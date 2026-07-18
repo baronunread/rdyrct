@@ -1,0 +1,40 @@
+{
+  "name": "shrtnr",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite dev",
+    "build": "vite build",
+    "preview": "vite preview",
+    "check": "tsc --noEmit",
+    "deploy": "npm run build && wrangler deploy",
+    "db:migrate:local": "wrangler d1 migrations apply shrtnr --local",
+    "db:migrate:remote": "wrangler d1 migrations apply shrtnr --remote"
+  },
+  "dependencies": {
+    "@base-ui/react": "^1.6.0",
+    "@fontsource/jetbrains-mono": "^5.2.8",
+    "@tanstack/react-query": "^5.101.2",
+    "drizzle-orm": "^0.45.2",
+    "hono": "^4.12.30",
+    "lucide-react": "^1.25.0",
+    "qr-code-styling": "^1.9.2",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
+    "react-router": "^8.2.0"
+  },
+  "devDependencies": {
+    "@cloudflare/vite-plugin": "^1.45.1",
+    "@cloudflare/workers-types": "^5.20260718.1",
+    "@tailwindcss/vite": "^4.3.3",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.0.3",
+    "drizzle-kit": "^0.31.10",
+    "tailwindcss": "^4.3.3",
+    "typescript": "^7.0.2",
+    "vite": "^8.1.5",
+    "wrangler": "^4.112.0"
+  }
+}

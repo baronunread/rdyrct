@@ -1,0 +1,96 @@
+@import "tailwindcss";
+
+/* ---------------------------------------------------------------- */
+/* Theme tokens — same dark pastel / paper pair as brnr.dev          */
+/* ---------------------------------------------------------------- */
+
+:root {
+  --bg: #17151f;
+  --surface: #1f1c2b;
+  --surface-2: #262336;
+  --border: #34304a;
+  --text: #eae7f2;
+  --muted: #9d95b3;
+
+  --pink: #f5b8c8;
+  --mint: #b9e6c9;
+  --lavender: #cdb9f5;
+  --butter: #f2e3b3;
+  --sky: #b9d9f0;
+
+  --accent: var(--lavender);
+  --accent-2: var(--mint);
+  /* chart mark color: deeper than the UI accent so it passes the
+     lightness/chroma band on dark surfaces (validated) */
+  --chart: #9d7fe8;
+  --danger: #f5b8c8;
+
+  color-scheme: dark;
+}
+
+[data-theme="light"] {
+  --bg: #f7f4ef;
+  --surface: #ffffff;
+  --surface-2: #efeae2;
+  --border: #ddd5c8;
+  --text: #2a2733;
+  --muted: #6e6880;
+
+  --pink: #c2607f;
+  --mint: #35875e;
+  --lavender: #7a5fc2;
+  --butter: #a8842c;
+  --sky: #4f7fae;
+
+  --chart: #7a5fc2;
+  --danger: #c2607f;
+
+  color-scheme: light;
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-border: var(--border);
+  --color-text: var(--text);
+  --color-muted: var(--muted);
+  --color-accent: var(--accent);
+  --color-accent-2: var(--accent-2);
+  --color-pink: var(--pink);
+  --color-mint: var(--mint);
+  --color-lavender: var(--lavender);
+  --color-butter: var(--butter);
+  --color-sky: var(--sky);
+  --color-chart: var(--chart);
+  --color-danger: var(--danger);
+  --font-sans: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas,
+    monospace;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas,
+    monospace;
+}
+
+html {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-mono);
+}
+
+body {
+  min-height: 100dvh;
+}
+
+::selection {
+  background: var(--accent);
+  color: var(--bg);
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* number-heavy UI: keep digits aligned */
+.tnum {
+  font-variant-numeric: tabular-nums;
+}
