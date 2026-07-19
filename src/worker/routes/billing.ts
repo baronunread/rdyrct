@@ -18,11 +18,12 @@ const polarFor = (env: Env) =>
 export const billingRoutes = new Hono<AppEnv>();
 
 billingRoutes.post("/checkout", requireUser, async (c) => {
-  const userId = c.var.user!.id;
+  const user = c.var.user!;
   const checkout = await polarFor(c.env).checkouts.create({
     products: [c.env.POLAR_PRO_PRODUCT_ID],
     successUrl: `${c.env.APP_URL}/billing?upgraded=1`,
-    metadata: { userId },
+    customerEmail: user.email,
+    metadata: { userId: user.id },
   });
   return c.json({ url: checkout.url });
 });

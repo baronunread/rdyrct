@@ -233,7 +233,11 @@ export function MembersPage() {
               disabled={sendEmailInvite.isPending || !emailInput.trim()}
               onClick={() => sendEmailInvite.mutate(emailInput.trim())}
             >
-              {sendEmailInvite.isPending ? "…" : "Send invite"}
+              {sendEmailInvite.isPending ? (
+                <span className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent" />
+              ) : (
+                "Send invite"
+              )}
             </Button>
           </div>
         </Card>

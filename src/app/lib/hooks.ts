@@ -139,14 +139,12 @@ export function useCheckout() {
   return useMutation({
     mutationFn: () =>
       api<{ url: string }>(`/billing/checkout`, { method: "POST" }),
-    onSuccess: (data) => window.location.assign(data.url),
   });
 }
 
 export function usePortal() {
   return useMutation({
     mutationFn: () => api<{ url: string }>(`/billing/portal`),
-    onSuccess: (data) => window.location.assign(data.url),
   });
 }
 
