@@ -19,7 +19,7 @@ const sizes: Record<Size, string> = {
   md: "h-9 px-3.5 text-sm gap-2",
 };
 
-export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
+interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: Variant;
   size?: Size;
 }
@@ -41,7 +41,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
 );
 Button.displayName = "Button";
 
-export interface IconButtonProps
+interface IconButtonProps
   extends ButtonHTMLAttributes<HTMLButtonElement> {
   /** Used for both aria-label and a native tooltip — icon-only buttons must name their action. */
   label: string;

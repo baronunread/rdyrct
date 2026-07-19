@@ -10,7 +10,7 @@ import type { Me, OrgPlan } from "@/shared/types";
 // This router only exposes the app-level session view, mounted at /api.
 export const meRoutes = new Hono<AppEnv>();
 
-export async function meFor(
+async function meFor(
   db: AppEnv["Variables"]["db"],
   user: NonNullable<AppEnv["Variables"]["user"]>,
 ): Promise<Me> {

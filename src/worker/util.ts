@@ -105,7 +105,7 @@ import { HTTPException } from "hono/http-exception";
 import { QR_DOT_STYLES } from "@/shared/types";
 
 /** data-URI QR logos are stored inline in D1, so keep them small. */
-export const MAX_QR_LOGO_BYTES = 96 * 1024;
+const MAX_QR_LOGO_BYTES = 96 * 1024;
 
 const HEX_COLOR_RE = /^#[0-9a-fA-F]{6}$/;
 

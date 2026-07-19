@@ -97,7 +97,7 @@ export function QRPreview({
 }
 
 /** data-URI logos are stored inline in D1 — keep them tiny. */
-export const MAX_QR_LOGO_BYTES = 96 * 1024;
+const MAX_QR_LOGO_BYTES = 96 * 1024;
 
 /**
  * File picker that reads an image into a data URI (≤ 96 KB). Shared by the

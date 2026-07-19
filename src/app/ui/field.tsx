@@ -7,7 +7,7 @@ import {
 import { ChevronDown } from "lucide-react";
 import { cn } from "./cn";
 
-export const inputClass =
+const inputClass =
   "h-9 w-full rounded-md border border-border bg-bg px-3 text-sm text-text transition-colors placeholder:text-muted/60 focus:border-accent focus:outline-none disabled:opacity-50";
 
 export const Input = forwardRef<
