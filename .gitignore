@@ -5,3 +5,4 @@ dist/
 prod.secrets.env
 *.local
 .DS_Store
+package-lock.json
