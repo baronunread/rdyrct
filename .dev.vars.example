@@ -1,0 +1,21 @@
+# Copy to .dev.vars (gitignored) for local dev.
+
+BETTER_AUTH_SECRET=dev-only-secret-change-in-prod
+SUPERADMIN_EMAIL=you@example.com
+APP_URL=http://localhost:5173
+APP_HOST=localhost:5173
+
+# Email: point at the emulate.dev Resend emulator (bunx emulate --service resend)
+RESEND_API_KEY=re_local_emulated
+RESEND_BASE_URL=http://localhost:4000
+MAIL_FROM=rdyrct <no-reply@localhost>
+
+# Polar (sandbox): https://sandbox.polar.sh
+POLAR_ACCESS_TOKEN=polar_oat_replace_me
+POLAR_WEBHOOK_SECRET=polar_whs_replace_me
+POLAR_PRO_PRODUCT_ID=replace_me
+POLAR_SERVER=sandbox
+
+# Custom domains: fake the Cloudflare API locally
+DEV_FAKE_CF=1
+CF_ZONE_ID=
