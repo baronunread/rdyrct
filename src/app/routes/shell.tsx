@@ -34,7 +34,7 @@ import { Menu, MenuItem, MenuSeparator } from "../ui/menu";
 import { Dialog } from "../ui/dialog";
 import { Button, IconButton } from "../ui/button";
 import { Field, Input } from "../ui/field";
-import { Footer } from "../ui/footer";
+
 import { Spinner } from "../ui/misc";
 import { cn } from "../ui/cn";
 import { NotFound } from "./not-found";
@@ -288,9 +288,6 @@ export function AppShell() {
       <main className="flex min-w-0 flex-1 flex-col px-5 py-8 pt-16 md:px-8 md:pt-8">
         <div className="mx-auto w-full max-w-5xl flex-1">
           <Outlet />
-        </div>
-        <div className="mx-auto w-full max-w-5xl">
-          <Footer />
         </div>
       </main>
 
