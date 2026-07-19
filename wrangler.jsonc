@@ -18,7 +18,7 @@
 	"kv_namespaces": [
 		{
 			"binding": "LINKS",
-			"id": "REPLACE_WITH_KV_ID"
+			"id": "aa2cec55f8964d0fba2c23e1e3b5fea1"
 		}
 	],
 	// Secrets (wrangler secret put …): BETTER_AUTH_SECRET, SUPERADMIN_EMAIL,
@@ -29,14 +29,14 @@
 		"APP_HOST": "rdyrct.com",
 		"MAIL_FROM": "rdyrct <no-reply@mail.rdyrct.com>",
 		"POLAR_SERVER": "sandbox",
-		"POLAR_PRO_PRODUCT_ID": "REPLACE_WITH_POLAR_PRODUCT_ID",
-		"CF_ZONE_ID": "REPLACE_WITH_ZONE_ID"
+		"POLAR_PRO_PRODUCT_ID": "5837e285-85c3-4d38-8557-a7b2bdc3b98d",
+		"CF_ZONE_ID": "21285955570c1215ae9efd13692c950a"
 	},
 	"d1_databases": [
 		{
 			"binding": "DB",
 			"database_name": "rdyrct",
-			"database_id": "REPLACE_WITH_D1_ID",
+			"database_id": "cff7eb6e-ee69-4c94-8d51-6ad09de5afd9",
 			"migrations_dir": "migrations"
 		}
 	],
