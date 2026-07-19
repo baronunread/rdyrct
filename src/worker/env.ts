@@ -5,6 +5,26 @@ export interface Env {
   DB: D1Database;
   LINKS: KVNamespace;
   ASSETS: Fetcher;
+
+  /* auth + email (secrets unless noted) */
+  BETTER_AUTH_SECRET: string;
+  SUPERADMIN_EMAIL: string;
+  RESEND_API_KEY: string;
+  MAIL_FROM: string; // var, e.g. "rdyrct <no-reply@mail.rdyrct.com>"
+  APP_URL: string; // var, e.g. "https://rdyrct.com"; SPA/API origin
+  RESEND_BASE_URL?: string; // var; dev points at the emulate.dev Resend emulator
+
+  /* billing (Polar) */
+  POLAR_ACCESS_TOKEN: string;
+  POLAR_WEBHOOK_SECRET: string;
+  POLAR_PRO_PRODUCT_ID: string; // var
+  POLAR_SERVER?: "sandbox" | "production"; // var, default sandbox
+
+  /* custom domains (Cloudflare for SaaS) */
+  APP_HOST: string; // var, e.g. "rdyrct.com"; the shared redirect host
+  CF_API_TOKEN?: string; // secret, Custom Hostnames edit
+  CF_ZONE_ID?: string; // var
+  DEV_FAKE_CF?: string; // var, "1" fakes the CF API in local dev
 }
 
 export type DB = DrizzleD1Database<typeof schema>;
@@ -14,6 +34,10 @@ export interface SessionUser {
   email: string;
   name: string;
   isAdmin: boolean;
+  emailVerified: boolean;
+  plan: "free" | "pro";
+  polarSubscriptionCancelAtPeriodEnd: boolean;
+  polarSubscriptionCurrentPeriodEnd: number | null;
 }
 
 export type Vars = {

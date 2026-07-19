@@ -1,26 +1,46 @@
 {
-  "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "shrtnr",
-  "main": "src/worker/index.ts",
-  "compatibility_date": "2026-01-01",
-  "compatibility_flags": ["nodejs_compat"],
-  "assets": {
-    "binding": "ASSETS",
-    "not_found_handling": "single-page-application",
-    "run_worker_first": true
-  },
-  // Create the real resources with:
-  //   wrangler kv namespace create LINKS
-  //   wrangler d1 create shrtnr
-  // then paste the ids below. Local dev works with the placeholders.
-  "kv_namespaces": [{ "binding": "LINKS", "id": "REPLACE_WITH_KV_ID" }],
-  "d1_databases": [
-    {
-      "binding": "DB",
-      "database_name": "shrtnr",
-      "database_id": "REPLACE_WITH_D1_ID",
-      "migrations_dir": "migrations"
-    }
-  ],
-  "observability": { "enabled": true }
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"name": "rdyrct",
+	"main": "src/worker/index.ts",
+	"compatibility_date": "2026-01-01",
+	"compatibility_flags": [
+		"nodejs_compat"
+	],
+	"assets": {
+		"binding": "ASSETS",
+		"not_found_handling": "single-page-application",
+		"run_worker_first": true
+	},
+	// Create the real resources with:
+	//   wrangler kv namespace create LINKS
+	//   wrangler d1 create rdyrct
+	// then paste the ids below. Local dev works with the placeholders.
+	"kv_namespaces": [
+		{
+			"binding": "LINKS",
+			"id": "REPLACE_WITH_KV_ID"
+		}
+	],
+	// Secrets (wrangler secret put …): BETTER_AUTH_SECRET, SUPERADMIN_EMAIL,
+	// RESEND_API_KEY, POLAR_ACCESS_TOKEN, POLAR_WEBHOOK_SECRET, CF_API_TOKEN.
+	// Local dev reads everything from .dev.vars (see .dev.vars.example).
+	"vars": {
+		"APP_URL": "https://rdyrct.com",
+		"APP_HOST": "rdyrct.com",
+		"MAIL_FROM": "rdyrct <no-reply@mail.rdyrct.com>",
+		"POLAR_SERVER": "sandbox",
+		"POLAR_PRO_PRODUCT_ID": "REPLACE_WITH_POLAR_PRODUCT_ID",
+		"CF_ZONE_ID": "REPLACE_WITH_ZONE_ID"
+	},
+	"d1_databases": [
+		{
+			"binding": "DB",
+			"database_name": "rdyrct",
+			"database_id": "REPLACE_WITH_D1_ID",
+			"migrations_dir": "migrations"
+		}
+	],
+	"observability": {
+		"enabled": true
+	}
 }

@@ -130,7 +130,7 @@ export function AreaChart({
 }
 
 /**
- * Ranked horizontal bars with direct labels — identity is in the row label,
+ * Ranked horizontal bars with direct labels: identity is in the row label,
  * so a single hue does the work.
  */
 export function BarList({

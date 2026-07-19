@@ -9,12 +9,15 @@ export function Dialog({
   title,
   children,
   wide,
+  shakeKey,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   title: string;
   children: ReactNode;
   wide?: boolean;
+  /** bump this (e.g. a counter) to shake the popup, used on validation errors */
+  shakeKey?: number;
 }) {
   return (
     <BaseDialog.Root open={open} onOpenChange={onOpenChange}>
@@ -22,22 +25,27 @@ export function Dialog({
         <BaseDialog.Backdrop className="fixed inset-0 z-40 bg-black/55 backdrop-blur-[2px] transition-opacity data-[starting-style]:opacity-0 data-[ending-style]:opacity-0" />
         <BaseDialog.Popup
           className={cn(
-            "fixed top-1/2 left-1/2 z-50 max-h-[85dvh] w-[calc(100vw-2rem)] -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-xl border-2 border-border bg-surface p-6 text-text shadow-2xl transition-[opacity,transform] duration-150 data-[starting-style]:scale-95 data-[starting-style]:opacity-0 data-[ending-style]:scale-95 data-[ending-style]:opacity-0",
+            "fixed top-1/2 left-1/2 z-50 max-h-[85dvh] w-[calc(100vw-2rem)] -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-xl border border-border bg-surface p-6 text-text shadow-2xl transition-[opacity,transform] duration-150 data-[starting-style]:scale-95 data-[starting-style]:opacity-0 data-[ending-style]:scale-95 data-[ending-style]:opacity-0",
             wide ? "max-w-2xl" : "max-w-md",
           )}
         >
-          <div className="mb-4 flex items-center justify-between">
-            <BaseDialog.Title className="text-base font-bold">
-              {title}
-            </BaseDialog.Title>
-            <BaseDialog.Close
-              className="cursor-pointer rounded p-1 text-muted hover:text-text"
-              aria-label="Close"
-            >
-              <X size={16} />
-            </BaseDialog.Close>
+          {/* keyed inner wrapper: bumping shakeKey remounts only this node so
+              the one-shot shake replays, without disturbing the popup's own
+              centering transform / entrance animation */}
+          <div key={shakeKey} className={shakeKey ? "animate-shake" : ""}>
+            <div className="mb-4 flex items-center justify-between">
+              <BaseDialog.Title className="text-base font-bold">
+                {title}
+              </BaseDialog.Title>
+              <BaseDialog.Close
+                className="cursor-pointer rounded p-1 text-muted hover:text-text"
+                aria-label="Close"
+              >
+                <X size={16} />
+              </BaseDialog.Close>
+            </div>
+            {children}
           </div>
-          {children}
         </BaseDialog.Popup>
       </BaseDialog.Portal>
     </BaseDialog.Root>

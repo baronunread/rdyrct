@@ -40,3 +40,29 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
   ),
 );
 Button.displayName = "Button";
+
+export interface IconButtonProps
+  extends ButtonHTMLAttributes<HTMLButtonElement> {
+  /** Used for both aria-label and a native tooltip — icon-only buttons must name their action. */
+  label: string;
+  danger?: boolean;
+}
+
+/** Icon-only action button with consistent hover/focus and a title tooltip. */
+export const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>(
+  ({ label, danger, className, type, ...props }, ref) => (
+    <button
+      ref={ref}
+      type={type ?? "button"}
+      aria-label={label}
+      title={label}
+      className={cn(
+        "inline-flex cursor-pointer items-center justify-center rounded-md p-1.5 text-muted transition-colors hover:bg-surface-2 disabled:pointer-events-none disabled:opacity-50",
+        danger ? "hover:text-danger" : "hover:text-text",
+        className,
+      )}
+      {...props}
+    />
+  ),
+);
+IconButton.displayName = "IconButton";

@@ -1,5 +1,5 @@
 {
-  "name": "shrtnr",
+  "name": "rdyrct",
   "private": true,
   "version": "0.1.0",
   "type": "module",
@@ -9,29 +9,37 @@
     "preview": "vite preview",
     "check": "tsc --noEmit",
     "deploy": "npm run build && wrangler deploy",
-    "db:migrate:local": "wrangler d1 migrations apply shrtnr --local",
-    "db:migrate:remote": "wrangler d1 migrations apply shrtnr --remote"
+    "db:migrate:local": "wrangler d1 migrations apply rdyrct --local",
+    "db:reset:local": "rm -rf .wrangler/state/v3/d1 .wrangler/state/v3/kv && wrangler d1 migrations apply rdyrct --local",
+    "db:migrate:remote": "wrangler d1 migrations apply rdyrct --remote",
+    "doctor": "react-doctor"
   },
   "dependencies": {
     "@base-ui/react": "^1.6.0",
     "@fontsource/jetbrains-mono": "^5.2.8",
+    "@polar-sh/sdk": "^0.48.1",
     "@tanstack/react-query": "^5.101.2",
+    "better-auth": "^1.6.23",
     "drizzle-orm": "^0.45.2",
     "hono": "^4.12.30",
     "lucide-react": "^1.25.0",
+    "motion": "^12.42.2",
     "qr-code-styling": "^1.9.2",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
-    "react-router": "^8.2.0"
+    "react-router": "^8.2.0",
+    "standardwebhooks": "^1.0.0"
   },
   "devDependencies": {
     "@cloudflare/vite-plugin": "^1.45.1",
     "@cloudflare/workers-types": "^5.20260718.1",
     "@tailwindcss/vite": "^4.3.3",
+    "@types/node": "^26.1.1",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.3",
     "drizzle-kit": "^0.31.10",
+    "react-doctor": "^0.8.1",
     "tailwindcss": "^4.3.3",
     "typescript": "^7.0.2",
     "vite": "^8.1.5",

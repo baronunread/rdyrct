@@ -4,24 +4,27 @@ import {
   useQueryClient,
 } from "@tanstack/react-query";
 import { api, ApiError } from "./api";
+import { authClient } from "./auth-client";
 import type {
   Me,
   LinkDTO,
   LinkInput,
   MemberDTO,
   InviteDTO,
+  DomainDTO,
   OrgStats,
   AdminOverview,
   AdminOrgRow,
+  AdminOrgDetail,
   AdminUserRow,
 } from "@/shared/types";
 
 export function useMe() {
   return useQuery<Me | null>({
-    queryKey: ["me"],
+    queryKey: ["user"],
     queryFn: async () => {
       try {
-        return await api<Me>("/auth/me");
+        return await api<Me>("/me");
       } catch (e) {
         if (e instanceof ApiError && e.status === 401) return null;
         throw e;
@@ -35,8 +38,8 @@ export function useMe() {
 export function useLogout() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: () => api("/auth/logout", { method: "POST" }),
-    onSuccess: () => qc.setQueryData(["me"], null),
+    mutationFn: () => authClient.signOut(),
+    onSuccess: () => qc.setQueryData(["user"], null),
   });
 }
 
@@ -89,6 +92,64 @@ export const useInvites = (orgId: string, enabled: boolean) =>
     enabled,
   });
 
+export const useDomains = (orgId: string, enabled = true) =>
+  useQuery<DomainDTO[]>({
+    queryKey: ["domains", orgId],
+    queryFn: () => api(`/orgs/${orgId}/domains`),
+    enabled,
+  });
+
+export function useDomainMutations(orgId: string) {
+  const qc = useQueryClient();
+  const invalidate = () =>
+    qc.invalidateQueries({ queryKey: ["domains", orgId] });
+  const add = useMutation({
+    mutationFn: (hostname: string) =>
+      api<DomainDTO>(`/orgs/${orgId}/domains`, {
+        method: "POST",
+        body: { hostname },
+      }),
+    onSuccess: invalidate,
+  });
+  const refresh = useMutation({
+    mutationFn: (id: string) =>
+      api<DomainDTO>(`/orgs/${orgId}/domains/${id}/refresh`, {
+        method: "POST",
+      }),
+    onSuccess: invalidate,
+  });
+  const setRootRedirect = useMutation({
+    mutationFn: ({ id, rootRedirect }: { id: string; rootRedirect: string }) =>
+      api<DomainDTO>(`/orgs/${orgId}/domains/${id}`, {
+        method: "PATCH",
+        body: { rootRedirect },
+      }),
+    onSuccess: invalidate,
+  });
+  const remove = useMutation({
+    mutationFn: (id: string) =>
+      api(`/orgs/${orgId}/domains/${id}`, { method: "DELETE" }),
+    onSuccess: invalidate,
+  });
+  return { add, refresh, setRootRedirect, remove };
+}
+
+// Billing is per-user (the caller's own subscription), so no orgId.
+export function useCheckout() {
+  return useMutation({
+    mutationFn: () =>
+      api<{ url: string }>(`/billing/checkout`, { method: "POST" }),
+    onSuccess: (data) => window.location.assign(data.url),
+  });
+}
+
+export function usePortal() {
+  return useMutation({
+    mutationFn: () => api<{ url: string }>(`/billing/portal`),
+    onSuccess: (data) => window.location.assign(data.url),
+  });
+}
+
 export const useAdminOverview = () =>
   useQuery<AdminOverview>({
     queryKey: ["admin", "overview"],
@@ -99,6 +160,13 @@ export const useAdminOrgs = () =>
   useQuery<AdminOrgRow[]>({
     queryKey: ["admin", "orgs"],
     queryFn: () => api("/admin/orgs"),
+  });
+
+export const useAdminOrgDetail = (orgId: string | null) =>
+  useQuery<AdminOrgDetail>({
+    queryKey: ["admin", "org", orgId],
+    queryFn: () => api(`/admin/orgs/${orgId}`),
+    enabled: !!orgId,
   });
 
 export const useAdminUsers = () =>

@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../lib/api";
 import type { InvitePreview } from "@/shared/types";
 import { useMe } from "../lib/hooks";
+import { useCurrentOrg } from "../lib/current-org";
 import { Button } from "../ui/button";
 import { Spinner } from "../ui/misc";
 import { useToast } from "../ui/toast";
@@ -13,6 +14,7 @@ export function InvitePage() {
   const navigate = useNavigate();
   const qc = useQueryClient();
   const toast = useToast();
+  const { setOrg } = useCurrentOrg();
 
   const preview = useQuery<InvitePreview>({
     queryKey: ["invite", token],
@@ -25,8 +27,9 @@ export function InvitePage() {
       const res = await api<{ orgId: string }>(`/invites/${token}/accept`, {
         method: "POST",
       });
-      await qc.invalidateQueries({ queryKey: ["me"] });
-      navigate(`/app/${res.orgId}`);
+      await qc.invalidateQueries({ queryKey: ["user"] });
+      setOrg(res.orgId);
+      navigate("/dashboard");
     } catch (e) {
       toast((e as Error).message, "error");
     }
@@ -38,7 +41,7 @@ export function InvitePage() {
     <div className="grid min-h-dvh place-items-center px-4">
       <div className="w-full max-w-sm rounded-xl border border-border bg-surface p-6 text-center">
         <p className="mb-4 text-xl font-bold tracking-widest">
-          shrtnr<span className="text-accent">·</span>
+          rdyrct
         </p>
         {preview.isLoading || me.isLoading ? (
           <Spinner />

@@ -1,13 +1,14 @@
 import { useState } from "react";
-import { useParams } from "react-router";
+import { useCurrentOrg } from "../lib/current-org";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { UserPlus, Copy, Trash2 } from "lucide-react";
+import { UserPlus, Copy, Trash2, Info } from "lucide-react";
 import { useMe, useMembers, useInvites } from "../lib/hooks";
 import { api } from "../lib/api";
-import type { OrgRole } from "@/shared/types";
-import { Button } from "../ui/button";
-import { Field, Select } from "../ui/field";
+import { PLAN_LIMITS, type InviteDTO, type OrgRole } from "@/shared/types";
+import { Button, IconButton } from "../ui/button";
+import { Field, Input, Select } from "../ui/field";
 import { Dialog } from "../ui/dialog";
+import { Tooltip } from "../ui/tooltip";
 import {
   Table,
   Th,
@@ -26,23 +27,29 @@ const roleColor: Record<OrgRole, "accent" | "mint" | "muted"> = {
 };
 
 export function MembersPage() {
-  const { orgId } = useParams<{ orgId: string }>();
+  const { org } = useCurrentOrg();
+  const orgId = org?.id ?? "";
   const me = useMe();
-  const members = useMembers(orgId!);
+  const members = useMembers(orgId);
   const qc = useQueryClient();
   const toast = useToast();
 
   const myRole: OrgRole = me.data?.user.isAdmin
     ? "owner"
-    : (me.data?.orgs.find((o) => o.id === orgId)?.role ?? "member");
+    : (org?.role ?? "member");
   const canManage = myRole === "owner" || myRole === "admin";
 
-  const invites = useInvites(orgId!, canManage);
+  const invites = useInvites(orgId, canManage);
   const [inviteOpen, setInviteOpen] = useState(false);
   const [inviteRole, setInviteRole] = useState<"member" | "admin">("member");
 
+  const [emailInput, setEmailInput] = useState("");
+  const [emailRole, setEmailRole] = useState<"member" | "admin">("member");
+
   const invalidateMembers = () =>
     qc.invalidateQueries({ queryKey: ["members", orgId] });
+  const invalidateInvites = () =>
+    qc.invalidateQueries({ queryKey: ["invites", orgId] });
 
   const setRole = useMutation({
     mutationFn: ({ userId, role }: { userId: string; role: string }) =>
@@ -63,14 +70,29 @@ export function MembersPage() {
 
   const createInvite = useMutation({
     mutationFn: () =>
-      api<{ token: string }>(`/orgs/${orgId}/invites`, {
+      api<{ invites: InviteDTO[] }>(`/orgs/${orgId}/invites`, {
         method: "POST",
         body: { role: inviteRole },
       }),
-    onSuccess: (invite) => {
-      qc.invalidateQueries({ queryKey: ["invites", orgId] });
-      copyInvite(invite.token);
+    onSuccess: ({ invites }) => {
+      invalidateInvites();
+      const invite = invites[0];
+      if (invite) copyInvite(invite.token);
       setInviteOpen(false);
+    },
+    onError: (e) => toast(e.message, "error"),
+  });
+
+  const sendEmailInvite = useMutation({
+    mutationFn: (email: string) =>
+      api<{ invites: InviteDTO[] }>(`/orgs/${orgId}/invites`, {
+        method: "POST",
+        body: { role: emailRole, emails: [email] },
+      }),
+    onSuccess: () => {
+      invalidateInvites();
+      setEmailInput("");
+      toast("Invite sent");
     },
     onError: (e) => toast(e.message, "error"),
   });
@@ -78,7 +100,7 @@ export function MembersPage() {
   const revokeInvite = useMutation({
     mutationFn: (token: string) =>
       api(`/orgs/${orgId}/invites/${token}`, { method: "DELETE" }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["invites", orgId] }),
+    onSuccess: invalidateInvites,
   });
 
   const copyInvite = (token: string) => {
@@ -88,6 +110,8 @@ export function MembersPage() {
 
   if (members.isLoading) return <Spinner />;
 
+  const memberLimit = org ? PLAN_LIMITS[org.plan].members : 0;
+
   return (
     <div>
       <PageHeader
@@ -96,7 +120,7 @@ export function MembersPage() {
         action={
           canManage && (
             <Button variant="primary" onClick={() => setInviteOpen(true)}>
-              <UserPlus size={15} /> Invite
+              <UserPlus size={15} /> Invite link
             </Button>
           )
         }
@@ -120,7 +144,8 @@ export function MembersPage() {
               <Td>
                 {canManage && m.role !== "owner" ? (
                   <Select
-                    className="h-7 w-28 text-xs"
+                    className="h-7 text-xs"
+                    wrapperClass="inline-block w-28"
                     value={m.role}
                     onChange={(e) =>
                       setRole.mutate({ userId: m.userId, role: e.target.value })
@@ -140,13 +165,13 @@ export function MembersPage() {
                 <Td>
                   {m.role !== "owner" && m.userId !== me.data?.user.id && (
                     <div className="flex justify-end">
-                      <button
+                      <IconButton
+                        label={`Remove ${m.name}`}
+                        danger
                         onClick={() => removeMember.mutate(m.userId)}
-                        aria-label={`Remove ${m.name}`}
-                        className="cursor-pointer rounded p-1.5 text-muted hover:bg-surface-2 hover:text-danger"
                       >
                         <Trash2 size={15} />
-                      </button>
+                      </IconButton>
                     </div>
                   )}
                 </Td>
@@ -155,6 +180,64 @@ export function MembersPage() {
           ))}
         </tbody>
       </Table>
+
+      {canManage && org && (
+        <Card className="mt-4">
+          <div className="mb-3 flex items-center gap-1.5">
+            <p className="text-[11px] tracking-wider text-muted uppercase">
+              Invite by email
+            </p>
+            <Tooltip
+              content={
+                <>
+                  You can invite up to {memberLimit} members on the{" "}
+                  {org.plan} plan. Pending invites count toward the limit.
+                </>
+              }
+            >
+              <button
+                type="button"
+                aria-label="Member limit info"
+                className="cursor-pointer text-muted hover:text-text"
+              >
+                <Info size={13} />
+              </button>
+            </Tooltip>
+          </div>
+          <div className="flex items-end gap-2">
+            <div className="min-w-0 flex-1">
+              <Field label="Email">
+                <Input
+                  type="email"
+                  value={emailInput}
+                  onChange={(e) => setEmailInput(e.target.value)}
+                  placeholder="teammate@company.com"
+                />
+              </Field>
+            </div>
+            <div className="w-36">
+              <Field label="Role">
+                <Select
+                  value={emailRole}
+                  onChange={(e) =>
+                    setEmailRole(e.target.value as "member" | "admin")
+                  }
+                >
+                  <option value="member">member</option>
+                  <option value="admin">admin</option>
+                </Select>
+              </Field>
+            </div>
+            <Button
+              variant="primary"
+              disabled={sendEmailInvite.isPending || !emailInput.trim()}
+              onClick={() => sendEmailInvite.mutate(emailInput.trim())}
+            >
+              {sendEmailInvite.isPending ? "…" : "Send invite"}
+            </Button>
+          </div>
+        </Card>
+      )}
 
       {canManage && !!invites.data?.length && (
         <Card className="mt-4">
@@ -168,7 +251,7 @@ export function MembersPage() {
                 className="flex items-center justify-between gap-3 text-sm"
               >
                 <span className="truncate text-muted">
-                  …/invite/{inv.token.slice(0, 10)}…
+                  {inv.email ?? "link invite"}
                 </span>
                 <span className="flex items-center gap-2">
                   <Badge color={inv.role === "admin" ? "mint" : "muted"}>
@@ -177,20 +260,19 @@ export function MembersPage() {
                   <span className="text-xs text-muted">
                     expires {new Date(inv.expiresAt).toLocaleDateString()}
                   </span>
-                  <button
+                  <IconButton
+                    label="Copy invite link"
                     onClick={() => copyInvite(inv.token)}
-                    aria-label="Copy invite link"
-                    className="cursor-pointer rounded p-1.5 text-muted hover:text-text"
                   >
                     <Copy size={14} />
-                  </button>
-                  <button
+                  </IconButton>
+                  <IconButton
+                    label="Revoke invite"
+                    danger
                     onClick={() => revokeInvite.mutate(inv.token)}
-                    aria-label="Revoke invite"
-                    className="cursor-pointer rounded p-1.5 text-muted hover:text-danger"
                   >
                     <Trash2 size={14} />
-                  </button>
+                  </IconButton>
                 </span>
               </li>
             ))}

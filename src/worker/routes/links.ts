@@ -2,9 +2,10 @@ import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import { eq, and, desc, sql } from "drizzle-orm";
 import * as schema from "../db/schema";
-import type { AppEnv } from "../env";
+import type { AppEnv, DB } from "../env";
 import { requireOrgRole } from "../auth";
 import { publishLink, unpublishLink } from "../kv";
+import { orgPlan } from "../plan";
 import {
   uid,
   now,
@@ -12,13 +13,12 @@ import {
   SLUG_RE,
   RESERVED_SLUGS,
   isValidHttpUrl,
+  validateQrFields,
 } from "../util";
 import type { LinkDTO, LinkInput } from "@/shared/types";
 
 // Mounted at /api/orgs/:orgId/links
 export const linkRoutes = new Hono<AppEnv>();
-
-const MAX_LOGO_BYTES = 96 * 1024; // data-URI logo stored inline in D1
 
 function validateInput(body: LinkInput, partial = false) {
   if (!partial || body.destination !== undefined) {
@@ -35,23 +35,24 @@ function validateInput(body: LinkInput, partial = false) {
     if (RESERVED_SLUGS.has(body.slug.toLowerCase()))
       throw new HTTPException(400, { message: "That slug is reserved" });
   }
-  if (body.qrLogo) {
-    if (!body.qrLogo.startsWith("data:image/"))
-      throw new HTTPException(400, { message: "Logo must be an image" });
-    if (body.qrLogo.length > MAX_LOGO_BYTES * 1.37)
-      throw new HTTPException(400, { message: "Logo too large (max ~96 KB)" });
-  }
+  validateQrFields(body);
 }
 
-// NB: literal `links.id` — interpolating the drizzle column renders an
+// NB: literal `links.id`; interpolating the drizzle column renders an
 // unqualified "id" that SQLite resolves against the subquery's own table.
 const clickCount = sql<number>`(
   select count(*) from clicks where clicks.link_id = links.id
 )`.as("clicks");
 
-function toDTO(row: typeof schema.links.$inferSelect, clicks: number): LinkDTO {
+function toDTO(
+  row: typeof schema.links.$inferSelect,
+  clicks: number,
+  domain: string | null,
+): LinkDTO {
   return {
     id: row.id,
+    domainId: row.domainId,
+    domain,
     slug: row.slug,
     destination: row.destination,
     title: row.title,
@@ -61,18 +62,80 @@ function toDTO(row: typeof schema.links.$inferSelect, clicks: number): LinkDTO {
     utmTerm: row.utmTerm,
     utmContent: row.utmContent,
     qrLogo: row.qrLogo,
+    qrStyle: row.qrStyle,
+    qrColor: row.qrColor,
     createdAt: row.createdAt,
     clicks,
   };
 }
 
+/**
+ * 409 with a machine-readable code so the editor can shake the dialog and
+ * point at the slug field. On the shared domain the message also pitches
+ * custom domains, where the whole namespace is the org's own.
+ */
+function slugConflict(slug: string, sharedDomain: boolean): HTTPException {
+  return new HTTPException(409, {
+    message: sharedDomain
+      ? `"/${slug}" is already taken on the shared domain. Pick another slug, or connect your own domain (Pro), where every slug is yours.`
+      : `"/${slug}" is already taken on this domain.`,
+    cause: { code: "slug_taken" },
+  });
+}
+
+/** Slug uniqueness is per-domain (null domain = the shared default host). */
+async function slugTaken(
+  db: DB,
+  slug: string,
+  domainId: string | null,
+  excludeLinkId?: string,
+): Promise<boolean> {
+  const rows = await db
+    .select({ id: schema.links.id })
+    .from(schema.links)
+    .where(
+      and(
+        eq(schema.links.slug, slug),
+        sql`ifnull(${schema.links.domainId}, '') = ${domainId ?? ""}`,
+      ),
+    );
+  return rows.some((r) => r.id !== excludeLinkId);
+}
+
+/**
+ * Validates a target domain for a link: must exist and belong to the org.
+ * Returns its hostname (used as the KV key prefix), or null for the shared
+ * domain.
+ */
+async function domainHostname(
+  db: DB,
+  orgId: string,
+  domainId: string | null,
+): Promise<string | null> {
+  if (!domainId) return null;
+  const rows = await db
+    .select({ hostname: schema.domains.hostname })
+    .from(schema.domains)
+    .where(
+      and(eq(schema.domains.id, domainId), eq(schema.domains.orgId, orgId)),
+    );
+  if (!rows[0])
+    throw new HTTPException(400, { message: "Unknown domain for this org" });
+  return rows[0].hostname;
+}
+
 linkRoutes.get("/", requireOrgRole("member"), async (c) => {
   const rows = await c.var.db
-    .select({ link: schema.links, clicks: clickCount })
+    .select({
+      link: schema.links,
+      clicks: clickCount,
+      domain: schema.domains.hostname,
+    })
     .from(schema.links)
+    .leftJoin(schema.domains, eq(schema.links.domainId, schema.domains.id))
     .where(eq(schema.links.orgId, c.req.param("orgId")!))
     .orderBy(desc(schema.links.createdAt));
-  return c.json(rows.map((r) => toDTO(r.link, r.clicks)));
+  return c.json(rows.map((r) => toDTO(r.link, r.clicks, r.domain)));
 });
 
 linkRoutes.post("/", requireOrgRole("member"), async (c) => {
@@ -81,23 +144,35 @@ linkRoutes.post("/", requireOrgRole("member"), async (c) => {
   const db = c.var.db;
   const orgId = c.req.param("orgId")!;
 
+  const { plan, limits } = await orgPlan(db, orgId);
+  const linkCount = await db
+    .select({ n: sql<number>`count(*)` })
+    .from(schema.links)
+    .where(eq(schema.links.orgId, orgId));
+  if ((linkCount[0]?.n ?? 0) >= limits.links)
+    throw new HTTPException(402, {
+      message:
+        plan === "free"
+          ? `The free plan allows ${limits.links} links, upgrade to Pro for more`
+          : `This plan allows at most ${limits.links} links`,
+    });
+  if ((body.qrLogo || body.qrStyle || body.qrColor) && !limits.qr)
+    throw new HTTPException(402, {
+      message: "QR customization is a Pro feature: upgrade to use it",
+    });
+
+  const domainId = body.domainId ?? null;
+  const hostname = await domainHostname(db, orgId, domainId);
+
   let slug = body.slug?.trim() || "";
   if (slug) {
-    const taken = await db
-      .select({ id: schema.links.id })
-      .from(schema.links)
-      .where(eq(schema.links.slug, slug));
-    if (taken.length)
-      throw new HTTPException(409, { message: "Slug already in use" });
+    if (await slugTaken(db, slug, domainId))
+      throw slugConflict(slug, domainId === null);
   } else {
     // random slugs: retry on the (unlikely) collision
     for (let i = 0; i < 5; i++) {
       slug = randomSlug();
-      const taken = await db
-        .select({ id: schema.links.id })
-        .from(schema.links)
-        .where(eq(schema.links.slug, slug));
-      if (!taken.length) break;
+      if (!(await slugTaken(db, slug, domainId))) break;
       slug = "";
     }
     if (!slug)
@@ -107,6 +182,7 @@ linkRoutes.post("/", requireOrgRole("member"), async (c) => {
   const link: typeof schema.links.$inferSelect = {
     id: uid(),
     orgId,
+    domainId,
     slug,
     destination: body.destination,
     title: body.title?.trim() ?? "",
@@ -116,43 +192,54 @@ linkRoutes.post("/", requireOrgRole("member"), async (c) => {
     utmTerm: body.utmTerm?.trim() ?? "",
     utmContent: body.utmContent?.trim() ?? "",
     qrLogo: body.qrLogo ?? "",
+    qrStyle: body.qrStyle ?? "",
+    qrColor: body.qrColor ?? "",
     createdBy: c.var.user!.id,
     createdAt: now(),
   };
   await db.insert(schema.links).values(link);
-  await publishLink(c.env, link);
-  return c.json(toDTO(link, 0), 201);
+  await publishLink(c.env, link, hostname);
+  return c.json(toDTO(link, 0, hostname), 201);
 });
 
 linkRoutes.patch("/:linkId", requireOrgRole("member"), async (c) => {
   const body = await c.req.json<LinkInput>();
   validateInput(body, true);
   const db = c.var.db;
+  const orgId = c.req.param("orgId")!;
+  if (body.qrLogo || body.qrStyle || body.qrColor) {
+    const { limits } = await orgPlan(db, orgId);
+    if (!limits.qr)
+      throw new HTTPException(402, {
+        message: "QR customization is a Pro feature: upgrade to use it",
+      });
+  }
   const rows = await db
     .select()
     .from(schema.links)
     .where(
       and(
         eq(schema.links.id, c.req.param("linkId")!),
-        eq(schema.links.orgId, c.req.param("orgId")!),
+        eq(schema.links.orgId, orgId),
       ),
     );
   const existing = rows[0];
   if (!existing) throw new HTTPException(404, { message: "Link not found" });
 
-  const newSlug = body.slug?.trim();
-  if (newSlug && newSlug !== existing.slug) {
-    const taken = await db
-      .select({ id: schema.links.id })
-      .from(schema.links)
-      .where(eq(schema.links.slug, newSlug));
-    if (taken.length)
-      throw new HTTPException(409, { message: "Slug already in use" });
-  }
+  const domainId =
+    body.domainId !== undefined ? body.domainId : existing.domainId;
+  const hostname = await domainHostname(db, orgId, domainId);
+  const oldHostname = await domainHostname(db, orgId, existing.domainId);
+
+  const newSlug = body.slug?.trim() || existing.slug;
+  const moved = newSlug !== existing.slug || domainId !== existing.domainId;
+  if (moved && (await slugTaken(db, newSlug, domainId, existing.id)))
+    throw slugConflict(newSlug, domainId === null);
 
   const updated = {
     ...existing,
-    slug: newSlug || existing.slug,
+    domainId,
+    slug: newSlug,
     destination: body.destination ?? existing.destination,
     title: body.title?.trim() ?? existing.title,
     utmSource: body.utmSource?.trim() ?? existing.utmSource,
@@ -161,36 +248,40 @@ linkRoutes.patch("/:linkId", requireOrgRole("member"), async (c) => {
     utmTerm: body.utmTerm?.trim() ?? existing.utmTerm,
     utmContent: body.utmContent?.trim() ?? existing.utmContent,
     qrLogo: body.qrLogo ?? existing.qrLogo,
+    qrStyle: body.qrStyle ?? existing.qrStyle,
+    qrColor: body.qrColor ?? existing.qrColor,
   };
   await db
     .update(schema.links)
     .set(updated)
     .where(eq(schema.links.id, existing.id));
 
-  if (updated.slug !== existing.slug) await unpublishLink(c.env, existing.slug);
-  await publishLink(c.env, updated);
+  if (moved) await unpublishLink(c.env, existing.slug, oldHostname);
+  await publishLink(c.env, updated, hostname);
 
   const clicks = await db
     .select({ n: sql<number>`count(*)` })
     .from(schema.clicks)
     .where(eq(schema.clicks.linkId, existing.id));
-  return c.json(toDTO(updated, clicks[0]?.n ?? 0));
+  return c.json(toDTO(updated, clicks[0]?.n ?? 0, hostname));
 });
 
 linkRoutes.delete("/:linkId", requireOrgRole("member"), async (c) => {
   const db = c.var.db;
+  const orgId = c.req.param("orgId")!;
   const rows = await db
     .select()
     .from(schema.links)
     .where(
       and(
         eq(schema.links.id, c.req.param("linkId")!),
-        eq(schema.links.orgId, c.req.param("orgId")!),
+        eq(schema.links.orgId, orgId),
       ),
     );
   const link = rows[0];
   if (!link) throw new HTTPException(404, { message: "Link not found" });
+  const hostname = await domainHostname(db, orgId, link.domainId);
   await db.delete(schema.links).where(eq(schema.links.id, link.id));
-  await unpublishLink(c.env, link.slug);
+  await unpublishLink(c.env, link.slug, hostname);
   return c.json({ ok: true });
 });

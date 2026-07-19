@@ -9,7 +9,7 @@ export function NotFound() {
           This short link does not exist (or the page moved).
         </p>
         <p className="mt-4 text-sm">
-          <Link to="/app">Go to the app</Link>
+          <Link to="/">Go home</Link>
         </p>
       </div>
     </div>

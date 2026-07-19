@@ -1,8 +1,11 @@
 export class ApiError extends Error {
   status: number;
-  constructor(status: number, message: string) {
+  /** machine-readable code from the error body, e.g. "slug_taken" */
+  code?: string;
+  constructor(status: number, message: string, code?: string) {
     super(message);
     this.status = status;
+    this.code = code;
   }
 }
 
@@ -20,16 +23,18 @@ export async function api<T>(
   });
   if (!res.ok) {
     let message = res.statusText;
+    let code: string | undefined;
     try {
-      const data = (await res.json()) as { message?: string };
+      const data = (await res.json()) as { message?: string; code?: string };
       if (data.message) message = data.message;
+      code = data.code;
     } catch {
       /* non-JSON error body */
     }
-    throw new ApiError(res.status, message);
+    throw new ApiError(res.status, message, code);
   }
   return res.json() as Promise<T>;
 }
 
-export const shortUrl = (slug: string) =>
-  `${window.location.origin}/${slug}`;
+export const shortUrl = (slug: string, domain?: string | null) =>
+  domain ? `https://${domain}/${slug}` : `${window.location.origin}/${slug}`;

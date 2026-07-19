@@ -1,7 +1,7 @@
 @import "tailwindcss";
 
 /* ---------------------------------------------------------------- */
-/* Theme tokens — same dark pastel / paper pair as brnr.dev          */
+/* Theme tokens: dark pastel / paper pair                            */
 /* ---------------------------------------------------------------- */
 
 :root {
@@ -93,4 +93,34 @@ body {
 /* number-heavy UI: keep digits aligned */
 .tnum {
   font-variant-numeric: tabular-nums;
+}
+
+/* one-shot horizontal shake for rejected form submissions (e.g. slug taken) */
+@keyframes shake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  20%,
+  60% {
+    transform: translateX(-6px);
+  }
+  40%,
+  80% {
+    transform: translateX(6px);
+  }
+}
+.animate-shake {
+  animation: shake 0.4s ease-in-out;
+}
+@media (prefers-reduced-motion: reduce) {
+  .animate-shake {
+    animation: none;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  html {
+    scroll-behavior: smooth;
+  }
 }

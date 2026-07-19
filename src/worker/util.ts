@@ -15,14 +15,27 @@ export const now = () => Date.now();
 
 export const SLUG_RE = /^[a-zA-Z0-9_-]{1,64}$/;
 
-// Paths the SPA owns at the top level; slugs may not shadow them.
+// Paths the SPA owns at the top level; slugs may not shadow them. There is no
+// /app prefix; every app page is a root keyword, so all of them are reserved.
 export const RESERVED_SLUGS = new Set([
   "api",
   "app",
+  "assets",
+  // public
   "login",
   "signup",
+  "onboarding",
+  "reset-password",
   "invite",
-  "assets",
+  "privacy",
+  "terms",
+  // authenticated app tabs
+  "dashboard",
+  "links",
+  "members",
+  "billing",
+  "domains",
+  "settings",
   "admin",
 ]);
 
@@ -84,4 +97,37 @@ export function isValidHttpUrl(value: string): boolean {
   } catch {
     return false;
   }
+}
+
+/* ---------------- QR appearance validation ---------------- */
+
+import { HTTPException } from "hono/http-exception";
+import { QR_DOT_STYLES } from "@/shared/types";
+
+/** data-URI QR logos are stored inline in D1, so keep them small. */
+export const MAX_QR_LOGO_BYTES = 96 * 1024;
+
+const HEX_COLOR_RE = /^#[0-9a-fA-F]{6}$/;
+
+/** Shared validation for org QR defaults and per-link overrides ('' = inherit). */
+export function validateQrFields(fields: {
+  qrLogo?: string;
+  qrStyle?: string;
+  qrColor?: string;
+}) {
+  if (fields.qrLogo) {
+    if (!fields.qrLogo.startsWith("data:image/"))
+      throw new HTTPException(400, { message: "Logo must be an image" });
+    if (fields.qrLogo.length > MAX_QR_LOGO_BYTES * 1.37)
+      throw new HTTPException(400, { message: "Logo too large (max ~96 KB)" });
+  }
+  if (
+    fields.qrStyle &&
+    !(QR_DOT_STYLES as readonly string[]).includes(fields.qrStyle)
+  )
+    throw new HTTPException(400, { message: "Unknown QR style" });
+  if (fields.qrColor && !HEX_COLOR_RE.test(fields.qrColor))
+    throw new HTTPException(400, {
+      message: "QR color must be a hex color like #17151f",
+    });
 }

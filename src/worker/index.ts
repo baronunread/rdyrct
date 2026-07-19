@@ -1,44 +1,38 @@
 import { Hono } from "hono";
+import type { Context } from "hono";
 import { HTTPException } from "hono/http-exception";
 import { drizzle } from "drizzle-orm/d1";
 import * as schema from "./db/schema";
-import type { AppEnv, Env } from "./env";
+import type { AppEnv } from "./env";
 import { withSession } from "./auth";
-import { authRoutes } from "./routes/auth";
+import { getAuth } from "./better-auth";
+import { meRoutes } from "./routes/auth";
 import { orgRoutes, inviteRoutes } from "./routes/orgs";
 import { linkRoutes } from "./routes/links";
 import { adminRoutes } from "./routes/admin";
-import { resolveSlug } from "./kv";
-import { now, deviceFromUA } from "./util";
+import { billingRoutes, handlePolarWebhook } from "./routes/billing";
+import { domainRoutes } from "./routes/domains";
+import { resolveSlug, resolveDomain, type KVLink } from "./kv";
+import { now, deviceFromUA, RESERVED_SLUGS } from "./util";
 
 const app = new Hono<AppEnv>();
 
 app.onError((err, c) => {
-  if (err instanceof HTTPException) return err.getResponse();
+  // JSON errors always: the SPA's api() reads res.json().message (and an
+  // optional machine-readable code, carried via HTTPException's cause)
+  if (err instanceof HTTPException) {
+    const code = (err.cause as { code?: string } | undefined)?.code;
+    return c.json({ message: err.message, ...(code ? { code } : {}) }, err.status);
+  }
   console.error(err);
   return c.json({ message: "Internal error" }, 500);
 });
 
-/* ---------------- API ---------------- */
-
-const api = new Hono<AppEnv>();
-api.use("*", withSession);
-api.route("/auth", authRoutes);
-api.route("/orgs", orgRoutes);
-api.route("/orgs/:orgId/links", linkRoutes);
-api.route("/invites", inviteRoutes);
-api.route("/admin", adminRoutes);
-app.route("/api", api);
-
 /* ---------------- redirect hot path ---------------- */
 
-// KV lookup only on request; click recording happens after the redirect
-// is already on its way (waitUntil), so redirects stay fast.
-app.get("/:slug", async (c, next) => {
-  const slug = c.req.param("slug");
-  const hit = await resolveSlug(c.env, slug);
-  if (!hit) return next(); // fall through to the SPA (404 page)
-
+// Click recording happens after the redirect is already on its way
+// (waitUntil), so redirects stay fast.
+function redirectWithClick(c: Context<AppEnv>, hit: KVLink): Response {
   c.executionCtx.waitUntil(
     (async () => {
       try {
@@ -56,8 +50,59 @@ app.get("/:slug", async (c, next) => {
       }
     })(),
   );
-
   return c.redirect(hit.url, 302);
+}
+
+// Custom domains (Cloudflare for SaaS) are redirect-only: no API, no SPA.
+// Hosts we don't know (e.g. *.workers.dev previews) fall through to the app.
+app.use("*", async (c, next) => {
+  const host = c.req.header("host")?.toLowerCase();
+  if (!host || host === c.env.APP_HOST.toLowerCase()) return next();
+  const domain = await resolveDomain(c.env, host);
+  if (!domain) return next();
+
+  const path = new URL(c.req.url).pathname;
+  const slug = path.slice(1);
+  if (slug && !slug.includes("/")) {
+    const hit = await resolveSlug(c.env, slug, host);
+    if (hit) return redirectWithClick(c, hit);
+  }
+  // root and misses land on the org's configured root redirect
+  if (domain.rootRedirect) return c.redirect(domain.rootRedirect, 302);
+  return c.text("Not found", 404);
+});
+
+/* ---------------- API ---------------- */
+
+// BetterAuth owns /api/auth/* (signup, login, logout, verify, reset).
+app.on(["GET", "POST"], "/api/auth/*", (c) =>
+  getAuth(c.env).handler(c.req.raw),
+);
+
+// Polar webhook: public, signature-verified, no session middleware.
+app.post("/api/webhooks/polar", (c) => handlePolarWebhook(c.req.raw, c.env));
+
+const api = new Hono<AppEnv>();
+api.use("*", withSession);
+api.route("/", meRoutes);
+api.route("/orgs", orgRoutes);
+api.route("/orgs/:orgId/links", linkRoutes);
+api.route("/billing", billingRoutes);
+api.route("/orgs/:orgId/domains", domainRoutes);
+api.route("/invites", inviteRoutes);
+api.route("/admin", adminRoutes);
+app.route("/api", api);
+
+/* ---------------- shared-domain slug redirect ---------------- */
+
+app.get("/:slug", async (c, next) => {
+  const slug = c.req.param("slug");
+  // Root keywords the SPA owns (/dashboard, /links, /login, …) never resolve as
+  // slugs; they can't be created as slugs either, this is belt-and-suspenders.
+  if (RESERVED_SLUGS.has(slug.toLowerCase())) return next();
+  const hit = await resolveSlug(c.env, slug, null);
+  if (!hit) return next(); // fall through to the SPA (404 page)
+  return redirectWithClick(c, hit);
 });
 
 /* ---------------- SPA fallback ---------------- */

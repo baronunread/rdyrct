@@ -1,11 +1,13 @@
-import { useParams, Link } from "react-router";
+import { Link } from "react-router";
 import { useStats } from "../lib/hooks";
+import { useCurrentOrg } from "../lib/current-org";
+import { PLAN_LIMITS } from "@/shared/types";
 import { AreaChart, BarList, StatCard } from "../components/charts";
 import { Card, PageHeader, Spinner } from "../ui/misc";
 
 export function Dashboard() {
-  const { orgId } = useParams<{ orgId: string }>();
-  const stats = useStats(orgId!);
+  const { org } = useCurrentOrg();
+  const stats = useStats(org?.id ?? "");
 
   if (stats.isLoading) return <Spinner />;
   if (!stats.data)
@@ -14,7 +16,19 @@ export function Dashboard() {
 
   return (
     <div>
-      <PageHeader title="Overview" sub="Last 30 days of activity" />
+      <PageHeader
+        title="Overview"
+        sub={`Last ${s.rangeDays} days of activity`}
+      />
+      {org?.plan === "free" && (
+        <p className="mb-4 text-xs text-muted">
+          Free plans show {PLAN_LIMITS.free.analyticsDays} days of history.{" "}
+          <Link to="/billing" className="text-accent hover:underline">
+            Upgrade to Pro
+          </Link>{" "}
+          for {PLAN_LIMITS.pro.analyticsDays} days.
+        </p>
+      )}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <StatCard label="Total clicks" value={s.totalClicks} />
         <StatCard label="Clicks · 7d" value={s.clicks7d} />
@@ -42,7 +56,7 @@ export function Dashboard() {
             />
           ) : (
             <p className="py-4 text-sm text-muted">
-              No links yet. <Link to={`/app/${orgId}/links`}>Create one</Link>.
+              No links yet. <Link to="/links">Create one</Link>.
             </p>
           )}
         </Card>

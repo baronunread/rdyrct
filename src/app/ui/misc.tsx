@@ -49,7 +49,9 @@ export function Card({
 export function Table({ children }: { children: ReactNode }) {
   return (
     <div className="overflow-x-auto rounded-lg border border-border bg-surface">
-      <table className="w-full text-sm">{children}</table>
+      <table className="w-full text-sm [&_tbody_tr]:transition-colors [&_tbody_tr:hover]:bg-surface-2/40">
+        {children}
+      </table>
     </div>
   );
 }
