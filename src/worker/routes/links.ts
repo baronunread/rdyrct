@@ -159,11 +159,13 @@ linkRoutes.post("/", requireOrgRole("member"), async (c) => {
   const db = c.var.db;
   const orgId = c.req.param("orgId")!;
 
-  const { plan, limits } = await orgPlan(db, orgId);
-  const linkCount = await db
-    .select({ n: sql<number>`count(*)` })
-    .from(schema.links)
-    .where(eq(schema.links.orgId, orgId));
+  const [{ plan, limits }, linkCount] = await Promise.all([
+    orgPlan(db, orgId),
+    db
+      .select({ n: sql<number>`count(*)` })
+      .from(schema.links)
+      .where(eq(schema.links.orgId, orgId)),
+  ]);
   if ((linkCount[0]?.n ?? 0) >= limits.links)
     throw new HTTPException(402, {
       message:
@@ -246,8 +248,10 @@ linkRoutes.patch("/:linkId", requireOrgRole("member"), async (c) => {
 
   const domainId =
     body.domainId !== undefined ? body.domainId : existing.domainId;
-  const hostname = await domainHostname(db, orgId, domainId);
-  const oldHostname = await domainHostname(db, orgId, existing.domainId);
+  const [hostname, oldHostname] = await Promise.all([
+    domainHostname(db, orgId, domainId),
+    domainHostname(db, orgId, existing.domainId),
+  ]);
 
   const newSlug = body.slug?.trim() || existing.slug;
   const moved = newSlug !== existing.slug || domainId !== existing.domainId;

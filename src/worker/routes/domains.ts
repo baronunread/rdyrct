@@ -227,8 +227,10 @@ domainRoutes.post("/:id/refresh", async (c) => {
 
 domainRoutes.patch("/:id", async (c) => {
   const db = c.var.db;
-  const row = await getDomain(c, c.req.param("orgId")!, c.req.param("id"));
-  const body = await c.req.json<{ rootRedirect?: string }>();
+  const [row, body] = await Promise.all([
+    getDomain(c, c.req.param("orgId")!, c.req.param("id")),
+    c.req.json<{ rootRedirect?: string }>(),
+  ]);
   const rootRedirect = body.rootRedirect?.trim() ?? "";
   if (rootRedirect && !isValidHttpUrl(rootRedirect))
     throw new HTTPException(400, {

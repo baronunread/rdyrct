@@ -24,16 +24,18 @@ orgRoutes.post("/", requireUser, async (c) => {
   const name = body.name?.trim();
   if (!name) throw new HTTPException(400, { message: "Name required" });
 
-  const ownedCount = await c.var.db
-    .select({ n: sql<number>`count(*)` })
-    .from(schema.orgMembers)
-    .where(
-      and(
-        eq(schema.orgMembers.userId, c.var.user!.id),
-        eq(schema.orgMembers.role, "owner"),
+  const [ownedCount, { limits }] = await Promise.all([
+    c.var.db
+      .select({ n: sql<number>`count(*)` })
+      .from(schema.orgMembers)
+      .where(
+        and(
+          eq(schema.orgMembers.userId, c.var.user!.id),
+          eq(schema.orgMembers.role, "owner"),
+        ),
       ),
-    );
-  const { limits } = await userPlan(c.var.db, c.var.user!.id);
+    userPlan(c.var.db, c.var.user!.id),
+  ]);
   if ((ownedCount[0]?.n ?? 0) >= limits.orgs)
     throw new HTTPException(402, {
       message: "Upgrade to Pro to create more organizations",
@@ -267,9 +269,10 @@ orgRoutes.post("/:orgId/invites", requireOrgRole("admin"), async (c) => {
 
   const emails = [
     ...new Set(
-      (body.emails ?? [])
-        .map((e) => e.trim().toLowerCase())
-        .filter((e) => EMAIL_RE.test(e)),
+      (body.emails ?? []).flatMap((e) => {
+        const email = e.trim().toLowerCase();
+        return EMAIL_RE.test(email) ? [email] : [];
+      }),
     ),
   ];
   const need = Math.max(1, emails.length);
@@ -411,8 +414,16 @@ orgRoutes.get("/:orgId/stats", requireOrgRole("member"), async (c) => {
   const since7 = now() - 7 * 24 * 60 * 60 * 1000;
   const inOrg = eq(schema.clicks.orgId, orgId);
 
-  const [totals, recent, seriesRows, topLinks, countries, referrers, devices] =
-    await Promise.all([
+  const [
+    totals,
+    recent,
+    seriesRows,
+    topLinks,
+    countries,
+    referrers,
+    devices,
+    linkCount,
+  ] = await Promise.all([
       db
         .select({
           clicks: sql<number>`count(*)`,
@@ -461,12 +472,11 @@ orgRoutes.get("/:orgId/stats", requireOrgRole("member"), async (c) => {
         .where(and(inOrg, gte(schema.clicks.ts, since)))
         .groupBy(schema.clicks.device)
         .orderBy(desc(sql`count(*)`)),
+      db
+        .select({ n: sql<number>`count(*)` })
+        .from(schema.links)
+        .where(eq(schema.links.orgId, orgId)),
     ]);
-
-  const linkCount = await db
-    .select({ n: sql<number>`count(*)` })
-    .from(schema.links)
-    .where(eq(schema.links.orgId, orgId));
 
   const clean = (rows: { key: string; clicks: number }[]) =>
     rows.map((r) => ({ key: r.key || "direct", clicks: r.clicks }));
@@ -546,11 +556,13 @@ inviteRoutes.post("/:token/accept", requireUser, async (c) => {
 
   // The cap may have been reached (or the plan downgraded) since the invite
   // was created; recheck against actual members at accept time.
-  const { limits } = await orgPlan(db, invite.orgId);
-  const members = await db
-    .select({ n: sql<number>`count(*)` })
-    .from(schema.orgMembers)
-    .where(eq(schema.orgMembers.orgId, invite.orgId));
+  const [{ limits }, members] = await Promise.all([
+    orgPlan(db, invite.orgId),
+    db
+      .select({ n: sql<number>`count(*)` })
+      .from(schema.orgMembers)
+      .where(eq(schema.orgMembers.orgId, invite.orgId)),
+  ]);
   if ((members[0]?.n ?? 0) >= limits.members)
     throw new HTTPException(402, {
       message: "This organization is full on its current plan",
