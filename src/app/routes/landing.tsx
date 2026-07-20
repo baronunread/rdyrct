@@ -34,7 +34,7 @@ const steps = [
     body: "Use it as a short link or a scannable QR code, served from our domain or your own.",
   },
   {
-    title: "Watch clicks roll in",
+    title: "See who's clicking",
     body: "Country, referrer, and device breakdowns update in real time, without storing a single IP.",
   },
 ];
@@ -43,24 +43,24 @@ const features = [
   {
     icon: Link2,
     title: "Short links + UTM builder",
-    body: "Turn unreadable URLs into short links, with a built-in UTM builder for clean campaign tracking, on every plan.",
+    body: "Turn unreadable URLs into short links, with a built-in UTM builder for clean campaign tracking. On every plan.",
   },
   {
     icon: QrCode,
     title: "QR codes",
     body: "One click turns any link into a scannable QR code, ready for packaging, posters, and slides.",
-    plan: "Hobby+",
+    plan: "Paid",
   },
   {
     icon: Globe,
     title: "Custom domains & slugs",
     body: "Serve short links from your own domain with automatic TLS and any slug you like, so every click reinforces your brand, not ours.",
-    plan: "Hobby+",
+    plan: "Paid",
   },
   {
     icon: Users,
     title: "Organizations & roles",
-    body: "Owner, admin, and member roles keep the whole team organized across shared workspaces.",
+    body: "Owner, admin, and member roles control who can edit links, connect domains, and invite people.",
   },
   {
     icon: BarChart3,
@@ -88,7 +88,7 @@ const cloudflareStack = [
   {
     icon: Zap,
     title: "KV",
-    body: "The redirect hot path reads from Workers KV, so short links resolve in milliseconds.",
+    body: "The redirect hot path reads from Workers KV, so redirects skip the database entirely.",
   },
   {
     icon: Globe,
@@ -100,7 +100,7 @@ const cloudflareStack = [
 const faqs = [
   {
     q: "Is the free plan really free?",
-    a: `Yes: ${PLAN_LIMITS.free.links} links, ${PLAN_LIMITS.free.members} teammates, and ${PLAN_LIMITS.free.analyticsDays} days of click analytics, forever. No credit card required. Shared-domain links get random slugs; picking your own slug needs a custom domain (Hobby or Pro).`,
+    a: `Yes: ${PLAN_LIMITS.free.links} links, ${PLAN_LIMITS.free.members} teammates, and ${PLAN_LIMITS.free.analyticsDays} days of click analytics, forever. No credit card required. Shared-domain links get random slugs; picking your own slug needs a custom domain (paid plans).`,
   },
   {
     q: "What's the difference between Hobby and Pro?",
@@ -108,7 +108,7 @@ const faqs = [
   },
   {
     q: "How is rdyrct privacy-friendly?",
-    a: "Click analytics store only a country, referrer, device type, and timestamp. Never an IP address, never a precise location, and no cross-site tracking.",
+    a: "Click analytics store only country, referrer, device type, and timestamp. Never an IP address, never a precise location, and no cross-site tracking.",
   },
   {
     q: "Can I use my own domain?",
@@ -537,10 +537,10 @@ export function LandingPage() {
               Short links that carry your brand.
             </h1>
             <p className="max-w-xl text-sm text-muted sm:text-base">
-              rdyrct gives your team branded short links, QR codes, and
-              custom domains, with privacy-friendly analytics that never
-              store an IP address. Free to start, open source, and resolving
-              in milliseconds on Cloudflare's global network.
+              rdyrct gives your team short links, QR codes, and custom
+              domains, with privacy-friendly analytics that never store an
+              IP address. Free to start, open source, and built on
+              Cloudflare's global network.
             </p>
             <div className="flex flex-wrap items-center justify-center gap-3">
               <Link to={ctaTo}>
@@ -648,7 +648,7 @@ export function LandingPage() {
               Everything a link needs to earn the click
             </h2>
             <p className="mx-auto mt-2 max-w-xl text-sm text-muted">
-              Built for marketing teams, developers, and everyone in between.
+              Built for marketing teams and developers.
             </p>
           </div>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -746,7 +746,7 @@ export function LandingPage() {
             </h2>
             <p className="max-w-md text-sm text-muted">
               Create your first short link on the free plan. No credit
-              card, no tracking baggage, no servers to run.
+              card, no visitor tracking, no servers to run.
             </p>
             <Link to={ctaTo}>
               <Button
