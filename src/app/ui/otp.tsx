@@ -28,7 +28,6 @@ export function OtpInput({
       length={length}
       value={value}
       disabled={disabled}
-      autoComplete="one-time-code"
       onValueChange={(next) => {
         onChange(next);
         if (next.length === length) onComplete?.(next);
