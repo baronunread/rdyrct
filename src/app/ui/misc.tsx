@@ -101,14 +101,6 @@ export function EmptyState({
   );
 }
 
-export function Spinner() {
-  return (
-    <div className="flex justify-center py-14 text-muted" role="status">
-      <span className="animate-pulse text-sm">loading…</span>
-    </div>
-  );
-}
-
 export function PageHeader({
   title,
   sub,

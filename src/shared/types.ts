@@ -188,7 +188,19 @@ export interface AdminOverview {
   links: number;
   clicks: number;
   clicks7d: number;
+  proUsers: number;
   series: SeriesPoint[];
+  /** New accounts per day, same window as `series`. */
+  signups: SeriesPoint[];
+  /** Most-clicked orgs/links over the same window as `series`. */
+  topOrgs: { id: string; name: string; clicks: number }[];
+  topLinks: {
+    id: string;
+    slug: string;
+    domain: string | null;
+    orgName: string;
+    clicks: number;
+  }[];
 }
 
 export interface AdminOrgRow {
@@ -223,9 +235,13 @@ export interface AdminUserRow {
   name: string;
   email: string;
   isAdmin: boolean;
+  banned: boolean;
+  emailVerified: boolean;
   plan: OrgPlan;
   createdAt: number;
   orgCount: number;
+  /** Last session activity (ms epoch), null if never signed in. */
+  lastSeen: number | null;
 }
 
 export interface InvitePreview {

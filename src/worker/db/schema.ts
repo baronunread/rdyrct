@@ -19,6 +19,8 @@ export const user = sqliteTable("user", {
     .default(false),
   image: text("image"),
   isAdmin: integer("is_admin", { mode: "boolean" }).notNull().default(false),
+  // Suspended by a platform admin: sessions are wiped and sign-in is refused.
+  banned: integer("banned", { mode: "boolean" }).notNull().default(false),
   // Billing lives on the user, not the org: one Free/Pro subscription per
   // person. An org's effective limits are its owner's plan (see plan.ts).
   plan: text("plan", { enum: ["free", "pro"] }).notNull().default("free"),

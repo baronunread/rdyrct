@@ -29,6 +29,7 @@ bun add <pkg>               # dependencies
 ```sh
 bun run check                          # app + shared (tsconfig.json → src/app, src/shared)
 bunx tsc -p tsconfig.worker.json --noEmit   # worker (src/worker)
+bun run test                           # unit tests (bun test, tests/)
 bun run doctor                         # react-doctor audit (React health score; --verbose for details)
 ```
 
@@ -61,6 +62,9 @@ Shell writes to repo files are sandboxed; edit through the editor tools, not
   `emailOTP` plugin, 6-digit code; password reset stays a link). PBKDF2/WebCrypto
   hashing (`src/worker/password.ts`). The account matching the `SUPERADMIN_EMAIL`
   secret is the platform admin; admin routes **404** (not 403) for everyone else.
+  Platform admins can **ban** users (`user.banned`): banning wipes their sessions
+  and `databaseHooks.session.create.before` (in `better-auth.ts`) refuses new
+  ones, while their orgs/links keep working.
   Self-service account deletion is blocked while the user still owns an org.
 - **KV keys**: `slug:{slug}` (shared host), `slug:{host}:{slug}` (custom domain),
   `domain:{host}`. D1 is authoritative; KV is the redirect hot path. Clicks are
@@ -71,8 +75,10 @@ Shell writes to repo files are sandboxed; edit through the editor tools, not
 
 - **Errors go to toasts** (`useToast`), never inline red field text.
 - UI kit in `src/app/ui/`: Button (`primary|outline|ghost`, has `size`),
-  Field/Input/Select, Dialog, Badge, Card/PageHeader/Spinner/Table, Menu,
-  Tooltip, toast. Design tokens: `bg`/`surface`/`surface-2`/`border`/`muted`/
+  Field/Input/Select, Dialog, Badge, Card/PageHeader/Table, Menu,
+  Tooltip, toast, Skeleton (`ui/skeleton.tsx`; page-level skeletons that
+  mirror each route's layout live in `src/app/components/skeletons.tsx` — use
+  those instead of a spinner for loading states). Design tokens: `bg`/`surface`/`surface-2`/`border`/`muted`/
   `text`/`accent`/`danger`. JetBrains Mono, theme-aware (light + dark).
 - Data layer: `api()` + `ApiError` (`.status`, `.code`) in `src/app/lib/api.ts`;
   TanStack Query hooks in `src/app/lib/hooks.ts`.

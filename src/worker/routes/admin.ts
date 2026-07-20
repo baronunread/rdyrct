@@ -38,7 +38,18 @@ adminRoutes.get("/overview", async (c) => {
   const days = 30;
   const since = now() - days * 24 * 60 * 60 * 1000;
   const since7 = now() - 7 * 24 * 60 * 60 * 1000;
-  const [users, orgs, links, clicks, clicks7d, seriesRows] = await Promise.all([
+  const [
+    users,
+    orgs,
+    links,
+    clicks,
+    clicks7d,
+    proUsers,
+    seriesRows,
+    signupRows,
+    topOrgRows,
+    topLinkRows,
+  ] = await Promise.all([
     db.select({ n: sql<number>`count(*)` }).from(schema.user),
     db.select({ n: sql<number>`count(*)` }).from(schema.orgs),
     db.select({ n: sql<number>`count(*)` }).from(schema.links),
@@ -48,10 +59,50 @@ adminRoutes.get("/overview", async (c) => {
       .from(schema.clicks)
       .where(gte(schema.clicks.ts, since7)),
     db
+      .select({ n: sql<number>`count(*)` })
+      .from(schema.user)
+      .where(eq(schema.user.plan, "pro")),
+    db
       .select({ day, clicks: sql<number>`count(*)` })
       .from(schema.clicks)
       .where(gte(schema.clicks.ts, since))
       .groupBy(day),
+    db
+      .select({
+        day: sql<string>`date(created_at / 1000, 'unixepoch')`,
+        clicks: sql<number>`count(*)`,
+      })
+      .from(schema.user)
+      .where(gte(schema.user.createdAt, new Date(since)))
+      .groupBy(sql`date(created_at / 1000, 'unixepoch')`),
+    db
+      .select({
+        id: schema.orgs.id,
+        name: schema.orgs.name,
+        clicks: sql<number>`count(*)`,
+      })
+      .from(schema.clicks)
+      .innerJoin(schema.orgs, eq(schema.clicks.orgId, schema.orgs.id))
+      .where(gte(schema.clicks.ts, since))
+      .groupBy(schema.clicks.orgId)
+      .orderBy(desc(sql`count(*)`))
+      .limit(5),
+    db
+      .select({
+        id: schema.links.id,
+        slug: schema.links.slug,
+        domain: schema.domains.hostname,
+        orgName: schema.orgs.name,
+        clicks: sql<number>`count(*)`,
+      })
+      .from(schema.clicks)
+      .innerJoin(schema.links, eq(schema.clicks.linkId, schema.links.id))
+      .leftJoin(schema.domains, eq(schema.links.domainId, schema.domains.id))
+      .innerJoin(schema.orgs, eq(schema.links.orgId, schema.orgs.id))
+      .where(gte(schema.clicks.ts, since))
+      .groupBy(schema.clicks.linkId)
+      .orderBy(desc(sql`count(*)`))
+      .limit(5),
   ]);
 
   return c.json({
@@ -60,7 +111,11 @@ adminRoutes.get("/overview", async (c) => {
     links: links[0]?.n ?? 0,
     clicks: clicks[0]?.n ?? 0,
     clicks7d: clicks7d[0]?.n ?? 0,
+    proUsers: proUsers[0]?.n ?? 0,
     series: fillSeries(seriesRows, days),
+    signups: fillSeries(signupRows, days),
+    topOrgs: topOrgRows,
+    topLinks: topLinkRows,
   } satisfies AdminOverview);
 });
 
@@ -152,15 +207,17 @@ adminRoutes.get("/orgs/:orgId", async (c) => {
 adminRoutes.delete("/orgs/:orgId", async (c) => {
   const db = c.var.db;
   const orgId = c.req.param("orgId");
-  const links = await db
-    .select({ slug: schema.links.slug, hostname: schema.domains.hostname })
-    .from(schema.links)
-    .leftJoin(schema.domains, eq(schema.links.domainId, schema.domains.id))
-    .where(eq(schema.links.orgId, orgId));
-  const domains = await db
-    .select({ hostname: schema.domains.hostname })
-    .from(schema.domains)
-    .where(eq(schema.domains.orgId, orgId));
+  const [links, domains] = await Promise.all([
+    db
+      .select({ slug: schema.links.slug, hostname: schema.domains.hostname })
+      .from(schema.links)
+      .leftJoin(schema.domains, eq(schema.links.domainId, schema.domains.id))
+      .where(eq(schema.links.orgId, orgId)),
+    db
+      .select({ hostname: schema.domains.hostname })
+      .from(schema.domains)
+      .where(eq(schema.domains.orgId, orgId)),
+  ]);
   // clicks/links/members/domains cascade in D1; KV needs manual cleanup
   await db.delete(schema.orgs).where(eq(schema.orgs.id, orgId));
   await Promise.all([
@@ -177,10 +234,18 @@ adminRoutes.get("/users", async (c) => {
       name: schema.user.name,
       email: schema.user.email,
       isAdmin: schema.user.isAdmin,
+      banned: schema.user.banned,
+      emailVerified: schema.user.emailVerified,
       plan: schema.user.plan,
       createdAt: schema.user.createdAt,
       orgCount: sql<number>`(
         select count(*) from org_members where org_members.user_id = "user".id
+      )`,
+      // literal "user".id: interpolated columns render unqualified inside
+      // correlated subqueries and bind to the wrong table
+      lastSeen: sql<number | null>`(
+        select max(session.updated_at) from session
+        where session.user_id = "user".id
       )`,
     })
     .from(schema.user);
@@ -192,30 +257,61 @@ adminRoutes.get("/users", async (c) => {
   );
 });
 
-// Superadmin controls: toggle platform-admin and/or comp a user's plan
-// (Free/Pro). Plan lives on the user, so comping Pro unlocks every org they own.
+// Superadmin controls: toggle platform-admin, ban/unban, and/or comp a user's
+// plan (Free/Pro). Plan lives on the user, so comping Pro unlocks every org
+// they own.
 adminRoutes.patch("/users/:userId", async (c) => {
-  const body = await c.req.json<{ isAdmin?: boolean; plan?: string }>();
+  const body = await c.req.json<{
+    isAdmin?: boolean;
+    banned?: boolean;
+    plan?: string;
+  }>();
   const targetId = c.req.param("userId");
-  const patch: { isAdmin?: boolean; plan?: OrgPlan } = {};
+  const self = c.var.user!;
+  const patch: { isAdmin?: boolean; banned?: boolean; plan?: OrgPlan } = {};
   if (body.isAdmin !== undefined) {
     if (typeof body.isAdmin !== "boolean")
       throw new HTTPException(400, { message: "isAdmin must be boolean" });
-    if (targetId === c.var.user!.id && !body.isAdmin)
+    if (targetId === self.id && !body.isAdmin)
       throw new HTTPException(400, { message: "Cannot demote yourself" });
     patch.isAdmin = body.isAdmin;
+  }
+  if (body.banned !== undefined) {
+    if (typeof body.banned !== "boolean")
+      throw new HTTPException(400, { message: "banned must be boolean" });
+    if (targetId === self.id)
+      throw new HTTPException(400, { message: "Cannot ban yourself" });
+    if (body.banned) {
+      const target = await c.var.db
+        .select({ isAdmin: schema.user.isAdmin })
+        .from(schema.user)
+        .where(eq(schema.user.id, targetId));
+      if (target[0]?.isAdmin)
+        throw new HTTPException(400, { message: "Cannot ban a platform admin" });
+    }
+    patch.banned = body.banned;
   }
   if (body.plan !== undefined) {
     if (body.plan !== "free" && body.plan !== "pro")
       throw new HTTPException(400, { message: "plan must be free or pro" });
     patch.plan = body.plan;
   }
-  if (patch.isAdmin === undefined && patch.plan === undefined)
+  if (
+    patch.isAdmin === undefined &&
+    patch.banned === undefined &&
+    patch.plan === undefined
+  )
     throw new HTTPException(400, { message: "Nothing to update" });
   await c.var.db
     .update(schema.user)
     .set(patch)
     .where(eq(schema.user.id, targetId));
+  // Banning kicks the user out immediately: all their sessions are wiped, and
+  // better-auth refuses to create new ones (see better-auth.ts).
+  if (patch.banned)
+    await c.var.db
+      .delete(schema.session)
+      .where(eq(schema.session.userId, targetId));
   return c.json({ ok: true });
 });
 

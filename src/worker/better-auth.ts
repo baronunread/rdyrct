@@ -81,6 +81,8 @@ function buildAuth(env: Env) {
     user: {
       additionalFields: {
         isAdmin: { type: "boolean", defaultValue: false, input: false },
+        // Suspended by a platform admin; flipped only via the admin API.
+        banned: { type: "boolean", defaultValue: false, input: false },
         // Per-user subscription; flipped by the Polar webhook, never by input.
         plan: { type: "string", defaultValue: "free", input: false },
         polarSubscriptionCancelAtPeriodEnd: {
@@ -134,6 +136,22 @@ function buildAuth(env: Env) {
                 plan: isSuper ? "pro" : "free",
               },
             };
+          },
+        },
+      },
+      session: {
+        create: {
+          // Banned accounts can't start a session (existing ones are wiped by
+          // the ban). Throwing aborts creation with this message on sign-in.
+          before: async (session) => {
+            const rows = await db
+              .select({ banned: schema.user.banned })
+              .from(schema.user)
+              .where(eq(schema.user.id, session.userId));
+            if (rows[0]?.banned)
+              throw new APIError(403, {
+                message: "This account has been suspended.",
+              });
           },
         },
       },

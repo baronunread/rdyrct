@@ -6,14 +6,23 @@ export function Menu({
   trigger,
   children,
   align = "start",
+  label,
 }: {
   trigger: ReactNode;
   children: ReactNode;
   align?: "start" | "end";
+  /** Names an icon-only trigger (aria-label + tooltip). */
+  label?: string;
 }) {
   return (
     <BaseMenu.Root>
-      <BaseMenu.Trigger className="w-full cursor-pointer" nativeButton={false} render={<div />}>
+      <BaseMenu.Trigger
+        className="w-full cursor-pointer"
+        nativeButton={false}
+        render={<div />}
+        aria-label={label}
+        title={label}
+      >
         {trigger}
       </BaseMenu.Trigger>
       <BaseMenu.Portal>
