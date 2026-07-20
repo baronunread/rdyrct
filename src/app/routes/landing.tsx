@@ -170,7 +170,7 @@ function NoCell({ tier }: { tier?: Tier }) {
 /**
  * Where a paid-plan CTA sends people: logged-in users go straight to checkout
  * (/billing?plan=…), everyone else signs up first with that destination as
- * `next`, so the intent survives OTP verification and onboarding.
+ * `next`, so the intent survives OTP verification.
  */
 function usePaidPlanTo() {
   const me = useCurrentUser();

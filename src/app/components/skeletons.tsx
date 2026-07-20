@@ -189,24 +189,6 @@ export function InviteSkeleton() {
   );
 }
 
-/** /onboarding: centered org-create form card. */
-export function OnboardingSkeleton() {
-  return (
-    <div className="grid min-h-dvh place-items-center px-4">
-      <SkeletonStatus className="w-full max-w-md">
-        <Skeleton className="mx-auto mb-6 h-5 w-24" />
-        <div className="flex flex-col gap-4 rounded-xl border border-border bg-surface p-6">
-          <Skeleton className="h-4 w-48 max-w-full" />
-          <Skeleton className="h-3 w-3/4" />
-          <Skeleton className="mt-2 h-9 w-full" />
-          <Skeleton className="h-9 w-full" />
-          <Skeleton className="h-9 w-full" />
-        </div>
-      </SkeletonStatus>
-    </div>
-  );
-}
-
 /** First paint of the authenticated app: sidebar chrome + main content. */
 export function AppShellSkeleton() {
   return (

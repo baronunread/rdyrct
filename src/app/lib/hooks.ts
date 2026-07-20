@@ -52,10 +52,13 @@ export function useLogout() {
   });
 }
 
+// Org-scoped queries guard on orgId: a user with no organization yet renders
+// the pages' empty states, and these must not fire at /orgs//… meanwhile.
 export const useLinks = (orgId: string) =>
   useQuery<LinkDTO[]>({
     queryKey: ["links", orgId],
     queryFn: () => api(`/orgs/${orgId}/links`),
+    enabled: !!orgId,
   });
 
 export function useLinkMutations(orgId: string) {
@@ -86,26 +89,28 @@ export const useStats = (orgId: string) =>
   useQuery<OrgStats>({
     queryKey: ["stats", orgId],
     queryFn: () => api(`/orgs/${orgId}/stats`),
+    enabled: !!orgId,
   });
 
 export const useMembers = (orgId: string) =>
   useQuery<MemberDTO[]>({
     queryKey: ["members", orgId],
     queryFn: () => api(`/orgs/${orgId}/members`),
+    enabled: !!orgId,
   });
 
 export const useInvites = (orgId: string, enabled: boolean) =>
   useQuery<InviteDTO[]>({
     queryKey: ["invites", orgId],
     queryFn: () => api(`/orgs/${orgId}/invites`),
-    enabled,
+    enabled: enabled && !!orgId,
   });
 
 export const useDomains = (orgId: string, enabled = true) =>
   useQuery<DomainDTO[]>({
     queryKey: ["domains", orgId],
     queryFn: () => api(`/orgs/${orgId}/domains`),
-    enabled,
+    enabled: enabled && !!orgId,
     // The backend advances the pipeline on read, so polling the list is all
     // it takes — poll while any domain is still in a transitional state.
     refetchInterval: (query) =>

@@ -1,6 +1,6 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import { BrowserRouter, Routes, Route } from "react-router";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import "@fontsource/jetbrains-mono/400.css";
 import "@fontsource/jetbrains-mono/700.css";
@@ -11,7 +11,6 @@ import { LandingPage } from "./routes/landing";
 import { AuthPage } from "./routes/auth";
 import { ResetPasswordPage } from "./routes/reset-password";
 import { InvitePage } from "./routes/invite";
-import { OnboardingPage } from "./routes/onboarding";
 import { PrivacyPage } from "./routes/privacy";
 import { TermsPage } from "./routes/terms";
 import { AppShell, RequireAuth, RequireAdmin } from "./routes/shell";
@@ -45,14 +44,11 @@ createRoot(document.getElementById("root")!).render(
             <Route path="/terms" element={<TermsPage />} />
             <Route path="/invite/:token" element={<InvitePage />} />
 
-            {/* authenticated, no shell (clean onboarding) */}
+            {/* onboarding is gone: the app renders a create-org empty state
+                instead; keep stale links working */}
             <Route
               path="/onboarding"
-              element={
-                <RequireAuth>
-                  <OnboardingPage />
-                </RequireAuth>
-              }
+              element={<Navigate to="/dashboard" replace />}
             />
 
             {/* authenticated app: root keywords, no /app prefix, no org id */}

@@ -46,7 +46,7 @@ Shell writes to repo files are sandboxed; edit through the editor tools, not
   BetterAuth at `/api/auth/*` → Polar webhook `/api/webhooks/polar` → API router
   (`/api/*`, behind `withSession`) → root `/:slug` redirect → SPA asset fallback.
 - **Routing has NO `/app` prefix.** `/` is the marketing landing. Public routes:
-  `/login`, `/signup`, `/onboarding`, `/privacy`, `/terms`, `/reset-password`,
+  `/login`, `/signup`, `/privacy`, `/terms`, `/reset-password`,
   `/invite/:token`. The app lives at root keywords: `/dashboard`, `/links`,
   `/domains`, `/members`, `/billing`, `/settings`, `/admin`. There is **no org id
   in URLs**: the current org is a localStorage-backed store, `useCurrentOrg`
@@ -60,8 +60,12 @@ Shell writes to repo files are sandboxed; edit through the editor tools, not
   `src/shared/types.ts` (`{ orgs, links, members, domains, qr,
   analyticsDays }`). Slugs on the **shared** domain are always random (every
   plan); chosen slugs exist only on custom domains, so the shared namespace
-  can't be squatted. New users get **no default org**; they create the first
-  one at `/onboarding`.
+  can't be squatted. New users get **no default org**: there is no onboarding
+  route — org-scoped pages render `NoOrgState`
+  (`src/app/components/no-org.tsx`) until they create one, and `/billing`
+  works org-less, so landing paid CTAs (`/signup?next=/billing?plan=…`) can
+  check out before the first org exists (`/onboarding` redirects to
+  `/dashboard`).
 - **Auth**: BetterAuth (email+password, `requireEmailVerification` via the
   `emailOTP` plugin, 6-digit code; password reset stays a link). PBKDF2/WebCrypto
   hashing (`src/worker/password.ts`). The account matching the `SUPERADMIN_EMAIL`

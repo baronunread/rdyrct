@@ -27,7 +27,10 @@ export function SettingsPage() {
   const qc = useQueryClient();
   const toast = useToast();
   const isOwner = me.data?.user.isAdmin || org?.role === "owner";
-  const [name, setName] = useState(org?.name ?? "");
+  // Draft-until-edited: tracks the active org (including one just created
+  // from the NoOrgState below, while this page stays mounted) until typed in.
+  const [nameDraft, setNameDraft] = useState<string | null>(null);
+  const name = nameDraft ?? org?.name ?? "";
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
@@ -59,39 +62,47 @@ export function SettingsPage() {
 
   return (
     <div>
-      <PageHeader title="Settings" sub="Organization settings" />
+      <PageHeader
+        title="Settings"
+        sub={org ? "Organization settings" : "Your account"}
+      />
       <div className="flex flex-col gap-4">
-        <Card className="max-w-2xl">
-          <div className="flex flex-col gap-4">
-            <Field label="Organization name">
-              <Input
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                disabled={!isOwner}
-              />
-            </Field>
-            <Field label="Organization id">
-              <Input value={orgId} disabled readOnly />
-            </Field>
-            {isOwner ? (
-              <div>
-                <Button
-                  variant="primary"
-                  onClick={rename}
-                  disabled={!name.trim()}
-                >
-                  Save
-                </Button>
+        {/* org cards only when an org exists; account deletion always */}
+        {org && (
+          <>
+            <Card className="max-w-2xl">
+              <div className="flex flex-col gap-4">
+                <Field label="Organization name">
+                  <Input
+                    value={name}
+                    onChange={(e) => setNameDraft(e.target.value)}
+                    disabled={!isOwner}
+                  />
+                </Field>
+                <Field label="Organization id">
+                  <Input value={orgId} disabled readOnly />
+                </Field>
+                {isOwner ? (
+                  <div>
+                    <Button
+                      variant="primary"
+                      onClick={rename}
+                      disabled={!name.trim()}
+                    >
+                      Save
+                    </Button>
+                  </div>
+                ) : (
+                  <p className="text-xs text-muted">
+                    Only the owner can change these settings.
+                  </p>
+                )}
               </div>
-            ) : (
-              <p className="text-xs text-muted">
-                Only the owner can change these settings.
-              </p>
-            )}
-          </div>
-        </Card>
+            </Card>
 
-        <QrDefaultsCard />
+            <QrDefaultsCard />
+          </>
+        )}
 
         <Card className="max-w-2xl">
           <div className="flex flex-col gap-3">

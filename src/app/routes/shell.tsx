@@ -36,11 +36,7 @@ import { Dialog } from "../ui/dialog";
 import { Button, IconButton } from "../ui/button";
 import { Field, Input } from "../ui/field";
 
-import {
-  AppShellSkeleton,
-  OnboardingSkeleton,
-  PageSkeleton,
-} from "../components/skeletons";
+import { AppShellSkeleton, PageSkeleton } from "../components/skeletons";
 import { cn } from "../ui/cn";
 import { NotFound } from "./not-found";
 import { PLAN_LIMITS } from "@/shared/types";
@@ -48,13 +44,7 @@ import { PLAN_LIMITS } from "@/shared/types";
 export function RequireAuth({ children }: { children: ReactNode }) {
   const me = useCurrentUser();
   const location = useLocation();
-  // Onboarding lives outside the app shell: show its own shape, not the sidebar.
-  if (me.isLoading)
-    return location.pathname === "/onboarding" ? (
-      <OnboardingSkeleton />
-    ) : (
-      <AppShellSkeleton />
-    );
+  if (me.isLoading) return <AppShellSkeleton />;
   if (!me.data)
     return (
       <Navigate
@@ -87,7 +77,6 @@ function navClass({ isActive }: { isActive: boolean }) {
 export function AppShell() {
   const me = useCurrentUser();
   const navigate = useNavigate();
-  const location = useLocation();
   const qc = useQueryClient();
   const logout = useLogout();
   const toast = useToast();
@@ -99,17 +88,7 @@ export function AppShell() {
   const { org, orgs, setOrg } = useCurrentOrg();
 
   if (!me.data) return null;
-  // No org yet → clean onboarding (outside the shell). Pass the destination
-  // along so deep links (e.g. landing's "Start Pro" → /billing?plan=pro)
-  // resume once the first org exists.
-  if (orgs.length === 0)
-    return (
-      <Navigate
-        to="/onboarding"
-        state={{ next: location.pathname + location.search }}
-        replace
-      />
-    );
+  // No org is fine: org-scoped pages render NoOrgState, billing is per-user.
   const { user } = me.data;
 
   // Multi-org is a Pro perk: the owned-org cap comes from the caller's plan.
@@ -155,7 +134,9 @@ export function AppShell() {
         <Menu
           trigger={
             <div className="flex w-full items-center justify-between gap-2 rounded-md border border-border bg-surface px-2.5 py-2 text-sm select-none hover:border-accent">
-              <span className="truncate">{org ? org.name : "Select org"}</span>
+              <span className="truncate">
+                {org ? org.name : "No organization"}
+              </span>
               <ChevronsUpDown size={14} className="shrink-0 text-muted" />
             </div>
           }
@@ -194,29 +175,28 @@ export function AppShell() {
         </Menu>
       </div>
 
-      {/* org nav */}
-      {org && (
-        <nav className="flex flex-col gap-0.5 px-3 py-2">
-          <NavLink to="/dashboard" className={navClass}>
-            <LayoutDashboard size={15} /> Overview
-          </NavLink>
-          <NavLink to="/links" className={navClass}>
-            <Link2 size={15} /> Links
-          </NavLink>
-          <NavLink to="/domains" className={navClass}>
-            <Globe size={15} /> Domains
-          </NavLink>
-          <NavLink to="/members" className={navClass}>
-            <Users size={15} /> Members
-          </NavLink>
-          <NavLink to="/billing" className={navClass}>
-            <CreditCard size={15} /> Billing
-          </NavLink>
-          <NavLink to="/settings" className={navClass}>
-            <Settings size={15} /> Settings
-          </NavLink>
-        </nav>
-      )}
+      {/* nav — always visible: org-scoped pages render their own empty state
+          when no org exists yet, and billing is per-user */}
+      <nav className="flex flex-col gap-0.5 px-3 py-2">
+        <NavLink to="/dashboard" className={navClass}>
+          <LayoutDashboard size={15} /> Overview
+        </NavLink>
+        <NavLink to="/links" className={navClass}>
+          <Link2 size={15} /> Links
+        </NavLink>
+        <NavLink to="/domains" className={navClass}>
+          <Globe size={15} /> Domains
+        </NavLink>
+        <NavLink to="/members" className={navClass}>
+          <Users size={15} /> Members
+        </NavLink>
+        <NavLink to="/billing" className={navClass}>
+          <CreditCard size={15} /> Billing
+        </NavLink>
+        <NavLink to="/settings" className={navClass}>
+          <Settings size={15} /> Settings
+        </NavLink>
+      </nav>
 
       {/* platform admin */}
       {user.isAdmin && (

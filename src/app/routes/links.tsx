@@ -33,6 +33,7 @@ import { TableSkeleton } from "../ui/skeleton";
 import { Tooltip } from "../ui/tooltip";
 import { useToast } from "../ui/toast";
 import { QRPreview, QrLogoInput, QrColorField } from "../components/qr";
+import { NoOrgState } from "../components/no-org";
 
 const emptyForm: LinkInput = {
   destination: "",
@@ -123,6 +124,8 @@ export function LinksPage() {
 
   const noQrToast = () =>
     toast("QR codes are a Pro feature: upgrade in Settings", "error");
+
+  if (!org) return <NoOrgState />;
 
   const save = () => {
     const done = {

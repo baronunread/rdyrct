@@ -4,12 +4,15 @@ import { useCurrentOrg } from "../lib/current-org";
 import { PLAN_LIMITS } from "@/shared/types";
 import { AreaChart, BarList, StatCard } from "../components/charts";
 import { DashboardSkeleton } from "../components/skeletons";
+import { NoOrgState } from "../components/no-org";
 import { Card, PageHeader } from "../ui/misc";
 
 export function Dashboard() {
   const { org } = useCurrentOrg();
   const stats = useStats(org?.id ?? "");
 
+  // Fresh accounts land here: the empty state doubles as onboarding.
+  if (!org) return <NoOrgState />;
   if (stats.isLoading) return <DashboardSkeleton />;
   if (!stats.data)
     return <p className="text-sm text-danger">Could not load stats.</p>;

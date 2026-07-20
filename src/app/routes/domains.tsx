@@ -16,6 +16,7 @@ import { Dialog } from "../ui/dialog";
 import { Input } from "../ui/field";
 import { Badge, Card, PageHeader } from "../ui/misc";
 import { DomainsSkeleton } from "../components/skeletons";
+import { NoOrgState } from "../components/no-org";
 import { useToast } from "../ui/toast";
 import { cn } from "../ui/cn";
 
@@ -40,13 +41,15 @@ export function DomainsPage() {
   const isAdmin =
     me.data?.user.isAdmin || org?.role === "owner" || org?.role === "admin";
 
+  if (!org) return <NoOrgState />;
+
   return (
     <div>
       <PageHeader
         title="Domains"
         sub="Serve short links from your own domain"
       />
-      {!org || !isAdmin ? (
+      {!isAdmin ? (
         <p className="text-sm text-muted">
           You don't have access to domains.
         </p>

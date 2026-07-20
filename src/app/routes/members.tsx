@@ -19,6 +19,7 @@ import {
 } from "../ui/misc";
 import { TableSkeleton } from "../ui/skeleton";
 import { useToast } from "../ui/toast";
+import { NoOrgState } from "../components/no-org";
 
 const roleColor: Record<OrgRole, "accent" | "mint" | "muted"> = {
   owner: "accent",
@@ -109,6 +110,8 @@ export function MembersPage() {
   };
 
   const memberLimit = org ? PLAN_LIMITS[org.plan].members : 0;
+
+  if (!org) return <NoOrgState />;
 
   return (
     <div>
