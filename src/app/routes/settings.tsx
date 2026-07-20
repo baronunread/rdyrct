@@ -19,6 +19,7 @@ import { MenuSelect } from "../ui/menu";
 import { Card, PageHeader } from "../ui/misc";
 import { useToast } from "../ui/toast";
 import { QRPreview, QrLogoInput, QrColorField } from "../components/qr";
+import { CopyButton } from "../ui/copy-button";
 
 export function SettingsPage() {
   const { org } = useCurrentOrg();
@@ -45,6 +46,11 @@ export function SettingsPage() {
     } catch (e) {
       toast((e as Error).message, "error");
     }
+  };
+
+  const copyOrgName = (text: string) => {
+    navigator.clipboard.writeText(text);
+    toast("Copied to clipboard");
   };
 
   const deleteOrg = async () => {
@@ -178,14 +184,28 @@ export function SettingsPage() {
               every link, custom domain, and all click history. Short links
               stop working immediately. This cannot be undone.
             </p>
-            <Field label={`Type "${org.name}" to confirm`}>
+            {/* outside a Field: its uppercase label would hide the name's
+                real casing, which the exact-match check depends on */}
+            <div>
+              <div className="mb-1.5 flex flex-wrap items-center gap-1.5 text-sm text-muted">
+                <span>To confirm, type</span>
+                <code className="rounded bg-bg px-1.5 py-0.5 text-text">
+                  {org.name}
+                </code>
+                <CopyButton
+                  text={org.name}
+                  label="Copy organization name"
+                  onCopy={copyOrgName}
+                />
+              </div>
               <Input
                 value={confirmName}
                 onChange={(e) => setConfirmName(e.target.value)}
                 placeholder={org.name}
+                aria-label={`Type ${org.name} to confirm deletion`}
                 autoFocus
               />
-            </Field>
+            </div>
             <div className="flex justify-end gap-2">
               <Button variant="ghost" onClick={() => setDeleteOrgOpen(false)}>
                 Cancel
