@@ -433,15 +433,13 @@ function LinkEditor({
                 hint={
                   slugLocked ? (
                     <>
-                      The shared domain assigns random slugs — pick your own
-                      on a{" "}
                       <RouterLink
-                        to="/domains"
+                        to="/billing"
                         className="text-accent hover:underline"
                       >
-                        custom domain
+                        Upgrade
                       </RouterLink>{" "}
-                      (Hobby or Pro).
+                      for custom slugs.
                     </>
                   ) : (
                     "Leave empty for a random one"
