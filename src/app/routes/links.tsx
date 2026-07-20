@@ -10,7 +10,7 @@ import {
   Lock,
   Info,
 } from "lucide-react";
-import { useLinks, useLinkMutations, useMe, useDomains } from "../lib/hooks";
+import { useLinks, useLinkMutations, useCurrentUser, useDomains } from "../lib/hooks";
 import { useCurrentOrg } from "../lib/current-org";
 import { shortUrl, ApiError } from "../lib/api";
 import {
@@ -66,7 +66,7 @@ export function LinksPage() {
   const orgId = org?.id ?? "";
   const links = useLinks(orgId);
   const { create, update, remove } = useLinkMutations(orgId);
-  const me = useMe();
+  const me = useCurrentUser();
   const toast = useToast();
 
   const limits = PLAN_LIMITS[org?.plan ?? "free"];
@@ -198,6 +198,7 @@ export function LinksPage() {
                       {link.domain ? `${link.domain}/${link.slug}` : `/${link.slug}`}
                     </span>
                     <button
+                      type="button"
                       onClick={() => copy(link)}
                       aria-label={`Copy ${shortUrl(link.slug, link.domain)}`}
                       className="cursor-pointer rounded p-1 text-muted opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100 hover:text-text"

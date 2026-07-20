@@ -24,6 +24,57 @@ function AuthCard({ children }: { children: ReactNode }) {
 
 type View = "form" | "forgot" | "forgot-sent" | "verify-otp";
 
+/** Password-reset request card ("email on its way" state included). */
+function ForgotView({
+  sent,
+  email,
+  busy,
+  onEmailChange,
+  onSubmit,
+  onBack,
+}: {
+  sent: boolean;
+  email: string;
+  busy: boolean;
+  onEmailChange: (v: string) => void;
+  onSubmit: (e: FormEvent) => void;
+  onBack: () => void;
+}) {
+  return (
+    <AuthCard>
+      <div className="flex flex-col gap-4 rounded-xl border border-border bg-surface p-6">
+        <h1 className="font-bold">Reset your password</h1>
+        {sent ? (
+          <p className="text-sm text-muted">
+            If that account exists, we sent a reset link to{" "}
+            <span className="text-text">{email}</span>.
+          </p>
+        ) : (
+          <form onSubmit={onSubmit} className="flex flex-col gap-4">
+            <Field label="Email">
+              <Input
+                type="email"
+                value={email}
+                onChange={(e) => onEmailChange(e.target.value)}
+                required
+                autoComplete="email"
+              />
+            </Field>
+            <Button type="submit" variant="primary" disabled={busy}>
+              {busy ? "…" : "Send reset link"}
+            </Button>
+          </form>
+        )}
+        <p className="text-center text-xs text-muted">
+          <Link to="/login" onClick={onBack}>
+            Back to sign in
+          </Link>
+        </p>
+      </div>
+    </AuthCard>
+  );
+}
+
 // The OTP screen survives a reload: the pending email (and post-verify
 // destination) live in sessionStorage until the code is entered or the user
 // backs out, so a refresh mid-verification doesn't dump you at the form.
@@ -255,40 +306,14 @@ export function AuthPage({ mode }: { mode: "login" | "signup" }) {
 
   if (view === "forgot" || view === "forgot-sent") {
     return (
-      <AuthCard>
-        <div className="flex flex-col gap-4 rounded-xl border border-border bg-surface p-6">
-          <h1 className="font-bold">Reset your password</h1>
-          {view === "forgot-sent" ? (
-            <p className="text-sm text-muted">
-              If that account exists, we sent a reset link to{" "}
-              <span className="text-text">{forgotEmail}</span>.
-            </p>
-          ) : (
-            <form onSubmit={submitForgot} className="flex flex-col gap-4">
-              <Field label="Email">
-                <Input
-                  type="email"
-                  value={forgotEmail}
-                  onChange={(e) => setForgotEmail(e.target.value)}
-                  required
-                  autoComplete="email"
-                />
-              </Field>
-              <Button type="submit" variant="primary" disabled={forgotBusy}>
-                {forgotBusy ? "…" : "Send reset link"}
-              </Button>
-            </form>
-          )}
-          <p className="text-center text-xs text-muted">
-            <Link
-              to="/login"
-              onClick={() => setView("form")}
-            >
-              Back to sign in
-            </Link>
-          </p>
-        </div>
-      </AuthCard>
+      <ForgotView
+        sent={view === "forgot-sent"}
+        email={forgotEmail}
+        busy={forgotBusy}
+        onEmailChange={setForgotEmail}
+        onSubmit={submitForgot}
+        onBack={() => setView("form")}
+      />
     );
   }
 

@@ -33,6 +33,7 @@ export function ConsentBanner() {
         .
       </p>
       <button
+        type="button"
         onClick={accept}
         className="mt-3 w-full cursor-pointer rounded-md border border-border px-3 py-1.5 hover:border-accent hover:text-text"
       >

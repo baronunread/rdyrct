@@ -2,7 +2,7 @@ import { useState, type FormEvent } from "react";
 import { Navigate, useNavigate } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { X } from "lucide-react";
-import { useMe } from "../lib/hooks";
+import { useCurrentUser } from "../lib/hooks";
 import { useCurrentOrg } from "../lib/current-org";
 import { api, ApiError } from "../lib/api";
 import { Button } from "../ui/button";
@@ -12,14 +12,17 @@ import { useToast } from "../ui/toast";
 import { PLAN_LIMITS } from "@/shared/types";
 
 export function OnboardingPage() {
-  const me = useMe();
+  const me = useCurrentUser();
   const { setOrg } = useCurrentOrg();
   const navigate = useNavigate();
   const toast = useToast();
   const qc = useQueryClient();
 
   const [name, setName] = useState("");
-  const [emails, setEmails] = useState<string[]>([""]);
+  // Each invite row carries a stable id so React keys survive row removal.
+  const [emails, setEmails] = useState<{ id: string; value: string }[]>([
+    { id: crypto.randomUUID(), value: "" },
+  ]);
   const [busy, setBusy] = useState(false);
 
   if (me.isLoading) {
@@ -34,16 +37,16 @@ export function OnboardingPage() {
     ? PLAN_LIMITS[me.data.user.plan].members - 1
     : 0;
 
-  const updateEmail = (i: number, value: string) => {
-    setEmails((es) => es.map((e, idx) => (idx === i ? value : e)));
+  const updateEmail = (id: string, value: string) => {
+    setEmails((es) => es.map((e) => (e.id === id ? { ...e, value } : e)));
   };
 
   const addEmailRow = () => {
-    setEmails((es) => [...es, ""]);
+    setEmails((es) => [...es, { id: crypto.randomUUID(), value: "" }]);
   };
 
-  const removeEmailRow = (i: number) => {
-    setEmails((es) => es.filter((_, idx) => idx !== i));
+  const removeEmailRow = (id: string) => {
+    setEmails((es) => es.filter((e) => e.id !== id));
   };
 
   const submit = async (e: FormEvent) => {
@@ -56,7 +59,10 @@ export function OnboardingPage() {
         body: { name: name.trim() },
       });
 
-      const inviteEmails = emails.map((e) => e.trim()).filter(Boolean);
+      const inviteEmails = emails.flatMap((e) => {
+        const email = e.value.trim();
+        return email ? [email] : [];
+      });
       if (inviteEmails.length > 0) {
         try {
           await api(`/orgs/${created.id}/invites`, {
@@ -117,12 +123,12 @@ export function OnboardingPage() {
               Invite your team
             </span>
             <div className="flex flex-col gap-2">
-              {emails.map((value, i) => (
-                <div key={i} className="flex items-center gap-2">
+              {emails.map(({ id, value }) => (
+                <div key={id} className="flex items-center gap-2">
                   <Input
                     type="email"
                     value={value}
-                    onChange={(e) => updateEmail(i, e.target.value)}
+                    onChange={(e) => updateEmail(id, e.target.value)}
                     placeholder="teammate@company.com"
                   />
                   {emails.length > 1 && (
@@ -130,7 +136,7 @@ export function OnboardingPage() {
                       type="button"
                       variant="ghost"
                       size="sm"
-                      onClick={() => removeEmailRow(i)}
+                      onClick={() => removeEmailRow(id)}
                       aria-label="Remove email"
                     >
                       <X size={13} />

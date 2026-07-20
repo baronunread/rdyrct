@@ -242,6 +242,7 @@ export function QrLogoInput({
       accept="image/*"
       disabled={disabled}
       onChange={onChange}
+      aria-label="Upload a logo image"
       className="w-full cursor-pointer text-xs text-muted file:mr-2 file:cursor-pointer file:rounded-md file:border file:border-border file:bg-surface file:px-2.5 file:py-1.5 file:text-xs file:text-text disabled:opacity-50"
     />
   );

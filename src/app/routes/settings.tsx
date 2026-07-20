@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
-import { useMe } from "../lib/hooks";
+import { useCurrentUser } from "../lib/hooks";
 import { useCurrentOrg } from "../lib/current-org";
 import { api, shortUrl } from "../lib/api";
 import { authClient } from "../lib/auth-client";
@@ -21,7 +21,7 @@ import { QRPreview, QrLogoInput, QrColorField } from "../components/qr";
 export function SettingsPage() {
   const { org } = useCurrentOrg();
   const orgId = org?.id ?? "";
-  const me = useMe();
+  const me = useCurrentUser();
   const qc = useQueryClient();
   const toast = useToast();
   const isOwner = me.data?.user.isAdmin || org?.role === "owner";
@@ -145,11 +145,15 @@ export function SettingsPage() {
                         disabled={!isOwner}
                       >
                         <option value="">Rounded (default)</option>
-                        {QR_DOT_STYLES.filter((s) => s !== "rounded").map(
-                          (s) => (
-                            <option key={s} value={s}>
-                              {s}
-                            </option>
+                        {QR_DOT_STYLES.flatMap((s) =>
+                          s === "rounded" ? (
+                            []
+                          ) : (
+                            [
+                              <option key={s} value={s}>
+                                {s}
+                              </option>,
+                            ]
                           ),
                         )}
                       </Select>
@@ -161,13 +165,17 @@ export function SettingsPage() {
                         disabled={!isOwner}
                       >
                         <option value="">Extra-rounded (default)</option>
-                        {QR_CORNER_STYLES.filter(
-                          (s) => s !== "extra-rounded",
-                        ).map((s) => (
-                          <option key={s} value={s}>
-                            {s}
-                          </option>
-                        ))}
+                        {QR_CORNER_STYLES.flatMap((s) =>
+                          s === "extra-rounded" ? (
+                            []
+                          ) : (
+                            [
+                              <option key={s} value={s}>
+                                {s}
+                              </option>,
+                            ]
+                          ),
+                        )}
                       </Select>
                     </Field>
                   </div>

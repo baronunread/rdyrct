@@ -1,6 +1,14 @@
 import type { ReactNode, ThHTMLAttributes, TdHTMLAttributes } from "react";
 import { cn } from "./cn";
 
+const badgeColors = {
+  muted: "border-border text-muted",
+  accent: "border-accent/40 text-accent",
+  mint: "border-accent-2/40 text-accent-2",
+  pink: "border-pink/40 text-pink",
+  butter: "border-butter/40 text-butter",
+};
+
 export function Badge({
   color = "muted",
   children,
@@ -8,18 +16,11 @@ export function Badge({
   color?: "muted" | "accent" | "mint" | "pink" | "butter";
   children: ReactNode;
 }) {
-  const colors = {
-    muted: "border-border text-muted",
-    accent: "border-accent/40 text-accent",
-    mint: "border-accent-2/40 text-accent-2",
-    pink: "border-pink/40 text-pink",
-    butter: "border-butter/40 text-butter",
-  };
   return (
     <span
       className={cn(
         "inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] tracking-wide",
-        colors[color],
+        badgeColors[color],
       )}
     >
       {children}

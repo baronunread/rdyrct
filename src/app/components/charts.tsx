@@ -1,6 +1,10 @@
 import { useMemo, useRef, useState } from "react";
 import type { SeriesPoint } from "@/shared/types";
 
+// Chart geometry constants — shared by every AreaChart render.
+const WIDTH = 640; // viewBox units; scales to container
+const PAD = { top: 12, right: 8, bottom: 22, left: 34 };
+
 /**
  * Single-series area chart (clicks over time). One hue (--chart), recessive
  * grid, crosshair + tooltip on hover. No legend: the card title names the
@@ -15,21 +19,19 @@ export function AreaChart({
 }) {
   const ref = useRef<SVGSVGElement>(null);
   const [hover, setHover] = useState<number | null>(null);
-  const width = 640; // viewBox units; scales to container
-  const pad = { top: 12, right: 8, bottom: 22, left: 34 };
-  const innerW = width - pad.left - pad.right;
-  const innerH = height - pad.top - pad.bottom;
+  const innerW = WIDTH - PAD.left - PAD.right;
+  const innerH = height - PAD.top - PAD.bottom;
 
   const { max, points, path, area, ticks } = useMemo(() => {
     const max = Math.max(1, ...data.map((d) => d.clicks));
     const x = (i: number) =>
-      pad.left + (data.length === 1 ? innerW / 2 : (i / (data.length - 1)) * innerW);
-    const y = (v: number) => pad.top + innerH - (v / max) * innerH;
+      PAD.left + (data.length === 1 ? innerW / 2 : (i / (data.length - 1)) * innerW);
+    const y = (v: number) => PAD.top + innerH - (v / max) * innerH;
     const points = data.map((d, i) => ({ x: x(i), y: y(d.clicks), ...d }));
     const path = points
       .map((p, i) => `${i === 0 ? "M" : "L"}${p.x.toFixed(1)},${p.y.toFixed(1)}`)
       .join("");
-    const area = `${path}L${points.at(-1)!.x.toFixed(1)},${pad.top + innerH}L${points[0].x.toFixed(1)},${pad.top + innerH}Z`;
+    const area = `${path}L${points.at(-1)!.x.toFixed(1)},${PAD.top + innerH}L${points[0].x.toFixed(1)},${PAD.top + innerH}Z`;
     const step = Math.max(1, Math.floor(data.length / 5));
     const ticks = points.filter((_, i) => i % step === 0);
     return { max, points, path, area, ticks };
@@ -39,7 +41,7 @@ export function AreaChart({
 
   const onMove = (e: React.MouseEvent) => {
     const rect = ref.current!.getBoundingClientRect();
-    const px = ((e.clientX - rect.left) / rect.width) * width;
+    const px = ((e.clientX - rect.left) / rect.width) * WIDTH;
     let best = 0;
     for (let i = 1; i < points.length; i++)
       if (Math.abs(points[i].x - px) < Math.abs(points[best].x - px)) best = i;
@@ -52,7 +54,7 @@ export function AreaChart({
     <div className="relative">
       <svg
         ref={ref}
-        viewBox={`0 0 ${width} ${height}`}
+        viewBox={`0 0 ${WIDTH} ${height}`}
         className="block w-full"
         onMouseMove={onMove}
         onMouseLeave={() => setHover(null)}
@@ -63,17 +65,17 @@ export function AreaChart({
         {[0, 0.5, 1].map((f) => (
           <g key={f}>
             <line
-              x1={pad.left}
-              x2={width - pad.right}
-              y1={pad.top + innerH * f}
-              y2={pad.top + innerH * f}
+              x1={PAD.left}
+              x2={WIDTH - PAD.right}
+              y1={PAD.top + innerH * f}
+              y2={PAD.top + innerH * f}
               stroke="var(--border)"
               strokeWidth="1"
               strokeDasharray={f === 1 ? undefined : "3 5"}
             />
             <text
-              x={pad.left - 6}
-              y={pad.top + innerH * f + 3}
+              x={PAD.left - 6}
+              y={PAD.top + innerH * f + 3}
               textAnchor="end"
               fontSize="9"
               fill="var(--muted)"
@@ -102,8 +104,8 @@ export function AreaChart({
             <line
               x1={h.x}
               x2={h.x}
-              y1={pad.top}
-              y2={pad.top + innerH}
+              y1={PAD.top}
+              y2={PAD.top + innerH}
               stroke="var(--muted)"
               strokeWidth="1"
               strokeDasharray="3 3"
@@ -117,8 +119,8 @@ export function AreaChart({
         <div
           className="pointer-events-none absolute -top-1 rounded-md border border-border bg-surface-2 px-2.5 py-1.5 text-xs shadow-lg"
           style={{
-            left: `${(h.x / width) * 100}%`,
-            transform: h.x > width * 0.7 ? "translateX(-105%)" : "translateX(8px)",
+            left: `${(h.x / WIDTH) * 100}%`,
+            transform: h.x > WIDTH * 0.7 ? "translateX(-105%)" : "translateX(8px)",
           }}
         >
           <span className="text-muted">{h.day}</span>{" "}

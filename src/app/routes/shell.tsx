@@ -25,7 +25,7 @@ import {
   Menu as MenuIcon,
   X,
 } from "lucide-react";
-import { useMe, useLogout } from "../lib/hooks";
+import { useCurrentUser, useLogout } from "../lib/hooks";
 import { useCurrentOrg } from "../lib/current-org";
 import { api, ApiError } from "../lib/api";
 import { useTheme } from "../lib/theme";
@@ -45,7 +45,7 @@ import { NotFound } from "./not-found";
 import { PLAN_LIMITS } from "@/shared/types";
 
 export function RequireAuth({ children }: { children: ReactNode }) {
-  const me = useMe();
+  const me = useCurrentUser();
   const location = useLocation();
   // Onboarding lives outside the app shell: show its own shape, not the sidebar.
   if (me.isLoading)
@@ -62,7 +62,7 @@ export function RequireAuth({ children }: { children: ReactNode }) {
 /** Platform admin surface: 404s (not a redirect) for non-admins, so the
  * admin area's existence isn't revealed to regular users. */
 export function RequireAdmin({ children }: { children: ReactNode }) {
-  const me = useMe();
+  const me = useCurrentUser();
   if (me.isLoading) return <PageSkeleton />;
   if (!me.data?.user.isAdmin) return <NotFound />;
   return children;
@@ -78,7 +78,7 @@ function navClass({ isActive }: { isActive: boolean }) {
 }
 
 export function AppShell() {
-  const me = useMe();
+  const me = useCurrentUser();
   const navigate = useNavigate();
   const qc = useQueryClient();
   const logout = useLogout();
@@ -264,6 +264,7 @@ export function AppShell() {
           rdyrct
         </span>
         <button
+          type="button"
           onClick={() => setMobileOpen((v) => !v)}
           aria-label="Menu"
           className="cursor-pointer rounded-md p-1.5 text-muted hover:text-text"
@@ -272,14 +273,16 @@ export function AppShell() {
         </button>
       </div>
       {mobileOpen && (
-        <div
-          className="fixed inset-0 z-20 md:hidden"
-          onClick={() => setMobileOpen(false)}
-        >
-          <div
-            className="absolute top-[49px] bottom-0 left-0 w-64 border-r border-border bg-bg"
-            onClick={(e) => e.stopPropagation()}
-          >
+        <div className="fixed inset-0 z-20 md:hidden">
+          {/* click-outside backdrop as a real button: keyboard-focusable and
+              labeled, while drawer clicks (sibling, not child) never reach it */}
+          <button
+            type="button"
+            aria-label="Close menu"
+            className="absolute inset-0 cursor-default"
+            onClick={() => setMobileOpen(false)}
+          />
+          <div className="absolute top-[49px] bottom-0 left-0 w-64 border-r border-border bg-bg">
             {sidebar}
           </div>
         </div>
