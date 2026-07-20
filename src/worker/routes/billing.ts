@@ -21,7 +21,9 @@ billingRoutes.post("/checkout", requireUser, async (c) => {
   const user = c.var.user!;
   const checkout = await polarFor(c.env).checkouts.create({
     products: [c.env.POLAR_PRO_PRODUCT_ID],
-    successUrl: `${c.env.APP_URL}/billing?upgraded=1`,
+    // Polar interpolates {CHECKOUT_ID}; the SPA uses it to confirm the
+    // upgrade before celebrating (webhook is still the entitlement source).
+    successUrl: `${c.env.APP_URL}/billing?checkout_id={CHECKOUT_ID}`,
     customerEmail: user.email,
     metadata: { userId: user.id },
   });
