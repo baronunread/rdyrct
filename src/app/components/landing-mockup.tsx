@@ -300,7 +300,7 @@ export function LandingMockup() {
                     >
                       <Check size={14} className="text-accent-2" />
                       <span className="font-mono text-text">acme.svg</span>
-                      <span>— logo added</span>
+                      <span>logo added</span>
                     </m.div>
                   ) : (
                     <span>
@@ -346,7 +346,7 @@ export function LandingMockup() {
                 </div>
               </m.div>
               <p className="text-[11px] tracking-wide text-muted uppercase">
-                Scan me — it works
+                Scan me, it works
               </p>
             </div>
           </m.div>

@@ -73,7 +73,7 @@ function toDTO(
   };
 }
 
-/** True when the body carries any QR appearance override (a Pro-only feature). */
+/** True when the body carries any QR appearance override (a paid feature). */
 function hasQrOverride(body: LinkInput): boolean {
   return !!(
     body.qrLogo ||
@@ -172,7 +172,7 @@ linkRoutes.post("/", requireOrgRole("member"), async (c) => {
     throw new HTTPException(402, {
       message:
         plan === "free"
-          ? `The free plan allows ${limits.links} links, upgrade to Hobby or Pro for more`
+          ? `The free plan allows ${limits.links} links, upgrade to a paid plan for more`
           : `This plan allows at most ${limits.links} links`,
     });
   if (hasQrOverride(body) && !limits.qr)
@@ -189,7 +189,7 @@ linkRoutes.post("/", requireOrgRole("member"), async (c) => {
   if (slug && domainId === null)
     throw new HTTPException(400, {
       message:
-        "Links on the shared domain get random slugs — connect a custom domain (Hobby or Pro) to choose your own",
+        "Links on the shared domain get random slugs: connect a custom domain (paid plans) to choose your own",
     });
   if (slug) {
     if (await slugTaken(db, slug, domainId))
@@ -267,7 +267,7 @@ linkRoutes.patch("/:linkId", requireOrgRole("member"), async (c) => {
   if (newSlug !== existing.slug && domainId === null)
     throw new HTTPException(400, {
       message:
-        "Links on the shared domain keep their random slug — move the link to a custom domain to choose one",
+        "Links on the shared domain keep their random slug: move the link to a custom domain to choose one",
     });
   const moved = newSlug !== existing.slug || domainId !== existing.domainId;
   if (moved && (await slugTaken(db, newSlug, domainId, existing.id)))

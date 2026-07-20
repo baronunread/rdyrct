@@ -61,7 +61,7 @@ Shell writes to repo files are sandboxed; edit through the editor tools, not
   analyticsDays }`). Slugs on the **shared** domain are always random (every
   plan); chosen slugs exist only on custom domains, so the shared namespace
   can't be squatted. New users get **no default org**: there is no onboarding
-  route — org-scoped pages render `NoOrgState`
+  route; org-scoped pages render `NoOrgState`
   (`src/app/components/no-org.tsx`) until they create one, and `/billing`
   works org-less, so landing paid CTAs (`/signup?next=/billing?plan=…`) can
   check out before the first org exists (`/onboarding` redirects to
@@ -85,8 +85,10 @@ Shell writes to repo files are sandboxed; edit through the editor tools, not
 - UI kit in `src/app/ui/`: Button (`primary|outline|ghost`, has `size`),
   Field/Input/Select, Dialog, Badge, Card/PageHeader/Table, Menu,
   Tooltip, toast, Skeleton (`ui/skeleton.tsx`; page-level skeletons that
-  mirror each route's layout live in `src/app/components/skeletons.tsx` — use
-  those instead of a spinner for loading states). Design tokens: `bg`/`surface`/`surface-2`/`border`/`muted`/
+  mirror each route's layout live in `src/app/components/skeletons.tsx`; use
+  those instead of a spinner for page loading states), Spinner
+  (`ui/spinner.tsx`; use it for in-flight buttons, never a `…` label).
+  Design tokens: `bg`/`surface`/`surface-2`/`border`/`muted`/
   `text`/`accent`/`danger`. JetBrains Mono, theme-aware (light + dark).
 - Data layer: `api()` + `ApiError` (`.status`, `.code`) in `src/app/lib/api.ts`;
   TanStack Query hooks in `src/app/lib/hooks.ts`.
@@ -95,6 +97,26 @@ Shell writes to repo files are sandboxed; edit through the editor tools, not
 - Email: `sendEmail()` (`src/worker/email.ts`) uses the Resend HTTP API via plain
   `fetch`, with `RESEND_BASE_URL` pointing at the emulator in dev. Keep it: the
   Resend SDK can't repoint its base URL, which would break the emulator flow.
+
+## Writing copy
+
+All user-facing copy (and this file) follows Orwell's six rules from
+"Politics and the English Language":
+
+1. Never use a metaphor, simile, or other figure of speech which you are used
+   to seeing in print.
+2. Never use a long word where a short one will do.
+3. If it is possible to cut a word out, always cut it out.
+4. Never use the passive where you can use the active.
+5. Never use a foreign phrase, a scientific word, or a jargon word if you can
+   think of an everyday English equivalent.
+6. Break any of these rules sooner than say anything outright barbarous.
+
+House rules on top of Orwell:
+
+- **No em dashes.** Use a period, comma, colon, or parentheses instead.
+- Say **"paid"** when a feature comes with any paid plan (Hobby or Pro);
+  name **"Pro"** only for the things only Pro has (extra orgs, more domains).
 
 ## Config
 

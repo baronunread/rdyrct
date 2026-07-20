@@ -30,6 +30,7 @@ import { Field, Input } from "../ui/field";
 import { MenuSelect } from "../ui/menu";
 import { Table, Th, Td, EmptyState, PageHeader } from "../ui/misc";
 import { TableSkeleton } from "../ui/skeleton";
+import { Spinner } from "../ui/spinner";
 import { Tooltip } from "../ui/tooltip";
 import { useToast } from "../ui/toast";
 import { QRPreview, QrLogoInput, QrColorField } from "../components/qr";
@@ -95,7 +96,7 @@ export function LinksPage() {
   const linkCount = links.data?.length ?? 0;
   const atLimit = linkCount >= limits.links;
   const limitHint = atLimit
-    ? "Link limit reached: upgrade to Pro for more links"
+    ? "Link limit reached: upgrade for more links"
     : undefined;
 
   const [editorOpen, setEditorOpen] = useState(false);
@@ -123,7 +124,7 @@ export function LinksPage() {
   };
 
   const noQrToast = () =>
-    toast("QR codes are a Pro feature: upgrade in Settings", "error");
+    toast("QR codes are a paid feature: upgrade in Billing", "error");
 
   if (!org) return <NoOrgState />;
 
@@ -239,7 +240,7 @@ export function LinksPage() {
                       </IconButton>
                     ) : (
                       <IconButton
-                        label="QR codes are a Pro feature"
+                        label="QR codes are a paid feature"
                         onClick={noQrToast}
                       >
                         <Lock size={15} />
@@ -552,7 +553,7 @@ function LinkEditor({
           Cancel
         </Button>
         <Button variant="primary" disabled={busy} onClick={onSave}>
-          {busy ? "…" : editing ? "Save changes" : "Create link"}
+          {busy ? <Spinner /> : editing ? "Save changes" : "Create link"}
         </Button>
       </div>
     </Dialog>

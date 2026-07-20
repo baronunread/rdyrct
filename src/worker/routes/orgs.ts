@@ -101,11 +101,11 @@ orgRoutes.patch("/:orgId", requireOrgRole("admin"), async (c) => {
     body.qrLogoSize !== undefined;
   if (wantsQr) {
     validateQrFields(body);
-    // QR customization is a Pro feature, so are the org-level defaults.
+    // QR customization is a paid feature, so are the org-level defaults.
     const { limits } = await orgPlan(c.var.db, orgId);
     if (!limits.qr)
       throw new HTTPException(402, {
-        message: "QR customization is a Pro feature: upgrade to use it",
+        message: "QR customization is a paid feature: upgrade to use it",
       });
     if (body.qrLogo !== undefined) set.qrLogo = body.qrLogo;
     if (body.qrStyle !== undefined) set.qrStyle = body.qrStyle;
@@ -329,7 +329,7 @@ orgRoutes.post("/:orgId/invites", requireOrgRole("admin"), async (c) => {
     throw new HTTPException(402, {
       message:
         plan === "free"
-          ? `The free plan allows ${limits.members} members (including you), upgrade to Pro to invite more`
+          ? `The free plan allows ${limits.members} members (including you), upgrade to a paid plan to invite more`
           : `This plan allows at most ${limits.members} members`,
     });
 
@@ -456,7 +456,7 @@ const day = sql<string>`date(ts / 1000, 'unixepoch')`;
 orgRoutes.get("/:orgId/stats", requireOrgRole("member"), async (c) => {
   const db = c.var.db;
   const orgId = c.req.param("orgId");
-  // Analytics look-back is a plan feature: Free sees a short window, Pro more.
+  // Analytics look-back is a plan feature: Free sees a short window, paid plans more.
   const { limits } = await orgPlan(db, orgId);
   const days = limits.analyticsDays;
   const since = now() - days * 24 * 60 * 60 * 1000;
@@ -588,7 +588,7 @@ inviteRoutes.post("/:token/accept", requireUser, async (c) => {
   if (invite.email && invite.email !== c.var.user!.email.toLowerCase())
     throw new HTTPException(403, {
       message:
-        "This invite was sent to a different email address — sign in with the invited account",
+        "This invite was sent to a different email address: sign in with the invited account",
     });
 
   const existing = await db

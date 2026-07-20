@@ -142,7 +142,7 @@ async function stepActivation(
 
 /* ---------------- routes ---------------- */
 
-// Mounted at /api/orgs/:orgId/domains: org admins, Pro only.
+// Mounted at /api/orgs/:orgId/domains: org admins, paid plans only.
 export const domainRoutes = new Hono<AppEnv>();
 
 domainRoutes.use("*", requireOrgRole("admin"));
@@ -185,7 +185,7 @@ domainRoutes.post("/", async (c) => {
   const { limits } = await orgPlan(db, orgId);
   if (limits.domains === 0)
     throw new HTTPException(402, {
-      message: "Custom domains are a Pro feature: upgrade to connect one",
+      message: "Custom domains are a paid feature: upgrade to connect one",
     });
   const existing = await db
     .select({ n: sql<number>`count(*)` })

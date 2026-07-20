@@ -3,6 +3,7 @@ import { Link, useNavigate, useSearchParams } from "react-router";
 import { authClient } from "../lib/auth-client";
 import { Button } from "../ui/button";
 import { Field, Input } from "../ui/field";
+import { Spinner } from "../ui/spinner";
 import { useToast } from "../ui/toast";
 
 export function ResetPasswordPage() {
@@ -76,7 +77,7 @@ export function ResetPasswordPage() {
           </Field>
           {error && <p className="text-sm text-danger">{error}</p>}
           <Button type="submit" variant="primary" disabled={busy || !token}>
-            {busy ? "…" : "Reset password"}
+            {busy ? <Spinner /> : "Reset password"}
           </Button>
         </form>
       </div>

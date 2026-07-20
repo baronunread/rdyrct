@@ -5,6 +5,7 @@ import { authClient } from "../lib/auth-client";
 import { Button } from "../ui/button";
 import { Field, Input } from "../ui/field";
 import { OtpInput } from "../ui/otp";
+import { Spinner } from "../ui/spinner";
 import { useToast } from "../ui/toast";
 
 function AuthCard({ children }: { children: ReactNode }) {
@@ -61,7 +62,7 @@ function ForgotView({
               />
             </Field>
             <Button type="submit" variant="primary" disabled={busy}>
-              {busy ? "…" : "Send reset link"}
+              {busy ? <Spinner /> : "Send reset link"}
             </Button>
           </form>
         )}
@@ -281,7 +282,7 @@ export function AuthPage({ mode }: { mode: "login" | "signup" }) {
           </Field>
           {otpError && <p className="text-sm text-danger">{otpError}</p>}
           <Button type="submit" variant="primary" disabled={busy}>
-            {busy ? "…" : "Verify & continue"}
+            {busy ? <Spinner /> : "Verify & continue"}
           </Button>
           <div className="flex items-center justify-between text-xs text-muted">
             {resent ? (
@@ -366,7 +367,7 @@ export function AuthPage({ mode }: { mode: "login" | "signup" }) {
         </Field>
         {error && <p className="text-sm text-danger">{error}</p>}
         <Button type="submit" variant="primary" disabled={busy}>
-          {busy ? "…" : mode === "login" ? "Sign in" : "Sign up"}
+          {busy ? <Spinner /> : mode === "login" ? "Sign in" : "Sign up"}
         </Button>
         <p className="text-center text-xs text-muted">
           {mode === "login" ? (

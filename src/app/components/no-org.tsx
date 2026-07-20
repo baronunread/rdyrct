@@ -4,12 +4,13 @@ import { api } from "../lib/api";
 import { useCurrentOrg } from "../lib/current-org";
 import { Button } from "../ui/button";
 import { Field, Input } from "../ui/field";
+import { Spinner } from "../ui/spinner";
 import { useToast } from "../ui/toast";
 
 /**
  * The app's onboarding: org-scoped pages render this when the user has no
  * organization yet. Creating one re-renders the page in place with the org
- * active — no navigation, no separate onboarding route. Billing is per-user
+ * active: no navigation, no separate onboarding route. Billing is per-user
  * and stays fully usable before this step (paid CTAs check out first).
  */
 export function NoOrgState() {
@@ -66,7 +67,7 @@ export function NoOrgState() {
           variant="primary"
           disabled={busy || !name.trim()}
         >
-          {busy ? "…" : "Create organization"}
+          {busy ? <Spinner /> : "Create organization"}
         </Button>
       </form>
     </div>

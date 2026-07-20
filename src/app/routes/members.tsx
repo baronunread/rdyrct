@@ -18,6 +18,7 @@ import {
   PageHeader,
 } from "../ui/misc";
 import { TableSkeleton } from "../ui/skeleton";
+import { Spinner } from "../ui/spinner";
 import { useToast } from "../ui/toast";
 import { NoOrgState } from "../components/no-org";
 
@@ -241,11 +242,7 @@ export function MembersPage() {
               disabled={sendEmailInvite.isPending || !emailInput.trim()}
               onClick={() => sendEmailInvite.mutate(emailInput.trim())}
             >
-              {sendEmailInvite.isPending ? (
-                <span className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent" />
-              ) : (
-                "Send invite"
-              )}
+              {sendEmailInvite.isPending ? <Spinner /> : "Send invite"}
             </Button>
           </div>
         </Card>

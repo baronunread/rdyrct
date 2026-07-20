@@ -5,7 +5,7 @@ import { PLAN_LIMITS, type OrgPlan, type PlanLimits } from "@/shared/types";
 
 /**
  * An org's plan = its owner's plan. Billing is per-user (a person holds one
- * Free/Pro subscription), so an org's effective limits come from whoever owns
+ * Free/Hobby/Pro subscription), so an org's effective limits come from whoever owns
  * it: resolve the owner membership and read that user's plan.
  */
 export async function orgPlan(

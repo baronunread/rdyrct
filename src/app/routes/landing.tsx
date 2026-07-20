@@ -27,7 +27,7 @@ import { cn } from "../ui/cn";
 const steps = [
   {
     title: "Paste your URL",
-    body: "Drop in any long link and tag it with the built-in UTM builder — on your own domain, pick any slug you like.",
+    body: "Drop in any long link and tag it with the built-in UTM builder. On your own domain, pick any slug you like.",
   },
   {
     title: "Share it anywhere",
@@ -35,7 +35,7 @@ const steps = [
   },
   {
     title: "Watch clicks roll in",
-    body: "Country, referrer, and device breakdowns update in real time — without storing a single IP.",
+    body: "Country, referrer, and device breakdowns update in real time, without storing a single IP.",
   },
 ];
 
@@ -43,7 +43,7 @@ const features = [
   {
     icon: Link2,
     title: "Short links + UTM builder",
-    body: "Turn unreadable URLs into short links, with a built-in UTM builder for clean campaign tracking — on every plan.",
+    body: "Turn unreadable URLs into short links, with a built-in UTM builder for clean campaign tracking, on every plan.",
   },
   {
     icon: QrCode,
@@ -100,15 +100,15 @@ const cloudflareStack = [
 const faqs = [
   {
     q: "Is the free plan really free?",
-    a: `Yes — ${PLAN_LIMITS.free.links} links, ${PLAN_LIMITS.free.members} teammates, and ${PLAN_LIMITS.free.analyticsDays} days of click analytics, forever. No credit card required. Shared-domain links get random slugs — picking your own slug needs a custom domain (Hobby or Pro).`,
+    a: `Yes: ${PLAN_LIMITS.free.links} links, ${PLAN_LIMITS.free.members} teammates, and ${PLAN_LIMITS.free.analyticsDays} days of click analytics, forever. No credit card required. Shared-domain links get random slugs; picking your own slug needs a custom domain (Hobby or Pro).`,
   },
   {
     q: "What's the difference between Hobby and Pro?",
-    a: `Hobby (${PLAN_PRICES.hobby}/mo) unlocks QR codes, a custom domain with your own slugs, ${PLAN_LIMITS.hobby.links} links, ${PLAN_LIMITS.hobby.members} team members, and ${PLAN_LIMITS.hobby.analyticsDays}-day analytics for one organization. Pro (${PLAN_PRICES.pro}/mo) raises everything: ${PLAN_LIMITS.pro.orgs} organizations, ${PLAN_LIMITS.pro.links.toLocaleString()} links, ${PLAN_LIMITS.pro.members} team members, ${PLAN_LIMITS.pro.domains} custom domains each, ${PLAN_LIMITS.pro.analyticsDays}-day analytics, and direct email support. Only the organization owner needs a paid plan — one subscription covers every organization they own.`,
+    a: `Hobby (${PLAN_PRICES.hobby}/mo) unlocks QR codes, a custom domain with your own slugs, ${PLAN_LIMITS.hobby.links} links, ${PLAN_LIMITS.hobby.members} team members, and ${PLAN_LIMITS.hobby.analyticsDays}-day analytics for one organization. Pro (${PLAN_PRICES.pro}/mo) raises everything: ${PLAN_LIMITS.pro.orgs} organizations, ${PLAN_LIMITS.pro.links.toLocaleString()} links, ${PLAN_LIMITS.pro.members} team members, ${PLAN_LIMITS.pro.domains} custom domains each, ${PLAN_LIMITS.pro.analyticsDays}-day analytics, and direct email support. Only the organization owner needs a paid plan: one subscription covers every organization they own.`,
   },
   {
     q: "How is rdyrct privacy-friendly?",
-    a: "Click analytics store only a country, referrer, device type, and timestamp — never an IP address, never a precise location, and no cross-site tracking.",
+    a: "Click analytics store only a country, referrer, device type, and timestamp. Never an IP address, never a precise location, and no cross-site tracking.",
   },
   {
     q: "Can I use my own domain?",
@@ -116,7 +116,7 @@ const faqs = [
   },
   {
     q: "Can I self-host instead?",
-    a: "Yes — rdyrct is open source and deploys to your own Cloudflare account. You get everything Pro has, minus direct email support.",
+    a: "Yes. rdyrct is open source and deploys to your own Cloudflare account. You get everything Pro has, minus direct email support.",
   },
 ];
 
@@ -226,7 +226,7 @@ function MobilePlans({ paidTo }: { paidTo: (p: "hobby" | "pro") => string }) {
       price: `${PLAN_PRICES.pro}/mo`,
       highlight: true,
       features: [
-        `${PLAN_LIMITS.pro.orgs} organizations — only the owner pays`,
+        `${PLAN_LIMITS.pro.orgs} organizations (only the owner pays)`,
         `${PLAN_LIMITS.pro.links.toLocaleString()} links`,
         `${PLAN_LIMITS.pro.members} team members`,
         `${PLAN_LIMITS.pro.domains} custom domains each`,
@@ -281,7 +281,7 @@ function MobilePlans({ paidTo }: { paidTo: (p: "hobby" | "pro") => string }) {
         </div>
       ))}
       <p className="text-center text-xs text-muted">
-        Prefer your own infra? rdyrct is open source —{" "}
+        Prefer your own infra? rdyrct is open source:{" "}
         <a
           href={GITHUB_URL}
           target="_blank"
@@ -311,7 +311,7 @@ function PricingSection() {
       <div className="mb-8 text-center">
         <h2 className="text-xl font-bold">Simple pricing</h2>
         <p className="mx-auto mt-2 max-w-xl text-sm text-muted">
-          Start free. Upgrade when your links outgrow the plan — or self-host
+          Start free. Upgrade when your links outgrow the plan, or self-host
           and never pay us a cent.
         </p>
       </div>
@@ -538,7 +538,7 @@ export function LandingPage() {
             </h1>
             <p className="max-w-xl text-sm text-muted sm:text-base">
               rdyrct gives your team branded short links, QR codes, and
-              custom domains — with privacy-friendly analytics that never
+              custom domains, with privacy-friendly analytics that never
               store an IP address. Free to start, open source, and resolving
               in milliseconds on Cloudflare's global network.
             </p>
@@ -627,7 +627,7 @@ export function LandingPage() {
             </h2>
             <p className="mx-auto mt-2 max-w-xl text-sm text-muted">
               Country, device, and referrer breakdowns for every link, updating
-              in real time — never an IP address, never cross-site tracking.
+              in real time. Never an IP address, never cross-site tracking.
               This is the actual dashboard.
             </p>
           </div>
@@ -683,7 +683,7 @@ export function LandingPage() {
             <h2 className="text-xl font-bold">Runs entirely on Cloudflare</h2>
             <p className="mx-auto mt-2 max-w-xl text-sm text-muted">
               No servers to patch, no databases to babysit. rdyrct is built
-              from Cloudflare's own primitives, end to end — so your links
+              from Cloudflare's own primitives, end to end, so your links
               resolve in milliseconds, anywhere on Earth.
             </p>
           </div>
@@ -745,7 +745,7 @@ export function LandingPage() {
               Start shortening in seconds.
             </h2>
             <p className="max-w-md text-sm text-muted">
-              Create your first short link on the free plan — no credit
+              Create your first short link on the free plan. No credit
               card, no tracking baggage, no servers to run.
             </p>
             <Link to={ctaTo}>

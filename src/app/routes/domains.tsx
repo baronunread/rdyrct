@@ -15,6 +15,7 @@ import { Button, IconButton } from "../ui/button";
 import { Dialog } from "../ui/dialog";
 import { Input } from "../ui/field";
 import { Badge, Card, PageHeader } from "../ui/misc";
+import { Spinner } from "../ui/spinner";
 import { DomainsSkeleton } from "../components/skeletons";
 import { NoOrgState } from "../components/no-org";
 import { CopyButton } from "../ui/copy-button";
@@ -96,7 +97,7 @@ function DomainsCard({
           d.status === "active"
             ? "Domain added successfully"
             : d.status === "issuing_tls"
-              ? "Domain added, DNS resolved — issuing certificate…"
+              ? "Domain added, DNS resolved, issuing certificate…"
               : "Domain added, checking DNS…",
         );
       },
@@ -111,10 +112,10 @@ function DomainsCard({
         if (updated.status === oldStatus) {
           if (oldStatus === "checking_dns")
             toast(
-              "CNAME record not detected yet — create it at your DNS provider to continue",
+              "CNAME record not detected yet: create it at your DNS provider to continue",
             );
           else if (oldStatus === "issuing_tls")
-            toast("Certificate still being issued — usually takes a few minutes");
+            toast("Certificate still being issued, usually takes a few minutes");
         } else if (updated.status === "active") {
           toast("Domain is live!");
         } else if (oldStatus === "checking_dns" && updated.status === "issuing_tls") {
@@ -225,9 +226,7 @@ function DomainsCard({
                         }
                         className="w-24"
                       >
-                        {add.isPending
-                          ? "Adding…"
-                          : "Add domain"}
+                        {add.isPending ? <Spinner /> : "Add domain"}
                       </Button>
                     </div>
                     <span className="mt-1 block text-xs text-muted/80">
@@ -255,7 +254,7 @@ function DomainsCard({
               <code className="text-text">{appHost}</code>.
             </Step>
             <Step n={2}>
-              Add the hostname below — we detect the CNAME and issue TLS
+              Add the hostname below. We detect the CNAME and issue TLS
               automatically.
             </Step>
             <Step n={3}>
@@ -401,7 +400,7 @@ function DomainRow({
           )}
           <p>
             {d.status === "checking_dns"
-              ? "We re-check automatically every few seconds — "
+              ? "We re-check automatically every few seconds. "
               : "This usually takes a few minutes. "}
             Hit the refresh button above to check progress manually.
           </p>

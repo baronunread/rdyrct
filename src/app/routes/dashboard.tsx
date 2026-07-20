@@ -28,9 +28,9 @@ export function Dashboard() {
         <p className="mb-4 text-xs text-muted">
           Free plans show {PLAN_LIMITS.free.analyticsDays} days of history.{" "}
           <Link to="/billing" className="text-accent hover:underline">
-            Upgrade to Pro
+            Upgrade
           </Link>{" "}
-          for {PLAN_LIMITS.pro.analyticsDays} days.
+          for up to {PLAN_LIMITS.pro.analyticsDays} days.
         </p>
       )}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">

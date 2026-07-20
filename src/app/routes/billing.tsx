@@ -7,6 +7,7 @@ import { useCurrentOrg } from "../lib/current-org";
 import { PLAN_LIMITS, PLAN_PRICES, type OrgPlan } from "@/shared/types";
 import { Button } from "../ui/button";
 import { Badge, Card, PageHeader } from "../ui/misc";
+import { Spinner } from "../ui/spinner";
 import { useToast } from "../ui/toast";
 
 const PLAN_LABEL: Record<OrgPlan, string> = {
@@ -158,12 +159,12 @@ export function BillingPage() {
                   month: "short",
                   day: "numeric",
                 })}
-                . Pro features remain available until then.
+                . Paid features remain available until then.
               </p>
             )}
             {confirmTimedOut && plan === "free" && (
               <p className="text-sm text-muted">
-                Payment received — your plan is still activating. Refresh in a
+                Payment received. Your plan is still activating, refresh in a
                 moment.
               </p>
             )}
@@ -176,7 +177,7 @@ export function BillingPage() {
                     onClick={() => handleUpgrade("hobby")}
                   >
                     {checkoutPlan === "hobby" ? (
-                      <span className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                      <Spinner />
                     ) : (
                       `Upgrade to Hobby · ${PLAN_PRICES.hobby}/mo`
                     )}
@@ -187,7 +188,7 @@ export function BillingPage() {
                     onClick={() => handleUpgrade("pro")}
                   >
                     {checkoutPlan === "pro" ? (
-                      <span className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                      <Spinner />
                     ) : (
                       `Upgrade to Pro · ${PLAN_PRICES.pro}/mo`
                     )}
@@ -212,7 +213,7 @@ export function BillingPage() {
                   }}
                 >
                   {showPortalOverlay ? (
-                    <span className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                    <Spinner />
                   ) : (
                     "Manage subscription"
                   )}

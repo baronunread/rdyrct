@@ -17,6 +17,7 @@ import { Dialog } from "../ui/dialog";
 import { Field, Input } from "../ui/field";
 import { MenuSelect } from "../ui/menu";
 import { Card, PageHeader } from "../ui/misc";
+import { Spinner } from "../ui/spinner";
 import { useToast } from "../ui/toast";
 import { QRPreview, QrLogoInput, QrColorField } from "../components/qr";
 import { CopyButton } from "../ui/copy-button";
@@ -180,7 +181,7 @@ export function SettingsPage() {
           <div className="flex flex-col gap-4">
             <p className="text-sm">
               This permanently deletes{" "}
-              <span className="font-bold text-accent">{org.name}</span> —
+              <span className="font-bold text-accent">{org.name}</span>:
               every link, custom domain, and all click history. Short links
               stop working immediately. This cannot be undone.
             </p>
@@ -215,7 +216,7 @@ export function SettingsPage() {
                 disabled={confirmName.trim() !== org.name || deletingOrg}
                 onClick={deleteOrg}
               >
-                {deletingOrg ? "…" : "Delete organization"}
+                {deletingOrg ? <Spinner /> : "Delete organization"}
               </Button>
             </div>
           </div>
@@ -240,7 +241,7 @@ export function SettingsPage() {
               disabled={deleting}
               onClick={deleteAccount}
             >
-              {deleting ? "…" : "Delete account"}
+              {deleting ? <Spinner /> : "Delete account"}
             </Button>
           </div>
         </div>
@@ -390,7 +391,7 @@ function QrDefaultsCard() {
 
               <Field
                 label="Logo size"
-                hint="How much of the QR code the logo covers — bigger can hurt scannability"
+                hint="How much of the QR code the logo covers. Bigger can hurt scannability"
               >
                 <MenuSelect
                   label="Logo size"
@@ -413,7 +414,7 @@ function QrDefaultsCard() {
                     onClick={saveQr}
                     disabled={savingQr}
                   >
-                    {savingQr ? "…" : "Save QR defaults"}
+                    {savingQr ? <Spinner /> : "Save QR defaults"}
                   </Button>
                 </div>
               ) : (
