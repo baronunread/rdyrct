@@ -91,9 +91,15 @@ export interface InviteDTO {
 export interface DomainDTO {
   id: string;
   hostname: string;
-  status: "pending" | "active" | "error";
+  status: "checking_dns" | "issuing_tls" | "active" | "error";
   rootRedirect: string;
   createdAt: number;
+}
+
+/** Public deployment config the SPA needs (no secrets). */
+export interface AppConfig {
+  /** Shared redirect host; the CNAME target for custom domains. */
+  appHost: string;
 }
 
 export interface LinkDTO {

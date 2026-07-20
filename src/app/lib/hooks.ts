@@ -7,6 +7,7 @@ import { api, ApiError } from "./api";
 import { authClient } from "./auth-client";
 import type {
   Me,
+  AppConfig,
   LinkDTO,
   LinkInput,
   MemberDTO,
@@ -34,6 +35,14 @@ export function useMe() {
     retry: false,
   });
 }
+
+// Deployment config (e.g. appHost for DNS instructions) — static per deploy.
+export const useConfig = () =>
+  useQuery<AppConfig>({
+    queryKey: ["config"],
+    queryFn: () => api("/config"),
+    staleTime: Infinity,
+  });
 
 export function useLogout() {
   const qc = useQueryClient();
@@ -97,6 +106,12 @@ export const useDomains = (orgId: string, enabled = true) =>
     queryKey: ["domains", orgId],
     queryFn: () => api(`/orgs/${orgId}/domains`),
     enabled,
+    // The backend advances the pipeline on read, so polling the list is all
+    // it takes — poll while any domain is still in a transitional state.
+    refetchInterval: (query) =>
+      query.state.data?.some((d) => d.status !== "active" && d.status !== "error")
+        ? 10_000
+        : false,
   });
 
 export function useDomainMutations(orgId: string) {

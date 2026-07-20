@@ -4,7 +4,7 @@ import { alias } from "drizzle-orm/sqlite-core";
 import * as schema from "../db/schema";
 import type { AppEnv } from "../env";
 import { requireUser } from "../auth";
-import type { Me, OrgPlan } from "@/shared/types";
+import type { AppConfig, Me, OrgPlan } from "@/shared/types";
 
 // Signup/login/logout/verification live under /api/auth/* (BetterAuth).
 // This router only exposes the app-level session view, mounted at /api.
@@ -54,4 +54,10 @@ async function meFor(
 
 meRoutes.get("/me", requireUser, async (c) => {
   return c.json(await meFor(c.var.db, c.var.user!));
+});
+
+// Public, non-secret deployment config (the SPA shows appHost in DNS setup
+// instructions for custom domains).
+meRoutes.get("/config", (c) => {
+  return c.json({ appHost: c.env.APP_HOST } satisfies AppConfig);
 });

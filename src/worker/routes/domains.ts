@@ -21,6 +21,11 @@ interface CfHostname {
   active: boolean;
 }
 
+interface CfHostnameResult {
+  status: string;
+  ssl?: { status: string } | null;
+}
+
 async function cfRequest(
   env: Env,
   method: string,
@@ -61,20 +66,69 @@ async function cfCreateHostname(
   return { id: data.result.id as string, active: false };
 }
 
-async function cfHostnameActive(
+async function cfGetHostnameStatus(
   env: Env,
-  cfHostnameId: string,
-): Promise<boolean> {
-  if (env.DEV_FAKE_CF === "1") return true; // fake activates on first refresh
-  const data = await cfRequest(env, "GET", `/custom_hostnames/${cfHostnameId}`);
-  if (!data) return false;
-  const r = data.result as { status?: string; ssl?: { status?: string } };
-  return r.status === "active" && r.ssl?.status === "active";
+  row: typeof schema.domains.$inferSelect,
+): Promise<CfHostnameResult | null> {
+  // The fake keeps new domains in checking_dns for ~5s before showing DNS as
+  // resolved, then another ~3s before the certificate is "issued".
+  if (env.DEV_FAKE_CF === "1") {
+    const age = now() - row.createdAt;
+    return {
+      status: age > 5_000 ? "active" : "pending",
+      ssl: age > 8_000 ? { status: "active" } : { status: "pending_validation" },
+    };
+  }
+  if (!row.cfHostnameId) return null;
+  const data = await cfRequest(
+    env,
+    "GET",
+    `/custom_hostnames/${row.cfHostnameId}`,
+  );
+  if (!data) return null;
+  return data.result as unknown as CfHostnameResult;
 }
 
 async function cfDeleteHostname(env: Env, cfHostnameId: string): Promise<void> {
   if (env.DEV_FAKE_CF === "1") return;
   await cfRequest(env, "DELETE", `/custom_hostnames/${cfHostnameId}`);
+}
+
+/* ---------------- activation pipeline ---------------- */
+
+// Advance a domain one step through the DNS→TLS pipeline.  Returns the
+// (possibly-updated) row.  Also called on every list read so polling drives it.
+async function stepActivation(
+  env: Env,
+  db: DB,
+  row: typeof schema.domains.$inferSelect,
+): Promise<typeof schema.domains.$inferSelect> {
+  if (row.status === "active" || row.status === "error") return row;
+  const h = await cfGetHostnameStatus(env, row);
+  if (!h) return row;
+
+  if (row.status === "checking_dns") {
+    if (h.status !== "active") return row;
+    await db
+      .update(schema.domains)
+      .set({ status: "issuing_tls" })
+      .where(eq(schema.domains.id, row.id));
+    return { ...row, status: "issuing_tls" };
+  }
+
+  // status === "issuing_tls"
+  if (h.ssl?.status !== "active") return row;
+  await db
+    .update(schema.domains)
+    .set({ status: "active" })
+    .where(eq(schema.domains.id, row.id));
+  await publishDomain(env, row);
+  const links = await db
+    .select()
+    .from(schema.links)
+    .where(eq(schema.links.domainId, row.id));
+  await Promise.all(links.map((l) => publishLink(env, l, row.hostname)));
+  return { ...row, status: "active" };
 }
 
 /* ---------------- routes ---------------- */
@@ -103,14 +157,19 @@ async function getDomain(c: { var: { db: DB } }, orgId: string, id: string) {
   return rows[0];
 }
 
+// List domains — activation runs on-read so auto-poll drives the pipeline.
 domainRoutes.get("/", async (c) => {
   const rows = await c.var.db
     .select()
     .from(schema.domains)
     .where(eq(schema.domains.orgId, c.req.param("orgId")!));
-  return c.json(rows.map(toDTO));
+  const settled = await Promise.all(
+    rows.map((r) => stepActivation(c.env, c.var.db, r)),
+  );
+  return c.json(settled.map(toDTO));
 });
 
+// Add a domain: create the CF custom hostname and start in checking_dns.
 domainRoutes.post("/", async (c) => {
   const db = c.var.db;
   const orgId = c.req.param("orgId")!;
@@ -148,39 +207,22 @@ domainRoutes.post("/", async (c) => {
     id: uid(),
     orgId,
     hostname,
-    status: "pending" as const,
+    status: "checking_dns" as const,
     rootRedirect: "",
     cfHostnameId: cf.id,
     createdAt: now(),
   };
   await db.insert(schema.domains).values(row);
-  return c.json(toDTO(row), 201);
+  // CF may already see the CNAME — advance immediately so the response toast
+  // matches what the user sees.
+  const settled = await stepActivation(c.env, db, row);
+  return c.json(toDTO(settled), 201);
 });
 
-// Poll CF until the hostname (DNS + certificate) goes active, then publish.
+// Manual re-check: stepActivation one level and return the result.
 domainRoutes.post("/:id/refresh", async (c) => {
-  const db = c.var.db;
-  const orgId = c.req.param("orgId")!;
-  const row = await getDomain(c, orgId, c.req.param("id"));
-  if (row.status === "active") return c.json(toDTO(row));
-
-  const active = row.cfHostnameId
-    ? await cfHostnameActive(c.env, row.cfHostnameId)
-    : false;
-  if (!active) return c.json(toDTO(row));
-
-  await db
-    .update(schema.domains)
-    .set({ status: "active" })
-    .where(eq(schema.domains.id, row.id));
-  await publishDomain(c.env, row);
-  // republish this domain's links under slug:{hostname}:{slug}
-  const links = await db
-    .select()
-    .from(schema.links)
-    .where(eq(schema.links.domainId, row.id));
-  await Promise.all(links.map((l) => publishLink(c.env, l, row.hostname)));
-  return c.json({ ...toDTO(row), status: "active" });
+  const row = await getDomain(c, c.req.param("orgId")!, c.req.param("id"));
+  return c.json(toDTO(await stepActivation(c.env, c.var.db, row)));
 });
 
 domainRoutes.patch("/:id", async (c) => {

@@ -157,9 +157,9 @@ export const domains = sqliteTable(
       .notNull()
       .references(() => orgs.id, { onDelete: "cascade" }),
     hostname: text("hostname").notNull().unique(),
-    status: text("status", { enum: ["pending", "active", "error"] })
+    status: text("status", { enum: ["checking_dns", "issuing_tls", "active", "error"] })
       .notNull()
-      .default("pending"),
+      .default("checking_dns"),
     rootRedirect: text("root_redirect").notNull().default(""),
     cfHostnameId: text("cf_hostname_id"),
     createdAt: integer("created_at").notNull(),
