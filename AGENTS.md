@@ -103,7 +103,7 @@ and vars live in `wrangler.jsonc`; local dev reads everything from `.dev.vars`
 ```
 migrations/            D1 schema (numbered SQL migrations, applied in order)
 src/worker/            Hono API, BetterAuth, KV publishing, redirect hot path
-  routes/              auth (me), orgs, links, domains, billing, admin
+  routes/              auth (user), orgs, links, domains, billing, admin
   plan.ts util.ts email.ts password.ts kv.ts
 src/shared/types.ts    DTOs + PLAN_LIMITS (shared worker ↔ app)
 src/app/               React SPA

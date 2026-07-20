@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useCurrentOrg } from "../lib/current-org";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { UserPlus, Copy, Trash2, Info } from "lucide-react";
-import { useMe, useMembers, useInvites } from "../lib/hooks";
+import { useCurrentUser, useMembers, useInvites } from "../lib/hooks";
 import { api } from "../lib/api";
 import { PLAN_LIMITS, type InviteDTO, type OrgRole } from "@/shared/types";
 import { Button, IconButton } from "../ui/button";
@@ -29,7 +29,7 @@ const roleColor: Record<OrgRole, "accent" | "mint" | "muted"> = {
 export function MembersPage() {
   const { org } = useCurrentOrg();
   const orgId = org?.id ?? "";
-  const me = useMe();
+  const me = useCurrentUser();
   const members = useMembers(orgId);
   const qc = useQueryClient();
   const toast = useToast();

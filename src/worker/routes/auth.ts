@@ -4,16 +4,16 @@ import { alias } from "drizzle-orm/sqlite-core";
 import * as schema from "../db/schema";
 import type { AppEnv } from "../env";
 import { requireUser } from "../auth";
-import type { AppConfig, Me, OrgPlan } from "@/shared/types";
+import type { AppConfig, CurrentUser, OrgPlan } from "@/shared/types";
 
 // Signup/login/logout/verification live under /api/auth/* (BetterAuth).
 // This router only exposes the app-level session view, mounted at /api.
-export const meRoutes = new Hono<AppEnv>();
+export const userRoutes = new Hono<AppEnv>();
 
-async function meFor(
+async function currentUserFor(
   db: AppEnv["Variables"]["db"],
   user: NonNullable<AppEnv["Variables"]["user"]>,
-): Promise<Me> {
+): Promise<CurrentUser> {
   // Each org's effective plan is its OWNER's plan, so join through the org's
   // owner membership to that user's subscription (self-joins on members/user).
   const ownerMember = alias(schema.orgMembers, "owner_member");
@@ -58,12 +58,12 @@ async function meFor(
   return { user, orgs };
 }
 
-meRoutes.get("/me", requireUser, async (c) => {
-  return c.json(await meFor(c.var.db, c.var.user!));
+userRoutes.get("/user", requireUser, async (c) => {
+  return c.json(await currentUserFor(c.var.db, c.var.user!));
 });
 
 // Public, non-secret deployment config (the SPA shows appHost in DNS setup
 // instructions for custom domains).
-meRoutes.get("/config", (c) => {
+userRoutes.get("/config", (c) => {
   return c.json({ appHost: c.env.APP_HOST } satisfies AppConfig);
 });

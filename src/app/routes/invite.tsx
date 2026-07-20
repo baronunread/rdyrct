@@ -2,7 +2,7 @@ import { Link, useNavigate, useParams } from "react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../lib/api";
 import type { InvitePreview } from "@/shared/types";
-import { useMe } from "../lib/hooks";
+import { useCurrentUser } from "../lib/hooks";
 import { useCurrentOrg } from "../lib/current-org";
 import { Button } from "../ui/button";
 import { InviteSkeleton } from "../components/skeletons";
@@ -10,7 +10,7 @@ import { useToast } from "../ui/toast";
 
 export function InvitePage() {
   const { token } = useParams<{ token: string }>();
-  const me = useMe();
+  const me = useCurrentUser();
   const navigate = useNavigate();
   const qc = useQueryClient();
   const toast = useToast();

@@ -164,7 +164,7 @@ Secrets are set with `wrangler secret put NAME` or `wrangler secret bulk prod.se
 ```
 migrations/            D1 schema (auth + app tables)
 src/worker/             Hono API, BetterAuth, KV publishing, redirect hot path
-  routes/               auth/me, orgs, links, domains, billing, admin
+  routes/               auth/user, orgs, links, domains, billing, admin
 src/shared/types.ts     DTOs + plan limits shared between worker and app
 src/app/                React SPA
   routes/               page-level route components

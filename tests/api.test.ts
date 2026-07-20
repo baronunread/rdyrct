@@ -58,8 +58,8 @@ describe("api", () => {
       ok: true,
       json: async () => ({ hello: "world" }),
     });
-    const data = await api<{ hello: string }>("/me");
-    expect(calls[0].url).toBe("/api/me");
+    const data = await api<{ hello: string }>("/user");
+    expect(calls[0].url).toBe("/api/user");
     expect(data.hello).toBe("world");
   });
 

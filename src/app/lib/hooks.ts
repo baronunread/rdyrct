@@ -6,7 +6,7 @@ import {
 import { api, ApiError } from "./api";
 import { authClient } from "./auth-client";
 import type {
-  Me,
+  CurrentUser,
   AppConfig,
   LinkDTO,
   LinkInput,
@@ -20,12 +20,12 @@ import type {
   AdminUserRow,
 } from "@/shared/types";
 
-export function useMe() {
-  return useQuery<Me | null>({
+export function useCurrentUser() {
+  return useQuery<CurrentUser | null>({
     queryKey: ["user"],
     queryFn: async () => {
       try {
-        return await api<Me>("/me");
+        return await api<CurrentUser>("/user");
       } catch (e) {
         if (e instanceof ApiError && e.status === 401) return null;
         throw e;
@@ -150,7 +150,11 @@ export function useDomainMutations(orgId: string) {
 }
 
 // Billing is per-user (the caller's own subscription), so no orgId.
+// These two only fetch a Polar redirect URL, then the browser leaves the app —
+// nothing in the cache goes stale. Plan changes arrive via the Polar webhook
+// and are picked up by polling ["user"] on the return to /billing.
 export function useCheckout() {
+  // react-doctor-disable-next-line react-doctor/query-mutation-missing-invalidation
   return useMutation({
     mutationFn: () =>
       api<{ url: string }>(`/billing/checkout`, { method: "POST" }),
@@ -158,6 +162,7 @@ export function useCheckout() {
 }
 
 export function usePortal() {
+  // react-doctor-disable-next-line react-doctor/query-mutation-missing-invalidation
   return useMutation({
     mutationFn: () => api<{ url: string }>(`/billing/portal`),
   });

@@ -55,7 +55,7 @@ export const QR_DEFAULT_COLOR = "#17151f";
 export const QR_DEFAULT_CORNER = "extra-rounded";
 export const QR_DEFAULT_BG = "#ffffff";
 
-export interface MeUser {
+export interface User {
   id: string;
   email: string;
   name: string;
@@ -67,7 +67,7 @@ export interface MeUser {
   polarSubscriptionCurrentPeriodEnd: number | null;
 }
 
-export interface MeOrg {
+export interface UserOrg {
   id: string;
   name: string;
   role: OrgRole;
@@ -82,9 +82,9 @@ export interface MeOrg {
   qrEyeColor: string;
 }
 
-export interface Me {
-  user: MeUser;
-  orgs: MeOrg[];
+export interface CurrentUser {
+  user: User;
+  orgs: UserOrg[];
 }
 
 export interface MemberDTO {

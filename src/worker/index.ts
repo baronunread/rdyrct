@@ -6,7 +6,7 @@ import * as schema from "./db/schema";
 import type { AppEnv } from "./env";
 import { withSession } from "./auth";
 import { getAuth } from "./better-auth";
-import { meRoutes } from "./routes/auth";
+import { userRoutes } from "./routes/auth";
 import { orgRoutes, inviteRoutes } from "./routes/orgs";
 import { linkRoutes } from "./routes/links";
 import { adminRoutes } from "./routes/admin";
@@ -84,7 +84,7 @@ app.post("/api/webhooks/polar", (c) => handlePolarWebhook(c.req.raw, c.env));
 
 const api = new Hono<AppEnv>();
 api.use("*", withSession);
-api.route("/", meRoutes);
+api.route("/", userRoutes);
 api.route("/orgs", orgRoutes);
 api.route("/orgs/:orgId/links", linkRoutes);
 api.route("/billing", billingRoutes);
