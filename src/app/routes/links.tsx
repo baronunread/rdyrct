@@ -425,11 +425,11 @@ function LinkEditor({
             </Field>
           </div>
 
-          <fieldset className="rounded-lg border border-border p-3">
+          <fieldset className="flex flex-1 flex-col rounded-lg border border-border p-3">
             <legend className="px-1 text-[11px] tracking-wider text-muted uppercase">
               UTM parameters
             </legend>
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div className="grid flex-1 grid-cols-1 gap-3 content-between sm:grid-cols-2">
               <Field label="Source">
                 <Input
                   value={form.utmSource ?? ""}
@@ -452,12 +452,17 @@ function LinkEditor({
                 />
               </Field>
               <Field label="Term">
-                <Input value={form.utmTerm ?? ""} onChange={set("utmTerm")} />
+                <Input
+                  value={form.utmTerm ?? ""}
+                  onChange={set("utmTerm")}
+                  placeholder="running-shoes"
+                />
               </Field>
-              <Field label="Content">
+              <Field label="Content" className="sm:col-span-2">
                 <Input
                   value={form.utmContent ?? ""}
                   onChange={set("utmContent")}
+                  placeholder="ad-variant-a"
                 />
               </Field>
             </div>

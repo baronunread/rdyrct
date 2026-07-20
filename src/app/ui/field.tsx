@@ -43,14 +43,16 @@ Select.displayName = "Select";
 export function Field({
   label,
   hint,
+  className,
   children,
 }: {
   label: string;
   hint?: ReactNode;
+  className?: string;
   children: ReactNode;
 }) {
   return (
-    <label className="block">
+    <label className={cn("block", className)}>
       <span className="mb-1.5 block text-xs tracking-wider text-muted uppercase">
         {label}
       </span>
