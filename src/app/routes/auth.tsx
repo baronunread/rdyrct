@@ -1,29 +1,21 @@
-import { useState, type FormEvent, type ReactNode } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { Link, useLocation, useNavigate, useSearchParams } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
+import { AuthCard, PasswordMeter } from "../components/auth-form";
 import { authClient } from "../lib/auth-client";
+import { friendlyAuthError, useShake } from "../lib/auth-form";
+import { useCurrentUser } from "../lib/hooks";
 import { Button } from "../ui/button";
 import { Field, Input } from "../ui/field";
 import { OtpInput } from "../ui/otp";
 import { Spinner } from "../ui/spinner";
 import { useToast } from "../ui/toast";
 
-function AuthCard({ children }: { children: ReactNode }) {
-  return (
-    <div className="grid min-h-dvh place-items-center px-4">
-      <div className="w-full max-w-sm">
-        <p className="mb-6 text-center text-xl font-bold tracking-widest">
-          <Link to="/" className="hover:text-accent">
-            rdyrct
-          </Link>
-        </p>
-        {children}
-      </div>
-    </div>
-  );
-}
-
 type View = "form" | "forgot" | "forgot-sent" | "verify-otp";
+
+// Stricter than the browser's type="email" check (which lets "a@b" through)
+// and matches what the server's schema accepts, so bad emails never reach it.
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 
 /** Password-reset request card ("email on its way" state included). */
 function ForgotView({
@@ -76,6 +68,174 @@ function ForgotView({
   );
 }
 
+/** OTP entry card shown after signup or an unverified login. */
+function VerifyOtpView({
+  email,
+  otp,
+  otpError,
+  busy,
+  resent,
+  onOtpChange,
+  onSubmit,
+  onComplete,
+  onResend,
+  onBack,
+}: {
+  email: string;
+  otp: string;
+  otpError: string;
+  busy: boolean;
+  resent: boolean;
+  onOtpChange: (v: string) => void;
+  onSubmit: (e: FormEvent) => void;
+  onComplete: (code: string) => void;
+  onResend: () => void;
+  onBack: () => void;
+}) {
+  return (
+    <AuthCard>
+      <form
+        onSubmit={onSubmit}
+        className="flex flex-col gap-4 rounded-xl border border-border bg-surface p-6"
+      >
+        <h1 className="font-bold">Enter your code</h1>
+        <p className="text-sm text-muted">
+          We emailed a 6-digit code to <span className="text-text">{email}</span>
+          . It expires in 10 minutes.
+        </p>
+        <Field label="Verification code">
+          <OtpInput
+            value={otp}
+            onChange={onOtpChange}
+            onComplete={onComplete}
+            disabled={busy}
+            autoFocus
+          />
+        </Field>
+        {otpError && <p className="text-sm text-danger">{otpError}</p>}
+        <Button type="submit" variant="primary" disabled={busy}>
+          {busy ? <Spinner /> : "Verify & continue"}
+        </Button>
+        <div className="flex items-center justify-between text-xs text-muted">
+          {resent ? (
+            <span>New code sent.</span>
+          ) : (
+            <button
+              type="button"
+              className="hover:text-accent"
+              onClick={onResend}
+            >
+              Resend code
+            </button>
+          )}
+          <Link to="/login" onClick={onBack}>
+            Back to sign in
+          </Link>
+        </div>
+      </form>
+    </AuthCard>
+  );
+}
+
+/** The main sign-in / sign-up card. */
+function AuthFormView({
+  mode,
+  email,
+  password,
+  error,
+  busy,
+  shake,
+  next,
+  onEmailChange,
+  onPasswordChange,
+  onSubmit,
+  onForgot,
+}: {
+  mode: "login" | "signup";
+  email: string;
+  password: string;
+  error: string;
+  busy: boolean;
+  shake: ReturnType<typeof useShake>;
+  next: string;
+  onEmailChange: (v: string) => void;
+  onPasswordChange: (v: string) => void;
+  onSubmit: (e: FormEvent) => void;
+  onForgot: () => void;
+}) {
+  return (
+    <AuthCard>
+      <form
+        onSubmit={onSubmit}
+        noValidate
+        className="flex flex-col gap-4 rounded-xl border border-border bg-surface p-6"
+      >
+        <h1 className="font-bold">
+          {mode === "login" ? "Sign in" : "Create an account"}
+        </h1>
+        <Field label="Email">
+          <Input
+            type="email"
+            value={email}
+            onChange={(e) => onEmailChange(e.target.value)}
+            required
+            autoComplete="email"
+          />
+        </Field>
+        {/* Both modes always render exactly one hint line here, so the sign-in
+            and sign-up cards stay the same height. */}
+        <Field
+          label="Password"
+          hint={
+            mode === "login" ? (
+              <button
+                type="button"
+                className="text-muted hover:text-accent"
+                onClick={onForgot}
+              >
+                Forgot password?
+              </button>
+            ) : (
+              <PasswordMeter password={password} />
+            )
+          }
+        >
+          <Input
+            type="password"
+            value={password}
+            onChange={(e) => onPasswordChange(e.target.value)}
+            required
+            autoComplete={mode === "login" ? "current-password" : "new-password"}
+          />
+        </Field>
+        {error && <p className="text-sm text-danger">{error}</p>}
+        <Button
+          type="submit"
+          variant="primary"
+          disabled={busy}
+          className={shake.className}
+          onAnimationEnd={shake.end}
+        >
+          {busy ? <Spinner /> : mode === "login" ? "Sign in" : "Sign up"}
+        </Button>
+        <p className="text-center text-xs text-muted">
+          {mode === "login" ? (
+            <>
+              No account?{" "}
+              <Link to={`/signup?next=${encodeURIComponent(next)}`}>Sign up</Link>
+            </>
+          ) : (
+            <>
+              Have an account?{" "}
+              <Link to={`/login?next=${encodeURIComponent(next)}`}>Sign in</Link>
+            </>
+          )}
+        </p>
+      </form>
+    </AuthCard>
+  );
+}
+
 // The OTP screen survives a reload: the pending email (and post-verify
 // destination) live in sessionStorage until the code is entered or the user
 // backs out, so a refresh mid-verification doesn't dump you at the form.
@@ -122,6 +282,22 @@ export function AuthPage({ mode }: { mode: "login" | "signup" }) {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const shake = useShake();
+
+  // /login and /signup render this same mounted component, so switching modes
+  // keeps all state: drop the previous mode's error instead of showing it
+  // under the other form.
+  const [prevMode, setPrevMode] = useState(mode);
+  if (prevMode !== mode) {
+    setPrevMode(mode);
+    setError("");
+    shake.end();
+  }
+
+  const failSubmit = (message: string) => {
+    setError(message);
+    shake.start();
+  };
 
   const [forgotEmail, setForgotEmail] = useState("");
   const [forgotBusy, setForgotBusy] = useState(false);
@@ -143,6 +319,16 @@ export function AuthPage({ mode }: { mode: "login" | "signup" }) {
       ? rawNext
       : "/dashboard";
 
+  // Already signed in: skip the form. The form still paints while the session
+  // check is in flight so signed-out visitors see no blank flash. This also
+  // covers the post-verify path (the ["user"] refetch resolves and we leave).
+  const { data: user } = useCurrentUser();
+  useEffect(() => {
+    if (!user) return;
+    clearPending(); // a session means verified; drop any stale OTP state
+    navigate(next, { replace: true });
+  }, [user, navigate, next]);
+
   // Move to the OTP screen and email a fresh code (the frontend is the single
   // sender; see better-auth.ts). Persist the pending state so a reload keeps
   // us here rather than bouncing back to the form.
@@ -160,12 +346,29 @@ export function AuthPage({ mode }: { mode: "login" | "signup" }) {
 
   const backToForm = () => {
     clearPending();
+    setError(""); // the pre-verify form error is stale by now
     setView("form");
   };
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
-    setError("");
+    // The form is noValidate: we run every check ourselves, in field order,
+    // because the browser's checks are looser than the server's and its
+    // bubbles can point at the wrong field.
+    if (!EMAIL_RE.test(email)) {
+      failSubmit("Enter a valid email address.");
+      return;
+    }
+    if (mode === "signup" && password.length < 8) {
+      failSubmit("Password must be at least 8 characters.");
+      return;
+    }
+    if (!password) {
+      failSubmit("Enter your password.");
+      return;
+    }
+    // Keep any previous error on screen while the retry is in flight: clearing
+    // it here made the text vanish and reflash on every repeated failure.
     setBusy(true);
     if (mode === "login") {
       const { error: signInError } = await authClient.signIn.email({
@@ -176,7 +379,7 @@ export function AuthPage({ mode }: { mode: "login" | "signup" }) {
         if (signInError.code === "EMAIL_NOT_VERIFIED") {
           await goVerify();
         } else {
-          setError(signInError.message ?? "Something went wrong");
+          failSubmit(friendlyAuthError(signInError));
         }
       } else {
         await qc.refetchQueries({ queryKey: ["user"] });
@@ -189,7 +392,7 @@ export function AuthPage({ mode }: { mode: "login" | "signup" }) {
         name: email.split("@")[0],
       });
       if (signUpError) {
-        setError(signUpError.message ?? "Something went wrong");
+        failSubmit(friendlyAuthError(signUpError));
       } else {
         await goVerify();
       }
@@ -260,48 +463,18 @@ export function AuthPage({ mode }: { mode: "login" | "signup" }) {
 
   if (view === "verify-otp") {
     return (
-      <AuthCard>
-        <form
-          onSubmit={submitOtp}
-          className="flex flex-col gap-4 rounded-xl border border-border bg-surface p-6"
-        >
-          <h1 className="font-bold">Enter your code</h1>
-          <p className="text-sm text-muted">
-            We emailed a 6-digit code to{" "}
-            <span className="text-text">{email}</span>. It expires in 10
-            minutes.
-          </p>
-          <Field label="Verification code">
-            <OtpInput
-              value={otp}
-              onChange={setOtp}
-              onComplete={runVerify}
-              disabled={busy}
-              autoFocus
-            />
-          </Field>
-          {otpError && <p className="text-sm text-danger">{otpError}</p>}
-          <Button type="submit" variant="primary" disabled={busy}>
-            {busy ? <Spinner /> : "Verify & continue"}
-          </Button>
-          <div className="flex items-center justify-between text-xs text-muted">
-            {resent ? (
-              <span>New code sent.</span>
-            ) : (
-              <button
-                type="button"
-                className="hover:text-accent"
-                onClick={resendOtp}
-              >
-                Resend code
-              </button>
-            )}
-            <Link to="/login" onClick={backToForm}>
-              Back to sign in
-            </Link>
-          </div>
-        </form>
-      </AuthCard>
+      <VerifyOtpView
+        email={email}
+        otp={otp}
+        otpError={otpError}
+        busy={busy}
+        resent={resent}
+        onOtpChange={setOtp}
+        onSubmit={submitOtp}
+        onComplete={runVerify}
+        onResend={resendOtp}
+        onBack={backToForm}
+      />
     );
   }
 
@@ -319,70 +492,21 @@ export function AuthPage({ mode }: { mode: "login" | "signup" }) {
   }
 
   return (
-    <AuthCard>
-      <form
-        onSubmit={submit}
-        className="flex flex-col gap-4 rounded-xl border border-border bg-surface p-6"
-      >
-        <h1 className="font-bold">
-          {mode === "login" ? "Sign in" : "Create an account"}
-        </h1>
-        <Field label="Email">
-          <Input
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            required
-            autoComplete="email"
-          />
-        </Field>
-        {/* Both modes always render exactly one hint line here, so the sign-in
-            and sign-up cards stay the same height. */}
-        <Field
-          label="Password"
-          hint={
-            mode === "login" ? (
-              <button
-                type="button"
-                className="text-muted hover:text-accent"
-                onClick={() => {
-                  setForgotEmail(email);
-                  setView("forgot");
-                }}
-              >
-                Forgot password?
-              </button>
-            ) : (
-              "8+ characters"
-            )
-          }
-        >
-          <Input
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-            autoComplete={mode === "login" ? "current-password" : "new-password"}
-          />
-        </Field>
-        {error && <p className="text-sm text-danger">{error}</p>}
-        <Button type="submit" variant="primary" disabled={busy}>
-          {busy ? <Spinner /> : mode === "login" ? "Sign in" : "Sign up"}
-        </Button>
-        <p className="text-center text-xs text-muted">
-          {mode === "login" ? (
-            <>
-              No account?{" "}
-              <Link to={`/signup?next=${encodeURIComponent(next)}`}>Sign up</Link>
-            </>
-          ) : (
-            <>
-              Have an account?{" "}
-              <Link to={`/login?next=${encodeURIComponent(next)}`}>Sign in</Link>
-            </>
-          )}
-        </p>
-      </form>
-    </AuthCard>
+    <AuthFormView
+      mode={mode}
+      email={email}
+      password={password}
+      error={error}
+      busy={busy}
+      shake={shake}
+      next={next}
+      onEmailChange={setEmail}
+      onPasswordChange={setPassword}
+      onSubmit={submit}
+      onForgot={() => {
+        setForgotEmail(email);
+        setView("forgot");
+      }}
+    />
   );
 }
