@@ -250,8 +250,8 @@ export function AppShell() {
 
   return (
     <div className="flex min-h-dvh">
-      {/* desktop sidebar */}
-      <aside className="sticky top-0 hidden h-dvh w-60 shrink-0 border-r border-border bg-surface/40 md:block">
+      {/* desktop sidebar: fixed so it never moves, not even on overscroll */}
+      <aside className="fixed inset-y-0 left-0 z-10 hidden w-60 border-r border-border bg-surface/40 md:block">
         {sidebar}
       </aside>
 
@@ -295,7 +295,7 @@ export function AppShell() {
         </AnimatePresence>
       </LazyMotion>
 
-      <main className="flex min-w-0 flex-1 flex-col px-5 py-8 pt-16 md:px-8 md:pt-8">
+      <main className="flex min-w-0 flex-1 flex-col px-5 py-8 pt-16 md:ml-60 md:px-8 md:pt-8">
         <div className="mx-auto w-full max-w-5xl flex-1">
           <Outlet />
         </div>
