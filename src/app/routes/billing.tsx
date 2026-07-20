@@ -82,7 +82,7 @@ export function BillingPage() {
     <div>
       <PageHeader title="Billing" sub="Your subscription" />
       <div className="flex flex-col gap-4">
-        <Card className="max-w-lg">
+        <Card className="max-w-2xl">
           <div className="flex flex-col gap-4">
             <div className="flex items-center justify-between">
               <p className="text-[11px] tracking-wider text-muted uppercase">
@@ -150,7 +150,7 @@ export function BillingPage() {
         </Card>
 
         {org && (
-          <Card className="max-w-lg">
+          <Card className="max-w-2xl">
             <div className="flex flex-col gap-1">
               <p className="mb-2 text-[11px] tracking-wider text-muted uppercase">
                 Usage: {org.name}

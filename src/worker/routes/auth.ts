@@ -27,6 +27,9 @@ async function meFor(
       qrLogo: schema.orgs.qrLogo,
       qrStyle: schema.orgs.qrStyle,
       qrColor: schema.orgs.qrColor,
+      qrCorner: schema.orgs.qrCorner,
+      qrBg: schema.orgs.qrBg,
+      qrEyeColor: schema.orgs.qrEyeColor,
     })
     .from(schema.orgMembers)
     .innerJoin(schema.orgs, eq(schema.orgMembers.orgId, schema.orgs.id))
@@ -48,6 +51,9 @@ async function meFor(
     qrLogo: r.qrLogo,
     qrStyle: r.qrStyle,
     qrColor: r.qrColor,
+    qrCorner: r.qrCorner,
+    qrBg: r.qrBg,
+    qrEyeColor: r.qrEyeColor,
   }));
   return { user, orgs };
 }

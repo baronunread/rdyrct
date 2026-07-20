@@ -58,6 +58,9 @@ orgRoutes.post("/", requireUser, async (c) => {
       qrLogo: "",
       qrStyle: "",
       qrColor: "",
+      qrCorner: "",
+      qrBg: "",
+      qrEyeColor: "",
     },
     201,
   );
@@ -69,6 +72,9 @@ orgRoutes.patch("/:orgId", requireOrgRole("owner"), async (c) => {
     qrLogo?: string;
     qrStyle?: string;
     qrColor?: string;
+    qrCorner?: string;
+    qrBg?: string;
+    qrEyeColor?: string;
   }>();
   const orgId = c.req.param("orgId");
 
@@ -82,7 +88,10 @@ orgRoutes.patch("/:orgId", requireOrgRole("owner"), async (c) => {
   const wantsQr =
     body.qrLogo !== undefined ||
     body.qrStyle !== undefined ||
-    body.qrColor !== undefined;
+    body.qrColor !== undefined ||
+    body.qrCorner !== undefined ||
+    body.qrBg !== undefined ||
+    body.qrEyeColor !== undefined;
   if (wantsQr) {
     validateQrFields(body);
     // QR customization is a Pro feature, so are the org-level defaults.
@@ -94,6 +103,9 @@ orgRoutes.patch("/:orgId", requireOrgRole("owner"), async (c) => {
     if (body.qrLogo !== undefined) set.qrLogo = body.qrLogo;
     if (body.qrStyle !== undefined) set.qrStyle = body.qrStyle;
     if (body.qrColor !== undefined) set.qrColor = body.qrColor;
+    if (body.qrCorner !== undefined) set.qrCorner = body.qrCorner;
+    if (body.qrBg !== undefined) set.qrBg = body.qrBg;
+    if (body.qrEyeColor !== undefined) set.qrEyeColor = body.qrEyeColor;
   }
 
   if (Object.keys(set).length === 0)

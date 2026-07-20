@@ -64,9 +64,24 @@ function toDTO(
     qrLogo: row.qrLogo,
     qrStyle: row.qrStyle,
     qrColor: row.qrColor,
+    qrCorner: row.qrCorner,
+    qrBg: row.qrBg,
+    qrEyeColor: row.qrEyeColor,
     createdAt: row.createdAt,
     clicks,
   };
+}
+
+/** True when the body carries any QR appearance override (a Pro-only feature). */
+function hasQrOverride(body: LinkInput): boolean {
+  return !!(
+    body.qrLogo ||
+    body.qrStyle ||
+    body.qrColor ||
+    body.qrCorner ||
+    body.qrBg ||
+    body.qrEyeColor
+  );
 }
 
 /**
@@ -156,7 +171,7 @@ linkRoutes.post("/", requireOrgRole("member"), async (c) => {
           ? `The free plan allows ${limits.links} links, upgrade to Pro for more`
           : `This plan allows at most ${limits.links} links`,
     });
-  if ((body.qrLogo || body.qrStyle || body.qrColor) && !limits.qr)
+  if (hasQrOverride(body) && !limits.qr)
     throw new HTTPException(402, {
       message: "QR customization is a Pro feature: upgrade to use it",
     });
@@ -194,6 +209,9 @@ linkRoutes.post("/", requireOrgRole("member"), async (c) => {
     qrLogo: body.qrLogo ?? "",
     qrStyle: body.qrStyle ?? "",
     qrColor: body.qrColor ?? "",
+    qrCorner: body.qrCorner ?? "",
+    qrBg: body.qrBg ?? "",
+    qrEyeColor: body.qrEyeColor ?? "",
     createdBy: c.var.user!.id,
     createdAt: now(),
   };
@@ -207,7 +225,7 @@ linkRoutes.patch("/:linkId", requireOrgRole("member"), async (c) => {
   validateInput(body, true);
   const db = c.var.db;
   const orgId = c.req.param("orgId")!;
-  if (body.qrLogo || body.qrStyle || body.qrColor) {
+  if (hasQrOverride(body)) {
     const { limits } = await orgPlan(db, orgId);
     if (!limits.qr)
       throw new HTTPException(402, {
@@ -250,6 +268,9 @@ linkRoutes.patch("/:linkId", requireOrgRole("member"), async (c) => {
     qrLogo: body.qrLogo ?? existing.qrLogo,
     qrStyle: body.qrStyle ?? existing.qrStyle,
     qrColor: body.qrColor ?? existing.qrColor,
+    qrCorner: body.qrCorner ?? existing.qrCorner,
+    qrBg: body.qrBg ?? existing.qrBg,
+    qrEyeColor: body.qrEyeColor ?? existing.qrEyeColor,
   };
   await db
     .update(schema.links)

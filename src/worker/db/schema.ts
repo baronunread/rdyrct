@@ -104,6 +104,9 @@ export const orgs = sqliteTable("orgs", {
   qrLogo: text("qr_logo").notNull().default(""),
   qrStyle: text("qr_style").notNull().default(""),
   qrColor: text("qr_color").notNull().default(""),
+  qrCorner: text("qr_corner").notNull().default(""),
+  qrBg: text("qr_bg").notNull().default(""),
+  qrEyeColor: text("qr_eye_color").notNull().default(""),
   createdAt: integer("created_at").notNull(),
 });
 
@@ -190,6 +193,9 @@ export const links = sqliteTable(
     // Per-link QR appearance overrides; '' = inherit the org's defaults.
     qrStyle: text("qr_style").notNull().default(""),
     qrColor: text("qr_color").notNull().default(""),
+    qrCorner: text("qr_corner").notNull().default(""),
+    qrBg: text("qr_bg").notNull().default(""),
+    qrEyeColor: text("qr_eye_color").notNull().default(""),
     createdBy: text("created_by").references(() => user.id, {
       onDelete: "set null",
     }),

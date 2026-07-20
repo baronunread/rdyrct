@@ -124,7 +124,7 @@ function DomainsCard({
 
   if (limits.domains === 0)
     return (
-      <Card className="max-w-xl">
+      <Card className="max-w-2xl">
         <div className="flex flex-col gap-3">
           <p className="text-[11px] tracking-wider text-muted uppercase">
             Custom domains
@@ -148,7 +148,7 @@ function DomainsCard({
   return (
     <>
       <div className="flex flex-col gap-6 lg:flex-row lg:items-start">
-        <Card className="w-full max-w-xl">
+        <Card className="w-full max-w-2xl">
           <div className="flex flex-col gap-4">
             <p className="text-[11px] tracking-wider text-muted uppercase">
               Custom domains
@@ -227,18 +227,20 @@ function DomainsCard({
                         <p>
                           {d.status === "checking_dns"
                             ? "To activate, create this record at your DNS provider:"
-                            : "DNS resolved. Waiting for the TLS certificate to be issued:"}
+                            : "DNS resolved. Waiting for the TLS certificate to be issued."}
                         </p>
-                        <div className="flex flex-wrap items-center gap-1.5">
-                          <code className="rounded bg-bg px-1.5 py-0.5 text-text">
-                            {d.hostname} CNAME {appHost}
-                          </code>
-                          <CopyButton
-                            text={appHost}
-                            label="Copy CNAME target"
-                            onCopy={copy}
-                          />
-                        </div>
+                        {d.status === "checking_dns" && (
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <code className="rounded bg-bg px-1.5 py-0.5 text-text">
+                              {d.hostname} CNAME {appHost}
+                            </code>
+                            <CopyButton
+                              text={appHost}
+                              label="Copy CNAME target"
+                              onCopy={copy}
+                            />
+                          </div>
+                        )}
                         <p>
                           {d.status === "checking_dns"
                             ? "We re-check automatically every few seconds — "

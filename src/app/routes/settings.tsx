@@ -5,13 +5,18 @@ import { useMe } from "../lib/hooks";
 import { useCurrentOrg } from "../lib/current-org";
 import { api, shortUrl } from "../lib/api";
 import { authClient } from "../lib/auth-client";
-import { QR_DEFAULT_COLOR, QR_DOT_STYLES } from "@/shared/types";
+import {
+  QR_CORNER_STYLES,
+  QR_DEFAULT_BG,
+  QR_DEFAULT_COLOR,
+  QR_DOT_STYLES,
+} from "@/shared/types";
 import { Button } from "../ui/button";
 import { Dialog } from "../ui/dialog";
 import { Field, Input, Select } from "../ui/field";
 import { Card, PageHeader } from "../ui/misc";
 import { useToast } from "../ui/toast";
-import { QRPreview, QrLogoInput } from "../components/qr";
+import { QRPreview, QrLogoInput, QrColorField } from "../components/qr";
 
 export function SettingsPage() {
   const { org } = useCurrentOrg();
@@ -29,6 +34,9 @@ export function SettingsPage() {
   const [qrStyle, setQrStyle] = useState(org?.qrStyle ?? "");
   const [qrColor, setQrColor] = useState(org?.qrColor ?? "");
   const [qrLogo, setQrLogo] = useState(org?.qrLogo ?? "");
+  const [qrCorner, setQrCorner] = useState(org?.qrCorner ?? "");
+  const [qrBg, setQrBg] = useState(org?.qrBg ?? "");
+  const [qrEyeColor, setQrEyeColor] = useState(org?.qrEyeColor ?? "");
   const [savingQr, setSavingQr] = useState(false);
 
   const rename = async () => {
@@ -46,7 +54,7 @@ export function SettingsPage() {
     try {
       await api(`/orgs/${orgId}`, {
         method: "PATCH",
-        body: { qrLogo, qrStyle, qrColor },
+        body: { qrLogo, qrStyle, qrColor, qrCorner, qrBg, qrEyeColor },
       });
       await qc.invalidateQueries({ queryKey: ["user"] });
       toast("QR defaults saved");
@@ -77,7 +85,7 @@ export function SettingsPage() {
     <div>
       <PageHeader title="Settings" sub="Organization settings" />
       <div className="flex flex-col gap-4">
-        <Card className="max-w-lg">
+        <Card className="max-w-2xl">
           <div className="flex flex-col gap-4">
             <Field label="Organization name">
               <Input
@@ -107,7 +115,7 @@ export function SettingsPage() {
           </div>
         </Card>
 
-        <Card className="max-w-lg">
+        <Card className="max-w-2xl">
           <div className="flex flex-col gap-4">
             <div>
               <p className="text-[11px] tracking-wider text-muted uppercase">
@@ -127,62 +135,85 @@ export function SettingsPage() {
                 to put your logo and style on every QR code.
               </p>
             ) : (
-              <div className="flex flex-col gap-5 sm:flex-row">
+              <div className="flex flex-col gap-6 sm:flex-row">
                 <div className="flex min-w-0 flex-1 flex-col gap-4">
-                  <Field label="Dot style">
-                    <Select
-                      value={qrStyle}
-                      onChange={(e) => setQrStyle(e.target.value)}
-                      disabled={!isOwner}
-                    >
-                      <option value="">Rounded (default)</option>
-                      {QR_DOT_STYLES.filter((s) => s !== "rounded").map(
-                        (s) => (
+                  <div className="grid grid-cols-2 gap-3">
+                    <Field label="Dot style">
+                      <Select
+                        value={qrStyle}
+                        onChange={(e) => setQrStyle(e.target.value)}
+                        disabled={!isOwner}
+                      >
+                        <option value="">Rounded (default)</option>
+                        {QR_DOT_STYLES.filter((s) => s !== "rounded").map(
+                          (s) => (
+                            <option key={s} value={s}>
+                              {s}
+                            </option>
+                          ),
+                        )}
+                      </Select>
+                    </Field>
+                    <Field label="Corner style">
+                      <Select
+                        value={qrCorner}
+                        onChange={(e) => setQrCorner(e.target.value)}
+                        disabled={!isOwner}
+                      >
+                        <option value="">Extra-rounded (default)</option>
+                        {QR_CORNER_STYLES.filter(
+                          (s) => s !== "extra-rounded",
+                        ).map((s) => (
                           <option key={s} value={s}>
                             {s}
                           </option>
-                        ),
-                      )}
-                    </Select>
-                  </Field>
-                  <Field label="Ink color">
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="color"
-                        value={qrColor || QR_DEFAULT_COLOR}
-                        onChange={(e) => setQrColor(e.target.value)}
-                        disabled={!isOwner}
-                        aria-label="QR ink color"
-                        className="h-9 w-14 cursor-pointer rounded-md border border-border bg-bg p-1 disabled:cursor-default disabled:opacity-50"
-                      />
-                      {qrColor && (
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => setQrColor("")}
-                        >
-                          Reset
-                        </Button>
-                      )}
-                    </div>
-                  </Field>
-                  <Field label="Logo (PNG/SVG, ≤ 96 KB)">
-                    <QrLogoInput
+                        ))}
+                      </Select>
+                    </Field>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <QrColorField
+                      label="Dot color"
+                      value={qrColor}
+                      fallback={QR_DEFAULT_COLOR}
+                      onChange={setQrColor}
                       disabled={!isOwner}
-                      onLoad={setQrLogo}
                     />
-                  </Field>
-                  {qrLogo && (
-                    <div>
-                      <Button
-                        size="sm"
-                        variant="ghost"
+                    <QrColorField
+                      label="Eye color"
+                      value={qrEyeColor}
+                      fallback={qrColor || QR_DEFAULT_COLOR}
+                      onChange={setQrEyeColor}
+                      disabled={!isOwner}
+                    />
+                  </div>
+
+                  <QrColorField
+                    label="Background"
+                    value={qrBg}
+                    fallback={QR_DEFAULT_BG}
+                    allowTransparent
+                    onChange={setQrBg}
+                    disabled={!isOwner}
+                  />
+
+                  <div>
+                    <span className="mb-1.5 block text-[11px] tracking-wider text-muted uppercase">
+                      Logo (PNG/SVG, ≤ 96 KB)
+                    </span>
+                    <QrLogoInput disabled={!isOwner} onLoad={setQrLogo} />
+                    {qrLogo && isOwner && (
+                      <button
+                        type="button"
                         onClick={() => setQrLogo("")}
+                        className="mt-1.5 cursor-pointer text-[11px] tracking-wider text-muted uppercase hover:text-text"
                       >
                         Remove logo
-                      </Button>
-                    </div>
-                  )}
+                      </button>
+                    )}
+                  </div>
+
                   {isOwner ? (
                     <div>
                       <Button
@@ -205,7 +236,10 @@ export function SettingsPage() {
                     logo={qrLogo || undefined}
                     dotStyle={qrStyle}
                     color={qrColor}
-                    size={144}
+                    corner={qrCorner}
+                    eyeColor={qrEyeColor}
+                    bg={qrBg}
+                    size={160}
                   />
                 </div>
               </div>
@@ -213,7 +247,7 @@ export function SettingsPage() {
           </div>
         </Card>
 
-        <Card className="max-w-lg">
+        <Card className="max-w-2xl">
           <div className="flex flex-col gap-3">
             <p className="text-[11px] tracking-wider text-danger uppercase">
               Danger zone

@@ -15,7 +15,10 @@ import { useCurrentOrg } from "../lib/current-org";
 import { shortUrl, ApiError } from "../lib/api";
 import {
   PLAN_LIMITS,
+  QR_CORNER_STYLES,
+  QR_DEFAULT_BG,
   QR_DEFAULT_COLOR,
+  QR_DEFAULT_CORNER,
   QR_DOT_STYLES,
   type DomainDTO,
   type LinkDTO,
@@ -27,7 +30,7 @@ import { Field, Input, Select } from "../ui/field";
 import { Table, Th, Td, EmptyState, PageHeader, Spinner } from "../ui/misc";
 import { Tooltip } from "../ui/tooltip";
 import { useToast } from "../ui/toast";
-import { QRPreview, QrLogoInput } from "../components/qr";
+import { QRPreview, QrLogoInput, QrColorField } from "../components/qr";
 
 const emptyForm: LinkInput = {
   destination: "",
@@ -41,6 +44,9 @@ const emptyForm: LinkInput = {
   qrLogo: "",
   qrStyle: "",
   qrColor: "",
+  qrCorner: "",
+  qrBg: "",
+  qrEyeColor: "",
   domainId: null,
 };
 
@@ -49,6 +55,9 @@ interface OrgQr {
   logo: string;
   style: string;
   color: string;
+  corner: string;
+  bg: string;
+  eyeColor: string;
 }
 
 export function LinksPage() {
@@ -73,6 +82,9 @@ export function LinksPage() {
     logo: org?.qrLogo ?? "",
     style: org?.qrStyle ?? "",
     color: org?.qrColor ?? "",
+    corner: org?.qrCorner ?? "",
+    bg: org?.qrBg ?? "",
+    eyeColor: org?.qrEyeColor ?? "",
   };
 
   const linkCount = links.data?.length ?? 0;
@@ -270,6 +282,9 @@ export function LinksPage() {
                 logo={qrLink.qrLogo || orgQr.logo || undefined}
                 dotStyle={qrLink.qrStyle || orgQr.style}
                 color={qrLink.qrColor || orgQr.color}
+                corner={qrLink.qrCorner || orgQr.corner}
+                eyeColor={qrLink.qrEyeColor || orgQr.eyeColor}
+                bg={qrLink.qrBg || orgQr.bg}
                 downloadName={`qr-${qrLink.slug}`}
               />
               <p className="text-xs text-muted">
@@ -450,65 +465,90 @@ function LinkEditor({
         </div>
 
         {qrEnabled ? (
-          <div className="flex flex-col items-center gap-3 sm:w-56">
-            <p className="self-start text-[11px] tracking-wider text-muted uppercase">
-              QR preview
+          <div className="flex flex-col gap-4 sm:w-72">
+            <p className="text-[11px] tracking-wider text-muted uppercase">
+              QR code
             </p>
             <QRPreview
               url={previewUrl}
               logo={form.qrLogo || orgQr.logo || undefined}
               dotStyle={form.qrStyle || orgQr.style}
               color={form.qrColor || orgQr.color}
-              size={176}
+              corner={form.qrCorner || orgQr.corner}
+              eyeColor={form.qrEyeColor || orgQr.eyeColor}
+              bg={form.qrBg || orgQr.bg}
+              size={192}
             />
-            <Field label={`Dot style · org default: ${orgQr.style || "rounded"}`}>
-              <Select
-                value={form.qrStyle ?? ""}
-                onChange={(e) =>
-                  setForm({ ...form, qrStyle: e.target.value })
-                }
-              >
-                <option value="">Org default</option>
-                {QR_DOT_STYLES.map((s) => (
-                  <option key={s} value={s}>
-                    {s}
-                  </option>
-                ))}
-              </Select>
-            </Field>
-            <div className="w-full">
-              <span className="mb-1.5 block text-xs tracking-wider text-muted uppercase">
-                Ink color
-              </span>
-              <div className="flex items-center gap-2">
-                <input
-                  type="color"
-                  value={form.qrColor || orgQr.color || QR_DEFAULT_COLOR}
+
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Dots">
+                <Select
+                  value={form.qrStyle ?? ""}
+                  onChange={(e) => setForm({ ...form, qrStyle: e.target.value })}
+                >
+                  <option value="">Org default</option>
+                  {QR_DOT_STYLES.map((s) => (
+                    <option key={s} value={s}>
+                      {s}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+              <Field label="Corners">
+                <Select
+                  value={form.qrCorner ?? ""}
                   onChange={(e) =>
-                    setForm({ ...form, qrColor: e.target.value })
+                    setForm({ ...form, qrCorner: e.target.value })
                   }
-                  aria-label="QR ink color"
-                  className="h-9 w-14 cursor-pointer rounded-md border border-border bg-bg p-1"
-                />
-                {form.qrColor && (
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => setForm({ ...form, qrColor: "" })}
-                  >
-                    Reset
-                  </Button>
-                )}
-              </div>
+                >
+                  <option value="">Org default</option>
+                  {QR_CORNER_STYLES.map((s) => (
+                    <option key={s} value={s}>
+                      {s}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
             </div>
-            <div className="w-full">
-              <span className="mb-1.5 flex items-center gap-1.5 text-xs text-muted">
-                Logo (PNG/SVG, ≤ 96 KB)
+
+            <div className="grid grid-cols-2 gap-3">
+              <QrColorField
+                label="Dots"
+                value={form.qrColor ?? ""}
+                fallback={orgQr.color || QR_DEFAULT_COLOR}
+                onChange={(v) => setForm({ ...form, qrColor: v })}
+              />
+              <QrColorField
+                label="Eyes"
+                value={form.qrEyeColor ?? ""}
+                fallback={
+                  form.qrColor ||
+                  orgQr.eyeColor ||
+                  orgQr.color ||
+                  QR_DEFAULT_COLOR
+                }
+                onChange={(v) => setForm({ ...form, qrEyeColor: v })}
+              />
+            </div>
+
+            <QrColorField
+              label="Background"
+              value={form.qrBg ?? ""}
+              fallback={
+                orgQr.bg && orgQr.bg !== "transparent" ? orgQr.bg : QR_DEFAULT_BG
+              }
+              allowTransparent
+              onChange={(v) => setForm({ ...form, qrBg: v })}
+            />
+
+            <div>
+              <span className="mb-1.5 flex items-center gap-1.5 text-[11px] tracking-wider text-muted uppercase">
+                Logo
                 <Tooltip content="Embedded in the center of the QR code. Use a small, square image with some breathing room so the code stays easy to scan. Leave empty to use your organization's default logo from Settings.">
                   <button
                     type="button"
                     aria-label="About QR logos"
-                    className="cursor-pointer text-muted hover:text-text"
+                    className="cursor-pointer text-muted normal-case hover:text-text"
                   >
                     <Info size={13} />
                   </button>
@@ -517,19 +557,19 @@ function LinkEditor({
               <QrLogoInput
                 onLoad={(dataUri) => setForm({ ...form, qrLogo: dataUri })}
               />
+              {form.qrLogo && (
+                <button
+                  type="button"
+                  onClick={() => setForm({ ...form, qrLogo: "" })}
+                  className="mt-1.5 cursor-pointer text-[11px] tracking-wider text-muted uppercase hover:text-text"
+                >
+                  Remove logo
+                </button>
+              )}
             </div>
-            {form.qrLogo && (
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={() => setForm({ ...form, qrLogo: "" })}
-              >
-                Remove logo
-              </Button>
-            )}
           </div>
         ) : (
-          <div className="flex flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-border p-4 text-center sm:w-56">
+          <div className="flex flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-border p-4 text-center sm:w-72">
             <Lock size={20} className="text-muted" />
             <p className="text-xs text-muted">
               QR codes are a Pro feature: upgrade in Settings.

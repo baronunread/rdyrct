@@ -102,7 +102,7 @@ export function isValidHttpUrl(value: string): boolean {
 /* ---------------- QR appearance validation ---------------- */
 
 import { HTTPException } from "hono/http-exception";
-import { QR_DOT_STYLES } from "@/shared/types";
+import { QR_CORNER_STYLES, QR_DOT_STYLES } from "@/shared/types";
 
 /** data-URI QR logos are stored inline in D1, so keep them small. */
 const MAX_QR_LOGO_BYTES = 96 * 1024;
@@ -114,6 +114,9 @@ export function validateQrFields(fields: {
   qrLogo?: string;
   qrStyle?: string;
   qrColor?: string;
+  qrCorner?: string;
+  qrBg?: string;
+  qrEyeColor?: string;
 }) {
   if (fields.qrLogo) {
     if (!fields.qrLogo.startsWith("data:image/"))
@@ -125,9 +128,24 @@ export function validateQrFields(fields: {
     fields.qrStyle &&
     !(QR_DOT_STYLES as readonly string[]).includes(fields.qrStyle)
   )
-    throw new HTTPException(400, { message: "Unknown QR style" });
-  if (fields.qrColor && !HEX_COLOR_RE.test(fields.qrColor))
+    throw new HTTPException(400, { message: "Unknown QR dot style" });
+  if (
+    fields.qrCorner &&
+    !(QR_CORNER_STYLES as readonly string[]).includes(fields.qrCorner)
+  )
+    throw new HTTPException(400, { message: "Unknown QR corner style" });
+  // 'transparent' is the one non-hex background we allow (see the QR preview).
+  if (fields.qrBg && fields.qrBg !== "transparent" && !HEX_COLOR_RE.test(fields.qrBg))
     throw new HTTPException(400, {
-      message: "QR color must be a hex color like #17151f",
+      message: "QR background must be a hex color or 'transparent'",
     });
+  for (const [key, val] of [
+    ["QR color", fields.qrColor],
+    ["QR eye color", fields.qrEyeColor],
+  ] as const) {
+    if (val && !HEX_COLOR_RE.test(val))
+      throw new HTTPException(400, {
+        message: `${key} must be a hex color like #17151f`,
+      });
+  }
 }

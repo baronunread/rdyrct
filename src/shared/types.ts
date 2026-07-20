@@ -39,8 +39,21 @@ export const QR_DOT_STYLES = [
   "extra-rounded",
 ] as const;
 export type QrDotStyle = (typeof QR_DOT_STYLES)[number];
-/** Built-in QR ink color when neither link nor org overrides it. */
+
+/** Corner ('eye') shapes; "" means inherit/default (QR_DEFAULT_CORNER). */
+export const QR_CORNER_STYLES = [
+  "extra-rounded",
+  "rounded",
+  "dot",
+  "square",
+  "classy",
+] as const;
+export type QrCornerStyle = (typeof QR_CORNER_STYLES)[number];
+
+/** Built-in defaults when neither link nor org overrides them. */
 export const QR_DEFAULT_COLOR = "#17151f";
+export const QR_DEFAULT_CORNER = "extra-rounded";
+export const QR_DEFAULT_BG = "#ffffff";
 
 export interface MeUser {
   id: string;
@@ -64,6 +77,9 @@ export interface MeOrg {
   qrLogo: string;
   qrStyle: string;
   qrColor: string;
+  qrCorner: string;
+  qrBg: string;
+  qrEyeColor: string;
 }
 
 export interface Me {
@@ -119,6 +135,9 @@ export interface LinkDTO {
   /** Per-link QR overrides; "" = inherit the org's defaults. */
   qrStyle: string;
   qrColor: string;
+  qrCorner: string;
+  qrBg: string;
+  qrEyeColor: string;
   createdAt: number;
   clicks: number;
 }
@@ -136,6 +155,9 @@ export interface LinkInput {
   qrLogo?: string;
   qrStyle?: string;
   qrColor?: string;
+  qrCorner?: string;
+  qrBg?: string;
+  qrEyeColor?: string;
 }
 
 export interface SeriesPoint {
