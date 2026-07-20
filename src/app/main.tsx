@@ -21,7 +21,9 @@ import { MembersPage } from "./routes/members";
 import { BillingPage } from "./routes/billing";
 import { DomainsPage } from "./routes/domains";
 import { SettingsPage } from "./routes/settings";
-import { AdminOverviewPage, AdminOrgsPage, AdminUsersPage } from "./routes/admin";
+import { AdminOverviewPage } from "./routes/admin/overview";
+import { AdminOrgsPage } from "./routes/admin/orgs";
+import { AdminUsersPage } from "./routes/admin/users";
 import { NotFound } from "./routes/not-found";
 
 const queryClient = new QueryClient({
