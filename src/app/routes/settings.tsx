@@ -144,7 +144,7 @@ function QrDefaultsCard() {
   const me = useCurrentUser();
   const qc = useQueryClient();
   const toast = useToast();
-  const isOwner = me.data?.user.isAdmin || org?.role === "owner";
+  const isAdmin = me.data?.user.isAdmin || org?.role === "owner" || org?.role === "admin";
   const isPro = org?.plan === "pro";
 
   // Org-level QR defaults; "" means the built-in default.
@@ -212,7 +212,7 @@ function QrDefaultsCard() {
                     label="Dot style"
                     value={qrStyle}
                     onChange={setQrStyle}
-                    disabled={!isOwner}
+                    disabled={!isAdmin}
                     options={[
                       { value: "", label: "Rounded (default)" },
                       ...QR_DOT_STYLES.flatMap((s) =>
@@ -226,7 +226,7 @@ function QrDefaultsCard() {
                     label="Corner style"
                     value={qrCorner}
                     onChange={setQrCorner}
-                    disabled={!isOwner}
+                    disabled={!isAdmin}
                     options={[
                       { value: "", label: "Extra-rounded (default)" },
                       ...QR_CORNER_STYLES.flatMap((s) =>
@@ -245,14 +245,14 @@ function QrDefaultsCard() {
                   value={qrColor}
                   fallback={QR_DEFAULT_COLOR}
                   onChange={setQrColor}
-                  disabled={!isOwner}
+                  disabled={!isAdmin}
                 />
                 <QrColorField
                   label="Eye color"
                   value={qrEyeColor}
                   fallback={qrColor || QR_DEFAULT_COLOR}
                   onChange={setQrEyeColor}
-                  disabled={!isOwner}
+                  disabled={!isAdmin}
                 />
               </div>
 
@@ -262,7 +262,7 @@ function QrDefaultsCard() {
                 fallback={QR_DEFAULT_BG}
                 allowTransparent
                 onChange={setQrBg}
-                disabled={!isOwner}
+                disabled={!isAdmin}
               />
 
               <div>
@@ -271,9 +271,9 @@ function QrDefaultsCard() {
                 </span>
                     <QrLogoInput
                       value={qrLogo}
-                      disabled={!isOwner}
+                      disabled={!isAdmin}
                       onLoad={setQrLogo}
-                      onClear={isOwner ? () => setQrLogo("") : undefined}
+                      onClear={isAdmin ? () => setQrLogo("") : undefined}
                     />
               </div>
 
@@ -285,7 +285,7 @@ function QrDefaultsCard() {
                   label="Logo size"
                   value={qrLogoSize}
                   onChange={setQrLogoSize}
-                  disabled={!isOwner}
+                  disabled={!isAdmin}
                       options={[
                         { value: "", label: "Medium (default)" },
                         { value: "0.25", label: "Small" },
@@ -295,7 +295,7 @@ function QrDefaultsCard() {
                 />
               </Field>
 
-              {isOwner ? (
+              {isAdmin ? (
                 <div>
                   <Button
                     variant="primary"
@@ -307,7 +307,7 @@ function QrDefaultsCard() {
                 </div>
               ) : (
                 <p className="text-xs text-muted">
-                  Only the owner can change these settings.
+                  Only the owner and admins can change these settings.
                 </p>
               )}
             </div>

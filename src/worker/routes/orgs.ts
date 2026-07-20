@@ -69,7 +69,7 @@ orgRoutes.post("/", requireUser, async (c) => {
   );
 });
 
-orgRoutes.patch("/:orgId", requireOrgRole("owner"), async (c) => {
+orgRoutes.patch("/:orgId", requireOrgRole("admin"), async (c) => {
   const body = await c.req.json<{
     name?: string;
     qrLogo?: string;
