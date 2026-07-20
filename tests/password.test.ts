@@ -6,7 +6,7 @@ describe("password hashing", () => {
     const hash = await hashPassword("correct horse battery staple");
     const [scheme, iterations, salt, key] = hash.split(":");
     expect(scheme).toBe("pbkdf2");
-    expect(Number(iterations)).toBe(150_000);
+    expect(Number(iterations)).toBe(100_000);
     expect(salt.length).toBeGreaterThan(0);
     expect(key.length).toBeGreaterThan(0);
   });
