@@ -95,7 +95,10 @@ async function cfGetHostnameStatus(
   return data.result as unknown as CfHostnameResult;
 }
 
-async function cfDeleteHostname(env: Env, cfHostnameId: string): Promise<void> {
+export async function cfDeleteHostname(
+  env: Env,
+  cfHostnameId: string,
+): Promise<void> {
   if (env.DEV_FAKE_CF === "1") return;
   await cfRequest(env, "DELETE", `/custom_hostnames/${cfHostnameId}`);
 }

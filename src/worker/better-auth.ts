@@ -115,7 +115,7 @@ function buildAuth(env: Env) {
           if (owned.length > 0)
             throw new APIError(400, {
               message:
-                "You still own organizations, delete or transfer them first.",
+                "You still own organizations, delete them first in Settings.",
             });
         },
       },

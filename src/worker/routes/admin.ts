@@ -4,7 +4,6 @@ import { eq, ne, gte, and, desc, sql } from "drizzle-orm";
 import * as schema from "../db/schema";
 import type { AppEnv } from "../env";
 import { requireAdmin } from "../auth";
-import { unpublishLink, unpublishDomain } from "../kv";
 import { now } from "../util";
 import type {
   AdminOverview,
@@ -13,7 +12,7 @@ import type {
   AdminUserRow,
   OrgPlan,
 } from "@/shared/types";
-import { fillSeries } from "./orgs";
+import { fillSeries, deleteOrgCascade } from "./orgs";
 import { orgPlan } from "../plan";
 
 // An org's effective plan is its owner's plan (billing is per-user). A single
@@ -205,25 +204,7 @@ adminRoutes.get("/orgs/:orgId", async (c) => {
 });
 
 adminRoutes.delete("/orgs/:orgId", async (c) => {
-  const db = c.var.db;
-  const orgId = c.req.param("orgId");
-  const [links, domains] = await Promise.all([
-    db
-      .select({ slug: schema.links.slug, hostname: schema.domains.hostname })
-      .from(schema.links)
-      .leftJoin(schema.domains, eq(schema.links.domainId, schema.domains.id))
-      .where(eq(schema.links.orgId, orgId)),
-    db
-      .select({ hostname: schema.domains.hostname })
-      .from(schema.domains)
-      .where(eq(schema.domains.orgId, orgId)),
-  ]);
-  // clicks/links/members/domains cascade in D1; KV needs manual cleanup
-  await db.delete(schema.orgs).where(eq(schema.orgs.id, orgId));
-  await Promise.all([
-    ...links.map((l) => unpublishLink(c.env, l.slug, l.hostname)),
-    ...domains.map((d) => unpublishDomain(c.env, d.hostname)),
-  ]);
+  await deleteOrgCascade(c.var.db, c.env, c.req.param("orgId"));
   return c.json({ ok: true });
 });
 

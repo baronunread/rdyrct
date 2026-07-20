@@ -2,10 +2,12 @@ import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import { eq, and, gte, desc, sql } from "drizzle-orm";
 import * as schema from "../db/schema";
-import type { AppEnv } from "../env";
+import type { AppEnv, DB, Env } from "../env";
 import { requireUser, requireOrgRole, orgRole } from "../auth";
 import { orgPlan, userPlan } from "../plan";
 import { sendEmail } from "../email";
+import { unpublishLink, unpublishDomain } from "../kv";
+import { cfDeleteHostname } from "./domains";
 import { uid, now, referrerHost, validateQrFields } from "../util";
 import type {
   MemberDTO,
@@ -120,6 +122,49 @@ orgRoutes.patch("/:orgId", requireOrgRole("admin"), async (c) => {
     .update(schema.orgs)
     .set(set)
     .where(eq(schema.orgs.id, orgId));
+  return c.json({ ok: true });
+});
+
+/**
+ * Full org teardown, shared with the admin route. Order matters: Cloudflare
+ * custom hostnames are deprovisioned first (a CF failure throws and leaves
+ * the org intact), then the D1 delete — the point of no return — cascades
+ * links/clicks/members/domains/invites, and KV cleanup runs last (idempotent,
+ * a partial failure only leaves dead keys the redirect path treats as misses).
+ */
+export async function deleteOrgCascade(
+  db: DB,
+  env: Env,
+  orgId: string,
+): Promise<void> {
+  const [links, domains] = await Promise.all([
+    db
+      .select({ slug: schema.links.slug, hostname: schema.domains.hostname })
+      .from(schema.links)
+      .leftJoin(schema.domains, eq(schema.links.domainId, schema.domains.id))
+      .where(eq(schema.links.orgId, orgId)),
+    db
+      .select({
+        hostname: schema.domains.hostname,
+        cfHostnameId: schema.domains.cfHostnameId,
+      })
+      .from(schema.domains)
+      .where(eq(schema.domains.orgId, orgId)),
+  ]);
+  await Promise.all(
+    domains.flatMap((d) =>
+      d.cfHostnameId ? [cfDeleteHostname(env, d.cfHostnameId)] : [],
+    ),
+  );
+  await db.delete(schema.orgs).where(eq(schema.orgs.id, orgId));
+  await Promise.all([
+    ...links.map((l) => unpublishLink(env, l.slug, l.hostname)),
+    ...domains.map((d) => unpublishDomain(env, d.hostname)),
+  ]);
+}
+
+orgRoutes.delete("/:orgId", requireOrgRole("owner"), async (c) => {
+  await deleteOrgCascade(c.var.db, c.env, c.req.param("orgId"));
   return c.json({ ok: true });
 });
 

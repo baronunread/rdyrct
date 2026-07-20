@@ -33,6 +33,9 @@ export function SettingsPage() {
   const name = nameDraft ?? org?.name ?? "";
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [deleteOrgOpen, setDeleteOrgOpen] = useState(false);
+  const [confirmName, setConfirmName] = useState("");
+  const [deletingOrg, setDeletingOrg] = useState(false);
 
   const rename = async () => {
     try {
@@ -41,6 +44,23 @@ export function SettingsPage() {
       toast("Organization renamed");
     } catch (e) {
       toast((e as Error).message, "error");
+    }
+  };
+
+  const deleteOrg = async () => {
+    setDeletingOrg(true);
+    try {
+      await api(`/orgs/${orgId}`, { method: "DELETE" });
+      setDeleteOrgOpen(false);
+      setConfirmName("");
+      setNameDraft(null);
+      toast("Organization deleted");
+      // useCurrentOrg falls back to the next org (or NoOrgState everywhere).
+      await qc.refetchQueries({ queryKey: ["user"] });
+    } catch (e) {
+      toast((e as Error).message, "error");
+    } finally {
+      setDeletingOrg(false);
     }
   };
 
@@ -109,10 +129,29 @@ export function SettingsPage() {
             <p className="text-[11px] tracking-wider text-danger uppercase">
               Danger zone
             </p>
+            {org && isOwner && (
+              <>
+                <p className="text-sm text-muted">
+                  Permanently delete{" "}
+                  <span className="text-text">{org.name}</span> with every
+                  link, custom domain, and all click history. Short links
+                  stop working immediately.
+                </p>
+                <div>
+                  <Button
+                    variant="danger"
+                    onClick={() => setDeleteOrgOpen(true)}
+                  >
+                    Delete organization
+                  </Button>
+                </div>
+                <div className="my-1 border-t border-border" />
+              </>
+            )}
             <p className="text-sm text-muted">
               Permanently delete your account. This does not delete
-              organizations you belong to as a member, but you must transfer
-              or delete any organizations you own first.
+              organizations you belong to as a member, but you must delete
+              any organizations you own first.
             </p>
             <div>
               <Button variant="danger" onClick={() => setDeleteOpen(true)}>
@@ -122,6 +161,46 @@ export function SettingsPage() {
           </div>
         </Card>
       </div>
+
+      {org && (
+        <Dialog
+          open={deleteOrgOpen}
+          onOpenChange={(o) => {
+            setDeleteOrgOpen(o);
+            if (!o) setConfirmName("");
+          }}
+          title="Delete organization"
+        >
+          <div className="flex flex-col gap-4">
+            <p className="text-sm">
+              This permanently deletes{" "}
+              <span className="font-bold text-accent">{org.name}</span> —
+              every link, custom domain, and all click history. Short links
+              stop working immediately. This cannot be undone.
+            </p>
+            <Field label={`Type "${org.name}" to confirm`}>
+              <Input
+                value={confirmName}
+                onChange={(e) => setConfirmName(e.target.value)}
+                placeholder={org.name}
+                autoFocus
+              />
+            </Field>
+            <div className="flex justify-end gap-2">
+              <Button variant="ghost" onClick={() => setDeleteOrgOpen(false)}>
+                Cancel
+              </Button>
+              <Button
+                variant="danger"
+                disabled={confirmName.trim() !== org.name || deletingOrg}
+                onClick={deleteOrg}
+              >
+                {deletingOrg ? "…" : "Delete organization"}
+              </Button>
+            </div>
+          </div>
+        </Dialog>
+      )}
 
       <Dialog
         open={deleteOpen}
