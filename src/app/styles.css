@@ -132,6 +132,13 @@ body {
   }
 }
 
+/* skeleton blocks hold a static shade instead of pulsing */
+@media (prefers-reduced-motion: reduce) {
+  .animate-pulse {
+    animation: none;
+  }
+}
+
 @media (prefers-reduced-motion: no-preference) {
   html {
     scroll-behavior: smooth;

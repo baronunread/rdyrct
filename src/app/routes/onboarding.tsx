@@ -7,7 +7,7 @@ import { useCurrentOrg } from "../lib/current-org";
 import { api, ApiError } from "../lib/api";
 import { Button } from "../ui/button";
 import { Field, Input } from "../ui/field";
-import { Spinner } from "../ui/misc";
+import { OnboardingSkeleton } from "../components/skeletons";
 import { useToast } from "../ui/toast";
 import { PLAN_LIMITS } from "@/shared/types";
 
@@ -23,11 +23,7 @@ export function OnboardingPage() {
   const [busy, setBusy] = useState(false);
 
   if (me.isLoading) {
-    return (
-      <div className="grid min-h-dvh place-items-center px-4">
-        <Spinner />
-      </div>
-    );
+    return <OnboardingSkeleton />;
   }
 
   if (me.data && me.data.orgs.length > 0) {

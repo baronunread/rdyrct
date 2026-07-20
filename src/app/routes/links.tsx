@@ -27,7 +27,8 @@ import {
 import { Button, IconButton } from "../ui/button";
 import { Dialog } from "../ui/dialog";
 import { Field, Input, Select } from "../ui/field";
-import { Table, Th, Td, EmptyState, PageHeader, Spinner } from "../ui/misc";
+import { Table, Th, Td, EmptyState, PageHeader } from "../ui/misc";
+import { TableSkeleton } from "../ui/skeleton";
 import { Tooltip } from "../ui/tooltip";
 import { useToast } from "../ui/toast";
 import { QRPreview, QrLogoInput, QrColorField } from "../components/qr";
@@ -161,7 +162,7 @@ export function LinksPage() {
       />
 
       {links.isLoading ? (
-        <Spinner />
+        <TableSkeleton rows={5} />
       ) : !links.data?.length ? (
         <EmptyState
           title="No links yet"

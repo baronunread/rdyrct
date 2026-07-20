@@ -3,13 +3,14 @@ import { useStats } from "../lib/hooks";
 import { useCurrentOrg } from "../lib/current-org";
 import { PLAN_LIMITS } from "@/shared/types";
 import { AreaChart, BarList, StatCard } from "../components/charts";
-import { Card, PageHeader, Spinner } from "../ui/misc";
+import { DashboardSkeleton } from "../components/skeletons";
+import { Card, PageHeader } from "../ui/misc";
 
 export function Dashboard() {
   const { org } = useCurrentOrg();
   const stats = useStats(org?.id ?? "");
 
-  if (stats.isLoading) return <Spinner />;
+  if (stats.isLoading) return <DashboardSkeleton />;
   if (!stats.data)
     return <p className="text-sm text-danger">Could not load stats.</p>;
   const s = stats.data;

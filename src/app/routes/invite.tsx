@@ -5,7 +5,7 @@ import type { InvitePreview } from "@/shared/types";
 import { useMe } from "../lib/hooks";
 import { useCurrentOrg } from "../lib/current-org";
 import { Button } from "../ui/button";
-import { Spinner } from "../ui/misc";
+import { InviteSkeleton } from "../components/skeletons";
 import { useToast } from "../ui/toast";
 
 export function InvitePage() {
@@ -44,7 +44,7 @@ export function InvitePage() {
           rdyrct
         </p>
         {preview.isLoading || me.isLoading ? (
-          <Spinner />
+          <InviteSkeleton />
         ) : preview.isError ? (
           <p className="text-sm text-muted">
             This invite is invalid or has expired.

@@ -35,7 +35,11 @@ import { Dialog } from "../ui/dialog";
 import { Button, IconButton } from "../ui/button";
 import { Field, Input } from "../ui/field";
 
-import { Spinner } from "../ui/misc";
+import {
+  AppShellSkeleton,
+  OnboardingSkeleton,
+  PageSkeleton,
+} from "../components/skeletons";
 import { cn } from "../ui/cn";
 import { NotFound } from "./not-found";
 import { PLAN_LIMITS } from "@/shared/types";
@@ -43,11 +47,12 @@ import { PLAN_LIMITS } from "@/shared/types";
 export function RequireAuth({ children }: { children: ReactNode }) {
   const me = useMe();
   const location = useLocation();
+  // Onboarding lives outside the app shell: show its own shape, not the sidebar.
   if (me.isLoading)
-    return (
-      <div className="grid min-h-dvh place-items-center">
-        <Spinner />
-      </div>
+    return location.pathname === "/onboarding" ? (
+      <OnboardingSkeleton />
+    ) : (
+      <AppShellSkeleton />
     );
   if (!me.data)
     return <Navigate to="/login" state={{ from: location.pathname }} replace />;
@@ -58,12 +63,7 @@ export function RequireAuth({ children }: { children: ReactNode }) {
  * admin area's existence isn't revealed to regular users. */
 export function RequireAdmin({ children }: { children: ReactNode }) {
   const me = useMe();
-  if (me.isLoading)
-    return (
-      <div className="grid min-h-dvh place-items-center">
-        <Spinner />
-      </div>
-    );
+  if (me.isLoading) return <PageSkeleton />;
   if (!me.data?.user.isAdmin) return <NotFound />;
   return children;
 }

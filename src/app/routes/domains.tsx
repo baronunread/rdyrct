@@ -8,7 +8,8 @@ import { PLAN_LIMITS, type DomainDTO } from "@/shared/types";
 import { Button, IconButton } from "../ui/button";
 import { Dialog } from "../ui/dialog";
 import { Input } from "../ui/field";
-import { Badge, Card, PageHeader, Spinner } from "../ui/misc";
+import { Badge, Card, PageHeader } from "../ui/misc";
+import { DomainsSkeleton } from "../components/skeletons";
 import { useToast } from "../ui/toast";
 import { cn } from "../ui/cn";
 
@@ -155,7 +156,7 @@ function DomainsCard({
             </p>
 
             {domains.isLoading ? (
-              <Spinner />
+              <DomainsSkeleton />
             ) : (
               <div className="flex flex-col gap-4">
                 <MotionConfig reducedMotion="user">

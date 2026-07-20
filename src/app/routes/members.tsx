@@ -16,8 +16,8 @@ import {
   Badge,
   Card,
   PageHeader,
-  Spinner,
 } from "../ui/misc";
+import { TableSkeleton } from "../ui/skeleton";
 import { useToast } from "../ui/toast";
 
 const roleColor: Record<OrgRole, "accent" | "mint" | "muted"> = {
@@ -108,8 +108,6 @@ export function MembersPage() {
     toast("Invite link copied");
   };
 
-  if (members.isLoading) return <Spinner />;
-
   const memberLimit = org ? PLAN_LIMITS[org.plan].members : 0;
 
   return (
@@ -126,60 +124,67 @@ export function MembersPage() {
         }
       />
 
-      <Table>
-        <thead>
-          <tr>
-            <Th>Name</Th>
-            <Th>Email</Th>
-            <Th>Role</Th>
-            <Th>Joined</Th>
-            {canManage && <Th className="text-right">Actions</Th>}
-          </tr>
-        </thead>
-        <tbody>
-          {members.data?.map((m) => (
-            <tr key={m.userId}>
-              <Td>{m.name}</Td>
-              <Td className="text-muted">{m.email}</Td>
-              <Td>
-                {canManage && m.role !== "owner" ? (
-                  <Select
-                    className="h-7 text-xs"
-                    wrapperClass="inline-block w-28"
-                    value={m.role}
-                    onChange={(e) =>
-                      setRole.mutate({ userId: m.userId, role: e.target.value })
-                    }
-                  >
-                    <option value="member">member</option>
-                    <option value="admin">admin</option>
-                  </Select>
-                ) : (
-                  <Badge color={roleColor[m.role]}>{m.role}</Badge>
-                )}
-              </Td>
-              <Td className="text-xs text-muted">
-                {new Date(m.createdAt).toLocaleDateString()}
-              </Td>
-              {canManage && (
+      {members.isLoading ? (
+        <TableSkeleton rows={4} />
+      ) : (
+        <Table>
+          <thead>
+            <tr>
+              <Th>Name</Th>
+              <Th>Email</Th>
+              <Th>Role</Th>
+              <Th>Joined</Th>
+              {canManage && <Th className="text-right">Actions</Th>}
+            </tr>
+          </thead>
+          <tbody>
+            {members.data?.map((m) => (
+              <tr key={m.userId}>
+                <Td>{m.name}</Td>
+                <Td className="text-muted">{m.email}</Td>
                 <Td>
-                  {m.role !== "owner" && m.userId !== me.data?.user.id && (
-                    <div className="flex justify-end">
-                      <IconButton
-                        label={`Remove ${m.name}`}
-                        danger
-                        onClick={() => removeMember.mutate(m.userId)}
-                      >
-                        <Trash2 size={15} />
-                      </IconButton>
-                    </div>
+                  {canManage && m.role !== "owner" ? (
+                    <Select
+                      className="h-7 text-xs"
+                      wrapperClass="inline-block w-28"
+                      value={m.role}
+                      onChange={(e) =>
+                        setRole.mutate({
+                          userId: m.userId,
+                          role: e.target.value,
+                        })
+                      }
+                    >
+                      <option value="member">member</option>
+                      <option value="admin">admin</option>
+                    </Select>
+                  ) : (
+                    <Badge color={roleColor[m.role]}>{m.role}</Badge>
                   )}
                 </Td>
-              )}
-            </tr>
-          ))}
-        </tbody>
-      </Table>
+                <Td className="text-xs text-muted">
+                  {new Date(m.createdAt).toLocaleDateString()}
+                </Td>
+                {canManage && (
+                  <Td>
+                    {m.role !== "owner" && m.userId !== me.data?.user.id && (
+                      <div className="flex justify-end">
+                        <IconButton
+                          label={`Remove ${m.name}`}
+                          danger
+                          onClick={() => removeMember.mutate(m.userId)}
+                        >
+                          <Trash2 size={15} />
+                        </IconButton>
+                      </div>
+                    )}
+                  </Td>
+                )}
+              </tr>
+            ))}
+          </tbody>
+        </Table>
+      )}
 
       {canManage && org && (
         <Card className="mt-4">
