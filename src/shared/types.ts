@@ -54,6 +54,8 @@ export type QrCornerStyle = (typeof QR_CORNER_STYLES)[number];
 export const QR_DEFAULT_COLOR = "#17151f";
 export const QR_DEFAULT_CORNER = "extra-rounded";
 export const QR_DEFAULT_BG = "#ffffff";
+/** Logo footprint (qr-code-styling imageSize ratio) when the org doesn't set one. */
+export const QR_DEFAULT_LOGO_SIZE = 0.35;
 
 export interface User {
   id: string;
@@ -80,6 +82,8 @@ export interface UserOrg {
   qrCorner: string;
   qrBg: string;
   qrEyeColor: string;
+  /** Logo footprint ratio; null = built-in default (QR_DEFAULT_LOGO_SIZE). */
+  qrLogoSize: number | null;
 }
 
 export interface CurrentUser {
@@ -138,6 +142,7 @@ export interface LinkDTO {
   qrCorner: string;
   qrBg: string;
   qrEyeColor: string;
+  qrLogoSize: number | null;
   createdAt: number;
   clicks: number;
 }
@@ -158,6 +163,7 @@ export interface LinkInput {
   qrCorner?: string;
   qrBg?: string;
   qrEyeColor?: string;
+  qrLogoSize?: number | null;
 }
 
 export interface SeriesPoint {

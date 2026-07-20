@@ -49,7 +49,7 @@ const emptyForm: LinkInput = {
   qrCorner: "",
   qrBg: "",
   qrEyeColor: "",
-  domainId: null,
+  qrLogoSize: null,
 };
 
 /** Org-level QR defaults a link inherits unless it overrides them. */
@@ -60,6 +60,7 @@ interface OrgQr {
   corner: string;
   bg: string;
   eyeColor: string;
+  logoSize: number | null;
 }
 
 export function LinksPage() {
@@ -87,6 +88,7 @@ export function LinksPage() {
     corner: org?.qrCorner ?? "",
     bg: org?.qrBg ?? "",
     eyeColor: org?.qrEyeColor ?? "",
+    logoSize: org?.qrLogoSize ?? null,
   };
 
   const linkCount = links.data?.length ?? 0;
@@ -288,6 +290,7 @@ export function LinksPage() {
                 corner={qrLink.qrCorner || orgQr.corner}
                 eyeColor={qrLink.qrEyeColor || orgQr.eyeColor}
                 bg={qrLink.qrBg || orgQr.bg}
+                logoSize={orgQr.logoSize ?? undefined}
                 downloadName={`qr-${qrLink.slug}`}
               />
               <p className="text-xs text-muted">
@@ -382,112 +385,137 @@ function LinkEditor({
       wide
       shakeKey={shakeKey}
     >
-      <div className="grid gap-6 sm:grid-cols-[1fr_auto]">
-        <div className="flex min-w-0 flex-col gap-4">
-          <Field label="Destination URL">
-            <Input
-              value={form.destination}
-              onChange={set("destination")}
-              placeholder="https://example.com/launch"
-              autoFocus={!editing}
-            />
-          </Field>
-
-          {activeDomains.length > 0 && (
-            <Field label="Domain">
-              <MenuSelect
-                label="Domain"
-                value={form.domainId ?? ""}
-                onChange={(v) => setForm({ ...form, domainId: v || null })}
-                options={[
-                  { value: "", label: `shared: ${window.location.host}` },
-                  ...activeDomains.map((d) => ({
-                    value: d.id,
-                    label: d.hostname,
-                  })),
-                ]}
-              />
-            </Field>
-          )}
-
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <Field label="Slug" hint="Leave empty for a random one">
+      <div className="flex flex-col gap-6">
+        {/* core fields + QR preview side by side */}
+        <div className="grid gap-6 sm:grid-cols-[1fr_auto]">
+          <div className="flex min-w-0 flex-col gap-4">
+            <Field label="Destination URL">
               <Input
-                value={form.slug ?? ""}
-                onChange={set("slug")}
-                placeholder="launch-2026"
+                value={form.destination}
+                onChange={set("destination")}
+                placeholder="https://example.com/launch"
+                autoFocus={!editing}
               />
             </Field>
-            <Field label="Title">
-              <Input
-                value={form.title ?? ""}
-                onChange={set("title")}
-                placeholder="Spring launch"
-              />
-            </Field>
-          </div>
 
-          <fieldset className="flex flex-1 flex-col rounded-lg border border-border p-3">
-            <legend className="px-1 text-[11px] tracking-wider text-muted uppercase">
-              UTM parameters
-            </legend>
-            <div className="grid flex-1 grid-cols-1 gap-3 content-between sm:grid-cols-2">
-              <Field label="Source">
-                <Input
-                  value={form.utmSource ?? ""}
-                  onChange={set("utmSource")}
-                  placeholder="newsletter"
+            {activeDomains.length > 0 && (
+              <Field label="Domain">
+                <MenuSelect
+                  label="Domain"
+                  value={form.domainId ?? ""}
+                  onChange={(v) => setForm({ ...form, domainId: v || null })}
+                  options={[
+                    { value: "", label: `shared: ${window.location.host}` },
+                    ...activeDomains.map((d) => ({
+                      value: d.id,
+                      label: d.hostname,
+                    })),
+                  ]}
                 />
               </Field>
-              <Field label="Medium">
+            )}
+
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <Field label="Slug" hint="Leave empty for a random one">
                 <Input
-                  value={form.utmMedium ?? ""}
-                  onChange={set("utmMedium")}
-                  placeholder="email"
+                  value={form.slug ?? ""}
+                  onChange={set("slug")}
+                  placeholder="launch-2026"
                 />
               </Field>
-              <Field label="Campaign">
+              <Field label="Title">
                 <Input
-                  value={form.utmCampaign ?? ""}
-                  onChange={set("utmCampaign")}
-                  placeholder="spring-launch"
-                />
-              </Field>
-              <Field label="Term">
-                <Input
-                  value={form.utmTerm ?? ""}
-                  onChange={set("utmTerm")}
-                  placeholder="running-shoes"
-                />
-              </Field>
-              <Field label="Content" className="sm:col-span-2">
-                <Input
-                  value={form.utmContent ?? ""}
-                  onChange={set("utmContent")}
-                  placeholder="ad-variant-a"
+                  value={form.title ?? ""}
+                  onChange={set("title")}
+                  placeholder="Spring launch"
                 />
               </Field>
             </div>
-          </fieldset>
+          </div>
+
+          {qrEnabled ? (
+            <div className="flex flex-col gap-2 sm:w-60">
+              <p className="text-[11px] tracking-wider text-muted uppercase">
+                QR code
+              </p>
+              <QRPreview
+                url={previewUrl}
+                logo={form.qrLogo || orgQr.logo || undefined}
+                dotStyle={form.qrStyle || orgQr.style}
+                color={form.qrColor || orgQr.color}
+                corner={form.qrCorner || orgQr.corner}
+                eyeColor={form.qrEyeColor || orgQr.eyeColor}
+                bg={form.qrBg || orgQr.bg}
+                logoSize={
+                  form.qrLogoSize != null
+                    ? Number(form.qrLogoSize)
+                    : orgQr.logoSize ?? undefined
+                }
+                size={192}
+              />
+            </div>
+          ) : (
+            <div className="flex flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-border p-4 text-center sm:w-60">
+              <Lock size={20} className="text-muted" />
+              <p className="text-xs text-muted">
+                QR codes are a Pro feature: upgrade in Settings.
+              </p>
+            </div>
+          )}
         </div>
 
-        {qrEnabled ? (
-          <div className="flex flex-col gap-4 sm:w-72">
-            <p className="text-[11px] tracking-wider text-muted uppercase">
-              QR code
-            </p>
-            <QRPreview
-              url={previewUrl}
-              logo={form.qrLogo || orgQr.logo || undefined}
-              dotStyle={form.qrStyle || orgQr.style}
-              color={form.qrColor || orgQr.color}
-              corner={form.qrCorner || orgQr.corner}
-              eyeColor={form.qrEyeColor || orgQr.eyeColor}
-              bg={form.qrBg || orgQr.bg}
-              size={192}
-            />
+        {/* UTM — full width below the twin columns */}
+        <fieldset className="rounded-lg border border-border p-3">
+          <legend className="px-1 text-[11px] tracking-wider text-muted uppercase">
+            UTM parameters
+          </legend>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <Field label="Source">
+              <Input
+                value={form.utmSource ?? ""}
+                onChange={set("utmSource")}
+                placeholder="newsletter"
+              />
+            </Field>
+            <Field label="Medium">
+              <Input
+                value={form.utmMedium ?? ""}
+                onChange={set("utmMedium")}
+                placeholder="email"
+              />
+            </Field>
+            <Field label="Campaign">
+              <Input
+                value={form.utmCampaign ?? ""}
+                onChange={set("utmCampaign")}
+                placeholder="spring-launch"
+              />
+            </Field>
+            <Field label="Term">
+              <Input
+                value={form.utmTerm ?? ""}
+                onChange={set("utmTerm")}
+                placeholder="running-shoes"
+              />
+            </Field>
+            <Field label="Content">
+              <Input
+                value={form.utmContent ?? ""}
+                onChange={set("utmContent")}
+                placeholder="ad-variant-a"
+              />
+            </Field>
+          </div>
+        </fieldset>
 
-            <div className="grid grid-cols-2 gap-3">
+        {/* QR customization */}
+        {qrEnabled && (
+          <div className="flex flex-col gap-4">
+            <p className="text-[11px] tracking-wider text-muted uppercase">
+              QR customization
+            </p>
+
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
               <Field label="Dots">
                 <MenuSelect
                   label="Dots"
@@ -510,9 +538,6 @@ function LinkEditor({
                   ]}
                 />
               </Field>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
               <QrColorField
                 label="Dots"
                 value={form.qrColor ?? ""}
@@ -532,15 +557,40 @@ function LinkEditor({
               />
             </div>
 
-            <QrColorField
-              label="Background"
-              value={form.qrBg ?? ""}
-              fallback={
-                orgQr.bg && orgQr.bg !== "transparent" ? orgQr.bg : QR_DEFAULT_BG
-              }
-              allowTransparent
-              onChange={(v) => setForm({ ...form, qrBg: v })}
-            />
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              <QrColorField
+                label="Background"
+                value={form.qrBg ?? ""}
+                fallback={
+                  orgQr.bg && orgQr.bg !== "transparent"
+                    ? orgQr.bg
+                    : QR_DEFAULT_BG
+                }
+                allowTransparent
+                onChange={(v) => setForm({ ...form, qrBg: v })}
+              />
+              <Field label="Logo size">
+                <MenuSelect
+                  label="Logo size"
+                  value={
+                    form.qrLogoSize == null ? "" : String(form.qrLogoSize)
+                  }
+                  onChange={(v) =>
+                    setForm({
+                      ...form,
+                      qrLogoSize: v === "" ? null : Number(v),
+                    })
+                  }
+                  options={[
+                    { value: "", label: "Org default" },
+                    { value: "0.25", label: "Small" },
+                    { value: "0.35", label: "Medium" },
+                    { value: "0.5", label: "Large" },
+                    { value: "0.65", label: "Extra large" },
+                  ]}
+                />
+              </Field>
+            </div>
 
             <div>
               <span className="mb-1.5 flex items-center gap-1.5 text-[11px] tracking-wider text-muted uppercase">
@@ -556,25 +606,11 @@ function LinkEditor({
                 </Tooltip>
               </span>
               <QrLogoInput
+                value={form.qrLogo ?? ""}
                 onLoad={(dataUri) => setForm({ ...form, qrLogo: dataUri })}
+                onClear={() => setForm({ ...form, qrLogo: "" })}
               />
-              {form.qrLogo && (
-                <button
-                  type="button"
-                  onClick={() => setForm({ ...form, qrLogo: "" })}
-                  className="mt-1.5 cursor-pointer text-[11px] tracking-wider text-muted uppercase hover:text-text"
-                >
-                  Remove logo
-                </button>
-              )}
             </div>
-          </div>
-        ) : (
-          <div className="flex flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-border p-4 text-center sm:w-72">
-            <Lock size={20} className="text-muted" />
-            <p className="text-xs text-muted">
-              QR codes are a Pro feature: upgrade in Settings.
-            </p>
           </div>
         )}
       </div>

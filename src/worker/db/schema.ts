@@ -2,6 +2,7 @@ import {
   sqliteTable,
   text,
   integer,
+  real,
   primaryKey,
   index,
 } from "drizzle-orm/sqlite-core";
@@ -109,6 +110,8 @@ export const orgs = sqliteTable("orgs", {
   qrCorner: text("qr_corner").notNull().default(""),
   qrBg: text("qr_bg").notNull().default(""),
   qrEyeColor: text("qr_eye_color").notNull().default(""),
+  // Logo footprint ratio (qr-code-styling imageSize); NULL = built-in default.
+  qrLogoSize: real("qr_logo_size"),
   createdAt: integer("created_at").notNull(),
 });
 
@@ -198,6 +201,7 @@ export const links = sqliteTable(
     qrCorner: text("qr_corner").notNull().default(""),
     qrBg: text("qr_bg").notNull().default(""),
     qrEyeColor: text("qr_eye_color").notNull().default(""),
+    qrLogoSize: real("qr_logo_size"),
     createdBy: text("created_by").references(() => user.id, {
       onDelete: "set null",
     }),

@@ -117,6 +117,7 @@ export function validateQrFields(fields: {
   qrCorner?: string;
   qrBg?: string;
   qrEyeColor?: string;
+  qrLogoSize?: number | null;
 }) {
   if (fields.qrLogo) {
     if (!fields.qrLogo.startsWith("data:image/"))
@@ -148,4 +149,14 @@ export function validateQrFields(fields: {
         message: `${key} must be a hex color like #17151f`,
       });
   }
+  // null = inherit; otherwise a sane footprint ratio (bigger stops scanning).
+  if (
+    fields.qrLogoSize != null &&
+    (!Number.isFinite(fields.qrLogoSize) ||
+      fields.qrLogoSize < 0.2 ||
+      fields.qrLogoSize > 0.7)
+  )
+    throw new HTTPException(400, {
+      message: "QR logo size must be a ratio between 0.2 and 0.5",
+    });
 }

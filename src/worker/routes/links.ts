@@ -67,6 +67,7 @@ function toDTO(
     qrCorner: row.qrCorner,
     qrBg: row.qrBg,
     qrEyeColor: row.qrEyeColor,
+    qrLogoSize: row.qrLogoSize,
     createdAt: row.createdAt,
     clicks,
   };
@@ -80,7 +81,8 @@ function hasQrOverride(body: LinkInput): boolean {
     body.qrColor ||
     body.qrCorner ||
     body.qrBg ||
-    body.qrEyeColor
+    body.qrEyeColor ||
+    body.qrLogoSize !== undefined
   );
 }
 
@@ -214,6 +216,7 @@ linkRoutes.post("/", requireOrgRole("member"), async (c) => {
     qrCorner: body.qrCorner ?? "",
     qrBg: body.qrBg ?? "",
     qrEyeColor: body.qrEyeColor ?? "",
+    qrLogoSize: body.qrLogoSize ?? null,
     createdBy: c.var.user!.id,
     createdAt: now(),
   };
@@ -275,6 +278,7 @@ linkRoutes.patch("/:linkId", requireOrgRole("member"), async (c) => {
     qrCorner: body.qrCorner ?? existing.qrCorner,
     qrBg: body.qrBg ?? existing.qrBg,
     qrEyeColor: body.qrEyeColor ?? existing.qrEyeColor,
+    qrLogoSize: body.qrLogoSize ?? existing.qrLogoSize,
   };
   await db
     .update(schema.links)

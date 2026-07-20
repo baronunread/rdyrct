@@ -1,15 +1,17 @@
-import { useEffect, useRef, type ChangeEvent } from "react";
+import { useEffect, useRef, useState } from "react";
 import QRCodeStyling, {
   type DotType,
   type CornerSquareType,
   type CornerDotType,
 } from "qr-code-styling";
 import { Button } from "../ui/button";
-import { Download } from "lucide-react";
+import { Check, Download, ImagePlus, X } from "lucide-react";
+import { cn } from "../ui/cn";
 import {
   QR_DEFAULT_BG,
   QR_DEFAULT_COLOR,
   QR_DEFAULT_CORNER,
+  QR_DEFAULT_LOGO_SIZE,
   type QrCornerStyle,
   type QrDotStyle,
 } from "@/shared/types";
@@ -23,6 +25,7 @@ interface QrLook {
   eye: string;
   bg: string;
   logo: string | undefined;
+  logoSize: number;
 }
 
 function looksOptions(look: QrLook) {
@@ -48,7 +51,8 @@ function makeQR(url: string, size: number, look: QrLook) {
     data: url,
     image: look.logo,
     margin: 8,
-    imageOptions: { margin: 4, imageSize: 0.35 },
+    qrOptions: { errorCorrectionLevel: "H" },
+    imageOptions: { margin: 4, imageSize: look.logoSize },
     ...looksOptions(look),
   });
 }
@@ -68,6 +72,7 @@ export function QRPreview({
   corner,
   eyeColor,
   bg,
+  logoSize,
   downloadName,
 }: {
   url: string;
@@ -83,6 +88,8 @@ export function QRPreview({
   eyeColor?: string;
   /** hex background or "transparent"; empty/undefined = QR_DEFAULT_BG */
   bg?: string;
+  /** logo footprint ratio; empty/undefined = QR_DEFAULT_LOGO_SIZE */
+  logoSize?: number;
   downloadName?: string;
 }) {
   const holder = useRef<HTMLDivElement>(null);
@@ -96,6 +103,7 @@ export function QRPreview({
     eye: eyeColor || ink,
     bg: bg === "transparent" ? "transparent" : bg || QR_DEFAULT_BG,
     logo: logo || undefined,
+    logoSize: logoSize || QR_DEFAULT_LOGO_SIZE,
   };
 
   useEffect(() => {
@@ -104,10 +112,25 @@ export function QRPreview({
       qr.current = makeQR(url, size, look);
       qr.current.append(holder.current);
     } else {
-      qr.current.update({ data: url, image: look.logo, ...looksOptions(look) });
+      qr.current.update({
+        data: url,
+        image: look.logo,
+        imageOptions: { margin: 4, imageSize: look.logoSize },
+        ...looksOptions(look),
+      });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [url, size, look.dot, look.corner, look.ink, look.eye, look.bg, look.logo]);
+  }, [
+    url,
+    size,
+    look.dot,
+    look.corner,
+    look.ink,
+    look.eye,
+    look.bg,
+    look.logo,
+    look.logoSize,
+  ]);
 
   const download = (extension: "png" | "svg") =>
     qr.current?.download({ name: downloadName ?? "qr", extension });
@@ -211,24 +234,36 @@ export function QrColorField({
 const MAX_QR_LOGO_BYTES = 96 * 1024;
 
 /**
- * File picker that reads an image into a data URI (≤ 96 KB). Shared by the
- * org QR defaults (Settings) and the per-link override (link editor).
+ * Dropzone-style image picker that reads a file into a data URI (≤ 96 KB).
+ * Shared by the org QR defaults (Settings) and the per-link override
+ * (link editor).
  */
 export function QrLogoInput({
+  value,
   onLoad,
+  onClear,
   disabled,
 }: {
+  /** current logo data URI ("" = none) — shows the loaded state */
+  value?: string;
   onLoad: (dataUri: string) => void;
+  /** called when the user clicks the remove button inside the dropzone */
+  onClear?: () => void;
   disabled?: boolean;
 }) {
   const toast = useToast();
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [dragging, setDragging] = useState(false);
 
-  const onChange = (e: ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  const readFile = (file: File | undefined) => {
+    if (!file || disabled) return;
+    // drag-dropped files bypass the input's accept filter, so check the type
+    if (!file.type.startsWith("image/")) {
+      toast("Logo must be an image file", "error");
+      return;
+    }
     if (file.size > MAX_QR_LOGO_BYTES) {
       toast("Logo too large (max 96 KB)", "error");
-      e.target.value = "";
       return;
     }
     const reader = new FileReader();
@@ -236,14 +271,82 @@ export function QrLogoInput({
     reader.readAsDataURL(file);
   };
 
+  const open = () => inputRef.current?.click();
+
   return (
-    <input
-      type="file"
-      accept="image/*"
-      disabled={disabled}
-      onChange={onChange}
+    <div
+      role="button"
+      tabIndex={disabled ? -1 : 0}
       aria-label="Upload a logo image"
-      className="w-full cursor-pointer text-xs text-muted file:mr-2 file:cursor-pointer file:rounded-md file:border file:border-border file:bg-surface file:px-2.5 file:py-1.5 file:text-xs file:text-text disabled:opacity-50"
-    />
+      aria-disabled={disabled || undefined}
+      onClick={() => !disabled && open()}
+      onKeyDown={(e) => !disabled && (e.key === "Enter" || e.key === " ") && open()}
+      onDragOver={(e) => {
+        e.preventDefault();
+        setDragging(true);
+      }}
+      onDragLeave={() => setDragging(false)}
+      onDrop={(e) => {
+        e.preventDefault();
+        setDragging(false);
+        readFile(e.dataTransfer.files?.[0]);
+      }}
+      className={cn(
+        "relative flex w-full cursor-pointer flex-col items-center justify-center gap-1.5 rounded-md border border-dashed border-border bg-bg px-3 h-24 text-xs text-muted transition-colors select-none focus-visible:outline-2 focus-visible:outline-accent/60 disabled:cursor-default disabled:opacity-50",
+        dragging
+          ? "border-accent text-text"
+          : "not-disabled:hover:border-accent/60 not-disabled:hover:text-text",
+      )}
+    >
+      <input
+        ref={inputRef}
+        type="file"
+        accept="image/*"
+        disabled={disabled}
+        className="hidden"
+        onChange={(e) => {
+          readFile(e.target.files?.[0]);
+          // reset so picking the same file again re-fires onChange
+          e.target.value = "";
+        }}
+      />
+      {value && onClear && (
+        <button
+          type="button"
+          aria-label="Remove logo"
+          onClick={(e) => {
+            e.stopPropagation();
+            onClear();
+          }}
+          onKeyDown={(e) => e.stopPropagation()}
+          className="absolute top-1 right-1 flex cursor-pointer items-center justify-center rounded p-0.5 text-muted hover:bg-surface-2 hover:text-text"
+        >
+          <X size={14} />
+        </button>
+      )}
+      {value ? (
+        <>
+          <img
+            src={value}
+            alt="Uploaded logo"
+            className="h-10 w-10 rounded border border-border bg-white object-contain"
+          />
+          <span className="flex items-center gap-1 text-text">
+            <Check size={12} className="text-accent" /> Logo added
+          </span>
+          <span className="text-[10px] text-muted/70">
+            Drop a new image or browse to replace
+          </span>
+        </>
+      ) : (
+        <>
+          <ImagePlus size={16} />
+          <span>
+            Drop an image or <span className="text-accent">browse</span>
+          </span>
+          <span className="text-[10px] text-muted/70">up to 96 KB</span>
+        </>
+      )}
+    </div>
   );
 }
