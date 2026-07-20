@@ -44,8 +44,18 @@ async function cfRequest(
     },
   );
   if (!res.ok) {
-    console.error("cf api error", res.status, await res.text().catch(() => ""));
-    return null;
+    const text = await res.text().catch(() => "");
+    console.error("cf api error", res.status, text);
+    try {
+      const body = JSON.parse(text);
+      const msg =
+        body.errors?.[0]?.message ?? `Cloudflare API error ${res.status}`;
+      throw new HTTPException(502, { message: msg });
+    } catch {
+      throw new HTTPException(502, {
+        message: "Could not register the domain, try again shortly",
+      });
+    }
   }
   return res.json();
 }
@@ -59,11 +69,7 @@ async function cfCreateHostname(
     hostname,
     ssl: { method: "http", type: "dv" },
   });
-  if (!data)
-    throw new HTTPException(502, {
-      message: "Could not register the domain, try again shortly",
-    });
-  return { id: data.result.id as string, active: false };
+  return { id: data!.result.id as string, active: false };
 }
 
 async function cfGetHostnameStatus(
