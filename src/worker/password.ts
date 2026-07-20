@@ -4,7 +4,7 @@
  * which burns CPU budget.
  */
 
-const PBKDF2_ITERATIONS = 150_000;
+const PBKDF2_ITERATIONS = 100_000;
 
 const b64 = (buf: ArrayBuffer) =>
   btoa(String.fromCharCode(...new Uint8Array(buf)));
