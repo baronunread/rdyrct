@@ -1,5 +1,5 @@
 import { betterAuth } from "better-auth";
-import { APIError } from "better-auth/api";
+import { APIError, createAuthMiddleware } from "better-auth/api";
 import { emailOTP } from "better-auth/plugins/email-otp";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { drizzle } from "drizzle-orm/d1";
@@ -119,6 +119,27 @@ function buildAuth(env: Env) {
             });
         },
       },
+    },
+    // better-auth 1.6+ answers a duplicate sign-up with a fake success so
+    // outsiders can't probe which emails have accounts. For us that meant the
+    // form jumped to the OTP screen, mailed a working code, and signed the
+    // visitor into the existing account while the password they had just
+    // typed went nowhere. We take the plain error over the disguise.
+    hooks: {
+      before: createAuthMiddleware(async (ctx) => {
+        if (ctx.path !== "/sign-up/email") return;
+        const email = (ctx.body as { email?: unknown } | null)?.email;
+        if (typeof email !== "string") return;
+        const rows = await db
+          .select({ id: schema.user.id })
+          .from(schema.user)
+          .where(eq(schema.user.email, email.toLowerCase()));
+        if (rows.length > 0)
+          throw new APIError(422, {
+            message: "This email already has an account. Sign in instead.",
+            code: "USER_ALREADY_EXISTS",
+          });
+      }),
     },
     databaseHooks: {
       user: {
