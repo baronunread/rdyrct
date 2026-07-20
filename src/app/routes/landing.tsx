@@ -21,6 +21,8 @@ import { Button } from "../ui/button";
 import { Table, Th, Td } from "../ui/misc";
 import { Footer, GITHUB_URL } from "../ui/footer";
 import { LandingMockup } from "../components/landing-mockup";
+import { LandingAnalyticsMock } from "../components/landing-analytics";
+import { cn } from "../ui/cn";
 
 const steps = [
   {
@@ -40,21 +42,20 @@ const steps = [
 const features = [
   {
     icon: Link2,
-    title: "Custom slugs + UTM",
-    body: "Turn unreadable URLs into memorable, on-brand slugs, with a built-in UTM builder for clean campaign tracking.",
-    paid: true,
+    title: "Short links + UTM builder",
+    body: "Turn unreadable URLs into short links, with a built-in UTM builder for clean campaign tracking — on every plan.",
   },
   {
     icon: QrCode,
     title: "QR codes",
     body: "One click turns any link into a scannable QR code, ready for packaging, posters, and slides.",
-    paid: true,
+    plan: "Hobby+",
   },
   {
     icon: Globe,
-    title: "Custom domains",
-    body: "Serve short links from your own domain with automatic TLS, so every click reinforces your brand, not ours.",
-    paid: true,
+    title: "Custom domains & slugs",
+    body: "Serve short links from your own domain with automatic TLS and any slug you like, so every click reinforces your brand, not ours.",
+    plan: "Hobby+",
   },
   {
     icon: Users,
@@ -119,6 +120,23 @@ const faqs = [
   },
 ];
 
+/** FAQPage structured data, generated from the same `faqs` the page renders. */
+function FaqJsonLd() {
+  const json = JSON.stringify({
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    mainEntity: faqs.map(({ q, a }) => ({
+      "@type": "Question",
+      name: q,
+      acceptedAnswer: { "@type": "Answer", text: a },
+    })),
+    // "</script>" inside a value would end the tag early; escape every "<"
+  }).replace(/</g, "\\u003c");
+  return (
+    <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: json }} />
+  );
+}
+
 type Tier = "self" | "free" | "hobby" | "pro";
 
 function Cell({ tier, children }: { tier?: Tier; children?: ReactNode }) {
@@ -149,8 +167,138 @@ function NoCell({ tier }: { tier?: Tier }) {
   );
 }
 
+/**
+ * Where a paid-plan CTA sends people: logged-in users go straight to checkout
+ * (/billing?plan=…), everyone else signs up first with that destination as
+ * `next`, so the intent survives OTP verification and onboarding.
+ */
+function usePaidPlanTo() {
+  const me = useCurrentUser();
+  return (plan: "hobby" | "pro") =>
+    me.data
+      ? `/billing?plan=${plan}`
+      : `/signup?next=${encodeURIComponent(`/billing?plan=${plan}`)}`;
+}
+
+/** Stacked plan cards for phones, where the comparison table can't breathe. */
+function MobilePlans({ paidTo }: { paidTo: (p: "hobby" | "pro") => string }) {
+  const tiers = [
+    {
+      name: "Free",
+      tagline: "For side projects",
+      price: "$0",
+      features: [
+        `${PLAN_LIMITS.free.links} links`,
+        `${PLAN_LIMITS.free.members} team members`,
+        `${PLAN_LIMITS.free.analyticsDays}-day click analytics`,
+        "Random slugs on the shared domain",
+      ],
+      cta: (
+        <Link to="/signup">
+          <Button variant="outline" size="sm" className="w-full">
+            Sign up free
+          </Button>
+        </Link>
+      ),
+    },
+    {
+      name: "Hobby",
+      tagline: "For creators & solo brands",
+      price: `${PLAN_PRICES.hobby}/mo`,
+      features: [
+        `${PLAN_LIMITS.hobby.links} links`,
+        `${PLAN_LIMITS.hobby.members} team members`,
+        `${PLAN_LIMITS.hobby.domains} custom domain with your own slugs`,
+        "QR codes",
+        `${PLAN_LIMITS.hobby.analyticsDays}-day click analytics`,
+      ],
+      cta: (
+        <Link to={paidTo("hobby")}>
+          <Button variant="outline" size="sm" className="w-full">
+            Start Hobby
+          </Button>
+        </Link>
+      ),
+    },
+    {
+      name: "Pro",
+      tagline: "For brands & growing teams",
+      price: `${PLAN_PRICES.pro}/mo`,
+      highlight: true,
+      features: [
+        `${PLAN_LIMITS.pro.orgs} organizations — only the owner pays`,
+        `${PLAN_LIMITS.pro.links.toLocaleString()} links`,
+        `${PLAN_LIMITS.pro.members} team members`,
+        `${PLAN_LIMITS.pro.domains} custom domains each`,
+        `${PLAN_LIMITS.pro.analyticsDays}-day click analytics`,
+        "Direct email support",
+      ],
+      cta: (
+        <Link to={paidTo("pro")}>
+          <Button variant="primary" size="sm" className="w-full">
+            Start Pro
+          </Button>
+        </Link>
+      ),
+    },
+  ];
+
+  return (
+    <div className="flex flex-col gap-4 sm:hidden">
+      {tiers.map(({ name, tagline, price, features, cta, highlight }) => (
+        <div
+          key={name}
+          className={cn(
+            "rounded-lg border p-4",
+            highlight
+              ? "border-accent/40 bg-accent/5"
+              : "border-border bg-surface",
+          )}
+        >
+          <div className="flex items-baseline justify-between gap-2">
+            <div>
+              <p className={highlight ? "font-bold text-accent" : "font-bold"}>
+                {name}
+                {highlight && (
+                  <span className="ml-2 rounded-full border border-accent/40 px-2 py-0.5 text-[10px] tracking-wide text-accent uppercase">
+                    Most popular
+                  </span>
+                )}
+              </p>
+              <p className="text-xs text-muted">{tagline}</p>
+            </div>
+            <p className="tnum text-base font-bold">{price}</p>
+          </div>
+          <ul className="my-4 flex flex-col gap-1.5">
+            {features.map((f) => (
+              <li key={f} className="flex items-start gap-1.5 text-sm text-muted">
+                <Check size={14} className="mt-0.5 shrink-0 text-accent-2" />
+                {f}
+              </li>
+            ))}
+          </ul>
+          {cta}
+        </div>
+      ))}
+      <p className="text-center text-xs text-muted">
+        Prefer your own infra? rdyrct is open source —{" "}
+        <a
+          href={GITHUB_URL}
+          target="_blank"
+          rel="noreferrer"
+          className="text-accent hover:underline"
+        >
+          self-host it
+        </a>{" "}
+        on your Cloudflare account, free, with everything Pro has.
+      </p>
+    </div>
+  );
+}
+
 /** Four-tier comparison table (self-hosted / Free / Hobby / Pro). */
 function PricingSection() {
+  const paidTo = usePaidPlanTo();
   return (
     <m.section
       id="pricing"
@@ -168,6 +316,9 @@ function PricingSection() {
         </p>
       </div>
 
+      <MobilePlans paidTo={paidTo} />
+
+      <div className="hidden sm:block">
       <Table>
         <thead>
           <tr>
@@ -302,14 +453,14 @@ function PricingSection() {
               </Link>
             </Td>
             <Td>
-              <Link to="/signup">
+              <Link to={paidTo("hobby")}>
                 <Button variant="outline" size="sm" className="w-full">
                   Start Hobby
                 </Button>
               </Link>
             </Td>
             <Cell tier="pro">
-              <Link to="/signup">
+              <Link to={paidTo("pro")}>
                 <Button variant="primary" size="sm" className="w-full">
                   Start Pro
                 </Button>
@@ -318,6 +469,7 @@ function PricingSection() {
           </tr>
         </tbody>
       </Table>
+      </div>
     </m.section>
   );
 }
@@ -331,6 +483,7 @@ export function LandingPage() {
     <MotionConfig reducedMotion="user">
       <LazyMotion features={domAnimation}>
         <div className="relative mx-auto min-h-dvh max-w-5xl px-6">
+        <FaqJsonLd />
         {/* soft accent glow behind the hero */}
         <div
           aria-hidden="true"
@@ -345,17 +498,11 @@ export function LandingPage() {
           <Link to="/" className="text-lg font-bold tracking-widest">
             rdyrct
           </Link>
-          <nav className="flex items-center gap-4 text-sm">
-            <a
-              href="#pricing"
-              className="hidden text-muted hover:text-accent sm:inline"
-            >
+          <nav className="flex items-center gap-2.5 text-sm sm:gap-4">
+            <a href="#pricing" className="text-muted hover:text-accent">
               Pricing
             </a>
-            <a
-              href="#faq"
-              className="hidden text-muted hover:text-accent sm:inline"
-            >
+            <a href="#faq" className="text-muted hover:text-accent">
               FAQ
             </a>
             {me.data ? (
@@ -386,7 +533,7 @@ export function LandingPage() {
               <span className="h-1.5 w-1.5 rounded-full bg-accent-2" />
               Open source · Runs on Cloudflare's edge
             </span>
-            <h1 className="max-w-3xl text-3xl font-bold tracking-tight sm:text-5xl">
+            <h1 className="max-w-3xl text-3xl font-bold tracking-tight text-balance sm:text-5xl">
               Short links that carry your brand.
             </h1>
             <p className="max-w-xl text-sm text-muted sm:text-base">
@@ -475,6 +622,28 @@ export function LandingPage() {
           className="py-16"
         >
           <div className="mb-8 text-center">
+            <h2 className="text-xl font-bold text-balance">
+              See every click, respect every visitor
+            </h2>
+            <p className="mx-auto mt-2 max-w-xl text-sm text-muted">
+              Country, device, and referrer breakdowns for every link, updating
+              in real time — never an IP address, never cross-site tracking.
+              This is the actual dashboard.
+            </p>
+          </div>
+          <div className="flex justify-center">
+            <LandingAnalyticsMock />
+          </div>
+        </m.section>
+
+        <m.section
+          initial={{ opacity: 0, y: 16 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true, margin: "-80px" }}
+          transition={{ duration: 0.5, ease: "easeOut" }}
+          className="py-16"
+        >
+          <div className="mb-8 text-center">
             <h2 className="text-xl font-bold">
               Everything a link needs to earn the click
             </h2>
@@ -483,7 +652,7 @@ export function LandingPage() {
             </p>
           </div>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {features.map(({ icon: Icon, title, body, paid }) => (
+            {features.map(({ icon: Icon, title, body, plan }) => (
               <div
                 key={title}
                 className="rounded-lg border border-border bg-surface p-4 transition-colors hover:border-accent/40"
@@ -491,9 +660,9 @@ export function LandingPage() {
                 <div className="mb-2 flex items-center gap-2">
                   <Icon size={16} className="text-accent" />
                   <p className="font-bold">{title}</p>
-                  {paid && (
+                  {plan && (
                     <span className="text-[11px] tracking-wide text-muted uppercase">
-                      Paid
+                      {plan}
                     </span>
                   )}
                 </div>

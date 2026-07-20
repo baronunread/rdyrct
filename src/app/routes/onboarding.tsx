@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react";
-import { Navigate, useNavigate } from "react-router";
+import { Navigate, useLocation, useNavigate } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { X } from "lucide-react";
 import { useCurrentUser } from "../lib/hooks";
@@ -15,8 +15,19 @@ export function OnboardingPage() {
   const me = useCurrentUser();
   const { setOrg } = useCurrentOrg();
   const navigate = useNavigate();
+  const location = useLocation();
   const toast = useToast();
   const qc = useQueryClient();
+
+  // The shell forwards the destination a fresh user was heading to (e.g.
+  // /billing?plan=pro from the landing CTAs); internal paths only, same
+  // open-redirect guard as the auth page.
+  const rawNext =
+    (location.state as { next?: string } | null)?.next ?? "/dashboard";
+  const next =
+    rawNext.startsWith("/") && !rawNext.startsWith("//")
+      ? rawNext
+      : "/dashboard";
 
   const [name, setName] = useState("");
   // Each invite row carries a stable id so React keys survive row removal.
@@ -29,8 +40,11 @@ export function OnboardingPage() {
     return <OnboardingSkeleton />;
   }
 
+  // Also the exit path after submit: creating the org refetches the user,
+  // and this re-render's Navigate races the explicit navigate(next) below —
+  // so it must honor `next` too, or the forwarded destination is lost.
   if (me.data && me.data.orgs.length > 0) {
-    return <Navigate to="/dashboard" replace />;
+    return <Navigate to={next} replace />;
   }
 
   const maxInvites = me.data
@@ -76,7 +90,7 @@ export function OnboardingPage() {
 
       setOrg(created.id);
       await qc.refetchQueries({ queryKey: ["user"] });
-      navigate("/dashboard", { replace: true });
+      navigate(next, { replace: true });
     } catch (err) {
       if (err instanceof ApiError && err.code === "org_limit") {
         toast("Upgrade to Pro to create more organizations", "error");

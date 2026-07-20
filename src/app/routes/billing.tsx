@@ -78,6 +78,25 @@ export function BillingPage() {
       toast((e as Error).message, "error");
     }
   };
+  const upgradeRef = useRef(handleUpgrade);
+  useEffect(() => {
+    upgradeRef.current = handleUpgrade;
+  });
+
+  // The landing page's "Start Hobby/Pro" CTAs arrive as /billing?plan=…: once
+  // the user is loaded, kick off that checkout (free plan only, once) and
+  // strip the param so back/refresh doesn't re-trigger it.
+  const planParamDone = useRef(false);
+  useEffect(() => {
+    if (!me.data || planParamDone.current) return;
+    planParamDone.current = true;
+    const url = new URL(window.location.href);
+    const target = url.searchParams.get("plan");
+    if (target !== "hobby" && target !== "pro") return;
+    url.searchParams.delete("plan");
+    window.history.replaceState({}, "", url.toString());
+    if (me.data.user.plan === "free") void upgradeRef.current(target);
+  }, [me.data]);
 
   // Detect the checkout return once on mount; the id is single-use, so strip
   // it from the URL right away.

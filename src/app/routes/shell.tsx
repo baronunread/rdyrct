@@ -56,7 +56,13 @@ export function RequireAuth({ children }: { children: ReactNode }) {
       <AppShellSkeleton />
     );
   if (!me.data)
-    return <Navigate to="/login" state={{ from: location.pathname }} replace />;
+    return (
+      <Navigate
+        to="/login"
+        state={{ from: location.pathname + location.search }}
+        replace
+      />
+    );
   return children;
 }
 
@@ -81,6 +87,7 @@ function navClass({ isActive }: { isActive: boolean }) {
 export function AppShell() {
   const me = useCurrentUser();
   const navigate = useNavigate();
+  const location = useLocation();
   const qc = useQueryClient();
   const logout = useLogout();
   const toast = useToast();
@@ -92,8 +99,17 @@ export function AppShell() {
   const { org, orgs, setOrg } = useCurrentOrg();
 
   if (!me.data) return null;
-  // No org yet → clean onboarding (outside the shell).
-  if (orgs.length === 0) return <Navigate to="/onboarding" replace />;
+  // No org yet → clean onboarding (outside the shell). Pass the destination
+  // along so deep links (e.g. landing's "Start Pro" → /billing?plan=pro)
+  // resume once the first org exists.
+  if (orgs.length === 0)
+    return (
+      <Navigate
+        to="/onboarding"
+        state={{ next: location.pathname + location.search }}
+        replace
+      />
+    );
   const { user } = me.data;
 
   // Multi-org is a Pro perk: the owned-org cap comes from the caller's plan.
