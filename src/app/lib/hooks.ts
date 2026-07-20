@@ -156,8 +156,11 @@ export function useDomainMutations(orgId: string) {
 export function useCheckout() {
   // react-doctor-disable-next-line react-doctor/query-mutation-missing-invalidation
   return useMutation({
-    mutationFn: () =>
-      api<{ url: string }>(`/billing/checkout`, { method: "POST" }),
+    mutationFn: (plan: "hobby" | "pro") =>
+      api<{ url: string }>(`/billing/checkout`, {
+        method: "POST",
+        body: { plan },
+      }),
   });
 }
 

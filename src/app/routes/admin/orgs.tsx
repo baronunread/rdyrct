@@ -42,7 +42,7 @@ function OrgDetailDialog({
       {org && (
         <div className="flex flex-col gap-4">
           <div className="flex items-center gap-2">
-            <Badge color={org.plan === "pro" ? "mint" : "muted"}>
+            <Badge color={org.plan === "pro" ? "mint" : org.plan === "hobby" ? "accent" : "muted"}>
               {org.plan}
             </Badge>
             <span className="text-xs text-muted">
@@ -218,7 +218,7 @@ export function AdminOrgsPage() {
                 </button>
               </Td>
               <Td>
-                <Badge color={org.plan === "pro" ? "mint" : "muted"}>
+                <Badge color={org.plan === "pro" ? "mint" : org.plan === "hobby" ? "accent" : "muted"}>
                   {org.plan}
                 </Badge>
               </Td>

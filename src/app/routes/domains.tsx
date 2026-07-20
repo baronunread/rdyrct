@@ -62,7 +62,7 @@ function DomainsCard({
   plan,
 }: {
   orgId: string;
-  plan: "free" | "pro";
+  plan: "free" | "hobby" | "pro";
 }) {
   const domains = useDomains(orgId);
   const { add, refresh, setRootRedirect, remove } =
@@ -141,7 +141,7 @@ function DomainsCard({
           </p>
           <p className="text-sm text-muted">
             Use your own domain for short links instead of the shared default.
-            Custom domains are a Pro feature.
+            Custom domains are a paid feature.
           </p>
           <div>
             <Link to="/billing">

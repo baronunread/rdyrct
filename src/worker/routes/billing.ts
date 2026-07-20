@@ -17,10 +17,28 @@ const polarFor = (env: Env) =>
 // Mounted at /api/billing: the caller's own subscription (per-user billing).
 export const billingRoutes = new Hono<AppEnv>();
 
+/** Which plan a Polar product grants. Unknown products fall back to pro so a
+ * paying customer is never left on free limits by a mapping mistake. */
+const planForProduct = (
+  env: Env,
+  productId: string | undefined,
+): "hobby" | "pro" =>
+  productId === env.POLAR_HOBBY_PRODUCT_ID ? "hobby" : "pro";
+
 billingRoutes.post("/checkout", requireUser, async (c) => {
   const user = c.var.user!;
+  const body = await c.req
+    .json<{ plan?: string }>()
+    .catch(() => ({}) as { plan?: string });
+  const plan = body.plan ?? "pro";
+  if (plan !== "hobby" && plan !== "pro")
+    throw new HTTPException(400, { message: "plan must be hobby or pro" });
   const checkout = await polarFor(c.env).checkouts.create({
-    products: [c.env.POLAR_PRO_PRODUCT_ID],
+    products: [
+      plan === "hobby"
+        ? c.env.POLAR_HOBBY_PRODUCT_ID
+        : c.env.POLAR_PRO_PRODUCT_ID,
+    ],
     // Polar interpolates {CHECKOUT_ID}; the SPA uses it to confirm the
     // upgrade before celebrating (webhook is still the entitlement source).
     successUrl: `${c.env.APP_URL}/billing?checkout_id={CHECKOUT_ID}`,
@@ -52,6 +70,8 @@ interface PolarEvent {
   data: {
     id: string;
     customer_id?: string;
+    product_id?: string;
+    status?: string;
     metadata?: Record<string, unknown>;
     cancel_at_period_end?: boolean;
     current_period_end?: string;
@@ -83,7 +103,7 @@ export async function handlePolarWebhook(
       await db
         .update(schema.user)
         .set({
-          plan: "pro",
+          plan: planForProduct(env, event.data.product_id),
           polarCustomerId: event.data.customer_id ?? null,
           polarSubscriptionId: event.data.id,
           polarSubscriptionCancelAtPeriodEnd: false,
@@ -124,6 +144,21 @@ export async function handlePolarWebhook(
             ? new Date(periodEnd)
             : null,
         })
+        .where(
+          userId
+            ? eq(schema.user.id, userId)
+            : eq(schema.user.polarSubscriptionId, event.data.id),
+        );
+    }
+  } else if (event.type === "subscription.updated") {
+    // Product switches (hobby ↔ pro via the Polar portal) land here. Only act
+    // while the subscription is active — cancellation and revocation have
+    // dedicated events above. Idempotent for unrelated updates like renewals.
+    if (event.data.status === "active" && event.data.product_id) {
+      const userId = String(event.data.metadata?.userId ?? "");
+      await db
+        .update(schema.user)
+        .set({ plan: planForProduct(env, event.data.product_id) })
         .where(
           userId
             ? eq(schema.user.id, userId)

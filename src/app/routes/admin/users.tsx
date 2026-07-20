@@ -246,7 +246,15 @@ export function AdminUsersPage() {
                 <Td className="text-muted">{u.email}</Td>
                 <Td className="tnum text-right">{u.orgCount}</Td>
                 <Td>
-                  <Badge color={u.plan === "pro" ? "mint" : "muted"}>
+                  <Badge
+                    color={
+                      u.plan === "pro"
+                        ? "mint"
+                        : u.plan === "hobby"
+                          ? "accent"
+                          : "muted"
+                    }
+                  >
                     {u.plan}
                   </Badge>
                 </Td>
@@ -301,6 +309,21 @@ export function AdminUsersPage() {
                         )}
                       </span>
                       Set plan: free
+                    </MenuItem>
+                    <MenuItem
+                      onClick={() =>
+                        patchUser.mutate(
+                          { userId: u.id, body: { plan: "hobby" } },
+                          { onSuccess: () => toast("Plan updated") },
+                        )
+                      }
+                    >
+                      <span className="w-3.5">
+                        {u.plan === "hobby" && (
+                          <Check size={13} className="text-accent" />
+                        )}
+                      </span>
+                      Set plan: hobby
                     </MenuItem>
                     <MenuItem
                       onClick={() =>

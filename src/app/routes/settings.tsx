@@ -6,6 +6,7 @@ import { useCurrentOrg } from "../lib/current-org";
 import { api, shortUrl } from "../lib/api";
 import { authClient } from "../lib/auth-client";
 import {
+  PLAN_LIMITS,
   QR_CORNER_STYLES,
   QR_DEFAULT_BG,
   QR_DEFAULT_COLOR,
@@ -145,7 +146,7 @@ function QrDefaultsCard() {
   const qc = useQueryClient();
   const toast = useToast();
   const isAdmin = me.data?.user.isAdmin || org?.role === "owner" || org?.role === "admin";
-  const isPro = org?.plan === "pro";
+  const hasQr = org ? PLAN_LIMITS[org.plan].qr : false;
 
   // Org-level QR defaults; "" means the built-in default.
   const [qrStyle, setQrStyle] = useState(org?.qrStyle ?? "");
@@ -195,9 +196,9 @@ function QrDefaultsCard() {
             Applied to every link's QR code unless the link overrides them.
           </p>
         </div>
-        {!isPro ? (
+        {!hasQr ? (
           <p className="text-sm text-muted">
-            QR customization is a Pro feature.{" "}
+            QR customization is a paid feature.{" "}
             <Link to="/billing" className="text-accent hover:underline">
               Upgrade
             </Link>{" "}

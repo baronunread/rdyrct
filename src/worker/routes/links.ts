@@ -94,7 +94,7 @@ function hasQrOverride(body: LinkInput): boolean {
 function slugConflict(slug: string, sharedDomain: boolean): HTTPException {
   return new HTTPException(409, {
     message: sharedDomain
-      ? `"/${slug}" is already taken on the shared domain. Pick another slug, or connect your own domain (Pro), where every slug is yours.`
+      ? `"/${slug}" is already taken on the shared domain.`
       : `"/${slug}" is already taken on this domain.`,
     cause: { code: "slug_taken" },
   });
@@ -172,18 +172,25 @@ linkRoutes.post("/", requireOrgRole("member"), async (c) => {
     throw new HTTPException(402, {
       message:
         plan === "free"
-          ? `The free plan allows ${limits.links} links, upgrade to Pro for more`
+          ? `The free plan allows ${limits.links} links, upgrade to Hobby or Pro for more`
           : `This plan allows at most ${limits.links} links`,
     });
   if (hasQrOverride(body) && !limits.qr)
     throw new HTTPException(402, {
-      message: "QR customization is a Pro feature: upgrade to use it",
+      message: "QR customization is a paid feature: upgrade to use it",
     });
 
   const domainId = body.domainId ?? null;
   const hostname = await domainHostname(db, orgId, domainId);
 
   let slug = body.slug?.trim() || "";
+  // Slugs on the shared domain are always random (every plan): chosen slugs
+  // exist only on custom domains, so the shared namespace can't be squatted.
+  if (slug && domainId === null)
+    throw new HTTPException(400, {
+      message:
+        "Links on the shared domain get random slugs — connect a custom domain (Hobby or Pro) to choose your own",
+    });
   if (slug) {
     if (await slugTaken(db, slug, domainId))
       throw slugConflict(slug, domainId === null);
@@ -230,13 +237,11 @@ linkRoutes.patch("/:linkId", requireOrgRole("member"), async (c) => {
   validateInput(body, true);
   const db = c.var.db;
   const orgId = c.req.param("orgId")!;
-  if (hasQrOverride(body)) {
-    const { limits } = await orgPlan(db, orgId);
-    if (!limits.qr)
-      throw new HTTPException(402, {
-        message: "QR customization is a Pro feature: upgrade to use it",
-      });
-  }
+  const { limits } = await orgPlan(db, orgId);
+  if (hasQrOverride(body) && !limits.qr)
+    throw new HTTPException(402, {
+      message: "QR customization is a paid feature: upgrade to use it",
+    });
   const rows = await db
     .select()
     .from(schema.links)
@@ -257,6 +262,13 @@ linkRoutes.patch("/:linkId", requireOrgRole("member"), async (c) => {
   ]);
 
   const newSlug = body.slug?.trim() || existing.slug;
+  // Chosen slugs exist only on custom domains; renaming a shared-domain link
+  // is out for every plan, but keeping its existing slug stays allowed.
+  if (newSlug !== existing.slug && domainId === null)
+    throw new HTTPException(400, {
+      message:
+        "Links on the shared domain keep their random slug — move the link to a custom domain to choose one",
+    });
   const moved = newSlug !== existing.slug || domainId !== existing.domainId;
   if (moved && (await slugTaken(db, newSlug, domainId, existing.id)))
     throw slugConflict(newSlug, domainId === null);

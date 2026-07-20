@@ -16,19 +16,16 @@ import {
 } from "lucide-react";
 import { LazyMotion, MotionConfig, domAnimation, m } from "motion/react";
 import { useCurrentUser } from "../lib/hooks";
-import { PLAN_LIMITS } from "@/shared/types";
+import { PLAN_LIMITS, PLAN_PRICES } from "@/shared/types";
 import { Button } from "../ui/button";
 import { Table, Th, Td } from "../ui/misc";
 import { Footer, GITHUB_URL } from "../ui/footer";
 import { LandingMockup } from "../components/landing-mockup";
 
-// TODO: owner to confirm final monthly price
-const PRO_PRICE = "$5";
-
 const steps = [
   {
     title: "Paste your URL",
-    body: "Drop in any long link, give it a memorable slug, and tag it with the built-in UTM builder.",
+    body: "Drop in any long link and tag it with the built-in UTM builder — on your own domain, pick any slug you like.",
   },
   {
     title: "Share it anywhere",
@@ -45,18 +42,19 @@ const features = [
     icon: Link2,
     title: "Custom slugs + UTM",
     body: "Turn unreadable URLs into memorable, on-brand slugs, with a built-in UTM builder for clean campaign tracking.",
+    paid: true,
   },
   {
     icon: QrCode,
     title: "QR codes",
     body: "One click turns any link into a scannable QR code, ready for packaging, posters, and slides.",
-    pro: true,
+    paid: true,
   },
   {
     icon: Globe,
     title: "Custom domains",
     body: "Serve short links from your own domain with automatic TLS, so every click reinforces your brand, not ours.",
-    pro: true,
+    paid: true,
   },
   {
     icon: Users,
@@ -101,11 +99,11 @@ const cloudflareStack = [
 const faqs = [
   {
     q: "Is the free plan really free?",
-    a: `Yes — ${PLAN_LIMITS.free.links} links, ${PLAN_LIMITS.free.members} teammates, and ${PLAN_LIMITS.free.analyticsDays} days of click analytics, forever. No credit card required. Upgrade only if you outgrow it.`,
+    a: `Yes — ${PLAN_LIMITS.free.links} links, ${PLAN_LIMITS.free.members} teammates, and ${PLAN_LIMITS.free.analyticsDays} days of click analytics, forever. No credit card required. Shared-domain links get random slugs — picking your own slug needs a custom domain (Hobby or Pro).`,
   },
   {
-    q: "What does Pro add?",
-    a: `QR codes, ${PLAN_LIMITS.pro.domains} custom domains, ${PLAN_LIMITS.pro.links.toLocaleString()} links, ${PLAN_LIMITS.pro.members} team members, ${PLAN_LIMITS.pro.analyticsDays}-day analytics, and direct email support. Only the organization owner needs Pro — one subscription covers every organization they own.`,
+    q: "What's the difference between Hobby and Pro?",
+    a: `Hobby (${PLAN_PRICES.hobby}/mo) unlocks QR codes, a custom domain with your own slugs, ${PLAN_LIMITS.hobby.links} links, ${PLAN_LIMITS.hobby.members} team members, and ${PLAN_LIMITS.hobby.analyticsDays}-day analytics for one organization. Pro (${PLAN_PRICES.pro}/mo) raises everything: ${PLAN_LIMITS.pro.orgs} organizations, ${PLAN_LIMITS.pro.links.toLocaleString()} links, ${PLAN_LIMITS.pro.members} team members, ${PLAN_LIMITS.pro.domains} custom domains each, ${PLAN_LIMITS.pro.analyticsDays}-day analytics, and direct email support. Only the organization owner needs a paid plan — one subscription covers every organization they own.`,
   },
   {
     q: "How is rdyrct privacy-friendly?",
@@ -113,7 +111,7 @@ const faqs = [
   },
   {
     q: "Can I use my own domain?",
-    a: "Yes. Pro includes custom domains with automatic TLS through Cloudflare for SaaS: point your DNS at us and short links go live under your brand.",
+    a: "Yes. Paid plans include custom domains with automatic TLS through Cloudflare for SaaS: point your DNS at us and short links go live under your brand.",
   },
   {
     q: "Can I self-host instead?",
@@ -121,7 +119,7 @@ const faqs = [
   },
 ];
 
-type Tier = "self" | "free" | "pro";
+type Tier = "self" | "free" | "hobby" | "pro";
 
 function Cell({ tier, children }: { tier?: Tier; children?: ReactNode }) {
   return (
@@ -151,7 +149,7 @@ function NoCell({ tier }: { tier?: Tier }) {
   );
 }
 
-/** Three-tier comparison table (self-hosted / Free / Pro). */
+/** Four-tier comparison table (self-hosted / Free / Hobby / Pro). */
 function PricingSection() {
   return (
     <m.section
@@ -186,6 +184,12 @@ function PricingSection() {
                 For side projects
               </span>
             </Th>
+            <Th>
+              Hobby
+              <span className="mt-0.5 block normal-case tracking-normal text-muted/80">
+                For creators & solo brands
+              </span>
+            </Th>
             <Th className="border-x border-x-accent/25 bg-accent/10">
               <span className="inline-flex items-center gap-2 text-accent">
                 Pro
@@ -204,9 +208,14 @@ function PricingSection() {
             <Td className="font-bold">Price</Td>
             <Td>Free · open source</Td>
             <Td>$0</Td>
+            <Td>
+              <span className="text-base font-bold">
+                {PLAN_PRICES.hobby}/mo
+              </span>
+            </Td>
             <Cell tier="pro">
               <span className="text-base font-bold text-accent">
-                {PRO_PRICE}/mo
+                {PLAN_PRICES.pro}/mo
               </span>
               <span className="block text-[11px] font-normal text-muted">
                 only the org owner pays
@@ -217,46 +226,61 @@ function PricingSection() {
             <Td className="font-bold">Hosting</Td>
             <Td>Your own Cloudflare</Td>
             <Td>Hosted on rdyrct.com</Td>
+            <Td>Hosted on rdyrct.com</Td>
             <Cell tier="pro">Hosted on rdyrct.com</Cell>
           </tr>
           <tr>
             <Td className="font-bold">Organizations</Td>
             <Td>Unlimited</Td>
             <Td>{PLAN_LIMITS.free.orgs}</Td>
+            <Td>{PLAN_LIMITS.hobby.orgs}</Td>
             <Cell tier="pro">{PLAN_LIMITS.pro.orgs}</Cell>
           </tr>
           <tr>
             <Td className="font-bold">Links</Td>
             <Td>Unlimited</Td>
             <Td>{PLAN_LIMITS.free.links}</Td>
+            <Td>{PLAN_LIMITS.hobby.links}</Td>
             <Cell tier="pro">{PLAN_LIMITS.pro.links.toLocaleString()}</Cell>
+          </tr>
+          <tr>
+            <Td className="font-bold">Custom slugs</Td>
+            <YesCell />
+            <Td className="text-muted">Random only</Td>
+            <Td>On your domain</Td>
+            <Cell tier="pro">On your domains</Cell>
           </tr>
           <tr>
             <Td className="font-bold">Team members</Td>
             <Td>Unlimited</Td>
             <Td>{PLAN_LIMITS.free.members}</Td>
+            <Td>{PLAN_LIMITS.hobby.members}</Td>
             <Cell tier="pro">{PLAN_LIMITS.pro.members}</Cell>
           </tr>
           <tr>
             <Td className="font-bold">QR codes</Td>
             <YesCell />
             <NoCell />
+            <YesCell />
             <YesCell tier="pro" />
           </tr>
           <tr>
             <Td className="font-bold">Custom domains</Td>
             <Td>Unlimited (your Cloudflare)</Td>
             <Td className="text-muted">No</Td>
+            <Td>{PLAN_LIMITS.hobby.domains}</Td>
             <Cell tier="pro">{PLAN_LIMITS.pro.domains}</Cell>
           </tr>
           <tr>
             <Td className="font-bold">Analytics history</Td>
             <Td>Unlimited</Td>
             <Td>{PLAN_LIMITS.free.analyticsDays} days</Td>
+            <Td>{PLAN_LIMITS.hobby.analyticsDays} days</Td>
             <Cell tier="pro">{PLAN_LIMITS.pro.analyticsDays} days</Cell>
           </tr>
           <tr>
             <Td className="font-bold">Support</Td>
+            <Td>GitHub issues</Td>
             <Td>GitHub issues</Td>
             <Td>GitHub issues</Td>
             <Cell tier="pro">Direct email support</Cell>
@@ -274,6 +298,13 @@ function PricingSection() {
               <Link to="/signup">
                 <Button variant="outline" size="sm" className="w-full">
                   Sign up free
+                </Button>
+              </Link>
+            </Td>
+            <Td>
+              <Link to="/signup">
+                <Button variant="outline" size="sm" className="w-full">
+                  Start Hobby
                 </Button>
               </Link>
             </Td>
@@ -452,7 +483,7 @@ export function LandingPage() {
             </p>
           </div>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {features.map(({ icon: Icon, title, body, pro }) => (
+            {features.map(({ icon: Icon, title, body, paid }) => (
               <div
                 key={title}
                 className="rounded-lg border border-border bg-surface p-4 transition-colors hover:border-accent/40"
@@ -460,9 +491,9 @@ export function LandingPage() {
                 <div className="mb-2 flex items-center gap-2">
                   <Icon size={16} className="text-accent" />
                   <p className="font-bold">{title}</p>
-                  {pro && (
+                  {paid && (
                     <span className="text-[11px] tracking-wide text-muted uppercase">
-                      Pro
+                      Paid
                     </span>
                   )}
                 </div>
@@ -545,7 +576,7 @@ export function LandingPage() {
               Start shortening in seconds.
             </h2>
             <p className="max-w-md text-sm text-muted">
-              Create your first branded link on the free plan — no credit
+              Create your first short link on the free plan — no credit
               card, no tracking baggage, no servers to run.
             </p>
             <Link to={ctaTo}>

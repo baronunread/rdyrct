@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
-import { eq, gte, and, desc, sql } from "drizzle-orm";
+import { eq, ne, gte, and, desc, sql } from "drizzle-orm";
 import * as schema from "../db/schema";
 import type { AppEnv } from "../env";
 import { requireAdmin } from "../auth";
@@ -61,7 +61,7 @@ adminRoutes.get("/overview", async (c) => {
     db
       .select({ n: sql<number>`count(*)` })
       .from(schema.user)
-      .where(eq(schema.user.plan, "pro")),
+      .where(ne(schema.user.plan, "free")),
     db
       .select({ day, clicks: sql<number>`count(*)` })
       .from(schema.clicks)
@@ -258,8 +258,8 @@ adminRoutes.get("/users", async (c) => {
 });
 
 // Superadmin controls: toggle platform-admin, ban/unban, and/or comp a user's
-// plan (Free/Pro). Plan lives on the user, so comping Pro unlocks every org
-// they own.
+// plan (free/hobby/pro). Plan lives on the user, so comping a paid plan
+// unlocks every org they own.
 adminRoutes.patch("/users/:userId", async (c) => {
   const body = await c.req.json<{
     isAdmin?: boolean;
@@ -292,8 +292,10 @@ adminRoutes.patch("/users/:userId", async (c) => {
     patch.banned = body.banned;
   }
   if (body.plan !== undefined) {
-    if (body.plan !== "free" && body.plan !== "pro")
-      throw new HTTPException(400, { message: "plan must be free or pro" });
+    if (body.plan !== "free" && body.plan !== "hobby" && body.plan !== "pro")
+      throw new HTTPException(400, {
+        message: "plan must be free, hobby or pro",
+      });
     patch.plan = body.plan;
   }
   if (

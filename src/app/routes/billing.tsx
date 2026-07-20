@@ -4,13 +4,22 @@ import { AnimatePresence, LazyMotion, domAnimation, m } from "motion/react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCurrentUser, useLinks, useMembers, useCheckout, usePortal } from "../lib/hooks";
 import { useCurrentOrg } from "../lib/current-org";
-import { PLAN_LIMITS } from "@/shared/types";
+import { PLAN_LIMITS, PLAN_PRICES, type OrgPlan } from "@/shared/types";
 import { Button } from "../ui/button";
 import { Badge, Card, PageHeader } from "../ui/misc";
 import { useToast } from "../ui/toast";
 
+const PLAN_LABEL: Record<OrgPlan, string> = {
+  free: "Free",
+  hobby: "Hobby",
+  pro: "Pro",
+};
+
 export function BillingPage() {
-  const [showCheckoutOverlay, setShowCheckoutOverlay] = useState(false);
+  // Which paid plan a checkout is in flight for (null = none).
+  const [checkoutPlan, setCheckoutPlan] = useState<"hobby" | "pro" | null>(
+    null,
+  );
   const [showPortalOverlay, setShowPortalOverlay] = useState(false);
   const [showCelebration, setShowCelebration] = useState(false);
   // Returning from Polar with ?checkout_id=: poll /user until the webhook
@@ -59,13 +68,13 @@ export function BillingPage() {
     me.data?.user.polarSubscriptionCancelAtPeriodEnd ?? false;
   const periodEnd = me.data?.user.polarSubscriptionCurrentPeriodEnd ?? null;
 
-  const handleUpgrade = async () => {
-    setShowCheckoutOverlay(true);
+  const handleUpgrade = async (target: "hobby" | "pro") => {
+    setCheckoutPlan(target);
     try {
-      const data = await checkout.mutateAsync();
+      const data = await checkout.mutateAsync(target);
       setTimeout(() => window.location.assign(data.url), 300);
     } catch (e) {
-      setShowCheckoutOverlay(false);
+      setCheckoutPlan(null);
       toast((e as Error).message, "error");
     }
   };
@@ -81,11 +90,11 @@ export function BillingPage() {
     }
   }, []);
 
-  // While confirming, poll /user until the Polar webhook flips the plan to
-  // pro — the entitlement the app actually gates on. Cap the wait at ~20s.
+  // While confirming, poll /user until the Polar webhook flips the plan to a
+  // paid one — the entitlement the app actually gates on. Cap the wait at ~20s.
   useEffect(() => {
     if (!confirming) return;
-    if (plan === "pro") {
+    if (plan !== "free") {
       setConfirming(false);
       celebratRef.current?.();
       return;
@@ -114,17 +123,17 @@ export function BillingPage() {
               <p className="text-[11px] tracking-wider text-muted uppercase">
                 Plan
               </p>
-              <Badge color={plan === "pro" ? "mint" : "muted"}>
-                {plan === "pro" ? "Pro" : "Free"}
+              <Badge color={plan === "free" ? "muted" : "mint"}>
+                {PLAN_LABEL[plan]}
               </Badge>
             </div>
             <p className="text-sm text-muted">
-              Billing is per account: Pro applies to every organization you
-              own.
+              Billing is per account: your plan applies to every organization
+              you own.
             </p>
             {cancelAtPeriodEnd && periodEnd && (
               <p className="text-sm text-amber-400">
-                Your Pro plan is scheduled to cancel on{" "}
+                Your {PLAN_LABEL[plan]} plan is scheduled to cancel on{" "}
                 {new Date(periodEnd).toLocaleDateString(undefined, {
                   year: "numeric",
                   month: "short",
@@ -133,7 +142,7 @@ export function BillingPage() {
                 . Pro features remain available until then.
               </p>
             )}
-            {confirmTimedOut && plan !== "pro" && (
+            {confirmTimedOut && plan === "free" && (
               <p className="text-sm text-muted">
                 Payment received — your plan is still activating. Refresh in a
                 moment.
@@ -141,17 +150,30 @@ export function BillingPage() {
             )}
             <div>
               {plan === "free" ? (
-                <Button
-                  variant="primary"
-                  disabled={showCheckoutOverlay}
-                  onClick={handleUpgrade}
-                >
-                  {showCheckoutOverlay ? (
-                    <span className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent" />
-                  ) : (
-                    "Upgrade to Pro"
-                  )}
-                </Button>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    variant="outline"
+                    disabled={checkoutPlan !== null}
+                    onClick={() => handleUpgrade("hobby")}
+                  >
+                    {checkoutPlan === "hobby" ? (
+                      <span className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                    ) : (
+                      `Upgrade to Hobby · ${PLAN_PRICES.hobby}/mo`
+                    )}
+                  </Button>
+                  <Button
+                    variant="primary"
+                    disabled={checkoutPlan !== null}
+                    onClick={() => handleUpgrade("pro")}
+                  >
+                    {checkoutPlan === "pro" ? (
+                      <span className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                    ) : (
+                      `Upgrade to Pro · ${PLAN_PRICES.pro}/mo`
+                    )}
+                  </Button>
+                </div>
               ) : (
                 <Button
                   variant="outline"
@@ -177,6 +199,11 @@ export function BillingPage() {
                   )}
                 </Button>
               )}
+              {plan === "hobby" && (
+                <p className="mt-2 text-xs text-muted">
+                  Want Pro? Switch plans from the subscription portal.
+                </p>
+              )}
             </div>
           </div>
         </Card>
@@ -200,7 +227,7 @@ export function BillingPage() {
       </div>
 
       <LazyMotion features={domAnimation}>
-        {(showCheckoutOverlay || showPortalOverlay || confirming) && (
+        {(checkoutPlan !== null || showPortalOverlay || confirming) && (
           <div className="fixed inset-0 z-50 flex items-center justify-center">
             <m.div
               className="fixed inset-0 bg-black/55 backdrop-blur-[2px]"
@@ -248,9 +275,11 @@ export function BillingPage() {
                 transition={{ duration: 0.2 }}
               >
                 <span className="text-5xl">🎉</span>
-                <p className="text-xl font-bold text-accent">Welcome to Pro!</p>
+                <p className="text-xl font-bold text-accent">
+                  Welcome to {PLAN_LABEL[plan]}!
+                </p>
                 <p className="text-sm text-muted">
-                  You now have access to all Pro features.
+                  You now have access to all {PLAN_LABEL[plan]} features.
                 </p>
               </m.div>
             </m.div>

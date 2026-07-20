@@ -1,5 +1,5 @@
 import { useMemo, useState, type ChangeEvent } from "react";
-import { useParams } from "react-router";
+import { Link as RouterLink, useParams } from "react-router";
 import {
   Plus,
   Copy,
@@ -370,6 +370,10 @@ function LinkEditor({
 
   const selectedDomain =
     activeDomains.find((d) => d.id === form.domainId)?.hostname ?? null;
+  // Chosen slugs exist only on custom domains: the shared domain always
+  // assigns random ones. When editing, the existing slug stays visible but
+  // locked.
+  const slugLocked = !form.domainId;
 
   // live preview URL: what the QR will encode
   const previewUrl = useMemo(
@@ -403,7 +407,15 @@ function LinkEditor({
                 <MenuSelect
                   label="Domain"
                   value={form.domainId ?? ""}
-                  onChange={(v) => setForm({ ...form, domainId: v || null })}
+                  onChange={(v) =>
+                    setForm({
+                      ...form,
+                      domainId: v || null,
+                      // dropping back to the shared domain discards any typed
+                      // slug (a random one is assigned there)
+                      ...(!v && !editing ? { slug: "" } : {}),
+                    })
+                  }
                   options={[
                     { value: "", label: `shared: ${window.location.host}` },
                     ...activeDomains.map((d) => ({
@@ -416,11 +428,31 @@ function LinkEditor({
             )}
 
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <Field label="Slug" hint="Leave empty for a random one">
+              <Field
+                label="Slug"
+                hint={
+                  slugLocked ? (
+                    <>
+                      The shared domain assigns random slugs — pick your own
+                      on a{" "}
+                      <RouterLink
+                        to="/domains"
+                        className="text-accent hover:underline"
+                      >
+                        custom domain
+                      </RouterLink>{" "}
+                      (Hobby or Pro).
+                    </>
+                  ) : (
+                    "Leave empty for a random one"
+                  )
+                }
+              >
                 <Input
                   value={form.slug ?? ""}
                   onChange={set("slug")}
-                  placeholder="launch-2026"
+                  placeholder={slugLocked ? "random" : "launch-2026"}
+                  disabled={slugLocked}
                 />
               </Field>
               <Field label="Title">
@@ -458,7 +490,7 @@ function LinkEditor({
             <div className="flex flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-border p-4 text-center sm:w-60">
               <Lock size={20} className="text-muted" />
               <p className="text-xs text-muted">
-                QR codes are a Pro feature: upgrade in Settings.
+                QR codes are a paid feature: upgrade in Settings.
               </p>
             </div>
           )}
@@ -510,108 +542,7 @@ function LinkEditor({
 
         {/* QR customization */}
         {qrEnabled && (
-          <div className="flex flex-col gap-4">
-            <p className="text-[11px] tracking-wider text-muted uppercase">
-              QR customization
-            </p>
-
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-              <Field label="Dots">
-                <MenuSelect
-                  label="Dots"
-                  value={form.qrStyle ?? ""}
-                  onChange={(v) => setForm({ ...form, qrStyle: v })}
-                  options={[
-                    { value: "", label: "Org default" },
-                    ...QR_DOT_STYLES.map((s) => ({ value: s, label: s })),
-                  ]}
-                />
-              </Field>
-              <Field label="Corners">
-                <MenuSelect
-                  label="Corners"
-                  value={form.qrCorner ?? ""}
-                  onChange={(v) => setForm({ ...form, qrCorner: v })}
-                  options={[
-                    { value: "", label: "Org default" },
-                    ...QR_CORNER_STYLES.map((s) => ({ value: s, label: s })),
-                  ]}
-                />
-              </Field>
-              <QrColorField
-                label="Dots"
-                value={form.qrColor ?? ""}
-                fallback={orgQr.color || QR_DEFAULT_COLOR}
-                onChange={(v) => setForm({ ...form, qrColor: v })}
-              />
-              <QrColorField
-                label="Eyes"
-                value={form.qrEyeColor ?? ""}
-                fallback={
-                  form.qrColor ||
-                  orgQr.eyeColor ||
-                  orgQr.color ||
-                  QR_DEFAULT_COLOR
-                }
-                onChange={(v) => setForm({ ...form, qrEyeColor: v })}
-              />
-            </div>
-
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-              <QrColorField
-                label="Background"
-                value={form.qrBg ?? ""}
-                fallback={
-                  orgQr.bg && orgQr.bg !== "transparent"
-                    ? orgQr.bg
-                    : QR_DEFAULT_BG
-                }
-                allowTransparent
-                onChange={(v) => setForm({ ...form, qrBg: v })}
-              />
-              <Field label="Logo size">
-                <MenuSelect
-                  label="Logo size"
-                  value={
-                    form.qrLogoSize == null ? "" : String(form.qrLogoSize)
-                  }
-                  onChange={(v) =>
-                    setForm({
-                      ...form,
-                      qrLogoSize: v === "" ? null : Number(v),
-                    })
-                  }
-                  options={[
-                    { value: "", label: "Org default" },
-                    { value: "0.25", label: "Small" },
-                    { value: "0.35", label: "Medium" },
-                    { value: "0.5", label: "Large" },
-                    { value: "0.65", label: "Extra large" },
-                  ]}
-                />
-              </Field>
-            </div>
-
-            <div>
-              <span className="mb-1.5 flex items-center gap-1.5 text-[11px] tracking-wider text-muted uppercase">
-                Logo
-                <Tooltip content="Embedded in the center of the QR code. Use a small, square image with some breathing room so the code stays easy to scan. Leave empty to use your organization's default logo from Settings.">
-                  <button
-                    type="button"
-                    aria-label="About QR logos"
-                    className="cursor-pointer text-muted normal-case hover:text-text"
-                  >
-                    <Info size={13} />
-                  </button>
-                </Tooltip>
-              </span>
-              <QrLogoInput
-                value={form.qrLogo ?? ""}
-                onLoad={(dataUri) => setForm({ ...form, qrLogo: dataUri })}
-                onClear={() => setForm({ ...form, qrLogo: "" })}
-              />
-            </div>
-          </div>
+          <QrCustomization form={form} setForm={setForm} orgQr={orgQr} />
         )}
       </div>
 
@@ -624,5 +555,117 @@ function LinkEditor({
         </Button>
       </div>
     </Dialog>
+  );
+}
+
+/** Per-link QR style overrides; "" / null fields inherit the org defaults. */
+function QrCustomization({
+  form,
+  setForm,
+  orgQr,
+}: {
+  form: LinkInput;
+  setForm: (f: LinkInput) => void;
+  orgQr: OrgQr;
+}) {
+  return (
+    <div className="flex flex-col gap-4">
+      <p className="text-[11px] tracking-wider text-muted uppercase">
+        QR customization
+      </p>
+
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <Field label="Dots">
+          <MenuSelect
+            label="Dots"
+            value={form.qrStyle ?? ""}
+            onChange={(v) => setForm({ ...form, qrStyle: v })}
+            options={[
+              { value: "", label: "Org default" },
+              ...QR_DOT_STYLES.map((s) => ({ value: s, label: s })),
+            ]}
+          />
+        </Field>
+        <Field label="Corners">
+          <MenuSelect
+            label="Corners"
+            value={form.qrCorner ?? ""}
+            onChange={(v) => setForm({ ...form, qrCorner: v })}
+            options={[
+              { value: "", label: "Org default" },
+              ...QR_CORNER_STYLES.map((s) => ({ value: s, label: s })),
+            ]}
+          />
+        </Field>
+        <QrColorField
+          label="Dots"
+          value={form.qrColor ?? ""}
+          fallback={orgQr.color || QR_DEFAULT_COLOR}
+          onChange={(v) => setForm({ ...form, qrColor: v })}
+        />
+        <QrColorField
+          label="Eyes"
+          value={form.qrEyeColor ?? ""}
+          fallback={
+            form.qrColor ||
+            orgQr.eyeColor ||
+            orgQr.color ||
+            QR_DEFAULT_COLOR
+          }
+          onChange={(v) => setForm({ ...form, qrEyeColor: v })}
+        />
+      </div>
+
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <QrColorField
+          label="Background"
+          value={form.qrBg ?? ""}
+          fallback={
+            orgQr.bg && orgQr.bg !== "transparent" ? orgQr.bg : QR_DEFAULT_BG
+          }
+          allowTransparent
+          onChange={(v) => setForm({ ...form, qrBg: v })}
+        />
+        <Field label="Logo size">
+          <MenuSelect
+            label="Logo size"
+            value={form.qrLogoSize == null ? "" : String(form.qrLogoSize)}
+            onChange={(v) =>
+              setForm({
+                ...form,
+                qrLogoSize: v === "" ? null : Number(v),
+              })
+            }
+            options={[
+              { value: "", label: "Org default" },
+              { value: "0.25", label: "Small" },
+              { value: "0.35", label: "Medium" },
+              { value: "0.5", label: "Large" },
+              { value: "0.65", label: "Extra large" },
+            ]}
+          />
+        </Field>
+      </div>
+
+      <div>
+        <span className="mb-1.5 flex items-center gap-1.5 text-[11px] tracking-wider text-muted uppercase">
+          Logo
+          <Tooltip content="Embedded in the center of the QR code. Use a small, square image with some breathing room so the code stays easy to scan. Leave empty to use your organization's default logo from Settings.">
+            <button
+              type="button"
+              aria-label="About QR logos"
+              className="cursor-pointer text-muted normal-case hover:text-text"
+            >
+              <Info size={13} />
+            </button>
+          </Tooltip>
+        </span>
+        <QrLogoInput
+          value={form.qrLogo ?? ""}
+          onLoad={(dataUri) => setForm({ ...form, qrLogo: dataUri })}
+          onClear={() => setForm({ ...form, qrLogo: "" })}
+        />
+      </div>
+    </div>
   );
 }

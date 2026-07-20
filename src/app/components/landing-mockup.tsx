@@ -18,7 +18,9 @@ import { QRPreview } from "./qr";
 import { cn } from "../ui/cn";
 
 const LONG_URL = "https://example.com/very/long/path?utm_campaign=launch";
-const SHORT_URL = "rdyrct.com/launch";
+// A custom-domain link: chosen slugs only exist on custom domains, so the
+// hero must not depict one on the shared host.
+const SHORT_URL = "go.acme.com/launch";
 const SHORT_HREF = `https://${SHORT_URL}`;
 const BARS = [8, 14, 10, 18, 12, 22, 15, 26, 19, 30];
 

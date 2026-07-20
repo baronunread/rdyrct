@@ -14,6 +14,7 @@ MAIL_FROM=rdyrct <no-reply@localhost>
 POLAR_ACCESS_TOKEN=polar_oat_replace_me
 POLAR_WEBHOOK_SECRET=polar_whs_replace_me
 POLAR_PRO_PRODUCT_ID=replace_me
+POLAR_HOBBY_PRODUCT_ID=replace_me
 POLAR_SERVER=sandbox
 
 # Custom domains: fake the Cloudflare API locally

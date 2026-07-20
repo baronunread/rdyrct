@@ -22,9 +22,11 @@ export const user = sqliteTable("user", {
   isAdmin: integer("is_admin", { mode: "boolean" }).notNull().default(false),
   // Suspended by a platform admin: sessions are wiped and sign-in is refused.
   banned: integer("banned", { mode: "boolean" }).notNull().default(false),
-  // Billing lives on the user, not the org: one Free/Pro subscription per
-  // person. An org's effective limits are its owner's plan (see plan.ts).
-  plan: text("plan", { enum: ["free", "pro"] }).notNull().default("free"),
+  // Billing lives on the user, not the org: one Free/Hobby/Pro subscription
+  // per person. An org's effective limits are its owner's plan (see plan.ts).
+  plan: text("plan", { enum: ["free", "hobby", "pro"] })
+    .notNull()
+    .default("free"),
   polarCustomerId: text("polar_customer_id"),
   polarSubscriptionId: text("polar_subscription_id"),
   polarSubscriptionCancelAtPeriodEnd: integer(

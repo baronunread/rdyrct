@@ -28,8 +28,10 @@
 		"APP_URL": "https://rdyrct.com",
 		"APP_HOST": "rdyrct.com",
 		"MAIL_FROM": "rdyrct <no-reply@mail.rdyrct.com>",
-		"POLAR_SERVER": "sandbox",
+		// "production" or "sandbox" — the SDK maps this to the API base URL.
+		"POLAR_SERVER": "production",
 		"POLAR_PRO_PRODUCT_ID": "5837e285-85c3-4d38-8557-a7b2bdc3b98d",
+		"POLAR_HOBBY_PRODUCT_ID": "60a69be5-ff21-4523-82ab-b6c466772724",
 		"CF_ZONE_ID": "21285955570c1215ae9efd13692c950a"
 	},
 	"d1_databases": [

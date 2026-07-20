@@ -1,5 +1,5 @@
 export type OrgRole = "owner" | "admin" | "member";
-export type OrgPlan = "free" | "pro";
+export type OrgPlan = "free" | "hobby" | "pro";
 
 export interface PlanLimits {
   orgs: number; // orgs a user may own on this plan
@@ -19,14 +19,28 @@ export const PLAN_LIMITS: Record<OrgPlan, PlanLimits> = {
     qr: false,
     analyticsDays: 7,
   },
+  hobby: {
+    orgs: 1,
+    links: 500,
+    members: 5,
+    domains: 1,
+    qr: true,
+    analyticsDays: 30,
+  },
   pro: {
     orgs: 3,
     links: 3000,
     members: 25,
-    domains: 3,
+    domains: 5,
     qr: true,
-    analyticsDays: 90,
+    analyticsDays: 365,
   },
+};
+
+/** Display prices for the paid plans; the charge itself is set in Polar. */
+export const PLAN_PRICES: Record<Exclude<OrgPlan, "free">, string> = {
+  hobby: "$4",
+  pro: "$9",
 };
 
 /** QR dot styles supported by qr-code-styling; "" means inherit/default. */

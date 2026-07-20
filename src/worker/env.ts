@@ -18,6 +18,7 @@ export interface Env {
   POLAR_ACCESS_TOKEN: string;
   POLAR_WEBHOOK_SECRET: string;
   POLAR_PRO_PRODUCT_ID: string; // var
+  POLAR_HOBBY_PRODUCT_ID: string; // var
   POLAR_SERVER?: "sandbox" | "production"; // var, default sandbox
 
   /* custom domains (Cloudflare for SaaS) */
@@ -35,7 +36,7 @@ export interface SessionUser {
   name: string;
   isAdmin: boolean;
   emailVerified: boolean;
-  plan: "free" | "pro";
+  plan: "free" | "hobby" | "pro";
   polarSubscriptionCancelAtPeriodEnd: boolean;
   polarSubscriptionCurrentPeriodEnd: number | null;
 }

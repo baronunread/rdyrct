@@ -96,10 +96,9 @@ export function AppShell() {
   if (orgs.length === 0) return <Navigate to="/onboarding" replace />;
   const { user } = me.data;
 
-  // Multi-org is a Pro perk: Free users may own a single org.
+  // Multi-org is a Pro perk: the owned-org cap comes from the caller's plan.
   const ownedCount = orgs.filter((o) => o.role === "owner").length;
-  const canCreateOrg =
-    user.plan === "pro" || ownedCount < PLAN_LIMITS.free.orgs;
+  const canCreateOrg = ownedCount < PLAN_LIMITS[user.plan].orgs;
 
   const switchOrg = (id: string) => {
     setOrg(id);

@@ -18,7 +18,7 @@ export function AdminOverviewPage() {
       />
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
         <StatCard label="Users" value={s.users} />
-        <StatCard label="Pro users" value={s.proUsers} />
+        <StatCard label="Paid users" value={s.proUsers} />
         <StatCard label="Orgs" value={s.orgs} />
         <StatCard label="Links" value={s.links} />
         <StatCard label="Clicks" value={s.clicks} />

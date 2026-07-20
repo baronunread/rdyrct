@@ -23,7 +23,7 @@ export const withSession = createMiddleware<AppEnv>(async (c, next) => {
       name: session.user.name,
       isAdmin: session.user.isAdmin ?? false,
       emailVerified: session.user.emailVerified,
-      plan: (session.user.plan ?? "free") as "free" | "pro",
+      plan: (session.user.plan ?? "free") as "free" | "hobby" | "pro",
       polarSubscriptionCancelAtPeriodEnd:
         session.user.polarSubscriptionCancelAtPeriodEnd ?? false,
       polarSubscriptionCurrentPeriodEnd:

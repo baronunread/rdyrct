@@ -52,12 +52,16 @@ Shell writes to repo files are sandboxed; edit through the editor tools, not
   in URLs**: the current org is a localStorage-backed store, `useCurrentOrg`
   (`src/app/lib/current-org.ts`). Those keywords are reserved from custom slugs
   via `RESERVED_SLUGS` in `src/worker/util.ts` (the Worker also guards `/:slug`).
-- **Billing is per-user, not per-org.** `user.plan` (`free`|`pro`) + Polar
-  customer/subscription ids live on the user. An org's effective limits are **its
-  owner's plan**: `orgPlan()` in `src/worker/plan.ts` resolves the owner. Free
-  users own 1 org, Pro own many. Caps: `PLAN_LIMITS` in `src/shared/types.ts`
-  (`{ orgs, links, members, domains, qr }`). New users get **no default org**;
-  they create the first one at `/onboarding`.
+- **Billing is per-user, not per-org.** `user.plan` (`free`|`hobby`|`pro`) +
+  Polar customer/subscription ids live on the user; each Polar product maps to
+  a plan via `POLAR_*_PRODUCT_ID`. An org's effective limits are **its
+  owner's plan**: `orgPlan()` in `src/worker/plan.ts` resolves the owner. Only
+  Pro raises the owned-org cap above 1. Caps: `PLAN_LIMITS` in
+  `src/shared/types.ts` (`{ orgs, links, members, domains, qr,
+  analyticsDays }`). Slugs on the **shared** domain are always random (every
+  plan); chosen slugs exist only on custom domains, so the shared namespace
+  can't be squatted. New users get **no default org**; they create the first
+  one at `/onboarding`.
 - **Auth**: BetterAuth (email+password, `requireEmailVerification` via the
   `emailOTP` plugin, 6-digit code; password reset stays a link). PBKDF2/WebCrypto
   hashing (`src/worker/password.ts`). The account matching the `SUPERADMIN_EMAIL`
@@ -96,7 +100,8 @@ and vars live in `wrangler.jsonc`; local dev reads everything from `.dev.vars`
 (see `.dev.vars.example`). Key names:
 `BETTER_AUTH_SECRET`, `SUPERADMIN_EMAIL`, `RESEND_API_KEY`, `MAIL_FROM`,
 `APP_URL`, `APP_HOST`, `POLAR_ACCESS_TOKEN`/`POLAR_WEBHOOK_SECRET`/
-`POLAR_PRO_PRODUCT_ID`, `CF_API_TOKEN`/`CF_ZONE_ID`, `DEV_FAKE_CF`.
+`POLAR_PRO_PRODUCT_ID`/`POLAR_HOBBY_PRODUCT_ID`, `CF_API_TOKEN`/`CF_ZONE_ID`,
+`DEV_FAKE_CF`.
 
 ## Layout
 
