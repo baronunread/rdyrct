@@ -1,8 +1,14 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Link } from "react-router";
-import { AnimatePresence, MotionConfig, motion } from "motion/react";
+import {
+  AnimatePresence,
+  LazyMotion,
+  MotionConfig,
+  domAnimation,
+  m,
+} from "motion/react";
 import { Trash2, RefreshCw, Copy, Check } from "lucide-react";
-import { useMe, useConfig, useDomains, useDomainMutations } from "../lib/hooks";
+import { useCurrentUser, useConfig, useDomains, useDomainMutations } from "../lib/hooks";
 import { useCurrentOrg } from "../lib/current-org";
 import { PLAN_LIMITS, type DomainDTO } from "@/shared/types";
 import { Button, IconButton } from "../ui/button";
@@ -23,10 +29,13 @@ const domainStatusColor: Record<
   error: "pink",
 };
 
+const transitional = (status: DomainDTO["status"]) =>
+  status === "checking_dns" || status === "issuing_tls";
+
 export function DomainsPage() {
   const { org } = useCurrentOrg();
   const orgId = org?.id ?? "";
-  const me = useMe();
+  const me = useCurrentUser();
 
   const isAdmin =
     me.data?.user.isAdmin || org?.role === "owner" || org?.role === "admin";
@@ -143,9 +152,6 @@ function DomainsCard({
       </Card>
     );
 
-  const transitional = (status: DomainDTO["status"]) =>
-    status === "checking_dns" || status === "issuing_tls";
-
   return (
     <>
       <div className="flex flex-col gap-6 lg:flex-row lg:items-start">
@@ -160,133 +166,25 @@ function DomainsCard({
             ) : (
               <div className="flex flex-col gap-4">
                 <MotionConfig reducedMotion="user">
-                  {domains.data?.map((d) => (
-                  <div
-                    key={d.id}
-                    className="rounded-lg border border-border p-3"
-                  >
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="font-bold">{d.hostname}</span>
-                      <div className="relative flex items-center gap-1">
-                        <AnimatePresence mode="popLayout">
-                          <motion.span
-                            key={d.status}
-                            initial={
-                              document.visibilityState === "visible"
-                                ? { x: 16, opacity: 0 }
-                                : { x: 0, opacity: 1 }
-                            }
-                            animate={{ x: 0, opacity: 1 }}
-                            exit={
-                              document.visibilityState === "visible"
-                                ? { x: -16, opacity: 0 }
-                                : { x: 0, opacity: 1 }
-                            }
-                            transition={{
-                              duration:
-                                document.visibilityState === "visible"
-                                  ? 0.2
-                                  : 0,
-                            }}
-                            className="inline-flex"
-                          >
-                            <Badge color={domainStatusColor[d.status]}>
-                              {d.status === "checking_dns"
-                                ? "Checking DNS"
-                                : d.status === "issuing_tls"
-                                  ? "Issuing TLS"
-                                  : d.status}
-                            </Badge>
-                          </motion.span>
-                        </AnimatePresence>
-                        {transitional(d.status) && (
-                          <IconButton
-                            label="Re-check now"
-                            disabled={refresh.isPending}
-                            onClick={() => recheck(d)}
-                          >
-                            <RefreshCw
-                              size={14}
-                              className={
-                                refresh.isPending ? "animate-spin" : ""
-                              }
-                            />
-                          </IconButton>
-                        )}
-                        <IconButton
-                          label={`Delete ${d.hostname}`}
-                          danger
-                          onClick={() => setDeleting(d)}
-                        >
-                          <Trash2 size={14} />
-                        </IconButton>
-                      </div>
-                    </div>
-
-                    {transitional(d.status) && (
-                      <div className="mt-3 flex flex-col gap-1.5 rounded-md bg-surface-2/50 p-3 text-xs text-muted">
-                        <p>
-                          {d.status === "checking_dns"
-                            ? "To activate, create this record at your DNS provider:"
-                            : "DNS resolved. Waiting for the TLS certificate to be issued."}
-                        </p>
-                        {d.status === "checking_dns" && (
-                          <div className="flex flex-wrap items-center gap-1.5">
-                            <code className="rounded bg-bg px-1.5 py-0.5 text-text">
-                              {d.hostname} CNAME {appHost}
-                            </code>
-                            <CopyButton
-                              text={appHost}
-                              label="Copy CNAME target"
-                              onCopy={copy}
-                            />
-                          </div>
-                        )}
-                        <p>
-                          {d.status === "checking_dns"
-                            ? "We re-check automatically every few seconds — "
-                            : "This usually takes a few minutes. "}
-                          Hit the refresh button above to check progress
-                          manually.
-                        </p>
-                      </div>
-                    )}
-
-                    {d.status === "active" && (
-                      <div className="mt-3">
-                        <span className="mb-1.5 block text-xs tracking-wider text-muted uppercase">
-                          Root redirect
-                        </span>
-                        <div className="flex items-center gap-2">
-                          <div className="min-w-0 flex-1">
-                            <Input
-                              aria-label="Root redirect"
-                              value={redirectDraft[d.id] ?? d.rootRedirect}
-                              onChange={(e) =>
-                                setRedirectDraft({
-                                  ...redirectDraft,
-                                  [d.id]: e.target.value,
-                                })
-                              }
-                              placeholder="https://example.com"
-                            />
-                          </div>
-                          <Button
-                            size="sm"
-                            disabled={setRootRedirect.isPending}
-                            onClick={() => saveRedirect(d)}
-                          >
-                            Save
-                          </Button>
-                        </div>
-                        <span className="mt-1 block text-xs text-muted/80">
-                          Where the bare domain (no slug) sends visitors, e.g.
-                          your homepage
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                  ))}
+                  <LazyMotion features={domAnimation}>
+                    {domains.data?.map((d) => (
+                      <DomainRow
+                        key={d.id}
+                        domain={d}
+                        appHost={appHost}
+                        refreshing={refresh.isPending}
+                        savingRedirect={setRootRedirect.isPending}
+                        redirectDraft={redirectDraft[d.id] ?? d.rootRedirect}
+                        onRecheck={() => recheck(d)}
+                        onDelete={() => setDeleting(d)}
+                        onRedirectDraft={(v) =>
+                          setRedirectDraft({ ...redirectDraft, [d.id]: v })
+                        }
+                        onSaveRedirect={() => saveRedirect(d)}
+                        onCopy={copy}
+                      />
+                    ))}
+                  </LazyMotion>
                 </MotionConfig>
 
                 <form
@@ -399,6 +297,137 @@ function DomainsCard({
         )}
       </Dialog>
     </>
+  );
+}
+
+/** One connected domain: status badge (animated on change), DNS/TLS guidance
+ * while it's transitional, and the root-redirect editor once it's active. */
+function DomainRow({
+  domain: d,
+  appHost,
+  refreshing,
+  savingRedirect,
+  redirectDraft,
+  onRecheck,
+  onDelete,
+  onRedirectDraft,
+  onSaveRedirect,
+  onCopy,
+}: {
+  domain: DomainDTO;
+  appHost: string;
+  refreshing: boolean;
+  savingRedirect: boolean;
+  redirectDraft: string;
+  onRecheck: () => void;
+  onDelete: () => void;
+  onRedirectDraft: (v: string) => void;
+  onSaveRedirect: () => void;
+  onCopy: (text: string) => void;
+}) {
+  return (
+    <div className="rounded-lg border border-border p-3">
+      <div className="flex items-center justify-between gap-2">
+        <span className="font-bold">{d.hostname}</span>
+        <div className="relative flex items-center gap-1">
+          <AnimatePresence mode="popLayout">
+            <m.span
+              key={d.status}
+              initial={
+                document.visibilityState === "visible"
+                  ? { x: 16, opacity: 0 }
+                  : { x: 0, opacity: 1 }
+              }
+              animate={{ x: 0, opacity: 1 }}
+              exit={
+                document.visibilityState === "visible"
+                  ? { x: -16, opacity: 0 }
+                  : { x: 0, opacity: 1 }
+              }
+              transition={{
+                duration: document.visibilityState === "visible" ? 0.2 : 0,
+              }}
+              className="inline-flex"
+            >
+              <Badge color={domainStatusColor[d.status]}>
+                {d.status === "checking_dns"
+                  ? "Checking DNS"
+                  : d.status === "issuing_tls"
+                    ? "Issuing TLS"
+                    : d.status}
+              </Badge>
+            </m.span>
+          </AnimatePresence>
+          {transitional(d.status) && (
+            <IconButton
+              label="Re-check now"
+              disabled={refreshing}
+              onClick={onRecheck}
+            >
+              <RefreshCw
+                size={14}
+                className={refreshing ? "animate-spin" : ""}
+              />
+            </IconButton>
+          )}
+          <IconButton label={`Delete ${d.hostname}`} danger onClick={onDelete}>
+            <Trash2 size={14} />
+          </IconButton>
+        </div>
+      </div>
+
+      {transitional(d.status) && (
+        <div className="mt-3 flex flex-col gap-1.5 rounded-md bg-surface-2/50 p-3 text-xs text-muted">
+          <p>
+            {d.status === "checking_dns"
+              ? "To activate, create this record at your DNS provider:"
+              : "DNS resolved. Waiting for the TLS certificate to be issued."}
+          </p>
+          {d.status === "checking_dns" && (
+            <div className="flex flex-wrap items-center gap-1.5">
+              <code className="rounded bg-bg px-1.5 py-0.5 text-text">
+                {d.hostname} CNAME {appHost}
+              </code>
+              <CopyButton
+                text={appHost}
+                label="Copy CNAME target"
+                onCopy={onCopy}
+              />
+            </div>
+          )}
+          <p>
+            {d.status === "checking_dns"
+              ? "We re-check automatically every few seconds — "
+              : "This usually takes a few minutes. "}
+            Hit the refresh button above to check progress manually.
+          </p>
+        </div>
+      )}
+
+      {d.status === "active" && (
+        <div className="mt-3">
+          <span className="mb-1.5 block text-xs tracking-wider text-muted uppercase">
+            Root redirect
+          </span>
+          <div className="flex items-center gap-2">
+            <div className="min-w-0 flex-1">
+              <Input
+                aria-label="Root redirect"
+                value={redirectDraft}
+                onChange={(e) => onRedirectDraft(e.target.value)}
+                placeholder="https://example.com"
+              />
+            </div>
+            <Button size="sm" disabled={savingRedirect} onClick={onSaveRedirect}>
+              Save
+            </Button>
+          </div>
+          <span className="mt-1 block text-xs text-muted/80">
+            Where the bare domain (no slug) sends visitors, e.g. your homepage
+          </span>
+        </div>
+      )}
+    </div>
   );
 }
 

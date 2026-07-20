@@ -14,8 +14,8 @@ import {
   Code2,
   ChevronDown,
 } from "lucide-react";
-import { motion, MotionConfig } from "motion/react";
-import { useMe } from "../lib/hooks";
+import { LazyMotion, MotionConfig, domAnimation, m } from "motion/react";
+import { useCurrentUser } from "../lib/hooks";
 import { PLAN_LIMITS } from "@/shared/types";
 import { Button } from "../ui/button";
 import { Table, Th, Td } from "../ui/misc";
@@ -151,14 +151,155 @@ function NoCell({ tier }: { tier?: Tier }) {
   );
 }
 
+/** Three-tier comparison table (self-hosted / Free / Pro). */
+function PricingSection() {
+  return (
+    <m.section
+      id="pricing"
+      initial={{ opacity: 0, y: 16 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true, margin: "-80px" }}
+      transition={{ duration: 0.5, ease: "easeOut" }}
+      className="scroll-mt-16 py-16"
+    >
+      <div className="mb-8 text-center">
+        <h2 className="text-xl font-bold">Simple pricing</h2>
+        <p className="mx-auto mt-2 max-w-xl text-sm text-muted">
+          Start free. Upgrade when your links outgrow the plan — or self-host
+          and never pay us a cent.
+        </p>
+      </div>
+
+      <Table>
+        <thead>
+          <tr>
+            <Th>Plan</Th>
+            <Th>
+              Self-hosted
+              <span className="mt-0.5 block normal-case tracking-normal text-muted/80">
+                Full control, your infra
+              </span>
+            </Th>
+            <Th>
+              Free
+              <span className="mt-0.5 block normal-case tracking-normal text-muted/80">
+                For side projects
+              </span>
+            </Th>
+            <Th className="border-x border-x-accent/25 bg-accent/10">
+              <span className="inline-flex items-center gap-2 text-accent">
+                Pro
+                <span className="rounded-full border border-accent/40 px-2 py-0.5 text-[10px] tracking-wide text-accent uppercase">
+                  Most popular
+                </span>
+              </span>
+              <span className="mt-0.5 block normal-case tracking-normal text-accent/80">
+                For brands & growing teams
+              </span>
+            </Th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <Td className="font-bold">Price</Td>
+            <Td>Free · open source</Td>
+            <Td>$0</Td>
+            <Cell tier="pro">
+              <span className="text-base font-bold text-accent">
+                {PRO_PRICE}/mo
+              </span>
+              <span className="block text-[11px] font-normal text-muted">
+                only the org owner pays
+              </span>
+            </Cell>
+          </tr>
+          <tr>
+            <Td className="font-bold">Hosting</Td>
+            <Td>Your own Cloudflare</Td>
+            <Td>Hosted on rdyrct.com</Td>
+            <Cell tier="pro">Hosted on rdyrct.com</Cell>
+          </tr>
+          <tr>
+            <Td className="font-bold">Organizations</Td>
+            <Td>Unlimited</Td>
+            <Td>{PLAN_LIMITS.free.orgs}</Td>
+            <Cell tier="pro">{PLAN_LIMITS.pro.orgs}</Cell>
+          </tr>
+          <tr>
+            <Td className="font-bold">Links</Td>
+            <Td>Unlimited</Td>
+            <Td>{PLAN_LIMITS.free.links}</Td>
+            <Cell tier="pro">{PLAN_LIMITS.pro.links.toLocaleString()}</Cell>
+          </tr>
+          <tr>
+            <Td className="font-bold">Team members</Td>
+            <Td>Unlimited</Td>
+            <Td>{PLAN_LIMITS.free.members}</Td>
+            <Cell tier="pro">{PLAN_LIMITS.pro.members}</Cell>
+          </tr>
+          <tr>
+            <Td className="font-bold">QR codes</Td>
+            <YesCell />
+            <NoCell />
+            <YesCell tier="pro" />
+          </tr>
+          <tr>
+            <Td className="font-bold">Custom domains</Td>
+            <Td>Unlimited (your Cloudflare)</Td>
+            <Td className="text-muted">No</Td>
+            <Cell tier="pro">{PLAN_LIMITS.pro.domains}</Cell>
+          </tr>
+          <tr>
+            <Td className="font-bold">Analytics history</Td>
+            <Td>Unlimited</Td>
+            <Td>{PLAN_LIMITS.free.analyticsDays} days</Td>
+            <Cell tier="pro">{PLAN_LIMITS.pro.analyticsDays} days</Cell>
+          </tr>
+          <tr>
+            <Td className="font-bold">Support</Td>
+            <Td>GitHub issues</Td>
+            <Td>GitHub issues</Td>
+            <Cell tier="pro">Direct email support</Cell>
+          </tr>
+          <tr>
+            <Td />
+            <Td>
+              <a href={GITHUB_URL} target="_blank" rel="noreferrer">
+                <Button variant="outline" size="sm" className="w-full">
+                  View on GitHub
+                </Button>
+              </a>
+            </Td>
+            <Td>
+              <Link to="/signup">
+                <Button variant="outline" size="sm" className="w-full">
+                  Sign up free
+                </Button>
+              </Link>
+            </Td>
+            <Cell tier="pro">
+              <Link to="/signup">
+                <Button variant="primary" size="sm" className="w-full">
+                  Start Pro
+                </Button>
+              </Link>
+            </Cell>
+          </tr>
+        </tbody>
+      </Table>
+    </m.section>
+  );
+}
+
 export function LandingPage() {
-  const me = useMe();
+  const me = useCurrentUser();
   const ctaTo = me.data ? "/dashboard" : "/signup";
   const ctaLabel = me.data ? "Open dashboard" : "Get started free";
 
   return (
     <MotionConfig reducedMotion="user">
-      <div className="relative mx-auto min-h-dvh max-w-5xl px-6">
+      <LazyMotion features={domAnimation}>
+        <div className="relative mx-auto min-h-dvh max-w-5xl px-6">
         {/* soft accent glow behind the hero */}
         <div
           aria-hidden="true"
@@ -204,7 +345,7 @@ export function LandingPage() {
         </header>
 
         <section className="flex flex-col items-center gap-10 py-16 sm:py-20">
-          <motion.div
+          <m.div
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5, ease: "easeOut" }}
@@ -255,19 +396,19 @@ export function LandingPage() {
                 <Check size={13} className="text-accent-2" /> No IP tracking
               </li>
             </ul>
-          </motion.div>
+          </m.div>
 
-          <motion.div
+          <m.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6, ease: "easeOut", delay: 0.15 }}
             className="flex w-full justify-center"
           >
             <LandingMockup />
-          </motion.div>
+          </m.div>
         </section>
 
-        <motion.section
+        <m.section
           initial={{ opacity: 0, y: 16 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true, margin: "-80px" }}
@@ -293,9 +434,9 @@ export function LandingPage() {
               </div>
             ))}
           </div>
-        </motion.section>
+        </m.section>
 
-        <motion.section
+        <m.section
           initial={{ opacity: 0, y: 16 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true, margin: "-80px" }}
@@ -329,9 +470,9 @@ export function LandingPage() {
               </div>
             ))}
           </div>
-        </motion.section>
+        </m.section>
 
-        <motion.section
+        <m.section
           initial={{ opacity: 0, y: 16 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true, margin: "-80px" }}
@@ -358,144 +499,11 @@ export function LandingPage() {
               </div>
             ))}
           </div>
-        </motion.section>
+        </m.section>
 
-        <motion.section
-          id="pricing"
-          initial={{ opacity: 0, y: 16 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true, margin: "-80px" }}
-          transition={{ duration: 0.5, ease: "easeOut" }}
-          className="scroll-mt-16 py-16"
-        >
-          <div className="mb-8 text-center">
-            <h2 className="text-xl font-bold">Simple pricing</h2>
-            <p className="mx-auto mt-2 max-w-xl text-sm text-muted">
-              Start free. Upgrade when your links outgrow the plan — or
-              self-host and never pay us a cent.
-            </p>
-          </div>
+        <PricingSection />
 
-          <Table>
-            <thead>
-              <tr>
-                <Th>Plan</Th>
-                <Th>
-                  Self-hosted
-                  <span className="mt-0.5 block normal-case tracking-normal text-muted/80">
-                    Full control, your infra
-                  </span>
-                </Th>
-                <Th>
-                  Free
-                  <span className="mt-0.5 block normal-case tracking-normal text-muted/80">
-                    For side projects
-                  </span>
-                </Th>
-                <Th className="border-x border-x-accent/25 bg-accent/10">
-                  <span className="inline-flex items-center gap-2 text-accent">
-                    Pro
-                    <span className="rounded-full border border-accent/40 px-2 py-0.5 text-[10px] tracking-wide text-accent uppercase">
-                      Most popular
-                    </span>
-                  </span>
-                  <span className="mt-0.5 block normal-case tracking-normal text-accent/80">
-                    For brands & growing teams
-                  </span>
-                </Th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <Td className="font-bold">Price</Td>
-                <Td>Free · open source</Td>
-                <Td>$0</Td>
-                <Cell tier="pro">
-                  <span className="text-base font-bold text-accent">
-                    {PRO_PRICE}/mo
-                  </span>
-                  <span className="block text-[11px] font-normal text-muted">
-                    only the org owner pays
-                  </span>
-                </Cell>
-              </tr>
-              <tr>
-                <Td className="font-bold">Hosting</Td>
-                <Td>Your own Cloudflare</Td>
-                <Td>Hosted on rdyrct.com</Td>
-                <Cell tier="pro">Hosted on rdyrct.com</Cell>
-              </tr>
-              <tr>
-                <Td className="font-bold">Organizations</Td>
-                <Td>Unlimited</Td>
-                <Td>{PLAN_LIMITS.free.orgs}</Td>
-                <Cell tier="pro">{PLAN_LIMITS.pro.orgs}</Cell>
-              </tr>
-              <tr>
-                <Td className="font-bold">Links</Td>
-                <Td>Unlimited</Td>
-                <Td>{PLAN_LIMITS.free.links}</Td>
-                <Cell tier="pro">{PLAN_LIMITS.pro.links.toLocaleString()}</Cell>
-              </tr>
-              <tr>
-                <Td className="font-bold">Team members</Td>
-                <Td>Unlimited</Td>
-                <Td>{PLAN_LIMITS.free.members}</Td>
-                <Cell tier="pro">{PLAN_LIMITS.pro.members}</Cell>
-              </tr>
-              <tr>
-                <Td className="font-bold">QR codes</Td>
-                <YesCell />
-                <NoCell />
-                <YesCell tier="pro" />
-              </tr>
-              <tr>
-                <Td className="font-bold">Custom domains</Td>
-                <Td>Unlimited (your Cloudflare)</Td>
-                <Td className="text-muted">No</Td>
-                <Cell tier="pro">{PLAN_LIMITS.pro.domains}</Cell>
-              </tr>
-              <tr>
-                <Td className="font-bold">Analytics history</Td>
-                <Td>Unlimited</Td>
-                <Td>{PLAN_LIMITS.free.analyticsDays} days</Td>
-                <Cell tier="pro">{PLAN_LIMITS.pro.analyticsDays} days</Cell>
-              </tr>
-              <tr>
-                <Td className="font-bold">Support</Td>
-                <Td>GitHub issues</Td>
-                <Td>GitHub issues</Td>
-                <Cell tier="pro">Direct email support</Cell>
-              </tr>
-              <tr>
-                <Td />
-                <Td>
-                  <a href={GITHUB_URL} target="_blank" rel="noreferrer">
-                    <Button variant="outline" size="sm" className="w-full">
-                      View on GitHub
-                    </Button>
-                  </a>
-                </Td>
-                <Td>
-                  <Link to="/signup">
-                    <Button variant="outline" size="sm" className="w-full">
-                      Sign up free
-                    </Button>
-                  </Link>
-                </Td>
-                <Cell tier="pro">
-                  <Link to="/signup">
-                    <Button variant="primary" size="sm" className="w-full">
-                      Start Pro
-                    </Button>
-                  </Link>
-                </Cell>
-              </tr>
-            </tbody>
-          </Table>
-        </motion.section>
-
-        <motion.section
+        <m.section
           id="faq"
           initial={{ opacity: 0, y: 16 }}
           whileInView={{ opacity: 1, y: 0 }}
@@ -523,9 +531,9 @@ export function LandingPage() {
               </details>
             ))}
           </div>
-        </motion.section>
+        </m.section>
 
-        <motion.section
+        <m.section
           initial={{ opacity: 0, y: 16 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true, margin: "-80px" }}
@@ -550,10 +558,11 @@ export function LandingPage() {
               </Button>
             </Link>
           </div>
-        </motion.section>
+        </m.section>
 
         <Footer />
-      </div>
+        </div>
+      </LazyMotion>
     </MotionConfig>
   );
 }

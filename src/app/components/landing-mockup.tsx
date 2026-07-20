@@ -1,5 +1,10 @@
 import { useEffect, useState } from "react";
-import { motion, useReducedMotion } from "motion/react";
+import {
+  LazyMotion,
+  domAnimation,
+  m,
+  useReducedMotion,
+} from "motion/react";
 import {
   ArrowRight,
   Check,
@@ -25,7 +30,7 @@ function ClickSparkline() {
   return (
     <div className="flex items-end gap-[5px]" aria-hidden="true">
       {BARS.map((h, i) => (
-        <motion.div
+        <m.div
           key={i}
           className="w-[9px] rounded-sm bg-accent-2/70"
           style={{ height: h }}
@@ -101,7 +106,8 @@ export function LandingMockup() {
   const isResult = phase === "result";
 
   return (
-    <div className="w-full max-w-4xl rounded-2xl border border-border bg-surface shadow-2xl shadow-black/10">
+    <LazyMotion features={domAnimation}>
+      <div className="w-full max-w-4xl rounded-2xl border border-border bg-surface shadow-2xl shadow-black/10">
       {/* fake browser chrome */}
       <div className="flex items-center gap-2 border-b border-border px-6 py-4">
         <span className="h-3 w-3 rounded-full bg-pink/60" />
@@ -123,7 +129,7 @@ export function LandingMockup() {
               <span className="flex h-full items-center truncate font-mono text-text">
                 {typed}
                 {phase === "typing" && (
-                  <motion.span
+                  <m.span
                     aria-hidden="true"
                     className="ml-px inline-block h-4 w-[7px] shrink-0 bg-accent"
                     animate={reduce ? undefined : { opacity: [1, 0, 1] }}
@@ -135,7 +141,7 @@ export function LandingMockup() {
                 )}
               </span>
             </div>
-            <motion.button
+            <m.button
               type="button"
               aria-label="Shorten (demo)"
               animate={
@@ -152,7 +158,7 @@ export function LandingMockup() {
                 <ArrowRight size={15} />
               )}
               Shorten
-            </motion.button>
+            </m.button>
           </div>
         </div>
 
@@ -206,7 +212,7 @@ export function LandingMockup() {
           </div>
 
           {/* the real result */}
-          <motion.div
+          <m.div
             aria-hidden={!isResult}
             initial={false}
             animate={isResult ? { opacity: 1, y: 0 } : { opacity: 0, y: 8 }}
@@ -253,9 +259,10 @@ export function LandingMockup() {
                 Scan me — it works
               </p>
             </div>
-          </motion.div>
+          </m.div>
         </div>
       </div>
-    </div>
+      </div>
+    </LazyMotion>
   );
 }
