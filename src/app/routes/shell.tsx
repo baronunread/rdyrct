@@ -7,6 +7,7 @@ import {
   useLocation,
 } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
+import { AnimatePresence, LazyMotion, domAnimation, m } from "motion/react";
 import {
   LayoutDashboard,
   Link2,
@@ -272,21 +273,31 @@ export function AppShell() {
           {mobileOpen ? <X size={18} /> : <MenuIcon size={18} />}
         </button>
       </div>
-      {mobileOpen && (
-        <div className="fixed inset-0 z-20 md:hidden">
-          {/* click-outside backdrop as a real button: keyboard-focusable and
-              labeled, while drawer clicks (sibling, not child) never reach it */}
-          <button
-            type="button"
-            aria-label="Close menu"
-            className="absolute inset-0 cursor-default"
-            onClick={() => setMobileOpen(false)}
-          />
-          <div className="absolute top-[49px] bottom-0 left-0 w-64 border-r border-border bg-bg">
-            {sidebar}
-          </div>
-        </div>
-      )}
+      <LazyMotion features={domAnimation}>
+        <AnimatePresence>
+          {mobileOpen && (
+            <div className="fixed inset-0 z-20 md:hidden">
+              {/* click-outside backdrop as a real button: keyboard-focusable and
+                  labeled, while drawer clicks (sibling, not child) never reach it */}
+              <button
+                type="button"
+                aria-label="Close menu"
+                className="absolute inset-0 cursor-default"
+                onClick={() => setMobileOpen(false)}
+              />
+              <m.div
+                className="absolute top-[49px] bottom-0 left-0 w-64 border-r border-border bg-bg"
+                initial={{ opacity: 0, x: -24 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -24 }}
+                transition={{ duration: 0.2 }}
+              >
+                {sidebar}
+              </m.div>
+            </div>
+          )}
+        </AnimatePresence>
+      </LazyMotion>
 
       <main className="flex min-w-0 flex-1 flex-col px-5 py-8 pt-16 md:px-8 md:pt-8">
         <div className="mx-auto w-full max-w-5xl flex-1">

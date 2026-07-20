@@ -27,7 +27,7 @@ export function Menu({
       </BaseMenu.Trigger>
       <BaseMenu.Portal>
         <BaseMenu.Positioner sideOffset={6} align={align} className="z-50">
-          <BaseMenu.Popup className="min-w-48 rounded-lg border border-border bg-surface p-1 shadow-xl transition-[opacity,transform] duration-100 data-[starting-style]:scale-95 data-[starting-style]:opacity-0">
+          <BaseMenu.Popup className="min-w-48 rounded-lg border border-border bg-surface p-1 shadow-xl transition-[opacity,scale] duration-100 data-[starting-style]:scale-95 data-[starting-style]:opacity-0">
             {children}
           </BaseMenu.Popup>
         </BaseMenu.Positioner>
