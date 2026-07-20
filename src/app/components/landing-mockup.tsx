@@ -9,6 +9,8 @@ import {
   ArrowRight,
   Check,
   Copy,
+  FileImage,
+  ImagePlus,
   Link2,
   Loader2,
   MousePointerClick,
@@ -22,9 +24,16 @@ const LONG_URL = "https://example.com/very/long/path?utm_campaign=launch";
 // hero must not depict one on the shared host.
 const SHORT_URL = "go.acme.com/launch";
 const SHORT_HREF = `https://${SHORT_URL}`;
+// Inline SVG mark for the fictional "Acme" brand — shows off the custom-logo
+// feature while staying CSP-safe (no remote images).
+const ACME_LOGO =
+  "data:image/svg+xml," +
+  encodeURIComponent(
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48"><rect width="48" height="48" rx="12" fill="#17151f"/><path d="M24 9 38.5 39h-6.9L24 22.6 16.4 39H9.5Z" fill="#fff"/></svg>',
+  );
 const BARS = [8, 14, 10, 18, 12, 22, 15, 26, 19, 30];
 
-type Phase = "typing" | "submitting" | "result";
+type Phase = "typing" | "submitting" | "result" | "uploading" | "branded";
 
 /** Small looping click sparkline: a row of bars with a subtle pulse. */
 function ClickSparkline() {
@@ -54,7 +63,8 @@ function ClickSparkline() {
 /**
  * Stylized, self-playing mockup of the link creator: a form "types" a long
  * URL, submits it, and gets back a short link plus its (real, scannable) QR
- * code. The result zone keeps a constant height — a skeleton placeholder
+ * code; a logo then "uploads" into the dropzone and the QR rebrands with it.
+ * The result zone keeps a constant height — a skeleton placeholder
  * mirrors the result's exact layout and crossfades in place — so the loop
  * never shifts the page layout. Built entirely from the app's own design
  * tokens so it stays theme-aware and CSP-safe (no images, no remote fonts).
@@ -70,7 +80,7 @@ export function LandingMockup() {
   useEffect(() => {
     if (reduce) {
       setTyped(LONG_URL);
-      setPhase("result");
+      setPhase("branded");
       return;
     }
     let id: number;
@@ -85,12 +95,16 @@ export function LandingMockup() {
       }
     } else if (phase === "submitting") {
       id = window.setTimeout(() => setPhase("result"), 800);
+    } else if (phase === "result") {
+      id = window.setTimeout(() => setPhase("uploading"), 1800);
+    } else if (phase === "uploading") {
+      id = window.setTimeout(() => setPhase("branded"), 1500);
     } else {
       id = window.setTimeout(() => {
         setTyped("");
         setCopied(false);
         setPhase("typing");
-      }, 4600);
+      }, 4200);
     }
     return () => clearTimeout(id);
   }, [phase, typed, reduce]);
@@ -105,7 +119,8 @@ export function LandingMockup() {
     }
   };
 
-  const isResult = phase === "result";
+  const isResult =
+    phase === "result" || phase === "uploading" || phase === "branded";
 
   return (
     <LazyMotion features={domAnimation}>
@@ -202,10 +217,16 @@ export function LandingMockup() {
                   ))}
                 </div>
               </div>
+              <div>
+                <p className="mb-1.5 flex items-center gap-1.5 text-xs tracking-wide text-muted uppercase">
+                  <ImagePlus size={14} /> QR logo
+                </p>
+                <div className="h-11 rounded-md border border-dashed border-border/70" />
+              </div>
             </div>
             <div className="flex shrink-0 flex-col items-center gap-2 self-center">
-              <div className="flex h-28 w-28 items-center justify-center rounded-lg border border-dashed border-border text-muted">
-                <QrCode size={22} />
+              <div className="flex h-40 w-40 items-center justify-center rounded-lg border border-dashed border-border text-muted">
+                <QrCode size={28} />
               </div>
               <p className="text-[11px] tracking-wide text-muted uppercase">
                 QR included
@@ -254,9 +275,76 @@ export function LandingMockup() {
                 </p>
                 <ClickSparkline />
               </div>
+              {/* fake logo dropzone: a file "drops in", then the QR rebrands */}
+              <div>
+                <p className="mb-1.5 flex items-center gap-1.5 text-xs tracking-wide text-muted uppercase">
+                  <ImagePlus size={14} /> QR logo
+                </p>
+                <div className="flex h-11 items-center justify-center gap-2 overflow-hidden rounded-md border border-dashed border-border px-3 text-xs text-muted">
+                  {phase === "uploading" ? (
+                    <m.div
+                      initial={reduce ? undefined : { y: -26, opacity: 0 }}
+                      animate={reduce ? undefined : { y: 0, opacity: 1 }}
+                      transition={{ duration: 0.45, ease: "easeOut" }}
+                      className="flex items-center gap-2"
+                    >
+                      <FileImage size={14} />
+                      <span className="font-mono text-text">acme.svg</span>
+                      <Loader2 size={13} className="animate-spin text-accent" />
+                    </m.div>
+                  ) : phase === "branded" ? (
+                    <m.div
+                      initial={reduce ? undefined : { opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      className="flex items-center gap-2"
+                    >
+                      <Check size={14} className="text-accent-2" />
+                      <span className="font-mono text-text">acme.svg</span>
+                      <span>— logo added</span>
+                    </m.div>
+                  ) : (
+                    <span>
+                      Drop an image or{" "}
+                      <span className="text-accent">browse</span>
+                    </span>
+                  )}
+                </div>
+              </div>
             </div>
             <div className="flex shrink-0 flex-col items-center gap-2 self-center">
-              <QRPreview url={SHORT_HREF} size={112} />
+              {/*
+               * Both QR variants stay mounted and crossfade: updating one
+               * instance's `image` would make qr-code-styling re-load the
+               * logo on every loop.
+               */}
+              <m.div
+                animate={
+                  phase === "branded" && !reduce
+                    ? { scale: [1, 1.04, 1] }
+                    : undefined
+                }
+                transition={{ duration: 0.5, ease: "easeOut" }}
+                className="grid"
+              >
+                <div
+                  aria-hidden={phase === "branded"}
+                  className={cn(
+                    "col-start-1 row-start-1 transition-opacity duration-300",
+                    phase === "branded" ? "opacity-0" : "opacity-100",
+                  )}
+                >
+                  <QRPreview url={SHORT_HREF} size={160} />
+                </div>
+                <div
+                  aria-hidden={phase !== "branded"}
+                  className={cn(
+                    "col-start-1 row-start-1 transition-opacity duration-300",
+                    phase === "branded" ? "opacity-100" : "opacity-0",
+                  )}
+                >
+                  <QRPreview url={SHORT_HREF} logo={ACME_LOGO} size={160} />
+                </div>
+              </m.div>
               <p className="text-[11px] tracking-wide text-muted uppercase">
                 Scan me — it works
               </p>
