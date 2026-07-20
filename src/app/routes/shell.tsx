@@ -128,7 +128,8 @@ export function AppShell() {
 
   const sidebar = (
     <div className="flex h-full flex-col">
-      <div className="px-3 pt-4 pb-2">
+      {/* brand — desktop only; on mobile the top bar already shows it */}
+      <div className="hidden px-3 pt-4 pb-2 md:block">
         <span className="px-1.5 text-sm font-bold tracking-widest">
           rdyrct
         </span>
@@ -138,7 +139,7 @@ export function AppShell() {
       <div className="px-3 py-2">
         <Menu
           trigger={
-            <div className="flex w-full items-center justify-between gap-2 rounded-md border border-border bg-surface px-2.5 py-2 text-sm hover:border-accent">
+            <div className="flex w-full items-center justify-between gap-2 rounded-md border border-border bg-surface px-2.5 py-2 text-sm select-none hover:border-accent">
               <span className="truncate">{org ? org.name : "Select org"}</span>
               <ChevronsUpDown size={14} className="shrink-0 text-muted" />
             </div>
@@ -260,10 +261,7 @@ export function AppShell() {
       </aside>
 
       {/* mobile top bar + drawer */}
-      <div className="fixed inset-x-0 top-0 z-30 flex items-center justify-between border-b border-border bg-bg/90 px-4 py-2.5 backdrop-blur md:hidden">
-        <span className="text-sm font-bold tracking-widest">
-          rdyrct
-        </span>
+      <div className="fixed inset-x-0 top-0 z-30 flex items-center gap-2 border-b border-border bg-bg/90 px-4 py-2.5 backdrop-blur md:hidden">
         <button
           type="button"
           onClick={() => setMobileOpen((v) => !v)}
@@ -272,6 +270,9 @@ export function AppShell() {
         >
           {mobileOpen ? <X size={18} /> : <MenuIcon size={18} />}
         </button>
+        <span className="text-sm font-bold tracking-widest">
+          rdyrct
+        </span>
       </div>
       <LazyMotion features={domAnimation}>
         <AnimatePresence>

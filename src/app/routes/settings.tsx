@@ -13,7 +13,8 @@ import {
 } from "@/shared/types";
 import { Button } from "../ui/button";
 import { Dialog } from "../ui/dialog";
-import { Field, Input, Select } from "../ui/field";
+import { Field, Input } from "../ui/field";
+import { MenuSelect } from "../ui/menu";
 import { Card, PageHeader } from "../ui/misc";
 import { useToast } from "../ui/toast";
 import { QRPreview, QrLogoInput, QrColorField } from "../components/qr";
@@ -139,44 +140,34 @@ export function SettingsPage() {
                 <div className="flex min-w-0 flex-1 flex-col gap-4">
                   <div className="grid grid-cols-2 gap-3">
                     <Field label="Dot style">
-                      <Select
+                      <MenuSelect
+                        label="Dot style"
                         value={qrStyle}
-                        onChange={(e) => setQrStyle(e.target.value)}
+                        onChange={setQrStyle}
                         disabled={!isOwner}
-                      >
-                        <option value="">Rounded (default)</option>
-                        {QR_DOT_STYLES.flatMap((s) =>
-                          s === "rounded" ? (
-                            []
-                          ) : (
-                            [
-                              <option key={s} value={s}>
-                                {s}
-                              </option>,
-                            ]
+                        options={[
+                          { value: "", label: "Rounded (default)" },
+                          ...QR_DOT_STYLES.flatMap((s) =>
+                            s === "rounded" ? [] : [{ value: s, label: s }],
                           ),
-                        )}
-                      </Select>
+                        ]}
+                      />
                     </Field>
                     <Field label="Corner style">
-                      <Select
+                      <MenuSelect
+                        label="Corner style"
                         value={qrCorner}
-                        onChange={(e) => setQrCorner(e.target.value)}
+                        onChange={setQrCorner}
                         disabled={!isOwner}
-                      >
-                        <option value="">Extra-rounded (default)</option>
-                        {QR_CORNER_STYLES.flatMap((s) =>
-                          s === "extra-rounded" ? (
-                            []
-                          ) : (
-                            [
-                              <option key={s} value={s}>
-                                {s}
-                              </option>,
-                            ]
+                        options={[
+                          { value: "", label: "Extra-rounded (default)" },
+                          ...QR_CORNER_STYLES.flatMap((s) =>
+                            s === "extra-rounded"
+                              ? []
+                              : [{ value: s, label: s }],
                           ),
-                        )}
-                      </Select>
+                        ]}
+                      />
                     </Field>
                   </div>
 

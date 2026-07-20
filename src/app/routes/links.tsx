@@ -26,7 +26,8 @@ import {
 } from "@/shared/types";
 import { Button, IconButton } from "../ui/button";
 import { Dialog } from "../ui/dialog";
-import { Field, Input, Select } from "../ui/field";
+import { Field, Input } from "../ui/field";
+import { MenuSelect } from "../ui/menu";
 import { Table, Th, Td, EmptyState, PageHeader } from "../ui/misc";
 import { TableSkeleton } from "../ui/skeleton";
 import { Tooltip } from "../ui/tooltip";
@@ -394,19 +395,18 @@ function LinkEditor({
 
           {activeDomains.length > 0 && (
             <Field label="Domain">
-              <Select
+              <MenuSelect
+                label="Domain"
                 value={form.domainId ?? ""}
-                onChange={(e) =>
-                  setForm({ ...form, domainId: e.target.value || null })
-                }
-              >
-                <option value="">shared: {window.location.host}</option>
-                {activeDomains.map((d) => (
-                  <option key={d.id} value={d.id}>
-                    {d.hostname}
-                  </option>
-                ))}
-              </Select>
+                onChange={(v) => setForm({ ...form, domainId: v || null })}
+                options={[
+                  { value: "", label: `shared: ${window.location.host}` },
+                  ...activeDomains.map((d) => ({
+                    value: d.id,
+                    label: d.hostname,
+                  })),
+                ]}
+              />
             </Field>
           )}
 
@@ -489,32 +489,26 @@ function LinkEditor({
 
             <div className="grid grid-cols-2 gap-3">
               <Field label="Dots">
-                <Select
+                <MenuSelect
+                  label="Dots"
                   value={form.qrStyle ?? ""}
-                  onChange={(e) => setForm({ ...form, qrStyle: e.target.value })}
-                >
-                  <option value="">Org default</option>
-                  {QR_DOT_STYLES.map((s) => (
-                    <option key={s} value={s}>
-                      {s}
-                    </option>
-                  ))}
-                </Select>
+                  onChange={(v) => setForm({ ...form, qrStyle: v })}
+                  options={[
+                    { value: "", label: "Org default" },
+                    ...QR_DOT_STYLES.map((s) => ({ value: s, label: s })),
+                  ]}
+                />
               </Field>
               <Field label="Corners">
-                <Select
+                <MenuSelect
+                  label="Corners"
                   value={form.qrCorner ?? ""}
-                  onChange={(e) =>
-                    setForm({ ...form, qrCorner: e.target.value })
-                  }
-                >
-                  <option value="">Org default</option>
-                  {QR_CORNER_STYLES.map((s) => (
-                    <option key={s} value={s}>
-                      {s}
-                    </option>
-                  ))}
-                </Select>
+                  onChange={(v) => setForm({ ...form, qrCorner: v })}
+                  options={[
+                    { value: "", label: "Org default" },
+                    ...QR_CORNER_STYLES.map((s) => ({ value: s, label: s })),
+                  ]}
+                />
               </Field>
             </div>
 
