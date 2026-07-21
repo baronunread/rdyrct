@@ -5,6 +5,7 @@ import {
 } from "@tanstack/react-query";
 import { api, ApiError } from "./api";
 import { authClient } from "./auth-client";
+import { writeAuthHint } from "./auth-hint";
 import type {
   CurrentUser,
   AppConfig,
@@ -25,9 +26,14 @@ export function useCurrentUser() {
     queryKey: ["user"],
     queryFn: async () => {
       try {
-        return await api<CurrentUser>("/user");
+        const user = await api<CurrentUser>("/user");
+        writeAuthHint(true);
+        return user;
       } catch (e) {
-        if (e instanceof ApiError && e.status === 401) return null;
+        if (e instanceof ApiError && e.status === 401) {
+          writeAuthHint(false);
+          return null;
+        }
         throw e;
       }
     },
@@ -48,7 +54,10 @@ export function useLogout() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: () => authClient.signOut(),
-    onSuccess: () => qc.setQueryData(["user"], null),
+    onSuccess: () => {
+      writeAuthHint(false);
+      qc.setQueryData(["user"], null);
+    },
   });
 }
 

@@ -15,7 +15,9 @@ import {
   ChevronDown,
 } from "lucide-react";
 import { LazyMotion, MotionConfig, domAnimation, m } from "motion/react";
+import { useState } from "react";
 import { useCurrentUser } from "../lib/hooks";
+import { readAuthHint } from "../lib/auth-hint";
 import { PLAN_LIMITS, PLAN_PRICES } from "@/shared/types";
 import { Button } from "../ui/button";
 import { Table, Th, Td } from "../ui/misc";
@@ -476,8 +478,13 @@ function PricingSection() {
 
 export function LandingPage() {
   const me = useCurrentUser();
-  const ctaTo = me.data ? "/dashboard" : "/signup";
-  const ctaLabel = me.data ? "Open dashboard" : "Get started free";
+  // While the /user query is in flight, fall back to the last known auth
+  // state so a signed-in visitor doesn't see "Sign up" flash before the
+  // header settles. Snapshot once: mid-visit flips come from the query.
+  const [authHint] = useState(readAuthHint);
+  const authed = me.isPending ? authHint : !!me.data;
+  const ctaTo = authed ? "/dashboard" : "/signup";
+  const ctaLabel = authed ? "Open dashboard" : "Get started free";
 
   return (
     <MotionConfig reducedMotion="user">
@@ -505,7 +512,7 @@ export function LandingPage() {
             <a href="#faq" className="text-muted hover:text-accent">
               FAQ
             </a>
-            {me.data ? (
+            {authed ? (
               <Link to="/dashboard">
                 <Button variant="primary">Dashboard</Button>
               </Link>
