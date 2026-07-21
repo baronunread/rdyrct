@@ -9,12 +9,7 @@ import {
 import { useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, LazyMotion, domAnimation, m } from "motion/react";
 import {
-  LayoutDashboard,
-  Link2,
-  Users,
-  Settings,
   Globe,
-  CreditCard,
   Building2,
   UserCog,
   ChevronsUpDown,
@@ -37,6 +32,7 @@ import { Button, IconButton } from "../ui/button";
 import { Field, Input } from "../ui/field";
 
 import { AppShellSkeleton, PageSkeleton } from "../components/skeletons";
+import { appNavItems } from "../components/nav-items";
 import { cn } from "../ui/cn";
 import { NotFound } from "./not-found";
 import { PLAN_LIMITS } from "@/shared/types";
@@ -178,24 +174,11 @@ export function AppShell() {
       {/* nav — always visible: org-scoped pages render their own empty state
           when no org exists yet, and billing is per-user */}
       <nav className="flex flex-col gap-0.5 px-3 py-2">
-        <NavLink to="/dashboard" className={navClass}>
-          <LayoutDashboard size={15} /> Overview
-        </NavLink>
-        <NavLink to="/links" className={navClass}>
-          <Link2 size={15} /> Links
-        </NavLink>
-        <NavLink to="/domains" className={navClass}>
-          <Globe size={15} /> Domains
-        </NavLink>
-        <NavLink to="/members" className={navClass}>
-          <Users size={15} /> Members
-        </NavLink>
-        <NavLink to="/billing" className={navClass}>
-          <CreditCard size={15} /> Billing
-        </NavLink>
-        <NavLink to="/settings" className={navClass}>
-          <Settings size={15} /> Settings
-        </NavLink>
+        {appNavItems.map(({ to, icon: Icon, label }) => (
+          <NavLink key={to} to={to} className={navClass}>
+            <Icon size={15} /> {label}
+          </NavLink>
+        ))}
       </nav>
 
       {/* platform admin */}

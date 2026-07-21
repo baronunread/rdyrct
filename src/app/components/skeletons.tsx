@@ -1,3 +1,13 @@
+import {
+  ChevronsUpDown,
+  LogOut,
+  Menu as MenuIcon,
+  Moon,
+  Sun,
+} from "lucide-react";
+import { useTheme } from "../lib/theme";
+import { appNavItems } from "./nav-items";
+import { IconButton } from "../ui/button";
 import { cn } from "../ui/cn";
 import { Card } from "../ui/misc";
 import { Skeleton, SkeletonStatus, TableSkeleton } from "../ui/skeleton";
@@ -189,50 +199,102 @@ export function InviteSkeleton() {
   );
 }
 
-/** First paint of the authenticated app: sidebar chrome + main content. */
+/**
+ * Sidebar for the loading shell. Everything static renders for real (brand,
+ * nav, theme toggle — which already works, theme needs no user data); only
+ * the data renders as skeleton bars: the org name and the user identity.
+ * Fixed-height wrappers keep each bar as tall as the text line it stands in,
+ * so the loaded sidebar replaces this without anything moving. Classes
+ * mirror AppShell's sidebar.
+ */
+function SidebarSkeleton() {
+  const [theme, toggleTheme] = useTheme();
+  return (
+    <div className="flex h-full flex-col">
+      <div className="hidden px-3 pt-4 pb-2 md:block">
+        <span className="px-1.5 text-sm font-bold tracking-widest">
+          rdyrct
+        </span>
+      </div>
+
+      {/* org switcher: the frame is chrome, the org name is data */}
+      <div className="px-3 py-2">
+        <div className="flex w-full items-center justify-between gap-2 rounded-md border border-border bg-surface px-2.5 py-2">
+          <span className="flex h-5 items-center">
+            <Skeleton className="h-3.5 w-28" />
+          </span>
+          <ChevronsUpDown size={14} className="shrink-0 text-muted" />
+        </div>
+      </div>
+
+      {/* nav: real labels and icons, inert until the shell mounts */}
+      <nav className="flex flex-col gap-0.5 px-3 py-2">
+        {appNavItems.map(({ icon: Icon, label }) => (
+          <span
+            key={label}
+            className="flex items-center gap-2.5 rounded-md px-2.5 py-2 text-sm text-muted"
+          >
+            <Icon size={15} /> {label}
+          </span>
+        ))}
+      </nav>
+
+      {/* user footer: name and email are data, the theme toggle is live */}
+      <div className="mt-auto border-t border-border px-3 py-2.5">
+        <div className="flex items-center gap-2 px-1.5">
+          <div className="min-w-0 flex-1">
+            <span className="flex h-5 items-center">
+              <Skeleton className="h-3 w-2/3" />
+            </span>
+            <span className="flex h-4 items-center">
+              <Skeleton className="h-2.5 w-4/5" />
+            </span>
+          </div>
+          <IconButton
+            label="Toggle theme"
+            className="p-2"
+            onClick={toggleTheme}
+          >
+            {theme === "dark" ? <Sun size={15} /> : <Moon size={15} />}
+          </IconButton>
+          <IconButton label="Sign out" danger className="p-2" disabled>
+            <LogOut size={15} />
+          </IconButton>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** First paint of the authenticated app: real sidebar chrome + skeleton
+ * content. Layout classes mirror AppShell so the swap doesn't shift. */
 export function AppShellSkeleton() {
   return (
-    <SkeletonStatus>
-      <div className="flex min-h-dvh">
-        {/* desktop sidebar */}
-        <aside className="sticky top-0 hidden h-dvh w-60 shrink-0 border-r border-border bg-surface/40 md:block">
-          <div className="flex h-full flex-col">
-            <div className="px-3 pt-4 pb-2">
-              <Skeleton className="mx-1.5 h-4 w-16" />
-            </div>
-            <div className="px-3 py-2">
-              <Skeleton className="h-9 w-full" />
-            </div>
-            <div className="flex flex-col gap-1.5 px-3 py-2">
-              {Array.from({ length: 6 }, (_, i) => (
-                <Skeleton key={i} className="h-8 w-full" />
-              ))}
-            </div>
-            <div className="mt-auto border-t border-border px-3 py-2.5">
-              <div className="px-1.5">
-                <Skeleton className="h-3 w-2/3" />
-                <Skeleton className="mt-1.5 h-2.5 w-4/5" />
-              </div>
-            </div>
-          </div>
-        </aside>
+    <div className="flex min-h-dvh">
+      {/* desktop sidebar */}
+      <aside className="fixed inset-y-0 left-0 z-10 hidden w-60 border-r border-border bg-surface/40 md:block">
+        <SidebarSkeleton />
+      </aside>
 
-        {/* mobile top bar */}
-        <div className="fixed inset-x-0 top-0 z-30 flex items-center justify-between border-b border-border bg-bg/90 px-4 py-2.5 backdrop-blur md:hidden">
-          <Skeleton className="h-4 w-16" />
-          <Skeleton className="h-6 w-6" />
-        </div>
+      {/* mobile top bar */}
+      <div className="fixed inset-x-0 top-0 z-30 flex items-center gap-2 border-b border-border bg-bg/90 px-4 py-2.5 backdrop-blur md:hidden">
+        <span className="p-1.5 text-muted">
+          <MenuIcon size={18} />
+        </span>
+        <span className="text-sm font-bold tracking-widest">rdyrct</span>
+      </div>
 
-        <main className="flex min-w-0 flex-1 flex-col px-5 py-8 pt-16 md:px-8 md:pt-8">
-          <div className="mx-auto w-full max-w-5xl flex-1">
+      <main className="flex min-w-0 flex-1 flex-col px-5 py-8 pt-16 md:ml-60 md:px-8 md:pt-8">
+        <div className="mx-auto w-full max-w-5xl flex-1">
+          <SkeletonStatus>
             <HeaderSkeleton />
             <StatCardsSkeleton count={3} />
             <div className="mt-4">
               <ChartCardSkeleton />
             </div>
-          </div>
-        </main>
-      </div>
-    </SkeletonStatus>
+          </SkeletonStatus>
+        </div>
+      </main>
+    </div>
   );
 }
