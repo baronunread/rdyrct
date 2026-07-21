@@ -2,8 +2,9 @@ import { Hono } from "hono";
 import type { Context } from "hono";
 import { HTTPException } from "hono/http-exception";
 import { drizzle } from "drizzle-orm/d1";
+import { sql } from "drizzle-orm";
 import * as schema from "./db/schema";
-import type { AppEnv } from "./env";
+import type { AppEnv, Env } from "./env";
 import { withSession } from "./auth";
 import { getAuth } from "./better-auth";
 import { userRoutes } from "./routes/auth";
@@ -109,4 +110,13 @@ app.get("/:slug", async (c, next) => {
 
 app.all("*", (c) => c.env.ASSETS.fetch(c.req.raw));
 
-export default app;
+/* ---------------- Cron: click retention ---------------- */
+
+export default {
+  fetch: app.fetch,
+  async scheduled(_event: ScheduledEvent, env: Env, _ctx: ExecutionContext) {
+    const db = drizzle(env.DB, { schema });
+    const cutoff = Date.now() - 400 * 24 * 60 * 60 * 1000;
+    await db.delete(schema.clicks).where(sql`ts < ${cutoff}`);
+  },
+};

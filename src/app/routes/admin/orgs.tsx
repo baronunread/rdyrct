@@ -3,7 +3,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Ellipsis, Eye, Trash2 } from "lucide-react";
 import { useAdminOrgDetail, useAdminOrgs } from "../../lib/hooks";
 import { api } from "../../lib/api";
-import type { AdminOrgRow, OrgRole } from "@/shared/types";
+import type { AdminOrgRow, OrgRole, Sort } from "@/shared/types";
 import { AreaChart } from "../../components/charts";
 import { Dialog } from "../../ui/dialog";
 import { Menu, MenuItem, MenuSeparator } from "../../ui/menu";
@@ -15,8 +15,9 @@ import {
 import { useToast } from "../../ui/toast";
 import { ConfirmDialog } from "./confirm-dialog";
 import { SearchInput } from "./search-input";
-import { SortTh } from "./sort";
-import { linkLabel, sortRows, type Sort } from "./util";
+import { linkLabel } from "./util";
+import { SortTh } from "../../ui/sort-th";
+import { sortRows } from "../../lib/sort";
 
 const roleColor: Record<OrgRole, "accent" | "mint" | "muted"> = {
   owner: "accent",

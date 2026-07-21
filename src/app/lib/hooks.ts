@@ -15,6 +15,7 @@ import type {
   InviteDTO,
   DomainDTO,
   OrgStats,
+  LinkStats,
   AdminOverview,
   AdminOrgRow,
   AdminOrgDetail,
@@ -94,11 +95,21 @@ export function useLinkMutations(orgId: string) {
   return { create, update, remove };
 }
 
-export const useStats = (orgId: string) =>
+export const useStats = (orgId: string, days?: number) =>
   useQuery<OrgStats>({
-    queryKey: ["stats", orgId],
-    queryFn: () => api(`/orgs/${orgId}/stats`),
+    queryKey: ["stats", orgId, days],
+    queryFn: () => {
+      const params = days ? `?days=${days}` : "";
+      return api<OrgStats>(`/orgs/${orgId}/stats${params}`);
+    },
     enabled: !!orgId,
+  });
+
+export const useLinkStats = (orgId: string, linkId: string | null) =>
+  useQuery<LinkStats>({
+    queryKey: ["linkStats", orgId, linkId],
+    queryFn: () => api(`/orgs/${orgId}/links/${linkId}/stats`),
+    enabled: !!orgId && !!linkId,
   });
 
 export const useMembers = (orgId: string) =>

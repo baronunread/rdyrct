@@ -47,10 +47,10 @@ export function Card({
   );
 }
 
-export function Table({ children }: { children: ReactNode }) {
+export function Table({ children, fixed }: { children: ReactNode; fixed?: boolean }) {
   return (
     <div className="overflow-x-auto rounded-lg border border-border bg-surface">
-      <table className="w-full text-sm [&_tbody_tr]:transition-colors [&_tbody_tr:hover]:bg-surface-2/40">
+      <table className={`w-full text-sm [&_tbody_tr]:transition-colors [&_tbody_tr:hover]:bg-surface-2/40 ${fixed ? "table-fixed" : ""}`}>
         {children}
       </table>
     </div>

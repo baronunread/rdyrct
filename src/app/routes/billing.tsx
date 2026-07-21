@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import confetti from "canvas-confetti";
 import { AnimatePresence, LazyMotion, domAnimation, m } from "motion/react";
 import { useQueryClient } from "@tanstack/react-query";
-import { useCurrentUser, useLinks, useMembers, useCheckout, usePortal } from "../lib/hooks";
+import { useCurrentUser, useLinks, useMembers, useDomains, useCheckout, usePortal } from "../lib/hooks";
 import { useCurrentOrg } from "../lib/current-org";
 import { PLAN_LIMITS, PLAN_PRICES, type OrgPlan } from "@/shared/types";
 import { Button } from "../ui/button";
@@ -15,6 +15,119 @@ const PLAN_LABEL: Record<OrgPlan, string> = {
   hobby: "Hobby",
   pro: "Pro",
 };
+
+const PLAN_FEATURES = [
+  ["Links", `${PLAN_LIMITS.free.links}`, `${PLAN_LIMITS.hobby.links}`, `${PLAN_LIMITS.pro.links}`],
+  ["Members", `${PLAN_LIMITS.free.members}`, `${PLAN_LIMITS.hobby.members}`, `${PLAN_LIMITS.pro.members}`],
+  ["Domains", `${PLAN_LIMITS.free.domains}`, `${PLAN_LIMITS.hobby.domains}`, `${PLAN_LIMITS.pro.domains}`],
+  ["Org. you own", `${PLAN_LIMITS.free.orgs}`, `${PLAN_LIMITS.hobby.orgs}`, `${PLAN_LIMITS.pro.orgs}`],
+  ["QR codes", "No", "Yes", "Yes"],
+  ["Analytics", `${PLAN_LIMITS.free.analyticsDays}d`, `${PLAN_LIMITS.hobby.analyticsDays}d`, `${PLAN_LIMITS.pro.analyticsDays}d`],
+] as const;
+
+function PlanFeatureComparison() {
+  return (
+    <div className="my-3 overflow-x-auto">
+      <table className="w-full text-xs tnum">
+        <thead>
+          <tr className="text-left text-muted">
+            <th className="pb-1 pr-4 font-medium" />
+            <th className="pb-1 pr-4 font-medium text-muted">Free</th>
+            <th className="pb-1 pr-4 font-medium text-accent">Hobby</th>
+            <th className="pb-1 font-medium text-accent">Pro</th>
+          </tr>
+        </thead>
+        <tbody className="text-text">
+          {PLAN_FEATURES.map(([label, free, hobby, pro]) => (
+            <tr key={label} className="border-t border-border/50">
+              <td className="py-1.5 pr-4 text-muted">{label}</td>
+              <td className="py-1.5 pr-4">{free}</td>
+              <td className="py-1.5 pr-4 text-accent">{hobby}</td>
+              <td className="py-1.5 text-accent">{pro}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function BillingOverlay({
+  show,
+  message,
+}: {
+  show: boolean;
+  message: string;
+}) {
+  if (!show) return null;
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      <m.div
+        className="fixed inset-0 bg-black/55 backdrop-blur-[2px]"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ duration: 0.2 }}
+      />
+      <m.div
+        className="relative z-10 flex flex-col items-center gap-4 rounded-xl border border-border bg-surface p-8 text-center shadow-2xl"
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1 }}
+        transition={{ duration: 0.2 }}
+      >
+        <div className="h-8 w-8 animate-spin rounded-full border-2 border-border border-t-accent" />
+        <p className="font-bold">{message}</p>
+      </m.div>
+    </div>
+  );
+}
+
+function CelebrationOverlay({
+  show,
+  plan,
+  onDismiss,
+}: {
+  show: boolean;
+  plan: OrgPlan;
+  onDismiss: () => void;
+}) {
+  return (
+    <AnimatePresence>
+      {show && (
+        <m.div
+          role="button"
+          tabIndex={0}
+          aria-label="Dismiss celebration"
+          className="fixed inset-0 z-50 flex cursor-pointer items-center justify-center"
+          onClick={onDismiss}
+          onKeyDown={(e) =>
+            (e.key === "Enter" || e.key === " ") && onDismiss()
+          }
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.2 }}
+        >
+          <div className="fixed inset-0 bg-black/55 backdrop-blur-[2px]" />
+          <m.div
+            className="relative z-10 flex flex-col items-center gap-4 rounded-xl border border-accent/30 bg-surface p-10 text-center shadow-2xl"
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+            transition={{ duration: 0.2 }}
+          >
+            <span className="text-5xl">🎉</span>
+            <p className="text-xl font-bold text-accent">
+              Welcome to {PLAN_LABEL[plan]}!
+            </p>
+            <p className="text-sm text-muted">
+              You now have access to all {PLAN_LABEL[plan]} features.
+            </p>
+          </m.div>
+        </m.div>
+      )}
+    </AnimatePresence>
+  );
+}
 
 export function BillingPage() {
   // Which paid plan a checkout is in flight for (null = none).
@@ -32,6 +145,8 @@ export function BillingPage() {
   const orgId = org?.id ?? "";
   const links = useLinks(orgId);
   const members = useMembers(orgId);
+  const domains = useDomains(orgId);
+  const ownedOrgs = me.data?.orgs.filter((o) => o.role === "owner").length ?? 0;
   const checkout = useCheckout();
   const portal = usePortal();
   const toast = useToast();
@@ -164,10 +279,11 @@ export function BillingPage() {
             )}
             {confirmTimedOut && plan === "free" && (
               <p className="text-sm text-muted">
-                Payment received. Your plan is still activating, refresh in a
-                moment.
+                Still confirming your payment. Your plan should activate
+                shortly: refresh in a moment.
               </p>
             )}
+            {plan === "free" && <PlanFeatureComparison />}
             <div>
               {plan === "free" ? (
                 <div className="flex flex-wrap gap-2">
@@ -241,70 +357,28 @@ export function BillingPage() {
                 Members {members.data?.length ?? 0} /{" "}
                 {PLAN_LIMITS[org.plan].members}
               </p>
+              <p className="text-sm text-muted tnum">
+                Domains {domains.data?.length ?? 0} /{" "}
+                {PLAN_LIMITS[org.plan].domains}
+              </p>
+              <p className="text-sm text-muted tnum">
+                Orgs you own {ownedOrgs} / {PLAN_LIMITS[me.data!.user.plan].orgs}
+              </p>
             </div>
           </Card>
         )}
       </div>
 
       <LazyMotion features={domAnimation}>
-        {(checkoutPlan !== null || showPortalOverlay || confirming) && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center">
-            <m.div
-              className="fixed inset-0 bg-black/55 backdrop-blur-[2px]"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ duration: 0.2 }}
-            />
-            <m.div
-              className="relative z-10 flex flex-col items-center gap-4 rounded-xl border border-border bg-surface p-8 text-center shadow-2xl"
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ duration: 0.2 }}
-            >
-              <div className="h-8 w-8 animate-spin rounded-full border-2 border-border border-t-accent" />
-              <p className="font-bold">
-                {confirming ? "Confirming your upgrade…" : "Redirecting to Polar…"}
-              </p>
-            </m.div>
-          </div>
-        )}
-
-        <AnimatePresence>
-          {showCelebration && (
-            <m.div
-              role="button"
-              tabIndex={0}
-              aria-label="Dismiss celebration"
-              className="fixed inset-0 z-50 flex cursor-pointer items-center justify-center"
-              onClick={() => setShowCelebration(false)}
-              onKeyDown={(e) =>
-                (e.key === "Enter" || e.key === " ") &&
-                setShowCelebration(false)
-              }
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.2 }}
-            >
-              <div className="fixed inset-0 bg-black/55 backdrop-blur-[2px]" />
-              <m.div
-                className="relative z-10 flex flex-col items-center gap-4 rounded-xl border border-accent/30 bg-surface p-10 text-center shadow-2xl"
-                initial={{ opacity: 0, scale: 0.95 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 0.95 }}
-                transition={{ duration: 0.2 }}
-              >
-                <span className="text-5xl">🎉</span>
-                <p className="text-xl font-bold text-accent">
-                  Welcome to {PLAN_LABEL[plan]}!
-                </p>
-                <p className="text-sm text-muted">
-                  You now have access to all {PLAN_LABEL[plan]} features.
-                </p>
-              </m.div>
-            </m.div>
-          )}
-        </AnimatePresence>
+        <BillingOverlay
+          show={checkoutPlan !== null || showPortalOverlay || confirming}
+          message={confirming ? "Confirming your upgrade…" : "Redirecting to Polar…"}
+        />
+        <CelebrationOverlay
+          show={showCelebration}
+          plan={plan}
+          onDismiss={() => setShowCelebration(false)}
+        />
       </LazyMotion>
     </div>
   );

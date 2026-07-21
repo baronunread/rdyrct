@@ -47,6 +47,9 @@ const Dashboard = lazy(() =>
 const LinksPage = lazy(() =>
   import("./routes/links").then((m) => ({ default: m.LinksPage })),
 );
+const LinkDetailPage = lazy(() =>
+  import("./routes/link-detail").then((m) => ({ default: m.LinkDetailPage })),
+);
 const MembersPage = lazy(() =>
   import("./routes/members").then((m) => ({ default: m.MembersPage })),
 );
@@ -115,6 +118,7 @@ createRoot(document.getElementById("root")!).render(
               >
                 <Route path="/dashboard" element={<Dashboard />} />
                 <Route path="/links" element={<LinksPage />} />
+                <Route path="/links/:linkId" element={<LinkDetailPage />} />
                 <Route path="/members" element={<MembersPage />} />
                 <Route path="/billing" element={<BillingPage />} />
                 <Route path="/domains" element={<DomainsPage />} />

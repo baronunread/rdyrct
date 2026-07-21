@@ -93,7 +93,9 @@ export function AppShell() {
 
   const switchOrg = (id: string) => {
     setOrg(id);
-    navigate("/dashboard");
+    const path = window.location.pathname;
+    const orgRoutes = ["/dashboard", "/links", "/domains", "/members", "/billing", "/settings"];
+    navigate(orgRoutes.includes(path) ? path : "/dashboard");
   };
 
   const createOrg = async () => {

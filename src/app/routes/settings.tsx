@@ -91,7 +91,7 @@ export function SettingsPage() {
     <div>
       <PageHeader
         title="Settings"
-        sub={org ? "Organization settings" : "Your account"}
+        sub="Account and organization settings"
       />
       <div className="flex flex-col gap-4">
         {/* org cards only when an org exists; account deletion always */}
@@ -316,9 +316,9 @@ function QrDefaultsCard() {
             to put your logo and style on every QR code.
           </p>
         ) : (
-          <div className="flex flex-col gap-6 sm:flex-row">
-            <div className="flex min-w-0 flex-1 flex-col gap-4">
-              <div className="grid grid-cols-2 gap-3">
+          <div className="flex flex-col gap-6">
+            <div className="grid grid-cols-[1fr_auto] gap-6 items-center">
+              <div className="flex flex-col gap-4">
                 <Field label="Dot style">
                   <MenuSelect
                     label="Dot style"
@@ -350,6 +350,19 @@ function QrDefaultsCard() {
                   />
                 </Field>
               </div>
+              <QRPreview
+                url={shortUrl("preview")}
+                logo={qrLogo || undefined}
+                dotStyle={qrStyle}
+                color={qrColor}
+                corner={qrCorner}
+                eyeColor={qrEyeColor}
+                bg={qrBg}
+                logoSize={qrLogoSize === "" ? undefined : Number(qrLogoSize)}
+                size={160}
+              />
+            </div>
+            <div className="flex flex-col gap-4">
 
               <div className="grid grid-cols-2 gap-3">
                 <QrColorField
@@ -368,44 +381,46 @@ function QrDefaultsCard() {
                 />
               </div>
 
-              <QrColorField
-                label="Background"
-                value={qrBg}
-                fallback={QR_DEFAULT_BG}
-                allowTransparent
-                onChange={setQrBg}
-                disabled={!isAdmin}
-              />
+              <div className="grid grid-cols-2 gap-3">
+                <QrColorField
+                  label="Background"
+                  value={qrBg}
+                  fallback={QR_DEFAULT_BG}
+                  allowTransparent
+                  onChange={setQrBg}
+                  disabled={!isAdmin}
+                />
+
+                <Field
+                  label="Logo size"
+                  hint="How much of the QR code the logo covers. Bigger can hurt scannability"
+                >
+                  <MenuSelect
+                    label="Logo size"
+                    value={qrLogoSize}
+                    onChange={setQrLogoSize}
+                    disabled={!isAdmin}
+                        options={[
+                          { value: "", label: "Medium (default)" },
+                          { value: "0.25", label: "Small" },
+                          { value: "0.5", label: "Large" },
+                          { value: "0.65", label: "Extra large" },
+                        ]}
+                  />
+                </Field>
+              </div>
 
               <div>
                 <span className="mb-1.5 block text-[11px] tracking-wider text-muted uppercase">
                   Logo (PNG/SVG, ≤ 96 KB)
                 </span>
-                    <QrLogoInput
-                      value={qrLogo}
-                      disabled={!isAdmin}
-                      onLoad={setQrLogo}
-                      onClear={isAdmin ? () => setQrLogo("") : undefined}
-                    />
-              </div>
-
-              <Field
-                label="Logo size"
-                hint="How much of the QR code the logo covers. Bigger can hurt scannability"
-              >
-                <MenuSelect
-                  label="Logo size"
-                  value={qrLogoSize}
-                  onChange={setQrLogoSize}
+                <QrLogoInput
+                  value={qrLogo}
                   disabled={!isAdmin}
-                      options={[
-                        { value: "", label: "Medium (default)" },
-                        { value: "0.25", label: "Small" },
-                        { value: "0.5", label: "Large" },
-                        { value: "0.65", label: "Extra large" },
-                      ]}
+                  onLoad={setQrLogo}
+                  onClear={isAdmin ? () => setQrLogo("") : undefined}
                 />
-              </Field>
+              </div>
 
               {isAdmin ? (
                 <div>
@@ -422,19 +437,6 @@ function QrDefaultsCard() {
                   Only the owner and admins can change these settings.
                 </p>
               )}
-            </div>
-            <div className="shrink-0 self-center sm:self-start">
-              <QRPreview
-                url={shortUrl("preview")}
-                logo={qrLogo || undefined}
-                dotStyle={qrStyle}
-                color={qrColor}
-                corner={qrCorner}
-                eyeColor={qrEyeColor}
-                bg={qrBg}
-                logoSize={qrLogoSize === "" ? undefined : Number(qrLogoSize)}
-                size={160}
-              />
             </div>
           </div>
         )}
