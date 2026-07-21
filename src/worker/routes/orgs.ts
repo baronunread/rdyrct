@@ -16,6 +16,7 @@ import type {
   LinkStats,
   SeriesPoint,
   InvitePreview,
+  RecentClick,
 } from "@/shared/types";
 
 export const orgRoutes = new Hono<AppEnv>();
@@ -193,34 +194,8 @@ orgRoutes.patch(
     const body = await c.req.json<{ role?: "admin" | "member" }>();
     if (body.role !== "admin" && body.role !== "member")
       throw new HTTPException(400, { message: "Role must be admin or member" });
-    const orgId = c.req.param("orgId");
-    const targetId = c.req.param("userId");
-    const target = await orgRole(
-      c.var.db,
-      {
-        id: targetId,
-        email: "",
-        name: "",
-        isAdmin: false,
-        emailVerified: false,
-        plan: "free",
-        polarSubscriptionCancelAtPeriodEnd: false,
-        polarSubscriptionCurrentPeriodEnd: null,
-      },
-      orgId,
-    );
-    if (!target) throw new HTTPException(404, { message: "Not a member" });
-    if (target === "owner")
-      throw new HTTPException(400, { message: "Cannot change the owner" });
-    await c.var.db
-      .update(schema.orgMembers)
-      .set({ role: body.role })
-      .where(
-        and(
-          eq(schema.orgMembers.orgId, orgId),
-          eq(schema.orgMembers.userId, targetId),
-        ),
-      );
+    const { orgId, targetId } = await resolveMember(c.var.db, c.req.param("orgId"), c.req.param("userId"));
+    await c.var.db.update(schema.orgMembers).set({ role: body.role }).where(memberWhere(orgId, targetId));
     return c.json({ ok: true });
   },
 );
@@ -229,33 +204,8 @@ orgRoutes.delete(
   "/:orgId/members/:userId",
   requireOrgRole("admin"),
   async (c) => {
-    const orgId = c.req.param("orgId");
-    const targetId = c.req.param("userId");
-    const target = await orgRole(
-      c.var.db,
-      {
-        id: targetId,
-        email: "",
-        name: "",
-        isAdmin: false,
-        emailVerified: false,
-        plan: "free",
-        polarSubscriptionCancelAtPeriodEnd: false,
-        polarSubscriptionCurrentPeriodEnd: null,
-      },
-      orgId,
-    );
-    if (!target) throw new HTTPException(404, { message: "Not a member" });
-    if (target === "owner")
-      throw new HTTPException(400, { message: "Cannot remove the owner" });
-    await c.var.db
-      .delete(schema.orgMembers)
-      .where(
-        and(
-          eq(schema.orgMembers.orgId, orgId),
-          eq(schema.orgMembers.userId, targetId),
-        ),
-      );
+    const { orgId, targetId } = await resolveMember(c.var.db, c.req.param("orgId"), c.req.param("userId"));
+    await c.var.db.delete(schema.orgMembers).where(memberWhere(orgId, targetId));
     return c.json({ ok: true });
   },
 );
@@ -453,6 +403,27 @@ export function fillSeries(
 }
 
 const day = sql<string>`date(ts / 1000, 'unixepoch')`;
+const hour = sql<string>`strftime('%Y-%m-%d %H:00', ts / 1000, 'unixepoch')`;
+
+function emptyHours(): Map<string, number> {
+  const map = new Map<string, number>();
+  const hourMs = 60 * 60 * 1000;
+  const start = Math.floor((now() - 23 * hourMs) / hourMs) * hourMs;
+  for (let i = 0; i < 24; i++) {
+    const d = new Date(start + i * hourMs);
+    const label = `${d.toISOString().slice(0, 10)} ${d.toISOString().slice(11, 13)}:00`;
+    map.set(label, 0);
+  }
+  return map;
+}
+
+function fillHours(
+  rows: { hour: string; clicks: number }[],
+): SeriesPoint[] {
+  const map = emptyHours();
+  for (const r of rows) if (map.has(r.hour)) map.set(r.hour, r.clicks);
+  return [...map.entries()].map(([day, clicks]) => ({ day, clicks }));
+}
 
 export function computeDelta(
   current: number,
@@ -474,16 +445,79 @@ function clampDays(requested: number | null, planDays: number): number {
   return Math.min(requested, planDays);
 }
 
+function computeWindows(days: number) {
+  const since = now() - days * 24 * 60 * 60 * 1000;
+  return {
+    since,
+    prevSince: since - days * 24 * 60 * 60 * 1000,
+    since7: now() - 7 * 24 * 60 * 60 * 1000,
+    prev7Since: now() - 14 * 24 * 60 * 60 * 1000,
+    since24: now() - 24 * 60 * 60 * 1000,
+  };
+}
+
+function clickTotals(totals: { clicks: number }[], totalsPrev: { clicks: number }[], recent: { n: number }[], recentPrev: { n: number }[]) {
+  return {
+    totalClicks: totals[0]?.clicks ?? 0,
+    totalClicksPrev: totalsPrev[0]?.clicks ?? 0,
+    clicks7dVal: recent[0]?.n ?? 0,
+    clicks7dPrev: recentPrev[0]?.n ?? 0,
+  };
+}
+
+async function resolveMember(db: DB, orgId: string, targetId: string) {
+  await assertMember(db, orgId, targetId);
+  return { orgId, targetId };
+}
+
+function memberWhere(orgId: string, targetId: string) {
+  return and(
+    eq(schema.orgMembers.orgId, orgId),
+    eq(schema.orgMembers.userId, targetId),
+  );
+}
+
+async function assertMember(db: DB, orgId: string, targetId: string): Promise<Exclude<Awaited<ReturnType<typeof orgRole>>, null>> {
+  const target = await orgRole(
+    db,
+    {
+      id: targetId,
+      email: "",
+      name: "",
+      isAdmin: false,
+      emailVerified: false,
+      plan: "free",
+      polarSubscriptionCancelAtPeriodEnd: false,
+      polarSubscriptionCurrentPeriodEnd: null,
+    },
+    orgId,
+  );
+  if (!target) throw new HTTPException(404, { message: "Not a member" });
+  if (target === "owner") throw new HTTPException(400, { message: "Cannot change the owner" });
+  return target;
+}
+
+async function lookupInvite(db: DB, token: string) {
+  const rows = await db
+    .select()
+    .from(schema.invites)
+    .where(eq(schema.invites.token, token));
+  const invite = rows[0];
+  if (!invite || invite.acceptedBy || invite.expiresAt < now())
+    throw new HTTPException(404, { message: "Invite not found or expired" });
+  return invite;
+}
+
 orgRoutes.get("/:orgId/stats", requireOrgRole("member"), async (c) => {
   const db = c.var.db;
   const orgId = c.req.param("orgId");
   const { limits } = await orgPlan(db, orgId);
   const queryDays = c.req.query("days");
-  const days = clampDays(queryDays ? parseInt(queryDays, 10) : null, limits.analyticsDays);
-  const since = now() - days * 24 * 60 * 60 * 1000;
-  const prevSince = since - days * 24 * 60 * 60 * 1000;
-  const since7 = now() - 7 * 24 * 60 * 60 * 1000;
-  const prev7Since = since7 - 7 * 24 * 60 * 60 * 1000;
+  const bucketRaw = c.req.query("bucket");
+  const bucket: "day" | "hour" = bucketRaw === "hour" ? "hour" : "day";
+  let days = clampDays(queryDays ? parseInt(queryDays, 10) : null, limits.analyticsDays);
+  if (bucket === "hour") days = 1;
+  const { since, prevSince, since7, prev7Since, since24 } = computeWindows(days);
   const inOrg = eq(schema.clicks.orgId, orgId);
 
   const [
@@ -492,6 +526,7 @@ orgRoutes.get("/:orgId/stats", requireOrgRole("member"), async (c) => {
     recent,
     recentPrev,
     seriesRows,
+    hourSeriesRows,
     topLinks,
     countries,
     referrers,
@@ -501,12 +536,15 @@ orgRoutes.get("/:orgId/stats", requireOrgRole("member"), async (c) => {
     decayingRaw,
     heatmapRaw,
     campaignRows,
+    sourceRows,
+    mediumRows,
   ] = await Promise.all([
     db.select({ clicks: sql<number>`count(*)` }).from(schema.clicks).where(inOrg),
     db.select({ clicks: sql<number>`count(*)` }).from(schema.clicks).where(and(inOrg, gte(schema.clicks.ts, prevSince), sql`${schema.clicks.ts} < ${since}`)),
     db.select({ n: sql<number>`count(*)` }).from(schema.clicks).where(and(inOrg, gte(schema.clicks.ts, since7))),
     db.select({ n: sql<number>`count(*)` }).from(schema.clicks).where(and(inOrg, gte(schema.clicks.ts, prev7Since), sql`${schema.clicks.ts} < ${since7}`)),
     db.select({ day, clicks: sql<number>`count(*)` }).from(schema.clicks).where(and(inOrg, gte(schema.clicks.ts, since))).groupBy(day),
+    db.select({ hour, clicks: sql<number>`count(*)` }).from(schema.clicks).where(and(inOrg, gte(schema.clicks.ts, since24))).groupBy(hour),
     db.select({ id: schema.links.id, slug: schema.links.slug, title: schema.links.title, clicks: sql<number>`count(${schema.clicks.id})` }).from(schema.links).leftJoin(schema.clicks, eq(schema.clicks.linkId, schema.links.id)).where(eq(schema.links.orgId, orgId)).groupBy(schema.links.id).orderBy(desc(sql`count(${schema.clicks.id})`)).limit(8),
     db.select({ key: schema.clicks.country, clicks: sql<number>`count(*)` }).from(schema.clicks).where(and(inOrg, gte(schema.clicks.ts, since))).groupBy(schema.clicks.country).orderBy(desc(sql`count(*)`)).limit(8),
     db.select({ key: schema.clicks.referrer, clicks: sql<number>`count(*)` }).from(schema.clicks).where(and(inOrg, gte(schema.clicks.ts, since))).groupBy(schema.clicks.referrer).orderBy(desc(sql`count(*)`)).limit(8),
@@ -530,19 +568,20 @@ orgRoutes.get("/:orgId/stats", requireOrgRole("member"), async (c) => {
     ).bind(orgId, since).all<{ day_of_week: number; hour: number; clicks: number }>()
       .then((r) => r.results),
     db.select({ campaign: schema.links.utmCampaign, clicks: sql<number>`count(${schema.clicks.id})` }).from(schema.links).innerJoin(schema.clicks, eq(schema.clicks.linkId, schema.links.id)).where(and(eq(schema.links.orgId, orgId), gte(schema.clicks.ts, since), sql`length(${schema.links.utmCampaign}) > 0`)).groupBy(schema.links.utmCampaign).orderBy(desc(sql`count(${schema.clicks.id})`)).limit(8),
+    db.select({ source: schema.links.utmSource, clicks: sql<number>`count(${schema.clicks.id})` }).from(schema.links).innerJoin(schema.clicks, eq(schema.clicks.linkId, schema.links.id)).where(and(eq(schema.links.orgId, orgId), gte(schema.clicks.ts, since), sql`length(${schema.links.utmSource}) > 0`)).groupBy(schema.links.utmSource).orderBy(desc(sql`count(${schema.clicks.id})`)).limit(8),
+    db.select({ medium: schema.links.utmMedium, clicks: sql<number>`count(${schema.clicks.id})` }).from(schema.links).innerJoin(schema.clicks, eq(schema.clicks.linkId, schema.links.id)).where(and(eq(schema.links.orgId, orgId), gte(schema.clicks.ts, since), sql`length(${schema.links.utmMedium}) > 0`)).groupBy(schema.links.utmMedium).orderBy(desc(sql`count(${schema.clicks.id})`)).limit(8),
   ]);
 
-  const totalClicks = totals[0]?.clicks ?? 0;
-  const totalClicksPrev = totalsPrev[0]?.clicks ?? 0;
-  const clicks7dVal = recent[0]?.n ?? 0;
-  const clicks7dPrev = recentPrev[0]?.n ?? 0;
+  const { totalClicks, totalClicksPrev, clicks7dVal, clicks7dPrev } = clickTotals(totals, totalsPrev, recent, recentPrev);
 
   return c.json({
     totalClicks,
     totalLinks: linkCount[0]?.n ?? 0,
     clicks7d: clicks7dVal,
     rangeDays: days,
+    bucket,
     series: fillSeries(seriesRows, days),
+    hourSeries: fillHours(hourSeriesRows),
     totalClicksDelta: computeDelta(totalClicks, totalClicksPrev),
     clicks7dDelta: computeDelta(clicks7dVal, clicks7dPrev),
     topLinks,
@@ -553,25 +592,76 @@ orgRoutes.get("/:orgId/stats", requireOrgRole("member"), async (c) => {
     decayingLinks: decayingRaw.map((l) => ({ id: l.id, slug: l.slug, title: l.title, drop: l.drop_pct })),
     heatmap: heatmapRaw.map((r) => ({ dayOfWeek: r.day_of_week, hour: r.hour, clicks: r.clicks })),
     campaigns: campaignRows.map((r) => ({ campaign: r.campaign, clicks: r.clicks })),
+    sources: sourceRows.map((r) => ({ source: r.source, clicks: r.clicks })),
+    mediums: mediumRows.map((r) => ({ medium: r.medium, clicks: r.clicks })),
   } satisfies OrgStats);
+});
+
+/* ---------------- recent clicks feed (dashboard) ---------------- */
+
+orgRoutes.get("/:orgId/clicks", requireOrgRole("member"), async (c) => {
+  const raw = parseInt(c.req.query("limit") ?? "", 10);
+  const limit = Math.min(Math.max(Number.isFinite(raw) ? raw : 8, 1), 50);
+  const rows = await c.var.db
+    .select({
+      id: schema.clicks.id,
+      ts: schema.clicks.ts,
+      country: schema.clicks.country,
+      referrer: schema.clicks.referrer,
+      device: schema.clicks.device,
+      slug: schema.links.slug,
+      domain: schema.domains.hostname,
+    })
+    .from(schema.clicks)
+    .innerJoin(schema.links, eq(schema.clicks.linkId, schema.links.id))
+    .leftJoin(schema.domains, eq(schema.links.domainId, schema.domains.id))
+    .where(eq(schema.clicks.orgId, c.req.param("orgId")))
+    .orderBy(desc(schema.clicks.ts))
+    .limit(limit);
+  return c.json(
+    rows.map((r) => ({
+      ...r,
+      referrer: r.referrer ? referrerHost(r.referrer) || r.referrer : "",
+    })) satisfies RecentClick[],
+  );
 });
 
 /* ---------------- per-link stats ---------------- */
 
-orgRoutes.get("/:orgId/links/:linkId/stats", requireOrgRole("member"), async (c) => {
+orgRoutes.get("/:orgId/links/stats/:slug", requireOrgRole("member"), async (c) => {
   const db = c.var.db;
   const orgId = c.req.param("orgId");
-  const linkId = c.req.param("linkId");
+  const slug = c.req.param("slug");
+  const domain = c.req.query("domain");
   const { limits } = await orgPlan(db, orgId);
   const days = limits.analyticsDays;
-  const since = now() - days * 24 * 60 * 60 * 1000;
-  const prevSince = since - days * 24 * 60 * 60 * 1000;
-  const since7 = now() - 7 * 24 * 60 * 60 * 1000;
-  const prev7Since = since7 - 7 * 24 * 60 * 60 * 1000;
+  const { since, prevSince, since7, prev7Since } = computeWindows(days);
+
+  const conditions = [eq(schema.links.slug, slug), eq(schema.links.orgId, orgId)];
+  if (domain) conditions.push(eq(schema.domains.hostname, domain));
+
+  const [link] = await db
+    .select({
+      id: schema.links.id,
+      slug: schema.links.slug,
+      destination: schema.links.destination,
+      title: schema.links.title,
+      createdAt: schema.links.createdAt,
+      createdBy: schema.links.createdBy,
+      domain: schema.domains.hostname,
+    })
+    .from(schema.links)
+    .leftJoin(schema.domains, eq(schema.links.domainId, schema.domains.id))
+    .where(and(...conditions))
+    .orderBy(sql`case when ${schema.links.domainId} is null then 0 else 1 end`)
+    .limit(1);
+
+  if (!link) throw new HTTPException(404, { message: "Link not found" });
+
+  const linkId = link.id;
   const onLink = and(eq(schema.clicks.orgId, orgId), eq(schema.clicks.linkId, linkId));
 
-  const [linkRows, totals, totalsPrev, recent, recentPrev, seriesRows, countries, referrers, devices, lastClickRow] = await Promise.all([
-    db.select().from(schema.links).where(and(eq(schema.links.id, linkId), eq(schema.links.orgId, orgId))),
+  const [totals, totalsPrev, recent, recentPrev, seriesRows, countries, referrers, devices, lastClickRow] = await Promise.all([
     db.select({ clicks: sql<number>`count(*)` }).from(schema.clicks).where(onLink),
     db.select({ clicks: sql<number>`count(*)` }).from(schema.clicks).where(and(onLink, gte(schema.clicks.ts, prevSince), sql`${schema.clicks.ts} < ${since}`)),
     db.select({ n: sql<number>`count(*)` }).from(schema.clicks).where(and(onLink, gte(schema.clicks.ts, since7))),
@@ -583,13 +673,7 @@ orgRoutes.get("/:orgId/links/:linkId/stats", requireOrgRole("member"), async (c)
     db.select({ ts: schema.clicks.ts }).from(schema.clicks).where(onLink).orderBy(desc(schema.clicks.ts)).limit(1),
   ]);
 
-  const link = linkRows[0];
-  if (!link) throw new HTTPException(404, { message: "Link not found" });
-
-  const totalClicks = totals[0]?.clicks ?? 0;
-  const totalClicksPrev = totalsPrev[0]?.clicks ?? 0;
-  const clicks7dVal = recent[0]?.n ?? 0;
-  const clicks7dPrev = recentPrev[0]?.n ?? 0;
+  const { totalClicks, totalClicksPrev, clicks7dVal, clicks7dPrev } = clickTotals(totals, totalsPrev, recent, recentPrev);
 
   return c.json({
     totalClicks,
@@ -602,6 +686,7 @@ orgRoutes.get("/:orgId/links/:linkId/stats", requireOrgRole("member"), async (c)
     referrers: cleanDim(referrers).map((r) => ({ ...r, key: r.key ? referrerHost(r.key) || r.key : "direct" })),
     devices: cleanDim(devices),
     slug: link.slug,
+    domain: link.domain,
     destination: link.destination,
     title: link.title,
     createdAt: link.createdAt,
@@ -636,13 +721,7 @@ inviteRoutes.get("/:token", async (c) => {
 
 inviteRoutes.post("/:token/accept", requireUser, async (c) => {
   const db = c.var.db;
-  const rows = await db
-    .select()
-    .from(schema.invites)
-    .where(eq(schema.invites.token, c.req.param("token")));
-  const invite = rows[0];
-  if (!invite || invite.acceptedBy || invite.expiresAt < now())
-    throw new HTTPException(404, { message: "Invite not found or expired" });
+  const invite = await lookupInvite(db, c.req.param("token"));
 
   // Email invites are bound to the address they were sent to; link invites
   // (email null) are bearer links anyone signed in can accept.

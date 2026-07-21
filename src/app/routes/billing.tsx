@@ -255,7 +255,7 @@ export function BillingPage() {
         <Card className="max-w-2xl">
           <div className="flex flex-col gap-4">
             <div className="flex items-center justify-between">
-              <p className="text-[11px] tracking-wider text-muted uppercase">
+              <p className="text-2xs tracking-wider text-muted uppercase">
                 Plan
               </p>
               <Badge color={plan === "free" ? "muted" : "mint"}>
@@ -347,7 +347,7 @@ export function BillingPage() {
         {org && (
           <Card className="max-w-2xl">
             <div className="flex flex-col gap-1">
-              <p className="mb-2 text-[11px] tracking-wider text-muted uppercase">
+              <p className="mb-2 text-2xs tracking-wider text-muted uppercase">
                 Usage: {org.name}
               </p>
               <p className="text-sm text-muted tnum">

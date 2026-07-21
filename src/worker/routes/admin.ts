@@ -5,7 +5,7 @@ import * as schema from "../db/schema";
 import type { AppEnv } from "../env";
 import { requireAdmin } from "../auth";
 import { now } from "../util";
-import { PLAN_LIMITS, type AdminOverview, type AdminOrgRow, type AdminOrgDetail, type AdminUserRow, type OrgPlan } from "@/shared/types";
+import { PLAN_LIMITS, type AdminUsage, type AdminOrgRow, type AdminOrgDetail, type AdminUserRow, type OrgPlan } from "@/shared/types";
 import { fillSeries, computeDelta, deleteOrgCascade } from "./orgs";
 import { orgPlan } from "../plan";
 
@@ -54,9 +54,9 @@ function cumulativeSeries(
   return result;
 }
 
-/* ─────────── /overview ─────────── */
+/* ─────────── /usage ─────────── */
 
-adminRoutes.get("/overview", async (c) => {
+adminRoutes.get("/usage", async (c) => {
   const db = c.var.db;
   const days = 30;
   const cumDays = 90;
@@ -363,7 +363,7 @@ adminRoutes.get("/overview", async (c) => {
     tableSize,
     tableGrowth,
     tableProjectedDays,
-  } satisfies AdminOverview);
+  } satisfies AdminUsage);
 });
 
 adminRoutes.get("/orgs", async (c) => {

@@ -79,21 +79,22 @@ export interface User {
   polarSubscriptionCurrentPeriodEnd: number | null;
 }
 
-export interface UserOrg {
-  id: string;
-  name: string;
-  role: OrgRole;
-  // Effective plan for this org = its owner's plan (not the caller's).
-  plan: OrgPlan;
-  // Org-level QR defaults; "" = built-in default.
+export interface QrOverrides {
   qrLogo: string;
   qrStyle: string;
   qrColor: string;
   qrCorner: string;
   qrBg: string;
   qrEyeColor: string;
-  /** Logo footprint ratio; null = built-in default (QR_DEFAULT_LOGO_SIZE). */
   qrLogoSize: number | null;
+}
+
+export interface UserOrg extends QrOverrides {
+  id: string;
+  name: string;
+  role: OrgRole;
+  // Effective plan for this org = its owner's plan (not the caller's).
+  plan: OrgPlan;
 }
 
 export interface CurrentUser {
@@ -132,7 +133,7 @@ export interface AppConfig {
   appHost: string;
 }
 
-export interface LinkDTO {
+export interface LinkDTO extends QrOverrides {
   id: string;
   domainId: string | null;
   /** hostname of the custom domain, null = shared default domain */
@@ -145,19 +146,13 @@ export interface LinkDTO {
   utmCampaign: string;
   utmTerm: string;
   utmContent: string;
-  qrLogo: string;
-  /** Per-link QR overrides; "" = inherit the org's defaults. */
-  qrStyle: string;
-  qrColor: string;
-  qrCorner: string;
-  qrBg: string;
-  qrEyeColor: string;
-  qrLogoSize: number | null;
   createdAt: number;
   clicks: number;
+  /** User id of the creator, null when that account is gone. */
+  createdBy: string | null;
 }
 
-export interface LinkInput {
+export type LinkInput = {
   domainId?: string | null;
   slug?: string;
   destination: string;
@@ -167,14 +162,7 @@ export interface LinkInput {
   utmCampaign?: string;
   utmTerm?: string;
   utmContent?: string;
-  qrLogo?: string;
-  qrStyle?: string;
-  qrColor?: string;
-  qrCorner?: string;
-  qrBg?: string;
-  qrEyeColor?: string;
-  qrLogoSize?: number | null;
-}
+} & Partial<QrOverrides>;
 
 export interface SeriesPoint {
   day: string;
@@ -198,7 +186,11 @@ export interface OrgStats {
   totalLinks: number;
   clicks7d: number;
   rangeDays: number; // analytics window for this org's plan
+  /** Whether the returned series is bucketed by day or by hour. */
+  bucket: "day" | "hour";
   series: SeriesPoint[];
+  /** 24 hour buckets for the last 24 hours, populated when bucket is "hour". */
+  hourSeries: SeriesPoint[];
   totalClicksDelta: DeltaValue | null;
   clicks7dDelta: DeltaValue | null;
   topLinks: { id: string; slug: string; title: string; clicks: number }[];
@@ -213,13 +205,29 @@ export interface OrgStats {
   heatmap: HeatmapRow[];
   /** Clicks grouped by utm_campaign (non-empty only). */
   campaigns: { campaign: string; clicks: number }[];
+  /** Clicks grouped by utm_source (non-empty only). */
+  sources: { source: string; clicks: number }[];
+  /** Clicks grouped by utm_medium (non-empty only). */
+  mediums: { medium: string; clicks: number }[];
 }
 
 export interface HeatmapRow {
-  /** 0=Sunday … 6=Saturday */
+  /** 0=Monday … 6=Sunday */
   dayOfWeek: number;
   hour: number;
   clicks: number;
+}
+
+/** One row of the org's recent-clicks feed on the dashboard. */
+export interface RecentClick {
+  id: number;
+  ts: number;
+  country: string;
+  /** Referrer host, "" for direct/unknown traffic. */
+  referrer: string;
+  device: string;
+  slug: string;
+  domain: string | null;
 }
 
 export interface LinkStats {
@@ -233,6 +241,7 @@ export interface LinkStats {
   referrers: TopEntry[];
   devices: TopEntry[];
   slug: string;
+  domain: string | null;
   destination: string;
   title: string;
   createdAt: number;
@@ -240,7 +249,7 @@ export interface LinkStats {
   createdBy: string | null;
 }
 
-export interface AdminOverview {
+export interface AdminUsage {
   users: number;
   orgs: number;
   links: number;

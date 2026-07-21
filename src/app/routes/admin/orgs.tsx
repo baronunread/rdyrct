@@ -56,14 +56,14 @@ function OrgDetailDialog({
           ) : (
             <>
               <Card>
-                <p className="mb-3 text-[11px] tracking-wider text-muted uppercase">
+                <p className="mb-3 text-2xs tracking-wider text-muted uppercase">
                   Clicks per day · 30d
                 </p>
                 <AreaChart data={detail.data.series} />
               </Card>
 
               <div>
-                <p className="mb-2 text-[11px] tracking-wider text-muted uppercase">
+                <p className="mb-2 text-2xs tracking-wider text-muted uppercase">
                   Members
                 </p>
                 <Table>
@@ -89,7 +89,7 @@ function OrgDetailDialog({
               </div>
 
               <div>
-                <p className="mb-2 text-[11px] tracking-wider text-muted uppercase">
+                <p className="mb-2 text-2xs tracking-wider text-muted uppercase">
                   Links
                 </p>
                 <Table>

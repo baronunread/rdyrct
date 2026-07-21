@@ -44,6 +44,9 @@ const RequireAdmin = lazy(() =>
 const Dashboard = lazy(() =>
   import("./routes/dashboard").then((m) => ({ default: m.Dashboard })),
 );
+const Analytics = lazy(() =>
+  import("./routes/analytics").then((m) => ({ default: m.Analytics })),
+);
 const LinksPage = lazy(() =>
   import("./routes/links").then((m) => ({ default: m.LinksPage })),
 );
@@ -62,9 +65,9 @@ const DomainsPage = lazy(() =>
 const SettingsPage = lazy(() =>
   import("./routes/settings").then((m) => ({ default: m.SettingsPage })),
 );
-const AdminOverviewPage = lazy(() =>
-  import("./routes/admin/overview").then((m) => ({
-    default: m.AdminOverviewPage,
+const AdminUsagePage = lazy(() =>
+  import("./routes/admin/usage").then((m) => ({
+    default: m.AdminUsagePage,
   })),
 );
 const AdminOrgsPage = lazy(() =>
@@ -117,8 +120,9 @@ createRoot(document.getElementById("root")!).render(
                 }
               >
                 <Route path="/dashboard" element={<Dashboard />} />
+                <Route path="/analytics" element={<Analytics />} />
                 <Route path="/links" element={<LinksPage />} />
-                <Route path="/links/:linkId" element={<LinkDetailPage />} />
+                <Route path="/links/:slug" element={<LinkDetailPage />} />
                 <Route path="/members" element={<MembersPage />} />
                 <Route path="/billing" element={<BillingPage />} />
                 <Route path="/domains" element={<DomainsPage />} />
@@ -127,7 +131,7 @@ createRoot(document.getElementById("root")!).render(
                   path="/admin"
                   element={
                     <RequireAdmin>
-                      <AdminOverviewPage />
+                      <AdminUsagePage />
                     </RequireAdmin>
                   }
                 />

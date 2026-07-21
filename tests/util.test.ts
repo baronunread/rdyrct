@@ -2,10 +2,12 @@ import { describe, expect, test } from "bun:test";
 import {
   buildDestination,
   deviceFromUA,
+  EMPTY_UTM,
   isValidHttpUrl,
   randomSlug,
   referrerHost,
   RESERVED_SLUGS,
+  resolveUtm,
   SLUG_RE,
   uid,
   validateQrFields,
@@ -53,7 +55,7 @@ describe("SLUG_RE / RESERVED_SLUGS", () => {
   });
 
   test("app routes are reserved", () => {
-    for (const kw of ["api", "dashboard", "links", "domains", "members", "billing", "settings", "admin", "login", "signup"])
+    for (const kw of ["api", "dashboard", "analytics", "links", "domains", "members", "billing", "settings", "admin", "login", "signup"])
       expect(RESERVED_SLUGS.has(kw)).toBe(true);
     expect(RESERVED_SLUGS.has("some-random-word")).toBe(false);
   });
@@ -88,8 +90,66 @@ describe("buildDestination", () => {
     expect(out).toBe("https://example.com/");
   });
 
+  test("existing query params and fragment survive appended UTM", () => {
+    const out = new URL(
+      buildDestination("https://example.com/p?foo=1&bar=2#frag", UTM),
+    );
+    expect(out.searchParams.get("foo")).toBe("1");
+    expect(out.searchParams.get("bar")).toBe("2");
+    expect(out.hash).toBe("#frag");
+    expect(out.searchParams.get("utm_source")).toBe("newsletter");
+    expect(out.searchParams.get("utm_campaign")).toBe("launch");
+  });
+
   test("invalid destinations are returned untouched", () => {
     expect(buildDestination("not a url", UTM)).toBe("not a url");
+  });
+});
+
+describe("resolveUtm", () => {
+  test("extracts params from the destination (quick-create paste)", () => {
+    const out = resolveUtm(
+      "https://example.com/p?utm_source=nl&utm_medium=email&utm_campaign=launch&foo=1",
+      {},
+    );
+    expect(out).toEqual({
+      ...EMPTY_UTM,
+      utmSource: "nl",
+      utmMedium: "email",
+      utmCampaign: "launch",
+    });
+  });
+
+  test("destination params win over explicit fields", () => {
+    const out = resolveUtm("https://example.com/?utm_campaign=from-url", {
+      utmCampaign: "from-field",
+    });
+    expect(out.utmCampaign).toBe("from-url");
+  });
+
+  test("fields fill gaps the destination lacks", () => {
+    const out = resolveUtm("https://example.com/?utm_campaign=launch", {
+      utmSource: "  newsletter  ",
+    });
+    expect(out.utmCampaign).toBe("launch");
+    expect(out.utmSource).toBe("newsletter");
+  });
+
+  test("undefined fields fall back to the base, empty strings clear", () => {
+    const base = { ...EMPTY_UTM, utmCampaign: "old", utmSource: "keep" };
+    const out = resolveUtm("https://example.com/", { utmCampaign: "" }, base);
+    expect(out.utmCampaign).toBe("");
+    expect(out.utmSource).toBe("keep");
+  });
+
+  test("invalid destinations resolve from fields and base only", () => {
+    const out = resolveUtm(
+      "not a url",
+      { utmMedium: "email" },
+      { ...EMPTY_UTM, utmSource: "keep" },
+    );
+    expect(out.utmMedium).toBe("email");
+    expect(out.utmSource).toBe("keep");
   });
 });
 

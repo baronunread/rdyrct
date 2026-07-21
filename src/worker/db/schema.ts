@@ -101,19 +101,23 @@ export const verification = sqliteTable(
 
 /* ---------------- app tables ---------------- */
 
+function qrColumns() {
+  return {
+    qrLogo: text("qr_logo").notNull().default(""),
+    qrStyle: text("qr_style").notNull().default(""),
+    qrColor: text("qr_color").notNull().default(""),
+    qrCorner: text("qr_corner").notNull().default(""),
+    qrBg: text("qr_bg").notNull().default(""),
+    qrEyeColor: text("qr_eye_color").notNull().default(""),
+    qrLogoSize: real("qr_logo_size"),
+  } as const;
+}
+
 export const orgs = sqliteTable("orgs", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),
   // No plan/billing columns: an org's plan is its owner's plan (plan.ts).
-  // QR appearance defaults for the org's links; '' = built-in default.
-  qrLogo: text("qr_logo").notNull().default(""),
-  qrStyle: text("qr_style").notNull().default(""),
-  qrColor: text("qr_color").notNull().default(""),
-  qrCorner: text("qr_corner").notNull().default(""),
-  qrBg: text("qr_bg").notNull().default(""),
-  qrEyeColor: text("qr_eye_color").notNull().default(""),
-  // Logo footprint ratio (qr-code-styling imageSize); NULL = built-in default.
-  qrLogoSize: real("qr_logo_size"),
+  ...qrColumns(),
   createdAt: integer("created_at").notNull(),
 });
 
@@ -196,14 +200,7 @@ export const links = sqliteTable(
     utmCampaign: text("utm_campaign").notNull().default(""),
     utmTerm: text("utm_term").notNull().default(""),
     utmContent: text("utm_content").notNull().default(""),
-    qrLogo: text("qr_logo").notNull().default(""),
-    // Per-link QR appearance overrides; '' = inherit the org's defaults.
-    qrStyle: text("qr_style").notNull().default(""),
-    qrColor: text("qr_color").notNull().default(""),
-    qrCorner: text("qr_corner").notNull().default(""),
-    qrBg: text("qr_bg").notNull().default(""),
-    qrEyeColor: text("qr_eye_color").notNull().default(""),
-    qrLogoSize: real("qr_logo_size"),
+    ...qrColumns(),
     createdBy: text("created_by").references(() => user.id, {
       onDelete: "set null",
     }),

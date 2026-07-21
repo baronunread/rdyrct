@@ -228,7 +228,7 @@ export function MembersPage() {
 
       {canManage && !!invites.data?.length && (
         <Card className="mt-4">
-          <p className="mb-3 text-[11px] tracking-wider text-muted uppercase">
+          <p className="mb-3 text-2xs tracking-wider text-muted uppercase">
             Pending invites
           </p>
           <ul className="flex flex-col gap-2">
@@ -309,7 +309,7 @@ function InviteByEmailCard({
   return (
     <Card className="mb-4">
       <div className="mb-3 flex items-center gap-1.5">
-        <p className="text-[11px] tracking-wider text-muted uppercase">
+        <p className="text-2xs tracking-wider text-muted uppercase">
           Invite by email
         </p>
         <Tooltip

@@ -224,7 +224,7 @@ export function LandingMockup() {
               <div className="flex h-40 w-40 items-center justify-center rounded-lg border border-dashed border-border text-muted">
                 <QrCode size={28} />
               </div>
-              <p className="text-[11px] tracking-wide text-muted uppercase">
+              <p className="text-2xs tracking-wide text-muted uppercase">
                 QR included
               </p>
             </div>
@@ -341,7 +341,7 @@ export function LandingMockup() {
                   <QRPreview url={SHORT_HREF} logo={ACME_LOGO} size={160} />
                 </div>
               </m.div>
-              <p className="text-[11px] tracking-wide text-muted uppercase">
+              <p className="text-2xs tracking-wide text-muted uppercase">
                 Scan me, it works
               </p>
             </div>

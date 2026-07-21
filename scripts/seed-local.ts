@@ -409,30 +409,67 @@ async function seed() {
   }
   console.log(`  links published to KV: ${links.length}`);
 
-  /* clicks: recency-weighted, weekday-aware history */
+  /* clicks: random per-day spikes + random per-hour spikes */
   let totalClicks = 0;
   const clickValues: string[] = [];
+  const baseHourWeights = [
+    1, 0.5, 0.3, 0.2, 0.2, 0.5,
+    1, 1.5, 3, 5, 6, 6,
+    4, 3, 5, 6, 5, 4,
+    3, 2, 1.5, 1, 0.8, 0.5,
+  ] as const;
+
   for (const link of links) {
     if (link.weight === 0) continue;
     const ageDays = Math.min(
       CONFIG.clickDays,
       Math.max(1, Math.floor((now - link.createdAt) / day)),
     );
-    const n = Math.min(1500, Math.round(link.weight * ageDays * (0.3 + rand())));
-    for (let i = 0; i < n; i++) {
-      // Bias toward recent days; quadratic pull toward "today".
-      const back = Math.floor(Math.pow(rand(), 1.8) * ageDays);
-      const ts = new Date(now - back * day);
-      const dow = ts.getUTCDay();
-      if ((dow === 0 || dow === 6) && rand() < 0.45) continue; // quieter weekends
-      const t =
-        ts.getTime() - ts.getTime() % day +
-        pickW([[9, 2], [10, 3], [11, 3], [12, 2], [14, 3], [15, 3], [16, 2], [18, 1], [20, 1], [8, 1], [22, 1]] as const) * 3_600_000 +
-        randInt(0, 3_599_999);
-      clickValues.push(
-        `(${q(link.id)}, ${q(link.org.id)}, ${Math.min(t, now)}, ${q(pickW(COUNTRIES))}, ${q(pickW(REFERRERS))}, ${q(pickW(DEVICES))})`,
+
+    // Per-day multipliers: most days are quiet, a few spike hard.
+    const dailyMult: number[] = [];
+    for (let d = 0; d < ageDays; d++) {
+      let m = 0;
+      if (rand() < 0.32) {
+        m = rand() < 0.2 ? randInt(8, 25) : randInt(1, 5);
+      }
+      dailyMult.push(m);
+    }
+    const maxIdx = dailyMult.indexOf(Math.max(...dailyMult));
+    if (dailyMult[maxIdx] === 0) {
+      dailyMult[randInt(0, ageDays - 1)] = randInt(8, 25);
+    }
+
+    // A couple of hot hours for this link, plus a common business-hour bump.
+    const spikeHours = new Set<number>();
+    if (rand() < 0.7) spikeHours.add(randInt(8, 18));
+    if (rand() < 0.35) spikeHours.add(randInt(0, 23));
+
+    for (let d = 0; d < ageDays; d++) {
+      if (dailyMult[d] === 0) continue;
+      const recency = Math.pow((ageDays - d) / ageDays, 1.5) * 0.6 + 0.4;
+      const n = Math.min(
+        60,
+        Math.max(0, Math.round(link.weight * dailyMult[d] * recency * (0.5 + rand()))),
       );
-      totalClicks++;
+      if (n <= 0) continue;
+
+      for (let i = 0; i < n; i++) {
+        const base = new Date(now - d * day);
+        const dayStart = base.getTime() - base.getTime() % day;
+        const hourWeights = baseHourWeights.map((w, h) =>
+          [h, w * (spikeHours.has(h) ? randInt(5, 25) : 1)] as const
+        );
+        const h = pickW(hourWeights);
+        const t = Math.min(
+          now,
+          dayStart + h * 3_600_000 + randInt(0, 3_599_999),
+        );
+        clickValues.push(
+          `(${q(link.id)}, ${q(link.org.id)}, ${t}, ${q(pickW(COUNTRIES))}, ${q(pickW(REFERRERS))}, ${q(pickW(DEVICES))})`,
+        );
+        totalClicks++;
+      }
     }
   }
   for (let i = 0; i < clickValues.length; i += 400) {

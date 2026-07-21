@@ -16,7 +16,8 @@ import type {
   DomainDTO,
   OrgStats,
   LinkStats,
-  AdminOverview,
+  RecentClick,
+  AdminUsage,
   AdminOrgRow,
   AdminOrgDetail,
   AdminUserRow,
@@ -95,21 +96,42 @@ export function useLinkMutations(orgId: string) {
   return { create, update, remove };
 }
 
-export const useStats = (orgId: string, days?: number) =>
+export const useStats = (
+  orgId: string,
+  days?: number,
+  bucket?: "day" | "hour",
+) =>
   useQuery<OrgStats>({
-    queryKey: ["stats", orgId, days],
+    queryKey: ["stats", orgId, days, bucket],
     queryFn: () => {
-      const params = days ? `?days=${days}` : "";
-      return api<OrgStats>(`/orgs/${orgId}/stats${params}`);
+      const params = new URLSearchParams();
+      if (days) params.set("days", String(days));
+      if (bucket) params.set("bucket", bucket);
+      const qs = params.size ? `?${params.toString()}` : "";
+      return api<OrgStats>(`/orgs/${orgId}/stats${qs}`);
     },
     enabled: !!orgId,
   });
 
-export const useLinkStats = (orgId: string, linkId: string | null) =>
+export const useLinkStats = (orgId: string, slug: string | null, domain?: string | null) =>
   useQuery<LinkStats>({
-    queryKey: ["linkStats", orgId, linkId],
-    queryFn: () => api(`/orgs/${orgId}/links/${linkId}/stats`),
-    enabled: !!orgId && !!linkId,
+    queryKey: ["linkStats", orgId, slug, domain],
+    queryFn: () => {
+      let path = `/orgs/${orgId}/links/stats/${encodeURIComponent(slug!)}`;
+      if (domain) path += `?domain=${encodeURIComponent(domain)}`;
+      return api<LinkStats>(path);
+    },
+    enabled: !!orgId && !!slug,
+  });
+
+// The dashboard's live pulse: a cheap indexed read (limit rows by ts desc),
+// so it polls while the page is open.
+export const useRecentClicks = (orgId: string, limit = 8) =>
+  useQuery<RecentClick[]>({
+    queryKey: ["recentClicks", orgId, limit],
+    queryFn: () => api(`/orgs/${orgId}/clicks?limit=${limit}`),
+    enabled: !!orgId,
+    refetchInterval: 30_000,
   });
 
 export const useMembers = (orgId: string) =>
@@ -196,10 +218,10 @@ export function usePortal() {
   });
 }
 
-export const useAdminOverview = () =>
-  useQuery<AdminOverview>({
-    queryKey: ["admin", "overview"],
-    queryFn: () => api("/admin/overview"),
+export const useAdminUsage = () =>
+  useQuery<AdminUsage>({
+    queryKey: ["admin", "usage"],
+    queryFn: () => api("/admin/usage"),
   });
 
 export const useAdminOrgs = () =>

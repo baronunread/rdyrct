@@ -141,7 +141,7 @@ function DomainsCard({
     return (
       <Card className="max-w-2xl">
         <div className="flex flex-col gap-3">
-          <p className="text-[11px] tracking-wider text-muted uppercase">
+          <p className="text-2xs tracking-wider text-muted uppercase">
             Custom domains
           </p>
           <p className="text-sm text-muted">
@@ -162,7 +162,7 @@ function DomainsCard({
       <div className="flex flex-col gap-6 lg:flex-row lg:items-start">
         <Card className="w-full max-w-2xl">
           <div className="flex flex-col gap-4">
-            <p className="text-[11px] tracking-wider text-muted uppercase">
+            <p className="text-2xs tracking-wider text-muted uppercase">
               Custom domains
             </p>
 
@@ -243,7 +243,7 @@ function DomainsCard({
         </Card>
 
         <aside className="w-full shrink-0 lg:w-72">
-          <p className="text-[11px] tracking-wider text-muted uppercase">
+          <p className="text-2xs tracking-wider text-muted uppercase">
             How it works
           </p>
           <ol className="mt-3 flex flex-col gap-3">

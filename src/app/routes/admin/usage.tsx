@@ -1,7 +1,7 @@
-import { useAdminOverview } from "../../lib/hooks";
+import { useAdminUsage } from "../../lib/hooks";
 import { AreaChart, BarList, StatCard } from "../../components/charts";
 import { Badge, Card, PageHeader, Table, Th, Td } from "../../ui/misc";
-import { AdminOverviewSkeleton } from "../../components/skeletons";
+import { AdminUsageSkeleton } from "../../components/skeletons";
 import { linkLabel } from "./util";
 import type { OrgPlan } from "@/shared/types";
 
@@ -17,7 +17,7 @@ function AdminTableCard({
 }) {
   return (
     <Card className="lg:col-span-2">
-      <p className="mb-3 text-[11px] tracking-wider text-muted uppercase">
+      <p className="mb-3 text-2xs tracking-wider text-muted uppercase">
         {title}
       </p>
       <Table>{children}</Table>
@@ -25,12 +25,12 @@ function AdminTableCard({
   );
 }
 
-export function AdminOverviewPage() {
-  const overview = useAdminOverview();
-  if (overview.isLoading) return <AdminOverviewSkeleton />;
-  if (!overview.data)
+export function AdminUsagePage() {
+  const usage = useAdminUsage();
+  if (usage.isLoading) return <AdminUsageSkeleton />;
+  if (!usage.data)
     return <p className="text-sm text-danger">Could not load usage.</p>;
-  const s = overview.data;
+  const s = usage.data;
 
   const projectedDate =
     s.tableProjectedDays !== null && s.tableProjectedDays > 0
@@ -64,7 +64,7 @@ export function AdminOverviewPage() {
       {/* ── Business row ── */}
       <div className="mt-4 grid gap-4 lg:grid-cols-3">
         <Card>
-          <p className="mb-3 text-[11px] tracking-wider text-muted uppercase">
+          <p className="mb-3 text-2xs tracking-wider text-muted uppercase">
             Plan mix
           </p>
           <BarList
@@ -81,13 +81,13 @@ export function AdminOverviewPage() {
           )}
         </Card>
         <Card>
-          <p className="mb-3 text-[11px] tracking-wider text-muted uppercase">
+          <p className="mb-3 text-2xs tracking-wider text-muted uppercase">
             Signups per day · 30d
           </p>
           <AreaChart data={s.signups} />
         </Card>
         <Card>
-          <p className="mb-3 text-[11px] tracking-wider text-muted uppercase">
+          <p className="mb-3 text-2xs tracking-wider text-muted uppercase">
             Cumulative users · 90d
           </p>
           <AreaChart data={s.cumulativeUsers} />
@@ -97,13 +97,13 @@ export function AdminOverviewPage() {
       {/* ── Growth row ── */}
       <div className="mt-4 grid gap-4 lg:grid-cols-2">
         <Card>
-          <p className="mb-3 text-[11px] tracking-wider text-muted uppercase">
+          <p className="mb-3 text-2xs tracking-wider text-muted uppercase">
             Clicks per day · 30d
           </p>
           <AreaChart data={s.series} />
         </Card>
         <Card>
-          <p className="mb-3 text-[11px] tracking-wider text-muted uppercase">
+          <p className="mb-3 text-2xs tracking-wider text-muted uppercase">
             Orgs created per day · 90d
           </p>
           <AreaChart data={s.orgsCreatedPerWeek} />
@@ -113,7 +113,7 @@ export function AdminOverviewPage() {
       {/* ── Top lists ── */}
       <div className="mt-4 grid gap-4 lg:grid-cols-2">
         <Card>
-          <p className="mb-3 text-[11px] tracking-wider text-muted uppercase">
+          <p className="mb-3 text-2xs tracking-wider text-muted uppercase">
             Top organizations · 30d
           </p>
           <BarList
@@ -133,7 +133,7 @@ export function AdminOverviewPage() {
           />
         </Card>
         <Card>
-          <p className="mb-3 text-[11px] tracking-wider text-muted uppercase">
+          <p className="mb-3 text-2xs tracking-wider text-muted uppercase">
             Top links · 30d
           </p>
           <BarList
@@ -149,13 +149,13 @@ export function AdminOverviewPage() {
       {/* ── Health row ── */}
       <div className="mt-4 grid gap-4 lg:grid-cols-2">
         <Card>
-          <p className="mb-3 text-[11px] tracking-wider text-muted uppercase">
+          <p className="mb-3 text-2xs tracking-wider text-muted uppercase">
             Bot clicks per day · 30d
           </p>
           <AreaChart data={s.botSeries} />
         </Card>
         <Card>
-          <p className="mb-3 text-[11px] tracking-wider text-muted uppercase">
+          <p className="mb-3 text-2xs tracking-wider text-muted uppercase">
             Table size
           </p>
           <div className="flex items-baseline gap-3">

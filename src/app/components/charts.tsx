@@ -1,7 +1,8 @@
 import { useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { Link } from "react-router";
-import type { SeriesPoint, DeltaValue, HeatmapRow } from "@/shared/types";
+import type { SeriesPoint, DeltaValue, HeatmapRow, TopEntry } from "@/shared/types";
+import { Card } from "../ui/misc";
 
 // Chart geometry constants — shared by every AreaChart render.
 const WIDTH = 640; // viewBox units; scales to container
@@ -15,9 +16,11 @@ const PAD = { top: 12, right: 8, bottom: 22, left: 34 };
 export function AreaChart({
   data,
   height = 180,
+  tickFormat = (day) => day.slice(5),
 }: {
   data: SeriesPoint[];
   height?: number;
+  tickFormat?: (day: string) => string;
 }) {
   const ref = useRef<SVGSVGElement>(null);
   const [hover, setHover] = useState<number | null>(null);
@@ -96,7 +99,7 @@ export function AreaChart({
             fontSize="9"
             fill="var(--muted)"
           >
-            {t.day.slice(5)}
+            {tickFormat(t.day)}
           </text>
         ))}
         <path d={area} fill="var(--chart)" opacity="0.14" />
@@ -172,17 +175,19 @@ export function StatCard({
   value,
   delta,
   prefix,
+  suffix,
 }: {
   label: string;
   value: number;
   delta?: DeltaValue | null;
   prefix?: string;
+  suffix?: string;
 }) {
   return (
     <div className="rounded-lg border border-border bg-surface p-4">
-      <p className="truncate text-[11px] tracking-wider text-muted uppercase">{label}</p>
+      <p className="truncate text-2xs tracking-wider text-muted uppercase">{label}</p>
       <p className="tnum mt-1 text-2xl font-bold">
-        {prefix}{value.toLocaleString()}
+        {prefix}{value.toLocaleString()}{suffix}
       </p>
       {delta && delta.pct !== null && (
         <DeltaBadge pct={delta.pct} />
@@ -221,7 +226,7 @@ function Sparkline({ data, height = 28 }: { data: SeriesPoint[]; height?: number
   );
 }
 
-const HEATMAP_DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const HEATMAP_DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const HEATMAP_HOURS = Array.from({ length: 24 }, (_, i) => i);
 
 /**
@@ -235,7 +240,7 @@ export function Heatmap({ data }: { data: HeatmapRow[] }) {
 
   return (
     <div className="overflow-x-auto">
-      <div className="grid grid-cols-[auto_repeat(24,1fr)] gap-px text-[9px]">
+      <div className="grid grid-cols-[auto_repeat(24,1fr)] gap-px text-4xs">
         <div />
         {HEATMAP_HOURS.map((h) => (
           <div key={h} className="text-center text-muted">{h}</div>
@@ -263,25 +268,25 @@ export function Heatmap({ data }: { data: HeatmapRow[] }) {
 }
 
 /**
- * Compact link card used in dashboard dead/decaying link lists.
+ * Compact link card used in the analytics dead/decaying link lists.
  */
 export function LinkListCard({
   title,
   links,
 }: {
   title: string;
-  links: { id: string; slug: string; title: string; suffix?: string }[];
+  links: { id: string; slug: string; title: string; suffix?: string; domain?: string | null }[];
 }) {
   return (
     <div className="rounded-lg border border-border bg-surface p-4">
-      <p className="mb-2 text-[11px] tracking-wider text-muted uppercase">{title}</p>
+      <p className="mb-2 text-2xs tracking-wider text-muted uppercase">{title}</p>
       {links.length === 0 ? (
         <p className="py-2 text-sm text-muted">No data yet</p>
       ) : (
         <ul className="flex flex-col gap-2">
           {links.map((l) => (
             <li key={l.id} className="flex items-center justify-between text-xs">
-              <Link to={`/links/${l.id}`} className="truncate text-accent hover:underline">
+              <Link to={l.domain ? `/links/${l.slug}?domain=${encodeURIComponent(l.domain)}` : `/links/${l.slug}`} className="truncate text-accent hover:underline">
                 /{l.slug}{l.title ? ` · ${l.title}` : ""}
               </Link>
               {l.suffix && <span className="tnum text-muted">{l.suffix}</span>}
@@ -290,5 +295,45 @@ export function LinkListCard({
         </ul>
       )}
     </div>
+  );
+}
+
+const COUNTRY_NAMES = new Intl.DisplayNames("en", { type: "region" });
+const fmtCountry = (key: string) => {
+  try { return COUNTRY_NAMES.of(key) ?? key; } catch { return key; }
+};
+
+export function ClickBreakdown({
+  countries,
+  referrers,
+  devices,
+}: {
+  countries: TopEntry[];
+  referrers: TopEntry[];
+  devices: TopEntry[];
+}) {
+  return (
+    <>
+      <Card>
+        <p className="mb-3 text-2xs tracking-wider text-muted uppercase">
+          Countries
+        </p>
+        <BarList
+          items={countries.map((c) => ({ ...c, key: fmtCountry(c.key) }))}
+        />
+      </Card>
+      <Card>
+        <p className="mb-3 text-2xs tracking-wider text-muted uppercase">
+          Referrers
+        </p>
+        <BarList items={referrers} />
+      </Card>
+      <Card>
+        <p className="mb-3 text-2xs tracking-wider text-muted uppercase">
+          Devices
+        </p>
+        <BarList items={devices} />
+      </Card>
+    </>
   );
 }

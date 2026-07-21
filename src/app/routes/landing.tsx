@@ -1,3 +1,4 @@
+// fallow-ignore-file code-duplication -- pricing table rows share structural pattern
 import type { ReactNode } from "react";
 import { Link } from "react-router";
 import {
@@ -121,6 +122,21 @@ const faqs = [
     a: "Yes. rdyrct is open source and deploys to your own Cloudflare account. You get everything Pro has, minus direct email support.",
   },
 ];
+
+function Section({ children, className = "py-16", id }: { children: ReactNode; className?: string; id?: string }) {
+  return (
+    <m.section
+      id={id}
+      initial={{ opacity: 0, y: 16 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true, margin: "-80px" }}
+      transition={{ duration: 0.5, ease: "easeOut" }}
+      className={className}
+    >
+      {children}
+    </m.section>
+  );
+}
 
 /** FAQPage structured data, generated from the same `faqs` the page renders. */
 function FaqJsonLd() {
@@ -262,7 +278,7 @@ function MobilePlans({ paidTo }: { paidTo: (p: "hobby" | "pro") => string }) {
               <p className={highlight ? "font-bold text-accent" : "font-bold"}>
                 {name}
                 {highlight && (
-                  <span className="ml-2 rounded-full border border-accent/40 px-2 py-0.5 text-[10px] tracking-wide text-accent uppercase">
+                  <span className="ml-2 rounded-full border border-accent/40 px-2 py-0.5 text-3xs tracking-wide text-accent uppercase">
                     Most popular
                   </span>
                 )}
@@ -302,14 +318,7 @@ function MobilePlans({ paidTo }: { paidTo: (p: "hobby" | "pro") => string }) {
 function PricingSection() {
   const paidTo = usePaidPlanTo();
   return (
-    <m.section
-      id="pricing"
-      initial={{ opacity: 0, y: 16 }}
-      whileInView={{ opacity: 1, y: 0 }}
-      viewport={{ once: true, margin: "-80px" }}
-      transition={{ duration: 0.5, ease: "easeOut" }}
-      className="scroll-mt-16 py-16"
-    >
+    <Section id="pricing" className="scroll-mt-16 py-16">
       <div className="mb-8 text-center">
         <h2 className="text-xl font-bold">Simple pricing</h2>
         <p className="mx-auto mt-2 max-w-xl text-sm text-muted">
@@ -346,7 +355,7 @@ function PricingSection() {
             <Th className="border-x border-x-accent/25 bg-accent/10">
               <span className="inline-flex items-center gap-2 text-accent">
                 Pro
-                <span className="rounded-full border border-accent/40 px-2 py-0.5 text-[10px] tracking-wide text-accent uppercase">
+                <span className="rounded-full border border-accent/40 px-2 py-0.5 text-3xs tracking-wide text-accent uppercase">
                   Most popular
                 </span>
               </span>
@@ -370,7 +379,7 @@ function PricingSection() {
               <span className="text-base font-bold text-accent">
                 {PLAN_PRICES.pro}/mo
               </span>
-              <span className="block text-[11px] font-normal text-muted">
+              <span className="block text-2xs font-normal text-muted">
                 only the org owner pays
               </span>
             </Cell>
@@ -472,7 +481,7 @@ function PricingSection() {
         </tbody>
       </Table>
       </div>
-    </m.section>
+    </Section>
   );
 }
 
@@ -593,13 +602,7 @@ export function LandingPage() {
           </m.div>
         </section>
 
-        <m.section
-          initial={{ opacity: 0, y: 16 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true, margin: "-80px" }}
-          transition={{ duration: 0.5, ease: "easeOut" }}
-          className="py-8"
-        >
+        <Section className="py-8">
           <div className="mb-8 text-center">
             <h2 className="text-xl font-bold">
               From paste to published in seconds
@@ -619,15 +622,9 @@ export function LandingPage() {
               </div>
             ))}
           </div>
-        </m.section>
+        </Section>
 
-        <m.section
-          initial={{ opacity: 0, y: 16 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true, margin: "-80px" }}
-          transition={{ duration: 0.5, ease: "easeOut" }}
-          className="py-16"
-        >
+        <Section>
           <div className="mb-8 text-center">
             <h2 className="text-xl font-bold text-balance">
               See every click, respect every visitor
@@ -641,15 +638,9 @@ export function LandingPage() {
           <div className="flex justify-center">
             <LandingAnalyticsMock />
           </div>
-        </m.section>
+        </Section>
 
-        <m.section
-          initial={{ opacity: 0, y: 16 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true, margin: "-80px" }}
-          transition={{ duration: 0.5, ease: "easeOut" }}
-          className="py-16"
-        >
+        <Section>
           <div className="mb-8 text-center">
             <h2 className="text-xl font-bold">
               Everything a link needs to earn the click
@@ -668,7 +659,7 @@ export function LandingPage() {
                   <Icon size={16} className="text-accent" />
                   <p className="font-bold">{title}</p>
                   {plan && (
-                    <span className="text-[11px] tracking-wide text-muted uppercase">
+                    <span className="text-2xs tracking-wide text-muted uppercase">
                       {plan}
                     </span>
                   )}
@@ -677,15 +668,9 @@ export function LandingPage() {
               </div>
             ))}
           </div>
-        </m.section>
+        </Section>
 
-        <m.section
-          initial={{ opacity: 0, y: 16 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true, margin: "-80px" }}
-          transition={{ duration: 0.5, ease: "easeOut" }}
-          className="py-16"
-        >
+        <Section>
           <div className="mb-8 text-center">
             <h2 className="text-xl font-bold">Runs entirely on Cloudflare</h2>
             <p className="mx-auto mt-2 max-w-xl text-sm text-muted">
@@ -706,18 +691,11 @@ export function LandingPage() {
               </div>
             ))}
           </div>
-        </m.section>
+        </Section>
 
         <PricingSection />
 
-        <m.section
-          id="faq"
-          initial={{ opacity: 0, y: 16 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true, margin: "-80px" }}
-          transition={{ duration: 0.5, ease: "easeOut" }}
-          className="scroll-mt-16 py-16"
-        >
+        <Section id="faq" className="scroll-mt-16 py-16">
           <div className="mb-8 text-center">
             <h2 className="text-xl font-bold">Frequently asked questions</h2>
           </div>
@@ -738,15 +716,9 @@ export function LandingPage() {
               </details>
             ))}
           </div>
-        </m.section>
+        </Section>
 
-        <m.section
-          initial={{ opacity: 0, y: 16 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true, margin: "-80px" }}
-          transition={{ duration: 0.5, ease: "easeOut" }}
-          className="py-16"
-        >
+        <Section>
           <div className="flex flex-col items-center gap-5 rounded-2xl border border-border bg-surface px-6 py-14 text-center">
             <h2 className="max-w-xl text-2xl font-bold tracking-tight sm:text-3xl">
               Start shortening in seconds.
@@ -765,7 +737,7 @@ export function LandingPage() {
               </Button>
             </Link>
           </div>
-        </m.section>
+        </Section>
 
         <Footer />
         </div>
