@@ -14,11 +14,20 @@
 	// Create the real resources with:
 	//   wrangler kv namespace create LINKS
 	//   wrangler d1 create rdyrct
+	//   wrangler r2 bucket create rdyrct-qr-logos
 	// then paste the ids below. Local dev works with the placeholders.
 	"kv_namespaces": [
 		{
 			"binding": "LINKS",
 			"id": "aa2cec55f8964d0fba2c23e1e3b5fea1"
+		}
+	],
+	// QR logo images; D1 rows store only the serving URL (see
+	// routes/qr-logos.ts).
+	"r2_buckets": [
+		{
+			"binding": "QR_LOGOS",
+			"bucket_name": "rdyrct-qr-logos"
 		}
 	],
 	// Secrets (wrangler secret put …): BETTER_AUTH_SECRET, SUPERADMIN_EMAIL,

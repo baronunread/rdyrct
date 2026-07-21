@@ -194,11 +194,14 @@ describe("isValidHttpUrl", () => {
 });
 
 describe("validateQrFields", () => {
+  const ORG = "aB3dE5fG7hJ9kL1m";
+  const valid = (fields: Parameters<typeof validateQrFields>[0]) =>
+    validateQrFields(fields, ORG);
   test("accepts empty and valid fields", () => {
-    expect(() => validateQrFields({})).not.toThrow();
+    expect(() => valid({})).not.toThrow();
     expect(() =>
-      validateQrFields({
-        qrLogo: "data:image/png;base64,AAAA",
+      valid({
+        qrLogo: `/api/orgs/${ORG}/qr-logo/n2P4r6T8v0x2z4B6.png`,
         qrStyle: "rounded",
         qrCorner: "dot",
         qrBg: "transparent",
@@ -210,19 +213,23 @@ describe("validateQrFields", () => {
 
   const expect400 = (fields: Parameters<typeof validateQrFields>[0]) => {
     try {
-      validateQrFields(fields);
+      valid(fields);
       throw new Error("should have thrown");
     } catch (err) {
       expect((err as { status: number }).status).toBe(400);
     }
   };
 
-  test("rejects a non-image logo", () => {
+  test("rejects logos that are not uploaded serving URLs", () => {
     expect400({ qrLogo: "https://example.com/logo.png" });
+    expect400({ qrLogo: "data:image/png;base64,AAAA" });
+    expect400({ qrLogo: `/api/orgs/${ORG}/qr-logo/no-extension` });
   });
 
-  test("rejects an oversized logo", () => {
-    expect400({ qrLogo: "data:image/png;base64," + "a".repeat(200_000) });
+  test("rejects a logo uploaded by a different org", () => {
+    expect400({
+      qrLogo: "/api/orgs/zzz9y8x7w6v5u4t3s/qr-logo/n2P4r6T8v0x2z4B6.png",
+    });
   });
 
   test("rejects unknown dot/corner styles", () => {

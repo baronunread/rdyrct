@@ -131,7 +131,7 @@ function QrCustomization({
         </span>
         <QrLogoInput
           value={form.qrLogo ?? ""}
-          onLoad={(dataUri) => setForm({ ...form, qrLogo: dataUri })}
+          onLoad={(url) => setForm({ ...form, qrLogo: url })}
           onClear={() => setForm({ ...form, qrLogo: "" })}
         />
       </div>

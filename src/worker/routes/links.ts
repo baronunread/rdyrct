@@ -5,6 +5,7 @@ import * as schema from "../db/schema";
 import type { AppEnv, DB } from "../env";
 import { requireOrgRole } from "../auth";
 import { publishLink, unpublishLink } from "../kv";
+import { deleteQrLogo } from "../r2";
 import { orgPlan } from "../plan";
 import {
   uid,
@@ -21,7 +22,7 @@ import type { LinkDTO, LinkInput } from "@/shared/types";
 // Mounted at /api/orgs/:orgId/links
 export const linkRoutes = new Hono<AppEnv>();
 
-function validateInput(body: LinkInput, partial = false) {
+function validateInput(body: LinkInput, orgId: string, partial = false) {
   if (!partial || body.destination !== undefined) {
     if (!body.destination || !isValidHttpUrl(body.destination))
       throw new HTTPException(400, {
@@ -36,7 +37,7 @@ function validateInput(body: LinkInput, partial = false) {
     if (RESERVED_SLUGS.has(body.slug.toLowerCase()))
       throw new HTTPException(400, { message: "That slug is reserved" });
   }
-  validateQrFields(body);
+  validateQrFields(body, orgId);
 }
 
 // NB: literal `links.id`; interpolating the drizzle column renders an
@@ -170,9 +171,9 @@ linkRoutes.get("/", requireOrgRole("member"), async (c) => {
 
 linkRoutes.post("/", requireOrgRole("member"), async (c) => {
   const body = await c.req.json<LinkInput>();
-  validateInput(body);
-  const db = c.var.db;
   const orgId = c.req.param("orgId")!;
+  validateInput(body, orgId);
+  const db = c.var.db;
 
   const [{ plan, limits }, linkCount] = await Promise.all([
     orgPlan(db, orgId),
@@ -251,9 +252,9 @@ linkRoutes.post("/", requireOrgRole("member"), async (c) => {
 
 linkRoutes.patch("/:linkId", requireOrgRole("member"), async (c) => {
   const body = await c.req.json<LinkInput>();
-  validateInput(body, true);
-  const db = c.var.db;
   const orgId = c.req.param("orgId")!;
+  validateInput(body, orgId, true);
+  const db = c.var.db;
   const { limits } = await orgPlan(db, orgId);
   if (hasQrOverride(body) && !limits.qr)
     throw new HTTPException(402, {
@@ -311,6 +312,9 @@ linkRoutes.patch("/:linkId", requireOrgRole("member"), async (c) => {
 
   if (moved) await unpublishLink(c.env, existing.slug, oldHostname);
   await publishLink(c.env, updated, hostname);
+  // The old logo object is unreferenced once the row points at the new one.
+  if (body.qrLogo !== undefined && body.qrLogo !== existing.qrLogo)
+    await deleteQrLogo(c.env, existing.qrLogo);
 
   const clicks = await db
     .select({ n: sql<number>`count(*)` })
@@ -326,5 +330,6 @@ linkRoutes.delete("/:linkId", requireOrgRole("member"), async (c) => {
   const hostname = await domainHostname(db, orgId, link.domainId);
   await db.delete(schema.links).where(eq(schema.links.id, link.id));
   await unpublishLink(c.env, link.slug, hostname);
+  await deleteQrLogo(c.env, link.qrLogo);
   return c.json({ ok: true });
 });

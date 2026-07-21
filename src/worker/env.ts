@@ -4,6 +4,7 @@ import type * as schema from "./db/schema";
 export interface Env {
   DB: D1Database;
   LINKS: KVNamespace;
+  QR_LOGOS: R2Bucket;
   ASSETS: Fetcher;
 
   /* auth + email (secrets unless noted) */

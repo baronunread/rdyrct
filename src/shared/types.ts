@@ -66,6 +66,8 @@ export const QR_DEFAULT_CORNER = "extra-rounded";
 export const QR_DEFAULT_BG = "#ffffff";
 /** Logo footprint (qr-code-styling imageSize ratio) when the org doesn't set one. */
 export const QR_DEFAULT_LOGO_SIZE = 0.35;
+/** Max upload size for a QR logo image (stored in R2, served from /qr-logo/*). */
+export const QR_LOGO_MAX_BYTES = 2 * 1024 * 1024;
 
 export interface User {
   id: string;

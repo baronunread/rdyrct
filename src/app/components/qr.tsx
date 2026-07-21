@@ -12,8 +12,12 @@ import {
   QR_DEFAULT_COLOR,
   QR_DEFAULT_CORNER,
   QR_DEFAULT_LOGO_SIZE,
+  QR_LOGO_MAX_BYTES,
 } from "@/shared/types";
 import { useToast } from "../ui/toast";
+import { Spinner } from "../ui/spinner";
+import { uploadQrLogo } from "../lib/api";
+import { useCurrentOrg } from "../lib/current-org";
 
 /** All of a QR code's appearance, already resolved to concrete values. */
 interface QrLook {
@@ -228,13 +232,10 @@ export function QrColorField({
   );
 }
 
-/** data-URI logos are stored inline in D1 — keep them tiny. */
-const MAX_QR_LOGO_BYTES = 96 * 1024;
-
 /**
- * Dropzone-style image picker that reads a file into a data URI (≤ 96 KB).
- * Shared by the org QR defaults (Settings) and the per-link override
- * (link editor).
+ * Dropzone-style image picker that uploads a logo to R2 (≤ 2 MB) and reports
+ * the serving URL. Shared by the org QR defaults (Settings) and the per-link
+ * override (link editor).
  */
 export function QrLogoInput({
   value,
@@ -242,31 +243,38 @@ export function QrLogoInput({
   onClear,
   disabled,
 }: {
-  /** current logo data URI ("" = none) — shows the loaded state */
+  /** current logo URL ("" = none) — shows the loaded state */
   value?: string;
-  onLoad: (dataUri: string) => void;
+  onLoad: (url: string) => void;
   /** called when the user clicks the remove button inside the dropzone */
   onClear?: () => void;
   disabled?: boolean;
 }) {
   const toast = useToast();
+  const { org } = useCurrentOrg();
   const inputRef = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
+  const [busy, setBusy] = useState(false);
 
-  const readFile = (file: File | undefined) => {
-    if (!file || disabled) return;
+  const readFile = async (file: File | undefined) => {
+    if (!file || disabled || busy || !org) return;
     // drag-dropped files bypass the input's accept filter, so check the type
     if (!file.type.startsWith("image/")) {
       toast("Logo must be an image file", "error");
       return;
     }
-    if (file.size > MAX_QR_LOGO_BYTES) {
-      toast("Logo too large (max 96 KB)", "error");
+    if (file.size > QR_LOGO_MAX_BYTES) {
+      toast("Logo too large (max 2 MB)", "error");
       return;
     }
-    const reader = new FileReader();
-    reader.onload = () => onLoad(reader.result as string);
-    reader.readAsDataURL(file);
+    setBusy(true);
+    try {
+      onLoad(await uploadQrLogo(org.id, file));
+    } catch (e) {
+      toast((e as Error).message, "error");
+    } finally {
+      setBusy(false);
+    }
   };
 
   const open = () => inputRef.current?.click();
@@ -278,8 +286,8 @@ export function QrLogoInput({
         tabIndex={disabled ? -1 : 0}
         aria-label="Upload a logo image"
         aria-disabled={disabled || undefined}
-        onClick={() => !disabled && open()}
-        onKeyDown={(e) => !disabled && (e.key === "Enter" || e.key === " ") && open()}
+        onClick={() => !disabled && !busy && open()}
+        onKeyDown={(e) => !disabled && !busy && (e.key === "Enter" || e.key === " ") && open()}
         onDragOver={(e) => {
           e.preventDefault();
           setDragging(true);
@@ -309,7 +317,12 @@ export function QrLogoInput({
             e.target.value = "";
           }}
         />
-        {value ? (
+        {busy ? (
+          <>
+            <Spinner />
+            <span>Uploading…</span>
+          </>
+        ) : value ? (
           <>
             <img
               src={value}
@@ -329,11 +342,11 @@ export function QrLogoInput({
             <span>
               Drop an image or <span className="text-accent">browse</span>
             </span>
-            <span className="text-3xs text-muted/70">up to 96 KB</span>
+            <span className="text-3xs text-muted/70">up to 2 MB</span>
           </>
         )}
       </div>
-      {value && onClear && (
+      {value && onClear && !busy && (
         <button
           type="button"
           aria-label="Remove logo"

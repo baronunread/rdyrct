@@ -147,26 +147,48 @@ export function isValidHttpUrl(value: string): boolean {
 import { HTTPException } from "hono/http-exception";
 import { QR_CORNER_STYLES, QR_DOT_STYLES } from "@/shared/types";
 
-/** data-URI QR logos are stored inline in D1, so keep them small. */
-const MAX_QR_LOGO_BYTES = 96 * 1024;
+/**
+ * Logo images live in R2; D1 rows store only the serving URL. Upload and
+ * serving both go through /api/orgs/:orgId/qr-logo (org members only).
+ */
+export const qrLogoUrl = (orgId: string, file: string) =>
+  `/api/orgs/${orgId}/qr-logo/${file}`;
+
+const QR_LOGO_URL_RE =
+  /^\/api\/orgs\/[A-Za-z0-9]+\/qr-logo\/[A-Za-z0-9]+\.[a-z0-9]+$/;
+
+/** R2 key (`{orgId}/{file}`) for a serving URL, null for anything else. */
+export function qrLogoKeyFromUrl(url: string): string | null {
+  const m =
+    /^\/api\/orgs\/([A-Za-z0-9]+)\/qr-logo\/([A-Za-z0-9]+\.[a-z0-9]+)$/.exec(
+      url,
+    );
+  return m ? `${m[1]}/${m[2]}` : null;
+}
 
 const HEX_COLOR_RE = /^#[0-9a-fA-F]{6}$/;
 
 /** Shared validation for org QR defaults and per-link overrides ('' = inherit). */
-export function validateQrFields(fields: {
-  qrLogo?: string;
-  qrStyle?: string;
-  qrColor?: string;
-  qrCorner?: string;
-  qrBg?: string;
-  qrEyeColor?: string;
-  qrLogoSize?: number | null;
-}) {
+export function validateQrFields(
+  fields: {
+    qrLogo?: string;
+    qrStyle?: string;
+    qrColor?: string;
+    qrCorner?: string;
+    qrBg?: string;
+    qrEyeColor?: string;
+    qrLogoSize?: number | null;
+  },
+  orgId: string,
+) {
   if (fields.qrLogo) {
-    if (!fields.qrLogo.startsWith("data:image/"))
-      throw new HTTPException(400, { message: "Logo must be an image" });
-    if (fields.qrLogo.length > MAX_QR_LOGO_BYTES * 1.37)
-      throw new HTTPException(400, { message: "Logo too large (max ~96 KB)" });
+    if (!QR_LOGO_URL_RE.test(fields.qrLogo))
+      throw new HTTPException(400, { message: "Logo must be an uploaded image" });
+    // A logo may only be referenced by the org that uploaded it.
+    if (!fields.qrLogo.startsWith(`/api/orgs/${orgId}/`))
+      throw new HTTPException(400, {
+        message: "Logo must belong to this organization",
+      });
   }
   if (
     fields.qrStyle &&

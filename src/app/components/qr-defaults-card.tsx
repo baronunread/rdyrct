@@ -179,7 +179,7 @@ export function QrDefaultsCard() {
 
               <div>
                 <span className="mb-1.5 block text-2xs tracking-wider text-muted uppercase">
-                  Logo (PNG/SVG, ≤ 96 KB)
+                  Logo (PNG/SVG, ≤ 2 MB)
                 </span>
                 <QrLogoInput
                   value={qrLogo}

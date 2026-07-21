@@ -25,6 +25,12 @@ bun add <pkg>               # dependencies
 bunx agent-browser          # real-browser checks: screenshots, clicking through pages. Use it for any visual verification; do not hand-roll headless Chrome
 ```
 
+**Local Cloudflare state**: while `bun run dev` runs, the Explorer API at
+`http://localhost:5173/cdn-cgi/explorer/api` exposes the local KV, R2, D1,
+Durable Objects, and Workflows. Fetch that URL for the OpenAPI schema, then use
+it to list, query, and manage local resources (e.g. inspect D1 rows or KV keys
+without wrangler CLI calls).
+
 **Two TypeScript projects; run BOTH after changes:**
 
 ```sh
@@ -80,6 +86,17 @@ Shell writes to repo files are sandboxed; edit through the editor tools, not
   `domain:{host}`. D1 is authoritative; KV is the redirect hot path. Clicks are
   recorded via `waitUntil` after the redirect is sent, and store only
   country/referrer/device/timestamp, **never an IP address**.
+- **QR logos live in R2** (binding `QR_LOGOS`, bucket `rdyrct-qr-logos`), keyed
+  `{orgId}/{fileId}.{ext}`. The `qr_logo` columns store only the serving URL
+  (`/api/orgs/<orgId>/qr-logo/<file>`), never image bytes. Upload and serving
+  are the same org-scoped route (`POST`/`GET /api/orgs/:orgId/qr-logo[/:file]`),
+  gated to org members: only the signed-in app ever fetches a logo (QR
+  previews/downloads bake the image in client-side), and a row may only
+  reference its own org's logos. Paid plans, ≤ 2 MB =
+  `QR_LOGO_MAX_BYTES` in `src/shared/types.ts`. Serving is immutable and
+  `private`-cached. Deletes follow the row: replace/clear/delete on
+  links and orgs removes the object; org teardown wipes the `{orgId}/` prefix
+  (`src/worker/r2.ts`).
 
 ## Conventions
 
@@ -136,8 +153,8 @@ and vars live in `wrangler.jsonc`; local dev reads everything from `.dev.vars`
 ```
 migrations/            D1 schema (numbered SQL migrations, applied in order)
 src/worker/            Hono API, BetterAuth, KV publishing, redirect hot path
-  routes/              auth (user), orgs, links, domains, billing, admin
-  plan.ts util.ts email.ts password.ts kv.ts
+  routes/              auth (user), orgs, links, qr-logos, domains, billing, admin
+  plan.ts util.ts email.ts password.ts kv.ts r2.ts
 src/shared/types.ts    DTOs + PLAN_LIMITS (shared worker ↔ app)
 src/app/               React SPA
   routes/  ui/  components/  lib/
