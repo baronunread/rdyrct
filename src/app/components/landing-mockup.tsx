@@ -24,13 +24,9 @@ const LONG_URL = "https://example.com/very/long/path?utm_campaign=launch";
 // hero must not depict one on the shared host.
 const SHORT_URL = "go.acme.com/launch";
 const SHORT_HREF = `https://${SHORT_URL}`;
-// Inline SVG mark for the fictional "Acme" brand — shows off the custom-logo
-// feature while staying CSP-safe (no remote images).
-const ACME_LOGO =
-  "data:image/svg+xml," +
-  encodeURIComponent(
-    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48"><rect width="48" height="48" rx="12" fill="#17151f"/><path d="M24 9 38.5 39h-6.9L24 22.6 16.4 39H9.5Z" fill="#fff"/></svg>',
-  );
+// SVG mark for the fictional "Acme" brand — shows off the custom-logo
+// feature. Served from /public so the browser caches it across loops.
+const ACME_LOGO = "/acme.svg";
 const BARS = [8, 14, 10, 18, 12, 22, 15, 26, 19, 30];
 
 type Phase = "typing" | "submitting" | "result" | "uploading" | "branded";
@@ -67,7 +63,7 @@ function ClickSparkline() {
  * The result zone keeps a constant height — a skeleton placeholder
  * mirrors the result's exact layout and crossfades in place — so the loop
  * never shifts the page layout. Built entirely from the app's own design
- * tokens so it stays theme-aware and CSP-safe (no images, no remote fonts).
+ * tokens so it stays theme-aware and CSP-safe (no remote images or fonts).
  */
 export function LandingMockup() {
   const reduce = useReducedMotion();
