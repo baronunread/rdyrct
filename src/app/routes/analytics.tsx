@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { Link } from "react-router";
 import { useStats } from "../lib/hooks";
 import { useCurrentOrg } from "../lib/current-org";
 import { PLAN_LIMITS } from "@/shared/types";
@@ -38,7 +37,6 @@ export function Analytics() {
   if (!stats.data)
     return <p className="text-sm text-danger">Could not load stats.</p>;
   const s = stats.data;
-  const noLinks = s.totalLinks === 0;
   const maxDays = PLAN_LIMITS[org.plan].analyticsDays;
   const presets = RANGE_PRESETS.filter((p) => p.days <= maxDays);
   const activeDays = range.days ?? s.rangeDays;
@@ -61,7 +59,7 @@ export function Analytics() {
     <div>
       <PageHeader
         title="Analytics"
-        sub={`Last ${s.rangeDays} days`}
+        sub={s.bucket === "hour" ? "Last 24 hours" : `Last ${s.rangeDays} days`}
         action={
           <div className="flex items-center gap-1.5">
             {presets.map((p) => (
@@ -81,20 +79,6 @@ export function Analytics() {
           </div>
         }
       />
-      {noLinks && (
-        <div className="mb-6 rounded-lg border border-accent/20 bg-accent/5 p-4 text-sm">
-          <p className="font-bold text-accent">Welcome to rdyrct</p>
-          <p className="mt-1 text-muted">
-            Create your first short link to see analytics here.
-          </p>
-          <Link
-            to="/dashboard"
-            className="mt-2 inline-block text-accent hover:underline"
-          >
-            Create a link
-          </Link>
-        </div>
-      )}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <StatCard
           label="Total clicks"

@@ -247,9 +247,19 @@ export function LandingMockup() {
                   Your short link
                 </p>
                 <div className="flex items-center gap-2">
-                  <span className="truncate font-mono text-base font-bold text-accent">
+                  {/* A working demo of the redirect: the "short link" opens
+                   * the typed destination in a new tab, just like the real
+                   * thing would. */}
+                  <a
+                    href={LONG_URL}
+                    target="_blank"
+                    rel="noreferrer"
+                    tabIndex={isResult ? 0 : -1}
+                    title="Try it: opens the destination like a real redirect"
+                    className="truncate font-mono text-base font-bold text-accent hover:underline"
+                  >
                     {SHORT_URL}
-                  </span>
+                  </a>
                   <button
                     type="button"
                     onClick={copy}

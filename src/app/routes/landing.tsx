@@ -14,6 +14,9 @@ import {
   Check,
   Code2,
   ChevronDown,
+  Target,
+  TrendingDown,
+  Activity,
 } from "lucide-react";
 import { LazyMotion, MotionConfig, domAnimation, m } from "motion/react";
 import { useState } from "react";
@@ -38,7 +41,7 @@ const steps = [
   },
   {
     title: "See who's clicking",
-    body: "Country, referrer, and device breakdowns update in real time, without storing a single IP.",
+    body: "Country, referrer, device, and campaign breakdowns update in real time, without storing a single IP.",
   },
 ];
 
@@ -46,7 +49,7 @@ const features = [
   {
     icon: Link2,
     title: "Short links + UTM builder",
-    body: "Turn unreadable URLs into short links, with a built-in UTM builder for clean campaign tracking. On every plan.",
+    body: "Turn unreadable URLs into short links, with a built-in UTM builder that also reads parameters already in the URL you paste. On every plan.",
   },
   {
     icon: QrCode,
@@ -68,7 +71,22 @@ const features = [
   {
     icon: BarChart3,
     title: "Click analytics",
-    body: "See what's working the moment it happens: country, referrer, and device breakdowns for every link.",
+    body: "Zoom from the last 24 hours to a full year, compare any period with the one before, and spot your busiest hours on the heatmap.",
+  },
+  {
+    icon: Target,
+    title: "Campaign tracking",
+    body: "UTM campaigns, sources, and mediums ranked by clicks, so you can see which channel earns its keep.",
+  },
+  {
+    icon: TrendingDown,
+    title: "Link health",
+    body: "rdyrct flags links that go quiet: zero clicks in 30 days, or a drop of more than half week over week.",
+  },
+  {
+    icon: Activity,
+    title: "Live click feed",
+    body: "A feed of the latest clicks sits on your dashboard and refreshes on its own: slug, referrer, country, and device.",
   },
   {
     icon: ShieldCheck,
@@ -112,6 +130,10 @@ const faqs = [
   {
     q: "How is rdyrct privacy-friendly?",
     a: "Click analytics store only country, referrer, device type, and timestamp. Never an IP address, never a precise location, and no cross-site tracking.",
+  },
+  {
+    q: "Can I track campaigns?",
+    a: "Yes. Tag links with the built-in UTM builder, or paste a URL that already has UTM parameters, and rdyrct ranks campaigns, sources, and mediums by clicks. The analytics page also shows trends against the previous period, an activity heatmap, and links that have gone quiet, with windows from 24 hours to a year depending on your plan.",
   },
   {
     q: "Can I use my own domain?",
@@ -630,9 +652,10 @@ export function LandingPage() {
               See every click, respect every visitor
             </h2>
             <p className="mx-auto mt-2 max-w-xl text-sm text-muted">
-              Country, device, and referrer breakdowns for every link, updating
-              in real time. Never an IP address, never cross-site tracking.
-              This is the actual dashboard.
+              Country, device, referrer, and campaign breakdowns for every
+              link, from the last 24 hours to the last year. Never an IP
+              address, never cross-site tracking. This is the actual
+              analytics page.
             </p>
           </div>
           <div className="flex justify-center">

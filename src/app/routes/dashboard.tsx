@@ -118,7 +118,10 @@ export function Dashboard() {
 
   return (
     <div>
-      <PageHeader title="Dashboard" sub="Paste a URL, get a short link" />
+      <PageHeader
+        title="Dashboard"
+        sub="See your organization's link activity at a glance"
+      />
 
       <QuickCreateCard
         create={create}
@@ -140,10 +143,8 @@ export function Dashboard() {
 
       <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-3">
         <TopLinksCard topLinks={s.topLinks} />
-        {(decaying.length > 0 || dead.length > 0) && (
-          <NeedsAttentionCard decaying={decaying} dead={dead} />
-        )}
-        {peak && <PeakCard peak={peak} rangeDays={s.rangeDays} />}
+        <NeedsAttentionCard decaying={decaying} dead={dead} />
+        <PeakCard peak={peak} rangeDays={s.rangeDays} />
       </div>
 
       <CreatedDialog
@@ -342,20 +343,24 @@ function NeedsAttentionCard({
       <p className="mb-3 text-2xs tracking-wider text-muted uppercase">
         Needs attention
       </p>
-      <div className="flex flex-col gap-3">
-        {decaying.length > 0 && (
-          <AttentionList
-            label="Decaying"
-            rows={decaying.map((l) => ({ ...l, suffix: `${l.drop}% drop` }))}
-          />
-        )}
-        {dead.length > 0 && (
-          <AttentionList
-            label="Dead"
-            rows={dead.map((l) => ({ ...l, suffix: "0 clicks in 30d" }))}
-          />
-        )}
-      </div>
+      {!decaying.length && !dead.length ? (
+        <p className="py-2 text-sm text-muted">No decaying or dead links</p>
+      ) : (
+        <div className="flex flex-col gap-3">
+          {decaying.length > 0 && (
+            <AttentionList
+              label="Decaying"
+              rows={decaying.map((l) => ({ ...l, suffix: `${l.drop}% drop` }))}
+            />
+          )}
+          {dead.length > 0 && (
+            <AttentionList
+              label="Dead"
+              rows={dead.map((l) => ({ ...l, suffix: "0 clicks in 30d" }))}
+            />
+          )}
+        </div>
+      )}
     </Card>
   );
 }
@@ -396,7 +401,7 @@ function PeakCard({
   peak,
   rangeDays,
 }: {
-  peak: { dayOfWeek: number; hour: number };
+  peak: { dayOfWeek: number; hour: number } | null;
   rangeDays: number;
 }) {
   return (
@@ -404,12 +409,18 @@ function PeakCard({
       <p className="mb-3 text-2xs tracking-wider text-muted uppercase">
         Peak activity
       </p>
-      <p className="tnum text-sm font-bold">
-        {WEEKDAYS[peak.dayOfWeek]} · {peak.hour}:00–{peak.hour + 1}:00
-      </p>
-      <p className="mt-1 text-xs text-muted">
-        Busiest hour over the last {rangeDays} days
-      </p>
+      {!peak ? (
+        <p className="py-2 text-sm text-muted">No clicks yet</p>
+      ) : (
+        <>
+          <p className="tnum text-sm font-bold">
+            {WEEKDAYS[peak.dayOfWeek]} · {peak.hour}:00–{peak.hour + 1}:00
+          </p>
+          <p className="mt-1 text-xs text-muted">
+            Busiest hour over the last {rangeDays} days
+          </p>
+        </>
+      )}
     </Card>
   );
 }

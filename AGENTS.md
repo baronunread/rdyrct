@@ -22,6 +22,7 @@ bunx emulate --service resend   # local Resend inbox on :4000 (read: curl :4000/
 bun run db:migrate:local    # apply migrations to local D1
 bun run db:reset:local      # wipe local D1 + KV, re-apply migrations (start from scratch; restart dev after)
 bun add <pkg>               # dependencies
+bunx agent-browser          # real-browser checks: screenshots, clicking through pages. Use it for any visual verification; do not hand-roll headless Chrome
 ```
 
 **Two TypeScript projects; run BOTH after changes:**
