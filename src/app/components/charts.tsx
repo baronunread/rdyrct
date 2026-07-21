@@ -1,5 +1,7 @@
 import { useMemo, useRef, useState } from "react";
-import type { SeriesPoint } from "@/shared/types";
+import type { ReactNode } from "react";
+import { Link } from "react-router";
+import type { SeriesPoint, DeltaValue, HeatmapRow } from "@/shared/types";
 
 // Chart geometry constants — shared by every AreaChart render.
 const WIDTH = 640; // viewBox units; scales to container
@@ -140,7 +142,7 @@ export function BarList({
   formatKey = (k) => k,
 }: {
   items: { key: string; clicks: number }[];
-  formatKey?: (key: string) => string;
+  formatKey?: (key: string) => string | ReactNode;
 }) {
   const max = Math.max(1, ...items.map((i) => i.clicks));
   if (!items.length)
@@ -148,7 +150,7 @@ export function BarList({
   return (
     <ul className="flex flex-col gap-2.5">
       {items.map((item) => (
-        <li key={item.key} title={`${formatKey(item.key)}: ${item.clicks}`}>
+        <li key={item.key} title={`${item.key}: ${item.clicks}`}>
           <div className="mb-1 flex items-baseline justify-between gap-3 text-xs">
             <span className="truncate">{formatKey(item.key)}</span>
             <span className="tnum text-muted">{item.clicks}</span>
@@ -165,11 +167,128 @@ export function BarList({
   );
 }
 
-export function StatCard({ label, value }: { label: string; value: number }) {
+export function StatCard({
+  label,
+  value,
+  delta,
+  prefix,
+}: {
+  label: string;
+  value: number;
+  delta?: DeltaValue | null;
+  prefix?: string;
+}) {
   return (
     <div className="rounded-lg border border-border bg-surface p-4">
-      <p className="text-[11px] tracking-wider text-muted uppercase">{label}</p>
-      <p className="tnum mt-1 text-2xl font-bold">{value.toLocaleString()}</p>
+      <p className="truncate text-[11px] tracking-wider text-muted uppercase">{label}</p>
+      <p className="tnum mt-1 text-2xl font-bold">
+        {prefix}{value.toLocaleString()}
+      </p>
+      {delta && delta.pct !== null && (
+        <DeltaBadge pct={delta.pct} />
+      )}
+    </div>
+  );
+}
+
+function DeltaBadge({ pct }: { pct: number }) {
+  const up = pct > 0;
+  const flat = pct === 0;
+  const color = flat ? "text-muted" : up ? "text-green-400" : "text-red-400";
+  return (
+    <span className={`tnum mt-1 inline-flex items-center gap-0.5 text-xs ${color}`}>
+      {up ? "+" : ""}{pct}%
+    </span>
+  );
+}
+
+/**
+ * Mini sparkline (no axes, no grid, no interaction, no label — just the line).
+ */
+function Sparkline({ data, height = 28 }: { data: SeriesPoint[]; height?: number }) {
+  if (!data.length) return null;
+  const w = 80;
+  const max = Math.max(1, ...data.map((d) => d.clicks));
+  const pts = data.map((d, i) => ({
+    x: data.length === 1 ? w / 2 : (i / (data.length - 1)) * w,
+    y: height - (d.clicks / max) * height,
+  }));
+  const d = pts.map((p, i) => `${i === 0 ? "M" : "L"}${p.x.toFixed(1)},${p.y.toFixed(1)}`).join("");
+  return (
+    <svg viewBox={`0 0 ${w} ${height}`} className="block w-full" role="img" aria-label="Sparkline">
+      <path d={d} fill="none" stroke="var(--chart)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+const HEATMAP_DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const HEATMAP_HOURS = Array.from({ length: 24 }, (_, i) => i);
+
+/**
+ * Day-of-week × hour-of-day activity heatmap. Sequential color scale from
+ * the --chart hue. Compact enough to live inside a card.
+ */
+export function Heatmap({ data }: { data: HeatmapRow[] }) {
+  const max = Math.max(1, ...data.map((r) => r.clicks));
+  const grid: (HeatmapRow | null)[][] = Array.from({ length: 7 }, () => Array(24).fill(null));
+  for (const row of data) grid[row.dayOfWeek][row.hour] = row;
+
+  return (
+    <div className="overflow-x-auto">
+      <div className="grid grid-cols-[auto_repeat(24,1fr)] gap-px text-[9px]">
+        <div />
+        {HEATMAP_HOURS.map((h) => (
+          <div key={h} className="text-center text-muted">{h}</div>
+        ))}
+        {HEATMAP_DAYS.map((day, di) => (
+          <>
+            <div key={day} className="pr-1.5 text-right text-muted">{day}</div>
+            {HEATMAP_HOURS.map((h) => {
+              const cell = grid[di][h];
+              const opacity = cell ? 0.1 + (cell.clicks / max) * 0.9 : 0;
+              return (
+                <div
+                  key={`${di}-${h}`}
+                  className="aspect-square rounded-sm"
+                  style={{ backgroundColor: `color-mix(in srgb, var(--chart) ${opacity * 100}%, transparent)` }}
+                  title={cell ? `${day} ${h}:00 — ${cell.clicks} clicks` : ""}
+                />
+              );
+            })}
+          </>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Compact link card used in dashboard dead/decaying link lists.
+ */
+export function LinkListCard({
+  title,
+  links,
+}: {
+  title: string;
+  links: { id: string; slug: string; title: string; suffix?: string }[];
+}) {
+  return (
+    <div className="rounded-lg border border-border bg-surface p-4">
+      <p className="mb-2 text-[11px] tracking-wider text-muted uppercase">{title}</p>
+      {links.length === 0 ? (
+        <p className="py-2 text-sm text-muted">No data yet</p>
+      ) : (
+        <ul className="flex flex-col gap-2">
+          {links.map((l) => (
+            <li key={l.id} className="flex items-center justify-between text-xs">
+              <Link to={`/links/${l.id}`} className="truncate text-accent hover:underline">
+                /{l.slug}{l.title ? ` · ${l.title}` : ""}
+              </Link>
+              {l.suffix && <span className="tnum text-muted">{l.suffix}</span>}
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }

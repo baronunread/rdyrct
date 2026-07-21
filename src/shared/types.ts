@@ -52,8 +52,6 @@ export const QR_DOT_STYLES = [
   "classy-rounded",
   "extra-rounded",
 ] as const;
-export type QrDotStyle = (typeof QR_DOT_STYLES)[number];
-
 /** Corner ('eye') shapes; "" means inherit/default (QR_DEFAULT_CORNER). */
 export const QR_CORNER_STYLES = [
   "extra-rounded",
@@ -62,8 +60,6 @@ export const QR_CORNER_STYLES = [
   "square",
   "classy",
 ] as const;
-export type QrCornerStyle = (typeof QR_CORNER_STYLES)[number];
-
 /** Built-in defaults when neither link nor org overrides them. */
 export const QR_DEFAULT_COLOR = "#17151f";
 export const QR_DEFAULT_CORNER = "extra-rounded";
@@ -190,16 +186,58 @@ export interface TopEntry {
   clicks: number;
 }
 
+export interface DeltaValue {
+  current: number;
+  previous: number;
+  /** Percentage change relative to the previous period, null when previous is 0. */
+  pct: number | null;
+}
+
 export interface OrgStats {
   totalClicks: number;
   totalLinks: number;
   clicks7d: number;
   rangeDays: number; // analytics window for this org's plan
   series: SeriesPoint[];
+  totalClicksDelta: DeltaValue | null;
+  clicks7dDelta: DeltaValue | null;
   topLinks: { id: string; slug: string; title: string; clicks: number }[];
   countries: TopEntry[];
   referrers: TopEntry[];
   devices: TopEntry[];
+  /** Links with zero clicks in the last 30 days. */
+  deadLinks: { id: string; slug: string; title: string }[];
+  /** Links whose last-7d clicks dropped more than 50% vs the prior 7d. */
+  decayingLinks: { id: string; slug: string; title: string; drop: number }[];
+  /** Day-of-week × hour-of-day heatmap over the window. */
+  heatmap: HeatmapRow[];
+  /** Clicks grouped by utm_campaign (non-empty only). */
+  campaigns: { campaign: string; clicks: number }[];
+}
+
+export interface HeatmapRow {
+  /** 0=Sunday … 6=Saturday */
+  dayOfWeek: number;
+  hour: number;
+  clicks: number;
+}
+
+export interface LinkStats {
+  totalClicks: number;
+  clicks7d: number;
+  rangeDays: number;
+  series: SeriesPoint[];
+  totalClicksDelta: DeltaValue | null;
+  clicks7dDelta: DeltaValue | null;
+  countries: TopEntry[];
+  referrers: TopEntry[];
+  devices: TopEntry[];
+  slug: string;
+  destination: string;
+  title: string;
+  createdAt: number;
+  lastClick: number | null;
+  createdBy: string | null;
 }
 
 export interface AdminOverview {
@@ -213,7 +251,7 @@ export interface AdminOverview {
   /** New accounts per day, same window as `series`. */
   signups: SeriesPoint[];
   /** Most-clicked orgs/links over the same window as `series`. */
-  topOrgs: { id: string; name: string; clicks: number }[];
+  topOrgs: { id: string; name: string; clicks: number; plan: OrgPlan }[];
   topLinks: {
     id: string;
     slug: string;
@@ -221,6 +259,40 @@ export interface AdminOverview {
     orgName: string;
     clicks: number;
   }[];
+  /** Business row */
+  planCounts: { free: number; hobby: number; pro: number };
+  mrr: number;
+  paidConversionRate: number | null;
+  signups7d: number;
+  signups7dDelta: DeltaValue | null;
+  wau: number;
+  /** Growth row */
+  cumulativeUsers: SeriesPoint[];
+  orgsCreatedPerWeek: SeriesPoint[];
+  /** Health row */
+  botSeries: SeriesPoint[];
+  anomalies: AnomalyEntry[];
+  capPressure: CapPressureEntry[];
+  tableSize: number;
+  tableGrowth: SeriesPoint[];
+  tableProjectedDays: number | null;
+}
+
+export interface AnomalyEntry {
+  orgId: string;
+  orgName: string;
+  clicks24h: number;
+  avg14d: number;
+  ratio: number;
+}
+
+export interface CapPressureEntry {
+  orgId: string;
+  orgName: string;
+  plan: OrgPlan;
+  linksPct: number;
+  membersPct: number;
+  domainsPct: number;
 }
 
 export interface AdminOrgRow {
@@ -268,3 +340,5 @@ export interface InvitePreview {
   orgName: string;
   role: OrgRole;
 }
+
+export type Sort = { key: string; dir: 1 | -1 };

@@ -12,8 +12,6 @@ import {
   QR_DEFAULT_COLOR,
   QR_DEFAULT_CORNER,
   QR_DEFAULT_LOGO_SIZE,
-  type QrCornerStyle,
-  type QrDotStyle,
 } from "@/shared/types";
 import { useToast } from "../ui/toast";
 
@@ -82,7 +80,7 @@ export function QRPreview({
   dotStyle?: string;
   /** hex ink color; empty/undefined = QR_DEFAULT_COLOR */
   color?: string;
-  /** QrCornerStyle for the finder 'eyes'; empty/undefined = QR_DEFAULT_CORNER */
+  /** Corner style for the finder 'eyes'; empty/undefined = QR_DEFAULT_CORNER */
   corner?: string;
   /** hex accent color for the eyes; empty/undefined = follows `color` */
   eyeColor?: string;
@@ -97,7 +95,7 @@ export function QRPreview({
 
   const ink = color || QR_DEFAULT_COLOR;
   const look: QrLook = {
-    dot: (dotStyle || "rounded") as QrDotStyle as DotType,
+    dot: (dotStyle || "rounded") as DotType,
     corner: corner || QR_DEFAULT_CORNER,
     ink,
     eye: eyeColor || ink,
