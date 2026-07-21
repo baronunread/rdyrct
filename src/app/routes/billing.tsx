@@ -6,7 +6,7 @@ import { useCurrentUser, useLinks, useMembers, useDomains, useCheckout, usePorta
 import { useCurrentOrg } from "../lib/current-org";
 import { PLAN_LIMITS, PLAN_PRICES, type OrgPlan } from "@/shared/types";
 import { Button } from "../ui/button";
-import { Badge, Card, PageHeader } from "../ui/misc";
+import { Badge, Card, PageHeader, Table, Th, Td } from "../ui/misc";
 import { Spinner } from "../ui/spinner";
 import { useToast } from "../ui/toast";
 
@@ -27,27 +27,27 @@ const PLAN_FEATURES = [
 
 function PlanFeatureComparison() {
   return (
-    <div className="my-3 overflow-x-auto">
-      <table className="w-full text-xs tnum">
+    <div className="my-3 text-xs tnum">
+      <Table>
         <thead>
-          <tr className="text-left text-muted">
-            <th className="pb-1 pr-4 font-medium" />
-            <th className="pb-1 pr-4 font-medium text-muted">Free</th>
-            <th className="pb-1 pr-4 font-medium text-accent">Hobby</th>
-            <th className="pb-1 font-medium text-accent">Pro</th>
+          <tr>
+            <Th />
+            <Th>Free</Th>
+            <Th className="text-accent">Hobby</Th>
+            <Th className="text-accent">Pro</Th>
           </tr>
         </thead>
-        <tbody className="text-text">
+        <tbody>
           {PLAN_FEATURES.map(([label, free, hobby, pro]) => (
-            <tr key={label} className="border-t border-border/50">
-              <td className="py-1.5 pr-4 text-muted">{label}</td>
-              <td className="py-1.5 pr-4">{free}</td>
-              <td className="py-1.5 pr-4 text-accent">{hobby}</td>
-              <td className="py-1.5 text-accent">{pro}</td>
+            <tr key={label}>
+              <Td className="text-muted">{label}</Td>
+              <Td>{free}</Td>
+              <Td className="text-accent">{hobby}</Td>
+              <Td className="text-accent">{pro}</Td>
             </tr>
           ))}
         </tbody>
-      </table>
+      </Table>
     </div>
   );
 }
@@ -362,7 +362,7 @@ export function BillingPage() {
                 {PLAN_LIMITS[org.plan].domains}
               </p>
               <p className="text-sm text-muted tnum">
-                Orgs you own {ownedOrgs} / {PLAN_LIMITS[me.data!.user.plan].orgs}
+                Orgs you own {ownedOrgs} / {PLAN_LIMITS[plan].orgs}
               </p>
             </div>
           </Card>

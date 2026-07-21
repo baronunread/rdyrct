@@ -5,6 +5,7 @@ import { useCurrentOrg } from "../lib/current-org";
 import { useConfig } from "../lib/hooks";
 import { shortUrl } from "../lib/api";
 import { AreaChart, StatCard, ClickBreakdown } from "../components/charts";
+import { NoOrgState } from "../components/no-org";
 import { Card } from "../ui/misc";
 
 export function LinkDetailPage() {
@@ -15,7 +16,7 @@ export function LinkDetailPage() {
   const { data: config } = useConfig();
   const stats = useLinkStats(org?.id ?? "", slug ?? null, domain);
 
-  if (!org) return null;
+  if (!org) return <NoOrgState />;
   if (stats.isLoading) return <p className="py-8 text-center text-sm text-muted">Loading…</p>;
   if (!stats.data)
     return <p className="py-8 text-center text-sm text-danger">Could not load link stats.</p>;

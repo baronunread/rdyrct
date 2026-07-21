@@ -23,6 +23,7 @@ import { DashboardSkeleton } from "../components/skeletons";
 import { NoOrgState } from "../components/no-org";
 import { QRPreview } from "../components/qr";
 import type { OrgQr } from "../components/link-editor";
+import { orgQrFrom } from "../lib/org-qr";
 import { Button } from "../ui/button";
 import { Dialog } from "../ui/dialog";
 import { Input } from "../ui/field";
@@ -70,15 +71,7 @@ export function Dashboard() {
     () => (domains.data ?? []).filter((d) => d.status === "active"),
     [domains.data],
   );
-  const orgQr: OrgQr = {
-    logo: org?.qrLogo ?? "",
-    style: org?.qrStyle ?? "",
-    color: org?.qrColor ?? "",
-    corner: org?.qrCorner ?? "",
-    bg: org?.qrBg ?? "",
-    eyeColor: org?.qrEyeColor ?? "",
-    logoSize: org?.qrLogoSize ?? null,
-  };
+  const orgQr = orgQrFrom(org);
 
   const [created, setCreated] = useState<LinkDTO | null>(null);
 

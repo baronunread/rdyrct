@@ -291,10 +291,10 @@ export function QrLogoInput({
           readFile(e.dataTransfer.files?.[0]);
         }}
         className={cn(
-          "flex w-full cursor-pointer flex-col items-center justify-center gap-1.5 rounded-md border border-dashed border-border bg-bg px-3 h-24 text-xs text-muted transition-colors select-none focus-visible:outline-2 focus-visible:outline-accent/60 disabled:cursor-default disabled:opacity-50",
+          "flex w-full cursor-pointer flex-col items-center justify-center gap-1.5 rounded-md border border-dashed border-border bg-bg px-3 h-24 text-xs text-muted transition-colors select-none focus-visible:outline-2 focus-visible:outline-accent/60 aria-disabled:cursor-default aria-disabled:opacity-50",
           dragging
             ? "border-accent text-text"
-            : "not-disabled:hover:border-accent/60 not-disabled:hover:text-text",
+            : "not-aria-disabled:hover:border-accent/60 not-aria-disabled:hover:text-text",
         )}
       >
         <input

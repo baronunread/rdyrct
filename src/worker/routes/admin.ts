@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
-import { eq, ne, gte, and, desc, lt, sql } from "drizzle-orm";
+import { eq, ne, gte, and, desc, lt, inArray, sql } from "drizzle-orm";
 import * as schema from "../db/schema";
 import type { AppEnv } from "../env";
 import { requireAdmin } from "../auth";
@@ -234,7 +234,7 @@ adminRoutes.get("/usage", async (c) => {
   // ── Growth row ──
 
   const cumulativeUsers = cumulativeSeries(userCreationRows, cumDays);
-  const orgsCreatedPerWeek = cumulativeSeries(orgCreationRows, cumDays);
+  const cumulativeOrgs = cumulativeSeries(orgCreationRows, cumDays);
 
   // ── Health row ──
 
@@ -268,7 +268,7 @@ adminRoutes.get("/usage", async (c) => {
     const orgRows = await db
       .select({ id: schema.orgs.id, name: schema.orgs.name })
       .from(schema.orgs)
-      .where(sql`${schema.orgs.id} in ${ids}`);
+      .where(inArray(schema.orgs.id, ids));
     const nameMap = new Map(orgRows.map((r) => [r.id, r.name]));
     for (const a of anomalies) a.orgName = nameMap.get(a.orgId) ?? "Unknown";
   }
@@ -356,7 +356,7 @@ adminRoutes.get("/usage", async (c) => {
     signups7dDelta,
     wau,
     cumulativeUsers,
-    orgsCreatedPerWeek,
+    cumulativeOrgs,
     botSeries,
     anomalies,
     capPressure,

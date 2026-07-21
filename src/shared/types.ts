@@ -277,7 +277,7 @@ export interface AdminUsage {
   wau: number;
   /** Growth row */
   cumulativeUsers: SeriesPoint[];
-  orgsCreatedPerWeek: SeriesPoint[];
+  cumulativeOrgs: SeriesPoint[];
   /** Health row */
   botSeries: SeriesPoint[];
   anomalies: AnomalyEntry[];

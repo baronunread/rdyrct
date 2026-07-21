@@ -22,6 +22,7 @@ import { QRPreview } from "../components/qr";
 import { NoOrgState } from "../components/no-org";
 import { sortRows } from "../lib/sort";
 import { LinkEditor, type OrgQr } from "../components/link-editor";
+import { orgQrFrom } from "../lib/org-qr";
 import { LinksTable } from "../components/links-table";
 
 const emptyForm: LinkInput = {
@@ -61,15 +62,7 @@ export function LinksPage() {
     () => (domains.data ?? []).filter((d) => d.status === "active"),
     [domains.data],
   );
-  const orgQr: OrgQr = {
-    logo: org?.qrLogo ?? "",
-    style: org?.qrStyle ?? "",
-    color: org?.qrColor ?? "",
-    corner: org?.qrCorner ?? "",
-    bg: org?.qrBg ?? "",
-    eyeColor: org?.qrEyeColor ?? "",
-    logoSize: org?.qrLogoSize ?? null,
-  };
+  const orgQr = orgQrFrom(org);
 
   const linkCount = links.data?.length ?? 0;
   const atLimit = linkCount >= limits.links;
@@ -263,7 +256,7 @@ export function LinksPage() {
 
 
 
-/** Per-link QR style overrides; "" / null fields inherit the org defaults. */
+/** Search + domain filter bar above the links table. */
 function LinksToolbar({
   search,
   onSearchChange,

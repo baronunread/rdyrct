@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { Fragment, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { Link } from "react-router";
 import type { SeriesPoint, DeltaValue, HeatmapRow, TopEntry } from "@/shared/types";
@@ -246,8 +246,8 @@ export function Heatmap({ data }: { data: HeatmapRow[] }) {
           <div key={h} className="text-center text-muted">{h}</div>
         ))}
         {HEATMAP_DAYS.map((day, di) => (
-          <>
-            <div key={day} className="pr-1.5 text-right text-muted">{day}</div>
+          <Fragment key={day}>
+            <div className="pr-1.5 text-right text-muted">{day}</div>
             {HEATMAP_HOURS.map((h) => {
               const cell = grid[di][h];
               const opacity = cell ? 0.1 + (cell.clicks / max) * 0.9 : 0;
@@ -260,7 +260,7 @@ export function Heatmap({ data }: { data: HeatmapRow[] }) {
                 />
               );
             })}
-          </>
+          </Fragment>
         ))}
       </div>
     </div>

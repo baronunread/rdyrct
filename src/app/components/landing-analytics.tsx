@@ -120,7 +120,7 @@ function StatTile({
       {delta != null && delta !== 0 && (
         <span
           className={`tnum mt-1 inline-block text-xs ${
-            delta > 0 ? "text-green-400" : "text-red-400"
+            delta > 0 ? "text-accent-2" : "text-danger"
           }`}
         >
           {delta > 0 ? "+" : ""}

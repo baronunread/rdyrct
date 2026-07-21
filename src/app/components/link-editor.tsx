@@ -67,13 +67,13 @@ function QrCustomization({
           />
         </Field>
         <QrColorField
-          label="Dots"
+          label="Dot color"
           value={form.qrColor ?? ""}
           fallback={orgQr.color || QR_DEFAULT_COLOR}
           onChange={(v) => setForm({ ...form, qrColor: v })}
         />
         <QrColorField
-          label="Eyes"
+          label="Eye color"
           value={form.qrEyeColor ?? ""}
           fallback={
             form.qrColor ||

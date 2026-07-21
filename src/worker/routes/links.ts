@@ -88,11 +88,7 @@ function hasQrOverride(body: LinkInput): boolean {
   );
 }
 
-/**
- * 409 with a machine-readable code so the editor can shake the dialog and
- * point at the slug field. On the shared domain the message also pitches
- * custom domains, where the whole namespace is the org's own.
- */
+/** Fetch a link inside an org or 404. */
 async function findLink(db: DB, orgId: string, linkId: string) {
   const rows = await db
     .select()
@@ -103,6 +99,11 @@ async function findLink(db: DB, orgId: string, linkId: string) {
   return link;
 }
 
+/**
+ * 409 with a machine-readable code so the editor can shake the dialog and
+ * point at the slug field. On the shared domain the message also pitches
+ * custom domains, where the whole namespace is the org's own.
+ */
 function slugConflict(slug: string, sharedDomain: boolean): HTTPException {
   return new HTTPException(409, {
     message: sharedDomain
