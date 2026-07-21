@@ -3,7 +3,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Ellipsis, Eye, Trash2 } from "lucide-react";
 import { useAdminOrgDetail, useAdminOrgs } from "../../lib/hooks";
 import { api } from "../../lib/api";
-import type { AdminOrgRow, OrgRole } from "@/shared/types";
+import type { AdminOrgRow, OrgRole, Sort } from "@/shared/types";
 import { AreaChart } from "../../components/charts";
 import { Dialog } from "../../ui/dialog";
 import { Menu, MenuItem, MenuSeparator } from "../../ui/menu";
@@ -15,8 +15,9 @@ import {
 import { useToast } from "../../ui/toast";
 import { ConfirmDialog } from "./confirm-dialog";
 import { SearchInput } from "./search-input";
-import { SortTh } from "./sort";
-import { linkLabel, sortRows, type Sort } from "./util";
+import { linkLabel } from "./util";
+import { SortTh } from "../../ui/sort-th";
+import { sortRows } from "../../lib/sort";
 
 const roleColor: Record<OrgRole, "accent" | "mint" | "muted"> = {
   owner: "accent",
@@ -55,14 +56,14 @@ function OrgDetailDialog({
           ) : (
             <>
               <Card>
-                <p className="mb-3 text-[11px] tracking-wider text-muted uppercase">
+                <p className="mb-3 text-2xs tracking-wider text-muted uppercase">
                   Clicks per day · 30d
                 </p>
                 <AreaChart data={detail.data.series} />
               </Card>
 
               <div>
-                <p className="mb-2 text-[11px] tracking-wider text-muted uppercase">
+                <p className="mb-2 text-2xs tracking-wider text-muted uppercase">
                   Members
                 </p>
                 <Table>
@@ -88,7 +89,7 @@ function OrgDetailDialog({
               </div>
 
               <div>
-                <p className="mb-2 text-[11px] tracking-wider text-muted uppercase">
+                <p className="mb-2 text-2xs tracking-wider text-muted uppercase">
                   Links
                 </p>
                 <Table>

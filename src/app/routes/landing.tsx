@@ -1,3 +1,4 @@
+// fallow-ignore-file code-duplication -- pricing table rows share structural pattern
 import type { ReactNode } from "react";
 import { Link } from "react-router";
 import {
@@ -13,6 +14,9 @@ import {
   Check,
   Code2,
   ChevronDown,
+  Target,
+  TrendingDown,
+  Activity,
 } from "lucide-react";
 import { LazyMotion, MotionConfig, domAnimation, m } from "motion/react";
 import { useState } from "react";
@@ -37,7 +41,7 @@ const steps = [
   },
   {
     title: "See who's clicking",
-    body: "Country, referrer, and device breakdowns update in real time, without storing a single IP.",
+    body: "Country, referrer, device, and campaign breakdowns update in real time, without storing a single IP.",
   },
 ];
 
@@ -45,7 +49,7 @@ const features = [
   {
     icon: Link2,
     title: "Short links + UTM builder",
-    body: "Turn unreadable URLs into short links, with a built-in UTM builder for clean campaign tracking. On every plan.",
+    body: "Turn unreadable URLs into short links, with a built-in UTM builder that also reads parameters already in the URL you paste. On every plan.",
   },
   {
     icon: QrCode,
@@ -67,7 +71,22 @@ const features = [
   {
     icon: BarChart3,
     title: "Click analytics",
-    body: "See what's working the moment it happens: country, referrer, and device breakdowns for every link.",
+    body: "Zoom from the last 24 hours to a full year, compare any period with the one before, and spot your busiest hours on the heatmap.",
+  },
+  {
+    icon: Target,
+    title: "Campaign tracking",
+    body: "UTM campaigns, sources, and mediums ranked by clicks, so you can see which channel earns its keep.",
+  },
+  {
+    icon: TrendingDown,
+    title: "Link health",
+    body: "rdyrct flags links that go quiet: zero clicks in 30 days, or a drop of more than half week over week.",
+  },
+  {
+    icon: Activity,
+    title: "Live click feed",
+    body: "A feed of the latest clicks sits on your dashboard and refreshes on its own: slug, referrer, country, and device.",
   },
   {
     icon: ShieldCheck,
@@ -113,6 +132,10 @@ const faqs = [
     a: "Click analytics store only country, referrer, device type, and timestamp. Never an IP address, never a precise location, and no cross-site tracking.",
   },
   {
+    q: "Can I track campaigns?",
+    a: "Yes. Tag links with the built-in UTM builder, or paste a URL that already has UTM parameters, and rdyrct ranks campaigns, sources, and mediums by clicks. The analytics page also shows trends against the previous period, an activity heatmap, and links that have gone quiet, with windows from 24 hours to a year depending on your plan.",
+  },
+  {
     q: "Can I use my own domain?",
     a: "Yes. Paid plans include custom domains with automatic TLS through Cloudflare for SaaS: point your DNS at us and short links go live under your brand.",
   },
@@ -121,6 +144,21 @@ const faqs = [
     a: "Yes. rdyrct is open source and deploys to your own Cloudflare account. You get everything Pro has, minus direct email support.",
   },
 ];
+
+function Section({ children, className = "py-16", id }: { children: ReactNode; className?: string; id?: string }) {
+  return (
+    <m.section
+      id={id}
+      initial={{ opacity: 0, y: 16 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true, margin: "-80px" }}
+      transition={{ duration: 0.5, ease: "easeOut" }}
+      className={className}
+    >
+      {children}
+    </m.section>
+  );
+}
 
 /** FAQPage structured data, generated from the same `faqs` the page renders. */
 function FaqJsonLd() {
@@ -262,7 +300,7 @@ function MobilePlans({ paidTo }: { paidTo: (p: "hobby" | "pro") => string }) {
               <p className={highlight ? "font-bold text-accent" : "font-bold"}>
                 {name}
                 {highlight && (
-                  <span className="ml-2 rounded-full border border-accent/40 px-2 py-0.5 text-[10px] tracking-wide text-accent uppercase">
+                  <span className="ml-2 rounded-full border border-accent/40 px-2 py-0.5 text-3xs tracking-wide text-accent uppercase">
                     Most popular
                   </span>
                 )}
@@ -302,14 +340,7 @@ function MobilePlans({ paidTo }: { paidTo: (p: "hobby" | "pro") => string }) {
 function PricingSection() {
   const paidTo = usePaidPlanTo();
   return (
-    <m.section
-      id="pricing"
-      initial={{ opacity: 0, y: 16 }}
-      whileInView={{ opacity: 1, y: 0 }}
-      viewport={{ once: true, margin: "-80px" }}
-      transition={{ duration: 0.5, ease: "easeOut" }}
-      className="scroll-mt-16 py-16"
-    >
+    <Section id="pricing" className="scroll-mt-16 py-16">
       <div className="mb-8 text-center">
         <h2 className="text-xl font-bold">Simple pricing</h2>
         <p className="mx-auto mt-2 max-w-xl text-sm text-muted">
@@ -346,7 +377,7 @@ function PricingSection() {
             <Th className="border-x border-x-accent/25 bg-accent/10">
               <span className="inline-flex items-center gap-2 text-accent">
                 Pro
-                <span className="rounded-full border border-accent/40 px-2 py-0.5 text-[10px] tracking-wide text-accent uppercase">
+                <span className="rounded-full border border-accent/40 px-2 py-0.5 text-3xs tracking-wide text-accent uppercase">
                   Most popular
                 </span>
               </span>
@@ -370,7 +401,7 @@ function PricingSection() {
               <span className="text-base font-bold text-accent">
                 {PLAN_PRICES.pro}/mo
               </span>
-              <span className="block text-[11px] font-normal text-muted">
+              <span className="block text-2xs font-normal text-muted">
                 only the org owner pays
               </span>
             </Cell>
@@ -472,7 +503,7 @@ function PricingSection() {
         </tbody>
       </Table>
       </div>
-    </m.section>
+    </Section>
   );
 }
 
@@ -593,13 +624,7 @@ export function LandingPage() {
           </m.div>
         </section>
 
-        <m.section
-          initial={{ opacity: 0, y: 16 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true, margin: "-80px" }}
-          transition={{ duration: 0.5, ease: "easeOut" }}
-          className="py-8"
-        >
+        <Section className="py-8">
           <div className="mb-8 text-center">
             <h2 className="text-xl font-bold">
               From paste to published in seconds
@@ -619,37 +644,26 @@ export function LandingPage() {
               </div>
             ))}
           </div>
-        </m.section>
+        </Section>
 
-        <m.section
-          initial={{ opacity: 0, y: 16 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true, margin: "-80px" }}
-          transition={{ duration: 0.5, ease: "easeOut" }}
-          className="py-16"
-        >
+        <Section>
           <div className="mb-8 text-center">
             <h2 className="text-xl font-bold text-balance">
               See every click, respect every visitor
             </h2>
             <p className="mx-auto mt-2 max-w-xl text-sm text-muted">
-              Country, device, and referrer breakdowns for every link, updating
-              in real time. Never an IP address, never cross-site tracking.
-              This is the actual dashboard.
+              Country, device, referrer, and campaign breakdowns for every
+              link, from the last 24 hours to the last year. Never an IP
+              address, never cross-site tracking. This is the actual
+              analytics page.
             </p>
           </div>
           <div className="flex justify-center">
             <LandingAnalyticsMock />
           </div>
-        </m.section>
+        </Section>
 
-        <m.section
-          initial={{ opacity: 0, y: 16 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true, margin: "-80px" }}
-          transition={{ duration: 0.5, ease: "easeOut" }}
-          className="py-16"
-        >
+        <Section>
           <div className="mb-8 text-center">
             <h2 className="text-xl font-bold">
               Everything a link needs to earn the click
@@ -668,7 +682,7 @@ export function LandingPage() {
                   <Icon size={16} className="text-accent" />
                   <p className="font-bold">{title}</p>
                   {plan && (
-                    <span className="text-[11px] tracking-wide text-muted uppercase">
+                    <span className="text-2xs tracking-wide text-muted uppercase">
                       {plan}
                     </span>
                   )}
@@ -677,15 +691,9 @@ export function LandingPage() {
               </div>
             ))}
           </div>
-        </m.section>
+        </Section>
 
-        <m.section
-          initial={{ opacity: 0, y: 16 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true, margin: "-80px" }}
-          transition={{ duration: 0.5, ease: "easeOut" }}
-          className="py-16"
-        >
+        <Section>
           <div className="mb-8 text-center">
             <h2 className="text-xl font-bold">Runs entirely on Cloudflare</h2>
             <p className="mx-auto mt-2 max-w-xl text-sm text-muted">
@@ -706,18 +714,11 @@ export function LandingPage() {
               </div>
             ))}
           </div>
-        </m.section>
+        </Section>
 
         <PricingSection />
 
-        <m.section
-          id="faq"
-          initial={{ opacity: 0, y: 16 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true, margin: "-80px" }}
-          transition={{ duration: 0.5, ease: "easeOut" }}
-          className="scroll-mt-16 py-16"
-        >
+        <Section id="faq" className="scroll-mt-16 py-16">
           <div className="mb-8 text-center">
             <h2 className="text-xl font-bold">Frequently asked questions</h2>
           </div>
@@ -738,15 +739,9 @@ export function LandingPage() {
               </details>
             ))}
           </div>
-        </m.section>
+        </Section>
 
-        <m.section
-          initial={{ opacity: 0, y: 16 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true, margin: "-80px" }}
-          transition={{ duration: 0.5, ease: "easeOut" }}
-          className="py-16"
-        >
+        <Section>
           <div className="flex flex-col items-center gap-5 rounded-2xl border border-border bg-surface px-6 py-14 text-center">
             <h2 className="max-w-xl text-2xl font-bold tracking-tight sm:text-3xl">
               Start shortening in seconds.
@@ -765,7 +760,7 @@ export function LandingPage() {
               </Button>
             </Link>
           </div>
-        </m.section>
+        </Section>
 
         <Footer />
         </div>

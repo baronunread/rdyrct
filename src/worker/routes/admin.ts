@@ -1,18 +1,12 @@
 import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
-import { eq, ne, gte, and, desc, sql } from "drizzle-orm";
+import { eq, ne, gte, and, desc, lt, inArray, sql } from "drizzle-orm";
 import * as schema from "../db/schema";
 import type { AppEnv } from "../env";
 import { requireAdmin } from "../auth";
 import { now } from "../util";
-import type {
-  AdminOverview,
-  AdminOrgRow,
-  AdminOrgDetail,
-  AdminUserRow,
-  OrgPlan,
-} from "@/shared/types";
-import { fillSeries, deleteOrgCascade } from "./orgs";
+import { PLAN_LIMITS, type AdminUsage, type AdminOrgRow, type AdminOrgDetail, type AdminUserRow, type OrgPlan } from "@/shared/types";
+import { fillSeries, computeDelta, deleteOrgCascade } from "./orgs";
 import { orgPlan } from "../plan";
 
 // An org's effective plan is its owner's plan (billing is per-user). A single
@@ -31,12 +25,45 @@ export const adminRoutes = new Hono<AppEnv>();
 adminRoutes.use("*", requireAdmin);
 
 const day = sql<string>`date(ts / 1000, 'unixepoch')`;
+const userDay = sql<string>`date(created_at / 1000, 'unixepoch')`;
+const orgDay = sql<string>`date(created_at / 1000, 'unixepoch')`;
 
-adminRoutes.get("/overview", async (c) => {
+/* ─────────── helpers ─────────── */
+
+function cumulativeSeries(
+  dailyRows: { day: string; clicks: number }[],
+  days: number,
+): { day: string; clicks: number }[] {
+  const cumMap = new Map<string, number>();
+  let cum = 0;
+  for (const r of dailyRows) {
+    cum += r.clicks;
+    cumMap.set(r.day, cum);
+  }
+  const result: { day: string; clicks: number }[] = [];
+  const today = new Date();
+  let prev = 0;
+  for (let i = days - 1; i >= 0; i--) {
+    const d = new Date(today);
+    d.setUTCDate(d.getUTCDate() - i);
+    const key = d.toISOString().slice(0, 10);
+    const val = cumMap.get(key);
+    if (val !== undefined) prev = val;
+    result.push({ day: key, clicks: prev });
+  }
+  return result;
+}
+
+/* ─────────── /usage ─────────── */
+
+adminRoutes.get("/usage", async (c) => {
   const db = c.var.db;
   const days = 30;
+  const cumDays = 90;
   const since = now() - days * 24 * 60 * 60 * 1000;
   const since7 = now() - 7 * 24 * 60 * 60 * 1000;
+  const since14d = now() - 14 * 24 * 60 * 60 * 1000;
+  const since24h = now() - 24 * 60 * 60 * 1000;
   const [
     users,
     orgs,
@@ -48,6 +75,15 @@ adminRoutes.get("/overview", async (c) => {
     signupRows,
     topOrgRows,
     topLinkRows,
+    planCountRows,
+    signups7dRows,
+    signups7dPrevRows,
+    wauRows,
+    botSeriesRows,
+    userCreationRows,
+    orgCreationRows,
+    anomaly24hRows,
+    anomaly14dRows,
   ] = await Promise.all([
     db.select({ n: sql<number>`count(*)` }).from(schema.user),
     db.select({ n: sql<number>`count(*)` }).from(schema.orgs),
@@ -61,24 +97,28 @@ adminRoutes.get("/overview", async (c) => {
       .select({ n: sql<number>`count(*)` })
       .from(schema.user)
       .where(ne(schema.user.plan, "free")),
+    // click series (30d)
     db
       .select({ day, clicks: sql<number>`count(*)` })
       .from(schema.clicks)
       .where(gte(schema.clicks.ts, since))
       .groupBy(day),
+    // signup series (30d)
     db
       .select({
-        day: sql<string>`date(created_at / 1000, 'unixepoch')`,
+        day: userDay,
         clicks: sql<number>`count(*)`,
       })
       .from(schema.user)
       .where(gte(schema.user.createdAt, new Date(since)))
-      .groupBy(sql`date(created_at / 1000, 'unixepoch')`),
+      .groupBy(userDay),
+    // top orgs (30d) with plan
     db
       .select({
         id: schema.orgs.id,
         name: schema.orgs.name,
         clicks: sql<number>`count(*)`,
+        plan: ownerPlan,
       })
       .from(schema.clicks)
       .innerJoin(schema.orgs, eq(schema.clicks.orgId, schema.orgs.id))
@@ -86,6 +126,7 @@ adminRoutes.get("/overview", async (c) => {
       .groupBy(schema.clicks.orgId)
       .orderBy(desc(sql`count(*)`))
       .limit(5),
+    // top links (30d)
     db
       .select({
         id: schema.links.id,
@@ -102,20 +143,227 @@ adminRoutes.get("/overview", async (c) => {
       .groupBy(schema.clicks.linkId)
       .orderBy(desc(sql`count(*)`))
       .limit(5),
+    // plan distribution
+    db
+      .select({ plan: schema.user.plan, n: sql<number>`count(*)` })
+      .from(schema.user)
+      .groupBy(schema.user.plan),
+    // signups 7d (current)
+    db
+      .select({ n: sql<number>`count(*)` })
+      .from(schema.user)
+      .where(gte(schema.user.createdAt, new Date(since7))),
+    // signups 7d (previous period)
+    db
+      .select({ n: sql<number>`count(*)` })
+      .from(schema.user)
+      .where(
+        and(
+          gte(schema.user.createdAt, new Date(since14d)),
+          lt(schema.user.createdAt, new Date(since7)),
+        ),
+      ),
+    // weekly active users (distinct sessions in 7d)
+    db
+      .select({ n: sql<number>`count(distinct user_id)` })
+      .from(schema.session)
+      .where(gte(schema.session.updatedAt, new Date(since7))),
+    // bot clicks per day (30d)
+    db
+      .select({ day, clicks: sql<number>`count(*)` })
+      .from(schema.clicks)
+      .where(and(gte(schema.clicks.ts, since), eq(schema.clicks.device, "bot")))
+      .groupBy(day),
+    // user creation all-time (for cumulative)
+    db
+      .select({
+        day: userDay,
+        clicks: sql<number>`count(*)`,
+      })
+      .from(schema.user)
+      .groupBy(userDay),
+    // org creation (for weekly)
+    db
+      .select({
+        day: orgDay,
+        clicks: sql<number>`count(*)`,
+      })
+      .from(schema.orgs)
+      .groupBy(orgDay),
+    // clicks per org in last 24h (anomaly detection)
+    db
+      .select({
+        orgId: schema.clicks.orgId,
+        clicks: sql<number>`count(*)`,
+      })
+      .from(schema.clicks)
+      .where(gte(schema.clicks.ts, since24h))
+      .groupBy(schema.clicks.orgId),
+    // clicks per org in last 14d (anomaly baseline)
+    db
+      .select({
+        orgId: schema.clicks.orgId,
+        clicks: sql<number>`count(*)`,
+      })
+      .from(schema.clicks)
+      .where(gte(schema.clicks.ts, since14d))
+      .groupBy(schema.clicks.orgId),
   ]);
 
+  // ── Business row ──
+
+  const totalUsers = users[0]?.n ?? 0;
+  const paidUsers = proUsers[0]?.n ?? 0;
+
+  const planCounts = { free: 0, hobby: 0, pro: 0 };
+  for (const r of planCountRows) {
+    planCounts[r.plan as OrgPlan] = r.n;
+  }
+
+  const mrr = planCounts.hobby * 4 + planCounts.pro * 9;
+
+  const paidConversionRate =
+    totalUsers > 0 ? Math.round((paidUsers / totalUsers) * 100) : null;
+
+  const signups7d = signups7dRows[0]?.n ?? 0;
+  const signups7dPrev = signups7dPrevRows[0]?.n ?? 0;
+  const signups7dDelta = computeDelta(signups7d, signups7dPrev);
+
+  const wau = wauRows[0]?.n ?? 0;
+
+  // ── Growth row ──
+
+  const cumulativeUsers = cumulativeSeries(userCreationRows, cumDays);
+  const cumulativeOrgs = cumulativeSeries(orgCreationRows, cumDays);
+
+  // ── Health row ──
+
+  const botSeries = fillSeries(botSeriesRows, days);
+
+  // Anomalies: orgs whose 24h clicks exceed 5x trailing 14d daily avg
+  const anomalyMap = new Map(anomaly14dRows.map((r) => [r.orgId, r.clicks]));
+  const anomalies: Array<{
+    orgId: string;
+    orgName: string;
+    clicks24h: number;
+    avg14d: number;
+    ratio: number;
+  }> = [];
+  for (const h of anomaly24hRows) {
+    const total14d = anomalyMap.get(h.orgId) ?? 0;
+    const avg14d = total14d / 14;
+    if (avg14d >= 1 && h.clicks > 5 * avg14d) {
+      anomalies.push({
+        orgId: h.orgId,
+        orgName: "",
+        clicks24h: h.clicks,
+        avg14d: Math.round(avg14d * 10) / 10,
+        ratio: Math.round((h.clicks / avg14d) * 10) / 10,
+      });
+    }
+  }
+  // Fetch names for anomalous orgs
+  if (anomalies.length > 0) {
+    const ids = anomalies.map((a) => a.orgId);
+    const orgRows = await db
+      .select({ id: schema.orgs.id, name: schema.orgs.name })
+      .from(schema.orgs)
+      .where(inArray(schema.orgs.id, ids));
+    const nameMap = new Map(orgRows.map((r) => [r.id, r.name]));
+    for (const a of anomalies) a.orgName = nameMap.get(a.orgId) ?? "Unknown";
+  }
+  anomalies.sort((a, b) => b.ratio - a.ratio);
+
+  // Cap pressure: orgs at >=80% of any plan limit
+  const allOrgs = await db
+    .select({
+      id: schema.orgs.id,
+      name: schema.orgs.name,
+      plan: ownerPlan,
+      linkCount: sql<number>`(
+        select count(*) from links where links.org_id = orgs.id
+      )`,
+      memberCount: sql<number>`(
+        select count(*) from org_members where org_members.org_id = orgs.id
+      )`,
+      domainCount: sql<number>`(
+        select count(*) from domains where domains.org_id = orgs.id
+      )`,
+    })
+    .from(schema.orgs);
+  const capPressure: Array<{
+    orgId: string;
+    orgName: string;
+    plan: OrgPlan;
+    linksPct: number;
+    membersPct: number;
+    domainsPct: number;
+  }> = [];
+  for (const orgRow of allOrgs) {
+    const limits = PLAN_LIMITS[orgRow.plan];
+    const linksPct = Math.round((orgRow.linkCount / Math.max(1, limits.links)) * 100);
+    const membersPct = Math.round(
+      (orgRow.memberCount / Math.max(1, limits.members)) * 100,
+    );
+    const domainsPct = Math.round(
+      (orgRow.domainCount / Math.max(1, limits.domains)) * 100,
+    );
+    if (linksPct >= 80 || membersPct >= 80 || domainsPct >= 80) {
+      capPressure.push({
+        orgId: orgRow.id,
+        orgName: orgRow.name,
+        plan: orgRow.plan,
+        linksPct,
+        membersPct,
+        domainsPct,
+      });
+    }
+  }
+  capPressure.sort((a, b) => Math.max(b.linksPct, b.membersPct, b.domainsPct) - Math.max(a.linksPct, a.membersPct, a.domainsPct));
+
+  // Table size and growth projection
+  const tableSize = clicks[0]?.n ?? 0;
+  const tableGrowth = fillSeries(seriesRows, days);
+  // D1 caps at 10 GB; ~100 bytes per click row → ~107M max rows
+  const MAX_ROWS = 107_000_000;
+  const recentDailyAvg =
+    seriesRows.length > 0
+      ? seriesRows.reduce((s, r) => s + r.clicks, 0) / seriesRows.length
+      : 0;
+  const tableProjectedDays =
+    recentDailyAvg > 0
+      ? Math.round((MAX_ROWS - tableSize) / recentDailyAvg)
+      : null;
+
   return c.json({
-    users: users[0]?.n ?? 0,
+    users: totalUsers,
     orgs: orgs[0]?.n ?? 0,
     links: links[0]?.n ?? 0,
-    clicks: clicks[0]?.n ?? 0,
+    clicks: tableSize,
     clicks7d: clicks7d[0]?.n ?? 0,
-    proUsers: proUsers[0]?.n ?? 0,
+    proUsers: paidUsers,
     series: fillSeries(seriesRows, days),
     signups: fillSeries(signupRows, days),
-    topOrgs: topOrgRows,
+    topOrgs: topOrgRows.map((o) => ({
+      ...o,
+      plan: (o as { plan?: OrgPlan }).plan ?? ("free" as OrgPlan),
+    })),
     topLinks: topLinkRows,
-  } satisfies AdminOverview);
+    planCounts,
+    mrr,
+    paidConversionRate,
+    signups7d,
+    signups7dDelta,
+    wau,
+    cumulativeUsers,
+    cumulativeOrgs,
+    botSeries,
+    anomalies,
+    capPressure,
+    tableSize,
+    tableGrowth,
+    tableProjectedDays,
+  } satisfies AdminUsage);
 });
 
 adminRoutes.get("/orgs", async (c) => {

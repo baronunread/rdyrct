@@ -93,7 +93,9 @@ export function AppShell() {
 
   const switchOrg = (id: string) => {
     setOrg(id);
-    navigate("/dashboard");
+    const path = window.location.pathname;
+    const orgRoutes = ["/dashboard", "/analytics", "/links", "/domains", "/members", "/billing", "/settings"];
+    navigate(orgRoutes.includes(path) ? path : "/dashboard");
   };
 
   const createOrg = async () => {
@@ -145,7 +147,7 @@ export function AppShell() {
                 )}
               </span>
               <span className="truncate">{o.name}</span>
-              <span className="ml-auto text-[10px] text-muted uppercase">
+              <span className="ml-auto text-3xs text-muted uppercase">
                 {o.role}
               </span>
             </MenuItem>
@@ -163,7 +165,7 @@ export function AppShell() {
           >
             <Plus size={14} className="text-muted" /> New organization
             {!canCreateOrg && (
-              <span className="ml-auto text-[10px] text-accent uppercase">
+              <span className="ml-auto text-3xs text-accent uppercase">
                 Pro
               </span>
             )}
@@ -184,7 +186,7 @@ export function AppShell() {
       {/* platform admin */}
       {user.isAdmin && (
         <div className="mt-2 px-3">
-          <p className="px-2.5 pb-1 text-[10px] tracking-widest text-muted uppercase">
+          <p className="px-2.5 pb-1 text-3xs tracking-widest text-muted uppercase">
             Platform
           </p>
           <nav className="flex flex-col gap-0.5">

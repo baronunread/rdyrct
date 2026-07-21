@@ -83,8 +83,35 @@ function BarListCardSkeleton() {
   );
 }
 
-/** /dashboard: header, 3 stat cards, clicks chart, 2×2 ranked lists. */
+/** /dashboard: header, quick-create card, 3 stat cards, 2 feed cards, 3 list cards. */
 export function DashboardSkeleton() {
+  return (
+    <SkeletonStatus>
+      <HeaderSkeleton />
+      <Card>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+          <Skeleton className="h-9 min-w-0 flex-1" />
+          <Skeleton className="h-9 sm:w-24" />
+        </div>
+      </Card>
+      <div className="mt-4">
+        <StatCardsSkeleton count={3} />
+      </div>
+      <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <BarListCardSkeleton />
+        <BarListCardSkeleton />
+      </div>
+      <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-3">
+        <BarListCardSkeleton />
+        <BarListCardSkeleton />
+        <BarListCardSkeleton />
+      </div>
+    </SkeletonStatus>
+  );
+}
+
+/** /analytics: header, 3 stat cards, clicks chart, 2×2 ranked lists. */
+export function AnalyticsSkeleton() {
   return (
     <SkeletonStatus>
       <HeaderSkeleton />
@@ -103,7 +130,7 @@ export function DashboardSkeleton() {
 }
 
 /** /admin: header, 6 stat cards, two charts, two ranked lists. */
-export function AdminOverviewSkeleton() {
+export function AdminUsageSkeleton() {
   return (
     <SkeletonStatus>
       <HeaderSkeleton />
@@ -286,11 +313,17 @@ export function AppShellSkeleton() {
 
       <main className="flex min-w-0 flex-1 flex-col px-5 py-8 pt-16 md:ml-60 md:px-8 md:pt-8">
         <div className="mx-auto w-full max-w-5xl flex-1">
+          {/* mirrors /dashboard, the default landing after login */}
           <SkeletonStatus>
             <HeaderSkeleton />
-            <StatCardsSkeleton count={3} />
+            <Card>
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                <Skeleton className="h-9 min-w-0 flex-1" />
+                <Skeleton className="h-9 sm:w-24" />
+              </div>
+            </Card>
             <div className="mt-4">
-              <ChartCardSkeleton />
+              <StatCardsSkeleton count={3} />
             </div>
           </SkeletonStatus>
         </div>

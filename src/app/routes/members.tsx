@@ -1,14 +1,15 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useCurrentOrg } from "../lib/current-org";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { UserPlus, Copy, Trash2, Info } from "lucide-react";
 import { useCurrentUser, useMembers, useInvites } from "../lib/hooks";
 import { api } from "../lib/api";
-import { PLAN_LIMITS, type InviteDTO, type OrgRole } from "@/shared/types";
+import { PLAN_LIMITS, type InviteDTO, type OrgRole, type Sort } from "@/shared/types";
 import { Button, IconButton } from "../ui/button";
 import { Field, Input, Select } from "../ui/field";
-import { Dialog } from "../ui/dialog";
+import { MenuSelect } from "../ui/menu";
 import { Tooltip } from "../ui/tooltip";
+import { RemoveMemberDialog, InviteMemberDialog } from "../components/member-dialogs";
 import {
   Table,
   Th,
@@ -21,6 +22,8 @@ import { TableSkeleton } from "../ui/skeleton";
 import { Spinner } from "../ui/spinner";
 import { useToast } from "../ui/toast";
 import { NoOrgState } from "../components/no-org";
+import { SortTh } from "../ui/sort-th";
+import { sortRows } from "../lib/sort";
 
 const roleColor: Record<OrgRole, "accent" | "mint" | "muted"> = {
   owner: "accent",
@@ -45,8 +48,10 @@ export function MembersPage() {
   const [inviteOpen, setInviteOpen] = useState(false);
   const [inviteRole, setInviteRole] = useState<"member" | "admin">("member");
 
+  const [removing, setRemoving] = useState<{ userId: string; name: string } | null>(null);
   const [emailInput, setEmailInput] = useState("");
   const [emailRole, setEmailRole] = useState<"member" | "admin">("member");
+  const [sort, setSort] = useState<Sort>({ key: "createdAt", dir: 1 });
 
   const invalidateMembers = () =>
     qc.invalidateQueries({ queryKey: ["members", orgId] });
@@ -69,6 +74,16 @@ export function MembersPage() {
     onSuccess: invalidateMembers,
     onError: (e) => toast(e.message, "error"),
   });
+
+  const sorted = useMemo(
+    () => sortRows(members.data ?? [], sort, {
+      name: (m) => m.name.toLowerCase(),
+      email: (m) => m.email.toLowerCase(),
+      role: (m) => m.role,
+      createdAt: (m) => m.createdAt,
+    }),
+    [members.data, sort],
+  );
 
   const createInvite = useMutation({
     mutationFn: () =>
@@ -128,40 +143,61 @@ export function MembersPage() {
         }
       />
 
+      {canManage && org && (
+        <InviteByEmailCard
+          org={org}
+          memberLimit={memberLimit}
+          emailInput={emailInput}
+          onEmailChange={setEmailInput}
+          emailRole={emailRole}
+          onRoleChange={setEmailRole}
+          isSending={sendEmailInvite.isPending}
+          onSend={() => sendEmailInvite.mutate(emailInput.trim())}
+        />
+      )}
+
       {members.isLoading ? (
         <TableSkeleton rows={4} />
       ) : (
-        <Table>
+        <Table fixed>
           <thead>
             <tr>
-              <Th>Name</Th>
-              <Th>Email</Th>
-              <Th>Role</Th>
-              <Th>Joined</Th>
-              {canManage && <Th className="text-right">Actions</Th>}
+              <SortTh label="Name" sortKey="name" sort={sort} onSort={setSort} className="w-36" />
+              <SortTh label="Email" sortKey="email" sort={sort} onSort={setSort} className="w-48" />
+              <SortTh label="Role" sortKey="role" sort={sort} onSort={setSort} className="w-32" />
+              <SortTh label="Joined" sortKey="createdAt" sort={sort} onSort={setSort} className="w-24" />
+              {canManage && <Th className="w-16 text-right">Actions</Th>}
             </tr>
           </thead>
           <tbody>
-            {members.data?.map((m) => (
+            {sorted.map((m) => (
               <tr key={m.userId}>
-                <Td>{m.name}</Td>
-                <Td className="text-muted">{m.email}</Td>
+                <Td className="truncate">{m.name}</Td>
+                <Td className="truncate text-muted">{m.email}</Td>
                 <Td>
-                  {canManage && m.role !== "owner" ? (
-                    <Select
-                      className="h-7 text-xs"
-                      wrapperClass="inline-block w-28"
+                  {m.role === "owner" ? (
+                    <MenuSelect
+                      label="Owner"
+                      value="owner"
+                      disabled
+                      onChange={() => {}}
+                      options={[{ value: "owner", label: "owner" }]}
+                    />
+                  ) : canManage ? (
+                    <MenuSelect
+                      label={`Role for ${m.name}`}
                       value={m.role}
-                      onChange={(e) =>
+                      onChange={(v) =>
                         setRole.mutate({
                           userId: m.userId,
-                          role: e.target.value,
+                          role: v,
                         })
                       }
-                    >
-                      <option value="member">member</option>
-                      <option value="admin">admin</option>
-                    </Select>
+                      options={[
+                        { value: "member", label: "member" },
+                        { value: "admin", label: "admin" },
+                      ]}
+                    />
                   ) : (
                     <Badge color={roleColor[m.role]}>{m.role}</Badge>
                   )}
@@ -176,7 +212,7 @@ export function MembersPage() {
                         <IconButton
                           label={`Remove ${m.name}`}
                           danger
-                          onClick={() => removeMember.mutate(m.userId)}
+                          onClick={() => setRemoving({ userId: m.userId, name: m.name })}
                         >
                           <Trash2 size={15} />
                         </IconButton>
@@ -190,67 +226,9 @@ export function MembersPage() {
         </Table>
       )}
 
-      {canManage && org && (
-        <Card className="mt-4">
-          <div className="mb-3 flex items-center gap-1.5">
-            <p className="text-[11px] tracking-wider text-muted uppercase">
-              Invite by email
-            </p>
-            <Tooltip
-              content={
-                <>
-                  You can invite up to {memberLimit} members on the{" "}
-                  {org.plan} plan. Pending invites count toward the limit.
-                </>
-              }
-            >
-              <button
-                type="button"
-                aria-label="Member limit info"
-                className="cursor-pointer text-muted hover:text-text"
-              >
-                <Info size={13} />
-              </button>
-            </Tooltip>
-          </div>
-          <div className="flex items-end gap-2">
-            <div className="min-w-0 flex-1">
-              <Field label="Email">
-                <Input
-                  type="email"
-                  value={emailInput}
-                  onChange={(e) => setEmailInput(e.target.value)}
-                  placeholder="teammate@company.com"
-                />
-              </Field>
-            </div>
-            <div className="w-36">
-              <Field label="Role">
-                <Select
-                  value={emailRole}
-                  onChange={(e) =>
-                    setEmailRole(e.target.value as "member" | "admin")
-                  }
-                >
-                  <option value="member">member</option>
-                  <option value="admin">admin</option>
-                </Select>
-              </Field>
-            </div>
-            <Button
-              variant="primary"
-              disabled={sendEmailInvite.isPending || !emailInput.trim()}
-              onClick={() => sendEmailInvite.mutate(emailInput.trim())}
-            >
-              {sendEmailInvite.isPending ? <Spinner /> : "Send invite"}
-            </Button>
-          </div>
-        </Card>
-      )}
-
       {canManage && !!invites.data?.length && (
         <Card className="mt-4">
-          <p className="mb-3 text-[11px] tracking-wider text-muted uppercase">
+          <p className="mb-3 text-2xs tracking-wider text-muted uppercase">
             Pending invites
           </p>
           <ul className="flex flex-col gap-2">
@@ -289,35 +267,100 @@ export function MembersPage() {
         </Card>
       )}
 
-      <Dialog open={inviteOpen} onOpenChange={setInviteOpen} title="Invite a teammate">
-        <div className="flex flex-col gap-4">
-          <p className="text-sm text-muted">
-            Creates a single-use invite link (valid 7 days). It is copied to
-            your clipboard so you can share it any way you like.
-          </p>
+      {removing && (
+        <RemoveMemberDialog
+          member={removing}
+          onClose={() => setRemoving(null)}
+          remove={removeMember}
+        />
+      )}
+
+      <InviteMemberDialog
+        open={inviteOpen}
+        onOpenChange={setInviteOpen}
+        role={inviteRole}
+        onRoleChange={setInviteRole}
+        onCreate={() => createInvite.mutate()}
+        isCreating={createInvite.isPending}
+      />
+    </div>
+  );
+}
+
+function InviteByEmailCard({
+  org,
+  memberLimit,
+  emailInput,
+  onEmailChange,
+  emailRole,
+  onRoleChange,
+  isSending,
+  onSend,
+}: {
+  org: NonNullable<ReturnType<typeof useCurrentOrg>["org"]>;
+  memberLimit: number;
+  emailInput: string;
+  onEmailChange: (v: string) => void;
+  emailRole: string;
+  onRoleChange: (v: "member" | "admin") => void;
+  isSending: boolean;
+  onSend: () => void;
+}) {
+  return (
+    <Card className="mb-4">
+      <div className="mb-3 flex items-center gap-1.5">
+        <p className="text-2xs tracking-wider text-muted uppercase">
+          Invite by email
+        </p>
+        <Tooltip
+          content={
+            <>
+              You can invite up to {memberLimit} members on the{" "}
+              {org.plan} plan. Pending invites count toward the limit.
+            </>
+          }
+        >
+          <button
+            type="button"
+            aria-label="Member limit info"
+            className="cursor-pointer text-muted hover:text-text"
+          >
+            <Info size={13} />
+          </button>
+        </Tooltip>
+      </div>
+      <div className="flex items-end gap-2">
+        <div className="min-w-0 flex-1">
+          <Field label="Email">
+            <Input
+              type="email"
+              value={emailInput}
+              onChange={(e) => onEmailChange(e.target.value)}
+              placeholder="teammate@company.com"
+            />
+          </Field>
+        </div>
+        <div className="w-36">
           <Field label="Role">
             <Select
-              value={inviteRole}
-              onChange={(e) => setInviteRole(e.target.value as "member" | "admin")}
+              value={emailRole}
+              onChange={(e) =>
+                onRoleChange(e.target.value as "member" | "admin")
+              }
             >
-              <option value="member">member · manage links</option>
-              <option value="admin">admin · manage links and team</option>
+              <option value="member">member</option>
+              <option value="admin">admin</option>
             </Select>
           </Field>
-          <div className="flex justify-end gap-2">
-            <Button variant="ghost" onClick={() => setInviteOpen(false)}>
-              Cancel
-            </Button>
-            <Button
-              variant="primary"
-              disabled={createInvite.isPending}
-              onClick={() => createInvite.mutate()}
-            >
-              Create invite link
-            </Button>
-          </div>
         </div>
-      </Dialog>
-    </div>
+        <Button
+          variant="primary"
+          disabled={isSending || !emailInput.trim()}
+          onClick={onSend}
+        >
+          {isSending ? <Spinner /> : "Send invite"}
+        </Button>
+      </div>
+    </Card>
   );
 }

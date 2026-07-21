@@ -10,15 +10,15 @@ import {
 } from "lucide-react";
 import { useAdminUsers, useCurrentUser } from "../../lib/hooks";
 import { api } from "../../lib/api";
-import type { AdminUserRow, OrgPlan } from "@/shared/types";
+import type { AdminUserRow, OrgPlan, Sort } from "@/shared/types";
 import { Menu, MenuItem, MenuSeparator } from "../../ui/menu";
 import { Badge, PageHeader, Table, Td, Th } from "../../ui/misc";
 import { AdminTableSkeleton } from "../../components/skeletons";
 import { useToast } from "../../ui/toast";
 import { ConfirmDialog } from "./confirm-dialog";
 import { SearchInput } from "./search-input";
-import { SortTh } from "./sort";
-import { sortRows, type Sort } from "./util";
+import { SortTh } from "../../ui/sort-th";
+import { sortRows } from "../../lib/sort";
 
 /** "today" / "3d ago" / a date, for the users table's last-seen column. */
 const lastSeenLabel = (ts: number | null) => {

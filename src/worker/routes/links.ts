@@ -13,6 +13,7 @@ import {
   SLUG_RE,
   RESERVED_SLUGS,
   isValidHttpUrl,
+  resolveUtm,
   validateQrFields,
 } from "../util";
 import type { LinkDTO, LinkInput } from "@/shared/types";
@@ -70,6 +71,7 @@ function toDTO(
     qrLogoSize: row.qrLogoSize,
     createdAt: row.createdAt,
     clicks,
+    createdBy: row.createdBy,
   };
 }
 
@@ -84,6 +86,17 @@ function hasQrOverride(body: LinkInput): boolean {
     body.qrEyeColor ||
     body.qrLogoSize !== undefined
   );
+}
+
+/** Fetch a link inside an org or 404. */
+async function findLink(db: DB, orgId: string, linkId: string) {
+  const rows = await db
+    .select()
+    .from(schema.links)
+    .where(and(eq(schema.links.id, linkId), eq(schema.links.orgId, orgId)));
+  const link = rows[0];
+  if (!link) throw new HTTPException(404, { message: "Link not found" });
+  return link;
 }
 
 /**
@@ -205,6 +218,10 @@ linkRoutes.post("/", requireOrgRole("member"), async (c) => {
       throw new HTTPException(500, { message: "Could not allocate slug" });
   }
 
+  // UTM params already in the destination are extracted into the columns so
+  // analytics group-bys see them; explicit fields fill whatever is missing.
+  const utm = resolveUtm(body.destination, body);
+
   const link: typeof schema.links.$inferSelect = {
     id: uid(),
     orgId,
@@ -212,11 +229,11 @@ linkRoutes.post("/", requireOrgRole("member"), async (c) => {
     slug,
     destination: body.destination,
     title: body.title?.trim() ?? "",
-    utmSource: body.utmSource?.trim() ?? "",
-    utmMedium: body.utmMedium?.trim() ?? "",
-    utmCampaign: body.utmCampaign?.trim() ?? "",
-    utmTerm: body.utmTerm?.trim() ?? "",
-    utmContent: body.utmContent?.trim() ?? "",
+    utmSource: utm.utmSource,
+    utmMedium: utm.utmMedium,
+    utmCampaign: utm.utmCampaign,
+    utmTerm: utm.utmTerm,
+    utmContent: utm.utmContent,
     qrLogo: body.qrLogo ?? "",
     qrStyle: body.qrStyle ?? "",
     qrColor: body.qrColor ?? "",
@@ -242,17 +259,7 @@ linkRoutes.patch("/:linkId", requireOrgRole("member"), async (c) => {
     throw new HTTPException(402, {
       message: "QR customization is a paid feature: upgrade to use it",
     });
-  const rows = await db
-    .select()
-    .from(schema.links)
-    .where(
-      and(
-        eq(schema.links.id, c.req.param("linkId")!),
-        eq(schema.links.orgId, orgId),
-      ),
-    );
-  const existing = rows[0];
-  if (!existing) throw new HTTPException(404, { message: "Link not found" });
+  const existing = await findLink(db, orgId, c.req.param("linkId")!);
 
   const domainId =
     body.domainId !== undefined ? body.domainId : existing.domainId;
@@ -273,17 +280,22 @@ linkRoutes.patch("/:linkId", requireOrgRole("member"), async (c) => {
   if (moved && (await slugTaken(db, newSlug, domainId, existing.id)))
     throw slugConflict(newSlug, domainId === null);
 
+  const destination = body.destination ?? existing.destination;
+  // Re-resolve against the final destination: its params win, explicit
+  // fields fill gaps or clear, anything else keeps the existing value.
+  const utm = resolveUtm(destination, body, existing);
+
   const updated = {
     ...existing,
     domainId,
     slug: newSlug,
-    destination: body.destination ?? existing.destination,
+    destination,
     title: body.title?.trim() ?? existing.title,
-    utmSource: body.utmSource?.trim() ?? existing.utmSource,
-    utmMedium: body.utmMedium?.trim() ?? existing.utmMedium,
-    utmCampaign: body.utmCampaign?.trim() ?? existing.utmCampaign,
-    utmTerm: body.utmTerm?.trim() ?? existing.utmTerm,
-    utmContent: body.utmContent?.trim() ?? existing.utmContent,
+    utmSource: utm.utmSource,
+    utmMedium: utm.utmMedium,
+    utmCampaign: utm.utmCampaign,
+    utmTerm: utm.utmTerm,
+    utmContent: utm.utmContent,
     qrLogo: body.qrLogo ?? existing.qrLogo,
     qrStyle: body.qrStyle ?? existing.qrStyle,
     qrColor: body.qrColor ?? existing.qrColor,
@@ -310,17 +322,7 @@ linkRoutes.patch("/:linkId", requireOrgRole("member"), async (c) => {
 linkRoutes.delete("/:linkId", requireOrgRole("member"), async (c) => {
   const db = c.var.db;
   const orgId = c.req.param("orgId")!;
-  const rows = await db
-    .select()
-    .from(schema.links)
-    .where(
-      and(
-        eq(schema.links.id, c.req.param("linkId")!),
-        eq(schema.links.orgId, orgId),
-      ),
-    );
-  const link = rows[0];
-  if (!link) throw new HTTPException(404, { message: "Link not found" });
+  const link = await findLink(db, orgId, c.req.param("linkId")!);
   const hostname = await domainHostname(db, orgId, link.domainId);
   await db.delete(schema.links).where(eq(schema.links.id, link.id));
   await unpublishLink(c.env, link.slug, hostname);

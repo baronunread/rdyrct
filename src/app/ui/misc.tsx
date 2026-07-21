@@ -1,5 +1,7 @@
 import type { ReactNode, ThHTMLAttributes, TdHTMLAttributes } from "react";
+import { Link } from "react-router";
 import { cn } from "./cn";
+import { Footer } from "./footer";
 
 const badgeColors = {
   muted: "border-border text-muted",
@@ -19,7 +21,7 @@ export function Badge({
   return (
     <span
       className={cn(
-        "inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] tracking-wide",
+        "inline-flex items-center rounded-full border px-2 py-0.5 text-2xs tracking-wide",
         badgeColors[color],
       )}
     >
@@ -47,10 +49,10 @@ export function Card({
   );
 }
 
-export function Table({ children }: { children: ReactNode }) {
+export function Table({ children, fixed }: { children: ReactNode; fixed?: boolean }) {
   return (
     <div className="overflow-x-auto rounded-lg border border-border bg-surface">
-      <table className="w-full text-sm [&_tbody_tr]:transition-colors [&_tbody_tr:hover]:bg-surface-2/40">
+      <table className={`w-full text-sm [&_tbody_tr]:transition-colors [&_tbody_tr:hover]:bg-surface-2/40 ${fixed ? "table-fixed" : ""}`}>
         {children}
       </table>
     </div>
@@ -64,7 +66,7 @@ export function Th({
   return (
     <th
       className={cn(
-        "border-b border-border px-4 py-2.5 text-left text-[11px] font-normal tracking-wider text-muted uppercase",
+        "border-b border-border px-4 py-2.5 text-left text-2xs font-normal tracking-wider text-muted uppercase",
         className,
       )}
       {...props}
@@ -118,6 +120,22 @@ export function PageHeader({
         {sub && <p className="mt-1 text-sm text-muted">{sub}</p>}
       </div>
       {action}
+    </div>
+  );
+}
+
+export function LegalPageLayout({ children }: { children: ReactNode }) {
+  return (
+    <div className="mx-auto max-w-3xl px-6 py-12">
+      <header className="mb-8">
+        <Link to="/" className="text-lg font-bold tracking-widest">
+          rdyrct
+        </Link>
+      </header>
+      <div className="flex flex-col gap-8 text-sm">
+        {children}
+      </div>
+      <Footer />
     </div>
   );
 }

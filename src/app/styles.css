@@ -68,6 +68,9 @@
     monospace;
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas,
     monospace;
+  --text-2xs: 11px;
+  --text-3xs: 10px;
+  --text-4xs: 9px;
   --animate-shake: shake 300ms ease;
 }
 

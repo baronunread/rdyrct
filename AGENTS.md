@@ -22,6 +22,7 @@ bunx emulate --service resend   # local Resend inbox on :4000 (read: curl :4000/
 bun run db:migrate:local    # apply migrations to local D1
 bun run db:reset:local      # wipe local D1 + KV, re-apply migrations (start from scratch; restart dev after)
 bun add <pkg>               # dependencies
+bunx agent-browser          # real-browser checks: screenshots, clicking through pages. Use it for any visual verification; do not hand-roll headless Chrome
 ```
 
 **Two TypeScript projects; run BOTH after changes:**
@@ -47,7 +48,8 @@ Shell writes to repo files are sandboxed; edit through the editor tools, not
   (`/api/*`, behind `withSession`) → root `/:slug` redirect → SPA asset fallback.
 - **Routing has NO `/app` prefix.** `/` is the marketing landing. Public routes:
   `/login`, `/signup`, `/privacy`, `/terms`, `/reset-password`,
-  `/invite/:token`. The app lives at root keywords: `/dashboard`, `/links`,
+  `/invite/:token`. The app lives at root keywords: `/dashboard` (quick link
+  creation, quick stats, recent activity), `/analytics` (the full stats page), `/links`,
   `/domains`, `/members`, `/billing`, `/settings`, `/admin`. There is **no org id
   in URLs**: the current org is a localStorage-backed store, `useCurrentOrg`
   (`src/app/lib/current-org.ts`). Those keywords are reserved from custom slugs

@@ -370,62 +370,67 @@ export function AuthPage({ mode }: { mode: "login" | "signup" }) {
     // Keep any previous error on screen while the retry is in flight: clearing
     // it here made the text vanish and reflash on every repeated failure.
     setBusy(true);
-    if (mode === "login") {
-      const { error: signInError } = await authClient.signIn.email({
-        email,
-        password,
-      });
-      if (signInError) {
-        if (signInError.code === "EMAIL_NOT_VERIFIED") {
-          await goVerify();
+    try {
+      if (mode === "login") {
+        const { error: signInError } = await authClient.signIn.email({
+          email,
+          password,
+        });
+        if (signInError) {
+          if (signInError.code === "EMAIL_NOT_VERIFIED") {
+            await goVerify();
+          } else {
+            failSubmit(friendlyAuthError(signInError));
+          }
         } else {
-          failSubmit(friendlyAuthError(signInError));
+          await qc.refetchQueries({ queryKey: ["user"] });
+          navigate(next, { replace: true });
         }
       } else {
-        await qc.refetchQueries({ queryKey: ["user"] });
-        navigate(next, { replace: true });
+        const { error: signUpError } = await authClient.signUp.email({
+          email,
+          password,
+          name: email.split("@")[0],
+        });
+        if (signUpError) {
+          failSubmit(friendlyAuthError(signUpError));
+        } else {
+          await goVerify();
+        }
       }
-    } else {
-      const { error: signUpError } = await authClient.signUp.email({
-        email,
-        password,
-        name: email.split("@")[0],
-      });
-      if (signUpError) {
-        failSubmit(friendlyAuthError(signUpError));
-      } else {
-        await goVerify();
-      }
+    } finally {
+      setBusy(false);
     }
-    setBusy(false);
   };
 
   const runVerify = async (code: string) => {
     if (busy) return; // onComplete + button click can both fire
     setOtpError("");
     setBusy(true);
-    // verifyEmail signs the user in on success (sets the session cookie)
-    const { error: verifyError } = await authClient.emailOtp.verifyEmail({
-      email,
-      otp: code.trim(),
-    });
-    if (verifyError) {
+    try {
+      // verifyEmail signs the user in on success (sets the session cookie)
+      const { error: verifyError } = await authClient.emailOtp.verifyEmail({
+        email,
+        otp: code.trim(),
+      });
+      if (verifyError) {
+        setOtpError(verifyError.message ?? "That code is invalid or expired");
+        return;
+      }
+      // verifyEmail sets the session cookie, but on the signup path (and the
+      // unverified-login path) the client-side session atom can lag behind,
+      // make sure a session actually exists before moving on so /dashboard
+      // doesn't bounce the user back to login.
+      const sess = await authClient.getSession();
+      if (!sess?.data) {
+        await authClient.signIn.email({ email, password });
+      }
+      clearPending();
+      await qc.refetchQueries({ queryKey: ["user"] });
+      navigate(next, { replace: true });
+    } finally {
       setBusy(false);
-      setOtpError(verifyError.message ?? "That code is invalid or expired");
-      return;
     }
-    // verifyEmail sets the session cookie, but on the signup path (and the
-    // unverified-login path) the client-side session atom can lag behind,
-    // make sure a session actually exists before moving on so /dashboard
-    // doesn't bounce the user back to login.
-    const sess = await authClient.getSession();
-    if (!sess?.data) {
-      await authClient.signIn.email({ email, password });
-    }
-    setBusy(false);
-    clearPending();
-    await qc.refetchQueries({ queryKey: ["user"] });
-    navigate(next, { replace: true });
   };
 
   const submitOtp = (e: FormEvent) => {
@@ -449,16 +454,19 @@ export function AuthPage({ mode }: { mode: "login" | "signup" }) {
   const submitForgot = async (e: FormEvent) => {
     e.preventDefault();
     setForgotBusy(true);
-    const { error: resetError } = await authClient.requestPasswordReset({
-      email: forgotEmail,
-      redirectTo: "/reset-password",
-    });
-    setForgotBusy(false);
-    if (resetError) {
-      toast(resetError.message ?? "Something went wrong", "error");
-      return;
+    try {
+      const { error: resetError } = await authClient.requestPasswordReset({
+        email: forgotEmail,
+        redirectTo: "/reset-password",
+      });
+      if (resetError) {
+        toast(resetError.message ?? "Something went wrong", "error");
+        return;
+      }
+      setView("forgot-sent");
+    } finally {
+      setForgotBusy(false);
     }
-    setView("forgot-sent");
   };
 
   if (view === "verify-otp") {

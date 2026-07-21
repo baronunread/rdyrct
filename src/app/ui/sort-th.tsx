@@ -1,9 +1,8 @@
 import { ArrowDown, ArrowUp, ArrowUpDown } from "lucide-react";
-import { Th } from "../../ui/misc";
-import { cn } from "../../ui/cn";
-import type { Sort } from "./util";
+import { Th } from "./misc";
+import { cn } from "./cn";
+import type { Sort } from "@/shared/types";
 
-/** Click-to-sort table header; toggles direction when already active. */
 export function SortTh({
   label,
   sortKey,

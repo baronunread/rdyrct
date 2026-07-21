@@ -12,8 +12,6 @@ import {
   QR_DEFAULT_COLOR,
   QR_DEFAULT_CORNER,
   QR_DEFAULT_LOGO_SIZE,
-  type QrCornerStyle,
-  type QrDotStyle,
 } from "@/shared/types";
 import { useToast } from "../ui/toast";
 
@@ -82,7 +80,7 @@ export function QRPreview({
   dotStyle?: string;
   /** hex ink color; empty/undefined = QR_DEFAULT_COLOR */
   color?: string;
-  /** QrCornerStyle for the finder 'eyes'; empty/undefined = QR_DEFAULT_CORNER */
+  /** Corner style for the finder 'eyes'; empty/undefined = QR_DEFAULT_CORNER */
   corner?: string;
   /** hex accent color for the eyes; empty/undefined = follows `color` */
   eyeColor?: string;
@@ -97,7 +95,7 @@ export function QRPreview({
 
   const ink = color || QR_DEFAULT_COLOR;
   const look: QrLook = {
-    dot: (dotStyle || "rounded") as QrDotStyle as DotType,
+    dot: (dotStyle || "rounded") as DotType,
     corner: corner || QR_DEFAULT_CORNER,
     ink,
     eye: eyeColor || ink,
@@ -191,14 +189,14 @@ export function QrColorField({
   return (
     <div className="min-w-0">
       <div className="mb-1.5 flex items-center justify-between gap-1">
-        <span className="truncate text-[11px] tracking-wider text-muted uppercase">
+        <span className="truncate text-2xs tracking-wider text-muted uppercase">
           {label}
         </span>
         {value && !disabled && (
           <button
             type="button"
             onClick={() => onChange("")}
-            className="shrink-0 cursor-pointer text-[10px] tracking-wider text-muted uppercase hover:text-text"
+            className="shrink-0 cursor-pointer text-3xs tracking-wider text-muted uppercase hover:text-text"
           >
             Reset
           </button>
@@ -214,7 +212,7 @@ export function QrColorField({
           className="h-9 w-full min-w-0 flex-1 cursor-pointer rounded-md border border-border bg-bg p-1 disabled:cursor-default disabled:opacity-50"
         />
         {allowTransparent && (
-          <label className="flex shrink-0 cursor-pointer items-center gap-1 text-[11px] text-muted select-none">
+          <label className="flex shrink-0 cursor-pointer items-center gap-1 text-2xs text-muted select-none">
             <input
               type="checkbox"
               checked={isTransparent}
@@ -274,42 +272,67 @@ export function QrLogoInput({
   const open = () => inputRef.current?.click();
 
   return (
-    <div
-      role="button"
-      tabIndex={disabled ? -1 : 0}
-      aria-label="Upload a logo image"
-      aria-disabled={disabled || undefined}
-      onClick={() => !disabled && open()}
-      onKeyDown={(e) => !disabled && (e.key === "Enter" || e.key === " ") && open()}
-      onDragOver={(e) => {
-        e.preventDefault();
-        setDragging(true);
-      }}
-      onDragLeave={() => setDragging(false)}
-      onDrop={(e) => {
-        e.preventDefault();
-        setDragging(false);
-        readFile(e.dataTransfer.files?.[0]);
-      }}
-      className={cn(
-        "relative flex w-full cursor-pointer flex-col items-center justify-center gap-1.5 rounded-md border border-dashed border-border bg-bg px-3 h-24 text-xs text-muted transition-colors select-none focus-visible:outline-2 focus-visible:outline-accent/60 disabled:cursor-default disabled:opacity-50",
-        dragging
-          ? "border-accent text-text"
-          : "not-disabled:hover:border-accent/60 not-disabled:hover:text-text",
-      )}
-    >
-      <input
-        ref={inputRef}
-        type="file"
-        accept="image/*"
-        disabled={disabled}
-        className="hidden"
-        onChange={(e) => {
-          readFile(e.target.files?.[0]);
-          // reset so picking the same file again re-fires onChange
-          e.target.value = "";
+    <div className="relative">
+      <div
+        role="button"
+        tabIndex={disabled ? -1 : 0}
+        aria-label="Upload a logo image"
+        aria-disabled={disabled || undefined}
+        onClick={() => !disabled && open()}
+        onKeyDown={(e) => !disabled && (e.key === "Enter" || e.key === " ") && open()}
+        onDragOver={(e) => {
+          e.preventDefault();
+          setDragging(true);
         }}
-      />
+        onDragLeave={() => setDragging(false)}
+        onDrop={(e) => {
+          e.preventDefault();
+          setDragging(false);
+          readFile(e.dataTransfer.files?.[0]);
+        }}
+        className={cn(
+          "flex w-full cursor-pointer flex-col items-center justify-center gap-1.5 rounded-md border border-dashed border-border bg-bg px-3 h-24 text-xs text-muted transition-colors select-none focus-visible:outline-2 focus-visible:outline-accent/60 aria-disabled:cursor-default aria-disabled:opacity-50",
+          dragging
+            ? "border-accent text-text"
+            : "not-aria-disabled:hover:border-accent/60 not-aria-disabled:hover:text-text",
+        )}
+      >
+        <input
+          ref={inputRef}
+          type="file"
+          accept="image/*"
+          disabled={disabled}
+          className="hidden"
+          onChange={(e) => {
+            readFile(e.target.files?.[0]);
+            // reset so picking the same file again re-fires onChange
+            e.target.value = "";
+          }}
+        />
+        {value ? (
+          <>
+            <img
+              src={value}
+              alt="Uploaded logo"
+              className="h-10 w-10 rounded border border-border bg-white object-contain"
+            />
+            <span className="flex items-center gap-1 text-text">
+              <Check size={12} className="text-accent" /> Logo added
+            </span>
+            <span className="text-3xs text-muted/70">
+              Drop a new image or browse to replace
+            </span>
+          </>
+        ) : (
+          <>
+            <ImagePlus size={16} />
+            <span>
+              Drop an image or <span className="text-accent">browse</span>
+            </span>
+            <span className="text-3xs text-muted/70">up to 96 KB</span>
+          </>
+        )}
+      </div>
       {value && onClear && (
         <button
           type="button"
@@ -323,29 +346,6 @@ export function QrLogoInput({
         >
           <X size={14} />
         </button>
-      )}
-      {value ? (
-        <>
-          <img
-            src={value}
-            alt="Uploaded logo"
-            className="h-10 w-10 rounded border border-border bg-white object-contain"
-          />
-          <span className="flex items-center gap-1 text-text">
-            <Check size={12} className="text-accent" /> Logo added
-          </span>
-          <span className="text-[10px] text-muted/70">
-            Drop a new image or browse to replace
-          </span>
-        </>
-      ) : (
-        <>
-          <ImagePlus size={16} />
-          <span>
-            Drop an image or <span className="text-accent">browse</span>
-          </span>
-          <span className="text-[10px] text-muted/70">up to 96 KB</span>
-        </>
       )}
     </div>
   );

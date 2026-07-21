@@ -38,17 +38,20 @@ export function ResetPasswordPage() {
       return;
     }
     setBusy(true);
-    const { error: resetError } = await authClient.resetPassword({
-      newPassword: password,
-      token,
-    });
-    setBusy(false);
-    if (resetError) {
-      failSubmit(friendlyAuthError(resetError));
-      return;
+    try {
+      const { error: resetError } = await authClient.resetPassword({
+        newPassword: password,
+        token,
+      });
+      if (resetError) {
+        failSubmit(friendlyAuthError(resetError));
+        return;
+      }
+      toast("Password updated, sign in with your new password");
+      navigate("/login", { replace: true });
+    } finally {
+      setBusy(false);
     }
-    toast("Password updated, sign in with your new password");
-    navigate("/login", { replace: true });
   };
 
   return (

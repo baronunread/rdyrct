@@ -31,6 +31,7 @@ export const RESERVED_SLUGS = new Set([
   "terms",
   // authenticated app tabs
   "dashboard",
+  "analytics",
   "links",
   "members",
   "billing",
@@ -53,6 +54,48 @@ export interface UtmFields {
   utmCampaign: string;
   utmTerm: string;
   utmContent: string;
+}
+
+export const EMPTY_UTM: UtmFields = {
+  utmSource: "",
+  utmMedium: "",
+  utmCampaign: "",
+  utmTerm: "",
+  utmContent: "",
+};
+
+/**
+ * Resolve the UTM fields to store on a link. Params already present in the
+ * destination URL win (they are what the redirect sends), then explicit
+ * fields (an empty string clears), then the base (existing values on update).
+ * Keeps the stored columns in sync with what buildDestination emits.
+ */
+export function resolveUtm(
+  destination: string,
+  fields: Partial<UtmFields>,
+  base: UtmFields = EMPTY_UTM,
+): UtmFields {
+  let url: URL | null = null;
+  try {
+    url = new URL(destination);
+  } catch {
+    // invalid destination: fields and base decide
+  }
+  const out = { ...base };
+  for (const [param, field] of UTM_KEYS) {
+    const fromUrl = url?.searchParams.get(param)?.trim();
+    if (fromUrl) {
+      out[field] = fromUrl;
+      continue;
+    }
+    const fromField = fields[field];
+    if (fromField !== undefined) {
+      out[field] = fromField.trim();
+      continue;
+    }
+    out[field] = base[field];
+  }
+  return out;
 }
 
 /** Destination with the link's UTM params applied (existing params win). */

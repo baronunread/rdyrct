@@ -3,7 +3,7 @@ import type { Context } from "hono";
 import { HTTPException } from "hono/http-exception";
 import { drizzle } from "drizzle-orm/d1";
 import * as schema from "./db/schema";
-import type { AppEnv } from "./env";
+import type { AppEnv, Env } from "./env";
 import { withSession } from "./auth";
 import { getAuth } from "./better-auth";
 import { userRoutes } from "./routes/auth";
@@ -109,4 +109,20 @@ app.get("/:slug", async (c, next) => {
 
 app.all("*", (c) => c.env.ASSETS.fetch(c.req.raw));
 
-export default app;
+/* ---------------- Cron: click retention ---------------- */
+
+export default {
+  fetch: app.fetch,
+  async scheduled(_event: ScheduledEvent, env: Env, _ctx: ExecutionContext) {
+    const cutoff = Date.now() - 400 * 24 * 60 * 60 * 1000;
+    // Bounded batches: one unbounded DELETE can hit D1 statement limits once
+    // the table is large.
+    const stmt = env.DB.prepare(
+      `delete from clicks where id in (select id from clicks where ts < ? limit 1000)`,
+    );
+    let changes = 0;
+    do {
+      changes = (await stmt.bind(cutoff).run()).meta.changes;
+    } while (changes > 0);
+  },
+};
