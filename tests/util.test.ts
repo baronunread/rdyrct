@@ -4,6 +4,7 @@ import {
   deviceFromUA,
   EMPTY_UTM,
   isValidHttpUrl,
+  qrLogoKeyFromUrl,
   randomSlug,
   referrerHost,
   RESERVED_SLUGS,
@@ -230,6 +231,26 @@ describe("validateQrFields", () => {
     expect400({
       qrLogo: "/api/orgs/zzz9y8x7w6v5u4t3s/qr-logo/n2P4r6T8v0x2z4B6.png",
     });
+  });
+
+  test("accepts org ids with hyphens (the local seed script's format)", () => {
+    const seedOrg = "seed-cMjzvojAF3j0";
+    expect(() =>
+      validateQrFields(
+        { qrLogo: `/api/orgs/${seedOrg}/qr-logo/n2P4r6T8v0x2z4B6.png` },
+        seedOrg,
+      ),
+    ).not.toThrow();
+    expect(
+      qrLogoKeyFromUrl(`/api/orgs/${seedOrg}/qr-logo/n2P4r6T8v0x2z4B6.png`),
+    ).toBe(`${seedOrg}/n2P4r6T8v0x2z4B6.png`);
+  });
+
+  test("the org id charset is irrelevant (matched by construction, not regex)", () => {
+    const weirdOrg = "o.rg+1~2";
+    const url = `/api/orgs/${weirdOrg}/qr-logo/n2P4r6T8v0x2z4B6.png`;
+    expect(() => validateQrFields({ qrLogo: url }, weirdOrg)).not.toThrow();
+    expect(qrLogoKeyFromUrl(url)).toBe(`${weirdOrg}/n2P4r6T8v0x2z4B6.png`);
   });
 
   test("rejects unknown dot/corner styles", () => {

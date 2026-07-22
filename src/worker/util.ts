@@ -154,15 +154,17 @@ import { QR_CORNER_STYLES, QR_DOT_STYLES } from "@/shared/types";
 export const qrLogoUrl = (orgId: string, file: string) =>
   `/api/orgs/${orgId}/qr-logo/${file}`;
 
-const QR_LOGO_URL_RE =
-  /^\/api\/orgs\/[A-Za-z0-9]+\/qr-logo\/[A-Za-z0-9]+\.[a-z0-9]+$/;
+// Only the file name is charset-checked: it is ours (uid() + a known
+// extension). The org id never goes through a regex — validateQrFields
+// matches it by construction and qrLogoKeyFromUrl takes "one path segment" —
+// so any org id works (the seed script's "seed-" ids included).
+export const QR_LOGO_FILE_RE = /^[A-Za-z0-9]+\.[a-z0-9]+$/;
 
 /** R2 key (`{orgId}/{file}`) for a serving URL, null for anything else. */
 export function qrLogoKeyFromUrl(url: string): string | null {
-  const m =
-    /^\/api\/orgs\/([A-Za-z0-9]+)\/qr-logo\/([A-Za-z0-9]+\.[a-z0-9]+)$/.exec(
-      url,
-    );
+  const m = /^\/api\/orgs\/([^/]+)\/qr-logo\/([A-Za-z0-9]+\.[a-z0-9]+)$/.exec(
+    url,
+  );
   return m ? `${m[1]}/${m[2]}` : null;
 }
 
@@ -182,13 +184,14 @@ export function validateQrFields(
   orgId: string,
 ) {
   if (fields.qrLogo) {
-    if (!QR_LOGO_URL_RE.test(fields.qrLogo))
+    // A logo may only be referenced by the org that uploaded it: match the
+    // org's own serving prefix, then check the file part is a real upload.
+    const prefix = qrLogoUrl(orgId, "");
+    const file = fields.qrLogo.startsWith(prefix)
+      ? fields.qrLogo.slice(prefix.length)
+      : "";
+    if (!QR_LOGO_FILE_RE.test(file))
       throw new HTTPException(400, { message: "Logo must be an uploaded image" });
-    // A logo may only be referenced by the org that uploaded it.
-    if (!fields.qrLogo.startsWith(`/api/orgs/${orgId}/`))
-      throw new HTTPException(400, {
-        message: "Logo must belong to this organization",
-      });
   }
   if (
     fields.qrStyle &&

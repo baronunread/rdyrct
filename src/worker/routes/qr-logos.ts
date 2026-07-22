@@ -3,7 +3,7 @@ import { HTTPException } from "hono/http-exception";
 import type { AppEnv } from "../env";
 import { requireOrgRole } from "../auth";
 import { orgPlan } from "../plan";
-import { uid, qrLogoUrl } from "../util";
+import { uid, qrLogoUrl, QR_LOGO_FILE_RE } from "../util";
 import { QR_LOGO_MAX_BYTES } from "@/shared/types";
 
 // Mounted at /api/orgs/:orgId/qr-logo. Both upload and serving are gated to
@@ -54,7 +54,7 @@ qrLogoRoutes.post("/", requireOrgRole("member"), async (c) => {
 // header keeps an SVG logo from running scripts if the URL is opened directly.
 qrLogoRoutes.get("/:file", requireOrgRole("member"), async (c) => {
   const file = c.req.param("file");
-  if (!/^[A-Za-z0-9]+\.[a-z0-9]+$/.test(file))
+  if (!QR_LOGO_FILE_RE.test(file))
     throw new HTTPException(404, { message: "Not found" });
   const obj = await c.env.QR_LOGOS.get(`${c.req.param("orgId")!}/${file}`);
   if (!obj) throw new HTTPException(404, { message: "Not found" });
