@@ -3,23 +3,17 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useCurrentOrg } from "../lib/current-org";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { UserPlus, Copy, Trash2, Info } from "lucide-react";
+import { UserPlus, Trash2, Info } from "lucide-react";
 import { useCurrentUser, useMembers, useInvites } from "../lib/hooks";
 import { api } from "../lib/api";
 import { PLAN_LIMITS, type InviteDTO, type OrgRole, type Sort } from "@/shared/types";
 import { Button, IconButton } from "../ui/button";
+import { CopyButton } from "../ui/copy-button";
 import { Field, Input, Select } from "../ui/field";
 import { MenuSelect } from "../ui/menu";
 import { Tooltip } from "../ui/tooltip";
 import { RemoveMemberDialog, InviteMemberDialog } from "../components/member-dialogs";
-import {
-  Table,
-  Th,
-  Td,
-  Badge,
-  Card,
-  PageHeader,
-} from "../ui/misc";
+import { Table, Th, Td, Badge, Card, PageHeader } from "../ui/misc";
 import { TableSkeleton } from "../ui/skeleton";
 import { BusyContent } from "../ui/spinner";
 import { useToast } from "../ui/toast";
@@ -36,6 +30,8 @@ const roleColor: Record<OrgRole, "accent" | "mint" | "muted"> = {
   member: "muted",
 };
 
+const inviteUrl = (token: string) => `${window.location.origin}/invite/${token}`;
+
 function useMemberManagement(orgId: string, canManage: boolean) {
   const qc = useQueryClient();
   const toast = useToast();
@@ -46,10 +42,8 @@ function useMemberManagement(orgId: string, canManage: boolean) {
   const [removing, setRemoving] = useState<{ userId: string; name: string } | null>(null);
   const [sort, setSort] = useState<Sort>({ key: "createdAt", dir: 1 });
 
-  const invalidateMembers = () =>
-    qc.invalidateQueries({ queryKey: ["members", orgId] });
-  const invalidateInvites = () =>
-    qc.invalidateQueries({ queryKey: ["invites", orgId] });
+  const invalidateMembers = () => qc.invalidateQueries({ queryKey: ["members", orgId] });
+  const invalidateInvites = () => qc.invalidateQueries({ queryKey: ["invites", orgId] });
 
   const setRole = useMutation({
     mutationFn: ({ userId, role }: { userId: string; role: string }) =>
@@ -59,8 +53,7 @@ function useMemberManagement(orgId: string, canManage: boolean) {
   });
 
   const removeMember = useMutation({
-    mutationFn: (userId: string) =>
-      api(`/orgs/${orgId}/members/${userId}`, { method: "DELETE" }),
+    mutationFn: (userId: string) => api(`/orgs/${orgId}/members/${userId}`, { method: "DELETE" }),
     onSuccess: invalidateMembers,
     onError: withErrorToast(toast),
   });
@@ -68,12 +61,17 @@ function useMemberManagement(orgId: string, canManage: boolean) {
   const createInvite = useMutation({
     mutationFn: () =>
       api<{ invites: InviteDTO[] }>(`/orgs/${orgId}/invites`, {
-        method: "POST", body: { role: inviteRole },
+        method: "POST",
+        body: { role: inviteRole },
       }),
     onSuccess: ({ invites }) => {
       invalidateInvites();
       const invite = invites[0];
-      if (invite) copyInvite(invite.token);
+      if (invite) {
+        void copyInvite(inviteUrl(invite.token)).catch(() =>
+          toast("Could not copy invite link", "error"),
+        );
+      }
       setInviteOpen(false);
     },
     onError: withErrorToast(toast),
@@ -82,7 +80,8 @@ function useMemberManagement(orgId: string, canManage: boolean) {
   const sendEmailInvite = useMutation({
     mutationFn: (params: { email: string; role: "member" | "admin" }) =>
       api<{ invites: InviteDTO[] }>(`/orgs/${orgId}/invites`, {
-        method: "POST", body: { role: params.role, emails: [params.email] },
+        method: "POST",
+        body: { role: params.role, emails: [params.email] },
       }),
     onSuccess: () => {
       invalidateInvites();
@@ -91,31 +90,45 @@ function useMemberManagement(orgId: string, canManage: boolean) {
   });
 
   const revokeInvite = useMutation({
-    mutationFn: (token: string) =>
-      api(`/orgs/${orgId}/invites/${token}`, { method: "DELETE" }),
+    mutationFn: (token: string) => api(`/orgs/${orgId}/invites/${token}`, { method: "DELETE" }),
     onSuccess: invalidateInvites,
   });
 
-  const copyInvite = (token: string) => {
-    navigator.clipboard.writeText(`${window.location.origin}/invite/${token}`);
+  const copyInvite = async (text: string) => {
+    await navigator.clipboard.writeText(text);
     toast("Invite link copied");
   };
 
   const sorted = useMemo(
-    () => sortRows(members.data ?? [], sort, {
-      name: (m) => m.name.toLowerCase(),
-      email: (m) => m.email.toLowerCase(),
-      role: (m) => m.role,
-      createdAt: (m) => m.createdAt,
-    }),
+    () =>
+      sortRows(members.data ?? [], sort, {
+        name: (m) => m.name.toLowerCase(),
+        email: (m) => m.email.toLowerCase(),
+        role: (m) => m.role,
+        createdAt: (m) => m.createdAt,
+      }),
     [members.data, sort],
   );
 
   return {
-    members, invites, inviteOpen, setInviteOpen, inviteRole, setInviteRole,
-    removing, setRemoving,
-    sort, setSort, sorted, setRole, removeMember, createInvite, sendEmailInvite,
-    revokeInvite, copyInvite,
+    members,
+    invites,
+    inviteOpen,
+    setInviteOpen,
+    inviteRole,
+    setInviteRole,
+    removing,
+    setRemoving,
+    sort,
+    setSort,
+    sorted,
+    setRole,
+    removeMember,
+    createInvite,
+    sendEmailInvite,
+    revokeInvite,
+    inviteUrl,
+    copyInvite,
   };
 }
 
@@ -123,16 +136,28 @@ export function MembersPage() {
   const { org } = useCurrentOrg();
   const orgId = org?.id ?? "";
   const me = useCurrentUser();
-  const myRole: OrgRole = me.data?.user.isAdmin
-    ? "owner"
-    : (org?.role ?? "member");
+  const myRole: OrgRole = me.data?.user.isAdmin ? "owner" : (org?.role ?? "member");
   const canManage = myRole === "owner" || myRole === "admin";
 
   const {
-    members, invites, inviteOpen, setInviteOpen, inviteRole, setInviteRole,
-    removing, setRemoving,
-    sort, setSort, sorted, setRole, removeMember, createInvite, sendEmailInvite,
-    revokeInvite, copyInvite,
+    members,
+    invites,
+    inviteOpen,
+    setInviteOpen,
+    inviteRole,
+    setInviteRole,
+    removing,
+    setRemoving,
+    sort,
+    setSort,
+    sorted,
+    setRole,
+    removeMember,
+    createInvite,
+    sendEmailInvite,
+    revokeInvite,
+    inviteUrl,
+    copyInvite,
   } = useMemberManagement(orgId, canManage);
 
   const memberLimit = org ? PLAN_LIMITS[org.plan].members : 0;
@@ -154,11 +179,7 @@ export function MembersPage() {
       />
 
       {canManage && org && (
-        <InviteByEmailCard
-          org={org}
-          memberLimit={memberLimit}
-          sendEmailInvite={sendEmailInvite}
-        />
+        <InviteByEmailCard org={org} memberLimit={memberLimit} sendEmailInvite={sendEmailInvite} />
       )}
 
       {members.isLoading ? (
@@ -170,7 +191,13 @@ export function MembersPage() {
               <SortTh label="Name" sortKey="name" sort={sort} onSort={setSort} className="w-36" />
               <SortTh label="Email" sortKey="email" sort={sort} onSort={setSort} className="w-48" />
               <SortTh label="Role" sortKey="role" sort={sort} onSort={setSort} className="w-32" />
-              <SortTh label="Joined" sortKey="createdAt" sort={sort} onSort={setSort} className="w-24" />
+              <SortTh
+                label="Joined"
+                sortKey="createdAt"
+                sort={sort}
+                onSort={setSort}
+                className="w-24"
+              />
               {canManage && <Th className="w-16 text-right">Actions</Th>}
             </tr>
           </thead>
@@ -207,9 +234,7 @@ export function MembersPage() {
                     <Badge color={roleColor[m.role]}>{m.role}</Badge>
                   )}
                 </Td>
-                <Td className="text-xs text-muted">
-                  {shortDate(m.createdAt)}
-                </Td>
+                <Td className="text-xs text-muted">{shortDate(m.createdAt)}</Td>
                 {canManage && (
                   <Td>
                     {m.role !== "owner" && m.userId !== me.data?.user.id && (
@@ -233,31 +258,19 @@ export function MembersPage() {
 
       {canManage && !!invites.data?.length && (
         <Card className="mt-4">
-          <p className="mb-3 text-2xs tracking-wider text-muted uppercase">
-            Pending invites
-          </p>
+          <p className="mb-3 text-2xs tracking-wider text-muted uppercase">Pending invites</p>
           <ul className="flex flex-col gap-2">
             {invites.data.map((inv) => (
-              <li
-                key={inv.token}
-                className="flex items-center justify-between gap-3 text-sm"
-              >
-                <span className="truncate text-muted">
-                  {inv.email ?? "link invite"}
-                </span>
+              <li key={inv.token} className="flex items-center justify-between gap-3 text-sm">
+                <span className="truncate text-muted">{inv.email ?? "link invite"}</span>
                 <span className="flex items-center gap-2">
-                  <Badge color={inv.role === "admin" ? "mint" : "muted"}>
-                    {inv.role}
-                  </Badge>
-                  <span className="text-xs text-muted">
-                    expires {shortDate(inv.expiresAt)}
-                  </span>
-                  <IconButton
+                  <Badge color={inv.role === "admin" ? "mint" : "muted"}>{inv.role}</Badge>
+                  <span className="text-xs text-muted">expires {shortDate(inv.expiresAt)}</span>
+                  <CopyButton
+                    text={inviteUrl(inv.token)}
                     label="Copy invite link"
-                    onClick={() => copyInvite(inv.token)}
-                  >
-                    <Copy size={14} />
-                  </IconButton>
+                    onCopy={copyInvite}
+                  />
                   <IconButton
                     label="Revoke invite"
                     danger
@@ -300,7 +313,10 @@ function InviteByEmailCard({
   org: NonNullable<ReturnType<typeof useCurrentOrg>["org"]>;
   memberLimit: number;
   sendEmailInvite: {
-    mutate: (params: { email: string; role: "member" | "admin" }, opts?: { onSuccess?: () => void }) => void;
+    mutate: (
+      params: { email: string; role: "member" | "admin" },
+      opts?: { onSuccess?: () => void },
+    ) => void;
     isPending: boolean;
   };
 }) {
@@ -336,14 +352,12 @@ function InviteByEmailCard({
   return (
     <Card className="mb-4">
       <div className="mb-3 flex items-center gap-1.5">
-        <p className="text-2xs tracking-wider text-muted uppercase">
-          Invite by email
-        </p>
+        <p className="text-2xs tracking-wider text-muted uppercase">Invite by email</p>
         <Tooltip
           content={
             <>
-              You can invite up to {memberLimit} members on the{" "}
-              {org.plan} plan. Pending invites count toward the limit.
+              You can invite up to {memberLimit} members on the {org.plan} plan. Pending invites
+              count toward the limit.
             </>
           }
         >
@@ -356,40 +370,24 @@ function InviteByEmailCard({
           </button>
         </Tooltip>
       </div>
-      <form
-        onSubmit={handleSubmit(submit)}
-        className="flex items-end gap-2"
-      >
+      <form onSubmit={handleSubmit(submit)} className="flex items-end gap-2">
         <div className="min-w-0 flex-1">
-          <Field
-            label="Email"
-            hint={errors.email?.message}
-          >
-            <Input
-              type="email"
-              {...register("email")}
-              placeholder="teammate@company.com"
-            />
+          <Field label="Email" hint={errors.email?.message}>
+            <Input type="email" {...register("email")} placeholder="teammate@company.com" />
           </Field>
         </div>
         <div className="w-36">
           <Field label="Role">
             <Select
               value={selectedRole}
-              onChange={(e) =>
-                setValue("role", e.target.value as "member" | "admin")
-              }
+              onChange={(e) => setValue("role", e.target.value as "member" | "admin")}
             >
               <option value="member">member</option>
               <option value="admin">admin</option>
             </Select>
           </Field>
         </div>
-        <Button
-          type="submit"
-          variant="primary"
-          disabled={sendEmailInvite.isPending}
-        >
+        <Button type="submit" variant="primary" disabled={sendEmailInvite.isPending}>
           <BusyContent busy={sendEmailInvite.isPending}>Send invite</BusyContent>
         </Button>
       </form>

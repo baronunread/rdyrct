@@ -2,21 +2,10 @@ import { useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Link } from "react-router";
-import { Check, Copy } from "lucide-react";
-import {
-  useStats,
-  useLinks,
-  useMembers,
-  useLinkMutations,
-  useRecentClicks,
-} from "../lib/hooks";
+import { useStats, useLinks, useMembers, useLinkMutations, useRecentClicks } from "../lib/hooks";
 import { useOrgLimits } from "../lib/org-limits";
 import { shortUrl } from "../lib/api";
-import {
-  type DomainDTO,
-  type LinkDTO,
-  type RecentClick,
-} from "@/shared/types";
+import { type DomainDTO, type LinkDTO, type RecentClick } from "@/shared/types";
 import { BarList, StatCard } from "../components/charts";
 import { DashboardSkeleton } from "../components/skeletons";
 import { NoOrgState } from "../components/no-org";
@@ -29,29 +18,16 @@ import { MenuSelect } from "../ui/menu";
 import { Card, PageHeader } from "../ui/misc";
 import { BusyContent } from "../ui/spinner";
 import { useToast } from "../ui/toast";
+import { CopyButton } from "../ui/copy-button";
 import { withErrorToast } from "../lib/mutation-toast";
 import { destinationSchema } from "../lib/schemas";
-import { shortDate } from "../lib/dates";
-
-/** "3h ago" for recent timestamps, a plain date past a month. */
-function timeAgo(ts: number): string {
-  const mins = Math.round((Date.now() - ts) / 60_000);
-  if (mins < 1) return "just now";
-  if (mins < 60) return `${mins}m ago`;
-  const hours = Math.round(mins / 60);
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.round(hours / 24);
-  if (days < 31) return `${days}d ago`;
-  return shortDate(ts);
-}
+import { relativeDate } from "../lib/dates";
 
 /** Heatmap rows come back Monday-first (see the stats query). */
 const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
 const linkPath = (l: { slug: string; domain?: string | null }) =>
-  l.domain
-    ? `/links/${l.slug}?domain=${encodeURIComponent(l.domain)}`
-    : `/links/${l.slug}`;
+  l.domain ? `/links/${l.slug}?domain=${encodeURIComponent(l.domain)}` : `/links/${l.slug}`;
 
 export function Dashboard() {
   const { org, orgId, limits, activeDomains, orgQr } = useOrgLimits();
@@ -64,10 +40,7 @@ export function Dashboard() {
   const [created, setCreated] = useState<LinkDTO | null>(null);
 
   const recentLinks = useMemo(
-    () =>
-      [...(links.data ?? [])]
-        .sort((a, b) => b.createdAt - a.createdAt)
-        .slice(0, 5),
+    () => [...(links.data ?? [])].sort((a, b) => b.createdAt - a.createdAt).slice(0, 5),
     [links.data],
   );
   // Link rows carry only the creator's user id; names come from the roster.
@@ -75,19 +48,12 @@ export function Dashboard() {
     () => new Map((members.data ?? []).map((m) => [m.userId, m.name])),
     [members.data],
   );
-  const creatorName = (id: string | null) =>
-    (id && memberNames.get(id)) || "A former member";
+  const creatorName = (id: string | null) => (id && memberNames.get(id)) || "A former member";
 
   if (!org) return <NoOrgState />;
-  if (
-    stats.isLoading ||
-    links.isLoading ||
-    members.isLoading ||
-    clicks.isLoading
-  )
+  if (stats.isLoading || links.isLoading || members.isLoading || clicks.isLoading)
     return <DashboardSkeleton />;
-  if (!stats.data)
-    return <p className="text-sm text-danger">Could not load stats.</p>;
+  if (!stats.data) return <p className="text-sm text-danger">Could not load stats.</p>;
   const s = stats.data;
 
   const decaying = s.decayingLinks.slice(0, 3);
@@ -99,10 +65,7 @@ export function Dashboard() {
 
   return (
     <div>
-      <PageHeader
-        title="Dashboard"
-        sub="See your organization's link activity at a glance"
-      />
+      <PageHeader title="Dashboard" sub="See your organization's link activity at a glance" />
 
       <QuickCreateCard
         create={create}
@@ -153,7 +116,13 @@ function QuickCreateCard({
   const toast = useToast();
   const [domainId, setDomainId] = useState<string | null>(null);
 
-  const { register, handleSubmit, reset, watch, formState: { errors } } = useForm({
+  const {
+    register,
+    handleSubmit,
+    reset,
+    watch,
+    formState: { errors },
+  } = useForm({
     resolver: zodResolver(destinationSchema),
     defaultValues: { destination: "" },
   });
@@ -176,10 +145,7 @@ function QuickCreateCard({
 
   return (
     <Card>
-      <form
-        onSubmit={submit}
-        className="flex flex-col gap-3 sm:flex-row sm:items-start"
-      >
+      <form onSubmit={submit} className="flex flex-col gap-3 sm:flex-row sm:items-start">
         <div className="min-w-0 flex-1">
           <Input
             {...register("destination")}
@@ -223,31 +189,21 @@ function QuickCreateCard({
 function RecentClicksCard({ clicks }: { clicks: RecentClick[] }) {
   return (
     <Card>
-      <p className="mb-3 text-2xs tracking-wider text-muted uppercase">
-        Recent clicks
-      </p>
+      <p className="mb-3 text-2xs tracking-wider text-muted uppercase">Recent clicks</p>
       {!clicks.length ? (
         <p className="py-2 text-sm text-muted">No clicks yet</p>
       ) : (
         <ul className="flex flex-col gap-2">
           {clicks.map((click) => (
-            <li
-              key={click.id}
-              className="flex items-center justify-between gap-3 text-xs"
-            >
+            <li key={click.id} className="flex items-center justify-between gap-3 text-xs">
               <span className="min-w-0 truncate">
                 <Link to={linkPath(click)} className="text-accent hover:underline">
                   /{click.slug}
                 </Link>
-                <span className="text-muted">
-                  {" "}
-                  · {click.referrer || "direct"}
-                </span>
+                <span className="text-muted"> · {click.referrer || "direct"}</span>
               </span>
               <span className="tnum shrink-0 text-muted">
-                {[click.country, click.device, timeAgo(click.ts)]
-                  .filter(Boolean)
-                  .join(" · ")}
+                {[click.country, click.device, relativeDate(click.ts)].filter(Boolean).join(" · ")}
               </span>
             </li>
           ))}
@@ -266,18 +222,13 @@ function ActivityCard({
 }) {
   return (
     <Card>
-      <p className="mb-3 text-2xs tracking-wider text-muted uppercase">
-        Member activity
-      </p>
+      <p className="mb-3 text-2xs tracking-wider text-muted uppercase">Member activity</p>
       {!links.length ? (
         <p className="py-2 text-sm text-muted">No activity yet</p>
       ) : (
         <ul className="flex flex-col gap-2">
           {links.map((l) => (
-            <li
-              key={l.id}
-              className="flex items-center justify-between gap-3 text-xs"
-            >
+            <li key={l.id} className="flex items-center justify-between gap-3 text-xs">
               <span className="min-w-0 truncate">
                 <span className="font-bold">{creatorName(l.createdBy)}</span>
                 {" created "}
@@ -285,7 +236,7 @@ function ActivityCard({
                   /{l.slug}
                 </Link>
               </span>
-              <span className="shrink-0 text-muted">{timeAgo(l.createdAt)}</span>
+              <span className="shrink-0 text-muted">{relativeDate(l.createdAt)}</span>
             </li>
           ))}
         </ul>
@@ -301,9 +252,7 @@ function TopLinksCard({
 }) {
   return (
     <Card>
-      <p className="mb-3 text-2xs tracking-wider text-muted uppercase">
-        Top links
-      </p>
+      <p className="mb-3 text-2xs tracking-wider text-muted uppercase">Top links</p>
       {topLinks.length ? (
         <BarList
           items={topLinks.slice(0, 5).map((l) => ({
@@ -327,9 +276,7 @@ function NeedsAttentionCard({
 }) {
   return (
     <Card>
-      <p className="mb-3 text-2xs tracking-wider text-muted uppercase">
-        Needs attention
-      </p>
+      <p className="mb-3 text-2xs tracking-wider text-muted uppercase">Needs attention</p>
       {!decaying.length && !dead.length ? (
         <p className="py-2 text-sm text-muted">No decaying or dead links</p>
       ) : (
@@ -365,14 +312,8 @@ function AttentionList({
       <p className="mb-1.5 text-2xs text-muted">{label}</p>
       <ul className="flex flex-col gap-2">
         {rows.map((l) => (
-          <li
-            key={l.id}
-            className="flex items-center justify-between gap-3 text-xs"
-          >
-            <Link
-              to={`/links/${l.slug}`}
-              className="truncate text-accent hover:underline"
-            >
+          <li key={l.id} className="flex items-center justify-between gap-3 text-xs">
+            <Link to={`/links/${l.slug}`} className="truncate text-accent hover:underline">
               /{l.slug}
               {l.title ? ` · ${l.title}` : ""}
             </Link>
@@ -393,9 +334,7 @@ function PeakCard({
 }) {
   return (
     <Card>
-      <p className="mb-3 text-2xs tracking-wider text-muted uppercase">
-        Peak activity
-      </p>
+      <p className="mb-3 text-2xs tracking-wider text-muted uppercase">Peak activity</p>
       {!peak ? (
         <p className="py-2 text-sm text-muted">No clicks yet</p>
       ) : (
@@ -403,9 +342,7 @@ function PeakCard({
           <p className="tnum text-sm font-bold">
             {WEEKDAYS[peak.dayOfWeek]} · {peak.hour}:00–{peak.hour + 1}:00
           </p>
-          <p className="mt-1 text-xs text-muted">
-            Busiest hour over the last {rangeDays} days
-          </p>
+          <p className="mt-1 text-xs text-muted">Busiest hour over the last {rangeDays} days</p>
         </>
       )}
     </Card>
@@ -426,18 +363,15 @@ function CreatedDialog({
   orgQr: OrgQr;
 }) {
   const toast = useToast();
-  const [copied, setCopied] = useState(false);
   const url = link ? shortUrl(link.slug, link.domain) : "";
 
-  const copy = async () => {
-    if (!link) return;
+  const copy = async (text: string) => {
     try {
-      await navigator.clipboard.writeText(url);
+      await navigator.clipboard.writeText(text);
       toast("Copied to clipboard");
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 1400);
-    } catch {
+    } catch (error) {
       toast("Could not copy to clipboard", "error");
+      throw error;
     }
   };
 
@@ -459,9 +393,9 @@ function CreatedDialog({
             />
           )}
           <p className="text-sm font-bold break-all">{url}</p>
-          <Button variant="primary" onClick={copy}>
-            {copied ? <Check size={15} /> : <Copy size={15} />} Copy link
-          </Button>
+          <CopyButton text={url} label="Copy link" onCopy={copy} display="button">
+            Copy link
+          </CopyButton>
         </div>
       )}
     </Dialog>

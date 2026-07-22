@@ -10,6 +10,7 @@ export function ConfirmDialog({
   confirmLabel,
   danger,
   pending,
+  confirmDisabled,
   children,
 }: {
   title: string;
@@ -19,19 +20,20 @@ export function ConfirmDialog({
   confirmLabel: string;
   danger?: boolean;
   pending?: boolean;
+  confirmDisabled?: boolean;
   children: ReactNode;
 }) {
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()} title={title}>
       <div className="flex flex-col gap-4">
-        <p className="text-sm">{children}</p>
+        <div className="text-sm">{children}</div>
         <div className="flex justify-end gap-2">
           <Button variant="ghost" onClick={onClose}>
             Cancel
           </Button>
           <Button
             variant={danger ? "danger" : "primary"}
-            disabled={pending}
+            disabled={pending || confirmDisabled}
             onClick={onConfirm}
           >
             {confirmLabel}

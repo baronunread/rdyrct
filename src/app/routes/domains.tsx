@@ -2,13 +2,7 @@ import { useState, type ReactNode, useCallback } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Link } from "react-router";
-import {
-  AnimatePresence,
-  LazyMotion,
-  MotionConfig,
-  domAnimation,
-  m,
-} from "motion/react";
+import { AnimatePresence, LazyMotion, MotionConfig, domAnimation, m } from "motion/react";
 import { Trash2, RefreshCw } from "lucide-react";
 import { useCurrentUser, useConfig, useDomains, useDomainMutations } from "../lib/hooks";
 import { useCurrentOrg } from "../lib/current-org";
@@ -26,10 +20,7 @@ import { CopyButton } from "../ui/copy-button";
 import { useToast } from "../ui/toast";
 import { cn } from "../ui/cn";
 
-const domainStatusColor: Record<
-  DomainDTO["status"],
-  "accent" | "butter" | "mint" | "pink"
-> = {
+const domainStatusColor: Record<DomainDTO["status"], "accent" | "butter" | "mint" | "pink"> = {
   checking_dns: "butter",
   issuing_tls: "accent",
   active: "mint",
@@ -44,21 +35,15 @@ export function DomainsPage() {
   const orgId = org?.id ?? "";
   const me = useCurrentUser();
 
-  const isAdmin =
-    me.data?.user.isAdmin || org?.role === "owner" || org?.role === "admin";
+  const isAdmin = me.data?.user.isAdmin || org?.role === "owner" || org?.role === "admin";
 
   if (!org) return <NoOrgState />;
 
   return (
     <div>
-      <PageHeader
-        title="Domains"
-        sub="Serve short links from your own domain"
-      />
+      <PageHeader title="Domains" sub="Serve short links from your own domain" />
       {!isAdmin ? (
-        <p className="text-sm text-muted">
-          You don't have access to domains.
-        </p>
+        <p className="text-sm text-muted">You don't have access to domains.</p>
       ) : (
         <DomainsCard orgId={orgId} plan={org.plan} />
       )}
@@ -66,24 +51,15 @@ export function DomainsPage() {
   );
 }
 
-function DomainsCard({
-  orgId,
-  plan,
-}: {
-  orgId: string;
-  plan: "free" | "hobby" | "pro";
-}) {
+function DomainsCard({ orgId, plan }: { orgId: string; plan: "free" | "hobby" | "pro" }) {
   const domains = useDomains(orgId);
-  const { add, refresh, setRootRedirect, remove } =
-    useDomainMutations(orgId);
+  const { add, refresh, setRootRedirect, remove } = useDomainMutations(orgId);
   const config = useConfig();
   const appHost = config.data?.appHost ?? window.location.host;
   const toast = useToast();
   const limits = PLAN_LIMITS[plan];
   const [deleting, setDeleting] = useState<DomainDTO | null>(null);
-  const [redirectDraft, setRedirectDraft] = useState<Record<string, string>>(
-    {},
-  );
+  const [redirectDraft, setRedirectDraft] = useState<Record<string, string>>({});
   const {
     register,
     handleSubmit,
@@ -94,27 +70,27 @@ function DomainsCard({
     defaultValues: { hostname: "" },
   });
 
-  const copy = (text: string) => {
-    navigator.clipboard.writeText(text);
+  const copy = async (text: string) => {
+    await navigator.clipboard.writeText(text);
     toast("Copied to clipboard");
   };
 
   const addDomain = useCallback(
     ({ hostname }: { hostname: string }) => {
       add.mutate(hostname, {
-      onSuccess: (d) => {
-        reset();
-        toast(
-          d.status === "active"
-            ? "Domain added successfully"
-            : d.status === "issuing_tls"
-              ? "Domain added, DNS resolved, issuing certificate…"
-              : "Domain added, checking DNS…",
-        );
-      },
-      onError: withErrorToast(toast),
-    });
-  },
+        onSuccess: (d) => {
+          reset();
+          toast(
+            d.status === "active"
+              ? "Domain added successfully"
+              : d.status === "issuing_tls"
+                ? "Domain added, DNS resolved, issuing certificate…"
+                : "Domain added, checking DNS…",
+          );
+        },
+        onError: withErrorToast(toast),
+      });
+    },
     [add, reset, toast],
   );
 
@@ -124,9 +100,7 @@ function DomainsCard({
       onSuccess: (updated) => {
         if (updated.status === oldStatus) {
           if (oldStatus === "checking_dns")
-            toast(
-              "CNAME record not detected yet: create it at your DNS provider to continue",
-            );
+            toast("CNAME record not detected yet: create it at your DNS provider to continue");
           else if (oldStatus === "issuing_tls")
             toast("Certificate still being issued, usually takes a few minutes");
         } else if (updated.status === "active") {
@@ -154,12 +128,10 @@ function DomainsCard({
     return (
       <Card className="max-w-2xl">
         <div className="flex flex-col gap-3">
-          <p className="text-2xs tracking-wider text-muted uppercase">
-            Custom domains
-          </p>
+          <p className="text-2xs tracking-wider text-muted uppercase">Custom domains</p>
           <p className="text-sm text-muted">
-            Use your own domain for short links instead of the shared default.
-            Custom domains are a paid feature.
+            Use your own domain for short links instead of the shared default. Custom domains are a
+            paid feature.
           </p>
           <div>
             <Link to="/billing">
@@ -175,9 +147,7 @@ function DomainsCard({
       <div className="flex flex-col gap-6 lg:flex-row lg:items-start">
         <Card className="w-full max-w-2xl">
           <div className="flex flex-col gap-4">
-            <p className="text-2xs tracking-wider text-muted uppercase">
-              Custom domains
-            </p>
+            <p className="text-2xs tracking-wider text-muted uppercase">Custom domains</p>
 
             {domains.isLoading ? (
               <DomainsSkeleton />
@@ -195,9 +165,7 @@ function DomainsCard({
                         redirectDraft={redirectDraft[d.id] ?? d.rootRedirect}
                         onRecheck={() => recheck(d)}
                         onDelete={() => setDeleting(d)}
-                        onRedirectDraft={(v) =>
-                          setRedirectDraft({ ...redirectDraft, [d.id]: v })
-                        }
+                        onRedirectDraft={(v) => setRedirectDraft({ ...redirectDraft, [d.id]: v })}
                         onSaveRedirect={() => saveRedirect(d)}
                         onCopy={copy}
                       />
@@ -235,13 +203,14 @@ function DomainsCard({
                       </Button>
                     </div>
                     {errors.hostname && (
-                      <span className="mt-1 block text-xs text-danger">{errors.hostname.message}</span>
+                      <span className="mt-1 block text-xs text-danger">
+                        {errors.hostname.message}
+                      </span>
                     )}
                     <span className="mt-1 block text-xs text-muted/80">
-                      After adding, we check for the CNAME record every few
-                      seconds. Once detected, we issue a TLS certificate
-                      automatically. You can also hit the refresh button to
-                      check progress.
+                      After adding, we check for the CNAME record every few seconds. Once detected,
+                      we issue a TLS certificate automatically. You can also hit the refresh button
+                      to check progress.
                     </span>
                   </div>
                 </form>
@@ -251,23 +220,19 @@ function DomainsCard({
         </Card>
 
         <aside className="w-full shrink-0 lg:w-72">
-          <p className="text-2xs tracking-wider text-muted uppercase">
-            How it works
-          </p>
+          <p className="text-2xs tracking-wider text-muted uppercase">How it works</p>
           <ol className="mt-3 flex flex-col gap-3">
             <Step n={1}>
-              At your DNS provider, create a CNAME record pointing a hostname
-              you own (e.g.{" "}
+              At your DNS provider, create a CNAME record pointing a hostname you own (e.g.{" "}
               <code className="text-text">links.example.com</code>) at{" "}
               <code className="text-text">{appHost}</code>.
             </Step>
             <Step n={2}>
-              Add the hostname below. We detect the CNAME and issue TLS
-              automatically.
+              Add the hostname below. We detect the CNAME and issue TLS automatically.
             </Step>
             <Step n={3}>
-              Your short links go live under your brand. Certificates and
-              renewals are handled for you.
+              Your short links go live under your brand. Certificates and renewals are handled for
+              you.
             </Step>
           </ol>
         </aside>
@@ -291,8 +256,8 @@ function DomainsCard({
         danger
         pending={remove.isPending}
       >
-        Delete <span className="font-bold">{deleting?.hostname}</span>?
-        {" "}Links still using this domain must be moved or deleted first.
+        Delete <span className="font-bold">{deleting?.hostname}</span>? Links still using this
+        domain must be moved or deleted first.
       </ConfirmDialog>
     </>
   );
@@ -357,15 +322,8 @@ function DomainRow({
             </m.span>
           </AnimatePresence>
           {transitional(d.status) && (
-            <IconButton
-              label="Re-check now"
-              disabled={refreshing}
-              onClick={onRecheck}
-            >
-              <RefreshCw
-                size={14}
-                className={refreshing ? "animate-spin" : ""}
-              />
+            <IconButton label="Re-check now" disabled={refreshing} onClick={onRecheck}>
+              <RefreshCw size={14} className={refreshing ? "animate-spin" : ""} />
             </IconButton>
           )}
           <IconButton label={`Delete ${d.hostname}`} danger onClick={onDelete}>
@@ -386,11 +344,7 @@ function DomainRow({
               <code className="rounded bg-bg px-1.5 py-0.5 text-text">
                 {d.hostname} CNAME {appHost}
               </code>
-              <CopyButton
-                text={appHost}
-                label="Copy CNAME target"
-                onCopy={onCopy}
-              />
+              <CopyButton text={appHost} label="Copy CNAME target" onCopy={onCopy} />
             </div>
           )}
           <p>

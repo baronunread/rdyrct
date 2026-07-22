@@ -1,16 +1,11 @@
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router";
-import { Plus, Copy, Check } from "lucide-react";
+import { Plus } from "lucide-react";
 import { useLinks, useLinkMutations } from "../lib/hooks";
 import { useOrgLimits } from "../lib/org-limits";
 import { shortUrl, ApiError } from "../lib/api";
-import {
-  type DomainDTO,
-  type LinkDTO,
-  type LinkInput,
-  type Sort,
-} from "@/shared/types";
-import { Button, IconButton } from "../ui/button";
+import { type DomainDTO, type LinkDTO, type LinkInput, type Sort } from "@/shared/types";
+import { Button } from "../ui/button";
 import { Dialog } from "../ui/dialog";
 import { Input } from "../ui/field";
 import { MenuSelect } from "../ui/menu";
@@ -24,8 +19,6 @@ import { LinkEditor, type OrgQr } from "../components/link-editor";
 import { LinksTable } from "../components/links-table";
 import { ConfirmDialog } from "../ui/confirm-dialog";
 import { withErrorToast } from "../lib/mutation-toast";
-
-
 
 const PAGE_SIZE = 25;
 
@@ -62,10 +55,31 @@ function useLinkFilter(links: { data?: LinkDTO[] }) {
   const safePage = Math.min(page, totalPages - 1);
   const paged = filtered.slice(safePage * PAGE_SIZE, (safePage + 1) * PAGE_SIZE);
 
-  const onSearchChange = (v: string) => { setSearch(v); setPage(0); };
-  const onDomainFilterChange = (v: string) => { setDomainFilter(v); setPage(0); };
+  const onSearchChange = (v: string) => {
+    setSearch(v);
+    setPage(0);
+  };
+  const onDomainFilterChange = (v: string) => {
+    setDomainFilter(v);
+    setPage(0);
+  };
 
-  return { search, setSearch, domainFilter, setDomainFilter, sort, setSort, page, setPage, filtered, totalPages, safePage, paged, onSearchChange, onDomainFilterChange };
+  return {
+    search,
+    setSearch,
+    domainFilter,
+    setDomainFilter,
+    sort,
+    setSort,
+    page,
+    setPage,
+    filtered,
+    totalPages,
+    safePage,
+    paged,
+    onSearchChange,
+    onDomainFilterChange,
+  };
 }
 
 export function LinksPage() {
@@ -77,9 +91,7 @@ export function LinksPage() {
 
   const linkCount = links.data?.length ?? 0;
   const atLimit = linkCount >= limits.links;
-  const limitHint = atLimit
-    ? "Link limit reached: upgrade for more links"
-    : undefined;
+  const limitHint = atLimit ? "Link limit reached: upgrade for more links" : undefined;
 
   const [editorOpen, setEditorOpen] = useState(false);
   const [editing, setEditing] = useState<LinkDTO | null>(null);
@@ -87,7 +99,19 @@ export function LinksPage() {
   const [deleting, setDeleting] = useState<LinkDTO | null>(null);
   const [shakeKey, setShakeKey] = useState(0);
 
-  const { search, domainFilter, sort, setSort, paged, filtered, totalPages, safePage, onSearchChange, onDomainFilterChange, setPage } = useLinkFilter(links);
+  const {
+    search,
+    domainFilter,
+    sort,
+    setSort,
+    paged,
+    filtered,
+    totalPages,
+    safePage,
+    onSearchChange,
+    onDomainFilterChange,
+    setPage,
+  } = useLinkFilter(links);
 
   const openCreate = () => {
     if (atLimit) return;
@@ -99,21 +123,7 @@ export function LinksPage() {
     setEditorOpen(true);
   };
 
-  const [copiedId, setCopiedId] = useState<string | null>(null);
-
-  const copy = async (link: LinkDTO) => {
-    try {
-      await navigator.clipboard.writeText(shortUrl(link.slug, link.domain));
-      toast("Copied to clipboard");
-      setCopiedId(link.id);
-      window.setTimeout(() => setCopiedId(null), 1400);
-    } catch {
-      toast("Could not copy to clipboard", "error");
-    }
-  };
-
-  const noQrToast = () =>
-    toast("QR codes are a paid feature: upgrade in Billing", "error");
+  const noQrToast = () => toast("QR codes are a paid feature: upgrade in Billing", "error");
 
   if (!org) return <NoOrgState />;
 
@@ -124,8 +134,7 @@ export function LinksPage() {
         toast(editing ? "Link updated" : "Link created");
       },
       onError: (e: Error) => {
-        if (e instanceof ApiError && e.code === "slug_taken")
-          setShakeKey((k) => k + 1);
+        if (e instanceof ApiError && e.code === "slug_taken") setShakeKey((k) => k + 1);
         toast(e.message, "error");
       },
     };
@@ -143,12 +152,7 @@ export function LinksPage() {
             <span className="text-xs tnum text-muted">
               {linkCount} / {limits.links} links
             </span>
-            <Button
-              variant="primary"
-              onClick={openCreate}
-              disabled={atLimit}
-              title={limitHint}
-            >
+            <Button variant="primary" onClick={openCreate} disabled={atLimit} title={limitHint}>
               <Plus size={15} /> New link
             </Button>
           </div>
@@ -162,12 +166,7 @@ export function LinksPage() {
           title="No links yet"
           hint="Create your first short link. UTM parameters and a QR logo are optional."
           action={
-            <Button
-              variant="primary"
-              onClick={openCreate}
-              disabled={atLimit}
-              title={limitHint}
-            >
+            <Button variant="primary" onClick={openCreate} disabled={atLimit} title={limitHint}>
               <Plus size={15} /> New link
             </Button>
           }
@@ -186,8 +185,6 @@ export function LinksPage() {
           <LinksTable
             paged={paged}
             navigate={navigate}
-            copy={copy}
-            copiedId={copiedId}
             limits={limits}
             onQrClick={setQrLink}
             onEdit={openEdit}
@@ -234,15 +231,12 @@ export function LinksPage() {
         danger
         pending={remove.isPending}
       >
-        Delete <span className="font-bold text-accent">/{deleting?.slug}</span>?
-        {" "}The short link stops working immediately and its click history is
-        removed.
+        Delete <span className="font-bold text-accent">/{deleting?.slug}</span>? The short link
+        stops working immediately and its click history is removed.
       </ConfirmDialog>
     </div>
   );
 }
-
-
 
 /** Search + domain filter bar above the links table. */
 function LinksToolbar({
@@ -304,7 +298,11 @@ function QrLinkDialog({
   orgQr: OrgQr;
 }) {
   return (
-    <Dialog open={!!link} onOpenChange={(o) => !o && onClose()} title={link ? `QR · /${link.slug}` : "QR"}>
+    <Dialog
+      open={!!link}
+      onOpenChange={(o) => !o && onClose()}
+      title={link ? `QR · /${link.slug}` : "QR"}
+    >
       {link && (
         <div className="flex flex-col items-center gap-2">
           <QRPreview
@@ -318,13 +316,9 @@ function QrLinkDialog({
             logoSize={orgQr.logoSize ?? undefined}
             downloadName={`qr-${link.slug}`}
           />
-          <p className="text-xs text-muted">
-            {shortUrl(link.slug, link.domain)}
-          </p>
+          <p className="text-xs text-muted">{shortUrl(link.slug, link.domain)}</p>
         </div>
       )}
     </Dialog>
   );
 }
-
-
