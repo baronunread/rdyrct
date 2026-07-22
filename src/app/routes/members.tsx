@@ -24,6 +24,8 @@ import { useToast } from "../ui/toast";
 import { NoOrgState } from "../components/no-org";
 import { SortTh } from "../ui/sort-th";
 import { sortRows } from "../lib/sort";
+import { withErrorToast } from "../lib/mutation-toast";
+import { shortDate } from "../lib/dates";
 
 const roleColor: Record<OrgRole, "accent" | "mint" | "muted"> = {
   owner: "accent",
@@ -52,14 +54,14 @@ function useMemberManagement(orgId: string, canManage: boolean) {
     mutationFn: ({ userId, role }: { userId: string; role: string }) =>
       api(`/orgs/${orgId}/members/${userId}`, { method: "PATCH", body: { role } }),
     onSuccess: invalidateMembers,
-    onError: (e) => toast(e.message, "error"),
+    onError: withErrorToast(toast),
   });
 
   const removeMember = useMutation({
     mutationFn: (userId: string) =>
       api(`/orgs/${orgId}/members/${userId}`, { method: "DELETE" }),
     onSuccess: invalidateMembers,
-    onError: (e) => toast(e.message, "error"),
+    onError: withErrorToast(toast),
   });
 
   const createInvite = useMutation({
@@ -73,7 +75,7 @@ function useMemberManagement(orgId: string, canManage: boolean) {
       if (invite) copyInvite(invite.token);
       setInviteOpen(false);
     },
-    onError: (e) => toast(e.message, "error"),
+    onError: withErrorToast(toast),
   });
 
   const sendEmailInvite = useMutation({
@@ -86,7 +88,7 @@ function useMemberManagement(orgId: string, canManage: boolean) {
       setEmailInput("");
       toast("Invite sent");
     },
-    onError: (e) => toast(e.message, "error"),
+    onError: withErrorToast(toast),
   });
 
   const revokeInvite = useMutation({
@@ -212,7 +214,7 @@ export function MembersPage() {
                   )}
                 </Td>
                 <Td className="text-xs text-muted">
-                  {new Date(m.createdAt).toLocaleDateString()}
+                  {shortDate(m.createdAt)}
                 </Td>
                 {canManage && (
                   <Td>
@@ -254,7 +256,7 @@ export function MembersPage() {
                     {inv.role}
                   </Badge>
                   <span className="text-xs text-muted">
-                    expires {new Date(inv.expiresAt).toLocaleDateString()}
+                    expires {shortDate(inv.expiresAt)}
                   </span>
                   <IconButton
                     label="Copy invite link"

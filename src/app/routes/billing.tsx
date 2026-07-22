@@ -3,6 +3,7 @@ import confetti from "canvas-confetti";
 import { AnimatePresence, LazyMotion, domAnimation, m } from "motion/react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCurrentUser, useLinks, useMembers, useDomains, useCheckout, usePortal } from "../lib/hooks";
+import { shortDate } from "../lib/dates";
 import { useCurrentOrg } from "../lib/current-org";
 import { PLAN_LIMITS, PLAN_PRICES, type OrgPlan } from "@/shared/types";
 import { Button } from "../ui/button";
@@ -92,11 +93,7 @@ function PlanActions({
         {cancelAtPeriodEnd && periodEnd && (
           <p className="text-sm text-amber-400">
             Your {PLAN_LABEL[plan]} plan is scheduled to cancel on{" "}
-            {new Date(periodEnd).toLocaleDateString(undefined, {
-              year: "numeric",
-              month: "short",
-              day: "numeric",
-            })}
+            {shortDate(periodEnd)}
             . Paid features remain available until then.
           </p>
         )}

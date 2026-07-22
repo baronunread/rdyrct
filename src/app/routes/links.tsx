@@ -22,6 +22,8 @@ import { NoOrgState } from "../components/no-org";
 import { sortRows } from "../lib/sort";
 import { LinkEditor, type OrgQr } from "../components/link-editor";
 import { LinksTable } from "../components/links-table";
+import { ConfirmDialog } from "../ui/confirm-dialog";
+import { withErrorToast } from "../lib/mutation-toast";
 
 const emptyForm: LinkInput = {
   destination: "",
@@ -237,12 +239,28 @@ export function LinksPage() {
 
       {limits.qr && <QrLinkDialog link={qrLink} onClose={() => setQrLink(null)} orgQr={orgQr} />}
 
-      <DeleteLinkDialog
-        link={deleting}
+      <ConfirmDialog
+        title="Delete link"
+        open={!!deleting}
         onClose={() => setDeleting(null)}
-        remove={remove}
-        notify={toast}
-      />
+        onConfirm={() => {
+          if (!deleting) return;
+          remove.mutate(deleting.id, {
+            onSuccess: () => {
+              toast("Link deleted");
+              setDeleting(null);
+            },
+            onError: withErrorToast(toast),
+          });
+        }}
+        confirmLabel="Delete"
+        danger
+        pending={remove.isPending}
+      >
+        Delete <span className="font-bold text-accent">/{deleting?.slug}</span>?
+        {" "}The short link stops working immediately and its click history is
+        removed.
+      </ConfirmDialog>
     </div>
   );
 }
@@ -332,48 +350,4 @@ function QrLinkDialog({
   );
 }
 
-function DeleteLinkDialog({
-  link,
-  onClose,
-  remove,
-  notify,
-}: {
-  link: LinkDTO | null;
-  onClose: () => void;
-  remove: { mutate: (id: string, opts: { onSuccess?: () => void; onError?: (e: Error) => void }) => void; isPending: boolean };
-  notify: (msg: string, type?: "error") => void;
-}) {
-  return (
-    <Dialog open={!!link} onOpenChange={(o) => !o && onClose()} title="Delete link">
-      {link && (
-        <div className="flex flex-col gap-4">
-          <p className="text-sm">
-            Delete <span className="font-bold text-accent">/{link.slug}</span>?
-            The short link stops working immediately and its click history is
-            removed.
-          </p>
-          <div className="flex justify-end gap-2">
-            <Button variant="ghost" onClick={onClose}>
-              Cancel
-            </Button>
-            <Button
-              variant="danger"
-              disabled={remove.isPending}
-              onClick={() =>
-                remove.mutate(link.id, {
-                  onSuccess: () => {
-                    notify("Link deleted");
-                    onClose();
-                  },
-                  onError: (e) => notify(e.message, "error"),
-                })
-              }
-            >
-              Delete
-            </Button>
-          </div>
-        </div>
-      )}
-    </Dialog>
-  );
-}
+

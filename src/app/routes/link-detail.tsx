@@ -1,6 +1,7 @@
 import { Link, useParams, useSearchParams } from "react-router";
 import { ArrowLeft, ExternalLink } from "lucide-react";
 import { useLinkStats } from "../lib/hooks";
+import { shortDate, relativeDate } from "../lib/dates";
 import { useCurrentOrg } from "../lib/current-org";
 import { useConfig } from "../lib/hooks";
 import { shortUrl } from "../lib/api";
@@ -89,12 +90,12 @@ export function LinkDetailPage() {
             </div>
             <div>
               <p className="text-3xs tracking-wider text-muted uppercase">Created</p>
-              <p className="tnum text-text">{new Date(s.createdAt).toLocaleDateString()}</p>
+              <p className="tnum text-text">{shortDate(s.createdAt)}</p>
             </div>
             {s.lastClick && (
               <div>
                 <p className="text-3xs tracking-wider text-muted uppercase">Last click</p>
-                <p className="tnum text-text">{new Date(s.lastClick).toLocaleDateString()}</p>
+                <p className="tnum text-text">{shortDate(s.lastClick)}</p>
               </div>
             )}
           </div>

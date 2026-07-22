@@ -1,8 +1,7 @@
 import type { ReactNode } from "react";
-import { Button } from "../../ui/button";
-import { Dialog } from "../../ui/dialog";
+import { Button } from "./button";
+import { Dialog } from "./dialog";
 
-/** Single confirmation popup for every destructive/privileged row action. */
 export function ConfirmDialog({
   title,
   open,

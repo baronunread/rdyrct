@@ -27,6 +27,8 @@ import { MenuSelect } from "../ui/menu";
 import { Card, PageHeader } from "../ui/misc";
 import { BusyContent } from "../ui/spinner";
 import { useToast } from "../ui/toast";
+import { withErrorToast } from "../lib/mutation-toast";
+import { shortDate } from "../lib/dates";
 
 /** "3h ago" for recent timestamps, a plain date past a month. */
 function timeAgo(ts: number): string {
@@ -37,7 +39,7 @@ function timeAgo(ts: number): string {
   if (hours < 24) return `${hours}h ago`;
   const days = Math.round(hours / 24);
   if (days < 31) return `${days}d ago`;
-  return new Date(ts).toLocaleDateString();
+  return shortDate(ts);
 }
 
 /** Heatmap rows come back Monday-first (see the stats query). */
@@ -160,7 +162,7 @@ function QuickCreateCard({
           setDestination("");
           onCreated(link);
         },
-        onError: (err) => toast(err.message, "error"),
+        onError: withErrorToast(toast),
       },
     );
   };

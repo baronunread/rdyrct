@@ -15,9 +15,11 @@ import { Menu, MenuItem, MenuSeparator } from "../../ui/menu";
 import { Badge, PageHeader, Table, Td, Th } from "../../ui/misc";
 import { AdminTableSkeleton } from "../../components/skeletons";
 import { useToast } from "../../ui/toast";
-import { ConfirmDialog } from "./confirm-dialog";
+import { ConfirmDialog } from "../../ui/confirm-dialog";
 import { SearchInput } from "./search-input";
 import { SortTh } from "../../ui/sort-th";
+import { withErrorToast } from "../../lib/mutation-toast";
+import { shortDate } from "../../lib/dates";
 import { sortRows } from "../../lib/sort";
 
 /** "today" / "3d ago" / a date, for the users table's last-seen column. */
@@ -27,7 +29,7 @@ const lastSeenLabel = (ts: number | null) => {
   if (days <= 0) return "today";
   if (days === 1) return "yesterday";
   if (days < 30) return `${days}d ago`;
-  return new Date(ts).toLocaleDateString();
+  return shortDate(ts);
 };
 
 type UserAction = "delete" | "ban" | "unban" | "makeAdmin" | "removeAdmin";
@@ -129,7 +131,7 @@ export function AdminUsersPage() {
       qc.invalidateQueries({ queryKey: ["admin", "users"] });
       setConfirm(null);
     },
-    onError: (e) => toast(e.message, "error"),
+    onError: withErrorToast(toast),
   });
 
   const remove = useMutation({
@@ -140,7 +142,7 @@ export function AdminUsersPage() {
       setConfirm(null);
       toast("User deleted");
     },
-    onError: (e) => toast(e.message, "error"),
+    onError: withErrorToast(toast),
   });
 
   const runAction = () => {
@@ -259,7 +261,7 @@ export function AdminUsersPage() {
                   </Badge>
                 </Td>
                 <Td className="text-xs text-muted">
-                  {new Date(u.createdAt).toLocaleDateString()}
+                  {shortDate(u.createdAt)}
                 </Td>
                 <Td className="text-xs text-muted">
                   {lastSeenLabel(u.lastSeen)}

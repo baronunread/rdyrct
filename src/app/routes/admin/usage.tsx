@@ -5,6 +5,7 @@ import { Badge, Card, PageHeader, Table, Th, Td } from "../../ui/misc";
 import { AdminUsageSkeleton } from "../../components/skeletons";
 import { linkLabel } from "./util";
 import type { AdminUsage, OrgPlan } from "@/shared/types";
+import { shortDate } from "../../lib/dates";
 
 const planColor = (p: OrgPlan) =>
   p === "pro" ? "accent" : p === "hobby" ? "mint" : "muted";
@@ -169,11 +170,7 @@ function TableSizeCard({ s }: { s: AdminUsage }) {
           </p>
           <p>
             Estimated{" "}
-            {projectedDate.toLocaleDateString("en-US", {
-              year: "numeric",
-              month: "short",
-              day: "numeric",
-            })}
+            {shortDate(projectedDate)}
           </p>
         </div>
       )}

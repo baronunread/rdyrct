@@ -4,6 +4,7 @@ import { type LinkDTO, type Sort } from "@/shared/types";
 import { IconButton } from "../ui/button";
 import { Table, Th, Td } from "../ui/misc";
 import { SortTh } from "../ui/sort-th";
+import { shortDate } from "../lib/dates";
 
 export function LinksTable({
   paged,
@@ -86,7 +87,7 @@ export function LinksTable({
               </Td>
               <Td className="tnum text-right">{link.clicks}</Td>
               <Td className="text-xs whitespace-nowrap text-muted">
-                {new Date(link.createdAt).toLocaleDateString()}
+                {shortDate(link.createdAt)}
               </Td>
               <Td>
                 <div className="flex justify-end gap-0.5">

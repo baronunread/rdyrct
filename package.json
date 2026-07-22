@@ -19,11 +19,14 @@
   "dependencies": {
     "@base-ui/react": "^1.6.0",
     "@fontsource/jetbrains-mono": "^5.2.8",
+    "@hookform/resolvers": "^5.4.0",
     "@polar-sh/sdk": "^0.48.1",
     "@tanstack/react-query": "^5.101.2",
     "better-auth": "^1.6.23",
     "browser-image-compression": "^2.0.2",
     "canvas-confetti": "^1.9.4",
+    "clsx": "^2.1.1",
+    "date-fns": "^4.4.0",
     "drizzle-orm": "^0.45.2",
     "hono": "^4.12.30",
     "lucide-react": "^1.25.0",
@@ -31,9 +34,12 @@
     "qr-code-styling": "^1.9.2",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
+    "react-hook-form": "^7.82.0",
     "react-router": "^8.2.0",
     "standardwebhooks": "^1.0.0",
-    "svgo": "^4.0.2"
+    "svgo": "^4.0.2",
+    "tailwind-merge": "^3.6.0",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@cloudflare/vite-plugin": "^1.45.1",

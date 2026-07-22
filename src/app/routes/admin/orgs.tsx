@@ -13,11 +13,13 @@ import {
   OrgDetailSkeleton,
 } from "../../components/skeletons";
 import { useToast } from "../../ui/toast";
-import { ConfirmDialog } from "./confirm-dialog";
+import { ConfirmDialog } from "../../ui/confirm-dialog";
 import { SearchInput } from "./search-input";
 import { linkLabel } from "./util";
 import { SortTh } from "../../ui/sort-th";
 import { sortRows } from "../../lib/sort";
+import { withErrorToast } from "../../lib/mutation-toast";
+import { shortDate } from "../../lib/dates";
 
 const roleColor: Record<OrgRole, "accent" | "mint" | "muted"> = {
   owner: "accent",
@@ -47,7 +49,7 @@ function OrgDetailDialog({
               {org.plan}
             </Badge>
             <span className="text-xs text-muted">
-              Created {new Date(org.createdAt).toLocaleDateString()}
+              Created {shortDate(org.createdAt)}
             </span>
           </div>
 
@@ -141,7 +143,7 @@ export function AdminOrgsPage() {
       setDeleting(null);
       toast("Organization deleted");
     },
-    onError: (e) => toast(e.message, "error"),
+    onError: withErrorToast(toast),
   });
 
   const rows = useMemo(() => {
@@ -227,7 +229,7 @@ export function AdminOrgsPage() {
               <Td className="tnum text-right">{org.links}</Td>
               <Td className="tnum text-right">{org.clicks}</Td>
               <Td className="text-xs text-muted">
-                {new Date(org.createdAt).toLocaleDateString()}
+                {shortDate(org.createdAt)}
               </Td>
               <Td>
                 <Menu

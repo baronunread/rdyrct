@@ -12,8 +12,9 @@ import { useCurrentUser, useConfig, useDomains, useDomainMutations } from "../li
 import { useCurrentOrg } from "../lib/current-org";
 import { PLAN_LIMITS, type DomainDTO } from "@/shared/types";
 import { Button, IconButton } from "../ui/button";
-import { Dialog } from "../ui/dialog";
 import { Input } from "../ui/field";
+import { ConfirmDialog } from "../ui/confirm-dialog";
+import { withErrorToast } from "../lib/mutation-toast";
 import { Badge, Card, PageHeader } from "../ui/misc";
 import { BusyContent } from "../ui/spinner";
 import { DomainsSkeleton } from "../components/skeletons";
@@ -101,7 +102,7 @@ function DomainsCard({
               : "Domain added, checking DNS…",
         );
       },
-      onError: (e) => toast(e.message, "error"),
+      onError: withErrorToast(toast),
     });
   };
 
@@ -122,7 +123,7 @@ function DomainsCard({
           toast("DNS resolved! Issuing TLS certificate…");
         }
       },
-      onError: (e) => toast(e.message, "error"),
+      onError: withErrorToast(toast),
     });
   };
 
@@ -132,7 +133,7 @@ function DomainsCard({
       { id: domain.id, rootRedirect: value },
       {
         onSuccess: () => toast("Root redirect updated"),
-        onError: (e) => toast(e.message, "error"),
+        onError: withErrorToast(toast),
       },
     );
   };
@@ -265,40 +266,27 @@ function DomainsCard({
         </aside>
       </div>
 
-      <Dialog
-        open={!!deleting}
-        onOpenChange={(o) => !o && setDeleting(null)}
+      <ConfirmDialog
         title="Delete domain"
+        open={!!deleting}
+        onClose={() => setDeleting(null)}
+        onConfirm={() => {
+          if (!deleting) return;
+          remove.mutate(deleting.id, {
+            onSuccess: () => {
+              setDeleting(null);
+              toast("Domain deleted");
+            },
+            onError: withErrorToast(toast),
+          });
+        }}
+        confirmLabel="Delete"
+        danger
+        pending={remove.isPending}
       >
-        {deleting && (
-          <div className="flex flex-col gap-4">
-            <p className="text-sm">
-              Delete <span className="font-bold">{deleting.hostname}</span>?
-              Links still using this domain must be moved or deleted first.
-            </p>
-            <div className="flex justify-end gap-2">
-              <Button variant="ghost" onClick={() => setDeleting(null)}>
-                Cancel
-              </Button>
-              <Button
-                variant="danger"
-                disabled={remove.isPending}
-                onClick={() =>
-                  remove.mutate(deleting.id, {
-                    onSuccess: () => {
-                      setDeleting(null);
-                      toast("Domain deleted");
-                    },
-                    onError: (e) => toast(e.message, "error"),
-                  })
-                }
-              >
-                Delete
-              </Button>
-            </div>
-          </div>
-        )}
-      </Dialog>
+        Delete <span className="font-bold">{deleting?.hostname}</span>?
+        {" "}Links still using this domain must be moved or deleted first.
+      </ConfirmDialog>
     </>
   );
 }

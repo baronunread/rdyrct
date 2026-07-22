@@ -7,12 +7,12 @@ import { api } from "../lib/api";
 import { authClient } from "../lib/auth-client";
 import { PLAN_LIMITS } from "@/shared/types";
 import { Button } from "../ui/button";
-import { Dialog } from "../ui/dialog";
 import { Field, Input } from "../ui/field";
 import { Card, PageHeader } from "../ui/misc";
 import { BusyContent } from "../ui/spinner";
 import { useToast } from "../ui/toast";
 import { CopyButton } from "../ui/copy-button";
+import { ConfirmDialog } from "../ui/confirm-dialog";
 import { QrDefaultsCard } from "../components/qr-defaults-card";
 
 export function SettingsPage() {
@@ -163,23 +163,22 @@ export function SettingsPage() {
       </div>
 
       {org && (
-        <Dialog
-          open={deleteOrgOpen}
-          onOpenChange={(o) => {
-            setDeleteOrgOpen(o);
-            if (!o) setConfirmName("");
-          }}
+        <ConfirmDialog
           title="Delete organization"
+          open={deleteOrgOpen}
+          onClose={() => { setDeleteOrgOpen(false); setConfirmName(""); }}
+          onConfirm={deleteOrg}
+          confirmLabel="Delete organization"
+          danger
+          pending={deletingOrg}
         >
-          <div className="flex flex-col gap-4">
-            <p className="text-sm">
+          <div>
+            <p className="mb-4 text-sm">
               This permanently deletes{" "}
               <span className="font-bold text-accent">{org.name}</span>:
               every link, custom domain, and all click history. Short links
               stop working immediately. This cannot be undone.
             </p>
-            {/* outside a Field: its uppercase label would hide the name's
-                real casing, which the exact-match check depends on */}
             <div>
               <div className="mb-1.5 flex flex-wrap items-center gap-1.5 text-sm text-muted">
                 <span>To confirm, type</span>
@@ -200,45 +199,21 @@ export function SettingsPage() {
                 autoFocus
               />
             </div>
-            <div className="flex justify-end gap-2">
-              <Button variant="ghost" onClick={() => setDeleteOrgOpen(false)}>
-                Cancel
-              </Button>
-              <Button
-                variant="danger"
-                disabled={confirmName.trim() !== org.name || deletingOrg}
-                onClick={deleteOrg}
-              >
-                <BusyContent busy={deletingOrg}>Delete organization</BusyContent>
-              </Button>
-            </div>
           </div>
-        </Dialog>
+        </ConfirmDialog>
       )}
 
-      <Dialog
-        open={deleteOpen}
-        onOpenChange={setDeleteOpen}
+      <ConfirmDialog
         title="Delete account"
+        open={deleteOpen}
+        onClose={() => setDeleteOpen(false)}
+        onConfirm={deleteAccount}
+        confirmLabel="Delete account"
+        danger
+        pending={deleting}
       >
-        <div className="flex flex-col gap-4">
-          <p className="text-sm">
-            This permanently deletes your account. This cannot be undone.
-          </p>
-          <div className="flex justify-end gap-2">
-            <Button variant="ghost" onClick={() => setDeleteOpen(false)}>
-              Cancel
-            </Button>
-            <Button
-              variant="danger"
-              disabled={deleting}
-              onClick={deleteAccount}
-            >
-              <BusyContent busy={deleting}>Delete account</BusyContent>
-            </Button>
-          </div>
-        </div>
-      </Dialog>
+        This permanently deletes your account. This cannot be undone.
+      </ConfirmDialog>
     </div>
   );
 }
