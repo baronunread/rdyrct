@@ -549,7 +549,7 @@ function DeployTerminal() {
     <span
       aria-hidden
       className="inline-block h-[13px] w-[5px] translate-y-px bg-accent align-middle ml-0.5"
-      style={{ animation: "cursorBlink 0.4s step-end 3 forwards" }}
+      style={{ animation: "cursorBlink 1s step-end infinite" }}
     />
   ) : null;
 
@@ -595,18 +595,18 @@ function DeployTerminal() {
 
   return (
     <div className="overflow-hidden rounded-[10px] border border-border bg-surface shadow-lg shadow-black/20">
-      <div className="flex items-center gap-1.5 border-b border-border bg-surface-2 px-4 py-2.5">
-        <span className="h-[9px] w-[9px] rounded-full bg-[#ff5f56]" />
-        <span className="h-[9px] w-[9px] rounded-full bg-[#ffbd2e]" />
-        <span className="h-[9px] w-[9px] rounded-full bg-[#27c93f]" />
-        <span className="flex flex-1 items-center justify-center gap-1 font-mono text-[0.7rem] text-muted/60">
-          <svg width="14" height="14" viewBox="0 0 48 48" fill="none">
-            <rect width="48" height="48" rx="8" fill="#f38020" />
-            <path d="M13.5 24c0-2.5 2-4.5 4.5-4.5h4l1.5-3h-5.5a7.5 7.5 0 000 15h5.5l-1.5-3h-4a4.5 4.5 0 01-4.5-4.5z" fill="#fff" />
-            <path d="M34.5 24c0 2.5-2 4.5-4.5 4.5h-4l-1.5 3h5.5a7.5 7.5 0 000-15h-5.5l1.5 3h4a4.5 4.5 0 014.5 4.5z" fill="#fff" />
-          </svg>
-          rdyrct deploy
-        </span>
+      <div className="flex items-center border-b border-border bg-surface-2 px-4 py-2.5">
+        <div className="flex items-center gap-1.5">
+          <span className="h-[9px] w-[9px] rounded-full bg-[#ff5f56]" />
+          <span className="h-[9px] w-[9px] rounded-full bg-[#ffbd2e]" />
+          <span className="h-[9px] w-[9px] rounded-full bg-[#27c93f]" />
+        </div>
+        <span className="flex-1 text-center font-mono text-[0.7rem] text-muted/60">rdyrct deploy</span>
+        <div className="invisible flex items-center gap-1.5">
+          <span className="h-[9px] w-[9px] rounded-full bg-[#ff5f56]" />
+          <span className="h-[9px] w-[9px] rounded-full bg-[#ffbd2e]" />
+          <span className="h-[9px] w-[9px] rounded-full bg-[#27c93f]" />
+        </div>
       </div>
       <div className="px-4 py-3 font-mono text-[0.78rem]">
         {content}
@@ -782,7 +782,7 @@ export function LandingPage() {
               Built for marketing teams and developers.
             </p>
           </div>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
             {features.map(({ icon: Icon, title, body, plan }) => (
               <div
                 key={title}
@@ -805,10 +805,11 @@ export function LandingPage() {
 
         <Section>
           <div className="mb-8 text-center">
+            <img src="/cloudflare.svg" alt="Cloudflare" className="mx-auto mb-5 h-10 w-auto" />
             <h2 className="text-xl font-bold">Runs entirely on Cloudflare</h2>
             <p className="mx-auto mt-2 max-w-xl text-sm text-muted">
               No servers to patch, no databases to babysit: rdyrct is built
-              from Cloudflare's own primitives, end to end. Watch it deploy:
+              from Cloudflare's own primitives, end to end.
             </p>
           </div>
           <DeployTerminal />
