@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import type { AppEnv } from "../env";
-import { requireOrgRole } from "../auth";
+import { requireOrgRole, orgRole } from "../auth";
 import { orgPlan } from "../plan";
 import { uid, qrLogoUrl, QR_LOGO_FILE_RE } from "../util";
 import { QR_LOGO_MAX_BYTES } from "@/shared/types";
@@ -52,11 +52,19 @@ qrLogoRoutes.post("/", requireOrgRole("member"), async (c) => {
 // Logo objects are immutable (a new upload gets a new key), so the browser
 // may cache them forever; `private` keeps them out of shared caches. The CSP
 // header keeps an SVG logo from running scripts if the URL is opened directly.
-qrLogoRoutes.get("/:file", requireOrgRole("member"), async (c) => {
+// Unauthorized access always returns 404 so the URL leaks nothing.
+qrLogoRoutes.get("/:file", async (c) => {
   const file = c.req.param("file");
   if (!QR_LOGO_FILE_RE.test(file))
     throw new HTTPException(404, { message: "Not found" });
-  const obj = await c.env.QR_LOGOS.get(`${c.req.param("orgId")!}/${file}`);
+
+  const user = c.var.user;
+  if (!user) throw new HTTPException(404, { message: "Not found" });
+  const orgId = c.req.param("orgId")!;
+  const role = await orgRole(c.var.db, user, orgId);
+  if (!role) throw new HTTPException(404, { message: "Not found" });
+
+  const obj = await c.env.QR_LOGOS.get(`${orgId}/${file}`);
   if (!obj) throw new HTTPException(404, { message: "Not found" });
   const headers = new Headers();
   obj.writeHttpMetadata(headers);
