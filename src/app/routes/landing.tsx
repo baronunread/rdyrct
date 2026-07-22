@@ -8,9 +8,6 @@ import {
   Users,
   BarChart3,
   ShieldCheck,
-  Server,
-  Database,
-  Zap,
   Check,
   Code2,
   ChevronDown,
@@ -18,7 +15,7 @@ import {
   TrendingDown,
   Activity,
 } from "lucide-react";
-import { LazyMotion, MotionConfig, domAnimation, m } from "motion/react";
+import { LazyMotion, MotionConfig, domAnimation, m, useReducedMotion, type Variants } from "motion/react";
 import { useState } from "react";
 import { useCurrentUser } from "../lib/hooks";
 import { readAuthHint } from "../lib/auth-hint";
@@ -53,8 +50,8 @@ const features = [
   },
   {
     icon: QrCode,
-    title: "QR codes",
-    body: "One click turns any link into a scannable QR code, ready for packaging, posters, and slides.",
+    title: "Branded QR codes",
+    body: "One click turns any link into a QR code with your logo, colors, and dot styles baked in. Set org-wide defaults, override per link, and print it anywhere.",
     plan: "Paid",
   },
   {
@@ -95,29 +92,6 @@ const features = [
   },
 ];
 
-const cloudflareStack = [
-  {
-    icon: Server,
-    title: "Workers",
-    body: "Compute and routing at the edge. Every redirect and API call runs on Cloudflare's global network.",
-  },
-  {
-    icon: Database,
-    title: "D1",
-    body: "Links, organizations, and members live in Cloudflare's managed SQLite database.",
-  },
-  {
-    icon: Zap,
-    title: "KV",
-    body: "The redirect hot path reads from Workers KV, so redirects skip the database entirely.",
-  },
-  {
-    icon: Globe,
-    title: "Cloudflare for SaaS",
-    body: "Custom domains are provisioned and TLS-terminated automatically, no extra infra to run.",
-  },
-];
-
 const faqs = [
   {
     q: "Is the free plan really free?",
@@ -125,7 +99,7 @@ const faqs = [
   },
   {
     q: "What's the difference between Hobby and Pro?",
-    a: `Hobby (${PLAN_PRICES.hobby}/mo) unlocks QR codes, a custom domain with your own slugs, ${PLAN_LIMITS.hobby.links} links, ${PLAN_LIMITS.hobby.members} team members, and ${PLAN_LIMITS.hobby.analyticsDays}-day analytics for one organization. Pro (${PLAN_PRICES.pro}/mo) raises everything: ${PLAN_LIMITS.pro.orgs} organizations, ${PLAN_LIMITS.pro.links.toLocaleString()} links, ${PLAN_LIMITS.pro.members} team members, ${PLAN_LIMITS.pro.domains} custom domains each, ${PLAN_LIMITS.pro.analyticsDays}-day analytics, and direct email support. Only the organization owner needs a paid plan: one subscription covers every organization they own.`,
+    a: `Hobby (${PLAN_PRICES.hobby}/mo) unlocks branded QR codes, a custom domain with your own slugs, ${PLAN_LIMITS.hobby.links} links, ${PLAN_LIMITS.hobby.members} team members, and ${PLAN_LIMITS.hobby.analyticsDays}-day analytics for one organization. Pro (${PLAN_PRICES.pro}/mo) raises everything: ${PLAN_LIMITS.pro.orgs} organizations, ${PLAN_LIMITS.pro.links.toLocaleString()} links, ${PLAN_LIMITS.pro.members} team members, ${PLAN_LIMITS.pro.domains} custom domains each, ${PLAN_LIMITS.pro.analyticsDays}-day analytics, and direct email support. Only the organization owner needs a paid plan: one subscription covers every organization they own.`,
   },
   {
     q: "How is rdyrct privacy-friendly?",
@@ -507,6 +481,140 @@ function PricingSection() {
   );
 }
 
+/* ---------------- Fake deploy terminal ---------------- */
+
+const resources = [
+  {
+    name: "KV",
+    id: "rdyrct-redirects",
+    desc: "Slug cache on the redirect hot path. Reads never touch the database.",
+  },
+  {
+    name: "D1",
+    id: "rdyrct",
+    desc: "Source of truth for links, organizations, members, and click analytics.",
+  },
+  {
+    name: "R2",
+    id: "rdyrct-qr-logos",
+    desc: "QR logo images, uploaded and served through the Worker.",
+  },
+  {
+    name: "Worker",
+    id: "rdyrct",
+    desc: "Routing, redirects, and API at the edge, nearest data center.",
+  },
+  {
+    name: "Cloudflare for SaaS",
+    id: "*.yourdomain.co",
+    desc: "TLS terminated automatically on every custom domain.",
+  },
+];
+
+const delays = [
+  0.2, // prompt
+  0.7, // build
+  1.2, // upload
+  1.7, // deploy
+  2.2, // blank
+  2.4, // header
+  2.8, // kv
+  3.2, // d1
+  3.6, // r2
+  4.0, // worker
+  4.4, // saas
+  4.8, // summary blank
+  5.0, // summary
+];
+
+const lineVariant: Variants = {
+  hidden: { opacity: 0, y: 6 },
+  visible: (delay: number) => ({
+    opacity: 1,
+    y: 0,
+    transition: { duration: 0.3, delay, ease: "easeOut" },
+  }),
+};
+
+/**
+ * A fake "bun run deploy" terminal that, when scrolled into view, walks
+ * through building, uploading, and deploying the Worker, then explains each
+ * Cloudflare primitive that was deployed.
+ */
+function DeployTerminal() {
+  const reduce = useReducedMotion();
+  const animated = !reduce;
+
+  const cursor = animated ? (
+    <span
+      aria-hidden
+      className="inline-block h-[13px] w-[5px] translate-y-px bg-accent align-middle ml-0.5"
+      style={{ animation: "cursorBlink 0.4s step-end 3 forwards" }}
+    />
+  ) : null;
+
+  const lines = [
+    /* 0 */ <span key="prompt"><span className="text-accent/70">$</span> bun run deploy{cursor}</span>,
+    /* 1 */ <span key="build"><span className="text-[#27c93f]">✓</span> src/worker/index.ts → dist/worker.js  <span className="text-muted/50">(2.4s)</span></span>,
+    /* 2 */ <span key="upload"><span className="text-[#27c93f]">✓</span> Optimizing bundle... <span className="text-muted/50">124 kB gzipped</span></span>,
+    /* 3 */ <span key="deploy"><span className="text-[#27c93f]">✓</span> Deploying to Cloudflare global network</span>,
+    /* 4 */ <span key="b1" />,
+    /* 5 */ <span key="header"><span className="text-muted/50">Deployed resources:</span></span>,
+    /* 6-10 */ ...resources.map((r) => (
+      <span key={r.name}>
+        <span className="text-accent font-semibold">{r.name}</span>
+        <span className="text-muted/40">  {r.id}</span>
+        <span className="text-muted/20">  —  </span>
+        <span className="text-muted">{r.desc}</span>
+      </span>
+    )),
+    /* 11 */ <span key="b2" />,
+    /* 12 */ <span key="summary"><span className="text-accent/85">Deployed to prod.</span> <span className="text-muted/50">330+ cities · 5 primitives</span></span>,
+  ];
+
+  const content = animated ? (
+    <m.div
+      initial="hidden"
+      whileInView="visible"
+      viewport={{ once: true, margin: "-60px" }}
+    >
+      {lines.map((node, i) => (
+        <m.div
+          key={i}
+          variants={lineVariant}
+          custom={delays[i]}
+          className={i === 4 || i === 11 ? "h-2" : "whitespace-pre-wrap leading-[1.9]"}
+        >
+          {node}
+        </m.div>
+      ))}
+    </m.div>
+  ) : (
+    <div>{lines.map((node, i) => <div key={i} className={i === 4 || i === 11 ? "h-2" : "whitespace-pre-wrap leading-[1.9]"}>{node}</div>)}</div>
+  );
+
+  return (
+    <div className="overflow-hidden rounded-[10px] border border-border bg-surface shadow-lg shadow-black/20">
+      <div className="flex items-center gap-1.5 border-b border-border bg-surface-2 px-4 py-2.5">
+        <span className="h-[9px] w-[9px] rounded-full bg-[#ff5f56]" />
+        <span className="h-[9px] w-[9px] rounded-full bg-[#ffbd2e]" />
+        <span className="h-[9px] w-[9px] rounded-full bg-[#27c93f]" />
+        <span className="flex flex-1 items-center justify-center gap-1 font-mono text-[0.7rem] text-muted/60">
+          <svg width="14" height="14" viewBox="0 0 48 48" fill="none">
+            <rect width="48" height="48" rx="8" fill="#f38020" />
+            <path d="M13.5 24c0-2.5 2-4.5 4.5-4.5h4l1.5-3h-5.5a7.5 7.5 0 000 15h5.5l-1.5-3h-4a4.5 4.5 0 01-4.5-4.5z" fill="#fff" />
+            <path d="M34.5 24c0 2.5-2 4.5-4.5 4.5h-4l-1.5 3h5.5a7.5 7.5 0 000-15h-5.5l1.5 3h4a4.5 4.5 0 014.5 4.5z" fill="#fff" />
+          </svg>
+          rdyrct deploy
+        </span>
+      </div>
+      <div className="px-4 py-3 font-mono text-[0.78rem]">
+        {content}
+      </div>
+    </div>
+  );
+}
+
 export function LandingPage() {
   const me = useCurrentUser();
   // While the /user query is in flight, fall back to the last known auth
@@ -522,6 +630,7 @@ export function LandingPage() {
       <LazyMotion features={domAnimation}>
         <div className="relative mx-auto min-h-dvh max-w-5xl px-6">
         <FaqJsonLd />
+        <style>{`@keyframes cursorBlink { 50% { opacity: 0; } }`}</style>
         {/* soft accent glow behind the hero */}
         <div
           aria-hidden="true"
@@ -575,8 +684,9 @@ export function LandingPage() {
               Short links that carry your brand.
             </h1>
             <p className="max-w-xl text-sm text-muted sm:text-base">
-              rdyrct gives your team short links, QR codes, and custom
-              domains, with privacy-friendly analytics that never store an
+              rdyrct gives your team short links, branded QR codes, and
+              custom domains, with privacy-friendly analytics that never
+              store an
               IP address. Free to start, open source, and built on
               Cloudflare's global network.
             </p>
@@ -697,23 +807,11 @@ export function LandingPage() {
           <div className="mb-8 text-center">
             <h2 className="text-xl font-bold">Runs entirely on Cloudflare</h2>
             <p className="mx-auto mt-2 max-w-xl text-sm text-muted">
-              No servers to patch, no databases to babysit. rdyrct is built
-              from Cloudflare's own primitives, end to end, so your links
-              resolve in milliseconds, anywhere on Earth.
+              No servers to patch, no databases to babysit: rdyrct is built
+              from Cloudflare's own primitives, end to end. Watch it deploy:
             </p>
           </div>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            {cloudflareStack.map(({ icon: Icon, title, body }) => (
-              <div
-                key={title}
-                className="rounded-lg border border-border bg-surface p-4"
-              >
-                <Icon size={18} className="mb-2 text-accent" />
-                <p className="font-bold">{title}</p>
-                <p className="mt-1 text-sm text-muted">{body}</p>
-              </div>
-            ))}
-          </div>
+          <DeployTerminal />
         </Section>
 
         <PricingSection />
