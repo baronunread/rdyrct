@@ -143,17 +143,12 @@ export function normalizeUrl(value: string): string {
 }
 
 export function isValidHttpUrl(value: string): boolean {
-  let url: URL;
   try {
-    url = new URL(value);
+    const url = new URL(value);
+    return url.protocol === "http:" || url.protocol === "https:";
   } catch {
     return false;
   }
-  if (url.protocol !== "http:" && url.protocol !== "https:") return false;
-  const hostname = url.hostname;
-  if (hostname.endsWith(".")) return false;
-  const tld = hostname.split(".").pop()!;
-  return tld.length >= 2;
 }
 
 /* ---------------- QR appearance validation ---------------- */

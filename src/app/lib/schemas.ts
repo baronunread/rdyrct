@@ -4,17 +4,12 @@ export const orgNameSchema = z.object({
   name: z.string().min(1, "Enter an organization name").max(100),
 });
 
-const isValidUrl = (v: string) => {
-  let hostname: string;
-  try { hostname = new URL(v).hostname; }
-  catch { try { hostname = new URL(`https://${v}`).hostname; }
-  catch { return false; } }
-  if (hostname.endsWith(".")) return false;
-  const tld = hostname.split(".").pop()!;
-  return tld.length >= 2;
-};
+const tryUrl = (v: string) => z.url().safeParse(v).success;
 
-export const destinationField = z.string().refine(isValidUrl, "Enter a valid URL");
+export const destinationField = z.string().refine(
+  (v) => tryUrl(v) || tryUrl(`https://${v}`),
+  "Enter a valid URL",
+);
 
 export const destinationSchema = z.object({
   destination: destinationField,
