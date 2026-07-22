@@ -64,8 +64,7 @@ export function ResetPasswordPage() {
         <h1 className="font-bold">Set a new password</h1>
         {!token && (
           <p className="text-sm text-danger">
-            This reset link is missing its token. Request a new one from the
-            sign-in page.
+            This reset link is missing its token. Request a new one from the sign-in page.
           </p>
         )}
         <Field label="New password" hint={<PasswordMeter password={password} />}>

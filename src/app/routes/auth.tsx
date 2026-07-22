@@ -12,12 +12,7 @@ import { Field, Input } from "../ui/field";
 import { OtpInput } from "../ui/otp";
 import { BusyContent } from "../ui/spinner";
 import { useToast } from "../ui/toast";
-import {
-  loginSchema,
-  signupSchema,
-  forgotSchema,
-  otpSchema,
-} from "../lib/schemas";
+import { loginSchema, signupSchema, forgotSchema, otpSchema } from "../lib/schemas";
 
 type View = "form" | "forgot" | "forgot-sent" | "verify-otp";
 
@@ -55,12 +50,7 @@ function ForgotView({
         ) : (
           <form onSubmit={onFormSubmit} className="flex flex-col gap-4">
             <Field label="Email">
-              <Input
-                type="email"
-                {...register("email")}
-                required
-                autoComplete="email"
-              />
+              <Input type="email" {...register("email")} required autoComplete="email" />
             </Field>
             <Button type="submit" variant="primary" disabled={busy}>
               <BusyContent busy={busy}>Send reset link</BusyContent>
@@ -96,7 +86,11 @@ function VerifyOtpView({
   onResend: () => void;
   onBack: () => void;
 }) {
-  const { control, handleSubmit, formState: { errors } } = useForm<OtpForm>({
+  const {
+    control,
+    handleSubmit,
+    formState: { errors },
+  } = useForm<OtpForm>({
     resolver: zodResolver(otpSchema),
     defaultValues: { otp: "" },
   });
@@ -111,8 +105,8 @@ function VerifyOtpView({
       >
         <h1 className="font-bold">Enter your code</h1>
         <p className="text-sm text-muted">
-          We emailed a 6-digit code to <span className="text-text">{email}</span>
-          . It expires in 10 minutes.
+          We emailed a 6-digit code to <span className="text-text">{email}</span>. It expires in 10
+          minutes.
         </p>
         <Field label="Verification code">
           <Controller
@@ -122,7 +116,10 @@ function VerifyOtpView({
               <OtpInput
                 value={field.value}
                 onChange={field.onChange}
-                onComplete={(v) => { field.onChange(v); onComplete(v); }}
+                onComplete={(v) => {
+                  field.onChange(v);
+                  onComplete(v);
+                }}
                 disabled={busy}
                 autoFocus
               />
@@ -139,11 +136,7 @@ function VerifyOtpView({
           {resent ? (
             <span>New code sent.</span>
           ) : (
-            <button
-              type="button"
-              className="hover:text-accent"
-              onClick={onResend}
-            >
+            <button type="button" className="hover:text-accent" onClick={onResend}>
               Resend code
             </button>
           )}
@@ -189,16 +182,9 @@ function AuthFormView({
         noValidate
         className="flex flex-col gap-4 rounded-xl border border-border bg-surface p-6"
       >
-        <h1 className="font-bold">
-          {mode === "login" ? "Sign in" : "Create an account"}
-        </h1>
+        <h1 className="font-bold">{mode === "login" ? "Sign in" : "Create an account"}</h1>
         <Field label="Email">
-          <Input
-            type="email"
-            {...register("email")}
-            required
-            autoComplete="email"
-          />
+          <Input type="email" {...register("email")} required autoComplete="email" />
         </Field>
         <Field
           label="Password"
@@ -236,13 +222,11 @@ function AuthFormView({
         <p className="text-center text-xs text-muted">
           {mode === "login" ? (
             <>
-              No account?{" "}
-              <Link to={`/signup?next=${encodeURIComponent(next)}`}>Sign up</Link>
+              No account? <Link to={`/signup?next=${encodeURIComponent(next)}`}>Sign up</Link>
             </>
           ) : (
             <>
-              Have an account?{" "}
-              <Link to={`/login?next=${encodeURIComponent(next)}`}>Sign in</Link>
+              Have an account? <Link to={`/login?next=${encodeURIComponent(next)}`}>Sign in</Link>
             </>
           )}
         </p>
@@ -267,10 +251,16 @@ function readPending(): Pending | null {
 function writePending(p: Pending) {
   try {
     sessionStorage.setItem(PENDING_KEY, JSON.stringify(p));
-  } catch { /* ignore */ }
+  } catch {
+    /* ignore */
+  }
 }
 function clearPending() {
-  try { sessionStorage.removeItem(PENDING_KEY); } catch { /* ignore */ }
+  try {
+    sessionStorage.removeItem(PENDING_KEY);
+  } catch {
+    /* ignore */
+  }
 }
 
 export function AuthPage({ mode }: { mode: "login" | "signup" }) {
@@ -280,9 +270,7 @@ export function AuthPage({ mode }: { mode: "login" | "signup" }) {
   const qc = useQueryClient();
   const toast = useToast();
 
-  const [view, setView] = useState<View>(() =>
-    readPending() ? "verify-otp" : "form",
-  );
+  const [view, setView] = useState<View>(() => (readPending() ? "verify-otp" : "form"));
   const [authEmail, setAuthEmail] = useState(() => readPending()?.email ?? "");
   const authPasswordRef = useRef("");
   const [error, setError] = useState("");
@@ -311,10 +299,7 @@ export function AuthPage({ mode }: { mode: "login" | "signup" }) {
     params.get("next") ??
     (location.state as { from?: string } | null)?.from ??
     "/dashboard";
-  const next =
-    rawNext.startsWith("/") && !rawNext.startsWith("//")
-      ? rawNext
-      : "/dashboard";
+  const next = rawNext.startsWith("/") && !rawNext.startsWith("//") ? rawNext : "/dashboard";
 
   const { data: user } = useCurrentUser();
   useEffect(() => {
@@ -404,9 +389,10 @@ export function AuthPage({ mode }: { mode: "login" | "signup" }) {
   const resendOtp = async () => {
     setResent(false);
     setOtpError("");
-    const { error: resendError } = await authClient.emailOtp.sendVerificationOtp(
-      { email: authEmail, type: "email-verification" },
-    );
+    const { error: resendError } = await authClient.emailOtp.sendVerificationOtp({
+      email: authEmail,
+      type: "email-verification",
+    });
     if (resendError) {
       toast(resendError.message ?? "Could not resend the code", "error");
       return;

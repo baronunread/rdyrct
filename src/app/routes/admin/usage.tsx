@@ -7,21 +7,12 @@ import { linkLabel } from "./util";
 import type { AdminUsage, OrgPlan } from "@/shared/types";
 import { shortDate } from "../../lib/dates";
 
-const planColor = (p: OrgPlan) =>
-  p === "pro" ? "accent" : p === "hobby" ? "mint" : "muted";
+const planColor = (p: OrgPlan) => (p === "pro" ? "accent" : p === "hobby" ? "mint" : "muted");
 
-function AdminTableCard({
-  title,
-  children,
-}: {
-  title: string;
-  children: ReactNode;
-}) {
+function AdminTableCard({ title, children }: { title: string; children: ReactNode }) {
   return (
     <Card className="lg:col-span-2">
-      <p className="mb-3 text-2xs tracking-wider text-muted uppercase">
-        {title}
-      </p>
+      <p className="mb-3 text-2xs tracking-wider text-muted uppercase">{title}</p>
       <Table>{children}</Table>
     </Card>
   );
@@ -54,9 +45,7 @@ function BusinessRow({ s }: { s: AdminUsage }) {
   return (
     <div className="mt-4 grid gap-4 lg:grid-cols-3">
       <Card>
-        <p className="mb-3 text-2xs tracking-wider text-muted uppercase">
-          Plan mix
-        </p>
+        <p className="mb-3 text-2xs tracking-wider text-muted uppercase">Plan mix</p>
         <BarList
           items={[
             { key: "Free", clicks: s.planCounts.free },
@@ -65,21 +54,15 @@ function BusinessRow({ s }: { s: AdminUsage }) {
           ]}
         />
         {s.paidConversionRate !== null && (
-          <p className="mt-3 text-xs text-muted">
-            {s.paidConversionRate}% paid conversion
-          </p>
+          <p className="mt-3 text-xs text-muted">{s.paidConversionRate}% paid conversion</p>
         )}
       </Card>
       <Card>
-        <p className="mb-3 text-2xs tracking-wider text-muted uppercase">
-          Signups per day · 30d
-        </p>
+        <p className="mb-3 text-2xs tracking-wider text-muted uppercase">Signups per day · 30d</p>
         <AreaChart data={s.signups} />
       </Card>
       <Card>
-        <p className="mb-3 text-2xs tracking-wider text-muted uppercase">
-          Cumulative users · 90d
-        </p>
+        <p className="mb-3 text-2xs tracking-wider text-muted uppercase">Cumulative users · 90d</p>
         <AreaChart data={s.cumulativeUsers} />
       </Card>
     </div>
@@ -90,15 +73,11 @@ function GrowthRow({ s }: { s: AdminUsage }) {
   return (
     <div className="mt-4 grid gap-4 lg:grid-cols-2">
       <Card>
-        <p className="mb-3 text-2xs tracking-wider text-muted uppercase">
-          Clicks per day · 30d
-        </p>
+        <p className="mb-3 text-2xs tracking-wider text-muted uppercase">Clicks per day · 30d</p>
         <AreaChart data={s.series} />
       </Card>
       <Card>
-        <p className="mb-3 text-2xs tracking-wider text-muted uppercase">
-          Cumulative orgs · 90d
-        </p>
+        <p className="mb-3 text-2xs tracking-wider text-muted uppercase">Cumulative orgs · 90d</p>
         <AreaChart data={s.cumulativeOrgs} />
       </Card>
     </div>
@@ -109,9 +88,7 @@ function TopListsRow({ s }: { s: AdminUsage }) {
   return (
     <div className="mt-4 grid gap-4 lg:grid-cols-2">
       <Card>
-        <p className="mb-3 text-2xs tracking-wider text-muted uppercase">
-          Top organizations · 30d
-        </p>
+        <p className="mb-3 text-2xs tracking-wider text-muted uppercase">Top organizations · 30d</p>
         <BarList
           items={s.topOrgs.map((o) => ({ key: o.id, clicks: o.clicks }))}
           formatKey={(id) => {
@@ -119,19 +96,14 @@ function TopListsRow({ s }: { s: AdminUsage }) {
             if (!o) return id;
             return (
               <span className="flex items-center gap-2">
-                {o.name}{" "}
-                <Badge color={planColor(o.plan as OrgPlan)}>
-                  {o.plan}
-                </Badge>
+                {o.name} <Badge color={planColor(o.plan as OrgPlan)}>{o.plan}</Badge>
               </span>
             );
           }}
         />
       </Card>
       <Card>
-        <p className="mb-3 text-2xs tracking-wider text-muted uppercase">
-          Top links · 30d
-        </p>
+        <p className="mb-3 text-2xs tracking-wider text-muted uppercase">Top links · 30d</p>
         <BarList
           items={s.topLinks.map((l) => ({ key: l.id, clicks: l.clicks }))}
           formatKey={(id) => {
@@ -151,13 +123,9 @@ function TableSizeCard({ s }: { s: AdminUsage }) {
       : null;
   return (
     <Card>
-      <p className="mb-3 text-2xs tracking-wider text-muted uppercase">
-        Table size
-      </p>
+      <p className="mb-3 text-2xs tracking-wider text-muted uppercase">Table size</p>
       <div className="flex items-baseline gap-3">
-        <span className="tnum text-2xl font-bold">
-          {s.tableSize.toLocaleString()}
-        </span>
+        <span className="tnum text-2xl font-bold">{s.tableSize.toLocaleString()}</span>
         <span className="text-xs text-muted">rows</span>
       </div>
       <div className="mt-3">
@@ -165,13 +133,8 @@ function TableSizeCard({ s }: { s: AdminUsage }) {
       </div>
       {projectedDate && (
         <div className="mt-2 text-xs text-muted">
-          <p>
-            ~{s.tableProjectedDays!.toLocaleString()} days until 10 GB cap
-          </p>
-          <p>
-            Estimated{" "}
-            {shortDate(projectedDate)}
-          </p>
+          <p>~{s.tableProjectedDays!.toLocaleString()} days until 10 GB cap</p>
+          <p>Estimated {shortDate(projectedDate)}</p>
         </div>
       )}
     </Card>
@@ -204,9 +167,7 @@ function HealthRow({ s }: { s: AdminUsage }) {
                 <Td>{a.orgName}</Td>
                 <Td className="tnum">{a.clicks24h.toLocaleString()}</Td>
                 <Td className="tnum">{a.avg14d}</Td>
-                <Td className="tnum font-bold text-danger">
-                  {a.ratio}x
-                </Td>
+                <Td className="tnum font-bold text-danger">{a.ratio}x</Td>
               </tr>
             ))}
           </tbody>
@@ -227,32 +188,21 @@ function HealthRow({ s }: { s: AdminUsage }) {
               <tr key={c.orgId}>
                 <Td>
                   <span className="flex items-center gap-2">
-                    {c.orgName}{" "}
-                    <Badge color={planColor(c.plan)}>{c.plan}</Badge>
+                    {c.orgName} <Badge color={planColor(c.plan)}>{c.plan}</Badge>
                   </span>
                 </Td>
                 <Td className="tnum">
-                  <span
-                    className={c.linksPct >= 100 ? "text-danger font-bold" : ""}
-                  >
+                  <span className={c.linksPct >= 100 ? "text-danger font-bold" : ""}>
                     {c.linksPct}%
                   </span>
                 </Td>
                 <Td className="tnum">
-                  <span
-                    className={
-                      c.membersPct >= 100 ? "text-danger font-bold" : ""
-                    }
-                  >
+                  <span className={c.membersPct >= 100 ? "text-danger font-bold" : ""}>
                     {c.membersPct}%
                   </span>
                 </Td>
                 <Td className="tnum">
-                  <span
-                    className={
-                      c.domainsPct >= 100 ? "text-danger font-bold" : ""
-                    }
-                  >
+                  <span className={c.domainsPct >= 100 ? "text-danger font-bold" : ""}>
                     {c.domainsPct}%
                   </span>
                 </Td>
@@ -268,16 +218,12 @@ function HealthRow({ s }: { s: AdminUsage }) {
 export function AdminUsagePage() {
   const usage = useAdminUsage();
   if (usage.isLoading) return <AdminUsageSkeleton />;
-  if (!usage.data)
-    return <p className="text-sm text-danger">Could not load usage.</p>;
+  if (!usage.data) return <p className="text-sm text-danger">Could not load usage.</p>;
   const s = usage.data;
 
   return (
     <div>
-      <PageHeader
-        title="Platform usage"
-        sub="Everything, across all organizations"
-      />
+      <PageHeader title="Platform usage" sub="Everything, across all organizations" />
       <BusinessStats s={s} />
       <ResourceStats s={s} />
       <BusinessRow s={s} />

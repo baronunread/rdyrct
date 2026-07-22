@@ -9,8 +9,7 @@ export function useOrgLimits() {
   const orgId = org?.id ?? "";
   const me = useCurrentUser();
   const limits = PLAN_LIMITS[org?.plan ?? "free"];
-  const canListDomains =
-    !!me.data?.user.isAdmin || org?.role === "owner" || org?.role === "admin";
+  const canListDomains = !!me.data?.user.isAdmin || org?.role === "owner" || org?.role === "admin";
   const domains = useDomains(orgId, canListDomains);
   const activeDomains = useMemo(
     () => (domains.data ?? []).filter((d) => d.status === "active"),

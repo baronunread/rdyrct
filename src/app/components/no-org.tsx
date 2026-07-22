@@ -35,10 +35,7 @@ export function NoOrgState() {
         setOrg(created.id);
         await qc.refetchQueries({ queryKey: ["user"] });
       } catch (err) {
-        toast(
-          err instanceof Error ? err.message : "Something went wrong",
-          "error",
-        );
+        toast(err instanceof Error ? err.message : "Something went wrong", "error");
       }
     },
     [setOrg, qc, toast],
@@ -56,21 +53,10 @@ export function NoOrgState() {
             This is where your links, domains, and teammates will live.
           </p>
         </div>
-        <Field
-          label="Organization name"
-          hint={errors.name?.message}
-        >
-          <Input
-            {...register("name")}
-            placeholder="acme inc"
-            autoFocus
-          />
+        <Field label="Organization name" hint={errors.name?.message}>
+          <Input {...register("name")} placeholder="acme inc" autoFocus />
         </Field>
-        <Button
-          type="submit"
-          variant="primary"
-          disabled={isSubmitting}
-        >
+        <Button type="submit" variant="primary" disabled={isSubmitting}>
           <BusyContent busy={isSubmitting}>Create organization</BusyContent>
         </Button>
       </form>

@@ -13,10 +13,7 @@ export function sortRows<T>(
     if (va == null && vb == null) return 0;
     if (va == null) return 1;
     if (vb == null) return -1;
-    const cmp =
-      typeof va === "string"
-        ? va.localeCompare(vb as string)
-        : va - (vb as number);
+    const cmp = typeof va === "string" ? va.localeCompare(vb as string) : va - (vb as number);
     return cmp * sort.dir;
   });
 }

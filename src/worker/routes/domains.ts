@@ -11,8 +11,7 @@ import { isValidHttpUrl, normalizeUrl } from "../util";
 import type { DomainDTO } from "@/shared/types";
 
 // e.g. links.example.com: at least one dot, no scheme/port/path
-const HOSTNAME_RE =
-  /^(?=.{4,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,}$/;
+const HOSTNAME_RE = /^(?=.{4,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,}$/;
 
 /* ---------------- Cloudflare for SaaS custom hostnames ---------------- */
 
@@ -32,24 +31,20 @@ async function cfRequest(
   path: string,
   body?: unknown,
 ): Promise<{ result: Record<string, unknown> } | null> {
-  const res = await fetch(
-    `https://api.cloudflare.com/client/v4/zones/${env.CF_ZONE_ID}${path}`,
-    {
-      method,
-      headers: {
-        authorization: `Bearer ${env.CF_API_TOKEN}`,
-        "content-type": "application/json",
-      },
-      body: body === undefined ? undefined : JSON.stringify(body),
+  const res = await fetch(`https://api.cloudflare.com/client/v4/zones/${env.CF_ZONE_ID}${path}`, {
+    method,
+    headers: {
+      authorization: `Bearer ${env.CF_API_TOKEN}`,
+      "content-type": "application/json",
     },
-  );
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
   if (!res.ok) {
     const text = await res.text().catch(() => "");
     console.error("cf api error", res.status, text);
     try {
       const body = JSON.parse(text);
-      const msg =
-        body.errors?.[0]?.message ?? `Cloudflare API error ${res.status}`;
+      const msg = body.errors?.[0]?.message ?? `Cloudflare API error ${res.status}`;
       throw new HTTPException(502, { message: msg });
     } catch {
       throw new HTTPException(502, {
@@ -60,10 +55,7 @@ async function cfRequest(
   return res.json();
 }
 
-async function cfCreateHostname(
-  env: Env,
-  hostname: string,
-): Promise<CfHostname> {
+async function cfCreateHostname(env: Env, hostname: string): Promise<CfHostname> {
   if (env.DEV_FAKE_CF === "1") return { id: `fake_${uid(8)}`, active: false };
   const data = await cfRequest(env, "POST", "/custom_hostnames", {
     hostname,
@@ -86,19 +78,12 @@ async function cfGetHostnameStatus(
     };
   }
   if (!row.cfHostnameId) return null;
-  const data = await cfRequest(
-    env,
-    "GET",
-    `/custom_hostnames/${row.cfHostnameId}`,
-  );
+  const data = await cfRequest(env, "GET", `/custom_hostnames/${row.cfHostnameId}`);
   if (!data) return null;
   return data.result as unknown as CfHostnameResult;
 }
 
-export async function cfDeleteHostname(
-  env: Env,
-  cfHostnameId: string,
-): Promise<void> {
+export async function cfDeleteHostname(env: Env, cfHostnameId: string): Promise<void> {
   if (env.DEV_FAKE_CF === "1") return;
   await cfRequest(env, "DELETE", `/custom_hostnames/${cfHostnameId}`);
 }
@@ -127,15 +112,9 @@ async function stepActivation(
 
   // status === "issuing_tls"
   if (h.ssl?.status !== "active") return row;
-  await db
-    .update(schema.domains)
-    .set({ status: "active" })
-    .where(eq(schema.domains.id, row.id));
+  await db.update(schema.domains).set({ status: "active" }).where(eq(schema.domains.id, row.id));
   await publishDomain(env, row);
-  const links = await db
-    .select()
-    .from(schema.links)
-    .where(eq(schema.links.domainId, row.id));
+  const links = await db.select().from(schema.links).where(eq(schema.links.domainId, row.id));
   await Promise.all(links.map((l) => publishLink(env, l, row.hostname)));
   return { ...row, status: "active" };
 }
@@ -172,9 +151,7 @@ domainRoutes.get("/", async (c) => {
     .select()
     .from(schema.domains)
     .where(eq(schema.domains.orgId, c.req.param("orgId")!));
-  const settled = await Promise.all(
-    rows.map((r) => stepActivation(c.env, c.var.db, r)),
-  );
+  const settled = await Promise.all(rows.map((r) => stepActivation(c.env, c.var.db, r)));
   return c.json(settled.map(toDTO));
 });
 
@@ -208,8 +185,7 @@ domainRoutes.post("/", async (c) => {
     .select({ id: schema.domains.id })
     .from(schema.domains)
     .where(eq(schema.domains.hostname, hostname));
-  if (taken.length)
-    throw new HTTPException(409, { message: "Domain already connected" });
+  if (taken.length) throw new HTTPException(409, { message: "Domain already connected" });
 
   const cf = await cfCreateHostname(c.env, hostname);
   const row = {
@@ -248,12 +224,8 @@ domainRoutes.patch("/:id", async (c) => {
         message: "Root redirect must be a valid http(s) URL",
       });
   }
-  await db
-    .update(schema.domains)
-    .set({ rootRedirect })
-    .where(eq(schema.domains.id, row.id));
-  if (row.status === "active")
-    await publishDomain(c.env, { ...row, rootRedirect });
+  await db.update(schema.domains).set({ rootRedirect }).where(eq(schema.domains.id, row.id));
+  if (row.status === "active") await publishDomain(c.env, { ...row, rootRedirect });
   return c.json(toDTO({ ...row, rootRedirect }));
 });
 
@@ -266,8 +238,7 @@ domainRoutes.delete("/:id", async (c) => {
     .where(eq(schema.links.domainId, row.id));
   if ((inUse[0]?.n ?? 0) > 0)
     throw new HTTPException(409, {
-      message:
-        "Links still use this domain, move or delete them first",
+      message: "Links still use this domain, move or delete them first",
     });
   if (row.cfHostnameId) await cfDeleteHostname(c.env, row.cfHostnameId);
   await unpublishDomain(c.env, row.hostname);

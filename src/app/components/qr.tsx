@@ -123,17 +123,7 @@ export function QRPreview({
       });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [
-    url,
-    size,
-    look.dot,
-    look.corner,
-    look.ink,
-    look.eye,
-    look.bg,
-    look.logo,
-    look.logoSize,
-  ]);
+  }, [url, size, look.dot, look.corner, look.ink, look.eye, look.bg, look.logo, look.logoSize]);
 
   const download = (extension: "png" | "svg") =>
     qr.current?.download({ name: downloadName ?? "qr", extension });
@@ -194,9 +184,7 @@ export function QrColorField({
   return (
     <div className="min-w-0">
       <div className="mb-1.5 flex items-center justify-between gap-1">
-        <span className="truncate text-2xs tracking-wider text-muted uppercase">
-          {label}
-        </span>
+        <span className="truncate text-2xs tracking-wider text-muted uppercase">{label}</span>
         {value && !disabled && (
           <button
             type="button"
@@ -262,8 +250,7 @@ async function rasterizeQrLogo(file: File): Promise<File> {
 
     const blob = await new Promise<Blob>((resolve, reject) =>
       canvas.toBlob(
-        (result) =>
-          result ? resolve(result) : reject(new Error("Could not encode this image")),
+        (result) => (result ? resolve(result) : reject(new Error("Could not encode this image"))),
         "image/webp",
         0.92,
       ),
@@ -293,10 +280,7 @@ async function optimizeQrLogoSvg(file: File): Promise<File> {
     ],
   });
   const document = new DOMParser().parseFromString(optimized.data, "image/svg+xml");
-  if (
-    document.querySelector("parsererror") ||
-    document.documentElement.localName !== "svg"
-  ) {
+  if (document.querySelector("parsererror") || document.documentElement.localName !== "svg") {
     throw new Error("Could not read this SVG file");
   }
   document.querySelectorAll("foreignObject").forEach((element) => element.remove());
@@ -345,9 +329,7 @@ export function QrLogoInput({
         return;
       }
       const rasterized = await rasterizeQrLogo(file);
-      const { default: imageCompression } = await import(
-        "browser-image-compression"
-      );
+      const { default: imageCompression } = await import("browser-image-compression");
       const compressed = await imageCompression(rasterized, {
         maxSizeMB: QR_LOGO_MAX_BYTES / 1024 / 1024,
         maxWidthOrHeight: QR_LOGO_MAX_DIMENSION,
@@ -420,9 +402,7 @@ export function QrLogoInput({
             <span className="flex items-center gap-1 text-text">
               <Check size={12} className="text-accent" /> Logo added
             </span>
-            <span className="text-3xs text-muted/70">
-              Drop a new image or browse to replace
-            </span>
+            <span className="text-3xs text-muted/70">Drop a new image or browse to replace</span>
           </>
         ) : (
           <>

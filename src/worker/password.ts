@@ -6,10 +6,8 @@
 
 const PBKDF2_ITERATIONS = 100_000;
 
-const b64 = (buf: ArrayBuffer) =>
-  btoa(String.fromCharCode(...new Uint8Array(buf)));
-const unb64 = (s: string) =>
-  Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
+const b64 = (buf: ArrayBuffer) => btoa(String.fromCharCode(...new Uint8Array(buf)));
+const unb64 = (s: string) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
 
 async function pbkdf2(
   password: string,
@@ -36,16 +34,11 @@ export async function hashPassword(password: string): Promise<string> {
   return `pbkdf2:${PBKDF2_ITERATIONS}:${b64(salt.buffer)}:${b64(hash)}`;
 }
 
-export async function verifyPassword(
-  password: string,
-  stored: string,
-): Promise<boolean> {
+export async function verifyPassword(password: string, stored: string): Promise<boolean> {
   const [scheme, iterations, saltB64, hashB64] = stored.split(":");
   if (scheme !== "pbkdf2") return false;
   const expected = unb64(hashB64);
-  const actual = new Uint8Array(
-    await pbkdf2(password, unb64(saltB64), Number(iterations)),
-  );
+  const actual = new Uint8Array(await pbkdf2(password, unb64(saltB64), Number(iterations)));
   if (actual.length !== expected.length) return false;
   let diff = 0;
   for (let i = 0; i < actual.length; i++) diff |= actual[i] ^ expected[i];

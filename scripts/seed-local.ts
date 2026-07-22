@@ -31,8 +31,7 @@ function rand(): number {
   t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
   return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
 }
-const randInt = (min: number, max: number) =>
-  min + Math.floor(rand() * (max - min + 1));
+const randInt = (min: number, max: number) => min + Math.floor(rand() * (max - min + 1));
 const pick = <T>(arr: readonly T[]): T => arr[Math.floor(rand() * arr.length)];
 /** Weighted pick: [value, weight] pairs. */
 function pickW<T>(pairs: readonly (readonly [T, number])[]): T {
@@ -45,8 +44,7 @@ function pickW<T>(pairs: readonly (readonly [T, number])[]): T {
   return pairs[pairs.length - 1][0];
 }
 
-const ID_ALPHABET =
-  "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
+const ID_ALPHABET = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
 const SLUG_ALPHABET = "23456789abcdefghjkmnpqrstuvwxyz";
 const randomFrom = (alphabet: string, len: number) => {
   let out = "";
@@ -94,21 +92,17 @@ async function sqlBatch(statements: string[]): Promise<void> {
 }
 
 async function kvPut(key: string, value: unknown): Promise<void> {
-  await apiJson(
-    `/storage/kv/namespaces/${KV_ID}/values/${encodeURIComponent(key)}`,
-    {
-      method: "PUT",
-      headers: { "content-type": "application/octet-stream" },
-      body: JSON.stringify(value),
-    },
-  );
+  await apiJson(`/storage/kv/namespaces/${KV_ID}/values/${encodeURIComponent(key)}`, {
+    method: "PUT",
+    headers: { "content-type": "application/octet-stream" },
+    body: JSON.stringify(value),
+  });
 }
 
 async function kvDelete(key: string): Promise<void> {
-  await fetch(
-    `${API}/storage/kv/namespaces/${KV_ID}/values/${encodeURIComponent(key)}`,
-    { method: "DELETE" },
-  );
+  await fetch(`${API}/storage/kv/namespaces/${KV_ID}/values/${encodeURIComponent(key)}`, {
+    method: "DELETE",
+  });
 }
 
 /** SQL string literal (all inputs come from the pools below, none user-supplied). */
@@ -132,23 +126,70 @@ async function hashPassword(password: string): Promise<string> {
     key,
     256,
   );
-  const b64 = (buf: ArrayBuffer) =>
-    btoa(String.fromCharCode(...new Uint8Array(buf)));
+  const b64 = (buf: ArrayBuffer) => btoa(String.fromCharCode(...new Uint8Array(buf)));
   return `pbkdf2:${iterations}:${b64(salt.buffer)}:${b64(hash)}`;
 }
 
 /* ---------------- data pools ---------------- */
 
 const ORG_NAMES = [
-  "Nimbus Labs", "Cactus Coffee", "Orbit Fitness", "Paper Trail Co",
-  "Bluegill Media", "Tundra Analytics", "Hearth & Home", "Velo Cycles",
-  "Sundial Travel", "Copper Kettle", "Moss Studio", "Lighthouse Legal",
+  "Nimbus Labs",
+  "Cactus Coffee",
+  "Orbit Fitness",
+  "Paper Trail Co",
+  "Bluegill Media",
+  "Tundra Analytics",
+  "Hearth & Home",
+  "Velo Cycles",
+  "Sundial Travel",
+  "Copper Kettle",
+  "Moss Studio",
+  "Lighthouse Legal",
 ];
-const FIRST = ["Ana", "Bruno", "Carla", "Dario", "Elena", "Franco", "Gina",
-  "Hugo", "Irene", "Jonas", "Kira", "Luca", "Mara", "Nico", "Olga", "Paolo",
-  "Rita", "Sami", "Tessa", "Ugo", "Vera", "Wanda", "Yuri", "Zoe"];
-const LAST = ["Rossi", "Kim", "Novak", "Silva", "Meyer", "Costa", "Haas",
-  "Lund", "Mori", "Pace", "Reyes", "Sato", "Toth", "Vidal", "Weiss", "Zana"];
+const FIRST = [
+  "Ana",
+  "Bruno",
+  "Carla",
+  "Dario",
+  "Elena",
+  "Franco",
+  "Gina",
+  "Hugo",
+  "Irene",
+  "Jonas",
+  "Kira",
+  "Luca",
+  "Mara",
+  "Nico",
+  "Olga",
+  "Paolo",
+  "Rita",
+  "Sami",
+  "Tessa",
+  "Ugo",
+  "Vera",
+  "Wanda",
+  "Yuri",
+  "Zoe",
+];
+const LAST = [
+  "Rossi",
+  "Kim",
+  "Novak",
+  "Silva",
+  "Meyer",
+  "Costa",
+  "Haas",
+  "Lund",
+  "Mori",
+  "Pace",
+  "Reyes",
+  "Sato",
+  "Toth",
+  "Vidal",
+  "Weiss",
+  "Zana",
+];
 
 const DESTINATIONS: readonly (readonly [string, string])[] = [
   ["https://example.com/spring-sale", "Spring sale"],
@@ -169,31 +210,48 @@ const UTM_MEDIUMS = ["email", "social", "offline", "cpc", ""];
 const CAMPAIGNS = ["spring-2026", "launch", "always-on", "summer-promo", ""];
 
 const COUNTRIES: readonly (readonly [string, number])[] = [
-  ["US", 30], ["IT", 18], ["DE", 12], ["GB", 10], ["FR", 8], ["ES", 6],
-  ["BR", 5], ["NL", 4], ["JP", 3], ["IN", 3], ["CA", 3], ["AU", 2], ["", 2],
+  ["US", 30],
+  ["IT", 18],
+  ["DE", 12],
+  ["GB", 10],
+  ["FR", 8],
+  ["ES", 6],
+  ["BR", 5],
+  ["NL", 4],
+  ["JP", 3],
+  ["IN", 3],
+  ["CA", 3],
+  ["AU", 2],
+  ["", 2],
 ];
 const REFERRERS: readonly (readonly [string, number])[] = [
-  ["", 40], ["google.com", 20], ["t.co", 10], ["linkedin.com", 9],
-  ["facebook.com", 7], ["news.ycombinator.com", 4], ["instagram.com", 4],
-  ["reddit.com", 3], ["duckduckgo.com", 3],
+  ["", 40],
+  ["google.com", 20],
+  ["t.co", 10],
+  ["linkedin.com", 9],
+  ["facebook.com", 7],
+  ["news.ycombinator.com", 4],
+  ["instagram.com", 4],
+  ["reddit.com", 3],
+  ["duckduckgo.com", 3],
 ];
 const DEVICES: readonly (readonly [string, number])[] = [
-  ["mobile", 48], ["desktop", 42], ["tablet", 6], ["bot", 4],
+  ["mobile", 48],
+  ["desktop", 42],
+  ["tablet", 6],
+  ["bot", 4],
 ];
 
 /* ---------------- wipe previous seed data ---------------- */
 
 async function wipe(): Promise<number> {
-  const links = await sql(
-    "SELECT slug, domain_id FROM links WHERE id LIKE 'seed-%'",
-  );
-  const domains = await sql(
-    "SELECT hostname FROM domains WHERE id LIKE 'seed-%'",
-  );
+  const links = await sql("SELECT slug, domain_id FROM links WHERE id LIKE 'seed-%'");
+  const domains = await sql("SELECT hostname FROM domains WHERE id LIKE 'seed-%'");
   const hostById = new Map(
-    (
-      await sql("SELECT id, hostname FROM domains WHERE id LIKE 'seed-%'")
-    ).map((d) => [d.id, d.hostname]),
+    (await sql("SELECT id, hostname FROM domains WHERE id LIKE 'seed-%'")).map((d) => [
+      d.id,
+      d.hostname,
+    ]),
   );
   for (const l of links) {
     const host = l.domain_id ? hostById.get(l.domain_id) : null;
@@ -235,7 +293,8 @@ async function seed() {
   const users: SeedUser[] = [];
   const emailSeen = new Set<string>();
   const makeUser = (plan: SeedUser["plan"]): SeedUser => {
-    let name = "", email = "";
+    let name = "",
+      email = "";
     do {
       name = `${pick(FIRST)} ${pick(LAST)}`;
       email = `${name.toLowerCase().replace(" ", ".")}@seed.test`;
@@ -253,12 +312,19 @@ async function seed() {
   };
 
   const ownerPlans: SeedUser["plan"][] = [
-    "pro", "pro", "hobby", "hobby", "hobby", "free", "free", "free", "free", "free",
+    "pro",
+    "pro",
+    "hobby",
+    "hobby",
+    "hobby",
+    "free",
+    "free",
+    "free",
+    "free",
+    "free",
   ];
   const owners = ownerPlans.slice(0, CONFIG.orgs).map((p) => makeUser(p));
-  const pool = Array.from({ length: CONFIG.extraUsersPool }, () =>
-    makeUser("free"),
-  );
+  const pool = Array.from({ length: CONFIG.extraUsersPool }, () => makeUser("free"));
 
   const userRows = users.map(
     (u) =>
@@ -303,11 +369,8 @@ async function seed() {
       `INSERT INTO orgs (id, name, created_at) VALUES (${q(org.id)}, ${q(org.name)}, ${org.createdAt})`,
     );
 
-    const memberRows = [
-      `(${q(org.id)}, ${q(owner.id)}, 'owner', ${org.createdAt})`,
-    ];
-    const others = [...pool].sort(() => rand() - 0.5)
-      .slice(0, randInt(1, memberCap[org.plan] - 1));
+    const memberRows = [`(${q(org.id)}, ${q(owner.id)}, 'owner', ${org.createdAt})`];
+    const others = [...pool].sort(() => rand() - 0.5).slice(0, randInt(1, memberCap[org.plan] - 1));
     for (const m of others) {
       const role = rand() < 0.3 ? "admin" : "member";
       memberRows.push(
@@ -356,17 +419,16 @@ async function seed() {
     const [lo, hi] = linkRange[org.plan];
     const count = randInt(lo, hi);
     const memberIds = (
-      await sql(
-        `SELECT user_id FROM org_members WHERE org_id = ${q(org.id)}`,
-      )
+      await sql(`SELECT user_id FROM org_members WHERE org_id = ${q(org.id)}`)
     ).map((r) => r.user_id as string);
 
     const rows: string[] = [];
     for (let i = 0; i < count; i++) {
       const onCustomDomain = org.domain !== null && rand() < 0.25;
-      let slug = onCustomDomain && rand() < 0.6
-        ? `${pick(["promo", "menu", "app", "event", "docs", "join", "sale"])}-${randomFrom(SLUG_ALPHABET, 3)}`
-        : randomSlug();
+      let slug =
+        onCustomDomain && rand() < 0.6
+          ? `${pick(["promo", "menu", "app", "event", "docs", "join", "sale"])}-${randomFrom(SLUG_ALPHABET, 3)}`
+          : randomSlug();
       while (usedSlugs.has(slug)) slug = randomSlug();
       usedSlugs.add(slug);
 
@@ -413,10 +475,7 @@ async function seed() {
   let totalClicks = 0;
   const clickValues: string[] = [];
   const baseHourWeights = [
-    1, 0.5, 0.3, 0.2, 0.2, 0.5,
-    1, 1.5, 3, 5, 6, 6,
-    4, 3, 5, 6, 5, 4,
-    3, 2, 1.5, 1, 0.8, 0.5,
+    1, 0.5, 0.3, 0.2, 0.2, 0.5, 1, 1.5, 3, 5, 6, 6, 4, 3, 5, 6, 5, 4, 3, 2, 1.5, 1, 0.8, 0.5,
   ] as const;
 
   for (const link of links) {
@@ -456,15 +515,12 @@ async function seed() {
 
       for (let i = 0; i < n; i++) {
         const base = new Date(now - d * day);
-        const dayStart = base.getTime() - base.getTime() % day;
-        const hourWeights = baseHourWeights.map((w, h) =>
-          [h, w * (spikeHours.has(h) ? randInt(5, 25) : 1)] as const
+        const dayStart = base.getTime() - (base.getTime() % day);
+        const hourWeights = baseHourWeights.map(
+          (w, h) => [h, w * (spikeHours.has(h) ? randInt(5, 25) : 1)] as const,
         );
         const h = pickW(hourWeights);
-        const t = Math.min(
-          now,
-          dayStart + h * 3_600_000 + randInt(0, 3_599_999),
-        );
+        const t = Math.min(now, dayStart + h * 3_600_000 + randInt(0, 3_599_999));
         clickValues.push(
           `(${q(link.id)}, ${q(link.org.id)}, ${t}, ${q(pickW(COUNTRIES))}, ${q(pickW(REFERRERS))}, ${q(pickW(DEVICES))})`,
         );
@@ -476,8 +532,7 @@ async function seed() {
     await sqlBatch([
       `INSERT INTO clicks (link_id, org_id, ts, country, referrer, device) VALUES ${clickValues.slice(i, i + 400).join(",")}`,
     ]);
-    if (i % 4000 === 0 && i > 0)
-      console.log(`  clicks inserted: ${i}/${clickValues.length}`);
+    if (i % 4000 === 0 && i > 0) console.log(`  clicks inserted: ${i}/${clickValues.length}`);
   }
 
   /* summary */

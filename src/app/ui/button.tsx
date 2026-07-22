@@ -5,13 +5,10 @@ type Variant = "primary" | "outline" | "ghost" | "danger";
 type Size = "sm" | "md";
 
 const variants: Record<Variant, string> = {
-  primary:
-    "bg-accent text-bg font-bold hover:brightness-110 active:brightness-95",
-  outline:
-    "border border-border bg-surface hover:border-accent hover:text-accent",
+  primary: "bg-accent text-bg font-bold hover:brightness-110 active:brightness-95",
+  outline: "border border-border bg-surface hover:border-accent hover:text-accent",
   ghost: "text-muted hover:text-text hover:bg-surface-2",
-  danger:
-    "border border-border text-danger hover:border-danger hover:bg-danger/10",
+  danger: "border border-border text-danger hover:border-danger hover:bg-danger/10",
 };
 
 const sizes: Record<Size, string> = {
@@ -41,8 +38,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
 );
 Button.displayName = "Button";
 
-interface IconButtonProps
-  extends ButtonHTMLAttributes<HTMLButtonElement> {
+interface IconButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   /** Used for both aria-label and a native tooltip — icon-only buttons must name their action. */
   label: string;
   danger?: boolean;

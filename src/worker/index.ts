@@ -76,9 +76,7 @@ app.use("*", async (c, next) => {
 /* ---------------- API ---------------- */
 
 // BetterAuth owns /api/auth/* (signup, login, logout, verify, reset).
-app.on(["GET", "POST"], "/api/auth/*", (c) =>
-  getAuth(c.env).handler(c.req.raw),
-);
+app.on(["GET", "POST"], "/api/auth/*", (c) => getAuth(c.env).handler(c.req.raw));
 
 // Polar webhook: public, signature-verified, no session middleware.
 app.post("/api/webhooks/polar", (c) => handlePolarWebhook(c.req.raw, c.env));

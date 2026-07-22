@@ -21,9 +21,7 @@ export function SortTh({
     <Th className={className}>
       <button
         type="button"
-        onClick={() =>
-          onSort({ key: sortKey, dir: active && sort.dir === 1 ? -1 : 1 })
-        }
+        onClick={() => onSort({ key: sortKey, dir: active && sort.dir === 1 ? -1 : 1 })}
         className={cn(
           "inline-flex cursor-pointer items-center gap-1 tracking-wider uppercase",
           active ? "text-text" : "hover:text-text",

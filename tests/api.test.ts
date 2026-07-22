@@ -41,9 +41,7 @@ describe("ApiError", () => {
 
 describe("shortUrl", () => {
   test("uses the custom domain when given one", () => {
-    expect(shortUrl("abc123", "go.brand.com")).toBe(
-      "https://go.brand.com/abc123",
-    );
+    expect(shortUrl("abc123", "go.brand.com")).toBe("https://go.brand.com/abc123");
   });
 
   test("falls back to the current origin", () => {
@@ -66,10 +64,11 @@ describe("api", () => {
   test("serializes a body and sets the JSON content type", async () => {
     const calls = stubFetch({ ok: true });
     await api("/links", { method: "POST", body: { slug: "abc" } });
-    expect(calls[0].init?.body).toBe(JSON.stringify({ slug: "abc" }));
-    expect(
-      (calls[0].init?.headers as Record<string, string>)["content-type"],
-    ).toBe("application/json");
+    const call = calls[0]!;
+    expect(call.init?.body).toBe(JSON.stringify({ slug: "abc" }));
+    expect(call.init?.headers).toMatchObject({
+      "content-type": "application/json",
+    });
   });
 
   test("throws ApiError with the server's message and code", async () => {

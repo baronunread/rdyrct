@@ -116,7 +116,14 @@ export function AreaChart({
               strokeDasharray="3 3"
             />
             {/* 2px surface ring so the marker separates from the line */}
-            <circle cx={h.x} cy={h.y} r="4" fill="var(--chart)" stroke="var(--surface)" strokeWidth="2" />
+            <circle
+              cx={h.x}
+              cy={h.y}
+              r="4"
+              fill="var(--chart)"
+              stroke="var(--surface)"
+              strokeWidth="2"
+            />
           </g>
         )}
       </svg>
@@ -148,8 +155,7 @@ export function BarList({
   formatKey?: (key: string) => string | ReactNode;
 }) {
   const max = Math.max(1, ...items.map((i) => i.clicks));
-  if (!items.length)
-    return <p className="py-4 text-sm text-muted">No data yet</p>;
+  if (!items.length) return <p className="py-4 text-sm text-muted">No data yet</p>;
   return (
     <ul className="flex flex-col gap-2.5">
       {items.map((item) => (
@@ -187,11 +193,11 @@ export function StatCard({
     <div className="rounded-lg border border-border bg-surface p-4">
       <p className="truncate text-2xs tracking-wider text-muted uppercase">{label}</p>
       <p className="tnum mt-1 text-2xl font-bold">
-        {prefix}{value.toLocaleString()}{suffix}
+        {prefix}
+        {value.toLocaleString()}
+        {suffix}
       </p>
-      {delta && delta.pct !== null && (
-        <DeltaBadge pct={delta.pct} />
-      )}
+      {delta && delta.pct !== null && <DeltaBadge pct={delta.pct} />}
     </div>
   );
 }
@@ -202,27 +208,9 @@ function DeltaBadge({ pct }: { pct: number }) {
   const color = flat ? "text-muted" : up ? "text-green-400" : "text-red-400";
   return (
     <span className={`tnum mt-1 inline-flex items-center gap-0.5 text-xs ${color}`}>
-      {up ? "+" : ""}{pct}%
+      {up ? "+" : ""}
+      {pct}%
     </span>
-  );
-}
-
-/**
- * Mini sparkline (no axes, no grid, no interaction, no label — just the line).
- */
-function Sparkline({ data, height = 28 }: { data: SeriesPoint[]; height?: number }) {
-  if (!data.length) return null;
-  const w = 80;
-  const max = Math.max(1, ...data.map((d) => d.clicks));
-  const pts = data.map((d, i) => ({
-    x: data.length === 1 ? w / 2 : (i / (data.length - 1)) * w,
-    y: height - (d.clicks / max) * height,
-  }));
-  const d = pts.map((p, i) => `${i === 0 ? "M" : "L"}${p.x.toFixed(1)},${p.y.toFixed(1)}`).join("");
-  return (
-    <svg viewBox={`0 0 ${w} ${height}`} className="block w-full" role="img" aria-label="Sparkline">
-      <path d={d} fill="none" stroke="var(--chart)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
   );
 }
 
@@ -243,7 +231,9 @@ export function Heatmap({ data }: { data: HeatmapRow[] }) {
       <div className="grid grid-cols-[auto_repeat(24,1fr)] gap-px text-4xs">
         <div />
         {HEATMAP_HOURS.map((h) => (
-          <div key={h} className="text-center text-muted">{h}</div>
+          <div key={h} className="text-center text-muted">
+            {h}
+          </div>
         ))}
         {HEATMAP_DAYS.map((day, di) => (
           <Fragment key={day}>
@@ -255,7 +245,9 @@ export function Heatmap({ data }: { data: HeatmapRow[] }) {
                 <div
                   key={`${di}-${h}`}
                   className="aspect-square rounded-sm"
-                  style={{ backgroundColor: `color-mix(in srgb, var(--chart) ${opacity * 100}%, transparent)` }}
+                  style={{
+                    backgroundColor: `color-mix(in srgb, var(--chart) ${opacity * 100}%, transparent)`,
+                  }}
                   title={cell ? `${day} ${h}:00 — ${cell.clicks} clicks` : ""}
                 />
               );
@@ -286,8 +278,16 @@ export function LinkListCard({
         <ul className="flex flex-col gap-2">
           {links.map((l) => (
             <li key={l.id} className="flex items-center justify-between text-xs">
-              <Link to={l.domain ? `/links/${l.slug}?domain=${encodeURIComponent(l.domain)}` : `/links/${l.slug}`} className="truncate text-accent hover:underline">
-                /{l.slug}{l.title ? ` · ${l.title}` : ""}
+              <Link
+                to={
+                  l.domain
+                    ? `/links/${l.slug}?domain=${encodeURIComponent(l.domain)}`
+                    : `/links/${l.slug}`
+                }
+                className="truncate text-accent hover:underline"
+              >
+                /{l.slug}
+                {l.title ? ` · ${l.title}` : ""}
               </Link>
               {l.suffix && <span className="tnum text-muted">{l.suffix}</span>}
             </li>
@@ -300,7 +300,11 @@ export function LinkListCard({
 
 const COUNTRY_NAMES = new Intl.DisplayNames("en", { type: "region" });
 const fmtCountry = (key: string) => {
-  try { return COUNTRY_NAMES.of(key) ?? key; } catch { return key; }
+  try {
+    return COUNTRY_NAMES.of(key) ?? key;
+  } catch {
+    return key;
+  }
 };
 
 export function ClickBreakdown({
@@ -315,23 +319,15 @@ export function ClickBreakdown({
   return (
     <>
       <Card>
-        <p className="mb-3 text-2xs tracking-wider text-muted uppercase">
-          Countries
-        </p>
-        <BarList
-          items={countries.map((c) => ({ ...c, key: fmtCountry(c.key) }))}
-        />
+        <p className="mb-3 text-2xs tracking-wider text-muted uppercase">Countries</p>
+        <BarList items={countries.map((c) => ({ ...c, key: fmtCountry(c.key) }))} />
       </Card>
       <Card>
-        <p className="mb-3 text-2xs tracking-wider text-muted uppercase">
-          Referrers
-        </p>
+        <p className="mb-3 text-2xs tracking-wider text-muted uppercase">Referrers</p>
         <BarList items={referrers} />
       </Card>
       <Card>
-        <p className="mb-3 text-2xs tracking-wider text-muted uppercase">
-          Devices
-        </p>
+        <p className="mb-3 text-2xs tracking-wider text-muted uppercase">Devices</p>
         <BarList items={devices} />
       </Card>
     </>

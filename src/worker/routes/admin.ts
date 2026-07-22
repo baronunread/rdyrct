@@ -5,7 +5,14 @@ import * as schema from "../db/schema";
 import type { AppEnv } from "../env";
 import { requireAdmin } from "../auth";
 import { now } from "../util";
-import { PLAN_LIMITS, type AdminUsage, type AdminOrgRow, type AdminOrgDetail, type AdminUserRow, type OrgPlan } from "@/shared/types";
+import {
+  PLAN_LIMITS,
+  type AdminUsage,
+  type AdminOrgRow,
+  type AdminOrgDetail,
+  type AdminUserRow,
+  type OrgPlan,
+} from "@/shared/types";
 import { fillSeries, computeDelta, deleteOrgCascade } from "./orgs";
 import { orgPlan } from "../plan";
 
@@ -222,8 +229,7 @@ adminRoutes.get("/usage", async (c) => {
 
   const mrr = planCounts.hobby * 4 + planCounts.pro * 9;
 
-  const paidConversionRate =
-    totalUsers > 0 ? Math.round((paidUsers / totalUsers) * 100) : null;
+  const paidConversionRate = totalUsers > 0 ? Math.round((paidUsers / totalUsers) * 100) : null;
 
   const signups7d = signups7dRows[0]?.n ?? 0;
   const signups7dPrev = signups7dPrevRows[0]?.n ?? 0;
@@ -302,12 +308,8 @@ adminRoutes.get("/usage", async (c) => {
   for (const orgRow of allOrgs) {
     const limits = PLAN_LIMITS[orgRow.plan];
     const linksPct = Math.round((orgRow.linkCount / Math.max(1, limits.links)) * 100);
-    const membersPct = Math.round(
-      (orgRow.memberCount / Math.max(1, limits.members)) * 100,
-    );
-    const domainsPct = Math.round(
-      (orgRow.domainCount / Math.max(1, limits.domains)) * 100,
-    );
+    const membersPct = Math.round((orgRow.memberCount / Math.max(1, limits.members)) * 100);
+    const domainsPct = Math.round((orgRow.domainCount / Math.max(1, limits.domains)) * 100);
     if (linksPct >= 80 || membersPct >= 80 || domainsPct >= 80) {
       capPressure.push({
         orgId: orgRow.id,
@@ -319,7 +321,11 @@ adminRoutes.get("/usage", async (c) => {
       });
     }
   }
-  capPressure.sort((a, b) => Math.max(b.linksPct, b.membersPct, b.domainsPct) - Math.max(a.linksPct, a.membersPct, a.domainsPct));
+  capPressure.sort(
+    (a, b) =>
+      Math.max(b.linksPct, b.membersPct, b.domainsPct) -
+      Math.max(a.linksPct, a.membersPct, a.domainsPct),
+  );
 
   // Table size and growth projection
   const tableSize = clicks[0]?.n ?? 0;
@@ -327,13 +333,9 @@ adminRoutes.get("/usage", async (c) => {
   // D1 caps at 10 GB; ~100 bytes per click row → ~107M max rows
   const MAX_ROWS = 107_000_000;
   const recentDailyAvg =
-    seriesRows.length > 0
-      ? seriesRows.reduce((s, r) => s + r.clicks, 0) / seriesRows.length
-      : 0;
+    seriesRows.length > 0 ? seriesRows.reduce((s, r) => s + r.clicks, 0) / seriesRows.length : 0;
   const tableProjectedDays =
-    recentDailyAvg > 0
-      ? Math.round((MAX_ROWS - tableSize) / recentDailyAvg)
-      : null;
+    recentDailyAvg > 0 ? Math.round((MAX_ROWS - tableSize) / recentDailyAvg) : null;
 
   return c.json({
     users: totalUsers,
@@ -393,10 +395,7 @@ adminRoutes.get("/orgs", async (c) => {
 adminRoutes.get("/orgs/:orgId", async (c) => {
   const db = c.var.db;
   const orgId = c.req.param("orgId");
-  const orgRows = await db
-    .select()
-    .from(schema.orgs)
-    .where(eq(schema.orgs.id, orgId));
+  const orgRows = await db.select().from(schema.orgs).where(eq(schema.orgs.id, orgId));
   const org = orgRows[0];
   if (!org) throw new HTTPException(404, { message: "Org not found" });
   const { plan } = await orgPlan(db, orgId);
@@ -508,8 +507,7 @@ adminRoutes.patch("/users/:userId", async (c) => {
   if (body.banned !== undefined) {
     if (typeof body.banned !== "boolean")
       throw new HTTPException(400, { message: "banned must be boolean" });
-    if (targetId === self.id)
-      throw new HTTPException(400, { message: "Cannot ban yourself" });
+    if (targetId === self.id) throw new HTTPException(400, { message: "Cannot ban yourself" });
     if (body.banned) {
       const target = await c.var.db
         .select({ isAdmin: schema.user.isAdmin })
@@ -527,22 +525,13 @@ adminRoutes.patch("/users/:userId", async (c) => {
       });
     patch.plan = body.plan;
   }
-  if (
-    patch.isAdmin === undefined &&
-    patch.banned === undefined &&
-    patch.plan === undefined
-  )
+  if (patch.isAdmin === undefined && patch.banned === undefined && patch.plan === undefined)
     throw new HTTPException(400, { message: "Nothing to update" });
-  await c.var.db
-    .update(schema.user)
-    .set(patch)
-    .where(eq(schema.user.id, targetId));
+  await c.var.db.update(schema.user).set(patch).where(eq(schema.user.id, targetId));
   // Banning kicks the user out immediately: all their sessions are wiped, and
   // better-auth refuses to create new ones (see better-auth.ts).
   if (patch.banned)
-    await c.var.db
-      .delete(schema.session)
-      .where(eq(schema.session.userId, targetId));
+    await c.var.db.delete(schema.session).where(eq(schema.session.userId, targetId));
   return c.json({ ok: true });
 });
 
@@ -554,12 +543,7 @@ adminRoutes.delete("/users/:userId", async (c) => {
   const owned = await db
     .select({ orgId: schema.orgMembers.orgId })
     .from(schema.orgMembers)
-    .where(
-      and(
-        eq(schema.orgMembers.userId, targetId),
-        eq(schema.orgMembers.role, "owner"),
-      ),
-    );
+    .where(and(eq(schema.orgMembers.userId, targetId), eq(schema.orgMembers.role, "owner")));
   if (owned.length)
     throw new HTTPException(409, {
       message: "User owns organizations, delete those orgs first",

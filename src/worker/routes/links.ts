@@ -149,11 +149,8 @@ async function domainHostname(
   const rows = await db
     .select({ hostname: schema.domains.hostname })
     .from(schema.domains)
-    .where(
-      and(eq(schema.domains.id, domainId), eq(schema.domains.orgId, orgId)),
-    );
-  if (!rows[0])
-    throw new HTTPException(400, { message: "Unknown domain for this org" });
+    .where(and(eq(schema.domains.id, domainId), eq(schema.domains.orgId, orgId)));
+  if (!rows[0]) throw new HTTPException(400, { message: "Unknown domain for this org" });
   return rows[0].hostname;
 }
 
@@ -208,8 +205,7 @@ linkRoutes.post("/", requireOrgRole("member"), async (c) => {
         "Links on the shared domain get random slugs: connect a custom domain (paid plans) to choose your own",
     });
   if (slug) {
-    if (await slugTaken(db, slug, domainId))
-      throw slugConflict(slug, domainId === null);
+    if (await slugTaken(db, slug, domainId)) throw slugConflict(slug, domainId === null);
   } else {
     // random slugs: retry on the (unlikely) collision
     for (let i = 0; i < 5; i++) {
@@ -217,8 +213,7 @@ linkRoutes.post("/", requireOrgRole("member"), async (c) => {
       if (!(await slugTaken(db, slug, domainId))) break;
       slug = "";
     }
-    if (!slug)
-      throw new HTTPException(500, { message: "Could not allocate slug" });
+    if (!slug) throw new HTTPException(500, { message: "Could not allocate slug" });
   }
 
   // UTM params already in the destination are extracted into the columns so
@@ -264,8 +259,7 @@ linkRoutes.patch("/:linkId", requireOrgRole("member"), async (c) => {
     });
   const existing = await findLink(db, orgId, c.req.param("linkId")!);
 
-  const domainId =
-    body.domainId !== undefined ? body.domainId : existing.domainId;
+  const domainId = body.domainId !== undefined ? body.domainId : existing.domainId;
   const [hostname, oldHostname] = await Promise.all([
     domainHostname(db, orgId, domainId),
     domainHostname(db, orgId, existing.domainId),
@@ -307,10 +301,7 @@ linkRoutes.patch("/:linkId", requireOrgRole("member"), async (c) => {
     qrEyeColor: body.qrEyeColor ?? existing.qrEyeColor,
     qrLogoSize: body.qrLogoSize ?? existing.qrLogoSize,
   };
-  await db
-    .update(schema.links)
-    .set(updated)
-    .where(eq(schema.links.id, existing.id));
+  await db.update(schema.links).set(updated).where(eq(schema.links.id, existing.id));
 
   if (moved) await unpublishLink(c.env, existing.slug, oldHostname);
   await publishLink(c.env, updated, hostname);

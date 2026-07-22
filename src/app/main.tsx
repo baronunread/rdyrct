@@ -15,41 +15,25 @@ import { AppShellSkeleton } from "./components/skeletons";
 const LandingPage = lazy(() =>
   import("./routes/landing").then((m) => ({ default: m.LandingPage })),
 );
-const AuthPage = lazy(() =>
-  import("./routes/auth").then((m) => ({ default: m.AuthPage })),
-);
+const AuthPage = lazy(() => import("./routes/auth").then((m) => ({ default: m.AuthPage })));
 const ResetPasswordPage = lazy(() =>
   import("./routes/reset-password").then((m) => ({
     default: m.ResetPasswordPage,
   })),
 );
-const InvitePage = lazy(() =>
-  import("./routes/invite").then((m) => ({ default: m.InvitePage })),
-);
+const InvitePage = lazy(() => import("./routes/invite").then((m) => ({ default: m.InvitePage })));
 const PrivacyPage = lazy(() =>
   import("./routes/privacy").then((m) => ({ default: m.PrivacyPage })),
 );
-const TermsPage = lazy(() =>
-  import("./routes/terms").then((m) => ({ default: m.TermsPage })),
-);
-const AppShell = lazy(() =>
-  import("./routes/shell").then((m) => ({ default: m.AppShell })),
-);
-const RequireAuth = lazy(() =>
-  import("./routes/shell").then((m) => ({ default: m.RequireAuth })),
-);
+const TermsPage = lazy(() => import("./routes/terms").then((m) => ({ default: m.TermsPage })));
+const AppShell = lazy(() => import("./routes/shell").then((m) => ({ default: m.AppShell })));
+const RequireAuth = lazy(() => import("./routes/shell").then((m) => ({ default: m.RequireAuth })));
 const RequireAdmin = lazy(() =>
   import("./routes/shell").then((m) => ({ default: m.RequireAdmin })),
 );
-const Dashboard = lazy(() =>
-  import("./routes/dashboard").then((m) => ({ default: m.Dashboard })),
-);
-const Analytics = lazy(() =>
-  import("./routes/analytics").then((m) => ({ default: m.Analytics })),
-);
-const LinksPage = lazy(() =>
-  import("./routes/links").then((m) => ({ default: m.LinksPage })),
-);
+const Dashboard = lazy(() => import("./routes/dashboard").then((m) => ({ default: m.Dashboard })));
+const Analytics = lazy(() => import("./routes/analytics").then((m) => ({ default: m.Analytics })));
+const LinksPage = lazy(() => import("./routes/links").then((m) => ({ default: m.LinksPage })));
 const LinkDetailPage = lazy(() =>
   import("./routes/link-detail").then((m) => ({ default: m.LinkDetailPage })),
 );
@@ -76,9 +60,7 @@ const AdminOrgsPage = lazy(() =>
 const AdminUsersPage = lazy(() =>
   import("./routes/admin/users").then((m) => ({ default: m.AdminUsersPage })),
 );
-const NotFound = lazy(() =>
-  import("./routes/not-found").then((m) => ({ default: m.NotFound })),
-);
+const NotFound = lazy(() => import("./routes/not-found").then((m) => ({ default: m.NotFound })));
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: 1, refetchOnWindowFocus: false } },
@@ -104,10 +86,7 @@ createRoot(document.getElementById("root")!).render(
 
               {/* onboarding is gone: the app renders a create-org empty state
                   instead; keep stale links working */}
-              <Route
-                path="/onboarding"
-                element={<Navigate to="/dashboard" replace />}
-              />
+              <Route path="/onboarding" element={<Navigate to="/dashboard" replace />} />
 
               {/* authenticated app: root keywords, no /app prefix, no org id */}
               <Route

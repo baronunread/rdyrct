@@ -30,20 +30,9 @@ export function Badge({
   );
 }
 
-export function Card({
-  className,
-  children,
-}: {
-  className?: string;
-  children: ReactNode;
-}) {
+export function Card({ className, children }: { className?: string; children: ReactNode }) {
   return (
-    <div
-      className={cn(
-        "rounded-lg border border-border bg-surface p-4",
-        className,
-      )}
-    >
+    <div className={cn("rounded-lg border border-border bg-surface p-4", className)}>
       {children}
     </div>
   );
@@ -52,17 +41,16 @@ export function Card({
 export function Table({ children, fixed }: { children: ReactNode; fixed?: boolean }) {
   return (
     <div className="overflow-x-auto rounded-lg border border-border bg-surface">
-      <table className={`w-full text-sm [&_tbody_tr]:transition-colors [&_tbody_tr:hover]:bg-surface-2/40 ${fixed ? "table-fixed" : ""}`}>
+      <table
+        className={`w-full text-sm [&_tbody_tr]:transition-colors [&_tbody_tr:hover]:bg-surface-2/40 ${fixed ? "table-fixed" : ""}`}
+      >
         {children}
       </table>
     </div>
   );
 }
 
-export function Th({
-  className,
-  ...props
-}: ThHTMLAttributes<HTMLTableCellElement>) {
+export function Th({ className, ...props }: ThHTMLAttributes<HTMLTableCellElement>) {
   return (
     <th
       className={cn(
@@ -74,16 +62,8 @@ export function Th({
   );
 }
 
-export function Td({
-  className,
-  ...props
-}: TdHTMLAttributes<HTMLTableCellElement>) {
-  return (
-    <td
-      className={cn("border-b border-border/50 px-4 py-2.5", className)}
-      {...props}
-    />
-  );
+export function Td({ className, ...props }: TdHTMLAttributes<HTMLTableCellElement>) {
+  return <td className={cn("border-b border-border/50 px-4 py-2.5", className)} {...props} />;
 }
 
 export function EmptyState({
@@ -132,9 +112,7 @@ export function LegalPageLayout({ children }: { children: ReactNode }) {
           rdyrct
         </Link>
       </header>
-      <div className="flex flex-col gap-8 text-sm">
-        {children}
-      </div>
+      <div className="flex flex-col gap-8 text-sm">{children}</div>
       <Footer />
     </div>
   );

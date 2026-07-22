@@ -1,8 +1,4 @@
-import {
-  useQuery,
-  useMutation,
-  useQueryClient,
-} from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, ApiError } from "./api";
 import { authClient } from "./auth-client";
 import { writeAuthHint } from "./auth-hint";
@@ -79,8 +75,7 @@ export function useLinkMutations(orgId: string) {
     qc.invalidateQueries({ queryKey: ["stats", orgId] });
   };
   const create = useMutation({
-    mutationFn: (body: LinkInput) =>
-      api<LinkDTO>(`/orgs/${orgId}/links`, { method: "POST", body }),
+    mutationFn: (body: LinkInput) => api<LinkDTO>(`/orgs/${orgId}/links`, { method: "POST", body }),
     onSuccess: invalidate,
   });
   const update = useMutation({
@@ -89,18 +84,13 @@ export function useLinkMutations(orgId: string) {
     onSuccess: invalidate,
   });
   const remove = useMutation({
-    mutationFn: (id: string) =>
-      api(`/orgs/${orgId}/links/${id}`, { method: "DELETE" }),
+    mutationFn: (id: string) => api(`/orgs/${orgId}/links/${id}`, { method: "DELETE" }),
     onSuccess: invalidate,
   });
   return { create, update, remove };
 }
 
-export const useStats = (
-  orgId: string,
-  days?: number,
-  bucket?: "day" | "hour",
-) =>
+export const useStats = (orgId: string, days?: number, bucket?: "day" | "hour") =>
   useQuery<OrgStats>({
     queryKey: ["stats", orgId, days, bucket],
     queryFn: () => {
@@ -156,15 +146,12 @@ export const useDomains = (orgId: string, enabled = true) =>
     // The backend advances the pipeline on read, so polling the list is all
     // it takes — poll while any domain is still in a transitional state.
     refetchInterval: (query) =>
-      query.state.data?.some((d) => d.status !== "active" && d.status !== "error")
-        ? 10_000
-        : false,
+      query.state.data?.some((d) => d.status !== "active" && d.status !== "error") ? 10_000 : false,
   });
 
 export function useDomainMutations(orgId: string) {
   const qc = useQueryClient();
-  const invalidate = () =>
-    qc.invalidateQueries({ queryKey: ["domains", orgId] });
+  const invalidate = () => qc.invalidateQueries({ queryKey: ["domains", orgId] });
   const add = useMutation({
     mutationFn: (hostname: string) =>
       api<DomainDTO>(`/orgs/${orgId}/domains`, {
@@ -189,8 +176,7 @@ export function useDomainMutations(orgId: string) {
     onSuccess: invalidate,
   });
   const remove = useMutation({
-    mutationFn: (id: string) =>
-      api(`/orgs/${orgId}/domains/${id}`, { method: "DELETE" }),
+    mutationFn: (id: string) => api(`/orgs/${orgId}/domains/${id}`, { method: "DELETE" }),
     onSuccess: invalidate,
   });
   return { add, refresh, setRootRedirect, remove };

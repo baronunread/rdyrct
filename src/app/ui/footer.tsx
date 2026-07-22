@@ -18,12 +18,7 @@ export function Footer() {
           <a href={`mailto:${SUPPORT_EMAIL}`} className="hover:text-accent">
             Support
           </a>
-          <a
-            href={GITHUB_URL}
-            target="_blank"
-            rel="noreferrer"
-            className="hover:text-accent"
-          >
+          <a href={GITHUB_URL} target="_blank" rel="noreferrer" className="hover:text-accent">
             GitHub
           </a>
         </nav>

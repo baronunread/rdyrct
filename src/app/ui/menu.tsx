@@ -88,9 +88,7 @@ export function MenuSelect({
   );
   const face = (
     <>
-      <span className="truncate">
-        {options.find((o) => o.value === value)?.label}
-      </span>
+      <span className="truncate">{options.find((o) => o.value === value)?.label}</span>
       <ChevronsUpDown size={14} className="shrink-0 text-muted" />
     </>
   );

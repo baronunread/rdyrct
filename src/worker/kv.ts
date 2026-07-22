@@ -68,16 +68,10 @@ export async function publishDomain(
   await env.LINKS.put(`domain:${domain.hostname}`, JSON.stringify(value));
 }
 
-export async function unpublishDomain(
-  env: Env,
-  hostname: string,
-): Promise<void> {
+export async function unpublishDomain(env: Env, hostname: string): Promise<void> {
   await env.LINKS.delete(`domain:${hostname}`);
 }
 
-export async function resolveDomain(
-  env: Env,
-  hostname: string,
-): Promise<KVDomain | null> {
+export async function resolveDomain(env: Env, hostname: string): Promise<KVDomain | null> {
   return env.LINKS.get<KVDomain>(`domain:${hostname}`, "json");
 }

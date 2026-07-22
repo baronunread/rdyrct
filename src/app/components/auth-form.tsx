@@ -24,8 +24,7 @@ export function AuthCard({ children }: { children: ReactNode }) {
 function passwordTips(pw: string): string[] {
   const tips: string[] = [];
   if (pw.length < 12) tips.push("Use 12 or more characters.");
-  if (!/[a-z]/.test(pw) || !/[A-Z]/.test(pw))
-    tips.push("Mix upper and lower case.");
+  if (!/[a-z]/.test(pw) || !/[A-Z]/.test(pw)) tips.push("Mix upper and lower case.");
   if (!/\d/.test(pw)) tips.push("Add a number.");
   if (!/[^A-Za-z0-9]/.test(pw)) tips.push("Add a symbol.");
   return tips;
@@ -76,9 +75,7 @@ export function PasswordMeter({ password }: { password: string }) {
         {/* The visible label never changes; the level itself is aria-only, so
             screen readers hear "Strength Weak" while sighted users read the
             fill. */}
-        <span className="shrink-0 underline decoration-dotted underline-offset-2">
-          Strength
-        </span>
+        <span className="shrink-0 underline decoration-dotted underline-offset-2">Strength</span>
         <span className="sr-only">{label}</span>
         <span aria-hidden className="flex flex-1 items-center gap-1">
           {[1, 2, 3, 4].map((i) => (

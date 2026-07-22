@@ -10,12 +10,11 @@ import { cn } from "./cn";
 const inputClass =
   "h-9 w-full rounded-md border border-border bg-bg px-3 text-sm text-text transition-colors placeholder:text-muted/60 focus:border-accent focus:outline-none disabled:opacity-50";
 
-export const Input = forwardRef<
-  HTMLInputElement,
-  InputHTMLAttributes<HTMLInputElement>
->(({ className, ...props }, ref) => (
-  <input ref={ref} className={cn(inputClass, className)} {...props} />
-));
+export const Input = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputElement>>(
+  ({ className, ...props }, ref) => (
+    <input ref={ref} className={cn(inputClass, className)} {...props} />
+  ),
+);
 Input.displayName = "Input";
 
 export const Select = forwardRef<
@@ -25,11 +24,7 @@ export const Select = forwardRef<
   <span className={cn("relative block", wrapperClass)}>
     <select
       ref={ref}
-      className={cn(
-        inputClass,
-        "cursor-pointer appearance-none pr-7",
-        className,
-      )}
+      className={cn(inputClass, "cursor-pointer appearance-none pr-7", className)}
       {...props}
     />
     <ChevronDown
@@ -53,9 +48,7 @@ export function Field({
 }) {
   return (
     <label className={cn("block", className)}>
-      <span className="mb-1.5 block text-xs tracking-wider text-muted uppercase">
-        {label}
-      </span>
+      <span className="mb-1.5 block text-xs tracking-wider text-muted uppercase">{label}</span>
       {children}
       {hint && <span className="mt-1 block text-xs text-muted/80">{hint}</span>}
     </label>

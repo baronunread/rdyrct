@@ -27,9 +27,7 @@ function dailyClicks(days: number, base: number, growth: number, seed: number): 
 function toDailyPoints(values: number[]): SeriesPoint[] {
   const now = Date.now();
   return values.map((clicks, i) => ({
-    day: new Date(now - (values.length - 1 - i) * 86_400_000)
-      .toISOString()
-      .slice(0, 10),
+    day: new Date(now - (values.length - 1 - i) * 86_400_000).toISOString().slice(0, 10),
     clicks,
   }));
 }
@@ -104,15 +102,7 @@ const DEVICES = [
   { key: "Tablet", clicks: 90 },
 ];
 
-function StatTile({
-  label,
-  value,
-  delta,
-}: {
-  label: string;
-  value: number;
-  delta?: number;
-}) {
+function StatTile({ label, value, delta }: { label: string; value: number; delta?: number }) {
   return (
     <div className="rounded-lg border border-border bg-bg/40 p-3">
       <p className="truncate text-2xs tracking-wider text-muted uppercase">{label}</p>
@@ -195,38 +185,28 @@ export function LandingAnalyticsMock() {
           <AreaChart
             data={series}
             height={160}
-            tickFormat={
-              active.bucket === "hour" ? (day) => day.slice(11, 16) : undefined
-            }
+            tickFormat={active.bucket === "hour" ? (day) => day.slice(11, 16) : undefined}
           />
         </div>
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
           <div className="rounded-lg border border-border bg-bg/40 p-4">
-            <p className="mb-3 text-2xs tracking-wider text-muted uppercase">
-              Campaigns
-            </p>
+            <p className="mb-3 text-2xs tracking-wider text-muted uppercase">Campaigns</p>
             <BarList items={CAMPAIGNS} />
           </div>
           <div className="rounded-lg border border-border bg-bg/40 p-4">
-            <p className="mb-3 text-2xs tracking-wider text-muted uppercase">
-              Countries
-            </p>
+            <p className="mb-3 text-2xs tracking-wider text-muted uppercase">Countries</p>
             <BarList items={COUNTRIES} />
           </div>
           <div className="rounded-lg border border-border bg-bg/40 p-4">
-            <p className="mb-3 text-2xs tracking-wider text-muted uppercase">
-              Devices
-            </p>
+            <p className="mb-3 text-2xs tracking-wider text-muted uppercase">Devices</p>
             <BarList items={DEVICES} />
           </div>
         </div>
 
         {active.bucket !== "hour" && (
           <div className="rounded-lg border border-border bg-bg/40 p-4">
-            <p className="mb-3 text-2xs tracking-wider text-muted uppercase">
-              Activity heatmap
-            </p>
+            <p className="mb-3 text-2xs tracking-wider text-muted uppercase">Activity heatmap</p>
             <Heatmap data={HEATMAP} />
           </div>
         )}

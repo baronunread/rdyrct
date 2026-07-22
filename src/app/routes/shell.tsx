@@ -1,11 +1,5 @@
 import { Suspense, useState, type ReactNode } from "react";
-import {
-  NavLink,
-  Navigate,
-  Outlet,
-  useNavigate,
-  useLocation,
-} from "react-router";
+import { NavLink, Navigate, Outlet, useNavigate, useLocation } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, LazyMotion, domAnimation, m } from "motion/react";
 import {
@@ -42,13 +36,7 @@ export function RequireAuth({ children }: { children: ReactNode }) {
   const location = useLocation();
   if (me.isLoading) return <AppShellSkeleton />;
   if (!me.data)
-    return (
-      <Navigate
-        to="/login"
-        state={{ from: location.pathname + location.search }}
-        replace
-      />
-    );
+    return <Navigate to="/login" state={{ from: location.pathname + location.search }} replace />;
   return children;
 }
 
@@ -64,9 +52,7 @@ export function RequireAdmin({ children }: { children: ReactNode }) {
 function navClass({ isActive }: { isActive: boolean }) {
   return cn(
     "flex items-center gap-2.5 rounded-md px-2.5 py-2 text-sm transition-colors",
-    isActive
-      ? "bg-surface-2 text-accent"
-      : "text-muted hover:bg-surface-2/60 hover:text-text",
+    isActive ? "bg-surface-2 text-accent" : "text-muted hover:bg-surface-2/60 hover:text-text",
   );
 }
 
@@ -94,7 +80,15 @@ export function AppShell() {
   const switchOrg = (id: string) => {
     setOrg(id);
     const path = window.location.pathname;
-    const orgRoutes = ["/dashboard", "/analytics", "/links", "/domains", "/members", "/billing", "/settings"];
+    const orgRoutes = [
+      "/dashboard",
+      "/analytics",
+      "/links",
+      "/domains",
+      "/members",
+      "/billing",
+      "/settings",
+    ];
     navigate(orgRoutes.includes(path) ? path : "/dashboard");
   };
 
@@ -122,9 +116,7 @@ export function AppShell() {
     <div className="flex h-full flex-col">
       {/* brand — desktop only; on mobile the top bar already shows it */}
       <div className="hidden px-3 pt-4 pb-2 md:block">
-        <span className="px-1.5 text-sm font-bold tracking-widest">
-          rdyrct
-        </span>
+        <span className="px-1.5 text-sm font-bold tracking-widest">rdyrct</span>
       </div>
 
       {/* org switcher */}
@@ -132,9 +124,7 @@ export function AppShell() {
         <Menu
           trigger={
             <div className="flex w-full items-center justify-between gap-2 rounded-md border border-border bg-surface px-2.5 py-2 text-sm select-none hover:border-accent">
-              <span className="truncate">
-                {org ? org.name : "No organization"}
-              </span>
+              <span className="truncate">{org ? org.name : "No organization"}</span>
               <ChevronsUpDown size={14} className="shrink-0 text-muted" />
             </div>
           }
@@ -142,14 +132,10 @@ export function AppShell() {
           {orgs.map((o) => (
             <MenuItem key={o.id} onClick={() => switchOrg(o.id)}>
               <span className="w-4">
-                {o.id === org?.id && (
-                  <Check size={13} className="text-accent" />
-                )}
+                {o.id === org?.id && <Check size={13} className="text-accent" />}
               </span>
               <span className="truncate">{o.name}</span>
-              <span className="ml-auto text-3xs text-muted uppercase">
-                {o.role}
-              </span>
+              <span className="ml-auto text-3xs text-muted uppercase">{o.role}</span>
             </MenuItem>
           ))}
           <MenuSeparator />
@@ -157,18 +143,11 @@ export function AppShell() {
             onClick={() =>
               canCreateOrg
                 ? setNewOrgOpen(true)
-                : toast(
-                    "Upgrade to Pro to create more organizations",
-                    "error",
-                  )
+                : toast("Upgrade to Pro to create more organizations", "error")
             }
           >
             <Plus size={14} className="text-muted" /> New organization
-            {!canCreateOrg && (
-              <span className="ml-auto text-3xs text-accent uppercase">
-                Pro
-              </span>
-            )}
+            {!canCreateOrg && <span className="ml-auto text-3xs text-accent uppercase">Pro</span>}
           </MenuItem>
         </Menu>
       </div>
@@ -186,9 +165,7 @@ export function AppShell() {
       {/* platform admin */}
       {user.isAdmin && (
         <div className="mt-2 px-3">
-          <p className="px-2.5 pb-1 text-3xs tracking-widest text-muted uppercase">
-            Platform
-          </p>
+          <p className="px-2.5 pb-1 text-3xs tracking-widest text-muted uppercase">Platform</p>
           <nav className="flex flex-col gap-0.5">
             <NavLink to="/admin" end className={navClass}>
               <Globe size={15} /> Usage
@@ -211,20 +188,14 @@ export function AppShell() {
             <p className="truncate text-sm">{user.name}</p>
             <p className="truncate text-xs text-muted">{user.email}</p>
           </div>
-          <IconButton
-            label="Toggle theme"
-            className="p-2"
-            onClick={toggleTheme}
-          >
+          <IconButton label="Toggle theme" className="p-2" onClick={toggleTheme}>
             {theme === "dark" ? <Sun size={15} /> : <Moon size={15} />}
           </IconButton>
           <IconButton
             label="Sign out"
             danger
             className="p-2"
-            onClick={() =>
-              logout.mutate(undefined, { onSuccess: () => navigate("/login") })
-            }
+            onClick={() => logout.mutate(undefined, { onSuccess: () => navigate("/login") })}
           >
             <LogOut size={15} />
           </IconButton>
@@ -250,9 +221,7 @@ export function AppShell() {
         >
           {mobileOpen ? <X size={18} /> : <MenuIcon size={18} />}
         </button>
-        <span className="text-sm font-bold tracking-widest">
-          rdyrct
-        </span>
+        <span className="text-sm font-bold tracking-widest">rdyrct</span>
       </div>
       <LazyMotion features={domAnimation}>
         <AnimatePresence>
@@ -289,11 +258,7 @@ export function AppShell() {
         </div>
       </main>
 
-      <Dialog
-        open={newOrgOpen}
-        onOpenChange={setNewOrgOpen}
-        title="New organization"
-      >
+      <Dialog open={newOrgOpen} onOpenChange={setNewOrgOpen} title="New organization">
         <div className="flex flex-col gap-4">
           <Field label="Name">
             <Input

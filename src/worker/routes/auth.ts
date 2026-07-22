@@ -36,10 +36,7 @@ async function currentUserFor(
     .innerJoin(schema.orgs, eq(schema.orgMembers.orgId, schema.orgs.id))
     .leftJoin(
       ownerMember,
-      and(
-        eq(ownerMember.orgId, schema.orgs.id),
-        eq(ownerMember.role, "owner"),
-      ),
+      and(eq(ownerMember.orgId, schema.orgs.id), eq(ownerMember.role, "owner")),
     )
     .leftJoin(ownerUser, eq(ownerMember.userId, ownerUser.id))
     .where(eq(schema.orgMembers.userId, user.id));

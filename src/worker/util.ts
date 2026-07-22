@@ -1,5 +1,4 @@
-const ID_ALPHABET =
-  "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
+const ID_ALPHABET = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
 const SLUG_ALPHABET = "23456789abcdefghjkmnpqrstuvwxyz"; // no lookalikes
 
 function randomFrom(alphabet: string, len: number): string {
@@ -99,16 +98,12 @@ export function resolveUtm(
 }
 
 /** Destination with the link's UTM params applied (existing params win). */
-export function buildDestination(
-  destination: string,
-  utm: UtmFields,
-): string {
+export function buildDestination(destination: string, utm: UtmFields): string {
   try {
     const url = new URL(destination);
     for (const [param, field] of UTM_KEYS) {
       const value = utm[field];
-      if (value && !url.searchParams.has(param))
-        url.searchParams.set(param, value);
+      if (value && !url.searchParams.has(param)) url.searchParams.set(param, value);
     }
     return url.toString();
   } catch {
@@ -160,8 +155,7 @@ import { QR_CORNER_STYLES, QR_DOT_STYLES } from "@/shared/types";
  * Logo images live in R2; D1 rows store only the serving URL. Upload and
  * serving both go through /api/orgs/:orgId/qr-logo (org members only).
  */
-export const qrLogoUrl = (orgId: string, file: string) =>
-  `/api/orgs/${orgId}/qr-logo/${file}`;
+export const qrLogoUrl = (orgId: string, file: string) => `/api/orgs/${orgId}/qr-logo/${file}`;
 
 // Only the file name is charset-checked: it is ours (uid() + a known
 // extension). The org id never goes through a regex — validateQrFields
@@ -171,9 +165,7 @@ export const QR_LOGO_FILE_RE = /^[A-Za-z0-9]+\.[a-z0-9]+$/;
 
 /** R2 key (`{orgId}/{file}`) for a serving URL, null for anything else. */
 export function qrLogoKeyFromUrl(url: string): string | null {
-  const m = /^\/api\/orgs\/([^/]+)\/qr-logo\/([A-Za-z0-9]+\.[a-z0-9]+)$/.exec(
-    url,
-  );
+  const m = /^\/api\/orgs\/([^/]+)\/qr-logo\/([A-Za-z0-9]+\.[a-z0-9]+)$/.exec(url);
   return m ? `${m[1]}/${m[2]}` : null;
 }
 
@@ -196,21 +188,13 @@ export function validateQrFields(
     // A logo may only be referenced by the org that uploaded it: match the
     // org's own serving prefix, then check the file part is a real upload.
     const prefix = qrLogoUrl(orgId, "");
-    const file = fields.qrLogo.startsWith(prefix)
-      ? fields.qrLogo.slice(prefix.length)
-      : "";
+    const file = fields.qrLogo.startsWith(prefix) ? fields.qrLogo.slice(prefix.length) : "";
     if (!QR_LOGO_FILE_RE.test(file))
       throw new HTTPException(400, { message: "Logo must be an uploaded image" });
   }
-  if (
-    fields.qrStyle &&
-    !(QR_DOT_STYLES as readonly string[]).includes(fields.qrStyle)
-  )
+  if (fields.qrStyle && !(QR_DOT_STYLES as readonly string[]).includes(fields.qrStyle))
     throw new HTTPException(400, { message: "Unknown QR dot style" });
-  if (
-    fields.qrCorner &&
-    !(QR_CORNER_STYLES as readonly string[]).includes(fields.qrCorner)
-  )
+  if (fields.qrCorner && !(QR_CORNER_STYLES as readonly string[]).includes(fields.qrCorner))
     throw new HTTPException(400, { message: "Unknown QR corner style" });
   // 'transparent' is the one non-hex background we allow (see the QR preview).
   if (fields.qrBg && fields.qrBg !== "transparent" && !HEX_COLOR_RE.test(fields.qrBg))
@@ -229,9 +213,7 @@ export function validateQrFields(
   // null = inherit; otherwise a sane footprint ratio (bigger stops scanning).
   if (
     fields.qrLogoSize != null &&
-    (!Number.isFinite(fields.qrLogoSize) ||
-      fields.qrLogoSize < 0.2 ||
-      fields.qrLogoSize > 0.7)
+    (!Number.isFinite(fields.qrLogoSize) || fields.qrLogoSize < 0.2 || fields.qrLogoSize > 0.7)
   )
     throw new HTTPException(400, {
       message: "QR logo size must be a ratio between 0.2 and 0.5",
