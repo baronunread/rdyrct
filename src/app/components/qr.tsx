@@ -13,6 +13,7 @@ import {
   QR_DEFAULT_CORNER,
   QR_DEFAULT_LOGO_SIZE,
   QR_LOGO_MAX_BYTES,
+  QR_LOGO_MAX_DIMENSION,
 } from "@/shared/types";
 import { useToast } from "../ui/toast";
 import { Spinner } from "../ui/spinner";
@@ -233,9 +234,83 @@ export function QrColorField({
 }
 
 /**
- * Dropzone-style image picker that uploads a logo to R2 (≤ 2 MB) and reports
- * the serving URL. Shared by the org QR defaults (Settings) and the per-link
- * override (link editor).
+ * Strip source metadata and animation by drawing the image into a fixed square
+ * canvas. The transparent padding keeps non-square marks from being cropped.
+ */
+async function rasterizeQrLogo(file: File): Promise<File> {
+  const image = await createImageBitmap(file);
+  try {
+    const canvas = document.createElement("canvas");
+    canvas.width = QR_LOGO_MAX_DIMENSION;
+    canvas.height = QR_LOGO_MAX_DIMENSION;
+    const context = canvas.getContext("2d");
+    if (!context) throw new Error("Could not prepare this image");
+
+    const scale = Math.min(
+      QR_LOGO_MAX_DIMENSION / image.width,
+      QR_LOGO_MAX_DIMENSION / image.height,
+    );
+    const width = image.width * scale;
+    const height = image.height * scale;
+    context.drawImage(
+      image,
+      (QR_LOGO_MAX_DIMENSION - width) / 2,
+      (QR_LOGO_MAX_DIMENSION - height) / 2,
+      width,
+      height,
+    );
+
+    const blob = await new Promise<Blob>((resolve, reject) =>
+      canvas.toBlob(
+        (result) =>
+          result ? resolve(result) : reject(new Error("Could not encode this image")),
+        "image/webp",
+        0.92,
+      ),
+    );
+    return new File([blob], "qr-logo.webp", { type: "image/webp" });
+  } finally {
+    image.close();
+  }
+}
+
+function isSvgFile(file: File) {
+  return file.type === "image/svg+xml" || file.name.toLowerCase().endsWith(".svg");
+}
+
+/** Keep vector marks scalable while removing executable and linked content. */
+async function optimizeQrLogoSvg(file: File): Promise<File> {
+  const { optimize: optimizeSvg } = await import("svgo/browser");
+  const optimized = optimizeSvg(await file.text(), {
+    multipass: true,
+    plugins: [
+      "preset-default",
+      "removeScripts",
+      {
+        name: "removeAttrs",
+        params: { attrs: ["*:href", "*:xlink:href"] },
+      },
+    ],
+  });
+  const document = new DOMParser().parseFromString(optimized.data, "image/svg+xml");
+  if (
+    document.querySelector("parsererror") ||
+    document.documentElement.localName !== "svg"
+  ) {
+    throw new Error("Could not read this SVG file");
+  }
+  document.querySelectorAll("foreignObject").forEach((element) => element.remove());
+  const sanitized = new XMLSerializer().serializeToString(document);
+  const result = new File([sanitized], "qr-logo.svg", { type: "image/svg+xml" });
+  if (result.size > QR_LOGO_MAX_BYTES) {
+    throw new Error("Logo could not be compressed below 256 KB");
+  }
+  return result;
+}
+
+/**
+ * Dropzone-style image picker that converts source images to a square WebP
+ * before upload. Shared by the org QR defaults (Settings) and per-link edits.
  */
 export function QrLogoInput({
   value,
@@ -258,18 +333,31 @@ export function QrLogoInput({
 
   const readFile = async (file: File | undefined) => {
     if (!file || disabled || busy || !org) return;
-    // drag-dropped files bypass the input's accept filter, so check the type
+    // Dragged files bypass the input's accept filter, so check the type.
     if (!file.type.startsWith("image/")) {
       toast("Logo must be an image file", "error");
       return;
     }
-    if (file.size > QR_LOGO_MAX_BYTES) {
-      toast("Logo too large (max 2 MB)", "error");
-      return;
-    }
     setBusy(true);
     try {
-      onLoad(await uploadQrLogo(org.id, file));
+      if (isSvgFile(file)) {
+        onLoad(await uploadQrLogo(org.id, await optimizeQrLogoSvg(file)));
+        return;
+      }
+      const rasterized = await rasterizeQrLogo(file);
+      const { default: imageCompression } = await import(
+        "browser-image-compression"
+      );
+      const compressed = await imageCompression(rasterized, {
+        maxSizeMB: QR_LOGO_MAX_BYTES / 1024 / 1024,
+        maxWidthOrHeight: QR_LOGO_MAX_DIMENSION,
+        useWebWorker: true,
+        fileType: "image/webp",
+      });
+      if (compressed.size > QR_LOGO_MAX_BYTES) {
+        throw new Error("Logo could not be compressed below 256 KB");
+      }
+      onLoad(await uploadQrLogo(org.id, compressed));
     } catch (e) {
       toast((e as Error).message, "error");
     } finally {
@@ -320,7 +408,7 @@ export function QrLogoInput({
         {busy ? (
           <>
             <Spinner />
-            <span>Uploading…</span>
+            <span>Preparing and uploading…</span>
           </>
         ) : value ? (
           <>
@@ -342,7 +430,9 @@ export function QrLogoInput({
             <span>
               Drop an image or <span className="text-accent">browse</span>
             </span>
-            <span className="text-3xs text-muted/70">up to 2 MB</span>
+            <span className="text-3xs text-muted/70">
+              Bitmap files become 512 × 512 WebP, up to 256 KB. SVGs stay vector.
+            </span>
           </>
         )}
       </div>

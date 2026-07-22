@@ -12,13 +12,23 @@ import { QR_LOGO_MAX_BYTES } from "@/shared/types";
 export const qrLogoRoutes = new Hono<AppEnv>();
 
 const EXT_BY_TYPE: Record<string, string> = {
-  "image/png": "png",
-  "image/jpeg": "jpg",
-  "image/gif": "gif",
   "image/webp": "webp",
-  "image/avif": "avif",
   "image/svg+xml": "svg",
 };
+
+function isWebp(body: ArrayBuffer) {
+  const bytes = new Uint8Array(body);
+  return (
+    bytes.length >= 12 &&
+    String.fromCharCode(...bytes.slice(0, 4)) === "RIFF" &&
+    String.fromCharCode(...bytes.slice(8, 12)) === "WEBP"
+  );
+}
+
+function isSvg(body: ArrayBuffer) {
+  const text = new TextDecoder().decode(body);
+  return /^\s*(?:<\?xml[^>]*\?>\s*)?<svg(?:\s|>)/i.test(text);
+}
 
 qrLogoRoutes.post("/", requireOrgRole("member"), async (c) => {
   // A logo is QR customization: a paid feature.
@@ -33,13 +43,15 @@ qrLogoRoutes.post("/", requireOrgRole("member"), async (c) => {
   const ext = EXT_BY_TYPE[type];
   if (!ext)
     throw new HTTPException(400, {
-      message: "Logo must be a PNG, JPEG, GIF, WebP, AVIF, or SVG image",
+      message: "Logo must be a compressed WebP or SVG image",
     });
 
   const body = await c.req.arrayBuffer();
   if (!body.byteLength) throw new HTTPException(400, { message: "Empty file" });
+  if ((type === "image/webp" && !isWebp(body)) || (type === "image/svg+xml" && !isSvg(body)))
+    throw new HTTPException(400, { message: "Logo file does not match its format" });
   if (body.byteLength > QR_LOGO_MAX_BYTES)
-    throw new HTTPException(400, { message: "Logo too large (max 2 MB)" });
+    throw new HTTPException(400, { message: "Logo too large (max 256 KB)" });
 
   const file = `${uid()}.${ext}`;
   const orgId = c.req.param("orgId")!;
@@ -70,7 +82,10 @@ qrLogoRoutes.get("/:file", async (c) => {
   obj.writeHttpMetadata(headers);
   headers.set("cache-control", "private, max-age=31536000, immutable");
   headers.set("x-content-type-options", "nosniff");
-  headers.set("content-security-policy", "script-src 'none'");
+  headers.set(
+    "content-security-policy",
+    "sandbox; default-src 'none'; style-src 'unsafe-inline'; img-src 'self' data:",
+  );
   headers.set("etag", obj.httpEtag);
   return new Response(obj.body, { headers });
 });
