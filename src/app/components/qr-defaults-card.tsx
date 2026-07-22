@@ -15,7 +15,7 @@ import { Button } from "../ui/button";
 import { Field } from "../ui/field";
 import { MenuSelect } from "../ui/menu";
 import { Card } from "../ui/misc";
-import { Spinner } from "../ui/spinner";
+import { BusyContent } from "../ui/spinner";
 import { useToast } from "../ui/toast";
 import { QRPreview, QrLogoInput, QrColorField } from "./qr";
 
@@ -196,7 +196,7 @@ export function QrDefaultsCard() {
                     onClick={saveQr}
                     disabled={savingQr}
                   >
-                    {savingQr ? <Spinner /> : "Save QR defaults"}
+                    <BusyContent busy={savingQr}>Save QR defaults</BusyContent>
                   </Button>
                 </div>
               ) : (

@@ -29,7 +29,7 @@ import { Dialog } from "../ui/dialog";
 import { Input } from "../ui/field";
 import { MenuSelect } from "../ui/menu";
 import { Card, PageHeader } from "../ui/misc";
-import { Spinner } from "../ui/spinner";
+import { BusyContent } from "../ui/spinner";
 import { useToast } from "../ui/toast";
 
 /** "3h ago" for recent timestamps, a plain date past a month. */
@@ -219,7 +219,7 @@ function QuickCreateCard({
           disabled={!destination.trim() || atLimit}
           title={atLimit ? "Link limit reached: upgrade for more links" : undefined}
         >
-          {create.isPending ? <Spinner /> : "Create link"}
+          <BusyContent busy={create.isPending}>Create link</BusyContent>
         </Button>
       </form>
     </Card>

@@ -4,7 +4,7 @@ import { api } from "../lib/api";
 import { useCurrentOrg } from "../lib/current-org";
 import { Button } from "../ui/button";
 import { Field, Input } from "../ui/field";
-import { Spinner } from "../ui/spinner";
+import { BusyContent } from "../ui/spinner";
 import { useToast } from "../ui/toast";
 
 /**
@@ -67,7 +67,7 @@ export function NoOrgState() {
           variant="primary"
           disabled={busy || !name.trim()}
         >
-          {busy ? <Spinner /> : "Create organization"}
+          <BusyContent busy={busy}>Create organization</BusyContent>
         </Button>
       </form>
     </div>

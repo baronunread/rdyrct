@@ -15,7 +15,7 @@ import { Button, IconButton } from "../ui/button";
 import { Dialog } from "../ui/dialog";
 import { Input } from "../ui/field";
 import { Badge, Card, PageHeader } from "../ui/misc";
-import { Spinner } from "../ui/spinner";
+import { BusyContent } from "../ui/spinner";
 import { DomainsSkeleton } from "../components/skeletons";
 import { NoOrgState } from "../components/no-org";
 import { CopyButton } from "../ui/copy-button";
@@ -226,7 +226,7 @@ function DomainsCard({
                         }
                         className="w-24"
                       >
-                        {add.isPending ? <Spinner /> : "Add domain"}
+                        <BusyContent busy={add.isPending}>Add domain</BusyContent>
                       </Button>
                     </div>
                     <span className="mt-1 block text-xs text-muted/80">

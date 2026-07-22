@@ -7,7 +7,8 @@ import { useCurrentOrg } from "../lib/current-org";
 import { PLAN_LIMITS, PLAN_PRICES, type OrgPlan } from "@/shared/types";
 import { Button } from "../ui/button";
 import { Badge, Card, PageHeader, Table, Th, Td } from "../ui/misc";
-import { Spinner } from "../ui/spinner";
+import { BusyContent } from "../ui/spinner";
+import { useShake } from "../lib/auth-form";
 import { useToast } from "../ui/toast";
 
 const PLAN_LABEL: Record<OrgPlan, string> = {
@@ -150,6 +151,9 @@ export function BillingPage() {
   const checkout = useCheckout();
   const portal = usePortal();
   const toast = useToast();
+  const shakeHobby = useShake();
+  const shakePro = useShake();
+  const shakePortal = useShake();
   const qc = useQueryClient();
   const celebratRef = useRef<(() => void) | null>(null);
 
@@ -191,6 +195,7 @@ export function BillingPage() {
       setTimeout(() => window.location.assign(data.url), 300);
     } catch (e) {
       setCheckoutPlan(null);
+      (target === "hobby" ? shakeHobby : shakePro).start();
       toast((e as Error).message, "error");
     }
   };
@@ -286,34 +291,36 @@ export function BillingPage() {
             {plan === "free" && <PlanFeatureComparison />}
             <div>
               {plan === "free" ? (
-                <div className="flex flex-wrap gap-2">
+                <div className="grid grid-cols-2 gap-3">
                   <Button
-                    variant="outline"
+                    variant="primary"
                     disabled={checkoutPlan !== null}
+                    className={shakeHobby.className}
+                    onAnimationEnd={shakeHobby.end}
                     onClick={() => handleUpgrade("hobby")}
                   >
-                    {checkoutPlan === "hobby" ? (
-                      <Spinner />
-                    ) : (
-                      `Upgrade to Hobby · ${PLAN_PRICES.hobby}/mo`
-                    )}
+                    <BusyContent busy={checkoutPlan === "hobby"}>
+                      Upgrade to Hobby · {PLAN_PRICES.hobby}/mo
+                    </BusyContent>
                   </Button>
                   <Button
                     variant="primary"
                     disabled={checkoutPlan !== null}
+                    className={shakePro.className}
+                    onAnimationEnd={shakePro.end}
                     onClick={() => handleUpgrade("pro")}
                   >
-                    {checkoutPlan === "pro" ? (
-                      <Spinner />
-                    ) : (
-                      `Upgrade to Pro · ${PLAN_PRICES.pro}/mo`
-                    )}
+                    <BusyContent busy={checkoutPlan === "pro"}>
+                      Upgrade to Pro · {PLAN_PRICES.pro}/mo
+                    </BusyContent>
                   </Button>
                 </div>
               ) : (
                 <Button
-                  variant="outline"
+                  variant="primary"
                   disabled={showPortalOverlay}
+                  className={shakePortal.className}
+                  onAnimationEnd={shakePortal.end}
                   onClick={async () => {
                     setShowPortalOverlay(true);
                     try {
@@ -324,15 +331,14 @@ export function BillingPage() {
                       );
                     } catch (e) {
                       setShowPortalOverlay(false);
+                      shakePortal.start();
                       toast((e as Error).message, "error");
                     }
                   }}
                 >
-                  {showPortalOverlay ? (
-                    <Spinner />
-                  ) : (
-                    "Manage subscription"
-                  )}
+                  <BusyContent busy={showPortalOverlay}>
+                    Manage subscription
+                  </BusyContent>
                 </Button>
               )}
               {plan === "hobby" && (

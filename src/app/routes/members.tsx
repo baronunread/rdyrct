@@ -19,7 +19,7 @@ import {
   PageHeader,
 } from "../ui/misc";
 import { TableSkeleton } from "../ui/skeleton";
-import { Spinner } from "../ui/spinner";
+import { BusyContent } from "../ui/spinner";
 import { useToast } from "../ui/toast";
 import { NoOrgState } from "../components/no-org";
 import { SortTh } from "../ui/sort-th";
@@ -358,7 +358,7 @@ function InviteByEmailCard({
           disabled={isSending || !emailInput.trim()}
           onClick={onSend}
         >
-          {isSending ? <Spinner /> : "Send invite"}
+          <BusyContent busy={isSending}>Send invite</BusyContent>
         </Button>
       </div>
     </Card>

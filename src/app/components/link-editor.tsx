@@ -14,7 +14,7 @@ import { Button } from "../ui/button";
 import { Dialog } from "../ui/dialog";
 import { Field, Input } from "../ui/field";
 import { MenuSelect } from "../ui/menu";
-import { Spinner } from "../ui/spinner";
+import { BusyContent } from "../ui/spinner";
 import { Tooltip } from "../ui/tooltip";
 import { QRPreview, QrLogoInput, QrColorField } from "./qr";
 
@@ -339,7 +339,7 @@ export function LinkEditor({
           Cancel
         </Button>
         <Button variant="primary" disabled={busy} onClick={onSave}>
-          {busy ? <Spinner /> : editing ? "Save changes" : "Create link"}
+          <BusyContent busy={busy}>{editing ? "Save changes" : "Create link"}</BusyContent>
         </Button>
       </div>
     </Dialog>
