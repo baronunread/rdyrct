@@ -54,6 +54,160 @@ function PlanFeatureComparison() {
   );
 }
 
+function PlanActions({
+  plan,
+  checkoutPlan,
+  showPortalOverlay,
+  confirmTimedOut,
+  cancelAtPeriodEnd,
+  periodEnd,
+  shakeHobby,
+  shakePro,
+  shakePortal,
+  onUpgrade,
+  onPortal,
+}: {
+  plan: OrgPlan;
+  checkoutPlan: "hobby" | "pro" | null;
+  showPortalOverlay: boolean;
+  confirmTimedOut: boolean;
+  cancelAtPeriodEnd: boolean;
+  periodEnd: number | null;
+  shakeHobby: ReturnType<typeof useShake>;
+  shakePro: ReturnType<typeof useShake>;
+  shakePortal: ReturnType<typeof useShake>;
+  onUpgrade: (target: "hobby" | "pro") => void;
+  onPortal: () => void;
+}) {
+  return (
+    <Card className="max-w-2xl">
+      <div className="flex flex-col gap-4">
+        <div className="flex items-center justify-between">
+          <p className="text-2xs tracking-wider text-muted uppercase">Plan</p>
+          <Badge color={plan === "free" ? "muted" : "mint"}>{PLAN_LABEL[plan]}</Badge>
+        </div>
+        <p className="text-sm text-muted">
+          Billing is per account: your plan applies to every organization you own.
+        </p>
+        {cancelAtPeriodEnd && periodEnd && (
+          <p className="text-sm text-amber-400">
+            Your {PLAN_LABEL[plan]} plan is scheduled to cancel on{" "}
+            {new Date(periodEnd).toLocaleDateString(undefined, {
+              year: "numeric",
+              month: "short",
+              day: "numeric",
+            })}
+            . Paid features remain available until then.
+          </p>
+        )}
+        {confirmTimedOut && plan === "free" && (
+          <p className="text-sm text-muted">
+            Still confirming your payment. Your plan should activate shortly: refresh in a moment.
+          </p>
+        )}
+        {plan === "free" && <PlanFeatureComparison />}
+        <div>
+          {plan === "free" ? (
+            <div className="grid grid-cols-2 gap-3">
+              <Button
+                variant="primary"
+                disabled={checkoutPlan !== null}
+                className={shakeHobby.className}
+                onAnimationEnd={shakeHobby.end}
+                onClick={() => onUpgrade("hobby")}
+              >
+                <BusyContent busy={checkoutPlan === "hobby"}>
+                  Upgrade to Hobby · {PLAN_PRICES.hobby}/mo
+                </BusyContent>
+              </Button>
+              <Button
+                variant="primary"
+                disabled={checkoutPlan !== null}
+                className={shakePro.className}
+                onAnimationEnd={shakePro.end}
+                onClick={() => onUpgrade("pro")}
+              >
+                <BusyContent busy={checkoutPlan === "pro"}>
+                  Upgrade to Pro · {PLAN_PRICES.pro}/mo
+                </BusyContent>
+              </Button>
+            </div>
+          ) : (
+            <Button
+              variant="primary"
+              disabled={showPortalOverlay}
+              className={shakePortal.className}
+              onAnimationEnd={shakePortal.end}
+              onClick={onPortal}
+            >
+              <BusyContent busy={showPortalOverlay}>Manage subscription</BusyContent>
+            </Button>
+          )}
+          {plan === "hobby" && (
+            <p className="mt-2 text-xs text-muted">
+              Want Pro? Switch plans from the subscription portal.
+            </p>
+          )}
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+function UsageMeter({
+  plan,
+  org,
+  linkData,
+  memberData,
+  domainData,
+  ownedOrgs,
+  linksPending,
+  membersPending,
+  domainsPending,
+}: {
+  plan: OrgPlan;
+  org: { id: string; name: string; plan: OrgPlan } | null;
+  linkData: unknown[];
+  memberData: unknown[];
+  domainData: unknown[];
+  ownedOrgs: number;
+  linksPending: boolean;
+  membersPending: boolean;
+  domainsPending: boolean;
+}) {
+  if (!org) return null;
+  const loading = linksPending || membersPending || domainsPending;
+  return (
+    <Card className="max-w-2xl">
+      <div className="flex flex-col gap-1">
+        <p className="mb-2 text-2xs tracking-wider text-muted uppercase">Usage: {org.name}</p>
+        {loading ? (
+          <div className="flex flex-col gap-3 py-1">
+            <Skeleton className="h-3.5 w-32" />
+            <Skeleton className="h-3.5 w-36" />
+            <Skeleton className="h-3.5 w-28" />
+          </div>
+        ) : (
+          <>
+            <p className="text-sm text-muted tnum">
+              Links {linkData?.length ?? 0} / {PLAN_LIMITS[org.plan].links}
+            </p>
+            <p className="text-sm text-muted tnum">
+              Members {memberData?.length ?? 0} / {PLAN_LIMITS[org.plan].members}
+            </p>
+            <p className="text-sm text-muted tnum">
+              Domains {domainData?.length ?? 0} / {PLAN_LIMITS[org.plan].domains}
+            </p>
+          </>
+        )}
+        <p className="text-sm text-muted tnum">
+          Orgs you own {ownedOrgs} / {PLAN_LIMITS[plan].orgs}
+        </p>
+      </div>
+    </Card>
+  );
+}
+
 function BillingOverlay({
   show,
   message,
@@ -279,119 +433,30 @@ export function BillingPage() {
     <div>
       <PageHeader title="Billing" sub="Your subscription" />
       <div className="flex flex-col gap-4">
-        <Card className="max-w-2xl">
-          <div className="flex flex-col gap-4">
-            <div className="flex items-center justify-between">
-              <p className="text-2xs tracking-wider text-muted uppercase">
-                Plan
-              </p>
-              <Badge color={plan === "free" ? "muted" : "mint"}>
-                {PLAN_LABEL[plan]}
-              </Badge>
-            </div>
-            <p className="text-sm text-muted">
-              Billing is per account: your plan applies to every organization
-              you own.
-            </p>
-            {cancelAtPeriodEnd && periodEnd && (
-              <p className="text-sm text-amber-400">
-                Your {PLAN_LABEL[plan]} plan is scheduled to cancel on{" "}
-                {new Date(periodEnd).toLocaleDateString(undefined, {
-                  year: "numeric",
-                  month: "short",
-                  day: "numeric",
-                })}
-                . Paid features remain available until then.
-              </p>
-            )}
-            {confirmTimedOut && plan === "free" && (
-              <p className="text-sm text-muted">
-                Still confirming your payment. Your plan should activate
-                shortly: refresh in a moment.
-              </p>
-            )}
-            {plan === "free" && <PlanFeatureComparison />}
-            <div>
-              {plan === "free" ? (
-                <div className="grid grid-cols-2 gap-3">
-                  <Button
-                    variant="primary"
-                    disabled={checkoutPlan !== null}
-                    className={shakeHobby.className}
-                    onAnimationEnd={shakeHobby.end}
-                    onClick={() => handleUpgrade("hobby")}
-                  >
-                    <BusyContent busy={checkoutPlan === "hobby"}>
-                      Upgrade to Hobby · {PLAN_PRICES.hobby}/mo
-                    </BusyContent>
-                  </Button>
-                  <Button
-                    variant="primary"
-                    disabled={checkoutPlan !== null}
-                    className={shakePro.className}
-                    onAnimationEnd={shakePro.end}
-                    onClick={() => handleUpgrade("pro")}
-                  >
-                    <BusyContent busy={checkoutPlan === "pro"}>
-                      Upgrade to Pro · {PLAN_PRICES.pro}/mo
-                    </BusyContent>
-                  </Button>
-                </div>
-              ) : (
-                <Button
-                  variant="primary"
-                  disabled={showPortalOverlay}
-                  className={shakePortal.className}
-                  onAnimationEnd={shakePortal.end}
-                  onClick={handlePortal}
-                >
-                  <BusyContent busy={showPortalOverlay}>
-                    Manage subscription
-                  </BusyContent>
-                </Button>
-              )}
-              {plan === "hobby" && (
-                <p className="mt-2 text-xs text-muted">
-                  Want Pro? Switch plans from the subscription portal.
-                </p>
-              )}
-            </div>
-          </div>
-        </Card>
-
-        {org && (
-          <Card className="max-w-2xl">
-            <div className="flex flex-col gap-1">
-              <p className="mb-2 text-2xs tracking-wider text-muted uppercase">
-                Usage: {org.name}
-              </p>
-              {linksPending || membersPending || domainsPending ? (
-                <div className="flex flex-col gap-3 py-1">
-                  <Skeleton className="h-3.5 w-32" />
-                  <Skeleton className="h-3.5 w-36" />
-                  <Skeleton className="h-3.5 w-28" />
-                </div>
-              ) : (
-                <>
-                  <p className="text-sm text-muted tnum">
-                    Links {linkData?.length ?? 0} / {PLAN_LIMITS[org.plan].links}
-                  </p>
-                  <p className="text-sm text-muted tnum">
-                    Members {memberData?.length ?? 0} /{" "}
-                    {PLAN_LIMITS[org.plan].members}
-                  </p>
-                  <p className="text-sm text-muted tnum">
-                    Domains {domainData?.length ?? 0} /{" "}
-                    {PLAN_LIMITS[org.plan].domains}
-                  </p>
-                </>
-              )}
-              <p className="text-sm text-muted tnum">
-                Orgs you own {ownedOrgs} / {PLAN_LIMITS[plan].orgs}
-              </p>
-            </div>
-          </Card>
-        )}
+        <PlanActions
+          plan={plan}
+          checkoutPlan={checkoutPlan}
+          showPortalOverlay={showPortalOverlay}
+          confirmTimedOut={confirmTimedOut}
+          cancelAtPeriodEnd={cancelAtPeriodEnd}
+          periodEnd={periodEnd}
+          shakeHobby={shakeHobby}
+          shakePro={shakePro}
+          shakePortal={shakePortal}
+          onUpgrade={handleUpgrade}
+          onPortal={handlePortal}
+        />
+        <UsageMeter
+          plan={plan}
+          org={org}
+          linkData={linkData ?? []}
+          memberData={memberData ?? []}
+          domainData={domainData ?? []}
+          ownedOrgs={ownedOrgs}
+          linksPending={linksPending}
+          membersPending={membersPending}
+          domainsPending={domainsPending}
+        />
       </div>
 
       <LazyMotion features={domAnimation}>

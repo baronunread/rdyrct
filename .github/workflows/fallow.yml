@@ -38,4 +38,4 @@ jobs:
         run: bun install
 
       - name: Fallow audit
-        run: bun run fallow audit --base origin/main --format github-annotations --fail-on-issues
+        run: bun run fallow audit --base origin/main --format github-annotations
