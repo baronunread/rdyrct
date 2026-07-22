@@ -219,16 +219,42 @@ export function BillingPage() {
     if (me.data.user.plan === "free") void upgradeRef.current(target);
   }, [me.data]);
 
+  // Reset overlay state when returning from Polar via bfcache (browser back).
+  useEffect(() => {
+    const handler = () => {
+      setCheckoutPlan(null);
+      setShowPortalOverlay(false);
+      setConfirming(false);
+      setConfirmTimedOut(false);
+      setShowCelebration(false);
+    };
+    window.addEventListener("pageshow", handler);
+    return () => window.removeEventListener("pageshow", handler);
+  }, []);
+
   // Detect the checkout return once on mount; the id is single-use, so strip
   // it from the URL right away.
   useEffect(() => {
     const url = new URL(window.location.href);
     if (url.searchParams.has("checkout_id")) {
+      setCheckoutPlan(null);
+      setShowPortalOverlay(false);
       setConfirming(true);
       url.searchParams.delete("checkout_id");
       window.history.replaceState({}, "", url.toString());
     }
   }, []);
+
+  // When user data loads after a Polar return, clear confirming and celebrate
+  // if the plan changed. This covers the case where the webhook already fired
+  // before the page mounted.
+  useEffect(() => {
+    if (!confirming || !me.data) return;
+    if (me.data.user.plan !== "free") {
+      setConfirming(false);
+      celebratRef.current?.();
+    }
+  }, [confirming, me.data]);
 
   // While confirming, poll /user until the Polar webhook flips the plan to a
   // paid one — the entitlement the app actually gates on. Cap the wait at ~20s.
