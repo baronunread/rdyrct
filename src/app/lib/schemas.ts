@@ -5,9 +5,13 @@ export const orgNameSchema = z.object({
 });
 
 const isValidUrl = (v: string) => {
-  try { new URL(v); return true; }
-  catch { try { new URL(`https://${v}`); return true; }
+  let hostname: string;
+  try { hostname = new URL(v).hostname; }
+  catch { try { hostname = new URL(`https://${v}`).hostname; }
   catch { return false; } }
+  if (hostname.endsWith(".")) return false;
+  const tld = hostname.split(".").pop()!;
+  return tld.length >= 2;
 };
 
 export const destinationField = z.string().refine(isValidUrl, "Enter a valid URL");
