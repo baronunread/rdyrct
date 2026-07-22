@@ -25,23 +25,7 @@ import { LinksTable } from "../components/links-table";
 import { ConfirmDialog } from "../ui/confirm-dialog";
 import { withErrorToast } from "../lib/mutation-toast";
 
-const emptyForm: LinkInput = {
-  destination: "",
-  slug: "",
-  title: "",
-  utmSource: "",
-  utmMedium: "",
-  utmCampaign: "",
-  utmTerm: "",
-  utmContent: "",
-  qrLogo: "",
-  qrStyle: "",
-  qrColor: "",
-  qrCorner: "",
-  qrBg: "",
-  qrEyeColor: "",
-  qrLogoSize: null,
-};
+
 
 const PAGE_SIZE = 25;
 
@@ -99,7 +83,6 @@ export function LinksPage() {
 
   const [editorOpen, setEditorOpen] = useState(false);
   const [editing, setEditing] = useState<LinkDTO | null>(null);
-  const [form, setForm] = useState<LinkInput>(emptyForm);
   const [qrLink, setQrLink] = useState<LinkDTO | null>(null);
   const [deleting, setDeleting] = useState<LinkDTO | null>(null);
   const [shakeKey, setShakeKey] = useState(0);
@@ -109,12 +92,10 @@ export function LinksPage() {
   const openCreate = () => {
     if (atLimit) return;
     setEditing(null);
-    setForm(emptyForm);
     setEditorOpen(true);
   };
   const openEdit = (link: LinkDTO) => {
     setEditing(link);
-    setForm({ ...link });
     setEditorOpen(true);
   };
 
@@ -136,22 +117,20 @@ export function LinksPage() {
 
   if (!org) return <NoOrgState />;
 
-  const save = () => {
+  const onSave = (data: LinkInput) => {
     const done = {
       onSuccess: () => {
         setEditorOpen(false);
         toast(editing ? "Link updated" : "Link created");
       },
       onError: (e: Error) => {
-        // slug clashes shake the dialog (kept open) and toast the reason;
-        // everything else just toasts
         if (e instanceof ApiError && e.code === "slug_taken")
           setShakeKey((k) => k + 1);
         toast(e.message, "error");
       },
     };
-    if (editing) update.mutate({ id: editing.id, ...form }, done);
-    else create.mutate(form, done);
+    if (editing) update.mutate({ id: editing.id, ...data }, done);
+    else create.mutate(data, done);
   };
 
   return (
@@ -226,11 +205,9 @@ export function LinksPage() {
       <LinkEditor
         open={editorOpen}
         onOpenChange={setEditorOpen}
-        form={form}
-        setForm={setForm}
-        editing={!!editing}
+        editingLink={editing}
         busy={create.isPending || update.isPending}
-        onSave={save}
+        onSave={onSave}
         activeDomains={activeDomains}
         qrEnabled={limits.qr}
         orgQr={orgQr}

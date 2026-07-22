@@ -1,4 +1,6 @@
-import { useMemo, type ChangeEvent } from "react";
+import { useMemo, useEffect, type ChangeEvent } from "react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
 import { Link as RouterLink } from "react-router";
 import { Lock, Info } from "lucide-react";
 import { shortUrl } from "../lib/api";
@@ -17,6 +19,7 @@ import { MenuSelect } from "../ui/menu";
 import { BusyContent } from "../ui/spinner";
 import { Tooltip } from "../ui/tooltip";
 import { QRPreview, QrLogoInput, QrColorField } from "./qr";
+import { linkInputSchema } from "../lib/schemas";
 
 export interface OrgQr {
   logo: string;
@@ -27,6 +30,25 @@ export interface OrgQr {
   eyeColor: string;
   logoSize: number | null;
 }
+
+const defaultForm: LinkInput = {
+  destination: "",
+  domainId: null,
+  slug: "",
+  title: "",
+  utmSource: "",
+  utmMedium: "",
+  utmCampaign: "",
+  utmTerm: "",
+  utmContent: "",
+  qrStyle: "",
+  qrColor: "",
+  qrCorner: "",
+  qrEyeColor: "",
+  qrBg: "",
+  qrLogo: "",
+  qrLogoSize: null,
+};
 
 function UtmFields({
   form,
@@ -296,9 +318,7 @@ function LinkFormFields({
 export function LinkEditor({
   open,
   onOpenChange,
-  form,
-  setForm,
-  editing,
+  editingLink,
   busy,
   onSave,
   activeDomains,
@@ -308,16 +328,30 @@ export function LinkEditor({
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  form: LinkInput;
-  setForm: (f: LinkInput) => void;
-  editing: boolean;
+  editingLink: LinkInput | null;
   busy: boolean;
-  onSave: () => void;
+  onSave: (data: LinkInput) => void;
   activeDomains: DomainDTO[];
   qrEnabled: boolean;
   orgQr: OrgQr;
   shakeKey: number;
 }) {
+  const editing = editingLink != null;
+
+  const { handleSubmit, watch, reset } = useForm<LinkInput>({
+    resolver: zodResolver(linkInputSchema),
+    defaultValues: defaultForm,
+  });
+
+  useEffect(() => {
+    if (open) {
+      reset(editingLink ?? defaultForm);
+    }
+  }, [open, editingLink, reset]);
+
+  const form = watch();
+  const setForm = (next: LinkInput) => reset(next);
+
   const selectedDomain =
     activeDomains.find((d) => d.id === form.domainId)?.hostname ?? null;
   const slugLocked = !form.domainId;
@@ -335,7 +369,7 @@ export function LinkEditor({
       wide
       shakeKey={shakeKey}
     >
-      <div className="flex flex-col gap-6">
+      <form onSubmit={handleSubmit(onSave)} className="flex flex-col gap-6">
         <div className="grid gap-6 sm:grid-cols-[1fr_auto]">
           <LinkFormFields form={form} setForm={setForm} editing={editing} activeDomains={activeDomains} slugLocked={slugLocked} />
           <QrPreviewSidebar form={form} orgQr={orgQr} qrEnabled={qrEnabled} previewUrl={previewUrl} />
@@ -346,13 +380,13 @@ export function LinkEditor({
         {qrEnabled && (
           <QrCustomization form={form} setForm={setForm} orgQr={orgQr} />
         )}
-      </div>
+      </form>
 
       <div className="mt-6 flex justify-end gap-2">
         <Button variant="ghost" onClick={() => onOpenChange(false)}>
           Cancel
         </Button>
-        <Button variant="primary" disabled={busy} onClick={onSave}>
+        <Button variant="primary" type="submit" disabled={busy} onClick={handleSubmit(onSave)}>
           <BusyContent busy={busy}>{editing ? "Save changes" : "Create link"}</BusyContent>
         </Button>
       </div>

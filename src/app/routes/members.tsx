@@ -1,4 +1,6 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
 import { useCurrentOrg } from "../lib/current-org";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { UserPlus, Copy, Trash2, Info } from "lucide-react";
@@ -26,6 +28,7 @@ import { SortTh } from "../ui/sort-th";
 import { sortRows } from "../lib/sort";
 import { withErrorToast } from "../lib/mutation-toast";
 import { shortDate } from "../lib/dates";
+import { inviteEmailSchema } from "../lib/schemas";
 
 const roleColor: Record<OrgRole, "accent" | "mint" | "muted"> = {
   owner: "accent",
@@ -41,8 +44,6 @@ function useMemberManagement(orgId: string, canManage: boolean) {
   const [inviteOpen, setInviteOpen] = useState(false);
   const [inviteRole, setInviteRole] = useState<"member" | "admin">("member");
   const [removing, setRemoving] = useState<{ userId: string; name: string } | null>(null);
-  const [emailInput, setEmailInput] = useState("");
-  const [emailRole, setEmailRole] = useState<"member" | "admin">("member");
   const [sort, setSort] = useState<Sort>({ key: "createdAt", dir: 1 });
 
   const invalidateMembers = () =>
@@ -79,14 +80,12 @@ function useMemberManagement(orgId: string, canManage: boolean) {
   });
 
   const sendEmailInvite = useMutation({
-    mutationFn: (email: string) =>
+    mutationFn: (params: { email: string; role: "member" | "admin" }) =>
       api<{ invites: InviteDTO[] }>(`/orgs/${orgId}/invites`, {
-        method: "POST", body: { role: emailRole, emails: [email] },
+        method: "POST", body: { role: params.role, emails: [params.email] },
       }),
     onSuccess: () => {
       invalidateInvites();
-      setEmailInput("");
-      toast("Invite sent");
     },
     onError: withErrorToast(toast),
   });
@@ -114,7 +113,7 @@ function useMemberManagement(orgId: string, canManage: boolean) {
 
   return {
     members, invites, inviteOpen, setInviteOpen, inviteRole, setInviteRole,
-    removing, setRemoving, emailInput, setEmailInput, emailRole, setEmailRole,
+    removing, setRemoving,
     sort, setSort, sorted, setRole, removeMember, createInvite, sendEmailInvite,
     revokeInvite, copyInvite,
   };
@@ -131,7 +130,7 @@ export function MembersPage() {
 
   const {
     members, invites, inviteOpen, setInviteOpen, inviteRole, setInviteRole,
-    removing, setRemoving, emailInput, setEmailInput, emailRole, setEmailRole,
+    removing, setRemoving,
     sort, setSort, sorted, setRole, removeMember, createInvite, sendEmailInvite,
     revokeInvite, copyInvite,
   } = useMemberManagement(orgId, canManage);
@@ -158,12 +157,7 @@ export function MembersPage() {
         <InviteByEmailCard
           org={org}
           memberLimit={memberLimit}
-          emailInput={emailInput}
-          onEmailChange={setEmailInput}
-          emailRole={emailRole}
-          onRoleChange={setEmailRole}
-          isSending={sendEmailInvite.isPending}
-          onSend={() => sendEmailInvite.mutate(emailInput.trim())}
+          sendEmailInvite={sendEmailInvite}
         />
       )}
 
@@ -301,22 +295,44 @@ export function MembersPage() {
 function InviteByEmailCard({
   org,
   memberLimit,
-  emailInput,
-  onEmailChange,
-  emailRole,
-  onRoleChange,
-  isSending,
-  onSend,
+  sendEmailInvite,
 }: {
   org: NonNullable<ReturnType<typeof useCurrentOrg>["org"]>;
   memberLimit: number;
-  emailInput: string;
-  onEmailChange: (v: string) => void;
-  emailRole: string;
-  onRoleChange: (v: "member" | "admin") => void;
-  isSending: boolean;
-  onSend: () => void;
+  sendEmailInvite: {
+    mutate: (params: { email: string; role: "member" | "admin" }, opts?: { onSuccess?: () => void }) => void;
+    isPending: boolean;
+  };
 }) {
+  const toast = useToast();
+  const {
+    register,
+    handleSubmit,
+    watch,
+    setValue,
+    reset,
+    formState: { errors },
+  } = useForm<{ email: string; role: "member" | "admin" }>({
+    resolver: zodResolver(inviteEmailSchema),
+    defaultValues: { email: "", role: "member" },
+  });
+  const selectedRole = watch("role");
+
+  const submit = useCallback(
+    ({ email, role }: { email: string; role: "member" | "admin" }) => {
+      sendEmailInvite.mutate(
+        { email, role },
+        {
+          onSuccess: () => {
+            reset({ email: "", role });
+            toast("Invite sent");
+          },
+        },
+      );
+    },
+    [sendEmailInvite, reset, toast],
+  );
+
   return (
     <Card className="mb-4">
       <div className="mb-3 flex items-center gap-1.5">
@@ -340,13 +356,18 @@ function InviteByEmailCard({
           </button>
         </Tooltip>
       </div>
-      <div className="flex items-end gap-2">
+      <form
+        onSubmit={handleSubmit(submit)}
+        className="flex items-end gap-2"
+      >
         <div className="min-w-0 flex-1">
-          <Field label="Email">
+          <Field
+            label="Email"
+            hint={errors.email?.message}
+          >
             <Input
               type="email"
-              value={emailInput}
-              onChange={(e) => onEmailChange(e.target.value)}
+              {...register("email")}
               placeholder="teammate@company.com"
             />
           </Field>
@@ -354,9 +375,9 @@ function InviteByEmailCard({
         <div className="w-36">
           <Field label="Role">
             <Select
-              value={emailRole}
+              value={selectedRole}
               onChange={(e) =>
-                onRoleChange(e.target.value as "member" | "admin")
+                setValue("role", e.target.value as "member" | "admin")
               }
             >
               <option value="member">member</option>
@@ -365,13 +386,13 @@ function InviteByEmailCard({
           </Field>
         </div>
         <Button
+          type="submit"
           variant="primary"
-          disabled={isSending || !emailInput.trim()}
-          onClick={onSend}
+          disabled={sendEmailInvite.isPending}
         >
-          <BusyContent busy={isSending}>Send invite</BusyContent>
+          <BusyContent busy={sendEmailInvite.isPending}>Send invite</BusyContent>
         </Button>
-      </div>
+      </form>
     </Card>
   );
 }

@@ -1,4 +1,6 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
 import { Link } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCurrentUser } from "../lib/hooks";
@@ -14,6 +16,9 @@ import { useToast } from "../ui/toast";
 import { CopyButton } from "../ui/copy-button";
 import { ConfirmDialog } from "../ui/confirm-dialog";
 import { QrDefaultsCard } from "../components/qr-defaults-card";
+import { orgNameSchema } from "../lib/schemas";
+
+type OrgNameForm = { name: string };
 
 export function SettingsPage() {
   const { org } = useCurrentOrg();
@@ -22,25 +27,33 @@ export function SettingsPage() {
   const qc = useQueryClient();
   const toast = useToast();
   const isOwner = me.data?.user.isAdmin || org?.role === "owner";
-  // Draft-until-edited: tracks the active org (including one just created
-  // from the NoOrgState below, while this page stays mounted) until typed in.
-  const [nameDraft, setNameDraft] = useState<string | null>(null);
-  const name = nameDraft ?? org?.name ?? "";
+
+  const { register, handleSubmit, reset, watch } = useForm<OrgNameForm>({
+    resolver: zodResolver(orgNameSchema),
+    defaultValues: { name: "" },
+  });
+
+  useEffect(() => {
+    if (org) reset({ name: org.name });
+  }, [org, reset]);
+
+  const currentName = watch("name");
+
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [deleteOrgOpen, setDeleteOrgOpen] = useState(false);
   const [confirmName, setConfirmName] = useState("");
   const [deletingOrg, setDeletingOrg] = useState(false);
 
-  const rename = async () => {
+  const rename = handleSubmit(async (data) => {
     try {
-      await api(`/orgs/${orgId}`, { method: "PATCH", body: { name } });
+      await api(`/orgs/${orgId}`, { method: "PATCH", body: { name: data.name } });
       await qc.invalidateQueries({ queryKey: ["user"] });
       toast("Organization renamed");
     } catch (e) {
       toast((e as Error).message, "error");
     }
-  };
+  });
 
   const copyOrgName = (text: string) => {
     navigator.clipboard.writeText(text);
@@ -53,7 +66,7 @@ export function SettingsPage() {
       await api(`/orgs/${orgId}`, { method: "DELETE" });
       setDeleteOrgOpen(false);
       setConfirmName("");
-      setNameDraft(null);
+      reset({ name: "" });
       toast("Organization deleted");
       // useCurrentOrg falls back to the next org (or NoOrgState everywhere).
       await qc.refetchQueries({ queryKey: ["user"] });
@@ -94,8 +107,7 @@ export function SettingsPage() {
               <div className="flex flex-col gap-4">
                 <Field label="Organization name">
                   <Input
-                    value={name}
-                    onChange={(e) => setNameDraft(e.target.value)}
+                    {...register("name")}
                     disabled={!isOwner}
                   />
                 </Field>
@@ -107,7 +119,7 @@ export function SettingsPage() {
                     <Button
                       variant="primary"
                       onClick={rename}
-                      disabled={!name.trim()}
+                      disabled={!currentName?.trim()}
                     >
                       Save
                     </Button>

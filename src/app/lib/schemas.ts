@@ -17,3 +17,29 @@ export const hostnameSchema = z.object({
       "Enter a valid hostname (e.g. links.example.com)",
     ),
 });
+
+export const inviteEmailSchema = z.object({
+  email: z.string().email("Enter a valid email address"),
+  role: z.enum(["member", "admin"]),
+});
+
+const qrField = z.string().optional().default("");
+
+export const linkInputSchema = z.object({
+  destination: z.string().min(1, "Enter a destination URL"),
+  domainId: z.string().nullable().optional().default(null),
+  slug: z.string().optional().default(""),
+  title: z.string().optional().default(""),
+  utmSource: z.string().optional().default(""),
+  utmMedium: z.string().optional().default(""),
+  utmCampaign: z.string().optional().default(""),
+  utmTerm: z.string().optional().default(""),
+  utmContent: z.string().optional().default(""),
+  qrStyle: qrField,
+  qrColor: qrField,
+  qrCorner: qrField,
+  qrEyeColor: qrField,
+  qrBg: qrField,
+  qrLogo: qrField,
+  qrLogoSize: z.number().nullable().optional().default(null),
+});
