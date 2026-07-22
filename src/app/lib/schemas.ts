@@ -5,7 +5,7 @@ export const orgNameSchema = z.object({
 });
 
 export const destinationSchema = z.object({
-  destination: z.string().url("Enter a valid URL"),
+  destination: z.url("Enter a valid URL"),
 });
 
 export const hostnameSchema = z.object({
@@ -19,7 +19,7 @@ export const hostnameSchema = z.object({
 });
 
 export const inviteEmailSchema = z.object({
-  email: z.string().email("Enter a valid email address"),
+  email: z.email("Enter a valid email address"),
   role: z.enum(["member", "admin"]),
 });
 
