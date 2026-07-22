@@ -1,4 +1,6 @@
-import { useState, type ReactNode } from "react";
+import { useState, type ReactNode, useCallback } from "react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
 import { Link } from "react-router";
 import {
   AnimatePresence,
@@ -15,6 +17,7 @@ import { Button, IconButton } from "../ui/button";
 import { Input } from "../ui/field";
 import { ConfirmDialog } from "../ui/confirm-dialog";
 import { withErrorToast } from "../lib/mutation-toast";
+import { hostnameSchema } from "../lib/schemas";
 import { Badge, Card, PageHeader } from "../ui/misc";
 import { BusyContent } from "../ui/spinner";
 import { DomainsSkeleton } from "../components/skeletons";
@@ -77,23 +80,30 @@ function DomainsCard({
   const appHost = config.data?.appHost ?? window.location.host;
   const toast = useToast();
   const limits = PLAN_LIMITS[plan];
-  const [hostname, setHostname] = useState("");
   const [deleting, setDeleting] = useState<DomainDTO | null>(null);
   const [redirectDraft, setRedirectDraft] = useState<Record<string, string>>(
     {},
   );
+  const {
+    register,
+    handleSubmit,
+    reset,
+    formState: { errors },
+  } = useForm<{ hostname: string }>({
+    resolver: zodResolver(hostnameSchema),
+    defaultValues: { hostname: "" },
+  });
 
   const copy = (text: string) => {
     navigator.clipboard.writeText(text);
     toast("Copied to clipboard");
   };
 
-  const addDomain = () => {
-    const value = hostname.trim();
-    if (!value) return;
-    add.mutate(value, {
+  const addDomain = useCallback(
+    ({ hostname }: { hostname: string }) => {
+      add.mutate(hostname, {
       onSuccess: (d) => {
-        setHostname("");
+        reset();
         toast(
           d.status === "active"
             ? "Domain added successfully"
@@ -104,7 +114,9 @@ function DomainsCard({
       },
       onError: withErrorToast(toast),
     });
-  };
+  },
+    [add, reset, toast],
+  );
 
   const recheck = (d: DomainDTO) => {
     const oldStatus = d.status;
@@ -198,10 +210,7 @@ function DomainsCard({
                     "flex flex-col gap-3",
                     domains.data?.length ? "border-t border-border pt-4" : "",
                   )}
-                  onSubmit={(e) => {
-                    e.preventDefault();
-                    addDomain();
-                  }}
+                  onSubmit={handleSubmit(addDomain)}
                 >
                   <div>
                     <span className="mb-1.5 block text-xs tracking-wider text-muted uppercase">
@@ -210,26 +219,24 @@ function DomainsCard({
                     <div className="flex items-center gap-2">
                       <div className="min-w-0 flex-1">
                         <Input
-                          aria-label="Add a domain"
-                          value={hostname}
-                          onChange={(e) => {
-                            setHostname(e.target.value);
-                          }}
+                          {...register("hostname")}
                           placeholder="links.example.com"
+                          aria-label="Add a domain"
                         />
                       </div>
                       <Button
                         type="submit"
                         variant="primary"
                         size="sm"
-                        disabled={
-                          !hostname.trim() || add.isPending
-                        }
+                        disabled={add.isPending}
                         className="w-24"
                       >
                         <BusyContent busy={add.isPending}>Add domain</BusyContent>
                       </Button>
                     </div>
+                    {errors.hostname && (
+                      <span className="mt-1 block text-xs text-danger">{errors.hostname.message}</span>
+                    )}
                     <span className="mt-1 block text-xs text-muted/80">
                       After adding, we check for the CNAME record every few
                       seconds. Once detected, we issue a TLS certificate
