@@ -1,4 +1,6 @@
 import { useMemo, useState } from "react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
 import { Link } from "react-router";
 import { Check, Copy } from "lucide-react";
 import {
@@ -28,6 +30,7 @@ import { Card, PageHeader } from "../ui/misc";
 import { BusyContent } from "../ui/spinner";
 import { useToast } from "../ui/toast";
 import { withErrorToast } from "../lib/mutation-toast";
+import { destinationSchema } from "../lib/schemas";
 import { shortDate } from "../lib/dates";
 
 /** "3h ago" for recent timestamps, a plain date past a month. */
@@ -148,39 +151,45 @@ function QuickCreateCard({
   onCreated: (link: LinkDTO) => void;
 }) {
   const toast = useToast();
-  const [destination, setDestination] = useState("");
   const [domainId, setDomainId] = useState<string | null>(null);
 
-  const submit = (e: React.FormEvent) => {
-    e.preventDefault();
-    const dest = destination.trim();
-    if (!dest || create.isPending) return;
+  const { register, handleSubmit, reset, watch, formState: { errors } } = useForm({
+    resolver: zodResolver(destinationSchema),
+    defaultValues: { destination: "" },
+  });
+
+  const destination = watch("destination");
+
+  const submit = handleSubmit((data) => {
+    if (create.isPending) return;
     create.mutate(
-      { destination: dest, domainId },
+      { destination: data.destination.trim(), domainId },
       {
         onSuccess: (link) => {
-          setDestination("");
+          reset({ destination: "" });
           onCreated(link);
         },
         onError: withErrorToast(toast),
       },
     );
-  };
+  });
 
   return (
     <Card>
       <form
         onSubmit={submit}
-        className="flex flex-col gap-3 sm:flex-row sm:items-center"
+        className="flex flex-col gap-3 sm:flex-row sm:items-start"
       >
         <div className="min-w-0 flex-1">
           <Input
-            value={destination}
-            onChange={(e) => setDestination(e.target.value)}
+            {...register("destination")}
             placeholder="https://example.com/launch"
             aria-label="Destination URL"
             autoFocus
           />
+          {errors.destination && (
+            <p className="mt-1 text-xs text-danger">{errors.destination.message}</p>
+          )}
         </div>
         {activeDomains.length > 0 && (
           <div className="sm:w-56">
@@ -201,7 +210,7 @@ function QuickCreateCard({
         <Button
           variant="primary"
           type="submit"
-          disabled={!destination.trim() || atLimit}
+          disabled={!destination?.trim() || atLimit}
           title={atLimit ? "Link limit reached: upgrade for more links" : undefined}
         >
           <BusyContent busy={create.isPending}>Create link</BusyContent>

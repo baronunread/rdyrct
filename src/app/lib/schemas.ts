@@ -4,8 +4,16 @@ export const orgNameSchema = z.object({
   name: z.string().min(1, "Enter an organization name").max(100),
 });
 
+const isValidUrl = (v: string) => {
+  try { new URL(v); return true; }
+  catch { try { new URL(`https://${v}`); return true; }
+  catch { return false; } }
+};
+
+export const destinationField = z.string().refine(isValidUrl, "Enter a valid URL");
+
 export const destinationSchema = z.object({
-  destination: z.url("Enter a valid URL"),
+  destination: destinationField,
 });
 
 export const hostnameSchema = z.object({
@@ -44,7 +52,7 @@ export const otpSchema = z.object({
 const qrField = z.string().optional().default("");
 
 export const linkInputSchema = z.object({
-  destination: z.string().min(1, "Enter a destination URL"),
+  destination: destinationField,
   domainId: z.string().nullable().optional().default(null),
   slug: z.string().optional().default(""),
   title: z.string().optional().default(""),
