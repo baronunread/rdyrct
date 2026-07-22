@@ -259,4 +259,9 @@ describe("validateQrFields", () => {
     expect400({ qrColor: "17151f" });
     expect400({ qrEyeColor: "#12345" });
   });
+
+  test("accepts supported logo sizes and rejects unsafe ones", () => {
+    expect(() => valid({ qrLogoSize: 0.65 })).not.toThrow();
+    expect400({ qrLogoSize: 0.71 });
+  });
 });

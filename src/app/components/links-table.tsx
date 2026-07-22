@@ -7,6 +7,7 @@ import { SortTh } from "../ui/sort-th";
 import { shortDate } from "../lib/dates";
 import { CopyButton } from "../ui/copy-button";
 import { useToast } from "../ui/toast";
+import { copyToClipboard } from "../lib/clipboard";
 
 export function LinksTable({
   paged,
@@ -36,16 +37,6 @@ export function LinksTable({
   noQrToast: () => void;
 }) {
   const toast = useToast();
-
-  const copy = async (text: string) => {
-    try {
-      await navigator.clipboard.writeText(text);
-      toast("Copied to clipboard");
-    } catch (error) {
-      toast("Could not copy to clipboard", "error");
-      throw error;
-    }
-  };
 
   return (
     <>
@@ -98,7 +89,7 @@ export function LinksTable({
                   <CopyButton
                     text={shortUrl(link.slug, link.domain)}
                     label={`Copy ${shortUrl(link.slug, link.domain)}`}
-                    onCopy={copy}
+                    onCopy={(text) => copyToClipboard(text, toast)}
                   />
                 </div>
                 {link.title && <p className="text-xs text-muted">{link.title}</p>}

@@ -6,7 +6,7 @@ export const orgNameSchema = z.object({
 
 const tryUrl = (v: string) => z.url().safeParse(v).success;
 
-export const destinationField = z
+const destinationField = z
   .string()
   .refine((v) => tryUrl(v) || tryUrl(`https://${v}`), "Enter a valid URL");
 

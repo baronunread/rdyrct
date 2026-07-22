@@ -22,6 +22,7 @@ import { CopyButton } from "../ui/copy-button";
 import { withErrorToast } from "../lib/mutation-toast";
 import { destinationSchema } from "../lib/schemas";
 import { relativeDate } from "../lib/dates";
+import { copyToClipboard } from "../lib/clipboard";
 
 /** Heatmap rows come back Monday-first (see the stats query). */
 const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -365,16 +366,6 @@ function CreatedDialog({
   const toast = useToast();
   const url = link ? shortUrl(link.slug, link.domain) : "";
 
-  const copy = async (text: string) => {
-    try {
-      await navigator.clipboard.writeText(text);
-      toast("Copied to clipboard");
-    } catch (error) {
-      toast("Could not copy to clipboard", "error");
-      throw error;
-    }
-  };
-
   return (
     <Dialog open={!!link} onOpenChange={(o) => !o && onClose()} title="Link created">
       {link && (
@@ -393,7 +384,12 @@ function CreatedDialog({
             />
           )}
           <p className="text-sm font-bold break-all">{url}</p>
-          <CopyButton text={url} label="Copy link" onCopy={copy} display="button">
+          <CopyButton
+            text={url}
+            label="Copy link"
+            onCopy={(text) => copyToClipboard(text, toast)}
+            display="button"
+          >
             Copy link
           </CopyButton>
         </div>
