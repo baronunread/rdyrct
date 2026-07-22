@@ -24,12 +24,12 @@ This provisions the Worker from the Cloudflare dashboard and may prompt you to c
 ## Features
 
 - **Short links** with custom or random slugs, optional UTM parameters (source, medium, campaign, term, content) applied at redirect time.
-- **QR codes** per link (Pro), with an optional logo in the center, live preview, and PNG/SVG download.
+- **QR codes** per link (paid plans), with an optional logo in the center, live preview, and PNG/SVG download.
 - **Custom domains** (Pro): connect `links.yourbrand.com` via Cloudflare for SaaS, with slugs namespaced per domain.
 - **Organizations** with `owner` / `admin` / `member` roles: admins manage the team, domains, and billing; members manage links.
 - **Magic-link invites**: single-use, valid for 7 days, sent by email.
 - **Privacy-friendly analytics**: clicks per day, top links, countries, referrers, devices. No IP addresses are ever stored.
-- **Per-user Free/Pro billing** through [Polar](https://polar.sh), which acts as Merchant of Record and handles tax/VAT.
+- **Per-user Free/Hobby/Pro billing** through [Polar](https://polar.sh), which acts as Merchant of Record and handles tax/VAT.
 - **Secret-pinned superadmin console**: the account matching `SUPERADMIN_EMAIL` gets a cloud-console panel for usage, org drill-down, and plan management. It 404s for everyone else.
 
 ---
@@ -41,6 +41,7 @@ rdyrct is built Cloudflare-first: the entire product runs in a single Worker wit
 - **Cloudflare Workers**: one Worker serves the API, the redirect hot path, and the static React app.
 - **D1**: SQLite at the edge, source of truth for auth, orgs, links, clicks, and domains.
 - **KV**: slug → destination lookups on the redirect hot path, so a click never waits on D1.
+- **R2**: QR logo images, keyed by org, served immutable and cached.
 - **Cloudflare for SaaS**: custom hostnames for Pro orgs' own short-link domains.
 
 Application layer:
@@ -68,7 +69,7 @@ bun run dev                        # http://localhost:5173
 ```
 
 - Sign up with the address you set as `SUPERADMIN_EMAIL` to unlock the admin console; any other address is a normal user.
-- New accounts land in onboarding to create their first organization.
+- New accounts see a create-org prompt on org-scoped pages until they create their first organization.
 - Email verification codes are sent through [emulate.dev](https://emulate.dev)'s Resend emulator instead of a real inbox. Read it with:
 
   ```sh
@@ -88,6 +89,7 @@ Prefer the manual path, or need to redeploy after the button above? Create the r
 ```sh
 bunx wrangler kv namespace create LINKS
 bunx wrangler d1 create rdyrct
+bunx wrangler r2 bucket create rdyrct-qr-logos
 ```
 
 Paste the returned ids into `wrangler.jsonc`:
@@ -102,6 +104,7 @@ Fill in the non-secret vars in `wrangler.jsonc`:
 - `MAIL_FROM=rdyrct <no-reply@mail.rdyrct.com>`
 - `POLAR_SERVER=sandbox` (or `production` when live)
 - `POLAR_PRO_PRODUCT_ID` — create a recurring Pro product in Polar and paste its id
+- `POLAR_HOBBY_PRODUCT_ID` — create a recurring Hobby product in Polar and paste its id
 - `CF_ZONE_ID` — your `rdyrct.com` zone id
 
 Set the secrets. Either one by one:
@@ -152,6 +155,7 @@ Finally, point `rdyrct.com` at the Worker as a **custom domain**: Cloudflare das
 | `RESEND_BASE_URL` | var (dev only) | Points at the local Resend emulator |
 | `POLAR_SERVER` | var | `sandbox` or `production` |
 | `POLAR_PRO_PRODUCT_ID` | var | Polar product id for the Pro plan |
+| `POLAR_HOBBY_PRODUCT_ID` | var | Polar product id for the Hobby plan |
 | `CF_ZONE_ID` | var | Zone id used for Custom Hostnames |
 | `DEV_FAKE_CF` | var (dev only) | `1` to stub the Cloudflare API locally |
 
@@ -162,15 +166,19 @@ Secrets are set with `wrangler secret put NAME` or `wrangler secret bulk prod.se
 ## Project layout
 
 ```
-migrations/            D1 schema (auth + app tables)
-src/worker/             Hono API, BetterAuth, KV publishing, redirect hot path
-  routes/               auth/user, orgs, links, domains, billing, admin
-src/shared/types.ts     DTOs + plan limits shared between worker and app
-src/app/                React SPA
-  routes/               page-level route components
-  ui/                   design-system primitives
-  components/           feature components
-  lib/                  client utilities, API hooks
+migrations/            D1 schema (numbered SQL migrations, applied in order)
+scripts/               Local dev utilities (e.g. seed-local.ts)
+src/worker/            Hono API, BetterAuth, KV publishing, redirect hot path
+  routes/              auth/user, orgs, links, qr-logos, domains, billing, admin
+  plan.ts util.ts email.ts password.ts kv.ts r2.ts
+src/shared/types.ts    DTOs + PLAN_LIMITS (shared worker ↔ app)
+src/app/               React SPA
+  routes/              page-level route components
+  ui/                  design-system primitives
+  components/          feature components
+  lib/                 client utilities, API hooks
+.agents/skills/        Agent skills (react-doctor)
+.claude/skills/        Claude skills (fallow, react-doctor)
 ```
 
 ---

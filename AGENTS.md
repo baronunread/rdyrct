@@ -23,6 +23,7 @@ bun run db:migrate:local    # apply migrations to local D1
 bun run db:reset:local      # wipe local D1 + KV, re-apply migrations (start from scratch; restart dev after)
 bun add <pkg>               # dependencies
 bunx agent-browser          # real-browser checks: screenshots, clicking through pages. Use it for any visual verification; do not hand-roll headless Chrome
+bun scripts/seed-local.ts   # seed local D1/KV with fake data (run dev server first)
 ```
 
 **Local Cloudflare state**: while `bun run dev` runs, the Explorer API at
@@ -38,11 +39,16 @@ bun run check                          # app + shared (tsconfig.json → src/app
 bunx tsc -p tsconfig.worker.json --noEmit   # worker (src/worker)
 bun run test                           # unit tests (bun test, tests/)
 bun run doctor                         # react-doctor audit (React health score; --verbose for details)
+bun run fallow                         # fallow codebase intelligence audit
 ```
 
-react-doctor also runs as a pre-commit hook on staged files (`--blocking warning`)
-and in CI (`.github/workflows/react-doctor.yml`, advisory on PRs). Its agent
-skill lives in `.agents/skills/react-doctor`.
+Both react-doctor and fallow run in CI:
+- `.github/workflows/react-doctor.yml` (advisory, PRs + main)
+- `.github/workflows/fallow.yml` (PRs + main)
+
+react-doctor also runs as a pre-commit hook on staged files (`--blocking warning`).
+react-doctor skill lives in `.agents/skills/react-doctor` and `.claude/skills/react-doctor`.
+fallow skill lives in `.claude/skills/fallow`.
 
 Shell writes to repo files are sandboxed; edit through the editor tools, not
 `sed`/`perl` (or run bash with the sandbox disabled for scripted edits).
@@ -152,10 +158,13 @@ and vars live in `wrangler.jsonc`; local dev reads everything from `.dev.vars`
 
 ```
 migrations/            D1 schema (numbered SQL migrations, applied in order)
+scripts/               Local dev utilities (e.g. seed-local.ts)
 src/worker/            Hono API, BetterAuth, KV publishing, redirect hot path
   routes/              auth (user), orgs, links, qr-logos, domains, billing, admin
   plan.ts util.ts email.ts password.ts kv.ts r2.ts
 src/shared/types.ts    DTOs + PLAN_LIMITS (shared worker ↔ app)
 src/app/               React SPA
   routes/  ui/  components/  lib/
+.agents/skills/        Agent skills (react-doctor)
+.claude/skills/        Claude skills (fallow, react-doctor)
 ```
