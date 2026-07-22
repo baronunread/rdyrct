@@ -326,156 +326,156 @@ function PricingSection() {
       <MobilePlans paidTo={paidTo} />
 
       <div className="hidden sm:block">
-      <Table>
-        <thead>
-          <tr>
-            <Th>Plan</Th>
-            <Th>
-              Self-hosted
-              <span className="mt-0.5 block normal-case tracking-normal text-muted/80">
-                Full control, your infra
-              </span>
-            </Th>
-            <Th>
-              Free
-              <span className="mt-0.5 block normal-case tracking-normal text-muted/80">
-                For side projects
-              </span>
-            </Th>
-            <Th>
-              Hobby
-              <span className="mt-0.5 block normal-case tracking-normal text-muted/80">
-                For creators & solo brands
-              </span>
-            </Th>
-            <Th className="border-x border-x-accent/25 bg-accent/10">
-              <span className="inline-flex items-center gap-2 text-accent">
-                Pro
-                <span className="rounded-full border border-accent/40 px-2 py-0.5 text-3xs tracking-wide text-accent uppercase">
-                  Most popular
+        <Table>
+          <thead>
+            <tr>
+              <Th></Th>
+              <Th>
+                Self-hosted
+                <span className="mt-0.5 block normal-case tracking-normal text-muted/80">
+                  Full control, your infra
                 </span>
-              </span>
-              <span className="mt-0.5 block normal-case tracking-normal text-accent/80">
-                For brands & growing teams
-              </span>
-            </Th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <Td className="font-bold">Price</Td>
-            <Td>Free · open source</Td>
-            <Td>$0</Td>
-            <Td>
-              <span className="text-base font-bold">
-                {PLAN_PRICES.hobby}/mo
-              </span>
-            </Td>
-            <Cell tier="pro">
-              <span className="text-base font-bold text-accent">
-                {PLAN_PRICES.pro}/mo
-              </span>
-              <span className="block text-2xs font-normal text-muted">
-                only the org owner pays
-              </span>
-            </Cell>
-          </tr>
-          <tr>
-            <Td className="font-bold">Hosting</Td>
-            <Td>Your own Cloudflare</Td>
-            <Td>Hosted on rdyrct.com</Td>
-            <Td>Hosted on rdyrct.com</Td>
-            <Cell tier="pro">Hosted on rdyrct.com</Cell>
-          </tr>
-          <tr>
-            <Td className="font-bold">Organizations</Td>
-            <Td>Unlimited</Td>
-            <Td>{PLAN_LIMITS.free.orgs}</Td>
-            <Td>{PLAN_LIMITS.hobby.orgs}</Td>
-            <Cell tier="pro">{PLAN_LIMITS.pro.orgs}</Cell>
-          </tr>
-          <tr>
-            <Td className="font-bold">Links</Td>
-            <Td>Unlimited</Td>
-            <Td>{PLAN_LIMITS.free.links}</Td>
-            <Td>{PLAN_LIMITS.hobby.links}</Td>
-            <Cell tier="pro">{PLAN_LIMITS.pro.links.toLocaleString()}</Cell>
-          </tr>
-          <tr>
-            <Td className="font-bold">Custom slugs</Td>
-            <YesCell />
-            <Td className="text-muted">Random only</Td>
-            <Td>On your domain</Td>
-            <Cell tier="pro">On your domains</Cell>
-          </tr>
-          <tr>
-            <Td className="font-bold">Team members</Td>
-            <Td>Unlimited</Td>
-            <Td>{PLAN_LIMITS.free.members}</Td>
-            <Td>{PLAN_LIMITS.hobby.members}</Td>
-            <Cell tier="pro">{PLAN_LIMITS.pro.members}</Cell>
-          </tr>
-          <tr>
-            <Td className="font-bold">QR codes</Td>
-            <YesCell />
-            <NoCell />
-            <YesCell />
-            <YesCell tier="pro" />
-          </tr>
-          <tr>
-            <Td className="font-bold">Custom domains</Td>
-            <Td>Unlimited (your Cloudflare)</Td>
-            <Td className="text-muted">No</Td>
-            <Td>{PLAN_LIMITS.hobby.domains}</Td>
-            <Cell tier="pro">{PLAN_LIMITS.pro.domains}</Cell>
-          </tr>
-          <tr>
-            <Td className="font-bold">Analytics history</Td>
-            <Td>Unlimited</Td>
-            <Td>{PLAN_LIMITS.free.analyticsDays} days</Td>
-            <Td>{PLAN_LIMITS.hobby.analyticsDays} days</Td>
-            <Cell tier="pro">{PLAN_LIMITS.pro.analyticsDays} days</Cell>
-          </tr>
-          <tr>
-            <Td className="font-bold">Support</Td>
-            <Td>GitHub issues</Td>
-            <Td>GitHub issues</Td>
-            <Td>GitHub issues</Td>
-            <Cell tier="pro">Direct email support</Cell>
-          </tr>
-          <tr>
-            <Td />
-            <Td>
-              <a href={GITHUB_URL} target="_blank" rel="noreferrer">
-                <Button variant="outline" size="sm" className="w-full">
-                  View on GitHub
-                </Button>
-              </a>
-            </Td>
-            <Td>
-              <Link to="/signup">
-                <Button variant="outline" size="sm" className="w-full">
-                  Sign up free
-                </Button>
-              </Link>
-            </Td>
-            <Td>
-              <Link to={paidTo("hobby")}>
-                <Button variant="outline" size="sm" className="w-full">
-                  Start Hobby
-                </Button>
-              </Link>
-            </Td>
-            <Cell tier="pro">
-              <Link to={paidTo("pro")}>
-                <Button variant="primary" size="sm" className="w-full">
-                  Start Pro
-                </Button>
-              </Link>
-            </Cell>
-          </tr>
-        </tbody>
-      </Table>
+              </Th>
+              <Th>
+                Free
+                <span className="mt-0.5 block normal-case tracking-normal text-muted/80">
+                  For side projects
+                </span>
+              </Th>
+              <Th>
+                Hobby
+                <span className="mt-0.5 block normal-case tracking-normal text-muted/80">
+                  For creators & solo brands
+                </span>
+              </Th>
+              <Th className="border-x border-x-accent/25 bg-accent/10">
+                <span className="inline-flex items-center gap-2 text-accent">
+                  Pro
+                  <span className="rounded-full border border-accent/40 px-2 py-0.5 text-3xs tracking-wide text-accent uppercase">
+                    Most popular
+                  </span>
+                </span>
+                <span className="mt-0.5 block normal-case tracking-normal text-accent/80">
+                  For brands & growing teams
+                </span>
+              </Th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <Td className="font-bold">Price</Td>
+              <Td>Free · open source</Td>
+              <Td>$0</Td>
+              <Td>
+                <span className="text-base font-bold">
+                  {PLAN_PRICES.hobby}/mo
+                </span>
+              </Td>
+              <Cell tier="pro">
+                <span className="text-base font-bold text-accent">
+                  {PLAN_PRICES.pro}/mo
+                </span>
+                <span className="block text-2xs font-normal text-muted">
+                  only the org owner pays
+                </span>
+              </Cell>
+            </tr>
+            <tr>
+              <Td className="font-bold">Hosting</Td>
+              <Td>Your own Cloudflare</Td>
+              <Td>Hosted on rdyrct.com</Td>
+              <Td>Hosted on rdyrct.com</Td>
+              <Cell tier="pro">Hosted on rdyrct.com</Cell>
+            </tr>
+            <tr>
+              <Td className="font-bold">Organizations</Td>
+              <Td>Unlimited</Td>
+              <Td>{PLAN_LIMITS.free.orgs}</Td>
+              <Td>{PLAN_LIMITS.hobby.orgs}</Td>
+              <Cell tier="pro">{PLAN_LIMITS.pro.orgs}</Cell>
+            </tr>
+            <tr>
+              <Td className="font-bold">Links</Td>
+              <Td>Unlimited</Td>
+              <Td>{PLAN_LIMITS.free.links}</Td>
+              <Td>{PLAN_LIMITS.hobby.links}</Td>
+              <Cell tier="pro">{PLAN_LIMITS.pro.links.toLocaleString()}</Cell>
+            </tr>
+            <tr>
+              <Td className="font-bold">Custom slugs</Td>
+              <YesCell />
+              <Td className="text-muted">Random only</Td>
+              <Td>On your domain</Td>
+              <Cell tier="pro">On your domains</Cell>
+            </tr>
+            <tr>
+              <Td className="font-bold">Team members</Td>
+              <Td>Unlimited</Td>
+              <Td>{PLAN_LIMITS.free.members}</Td>
+              <Td>{PLAN_LIMITS.hobby.members}</Td>
+              <Cell tier="pro">{PLAN_LIMITS.pro.members}</Cell>
+            </tr>
+            <tr>
+              <Td className="font-bold">QR codes</Td>
+              <YesCell />
+              <NoCell />
+              <YesCell />
+              <YesCell tier="pro" />
+            </tr>
+            <tr>
+              <Td className="font-bold">Custom domains</Td>
+              <Td>Unlimited (your Cloudflare)</Td>
+              <Td className="text-muted">No</Td>
+              <Td>{PLAN_LIMITS.hobby.domains}</Td>
+              <Cell tier="pro">{PLAN_LIMITS.pro.domains}</Cell>
+            </tr>
+            <tr>
+              <Td className="font-bold">Analytics history</Td>
+              <Td>Unlimited</Td>
+              <Td>{PLAN_LIMITS.free.analyticsDays} days</Td>
+              <Td>{PLAN_LIMITS.hobby.analyticsDays} days</Td>
+              <Cell tier="pro">{PLAN_LIMITS.pro.analyticsDays} days</Cell>
+            </tr>
+            <tr>
+              <Td className="font-bold">Support</Td>
+              <Td>GitHub issues</Td>
+              <Td>GitHub issues</Td>
+              <Td>GitHub issues</Td>
+              <Cell tier="pro">Direct email support</Cell>
+            </tr>
+            <tr>
+              <Td />
+              <Td>
+                <a href={GITHUB_URL} target="_blank" rel="noreferrer">
+                  <Button variant="outline" size="sm" className="w-full">
+                    View on GitHub
+                  </Button>
+                </a>
+              </Td>
+              <Td>
+                <Link to="/signup">
+                  <Button variant="outline" size="sm" className="w-full">
+                    Sign up free
+                  </Button>
+                </Link>
+              </Td>
+              <Td>
+                <Link to={paidTo("hobby")}>
+                  <Button variant="outline" size="sm" className="w-full">
+                    Start Hobby
+                  </Button>
+                </Link>
+              </Td>
+              <Cell tier="pro">
+                <Link to={paidTo("pro")}>
+                  <Button variant="primary" size="sm" className="w-full">
+                    Start Pro
+                  </Button>
+                </Link>
+              </Cell>
+            </tr>
+          </tbody>
+        </Table>
       </div>
     </Section>
   );
@@ -561,13 +561,13 @@ function DeployTerminal() {
     /* 4 */ <span key="b1" />,
     /* 5 */ <span key="header"><span className="text-muted/50">Deployed resources:</span></span>,
     /* 6-10 */ ...resources.map((r) => (
-      <span key={r.name}>
-        <span className="text-accent font-semibold">{r.name}</span>
-        <span className="text-muted/40">  {r.id}</span>
-        <span className="text-muted/20">  —  </span>
-        <span className="text-muted">{r.desc}</span>
-      </span>
-    )),
+    <span key={r.name}>
+      <span className="text-accent font-semibold">{r.name}</span>
+      <span className="text-muted/40">  {r.id}</span>
+      <span className="text-muted/20">  —  </span>
+      <span className="text-muted">{r.desc}</span>
+    </span>
+  )),
     /* 11 */ <span key="b2" />,
     /* 12 */ <span key="summary"><span className="text-accent/85">Deployed to prod.</span> <span className="text-muted/50">330+ cities · 5 primitives</span></span>,
   ];
@@ -629,68 +629,226 @@ export function LandingPage() {
     <MotionConfig reducedMotion="user">
       <LazyMotion features={domAnimation}>
         <div className="relative mx-auto min-h-dvh max-w-5xl px-6">
-        <FaqJsonLd />
-        <style>{`@keyframes cursorBlink { 50% { opacity: 0; } }`}</style>
-        {/* soft accent glow behind the hero */}
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-[480px]"
-          style={{
-            background:
-              "radial-gradient(55% 60% at 50% 0%, color-mix(in srgb, var(--accent) 9%, transparent), transparent)",
-          }}
-        />
+          <FaqJsonLd />
+          <style>{`@keyframes cursorBlink { 50% { opacity: 0; } }`}</style>
+          {/* soft accent glow behind the hero */}
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-[480px]"
+            style={{
+              background:
+                "radial-gradient(55% 60% at 50% 0%, color-mix(in srgb, var(--accent) 9%, transparent), transparent)",
+            }}
+          />
 
-        <header className="sticky top-0 z-20 -mx-6 flex items-center justify-between border-b border-border/50 bg-bg/85 px-6 py-4 backdrop-blur-md">
-          <Link to="/" className="text-lg font-bold tracking-widest">
-            rdyrct
-          </Link>
-          <nav className="flex items-center gap-2.5 text-sm sm:gap-4">
-            <a href="#pricing" className="text-muted hover:text-accent">
-              Pricing
-            </a>
-            <a href="#faq" className="text-muted hover:text-accent">
-              FAQ
-            </a>
-            {authed ? (
-              <Link to="/dashboard">
-                <Button variant="primary">Dashboard</Button>
-              </Link>
-            ) : (
-              <>
-                <Link to="/login" className="text-muted hover:text-accent">
-                  Log in
+          <header className="sticky top-0 z-20 -mx-6 flex items-center justify-between border-b border-border/50 bg-bg/85 px-6 py-4 backdrop-blur-md">
+            <Link to="/" className="text-lg font-bold tracking-widest">
+              rdyrct
+            </Link>
+            <nav className="flex items-center gap-2.5 text-sm sm:gap-4">
+              <a href="#pricing" className="text-muted hover:text-accent">
+                Pricing
+              </a>
+              <a href="#faq" className="text-muted hover:text-accent">
+                FAQ
+              </a>
+              {authed ? (
+                <Link to="/dashboard">
+                  <Button variant="primary">Dashboard</Button>
                 </Link>
-                <Link to="/signup">
-                  <Button variant="primary">Sign up</Button>
-                </Link>
-              </>
-            )}
-          </nav>
-        </header>
+              ) : (
+                <>
+                  <Link to="/login" className="text-muted hover:text-accent">
+                    Log in
+                  </Link>
+                  <Link to="/signup">
+                    <Button variant="primary">Sign up</Button>
+                  </Link>
+                </>
+              )}
+            </nav>
+          </header>
 
-        <section className="flex flex-col items-center gap-10 py-16 sm:py-20">
-          <m.div
-            initial={{ opacity: 0, y: 12 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5, ease: "easeOut" }}
-            className="flex flex-col items-center gap-6 text-center"
-          >
-            <span className="inline-flex items-center gap-2 rounded-full border border-border bg-surface px-3 py-1 text-xs text-muted">
-              <span className="h-1.5 w-1.5 rounded-full bg-accent-2" />
-              Open source · Runs on Cloudflare's edge
-            </span>
-            <h1 className="max-w-3xl text-3xl font-bold tracking-tight text-balance sm:text-5xl">
-              Short links that carry your brand.
-            </h1>
-            <p className="max-w-xl text-sm text-muted sm:text-base">
-              rdyrct gives your team short links, branded QR codes, and
-              custom domains, with privacy-friendly analytics that never
-              store an
-              IP address. Free to start, open source, and built on
-              Cloudflare's global network.
-            </p>
-            <div className="flex flex-wrap items-center justify-center gap-3">
+          <section className="flex flex-col items-center gap-10 py-16 sm:py-20">
+            <m.div
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.5, ease: "easeOut" }}
+              className="flex flex-col items-center gap-6 text-center"
+            >
+              <span className="inline-flex items-center gap-2 rounded-full border border-border bg-surface px-3 py-1 text-xs text-muted">
+                <span className="h-1.5 w-1.5 rounded-full bg-accent-2" />
+                Open source · Runs on Cloudflare's edge
+              </span>
+              <h1 className="max-w-3xl text-3xl font-bold tracking-tight text-balance sm:text-5xl">
+                Short links that carry your brand.
+              </h1>
+              <p className="max-w-xl text-sm text-muted sm:text-base">
+                rdyrct gives your team short links, branded QR codes, and
+                custom domains, with privacy-friendly analytics that never
+                store an
+                IP address. Free to start, open source, and built on
+                Cloudflare's global network.
+              </p>
+              <div className="flex flex-wrap items-center justify-center gap-3">
+                <Link to={ctaTo}>
+                  <Button
+                    variant="primary"
+                    size="md"
+                    className="h-11 px-6 text-base"
+                  >
+                    {ctaLabel}
+                  </Button>
+                </Link>
+                <a href={GITHUB_URL} target="_blank" rel="noreferrer">
+                  <Button
+                    variant="outline"
+                    size="md"
+                    className="h-11 px-6 text-base"
+                  >
+                    <Code2 size={16} /> Self-host from GitHub
+                  </Button>
+                </a>
+              </div>
+              <ul className="flex flex-wrap items-center justify-center gap-x-5 gap-y-1 text-xs text-muted">
+                <li className="flex items-center gap-1.5">
+                  <Check size={13} className="text-accent-2" /> Free plan forever
+                </li>
+                <li className="flex items-center gap-1.5">
+                  <Check size={13} className="text-accent-2" /> No credit card
+                  required
+                </li>
+                <li className="flex items-center gap-1.5">
+                  <Check size={13} className="text-accent-2" /> No IP tracking
+                </li>
+              </ul>
+            </m.div>
+
+            <m.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.6, ease: "easeOut", delay: 0.15 }}
+              className="flex w-full justify-center"
+            >
+              <LandingMockup />
+            </m.div>
+          </section>
+
+          <Section className="py-8">
+            <div className="mb-8 text-center">
+              <h2 className="text-xl font-bold">
+                From paste to published in seconds
+              </h2>
+            </div>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+              {steps.map(({ title, body }, i) => (
+                <div
+                  key={title}
+                  className="rounded-lg border border-border bg-surface p-4"
+                >
+                  <span className="mb-3 inline-flex h-7 w-7 items-center justify-center rounded-full border border-accent/40 font-mono text-xs font-bold text-accent">
+                    {i + 1}
+                  </span>
+                  <p className="font-bold">{title}</p>
+                  <p className="mt-1 text-sm text-muted">{body}</p>
+                </div>
+              ))}
+            </div>
+          </Section>
+
+          <Section>
+            <div className="mb-8 text-center">
+              <h2 className="text-xl font-bold text-balance">
+                See every click, respect every visitor
+              </h2>
+              <p className="mx-auto mt-2 max-w-xl text-sm text-muted">
+                Country, device, referrer, and campaign breakdowns for every
+                link, from the last 24 hours to the last year. Never an IP
+                address, never cross-site tracking. This is the actual
+                analytics page.
+              </p>
+            </div>
+            <div className="flex justify-center">
+              <LandingAnalyticsMock />
+            </div>
+          </Section>
+
+          <Section>
+            <div className="mb-8 text-center">
+              <h2 className="text-xl font-bold">
+                Everything a link needs to earn the click
+              </h2>
+              <p className="mx-auto mt-2 max-w-xl text-sm text-muted">
+                Built for marketing teams and developers.
+              </p>
+            </div>
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+              {features.map(({ icon: Icon, title, body, plan }) => (
+                <div
+                  key={title}
+                  className="rounded-lg border border-border bg-surface p-4 transition-colors hover:border-accent/40"
+                >
+                  <div className="mb-2 flex items-center gap-2">
+                    <Icon size={16} className="text-accent" />
+                    <p className="font-bold">{title}</p>
+                    {plan && (
+                      <span className="text-2xs tracking-wide text-muted uppercase">
+                        {plan}
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-sm text-muted">{body}</p>
+                </div>
+              ))}
+            </div>
+          </Section>
+
+          <Section>
+            <div className="mb-8 text-center">
+              <img src="/cloudflare.svg" alt="Cloudflare" className="mx-auto mb-5 h-10 w-auto" />
+              <h2 className="text-xl font-bold">Runs entirely on Cloudflare</h2>
+              <p className="mx-auto mt-2 max-w-xl text-sm text-muted">
+                No servers to patch, no databases to babysit: rdyrct is built
+                from Cloudflare's own primitives, end to end.
+              </p>
+            </div>
+            <DeployTerminal />
+          </Section>
+
+          <PricingSection />
+
+          <Section id="faq" className="scroll-mt-16 py-16">
+            <div className="mb-8 text-center">
+              <h2 className="text-xl font-bold">Frequently asked questions</h2>
+            </div>
+            <div className="mx-auto flex max-w-3xl flex-col gap-3">
+              {faqs.map(({ q, a }) => (
+                <details
+                  key={q}
+                  className="group rounded-lg border border-border bg-surface px-4 open:border-accent/40"
+                >
+                  <summary className="flex cursor-pointer list-none items-center justify-between gap-3 py-4 text-sm font-bold [&::-webkit-details-marker]:hidden">
+                    {q}
+                    <ChevronDown
+                      size={16}
+                      className="shrink-0 text-muted transition-transform group-open:rotate-180"
+                    />
+                  </summary>
+                  <p className="pb-4 text-sm text-muted">{a}</p>
+                </details>
+              ))}
+            </div>
+          </Section>
+
+          <Section>
+            <div className="flex flex-col items-center gap-5 rounded-2xl border border-border bg-surface px-6 py-14 text-center">
+              <h2 className="max-w-xl text-2xl font-bold tracking-tight sm:text-3xl">
+                Start shortening in seconds.
+              </h2>
+              <p className="max-w-md text-sm text-muted">
+                Create your first short link on the free plan. No credit
+                card, no visitor tracking, no servers to run.
+              </p>
               <Link to={ctaTo}>
                 <Button
                   variant="primary"
@@ -700,168 +858,10 @@ export function LandingPage() {
                   {ctaLabel}
                 </Button>
               </Link>
-              <a href={GITHUB_URL} target="_blank" rel="noreferrer">
-                <Button
-                  variant="outline"
-                  size="md"
-                  className="h-11 px-6 text-base"
-                >
-                  <Code2 size={16} /> Self-host from GitHub
-                </Button>
-              </a>
             </div>
-            <ul className="flex flex-wrap items-center justify-center gap-x-5 gap-y-1 text-xs text-muted">
-              <li className="flex items-center gap-1.5">
-                <Check size={13} className="text-accent-2" /> Free plan forever
-              </li>
-              <li className="flex items-center gap-1.5">
-                <Check size={13} className="text-accent-2" /> No credit card
-                required
-              </li>
-              <li className="flex items-center gap-1.5">
-                <Check size={13} className="text-accent-2" /> No IP tracking
-              </li>
-            </ul>
-          </m.div>
+          </Section>
 
-          <m.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6, ease: "easeOut", delay: 0.15 }}
-            className="flex w-full justify-center"
-          >
-            <LandingMockup />
-          </m.div>
-        </section>
-
-        <Section className="py-8">
-          <div className="mb-8 text-center">
-            <h2 className="text-xl font-bold">
-              From paste to published in seconds
-            </h2>
-          </div>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-            {steps.map(({ title, body }, i) => (
-              <div
-                key={title}
-                className="rounded-lg border border-border bg-surface p-4"
-              >
-                <span className="mb-3 inline-flex h-7 w-7 items-center justify-center rounded-full border border-accent/40 font-mono text-xs font-bold text-accent">
-                  {i + 1}
-                </span>
-                <p className="font-bold">{title}</p>
-                <p className="mt-1 text-sm text-muted">{body}</p>
-              </div>
-            ))}
-          </div>
-        </Section>
-
-        <Section>
-          <div className="mb-8 text-center">
-            <h2 className="text-xl font-bold text-balance">
-              See every click, respect every visitor
-            </h2>
-            <p className="mx-auto mt-2 max-w-xl text-sm text-muted">
-              Country, device, referrer, and campaign breakdowns for every
-              link, from the last 24 hours to the last year. Never an IP
-              address, never cross-site tracking. This is the actual
-              analytics page.
-            </p>
-          </div>
-          <div className="flex justify-center">
-            <LandingAnalyticsMock />
-          </div>
-        </Section>
-
-        <Section>
-          <div className="mb-8 text-center">
-            <h2 className="text-xl font-bold">
-              Everything a link needs to earn the click
-            </h2>
-            <p className="mx-auto mt-2 max-w-xl text-sm text-muted">
-              Built for marketing teams and developers.
-            </p>
-          </div>
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-            {features.map(({ icon: Icon, title, body, plan }) => (
-              <div
-                key={title}
-                className="rounded-lg border border-border bg-surface p-4 transition-colors hover:border-accent/40"
-              >
-                <div className="mb-2 flex items-center gap-2">
-                  <Icon size={16} className="text-accent" />
-                  <p className="font-bold">{title}</p>
-                  {plan && (
-                    <span className="text-2xs tracking-wide text-muted uppercase">
-                      {plan}
-                    </span>
-                  )}
-                </div>
-                <p className="text-sm text-muted">{body}</p>
-              </div>
-            ))}
-          </div>
-        </Section>
-
-        <Section>
-          <div className="mb-8 text-center">
-            <img src="/cloudflare.svg" alt="Cloudflare" className="mx-auto mb-5 h-10 w-auto" />
-            <h2 className="text-xl font-bold">Runs entirely on Cloudflare</h2>
-            <p className="mx-auto mt-2 max-w-xl text-sm text-muted">
-              No servers to patch, no databases to babysit: rdyrct is built
-              from Cloudflare's own primitives, end to end.
-            </p>
-          </div>
-          <DeployTerminal />
-        </Section>
-
-        <PricingSection />
-
-        <Section id="faq" className="scroll-mt-16 py-16">
-          <div className="mb-8 text-center">
-            <h2 className="text-xl font-bold">Frequently asked questions</h2>
-          </div>
-          <div className="mx-auto flex max-w-3xl flex-col gap-3">
-            {faqs.map(({ q, a }) => (
-              <details
-                key={q}
-                className="group rounded-lg border border-border bg-surface px-4 open:border-accent/40"
-              >
-                <summary className="flex cursor-pointer list-none items-center justify-between gap-3 py-4 text-sm font-bold [&::-webkit-details-marker]:hidden">
-                  {q}
-                  <ChevronDown
-                    size={16}
-                    className="shrink-0 text-muted transition-transform group-open:rotate-180"
-                  />
-                </summary>
-                <p className="pb-4 text-sm text-muted">{a}</p>
-              </details>
-            ))}
-          </div>
-        </Section>
-
-        <Section>
-          <div className="flex flex-col items-center gap-5 rounded-2xl border border-border bg-surface px-6 py-14 text-center">
-            <h2 className="max-w-xl text-2xl font-bold tracking-tight sm:text-3xl">
-              Start shortening in seconds.
-            </h2>
-            <p className="max-w-md text-sm text-muted">
-              Create your first short link on the free plan. No credit
-              card, no visitor tracking, no servers to run.
-            </p>
-            <Link to={ctaTo}>
-              <Button
-                variant="primary"
-                size="md"
-                className="h-11 px-6 text-base"
-              >
-                {ctaLabel}
-              </Button>
-            </Link>
-          </div>
-        </Section>
-
-        <Footer />
+          <Footer />
         </div>
       </LazyMotion>
     </MotionConfig>

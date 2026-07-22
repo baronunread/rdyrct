@@ -1,11 +1,10 @@
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router";
-import { Plus, Copy, Check, QrCode, Lock } from "lucide-react";
-import { useLinks, useLinkMutations, useCurrentUser, useDomains } from "../lib/hooks";
-import { useCurrentOrg } from "../lib/current-org";
+import { Plus, Copy, Check } from "lucide-react";
+import { useLinks, useLinkMutations } from "../lib/hooks";
+import { useOrgLimits } from "../lib/org-limits";
 import { shortUrl, ApiError } from "../lib/api";
 import {
-  PLAN_LIMITS,
   type DomainDTO,
   type LinkDTO,
   type LinkInput,
@@ -22,7 +21,6 @@ import { QRPreview } from "../components/qr";
 import { NoOrgState } from "../components/no-org";
 import { sortRows } from "../lib/sort";
 import { LinkEditor, type OrgQr } from "../components/link-editor";
-import { orgQrFrom } from "../lib/org-qr";
 import { LinksTable } from "../components/links-table";
 
 const emptyForm: LinkInput = {
@@ -43,46 +41,13 @@ const emptyForm: LinkInput = {
   qrLogoSize: null,
 };
 
-export function LinksPage() {
-  const { org } = useCurrentOrg();
-  const orgId = org?.id ?? "";
-  const links = useLinks(orgId);
-  const { create, update, remove } = useLinkMutations(orgId);
-  const me = useCurrentUser();
-  const toast = useToast();
-  const navigate = useNavigate();
+const PAGE_SIZE = 25;
 
-  const limits = PLAN_LIMITS[org?.plan ?? "free"];
-  // GET /domains requires an admin+ role on the backend, only query it for
-  // users who can actually see it, so members don't fire a doomed request.
-  const canListDomains =
-    !!me.data?.user.isAdmin || org?.role === "owner" || org?.role === "admin";
-  const domains = useDomains(orgId, canListDomains);
-  const activeDomains = useMemo(
-    () => (domains.data ?? []).filter((d) => d.status === "active"),
-    [domains.data],
-  );
-  const orgQr = orgQrFrom(org);
-
-  const linkCount = links.data?.length ?? 0;
-  const atLimit = linkCount >= limits.links;
-  const limitHint = atLimit
-    ? "Link limit reached: upgrade for more links"
-    : undefined;
-
-  const [editorOpen, setEditorOpen] = useState(false);
-  const [editing, setEditing] = useState<LinkDTO | null>(null);
-  const [form, setForm] = useState<LinkInput>(emptyForm);
-  const [qrLink, setQrLink] = useState<LinkDTO | null>(null);
-  const [deleting, setDeleting] = useState<LinkDTO | null>(null);
-  const [shakeKey, setShakeKey] = useState(0);
-
-  // Search, filter, sort, pagination
+function useLinkFilter(links: { data?: LinkDTO[] }) {
   const [search, setSearch] = useState("");
   const [domainFilter, setDomainFilter] = useState<string>("all");
   const [sort, setSort] = useState<Sort>({ key: "createdAt", dir: -1 });
   const [page, setPage] = useState(0);
-  const PAGE_SIZE = 25;
 
   const filtered = useMemo(() => {
     let list = links.data ?? [];
@@ -110,6 +75,34 @@ export function LinksPage() {
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const safePage = Math.min(page, totalPages - 1);
   const paged = filtered.slice(safePage * PAGE_SIZE, (safePage + 1) * PAGE_SIZE);
+
+  const onSearchChange = (v: string) => { setSearch(v); setPage(0); };
+  const onDomainFilterChange = (v: string) => { setDomainFilter(v); setPage(0); };
+
+  return { search, setSearch, domainFilter, setDomainFilter, sort, setSort, page, setPage, filtered, totalPages, safePage, paged, onSearchChange, onDomainFilterChange };
+}
+
+export function LinksPage() {
+  const { org, orgId, limits, activeDomains, orgQr, domains } = useOrgLimits();
+  const links = useLinks(orgId);
+  const { create, update, remove } = useLinkMutations(orgId);
+  const toast = useToast();
+  const navigate = useNavigate();
+
+  const linkCount = links.data?.length ?? 0;
+  const atLimit = linkCount >= limits.links;
+  const limitHint = atLimit
+    ? "Link limit reached: upgrade for more links"
+    : undefined;
+
+  const [editorOpen, setEditorOpen] = useState(false);
+  const [editing, setEditing] = useState<LinkDTO | null>(null);
+  const [form, setForm] = useState<LinkInput>(emptyForm);
+  const [qrLink, setQrLink] = useState<LinkDTO | null>(null);
+  const [deleting, setDeleting] = useState<LinkDTO | null>(null);
+  const [shakeKey, setShakeKey] = useState(0);
+
+  const { search, domainFilter, sort, setSort, paged, filtered, totalPages, safePage, onSearchChange, onDomainFilterChange, setPage } = useLinkFilter(links);
 
   const openCreate = () => {
     if (atLimit) return;
@@ -202,9 +195,9 @@ export function LinksPage() {
         <>
           <LinksToolbar
             search={search}
-            onSearchChange={(v) => { setSearch(v); setPage(0); }}
+            onSearchChange={onSearchChange}
             domainFilter={domainFilter}
-            onDomainFilterChange={(v) => { setDomainFilter(v); setPage(0); }}
+            onDomainFilterChange={onDomainFilterChange}
             domains={domains.data ?? []}
             filteredCount={filtered.length}
             totalCount={links.data.length}

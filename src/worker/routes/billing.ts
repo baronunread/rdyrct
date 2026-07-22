@@ -79,13 +79,109 @@ interface PolarEvent {
   };
 }
 
+async function handleSubscriptionActive(
+  db: ReturnType<typeof drizzle>,
+  env: Env,
+  event: PolarEvent,
+) {
+  const userId = String(event.data.metadata?.userId ?? "");
+  if (!userId) return;
+  await db
+    .update(schema.user)
+    .set({
+      plan: planForProduct(env, event.data.product_id),
+      polarCustomerId: event.data.customer_id ?? null,
+      polarSubscriptionId: event.data.id,
+      polarSubscriptionCancelAtPeriodEnd: false,
+      polarSubscriptionCurrentPeriodEnd: null,
+    })
+    .where(eq(schema.user.id, userId));
+}
+
+async function handleSubscriptionRevoked(
+  db: ReturnType<typeof drizzle>,
+  env: Env,
+  event: PolarEvent,
+) {
+  const userId = String(event.data.metadata?.userId ?? "");
+  await db
+    .update(schema.user)
+    .set({
+      plan: "free",
+      polarSubscriptionId: null,
+      polarSubscriptionCancelAtPeriodEnd: false,
+      polarSubscriptionCurrentPeriodEnd: null,
+    })
+    .where(
+      userId
+        ? eq(schema.user.id, userId)
+        : eq(schema.user.polarSubscriptionId, event.data.id),
+    );
+}
+
+async function handleSubscriptionCanceled(
+  db: ReturnType<typeof drizzle>,
+  env: Env,
+  event: PolarEvent,
+) {
+  const userId = String(event.data.metadata?.userId ?? "");
+  const periodEnd = event.data.current_period_end ?? event.data.ends_at;
+  if (!userId && !event.data.id) return;
+  await db
+    .update(schema.user)
+    .set({
+      polarSubscriptionCancelAtPeriodEnd: true,
+      polarSubscriptionCurrentPeriodEnd: periodEnd ? new Date(periodEnd) : null,
+    })
+    .where(
+      userId
+        ? eq(schema.user.id, userId)
+        : eq(schema.user.polarSubscriptionId, event.data.id),
+    );
+}
+
+async function handleSubscriptionUpdated(
+  db: ReturnType<typeof drizzle>,
+  env: Env,
+  event: PolarEvent,
+) {
+  if (event.data.status !== "active" || !event.data.product_id) return;
+  const userId = String(event.data.metadata?.userId ?? "");
+  await db
+    .update(schema.user)
+    .set({ plan: planForProduct(env, event.data.product_id) })
+    .where(
+      userId
+        ? eq(schema.user.id, userId)
+        : eq(schema.user.polarSubscriptionId, event.data.id),
+    );
+}
+
+async function handleSubscriptionUncanceled(
+  db: ReturnType<typeof drizzle>,
+  env: Env,
+  event: PolarEvent,
+) {
+  const userId = String(event.data.metadata?.userId ?? "");
+  if (!userId && !event.data.id) return;
+  await db
+    .update(schema.user)
+    .set({
+      polarSubscriptionCancelAtPeriodEnd: false,
+      polarSubscriptionCurrentPeriodEnd: null,
+    })
+    .where(
+      userId
+        ? eq(schema.user.id, userId)
+        : eq(schema.user.polarSubscriptionId, event.data.id),
+    );
+}
+
 export async function handlePolarWebhook(
   req: Request,
   env: Env,
 ): Promise<Response> {
   const body = await req.text();
-  // standardwebhooks directly (what Polar signs with): the SDK's validateEvent
-  // also zod-parses every payload shape, which we don't need for two events.
   try {
     new Webhook(btoa(env.POLAR_WEBHOOK_SECRET)).verify(
       body,
@@ -97,90 +193,14 @@ export async function handlePolarWebhook(
   const event = JSON.parse(body) as PolarEvent;
 
   const db = drizzle(env.DB, { schema });
-  if (event.type === "subscription.active") {
-    const userId = String(event.data.metadata?.userId ?? "");
-    if (userId) {
-      await db
-        .update(schema.user)
-        .set({
-          plan: planForProduct(env, event.data.product_id),
-          polarCustomerId: event.data.customer_id ?? null,
-          polarSubscriptionId: event.data.id,
-          polarSubscriptionCancelAtPeriodEnd: false,
-          polarSubscriptionCurrentPeriodEnd: null,
-        })
-        .where(eq(schema.user.id, userId));
-    }
-  } else if (event.type === "subscription.revoked") {
-    // Downgrade by metadata userId, falling back to the stored subscription id.
-    // Every org this user owns reverts to free limits; existing over-cap links
-    // keep redirecting, only new creation is gated.
-    const userId = String(event.data.metadata?.userId ?? "");
-    await db
-      .update(schema.user)
-      .set({
-        plan: "free",
-        polarSubscriptionId: null,
-        polarSubscriptionCancelAtPeriodEnd: false,
-        polarSubscriptionCurrentPeriodEnd: null,
-      })
-      .where(
-        userId
-          ? eq(schema.user.id, userId)
-          : eq(schema.user.polarSubscriptionId, event.data.id),
-      );
-  } else if (event.type === "subscription.canceled") {
-    // User scheduled cancellation. Access continues until the paid period ends,
-    // at which point Polar sends subscription.revoked. Record the pending
-    // cancellation and the end date so the UI can show a clear message.
-    const userId = String(event.data.metadata?.userId ?? "");
-    const periodEnd = event.data.current_period_end ?? event.data.ends_at;
-    if (userId || event.data.id) {
-      await db
-        .update(schema.user)
-        .set({
-          polarSubscriptionCancelAtPeriodEnd: true,
-          polarSubscriptionCurrentPeriodEnd: periodEnd
-            ? new Date(periodEnd)
-            : null,
-        })
-        .where(
-          userId
-            ? eq(schema.user.id, userId)
-            : eq(schema.user.polarSubscriptionId, event.data.id),
-        );
-    }
-  } else if (event.type === "subscription.updated") {
-    // Product switches (hobby ↔ pro via the Polar portal) land here. Only act
-    // while the subscription is active — cancellation and revocation have
-    // dedicated events above. Idempotent for unrelated updates like renewals.
-    if (event.data.status === "active" && event.data.product_id) {
-      const userId = String(event.data.metadata?.userId ?? "");
-      await db
-        .update(schema.user)
-        .set({ plan: planForProduct(env, event.data.product_id) })
-        .where(
-          userId
-            ? eq(schema.user.id, userId)
-            : eq(schema.user.polarSubscriptionId, event.data.id),
-        );
-    }
-  } else if (event.type === "subscription.uncanceled") {
-    // User undid the scheduled cancellation. The subscription is active again.
-    const userId = String(event.data.metadata?.userId ?? "");
-    if (userId || event.data.id) {
-      await db
-        .update(schema.user)
-        .set({
-          polarSubscriptionCancelAtPeriodEnd: false,
-          polarSubscriptionCurrentPeriodEnd: null,
-        })
-        .where(
-          userId
-            ? eq(schema.user.id, userId)
-            : eq(schema.user.polarSubscriptionId, event.data.id),
-        );
-    }
-  }
+  const handlers: Record<string, (db: ReturnType<typeof drizzle>, env: Env, event: PolarEvent) => Promise<void>> = {
+    "subscription.active": handleSubscriptionActive,
+    "subscription.revoked": handleSubscriptionRevoked,
+    "subscription.canceled": handleSubscriptionCanceled,
+    "subscription.updated": handleSubscriptionUpdated,
+    "subscription.uncanceled": handleSubscriptionUncanceled,
+  };
+  const handler = handlers[event.type];
+  if (handler) await handler(db, env, event);
   return Response.json({ received: true });
 }
