@@ -23,6 +23,24 @@ export const inviteEmailSchema = z.object({
   role: z.enum(["member", "admin"]),
 });
 
+export const loginSchema = z.object({
+  email: z.email("Enter a valid email address"),
+  password: z.string().min(1, "Enter your password"),
+});
+
+export const signupSchema = z.object({
+  email: z.email("Enter a valid email address"),
+  password: z.string().min(8, "Password must be at least 8 characters"),
+});
+
+export const forgotSchema = z.object({
+  email: z.email("Enter a valid email address"),
+});
+
+export const otpSchema = z.object({
+  otp: z.string().length(6, "Enter a 6-digit code"),
+});
+
 const qrField = z.string().optional().default("");
 
 export const linkInputSchema = z.object({
