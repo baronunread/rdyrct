@@ -14,7 +14,7 @@ import { Button } from "../ui/button";
 import { Dialog } from "../ui/dialog";
 import { Field, Input } from "../ui/field";
 import { MenuSelect } from "../ui/menu";
-import { Spinner } from "../ui/spinner";
+import { BusyContent } from "../ui/spinner";
 import { Tooltip } from "../ui/tooltip";
 import { QRPreview, QrLogoInput, QrColorField } from "./qr";
 
@@ -26,6 +26,78 @@ export interface OrgQr {
   bg: string;
   eyeColor: string;
   logoSize: number | null;
+}
+
+function UtmFields({
+  form,
+  setForm,
+}: {
+  form: LinkInput;
+  setForm: (f: LinkInput) => void;
+}) {
+  const set = (key: keyof LinkInput) => (e: ChangeEvent<HTMLInputElement>) =>
+    setForm({ ...form, [key]: e.target.value });
+  return (
+    <fieldset className="rounded-lg border border-border p-3">
+      <legend className="px-1 text-2xs tracking-wider text-muted uppercase">
+        UTM parameters
+      </legend>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <Field label="Source">
+          <Input value={form.utmSource ?? ""} onChange={set("utmSource")} placeholder="newsletter" />
+        </Field>
+        <Field label="Medium">
+          <Input value={form.utmMedium ?? ""} onChange={set("utmMedium")} placeholder="email" />
+        </Field>
+        <Field label="Campaign">
+          <Input value={form.utmCampaign ?? ""} onChange={set("utmCampaign")} placeholder="spring-launch" />
+        </Field>
+        <Field label="Term">
+          <Input value={form.utmTerm ?? ""} onChange={set("utmTerm")} placeholder="running-shoes" />
+        </Field>
+        <Field label="Content">
+          <Input value={form.utmContent ?? ""} onChange={set("utmContent")} placeholder="ad-variant-a" />
+        </Field>
+      </div>
+    </fieldset>
+  );
+}
+
+function QrPreviewSidebar({
+  form,
+  orgQr,
+  qrEnabled,
+  previewUrl,
+}: {
+  form: LinkInput;
+  orgQr: OrgQr;
+  qrEnabled: boolean;
+  previewUrl: string;
+}) {
+  if (qrEnabled) {
+    return (
+      <div className="flex flex-col gap-2 sm:w-60">
+        <p className="text-2xs tracking-wider text-muted uppercase">QR code</p>
+        <QRPreview
+          url={previewUrl}
+          logo={form.qrLogo || orgQr.logo || undefined}
+          dotStyle={form.qrStyle || orgQr.style}
+          color={form.qrColor || orgQr.color}
+          corner={form.qrCorner || orgQr.corner}
+          eyeColor={form.qrEyeColor || orgQr.eyeColor}
+          bg={form.qrBg || orgQr.bg}
+          logoSize={form.qrLogoSize != null ? Number(form.qrLogoSize) : orgQr.logoSize ?? undefined}
+          size={192}
+        />
+      </div>
+    );
+  }
+  return (
+    <div className="flex flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-border p-4 text-center sm:w-60">
+      <Lock size={20} className="text-muted" />
+      <p className="text-xs text-muted">QR codes are a paid feature: upgrade in Billing.</p>
+    </div>
+  );
 }
 
 function QrCustomization({
@@ -131,9 +203,91 @@ function QrCustomization({
         </span>
         <QrLogoInput
           value={form.qrLogo ?? ""}
-          onLoad={(dataUri) => setForm({ ...form, qrLogo: dataUri })}
+          onLoad={(url) => setForm({ ...form, qrLogo: url })}
           onClear={() => setForm({ ...form, qrLogo: "" })}
         />
+      </div>
+    </div>
+  );
+}
+
+function LinkFormFields({
+  form,
+  setForm,
+  editing,
+  activeDomains,
+  slugLocked,
+}: {
+  form: LinkInput;
+  setForm: (f: LinkInput) => void;
+  editing: boolean;
+  activeDomains: DomainDTO[];
+  slugLocked: boolean;
+}) {
+  const set = (key: keyof LinkInput) => (e: ChangeEvent<HTMLInputElement>) =>
+    setForm({ ...form, [key]: e.target.value });
+
+  return (
+    <div className="flex min-w-0 flex-col gap-4">
+      <Field label="Destination URL">
+        <Input
+          value={form.destination}
+          onChange={set("destination")}
+          placeholder="https://example.com/launch"
+          autoFocus={!editing}
+        />
+      </Field>
+
+      {activeDomains.length > 0 && (
+        <Field label="Domain">
+          <MenuSelect
+            label="Domain"
+            value={form.domainId ?? ""}
+            onChange={(v) =>
+              setForm({
+                ...form,
+                domainId: v || null,
+                ...(!v && !editing ? { slug: "" } : {}),
+              })
+            }
+            options={[
+              { value: "", label: `shared: ${window.location.host}` },
+              ...activeDomains.map((d) => ({ value: d.id, label: d.hostname })),
+            ]}
+          />
+        </Field>
+      )}
+
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <Field
+          label="Slug"
+          hint={
+            slugLocked ? (
+              <>
+                <RouterLink to="/billing" className="text-accent hover:underline">
+                  Upgrade
+                </RouterLink>{" "}
+                for custom slugs.
+              </>
+            ) : (
+              "Leave empty for a random one"
+            )
+          }
+        >
+          <Input
+            value={form.slug ?? ""}
+            onChange={set("slug")}
+            placeholder={slugLocked ? "random" : "launch-2026"}
+            disabled={slugLocked}
+          />
+        </Field>
+        <Field label="Title">
+          <Input
+            value={form.title ?? ""}
+            onChange={set("title")}
+            placeholder="Spring launch"
+          />
+        </Field>
       </div>
     </div>
   );
@@ -164,9 +318,6 @@ export function LinkEditor({
   orgQr: OrgQr;
   shakeKey: number;
 }) {
-  const set = (key: keyof LinkInput) => (e: ChangeEvent<HTMLInputElement>) =>
-    setForm({ ...form, [key]: e.target.value });
-
   const selectedDomain =
     activeDomains.find((d) => d.id === form.domainId)?.hostname ?? null;
   const slugLocked = !form.domainId;
@@ -186,148 +337,11 @@ export function LinkEditor({
     >
       <div className="flex flex-col gap-6">
         <div className="grid gap-6 sm:grid-cols-[1fr_auto]">
-          <div className="flex min-w-0 flex-col gap-4">
-            <Field label="Destination URL">
-              <Input
-                value={form.destination}
-                onChange={set("destination")}
-                placeholder="https://example.com/launch"
-                autoFocus={!editing}
-              />
-            </Field>
-
-            {activeDomains.length > 0 && (
-              <Field label="Domain">
-                <MenuSelect
-                  label="Domain"
-                  value={form.domainId ?? ""}
-                  onChange={(v) =>
-                    setForm({
-                      ...form,
-                      domainId: v || null,
-                      ...(!v && !editing ? { slug: "" } : {}),
-                    })
-                  }
-                  options={[
-                    { value: "", label: `shared: ${window.location.host}` },
-                    ...activeDomains.map((d) => ({
-                      value: d.id,
-                      label: d.hostname,
-                    })),
-                  ]}
-                />
-              </Field>
-            )}
-
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <Field
-                label="Slug"
-                hint={
-                  slugLocked ? (
-                    <>
-                      <RouterLink
-                        to="/billing"
-                        className="text-accent hover:underline"
-                      >
-                        Upgrade
-                      </RouterLink>{" "}
-                      for custom slugs.
-                    </>
-                  ) : (
-                    "Leave empty for a random one"
-                  )
-                }
-              >
-                <Input
-                  value={form.slug ?? ""}
-                  onChange={set("slug")}
-                  placeholder={slugLocked ? "random" : "launch-2026"}
-                  disabled={slugLocked}
-                />
-              </Field>
-              <Field label="Title">
-                <Input
-                  value={form.title ?? ""}
-                  onChange={set("title")}
-                  placeholder="Spring launch"
-                />
-              </Field>
-            </div>
-          </div>
-
-          {qrEnabled ? (
-            <div className="flex flex-col gap-2 sm:w-60">
-              <p className="text-2xs tracking-wider text-muted uppercase">
-                QR code
-              </p>
-              <QRPreview
-                url={previewUrl}
-                logo={form.qrLogo || orgQr.logo || undefined}
-                dotStyle={form.qrStyle || orgQr.style}
-                color={form.qrColor || orgQr.color}
-                corner={form.qrCorner || orgQr.corner}
-                eyeColor={form.qrEyeColor || orgQr.eyeColor}
-                bg={form.qrBg || orgQr.bg}
-                logoSize={
-                  form.qrLogoSize != null
-                    ? Number(form.qrLogoSize)
-                    : orgQr.logoSize ?? undefined
-                }
-                size={192}
-              />
-            </div>
-          ) : (
-            <div className="flex flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-border p-4 text-center sm:w-60">
-              <Lock size={20} className="text-muted" />
-              <p className="text-xs text-muted">
-                QR codes are a paid feature: upgrade in Billing.
-              </p>
-            </div>
-          )}
+          <LinkFormFields form={form} setForm={setForm} editing={editing} activeDomains={activeDomains} slugLocked={slugLocked} />
+          <QrPreviewSidebar form={form} orgQr={orgQr} qrEnabled={qrEnabled} previewUrl={previewUrl} />
         </div>
 
-        <fieldset className="rounded-lg border border-border p-3">
-          <legend className="px-1 text-2xs tracking-wider text-muted uppercase">
-            UTM parameters
-          </legend>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-            <Field label="Source">
-              <Input
-                value={form.utmSource ?? ""}
-                onChange={set("utmSource")}
-                placeholder="newsletter"
-              />
-            </Field>
-            <Field label="Medium">
-              <Input
-                value={form.utmMedium ?? ""}
-                onChange={set("utmMedium")}
-                placeholder="email"
-              />
-            </Field>
-            <Field label="Campaign">
-              <Input
-                value={form.utmCampaign ?? ""}
-                onChange={set("utmCampaign")}
-                placeholder="spring-launch"
-              />
-            </Field>
-            <Field label="Term">
-              <Input
-                value={form.utmTerm ?? ""}
-                onChange={set("utmTerm")}
-                placeholder="running-shoes"
-              />
-            </Field>
-            <Field label="Content">
-              <Input
-                value={form.utmContent ?? ""}
-                onChange={set("utmContent")}
-                placeholder="ad-variant-a"
-              />
-            </Field>
-          </div>
-        </fieldset>
+        <UtmFields form={form} setForm={setForm} />
 
         {qrEnabled && (
           <QrCustomization form={form} setForm={setForm} orgQr={orgQr} />
@@ -339,7 +353,7 @@ export function LinkEditor({
           Cancel
         </Button>
         <Button variant="primary" disabled={busy} onClick={onSave}>
-          {busy ? <Spinner /> : editing ? "Save changes" : "Create link"}
+          <BusyContent busy={busy}>{editing ? "Save changes" : "Create link"}</BusyContent>
         </Button>
       </div>
     </Dialog>

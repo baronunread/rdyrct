@@ -147,26 +147,51 @@ export function isValidHttpUrl(value: string): boolean {
 import { HTTPException } from "hono/http-exception";
 import { QR_CORNER_STYLES, QR_DOT_STYLES } from "@/shared/types";
 
-/** data-URI QR logos are stored inline in D1, so keep them small. */
-const MAX_QR_LOGO_BYTES = 96 * 1024;
+/**
+ * Logo images live in R2; D1 rows store only the serving URL. Upload and
+ * serving both go through /api/orgs/:orgId/qr-logo (org members only).
+ */
+export const qrLogoUrl = (orgId: string, file: string) =>
+  `/api/orgs/${orgId}/qr-logo/${file}`;
+
+// Only the file name is charset-checked: it is ours (uid() + a known
+// extension). The org id never goes through a regex — validateQrFields
+// matches it by construction and qrLogoKeyFromUrl takes "one path segment" —
+// so any org id works (the seed script's "seed-" ids included).
+export const QR_LOGO_FILE_RE = /^[A-Za-z0-9]+\.[a-z0-9]+$/;
+
+/** R2 key (`{orgId}/{file}`) for a serving URL, null for anything else. */
+export function qrLogoKeyFromUrl(url: string): string | null {
+  const m = /^\/api\/orgs\/([^/]+)\/qr-logo\/([A-Za-z0-9]+\.[a-z0-9]+)$/.exec(
+    url,
+  );
+  return m ? `${m[1]}/${m[2]}` : null;
+}
 
 const HEX_COLOR_RE = /^#[0-9a-fA-F]{6}$/;
 
 /** Shared validation for org QR defaults and per-link overrides ('' = inherit). */
-export function validateQrFields(fields: {
-  qrLogo?: string;
-  qrStyle?: string;
-  qrColor?: string;
-  qrCorner?: string;
-  qrBg?: string;
-  qrEyeColor?: string;
-  qrLogoSize?: number | null;
-}) {
+export function validateQrFields(
+  fields: {
+    qrLogo?: string;
+    qrStyle?: string;
+    qrColor?: string;
+    qrCorner?: string;
+    qrBg?: string;
+    qrEyeColor?: string;
+    qrLogoSize?: number | null;
+  },
+  orgId: string,
+) {
   if (fields.qrLogo) {
-    if (!fields.qrLogo.startsWith("data:image/"))
-      throw new HTTPException(400, { message: "Logo must be an image" });
-    if (fields.qrLogo.length > MAX_QR_LOGO_BYTES * 1.37)
-      throw new HTTPException(400, { message: "Logo too large (max ~96 KB)" });
+    // A logo may only be referenced by the org that uploaded it: match the
+    // org's own serving prefix, then check the file part is a real upload.
+    const prefix = qrLogoUrl(orgId, "");
+    const file = fields.qrLogo.startsWith(prefix)
+      ? fields.qrLogo.slice(prefix.length)
+      : "";
+    if (!QR_LOGO_FILE_RE.test(file))
+      throw new HTTPException(400, { message: "Logo must be an uploaded image" });
   }
   if (
     fields.qrStyle &&

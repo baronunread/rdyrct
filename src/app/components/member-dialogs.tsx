@@ -2,7 +2,7 @@ import { type UseMutationResult } from "@tanstack/react-query";
 import { Button } from "../ui/button";
 import { Dialog } from "../ui/dialog";
 import { Field, Select } from "../ui/field";
-import { Spinner } from "../ui/spinner";
+import { BusyContent } from "../ui/spinner";
 
 export function RemoveMemberDialog({
   member,
@@ -34,7 +34,7 @@ export function RemoveMemberDialog({
               });
             }}
           >
-            {remove.isPending ? <Spinner /> : "Remove"}
+            <BusyContent busy={remove.isPending}>Remove</BusyContent>
           </Button>
         </div>
       </div>

@@ -10,7 +10,7 @@ import { Button } from "../ui/button";
 import { Dialog } from "../ui/dialog";
 import { Field, Input } from "../ui/field";
 import { Card, PageHeader } from "../ui/misc";
-import { Spinner } from "../ui/spinner";
+import { BusyContent } from "../ui/spinner";
 import { useToast } from "../ui/toast";
 import { CopyButton } from "../ui/copy-button";
 import { QrDefaultsCard } from "../components/qr-defaults-card";
@@ -209,7 +209,7 @@ export function SettingsPage() {
                 disabled={confirmName.trim() !== org.name || deletingOrg}
                 onClick={deleteOrg}
               >
-                {deletingOrg ? <Spinner /> : "Delete organization"}
+                <BusyContent busy={deletingOrg}>Delete organization</BusyContent>
               </Button>
             </div>
           </div>
@@ -234,7 +234,7 @@ export function SettingsPage() {
               disabled={deleting}
               onClick={deleteAccount}
             >
-              {deleting ? <Spinner /> : "Delete account"}
+              <BusyContent busy={deleting}>Delete account</BusyContent>
             </Button>
           </div>
         </div>

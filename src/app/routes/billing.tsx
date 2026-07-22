@@ -7,7 +7,9 @@ import { useCurrentOrg } from "../lib/current-org";
 import { PLAN_LIMITS, PLAN_PRICES, type OrgPlan } from "@/shared/types";
 import { Button } from "../ui/button";
 import { Badge, Card, PageHeader, Table, Th, Td } from "../ui/misc";
-import { Spinner } from "../ui/spinner";
+import { BusyContent } from "../ui/spinner";
+import { Skeleton } from "../ui/skeleton";
+import { useShake } from "../lib/auth-form";
 import { useToast } from "../ui/toast";
 
 const PLAN_LABEL: Record<OrgPlan, string> = {
@@ -49,6 +51,160 @@ function PlanFeatureComparison() {
         </tbody>
       </Table>
     </div>
+  );
+}
+
+function PlanActions({
+  plan,
+  checkoutPlan,
+  showPortalOverlay,
+  confirmTimedOut,
+  cancelAtPeriodEnd,
+  periodEnd,
+  shakeHobby,
+  shakePro,
+  shakePortal,
+  onUpgrade,
+  onPortal,
+}: {
+  plan: OrgPlan;
+  checkoutPlan: "hobby" | "pro" | null;
+  showPortalOverlay: boolean;
+  confirmTimedOut: boolean;
+  cancelAtPeriodEnd: boolean;
+  periodEnd: number | null;
+  shakeHobby: ReturnType<typeof useShake>;
+  shakePro: ReturnType<typeof useShake>;
+  shakePortal: ReturnType<typeof useShake>;
+  onUpgrade: (target: "hobby" | "pro") => void;
+  onPortal: () => void;
+}) {
+  return (
+    <Card className="max-w-2xl">
+      <div className="flex flex-col gap-4">
+        <div className="flex items-center justify-between">
+          <p className="text-2xs tracking-wider text-muted uppercase">Plan</p>
+          <Badge color={plan === "free" ? "muted" : "mint"}>{PLAN_LABEL[plan]}</Badge>
+        </div>
+        <p className="text-sm text-muted">
+          Billing is per account: your plan applies to every organization you own.
+        </p>
+        {cancelAtPeriodEnd && periodEnd && (
+          <p className="text-sm text-amber-400">
+            Your {PLAN_LABEL[plan]} plan is scheduled to cancel on{" "}
+            {new Date(periodEnd).toLocaleDateString(undefined, {
+              year: "numeric",
+              month: "short",
+              day: "numeric",
+            })}
+            . Paid features remain available until then.
+          </p>
+        )}
+        {confirmTimedOut && plan === "free" && (
+          <p className="text-sm text-muted">
+            Still confirming your payment. Your plan should activate shortly: refresh in a moment.
+          </p>
+        )}
+        {plan === "free" && <PlanFeatureComparison />}
+        <div>
+          {plan === "free" ? (
+            <div className="grid grid-cols-2 gap-3">
+              <Button
+                variant="primary"
+                disabled={checkoutPlan !== null}
+                className={shakeHobby.className}
+                onAnimationEnd={shakeHobby.end}
+                onClick={() => onUpgrade("hobby")}
+              >
+                <BusyContent busy={checkoutPlan === "hobby"}>
+                  Upgrade to Hobby · {PLAN_PRICES.hobby}/mo
+                </BusyContent>
+              </Button>
+              <Button
+                variant="primary"
+                disabled={checkoutPlan !== null}
+                className={shakePro.className}
+                onAnimationEnd={shakePro.end}
+                onClick={() => onUpgrade("pro")}
+              >
+                <BusyContent busy={checkoutPlan === "pro"}>
+                  Upgrade to Pro · {PLAN_PRICES.pro}/mo
+                </BusyContent>
+              </Button>
+            </div>
+          ) : (
+            <Button
+              variant="primary"
+              disabled={showPortalOverlay}
+              className={shakePortal.className}
+              onAnimationEnd={shakePortal.end}
+              onClick={onPortal}
+            >
+              <BusyContent busy={showPortalOverlay}>Manage subscription</BusyContent>
+            </Button>
+          )}
+          {plan === "hobby" && (
+            <p className="mt-2 text-xs text-muted">
+              Want Pro? Switch plans from the subscription portal.
+            </p>
+          )}
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+function UsageMeter({
+  plan,
+  org,
+  linkData,
+  memberData,
+  domainData,
+  ownedOrgs,
+  linksPending,
+  membersPending,
+  domainsPending,
+}: {
+  plan: OrgPlan;
+  org: { id: string; name: string; plan: OrgPlan } | null;
+  linkData: unknown[];
+  memberData: unknown[];
+  domainData: unknown[];
+  ownedOrgs: number;
+  linksPending: boolean;
+  membersPending: boolean;
+  domainsPending: boolean;
+}) {
+  if (!org) return null;
+  const loading = linksPending || membersPending || domainsPending;
+  return (
+    <Card className="max-w-2xl">
+      <div className="flex flex-col gap-1">
+        <p className="mb-2 text-2xs tracking-wider text-muted uppercase">Usage: {org.name}</p>
+        {loading ? (
+          <div className="flex flex-col gap-3 py-1">
+            <Skeleton className="h-3.5 w-32" />
+            <Skeleton className="h-3.5 w-36" />
+            <Skeleton className="h-3.5 w-28" />
+          </div>
+        ) : (
+          <>
+            <p className="text-sm text-muted tnum">
+              Links {linkData?.length ?? 0} / {PLAN_LIMITS[org.plan].links}
+            </p>
+            <p className="text-sm text-muted tnum">
+              Members {memberData?.length ?? 0} / {PLAN_LIMITS[org.plan].members}
+            </p>
+            <p className="text-sm text-muted tnum">
+              Domains {domainData?.length ?? 0} / {PLAN_LIMITS[org.plan].domains}
+            </p>
+          </>
+        )}
+        <p className="text-sm text-muted tnum">
+          Orgs you own {ownedOrgs} / {PLAN_LIMITS[plan].orgs}
+        </p>
+      </div>
+    </Card>
   );
 }
 
@@ -129,60 +285,35 @@ function CelebrationOverlay({
   );
 }
 
-export function BillingPage() {
-  // Which paid plan a checkout is in flight for (null = none).
-  const [checkoutPlan, setCheckoutPlan] = useState<"hobby" | "pro" | null>(
-    null,
-  );
-  const [showPortalOverlay, setShowPortalOverlay] = useState(false);
-  const [showCelebration, setShowCelebration] = useState(false);
-  // Returning from Polar with ?checkout_id=: poll /user until the webhook
-  // flips the plan, then celebrate. A forged id just times out.
-  const [confirming, setConfirming] = useState(false);
-  const [confirmTimedOut, setConfirmTimedOut] = useState(false);
+function useCheckoutFlow() {
   const me = useCurrentUser();
-  const { org } = useCurrentOrg();
-  const orgId = org?.id ?? "";
-  const links = useLinks(orgId);
-  const members = useMembers(orgId);
-  const domains = useDomains(orgId);
-  const ownedOrgs = me.data?.orgs.filter((o) => o.role === "owner").length ?? 0;
   const checkout = useCheckout();
   const portal = usePortal();
   const toast = useToast();
+  const shakeHobby = useShake();
+  const shakePro = useShake();
+  const shakePortal = useShake();
   const qc = useQueryClient();
-  const celebratRef = useRef<(() => void) | null>(null);
+
+  const [checkoutPlan, setCheckoutPlan] = useState<"hobby" | "pro" | null>(null);
+  const [showPortalOverlay, setShowPortalOverlay] = useState(false);
+  const [confirming, setConfirming] = useState(false);
+  const [confirmTimedOut, setConfirmTimedOut] = useState(false);
+  const [showCelebration, setShowCelebration] = useState(false);
 
   const celebrat = useCallback(() => {
     setShowCelebration(true);
     const colors = ["#cdb9f5", "#b9e6c9", "#f5b8c8", "#f2e3b3", "#b9d9f0"];
     confetti({
-      particleCount: 40,
-      angle: 60,
-      spread: 70,
-      startVelocity: 50,
-      origin: { x: 0, y: 0.75 },
-      colors,
+      particleCount: 40, angle: 60, spread: 70, startVelocity: 50,
+      origin: { x: 0, y: 0.75 }, colors,
     });
     confetti({
-      particleCount: 40,
-      angle: 120,
-      spread: 70,
-      startVelocity: 50,
-      origin: { x: 1, y: 0.75 },
-      colors,
+      particleCount: 40, angle: 120, spread: 70, startVelocity: 50,
+      origin: { x: 1, y: 0.75 }, colors,
     });
     setTimeout(() => setShowCelebration(false), 4000);
   }, []);
-
-  useEffect(() => {
-    celebratRef.current = celebrat;
-  }, [celebrat]);
-
-  const plan = me.data?.user.plan ?? "free";
-  const cancelAtPeriodEnd =
-    me.data?.user.polarSubscriptionCancelAtPeriodEnd ?? false;
-  const periodEnd = me.data?.user.polarSubscriptionCurrentPeriodEnd ?? null;
 
   const handleUpgrade = async (target: "hobby" | "pro") => {
     setCheckoutPlan(target);
@@ -191,42 +322,53 @@ export function BillingPage() {
       setTimeout(() => window.location.assign(data.url), 300);
     } catch (e) {
       setCheckoutPlan(null);
+      (target === "hobby" ? shakeHobby : shakePro).start();
       toast((e as Error).message, "error");
     }
   };
-  const upgradeRef = useRef(handleUpgrade);
-  useEffect(() => {
-    upgradeRef.current = handleUpgrade;
-  });
 
-  // The landing page's "Start Hobby/Pro" CTAs arrive as /billing?plan=…: once
-  // the user is loaded, kick off that checkout (free plan only, once) and
-  // strip the param so back/refresh doesn't re-trigger it.
-  const planParamDone = useRef(false);
-  useEffect(() => {
-    if (!me.data || planParamDone.current) return;
-    planParamDone.current = true;
-    const url = new URL(window.location.href);
-    const target = url.searchParams.get("plan");
-    if (target !== "hobby" && target !== "pro") return;
-    url.searchParams.delete("plan");
-    window.history.replaceState({}, "", url.toString());
-    if (me.data.user.plan === "free") void upgradeRef.current(target);
-  }, [me.data]);
+  const handlePortal = async () => {
+    setShowPortalOverlay(true);
+    try {
+      const data = await portal.mutateAsync();
+      setTimeout(() => window.location.assign(data.url), 800);
+    } catch (e) {
+      setShowPortalOverlay(false);
+      shakePortal.start();
+      toast((e as Error).message, "error");
+    }
+  };
 
-  // Detect the checkout return once on mount; the id is single-use, so strip
-  // it from the URL right away.
+  // Reset overlay state when returning from Polar via bfcache (browser back).
+  useEffect(() => {
+    const handler = () => {
+      setCheckoutPlan(null);
+      setShowPortalOverlay(false);
+      setConfirming(false);
+      setConfirmTimedOut(false);
+      setShowCelebration(false);
+    };
+    window.addEventListener("pageshow", handler);
+    return () => window.removeEventListener("pageshow", handler);
+  }, []);
+
+  const plan = me.data?.user.plan ?? "free";
+
+  // Detect the checkout return once on mount.
   useEffect(() => {
     const url = new URL(window.location.href);
     if (url.searchParams.has("checkout_id")) {
+      setCheckoutPlan(null);
+      setShowPortalOverlay(false);
       setConfirming(true);
       url.searchParams.delete("checkout_id");
       window.history.replaceState({}, "", url.toString());
     }
   }, []);
 
-  // While confirming, poll /user until the Polar webhook flips the plan to a
-  // paid one — the entitlement the app actually gates on. Cap the wait at ~20s.
+  // While confirming, poll /user until plan flips to paid.
+  const celebratRef = useRef(celebrat);
+  useEffect(() => { celebratRef.current = celebrat; }, [celebrat]);
   useEffect(() => {
     if (!confirming) return;
     if (plan !== "free") {
@@ -248,125 +390,73 @@ export function BillingPage() {
     return () => window.clearInterval(id);
   }, [confirming, plan, qc]);
 
+  // Auto-upgrade from ?plan= param
+  const planParamDone = useRef(false);
+  const upgradeRef = useRef(handleUpgrade);
+  useEffect(() => { upgradeRef.current = handleUpgrade; });
+  useEffect(() => {
+    if (!me.data || planParamDone.current) return;
+    planParamDone.current = true;
+    const url = new URL(window.location.href);
+    const target = url.searchParams.get("plan");
+    if (target !== "hobby" && target !== "pro") return;
+    url.searchParams.delete("plan");
+    window.history.replaceState({}, "", url.toString());
+    if (me.data.user.plan === "free") void upgradeRef.current(target);
+  }, [me.data]);
+
+  return {
+    plan, checkoutPlan, showPortalOverlay, showCelebration, confirming, confirmTimedOut,
+    setShowCelebration, handleUpgrade, handlePortal, shakeHobby, shakePro, shakePortal,
+  };
+}
+
+export function BillingPage() {
+  const me = useCurrentUser();
+  const { org } = useCurrentOrg();
+  const orgId = org?.id ?? "";
+  const { data: linkData, isPending: linksPending } = useLinks(orgId);
+  const { data: memberData, isPending: membersPending } = useMembers(orgId);
+  const { data: domainData, isPending: domainsPending } = useDomains(orgId);
+  const ownedOrgs = me.data?.orgs.filter((o) => o.role === "owner").length ?? 0;
+
+  const {
+    plan, checkoutPlan, showPortalOverlay, showCelebration, confirming, confirmTimedOut,
+    setShowCelebration, handleUpgrade, handlePortal, shakeHobby, shakePro, shakePortal,
+  } = useCheckoutFlow();
+
+  const cancelAtPeriodEnd =
+    me.data?.user.polarSubscriptionCancelAtPeriodEnd ?? false;
+  const periodEnd = me.data?.user.polarSubscriptionCurrentPeriodEnd ?? null;
+
   return (
     <div>
       <PageHeader title="Billing" sub="Your subscription" />
       <div className="flex flex-col gap-4">
-        <Card className="max-w-2xl">
-          <div className="flex flex-col gap-4">
-            <div className="flex items-center justify-between">
-              <p className="text-2xs tracking-wider text-muted uppercase">
-                Plan
-              </p>
-              <Badge color={plan === "free" ? "muted" : "mint"}>
-                {PLAN_LABEL[plan]}
-              </Badge>
-            </div>
-            <p className="text-sm text-muted">
-              Billing is per account: your plan applies to every organization
-              you own.
-            </p>
-            {cancelAtPeriodEnd && periodEnd && (
-              <p className="text-sm text-amber-400">
-                Your {PLAN_LABEL[plan]} plan is scheduled to cancel on{" "}
-                {new Date(periodEnd).toLocaleDateString(undefined, {
-                  year: "numeric",
-                  month: "short",
-                  day: "numeric",
-                })}
-                . Paid features remain available until then.
-              </p>
-            )}
-            {confirmTimedOut && plan === "free" && (
-              <p className="text-sm text-muted">
-                Still confirming your payment. Your plan should activate
-                shortly: refresh in a moment.
-              </p>
-            )}
-            {plan === "free" && <PlanFeatureComparison />}
-            <div>
-              {plan === "free" ? (
-                <div className="flex flex-wrap gap-2">
-                  <Button
-                    variant="outline"
-                    disabled={checkoutPlan !== null}
-                    onClick={() => handleUpgrade("hobby")}
-                  >
-                    {checkoutPlan === "hobby" ? (
-                      <Spinner />
-                    ) : (
-                      `Upgrade to Hobby · ${PLAN_PRICES.hobby}/mo`
-                    )}
-                  </Button>
-                  <Button
-                    variant="primary"
-                    disabled={checkoutPlan !== null}
-                    onClick={() => handleUpgrade("pro")}
-                  >
-                    {checkoutPlan === "pro" ? (
-                      <Spinner />
-                    ) : (
-                      `Upgrade to Pro · ${PLAN_PRICES.pro}/mo`
-                    )}
-                  </Button>
-                </div>
-              ) : (
-                <Button
-                  variant="outline"
-                  disabled={showPortalOverlay}
-                  onClick={async () => {
-                    setShowPortalOverlay(true);
-                    try {
-                      const data = await portal.mutateAsync();
-                      setTimeout(
-                        () => window.location.assign(data.url),
-                        800,
-                      );
-                    } catch (e) {
-                      setShowPortalOverlay(false);
-                      toast((e as Error).message, "error");
-                    }
-                  }}
-                >
-                  {showPortalOverlay ? (
-                    <Spinner />
-                  ) : (
-                    "Manage subscription"
-                  )}
-                </Button>
-              )}
-              {plan === "hobby" && (
-                <p className="mt-2 text-xs text-muted">
-                  Want Pro? Switch plans from the subscription portal.
-                </p>
-              )}
-            </div>
-          </div>
-        </Card>
-
-        {org && (
-          <Card className="max-w-2xl">
-            <div className="flex flex-col gap-1">
-              <p className="mb-2 text-2xs tracking-wider text-muted uppercase">
-                Usage: {org.name}
-              </p>
-              <p className="text-sm text-muted tnum">
-                Links {links.data?.length ?? 0} / {PLAN_LIMITS[org.plan].links}
-              </p>
-              <p className="text-sm text-muted tnum">
-                Members {members.data?.length ?? 0} /{" "}
-                {PLAN_LIMITS[org.plan].members}
-              </p>
-              <p className="text-sm text-muted tnum">
-                Domains {domains.data?.length ?? 0} /{" "}
-                {PLAN_LIMITS[org.plan].domains}
-              </p>
-              <p className="text-sm text-muted tnum">
-                Orgs you own {ownedOrgs} / {PLAN_LIMITS[plan].orgs}
-              </p>
-            </div>
-          </Card>
-        )}
+        <PlanActions
+          plan={plan}
+          checkoutPlan={checkoutPlan}
+          showPortalOverlay={showPortalOverlay}
+          confirmTimedOut={confirmTimedOut}
+          cancelAtPeriodEnd={cancelAtPeriodEnd}
+          periodEnd={periodEnd}
+          shakeHobby={shakeHobby}
+          shakePro={shakePro}
+          shakePortal={shakePortal}
+          onUpgrade={handleUpgrade}
+          onPortal={handlePortal}
+        />
+        <UsageMeter
+          plan={plan}
+          org={org}
+          linkData={linkData ?? []}
+          memberData={memberData ?? []}
+          domainData={domainData ?? []}
+          ownedOrgs={ownedOrgs}
+          linksPending={linksPending}
+          membersPending={membersPending}
+          domainsPending={domainsPending}
+        />
       </div>
 
       <LazyMotion features={domAnimation}>

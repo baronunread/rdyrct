@@ -15,42 +15,29 @@ import { Button } from "../ui/button";
 import { Field } from "../ui/field";
 import { MenuSelect } from "../ui/menu";
 import { Card } from "../ui/misc";
-import { Spinner } from "../ui/spinner";
+import { BusyContent } from "../ui/spinner";
 import { useToast } from "../ui/toast";
 import { QRPreview, QrLogoInput, QrColorField } from "./qr";
 
-export function QrDefaultsCard() {
-  const { org } = useCurrentOrg();
-  const orgId = org?.id ?? "";
-  const me = useCurrentUser();
+function useQrDefaultsForm(orgId: string, org: NonNullable<ReturnType<typeof useCurrentOrg>["org"]>) {
   const qc = useQueryClient();
   const toast = useToast();
-  const isAdmin = me.data?.user.isAdmin || org?.role === "owner" || org?.role === "admin";
-  const hasQr = org ? PLAN_LIMITS[org.plan].qr : false;
-
   const [qrStyle, setQrStyle] = useState(org?.qrStyle ?? "");
   const [qrColor, setQrColor] = useState(org?.qrColor ?? "");
   const [qrLogo, setQrLogo] = useState(org?.qrLogo ?? "");
   const [qrCorner, setQrCorner] = useState(org?.qrCorner ?? "");
   const [qrBg, setQrBg] = useState(org?.qrBg ?? "");
   const [qrEyeColor, setQrEyeColor] = useState(org?.qrEyeColor ?? "");
-  const [qrLogoSize, setQrLogoSize] = useState(
-    () => org?.qrLogoSize?.toString() ?? "",
-  );
+  const [qrLogoSize, setQrLogoSize] = useState(() => org?.qrLogoSize?.toString() ?? "");
   const [savingQr, setSavingQr] = useState(false);
 
-  const saveQr = async () => {
+  const save = async () => {
     setSavingQr(true);
     try {
       await api(`/orgs/${orgId}`, {
         method: "PATCH",
         body: {
-          qrLogo,
-          qrStyle,
-          qrColor,
-          qrCorner,
-          qrBg,
-          qrEyeColor,
+          qrLogo, qrStyle, qrColor, qrCorner, qrBg, qrEyeColor,
           qrLogoSize: qrLogoSize === "" ? null : Number(qrLogoSize),
         },
       });
@@ -62,6 +49,97 @@ export function QrDefaultsCard() {
       setSavingQr(false);
     }
   };
+
+  return {
+    qrStyle, setQrStyle, qrColor, setQrColor, qrLogo, setQrLogo, qrCorner, setQrCorner,
+    qrBg, setQrBg, qrEyeColor, setQrEyeColor, qrLogoSize, setQrLogoSize, savingQr, save,
+  };
+}
+
+function QrDefaultsFormFields({
+  qrStyle, setQrStyle, qrCorner, setQrCorner, qrColor, setQrColor,
+  qrEyeColor, setQrEyeColor, qrBg, setQrBg, qrLogoSize, setQrLogoSize,
+  qrLogo, setQrLogo, isAdmin,
+}: ReturnType<typeof useQrDefaultsForm> & { isAdmin: boolean }) {
+  return (
+    <div className="flex flex-col gap-6">
+      <div className="grid grid-cols-[1fr_auto] gap-6 items-center">
+        <div className="flex flex-col gap-4">
+          <Field label="Dot style">
+            <MenuSelect
+              label="Dot style" value={qrStyle} onChange={setQrStyle} disabled={!isAdmin}
+              options={[
+                { value: "", label: "Rounded (default)" },
+                ...QR_DOT_STYLES.flatMap((s) =>
+                  s === "rounded" ? [] : [{ value: s, label: s }],
+                ),
+              ]}
+            />
+          </Field>
+          <Field label="Corner style">
+            <MenuSelect
+              label="Corner style" value={qrCorner} onChange={setQrCorner} disabled={!isAdmin}
+              options={[
+                { value: "", label: "Extra-rounded (default)" },
+                ...QR_CORNER_STYLES.flatMap((s) =>
+                  s === "extra-rounded" ? [] : [{ value: s, label: s }],
+                ),
+              ]}
+            />
+          </Field>
+        </div>
+        <QRPreview
+          url={shortUrl("preview")}
+          logo={qrLogo || undefined}
+          dotStyle={qrStyle} color={qrColor} corner={qrCorner}
+          eyeColor={qrEyeColor} bg={qrBg}
+          logoSize={qrLogoSize === "" ? undefined : Number(qrLogoSize)}
+          size={160}
+        />
+      </div>
+      <div className="flex flex-col gap-4">
+        <div className="grid grid-cols-2 gap-3">
+          <QrColorField label="Dot color" value={qrColor} fallback={QR_DEFAULT_COLOR} onChange={setQrColor} disabled={!isAdmin} />
+          <QrColorField label="Eye color" value={qrEyeColor} fallback={qrColor || QR_DEFAULT_COLOR} onChange={setQrEyeColor} disabled={!isAdmin} />
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <QrColorField label="Background" value={qrBg} fallback={QR_DEFAULT_BG} allowTransparent onChange={setQrBg} disabled={!isAdmin} />
+          <Field label="Logo size" hint="How much of the QR code the logo covers. Bigger can hurt scannability">
+            <MenuSelect
+              label="Logo size" value={qrLogoSize} onChange={setQrLogoSize} disabled={!isAdmin}
+              options={[
+                { value: "", label: "Medium (default)" },
+                { value: "0.25", label: "Small" },
+                { value: "0.5", label: "Large" },
+                { value: "0.65", label: "Extra large" },
+              ]}
+            />
+          </Field>
+        </div>
+        <div>
+          <span className="mb-1.5 block text-2xs tracking-wider text-muted uppercase">
+            Logo (PNG/SVG, ≤ 2 MB)
+          </span>
+          <QrLogoInput
+            value={qrLogo} disabled={!isAdmin}
+            onLoad={setQrLogo}
+            onClear={isAdmin ? () => setQrLogo("") : undefined}
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export function QrDefaultsCard() {
+  const { org } = useCurrentOrg();
+  const orgId = org?.id ?? "";
+  const me = useCurrentUser();
+  const isAdmin = me.data?.user.isAdmin || org?.role === "owner" || org?.role === "admin";
+  const hasQr = org ? PLAN_LIMITS[org.plan].qr : false;
+
+  const form = useQrDefaultsForm(orgId, org!);
+  const { savingQr, save } = form;
 
   return (
     <Card className="max-w-2xl">
@@ -84,127 +162,18 @@ export function QrDefaultsCard() {
           </p>
         ) : (
           <div className="flex flex-col gap-6">
-            <div className="grid grid-cols-[1fr_auto] gap-6 items-center">
-              <div className="flex flex-col gap-4">
-                <Field label="Dot style">
-                  <MenuSelect
-                    label="Dot style"
-                    value={qrStyle}
-                    onChange={setQrStyle}
-                    disabled={!isAdmin}
-                    options={[
-                      { value: "", label: "Rounded (default)" },
-                      ...QR_DOT_STYLES.flatMap((s) =>
-                        s === "rounded" ? [] : [{ value: s, label: s }],
-                      ),
-                    ]}
-                  />
-                </Field>
-                <Field label="Corner style">
-                  <MenuSelect
-                    label="Corner style"
-                    value={qrCorner}
-                    onChange={setQrCorner}
-                    disabled={!isAdmin}
-                    options={[
-                      { value: "", label: "Extra-rounded (default)" },
-                      ...QR_CORNER_STYLES.flatMap((s) =>
-                        s === "extra-rounded"
-                          ? []
-                          : [{ value: s, label: s }],
-                      ),
-                    ]}
-                  />
-                </Field>
-              </div>
-              <QRPreview
-                url={shortUrl("preview")}
-                logo={qrLogo || undefined}
-                dotStyle={qrStyle}
-                color={qrColor}
-                corner={qrCorner}
-                eyeColor={qrEyeColor}
-                bg={qrBg}
-                logoSize={qrLogoSize === "" ? undefined : Number(qrLogoSize)}
-                size={160}
-              />
-            </div>
-            <div className="flex flex-col gap-4">
-
-              <div className="grid grid-cols-2 gap-3">
-                <QrColorField
-                  label="Dot color"
-                  value={qrColor}
-                  fallback={QR_DEFAULT_COLOR}
-                  onChange={setQrColor}
-                  disabled={!isAdmin}
-                />
-                <QrColorField
-                  label="Eye color"
-                  value={qrEyeColor}
-                  fallback={qrColor || QR_DEFAULT_COLOR}
-                  onChange={setQrEyeColor}
-                  disabled={!isAdmin}
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <QrColorField
-                  label="Background"
-                  value={qrBg}
-                  fallback={QR_DEFAULT_BG}
-                  allowTransparent
-                  onChange={setQrBg}
-                  disabled={!isAdmin}
-                />
-
-                <Field
-                  label="Logo size"
-                  hint="How much of the QR code the logo covers. Bigger can hurt scannability"
-                >
-                  <MenuSelect
-                    label="Logo size"
-                    value={qrLogoSize}
-                    onChange={setQrLogoSize}
-                    disabled={!isAdmin}
-                    options={[
-                      { value: "", label: "Medium (default)" },
-                      { value: "0.25", label: "Small" },
-                      { value: "0.5", label: "Large" },
-                      { value: "0.65", label: "Extra large" },
-                    ]}
-                  />
-                </Field>
-              </div>
-
+            <QrDefaultsFormFields {...form} isAdmin={isAdmin} />
+            {isAdmin ? (
               <div>
-                <span className="mb-1.5 block text-2xs tracking-wider text-muted uppercase">
-                  Logo (PNG/SVG, ≤ 96 KB)
-                </span>
-                <QrLogoInput
-                  value={qrLogo}
-                  disabled={!isAdmin}
-                  onLoad={setQrLogo}
-                  onClear={isAdmin ? () => setQrLogo("") : undefined}
-                />
+                <Button variant="primary" onClick={save} disabled={savingQr}>
+                  <BusyContent busy={savingQr}>Save QR defaults</BusyContent>
+                </Button>
               </div>
-
-              {isAdmin ? (
-                <div>
-                  <Button
-                    variant="primary"
-                    onClick={saveQr}
-                    disabled={savingQr}
-                  >
-                    {savingQr ? <Spinner /> : "Save QR defaults"}
-                  </Button>
-                </div>
-              ) : (
-                <p className="text-xs text-muted">
-                  Only the owner and admins can change these settings.
-                </p>
-              )}
-            </div>
+            ) : (
+              <p className="text-xs text-muted">
+                Only the owner and admins can change these settings.
+              </p>
+            )}
           </div>
         )}
       </div>

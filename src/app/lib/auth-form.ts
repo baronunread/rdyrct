@@ -11,6 +11,8 @@ export function friendlyAuthError(err: {
   if (err.code === "PASSWORD_TOO_LONG") return "Password is too long.";
   if (err.code === "INVALID_TOKEN")
     return "This reset link is invalid or expired. Request a new one from the sign-in page.";
+  if (err.code === "INVALID_EMAIL_DOMAIN")
+    return "Enter a valid email address.";
   if (err.message?.includes("[body.email]"))
     return "Enter a valid email address.";
   return err.message ?? "Something went wrong";

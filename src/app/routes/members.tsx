@@ -19,7 +19,7 @@ import {
   PageHeader,
 } from "../ui/misc";
 import { TableSkeleton } from "../ui/skeleton";
-import { Spinner } from "../ui/spinner";
+import { BusyContent } from "../ui/spinner";
 import { useToast } from "../ui/toast";
 import { NoOrgState } from "../components/no-org";
 import { SortTh } from "../ui/sort-th";
@@ -31,23 +31,13 @@ const roleColor: Record<OrgRole, "accent" | "mint" | "muted"> = {
   member: "muted",
 };
 
-export function MembersPage() {
-  const { org } = useCurrentOrg();
-  const orgId = org?.id ?? "";
-  const me = useCurrentUser();
-  const members = useMembers(orgId);
+function useMemberManagement(orgId: string, canManage: boolean) {
   const qc = useQueryClient();
   const toast = useToast();
-
-  const myRole: OrgRole = me.data?.user.isAdmin
-    ? "owner"
-    : (org?.role ?? "member");
-  const canManage = myRole === "owner" || myRole === "admin";
-
+  const members = useMembers(orgId);
   const invites = useInvites(orgId, canManage);
   const [inviteOpen, setInviteOpen] = useState(false);
   const [inviteRole, setInviteRole] = useState<"member" | "admin">("member");
-
   const [removing, setRemoving] = useState<{ userId: string; name: string } | null>(null);
   const [emailInput, setEmailInput] = useState("");
   const [emailRole, setEmailRole] = useState<"member" | "admin">("member");
@@ -60,10 +50,7 @@ export function MembersPage() {
 
   const setRole = useMutation({
     mutationFn: ({ userId, role }: { userId: string; role: string }) =>
-      api(`/orgs/${orgId}/members/${userId}`, {
-        method: "PATCH",
-        body: { role },
-      }),
+      api(`/orgs/${orgId}/members/${userId}`, { method: "PATCH", body: { role } }),
     onSuccess: invalidateMembers,
     onError: (e) => toast(e.message, "error"),
   });
@@ -75,21 +62,10 @@ export function MembersPage() {
     onError: (e) => toast(e.message, "error"),
   });
 
-  const sorted = useMemo(
-    () => sortRows(members.data ?? [], sort, {
-      name: (m) => m.name.toLowerCase(),
-      email: (m) => m.email.toLowerCase(),
-      role: (m) => m.role,
-      createdAt: (m) => m.createdAt,
-    }),
-    [members.data, sort],
-  );
-
   const createInvite = useMutation({
     mutationFn: () =>
       api<{ invites: InviteDTO[] }>(`/orgs/${orgId}/invites`, {
-        method: "POST",
-        body: { role: inviteRole },
+        method: "POST", body: { role: inviteRole },
       }),
     onSuccess: ({ invites }) => {
       invalidateInvites();
@@ -103,8 +79,7 @@ export function MembersPage() {
   const sendEmailInvite = useMutation({
     mutationFn: (email: string) =>
       api<{ invites: InviteDTO[] }>(`/orgs/${orgId}/invites`, {
-        method: "POST",
-        body: { role: emailRole, emails: [email] },
+        method: "POST", body: { role: emailRole, emails: [email] },
       }),
     onSuccess: () => {
       invalidateInvites();
@@ -124,6 +99,40 @@ export function MembersPage() {
     navigator.clipboard.writeText(`${window.location.origin}/invite/${token}`);
     toast("Invite link copied");
   };
+
+  const sorted = useMemo(
+    () => sortRows(members.data ?? [], sort, {
+      name: (m) => m.name.toLowerCase(),
+      email: (m) => m.email.toLowerCase(),
+      role: (m) => m.role,
+      createdAt: (m) => m.createdAt,
+    }),
+    [members.data, sort],
+  );
+
+  return {
+    members, invites, inviteOpen, setInviteOpen, inviteRole, setInviteRole,
+    removing, setRemoving, emailInput, setEmailInput, emailRole, setEmailRole,
+    sort, setSort, sorted, setRole, removeMember, createInvite, sendEmailInvite,
+    revokeInvite, copyInvite,
+  };
+}
+
+export function MembersPage() {
+  const { org } = useCurrentOrg();
+  const orgId = org?.id ?? "";
+  const me = useCurrentUser();
+  const myRole: OrgRole = me.data?.user.isAdmin
+    ? "owner"
+    : (org?.role ?? "member");
+  const canManage = myRole === "owner" || myRole === "admin";
+
+  const {
+    members, invites, inviteOpen, setInviteOpen, inviteRole, setInviteRole,
+    removing, setRemoving, emailInput, setEmailInput, emailRole, setEmailRole,
+    sort, setSort, sorted, setRole, removeMember, createInvite, sendEmailInvite,
+    revokeInvite, copyInvite,
+  } = useMemberManagement(orgId, canManage);
 
   const memberLimit = org ? PLAN_LIMITS[org.plan].members : 0;
 
@@ -358,7 +367,7 @@ function InviteByEmailCard({
           disabled={isSending || !emailInput.trim()}
           onClick={onSend}
         >
-          {isSending ? <Spinner /> : "Send invite"}
+          <BusyContent busy={isSending}>Send invite</BusyContent>
         </Button>
       </div>
     </Card>

@@ -9,6 +9,43 @@ import type { Env } from "./env";
 import { sendEmail } from "./email";
 import { hashPassword, verifyPassword } from "./password";
 
+const DNS_CHECK_TIMEOUT = 3000;
+
+async function domainHasMailRecords(domain: string): Promise<boolean> {
+  try {
+    const resp = await fetch(
+      `https://cloudflare-dns.com/dns-query?name=${encodeURIComponent(domain)}&type=MX`,
+      {
+        headers: { accept: "application/dns-json" },
+        signal: AbortSignal.timeout(DNS_CHECK_TIMEOUT),
+      },
+    );
+    if (!resp.ok) return false;
+    const data = (await resp.json()) as {
+      Status: number;
+      Answer?: { type: number }[];
+    };
+    if (data.Status !== 0) return false;
+    if (data.Answer?.some((r) => r.type === 15)) return true;
+    // No MX records: RFC 5321 says fall back to A/AAAA records for mail delivery.
+    const aResp = await fetch(
+      `https://cloudflare-dns.com/dns-query?name=${encodeURIComponent(domain)}&type=A`,
+      {
+        headers: { accept: "application/dns-json" },
+        signal: AbortSignal.timeout(DNS_CHECK_TIMEOUT),
+      },
+    );
+    if (!aResp.ok) return false;
+    const aData = (await aResp.json()) as {
+      Status: number;
+      Answer?: unknown[];
+    };
+    return aData.Status === 0 && (aData.Answer?.length ?? 0) > 0;
+  } catch {
+    return false;
+  }
+}
+
 function buildAuth(env: Env) {
   const db = drizzle(env.DB, { schema });
   return betterAuth({
@@ -130,14 +167,22 @@ function buildAuth(env: Env) {
         if (ctx.path !== "/sign-up/email") return;
         const email = (ctx.body as { email?: unknown } | null)?.email;
         if (typeof email !== "string") return;
+        const normalized = email.toLowerCase();
         const rows = await db
           .select({ id: schema.user.id })
           .from(schema.user)
-          .where(eq(schema.user.email, email.toLowerCase()));
+          .where(eq(schema.user.email, normalized));
         if (rows.length > 0)
           throw new APIError(422, {
             message: "This email already has an account. Sign in instead.",
             code: "USER_ALREADY_EXISTS",
+          });
+        const domain = normalized.split("@")[1];
+        if (domain && !(await domainHasMailRecords(domain)))
+          throw new APIError(422, {
+            message:
+              "Enter a valid email address.",
+            code: "INVALID_EMAIL_DOMAIN",
           });
       }),
     },

@@ -5,7 +5,7 @@ import { authClient } from "../lib/auth-client";
 import { friendlyAuthError, useShake } from "../lib/auth-form";
 import { Button } from "../ui/button";
 import { Field, Input } from "../ui/field";
-import { Spinner } from "../ui/spinner";
+import { BusyContent } from "../ui/spinner";
 import { useToast } from "../ui/toast";
 
 export function ResetPasswordPage() {
@@ -94,7 +94,7 @@ export function ResetPasswordPage() {
           className={shake.className}
           onAnimationEnd={shake.end}
         >
-          {busy ? <Spinner /> : "Reset password"}
+          <BusyContent busy={busy}>Reset password</BusyContent>
         </Button>
       </form>
     </AuthCard>

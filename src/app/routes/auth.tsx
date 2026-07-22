@@ -8,14 +8,14 @@ import { useCurrentUser } from "../lib/hooks";
 import { Button } from "../ui/button";
 import { Field, Input } from "../ui/field";
 import { OtpInput } from "../ui/otp";
-import { Spinner } from "../ui/spinner";
+import { BusyContent } from "../ui/spinner";
 import { useToast } from "../ui/toast";
 
 type View = "form" | "forgot" | "forgot-sent" | "verify-otp";
 
 // Stricter than the browser's type="email" check (which lets "a@b" through)
 // and matches what the server's schema accepts, so bad emails never reach it.
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[A-Za-z]{2,}$/;
 
 /** Password-reset request card ("email on its way" state included). */
 function ForgotView({
@@ -54,7 +54,7 @@ function ForgotView({
               />
             </Field>
             <Button type="submit" variant="primary" disabled={busy}>
-              {busy ? <Spinner /> : "Send reset link"}
+              <BusyContent busy={busy}>Send reset link</BusyContent>
             </Button>
           </form>
         )}
@@ -114,7 +114,7 @@ function VerifyOtpView({
         </Field>
         {otpError && <p className="text-sm text-danger">{otpError}</p>}
         <Button type="submit" variant="primary" disabled={busy}>
-          {busy ? <Spinner /> : "Verify & continue"}
+          <BusyContent busy={busy}>Verify & continue</BusyContent>
         </Button>
         <div className="flex items-center justify-between text-xs text-muted">
           {resent ? (
@@ -216,7 +216,7 @@ function AuthFormView({
           className={shake.className}
           onAnimationEnd={shake.end}
         >
-          {busy ? <Spinner /> : mode === "login" ? "Sign in" : "Sign up"}
+          <BusyContent busy={busy}>{mode === "login" ? "Sign in" : "Sign up"}</BusyContent>
         </Button>
         <p className="text-center text-xs text-muted">
           {mode === "login" ? (

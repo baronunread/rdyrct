@@ -7,6 +7,7 @@ import { requireUser, requireOrgRole, orgRole } from "../auth";
 import { orgPlan, userPlan } from "../plan";
 import { sendEmail } from "../email";
 import { unpublishLink, unpublishDomain } from "../kv";
+import { deleteOrgQrLogos, deleteQrLogo } from "../r2";
 import { cfDeleteHostname } from "./domains";
 import { uid, now, referrerHost, validateQrFields } from "../util";
 import type {
@@ -101,15 +102,24 @@ orgRoutes.patch("/:orgId", requireOrgRole("admin"), async (c) => {
     body.qrBg !== undefined ||
     body.qrEyeColor !== undefined ||
     body.qrLogoSize !== undefined;
+  // Read the current logo so a replaced/cleared one can leave R2.
+  let oldLogo = "";
   if (wantsQr) {
-    validateQrFields(body);
+    validateQrFields(body, orgId);
     // QR customization is a paid feature, so are the org-level defaults.
     const { limits } = await orgPlan(c.var.db, orgId);
     if (!limits.qr)
       throw new HTTPException(402, {
         message: "QR customization is a paid feature: upgrade to use it",
       });
-    if (body.qrLogo !== undefined) set.qrLogo = body.qrLogo;
+    if (body.qrLogo !== undefined) {
+      const rows = await c.var.db
+        .select({ qrLogo: schema.orgs.qrLogo })
+        .from(schema.orgs)
+        .where(eq(schema.orgs.id, orgId));
+      oldLogo = rows[0]?.qrLogo ?? "";
+      set.qrLogo = body.qrLogo;
+    }
     if (body.qrStyle !== undefined) set.qrStyle = body.qrStyle;
     if (body.qrColor !== undefined) set.qrColor = body.qrColor;
     if (body.qrCorner !== undefined) set.qrCorner = body.qrCorner;
@@ -124,6 +134,9 @@ orgRoutes.patch("/:orgId", requireOrgRole("admin"), async (c) => {
     .update(schema.orgs)
     .set(set)
     .where(eq(schema.orgs.id, orgId));
+  // The old logo object is unreferenced once the row points at the new one.
+  if (body.qrLogo !== undefined && body.qrLogo !== oldLogo)
+    await deleteQrLogo(c.env, oldLogo);
   return c.json({ ok: true });
 });
 
@@ -131,8 +144,9 @@ orgRoutes.patch("/:orgId", requireOrgRole("admin"), async (c) => {
  * Full org teardown, shared with the admin route. Order matters: Cloudflare
  * custom hostnames are deprovisioned first (a CF failure throws and leaves
  * the org intact), then the D1 delete — the point of no return — cascades
- * links/clicks/members/domains/invites, and KV cleanup runs last (idempotent,
- * a partial failure only leaves dead keys the redirect path treats as misses).
+ * links/clicks/members/domains/invites, and KV/R2 cleanup runs last
+ * (idempotent, a partial failure only leaves dead keys/objects the redirect
+ * and logo paths treat as misses).
  */
 export async function deleteOrgCascade(
   db: DB,
@@ -162,6 +176,7 @@ export async function deleteOrgCascade(
   await Promise.all([
     ...links.map((l) => unpublishLink(env, l.slug, l.hostname)),
     ...domains.map((d) => unpublishDomain(env, d.hostname)),
+    deleteOrgQrLogos(env, orgId),
   ]);
 }
 

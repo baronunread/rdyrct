@@ -6,14 +6,11 @@ import {
   useLinks,
   useMembers,
   useLinkMutations,
-  useCurrentUser,
-  useDomains,
   useRecentClicks,
 } from "../lib/hooks";
-import { useCurrentOrg } from "../lib/current-org";
+import { useOrgLimits } from "../lib/org-limits";
 import { shortUrl } from "../lib/api";
 import {
-  PLAN_LIMITS,
   type DomainDTO,
   type LinkDTO,
   type RecentClick,
@@ -23,13 +20,12 @@ import { DashboardSkeleton } from "../components/skeletons";
 import { NoOrgState } from "../components/no-org";
 import { QRPreview } from "../components/qr";
 import type { OrgQr } from "../components/link-editor";
-import { orgQrFrom } from "../lib/org-qr";
 import { Button } from "../ui/button";
 import { Dialog } from "../ui/dialog";
 import { Input } from "../ui/field";
 import { MenuSelect } from "../ui/menu";
 import { Card, PageHeader } from "../ui/misc";
-import { Spinner } from "../ui/spinner";
+import { BusyContent } from "../ui/spinner";
 import { useToast } from "../ui/toast";
 
 /** "3h ago" for recent timestamps, a plain date past a month. */
@@ -53,25 +49,12 @@ const linkPath = (l: { slug: string; domain?: string | null }) =>
     : `/links/${l.slug}`;
 
 export function Dashboard() {
-  const { org } = useCurrentOrg();
-  const orgId = org?.id ?? "";
+  const { org, orgId, limits, activeDomains, orgQr } = useOrgLimits();
   const stats = useStats(orgId);
   const links = useLinks(orgId);
   const members = useMembers(orgId);
   const clicks = useRecentClicks(orgId);
   const { create } = useLinkMutations(orgId);
-  const me = useCurrentUser();
-
-  const limits = PLAN_LIMITS[org?.plan ?? "free"];
-  // GET /domains requires an admin+ role on the backend (see /links).
-  const canListDomains =
-    !!me.data?.user.isAdmin || org?.role === "owner" || org?.role === "admin";
-  const domains = useDomains(orgId, canListDomains);
-  const activeDomains = useMemo(
-    () => (domains.data ?? []).filter((d) => d.status === "active"),
-    [domains.data],
-  );
-  const orgQr = orgQrFrom(org);
 
   const [created, setCreated] = useState<LinkDTO | null>(null);
 
@@ -219,7 +202,7 @@ function QuickCreateCard({
           disabled={!destination.trim() || atLimit}
           title={atLimit ? "Link limit reached: upgrade for more links" : undefined}
         >
-          {create.isPending ? <Spinner /> : "Create link"}
+          <BusyContent busy={create.isPending}>Create link</BusyContent>
         </Button>
       </form>
     </Card>

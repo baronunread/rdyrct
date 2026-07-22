@@ -65,14 +65,12 @@ function ClickSparkline() {
  * never shifts the page layout. Built entirely from the app's own design
  * tokens so it stays theme-aware and CSP-safe (no remote images or fonts).
  */
-export function LandingMockup() {
+function useAutoPlay() {
   const reduce = useReducedMotion();
   const [phase, setPhase] = useState<Phase>("typing");
   const [typed, setTyped] = useState("");
   const [copied, setCopied] = useState(false);
 
-  // Self-playing loop: type the URL char by char → submit → show the result,
-  // hold it, then reset. Reduced motion skips straight to the final state.
   useEffect(() => {
     if (reduce) {
       setTyped(LONG_URL);
@@ -105,15 +103,19 @@ export function LandingMockup() {
     return () => clearTimeout(id);
   }, [phase, typed, reduce]);
 
-  const copy = async () => {
+  return { phase, typed, setTyped, copied, setCopied, reduce, copy: async () => {
     try {
       await navigator.clipboard.writeText(SHORT_HREF);
       setCopied(true);
       window.setTimeout(() => setCopied(false), 1400);
     } catch {
-      // clipboard unavailable (permissions) — purely decorative anyway
+      // clipboard unavailable
     }
-  };
+  }};
+}
+
+export function LandingMockup() {
+  const { phase, typed, copied, copy, reduce } = useAutoPlay();
 
   const isResult =
     phase === "result" || phase === "uploading" || phase === "branded";
