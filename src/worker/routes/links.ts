@@ -14,6 +14,7 @@ import {
   SLUG_RE,
   RESERVED_SLUGS,
   isValidHttpUrl,
+  normalizeUrl,
   resolveUtm,
   validateQrFields,
 } from "../util";
@@ -23,8 +24,9 @@ import type { LinkDTO, LinkInput } from "@/shared/types";
 export const linkRoutes = new Hono<AppEnv>();
 
 function validateInput(body: LinkInput, orgId: string, partial = false) {
-  if (!partial || body.destination !== undefined) {
-    if (!body.destination || !isValidHttpUrl(body.destination))
+  if ((!partial || body.destination !== undefined) && body.destination) {
+    body.destination = normalizeUrl(body.destination);
+    if (!isValidHttpUrl(body.destination))
       throw new HTTPException(400, {
         message: "Destination must be a valid http(s) URL",
       });

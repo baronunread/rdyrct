@@ -7,7 +7,7 @@ import { requireOrgRole } from "../auth";
 import { orgPlan } from "../plan";
 import { publishLink, publishDomain, unpublishDomain } from "../kv";
 import { uid, now } from "../util";
-import { isValidHttpUrl } from "../util";
+import { isValidHttpUrl, normalizeUrl } from "../util";
 import type { DomainDTO } from "@/shared/types";
 
 // e.g. links.example.com: at least one dot, no scheme/port/path
@@ -240,11 +240,14 @@ domainRoutes.patch("/:id", async (c) => {
     getDomain(c, c.req.param("orgId")!, c.req.param("id")),
     c.req.json<{ rootRedirect?: string }>(),
   ]);
-  const rootRedirect = body.rootRedirect?.trim() ?? "";
-  if (rootRedirect && !isValidHttpUrl(rootRedirect))
-    throw new HTTPException(400, {
-      message: "Root redirect must be a valid http(s) URL",
-    });
+  let rootRedirect = body.rootRedirect?.trim() ?? "";
+  if (rootRedirect) {
+    rootRedirect = normalizeUrl(rootRedirect);
+    if (!isValidHttpUrl(rootRedirect))
+      throw new HTTPException(400, {
+        message: "Root redirect must be a valid http(s) URL",
+      });
+  }
   await db
     .update(schema.domains)
     .set({ rootRedirect })

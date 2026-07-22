@@ -133,6 +133,15 @@ export function referrerHost(referrer: string): string {
   }
 }
 
+export function normalizeUrl(value: string): string {
+  try {
+    new URL(value);
+    return value;
+  } catch {
+    return `https://${value}`;
+  }
+}
+
 export function isValidHttpUrl(value: string): boolean {
   try {
     const url = new URL(value);
