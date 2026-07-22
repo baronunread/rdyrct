@@ -155,6 +155,42 @@ body {
   }
 }
 
+/* busy-button transition: text blurs then shrinks away while the spinner
+   fades in with a delay. Each direction uses different timings so the
+   forward direction feels sequenced and the reverse (error) is instant. */
+.busy-label {
+  transition: filter 100ms, transform 100ms, opacity 100ms;
+}
+.busy-label[data-busy] {
+  filter: blur(4px);
+  transform: scale(0.75);
+  opacity: 0;
+  transition: filter 150ms, transform 150ms 150ms, opacity 150ms 150ms;
+}
+
+.busy-spinner {
+  opacity: 0;
+  transform: scale(0.5);
+  pointer-events: none;
+  transition: opacity 100ms, transform 100ms;
+}
+.busy-spinner[data-busy] {
+  opacity: 1;
+  transform: scale(1);
+  transition: opacity 200ms 200ms, transform 200ms 200ms;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .busy-label,
+  .busy-label[data-busy],
+  .busy-spinner,
+  .busy-spinner[data-busy] {
+    transition: opacity 100ms !important;
+    filter: none !important;
+    transform: none !important;
+  }
+}
+
 /* skeleton blocks hold a static shade instead of pulsing */
 @media (prefers-reduced-motion: reduce) {
   .animate-pulse {
