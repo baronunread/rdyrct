@@ -580,7 +580,7 @@ function DeployTerminal() {
     >
       {lines.map((node, i) => (
         <m.div
-          key={i}
+          key={node.key as string}
           variants={lineVariant}
           custom={delays[i]}
           className={i === 4 || i === 11 ? "h-2" : "whitespace-pre-wrap leading-[1.9]"}
@@ -590,7 +590,7 @@ function DeployTerminal() {
       ))}
     </m.div>
   ) : (
-    <div>{lines.map((node, i) => <div key={i} className={i === 4 || i === 11 ? "h-2" : "whitespace-pre-wrap leading-[1.9]"}>{node}</div>)}</div>
+    <div>{lines.map((node, i) => <div key={node.key as string} className={i === 4 || i === 11 ? "h-2" : "whitespace-pre-wrap leading-[1.9]"}>{node}</div>)}</div>
   );
 
   return (
