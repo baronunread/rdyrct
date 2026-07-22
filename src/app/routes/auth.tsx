@@ -15,7 +15,7 @@ type View = "form" | "forgot" | "forgot-sent" | "verify-otp";
 
 // Stricter than the browser's type="email" check (which lets "a@b" through)
 // and matches what the server's schema accepts, so bad emails never reach it.
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[A-Za-z]{2,}$/;
 
 /** Password-reset request card ("email on its way" state included). */
 function ForgotView({
