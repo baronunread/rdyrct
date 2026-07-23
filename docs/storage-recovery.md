@@ -94,6 +94,11 @@ orphaned KV keys or R2 objects are left behind with nothing that sweeps for
 them. That instance shows as errored in the Workflows dashboard, which is the
 signal to intervene by hand.
 
+A narrower, permanent gap: a link or domain created in the window between
+gather and d1-delete was never in the gathered KV key list, so it cascades out
+of D1 without its KV entry ever being deleted. This is the same kind of gap
+custom-domain activation accepts below, not a case we sweep for.
+
 ## Custom-domain activation (a Workflow)
 
 Adding a custom domain used to create the Cloudflare hostname inside the request

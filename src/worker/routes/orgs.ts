@@ -142,7 +142,7 @@ orgRoutes.patch("/:orgId", requireOrgRole("admin"), async (c) => {
  * Workflows runs every step to completion. See docs/storage-recovery.md.
  */
 export async function deleteOrg(env: Env, orgId: string): Promise<void> {
-  await env.ORG_DELETE.create({ params: { orgId } });
+  await env.ORG_DELETE.create({ id: orgId, params: { orgId } });
 }
 
 orgRoutes.delete("/:orgId", requireOrgRole("owner"), async (c) => {

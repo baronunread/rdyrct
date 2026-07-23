@@ -28,6 +28,14 @@ function overrideEnv(overrides: Partial<Env>): Env {
 const realCfEnv = () =>
   overrideEnv({ DEV_FAKE_CF: undefined, CF_ZONE_ID: "zone", CF_API_TOKEN: "tok" });
 
+// Env with the CF fake forced on, independent of whatever DEV_FAKE_CF happens
+// to be in the ambient .dev.vars (CI runs unit tests before .dev.vars exists).
+const fakeCfEnv = () => overrideEnv({ DEV_FAKE_CF: "1" });
+
+// Env with a non-empty auth secret, independent of the ambient .dev.vars, so
+// sign-in's rate-limit key derivation has a key to HMAC with.
+const authEnv = () => overrideEnv({ BETTER_AUTH_SECRET: "test-secret" });
+
 const cfJson = (body: unknown) =>
   new Response(JSON.stringify(body), {
     status: 200,
@@ -163,25 +171,25 @@ describe("probeDomain: one durable step at a time", () => {
     // under the 24h deadline.
     await seedDomain({ createdAt: now() - 9_000 });
 
-    const first = await probeDomain(env as Env, "domain-1");
+    const first = await probeDomain(fakeCfEnv(), "domain-1");
     expect(first).toEqual({ state: "pending", status: "issuing_tls" });
     expect((await statusOf("domain-1"))?.status).toBe("issuing_tls");
 
-    const second = await probeDomain(env as Env, "domain-1");
+    const second = await probeDomain(fakeCfEnv(), "domain-1");
     expect(second).toEqual({ state: "active" });
     expect((await statusOf("domain-1"))?.status).toBe("active");
   });
 
   it("leaves checking_dns in place while the fake DNS is still pending", async () => {
     await seedDomain({ createdAt: now() }); // age < 5s: fake DNS not resolved yet
-    const probe = await probeDomain(env as Env, "domain-1");
+    const probe = await probeDomain(fakeCfEnv(), "domain-1");
     expect(probe).toEqual({ state: "pending", status: "checking_dns" });
     expect((await statusOf("domain-1"))?.status).toBe("checking_dns");
   });
 
   it("fails a domain that has not resolved within the deadline", async () => {
     await seedDomain({ createdAt: now() - 25 * 60 * 60 * 1000 }); // 25h old
-    const probe = await probeDomain(env as Env, "domain-1");
+    const probe = await probeDomain(fakeCfEnv(), "domain-1");
     expect(probe.state).toBe("error");
     const after = await statusOf("domain-1");
     expect(after?.status).toBe("error");
@@ -190,16 +198,19 @@ describe("probeDomain: one durable step at a time", () => {
 
   it("reports active and error as terminal without re-checking", async () => {
     await seedDomain({ status: "active", cfHostnameId: "cf-1", createdAt: now() });
-    expect(await probeDomain(env as Env, "domain-1")).toEqual({ state: "active" });
+    expect(await probeDomain(fakeCfEnv(), "domain-1")).toEqual({ state: "active" });
 
     await env.DB.prepare(
       "update domains set status = 'error', status_reason = 'nope' where id = 'domain-1'",
     ).run();
-    expect(await probeDomain(env as Env, "domain-1")).toEqual({ state: "error", reason: "nope" });
+    expect(await probeDomain(fakeCfEnv(), "domain-1")).toEqual({
+      state: "error",
+      reason: "nope",
+    });
   });
 
   it("reports a missing domain as gone", async () => {
-    expect(await probeDomain(env as Env, "missing")).toEqual({ state: "gone" });
+    expect(await probeDomain(fakeCfEnv(), "missing")).toEqual({ state: "gone" });
   });
 });
 
@@ -233,7 +244,7 @@ describe("domain reads do not mutate", () => {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ email: "admin@example.com", password }),
       }),
-      env,
+      authEnv(),
       ctx,
     );
     await waitOnExecutionContext(ctx);
@@ -246,7 +257,7 @@ describe("domain reads do not mutate", () => {
 
   async function call(request: Request): Promise<Response> {
     const ctx = createExecutionContext();
-    const res = await worker.fetch(request, env, ctx);
+    const res = await worker.fetch(request, authEnv(), ctx);
     await waitOnExecutionContext(ctx);
     return res;
   }

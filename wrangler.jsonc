@@ -60,8 +60,8 @@
   // also consumes (see the `queue()` handler) purely to log it for
   // visibility: nothing repairs or re-drives it. Create both queues before
   // first deploy:
-  //   wrangler queues create rdyrct-storage
-  //   wrangler queues create rdyrct-storage-dlq
+  //   bunx wrangler queues create rdyrct-storage
+  //   bunx wrangler queues create rdyrct-storage-dlq
   // Keep max_retries here in sync with STORAGE_MAX_DELIVERIES in storage.ts.
   "queues": {
     "producers": [
@@ -76,6 +76,7 @@
         "max_batch_size": 10,
         "max_batch_timeout": 5,
         "max_retries": 5,
+        "retry_delay": 30,
         "dead_letter_queue": "rdyrct-storage-dlq",
       },
       {
@@ -83,6 +84,7 @@
         "max_batch_size": 10,
         "max_batch_timeout": 5,
         "max_retries": 3,
+        "retry_delay": 30,
       },
     ],
   },
@@ -224,6 +226,7 @@
             "max_batch_size": 10,
             "max_batch_timeout": 5,
             "max_retries": 5,
+            "retry_delay": 30,
             "dead_letter_queue": "rdyrct-playwright-storage-dlq",
           },
           {
@@ -231,6 +234,7 @@
             "max_batch_size": 10,
             "max_batch_timeout": 5,
             "max_retries": 3,
+            "retry_delay": 30,
           },
         ],
       },

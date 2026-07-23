@@ -19,6 +19,7 @@ export async function alertBetterStack(
         "content-type": "application/json",
       },
       body: JSON.stringify(events),
+      signal: AbortSignal.timeout(5_000),
     });
     if (!res.ok) console.error(`Better Stack alert failed: ${res.status}`);
   } catch (error) {
