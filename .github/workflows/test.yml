@@ -26,5 +26,7 @@ jobs:
         run: bun run verify
       - name: Install Chromium for browser tests
         run: bunx playwright install --with-deps chromium
+      - name: Configure browser test environment
+        run: cp .dev.vars.example .dev.vars
       - name: Browser smoke test
         run: bun run e2e:smoke
