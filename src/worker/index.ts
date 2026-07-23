@@ -15,6 +15,11 @@ import { billingRoutes, handlePolarWebhook } from "./routes/billing";
 import { domainRoutes } from "./routes/domains";
 import { resolveSlug, resolveDomain, type KVLink } from "./kv";
 import { now, deviceFromUA, RESERVED_SLUGS } from "./util";
+import {
+  clickAnalyticsAllowed,
+  enforcePublicAuthRateLimit,
+  enforceSignedApiRateLimit,
+} from "./rate-limit";
 
 const app = new Hono<AppEnv>();
 
@@ -37,6 +42,7 @@ function redirectWithClick(c: Context<AppEnv>, hit: KVLink): Response {
   c.executionCtx.waitUntil(
     (async () => {
       try {
+        if (!(await clickAnalyticsAllowed(c.env, hit.orgId, c.req.method))) return;
         const db = drizzle(c.env.DB, { schema });
         await db.insert(schema.clicks).values({
           linkId: hit.linkId,
@@ -76,13 +82,17 @@ app.use("*", async (c, next) => {
 /* ---------------- API ---------------- */
 
 // BetterAuth owns /api/auth/* (signup, login, logout, verify, reset).
-app.on(["GET", "POST"], "/api/auth/*", (c) => getAuth(c.env).handler(c.req.raw));
+app.on(["GET", "POST"], "/api/auth/*", async (c) => {
+  const limited = await enforcePublicAuthRateLimit(c);
+  return limited ?? getAuth(c.env).handler(c.req.raw);
+});
 
 // Polar webhook: public, signature-verified, no session middleware.
 app.post("/api/webhooks/polar", (c) => handlePolarWebhook(c.req.raw, c.env));
 
 const api = new Hono<AppEnv>();
 api.use("*", withSession);
+api.use("*", enforceSignedApiRateLimit);
 api.route("/", userRoutes);
 api.route("/orgs", orgRoutes);
 api.route("/orgs/:orgId/links", linkRoutes);

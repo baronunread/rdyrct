@@ -4,10 +4,12 @@ import { applyD1Migrations, reset } from "cloudflare:test";
 
 type TestEnv = typeof env & { TEST_MIGRATIONS: D1Migration[] };
 
+const settleClickTasks = () => new Promise((resolve) => setTimeout(resolve, 0));
+
 afterEach(async () => {
   // The redirect handler records clicks through waitUntil. Let that task finish
   // before Miniflare clears the test bindings.
-  await new Promise((resolve) => setTimeout(resolve, 0));
+  await settleClickTasks();
   await reset();
 });
 
@@ -26,6 +28,14 @@ beforeEach(async () => {
     env.DB.prepare(
       "insert into links (id, org_id, slug, destination, created_at) values (?, ?, ?, ?, ?)",
     ).bind("link-2", "org-1", "pricing", "https://example.com/pricing", 0),
+    env.DB.prepare("insert into orgs (id, name, created_at) values (?, ?, ?)").bind(
+      "org-limited",
+      "Rate-limited org",
+      0,
+    ),
+    env.DB.prepare(
+      "insert into links (id, org_id, slug, destination, created_at) values (?, ?, ?, ?, ?)",
+    ).bind("link-limited", "org-limited", "viral", "https://example.com/viral", 0),
   ]);
 });
 
@@ -39,6 +49,7 @@ describe("redirect hot path", () => {
     const response = await worker.default.fetch(
       new Request("http://localhost/summer", { redirect: "manual" }),
     );
+    await settleClickTasks();
 
     expect(response.status).toBe(302);
     expect(response.headers.get("location")).toBe("https://example.com/sale");
@@ -67,6 +78,33 @@ describe("redirect hot path", () => {
 
     expect(response.status).toBe(302);
     expect(response.headers.get("location")).toBe("https://example.com/pricing");
+  });
+
+  it("still redirects and skips click storage when analytics is limited", async () => {
+    await env.LINKS.put(
+      "slug:viral",
+      JSON.stringify({
+        linkId: "link-limited",
+        orgId: "org-limited",
+        url: "https://example.com/viral",
+      }),
+    );
+    await env.RL_CLICK_RECORDING.limit({ key: "click:org:org-limited" });
+
+    const response = await worker.default.fetch(
+      new Request("http://localhost/viral", { redirect: "manual" }),
+    );
+    await settleClickTasks();
+
+    expect(response.status).toBe(302);
+    expect(response.headers.get("location")).toBe("https://example.com/viral");
+    expect(
+      (
+        await env.DB.prepare("select count(*) as count from clicks where org_id = ?")
+          .bind("org-limited")
+          .first<{ count: number }>()
+      )?.count,
+    ).toBe(0);
   });
 
   it("uses a custom domain's root redirect for the root and missing slugs", async () => {

@@ -6,6 +6,14 @@ export interface Env {
   LINKS: KVNamespace;
   QR_LOGOS: R2Bucket;
   ASSETS: Fetcher;
+  RL_AUTH_PUBLIC: RateLimit;
+  RL_EMAIL: RateLimit;
+  RL_WRITE_FREE: RateLimit;
+  RL_WRITE_PAID: RateLimit;
+  RL_QR_UPLOAD: RateLimit;
+  RL_DOMAIN_SETUP: RateLimit;
+  RL_BILLING: RateLimit;
+  RL_CLICK_RECORDING: RateLimit;
 
   /* auth + email (secrets unless noted) */
   BETTER_AUTH_SECRET: string;
