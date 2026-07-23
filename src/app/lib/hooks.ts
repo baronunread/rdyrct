@@ -51,10 +51,16 @@ export const useConfig = () =>
 export function useLogout() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: () => authClient.signOut(),
+    mutationFn: async () => {
+      const { error } = await authClient.signOut();
+      if (error) throw new Error(error.message ?? "Could not sign out");
+    },
     onSuccess: () => {
       writeAuthHint(false);
       qc.setQueryData(["user"], null);
+      qc.removeQueries({
+        predicate: (query) => query.queryKey[0] !== "config" && query.queryKey[0] !== "user",
+      });
     },
   });
 }

@@ -180,7 +180,10 @@ function AuthFormView({
   const password = watch("password");
   const onFormSubmit = handleSubmit(
     (data) => onSubmit(data.email, data.password),
-    (errors) => toast(firstFormError(errors, "Check your email and password"), "error"),
+    (errors) => {
+      toast(firstFormError(errors, "Check your email and password"), "error");
+      shake.start();
+    },
   );
 
   return (
@@ -318,7 +321,7 @@ export function AuthPage({ mode }: { mode: "login" | "signup" }) {
       type: "email-verification",
     });
     if (error) {
-      toast(error.message ?? "Could not send the verification code", "error");
+      failSubmit(error.message ?? "Could not send the verification code");
       return;
     }
     setAuthEmail(email);
@@ -363,6 +366,8 @@ export function AuthPage({ mode }: { mode: "login" | "signup" }) {
           await goVerify(email);
         }
       }
+    } catch (error) {
+      failSubmit(error instanceof Error ? error.message : "Something went wrong");
     } finally {
       setBusy(false);
     }

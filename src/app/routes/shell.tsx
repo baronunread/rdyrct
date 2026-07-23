@@ -195,7 +195,13 @@ export function AppShell() {
             label="Sign out"
             danger
             className="p-2"
-            onClick={() => logout.mutate(undefined, { onSuccess: () => navigate("/login") })}
+            disabled={logout.isPending}
+            onClick={() =>
+              logout.mutate(undefined, {
+                onSuccess: () => navigate("/login"),
+                onError: (error) => toast(error.message, "error"),
+              })
+            }
           >
             <LogOut size={15} />
           </IconButton>

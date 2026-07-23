@@ -17,6 +17,7 @@ test.describe("authentication forms", () => {
 
     await expect(page).toHaveURL(/\/login$/);
     await expect(page.getByLabel("Password")).toHaveValue("password");
+    await expect(page.getByRole("button", { name: "Sign in" })).toHaveClass(/animate-shake/);
     await expect(page.getByText("Enter a valid email address")).toBeVisible();
     expect(authRequests).toBe(0);
   });
@@ -35,6 +36,7 @@ test.describe("authentication forms", () => {
 
     await expect(page).toHaveURL(/\/signup$/);
     await expect(page.getByLabel("Password")).toHaveValue("short");
+    await expect(page.getByRole("button", { name: "Sign up" })).toHaveClass(/animate-shake/);
     await expect(page.getByText("Password must be at least 8 characters")).toBeVisible();
     expect(authRequests).toBe(0);
   });
@@ -58,6 +60,7 @@ test.describe("authentication forms", () => {
     await page.getByRole("button", { name: "Sign up" }).click();
 
     await expect(page.getByRole("heading", { name: "Create an account" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Sign up" })).toHaveClass(/animate-shake/);
     await expect(page.getByText("Email delivery unavailable")).toBeVisible();
   });
 });

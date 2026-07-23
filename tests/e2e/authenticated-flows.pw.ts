@@ -111,4 +111,23 @@ test("a new owner can create an organization and a scheme-less quick link", asyn
   await organizationName.fill("Playwright Org Renamed");
   await page.getByRole("button", { name: "Save", exact: true }).click();
   await expect(page.getByText("Organization renamed")).toBeVisible();
+
+  const signOutUrl = "**/api/auth/sign-out";
+  await page.route(signOutUrl, async (route) => {
+    await route.fulfill({
+      status: 503,
+      contentType: "application/json",
+      body: JSON.stringify({ message: "Sign-out service unavailable" }),
+    });
+  });
+  await page.getByLabel("Sign out").click();
+  await expect(page.getByText("Sign-out service unavailable")).toBeVisible();
+  await expect(page).toHaveURL(/\/settings$/);
+
+  await page.unroute(signOutUrl);
+  await page.getByLabel("Sign out").click();
+  await expect(page).toHaveURL(/\/login$/);
+  await page.reload();
+  await expect(page).toHaveURL(/\/login$/);
+  await expect(page.getByRole("heading", { name: "Sign in" })).toBeVisible();
 });
