@@ -1,5 +1,5 @@
 import { useMemo, useEffect, type ChangeEvent } from "react";
-import { useForm } from "react-hook-form";
+import { useForm, type SubmitErrorHandler } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Link as RouterLink } from "react-router";
 import { Lock, Info } from "lucide-react";
@@ -17,6 +17,7 @@ import { Dialog } from "../ui/dialog";
 import { Field, Input } from "../ui/field";
 import { MenuSelect } from "../ui/menu";
 import { BusyContent } from "../ui/spinner";
+import { useToast } from "../ui/toast";
 import { Tooltip } from "../ui/tooltip";
 import { QRPreview, QrLogoInput, QrColorField } from "./qr";
 import { linkInputSchema } from "../lib/schemas";
@@ -330,6 +331,7 @@ export function LinkEditor({
   shakeKey: number;
 }) {
   const editing = editingLink != null;
+  const toast = useToast();
 
   const { handleSubmit, watch, reset } = useForm<LinkInput>({
     resolver: zodResolver(linkInputSchema),
@@ -344,6 +346,13 @@ export function LinkEditor({
 
   const form = watch();
   const setForm = (next: LinkInput) => reset(next);
+  const onInvalid: SubmitErrorHandler<LinkInput> = (errors) => {
+    const firstError = Object.values(errors).find((entry) => entry?.message);
+    toast(
+      typeof firstError?.message === "string" ? firstError.message : "Check the link details",
+      "error",
+    );
+  };
 
   const selectedDomain = activeDomains.find((d) => d.id === form.domainId)?.hostname ?? null;
   const slugLocked = !form.domainId;
@@ -361,7 +370,7 @@ export function LinkEditor({
       wide
       shakeKey={shakeKey}
     >
-      <form onSubmit={handleSubmit(onSave)} className="flex flex-col gap-6">
+      <form onSubmit={handleSubmit(onSave, onInvalid)} className="flex flex-col gap-6">
         <div className="grid gap-6 sm:grid-cols-[1fr_auto]">
           <LinkFormFields
             form={form}
@@ -387,7 +396,12 @@ export function LinkEditor({
         <Button variant="ghost" onClick={() => onOpenChange(false)}>
           Cancel
         </Button>
-        <Button variant="primary" type="submit" disabled={busy} onClick={handleSubmit(onSave)}>
+        <Button
+          variant="primary"
+          type="submit"
+          disabled={busy}
+          onClick={handleSubmit(onSave, onInvalid)}
+        >
           <BusyContent busy={busy}>{editing ? "Save changes" : "Create link"}</BusyContent>
         </Button>
       </div>

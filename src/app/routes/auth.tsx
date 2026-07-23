@@ -21,19 +21,26 @@ type ForgotForm = { email: string };
 type OtpForm = { otp: string };
 
 function ForgotView({
+  initialEmail,
   sent,
   busy,
   onSubmit,
   onBack,
 }: {
+  initialEmail: string;
   sent: boolean;
   busy: boolean;
   onSubmit: (email: string) => void;
   onBack: () => void;
 }) {
-  const { register, handleSubmit, getValues } = useForm<ForgotForm>({
+  const {
+    register,
+    handleSubmit,
+    getValues,
+    formState: { errors },
+  } = useForm<ForgotForm>({
     resolver: zodResolver(forgotSchema),
-    defaultValues: { email: "" },
+    defaultValues: { email: initialEmail },
   });
 
   const onFormSubmit = handleSubmit((data) => onSubmit(data.email));
@@ -49,7 +56,7 @@ function ForgotView({
           </p>
         ) : (
           <form onSubmit={onFormSubmit} className="flex flex-col gap-4">
-            <Field label="Email">
+            <Field label="Email" hint={errors.email?.message}>
               <Input type="email" {...register("email")} required autoComplete="email" />
             </Field>
             <Button type="submit" variant="primary" disabled={busy}>
@@ -71,7 +78,6 @@ function VerifyOtpView({
   email,
   busy,
   resent,
-  error,
   onSubmit,
   onComplete,
   onResend,
@@ -80,7 +86,6 @@ function VerifyOtpView({
   email: string;
   busy: boolean;
   resent: boolean;
-  error: string;
   onSubmit: (code: string) => void;
   onComplete: (code: string) => void;
   onResend: () => void;
@@ -108,7 +113,7 @@ function VerifyOtpView({
           We emailed a 6-digit code to <span className="text-text">{email}</span>. It expires in 10
           minutes.
         </p>
-        <Field label="Verification code">
+        <Field label="Verification code" hint={errors.otp?.message}>
           <Controller
             control={control}
             name="otp"
@@ -126,9 +131,6 @@ function VerifyOtpView({
             )}
           />
         </Field>
-        {(errors.otp || error) && (
-          <p className="text-sm text-danger">{errors.otp?.message ?? error}</p>
-        )}
         <Button type="submit" variant="primary" disabled={busy}>
           <BusyContent busy={busy}>Verify & continue</BusyContent>
         </Button>
@@ -151,7 +153,6 @@ function VerifyOtpView({
 
 function AuthFormView({
   mode,
-  error,
   busy,
   shake,
   next,
@@ -159,7 +160,6 @@ function AuthFormView({
   onForgot,
 }: {
   mode: "login" | "signup";
-  error: string;
   busy: boolean;
   shake: ReturnType<typeof useShake>;
   next: string;
@@ -167,7 +167,13 @@ function AuthFormView({
   onForgot: (email: string) => void;
 }) {
   const schema = mode === "login" ? loginSchema : signupSchema;
-  const { register, handleSubmit, watch, getValues } = useForm<AuthForm>({
+  const {
+    register,
+    handleSubmit,
+    watch,
+    getValues,
+    formState: { errors },
+  } = useForm<AuthForm>({
     resolver: zodResolver(schema),
     defaultValues: { email: "", password: "" },
   });
@@ -183,13 +189,14 @@ function AuthFormView({
         className="flex flex-col gap-4 rounded-xl border border-border bg-surface p-6"
       >
         <h1 className="font-bold">{mode === "login" ? "Sign in" : "Create an account"}</h1>
-        <Field label="Email">
+        <Field label="Email" hint={errors.email?.message}>
           <Input type="email" {...register("email")} required autoComplete="email" />
         </Field>
         <Field
           label="Password"
           hint={
-            mode === "login" ? (
+            errors.password?.message ??
+            (mode === "login" ? (
               <button
                 type="button"
                 className="text-muted hover:text-accent"
@@ -199,7 +206,7 @@ function AuthFormView({
               </button>
             ) : (
               <PasswordMeter password={password} />
-            )
+            ))
           }
         >
           <Input
@@ -209,7 +216,6 @@ function AuthFormView({
             autoComplete={mode === "login" ? "current-password" : "new-password"}
           />
         </Field>
-        {error && <p className="text-sm text-danger">{error}</p>}
         <Button
           type="submit"
           variant="primary"
@@ -273,25 +279,22 @@ export function AuthPage({ mode }: { mode: "login" | "signup" }) {
   const [view, setView] = useState<View>(() => (readPending() ? "verify-otp" : "form"));
   const [authEmail, setAuthEmail] = useState(() => readPending()?.email ?? "");
   const authPasswordRef = useRef("");
-  const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const shake = useShake();
 
   const [prevMode, setPrevMode] = useState(mode);
   if (prevMode !== mode) {
     setPrevMode(mode);
-    setError("");
     shake.end();
   }
 
   const failSubmit = (message: string) => {
-    setError(message);
+    toast(message, "error");
     shake.start();
   };
 
   const [forgotBusy, setForgotBusy] = useState(false);
 
-  const [otpError, setOtpError] = useState("");
   const [resent, setResent] = useState(false);
 
   const rawNext =
@@ -320,7 +323,6 @@ export function AuthPage({ mode }: { mode: "login" | "signup" }) {
 
   const backToForm = () => {
     clearPending();
-    setError("");
     setView("form");
   };
 
@@ -363,7 +365,6 @@ export function AuthPage({ mode }: { mode: "login" | "signup" }) {
 
   const runVerify = async (code: string) => {
     if (busy) return;
-    setOtpError("");
     setBusy(true);
     try {
       const { error: verifyError } = await authClient.emailOtp.verifyEmail({
@@ -371,7 +372,7 @@ export function AuthPage({ mode }: { mode: "login" | "signup" }) {
         otp: code.trim(),
       });
       if (verifyError) {
-        setOtpError(verifyError.message ?? "That code is invalid or expired");
+        toast(verifyError.message ?? "That code is invalid or expired", "error");
         return;
       }
       const sess = await authClient.getSession();
@@ -388,7 +389,6 @@ export function AuthPage({ mode }: { mode: "login" | "signup" }) {
 
   const resendOtp = async () => {
     setResent(false);
-    setOtpError("");
     const { error: resendError } = await authClient.emailOtp.sendVerificationOtp({
       email: authEmail,
       type: "email-verification",
@@ -423,7 +423,6 @@ export function AuthPage({ mode }: { mode: "login" | "signup" }) {
         email={authEmail}
         busy={busy}
         resent={resent}
-        error={otpError}
         onSubmit={runVerify}
         onComplete={runVerify}
         onResend={resendOtp}
@@ -435,6 +434,7 @@ export function AuthPage({ mode }: { mode: "login" | "signup" }) {
   if (view === "forgot" || view === "forgot-sent") {
     return (
       <ForgotView
+        initialEmail={authEmail}
         sent={view === "forgot-sent"}
         busy={forgotBusy}
         onSubmit={submitForgot}
@@ -446,7 +446,6 @@ export function AuthPage({ mode }: { mode: "login" | "signup" }) {
   return (
     <AuthFormView
       mode={mode}
-      error={error}
       busy={busy}
       shake={shake}
       next={next}

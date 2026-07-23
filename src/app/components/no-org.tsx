@@ -19,7 +19,7 @@ export function NoOrgState() {
   const {
     register,
     handleSubmit,
-    formState: { errors, isSubmitting },
+    formState: { isSubmitting },
   } = useForm<OrgNameForm>({
     resolver: zodResolver(orgNameSchema),
     defaultValues: { name: "" },
@@ -44,7 +44,7 @@ export function NoOrgState() {
   return (
     <div className="grid place-items-center py-20">
       <form
-        onSubmit={handleSubmit(submit)}
+        onSubmit={handleSubmit(submit, () => toast("Enter an organization name", "error"))}
         className="flex w-full max-w-md flex-col gap-4 rounded-xl border border-border bg-surface p-6"
       >
         <div>
@@ -53,7 +53,7 @@ export function NoOrgState() {
             This is where your links, domains, and teammates will live.
           </p>
         </div>
-        <Field label="Organization name" hint={errors.name?.message}>
+        <Field label="Organization name">
           <Input {...register("name")} placeholder="acme inc" autoFocus />
         </Field>
         <Button type="submit" variant="primary" disabled={isSubmitting}>

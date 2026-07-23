@@ -92,6 +92,7 @@ function useMemberManagement(orgId: string, canManage: boolean) {
   const revokeInvite = useMutation({
     mutationFn: (token: string) => api(`/orgs/${orgId}/invites/${token}`, { method: "DELETE" }),
     onSuccess: invalidateInvites,
+    onError: withErrorToast(toast),
   });
 
   const copyInvite = async (text: string) => {
@@ -321,14 +322,10 @@ function InviteByEmailCard({
   };
 }) {
   const toast = useToast();
-  const {
-    register,
-    handleSubmit,
-    watch,
-    setValue,
-    reset,
-    formState: { errors },
-  } = useForm<{ email: string; role: "member" | "admin" }>({
+  const { register, handleSubmit, watch, setValue, reset } = useForm<{
+    email: string;
+    role: "member" | "admin";
+  }>({
     resolver: zodResolver(inviteEmailSchema),
     defaultValues: { email: "", role: "member" },
   });
@@ -370,9 +367,14 @@ function InviteByEmailCard({
           </button>
         </Tooltip>
       </div>
-      <form onSubmit={handleSubmit(submit)} className="flex items-end gap-2">
+      <form
+        onSubmit={handleSubmit(submit, (errors) =>
+          toast(errors.email?.message ?? "Enter a valid email address", "error"),
+        )}
+        className="flex items-end gap-2"
+      >
         <div className="min-w-0 flex-1">
-          <Field label="Email" hint={errors.email?.message}>
+          <Field label="Email">
             <Input type="email" {...register("email")} placeholder="teammate@company.com" />
           </Field>
         </div>

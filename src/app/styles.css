@@ -64,8 +64,10 @@
   --color-sky: var(--sky);
   --color-chart: var(--chart);
   --color-danger: var(--danger);
+  /* stylelint-disable value-keyword-case -- Preserve canonical font-family casing. */
   --font-sans: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  /* stylelint-enable value-keyword-case */
   --text-2xs: 11px;
   --text-3xs: 10px;
   --text-4xs: 9px;

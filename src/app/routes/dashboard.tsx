@@ -117,32 +117,29 @@ function QuickCreateCard({
   const toast = useToast();
   const [domainId, setDomainId] = useState<string | null>(null);
 
-  const {
-    register,
-    handleSubmit,
-    reset,
-    watch,
-    formState: { errors },
-  } = useForm({
+  const { register, handleSubmit, reset, watch } = useForm({
     resolver: zodResolver(destinationSchema),
     defaultValues: { destination: "" },
   });
 
   const destination = watch("destination");
 
-  const submit = handleSubmit((data) => {
-    if (create.isPending) return;
-    create.mutate(
-      { destination: data.destination.trim(), domainId },
-      {
-        onSuccess: (link) => {
-          reset({ destination: "" });
-          onCreated(link);
+  const submit = handleSubmit(
+    (data) => {
+      if (create.isPending) return;
+      create.mutate(
+        { destination: data.destination.trim(), domainId },
+        {
+          onSuccess: (link) => {
+            reset({ destination: "" });
+            onCreated(link);
+          },
+          onError: withErrorToast(toast),
         },
-        onError: withErrorToast(toast),
-      },
-    );
-  });
+      );
+    },
+    () => toast("Enter a valid URL", "error"),
+  );
 
   return (
     <Card>
@@ -154,9 +151,6 @@ function QuickCreateCard({
             aria-label="Destination URL"
             autoFocus
           />
-          {errors.destination && (
-            <p className="mt-1 text-xs text-danger">{errors.destination.message}</p>
-          )}
         </div>
         {activeDomains.length > 0 && (
           <div className="sm:w-56">

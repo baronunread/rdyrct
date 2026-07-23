@@ -35,9 +35,10 @@ export function DomainsPage() {
   const orgId = org?.id ?? "";
   const me = useCurrentUser();
 
-  const isAdmin = me.data?.user.isAdmin || org?.role === "owner" || org?.role === "admin";
-
+  if (me.isLoading) return <DomainsSkeleton />;
   if (!org) return <NoOrgState />;
+
+  const isAdmin = me.data?.user.isAdmin || org.role === "owner" || org.role === "admin";
 
   return (
     <div>
@@ -60,12 +61,7 @@ function DomainsCard({ orgId, plan }: { orgId: string; plan: "free" | "hobby" | 
   const limits = PLAN_LIMITS[plan];
   const [deleting, setDeleting] = useState<DomainDTO | null>(null);
   const [redirectDraft, setRedirectDraft] = useState<Record<string, string>>({});
-  const {
-    register,
-    handleSubmit,
-    reset,
-    formState: { errors },
-  } = useForm<{ hostname: string }>({
+  const { register, handleSubmit, reset } = useForm<{ hostname: string }>({
     resolver: zodResolver(hostnameSchema),
     defaultValues: { hostname: "" },
   });
@@ -178,7 +174,9 @@ function DomainsCard({ orgId, plan }: { orgId: string; plan: "free" | "hobby" | 
                     "flex flex-col gap-3",
                     domains.data?.length ? "border-t border-border pt-4" : "",
                   )}
-                  onSubmit={handleSubmit(addDomain)}
+                  onSubmit={handleSubmit(addDomain, (errors) =>
+                    toast(errors.hostname?.message ?? "Enter a valid hostname", "error"),
+                  )}
                 >
                   <div>
                     <span className="mb-1.5 block text-xs tracking-wider text-muted uppercase">
@@ -202,11 +200,6 @@ function DomainsCard({ orgId, plan }: { orgId: string; plan: "free" | "hobby" | 
                         <BusyContent busy={add.isPending}>Add domain</BusyContent>
                       </Button>
                     </div>
-                    {errors.hostname && (
-                      <span className="mt-1 block text-xs text-danger">
-                        {errors.hostname.message}
-                      </span>
-                    )}
                     <span className="mt-1 block text-xs text-muted/80">
                       After adding, we check for the CNAME record every few seconds. Once detected,
                       we issue a TLS certificate automatically. You can also hit the refresh button

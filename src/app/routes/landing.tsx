@@ -579,7 +579,7 @@ function DeployTerminal() {
       <span key={r.name}>
         <span className="text-accent font-semibold">{r.name}</span>
         <span className="text-muted/40"> {r.id}</span>
-        <span className="text-muted/20"> — </span>
+        <span className="text-muted/20"> · </span>
         <span className="text-muted">{r.desc}</span>
       </span>
     )),

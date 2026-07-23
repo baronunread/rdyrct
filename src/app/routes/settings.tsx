@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useQueryClient } from "@tanstack/react-query";
@@ -9,6 +9,7 @@ import { authClient } from "../lib/auth-client";
 import { Button } from "../ui/button";
 import { Field, Input } from "../ui/field";
 import { Card, PageHeader } from "../ui/misc";
+import { BusyContent } from "../ui/spinner";
 import { useToast } from "../ui/toast";
 import { CopyButton } from "../ui/copy-button";
 import { ConfirmDialog } from "../ui/confirm-dialog";
@@ -25,13 +26,26 @@ export function SettingsPage() {
   const toast = useToast();
   const isOwner = me.data?.user.isAdmin || org?.role === "owner";
 
-  const { register, handleSubmit, reset, watch } = useForm<OrgNameForm>({
+  const {
+    register,
+    handleSubmit,
+    reset,
+    watch,
+    formState: { isSubmitting },
+  } = useForm<OrgNameForm>({
     resolver: zodResolver(orgNameSchema),
     defaultValues: { name: "" },
   });
+  const resetOrgId = useRef<string | undefined>(undefined);
 
   useEffect(() => {
-    if (org) reset({ name: org.name });
+    if (!org) {
+      resetOrgId.current = undefined;
+      return;
+    }
+    if (resetOrgId.current === org.id) return;
+    resetOrgId.current = org.id;
+    reset({ name: org.name });
   }, [org, reset]);
 
   const currentName = watch("name");
@@ -42,15 +56,18 @@ export function SettingsPage() {
   const [confirmName, setConfirmName] = useState("");
   const [deletingOrg, setDeletingOrg] = useState(false);
 
-  const rename = handleSubmit(async (data) => {
-    try {
-      await api(`/orgs/${orgId}`, { method: "PATCH", body: { name: data.name } });
-      await qc.invalidateQueries({ queryKey: ["user"] });
-      toast("Organization renamed");
-    } catch (e) {
-      toast((e as Error).message, "error");
-    }
-  });
+  const rename = handleSubmit(
+    async (data) => {
+      try {
+        await api(`/orgs/${orgId}`, { method: "PATCH", body: { name: data.name } });
+        await qc.invalidateQueries({ queryKey: ["user"] });
+        toast("Organization renamed");
+      } catch (e) {
+        toast((e as Error).message, "error");
+      }
+    },
+    (errors) => toast(errors.name?.message ?? "Enter an organization name", "error"),
+  );
 
   const copyOrgName = async (text: string) => {
     await navigator.clipboard.writeText(text);
@@ -107,8 +124,12 @@ export function SettingsPage() {
                 </Field>
                 {isOwner ? (
                   <div>
-                    <Button variant="primary" onClick={rename} disabled={!currentName?.trim()}>
-                      Save
+                    <Button
+                      variant="primary"
+                      onClick={rename}
+                      disabled={!currentName?.trim() || isSubmitting}
+                    >
+                      <BusyContent busy={isSubmitting}>Save</BusyContent>
                     </Button>
                   </div>
                 ) : (

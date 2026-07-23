@@ -48,6 +48,7 @@ describe("form schemas", () => {
     expect(link.slug).toBe("");
     expect(link.qrLogoSize).toBeNull();
     expect(orgNameSchema.safeParse({ name: "" }).success).toBe(false);
+    expect(orgNameSchema.safeParse({ name: "   " }).success).toBe(false);
     expect(orgNameSchema.safeParse({ name: "x".repeat(101) }).success).toBe(false);
   });
 });

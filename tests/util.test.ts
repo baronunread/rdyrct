@@ -206,6 +206,7 @@ describe("normalizeUrl", () => {
   test("preserves a URL with a scheme and adds https to a bare destination", () => {
     expect(normalizeUrl("http://example.com/path")).toBe("http://example.com/path");
     expect(normalizeUrl("example.com/path")).toBe("https://example.com/path");
+    expect(normalizeUrl("example.com:8443/path")).toBe("https://example.com:8443/path");
   });
 });
 

@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 export const orgNameSchema = z.object({
-  name: z.string().min(1, "Enter an organization name").max(100),
+  name: z.string().trim().min(1, "Enter an organization name").max(100),
 });
 
 const tryUrl = (v: string) => z.url().safeParse(v).success;

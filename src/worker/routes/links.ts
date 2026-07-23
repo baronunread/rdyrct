@@ -25,7 +25,7 @@ export const linkRoutes = new Hono<AppEnv>();
 
 function validateInput(body: LinkInput, orgId: string, partial = false) {
   if ((!partial || body.destination !== undefined) && body.destination) {
-    body.destination = normalizeUrl(body.destination);
+    body.destination = normalizeUrl(body.destination.trim());
     if (!isValidHttpUrl(body.destination))
       throw new HTTPException(400, {
         message: "Destination must be a valid http(s) URL",

@@ -42,15 +42,14 @@ async function cfRequest(
   if (!res.ok) {
     const text = await res.text().catch(() => "");
     console.error("cf api error", res.status, text);
+    let message = `Cloudflare API error ${res.status}`;
     try {
-      const body = JSON.parse(text);
-      const msg = body.errors?.[0]?.message ?? `Cloudflare API error ${res.status}`;
-      throw new HTTPException(502, { message: msg });
+      const parsed = JSON.parse(text) as { errors?: { message?: string }[] };
+      message = parsed.errors?.[0]?.message ?? message;
     } catch {
-      throw new HTTPException(502, {
-        message: "Could not register the domain, try again shortly",
-      });
+      // Keep the status-based fallback when Cloudflare does not return JSON.
     }
+    throw new HTTPException(502, { message });
   }
   return res.json();
 }

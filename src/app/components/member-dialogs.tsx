@@ -3,6 +3,7 @@ import { Button } from "../ui/button";
 import { ConfirmDialog } from "../ui/confirm-dialog";
 import { Dialog } from "../ui/dialog";
 import { Field, Select } from "../ui/field";
+import { BusyContent } from "../ui/spinner";
 
 export function RemoveMemberDialog({
   member,
@@ -66,7 +67,7 @@ export function InviteMemberDialog({
             Cancel
           </Button>
           <Button variant="primary" disabled={isCreating} onClick={onCreate}>
-            Create invite link
+            <BusyContent busy={isCreating}>Create invite link</BusyContent>
           </Button>
         </div>
       </div>
