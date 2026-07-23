@@ -212,6 +212,34 @@ that same event to Better Stack over its HTTP source
 silently no-ops, which is the case in dev and tests). Read the logs with
 `wrangler tail` or in Cloudflare observability either way.
 
+### Recovering from a give-up, by hand
+
+Every message is self-healing: it re-derives its result from current D1 state
+when it runs, rather than carrying a fixed value. So recovery is not resending
+the exact message, it is making the app touch the same row again, which
+enqueues an equivalent message and runs it through the normal path. The alert
+gives you `op` and `target`; use `target` to find the row.
+
+- **`kv_sync` on a link key** (`slug:...`): open the link and save it, even
+  with no changes. `PATCH /:linkId` unconditionally re-enqueues `syncLinkMsg`
+  for its current key.
+- **`kv_sync` on a domain key** (`domain:...`): if the domain is still
+  `active`, PATCH its root redirect (an unchanged value is fine); that
+  re-enqueues `syncDomainMsg`. If the domain row is already gone, the key
+  should be deleted and nothing in the app touches it anymore: delete it
+  directly, `wrangler kv key delete --binding=LINKS "<target>"`.
+- **`r2_delete` / `r2_delete_prefix`**: low urgency, since no D1 row points at
+  the orphaned object anymore. Delete it directly: `wrangler r2 object delete
+rdyrct-qr-logos/<target>`, or for a prefix, list and delete matching keys via
+  the R2 dashboard or `wrangler r2 object list --prefix`.
+
+A burst of give-ups usually means KV or R2 itself had a bad few minutes, not a
+bug: check Cloudflare's status page and the `rdyrct-storage` backlog in the
+Queues dashboard, let it recover, then work the list. A single `target` that
+keeps dead-lettering outside of a known outage points at a bug in
+`applyStorageMessage` or its callers, which is a code fix, not something this
+runbook covers.
+
 ## Local development
 
 `bun run dev` (Wrangler/Miniflare) runs the storage queue, its main consumer,
