@@ -19,26 +19,17 @@ export const billingRoutes = new Hono<AppEnv>();
 
 /** Which plan a Polar product grants. Unknown products fall back to pro so a
  * paying customer is never left on free limits by a mapping mistake. */
-const planForProduct = (
-  env: Env,
-  productId: string | undefined,
-): "hobby" | "pro" =>
+const planForProduct = (env: Env, productId: string | undefined): "hobby" | "pro" =>
   productId === env.POLAR_HOBBY_PRODUCT_ID ? "hobby" : "pro";
 
 billingRoutes.post("/checkout", requireUser, async (c) => {
   const user = c.var.user!;
-  const body = await c.req
-    .json<{ plan?: string }>()
-    .catch(() => ({}) as { plan?: string });
+  const body = await c.req.json<{ plan?: string }>().catch(() => ({}) as { plan?: string });
   const plan = body.plan ?? "pro";
   if (plan !== "hobby" && plan !== "pro")
     throw new HTTPException(400, { message: "plan must be hobby or pro" });
   const checkout = await polarFor(c.env).checkouts.create({
-    products: [
-      plan === "hobby"
-        ? c.env.POLAR_HOBBY_PRODUCT_ID
-        : c.env.POLAR_PRO_PRODUCT_ID,
-    ],
+    products: [plan === "hobby" ? c.env.POLAR_HOBBY_PRODUCT_ID : c.env.POLAR_PRO_PRODUCT_ID],
     // Polar interpolates {CHECKOUT_ID}; the SPA uses it to confirm the
     // upgrade before celebrating (webhook is still the entitlement source).
     successUrl: `${c.env.APP_URL}/billing?checkout_id={CHECKOUT_ID}`,
@@ -54,8 +45,7 @@ billingRoutes.get("/portal", requireUser, async (c) => {
     .from(schema.user)
     .where(eq(schema.user.id, c.var.user!.id));
   const customerId = rows[0]?.customerId;
-  if (!customerId)
-    throw new HTTPException(400, { message: "No billing account yet" });
+  if (!customerId) throw new HTTPException(400, { message: "No billing account yet" });
   const session = await polarFor(c.env).customerSessions.create({ customerId });
   return c.json({ url: session.customerPortalUrl });
 });
@@ -113,9 +103,7 @@ async function handleSubscriptionRevoked(
       polarSubscriptionCurrentPeriodEnd: null,
     })
     .where(
-      userId
-        ? eq(schema.user.id, userId)
-        : eq(schema.user.polarSubscriptionId, event.data.id),
+      userId ? eq(schema.user.id, userId) : eq(schema.user.polarSubscriptionId, event.data.id),
     );
 }
 
@@ -134,9 +122,7 @@ async function handleSubscriptionCanceled(
       polarSubscriptionCurrentPeriodEnd: periodEnd ? new Date(periodEnd) : null,
     })
     .where(
-      userId
-        ? eq(schema.user.id, userId)
-        : eq(schema.user.polarSubscriptionId, event.data.id),
+      userId ? eq(schema.user.id, userId) : eq(schema.user.polarSubscriptionId, event.data.id),
     );
 }
 
@@ -151,9 +137,7 @@ async function handleSubscriptionUpdated(
     .update(schema.user)
     .set({ plan: planForProduct(env, event.data.product_id) })
     .where(
-      userId
-        ? eq(schema.user.id, userId)
-        : eq(schema.user.polarSubscriptionId, event.data.id),
+      userId ? eq(schema.user.id, userId) : eq(schema.user.polarSubscriptionId, event.data.id),
     );
 }
 
@@ -171,16 +155,11 @@ async function handleSubscriptionUncanceled(
       polarSubscriptionCurrentPeriodEnd: null,
     })
     .where(
-      userId
-        ? eq(schema.user.id, userId)
-        : eq(schema.user.polarSubscriptionId, event.data.id),
+      userId ? eq(schema.user.id, userId) : eq(schema.user.polarSubscriptionId, event.data.id),
     );
 }
 
-export async function handlePolarWebhook(
-  req: Request,
-  env: Env,
-): Promise<Response> {
+export async function handlePolarWebhook(req: Request, env: Env): Promise<Response> {
   const body = await req.text();
   try {
     new Webhook(btoa(env.POLAR_WEBHOOK_SECRET)).verify(
@@ -193,7 +172,10 @@ export async function handlePolarWebhook(
   const event = JSON.parse(body) as PolarEvent;
 
   const db = drizzle(env.DB, { schema });
-  const handlers: Record<string, (db: ReturnType<typeof drizzle>, env: Env, event: PolarEvent) => Promise<void>> = {
+  const handlers: Record<
+    string,
+    (db: ReturnType<typeof drizzle>, env: Env, event: PolarEvent) => Promise<void>
+  > = {
     "subscription.active": handleSubscriptionActive,
     "subscription.revoked": handleSubscriptionRevoked,
     "subscription.canceled": handleSubscriptionCanceled,

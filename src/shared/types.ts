@@ -53,13 +53,7 @@ export const QR_DOT_STYLES = [
   "extra-rounded",
 ] as const;
 /** Corner ('eye') shapes; "" means inherit/default (QR_DEFAULT_CORNER). */
-export const QR_CORNER_STYLES = [
-  "extra-rounded",
-  "rounded",
-  "dot",
-  "square",
-  "classy",
-] as const;
+export const QR_CORNER_STYLES = ["extra-rounded", "rounded", "dot", "square", "classy"] as const;
 /** Built-in defaults when neither link nor org overrides them. */
 export const QR_DEFAULT_COLOR = "#17151f";
 export const QR_DEFAULT_CORNER = "extra-rounded";

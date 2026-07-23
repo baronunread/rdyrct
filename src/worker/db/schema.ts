@@ -1,11 +1,4 @@
-import {
-  sqliteTable,
-  text,
-  integer,
-  real,
-  primaryKey,
-  index,
-} from "drizzle-orm/sqlite-core";
+import { sqliteTable, text, integer, real, primaryKey, index } from "drizzle-orm/sqlite-core";
 
 /* ---------------- BetterAuth-managed tables ---------------- */
 // Shapes follow the BetterAuth core schema (bunx @better-auth/cli generate),
@@ -15,9 +8,7 @@ export const user = sqliteTable("user", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),
   email: text("email").notNull().unique(),
-  emailVerified: integer("email_verified", { mode: "boolean" })
-    .notNull()
-    .default(false),
+  emailVerified: integer("email_verified", { mode: "boolean" }).notNull().default(false),
   image: text("image"),
   isAdmin: integer("is_admin", { mode: "boolean" }).notNull().default(false),
   // Suspended by a platform admin: sessions are wiped and sign-in is refused.
@@ -29,16 +20,14 @@ export const user = sqliteTable("user", {
     .default("free"),
   polarCustomerId: text("polar_customer_id"),
   polarSubscriptionId: text("polar_subscription_id"),
-  polarSubscriptionCancelAtPeriodEnd: integer(
-    "polar_subscription_cancel_at_period_end",
-    { mode: "boolean" },
-  )
+  polarSubscriptionCancelAtPeriodEnd: integer("polar_subscription_cancel_at_period_end", {
+    mode: "boolean",
+  })
     .notNull()
     .default(false),
-  polarSubscriptionCurrentPeriodEnd: integer(
-    "polar_subscription_current_period_end",
-    { mode: "timestamp_ms" },
-  ),
+  polarSubscriptionCurrentPeriodEnd: integer("polar_subscription_current_period_end", {
+    mode: "timestamp_ms",
+  }),
   createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
   updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),
 });
@@ -133,10 +122,7 @@ export const orgMembers = sqliteTable(
     role: text("role", { enum: ["owner", "admin", "member"] }).notNull(),
     createdAt: integer("created_at").notNull(),
   },
-  (t) => [
-    primaryKey({ columns: [t.orgId, t.userId] }),
-    index("idx_org_members_user").on(t.userId),
-  ],
+  (t) => [primaryKey({ columns: [t.orgId, t.userId] }), index("idx_org_members_user").on(t.userId)],
 );
 
 export const invites = sqliteTable(

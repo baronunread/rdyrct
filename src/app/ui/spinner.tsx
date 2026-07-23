@@ -23,19 +23,10 @@ export function Spinner({ className }: { className?: string }) {
  * text stays in the DOM (invisible during busy) so the button does not
  * shrink.
  */
-export function BusyContent({
-  busy,
-  children,
-}: {
-  busy: boolean;
-  children: React.ReactNode;
-}) {
+export function BusyContent({ busy, children }: { busy: boolean; children: React.ReactNode }) {
   return (
     <span className="relative inline-flex items-center justify-center">
-      <span
-        className="busy-label"
-        data-busy={busy ? "" : undefined}
-      >
+      <span className="busy-label" data-busy={busy ? "" : undefined}>
         {children}
       </span>
       <span

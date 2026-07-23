@@ -1,11 +1,4 @@
-import {
-  createContext,
-  useCallback,
-  useContext,
-  useRef,
-  useState,
-  type ReactNode,
-} from "react";
+import { createContext, useCallback, useContext, useRef, useState, type ReactNode } from "react";
 import { cn } from "./cn";
 
 interface Toast {
@@ -14,9 +7,7 @@ interface Toast {
   kind: "info" | "error";
 }
 
-const ToastContext = createContext<(message: string, kind?: Toast["kind"]) => void>(
-  () => {},
-);
+const ToastContext = createContext<(message: string, kind?: Toast["kind"]) => void>(() => {});
 
 export const useToast = () => useContext(ToastContext);
 
@@ -40,9 +31,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
             role="status"
             className={cn(
               "rounded-lg border bg-surface px-4 py-2.5 text-sm shadow-xl",
-              t.kind === "error"
-                ? "border-danger/50 text-danger"
-                : "border-border text-text",
+              t.kind === "error" ? "border-danger/50 text-danger" : "border-border text-text",
             )}
           >
             {t.message}

@@ -1,10 +1,4 @@
-import {
-  ChevronsUpDown,
-  LogOut,
-  Menu as MenuIcon,
-  Moon,
-  Sun,
-} from "lucide-react";
+import { ChevronsUpDown, LogOut, Menu as MenuIcon, Moon, Sun } from "lucide-react";
 import { useTheme } from "../lib/theme";
 import { appNavItems } from "./nav-items";
 import { IconButton } from "../ui/button";
@@ -37,10 +31,7 @@ function StatCardsSkeleton({
   return (
     <div className={cn("grid grid-cols-1 gap-4", gridClass)}>
       {Array.from({ length: count }, (_, i) => (
-        <div
-          key={i}
-          className="rounded-lg border border-border bg-surface p-4"
-        >
+        <div key={i} className="rounded-lg border border-border bg-surface p-4">
           <Skeleton className="h-2.5 w-16" />
           <Skeleton className="mt-3 h-6 w-20" />
         </div>
@@ -72,10 +63,7 @@ function BarListCardSkeleton() {
               <Skeleton className="h-2.5" style={{ width: `${w}%` }} />
               <Skeleton className="h-2.5 w-8 shrink-0" />
             </div>
-            <Skeleton
-              className="h-1.5 rounded-full"
-              style={{ width: `${w}%` }}
-            />
+            <Skeleton className="h-1.5 rounded-full" style={{ width: `${w}%` }} />
           </div>
         ))}
       </div>
@@ -134,10 +122,7 @@ export function AdminUsageSkeleton() {
   return (
     <SkeletonStatus>
       <HeaderSkeleton />
-      <StatCardsSkeleton
-        count={6}
-        gridClass="grid-cols-2 sm:grid-cols-3 lg:grid-cols-6"
-      />
+      <StatCardsSkeleton count={6} gridClass="grid-cols-2 sm:grid-cols-3 lg:grid-cols-6" />
       <div className="mt-4 grid gap-4 lg:grid-cols-2">
         <ChartCardSkeleton />
         <ChartCardSkeleton />
@@ -239,9 +224,7 @@ function SidebarSkeleton() {
   return (
     <div className="flex h-full flex-col">
       <div className="hidden px-3 pt-4 pb-2 md:block">
-        <span className="px-1.5 text-sm font-bold tracking-widest">
-          rdyrct
-        </span>
+        <span className="px-1.5 text-sm font-bold tracking-widest">rdyrct</span>
       </div>
 
       {/* org switcher: the frame is chrome, the org name is data */}
@@ -277,11 +260,7 @@ function SidebarSkeleton() {
               <Skeleton className="h-2.5 w-4/5" />
             </span>
           </div>
-          <IconButton
-            label="Toggle theme"
-            className="p-2"
-            onClick={toggleTheme}
-          >
+          <IconButton label="Toggle theme" className="p-2" onClick={toggleTheme}>
             {theme === "dark" ? <Sun size={15} /> : <Moon size={15} />}
           </IconButton>
           <IconButton label="Sign out" danger className="p-2" disabled>

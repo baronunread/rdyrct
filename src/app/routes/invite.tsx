@@ -40,23 +40,17 @@ export function InvitePage() {
   return (
     <div className="grid min-h-dvh place-items-center px-4">
       <div className="w-full max-w-sm rounded-xl border border-border bg-surface p-6 text-center">
-        <p className="mb-4 text-xl font-bold tracking-widest">
-          rdyrct
-        </p>
+        <p className="mb-4 text-xl font-bold tracking-widest">rdyrct</p>
         {preview.isLoading || me.isLoading ? (
           <InviteSkeleton />
         ) : preview.isError ? (
-          <p className="text-sm text-muted">
-            This invite is invalid or has expired.
-          </p>
+          <p className="text-sm text-muted">This invite is invalid or has expired.</p>
         ) : (
           <>
             <p className="text-sm">
               You have been invited to join{" "}
-              <span className="font-bold text-accent">
-                {preview.data!.orgName}
-              </span>{" "}
-              as <span className="text-accent-2">{preview.data!.role}</span>.
+              <span className="font-bold text-accent">{preview.data!.orgName}</span> as{" "}
+              <span className="text-accent-2">{preview.data!.role}</span>.
             </p>
             <div className="mt-5 flex flex-col gap-2">
               {me.data ? (
@@ -67,17 +61,13 @@ export function InvitePage() {
                 <>
                   <Button
                     variant="primary"
-                    onClick={() =>
-                      navigate(`/login?next=${encodeURIComponent(here)}`)
-                    }
+                    onClick={() => navigate(`/login?next=${encodeURIComponent(here)}`)}
                   >
                     Sign in to accept
                   </Button>
                   <p className="text-xs text-muted">
                     New here?{" "}
-                    <Link to={`/signup?next=${encodeURIComponent(here)}`}>
-                      Create an account
-                    </Link>
+                    <Link to={`/signup?next=${encodeURIComponent(here)}`}>Create an account</Link>
                   </p>
                 </>
               )}

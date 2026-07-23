@@ -59,9 +59,7 @@ export function Dialog({
                     popup's own centering transform / entrance animation */}
                 <div key={shakeKey} className={shakeKey ? "animate-shake" : ""}>
                   <div className="mb-4 flex items-center justify-between">
-                    <BaseDialog.Title className="text-base font-bold">
-                      {title}
-                    </BaseDialog.Title>
+                    <BaseDialog.Title className="text-base font-bold">{title}</BaseDialog.Title>
                     <BaseDialog.Close
                       className="cursor-pointer rounded p-1 text-muted hover:text-text"
                       aria-label="Close"

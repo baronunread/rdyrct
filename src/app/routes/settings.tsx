@@ -1,19 +1,22 @@
-import { useState } from "react";
-import { Link } from "react-router";
+import { useState, useEffect, useRef } from "react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCurrentUser } from "../lib/hooks";
 import { useCurrentOrg } from "../lib/current-org";
 import { api } from "../lib/api";
 import { authClient } from "../lib/auth-client";
-import { PLAN_LIMITS } from "@/shared/types";
 import { Button } from "../ui/button";
-import { Dialog } from "../ui/dialog";
 import { Field, Input } from "../ui/field";
 import { Card, PageHeader } from "../ui/misc";
 import { BusyContent } from "../ui/spinner";
 import { useToast } from "../ui/toast";
 import { CopyButton } from "../ui/copy-button";
+import { ConfirmDialog } from "../ui/confirm-dialog";
 import { QrDefaultsCard } from "../components/qr-defaults-card";
+import { orgNameSchema } from "../lib/schemas";
+
+type OrgNameForm = { name: string };
 
 export function SettingsPage() {
   const { org } = useCurrentOrg();
@@ -22,28 +25,52 @@ export function SettingsPage() {
   const qc = useQueryClient();
   const toast = useToast();
   const isOwner = me.data?.user.isAdmin || org?.role === "owner";
-  // Draft-until-edited: tracks the active org (including one just created
-  // from the NoOrgState below, while this page stays mounted) until typed in.
-  const [nameDraft, setNameDraft] = useState<string | null>(null);
-  const name = nameDraft ?? org?.name ?? "";
+
+  const {
+    register,
+    handleSubmit,
+    reset,
+    watch,
+    formState: { isSubmitting },
+  } = useForm<OrgNameForm>({
+    resolver: zodResolver(orgNameSchema),
+    defaultValues: { name: "" },
+  });
+  const resetOrgId = useRef<string | undefined>(undefined);
+
+  useEffect(() => {
+    if (!org) {
+      resetOrgId.current = undefined;
+      return;
+    }
+    if (resetOrgId.current === org.id) return;
+    resetOrgId.current = org.id;
+    reset({ name: org.name });
+  }, [org, reset]);
+
+  const currentName = watch("name");
+
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [deleteOrgOpen, setDeleteOrgOpen] = useState(false);
   const [confirmName, setConfirmName] = useState("");
   const [deletingOrg, setDeletingOrg] = useState(false);
 
-  const rename = async () => {
-    try {
-      await api(`/orgs/${orgId}`, { method: "PATCH", body: { name } });
-      await qc.invalidateQueries({ queryKey: ["user"] });
-      toast("Organization renamed");
-    } catch (e) {
-      toast((e as Error).message, "error");
-    }
-  };
+  const rename = handleSubmit(
+    async (data) => {
+      try {
+        await api(`/orgs/${orgId}`, { method: "PATCH", body: { name: data.name } });
+        await qc.invalidateQueries({ queryKey: ["user"] });
+        toast("Organization renamed");
+      } catch (e) {
+        toast((e as Error).message, "error");
+      }
+    },
+    (errors) => toast(errors.name?.message ?? "Enter an organization name", "error"),
+  );
 
-  const copyOrgName = (text: string) => {
-    navigator.clipboard.writeText(text);
+  const copyOrgName = async (text: string) => {
+    await navigator.clipboard.writeText(text);
     toast("Copied to clipboard");
   };
 
@@ -53,7 +80,7 @@ export function SettingsPage() {
       await api(`/orgs/${orgId}`, { method: "DELETE" });
       setDeleteOrgOpen(false);
       setConfirmName("");
-      setNameDraft(null);
+      reset({ name: "" });
       toast("Organization deleted");
       // useCurrentOrg falls back to the next org (or NoOrgState everywhere).
       await qc.refetchQueries({ queryKey: ["user"] });
@@ -82,10 +109,7 @@ export function SettingsPage() {
 
   return (
     <div>
-      <PageHeader
-        title="Settings"
-        sub="Account and organization settings"
-      />
+      <PageHeader title="Settings" sub="Account and organization settings" />
       <div className="flex flex-col gap-4">
         {/* org cards only when an org exists; account deletion always */}
         {org && (
@@ -93,11 +117,7 @@ export function SettingsPage() {
             <Card className="max-w-2xl">
               <div className="flex flex-col gap-4">
                 <Field label="Organization name">
-                  <Input
-                    value={name}
-                    onChange={(e) => setNameDraft(e.target.value)}
-                    disabled={!isOwner}
-                  />
+                  <Input {...register("name")} disabled={!isOwner} />
                 </Field>
                 <Field label="Organization id">
                   <Input value={orgId} disabled readOnly />
@@ -107,15 +127,13 @@ export function SettingsPage() {
                     <Button
                       variant="primary"
                       onClick={rename}
-                      disabled={!name.trim()}
+                      disabled={!currentName?.trim() || isSubmitting}
                     >
-                      Save
+                      <BusyContent busy={isSubmitting}>Save</BusyContent>
                     </Button>
                   </div>
                 ) : (
-                  <p className="text-xs text-muted">
-                    Only the owner can change these settings.
-                  </p>
+                  <p className="text-xs text-muted">Only the owner can change these settings.</p>
                 )}
               </div>
             </Card>
@@ -126,22 +144,15 @@ export function SettingsPage() {
 
         <Card className="max-w-2xl">
           <div className="flex flex-col gap-3">
-            <p className="text-2xs tracking-wider text-danger uppercase">
-              Danger zone
-            </p>
+            <p className="text-2xs tracking-wider text-danger uppercase">Danger zone</p>
             {org && isOwner && (
               <>
                 <p className="text-sm text-muted">
-                  Permanently delete{" "}
-                  <span className="text-text">{org.name}</span> with every
-                  link, custom domain, and all click history. Short links
-                  stop working immediately.
+                  Permanently delete <span className="text-text">{org.name}</span> with every link,
+                  custom domain, and all click history. Short links stop working immediately.
                 </p>
                 <div>
-                  <Button
-                    variant="danger"
-                    onClick={() => setDeleteOrgOpen(true)}
-                  >
+                  <Button variant="danger" onClick={() => setDeleteOrgOpen(true)}>
                     Delete organization
                   </Button>
                 </div>
@@ -149,9 +160,8 @@ export function SettingsPage() {
               </>
             )}
             <p className="text-sm text-muted">
-              Permanently delete your account. This does not delete
-              organizations you belong to as a member, but you must delete
-              any organizations you own first.
+              Permanently delete your account. This does not delete organizations you belong to as a
+              member, but you must delete any organizations you own first.
             </p>
             <div>
               <Button variant="danger" onClick={() => setDeleteOpen(true)}>
@@ -163,34 +173,30 @@ export function SettingsPage() {
       </div>
 
       {org && (
-        <Dialog
-          open={deleteOrgOpen}
-          onOpenChange={(o) => {
-            setDeleteOrgOpen(o);
-            if (!o) setConfirmName("");
-          }}
+        <ConfirmDialog
           title="Delete organization"
+          open={deleteOrgOpen}
+          onClose={() => {
+            setDeleteOrgOpen(false);
+            setConfirmName("");
+          }}
+          onConfirm={deleteOrg}
+          confirmLabel="Delete organization"
+          danger
+          pending={deletingOrg}
+          confirmDisabled={confirmName.trim() !== org.name}
         >
-          <div className="flex flex-col gap-4">
-            <p className="text-sm">
-              This permanently deletes{" "}
-              <span className="font-bold text-accent">{org.name}</span>:
-              every link, custom domain, and all click history. Short links
-              stop working immediately. This cannot be undone.
+          <div>
+            <p className="mb-4 text-sm">
+              This permanently deletes <span className="font-bold text-accent">{org.name}</span>:
+              every link, custom domain, and all click history. Short links stop working
+              immediately. This cannot be undone.
             </p>
-            {/* outside a Field: its uppercase label would hide the name's
-                real casing, which the exact-match check depends on */}
             <div>
               <div className="mb-1.5 flex flex-wrap items-center gap-1.5 text-sm text-muted">
                 <span>To confirm, type</span>
-                <code className="rounded bg-bg px-1.5 py-0.5 text-text">
-                  {org.name}
-                </code>
-                <CopyButton
-                  text={org.name}
-                  label="Copy organization name"
-                  onCopy={copyOrgName}
-                />
+                <code className="rounded bg-bg px-1.5 py-0.5 text-text">{org.name}</code>
+                <CopyButton text={org.name} label="Copy organization name" onCopy={copyOrgName} />
               </div>
               <Input
                 value={confirmName}
@@ -200,47 +206,21 @@ export function SettingsPage() {
                 autoFocus
               />
             </div>
-            <div className="flex justify-end gap-2">
-              <Button variant="ghost" onClick={() => setDeleteOrgOpen(false)}>
-                Cancel
-              </Button>
-              <Button
-                variant="danger"
-                disabled={confirmName.trim() !== org.name || deletingOrg}
-                onClick={deleteOrg}
-              >
-                <BusyContent busy={deletingOrg}>Delete organization</BusyContent>
-              </Button>
-            </div>
           </div>
-        </Dialog>
+        </ConfirmDialog>
       )}
 
-      <Dialog
-        open={deleteOpen}
-        onOpenChange={setDeleteOpen}
+      <ConfirmDialog
         title="Delete account"
+        open={deleteOpen}
+        onClose={() => setDeleteOpen(false)}
+        onConfirm={deleteAccount}
+        confirmLabel="Delete account"
+        danger
+        pending={deleting}
       >
-        <div className="flex flex-col gap-4">
-          <p className="text-sm">
-            This permanently deletes your account. This cannot be undone.
-          </p>
-          <div className="flex justify-end gap-2">
-            <Button variant="ghost" onClick={() => setDeleteOpen(false)}>
-              Cancel
-            </Button>
-            <Button
-              variant="danger"
-              disabled={deleting}
-              onClick={deleteAccount}
-            >
-              <BusyContent busy={deleting}>Delete account</BusyContent>
-            </Button>
-          </div>
-        </div>
-      </Dialog>
+        This permanently deletes your account. This cannot be undone.
+      </ConfirmDialog>
     </div>
   );
 }
-
-

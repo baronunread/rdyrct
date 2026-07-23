@@ -1,5 +1,4 @@
-const ID_ALPHABET =
-  "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
+const ID_ALPHABET = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
 const SLUG_ALPHABET = "23456789abcdefghjkmnpqrstuvwxyz"; // no lookalikes
 
 function randomFrom(alphabet: string, len: number): string {
@@ -99,16 +98,12 @@ export function resolveUtm(
 }
 
 /** Destination with the link's UTM params applied (existing params win). */
-export function buildDestination(
-  destination: string,
-  utm: UtmFields,
-): string {
+export function buildDestination(destination: string, utm: UtmFields): string {
   try {
     const url = new URL(destination);
     for (const [param, field] of UTM_KEYS) {
       const value = utm[field];
-      if (value && !url.searchParams.has(param))
-        url.searchParams.set(param, value);
+      if (value && !url.searchParams.has(param)) url.searchParams.set(param, value);
     }
     return url.toString();
   } catch {
@@ -133,10 +128,23 @@ export function referrerHost(referrer: string): string {
   }
 }
 
+export function normalizeUrl(value: string): string {
+  return /^https?:\/\//i.test(value) ? value : `https://${value}`;
+}
+
 export function isValidHttpUrl(value: string): boolean {
   try {
     const url = new URL(value);
-    return url.protocol === "http:" || url.protocol === "https:";
+    if (url.protocol !== "http:" && url.protocol !== "https:") return false;
+
+    // URLs with a trailing dot or a one-character top-level domain are almost
+    // always a pasted typo (for example, "http./path"). Keep IP addresses
+    // valid, but require ordinary hostnames to have a real TLD.
+    const hostname = url.hostname;
+    if (hostname.endsWith(".") || hostname.includes(":")) return !hostname.endsWith(".");
+    if (/^\d{1,3}(?:\.\d{1,3}){3}$/.test(hostname)) return true;
+    const labels = hostname.split(".");
+    return labels.length > 1 && labels.at(-1)!.length >= 2;
   } catch {
     return false;
   }
@@ -151,8 +159,7 @@ import { QR_CORNER_STYLES, QR_DOT_STYLES } from "@/shared/types";
  * Logo images live in R2; D1 rows store only the serving URL. Upload and
  * serving both go through /api/orgs/:orgId/qr-logo (org members only).
  */
-export const qrLogoUrl = (orgId: string, file: string) =>
-  `/api/orgs/${orgId}/qr-logo/${file}`;
+export const qrLogoUrl = (orgId: string, file: string) => `/api/orgs/${orgId}/qr-logo/${file}`;
 
 // Only the file name is charset-checked: it is ours (uid() + a known
 // extension). The org id never goes through a regex — validateQrFields
@@ -162,69 +169,60 @@ export const QR_LOGO_FILE_RE = /^[A-Za-z0-9]+\.[a-z0-9]+$/;
 
 /** R2 key (`{orgId}/{file}`) for a serving URL, null for anything else. */
 export function qrLogoKeyFromUrl(url: string): string | null {
-  const m = /^\/api\/orgs\/([^/]+)\/qr-logo\/([A-Za-z0-9]+\.[a-z0-9]+)$/.exec(
-    url,
-  );
+  const m = /^\/api\/orgs\/([^/]+)\/qr-logo\/([A-Za-z0-9]+\.[a-z0-9]+)$/.exec(url);
   return m ? `${m[1]}/${m[2]}` : null;
 }
 
 const HEX_COLOR_RE = /^#[0-9a-fA-F]{6}$/;
 
+type QrFields = {
+  qrLogo?: string;
+  qrStyle?: string;
+  qrColor?: string;
+  qrCorner?: string;
+  qrBg?: string;
+  qrEyeColor?: string;
+  qrLogoSize?: number | null;
+};
+
+function invalidQrField(message: string): never {
+  throw new HTTPException(400, { message });
+}
+
+function validateQrLogo(qrLogo: string | undefined, orgId: string) {
+  if (!qrLogo) return;
+  const prefix = qrLogoUrl(orgId, "");
+  const file = qrLogo.startsWith(prefix) ? qrLogo.slice(prefix.length) : "";
+  if (!QR_LOGO_FILE_RE.test(file)) invalidQrField("Logo must be an uploaded image");
+}
+
+function validateQrChoice(value: string | undefined, choices: readonly string[], message: string) {
+  if (value && !choices.includes(value)) invalidQrField(message);
+}
+
+function validateQrColor(value: string | undefined, label: string) {
+  if (value && !HEX_COLOR_RE.test(value)) {
+    invalidQrField(`${label} must be a hex color like #17151f`);
+  }
+}
+
+function validateQrLogoSize(value: number | null | undefined) {
+  if (value != null && (!Number.isFinite(value) || value < 0.2 || value > 0.7)) {
+    invalidQrField("QR logo size must be a ratio between 0.2 and 0.7");
+  }
+}
+
 /** Shared validation for org QR defaults and per-link overrides ('' = inherit). */
-export function validateQrFields(
-  fields: {
-    qrLogo?: string;
-    qrStyle?: string;
-    qrColor?: string;
-    qrCorner?: string;
-    qrBg?: string;
-    qrEyeColor?: string;
-    qrLogoSize?: number | null;
-  },
-  orgId: string,
-) {
-  if (fields.qrLogo) {
-    // A logo may only be referenced by the org that uploaded it: match the
-    // org's own serving prefix, then check the file part is a real upload.
-    const prefix = qrLogoUrl(orgId, "");
-    const file = fields.qrLogo.startsWith(prefix)
-      ? fields.qrLogo.slice(prefix.length)
-      : "";
-    if (!QR_LOGO_FILE_RE.test(file))
-      throw new HTTPException(400, { message: "Logo must be an uploaded image" });
-  }
-  if (
-    fields.qrStyle &&
-    !(QR_DOT_STYLES as readonly string[]).includes(fields.qrStyle)
-  )
-    throw new HTTPException(400, { message: "Unknown QR dot style" });
-  if (
-    fields.qrCorner &&
-    !(QR_CORNER_STYLES as readonly string[]).includes(fields.qrCorner)
-  )
-    throw new HTTPException(400, { message: "Unknown QR corner style" });
+export function validateQrFields(fields: QrFields, orgId: string) {
+  validateQrLogo(fields.qrLogo, orgId);
+  validateQrChoice(fields.qrStyle, QR_DOT_STYLES, "Unknown QR dot style");
+  validateQrChoice(fields.qrCorner, QR_CORNER_STYLES, "Unknown QR corner style");
   // 'transparent' is the one non-hex background we allow (see the QR preview).
-  if (fields.qrBg && fields.qrBg !== "transparent" && !HEX_COLOR_RE.test(fields.qrBg))
-    throw new HTTPException(400, {
-      message: "QR background must be a hex color or 'transparent'",
-    });
-  for (const [key, val] of [
-    ["QR color", fields.qrColor],
-    ["QR eye color", fields.qrEyeColor],
-  ] as const) {
-    if (val && !HEX_COLOR_RE.test(val))
-      throw new HTTPException(400, {
-        message: `${key} must be a hex color like #17151f`,
-      });
+  if (fields.qrBg && fields.qrBg !== "transparent") {
+    validateQrColor(fields.qrBg, "QR background");
   }
+  validateQrColor(fields.qrColor, "QR color");
+  validateQrColor(fields.qrEyeColor, "QR eye color");
   // null = inherit; otherwise a sane footprint ratio (bigger stops scanning).
-  if (
-    fields.qrLogoSize != null &&
-    (!Number.isFinite(fields.qrLogoSize) ||
-      fields.qrLogoSize < 0.2 ||
-      fields.qrLogoSize > 0.7)
-  )
-    throw new HTTPException(400, {
-      message: "QR logo size must be a ratio between 0.2 and 0.5",
-    });
+  validateQrLogoSize(fields.qrLogoSize);
 }

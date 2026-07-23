@@ -42,9 +42,9 @@ bun run doctor                         # react-doctor audit (React health score;
 bun run fallow                         # fallow codebase intelligence audit
 ```
 
-Both react-doctor and fallow run in CI:
-- `.github/workflows/react-doctor.yml` (advisory, PRs + main)
-- `.github/workflows/fallow.yml` (PRs + main)
+react-doctor runs in CI through `.github/workflows/react-doctor.yml` (advisory,
+PRs + main). Run fallow locally when auditing codebase health; track its
+findings in issues rather than blocking CI.
 
 react-doctor also runs as a pre-commit hook on staged files (`--blocking warning`).
 react-doctor skill lives in `.agents/skills/react-doctor` and `.claude/skills/react-doctor`.
@@ -72,7 +72,7 @@ Shell writes to repo files are sandboxed; edit through the editor tools, not
   owner's plan**: `orgPlan()` in `src/worker/plan.ts` resolves the owner. Only
   Pro raises the owned-org cap above 1. Caps: `PLAN_LIMITS` in
   `src/shared/types.ts` (`{ orgs, links, members, domains, qr,
-  analyticsDays }`). Slugs on the **shared** domain are always random (every
+analyticsDays }`). Slugs on the **shared** domain are always random (every
   plan); chosen slugs exist only on custom domains, so the shared namespace
   can't be squatted. New users get **no default org**: there is no onboarding
   route; org-scoped pages render `NoOrgState`

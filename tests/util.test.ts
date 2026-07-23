@@ -4,6 +4,7 @@ import {
   deviceFromUA,
   EMPTY_UTM,
   isValidHttpUrl,
+  normalizeUrl,
   qrLogoKeyFromUrl,
   randomSlug,
   referrerHost,
@@ -56,7 +57,19 @@ describe("SLUG_RE / RESERVED_SLUGS", () => {
   });
 
   test("app routes are reserved", () => {
-    for (const kw of ["api", "dashboard", "analytics", "links", "domains", "members", "billing", "settings", "admin", "login", "signup"])
+    for (const kw of [
+      "api",
+      "dashboard",
+      "analytics",
+      "links",
+      "domains",
+      "members",
+      "billing",
+      "settings",
+      "admin",
+      "login",
+      "signup",
+    ])
       expect(RESERVED_SLUGS.has(kw)).toBe(true);
     expect(RESERVED_SLUGS.has("some-random-word")).toBe(false);
   });
@@ -73,9 +86,7 @@ describe("buildDestination", () => {
   });
 
   test("existing params on the destination win", () => {
-    const out = new URL(
-      buildDestination("https://example.com/?utm_source=original", UTM),
-    );
+    const out = new URL(buildDestination("https://example.com/?utm_source=original", UTM));
     expect(out.searchParams.get("utm_source")).toBe("original");
     expect(out.searchParams.get("utm_medium")).toBe("email");
   });
@@ -92,9 +103,7 @@ describe("buildDestination", () => {
   });
 
   test("existing query params and fragment survive appended UTM", () => {
-    const out = new URL(
-      buildDestination("https://example.com/p?foo=1&bar=2#frag", UTM),
-    );
+    const out = new URL(buildDestination("https://example.com/p?foo=1&bar=2#frag", UTM));
     expect(out.searchParams.get("foo")).toBe("1");
     expect(out.searchParams.get("bar")).toBe("2");
     expect(out.hash).toBe("#frag");
@@ -159,23 +168,15 @@ describe("deviceFromUA", () => {
     expect(deviceFromUA("")).toBe("unknown");
     expect(deviceFromUA("Googlebot/2.1")).toBe("bot");
     expect(deviceFromUA("curl/8.0")).toBe("bot");
-    expect(
-      deviceFromUA("Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)"),
-    ).toBe("mobile");
-    expect(deviceFromUA("Mozilla/5.0 (iPad; CPU OS 17_0 like Mac OS X)")).toBe(
-      "tablet",
-    );
-    expect(deviceFromUA("Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0)")).toBe(
-      "desktop",
-    );
+    expect(deviceFromUA("Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)")).toBe("mobile");
+    expect(deviceFromUA("Mozilla/5.0 (iPad; CPU OS 17_0 like Mac OS X)")).toBe("tablet");
+    expect(deviceFromUA("Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0)")).toBe("desktop");
   });
 });
 
 describe("referrerHost", () => {
   test("extracts the hostname", () => {
-    expect(referrerHost("https://news.ycombinator.com/item?id=1")).toBe(
-      "news.ycombinator.com",
-    );
+    expect(referrerHost("https://news.ycombinator.com/item?id=1")).toBe("news.ycombinator.com");
   });
 
   test("empty or invalid referrers give an empty string", () => {
@@ -188,16 +189,30 @@ describe("isValidHttpUrl", () => {
   test("accepts http(s) only", () => {
     expect(isValidHttpUrl("https://example.com")).toBe(true);
     expect(isValidHttpUrl("http://example.com")).toBe(true);
+    expect(isValidHttpUrl("https://127.0.0.1:8787")).toBe(true);
     expect(isValidHttpUrl("ftp://example.com")).toBe(false);
     expect(isValidHttpUrl("not a url")).toBe(false);
     expect(isValidHttpUrl("")).toBe(false);
+  });
+
+  test("rejects malformed hostnames that URL parsing otherwise accepts", () => {
+    expect(isValidHttpUrl("https://example.")).toBe(false);
+    expect(isValidHttpUrl("https://example.c")).toBe(false);
+    expect(isValidHttpUrl("http./path")).toBe(false);
+  });
+});
+
+describe("normalizeUrl", () => {
+  test("preserves a URL with a scheme and adds https to a bare destination", () => {
+    expect(normalizeUrl("http://example.com/path")).toBe("http://example.com/path");
+    expect(normalizeUrl("example.com/path")).toBe("https://example.com/path");
+    expect(normalizeUrl("example.com:8443/path")).toBe("https://example.com:8443/path");
   });
 });
 
 describe("validateQrFields", () => {
   const ORG = "aB3dE5fG7hJ9kL1m";
-  const valid = (fields: Parameters<typeof validateQrFields>[0]) =>
-    validateQrFields(fields, ORG);
+  const valid = (fields: Parameters<typeof validateQrFields>[0]) => validateQrFields(fields, ORG);
   test("accepts empty and valid fields", () => {
     expect(() => valid({})).not.toThrow();
     expect(() =>
@@ -236,14 +251,11 @@ describe("validateQrFields", () => {
   test("accepts org ids with hyphens (the local seed script's format)", () => {
     const seedOrg = "seed-cMjzvojAF3j0";
     expect(() =>
-      validateQrFields(
-        { qrLogo: `/api/orgs/${seedOrg}/qr-logo/n2P4r6T8v0x2z4B6.png` },
-        seedOrg,
-      ),
+      validateQrFields({ qrLogo: `/api/orgs/${seedOrg}/qr-logo/n2P4r6T8v0x2z4B6.png` }, seedOrg),
     ).not.toThrow();
-    expect(
-      qrLogoKeyFromUrl(`/api/orgs/${seedOrg}/qr-logo/n2P4r6T8v0x2z4B6.png`),
-    ).toBe(`${seedOrg}/n2P4r6T8v0x2z4B6.png`);
+    expect(qrLogoKeyFromUrl(`/api/orgs/${seedOrg}/qr-logo/n2P4r6T8v0x2z4B6.png`)).toBe(
+      `${seedOrg}/n2P4r6T8v0x2z4B6.png`,
+    );
   });
 
   test("the org id charset is irrelevant (matched by construction, not regex)", () => {
@@ -262,5 +274,10 @@ describe("validateQrFields", () => {
     expect400({ qrBg: "red" });
     expect400({ qrColor: "17151f" });
     expect400({ qrEyeColor: "#12345" });
+  });
+
+  test("accepts supported logo sizes and rejects unsafe ones", () => {
+    expect(() => valid({ qrLogoSize: 0.65 })).not.toThrow();
+    expect400({ qrLogoSize: 0.71 });
   });
 });

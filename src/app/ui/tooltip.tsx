@@ -1,13 +1,7 @@
 import { Tooltip as BaseTooltip } from "@base-ui/react/tooltip";
 import type { ReactElement, ReactNode } from "react";
 
-export function Tooltip({
-  content,
-  children,
-}: {
-  content: ReactNode;
-  children: ReactElement;
-}) {
+export function Tooltip({ content, children }: { content: ReactNode; children: ReactElement }) {
   return (
     <BaseTooltip.Provider>
       <BaseTooltip.Root>

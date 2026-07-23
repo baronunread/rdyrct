@@ -1,0 +1,309 @@
+{
+  "finding_counts": {
+    "src/app/components/auth-form.tsx": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "src/app/components/charts.tsx": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "src/app/components/landing-analytics.tsx": {
+      "crap_high": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 2
+      }
+    },
+    "src/app/components/landing-mockup.tsx": {
+      "complexity_critical": {
+        "count": 1
+      },
+      "crap_critical": {
+        "count": 1
+      },
+      "crap_high": {
+        "count": 1
+      }
+    },
+    "src/app/components/link-editor.tsx": {
+      "crap_critical": {
+        "count": 2
+      },
+      "crap_high": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 2
+      }
+    },
+    "src/app/components/qr-defaults-card.tsx": {
+      "complexity_critical": {
+        "count": 1
+      },
+      "crap_critical": {
+        "count": 2
+      },
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "src/app/components/qr.tsx": {
+      "complexity_critical": {
+        "count": 1
+      },
+      "crap_critical": {
+        "count": 1
+      },
+      "crap_high": {
+        "count": 3
+      },
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "src/app/lib/auth-form.ts": {
+      "crap_high": {
+        "count": 1
+      }
+    },
+    "src/app/lib/current-org.ts": {
+      "crap_high": {
+        "count": 1
+      }
+    },
+    "src/app/lib/org-limits.ts": {
+      "crap_high": {
+        "count": 1
+      }
+    },
+    "src/app/lib/org-qr.ts": {
+      "crap_critical": {
+        "count": 1
+      }
+    },
+    "src/app/lib/sort.ts": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "src/app/routes/admin/orgs.tsx": {
+      "crap_critical": {
+        "count": 1
+      }
+    },
+    "src/app/routes/admin/users.tsx": {
+      "complexity_critical": {
+        "count": 1
+      },
+      "crap_critical": {
+        "count": 1
+      },
+      "crap_high": {
+        "count": 2
+      },
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "src/app/routes/analytics.tsx": {
+      "complexity_critical": {
+        "count": 1
+      },
+      "crap_critical": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "src/app/routes/auth.tsx": {
+      "complexity_critical": {
+        "count": 1
+      },
+      "crap_critical": {
+        "count": 1
+      },
+      "crap_high": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 3
+      }
+    },
+    "src/app/routes/billing.tsx": {
+      "complexity_moderate": {
+        "count": 1
+      },
+      "crap_critical": {
+        "count": 2
+      },
+      "crap_high": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "src/app/routes/dashboard.tsx": {
+      "complexity_critical": {
+        "count": 1
+      },
+      "crap_critical": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 3
+      }
+    },
+    "src/app/routes/domains.tsx": {
+      "complexity_critical": {
+        "count": 1
+      },
+      "crap_critical": {
+        "count": 1
+      },
+      "crap_high": {
+        "count": 3
+      }
+    },
+    "src/app/routes/invite.tsx": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "src/app/routes/landing.tsx": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "src/app/routes/link-detail.tsx": {
+      "complexity_critical": {
+        "count": 1
+      },
+      "crap_critical": {
+        "count": 1
+      }
+    },
+    "src/app/routes/links.tsx": {
+      "complexity_critical": {
+        "count": 1
+      },
+      "crap_critical": {
+        "count": 2
+      }
+    },
+    "src/app/routes/members.tsx": {
+      "crap_critical": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "src/app/routes/reset-password.tsx": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "src/app/routes/settings.tsx": {
+      "complexity_critical": {
+        "count": 1
+      },
+      "crap_critical": {
+        "count": 1
+      }
+    },
+    "src/app/routes/shell.tsx": {
+      "complexity_high": {
+        "count": 1
+      },
+      "crap_high": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "src/worker/auth.ts": {
+      "crap_moderate": {
+        "count": 2
+      }
+    },
+    "src/worker/better-auth.ts": {
+      "crap_high": {
+        "count": 2
+      }
+    },
+    "src/worker/index.ts": {
+      "crap_high": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "src/worker/routes/admin.ts": {
+      "complexity_critical": {
+        "count": 2
+      },
+      "crap_critical": {
+        "count": 2
+      }
+    },
+    "src/worker/routes/billing.ts": {
+      "crap_high": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 4
+      }
+    },
+    "src/worker/routes/domains.ts": {
+      "crap_high": {
+        "count": 2
+      },
+      "crap_moderate": {
+        "count": 4
+      }
+    },
+    "src/worker/routes/links.ts": {
+      "complexity_critical": {
+        "count": 2
+      },
+      "crap_critical": {
+        "count": 2
+      },
+      "crap_high": {
+        "count": 2
+      }
+    },
+    "src/worker/routes/orgs.ts": {
+      "complexity_critical": {
+        "count": 1
+      },
+      "crap_critical": {
+        "count": 1
+      },
+      "crap_high": {
+        "count": 3
+      },
+      "crap_moderate": {
+        "count": 4
+      }
+    },
+    "src/worker/routes/qr-logos.ts": {
+      "crap_critical": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 1
+      }
+    }
+  },
+  "runtime_coverage_findings": [],
+  "target_keys": []
+}

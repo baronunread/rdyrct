@@ -1,6 +1,7 @@
 import { Link, useParams, useSearchParams } from "react-router";
 import { ArrowLeft, ExternalLink } from "lucide-react";
 import { useLinkStats } from "../lib/hooks";
+import { shortDate } from "../lib/dates";
 import { useCurrentOrg } from "../lib/current-org";
 import { useConfig } from "../lib/hooks";
 import { shortUrl } from "../lib/api";
@@ -28,7 +29,11 @@ export function LinkDetailPage() {
     <div>
       <div className="mb-6 flex items-center gap-3">
         <Link to="/links">
-          <button type="button" aria-label="Back to links" className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-surface-2 hover:text-text">
+          <button
+            type="button"
+            aria-label="Back to links"
+            className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-surface-2 hover:text-text"
+          >
             <ArrowLeft size={16} />
           </button>
         </Link>
@@ -40,9 +45,7 @@ export function LinkDetailPage() {
                 ? `${new URL(config.appHost).host}/${s.slug}`
                 : `/${s.slug}`}
           </h1>
-          {s.title && (
-            <p className="mt-0.5 truncate text-sm text-muted">{s.title}</p>
-          )}
+          {s.title && <p className="mt-0.5 truncate text-sm text-muted">{s.title}</p>}
         </div>
         <a
           href={fullUrl}
@@ -65,16 +68,12 @@ export function LinkDetailPage() {
 
       <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-3">
         <Card className="lg:col-span-2">
-          <p className="mb-3 text-2xs tracking-wider text-muted uppercase">
-            Clicks per day
-          </p>
+          <p className="mb-3 text-2xs tracking-wider text-muted uppercase">Clicks per day</p>
           <AreaChart data={s.series} />
         </Card>
 
         <Card>
-          <p className="mb-3 text-2xs tracking-wider text-muted uppercase">
-            Info
-          </p>
+          <p className="mb-3 text-2xs tracking-wider text-muted uppercase">Info</p>
           <div className="flex flex-col gap-2 text-sm">
             <div className="min-w-0">
               <p className="text-3xs tracking-wider text-muted uppercase">Destination</p>
@@ -89,12 +88,12 @@ export function LinkDetailPage() {
             </div>
             <div>
               <p className="text-3xs tracking-wider text-muted uppercase">Created</p>
-              <p className="tnum text-text">{new Date(s.createdAt).toLocaleDateString()}</p>
+              <p className="tnum text-text">{shortDate(s.createdAt)}</p>
             </div>
             {s.lastClick && (
               <div>
                 <p className="text-3xs tracking-wider text-muted uppercase">Last click</p>
-                <p className="tnum text-text">{new Date(s.lastClick).toLocaleDateString()}</p>
+                <p className="tnum text-text">{shortDate(s.lastClick)}</p>
               </div>
             )}
           </div>
@@ -102,11 +101,7 @@ export function LinkDetailPage() {
       </div>
 
       <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <ClickBreakdown
-          countries={s.countries}
-          referrers={s.referrers}
-          devices={s.devices}
-        />
+        <ClickBreakdown countries={s.countries} referrers={s.referrers} devices={s.devices} />
       </div>
     </div>
   );

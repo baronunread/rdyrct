@@ -6,10 +6,7 @@ import { cn } from "./cn";
  * into skeletons that mirror the layout of the content being loaded, so real
  * data pops into place without the page jumping.
  */
-export function Skeleton({
-  className,
-  ...props
-}: HTMLAttributes<HTMLDivElement>) {
+export function Skeleton({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
   return (
     <div
       aria-hidden
@@ -43,10 +40,7 @@ const firstColWidths = [22, 30, 18, 26, 34, 24];
 /** Placeholder for a data Table: a header row plus `rows` body rows. */
 export function TableSkeleton({ rows = 4 }: { rows?: number }) {
   return (
-    <div
-      role="status"
-      className="overflow-hidden rounded-lg border border-border bg-surface"
-    >
+    <div role="status" className="overflow-hidden rounded-lg border border-border bg-surface">
       <span className="sr-only">loading…</span>
       <div className="flex items-center gap-6 border-b border-border px-4 py-3">
         <Skeleton className="h-2.5 w-16" />

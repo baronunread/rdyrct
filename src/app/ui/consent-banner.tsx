@@ -25,8 +25,8 @@ export function ConsentBanner() {
   return (
     <div className="fixed bottom-4 right-4 z-50 max-w-xs rounded-xl border border-border bg-surface/95 p-4 text-xs text-muted shadow-xl backdrop-blur">
       <p className="leading-relaxed">
-        rdyrct uses a single strictly-necessary cookie to keep you signed in,
-        no tracking or advertising cookies. See our{" "}
+        rdyrct uses a single strictly-necessary cookie to keep you signed in, no tracking or
+        advertising cookies. See our{" "}
         <Link to="/privacy" className="text-accent hover:underline">
           Privacy Policy
         </Link>

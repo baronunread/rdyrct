@@ -34,10 +34,7 @@ orgRoutes.post("/", requireUser, async (c) => {
       .select({ n: sql<number>`count(*)` })
       .from(schema.orgMembers)
       .where(
-        and(
-          eq(schema.orgMembers.userId, c.var.user!.id),
-          eq(schema.orgMembers.role, "owner"),
-        ),
+        and(eq(schema.orgMembers.userId, c.var.user!.id), eq(schema.orgMembers.role, "owner")),
       ),
     userPlan(c.var.db, c.var.user!.id),
   ]);
@@ -128,15 +125,10 @@ orgRoutes.patch("/:orgId", requireOrgRole("admin"), async (c) => {
     if (body.qrLogoSize !== undefined) set.qrLogoSize = body.qrLogoSize;
   }
 
-  if (Object.keys(set).length === 0)
-    throw new HTTPException(400, { message: "Nothing to update" });
-  await c.var.db
-    .update(schema.orgs)
-    .set(set)
-    .where(eq(schema.orgs.id, orgId));
+  if (Object.keys(set).length === 0) throw new HTTPException(400, { message: "Nothing to update" });
+  await c.var.db.update(schema.orgs).set(set).where(eq(schema.orgs.id, orgId));
   // The old logo object is unreferenced once the row points at the new one.
-  if (body.qrLogo !== undefined && body.qrLogo !== oldLogo)
-    await deleteQrLogo(c.env, oldLogo);
+  if (body.qrLogo !== undefined && body.qrLogo !== oldLogo) await deleteQrLogo(c.env, oldLogo);
   return c.json({ ok: true });
 });
 
@@ -148,11 +140,7 @@ orgRoutes.patch("/:orgId", requireOrgRole("admin"), async (c) => {
  * (idempotent, a partial failure only leaves dead keys/objects the redirect
  * and logo paths treat as misses).
  */
-export async function deleteOrgCascade(
-  db: DB,
-  env: Env,
-  orgId: string,
-): Promise<void> {
+export async function deleteOrgCascade(db: DB, env: Env, orgId: string): Promise<void> {
   const [links, domains] = await Promise.all([
     db
       .select({ slug: schema.links.slug, hostname: schema.domains.hostname })
@@ -168,9 +156,7 @@ export async function deleteOrgCascade(
       .where(eq(schema.domains.orgId, orgId)),
   ]);
   await Promise.all(
-    domains.flatMap((d) =>
-      d.cfHostnameId ? [cfDeleteHostname(env, d.cfHostnameId)] : [],
-    ),
+    domains.flatMap((d) => (d.cfHostnameId ? [cfDeleteHostname(env, d.cfHostnameId)] : [])),
   );
   await db.delete(schema.orgs).where(eq(schema.orgs.id, orgId));
   await Promise.all([
@@ -202,28 +188,31 @@ orgRoutes.get("/:orgId/members", requireOrgRole("member"), async (c) => {
   return c.json(rows satisfies MemberDTO[]);
 });
 
-orgRoutes.patch(
-  "/:orgId/members/:userId",
-  requireOrgRole("admin"),
-  async (c) => {
-    const body = await c.req.json<{ role?: "admin" | "member" }>();
-    if (body.role !== "admin" && body.role !== "member")
-      throw new HTTPException(400, { message: "Role must be admin or member" });
-    const { orgId, targetId } = await resolveMember(c.var.db, c.req.param("orgId"), c.req.param("userId"));
-    await c.var.db.update(schema.orgMembers).set({ role: body.role }).where(memberWhere(orgId, targetId));
-    return c.json({ ok: true });
-  },
-);
+orgRoutes.patch("/:orgId/members/:userId", requireOrgRole("admin"), async (c) => {
+  const body = await c.req.json<{ role?: "admin" | "member" }>();
+  if (body.role !== "admin" && body.role !== "member")
+    throw new HTTPException(400, { message: "Role must be admin or member" });
+  const { orgId, targetId } = await resolveMember(
+    c.var.db,
+    c.req.param("orgId"),
+    c.req.param("userId"),
+  );
+  await c.var.db
+    .update(schema.orgMembers)
+    .set({ role: body.role })
+    .where(memberWhere(orgId, targetId));
+  return c.json({ ok: true });
+});
 
-orgRoutes.delete(
-  "/:orgId/members/:userId",
-  requireOrgRole("admin"),
-  async (c) => {
-    const { orgId, targetId } = await resolveMember(c.var.db, c.req.param("orgId"), c.req.param("userId"));
-    await c.var.db.delete(schema.orgMembers).where(memberWhere(orgId, targetId));
-    return c.json({ ok: true });
-  },
-);
+orgRoutes.delete("/:orgId/members/:userId", requireOrgRole("admin"), async (c) => {
+  const { orgId, targetId } = await resolveMember(
+    c.var.db,
+    c.req.param("orgId"),
+    c.req.param("userId"),
+  );
+  await c.var.db.delete(schema.orgMembers).where(memberWhere(orgId, targetId));
+  return c.json({ ok: true });
+});
 
 /* ---------------- invites ---------------- */
 
@@ -241,16 +230,11 @@ orgRoutes.get("/:orgId/invites", requireOrgRole("admin"), async (c) => {
     .where(eq(schema.invites.orgId, c.req.param("orgId")))
     .orderBy(desc(schema.invites.createdAt));
   const ts = now();
-  return c.json(
-    rows.filter((r) => !r.acceptedBy && r.expiresAt > ts) satisfies InviteDTO[],
-  );
+  return c.json(rows.filter((r) => !r.acceptedBy && r.expiresAt > ts) satisfies InviteDTO[]);
 });
 
 /** Members + open (unaccepted, unexpired) invites, for the plan member cap. */
-async function occupiedSeats(
-  db: AppEnv["Variables"]["db"],
-  orgId: string,
-): Promise<number> {
+async function occupiedSeats(db: AppEnv["Variables"]["db"], orgId: string): Promise<number> {
   const ts = now();
   const [members, pending] = await Promise.all([
     db
@@ -378,21 +362,17 @@ orgRoutes.post("/:orgId/invites", requireOrgRole("admin"), async (c) => {
   );
 });
 
-orgRoutes.delete(
-  "/:orgId/invites/:token",
-  requireOrgRole("admin"),
-  async (c) => {
-    await c.var.db
-      .delete(schema.invites)
-      .where(
-        and(
-          eq(schema.invites.token, c.req.param("token")),
-          eq(schema.invites.orgId, c.req.param("orgId")),
-        ),
-      );
-    return c.json({ ok: true });
-  },
-);
+orgRoutes.delete("/:orgId/invites/:token", requireOrgRole("admin"), async (c) => {
+  await c.var.db
+    .delete(schema.invites)
+    .where(
+      and(
+        eq(schema.invites.token, c.req.param("token")),
+        eq(schema.invites.orgId, c.req.param("orgId")),
+      ),
+    );
+  return c.json({ ok: true });
+});
 
 /* ---------------- stats helpers ---------------- */
 
@@ -408,10 +388,7 @@ function emptySeries(days: number): Map<string, number> {
   return map;
 }
 
-export function fillSeries(
-  rows: { day: string; clicks: number }[],
-  days: number,
-): SeriesPoint[] {
+export function fillSeries(rows: { day: string; clicks: number }[], days: number): SeriesPoint[] {
   const map = emptySeries(days);
   for (const r of rows) if (map.has(r.day)) map.set(r.day, r.clicks);
   return [...map.entries()].map(([day, clicks]) => ({ day, clicks }));
@@ -432,9 +409,7 @@ function emptyHours(): Map<string, number> {
   return map;
 }
 
-function fillHours(
-  rows: { hour: string; clicks: number }[],
-): SeriesPoint[] {
+function fillHours(rows: { hour: string; clicks: number }[]): SeriesPoint[] {
   const map = emptyHours();
   for (const r of rows) if (map.has(r.hour)) map.set(r.hour, r.clicks);
   return [...map.entries()].map(([day, clicks]) => ({ day, clicks }));
@@ -471,7 +446,12 @@ function computeWindows(days: number) {
   };
 }
 
-function clickTotals(totals: { clicks: number }[], totalsPrev: { clicks: number }[], recent: { n: number }[], recentPrev: { n: number }[]) {
+function clickTotals(
+  totals: { clicks: number }[],
+  totalsPrev: { clicks: number }[],
+  recent: { n: number }[],
+  recentPrev: { n: number }[],
+) {
   return {
     totalClicks: totals[0]?.clicks ?? 0,
     totalClicksPrev: totalsPrev[0]?.clicks ?? 0,
@@ -486,13 +466,14 @@ async function resolveMember(db: DB, orgId: string, targetId: string) {
 }
 
 function memberWhere(orgId: string, targetId: string) {
-  return and(
-    eq(schema.orgMembers.orgId, orgId),
-    eq(schema.orgMembers.userId, targetId),
-  );
+  return and(eq(schema.orgMembers.orgId, orgId), eq(schema.orgMembers.userId, targetId));
 }
 
-async function assertMember(db: DB, orgId: string, targetId: string): Promise<Exclude<Awaited<ReturnType<typeof orgRole>>, null>> {
+async function assertMember(
+  db: DB,
+  orgId: string,
+  targetId: string,
+): Promise<Exclude<Awaited<ReturnType<typeof orgRole>>, null>> {
   const target = await orgRole(
     db,
     {
@@ -513,10 +494,7 @@ async function assertMember(db: DB, orgId: string, targetId: string): Promise<Ex
 }
 
 async function lookupInvite(db: DB, token: string) {
-  const rows = await db
-    .select()
-    .from(schema.invites)
-    .where(eq(schema.invites.token, token));
+  const rows = await db.select().from(schema.invites).where(eq(schema.invites.token, token));
   const invite = rows[0];
   if (!invite || invite.acceptedBy || invite.expiresAt < now())
     throw new HTTPException(404, { message: "Invite not found or expired" });
@@ -554,40 +532,152 @@ orgRoutes.get("/:orgId/stats", requireOrgRole("member"), async (c) => {
     sourceRows,
     mediumRows,
   ] = await Promise.all([
-    db.select({ clicks: sql<number>`count(*)` }).from(schema.clicks).where(inOrg),
-    db.select({ clicks: sql<number>`count(*)` }).from(schema.clicks).where(and(inOrg, gte(schema.clicks.ts, prevSince), sql`${schema.clicks.ts} < ${since}`)),
-    db.select({ n: sql<number>`count(*)` }).from(schema.clicks).where(and(inOrg, gte(schema.clicks.ts, since7))),
-    db.select({ n: sql<number>`count(*)` }).from(schema.clicks).where(and(inOrg, gte(schema.clicks.ts, prev7Since), sql`${schema.clicks.ts} < ${since7}`)),
-    db.select({ day, clicks: sql<number>`count(*)` }).from(schema.clicks).where(and(inOrg, gte(schema.clicks.ts, since))).groupBy(day),
-    db.select({ hour, clicks: sql<number>`count(*)` }).from(schema.clicks).where(and(inOrg, gte(schema.clicks.ts, since24))).groupBy(hour),
-    db.select({ id: schema.links.id, slug: schema.links.slug, title: schema.links.title, clicks: sql<number>`count(${schema.clicks.id})` }).from(schema.links).leftJoin(schema.clicks, eq(schema.clicks.linkId, schema.links.id)).where(eq(schema.links.orgId, orgId)).groupBy(schema.links.id).orderBy(desc(sql`count(${schema.clicks.id})`)).limit(8),
-    db.select({ key: schema.clicks.country, clicks: sql<number>`count(*)` }).from(schema.clicks).where(and(inOrg, gte(schema.clicks.ts, since))).groupBy(schema.clicks.country).orderBy(desc(sql`count(*)`)).limit(8),
-    db.select({ key: schema.clicks.referrer, clicks: sql<number>`count(*)` }).from(schema.clicks).where(and(inOrg, gte(schema.clicks.ts, since))).groupBy(schema.clicks.referrer).orderBy(desc(sql`count(*)`)).limit(8),
-    db.select({ key: schema.clicks.device, clicks: sql<number>`count(*)` }).from(schema.clicks).where(and(inOrg, gte(schema.clicks.ts, since))).groupBy(schema.clicks.device).orderBy(desc(sql`count(*)`)),
-    db.select({ n: sql<number>`count(*)` }).from(schema.links).where(eq(schema.links.orgId, orgId)),
-    db.select({ id: schema.links.id, slug: schema.links.slug, title: schema.links.title }).from(schema.links).where(and(eq(schema.links.orgId, orgId), sql`${schema.links.id} not in (select distinct link_id from clicks where org_id = ${orgId} and ts >= ${now() - 30 * 24 * 60 * 60 * 1000})`)).limit(5),
+    db
+      .select({ clicks: sql<number>`count(*)` })
+      .from(schema.clicks)
+      .where(inOrg),
+    db
+      .select({ clicks: sql<number>`count(*)` })
+      .from(schema.clicks)
+      .where(and(inOrg, gte(schema.clicks.ts, prevSince), sql`${schema.clicks.ts} < ${since}`)),
+    db
+      .select({ n: sql<number>`count(*)` })
+      .from(schema.clicks)
+      .where(and(inOrg, gte(schema.clicks.ts, since7))),
+    db
+      .select({ n: sql<number>`count(*)` })
+      .from(schema.clicks)
+      .where(and(inOrg, gte(schema.clicks.ts, prev7Since), sql`${schema.clicks.ts} < ${since7}`)),
+    db
+      .select({ day, clicks: sql<number>`count(*)` })
+      .from(schema.clicks)
+      .where(and(inOrg, gte(schema.clicks.ts, since)))
+      .groupBy(day),
+    db
+      .select({ hour, clicks: sql<number>`count(*)` })
+      .from(schema.clicks)
+      .where(and(inOrg, gte(schema.clicks.ts, since24)))
+      .groupBy(hour),
+    db
+      .select({
+        id: schema.links.id,
+        slug: schema.links.slug,
+        title: schema.links.title,
+        clicks: sql<number>`count(${schema.clicks.id})`,
+      })
+      .from(schema.links)
+      .leftJoin(schema.clicks, eq(schema.clicks.linkId, schema.links.id))
+      .where(eq(schema.links.orgId, orgId))
+      .groupBy(schema.links.id)
+      .orderBy(desc(sql`count(${schema.clicks.id})`))
+      .limit(8),
+    db
+      .select({ key: schema.clicks.country, clicks: sql<number>`count(*)` })
+      .from(schema.clicks)
+      .where(and(inOrg, gte(schema.clicks.ts, since)))
+      .groupBy(schema.clicks.country)
+      .orderBy(desc(sql`count(*)`))
+      .limit(8),
+    db
+      .select({ key: schema.clicks.referrer, clicks: sql<number>`count(*)` })
+      .from(schema.clicks)
+      .where(and(inOrg, gte(schema.clicks.ts, since)))
+      .groupBy(schema.clicks.referrer)
+      .orderBy(desc(sql`count(*)`))
+      .limit(8),
+    db
+      .select({ key: schema.clicks.device, clicks: sql<number>`count(*)` })
+      .from(schema.clicks)
+      .where(and(inOrg, gte(schema.clicks.ts, since)))
+      .groupBy(schema.clicks.device)
+      .orderBy(desc(sql`count(*)`)),
+    db
+      .select({ n: sql<number>`count(*)` })
+      .from(schema.links)
+      .where(eq(schema.links.orgId, orgId)),
+    db
+      .select({ id: schema.links.id, slug: schema.links.slug, title: schema.links.title })
+      .from(schema.links)
+      .where(
+        and(
+          eq(schema.links.orgId, orgId),
+          sql`${schema.links.id} not in (select distinct link_id from clicks where org_id = ${orgId} and ts >= ${now() - 30 * 24 * 60 * 60 * 1000})`,
+        ),
+      )
+      .limit(5),
     // Complex queries that use D1 directly (CTEs, strftime)
     c.env.DB.prepare(
       `with cur as (select link_id, count(*) as n from clicks where org_id = ? and ts >= ? group by link_id),
             prev as (select link_id, count(*) as n from clicks where org_id = ? and ts >= ? and ts < ? group by link_id),
             decay as (select cur.link_id, case when prev.n is null or prev.n = 0 then 100 else round((prev.n - cur.n) * 100.0 / prev.n) end as drop_pct from cur left join prev on cur.link_id = prev.link_id where prev.n is not null and prev.n > 0 and cur.n < prev.n * 0.5)
-       select l.id, l.slug, l.title, d.drop_pct from decay d join links l on l.id = d.link_id order by d.drop_pct desc limit 5`
-    ).bind(orgId, since7, orgId, prev7Since, since7).all<{ id: string; slug: string; title: string; drop_pct: number }>()
+       select l.id, l.slug, l.title, d.drop_pct from decay d join links l on l.id = d.link_id order by d.drop_pct desc limit 5`,
+    )
+      .bind(orgId, since7, orgId, prev7Since, since7)
+      .all<{ id: string; slug: string; title: string; drop_pct: number }>()
       .then((r) => r.results),
     c.env.DB.prepare(
       `select (cast(strftime('%w', ts / 1000, 'unixepoch') as integer) + 6) % 7 as day_of_week,
               cast(strftime('%H', ts / 1000, 'unixepoch') as integer) as hour,
               count(*) as clicks
        from clicks where org_id = ? and ts >= ?
-       group by day_of_week, hour`
-    ).bind(orgId, since).all<{ day_of_week: number; hour: number; clicks: number }>()
+       group by day_of_week, hour`,
+    )
+      .bind(orgId, since)
+      .all<{ day_of_week: number; hour: number; clicks: number }>()
       .then((r) => r.results),
-    db.select({ campaign: schema.links.utmCampaign, clicks: sql<number>`count(${schema.clicks.id})` }).from(schema.links).innerJoin(schema.clicks, eq(schema.clicks.linkId, schema.links.id)).where(and(eq(schema.links.orgId, orgId), gte(schema.clicks.ts, since), sql`length(${schema.links.utmCampaign}) > 0`)).groupBy(schema.links.utmCampaign).orderBy(desc(sql`count(${schema.clicks.id})`)).limit(8),
-    db.select({ source: schema.links.utmSource, clicks: sql<number>`count(${schema.clicks.id})` }).from(schema.links).innerJoin(schema.clicks, eq(schema.clicks.linkId, schema.links.id)).where(and(eq(schema.links.orgId, orgId), gte(schema.clicks.ts, since), sql`length(${schema.links.utmSource}) > 0`)).groupBy(schema.links.utmSource).orderBy(desc(sql`count(${schema.clicks.id})`)).limit(8),
-    db.select({ medium: schema.links.utmMedium, clicks: sql<number>`count(${schema.clicks.id})` }).from(schema.links).innerJoin(schema.clicks, eq(schema.clicks.linkId, schema.links.id)).where(and(eq(schema.links.orgId, orgId), gte(schema.clicks.ts, since), sql`length(${schema.links.utmMedium}) > 0`)).groupBy(schema.links.utmMedium).orderBy(desc(sql`count(${schema.clicks.id})`)).limit(8),
+    db
+      .select({
+        campaign: schema.links.utmCampaign,
+        clicks: sql<number>`count(${schema.clicks.id})`,
+      })
+      .from(schema.links)
+      .innerJoin(schema.clicks, eq(schema.clicks.linkId, schema.links.id))
+      .where(
+        and(
+          eq(schema.links.orgId, orgId),
+          gte(schema.clicks.ts, since),
+          sql`length(${schema.links.utmCampaign}) > 0`,
+        ),
+      )
+      .groupBy(schema.links.utmCampaign)
+      .orderBy(desc(sql`count(${schema.clicks.id})`))
+      .limit(8),
+    db
+      .select({ source: schema.links.utmSource, clicks: sql<number>`count(${schema.clicks.id})` })
+      .from(schema.links)
+      .innerJoin(schema.clicks, eq(schema.clicks.linkId, schema.links.id))
+      .where(
+        and(
+          eq(schema.links.orgId, orgId),
+          gte(schema.clicks.ts, since),
+          sql`length(${schema.links.utmSource}) > 0`,
+        ),
+      )
+      .groupBy(schema.links.utmSource)
+      .orderBy(desc(sql`count(${schema.clicks.id})`))
+      .limit(8),
+    db
+      .select({ medium: schema.links.utmMedium, clicks: sql<number>`count(${schema.clicks.id})` })
+      .from(schema.links)
+      .innerJoin(schema.clicks, eq(schema.clicks.linkId, schema.links.id))
+      .where(
+        and(
+          eq(schema.links.orgId, orgId),
+          gte(schema.clicks.ts, since),
+          sql`length(${schema.links.utmMedium}) > 0`,
+        ),
+      )
+      .groupBy(schema.links.utmMedium)
+      .orderBy(desc(sql`count(${schema.clicks.id})`))
+      .limit(8),
   ]);
 
-  const { totalClicks, totalClicksPrev, clicks7dVal, clicks7dPrev } = clickTotals(totals, totalsPrev, recent, recentPrev);
+  const { totalClicks, totalClicksPrev, clicks7dVal, clicks7dPrev } = clickTotals(
+    totals,
+    totalsPrev,
+    recent,
+    recentPrev,
+  );
 
   return c.json({
     totalClicks,
@@ -600,11 +690,22 @@ orgRoutes.get("/:orgId/stats", requireOrgRole("member"), async (c) => {
     totalClicksDelta: computeDelta(totalClicks, totalClicksPrev),
     clicks7dDelta: computeDelta(clicks7dVal, clicks7dPrev),
     topLinks,
-    countries: cleanDim(countries).map((r) => ({ ...r, key: r.key === "direct" ? "unknown" : r.key })),
-    referrers: cleanDim(referrers).map((r) => ({ ...r, key: r.key ? referrerHost(r.key) || r.key : "direct" })),
+    countries: cleanDim(countries).map((r) => ({
+      ...r,
+      key: r.key === "direct" ? "unknown" : r.key,
+    })),
+    referrers: cleanDim(referrers).map((r) => ({
+      ...r,
+      key: r.key ? referrerHost(r.key) || r.key : "direct",
+    })),
     devices: cleanDim(devices),
     deadLinks: deadLinks.map((l) => ({ id: l.id, slug: l.slug, title: l.title })),
-    decayingLinks: decayingRaw.map((l) => ({ id: l.id, slug: l.slug, title: l.title, drop: l.drop_pct })),
+    decayingLinks: decayingRaw.map((l) => ({
+      id: l.id,
+      slug: l.slug,
+      title: l.title,
+      drop: l.drop_pct,
+    })),
     heatmap: heatmapRaw.map((r) => ({ dayOfWeek: r.day_of_week, hour: r.hour, clicks: r.clicks })),
     campaigns: campaignRows.map((r) => ({ campaign: r.campaign, clicks: r.clicks })),
     sources: sourceRows.map((r) => ({ source: r.source, clicks: r.clicks })),
@@ -676,19 +777,72 @@ orgRoutes.get("/:orgId/links/stats/:slug", requireOrgRole("member"), async (c) =
   const linkId = link.id;
   const onLink = and(eq(schema.clicks.orgId, orgId), eq(schema.clicks.linkId, linkId));
 
-  const [totals, totalsPrev, recent, recentPrev, seriesRows, countries, referrers, devices, lastClickRow] = await Promise.all([
-    db.select({ clicks: sql<number>`count(*)` }).from(schema.clicks).where(onLink),
-    db.select({ clicks: sql<number>`count(*)` }).from(schema.clicks).where(and(onLink, gte(schema.clicks.ts, prevSince), sql`${schema.clicks.ts} < ${since}`)),
-    db.select({ n: sql<number>`count(*)` }).from(schema.clicks).where(and(onLink, gte(schema.clicks.ts, since7))),
-    db.select({ n: sql<number>`count(*)` }).from(schema.clicks).where(and(onLink, gte(schema.clicks.ts, prev7Since), sql`${schema.clicks.ts} < ${since7}`)),
-    db.select({ day, clicks: sql<number>`count(*)` }).from(schema.clicks).where(and(onLink, gte(schema.clicks.ts, since))).groupBy(day),
-    db.select({ key: schema.clicks.country, clicks: sql<number>`count(*)` }).from(schema.clicks).where(and(onLink, gte(schema.clicks.ts, since))).groupBy(schema.clicks.country).orderBy(desc(sql`count(*)`)).limit(8),
-    db.select({ key: schema.clicks.referrer, clicks: sql<number>`count(*)` }).from(schema.clicks).where(and(onLink, gte(schema.clicks.ts, since))).groupBy(schema.clicks.referrer).orderBy(desc(sql`count(*)`)).limit(8),
-    db.select({ key: schema.clicks.device, clicks: sql<number>`count(*)` }).from(schema.clicks).where(and(onLink, gte(schema.clicks.ts, since))).groupBy(schema.clicks.device).orderBy(desc(sql`count(*)`)),
-    db.select({ ts: schema.clicks.ts }).from(schema.clicks).where(onLink).orderBy(desc(schema.clicks.ts)).limit(1),
+  const [
+    totals,
+    totalsPrev,
+    recent,
+    recentPrev,
+    seriesRows,
+    countries,
+    referrers,
+    devices,
+    lastClickRow,
+  ] = await Promise.all([
+    db
+      .select({ clicks: sql<number>`count(*)` })
+      .from(schema.clicks)
+      .where(onLink),
+    db
+      .select({ clicks: sql<number>`count(*)` })
+      .from(schema.clicks)
+      .where(and(onLink, gte(schema.clicks.ts, prevSince), sql`${schema.clicks.ts} < ${since}`)),
+    db
+      .select({ n: sql<number>`count(*)` })
+      .from(schema.clicks)
+      .where(and(onLink, gte(schema.clicks.ts, since7))),
+    db
+      .select({ n: sql<number>`count(*)` })
+      .from(schema.clicks)
+      .where(and(onLink, gte(schema.clicks.ts, prev7Since), sql`${schema.clicks.ts} < ${since7}`)),
+    db
+      .select({ day, clicks: sql<number>`count(*)` })
+      .from(schema.clicks)
+      .where(and(onLink, gte(schema.clicks.ts, since)))
+      .groupBy(day),
+    db
+      .select({ key: schema.clicks.country, clicks: sql<number>`count(*)` })
+      .from(schema.clicks)
+      .where(and(onLink, gte(schema.clicks.ts, since)))
+      .groupBy(schema.clicks.country)
+      .orderBy(desc(sql`count(*)`))
+      .limit(8),
+    db
+      .select({ key: schema.clicks.referrer, clicks: sql<number>`count(*)` })
+      .from(schema.clicks)
+      .where(and(onLink, gte(schema.clicks.ts, since)))
+      .groupBy(schema.clicks.referrer)
+      .orderBy(desc(sql`count(*)`))
+      .limit(8),
+    db
+      .select({ key: schema.clicks.device, clicks: sql<number>`count(*)` })
+      .from(schema.clicks)
+      .where(and(onLink, gte(schema.clicks.ts, since)))
+      .groupBy(schema.clicks.device)
+      .orderBy(desc(sql`count(*)`)),
+    db
+      .select({ ts: schema.clicks.ts })
+      .from(schema.clicks)
+      .where(onLink)
+      .orderBy(desc(schema.clicks.ts))
+      .limit(1),
   ]);
 
-  const { totalClicks, totalClicksPrev, clicks7dVal, clicks7dPrev } = clickTotals(totals, totalsPrev, recent, recentPrev);
+  const { totalClicks, totalClicksPrev, clicks7dVal, clicks7dPrev } = clickTotals(
+    totals,
+    totalsPrev,
+    recent,
+    recentPrev,
+  );
 
   return c.json({
     totalClicks,
@@ -697,8 +851,14 @@ orgRoutes.get("/:orgId/links/stats/:slug", requireOrgRole("member"), async (c) =
     series: fillSeries(seriesRows, days),
     totalClicksDelta: computeDelta(totalClicks, totalClicksPrev),
     clicks7dDelta: computeDelta(clicks7dVal, clicks7dPrev),
-    countries: cleanDim(countries).map((r) => ({ ...r, key: r.key === "direct" ? "unknown" : r.key })),
-    referrers: cleanDim(referrers).map((r) => ({ ...r, key: r.key ? referrerHost(r.key) || r.key : "direct" })),
+    countries: cleanDim(countries).map((r) => ({
+      ...r,
+      key: r.key === "direct" ? "unknown" : r.key,
+    })),
+    referrers: cleanDim(referrers).map((r) => ({
+      ...r,
+      key: r.key ? referrerHost(r.key) || r.key : "direct",
+    })),
     devices: cleanDim(devices),
     slug: link.slug,
     domain: link.domain,
@@ -750,13 +910,9 @@ inviteRoutes.post("/:token/accept", requireUser, async (c) => {
     .select({ role: schema.orgMembers.role })
     .from(schema.orgMembers)
     .where(
-      and(
-        eq(schema.orgMembers.orgId, invite.orgId),
-        eq(schema.orgMembers.userId, c.var.user!.id),
-      ),
+      and(eq(schema.orgMembers.orgId, invite.orgId), eq(schema.orgMembers.userId, c.var.user!.id)),
     );
-  if (existing.length)
-    throw new HTTPException(409, { message: "Already a member of this org" });
+  if (existing.length) throw new HTTPException(409, { message: "Already a member of this org" });
 
   // The cap may have been reached (or the plan downgraded) since the invite
   // was created; recheck against actual members at accept time.

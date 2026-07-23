@@ -19,6 +19,5 @@ export async function sendEmail(
     },
     body: JSON.stringify({ from: env.MAIL_FROM, to, subject, html }),
   });
-  if (!res.ok)
-    throw new Error(`Resend ${res.status}: ${await res.text().catch(() => "")}`);
+  if (!res.ok) throw new Error(`Resend ${res.status}: ${await res.text().catch(() => "")}`);
 }

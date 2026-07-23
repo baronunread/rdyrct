@@ -1,4 +1,6 @@
-import { useMemo, type ChangeEvent } from "react";
+import { useMemo, useEffect, type ChangeEvent } from "react";
+import { useForm, type SubmitErrorHandler } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
 import { Link as RouterLink } from "react-router";
 import { Lock, Info } from "lucide-react";
 import { shortUrl } from "../lib/api";
@@ -15,8 +17,10 @@ import { Dialog } from "../ui/dialog";
 import { Field, Input } from "../ui/field";
 import { MenuSelect } from "../ui/menu";
 import { BusyContent } from "../ui/spinner";
+import { useToast } from "../ui/toast";
 import { Tooltip } from "../ui/tooltip";
 import { QRPreview, QrLogoInput, QrColorField } from "./qr";
+import { linkInputSchema } from "../lib/schemas";
 
 export interface OrgQr {
   logo: string;
@@ -28,35 +32,58 @@ export interface OrgQr {
   logoSize: number | null;
 }
 
-function UtmFields({
-  form,
-  setForm,
-}: {
-  form: LinkInput;
-  setForm: (f: LinkInput) => void;
-}) {
+const defaultForm: LinkInput = {
+  destination: "",
+  domainId: null,
+  slug: "",
+  title: "",
+  utmSource: "",
+  utmMedium: "",
+  utmCampaign: "",
+  utmTerm: "",
+  utmContent: "",
+  qrStyle: "",
+  qrColor: "",
+  qrCorner: "",
+  qrEyeColor: "",
+  qrBg: "",
+  qrLogo: "",
+  qrLogoSize: null,
+};
+
+function UtmFields({ form, setForm }: { form: LinkInput; setForm: (f: LinkInput) => void }) {
   const set = (key: keyof LinkInput) => (e: ChangeEvent<HTMLInputElement>) =>
     setForm({ ...form, [key]: e.target.value });
   return (
     <fieldset className="rounded-lg border border-border p-3">
-      <legend className="px-1 text-2xs tracking-wider text-muted uppercase">
-        UTM parameters
-      </legend>
+      <legend className="px-1 text-2xs tracking-wider text-muted uppercase">UTM parameters</legend>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <Field label="Source">
-          <Input value={form.utmSource ?? ""} onChange={set("utmSource")} placeholder="newsletter" />
+          <Input
+            value={form.utmSource ?? ""}
+            onChange={set("utmSource")}
+            placeholder="newsletter"
+          />
         </Field>
         <Field label="Medium">
           <Input value={form.utmMedium ?? ""} onChange={set("utmMedium")} placeholder="email" />
         </Field>
         <Field label="Campaign">
-          <Input value={form.utmCampaign ?? ""} onChange={set("utmCampaign")} placeholder="spring-launch" />
+          <Input
+            value={form.utmCampaign ?? ""}
+            onChange={set("utmCampaign")}
+            placeholder="spring-launch"
+          />
         </Field>
         <Field label="Term">
           <Input value={form.utmTerm ?? ""} onChange={set("utmTerm")} placeholder="running-shoes" />
         </Field>
         <Field label="Content">
-          <Input value={form.utmContent ?? ""} onChange={set("utmContent")} placeholder="ad-variant-a" />
+          <Input
+            value={form.utmContent ?? ""}
+            onChange={set("utmContent")}
+            placeholder="ad-variant-a"
+          />
         </Field>
       </div>
     </fieldset>
@@ -86,7 +113,9 @@ function QrPreviewSidebar({
           corner={form.qrCorner || orgQr.corner}
           eyeColor={form.qrEyeColor || orgQr.eyeColor}
           bg={form.qrBg || orgQr.bg}
-          logoSize={form.qrLogoSize != null ? Number(form.qrLogoSize) : orgQr.logoSize ?? undefined}
+          logoSize={
+            form.qrLogoSize != null ? Number(form.qrLogoSize) : (orgQr.logoSize ?? undefined)
+          }
           size={192}
         />
       </div>
@@ -111,9 +140,7 @@ function QrCustomization({
 }) {
   return (
     <div className="flex flex-col gap-4">
-      <p className="text-2xs tracking-wider text-muted uppercase">
-        QR customization
-      </p>
+      <p className="text-2xs tracking-wider text-muted uppercase">QR customization</p>
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <Field label="Dots">
@@ -147,12 +174,7 @@ function QrCustomization({
         <QrColorField
           label="Eye color"
           value={form.qrEyeColor ?? ""}
-          fallback={
-            form.qrColor ||
-            orgQr.eyeColor ||
-            orgQr.color ||
-            QR_DEFAULT_COLOR
-          }
+          fallback={form.qrColor || orgQr.eyeColor || orgQr.color || QR_DEFAULT_COLOR}
           onChange={(v) => setForm({ ...form, qrEyeColor: v })}
         />
       </div>
@@ -161,9 +183,7 @@ function QrCustomization({
         <QrColorField
           label="Background"
           value={form.qrBg ?? ""}
-          fallback={
-            orgQr.bg && orgQr.bg !== "transparent" ? orgQr.bg : QR_DEFAULT_BG
-          }
+          fallback={orgQr.bg && orgQr.bg !== "transparent" ? orgQr.bg : QR_DEFAULT_BG}
           allowTransparent
           onChange={(v) => setForm({ ...form, qrBg: v })}
         />
@@ -282,11 +302,7 @@ function LinkFormFields({
           />
         </Field>
         <Field label="Title">
-          <Input
-            value={form.title ?? ""}
-            onChange={set("title")}
-            placeholder="Spring launch"
-          />
+          <Input value={form.title ?? ""} onChange={set("title")} placeholder="Spring launch" />
         </Field>
       </div>
     </div>
@@ -296,9 +312,7 @@ function LinkFormFields({
 export function LinkEditor({
   open,
   onOpenChange,
-  form,
-  setForm,
-  editing,
+  editingLink,
   busy,
   onSave,
   activeDomains,
@@ -308,18 +322,39 @@ export function LinkEditor({
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  form: LinkInput;
-  setForm: (f: LinkInput) => void;
-  editing: boolean;
+  editingLink: LinkInput | null;
   busy: boolean;
-  onSave: () => void;
+  onSave: (data: LinkInput) => void;
   activeDomains: DomainDTO[];
   qrEnabled: boolean;
   orgQr: OrgQr;
   shakeKey: number;
 }) {
-  const selectedDomain =
-    activeDomains.find((d) => d.id === form.domainId)?.hostname ?? null;
+  const editing = editingLink != null;
+  const toast = useToast();
+
+  const { handleSubmit, watch, reset } = useForm<LinkInput>({
+    resolver: zodResolver(linkInputSchema),
+    defaultValues: defaultForm,
+  });
+
+  useEffect(() => {
+    if (open) {
+      reset(editingLink ?? defaultForm);
+    }
+  }, [open, editingLink, reset]);
+
+  const form = watch();
+  const setForm = (next: LinkInput) => reset(next);
+  const onInvalid: SubmitErrorHandler<LinkInput> = (errors) => {
+    const firstError = Object.values(errors).find((entry) => entry?.message);
+    toast(
+      typeof firstError?.message === "string" ? firstError.message : "Check the link details",
+      "error",
+    );
+  };
+
+  const selectedDomain = activeDomains.find((d) => d.id === form.domainId)?.hostname ?? null;
   const slugLocked = !form.domainId;
 
   const previewUrl = useMemo(
@@ -335,24 +370,38 @@ export function LinkEditor({
       wide
       shakeKey={shakeKey}
     >
-      <div className="flex flex-col gap-6">
+      <form onSubmit={handleSubmit(onSave, onInvalid)} className="flex flex-col gap-6">
         <div className="grid gap-6 sm:grid-cols-[1fr_auto]">
-          <LinkFormFields form={form} setForm={setForm} editing={editing} activeDomains={activeDomains} slugLocked={slugLocked} />
-          <QrPreviewSidebar form={form} orgQr={orgQr} qrEnabled={qrEnabled} previewUrl={previewUrl} />
+          <LinkFormFields
+            form={form}
+            setForm={setForm}
+            editing={editing}
+            activeDomains={activeDomains}
+            slugLocked={slugLocked}
+          />
+          <QrPreviewSidebar
+            form={form}
+            orgQr={orgQr}
+            qrEnabled={qrEnabled}
+            previewUrl={previewUrl}
+          />
         </div>
 
         <UtmFields form={form} setForm={setForm} />
 
-        {qrEnabled && (
-          <QrCustomization form={form} setForm={setForm} orgQr={orgQr} />
-        )}
-      </div>
+        {qrEnabled && <QrCustomization form={form} setForm={setForm} orgQr={orgQr} />}
+      </form>
 
       <div className="mt-6 flex justify-end gap-2">
         <Button variant="ghost" onClick={() => onOpenChange(false)}>
           Cancel
         </Button>
-        <Button variant="primary" disabled={busy} onClick={onSave}>
+        <Button
+          variant="primary"
+          type="submit"
+          disabled={busy}
+          onClick={handleSubmit(onSave, onInvalid)}
+        >
           <BusyContent busy={busy}>{editing ? "Save changes" : "Create link"}</BusyContent>
         </Button>
       </div>

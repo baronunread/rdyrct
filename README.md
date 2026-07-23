@@ -77,8 +77,25 @@ bun run dev                        # http://localhost:5173
   ```
 
   and copy the 6-digit code out of the latest message.
+
 - `DEV_FAKE_CF=1` (the `.dev.vars.example` default) stubs the Cloudflare Custom Hostnames API locally, so custom domains activate instantly on "Check status" without a real zone.
 - Billing against a real [Polar sandbox](https://sandbox.polar.sh) account needs a public URL (`wrangler dev --remote` or a tunnel) for webhooks to reach `/api/webhooks/polar`.
+
+---
+
+## Tests
+
+```sh
+bun run test          # fast unit tests
+bun run test:worker   # Worker routes with local D1 and KV bindings
+bun run e2e:install   # install Chromium for Playwright once
+bun run e2e:smoke     # real-browser baseline regression checks
+bun run verify        # types, lint, formatting, unit, and Worker tests
+```
+
+Playwright owns the local server lifecycle and never resets or seeds local
+Cloudflare state. Failed browser tests keep a screenshot and trace in
+`test-results/`.
 
 ---
 
@@ -141,23 +158,23 @@ Finally, point `rdyrct.com` at the Worker as a **custom domain**: Cloudflare das
 
 ## Configuration
 
-| Name | Kind | Purpose |
-| --- | --- | --- |
-| `BETTER_AUTH_SECRET` | secret | Signs sessions and tokens |
-| `SUPERADMIN_EMAIL` | secret | The account that becomes the platform admin |
-| `RESEND_API_KEY` | secret | Resend API key for transactional email |
-| `POLAR_ACCESS_TOKEN` | secret | Polar API access token (scopes: `checkouts:write`, `customer_sessions:write`) |
-| `POLAR_WEBHOOK_SECRET` | secret | Verifies Polar webhook signatures; endpoint `https://rdyrct.com/api/webhooks/polar` |
-| `CF_API_TOKEN` | secret | Cloudflare token with **Zone → SSL and Certificates → Edit** (custom domains) |
-| `APP_URL` | var | Full public URL of the app, e.g. `https://rdyrct.com` |
-| `APP_HOST` | var | Public host, e.g. `rdyrct.com` |
-| `MAIL_FROM` | var | From address for outgoing email |
-| `RESEND_BASE_URL` | var (dev only) | Points at the local Resend emulator |
-| `POLAR_SERVER` | var | `sandbox` or `production` |
-| `POLAR_PRO_PRODUCT_ID` | var | Polar product id for the Pro plan |
-| `POLAR_HOBBY_PRODUCT_ID` | var | Polar product id for the Hobby plan |
-| `CF_ZONE_ID` | var | Zone id used for Custom Hostnames |
-| `DEV_FAKE_CF` | var (dev only) | `1` to stub the Cloudflare API locally |
+| Name                     | Kind           | Purpose                                                                             |
+| ------------------------ | -------------- | ----------------------------------------------------------------------------------- |
+| `BETTER_AUTH_SECRET`     | secret         | Signs sessions and tokens                                                           |
+| `SUPERADMIN_EMAIL`       | secret         | The account that becomes the platform admin                                         |
+| `RESEND_API_KEY`         | secret         | Resend API key for transactional email                                              |
+| `POLAR_ACCESS_TOKEN`     | secret         | Polar API access token (scopes: `checkouts:write`, `customer_sessions:write`)       |
+| `POLAR_WEBHOOK_SECRET`   | secret         | Verifies Polar webhook signatures; endpoint `https://rdyrct.com/api/webhooks/polar` |
+| `CF_API_TOKEN`           | secret         | Cloudflare token with **Zone → SSL and Certificates → Edit** (custom domains)       |
+| `APP_URL`                | var            | Full public URL of the app, e.g. `https://rdyrct.com`                               |
+| `APP_HOST`               | var            | Public host, e.g. `rdyrct.com`                                                      |
+| `MAIL_FROM`              | var            | From address for outgoing email                                                     |
+| `RESEND_BASE_URL`        | var (dev only) | Points at the local Resend emulator                                                 |
+| `POLAR_SERVER`           | var            | `sandbox` or `production`                                                           |
+| `POLAR_PRO_PRODUCT_ID`   | var            | Polar product id for the Pro plan                                                   |
+| `POLAR_HOBBY_PRODUCT_ID` | var            | Polar product id for the Hobby plan                                                 |
+| `CF_ZONE_ID`             | var            | Zone id used for Custom Hostnames                                                   |
+| `DEV_FAKE_CF`            | var (dev only) | `1` to stub the Cloudflare API locally                                              |
 
 Secrets are set with `wrangler secret put NAME` or `wrangler secret bulk prod.secrets.env` in production; locally they all come from `.dev.vars` (see `.dev.vars.example`).
 

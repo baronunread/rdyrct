@@ -8,16 +8,15 @@ import { AreaChart } from "../../components/charts";
 import { Dialog } from "../../ui/dialog";
 import { Menu, MenuItem, MenuSeparator } from "../../ui/menu";
 import { Badge, Card, PageHeader, Table, Td, Th } from "../../ui/misc";
-import {
-  AdminTableSkeleton,
-  OrgDetailSkeleton,
-} from "../../components/skeletons";
+import { AdminTableSkeleton, OrgDetailSkeleton } from "../../components/skeletons";
 import { useToast } from "../../ui/toast";
-import { ConfirmDialog } from "./confirm-dialog";
+import { ConfirmDialog } from "../../ui/confirm-dialog";
 import { SearchInput } from "./search-input";
 import { linkLabel } from "./util";
 import { SortTh } from "../../ui/sort-th";
 import { sortRows } from "../../lib/sort";
+import { withErrorToast } from "../../lib/mutation-toast";
+import { shortDate } from "../../lib/dates";
 
 const roleColor: Record<OrgRole, "accent" | "mint" | "muted"> = {
   owner: "accent",
@@ -25,30 +24,17 @@ const roleColor: Record<OrgRole, "accent" | "mint" | "muted"> = {
   member: "muted",
 };
 
-function OrgDetailDialog({
-  org,
-  onClose,
-}: {
-  org: AdminOrgRow | null;
-  onClose: () => void;
-}) {
+function OrgDetailDialog({ org, onClose }: { org: AdminOrgRow | null; onClose: () => void }) {
   const detail = useAdminOrgDetail(org?.id ?? null);
   return (
-    <Dialog
-      open={!!org}
-      onOpenChange={(o) => !o && onClose()}
-      title={org?.name ?? ""}
-      wide
-    >
+    <Dialog open={!!org} onOpenChange={(o) => !o && onClose()} title={org?.name ?? ""} wide>
       {org && (
         <div className="flex flex-col gap-4">
           <div className="flex items-center gap-2">
             <Badge color={org.plan === "pro" ? "mint" : org.plan === "hobby" ? "accent" : "muted"}>
               {org.plan}
             </Badge>
-            <span className="text-xs text-muted">
-              Created {new Date(org.createdAt).toLocaleDateString()}
-            </span>
+            <span className="text-xs text-muted">Created {shortDate(org.createdAt)}</span>
           </div>
 
           {detail.isLoading || !detail.data ? (
@@ -63,9 +49,7 @@ function OrgDetailDialog({
               </Card>
 
               <div>
-                <p className="mb-2 text-2xs tracking-wider text-muted uppercase">
-                  Members
-                </p>
+                <p className="mb-2 text-2xs tracking-wider text-muted uppercase">Members</p>
                 <Table>
                   <thead>
                     <tr>
@@ -89,9 +73,7 @@ function OrgDetailDialog({
               </div>
 
               <div>
-                <p className="mb-2 text-2xs tracking-wider text-muted uppercase">
-                  Links
-                </p>
+                <p className="mb-2 text-2xs tracking-wider text-muted uppercase">Links</p>
                 <Table>
                   <thead>
                     <tr>
@@ -103,12 +85,8 @@ function OrgDetailDialog({
                   <tbody>
                     {detail.data.links.map((l) => (
                       <tr key={l.id}>
-                        <Td className="font-bold text-accent">
-                          {linkLabel(l)}
-                        </Td>
-                        <Td className="max-w-64 truncate text-muted">
-                          {l.destination}
-                        </Td>
+                        <Td className="font-bold text-accent">{linkLabel(l)}</Td>
+                        <Td className="max-w-64 truncate text-muted">{l.destination}</Td>
                         <Td className="tnum text-right">{l.clicks}</Td>
                       </tr>
                     ))}
@@ -133,15 +111,14 @@ export function AdminOrgsPage() {
   const [sort, setSort] = useState<Sort>({ key: "created", dir: -1 });
 
   const remove = useMutation({
-    mutationFn: (orgId: string) =>
-      api(`/admin/orgs/${orgId}`, { method: "DELETE" }),
+    mutationFn: (orgId: string) => api(`/admin/orgs/${orgId}`, { method: "DELETE" }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["admin"] });
       qc.invalidateQueries({ queryKey: ["user"] });
       setDeleting(null);
       toast("Organization deleted");
     },
-    onError: (e) => toast(e.message, "error"),
+    onError: withErrorToast(toast),
   });
 
   const rows = useMemo(() => {
@@ -161,10 +138,7 @@ export function AdminOrgsPage() {
   if (orgs.isLoading) return <AdminTableSkeleton />;
   return (
     <div>
-      <PageHeader
-        title="Organizations"
-        sub="All organizations on this instance"
-      />
+      <PageHeader title="Organizations" sub="All organizations on this instance" />
       <SearchInput
         value={q}
         onChange={setQ}
@@ -197,12 +171,7 @@ export function AdminOrgsPage() {
               onSort={setSort}
               className="text-right"
             />
-            <SortTh
-              label="Created"
-              sortKey="created"
-              sort={sort}
-              onSort={setSort}
-            />
+            <SortTh label="Created" sortKey="created" sort={sort} onSort={setSort} />
             <Th className="text-right">Actions</Th>
           </tr>
         </thead>
@@ -219,16 +188,16 @@ export function AdminOrgsPage() {
                 </button>
               </Td>
               <Td>
-                <Badge color={org.plan === "pro" ? "mint" : org.plan === "hobby" ? "accent" : "muted"}>
+                <Badge
+                  color={org.plan === "pro" ? "mint" : org.plan === "hobby" ? "accent" : "muted"}
+                >
                   {org.plan}
                 </Badge>
               </Td>
               <Td className="tnum text-right">{org.members}</Td>
               <Td className="tnum text-right">{org.links}</Td>
               <Td className="tnum text-right">{org.clicks}</Td>
-              <Td className="text-xs text-muted">
-                {new Date(org.createdAt).toLocaleDateString()}
-              </Td>
+              <Td className="text-xs text-muted">{shortDate(org.createdAt)}</Td>
               <Td>
                 <Menu
                   align="end"
@@ -245,10 +214,7 @@ export function AdminOrgsPage() {
                     <Eye size={14} /> View details
                   </MenuItem>
                   <MenuSeparator />
-                  <MenuItem
-                    className="text-danger"
-                    onClick={() => setDeleting(org)}
-                  >
+                  <MenuItem className="text-danger" onClick={() => setDeleting(org)}>
                     <Trash2 size={14} /> Delete organization
                   </MenuItem>
                 </Menu>
@@ -278,10 +244,9 @@ export function AdminOrgsPage() {
       >
         {deleting && (
           <>
-            Delete{" "}
-            <span className="font-bold text-accent">{deleting.name}</span> with{" "}
-            {deleting.links} links and {deleting.clicks} recorded clicks? All
-            its short links stop working. This cannot be undone.
+            Delete <span className="font-bold text-accent">{deleting.name}</span> with{" "}
+            {deleting.links} links and {deleting.clicks} recorded clicks? All its short links stop
+            working. This cannot be undone.
           </>
         )}
       </ConfirmDialog>

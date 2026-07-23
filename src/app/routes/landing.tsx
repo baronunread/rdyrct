@@ -15,7 +15,14 @@ import {
   TrendingDown,
   Activity,
 } from "lucide-react";
-import { LazyMotion, MotionConfig, domAnimation, m, useReducedMotion, type Variants } from "motion/react";
+import {
+  LazyMotion,
+  MotionConfig,
+  domAnimation,
+  m,
+  useReducedMotion,
+  type Variants,
+} from "motion/react";
 import { useState } from "react";
 import { useCurrentUser } from "../lib/hooks";
 import { readAuthHint } from "../lib/auth-hint";
@@ -119,7 +126,15 @@ const faqs = [
   },
 ];
 
-function Section({ children, className = "py-16", id }: { children: ReactNode; className?: string; id?: string }) {
+function Section({
+  children,
+  className = "py-16",
+  id,
+}: {
+  children: ReactNode;
+  className?: string;
+  id?: string;
+}) {
   return (
     <m.section
       id={id}
@@ -146,20 +161,14 @@ function FaqJsonLd() {
     })),
     // "</script>" inside a value would end the tag early; escape every "<"
   }).replace(/</g, "\\u003c");
-  return (
-    <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: json }} />
-  );
+  return <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: json }} />;
 }
 
 type Tier = "self" | "free" | "hobby" | "pro";
 
 function Cell({ tier, children }: { tier?: Tier; children?: ReactNode }) {
   return (
-    <Td
-      className={
-        tier === "pro" ? "border-x border-x-accent/25 bg-accent/5" : undefined
-      }
-    >
+    <Td className={tier === "pro" ? "border-x border-x-accent/25 bg-accent/5" : undefined}>
       {children}
     </Td>
   );
@@ -264,9 +273,7 @@ function MobilePlans({ paidTo }: { paidTo: (p: "hobby" | "pro") => string }) {
           key={name}
           className={cn(
             "rounded-lg border p-4",
-            highlight
-              ? "border-accent/40 bg-accent/5"
-              : "border-border bg-surface",
+            highlight ? "border-accent/40 bg-accent/5" : "border-border bg-surface",
           )}
         >
           <div className="flex items-baseline justify-between gap-2">
@@ -318,8 +325,8 @@ function PricingSection() {
       <div className="mb-8 text-center">
         <h2 className="text-xl font-bold">Simple pricing</h2>
         <p className="mx-auto mt-2 max-w-xl text-sm text-muted">
-          Start free. Upgrade when your links outgrow the plan, or self-host
-          and never pay us a cent.
+          Start free. Upgrade when your links outgrow the plan, or self-host and never pay us a
+          cent.
         </p>
       </div>
 
@@ -367,14 +374,10 @@ function PricingSection() {
               <Td>Free · open source</Td>
               <Td>$0</Td>
               <Td>
-                <span className="text-base font-bold">
-                  {PLAN_PRICES.hobby}/mo
-                </span>
+                <span className="text-base font-bold">{PLAN_PRICES.hobby}/mo</span>
               </Td>
               <Cell tier="pro">
-                <span className="text-base font-bold text-accent">
-                  {PLAN_PRICES.pro}/mo
-                </span>
+                <span className="text-base font-bold text-accent">{PLAN_PRICES.pro}/mo</span>
                 <span className="block text-2xs font-normal text-muted">
                   only the org owner pays
                 </span>
@@ -554,30 +557,41 @@ function DeployTerminal() {
   ) : null;
 
   const lines = [
-    /* 0 */ <span key="prompt"><span className="text-accent/70">$</span> bun run deploy{cursor}</span>,
-    /* 1 */ <span key="build"><span className="text-[#27c93f]">✓</span> src/worker/index.ts → dist/worker.js  <span className="text-muted/50">(2.4s)</span></span>,
-    /* 2 */ <span key="upload"><span className="text-[#27c93f]">✓</span> Optimizing bundle... <span className="text-muted/50">124 kB gzipped</span></span>,
-    /* 3 */ <span key="deploy"><span className="text-[#27c93f]">✓</span> Deploying to Cloudflare global network</span>,
+    /* 0 */ <span key="prompt">
+      <span className="text-accent/70">$</span> bun run deploy{cursor}
+    </span>,
+    /* 1 */ <span key="build">
+      <span className="text-[#27c93f]">✓</span> src/worker/index.ts → dist/worker.js{" "}
+      <span className="text-muted/50">(2.4s)</span>
+    </span>,
+    /* 2 */ <span key="upload">
+      <span className="text-[#27c93f]">✓</span> Optimizing bundle...{" "}
+      <span className="text-muted/50">124 kB gzipped</span>
+    </span>,
+    /* 3 */ <span key="deploy">
+      <span className="text-[#27c93f]">✓</span> Deploying to Cloudflare global network
+    </span>,
     /* 4 */ <span key="b1" />,
-    /* 5 */ <span key="header"><span className="text-muted/50">Deployed resources:</span></span>,
+    /* 5 */ <span key="header">
+      <span className="text-muted/50">Deployed resources:</span>
+    </span>,
     /* 6-10 */ ...resources.map((r) => (
-    <span key={r.name}>
-      <span className="text-accent font-semibold">{r.name}</span>
-      <span className="text-muted/40">  {r.id}</span>
-      <span className="text-muted/20">  —  </span>
-      <span className="text-muted">{r.desc}</span>
-    </span>
-  )),
+      <span key={r.name}>
+        <span className="text-accent font-semibold">{r.name}</span>
+        <span className="text-muted/40"> {r.id}</span>
+        <span className="text-muted/20"> · </span>
+        <span className="text-muted">{r.desc}</span>
+      </span>
+    )),
     /* 11 */ <span key="b2" />,
-    /* 12 */ <span key="summary"><span className="text-accent/85">Deployed to prod.</span> <span className="text-muted/50">330+ cities · 5 primitives</span></span>,
+    /* 12 */ <span key="summary">
+      <span className="text-accent/85">Deployed to prod.</span>{" "}
+      <span className="text-muted/50">330+ cities · 5 primitives</span>
+    </span>,
   ];
 
   const content = animated ? (
-    <m.div
-      initial="hidden"
-      whileInView="visible"
-      viewport={{ once: true, margin: "-60px" }}
-    >
+    <m.div initial="hidden" whileInView="visible" viewport={{ once: true, margin: "-60px" }}>
       {lines.map((node, i) => (
         <m.div
           key={node.key as string}
@@ -590,7 +604,16 @@ function DeployTerminal() {
       ))}
     </m.div>
   ) : (
-    <div>{lines.map((node, i) => <div key={node.key as string} className={i === 4 || i === 11 ? "h-2" : "whitespace-pre-wrap leading-[1.9]"}>{node}</div>)}</div>
+    <div>
+      {lines.map((node, i) => (
+        <div
+          key={node.key as string}
+          className={i === 4 || i === 11 ? "h-2" : "whitespace-pre-wrap leading-[1.9]"}
+        >
+          {node}
+        </div>
+      ))}
+    </div>
   );
 
   return (
@@ -601,16 +624,16 @@ function DeployTerminal() {
           <span className="h-[9px] w-[9px] rounded-full bg-[#ffbd2e]" />
           <span className="h-[9px] w-[9px] rounded-full bg-[#27c93f]" />
         </div>
-        <span className="flex-1 text-center font-mono text-[0.7rem] text-muted/60">rdyrct deploy</span>
+        <span className="flex-1 text-center font-mono text-[0.7rem] text-muted/60">
+          rdyrct deploy
+        </span>
         <div className="invisible flex items-center gap-1.5">
           <span className="h-[9px] w-[9px] rounded-full bg-[#ff5f56]" />
           <span className="h-[9px] w-[9px] rounded-full bg-[#ffbd2e]" />
           <span className="h-[9px] w-[9px] rounded-full bg-[#27c93f]" />
         </div>
       </div>
-      <div className="px-4 py-3 font-mono text-[0.78rem]">
-        {content}
-      </div>
+      <div className="px-4 py-3 font-mono text-[0.78rem]">{content}</div>
     </div>
   );
 }
@@ -684,28 +707,18 @@ export function LandingPage() {
                 Short links that carry your brand.
               </h1>
               <p className="max-w-xl text-sm text-muted sm:text-base">
-                rdyrct gives your team short links, branded QR codes, and
-                custom domains, with privacy-friendly analytics that never
-                store an
-                IP address. Free to start, open source, and built on
-                Cloudflare's global network.
+                rdyrct gives your team short links, branded QR codes, and custom domains, with
+                privacy-friendly analytics that never store an IP address. Free to start, open
+                source, and built on Cloudflare's global network.
               </p>
               <div className="flex flex-wrap items-center justify-center gap-3">
                 <Link to={ctaTo}>
-                  <Button
-                    variant="primary"
-                    size="md"
-                    className="h-11 px-6 text-base"
-                  >
+                  <Button variant="primary" size="md" className="h-11 px-6 text-base">
                     {ctaLabel}
                   </Button>
                 </Link>
                 <a href={GITHUB_URL} target="_blank" rel="noreferrer">
-                  <Button
-                    variant="outline"
-                    size="md"
-                    className="h-11 px-6 text-base"
-                  >
+                  <Button variant="outline" size="md" className="h-11 px-6 text-base">
                     <Code2 size={16} /> Self-host from GitHub
                   </Button>
                 </a>
@@ -715,8 +728,7 @@ export function LandingPage() {
                   <Check size={13} className="text-accent-2" /> Free plan forever
                 </li>
                 <li className="flex items-center gap-1.5">
-                  <Check size={13} className="text-accent-2" /> No credit card
-                  required
+                  <Check size={13} className="text-accent-2" /> No credit card required
                 </li>
                 <li className="flex items-center gap-1.5">
                   <Check size={13} className="text-accent-2" /> No IP tracking
@@ -736,16 +748,11 @@ export function LandingPage() {
 
           <Section className="py-8">
             <div className="mb-8 text-center">
-              <h2 className="text-xl font-bold">
-                From paste to published in seconds
-              </h2>
+              <h2 className="text-xl font-bold">From paste to published in seconds</h2>
             </div>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
               {steps.map(({ title, body }, i) => (
-                <div
-                  key={title}
-                  className="rounded-lg border border-border bg-surface p-4"
-                >
+                <div key={title} className="rounded-lg border border-border bg-surface p-4">
                   <span className="mb-3 inline-flex h-7 w-7 items-center justify-center rounded-full border border-accent/40 font-mono text-xs font-bold text-accent">
                     {i + 1}
                   </span>
@@ -762,10 +769,9 @@ export function LandingPage() {
                 See every click, respect every visitor
               </h2>
               <p className="mx-auto mt-2 max-w-xl text-sm text-muted">
-                Country, device, referrer, and campaign breakdowns for every
-                link, from the last 24 hours to the last year. Never an IP
-                address, never cross-site tracking. This is the actual
-                analytics page.
+                Country, device, referrer, and campaign breakdowns for every link, from the last 24
+                hours to the last year. Never an IP address, never cross-site tracking. This is the
+                actual analytics page.
               </p>
             </div>
             <div className="flex justify-center">
@@ -775,9 +781,7 @@ export function LandingPage() {
 
           <Section>
             <div className="mb-8 text-center">
-              <h2 className="text-xl font-bold">
-                Everything a link needs to earn the click
-              </h2>
+              <h2 className="text-xl font-bold">Everything a link needs to earn the click</h2>
               <p className="mx-auto mt-2 max-w-xl text-sm text-muted">
                 Built for marketing teams and developers.
               </p>
@@ -792,9 +796,7 @@ export function LandingPage() {
                     <Icon size={16} className="text-accent" />
                     <p className="font-bold">{title}</p>
                     {plan && (
-                      <span className="text-2xs tracking-wide text-muted uppercase">
-                        {plan}
-                      </span>
+                      <span className="text-2xs tracking-wide text-muted uppercase">{plan}</span>
                     )}
                   </div>
                   <p className="text-sm text-muted">{body}</p>
@@ -808,8 +810,8 @@ export function LandingPage() {
               <img src="/cloudflare.svg" alt="Cloudflare" className="mx-auto mb-5 h-10 w-auto" />
               <h2 className="text-xl font-bold">Runs entirely on Cloudflare</h2>
               <p className="mx-auto mt-2 max-w-xl text-sm text-muted">
-                No servers to patch, no databases to babysit: rdyrct is built
-                from Cloudflare's own primitives, end to end.
+                No servers to patch, no databases to babysit: rdyrct is built from Cloudflare's own
+                primitives, end to end.
               </p>
             </div>
             <DeployTerminal />
@@ -846,15 +848,11 @@ export function LandingPage() {
                 Start shortening in seconds.
               </h2>
               <p className="max-w-md text-sm text-muted">
-                Create your first short link on the free plan. No credit
-                card, no visitor tracking, no servers to run.
+                Create your first short link on the free plan. No credit card, no visitor tracking,
+                no servers to run.
               </p>
               <Link to={ctaTo}>
-                <Button
-                  variant="primary"
-                  size="md"
-                  className="h-11 px-6 text-base"
-                >
+                <Button variant="primary" size="md" className="h-11 px-6 text-base">
                   {ctaLabel}
                 </Button>
               </Link>

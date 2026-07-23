@@ -2,7 +2,15 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import confetti from "canvas-confetti";
 import { AnimatePresence, LazyMotion, domAnimation, m } from "motion/react";
 import { useQueryClient } from "@tanstack/react-query";
-import { useCurrentUser, useLinks, useMembers, useDomains, useCheckout, usePortal } from "../lib/hooks";
+import {
+  useCurrentUser,
+  useLinks,
+  useMembers,
+  useDomains,
+  useCheckout,
+  usePortal,
+} from "../lib/hooks";
+import { shortDate } from "../lib/dates";
 import { useCurrentOrg } from "../lib/current-org";
 import { PLAN_LIMITS, PLAN_PRICES, type OrgPlan } from "@/shared/types";
 import { Button } from "../ui/button";
@@ -20,11 +28,31 @@ const PLAN_LABEL: Record<OrgPlan, string> = {
 
 const PLAN_FEATURES = [
   ["Links", `${PLAN_LIMITS.free.links}`, `${PLAN_LIMITS.hobby.links}`, `${PLAN_LIMITS.pro.links}`],
-  ["Members", `${PLAN_LIMITS.free.members}`, `${PLAN_LIMITS.hobby.members}`, `${PLAN_LIMITS.pro.members}`],
-  ["Domains", `${PLAN_LIMITS.free.domains}`, `${PLAN_LIMITS.hobby.domains}`, `${PLAN_LIMITS.pro.domains}`],
-  ["Org. you own", `${PLAN_LIMITS.free.orgs}`, `${PLAN_LIMITS.hobby.orgs}`, `${PLAN_LIMITS.pro.orgs}`],
+  [
+    "Members",
+    `${PLAN_LIMITS.free.members}`,
+    `${PLAN_LIMITS.hobby.members}`,
+    `${PLAN_LIMITS.pro.members}`,
+  ],
+  [
+    "Domains",
+    `${PLAN_LIMITS.free.domains}`,
+    `${PLAN_LIMITS.hobby.domains}`,
+    `${PLAN_LIMITS.pro.domains}`,
+  ],
+  [
+    "Org. you own",
+    `${PLAN_LIMITS.free.orgs}`,
+    `${PLAN_LIMITS.hobby.orgs}`,
+    `${PLAN_LIMITS.pro.orgs}`,
+  ],
   ["QR codes", "No", "Yes", "Yes"],
-  ["Analytics", `${PLAN_LIMITS.free.analyticsDays}d`, `${PLAN_LIMITS.hobby.analyticsDays}d`, `${PLAN_LIMITS.pro.analyticsDays}d`],
+  [
+    "Analytics",
+    `${PLAN_LIMITS.free.analyticsDays}d`,
+    `${PLAN_LIMITS.hobby.analyticsDays}d`,
+    `${PLAN_LIMITS.pro.analyticsDays}d`,
+  ],
 ] as const;
 
 function PlanFeatureComparison() {
@@ -91,13 +119,8 @@ function PlanActions({
         </p>
         {cancelAtPeriodEnd && periodEnd && (
           <p className="text-sm text-amber-400">
-            Your {PLAN_LABEL[plan]} plan is scheduled to cancel on{" "}
-            {new Date(periodEnd).toLocaleDateString(undefined, {
-              year: "numeric",
-              month: "short",
-              day: "numeric",
-            })}
-            . Paid features remain available until then.
+            Your {PLAN_LABEL[plan]} plan is scheduled to cancel on {shortDate(periodEnd)}. Paid
+            features remain available until then.
           </p>
         )}
         {confirmTimedOut && plan === "free" && (
@@ -208,13 +231,7 @@ function UsageMeter({
   );
 }
 
-function BillingOverlay({
-  show,
-  message,
-}: {
-  show: boolean;
-  message: string;
-}) {
+function BillingOverlay({ show, message }: { show: boolean; message: string }) {
   if (!show) return null;
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
@@ -255,9 +272,7 @@ function CelebrationOverlay({
           aria-label="Dismiss celebration"
           className="fixed inset-0 z-50 flex cursor-pointer items-center justify-center"
           onClick={onDismiss}
-          onKeyDown={(e) =>
-            (e.key === "Enter" || e.key === " ") && onDismiss()
-          }
+          onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && onDismiss()}
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
@@ -272,9 +287,7 @@ function CelebrationOverlay({
             transition={{ duration: 0.2 }}
           >
             <span className="text-5xl">🎉</span>
-            <p className="text-xl font-bold text-accent">
-              Welcome to {PLAN_LABEL[plan]}!
-            </p>
+            <p className="text-xl font-bold text-accent">Welcome to {PLAN_LABEL[plan]}!</p>
             <p className="text-sm text-muted">
               You now have access to all {PLAN_LABEL[plan]} features.
             </p>
@@ -305,12 +318,20 @@ function useCheckoutFlow() {
     setShowCelebration(true);
     const colors = ["#cdb9f5", "#b9e6c9", "#f5b8c8", "#f2e3b3", "#b9d9f0"];
     confetti({
-      particleCount: 40, angle: 60, spread: 70, startVelocity: 50,
-      origin: { x: 0, y: 0.75 }, colors,
+      particleCount: 40,
+      angle: 60,
+      spread: 70,
+      startVelocity: 50,
+      origin: { x: 0, y: 0.75 },
+      colors,
     });
     confetti({
-      particleCount: 40, angle: 120, spread: 70, startVelocity: 50,
-      origin: { x: 1, y: 0.75 }, colors,
+      particleCount: 40,
+      angle: 120,
+      spread: 70,
+      startVelocity: 50,
+      origin: { x: 1, y: 0.75 },
+      colors,
     });
     setTimeout(() => setShowCelebration(false), 4000);
   }, []);
@@ -368,7 +389,9 @@ function useCheckoutFlow() {
 
   // While confirming, poll /user until plan flips to paid.
   const celebratRef = useRef(celebrat);
-  useEffect(() => { celebratRef.current = celebrat; }, [celebrat]);
+  useEffect(() => {
+    celebratRef.current = celebrat;
+  }, [celebrat]);
   useEffect(() => {
     if (!confirming) return;
     if (plan !== "free") {
@@ -393,7 +416,9 @@ function useCheckoutFlow() {
   // Auto-upgrade from ?plan= param
   const planParamDone = useRef(false);
   const upgradeRef = useRef(handleUpgrade);
-  useEffect(() => { upgradeRef.current = handleUpgrade; });
+  useEffect(() => {
+    upgradeRef.current = handleUpgrade;
+  });
   useEffect(() => {
     if (!me.data || planParamDone.current) return;
     planParamDone.current = true;
@@ -406,8 +431,18 @@ function useCheckoutFlow() {
   }, [me.data]);
 
   return {
-    plan, checkoutPlan, showPortalOverlay, showCelebration, confirming, confirmTimedOut,
-    setShowCelebration, handleUpgrade, handlePortal, shakeHobby, shakePro, shakePortal,
+    plan,
+    checkoutPlan,
+    showPortalOverlay,
+    showCelebration,
+    confirming,
+    confirmTimedOut,
+    setShowCelebration,
+    handleUpgrade,
+    handlePortal,
+    shakeHobby,
+    shakePro,
+    shakePortal,
   };
 }
 
@@ -421,12 +456,21 @@ export function BillingPage() {
   const ownedOrgs = me.data?.orgs.filter((o) => o.role === "owner").length ?? 0;
 
   const {
-    plan, checkoutPlan, showPortalOverlay, showCelebration, confirming, confirmTimedOut,
-    setShowCelebration, handleUpgrade, handlePortal, shakeHobby, shakePro, shakePortal,
+    plan,
+    checkoutPlan,
+    showPortalOverlay,
+    showCelebration,
+    confirming,
+    confirmTimedOut,
+    setShowCelebration,
+    handleUpgrade,
+    handlePortal,
+    shakeHobby,
+    shakePro,
+    shakePortal,
   } = useCheckoutFlow();
 
-  const cancelAtPeriodEnd =
-    me.data?.user.polarSubscriptionCancelAtPeriodEnd ?? false;
+  const cancelAtPeriodEnd = me.data?.user.polarSubscriptionCancelAtPeriodEnd ?? false;
   const periodEnd = me.data?.user.polarSubscriptionCurrentPeriodEnd ?? null;
 
   return (

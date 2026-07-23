@@ -1,15 +1,17 @@
-import { Check, Copy, ExternalLink, Lock, Pencil, QrCode, Trash2 } from "lucide-react";
+import { ExternalLink, Lock, Pencil, QrCode, Trash2 } from "lucide-react";
 import { shortUrl } from "../lib/api";
 import { type LinkDTO, type Sort } from "@/shared/types";
 import { IconButton } from "../ui/button";
 import { Table, Th, Td } from "../ui/misc";
 import { SortTh } from "../ui/sort-th";
+import { shortDate } from "../lib/dates";
+import { CopyButton } from "../ui/copy-button";
+import { useToast } from "../ui/toast";
+import { copyToClipboard } from "../lib/clipboard";
 
 export function LinksTable({
   paged,
   navigate,
-  copy,
-  copiedId,
   limits,
   onQrClick,
   onEdit,
@@ -23,8 +25,6 @@ export function LinksTable({
 }: {
   paged: LinkDTO[];
   navigate: (to: string) => void;
-  copy: (link: LinkDTO) => void;
-  copiedId: string | null;
   limits: { qr: boolean };
   onQrClick: (link: LinkDTO) => void;
   onEdit: (link: LinkDTO) => void;
@@ -36,15 +36,35 @@ export function LinksTable({
   onPageChange: (fn: (p: number) => number) => void;
   noQrToast: () => void;
 }) {
+  const toast = useToast();
+
   return (
     <>
       <Table fixed>
         <thead>
           <tr>
-            <SortTh label="Short link" sortKey="slug" sort={sort} onSort={onSort} className="w-[40%]" />
+            <SortTh
+              label="Short link"
+              sortKey="slug"
+              sort={sort}
+              onSort={onSort}
+              className="w-[40%]"
+            />
             <Th className="w-[25%]">Destination</Th>
-            <SortTh label="Clicks" sortKey="clicks" sort={sort} onSort={onSort} className="w-20 text-right" />
-            <SortTh label="Created" sortKey="createdAt" sort={sort} onSort={onSort} className="w-28" />
+            <SortTh
+              label="Clicks"
+              sortKey="clicks"
+              sort={sort}
+              onSort={onSort}
+              className="w-20 text-right"
+            />
+            <SortTh
+              label="Created"
+              sortKey="createdAt"
+              sort={sort}
+              onSort={onSort}
+              className="w-28"
+            />
             <Th className="w-14 text-right">Actions</Th>
           </tr>
         </thead>
@@ -55,23 +75,24 @@ export function LinksTable({
                 <div className="flex items-center gap-1.5">
                   <button
                     type="button"
-                    onClick={() => navigate(link.domain ? `/links/${link.slug}?domain=${encodeURIComponent(link.domain)}` : `/links/${link.slug}`)}
+                    onClick={() =>
+                      navigate(
+                        link.domain
+                          ? `/links/${link.slug}?domain=${encodeURIComponent(link.domain)}`
+                          : `/links/${link.slug}`,
+                      )
+                    }
                     className="cursor-pointer font-bold text-accent hover:underline"
                   >
                     {link.domain ? `${link.domain}/${link.slug}` : `/${link.slug}`}
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => copy(link)}
-                    aria-label={`Copy ${shortUrl(link.slug, link.domain)}`}
-                    className="cursor-pointer rounded p-1 text-muted opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100 hover:text-text"
-                  >
-                    {copiedId === link.id ? <Check size={13} className="text-accent" /> : <Copy size={13} />}
-                  </button>
+                  <CopyButton
+                    text={shortUrl(link.slug, link.domain)}
+                    label={`Copy ${shortUrl(link.slug, link.domain)}`}
+                    onCopy={(text) => copyToClipboard(text, toast)}
+                  />
                 </div>
-                {link.title && (
-                  <p className="text-xs text-muted">{link.title}</p>
-                )}
+                {link.title && <p className="text-xs text-muted">{link.title}</p>}
               </Td>
               <Td className="max-w-64">
                 <a
@@ -85,9 +106,7 @@ export function LinksTable({
                 </a>
               </Td>
               <Td className="tnum text-right">{link.clicks}</Td>
-              <Td className="text-xs whitespace-nowrap text-muted">
-                {new Date(link.createdAt).toLocaleDateString()}
-              </Td>
+              <Td className="text-xs whitespace-nowrap text-muted">{shortDate(link.createdAt)}</Td>
               <Td>
                 <div className="flex justify-end gap-0.5">
                   {limits.qr ? (
@@ -95,21 +114,14 @@ export function LinksTable({
                       <QrCode size={15} />
                     </IconButton>
                   ) : (
-                    <IconButton
-                      label="QR codes are a paid feature"
-                      onClick={noQrToast}
-                    >
+                    <IconButton label="QR codes are a paid feature" onClick={noQrToast}>
                       <Lock size={15} />
                     </IconButton>
                   )}
                   <IconButton label="Edit" onClick={() => onEdit(link)}>
                     <Pencil size={15} />
                   </IconButton>
-                  <IconButton
-                    label="Delete"
-                    danger
-                    onClick={() => onDelete(link)}
-                  >
+                  <IconButton label="Delete" danger onClick={() => onDelete(link)}>
                     <Trash2 size={15} />
                   </IconButton>
                 </div>

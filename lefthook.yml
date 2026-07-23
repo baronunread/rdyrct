@@ -1,0 +1,13 @@
+pre-commit:
+  parallel: false
+  jobs:
+    - name: format
+      glob: "*.{cjs,cts,css,js,json,jsonc,jsx,md,mjs,mts,ts,tsx}"
+      run: bunx oxfmt --write {staged_files}
+      stage_fixed: true
+    - name: lint
+      glob: "*.{cjs,cts,js,jsx,mjs,mts,ts,tsx}"
+      run: bunx oxlint --deny-warnings {staged_files}
+    - name: react-doctor
+      glob: "*.{cjs,cts,js,jsx,mjs,mts,ts,tsx}"
+      run: bunx react-doctor --staged --blocking warning

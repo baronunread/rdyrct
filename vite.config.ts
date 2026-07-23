@@ -5,7 +5,15 @@ import tailwindcss from "@tailwindcss/vite";
 import { cloudflare } from "@cloudflare/vite-plugin";
 
 export default defineConfig({
-  plugins: [react(), tailwindcss(), cloudflare()],
+  plugins: [
+    react(),
+    tailwindcss(),
+    cloudflare({
+      // Browser tests use short-lived in-memory bindings, never a developer's
+      // persisted D1, KV, or R2 state.
+      persistState: process.env.PLAYWRIGHT_TEST ? false : true,
+    }),
+  ],
   resolve: {
     // mirror the tsconfig "@/*" path for runtime imports (app and worker)
     alias: { "@": fileURLToPath(new URL("./src", import.meta.url)) },

@@ -16,12 +16,7 @@ export async function orgPlan(
     .select({ plan: schema.user.plan })
     .from(schema.orgMembers)
     .innerJoin(schema.user, eq(schema.orgMembers.userId, schema.user.id))
-    .where(
-      and(
-        eq(schema.orgMembers.orgId, orgId),
-        eq(schema.orgMembers.role, "owner"),
-      ),
-    );
+    .where(and(eq(schema.orgMembers.orgId, orgId), eq(schema.orgMembers.role, "owner")));
   const plan = rows[0]?.plan ?? "free";
   return { plan, limits: PLAN_LIMITS[plan] };
 }

@@ -64,10 +64,10 @@
   --color-sky: var(--sky);
   --color-chart: var(--chart);
   --color-danger: var(--danger);
-  --font-sans: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas,
-    monospace;
-  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas,
-    monospace;
+  /* stylelint-disable value-keyword-case -- Preserve canonical font-family casing. */
+  --font-sans: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  /* stylelint-enable value-keyword-case */
   --text-2xs: 11px;
   --text-3xs: 10px;
   --text-4xs: 9px;
@@ -97,11 +97,15 @@ html {
   background: var(--bg);
   color: var(--text);
   font-family: var(--font-mono);
-  transition: background-color 0.25s ease, color 0.25s ease;
+  transition:
+    background-color 0.25s ease,
+    color 0.25s ease;
 }
 
 html * {
-  transition: background-color 0.25s ease, border-color 0.25s ease,
+  transition:
+    background-color 0.25s ease,
+    border-color 0.25s ease,
     color 0.25s ease;
 }
 
@@ -159,25 +163,35 @@ body {
    fades in with a delay. Each direction uses different timings so the
    forward direction feels sequenced and the reverse (error) is instant. */
 .busy-label {
-  transition: filter 100ms, transform 100ms, opacity 100ms;
+  transition:
+    filter 100ms,
+    transform 100ms,
+    opacity 100ms;
 }
 .busy-label[data-busy] {
   filter: blur(4px);
   transform: scale(0.75);
   opacity: 0;
-  transition: filter 150ms, transform 150ms 150ms, opacity 150ms 150ms;
+  transition:
+    filter 150ms,
+    transform 150ms 150ms,
+    opacity 150ms 150ms;
 }
 
 .busy-spinner {
   opacity: 0;
   transform: scale(0.5);
   pointer-events: none;
-  transition: opacity 100ms, transform 100ms;
+  transition:
+    opacity 100ms,
+    transform 100ms;
 }
 .busy-spinner[data-busy] {
   opacity: 1;
   transform: scale(1);
-  transition: opacity 200ms 200ms, transform 200ms 200ms;
+  transition:
+    opacity 200ms 200ms,
+    transform 200ms 200ms;
 }
 
 @media (prefers-reduced-motion: reduce) {

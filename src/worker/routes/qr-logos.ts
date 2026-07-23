@@ -38,8 +38,7 @@ qrLogoRoutes.post("/", requireOrgRole("member"), async (c) => {
       message: "QR customization is a paid feature: upgrade to use it",
     });
 
-  const type =
-    c.req.header("content-type")?.split(";")[0].trim().toLowerCase() ?? "";
+  const type = c.req.header("content-type")?.split(";")[0].trim().toLowerCase() ?? "";
   const ext = EXT_BY_TYPE[type];
   if (!ext)
     throw new HTTPException(400, {
@@ -67,8 +66,7 @@ qrLogoRoutes.post("/", requireOrgRole("member"), async (c) => {
 // Unauthorized access always returns 404 so the URL leaks nothing.
 qrLogoRoutes.get("/:file", async (c) => {
   const file = c.req.param("file");
-  if (!QR_LOGO_FILE_RE.test(file))
-    throw new HTTPException(404, { message: "Not found" });
+  if (!QR_LOGO_FILE_RE.test(file)) throw new HTTPException(404, { message: "Not found" });
 
   const user = c.var.user;
   if (!user) throw new HTTPException(404, { message: "Not found" });

@@ -1,4 +1,6 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useForm, Controller, type FieldErrors } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
 import { Link, useLocation, useNavigate, useSearchParams } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { AuthCard, PasswordMeter } from "../components/auth-form";
@@ -10,29 +12,43 @@ import { Field, Input } from "../ui/field";
 import { OtpInput } from "../ui/otp";
 import { BusyContent } from "../ui/spinner";
 import { useToast } from "../ui/toast";
+import { loginSchema, signupSchema, forgotSchema, otpSchema } from "../lib/schemas";
 
 type View = "form" | "forgot" | "forgot-sent" | "verify-otp";
 
-// Stricter than the browser's type="email" check (which lets "a@b" through)
-// and matches what the server's schema accepts, so bad emails never reach it.
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[A-Za-z]{2,}$/;
+type AuthForm = { email: string; password: string };
+type ForgotForm = { email: string };
+type OtpForm = { otp: string };
 
-/** Password-reset request card ("email on its way" state included). */
+function firstFormError(errors: FieldErrors, fallback: string): string {
+  const firstError = Object.values(errors).find((entry) => entry?.message);
+  return typeof firstError?.message === "string" ? firstError.message : fallback;
+}
+
 function ForgotView({
+  initialEmail,
   sent,
-  email,
   busy,
-  onEmailChange,
   onSubmit,
   onBack,
 }: {
+  initialEmail: string;
   sent: boolean;
-  email: string;
   busy: boolean;
-  onEmailChange: (v: string) => void;
-  onSubmit: (e: FormEvent) => void;
+  onSubmit: (email: string) => void;
   onBack: () => void;
 }) {
+  const toast = useToast();
+  const { register, handleSubmit, getValues } = useForm<ForgotForm>({
+    resolver: zodResolver(forgotSchema),
+    defaultValues: { email: initialEmail },
+  });
+
+  const onFormSubmit = handleSubmit(
+    (data) => onSubmit(data.email),
+    (errors) => toast(firstFormError(errors, "Enter a valid email address"), "error"),
+  );
+
   return (
     <AuthCard>
       <div className="flex flex-col gap-4 rounded-xl border border-border bg-surface p-6">
@@ -40,18 +56,12 @@ function ForgotView({
         {sent ? (
           <p className="text-sm text-muted">
             If that account exists, we sent a reset link to{" "}
-            <span className="text-text">{email}</span>.
+            <span className="text-text">{getValues("email")}</span>.
           </p>
         ) : (
-          <form onSubmit={onSubmit} className="flex flex-col gap-4">
+          <form onSubmit={onFormSubmit} className="flex flex-col gap-4">
             <Field label="Email">
-              <Input
-                type="email"
-                value={email}
-                onChange={(e) => onEmailChange(e.target.value)}
-                required
-                autoComplete="email"
-              />
+              <Input type="email" {...register("email")} required autoComplete="email" />
             </Field>
             <Button type="submit" variant="primary" disabled={busy}>
               <BusyContent busy={busy}>Send reset link</BusyContent>
@@ -68,51 +78,63 @@ function ForgotView({
   );
 }
 
-/** OTP entry card shown after signup or an unverified login. */
 function VerifyOtpView({
   email,
-  otp,
-  otpError,
   busy,
   resent,
-  onOtpChange,
   onSubmit,
   onComplete,
   onResend,
   onBack,
 }: {
   email: string;
-  otp: string;
-  otpError: string;
   busy: boolean;
   resent: boolean;
-  onOtpChange: (v: string) => void;
-  onSubmit: (e: FormEvent) => void;
+  onSubmit: (code: string) => void;
   onComplete: (code: string) => void;
   onResend: () => void;
   onBack: () => void;
 }) {
+  const toast = useToast();
+  const { control, handleSubmit } = useForm<OtpForm>({
+    resolver: zodResolver(otpSchema),
+    defaultValues: { otp: "" },
+  });
+
+  const onFormSubmit = handleSubmit(
+    (data) => onSubmit(data.otp),
+    (errors) => toast(firstFormError(errors, "Enter a 6-digit code"), "error"),
+  );
+
   return (
     <AuthCard>
       <form
-        onSubmit={onSubmit}
+        onSubmit={onFormSubmit}
         className="flex flex-col gap-4 rounded-xl border border-border bg-surface p-6"
       >
         <h1 className="font-bold">Enter your code</h1>
         <p className="text-sm text-muted">
-          We emailed a 6-digit code to <span className="text-text">{email}</span>
-          . It expires in 10 minutes.
+          We emailed a 6-digit code to <span className="text-text">{email}</span>. It expires in 10
+          minutes.
         </p>
         <Field label="Verification code">
-          <OtpInput
-            value={otp}
-            onChange={onOtpChange}
-            onComplete={onComplete}
-            disabled={busy}
-            autoFocus
+          <Controller
+            control={control}
+            name="otp"
+            render={({ field }) => (
+              <OtpInput
+                value={field.value}
+                onChange={field.onChange}
+                onComplete={(v) => {
+                  field.onChange(v);
+                  onComplete(v);
+                }}
+                disabled={busy}
+                autoFocus
+              />
+            )}
           />
         </Field>
-        {otpError && <p className="text-sm text-danger">{otpError}</p>}
         <Button type="submit" variant="primary" disabled={busy}>
           <BusyContent busy={busy}>Verify & continue</BusyContent>
         </Button>
@@ -120,11 +142,7 @@ function VerifyOtpView({
           {resent ? (
             <span>New code sent.</span>
           ) : (
-            <button
-              type="button"
-              className="hover:text-accent"
-              onClick={onResend}
-            >
+            <button type="button" className="hover:text-accent" onClick={onResend}>
               Resend code
             </button>
           )}
@@ -137,53 +155,48 @@ function VerifyOtpView({
   );
 }
 
-/** The main sign-in / sign-up card. */
 function AuthFormView({
   mode,
-  email,
-  password,
-  error,
   busy,
   shake,
   next,
-  onEmailChange,
-  onPasswordChange,
   onSubmit,
   onForgot,
 }: {
   mode: "login" | "signup";
-  email: string;
-  password: string;
-  error: string;
   busy: boolean;
   shake: ReturnType<typeof useShake>;
   next: string;
-  onEmailChange: (v: string) => void;
-  onPasswordChange: (v: string) => void;
-  onSubmit: (e: FormEvent) => void;
-  onForgot: () => void;
+  onSubmit: (email: string, password: string) => void;
+  onForgot: (email: string) => void;
 }) {
+  const schema = mode === "login" ? loginSchema : signupSchema;
+  const toast = useToast();
+  const { register, handleSubmit, watch, getValues } = useForm<AuthForm>({
+    resolver: zodResolver(schema),
+    defaultValues: { email: "", password: "" },
+  });
+
+  const password = watch("password");
+  const onFormSubmit = handleSubmit(
+    (data) => onSubmit(data.email, data.password),
+    (errors) => {
+      toast(firstFormError(errors, "Check your email and password"), "error");
+      shake.start();
+    },
+  );
+
   return (
     <AuthCard>
       <form
-        onSubmit={onSubmit}
+        onSubmit={onFormSubmit}
         noValidate
         className="flex flex-col gap-4 rounded-xl border border-border bg-surface p-6"
       >
-        <h1 className="font-bold">
-          {mode === "login" ? "Sign in" : "Create an account"}
-        </h1>
+        <h1 className="font-bold">{mode === "login" ? "Sign in" : "Create an account"}</h1>
         <Field label="Email">
-          <Input
-            type="email"
-            value={email}
-            onChange={(e) => onEmailChange(e.target.value)}
-            required
-            autoComplete="email"
-          />
+          <Input type="email" {...register("email")} required autoComplete="email" />
         </Field>
-        {/* Both modes always render exactly one hint line here, so the sign-in
-            and sign-up cards stay the same height. */}
         <Field
           label="Password"
           hint={
@@ -191,7 +204,7 @@ function AuthFormView({
               <button
                 type="button"
                 className="text-muted hover:text-accent"
-                onClick={onForgot}
+                onClick={() => onForgot(getValues("email"))}
               >
                 Forgot password?
               </button>
@@ -202,13 +215,11 @@ function AuthFormView({
         >
           <Input
             type="password"
-            value={password}
-            onChange={(e) => onPasswordChange(e.target.value)}
+            {...register("password")}
             required
             autoComplete={mode === "login" ? "current-password" : "new-password"}
           />
         </Field>
-        {error && <p className="text-sm text-danger">{error}</p>}
         <Button
           type="submit"
           variant="primary"
@@ -221,13 +232,11 @@ function AuthFormView({
         <p className="text-center text-xs text-muted">
           {mode === "login" ? (
             <>
-              No account?{" "}
-              <Link to={`/signup?next=${encodeURIComponent(next)}`}>Sign up</Link>
+              No account? <Link to={`/signup?next=${encodeURIComponent(next)}`}>Sign up</Link>
             </>
           ) : (
             <>
-              Have an account?{" "}
-              <Link to={`/login?next=${encodeURIComponent(next)}`}>Sign in</Link>
+              Have an account? <Link to={`/login?next=${encodeURIComponent(next)}`}>Sign in</Link>
             </>
           )}
         </p>
@@ -236,9 +245,6 @@ function AuthFormView({
   );
 }
 
-// The OTP screen survives a reload: the pending email (and post-verify
-// destination) live in sessionStorage until the code is entered or the user
-// backs out, so a refresh mid-verification doesn't dump you at the form.
 const PENDING_KEY = "rdyrct:pendingVerify";
 interface Pending {
   email: string;
@@ -274,36 +280,25 @@ export function AuthPage({ mode }: { mode: "login" | "signup" }) {
   const qc = useQueryClient();
   const toast = useToast();
 
-  // Restore the OTP screen on reload (before first paint, so no form flash).
-  const [view, setView] = useState<View>(() =>
-    readPending() ? "verify-otp" : "form",
-  );
-  const [email, setEmail] = useState(() => readPending()?.email ?? "");
-  const [password, setPassword] = useState("");
-  const [error, setError] = useState("");
+  const [view, setView] = useState<View>(() => (readPending() ? "verify-otp" : "form"));
+  const [authEmail, setAuthEmail] = useState(() => readPending()?.email ?? "");
+  const authPasswordRef = useRef("");
   const [busy, setBusy] = useState(false);
   const shake = useShake();
 
-  // /login and /signup render this same mounted component, so switching modes
-  // keeps all state: drop the previous mode's error instead of showing it
-  // under the other form.
   const [prevMode, setPrevMode] = useState(mode);
   if (prevMode !== mode) {
     setPrevMode(mode);
-    setError("");
     shake.end();
   }
 
   const failSubmit = (message: string) => {
-    setError(message);
+    toast(message, "error");
     shake.start();
   };
 
-  const [forgotEmail, setForgotEmail] = useState("");
   const [forgotBusy, setForgotBusy] = useState(false);
 
-  const [otp, setOtp] = useState("");
-  const [otpError, setOtpError] = useState("");
   const [resent, setResent] = useState(false);
 
   const rawNext =
@@ -311,64 +306,37 @@ export function AuthPage({ mode }: { mode: "login" | "signup" }) {
     params.get("next") ??
     (location.state as { from?: string } | null)?.from ??
     "/dashboard";
-  // Internal paths only: anything else (absolute URLs, protocol-relative)
-  // would be an open redirect. Stale pre-refactor paths (/app/:orgId/*) are
-  // fine — the router remaps them.
-  const next =
-    rawNext.startsWith("/") && !rawNext.startsWith("//")
-      ? rawNext
-      : "/dashboard";
+  const next = rawNext.startsWith("/") && !rawNext.startsWith("//") ? rawNext : "/dashboard";
 
-  // Already signed in: skip the form. The form still paints while the session
-  // check is in flight so signed-out visitors see no blank flash. This also
-  // covers the post-verify path (the ["user"] refetch resolves and we leave).
   const { data: user } = useCurrentUser();
   useEffect(() => {
     if (!user) return;
-    clearPending(); // a session means verified; drop any stale OTP state
+    clearPending();
     navigate(next, { replace: true });
   }, [user, navigate, next]);
 
-  // Move to the OTP screen and email a fresh code (the frontend is the single
-  // sender; see better-auth.ts). Persist the pending state so a reload keeps
-  // us here rather than bouncing back to the form.
-  const goVerify = async () => {
-    setOtp("");
-    setOtpError("");
-    setResent(false);
-    writePending({ email, next });
-    setView("verify-otp");
-    await authClient.emailOtp.sendVerificationOtp({
+  const goVerify = async (email: string) => {
+    const { error } = await authClient.emailOtp.sendVerificationOtp({
       email,
       type: "email-verification",
     });
+    if (error) {
+      failSubmit(error.message ?? "Could not send the verification code");
+      return;
+    }
+    setAuthEmail(email);
+    writePending({ email, next });
+    setView("verify-otp");
   };
 
   const backToForm = () => {
     clearPending();
-    setError(""); // the pre-verify form error is stale by now
     setView("form");
   };
 
-  const submit = async (e: FormEvent) => {
-    e.preventDefault();
-    // The form is noValidate: we run every check ourselves, in field order,
-    // because the browser's checks are looser than the server's and its
-    // bubbles can point at the wrong field.
-    if (!EMAIL_RE.test(email)) {
-      failSubmit("Enter a valid email address.");
-      return;
-    }
-    if (mode === "signup" && password.length < 8) {
-      failSubmit("Password must be at least 8 characters.");
-      return;
-    }
-    if (!password) {
-      failSubmit("Enter your password.");
-      return;
-    }
-    // Keep any previous error on screen while the retry is in flight: clearing
-    // it here made the text vanish and reflash on every repeated failure.
+  const submit = async (email: string, password: string) => {
+    setAuthEmail(email);
+    authPasswordRef.current = password;
     setBusy(true);
     try {
       if (mode === "login") {
@@ -378,7 +346,7 @@ export function AuthPage({ mode }: { mode: "login" | "signup" }) {
         });
         if (signInError) {
           if (signInError.code === "EMAIL_NOT_VERIFIED") {
-            await goVerify();
+            await goVerify(email);
           } else {
             failSubmit(friendlyAuthError(signInError));
           }
@@ -395,35 +363,45 @@ export function AuthPage({ mode }: { mode: "login" | "signup" }) {
         if (signUpError) {
           failSubmit(friendlyAuthError(signUpError));
         } else {
-          await goVerify();
+          await goVerify(email);
         }
       }
+    } catch (error) {
+      failSubmit(error instanceof Error ? error.message : "Something went wrong");
     } finally {
       setBusy(false);
     }
   };
 
   const runVerify = async (code: string) => {
-    if (busy) return; // onComplete + button click can both fire
-    setOtpError("");
+    if (busy) return;
     setBusy(true);
     try {
-      // verifyEmail signs the user in on success (sets the session cookie)
       const { error: verifyError } = await authClient.emailOtp.verifyEmail({
-        email,
+        email: authEmail,
         otp: code.trim(),
       });
       if (verifyError) {
-        setOtpError(verifyError.message ?? "That code is invalid or expired");
+        toast(verifyError.message ?? "That code is invalid or expired", "error");
         return;
       }
-      // verifyEmail sets the session cookie, but on the signup path (and the
-      // unverified-login path) the client-side session atom can lag behind,
-      // make sure a session actually exists before moving on so /dashboard
-      // doesn't bounce the user back to login.
       const sess = await authClient.getSession();
       if (!sess?.data) {
-        await authClient.signIn.email({ email, password });
+        const password = authPasswordRef.current;
+        if (!password) {
+          clearPending();
+          toast("Email verified. Sign in to continue.");
+          navigate(`/login?next=${encodeURIComponent(next)}`, { replace: true });
+          return;
+        }
+        const { error: signInError } = await authClient.signIn.email({
+          email: authEmail,
+          password,
+        });
+        if (signInError) {
+          toast(friendlyAuthError(signInError), "error");
+          return;
+        }
       }
       clearPending();
       await qc.refetchQueries({ queryKey: ["user"] });
@@ -433,17 +411,12 @@ export function AuthPage({ mode }: { mode: "login" | "signup" }) {
     }
   };
 
-  const submitOtp = (e: FormEvent) => {
-    e.preventDefault();
-    runVerify(otp);
-  };
-
   const resendOtp = async () => {
     setResent(false);
-    setOtpError("");
-    const { error: resendError } = await authClient.emailOtp.sendVerificationOtp(
-      { email, type: "email-verification" },
-    );
+    const { error: resendError } = await authClient.emailOtp.sendVerificationOtp({
+      email: authEmail,
+      type: "email-verification",
+    });
     if (resendError) {
       toast(resendError.message ?? "Could not resend the code", "error");
       return;
@@ -451,12 +424,11 @@ export function AuthPage({ mode }: { mode: "login" | "signup" }) {
     setResent(true);
   };
 
-  const submitForgot = async (e: FormEvent) => {
-    e.preventDefault();
+  const submitForgot = async (email: string) => {
     setForgotBusy(true);
     try {
       const { error: resetError } = await authClient.requestPasswordReset({
-        email: forgotEmail,
+        email,
         redirectTo: "/reset-password",
       });
       if (resetError) {
@@ -472,13 +444,10 @@ export function AuthPage({ mode }: { mode: "login" | "signup" }) {
   if (view === "verify-otp") {
     return (
       <VerifyOtpView
-        email={email}
-        otp={otp}
-        otpError={otpError}
+        email={authEmail}
         busy={busy}
         resent={resent}
-        onOtpChange={setOtp}
-        onSubmit={submitOtp}
+        onSubmit={runVerify}
         onComplete={runVerify}
         onResend={resendOtp}
         onBack={backToForm}
@@ -489,10 +458,9 @@ export function AuthPage({ mode }: { mode: "login" | "signup" }) {
   if (view === "forgot" || view === "forgot-sent") {
     return (
       <ForgotView
+        initialEmail={authEmail}
         sent={view === "forgot-sent"}
-        email={forgotEmail}
         busy={forgotBusy}
-        onEmailChange={setForgotEmail}
         onSubmit={submitForgot}
         onBack={() => setView("form")}
       />
@@ -502,17 +470,12 @@ export function AuthPage({ mode }: { mode: "login" | "signup" }) {
   return (
     <AuthFormView
       mode={mode}
-      email={email}
-      password={password}
-      error={error}
       busy={busy}
       shake={shake}
       next={next}
-      onEmailChange={setEmail}
-      onPasswordChange={setPassword}
       onSubmit={submit}
-      onForgot={() => {
-        setForgotEmail(email);
+      onForgot={(email) => {
+        setAuthEmail(email);
         setView("forgot");
       }}
     />

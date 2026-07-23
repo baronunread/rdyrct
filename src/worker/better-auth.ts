@@ -143,16 +143,10 @@ function buildAuth(env: Env) {
           const owned = await db
             .select({ orgId: schema.orgMembers.orgId })
             .from(schema.orgMembers)
-            .where(
-              and(
-                eq(schema.orgMembers.userId, user.id),
-                eq(schema.orgMembers.role, "owner"),
-              ),
-            );
+            .where(and(eq(schema.orgMembers.userId, user.id), eq(schema.orgMembers.role, "owner")));
           if (owned.length > 0)
             throw new APIError(400, {
-              message:
-                "You still own organizations, delete them first in Settings.",
+              message: "You still own organizations, delete them first in Settings.",
             });
         },
       },
@@ -180,8 +174,7 @@ function buildAuth(env: Env) {
         const domain = normalized.split("@")[1];
         if (domain && !(await domainHasMailRecords(domain)))
           throw new APIError(422, {
-            message:
-              "Enter a valid email address.",
+            message: "Enter a valid email address.",
             code: "INVALID_EMAIL_DOMAIN",
           });
       }),
@@ -193,8 +186,7 @@ function buildAuth(env: Env) {
           // SUPERADMIN_EMAIL is the platform admin (and always lands on Pro,
           // so all Pro-gated features are reachable). No first-signup rule.
           before: async (user) => {
-            const isSuper =
-              user.email.toLowerCase() === env.SUPERADMIN_EMAIL.toLowerCase();
+            const isSuper = user.email.toLowerCase() === env.SUPERADMIN_EMAIL.toLowerCase();
             return {
               data: {
                 ...user,

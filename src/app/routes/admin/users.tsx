@@ -1,13 +1,6 @@
 import { useMemo, useState, type ReactNode } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import {
-  Ban,
-  Check,
-  Ellipsis,
-  ShieldMinus,
-  ShieldPlus,
-  Trash2,
-} from "lucide-react";
+import { Ban, Check, Ellipsis, ShieldMinus, ShieldPlus, Trash2 } from "lucide-react";
 import { useAdminUsers, useCurrentUser } from "../../lib/hooks";
 import { api } from "../../lib/api";
 import type { AdminUserRow, OrgPlan, Sort } from "@/shared/types";
@@ -15,9 +8,11 @@ import { Menu, MenuItem, MenuSeparator } from "../../ui/menu";
 import { Badge, PageHeader, Table, Td, Th } from "../../ui/misc";
 import { AdminTableSkeleton } from "../../components/skeletons";
 import { useToast } from "../../ui/toast";
-import { ConfirmDialog } from "./confirm-dialog";
+import { ConfirmDialog } from "../../ui/confirm-dialog";
 import { SearchInput } from "./search-input";
 import { SortTh } from "../../ui/sort-th";
+import { withErrorToast } from "../../lib/mutation-toast";
+import { shortDate } from "../../lib/dates";
 import { sortRows } from "../../lib/sort";
 
 /** "today" / "3d ago" / a date, for the users table's last-seen column. */
@@ -27,7 +22,7 @@ const lastSeenLabel = (ts: number | null) => {
   if (days <= 0) return "today";
   if (days === 1) return "yesterday";
   if (days < 30) return `${days}d ago`;
-  return new Date(ts).toLocaleDateString();
+  return shortDate(ts);
 };
 
 type UserAction = "delete" | "ban" | "unban" | "makeAdmin" | "removeAdmin";
@@ -47,10 +42,10 @@ const userActionMeta: Record<
     danger: true,
     body: (u) => (
       <>
-        Delete <span className="font-bold text-accent">{u.name}</span>? Their
-        sessions, linked accounts, and org memberships are removed. Links and
-        invites they created stay, unattributed. If they own any organization,
-        delete that organization first. This cannot be undone.
+        Delete <span className="font-bold text-accent">{u.name}</span>? Their sessions, linked
+        accounts, and org memberships are removed. Links and invites they created stay,
+        unattributed. If they own any organization, delete that organization first. This cannot be
+        undone.
       </>
     ),
   },
@@ -60,9 +55,9 @@ const userActionMeta: Record<
     danger: true,
     body: (u) => (
       <>
-        Ban <span className="font-bold text-accent">{u.name}</span>? They are
-        signed out immediately and cannot sign back in. Their organizations,
-        links, and QR codes keep working. You can unban them anytime.
+        Ban <span className="font-bold text-accent">{u.name}</span>? They are signed out immediately
+        and cannot sign back in. Their organizations, links, and QR codes keep working. You can
+        unban them anytime.
       </>
     ),
   },
@@ -72,8 +67,8 @@ const userActionMeta: Record<
     danger: false,
     body: (u) => (
       <>
-        Unban <span className="font-bold text-accent">{u.name}</span>? They can
-        sign in again right away.
+        Unban <span className="font-bold text-accent">{u.name}</span>? They can sign in again right
+        away.
       </>
     ),
   },
@@ -83,9 +78,8 @@ const userActionMeta: Record<
     danger: false,
     body: (u) => (
       <>
-        Make <span className="font-bold text-accent">{u.name}</span> a platform
-        admin? They get full access to this admin area: every user,
-        organization, and link on the instance.
+        Make <span className="font-bold text-accent">{u.name}</span> a platform admin? They get full
+        access to this admin area: every user, organization, and link on the instance.
       </>
     ),
   },
@@ -95,9 +89,8 @@ const userActionMeta: Record<
     danger: true,
     body: (u) => (
       <>
-        Remove <span className="font-bold text-accent">{u.name}</span>'s
-        platform admin? They keep their organizations and links but lose
-        access to this admin area.
+        Remove <span className="font-bold text-accent">{u.name}</span>'s platform admin? They keep
+        their organizations and links but lose access to this admin area.
       </>
     ),
   },
@@ -129,18 +122,17 @@ export function AdminUsersPage() {
       qc.invalidateQueries({ queryKey: ["admin", "users"] });
       setConfirm(null);
     },
-    onError: (e) => toast(e.message, "error"),
+    onError: withErrorToast(toast),
   });
 
   const remove = useMutation({
-    mutationFn: (userId: string) =>
-      api(`/admin/users/${userId}`, { method: "DELETE" }),
+    mutationFn: (userId: string) => api(`/admin/users/${userId}`, { method: "DELETE" }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["admin"] });
       setConfirm(null);
       toast("User deleted");
     },
-    onError: (e) => toast(e.message, "error"),
+    onError: withErrorToast(toast),
   });
 
   const runAction = () => {
@@ -181,9 +173,7 @@ export function AdminUsersPage() {
     const needle = q.trim().toLowerCase();
     const filtered = (users.data ?? []).filter(
       (u) =>
-        !needle ||
-        u.name.toLowerCase().includes(needle) ||
-        u.email.toLowerCase().includes(needle),
+        !needle || u.name.toLowerCase().includes(needle) || u.email.toLowerCase().includes(needle),
     );
     return sortRows(filtered, sort, {
       name: (u) => u.name.toLowerCase(),
@@ -217,18 +207,8 @@ export function AdminUsersPage() {
               className="text-right"
             />
             <Th>Plan</Th>
-            <SortTh
-              label="Joined"
-              sortKey="joined"
-              sort={sort}
-              onSort={setSort}
-            />
-            <SortTh
-              label="Last seen"
-              sortKey="lastSeen"
-              sort={sort}
-              onSort={setSort}
-            />
+            <SortTh label="Joined" sortKey="joined" sort={sort} onSort={setSort} />
+            <SortTh label="Last seen" sortKey="lastSeen" sort={sort} onSort={setSort} />
             <Th className="text-right">Actions</Th>
           </tr>
         </thead>
@@ -247,23 +227,13 @@ export function AdminUsersPage() {
                 <Td className="tnum text-right">{u.orgCount}</Td>
                 <Td>
                   <Badge
-                    color={
-                      u.plan === "pro"
-                        ? "mint"
-                        : u.plan === "hobby"
-                          ? "accent"
-                          : "muted"
-                    }
+                    color={u.plan === "pro" ? "mint" : u.plan === "hobby" ? "accent" : "muted"}
                   >
                     {u.plan}
                   </Badge>
                 </Td>
-                <Td className="text-xs text-muted">
-                  {new Date(u.createdAt).toLocaleDateString()}
-                </Td>
-                <Td className="text-xs text-muted">
-                  {lastSeenLabel(u.lastSeen)}
-                </Td>
+                <Td className="text-xs text-muted">{shortDate(u.createdAt)}</Td>
+                <Td className="text-xs text-muted">{lastSeenLabel(u.lastSeen)}</Td>
                 <Td>
                   <Menu
                     align="end"
@@ -285,14 +255,8 @@ export function AdminUsersPage() {
                           })
                         }
                       >
-                        {u.isAdmin ? (
-                          <ShieldMinus size={14} />
-                        ) : (
-                          <ShieldPlus size={14} />
-                        )}
-                        {u.isAdmin
-                          ? "Remove platform admin"
-                          : "Make platform admin"}
+                        {u.isAdmin ? <ShieldMinus size={14} /> : <ShieldPlus size={14} />}
+                        {u.isAdmin ? "Remove platform admin" : "Make platform admin"}
                       </MenuItem>
                     )}
                     <MenuItem
@@ -304,9 +268,7 @@ export function AdminUsersPage() {
                       }
                     >
                       <span className="w-3.5">
-                        {u.plan === "free" && (
-                          <Check size={13} className="text-accent" />
-                        )}
+                        {u.plan === "free" && <Check size={13} className="text-accent" />}
                       </span>
                       Set plan: free
                     </MenuItem>
@@ -319,9 +281,7 @@ export function AdminUsersPage() {
                       }
                     >
                       <span className="w-3.5">
-                        {u.plan === "hobby" && (
-                          <Check size={13} className="text-accent" />
-                        )}
+                        {u.plan === "hobby" && <Check size={13} className="text-accent" />}
                       </span>
                       Set plan: hobby
                     </MenuItem>
@@ -334,9 +294,7 @@ export function AdminUsersPage() {
                       }
                     >
                       <span className="w-3.5">
-                        {u.plan === "pro" && (
-                          <Check size={13} className="text-accent" />
-                        )}
+                        {u.plan === "pro" && <Check size={13} className="text-accent" />}
                       </span>
                       Set plan: pro
                     </MenuItem>
