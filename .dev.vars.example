@@ -20,3 +20,8 @@ POLAR_SERVER=sandbox
 # Custom domains: fake the Cloudflare API locally
 DEV_FAKE_CF=1
 CF_ZONE_ID=
+
+# Better Stack: alerts on dead-lettered storage messages. Leave blank to no-op
+# locally (no alerts fire from dev/test).
+BETTERSTACK_SOURCE_TOKEN=
+BETTERSTACK_INGEST_URL=

@@ -29,7 +29,8 @@
     },
   ],
   // Secrets (wrangler secret put …): BETTER_AUTH_SECRET, SUPERADMIN_EMAIL,
-  // RESEND_API_KEY, POLAR_ACCESS_TOKEN, POLAR_WEBHOOK_SECRET, CF_API_TOKEN.
+  // RESEND_API_KEY, POLAR_ACCESS_TOKEN, POLAR_WEBHOOK_SECRET, CF_API_TOKEN,
+  // BETTERSTACK_SOURCE_TOKEN.
   // Local dev reads everything from .dev.vars (see .dev.vars.example).
   "vars": {
     "APP_URL": "https://rdyrct.com",
@@ -40,6 +41,9 @@
     "POLAR_PRO_PRODUCT_ID": "5837e285-85c3-4d38-8557-a7b2bdc3b98d",
     "POLAR_HOBBY_PRODUCT_ID": "60a69be5-ff21-4523-82ab-b6c466772724",
     "CF_ZONE_ID": "21285955570c1215ae9efd13692c950a",
+    // Better Stack source's ingesting host (Data ingestion tab), e.g.
+    // "https://in.logs.betterstack.com". Alerts no-op until this is set.
+    "BETTERSTACK_INGEST_URL": "",
   },
   "d1_databases": [
     {

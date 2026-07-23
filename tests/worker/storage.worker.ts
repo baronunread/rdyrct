@@ -232,7 +232,7 @@ describe("storage queue: dead-letter visibility", () => {
       deleteQrLogoMsg("/api/orgs/org-1/qr-logo/logo.webp")!,
     ]);
 
-    logDeadLetterBatch(batch);
+    await logDeadLetterBatch(env as Env, batch);
 
     const result = await getQueueResult(batch, ctx);
     expect(result.explicitAcks).toHaveLength(2);
@@ -241,6 +241,42 @@ describe("storage queue: dead-letter visibility", () => {
     expect(logged.some((line) => line.includes("storage_message_gave_up"))).toBe(true);
     expect(logged.some((line) => line.includes("slug:sale"))).toBe(true);
     errors.mockRestore();
+  });
+
+  it("alerts Better Stack with the same events once it reaches the dead-letter queue", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(null));
+    const { batch, ctx } = batchOf("rdyrct-storage-dlq", [syncLinkMsg("sale", null)]);
+    const alerting = overrideEnv({
+      BETTERSTACK_SOURCE_TOKEN: "tok_test",
+      BETTERSTACK_INGEST_URL: "https://in.logs.betterstack.example",
+    });
+
+    await logDeadLetterBatch(alerting, batch);
+    await getQueueResult(batch, ctx);
+
+    expect(fetchSpy).toHaveBeenCalledWith(
+      "https://in.logs.betterstack.example",
+      expect.objectContaining({
+        method: "POST",
+        headers: expect.objectContaining({ authorization: "Bearer tok_test" }),
+      }),
+    );
+    const body = JSON.parse(String(fetchSpy.mock.calls[0]?.[1]?.body));
+    expect(body).toEqual([
+      { event: "storage_message_gave_up", op: "kv_sync", target: "slug:sale" },
+    ]);
+    fetchSpy.mockRestore();
+  });
+
+  it("does not alert when Better Stack is unconfigured", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
+    const { batch, ctx } = batchOf("rdyrct-storage-dlq", [syncLinkMsg("sale", null)]);
+
+    await logDeadLetterBatch(env as Env, batch);
+    await getQueueResult(batch, ctx);
+
+    expect(fetchSpy).not.toHaveBeenCalled();
+    fetchSpy.mockRestore();
   });
 });
 

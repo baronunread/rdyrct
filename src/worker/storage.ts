@@ -3,6 +3,7 @@ import { drizzle } from "drizzle-orm/d1";
 import * as schema from "./db/schema";
 import type { DB, Env } from "./env";
 import { buildDestination, qrLogoKeyFromUrl } from "./util";
+import { alertBetterStack } from "./alerts";
 
 /**
  * Storage recovery. D1 is the source of truth. KV serves redirects and R2
@@ -221,22 +222,23 @@ export async function consumeStorageBatch(
 }
 
 /**
- * Consume the dead-letter queue: log for visibility, then ack. There is
- * nothing to repair here (see the top of this file), just something to see:
- * a message reaching this point means Cloudflare Queues gave up on it after
- * every retry, which is worth knowing even though nothing re-drives it.
+ * Consume the dead-letter queue: log and alert for visibility, then ack.
+ * There is nothing to repair here (see the top of this file), just something
+ * to see: a message reaching this point means Cloudflare Queues gave up on it
+ * after every retry, which is worth knowing even though nothing re-drives it.
  */
-export function logDeadLetterBatch(batch: MessageBatch<StorageMessage>): void {
-  for (const message of batch.messages) {
-    console.error(
-      JSON.stringify({
-        event: "storage_message_gave_up",
-        op: message.body.op,
-        target: targetOf(message.body),
-      }),
-    );
-    message.ack();
-  }
+export async function logDeadLetterBatch(
+  env: Env,
+  batch: MessageBatch<StorageMessage>,
+): Promise<void> {
+  const events = batch.messages.map((message) => ({
+    event: "storage_message_gave_up",
+    op: message.body.op,
+    target: targetOf(message.body),
+  }));
+  for (const event of events) console.error(JSON.stringify(event));
+  await alertBetterStack(env, events);
+  for (const message of batch.messages) message.ack();
 }
 
 /* ---------------- org teardown steps (driven by the workflow) ---------------- */

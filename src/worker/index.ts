@@ -129,7 +129,7 @@ export default {
   async queue(batch: MessageBatch<StorageMessage>, env: Env, _ctx: ExecutionContext) {
     // The dead-letter queue routes to this same handler (see wrangler.jsonc);
     // its messages only get logged, never retried or repaired.
-    if (batch.queue.endsWith("-dlq")) return logDeadLetterBatch(batch);
+    if (batch.queue.endsWith("-dlq")) return logDeadLetterBatch(env, batch);
     await consumeStorageBatch(env, batch);
   },
   async scheduled(event: ScheduledEvent, env: Env, _ctx: ExecutionContext) {

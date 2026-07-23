@@ -42,6 +42,10 @@ export interface Env {
   CF_API_TOKEN?: string; // secret, Custom Hostnames edit
   CF_ZONE_ID?: string; // var
   DEV_FAKE_CF?: string; // var, "1" fakes the CF API in local dev
+
+  /* alerting: dead-lettered storage messages (best-effort, never blocks acking) */
+  BETTERSTACK_SOURCE_TOKEN?: string; // secret
+  BETTERSTACK_INGEST_URL?: string; // var, e.g. https://in.logs.betterstack.com
 }
 
 export type DB = DrizzleD1Database<typeof schema>;

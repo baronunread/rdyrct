@@ -186,22 +186,26 @@ A message that runs out of deliveries moves to the dead-letter queue
 (`rdyrct-storage-dlq`). That queue has its own consumer: the same Worker,
 routed by queue name in the `queue()` handler (`batch.queue.endsWith("-dlq")`).
 `logDeadLetterBatch` logs a `storage_message_gave_up` line naming the op and
-target, then acks. Nothing re-drives it and nothing repairs the drift it
-represents.
+target, sends the same event to Better Stack (`alertBetterStack`, best-effort,
+never throws), then acks. Nothing re-drives it and nothing repairs the drift
+it represents.
 
 That is deliberate, not an oversight. We trust Cloudflare Queues' retry and
 backoff to recover from anything transient; a message that still exhausts
 `max_retries` is rare enough, and specific enough to its cause (a real,
 sustained outage or a bug in `applyStorageMessage`), that fixing it should mean
-looking at the log and understanding why, not an automatic sweep re-deriving
+looking at the alert and understanding why, not an automatic sweep re-deriving
 D1 state over it on a schedule. Recovery from a give-up is a manual re-send
 once the cause is understood.
 
-Visibility is the log. The main consumer logs `storage message failed` on
-every failed try, and on a message's last delivery it logs a
-`storage_message_dead_letter` line. The dead-letter consumer logs
-`storage_message_gave_up` once the message actually lands there. Read all
-three with `wrangler tail` or in Cloudflare observability.
+Visibility is the log and the alert. The main consumer logs
+`storage message failed` on every failed try, and on a message's last delivery
+it logs a `storage_message_dead_letter` line. The dead-letter consumer logs
+`storage_message_gave_up` once the message actually lands there, and pushes
+that same event to Better Stack over its HTTP source
+(`BETTERSTACK_SOURCE_TOKEN`/`BETTERSTACK_INGEST_URL`; unset means the alert
+silently no-ops, which is the case in dev and tests). Read the logs with
+`wrangler tail` or in Cloudflare observability either way.
 
 ## Local development
 
@@ -239,7 +243,9 @@ boundaries:
 - The consumer logs `storage_message_dead_letter` only on a message's last
   delivery, so the log flags a real give-up and not every failed try.
 - The dead-letter consumer logs `storage_message_gave_up` and acks every
-  message it receives, for both message shapes.
+  message it receives, for both message shapes, and posts the same events to
+  Better Stack when configured (and does nothing, without throwing, when it
+  is not).
 - `enqueueStorage` propagates a producer-side send failure instead of
   swallowing it, so a route handler that awaits it actually fails the request.
 - Org teardown gathers keys, removes the org from D1, and keeps the KV and R2
