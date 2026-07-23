@@ -43,7 +43,7 @@
     "CF_ZONE_ID": "21285955570c1215ae9efd13692c950a",
     // Better Stack source's ingesting host (Data ingestion tab), e.g.
     // "https://in.logs.betterstack.com". Alerts no-op until this is set.
-    "BETTERSTACK_INGEST_URL": "",
+    "BETTERSTACK_INGEST_URL": "https://s2624707.eu-central-1a.betterstackdata.com",
   },
   "d1_databases": [
     {
