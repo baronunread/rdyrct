@@ -271,8 +271,12 @@ describe("storage queue: dead-letter visibility", () => {
   it("does not alert when Better Stack is unconfigured", async () => {
     const fetchSpy = vi.spyOn(globalThis, "fetch");
     const { batch, ctx } = batchOf("rdyrct-storage-dlq", [syncLinkMsg("sale", null)]);
+    const unconfigured = overrideEnv({
+      BETTERSTACK_SOURCE_TOKEN: undefined,
+      BETTERSTACK_INGEST_URL: undefined,
+    });
 
-    await logDeadLetterBatch(env as Env, batch);
+    await logDeadLetterBatch(unconfigured, batch);
     await getQueueResult(batch, ctx);
 
     expect(fetchSpy).not.toHaveBeenCalled();

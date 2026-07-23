@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
-import { eq, and, gte, desc, sql } from "drizzle-orm";
+import { eq, and, gte, desc, sql, isNull } from "drizzle-orm";
 import * as schema from "../db/schema";
 import type { AppEnv, DB, Env } from "../env";
 import { requireUser, requireOrgRole, orgRole } from "../auth";
@@ -134,19 +134,38 @@ orgRoutes.patch("/:orgId", requireOrgRole("admin"), async (c) => {
 });
 
 /**
- * Full org teardown, shared with the admin route. A Cloudflare Workflow runs
- * the ordered, per-step-retried sequence: capture the org's hostnames and KV
- * keys, delete the org row (D1 cascade), then deprovision Cloudflare hostnames,
- * KV entries, and the R2 logo prefix. Creating the instance is the single
- * commit point, so a lost trigger leaves the org fully intact; once created,
- * Workflows runs every step to completion. See docs/storage-recovery.md.
+ * Full org teardown, shared with the admin route. Marking the org deleting
+ * first closes the gather/d1-delete race: requireOrgRole rejects every
+ * org-scoped write from this point on, so nothing can create a link or
+ * domain the workflow's gather step never sees. A Cloudflare Workflow then
+ * runs the ordered, per-step-retried sequence: capture the org's hostnames
+ * and KV keys, delete the org row (D1 cascade), then deprovision Cloudflare
+ * hostnames, KV entries, and the R2 logo prefix. Once the instance is
+ * created, Workflows runs every step to completion. See
+ * docs/storage-recovery.md.
  */
-export async function deleteOrg(env: Env, orgId: string): Promise<void> {
-  await env.ORG_DELETE.create({ id: orgId, params: { orgId } });
+export async function deleteOrg(db: DB, env: Env, orgId: string): Promise<void> {
+  // Only the request that actually flips the flag tries to start the
+  // workflow, so a double-submitted delete is a no-op on the second call
+  // instead of racing ORG_DELETE.create against its own keyed instance id.
+  const result = await db
+    .update(schema.orgs)
+    .set({ deletingAt: now() })
+    .where(and(eq(schema.orgs.id, orgId), isNull(schema.orgs.deletingAt)));
+  if (result.meta.changes === 0) return;
+  try {
+    await env.ORG_DELETE.create({ id: orgId, params: { orgId } });
+  } catch (err) {
+    // Starting the workflow failed: undo the flag so the org stays fully
+    // intact and writable, same as before it was marked, and the delete can
+    // be retried from scratch instead of being stuck deleting forever.
+    await db.update(schema.orgs).set({ deletingAt: null }).where(eq(schema.orgs.id, orgId));
+    throw err;
+  }
 }
 
 orgRoutes.delete("/:orgId", requireOrgRole("owner"), async (c) => {
-  await deleteOrg(c.env, c.req.param("orgId"));
+  await deleteOrg(c.var.db, c.env, c.req.param("orgId"));
   return c.json({ ok: true });
 });
 

@@ -451,7 +451,7 @@ adminRoutes.get("/orgs/:orgId", async (c) => {
 });
 
 adminRoutes.delete("/orgs/:orgId", async (c) => {
-  await deleteOrg(c.env, c.req.param("orgId"));
+  await deleteOrg(c.var.db, c.env, c.req.param("orgId"));
   return c.json({ ok: true });
 });
 

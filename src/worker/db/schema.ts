@@ -108,6 +108,10 @@ export const orgs = sqliteTable("orgs", {
   // No plan/billing columns: an org's plan is its owner's plan (plan.ts).
   ...qrColumns(),
   createdAt: integer("created_at").notNull(),
+  // Set right before the teardown workflow starts, so requireOrgRole can
+  // reject writes before the workflow's gather step ever runs. Null means
+  // not deleting.
+  deletingAt: integer("deleting_at"),
 });
 
 export const orgMembers = sqliteTable(

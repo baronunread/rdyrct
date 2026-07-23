@@ -71,10 +71,21 @@ leave it.
 ## Org deletion (a Workflow)
 
 Org teardown is a multi-step, ordered process, so it runs as a Cloudflare
-Workflow (`ORG_DELETE`, class `OrgDeleteWorkflow`). Creating the instance is the
-single commit point: if the request fails to create it, the org is fully intact
-and the user can retry. Once created, Workflows runs every step to completion and
-retries each step on its own.
+Workflow (`ORG_DELETE`, class `OrgDeleteWorkflow`). `deleteOrg` (`routes/orgs.ts`)
+first marks the org `deleting_at` in a single `UPDATE`, then creates the
+instance. Marking it first, not the workflow's own first step, matters:
+`requireOrgRole` rejects every org-scoped write (anything but a `GET`) once
+that column is set, so a link or domain created after a delete request lands
+can never slip in ahead of the workflow's gather step. A delete that races
+itself (a double-submitted `DELETE`) is a no-op on the second call: only the
+request whose `UPDATE` actually flips the flag starts the workflow, since the
+column already keys the workflow instance by org id.
+
+If creating the workflow instance fails, `deleteOrg` clears `deleting_at`
+again before returning the error, so a lost trigger leaves the org fully
+intact and writable, same as before this two-step version: the caller can
+just retry the delete. Once the instance is created, Workflows runs every
+step to completion and retries each on its own.
 
 The steps run in this order:
 
@@ -94,10 +105,12 @@ orphaned KV keys or R2 objects are left behind with nothing that sweeps for
 them. That instance shows as errored in the Workflows dashboard, which is the
 signal to intervene by hand.
 
-A narrower, permanent gap: a link or domain created in the window between
-gather and d1-delete was never in the gathered KV key list, so it cascades out
-of D1 without its KV entry ever being deleted. This is the same kind of gap
-custom-domain activation accepts below, not a case we sweep for.
+A link or domain created in the window between gather and d1-delete would
+never make the gathered KV key list, and would cascade out of D1 without its
+KV entry ever being deleted. `deleting_at` closes that window rather than
+accepting it: it is set before the workflow instance is even created, so
+`requireOrgRole` has already started rejecting every org-scoped write by the
+time gather runs.
 
 ## Custom-domain activation (a Workflow)
 

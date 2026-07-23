@@ -246,11 +246,10 @@ export async function logDeadLetterBatch(
 /**
  * Read an org's Cloudflare hostname ids and KV keys before the org row leaves
  * D1. The workflow persists this so later steps still know what to clean up.
- *
- * A link or domain created after this snapshot and before the workflow's
- * d1-delete step cascades out of D1 without its KV key ever landing here, so
- * its KV entry is never deleted. Accepted, not swept for: see "Org deletion"
- * in docs/storage-recovery.md.
+ * A link or domain created after this snapshot would miss this gather step,
+ * but by the time this runs `deleteOrg` (routes/orgs.ts) has already marked
+ * the org deleting, and every write route rejects on that before it can
+ * happen. See "Org deletion" in docs/storage-recovery.md.
  */
 export async function orgDeleteGather(
   db: DB,

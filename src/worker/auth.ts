@@ -67,6 +67,19 @@ export function requireOrgRole(min: OrgRole) {
     const role = await orgRole(c.var.db, user, orgId);
     if (!role || ROLE_RANK[role] < ROLE_RANK[min])
       throw new HTTPException(403, { message: "Insufficient role" });
+    // Reads stay allowed while an org tears down; only block writes, so a
+    // link or domain created in that window is never missed by the teardown
+    // workflow's gather step. See deleteOrg in routes/orgs.ts.
+    if (c.req.method !== "GET" && (await orgDeleting(c.var.db, orgId)))
+      throw new HTTPException(409, { message: "Organization is being deleted" });
     await next();
   });
+}
+
+async function orgDeleting(db: DB, orgId: string): Promise<boolean> {
+  const rows = await db
+    .select({ deletingAt: schema.orgs.deletingAt })
+    .from(schema.orgs)
+    .where(eq(schema.orgs.id, orgId));
+  return rows[0]?.deletingAt != null;
 }
