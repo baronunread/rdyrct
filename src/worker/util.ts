@@ -140,7 +140,16 @@ export function normalizeUrl(value: string): string {
 export function isValidHttpUrl(value: string): boolean {
   try {
     const url = new URL(value);
-    return url.protocol === "http:" || url.protocol === "https:";
+    if (url.protocol !== "http:" && url.protocol !== "https:") return false;
+
+    // URLs with a trailing dot or a one-character top-level domain are almost
+    // always a pasted typo (for example, "http./path"). Keep IP addresses
+    // valid, but require ordinary hostnames to have a real TLD.
+    const hostname = url.hostname;
+    if (hostname.endsWith(".") || hostname.includes(":")) return !hostname.endsWith(".");
+    if (/^\d{1,3}(?:\.\d{1,3}){3}$/.test(hostname)) return true;
+    const labels = hostname.split(".");
+    return labels.length > 1 && labels.at(-1)!.length >= 2;
   } catch {
     return false;
   }

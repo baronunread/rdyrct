@@ -4,6 +4,7 @@ import {
   deviceFromUA,
   EMPTY_UTM,
   isValidHttpUrl,
+  normalizeUrl,
   qrLogoKeyFromUrl,
   randomSlug,
   referrerHost,
@@ -188,9 +189,23 @@ describe("isValidHttpUrl", () => {
   test("accepts http(s) only", () => {
     expect(isValidHttpUrl("https://example.com")).toBe(true);
     expect(isValidHttpUrl("http://example.com")).toBe(true);
+    expect(isValidHttpUrl("https://127.0.0.1:8787")).toBe(true);
     expect(isValidHttpUrl("ftp://example.com")).toBe(false);
     expect(isValidHttpUrl("not a url")).toBe(false);
     expect(isValidHttpUrl("")).toBe(false);
+  });
+
+  test("rejects malformed hostnames that URL parsing otherwise accepts", () => {
+    expect(isValidHttpUrl("https://example.")).toBe(false);
+    expect(isValidHttpUrl("https://example.c")).toBe(false);
+    expect(isValidHttpUrl("http./path")).toBe(false);
+  });
+});
+
+describe("normalizeUrl", () => {
+  test("preserves a URL with a scheme and adds https to a bare destination", () => {
+    expect(normalizeUrl("http://example.com/path")).toBe("http://example.com/path");
+    expect(normalizeUrl("example.com/path")).toBe("https://example.com/path");
   });
 });
 

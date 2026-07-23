@@ -13,6 +13,10 @@
     "format": "oxfmt --write src scripts tests package.json vite.config.ts wrangler.jsonc README.md",
     "format:check": "oxfmt --check src scripts tests package.json vite.config.ts wrangler.jsonc README.md",
     "test": "bun test",
+    "test:worker": "vitest run --config vitest.config.ts",
+    "e2e:install": "playwright install chromium",
+    "e2e:smoke": "playwright test",
+    "verify": "bun run check && bunx tsc -p tsconfig.worker.json --noEmit && bun run lint && bun run format:check && bun run test && bun run test:worker",
     "deploy": "bun run build && wrangler deploy",
     "db:migrate:local": "wrangler d1 migrations apply rdyrct --local",
     "db:reset:local": "rm -rf .wrangler/state/v3/d1 .wrangler/state/v3/kv && wrangler d1 migrations apply rdyrct --local",
@@ -47,7 +51,9 @@
   },
   "devDependencies": {
     "@cloudflare/vite-plugin": "^1.45.1",
+    "@cloudflare/vitest-pool-workers": "^0.18.7",
     "@cloudflare/workers-types": "^5.20260718.1",
+    "@playwright/test": "^1.61.1",
     "@tailwindcss/vite": "^4.3.3",
     "@types/canvas-confetti": "^1.9.0",
     "@types/node": "^26.1.1",
@@ -64,6 +70,7 @@
     "tailwindcss": "^4.3.3",
     "typescript": "^7.0.2",
     "vite": "^8.1.5",
+    "vitest": "^4.1.0",
     "wrangler": "^4.112.0"
   }
 }

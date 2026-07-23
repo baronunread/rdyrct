@@ -83,6 +83,22 @@ bun run dev                        # http://localhost:5173
 
 ---
 
+## Tests
+
+```sh
+bun run test          # fast unit tests
+bun run test:worker   # Worker routes with local D1 and KV bindings
+bun run e2e:install   # install Chromium for Playwright once
+bun run e2e:smoke     # real-browser baseline regression checks
+bun run verify        # types, lint, formatting, unit, and Worker tests
+```
+
+Playwright owns the local server lifecycle and never resets or seeds local
+Cloudflare state. Failed browser tests keep a screenshot and trace in
+`test-results/`.
+
+---
+
 ## Deploy to Cloudflare Workers
 
 Prefer the manual path, or need to redeploy after the button above? Create the resources:
