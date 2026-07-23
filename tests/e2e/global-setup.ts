@@ -1,7 +1,6 @@
 import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
-
-const explorerUrl = "http://localhost:5173/cdn-cgi/explorer/api";
+import { explorerUrl } from "./environment";
 
 export default async function globalSetup() {
   const databases = await fetch(`${explorerUrl}/d1/database`).then((response) => response.json());

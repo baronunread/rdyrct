@@ -43,6 +43,7 @@ rdyrct is built Cloudflare-first: the entire product runs in a single Worker wit
 - **KV**: slug → destination lookups on the redirect hot path, so a click never waits on D1.
 - **R2**: QR logo images, keyed by org, served immutable and cached.
 - **Cloudflare for SaaS**: custom hostnames for Pro orgs' own short-link domains.
+- **Workers Rate Limiting**: separate abuse controls for auth, email, writes, uploads, domains, billing, and click recording.
 
 Application layer:
 
@@ -151,6 +152,9 @@ bun run deploy
 **Polar setup:** create an Organization Access Token with scopes `checkouts:write` and `customer_sessions:write`. Add a webhook endpoint at `https://rdyrct.com/api/webhooks/polar` and subscribe to `subscription.active`, `subscription.revoked`, `subscription.canceled`, and `subscription.uncanceled`.
 
 Finally, point `rdyrct.com` at the Worker as a **custom domain**: Cloudflare dashboard → Workers → your worker → **Settings → Domains & Routes**. Short links live at the root (`https://rdyrct.com/<slug>`); the app is served on every other path.
+
+Review the [rate-limiting policies, monitoring, WAF rule, and rollback steps](docs/rate-limiting.md)
+before the first production deploy.
 
 **Customer custom domains (Pro):** to let orgs use `links.theirbrand.com`, enable [Cloudflare for SaaS](https://developers.cloudflare.com/cloudflare-for-platforms/cloudflare-for-saas/) on the `rdyrct.com` zone, create an originless proxied fallback origin (e.g. `fallback.rdyrct.com AAAA 100::`), and add a Worker route `*/*` pointing at the `rdyrct` worker. The `CF_API_TOKEN` needs permission **Zone → SSL and Certificates → Edit** scoped to the zone. Also verify your sending domain (e.g. `mail.rdyrct.com`) in [Resend](https://resend.com) so transactional email isn't blocked.
 

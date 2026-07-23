@@ -1,0 +1,17 @@
+BETTER_AUTH_SECRET=playwright-only-secret-with-32-characters
+SUPERADMIN_EMAIL=playwright-admin@example.com
+APP_URL=http://localhost:5174
+APP_HOST=localhost:5174
+
+RESEND_API_KEY=re_local_emulated
+RESEND_BASE_URL=http://localhost:4000
+MAIL_FROM=rdyrct <no-reply@localhost>
+
+POLAR_ACCESS_TOKEN=playwright_polar_token
+POLAR_WEBHOOK_SECRET=playwright_webhook_secret
+POLAR_PRO_PRODUCT_ID=playwright_pro_product
+POLAR_HOBBY_PRODUCT_ID=playwright_hobby_product
+POLAR_SERVER=sandbox
+
+DEV_FAKE_CF=1
+CF_ZONE_ID=

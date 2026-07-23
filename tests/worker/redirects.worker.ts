@@ -1,13 +1,23 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { env, exports as worker } from "cloudflare:workers";
-import { applyD1Migrations, reset } from "cloudflare:test";
+import { env } from "cloudflare:workers";
+import {
+  applyD1Migrations,
+  createExecutionContext,
+  reset,
+  waitOnExecutionContext,
+} from "cloudflare:test";
+import worker from "../../src/worker";
 
 type TestEnv = typeof env & { TEST_MIGRATIONS: D1Migration[] };
 
+async function fetchWorker(request: Request): Promise<Response> {
+  const ctx = createExecutionContext();
+  const response = await worker.fetch(request, env, ctx);
+  await waitOnExecutionContext(ctx);
+  return response;
+}
+
 afterEach(async () => {
-  // The redirect handler records clicks through waitUntil. Let that task finish
-  // before Miniflare clears the test bindings.
-  await new Promise((resolve) => setTimeout(resolve, 0));
   await reset();
 });
 
@@ -26,6 +36,14 @@ beforeEach(async () => {
     env.DB.prepare(
       "insert into links (id, org_id, slug, destination, created_at) values (?, ?, ?, ?, ?)",
     ).bind("link-2", "org-1", "pricing", "https://example.com/pricing", 0),
+    env.DB.prepare("insert into orgs (id, name, created_at) values (?, ?, ?)").bind(
+      "org-limited",
+      "Rate-limited org",
+      0,
+    ),
+    env.DB.prepare(
+      "insert into links (id, org_id, slug, destination, created_at) values (?, ?, ?, ?, ?)",
+    ).bind("link-limited", "org-limited", "viral", "https://example.com/viral", 0),
   ]);
 });
 
@@ -36,7 +54,7 @@ describe("redirect hot path", () => {
       JSON.stringify({ linkId: "link-1", orgId: "org-1", url: "https://example.com/sale" }),
     );
 
-    const response = await worker.default.fetch(
+    const response = await fetchWorker(
       new Request("http://localhost/summer", { redirect: "manual" }),
     );
 
@@ -58,7 +76,7 @@ describe("redirect hot path", () => {
       JSON.stringify({ linkId: "link-2", orgId: "org-1", url: "https://example.com/pricing" }),
     );
 
-    const response = await worker.default.fetch(
+    const response = await fetchWorker(
       new Request("http://localhost/pricing", {
         headers: { host: "go.example.com" },
         redirect: "manual",
@@ -67,6 +85,32 @@ describe("redirect hot path", () => {
 
     expect(response.status).toBe(302);
     expect(response.headers.get("location")).toBe("https://example.com/pricing");
+  });
+
+  it("still redirects and skips click storage when analytics is limited", async () => {
+    await env.LINKS.put(
+      "slug:viral",
+      JSON.stringify({
+        linkId: "link-limited",
+        orgId: "org-limited",
+        url: "https://example.com/viral",
+      }),
+    );
+    await env.RL_CLICK_RECORDING.limit({ key: "click:org:org-limited" });
+
+    const response = await fetchWorker(
+      new Request("http://localhost/viral", { redirect: "manual" }),
+    );
+
+    expect(response.status).toBe(302);
+    expect(response.headers.get("location")).toBe("https://example.com/viral");
+    expect(
+      (
+        await env.DB.prepare("select count(*) as count from clicks where org_id = ?")
+          .bind("org-limited")
+          .first<{ count: number }>()
+      )?.count,
+    ).toBe(0);
   });
 
   it("uses a custom domain's root redirect for the root and missing slugs", async () => {
@@ -79,10 +123,10 @@ describe("redirect hot path", () => {
       }),
     );
 
-    const root = await worker.default.fetch(
+    const root = await fetchWorker(
       new Request("http://localhost/", { headers: { host: "go.example.com" }, redirect: "manual" }),
     );
-    const missing = await worker.default.fetch(
+    const missing = await fetchWorker(
       new Request("http://localhost/no-such-link", {
         headers: { host: "go.example.com" },
         redirect: "manual",

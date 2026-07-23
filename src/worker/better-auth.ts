@@ -62,6 +62,10 @@ function buildAuth(env: Env) {
         verification: schema.verification,
       },
     }),
+    // Cloudflare Workers Rate Limiting bindings guard auth before BetterAuth.
+    // Keeping BetterAuth's per-isolate limiter enabled would create a second,
+    // inconsistent 429 shape and would not protect the rest of the app.
+    rateLimit: { enabled: false },
     emailAndPassword: {
       enabled: true,
       requireEmailVerification: true,
