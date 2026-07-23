@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { useForm, Controller } from "react-hook-form";
+import { useForm, Controller, type FieldErrors } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Link, useLocation, useNavigate, useSearchParams } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
@@ -20,6 +20,11 @@ type AuthForm = { email: string; password: string };
 type ForgotForm = { email: string };
 type OtpForm = { otp: string };
 
+function firstFormError(errors: FieldErrors, fallback: string): string {
+  const firstError = Object.values(errors).find((entry) => entry?.message);
+  return typeof firstError?.message === "string" ? firstError.message : fallback;
+}
+
 function ForgotView({
   initialEmail,
   sent,
@@ -33,17 +38,16 @@ function ForgotView({
   onSubmit: (email: string) => void;
   onBack: () => void;
 }) {
-  const {
-    register,
-    handleSubmit,
-    getValues,
-    formState: { errors },
-  } = useForm<ForgotForm>({
+  const toast = useToast();
+  const { register, handleSubmit, getValues } = useForm<ForgotForm>({
     resolver: zodResolver(forgotSchema),
     defaultValues: { email: initialEmail },
   });
 
-  const onFormSubmit = handleSubmit((data) => onSubmit(data.email));
+  const onFormSubmit = handleSubmit(
+    (data) => onSubmit(data.email),
+    (errors) => toast(firstFormError(errors, "Enter a valid email address"), "error"),
+  );
 
   return (
     <AuthCard>
@@ -56,7 +60,7 @@ function ForgotView({
           </p>
         ) : (
           <form onSubmit={onFormSubmit} className="flex flex-col gap-4">
-            <Field label="Email" hint={errors.email?.message}>
+            <Field label="Email">
               <Input type="email" {...register("email")} required autoComplete="email" />
             </Field>
             <Button type="submit" variant="primary" disabled={busy}>
@@ -91,16 +95,16 @@ function VerifyOtpView({
   onResend: () => void;
   onBack: () => void;
 }) {
-  const {
-    control,
-    handleSubmit,
-    formState: { errors },
-  } = useForm<OtpForm>({
+  const toast = useToast();
+  const { control, handleSubmit } = useForm<OtpForm>({
     resolver: zodResolver(otpSchema),
     defaultValues: { otp: "" },
   });
 
-  const onFormSubmit = handleSubmit((data) => onSubmit(data.otp));
+  const onFormSubmit = handleSubmit(
+    (data) => onSubmit(data.otp),
+    (errors) => toast(firstFormError(errors, "Enter a 6-digit code"), "error"),
+  );
 
   return (
     <AuthCard>
@@ -113,7 +117,7 @@ function VerifyOtpView({
           We emailed a 6-digit code to <span className="text-text">{email}</span>. It expires in 10
           minutes.
         </p>
-        <Field label="Verification code" hint={errors.otp?.message}>
+        <Field label="Verification code">
           <Controller
             control={control}
             name="otp"
@@ -167,19 +171,17 @@ function AuthFormView({
   onForgot: (email: string) => void;
 }) {
   const schema = mode === "login" ? loginSchema : signupSchema;
-  const {
-    register,
-    handleSubmit,
-    watch,
-    getValues,
-    formState: { errors },
-  } = useForm<AuthForm>({
+  const toast = useToast();
+  const { register, handleSubmit, watch, getValues } = useForm<AuthForm>({
     resolver: zodResolver(schema),
     defaultValues: { email: "", password: "" },
   });
 
   const password = watch("password");
-  const onFormSubmit = handleSubmit((data) => onSubmit(data.email, data.password));
+  const onFormSubmit = handleSubmit(
+    (data) => onSubmit(data.email, data.password),
+    (errors) => toast(firstFormError(errors, "Check your email and password"), "error"),
+  );
 
   return (
     <AuthCard>
@@ -189,14 +191,13 @@ function AuthFormView({
         className="flex flex-col gap-4 rounded-xl border border-border bg-surface p-6"
       >
         <h1 className="font-bold">{mode === "login" ? "Sign in" : "Create an account"}</h1>
-        <Field label="Email" hint={errors.email?.message}>
+        <Field label="Email">
           <Input type="email" {...register("email")} required autoComplete="email" />
         </Field>
         <Field
           label="Password"
           hint={
-            errors.password?.message ??
-            (mode === "login" ? (
+            mode === "login" ? (
               <button
                 type="button"
                 className="text-muted hover:text-accent"
@@ -206,7 +207,7 @@ function AuthFormView({
               </button>
             ) : (
               <PasswordMeter password={password} />
-            ))
+            )
           }
         >
           <Input
@@ -312,13 +313,17 @@ export function AuthPage({ mode }: { mode: "login" | "signup" }) {
   }, [user, navigate, next]);
 
   const goVerify = async (email: string) => {
-    setAuthEmail(email);
-    writePending({ email, next });
-    setView("verify-otp");
-    await authClient.emailOtp.sendVerificationOtp({
+    const { error } = await authClient.emailOtp.sendVerificationOtp({
       email,
       type: "email-verification",
     });
+    if (error) {
+      toast(error.message ?? "Could not send the verification code", "error");
+      return;
+    }
+    setAuthEmail(email);
+    writePending({ email, next });
+    setView("verify-otp");
   };
 
   const backToForm = () => {
@@ -377,7 +382,21 @@ export function AuthPage({ mode }: { mode: "login" | "signup" }) {
       }
       const sess = await authClient.getSession();
       if (!sess?.data) {
-        await authClient.signIn.email({ email: authEmail, password: authPasswordRef.current });
+        const password = authPasswordRef.current;
+        if (!password) {
+          clearPending();
+          toast("Email verified. Sign in to continue.");
+          navigate(`/login?next=${encodeURIComponent(next)}`, { replace: true });
+          return;
+        }
+        const { error: signInError } = await authClient.signIn.email({
+          email: authEmail,
+          password,
+        });
+        if (signInError) {
+          toast(friendlyAuthError(signInError), "error");
+          return;
+        }
       }
       clearPending();
       await qc.refetchQueries({ queryKey: ["user"] });

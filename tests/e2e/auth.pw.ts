@@ -17,6 +17,7 @@ test.describe("authentication forms", () => {
 
     await expect(page).toHaveURL(/\/login$/);
     await expect(page.getByLabel("Password")).toHaveValue("password");
+    await expect(page.getByText("Enter a valid email address")).toBeVisible();
     expect(authRequests).toBe(0);
   });
 
@@ -34,6 +35,29 @@ test.describe("authentication forms", () => {
 
     await expect(page).toHaveURL(/\/signup$/);
     await expect(page.getByLabel("Password")).toHaveValue("short");
+    await expect(page.getByText("Password must be at least 8 characters")).toBeVisible();
     expect(authRequests).toBe(0);
+  });
+
+  test("stays on sign-up when verification-code delivery fails", async ({ page }) => {
+    const email = `delivery-failure-${Date.now()}@gmail.com`;
+    await page.route("**/api/auth/email-otp/send-verification-otp", async (route) => {
+      await route.fulfill({
+        status: 503,
+        contentType: "application/json",
+        body: JSON.stringify({
+          code: "EMAIL_DELIVERY_FAILED",
+          message: "Email delivery unavailable",
+        }),
+      });
+    });
+
+    await page.goto("/signup");
+    await page.getByLabel("Email").fill(email);
+    await page.getByLabel("Password").fill("test-password-123");
+    await page.getByRole("button", { name: "Sign up" }).click();
+
+    await expect(page.getByRole("heading", { name: "Create an account" })).toBeVisible();
+    await expect(page.getByText("Email delivery unavailable")).toBeVisible();
   });
 });

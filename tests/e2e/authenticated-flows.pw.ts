@@ -68,6 +68,8 @@ test("a new owner can create an organization and a scheme-less quick link", asyn
   await page.getByRole("button", { name: "Sign up" }).click();
 
   await expect(page.getByRole("heading", { name: "Enter your code" })).toBeVisible();
+  await page.reload();
+  await expect(page.getByRole("heading", { name: "Enter your code" })).toBeVisible();
   const otp = await latestOtp(page, email);
   await page.locator("input").first().focus();
   await page.keyboard.insertText(otp);
