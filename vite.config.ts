@@ -12,6 +12,7 @@ export default defineConfig({
       // Browser tests use short-lived in-memory bindings, never a developer's
       // persisted D1, KV, or R2 state.
       persistState: process.env.PLAYWRIGHT_TEST ? false : true,
+      inspectorPort: process.env.PLAYWRIGHT_TEST ? false : undefined,
     }),
   ],
   resolve: {

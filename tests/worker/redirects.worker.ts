@@ -1,15 +1,23 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { env, exports as worker } from "cloudflare:workers";
-import { applyD1Migrations, reset } from "cloudflare:test";
+import { env } from "cloudflare:workers";
+import {
+  applyD1Migrations,
+  createExecutionContext,
+  reset,
+  waitOnExecutionContext,
+} from "cloudflare:test";
+import worker from "../../src/worker";
 
 type TestEnv = typeof env & { TEST_MIGRATIONS: D1Migration[] };
 
-const settleClickTasks = () => new Promise((resolve) => setTimeout(resolve, 0));
+async function fetchWorker(request: Request): Promise<Response> {
+  const ctx = createExecutionContext();
+  const response = await worker.fetch(request, env, ctx);
+  await waitOnExecutionContext(ctx);
+  return response;
+}
 
 afterEach(async () => {
-  // The redirect handler records clicks through waitUntil. Let that task finish
-  // before Miniflare clears the test bindings.
-  await settleClickTasks();
   await reset();
 });
 
@@ -46,10 +54,9 @@ describe("redirect hot path", () => {
       JSON.stringify({ linkId: "link-1", orgId: "org-1", url: "https://example.com/sale" }),
     );
 
-    const response = await worker.default.fetch(
+    const response = await fetchWorker(
       new Request("http://localhost/summer", { redirect: "manual" }),
     );
-    await settleClickTasks();
 
     expect(response.status).toBe(302);
     expect(response.headers.get("location")).toBe("https://example.com/sale");
@@ -69,7 +76,7 @@ describe("redirect hot path", () => {
       JSON.stringify({ linkId: "link-2", orgId: "org-1", url: "https://example.com/pricing" }),
     );
 
-    const response = await worker.default.fetch(
+    const response = await fetchWorker(
       new Request("http://localhost/pricing", {
         headers: { host: "go.example.com" },
         redirect: "manual",
@@ -91,10 +98,9 @@ describe("redirect hot path", () => {
     );
     await env.RL_CLICK_RECORDING.limit({ key: "click:org:org-limited" });
 
-    const response = await worker.default.fetch(
+    const response = await fetchWorker(
       new Request("http://localhost/viral", { redirect: "manual" }),
     );
-    await settleClickTasks();
 
     expect(response.status).toBe(302);
     expect(response.headers.get("location")).toBe("https://example.com/viral");
@@ -117,10 +123,10 @@ describe("redirect hot path", () => {
       }),
     );
 
-    const root = await worker.default.fetch(
+    const root = await fetchWorker(
       new Request("http://localhost/", { headers: { host: "go.example.com" }, redirect: "manual" }),
     );
-    const missing = await worker.default.fetch(
+    const missing = await fetchWorker(
       new Request("http://localhost/no-such-link", {
         headers: { host: "go.example.com" },
         redirect: "manual",

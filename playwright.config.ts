@@ -1,4 +1,5 @@
 import { defineConfig, devices } from "@playwright/test";
+import { appUrl, playwrightPort } from "./tests/e2e/environment";
 
 export default defineConfig({
   testDir: "./tests/e2e",
@@ -9,7 +10,7 @@ export default defineConfig({
   retries: process.env.CI ? 1 : 0,
   reporter: process.env.CI ? [["github"], ["html", { open: "never" }]] : "list",
   use: {
-    baseURL: "http://localhost:5173",
+    baseURL: appUrl,
     screenshot: "only-on-failure",
     trace: "retain-on-failure",
   },
@@ -22,11 +23,14 @@ export default defineConfig({
       gracefulShutdown: { signal: "SIGTERM", timeout: 500 },
     },
     {
-      command: "bun run dev -- --host localhost --port 5173 --strictPort",
-      url: "http://localhost:5173",
+      command: `bunx vite dev --host localhost --port ${playwrightPort} --strictPort`,
+      url: appUrl,
       reuseExistingServer: false,
       gracefulShutdown: { signal: "SIGTERM", timeout: 500 },
-      env: { PLAYWRIGHT_TEST: "1" },
+      env: {
+        PLAYWRIGHT_TEST: "1",
+        CLOUDFLARE_ENV: "playwright",
+      },
     },
   ],
 });

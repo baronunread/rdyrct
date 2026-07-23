@@ -99,6 +99,83 @@
   "triggers": {
     "crons": ["0 6 * * *"],
   },
+  // Browser tests select this environment so Wrangler loads
+  // .dev.vars.playwright instead of a developer's local values.
+  "env": {
+    "playwright": {
+      "vars": {
+        "APP_URL": "http://localhost:5174",
+        "APP_HOST": "localhost:5174",
+        "MAIL_FROM": "rdyrct <no-reply@localhost>",
+        "POLAR_SERVER": "sandbox",
+        "POLAR_PRO_PRODUCT_ID": "playwright_pro_product",
+        "POLAR_HOBBY_PRODUCT_ID": "playwright_hobby_product",
+        "CF_ZONE_ID": "",
+      },
+      "kv_namespaces": [
+        {
+          "binding": "LINKS",
+          "id": "aa2cec55f8964d0fba2c23e1e3b5fea1",
+        },
+      ],
+      "r2_buckets": [
+        {
+          "binding": "QR_LOGOS",
+          "bucket_name": "rdyrct-qr-logos",
+        },
+      ],
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "rdyrct-playwright",
+          "database_id": "cff7eb6e-ee69-4c94-8d51-6ad09de5afd9",
+          "migrations_dir": "migrations",
+        },
+      ],
+      "ratelimits": [
+        {
+          "name": "RL_AUTH_PUBLIC",
+          "namespace_id": "14001",
+          "simple": { "limit": 10, "period": 60 },
+        },
+        {
+          "name": "RL_EMAIL",
+          "namespace_id": "14002",
+          "simple": { "limit": 3, "period": 60 },
+        },
+        {
+          "name": "RL_WRITE_FREE",
+          "namespace_id": "14003",
+          "simple": { "limit": 30, "period": 60 },
+        },
+        {
+          "name": "RL_WRITE_PAID",
+          "namespace_id": "14004",
+          "simple": { "limit": 120, "period": 60 },
+        },
+        {
+          "name": "RL_QR_UPLOAD",
+          "namespace_id": "14005",
+          "simple": { "limit": 5, "period": 60 },
+        },
+        {
+          "name": "RL_DOMAIN_SETUP",
+          "namespace_id": "14006",
+          "simple": { "limit": 12, "period": 60 },
+        },
+        {
+          "name": "RL_BILLING",
+          "namespace_id": "14007",
+          "simple": { "limit": 3, "period": 60 },
+        },
+        {
+          "name": "RL_CLICK_RECORDING",
+          "namespace_id": "14008",
+          "simple": { "limit": 600, "period": 60 },
+        },
+      ],
+    },
+  },
   "observability": {
     "enabled": true,
   },

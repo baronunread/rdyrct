@@ -43,6 +43,7 @@ function signedWriteApp(plan: SessionUser["plan"]) {
 describe("Cloudflare rate limiting", () => {
   it("groups public email delivery separately from auth and never limits logout", () => {
     expect(publicAuthGroup("/api/auth/sign-in/email")).toBe("auth");
+    expect(publicAuthGroup("/api/auth/sign-up/email")).toBe("email");
     expect(publicAuthGroup("/api/auth/email-otp/verify-email")).toBe("auth");
     expect(publicAuthGroup("/api/auth/email-otp/send-verification-otp")).toBe("email");
     expect(publicAuthGroup("/api/auth/request-password-reset")).toBe("email");
@@ -108,6 +109,31 @@ describe("Cloudflare rate limiting", () => {
       message: "Too many requests. Try again shortly.",
       code: "rate_limited",
     });
+  });
+
+  it("uses the email binding for sign-up email", async () => {
+    const app = new Hono<AppEnv>();
+    app.post("/api/auth/*", async (c) => {
+      const limited = await enforcePublicAuthRateLimit(c);
+      return limited ?? c.json({ ok: true });
+    });
+    const auth = limiter(true);
+    const email = limiter(false);
+    const env = {
+      BETTER_AUTH_SECRET: "test-secret",
+      RL_AUTH_PUBLIC: auth,
+      RL_EMAIL: email,
+    } as Env;
+
+    const response = await app.request(
+      "/api/auth/sign-up/email",
+      { method: "POST", headers: { "cf-connecting-ip": "203.0.113.9" } },
+      env,
+    );
+
+    expect(response.status).toBe(429);
+    expect(email.limit).toHaveBeenCalledTimes(1);
+    expect(auth.limit).not.toHaveBeenCalled();
   });
 
   it("limits free writes and allows the same request through the paid binding", async () => {

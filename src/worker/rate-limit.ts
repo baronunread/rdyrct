@@ -13,6 +13,7 @@ export type RateLimitGroup =
   | "click";
 
 const EMAIL_AUTH_PATHS = new Set([
+  "/api/auth/sign-up/email",
   "/api/auth/email-otp/request-password-reset",
   "/api/auth/email-otp/send-verification-otp",
   "/api/auth/forget-password/email-otp",

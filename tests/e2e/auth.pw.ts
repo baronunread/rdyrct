@@ -1,6 +1,24 @@
 import { expect, test } from "@playwright/test";
+import { signUpAndVerify } from "./resend";
 
 test.describe("authentication forms", () => {
+  test("signs in with a verified account", async ({ page }) => {
+    const email = `login-${Date.now()}@gmail.com`;
+    const password = "test-password-123";
+
+    await signUpAndVerify(page, email, password);
+
+    await page.getByLabel("Sign out").click();
+    await expect(page).toHaveURL(/\/login$/);
+
+    await page.getByLabel("Email").fill(email);
+    await page.getByLabel("Password").fill(password);
+    await page.getByRole("button", { name: "Sign in" }).click();
+
+    await expect(page).toHaveURL(/\/dashboard$/);
+    await expect(page.getByText("No organization", { exact: true })).toBeVisible();
+  });
+
   test("keeps invalid login details in the browser instead of sending an auth request", async ({
     page,
   }) => {
