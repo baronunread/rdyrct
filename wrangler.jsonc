@@ -49,6 +49,54 @@
       "migrations_dir": "migrations",
     },
   ],
+  // KV/R2 follow-up work. A request handler awaits the send after committing
+  // D1, so a producer-side failure fails the request instead of vanishing
+  // silently. Once a message is on the queue, Cloudflare Queues own retry and
+  // backoff. A give-up lands on rdyrct-storage-dlq, which this same Worker
+  // also consumes (see the `queue()` handler) purely to log it for
+  // visibility: nothing repairs or re-drives it. Create both queues before
+  // first deploy:
+  //   wrangler queues create rdyrct-storage
+  //   wrangler queues create rdyrct-storage-dlq
+  // Keep max_retries here in sync with STORAGE_MAX_DELIVERIES in storage.ts.
+  "queues": {
+    "producers": [
+      {
+        "binding": "STORAGE_QUEUE",
+        "queue": "rdyrct-storage",
+      },
+    ],
+    "consumers": [
+      {
+        "queue": "rdyrct-storage",
+        "max_batch_size": 10,
+        "max_batch_timeout": 5,
+        "max_retries": 5,
+        "dead_letter_queue": "rdyrct-storage-dlq",
+      },
+      {
+        "queue": "rdyrct-storage-dlq",
+        "max_batch_size": 10,
+        "max_batch_timeout": 5,
+        "max_retries": 3,
+      },
+    ],
+  },
+  // Durable, per-step-retried background processes: org teardown (ordered
+  // cleanup) and custom-domain activation (CF hostname create + DNS/TLS polling
+  // off the request path).
+  "workflows": [
+    {
+      "binding": "ORG_DELETE",
+      "name": "rdyrct-org-delete",
+      "class_name": "OrgDeleteWorkflow",
+    },
+    {
+      "binding": "DOMAIN_ACTIVATE",
+      "name": "rdyrct-domain-activate",
+      "class_name": "DomainActivateWorkflow",
+    },
+  ],
   // Cloudflare Workers Rate Limiting counters. Namespace IDs are unique within
   // this account. Counters are permissive and local to each Cloudflare location,
   // so these are abuse controls, not billing or exact quota enforcement.
@@ -56,46 +104,72 @@
     {
       "name": "RL_AUTH_PUBLIC",
       "namespace_id": "14001",
-      "simple": { "limit": 10, "period": 60 },
+      "simple": {
+        "limit": 10,
+        "period": 60,
+      },
     },
     {
       "name": "RL_EMAIL",
       "namespace_id": "14002",
-      "simple": { "limit": 3, "period": 60 },
+      "simple": {
+        "limit": 3,
+        "period": 60,
+      },
     },
     {
       "name": "RL_WRITE_FREE",
       "namespace_id": "14003",
-      "simple": { "limit": 30, "period": 60 },
+      "simple": {
+        "limit": 30,
+        "period": 60,
+      },
     },
     {
       "name": "RL_WRITE_PAID",
       "namespace_id": "14004",
-      "simple": { "limit": 120, "period": 60 },
+      "simple": {
+        "limit": 120,
+        "period": 60,
+      },
     },
     {
       "name": "RL_QR_UPLOAD",
       "namespace_id": "14005",
-      "simple": { "limit": 5, "period": 60 },
+      "simple": {
+        "limit": 5,
+        "period": 60,
+      },
     },
     {
       "name": "RL_DOMAIN_SETUP",
       "namespace_id": "14006",
-      "simple": { "limit": 12, "period": 60 },
+      "simple": {
+        "limit": 12,
+        "period": 60,
+      },
     },
     {
       "name": "RL_BILLING",
       "namespace_id": "14007",
-      "simple": { "limit": 3, "period": 60 },
+      "simple": {
+        "limit": 3,
+        "period": 60,
+      },
     },
     {
       "name": "RL_CLICK_RECORDING",
       "namespace_id": "14008",
-      "simple": { "limit": 600, "period": 60 },
+      "simple": {
+        "limit": 600,
+        "period": 60,
+      },
     },
   ],
   "workers_dev": false,
   "preview_urls": false,
+  // One daily trigger: trim old clicks. The storage queue drives all KV/R2
+  // follow-up work; nothing here reconciles it.
   "triggers": {
     "crons": ["0 6 * * *"],
   },
@@ -133,46 +207,105 @@
           "migrations_dir": "migrations",
         },
       ],
+      "queues": {
+        "producers": [
+          {
+            "binding": "STORAGE_QUEUE",
+            "queue": "rdyrct-playwright-storage",
+          },
+        ],
+        "consumers": [
+          {
+            "queue": "rdyrct-playwright-storage",
+            "max_batch_size": 10,
+            "max_batch_timeout": 5,
+            "max_retries": 5,
+            "dead_letter_queue": "rdyrct-playwright-storage-dlq",
+          },
+          {
+            "queue": "rdyrct-playwright-storage-dlq",
+            "max_batch_size": 10,
+            "max_batch_timeout": 5,
+            "max_retries": 3,
+          },
+        ],
+      },
+      "workflows": [
+        {
+          "binding": "ORG_DELETE",
+          "name": "rdyrct-playwright-org-delete",
+          "class_name": "OrgDeleteWorkflow",
+        },
+        {
+          "binding": "DOMAIN_ACTIVATE",
+          "name": "rdyrct-playwright-domain-activate",
+          "class_name": "DomainActivateWorkflow",
+        },
+      ],
       "ratelimits": [
         {
           "name": "RL_AUTH_PUBLIC",
           "namespace_id": "24001",
-          "simple": { "limit": 10, "period": 60 },
+          "simple": {
+            "limit": 10,
+            "period": 60,
+          },
         },
         {
           "name": "RL_EMAIL",
           "namespace_id": "24002",
-          "simple": { "limit": 3, "period": 60 },
+          "simple": {
+            "limit": 3,
+            "period": 60,
+          },
         },
         {
           "name": "RL_WRITE_FREE",
           "namespace_id": "24003",
-          "simple": { "limit": 30, "period": 60 },
+          "simple": {
+            "limit": 30,
+            "period": 60,
+          },
         },
         {
           "name": "RL_WRITE_PAID",
           "namespace_id": "24004",
-          "simple": { "limit": 120, "period": 60 },
+          "simple": {
+            "limit": 120,
+            "period": 60,
+          },
         },
         {
           "name": "RL_QR_UPLOAD",
           "namespace_id": "24005",
-          "simple": { "limit": 5, "period": 60 },
+          "simple": {
+            "limit": 5,
+            "period": 60,
+          },
         },
         {
           "name": "RL_DOMAIN_SETUP",
           "namespace_id": "24006",
-          "simple": { "limit": 12, "period": 60 },
+          "simple": {
+            "limit": 12,
+            "period": 60,
+          },
         },
         {
           "name": "RL_BILLING",
           "namespace_id": "24007",
-          "simple": { "limit": 3, "period": 60 },
+          "simple": {
+            "limit": 3,
+            "period": 60,
+          },
         },
         {
           "name": "RL_CLICK_RECORDING",
           "namespace_id": "24008",
-          "simple": { "limit": 600, "period": 60 },
+          "simple": {
+            "limit": 600,
+            "period": 60,
+          },
         },
       ],
     },

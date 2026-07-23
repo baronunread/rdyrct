@@ -102,7 +102,7 @@ analyticsDays }`). Slugs on the **shared** domain are always random (every
   `QR_LOGO_MAX_BYTES` in `src/shared/types.ts`. Serving is immutable and
   `private`-cached. Deletes follow the row: replace/clear/delete on
   links and orgs removes the object; org teardown wipes the `{orgId}/` prefix
-  (`src/worker/r2.ts`).
+  (`src/worker/storage.ts`).
 
 ## Conventions
 
@@ -161,7 +161,7 @@ migrations/            D1 schema (numbered SQL migrations, applied in order)
 scripts/               Local dev utilities (e.g. seed-local.ts)
 src/worker/            Hono API, BetterAuth, KV publishing, redirect hot path
   routes/              auth (user), orgs, links, qr-logos, domains, billing, admin
-  plan.ts util.ts email.ts password.ts kv.ts r2.ts
+  plan.ts util.ts email.ts password.ts kv.ts storage.ts
 src/shared/types.ts    DTOs + PLAN_LIMITS (shared worker ↔ app)
 src/app/               React SPA
   routes/  ui/  components/  lib/

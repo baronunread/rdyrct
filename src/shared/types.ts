@@ -120,6 +120,8 @@ export interface DomainDTO {
   id: string;
   hostname: string;
   status: "checking_dns" | "issuing_tls" | "active" | "error";
+  /** Why the domain is in `error`, ready to show. Empty for every other status. */
+  statusReason: string;
   rootRedirect: string;
   createdAt: number;
 }

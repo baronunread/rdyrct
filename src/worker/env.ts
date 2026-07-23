@@ -1,11 +1,18 @@
 import type { DrizzleD1Database } from "drizzle-orm/d1";
 import type * as schema from "./db/schema";
+import type { StorageMessage } from "./storage";
 
 export interface Env {
   DB: D1Database;
   LINKS: KVNamespace;
   QR_LOGOS: R2Bucket;
   ASSETS: Fetcher;
+
+  /* storage recovery: KV/R2 follow-up work and the org-teardown workflow */
+  STORAGE_QUEUE: Queue<StorageMessage>;
+  ORG_DELETE: Workflow<{ orgId: string }>;
+  /* custom-domain activation as a durable background workflow */
+  DOMAIN_ACTIVATE: Workflow<{ domainId: string; hostname: string }>;
   RL_AUTH_PUBLIC: RateLimit;
   RL_EMAIL: RateLimit;
   RL_WRITE_FREE: RateLimit;

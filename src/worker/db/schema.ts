@@ -160,6 +160,9 @@ export const domains = sqliteTable(
     status: text("status", { enum: ["checking_dns", "issuing_tls", "active", "error"] })
       .notNull()
       .default("checking_dns"),
+    // Human-readable reason a domain sits in `error` (DNS never resolved, cert
+    // never issued). Empty for every other status. Surfaced to users and admins.
+    statusReason: text("status_reason").notNull().default(""),
     rootRedirect: text("root_redirect").notNull().default(""),
     cfHostnameId: text("cf_hostname_id"),
     createdAt: integer("created_at").notNull(),
@@ -213,3 +216,7 @@ export const clicks = sqliteTable(
     index("idx_clicks_org_ts").on(t.orgId, t.ts),
   ],
 );
+
+// No storage outbox or failure table: KV/R2 follow-up work rides Cloudflare
+// Queues, and the queue's own dead-letter queue holds give-ups (four days) for
+// an operator to re-drive. See docs/storage-recovery.md.

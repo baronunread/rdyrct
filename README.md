@@ -156,6 +156,9 @@ Finally, point `rdyrct.com` at the Worker as a **custom domain**: Cloudflare das
 Review the [rate-limiting policies, monitoring, WAF rule, and rollback steps](docs/rate-limiting.md)
 before the first production deploy.
 
+Review the [storage recovery and reconciliation guide](docs/storage-recovery.md)
+before changing link, domain, logo, or organization delete flows.
+
 **Customer custom domains (Pro):** to let orgs use `links.theirbrand.com`, enable [Cloudflare for SaaS](https://developers.cloudflare.com/cloudflare-for-platforms/cloudflare-for-saas/) on the `rdyrct.com` zone, create an originless proxied fallback origin (e.g. `fallback.rdyrct.com AAAA 100::`), and add a Worker route `*/*` pointing at the `rdyrct` worker. The `CF_API_TOKEN` needs permission **Zone → SSL and Certificates → Edit** scoped to the zone. Also verify your sending domain (e.g. `mail.rdyrct.com`) in [Resend](https://resend.com) so transactional email isn't blocked.
 
 ---
@@ -191,7 +194,7 @@ migrations/            D1 schema (numbered SQL migrations, applied in order)
 scripts/               Local dev utilities (e.g. seed-local.ts)
 src/worker/            Hono API, BetterAuth, KV publishing, redirect hot path
   routes/              auth/user, orgs, links, qr-logos, domains, billing, admin
-  plan.ts util.ts email.ts password.ts kv.ts r2.ts
+  plan.ts util.ts email.ts password.ts kv.ts storage.ts
 src/shared/types.ts    DTOs + PLAN_LIMITS (shared worker ↔ app)
 src/app/               React SPA
   routes/              page-level route components

@@ -6,9 +6,7 @@ import type { AppEnv, DB, Env } from "../env";
 import { requireUser, requireOrgRole, orgRole } from "../auth";
 import { orgPlan, userPlan } from "../plan";
 import { sendEmail } from "../email";
-import { unpublishLink, unpublishDomain } from "../kv";
-import { deleteOrgQrLogos, deleteQrLogo } from "../r2";
-import { cfDeleteHostname } from "./domains";
+import { deleteQrLogoMsg, enqueueStorage } from "../storage";
 import { uid, now, referrerHost, validateQrFields } from "../util";
 import type {
   MemberDTO,
@@ -46,13 +44,15 @@ orgRoutes.post("/", requireUser, async (c) => {
 
   const orgId = uid();
   const ts = now();
-  await c.var.db.insert(schema.orgs).values({ id: orgId, name, createdAt: ts });
-  await c.var.db.insert(schema.orgMembers).values({
-    orgId,
-    userId: c.var.user!.id,
-    role: "owner",
-    createdAt: ts,
-  });
+  await c.var.db.batch([
+    c.var.db.insert(schema.orgs).values({ id: orgId, name, createdAt: ts }),
+    c.var.db.insert(schema.orgMembers).values({
+      orgId,
+      userId: c.var.user!.id,
+      role: "owner",
+      createdAt: ts,
+    }),
+  ]);
   return c.json(
     {
       id: orgId,
@@ -127,47 +127,26 @@ orgRoutes.patch("/:orgId", requireOrgRole("admin"), async (c) => {
 
   if (Object.keys(set).length === 0) throw new HTTPException(400, { message: "Nothing to update" });
   await c.var.db.update(schema.orgs).set(set).where(eq(schema.orgs.id, orgId));
-  // The old logo object is unreferenced once the row points at the new one.
-  if (body.qrLogo !== undefined && body.qrLogo !== oldLogo) await deleteQrLogo(c.env, oldLogo);
+  await enqueueStorage(c.env, [
+    body.qrLogo !== undefined && body.qrLogo !== oldLogo ? deleteQrLogoMsg(oldLogo) : null,
+  ]);
   return c.json({ ok: true });
 });
 
 /**
- * Full org teardown, shared with the admin route. Order matters: Cloudflare
- * custom hostnames are deprovisioned first (a CF failure throws and leaves
- * the org intact), then the D1 delete — the point of no return — cascades
- * links/clicks/members/domains/invites, and KV/R2 cleanup runs last
- * (idempotent, a partial failure only leaves dead keys/objects the redirect
- * and logo paths treat as misses).
+ * Full org teardown, shared with the admin route. A Cloudflare Workflow runs
+ * the ordered, per-step-retried sequence: capture the org's hostnames and KV
+ * keys, delete the org row (D1 cascade), then deprovision Cloudflare hostnames,
+ * KV entries, and the R2 logo prefix. Creating the instance is the single
+ * commit point, so a lost trigger leaves the org fully intact; once created,
+ * Workflows runs every step to completion. See docs/storage-recovery.md.
  */
-export async function deleteOrgCascade(db: DB, env: Env, orgId: string): Promise<void> {
-  const [links, domains] = await Promise.all([
-    db
-      .select({ slug: schema.links.slug, hostname: schema.domains.hostname })
-      .from(schema.links)
-      .leftJoin(schema.domains, eq(schema.links.domainId, schema.domains.id))
-      .where(eq(schema.links.orgId, orgId)),
-    db
-      .select({
-        hostname: schema.domains.hostname,
-        cfHostnameId: schema.domains.cfHostnameId,
-      })
-      .from(schema.domains)
-      .where(eq(schema.domains.orgId, orgId)),
-  ]);
-  await Promise.all(
-    domains.flatMap((d) => (d.cfHostnameId ? [cfDeleteHostname(env, d.cfHostnameId)] : [])),
-  );
-  await db.delete(schema.orgs).where(eq(schema.orgs.id, orgId));
-  await Promise.all([
-    ...links.map((l) => unpublishLink(env, l.slug, l.hostname)),
-    ...domains.map((d) => unpublishDomain(env, d.hostname)),
-    deleteOrgQrLogos(env, orgId),
-  ]);
+export async function deleteOrg(env: Env, orgId: string): Promise<void> {
+  await env.ORG_DELETE.create({ params: { orgId } });
 }
 
 orgRoutes.delete("/:orgId", requireOrgRole("owner"), async (c) => {
-  await deleteOrgCascade(c.var.db, c.env, c.req.param("orgId"));
+  await deleteOrg(c.env, c.req.param("orgId"));
   return c.json({ ok: true });
 });
 
