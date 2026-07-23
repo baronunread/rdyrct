@@ -23,20 +23,19 @@ function otpForEmail(value: unknown, email: string): string {
 }
 
 export async function latestOtp(page: Page, email: string) {
+  let otp = "";
   await expect
     .poll(async () => {
       const response = await page.request.get("http://localhost:4000/emails", {
         headers: { authorization: "Bearer test_token_admin" },
       });
       if (!response.ok()) return "";
-      return otpForEmail(await response.json(), email);
+      otp = otpForEmail(await response.json(), email);
+      return otp;
     })
     .not.toBe("");
 
-  const response = await page.request.get("http://localhost:4000/emails", {
-    headers: { authorization: "Bearer test_token_admin" },
-  });
-  return otpForEmail(await response.json(), email);
+  return otp;
 }
 
 export async function signUpAndVerify(page: Page, email: string, password: string) {

@@ -100,7 +100,8 @@
     "crons": ["0 6 * * *"],
   },
   // Browser tests select this environment so Wrangler loads
-  // .dev.vars.playwright instead of a developer's local values.
+  // .dev.vars.playwright instead of a developer's local values. Resource
+  // identifiers are local-only placeholders, never production identifiers.
   "env": {
     "playwright": {
       "vars": {
@@ -115,62 +116,62 @@
       "kv_namespaces": [
         {
           "binding": "LINKS",
-          "id": "aa2cec55f8964d0fba2c23e1e3b5fea1",
+          "id": "00000000000000000000000000000001",
         },
       ],
       "r2_buckets": [
         {
           "binding": "QR_LOGOS",
-          "bucket_name": "rdyrct-qr-logos",
+          "bucket_name": "rdyrct-playwright-local",
         },
       ],
       "d1_databases": [
         {
           "binding": "DB",
           "database_name": "rdyrct-playwright",
-          "database_id": "cff7eb6e-ee69-4c94-8d51-6ad09de5afd9",
+          "database_id": "00000000-0000-0000-0000-000000000001",
           "migrations_dir": "migrations",
         },
       ],
       "ratelimits": [
         {
           "name": "RL_AUTH_PUBLIC",
-          "namespace_id": "14001",
+          "namespace_id": "24001",
           "simple": { "limit": 10, "period": 60 },
         },
         {
           "name": "RL_EMAIL",
-          "namespace_id": "14002",
+          "namespace_id": "24002",
           "simple": { "limit": 3, "period": 60 },
         },
         {
           "name": "RL_WRITE_FREE",
-          "namespace_id": "14003",
+          "namespace_id": "24003",
           "simple": { "limit": 30, "period": 60 },
         },
         {
           "name": "RL_WRITE_PAID",
-          "namespace_id": "14004",
+          "namespace_id": "24004",
           "simple": { "limit": 120, "period": 60 },
         },
         {
           "name": "RL_QR_UPLOAD",
-          "namespace_id": "14005",
+          "namespace_id": "24005",
           "simple": { "limit": 5, "period": 60 },
         },
         {
           "name": "RL_DOMAIN_SETUP",
-          "namespace_id": "14006",
+          "namespace_id": "24006",
           "simple": { "limit": 12, "period": 60 },
         },
         {
           "name": "RL_BILLING",
-          "namespace_id": "14007",
+          "namespace_id": "24007",
           "simple": { "limit": 3, "period": 60 },
         },
         {
           "name": "RL_CLICK_RECORDING",
-          "namespace_id": "14008",
+          "namespace_id": "24008",
           "simple": { "limit": 600, "period": 60 },
         },
       ],
