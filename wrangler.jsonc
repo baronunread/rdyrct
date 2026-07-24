@@ -53,21 +53,29 @@
       "migrations_dir": "migrations",
     },
   ],
-  // KV/R2 follow-up work. A request handler awaits the send after committing
-  // D1, so a producer-side failure fails the request instead of vanishing
-  // silently. Once a message is on the queue, Cloudflare Queues own retry and
-  // backoff. A give-up lands on rdyrct-storage-dlq, which this same Worker
-  // also consumes (see the `queue()` handler) purely to log it for
-  // visibility: nothing repairs or re-drives it. Create both queues before
-  // first deploy:
+  // KV/R2 follow-up work, and click ingestion off the redirect hot path
+  // (issue #16). A storage-queue send is awaited after committing D1, so a
+  // producer-side failure fails the request instead of vanishing silently; a
+  // click-queue send is best-effort instead (see clicks.ts), because a click
+  // is analytics, not a correctness-critical follow-up. Each queue's give-ups
+  // land on its own DLQ, which this same Worker also consumes (see the
+  // `queue()` handler) purely to log them for visibility: nothing repairs or
+  // re-drives either. Create all four queues before first deploy:
   //   bunx wrangler queues create rdyrct-storage
   //   bunx wrangler queues create rdyrct-storage-dlq
-  // Keep max_retries here in sync with STORAGE_MAX_DELIVERIES in storage.ts.
+  //   bunx wrangler queues create rdyrct-clicks
+  //   bunx wrangler queues create rdyrct-clicks-dlq
+  // Keep max_retries here in sync with STORAGE_MAX_DELIVERIES (storage.ts)
+  // and CLICK_MAX_DELIVERIES (clicks.ts).
   "queues": {
     "producers": [
       {
         "binding": "STORAGE_QUEUE",
         "queue": "rdyrct-storage",
+      },
+      {
+        "binding": "CLICK_QUEUE",
+        "queue": "rdyrct-clicks",
       },
     ],
     "consumers": [
@@ -82,6 +90,24 @@
       {
         "queue": "rdyrct-storage-dlq",
         "max_batch_size": 10,
+        "max_batch_timeout": 5,
+        "max_retries": 3,
+        "retry_delay": 30,
+      },
+      {
+        "queue": "rdyrct-clicks",
+        // Larger, time-boxed batches: clicks are high-volume and each batch
+        // becomes one multi-row D1 insert, so bigger batches mean fewer
+        // writes under load.
+        "max_batch_size": 100,
+        "max_batch_timeout": 5,
+        "max_retries": 5,
+        "retry_delay": 30,
+        "dead_letter_queue": "rdyrct-clicks-dlq",
+      },
+      {
+        "queue": "rdyrct-clicks-dlq",
+        "max_batch_size": 100,
         "max_batch_timeout": 5,
         "max_retries": 3,
         "retry_delay": 30,
@@ -219,6 +245,10 @@
             "binding": "STORAGE_QUEUE",
             "queue": "rdyrct-playwright-storage",
           },
+          {
+            "binding": "CLICK_QUEUE",
+            "queue": "rdyrct-playwright-clicks",
+          },
         ],
         "consumers": [
           {
@@ -232,6 +262,21 @@
           {
             "queue": "rdyrct-playwright-storage-dlq",
             "max_batch_size": 10,
+            "max_batch_timeout": 5,
+            "max_retries": 3,
+            "retry_delay": 30,
+          },
+          {
+            "queue": "rdyrct-playwright-clicks",
+            "max_batch_size": 100,
+            "max_batch_timeout": 5,
+            "max_retries": 5,
+            "retry_delay": 30,
+            "dead_letter_queue": "rdyrct-playwright-clicks-dlq",
+          },
+          {
+            "queue": "rdyrct-playwright-clicks-dlq",
+            "max_batch_size": 100,
             "max_batch_timeout": 5,
             "max_retries": 3,
             "retry_delay": 30,
