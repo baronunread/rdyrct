@@ -37,6 +37,19 @@ export type ClickMessage = {
 // with the click consumer's max_retries + 1 in wrangler.jsonc.
 const CLICK_MAX_DELIVERIES = 6;
 
+// D1 caps bound parameters at 100 per statement. A click row binds 7 values,
+// so a single multi-row insert statement can hold at most floor(100 / 7) = 14
+// rows before it would exceed that cap. A queue batch (up to 100 messages)
+// splits into several insert statements run in one db.batch() call: D1 runs
+// them as one atomic unit, so the batch still acks or retries as a whole.
+const CLICK_INSERT_CHUNK_SIZE = 14;
+
+function chunk<T>(items: readonly T[], size: number): T[][] {
+  const chunks: T[][] = [];
+  for (let i = 0; i < items.length; i += size) chunks.push(items.slice(i, i + size));
+  return chunks;
+}
+
 /* ---------------- producing ---------------- */
 
 /**
@@ -65,13 +78,16 @@ export async function enqueueClick(c: Context<AppEnv>, hit: KVLink): Promise<voi
 /* ---------------- consuming ---------------- */
 
 /**
- * Consume a batch off the click queue: one multi-row insert for the whole
- * batch, deduped on `dedupeId` so a redelivery after a partial failure never
- * double-counts a click. The batch acks or retries as a unit, which matches
- * the insert: either every row in the statement lands or none does.
+ * Consume a batch off the click queue: the whole batch's rows land in one
+ * db.batch() transaction (split into D1-safe insert statements, see
+ * CLICK_INSERT_CHUNK_SIZE above), deduped on `dedupeId` so a redelivery after
+ * a partial failure never double-counts a click. The batch acks or retries
+ * as a unit, matching the transaction: a hard D1 error aborts every
+ * statement in it, while a duplicate `dedupeId` is skipped per row rather
+ * than aborting anything.
  *
  * A link deleted between the redirect and this running fails the whole
- * batch's insert (a foreign key violation), so that batch retries and, if
+ * transaction (a foreign key violation), so that batch retries and, if
  * the link stays gone, eventually dead-letters together with its batch
  * mates. That is a rare, small, accepted loss (see the top of this file),
  * not a bug: rather than splitting a failed batch to save the other rows,
@@ -83,20 +99,23 @@ export async function consumeClickBatch(
 ): Promise<void> {
   const db = drizzle(env.DB, { schema });
   try {
-    await db
-      .insert(schema.clicks)
-      .values(
-        batch.messages.map((m) => ({
-          linkId: m.body.linkId,
-          orgId: m.body.orgId,
-          ts: m.body.ts,
-          country: m.body.country,
-          referrer: m.body.referrer,
-          device: m.body.device,
-          dedupeId: m.body.dedupeId,
-        })),
-      )
-      .onConflictDoNothing({ target: schema.clicks.dedupeId });
+    const inserts = chunk(batch.messages, CLICK_INSERT_CHUNK_SIZE).map((rows) =>
+      db
+        .insert(schema.clicks)
+        .values(
+          rows.map((m) => ({
+            linkId: m.body.linkId,
+            orgId: m.body.orgId,
+            ts: m.body.ts,
+            country: m.body.country,
+            referrer: m.body.referrer,
+            device: m.body.device,
+            dedupeId: m.body.dedupeId,
+          })),
+        )
+        .onConflictDoNothing({ target: schema.clicks.dedupeId }),
+    );
+    await db.batch(inserts as [(typeof inserts)[number], ...(typeof inserts)[number][]]);
     batch.ackAll();
   } catch (error) {
     console.error("click batch insert failed", batch.messages.length, error);

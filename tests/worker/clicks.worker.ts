@@ -50,6 +50,22 @@ describe("click queue: consumer", () => {
     expect(result.ackAll).toBe(true);
   });
 
+  it("persists a full-size batch that would exceed D1's bound-parameter limit as one insert", async () => {
+    await seedLink();
+    // A click row binds 7 values, so a naive single-statement insert of a
+    // full 100-message batch would bind 700 parameters and exceed D1's cap
+    // of 100. The consumer must chunk this internally and still land every
+    // row from one batch.
+    const messages = Array.from({ length: 100 }, (_, i) => clickMessage({ dedupeId: `bulk-${i}` }));
+    const { batch, ctx } = batchOf("rdyrct-clicks", messages);
+
+    await consumeClickBatch(env as Env, batch);
+
+    expect(await clickCount()).toBe(100);
+    const result = await getQueueResult(batch, ctx);
+    expect(result.ackAll).toBe(true);
+  });
+
   it("dedupes a redelivered message instead of double-inserting", async () => {
     await seedLink();
     const message = clickMessage({ dedupeId: "dup-1" });

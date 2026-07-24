@@ -27,19 +27,21 @@ already on its way. `enqueueClick`:
    Cloudflare Queues outage, or the rate limit all fall through to the same
    place: the click is dropped, the redirect is unaffected.
 
-The consumer, `consumeClickBatch`, inserts every message in a batch as one
-`INSERT ... VALUES (...), (...), ...` statement, with
+The consumer, `consumeClickBatch`, splits a batch into chunks of 14 rows (D1
+caps bound parameters at 100 per statement, and a click row binds 7), and
+inserts every chunk in one `db.batch()` transaction, with
 `onConflictDoNothing()` targeting the unique `dedupe_id` column. A redelivery
-of a message that already landed inserts nothing for that row. The batch acks
-or retries as a unit (`batch.ackAll()` / `batch.retryAll()`), matching the
-insert: either every row in the statement lands or none does.
+of a message that already landed inserts nothing for that row: duplicate
+`dedupe_id` values are skipped per row, not treated as an error. The batch
+acks or retries as a unit (`batch.ackAll()` / `batch.retryAll()`), matching
+the transaction: a hard D1 error aborts every statement in it.
 
 ## The batch failure tradeoff
 
 A `dedupe_id` collision is silently skipped, but a **foreign key** violation
 (a message naming a `linkId` that no longer exists, because the link was
-deleted between the redirect and the consumer running) fails the whole
-statement, and with it every other row in that batch. The batch retries as a
+deleted between the redirect and the consumer running) aborts the whole
+transaction, and with it every other row in that batch. The batch retries as a
 unit; if the link stays gone, the whole batch eventually dead-letters
 together, not just the one bad row.
 
