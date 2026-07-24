@@ -1,18 +1,18 @@
 /**
  * Seed the LOCAL dev environment with fake orgs, members, links and clicks.
  *
- * Talks only to the local Explorer API (http://localhost:5173), so it can
+ * Talks only to the local Explorer API (https://rdyrct.localhost), so it can
  * never touch remote D1/KV. Run the dev server first, then:
  *
- *   bun scripts/seed-local.ts           # wipe previous seed data, re-seed
- *   bun scripts/seed-local.ts --wipe    # only remove seed data
+ *   bun run db:seed:local           # wipe previous seed data, re-seed
+ *   bun run db:seed:local -- --wipe # only remove seed data
  *
  * Every seeded row carries a "seed-" id prefix and every seeded user email
  * ends in @seed.test, so re-runs are idempotent. All seeded users share the
  * password below and have verified emails, so you can log in as any of them.
  */
 
-const API = "http://localhost:5173/cdn-cgi/explorer/api";
+const API = "https://rdyrct.localhost/cdn-cgi/explorer/api";
 const PASSWORD = "seed-password-123";
 
 const CONFIG = {

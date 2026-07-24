@@ -2,8 +2,8 @@
 
 BETTER_AUTH_SECRET=dev-only-secret-change-in-prod
 SUPERADMIN_EMAIL=you@example.com
-APP_URL=http://localhost:5173
-APP_HOST=localhost:5173
+APP_URL=https://rdyrct.localhost
+APP_HOST=rdyrct.localhost
 
 # Email: point at the emulate.dev Resend emulator (bunx emulate --service resend)
 RESEND_API_KEY=re_local_emulated

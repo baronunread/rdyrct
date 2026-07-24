@@ -283,7 +283,7 @@ domain activation) locally, so the whole path works without cloud resources.
 `DEV_FAKE_CF=1` fakes the Cloudflare hostname calls, so the domain workflow
 reaches `active` on its own in about ten seconds (the fake resolves DNS at ~5s
 and issues TLS at ~8s). The Explorer API at
-`http://localhost:5173/cdn-cgi/explorer/api` exposes local KV, R2, D1, Durable
+`https://rdyrct.localhost/cdn-cgi/explorer/api` exposes local KV, R2, D1, Durable
 Objects, and Workflows for inspection. Queues have no Explorer surface yet;
 follow their effect through KV and R2 instead, and watch the dev log for
 `storage_message_dead_letter` and `storage_message_gave_up` lines.
@@ -291,7 +291,7 @@ follow their effect through KV and R2 instead, and watch the dev log for
 To run the daily click-retention cron by hand:
 
 ```sh
-curl "http://localhost:5173/cdn-cgi/handler/scheduled?cron=0+6+*+*+*"
+curl "https://rdyrct.localhost/cdn-cgi/handler/scheduled?cron=0+6+*+*+*"
 ```
 
 Caveat: local queue delivery and Workflow execution are simulations. Retry timing

@@ -17,17 +17,17 @@ Always use **bun**, never npm/npx.
 
 ```sh
 bun install
-bun run dev                 # vite dev (Worker + SPA) on :5173
+bun run dev                 # vite dev (Worker + SPA) via portless: https://rdyrct.localhost
 bunx emulate --service resend   # local Resend inbox on :4000 (read: curl :4000/emails -H 'authorization: Bearer test_token_admin')
 bun run db:migrate:local    # apply migrations to local D1
 bun run db:reset:local      # wipe local D1 + KV, re-apply migrations (start from scratch; restart dev after)
 bun add <pkg>               # dependencies
 bunx agent-browser          # real-browser checks: screenshots, clicking through pages. Use it for any visual verification; do not hand-roll headless Chrome
-bun scripts/seed-local.ts   # seed local D1/KV with fake data (run dev server first)
+bun run db:seed:local       # seed local D1/KV with fake data (run dev server first)
 ```
 
 **Local Cloudflare state**: while `bun run dev` runs, the Explorer API at
-`http://localhost:5173/cdn-cgi/explorer/api` exposes the local KV, R2, D1,
+`https://rdyrct.localhost/cdn-cgi/explorer/api` exposes the local KV, R2, D1,
 Durable Objects, and Workflows. Fetch that URL for the OpenAPI schema, then use
 it to list, query, and manage local resources (e.g. inspect D1 rows or KV keys
 without wrangler CLI calls).

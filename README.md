@@ -66,7 +66,7 @@ cp .dev.vars.example .dev.vars     # then edit; at minimum set SUPERADMIN_EMAIL
 bunx emulate --service resend      # local Resend inbox on :4000
 
 bun run db:migrate:local
-bun run dev                        # http://localhost:5173
+bun run dev                        # https://rdyrct.localhost
 ```
 
 - Sign up with the address you set as `SUPERADMIN_EMAIL` to unlock the admin console; any other address is a normal user.

@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vite dev",
+    "dev": "portless rdyrct vite dev",
     "build": "vite build",
     "preview": "vite preview",
     "check": "tsc --noEmit",
@@ -21,6 +21,7 @@
     "db:migrate:local": "wrangler d1 migrations apply rdyrct --local",
     "db:reset:local": "rm -rf .wrangler/state/v3/d1 .wrangler/state/v3/kv && wrangler d1 migrations apply rdyrct --local",
     "db:migrate:remote": "wrangler d1 migrations apply rdyrct --remote",
+    "db:seed:local": "NODE_EXTRA_CA_CERTS=\"$HOME/.portless/ca.pem\" bun scripts/seed-local.ts",
     "doctor": "react-doctor",
     "fallow": "fallow"
   },
@@ -66,6 +67,7 @@
     "lefthook": "^2.1.10",
     "oxfmt": "^0.60.0",
     "oxlint": "^1.75.0",
+    "portless": "^0.15.4",
     "react-doctor": "^0.8.3",
     "tailwindcss": "^4.3.3",
     "typescript": "^7.0.2",
