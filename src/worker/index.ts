@@ -20,6 +20,9 @@ import {
   enforcePublicAuthRateLimit,
   enforceSignedApiRateLimit,
 } from "./rate-limit";
+import { consumeStorageBatch, logDeadLetterBatch, type StorageMessage } from "./storage";
+
+export { OrgDeleteWorkflow, DomainActivateWorkflow } from "./workflows";
 
 const app = new Hono<AppEnv>();
 
@@ -119,11 +122,18 @@ app.get("/:slug", async (c, next) => {
 
 app.all("*", (c) => c.env.ASSETS.fetch(c.req.raw));
 
-/* ---------------- Cron: click retention ---------------- */
+/* ---------------- Queue consumer: KV + R2 follow-up work ---------------- */
 
 export default {
   fetch: app.fetch,
-  async scheduled(_event: ScheduledEvent, env: Env, _ctx: ExecutionContext) {
+  async queue(batch: MessageBatch<StorageMessage>, env: Env, _ctx: ExecutionContext) {
+    // The dead-letter queue routes to this same handler (see wrangler.jsonc);
+    // its messages only get logged, never retried or repaired.
+    if (batch.queue.endsWith("-dlq")) return logDeadLetterBatch(env, batch);
+    await consumeStorageBatch(env, batch);
+  },
+  async scheduled(event: ScheduledEvent, env: Env, _ctx: ExecutionContext) {
+    // Daily: trim old clicks.
     const cutoff = Date.now() - 400 * 24 * 60 * 60 * 1000;
     // Bounded batches: one unbounded DELETE can hit D1 statement limits once
     // the table is large.

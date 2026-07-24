@@ -1,14 +1,12 @@
 import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
-import { eq, and, gte, desc, sql } from "drizzle-orm";
+import { eq, and, gte, desc, sql, isNull } from "drizzle-orm";
 import * as schema from "../db/schema";
 import type { AppEnv, DB, Env } from "../env";
 import { requireUser, requireOrgRole, orgRole } from "../auth";
 import { orgPlan, userPlan } from "../plan";
 import { sendEmail } from "../email";
-import { unpublishLink, unpublishDomain } from "../kv";
-import { deleteOrgQrLogos, deleteQrLogo } from "../r2";
-import { cfDeleteHostname } from "./domains";
+import { deleteQrLogoMsg, enqueueStorage } from "../storage";
 import { uid, now, referrerHost, validateQrFields } from "../util";
 import type {
   MemberDTO,
@@ -46,13 +44,15 @@ orgRoutes.post("/", requireUser, async (c) => {
 
   const orgId = uid();
   const ts = now();
-  await c.var.db.insert(schema.orgs).values({ id: orgId, name, createdAt: ts });
-  await c.var.db.insert(schema.orgMembers).values({
-    orgId,
-    userId: c.var.user!.id,
-    role: "owner",
-    createdAt: ts,
-  });
+  await c.var.db.batch([
+    c.var.db.insert(schema.orgs).values({ id: orgId, name, createdAt: ts }),
+    c.var.db.insert(schema.orgMembers).values({
+      orgId,
+      userId: c.var.user!.id,
+      role: "owner",
+      createdAt: ts,
+    }),
+  ]);
   return c.json(
     {
       id: orgId,
@@ -127,47 +127,66 @@ orgRoutes.patch("/:orgId", requireOrgRole("admin"), async (c) => {
 
   if (Object.keys(set).length === 0) throw new HTTPException(400, { message: "Nothing to update" });
   await c.var.db.update(schema.orgs).set(set).where(eq(schema.orgs.id, orgId));
-  // The old logo object is unreferenced once the row points at the new one.
-  if (body.qrLogo !== undefined && body.qrLogo !== oldLogo) await deleteQrLogo(c.env, oldLogo);
+  await enqueueStorage(c.env, [
+    body.qrLogo !== undefined && body.qrLogo !== oldLogo ? deleteQrLogoMsg(oldLogo) : null,
+  ]);
   return c.json({ ok: true });
 });
 
 /**
- * Full org teardown, shared with the admin route. Order matters: Cloudflare
- * custom hostnames are deprovisioned first (a CF failure throws and leaves
- * the org intact), then the D1 delete — the point of no return — cascades
- * links/clicks/members/domains/invites, and KV/R2 cleanup runs last
- * (idempotent, a partial failure only leaves dead keys/objects the redirect
- * and logo paths treat as misses).
+ * Full org teardown, shared with the admin route. Marking the org deleting
+ * first closes the gather/d1-delete race: requireOrgRole rejects every
+ * org-scoped write from this point on, so nothing can create a link or
+ * domain the workflow's gather step never sees. A Cloudflare Workflow then
+ * runs the ordered, per-step-retried sequence: capture the org's hostnames
+ * and KV keys, delete the org row (D1 cascade), then deprovision Cloudflare
+ * hostnames, KV entries, and the R2 logo prefix. Once the instance is
+ * created, Workflows runs every step to completion. See
+ * docs/storage-recovery.md.
  */
-export async function deleteOrgCascade(db: DB, env: Env, orgId: string): Promise<void> {
-  const [links, domains] = await Promise.all([
-    db
-      .select({ slug: schema.links.slug, hostname: schema.domains.hostname })
-      .from(schema.links)
-      .leftJoin(schema.domains, eq(schema.links.domainId, schema.domains.id))
-      .where(eq(schema.links.orgId, orgId)),
-    db
-      .select({
-        hostname: schema.domains.hostname,
-        cfHostnameId: schema.domains.cfHostnameId,
-      })
-      .from(schema.domains)
-      .where(eq(schema.domains.orgId, orgId)),
-  ]);
-  await Promise.all(
-    domains.flatMap((d) => (d.cfHostnameId ? [cfDeleteHostname(env, d.cfHostnameId)] : [])),
-  );
-  await db.delete(schema.orgs).where(eq(schema.orgs.id, orgId));
-  await Promise.all([
-    ...links.map((l) => unpublishLink(env, l.slug, l.hostname)),
-    ...domains.map((d) => unpublishDomain(env, d.hostname)),
-    deleteOrgQrLogos(env, orgId),
-  ]);
+const TERMINAL_WORKFLOW_STATUSES = new Set(["errored", "terminated", "complete"]);
+
+/**
+ * True if a workflow instance keyed to this org exists and is still doing
+ * something. `create()` can fail on the client side (a timeout, say) while
+ * still having started the instance server-side, so a create() error alone
+ * does not mean nothing is running.
+ */
+async function orgDeleteWorkflowActive(env: Env, orgId: string): Promise<boolean> {
+  try {
+    const status = await (await env.ORG_DELETE.get(orgId)).status();
+    return !TERMINAL_WORKFLOW_STATUSES.has(status.status);
+  } catch {
+    return false;
+  }
 }
 
-orgRoutes.delete("/:orgId", requireOrgRole("owner"), async (c) => {
-  await deleteOrgCascade(c.var.db, c.env, c.req.param("orgId"));
+export async function deleteOrg(db: DB, env: Env, orgId: string): Promise<void> {
+  // Only the request that actually flips the flag tries to start the
+  // workflow, so a double-submitted delete is a no-op on the second call
+  // instead of racing ORG_DELETE.create against its own keyed instance id.
+  const result = await db
+    .update(schema.orgs)
+    .set({ deletingAt: now() })
+    .where(and(eq(schema.orgs.id, orgId), isNull(schema.orgs.deletingAt)));
+  if (result.meta.changes === 0) return;
+  try {
+    await env.ORG_DELETE.create({ id: orgId, params: { orgId } });
+  } catch (err) {
+    // A failed create() does not prove nothing started: only undo the flag
+    // if there is truly no instance driving teardown, so a client-side
+    // timeout can never reopen the write window under a workflow that is
+    // actually running. If a real instance is running, leave deleting_at set
+    // and let it finish; the caller still sees this error and can decide
+    // whether to look into it.
+    if (!(await orgDeleteWorkflowActive(env, orgId)))
+      await db.update(schema.orgs).set({ deletingAt: null }).where(eq(schema.orgs.id, orgId));
+    throw err;
+  }
+}
+
+orgRoutes.delete("/:orgId", requireOrgRole("owner", { allowWhileDeleting: true }), async (c) => {
+  await deleteOrg(c.var.db, c.env, c.req.param("orgId"));
   return c.json({ ok: true });
 });
 

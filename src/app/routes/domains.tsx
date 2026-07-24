@@ -310,7 +310,9 @@ function DomainRow({
                   ? "Checking DNS"
                   : d.status === "issuing_tls"
                     ? "Issuing TLS"
-                    : d.status}
+                    : d.status === "error"
+                      ? "Failed"
+                      : d.status}
               </Badge>
             </m.span>
           </AnimatePresence>
@@ -346,6 +348,12 @@ function DomainRow({
               : "This usually takes a few minutes. "}
             Hit the refresh button above to check progress manually.
           </p>
+        </div>
+      )}
+
+      {d.status === "error" && (
+        <div className="mt-3 flex flex-col gap-1.5 rounded-md bg-danger/10 p-3 text-xs text-danger">
+          <p>{d.statusReason || "Activation failed. Delete and re-add the domain to try again."}</p>
         </div>
       )}
 

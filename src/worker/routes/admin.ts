@@ -13,7 +13,7 @@ import {
   type AdminUserRow,
   type OrgPlan,
 } from "@/shared/types";
-import { fillSeries, computeDelta, deleteOrgCascade } from "./orgs";
+import { fillSeries, computeDelta, deleteOrg } from "./orgs";
 import { orgPlan } from "../plan";
 
 // An org's effective plan is its owner's plan (billing is per-user). A single
@@ -451,7 +451,7 @@ adminRoutes.get("/orgs/:orgId", async (c) => {
 });
 
 adminRoutes.delete("/orgs/:orgId", async (c) => {
-  await deleteOrgCascade(c.var.db, c.env, c.req.param("orgId"));
+  await deleteOrg(c.var.db, c.env, c.req.param("orgId"));
   return c.json({ ok: true });
 });
 

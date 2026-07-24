@@ -4,8 +4,7 @@ import { eq, and, desc, sql } from "drizzle-orm";
 import * as schema from "../db/schema";
 import type { AppEnv, DB } from "../env";
 import { requireOrgRole } from "../auth";
-import { publishLink, unpublishLink } from "../kv";
-import { deleteQrLogo } from "../r2";
+import { deleteQrLogoMsg, enqueueStorage, syncLinkMsg } from "../storage";
 import { orgPlan } from "../plan";
 import {
   uid,
@@ -243,7 +242,7 @@ linkRoutes.post("/", requireOrgRole("member"), async (c) => {
     createdAt: now(),
   };
   await db.insert(schema.links).values(link);
-  await publishLink(c.env, link, hostname);
+  await enqueueStorage(c.env, [syncLinkMsg(link.slug, hostname)]);
   return c.json(toDTO(link, 0, hostname), 201);
 });
 
@@ -301,13 +300,17 @@ linkRoutes.patch("/:linkId", requireOrgRole("member"), async (c) => {
     qrEyeColor: body.qrEyeColor ?? existing.qrEyeColor,
     qrLogoSize: body.qrLogoSize ?? existing.qrLogoSize,
   };
+  // A moved link leaves a stale key behind: syncing that old key finds no row
+  // and deletes it. Syncing the new key publishes the updated row.
+  const messages = [
+    moved ? syncLinkMsg(existing.slug, oldHostname) : null,
+    syncLinkMsg(updated.slug, hostname),
+    body.qrLogo !== undefined && body.qrLogo !== existing.qrLogo
+      ? deleteQrLogoMsg(existing.qrLogo)
+      : null,
+  ];
   await db.update(schema.links).set(updated).where(eq(schema.links.id, existing.id));
-
-  if (moved) await unpublishLink(c.env, existing.slug, oldHostname);
-  await publishLink(c.env, updated, hostname);
-  // The old logo object is unreferenced once the row points at the new one.
-  if (body.qrLogo !== undefined && body.qrLogo !== existing.qrLogo)
-    await deleteQrLogo(c.env, existing.qrLogo);
+  await enqueueStorage(c.env, messages);
 
   const clicks = await db
     .select({ n: sql<number>`count(*)` })
@@ -322,7 +325,7 @@ linkRoutes.delete("/:linkId", requireOrgRole("member"), async (c) => {
   const link = await findLink(db, orgId, c.req.param("linkId")!);
   const hostname = await domainHostname(db, orgId, link.domainId);
   await db.delete(schema.links).where(eq(schema.links.id, link.id));
-  await unpublishLink(c.env, link.slug, hostname);
-  await deleteQrLogo(c.env, link.qrLogo);
+  // Syncing the now-orphaned key deletes it; the logo delete clears R2.
+  await enqueueStorage(c.env, [syncLinkMsg(link.slug, hostname), deleteQrLogoMsg(link.qrLogo)]);
   return c.json({ ok: true });
 });

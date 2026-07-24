@@ -1,11 +1,18 @@
 import type { DrizzleD1Database } from "drizzle-orm/d1";
 import type * as schema from "./db/schema";
+import type { StorageMessage } from "./storage";
 
 export interface Env {
   DB: D1Database;
   LINKS: KVNamespace;
   QR_LOGOS: R2Bucket;
   ASSETS: Fetcher;
+
+  /* storage recovery: KV/R2 follow-up work and the org-teardown workflow */
+  STORAGE_QUEUE: Queue<StorageMessage>;
+  ORG_DELETE: Workflow<{ orgId: string }>;
+  /* custom-domain activation as a durable background workflow */
+  DOMAIN_ACTIVATE: Workflow<{ domainId: string; hostname: string }>;
   RL_AUTH_PUBLIC: RateLimit;
   RL_EMAIL: RateLimit;
   RL_WRITE_FREE: RateLimit;
@@ -35,6 +42,10 @@ export interface Env {
   CF_API_TOKEN?: string; // secret, Custom Hostnames edit
   CF_ZONE_ID?: string; // var
   DEV_FAKE_CF?: string; // var, "1" fakes the CF API in local dev
+
+  /* alerting: dead-lettered storage messages (best-effort, never blocks acking) */
+  BETTERSTACK_SOURCE_TOKEN?: string; // secret
+  BETTERSTACK_INGEST_URL?: string; // var, e.g. https://in.logs.betterstack.com
 }
 
 export type DB = DrizzleD1Database<typeof schema>;
