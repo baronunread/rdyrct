@@ -1,27 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { env } from "cloudflare:workers";
-import {
-  applyD1Migrations,
-  createExecutionContext,
-  reset,
-  waitOnExecutionContext,
-} from "cloudflare:test";
+import { createExecutionContext, reset, waitOnExecutionContext } from "cloudflare:test";
 import worker from "../../src/worker";
-import type { Env } from "../../src/worker/env";
 import { ensureHostname, probeDelaySeconds, probeDomain } from "../../src/worker/routes/domains";
-import { hashPassword } from "../../src/worker/password";
 import { now } from "../../src/worker/util";
-
-type TestEnv = typeof env & { TEST_MIGRATIONS: D1Migration[] };
-
-function overrideEnv(overrides: Partial<Env>): Env {
-  return new Proxy(env, {
-    get(target, property, receiver) {
-      if (property in overrides) return overrides[property as keyof Env];
-      return Reflect.get(target, property, receiver);
-    },
-  }) as unknown as Env;
-}
+import { adminCookie, applyTestMigrations, authEnv, overrideEnv } from "./support";
 
 // Env with the CF fake off and credentials present, so the real get-or-create
 // path runs against a mocked global fetch.
@@ -31,10 +14,6 @@ const realCfEnv = () =>
 // Env with the CF fake forced on, independent of whatever DEV_FAKE_CF happens
 // to be in the ambient .dev.vars (CI runs unit tests before .dev.vars exists).
 const fakeCfEnv = () => overrideEnv({ DEV_FAKE_CF: "1" });
-
-// Env with a non-empty auth secret, independent of the ambient .dev.vars, so
-// sign-in's rate-limit key derivation has a key to HMAC with.
-const authEnv = () => overrideEnv({ BETTER_AUTH_SECRET: "test-secret" });
 
 const cfJson = (body: unknown) =>
   new Response(JSON.stringify(body), {
@@ -72,10 +51,7 @@ afterEach(async () => {
   await reset();
 });
 
-beforeEach(async () => {
-  const testEnv = env as TestEnv;
-  await applyD1Migrations(testEnv.DB, testEnv.TEST_MIGRATIONS);
-});
+beforeEach(applyTestMigrations);
 
 describe("ensureHostname: get-or-create idempotency", () => {
   it("creates a hostname once and persists its id", async () => {
@@ -227,34 +203,6 @@ describe("probeDelaySeconds", () => {
 // advanced it, then assert these routes leave the status untouched and never
 // call Cloudflare.
 describe("domain reads do not mutate", () => {
-  async function adminCookie(): Promise<string> {
-    const password = "correct-horse-battery";
-    await env.DB.batch([
-      env.DB.prepare(
-        "insert into user (id, name, email, email_verified, is_admin, plan, created_at, updated_at) values ('admin-1', 'Admin', 'admin@example.com', 1, 1, 'pro', 0, 0)",
-      ),
-      env.DB.prepare(
-        "insert into account (id, account_id, provider_id, user_id, password, created_at, updated_at) values ('acct-1', 'admin-1', 'credential', 'admin-1', ?, 0, 0)",
-      ).bind(await hashPassword(password)),
-    ]);
-    const ctx = createExecutionContext();
-    const res = await worker.fetch(
-      new Request("http://localhost/api/auth/sign-in/email", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ email: "admin@example.com", password }),
-      }),
-      authEnv(),
-      ctx,
-    );
-    await waitOnExecutionContext(ctx);
-    expect(res.status).toBe(200);
-    return res.headers
-      .getSetCookie()
-      .map((c) => c.split(";")[0])
-      .join("; ");
-  }
-
   async function call(request: Request): Promise<Response> {
     const ctx = createExecutionContext();
     const res = await worker.fetch(request, authEnv(), ctx);

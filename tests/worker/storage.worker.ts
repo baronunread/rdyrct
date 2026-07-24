@@ -1,12 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { env } from "cloudflare:workers";
-import {
-  applyD1Migrations,
-  createExecutionContext,
-  createMessageBatch,
-  getQueueResult,
-  reset,
-} from "cloudflare:test";
+import { createExecutionContext, createMessageBatch, getQueueResult, reset } from "cloudflare:test";
 import { drizzle } from "drizzle-orm/d1";
 import { eq } from "drizzle-orm";
 import * as schema from "../../src/worker/db/schema";
@@ -23,17 +17,7 @@ import {
   syncLinkMsg,
   type StorageMessage,
 } from "../../src/worker/storage";
-
-type TestEnv = typeof env & { TEST_MIGRATIONS: D1Migration[] };
-
-function overrideEnv(overrides: Partial<Env>): Env {
-  return new Proxy(env, {
-    get(target, property, receiver) {
-      if (property in overrides) return overrides[property as keyof Env];
-      return Reflect.get(target, property, receiver);
-    },
-  }) as unknown as Env;
-}
+import { applyTestMigrations, overrideEnv } from "./support";
 
 // A queue that records what was sent, so producer paths can be asserted without
 // a live queue delivering messages back into the worker under test.
@@ -113,8 +97,7 @@ async function seedLink(destination = "https://example.com") {
 
 beforeEach(async () => {
   await reset();
-  const testEnv = env as TestEnv;
-  await applyD1Migrations(testEnv.DB, testEnv.TEST_MIGRATIONS);
+  await applyTestMigrations();
 });
 
 describe("storage queue: kv_sync", () => {

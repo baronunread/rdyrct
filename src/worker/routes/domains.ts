@@ -135,17 +135,22 @@ export type DomainProbe =
  * This is what stops a duplicate or retried job from creating a second custom
  * hostname for the same domain. Returns the id, or null if the domain is gone.
  */
+async function findDomainById(db: DB, domainId: string) {
+  const [row] = await db
+    .select()
+    .from(schema.domains)
+    .where(eq(schema.domains.id, domainId))
+    .limit(1);
+  return row;
+}
+
 export async function ensureHostname(
   env: Env,
   domainId: string,
   hostname: string,
 ): Promise<string | null> {
   const db = drizzle(env.DB, { schema });
-  const [row] = await db
-    .select()
-    .from(schema.domains)
-    .where(eq(schema.domains.id, domainId))
-    .limit(1);
+  const row = await findDomainById(db, domainId);
   if (!row) return null;
   if (row.cfHostnameId) return row.cfHostnameId;
 
@@ -173,11 +178,7 @@ export async function ensureHostname(
  */
 export async function probeDomain(env: Env, domainId: string): Promise<DomainProbe> {
   const db = drizzle(env.DB, { schema });
-  const [row] = await db
-    .select()
-    .from(schema.domains)
-    .where(eq(schema.domains.id, domainId))
-    .limit(1);
+  const row = await findDomainById(db, domainId);
   if (!row) return { state: "gone" };
   if (row.status === "active") return { state: "active" };
   if (row.status === "error") return { state: "error", reason: row.statusReason };

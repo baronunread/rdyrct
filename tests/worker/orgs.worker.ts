@@ -1,32 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { env } from "cloudflare:workers";
-import {
-  applyD1Migrations,
-  createExecutionContext,
-  reset,
-  waitOnExecutionContext,
-} from "cloudflare:test";
+import { createExecutionContext, reset, waitOnExecutionContext } from "cloudflare:test";
 import { drizzle } from "drizzle-orm/d1";
 import worker from "../../src/worker";
 import * as schema from "../../src/worker/db/schema";
 import type { Env } from "../../src/worker/env";
 import { deleteOrg } from "../../src/worker/routes/orgs";
-import { hashPassword } from "../../src/worker/password";
-
-type TestEnv = typeof env & { TEST_MIGRATIONS: D1Migration[] };
-
-function overrideEnv(overrides: Partial<Env>): Env {
-  return new Proxy(env, {
-    get(target, property, receiver) {
-      if (property in overrides) return overrides[property as keyof Env];
-      return Reflect.get(target, property, receiver);
-    },
-  }) as unknown as Env;
-}
-
-// Env with a non-empty auth secret, independent of the ambient .dev.vars, so
-// sign-in's rate-limit key derivation has a key to HMAC with.
-const authEnv = () => overrideEnv({ BETTER_AUTH_SECRET: "test-secret" });
+import { adminCookie, applyTestMigrations, authEnv, overrideEnv } from "./support";
 
 // A workflow stub that records create() calls without running the real
 // OrgDeleteWorkflow, so these tests assert deleteOrg's own gating logic
@@ -74,10 +54,7 @@ afterEach(async () => {
   await reset();
 });
 
-beforeEach(async () => {
-  const testEnv = env as TestEnv;
-  await applyD1Migrations(testEnv.DB, testEnv.TEST_MIGRATIONS);
-});
+beforeEach(applyTestMigrations);
 
 describe("deleteOrg: marking an org deleting", () => {
   it("sets deleting_at before starting the teardown workflow", async () => {
@@ -143,34 +120,6 @@ describe("deleteOrg: marking an org deleting", () => {
 });
 
 describe("requireOrgRole: writes during teardown", () => {
-  async function adminCookie(): Promise<string> {
-    const password = "correct-horse-battery";
-    await env.DB.batch([
-      env.DB.prepare(
-        "insert into user (id, name, email, email_verified, is_admin, plan, created_at, updated_at) values ('admin-1', 'Admin', 'admin@example.com', 1, 1, 'pro', 0, 0)",
-      ),
-      env.DB.prepare(
-        "insert into account (id, account_id, provider_id, user_id, password, created_at, updated_at) values ('acct-1', 'admin-1', 'credential', 'admin-1', ?, 0, 0)",
-      ).bind(await hashPassword(password)),
-    ]);
-    const ctx = createExecutionContext();
-    const res = await worker.fetch(
-      new Request("http://localhost/api/auth/sign-in/email", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ email: "admin@example.com", password }),
-      }),
-      authEnv(),
-      ctx,
-    );
-    await waitOnExecutionContext(ctx);
-    expect(res.status).toBe(200);
-    return res.headers
-      .getSetCookie()
-      .map((c) => c.split(";")[0])
-      .join("; ");
-  }
-
   async function call(request: Request, callEnv: Env = authEnv()): Promise<Response> {
     const ctx = createExecutionContext();
     const res = await worker.fetch(request, callEnv, ctx);
@@ -178,19 +127,22 @@ describe("requireOrgRole: writes during teardown", () => {
     return res;
   }
 
-  it("rejects a write once the org is marked deleting, but still allows reads", async () => {
-    await seedOrg();
-    await env.DB.prepare("update orgs set deleting_at = ? where id = 'org-1'").bind(1).run();
-    const cookie = await adminCookie();
-
-    const create = await call(
+  function postLink(cookie: string): Promise<Response> {
+    return call(
       new Request("http://localhost/api/orgs/org-1/links", {
         method: "POST",
         headers: { cookie, "content-type": "application/json" },
         body: JSON.stringify({ destination: "https://example.com" }),
       }),
     );
-    expect(create.status).toBe(409);
+  }
+
+  it("rejects a write once the org is marked deleting, but still allows reads", async () => {
+    await seedOrg();
+    await env.DB.prepare("update orgs set deleting_at = ? where id = 'org-1'").bind(1).run();
+    const cookie = await adminCookie();
+
+    expect((await postLink(cookie)).status).toBe(409);
 
     const list = await call(
       new Request("http://localhost/api/orgs/org-1/links", { headers: { cookie } }),
@@ -202,14 +154,7 @@ describe("requireOrgRole: writes during teardown", () => {
     await seedOrg();
     const cookie = await adminCookie();
 
-    const create = await call(
-      new Request("http://localhost/api/orgs/org-1/links", {
-        method: "POST",
-        headers: { cookie, "content-type": "application/json" },
-        body: JSON.stringify({ destination: "https://example.com" }),
-      }),
-    );
-    expect(create.status).toBe(201);
+    expect((await postLink(cookie)).status).toBe(201);
   });
 
   it("a duplicate DELETE is a no-op, not a 409, once the first has marked the org deleting", async () => {
