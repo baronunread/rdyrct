@@ -334,8 +334,11 @@ adminRoutes.get("/usage", async (c) => {
   const MAX_ROWS = 107_000_000;
   const recentDailyAvg =
     seriesRows.length > 0 ? seriesRows.reduce((s, r) => s + r.clicks, 0) / seriesRows.length : 0;
-  const tableProjectedDays =
+  const projectedDays =
     recentDailyAvg > 0 ? Math.round((MAX_ROWS - tableSize) / recentDailyAvg) : null;
+  // Beyond ~10 years the projection isn't a useful signal, and a tiny daily
+  // average can project far enough out to overflow JS's Date range.
+  const tableProjectedDays = projectedDays !== null && projectedDays <= 3650 ? projectedDays : null;
 
   return c.json({
     users: totalUsers,
