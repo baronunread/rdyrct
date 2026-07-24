@@ -1,6 +1,7 @@
 import type { DrizzleD1Database } from "drizzle-orm/d1";
 import type * as schema from "./db/schema";
 import type { StorageMessage } from "./storage";
+import type { ClickMessage } from "./clicks";
 
 export interface Env {
   DB: D1Database;
@@ -13,6 +14,8 @@ export interface Env {
   ORG_DELETE: Workflow<{ orgId: string }>;
   /* custom-domain activation as a durable background workflow */
   DOMAIN_ACTIVATE: Workflow<{ domainId: string; hostname: string }>;
+  /* click ingestion: redirects enqueue instead of writing D1 directly */
+  CLICK_QUEUE: Queue<ClickMessage>;
   RL_AUTH_PUBLIC: RateLimit;
   RL_EMAIL: RateLimit;
   RL_WRITE_FREE: RateLimit;

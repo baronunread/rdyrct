@@ -1,7 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { env } from "cloudflare:workers";
-import { createExecutionContext, createMessageBatch, getQueueResult, reset } from "cloudflare:test";
-import { drizzle } from "drizzle-orm/d1";
+import { getQueueResult, reset } from "cloudflare:test";
 import { eq } from "drizzle-orm";
 import * as schema from "../../src/worker/db/schema";
 import type { Env } from "../../src/worker/env";
@@ -17,7 +16,7 @@ import {
   syncLinkMsg,
   type StorageMessage,
 } from "../../src/worker/storage";
-import { applyTestMigrations, overrideEnv } from "./support";
+import { applyTestMigrations, batchOf, overrideEnv, sampleLink, seedLink } from "./support";
 
 // A queue that records what was sent, so producer paths can be asserted without
 // a live queue delivering messages back into the worker under test.
@@ -60,39 +59,6 @@ function failingR2(): R2Bucket {
       return typeof value === "function" ? value.bind(target) : value;
     },
   });
-}
-
-// Builds a real MessageBatch via the official cloudflare:test helpers, so ack/
-// retry/dead-letter assertions exercise the same runtime semantics production
-// queue delivery does, rather than hand-rolled spies.
-function batchOf(queueName: string, bodies: StorageMessage[], attempts = 1) {
-  const batch = createMessageBatch(
-    queueName,
-    bodies.map((body, i) => ({ id: `m${i}`, timestamp: new Date(), attempts, body })),
-  );
-  const ctx = createExecutionContext();
-  return { batch, ctx };
-}
-
-const sampleLink = {
-  id: "link-1",
-  orgId: "org-1",
-  slug: "sale",
-  destination: "https://example.com",
-  utmSource: "",
-  utmMedium: "",
-  utmCampaign: "",
-  utmTerm: "",
-  utmContent: "",
-};
-
-async function seedLink(destination = "https://example.com") {
-  const db = drizzle(env.DB, { schema });
-  await db.batch([
-    db.insert(schema.orgs).values({ id: "org-1", name: "Test", createdAt: 0 }),
-    db.insert(schema.links).values({ ...sampleLink, destination, createdAt: 0 }),
-  ]);
-  return db;
 }
 
 beforeEach(async () => {
