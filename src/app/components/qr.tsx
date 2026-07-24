@@ -351,13 +351,24 @@ export function QrLogoInput({
 
   return (
     <div className="relative">
-      <div
-        role="button"
-        tabIndex={disabled ? -1 : 0}
+      {/* Sibling, not nested: a <button> can't legally contain an <input> */}
+      <input
+        ref={inputRef}
+        type="file"
+        accept="image/*"
+        disabled={disabled}
+        className="hidden"
+        onChange={(e) => {
+          readFile(e.target.files?.[0]);
+          // reset so picking the same file again re-fires onChange
+          e.target.value = "";
+        }}
+      />
+      <button
+        type="button"
         aria-label="Upload a logo image"
-        aria-disabled={disabled || undefined}
-        onClick={() => !disabled && !busy && open()}
-        onKeyDown={(e) => !disabled && !busy && (e.key === "Enter" || e.key === " ") && open()}
+        disabled={disabled}
+        onClick={() => !busy && open()}
         onDragOver={(e) => {
           e.preventDefault();
           setDragging(true);
@@ -369,24 +380,12 @@ export function QrLogoInput({
           readFile(e.dataTransfer.files?.[0]);
         }}
         className={cn(
-          "flex w-full cursor-pointer flex-col items-center justify-center gap-1.5 rounded-md border border-dashed border-border bg-bg px-3 h-24 text-xs text-muted transition-colors select-none focus-visible:outline-2 focus-visible:outline-accent/60 aria-disabled:cursor-default aria-disabled:opacity-50",
+          "flex w-full cursor-pointer flex-col items-center justify-center gap-1.5 rounded-md border border-dashed border-border bg-bg px-3 h-24 text-xs text-muted transition-colors select-none focus-visible:outline-2 focus-visible:outline-accent/60 disabled:cursor-default disabled:opacity-50",
           dragging
             ? "border-accent text-text"
-            : "not-aria-disabled:hover:border-accent/60 not-aria-disabled:hover:text-text",
+            : "enabled:hover:border-accent/60 enabled:hover:text-text",
         )}
       >
-        <input
-          ref={inputRef}
-          type="file"
-          accept="image/*"
-          disabled={disabled}
-          className="hidden"
-          onChange={(e) => {
-            readFile(e.target.files?.[0]);
-            // reset so picking the same file again re-fires onChange
-            e.target.value = "";
-          }}
-        />
         {busy ? (
           <>
             <Spinner />
@@ -415,7 +414,7 @@ export function QrLogoInput({
             </span>
           </>
         )}
-      </div>
+      </button>
       {value && onClear && !busy && (
         <button
           type="button"

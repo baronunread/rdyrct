@@ -72,6 +72,8 @@
   --text-3xs: 10px;
   --text-4xs: 9px;
   --animate-shake: shake 300ms ease;
+  /* above dialogs (z-50): toasts must stay visible over an open modal */
+  --z-toast: 60;
 }
 
 @keyframes shake {
@@ -152,6 +154,137 @@ body {
 }
 .animate-shake {
   animation: shake 0.4s ease-in-out;
+}
+
+/* Toasts share one grid cell (true overlap, not just visual stacking) so a
+   collapsed toast can sit exactly behind the one in front of it. Collapsed
+   position/scale/opacity are index-based (a fixed per-slot look, matching
+   the old design); Base UI's --toast-index/--toast-offset-y/data-* come
+   from its own Toast.Root, Toast.Viewport, and the toast's transitionStatus. */
+.toast-stack {
+  left: 50%;
+  display: grid;
+  width: min(22rem, calc(100vw - 2rem));
+  min-height: 2.75rem;
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+.rdyrct-toast {
+  grid-area: 1 / 1;
+  justify-self: end;
+  width: 100%;
+  z-index: calc(100 - var(--toast-index, 0));
+  pointer-events: auto;
+  opacity: calc(1 - var(--toast-index, 0) * 0.025);
+  transform: translateY(calc(var(--toast-index, 0) * -0.65rem))
+    scale(calc(1 - var(--toast-index, 0) * 0.06));
+  transform-origin: bottom center;
+  transition:
+    transform 250ms cubic-bezier(0.2, 0, 0, 1),
+    opacity 200ms ease;
+}
+
+.rdyrct-toast[data-starting-style] {
+  opacity: 0;
+  transform: translateY(calc(var(--toast-index, 0) * -0.65rem + 1.5rem))
+    scale(calc(1 - var(--toast-index, 0) * 0.06));
+}
+
+/* Hovering or focusing the stack spaces every toast out to its real,
+   measured position (--toast-offset-y, in px) so each becomes fully
+   readable and individually closable, instead of just the frontmost one. */
+.rdyrct-toast[data-expanded] {
+  opacity: 1;
+  transform: translateY(calc(var(--toast-offset-y, 0px) * -1)) scale(1);
+  /* Read by .rdyrct-toast-timer circle below: an inherited custom property
+     keeps that rule a plain descendant selector instead of repeating this
+     one's [data-expanded] condition. */
+  --toast-timer-play-state: paused;
+}
+
+/* Last, so a toast being dismissed always collapses and fades regardless of
+   the expanded/collapsed state above. */
+.rdyrct-toast[data-ending-style] {
+  opacity: 0;
+  transform: translateY(calc(var(--toast-index, 0) * -0.65rem + 0.75rem))
+    scale(calc(1 - var(--toast-index, 0) * 0.06));
+  transition-duration: 250ms;
+}
+
+.rdyrct-toast[data-limited] {
+  display: none;
+}
+
+.rdyrct-toast-close {
+  position: absolute;
+  top: 0.55rem;
+  right: 0.55rem;
+  display: grid;
+  width: 1.25rem;
+  height: 1.25rem;
+  place-items: center;
+  border-radius: 999px;
+  color: var(--muted);
+  cursor: pointer;
+  /* Every toast gets a close button, but only the frontmost one is reachable
+     while the stack is collapsed: the rest sit visually behind it and only
+     become individually closable once the stack is expanded (hover/focus). */
+  pointer-events: none;
+  transition:
+    color 150ms ease,
+    scale 150ms ease;
+}
+
+.rdyrct-toast-close-front,
+.rdyrct-toast[data-expanded] .rdyrct-toast-close {
+  pointer-events: auto;
+}
+
+.rdyrct-toast-close:hover,
+.rdyrct-toast-close:focus-visible {
+  color: var(--text);
+}
+
+.rdyrct-toast-close:active {
+  scale: 0.96;
+}
+
+.rdyrct-toast-timer {
+  position: absolute;
+  inset: -3px;
+  width: calc(100% + 6px);
+  height: calc(100% + 6px);
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  transform: rotate(-90deg);
+}
+
+/* Expanding the stack pauses each toast's auto-dismiss timer (Base UI);
+   --toast-timer-play-state (set above, on the expanded toast) freezes the
+   ring in step so it doesn't finish before the toast actually would, which'd
+   read as the toast lying about its remaining time. */
+.rdyrct-toast-timer circle {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 0;
+  animation: rdyrct-toast-timer 3250ms linear forwards;
+  animation-play-state: var(--toast-timer-play-state, running);
+}
+
+@keyframes rdyrct-toast-timer {
+  to {
+    stroke-dashoffset: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rdyrct-toast,
+  .rdyrct-toast-timer circle,
+  .toast-stack {
+    animation: none;
+    transition: none;
+  }
 }
 @media (prefers-reduced-motion: reduce) {
   .animate-shake {
