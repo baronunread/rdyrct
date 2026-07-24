@@ -1,7 +1,14 @@
 import { expect } from "vitest";
 import { env } from "cloudflare:workers";
-import { applyD1Migrations, createExecutionContext, waitOnExecutionContext } from "cloudflare:test";
+import {
+  applyD1Migrations,
+  createExecutionContext,
+  createMessageBatch,
+  waitOnExecutionContext,
+} from "cloudflare:test";
+import { drizzle } from "drizzle-orm/d1";
 import worker from "../../src/worker";
+import * as schema from "../../src/worker/db/schema";
 import type { Env } from "../../src/worker/env";
 import { hashPassword } from "../../src/worker/password";
 
@@ -53,4 +60,40 @@ export async function adminCookie(): Promise<string> {
     .getSetCookie()
     .map((c) => c.split(";")[0])
     .join("; ");
+}
+
+export const sampleLink = {
+  id: "link-1",
+  orgId: "org-1",
+  slug: "sale",
+  destination: "https://example.com",
+  utmSource: "",
+  utmMedium: "",
+  utmCampaign: "",
+  utmTerm: "",
+  utmContent: "",
+};
+
+// Seeds one org ("org-1") and one link ("link-1", slug "sale"), the fixture
+// shared by tests that need a real link row to satisfy a foreign key
+// (clicks, KV publish) without caring about its other fields.
+export async function seedLink(destination = "https://example.com") {
+  const db = drizzle(env.DB, { schema });
+  await db.batch([
+    db.insert(schema.orgs).values({ id: "org-1", name: "Test", createdAt: 0 }),
+    db.insert(schema.links).values({ ...sampleLink, destination, createdAt: 0 }),
+  ]);
+  return db;
+}
+
+// Builds a real MessageBatch via the official cloudflare:test helpers, so ack/
+// retry/dead-letter assertions exercise the same runtime semantics production
+// queue delivery does, rather than hand-rolled spies.
+export function batchOf<Body>(queueName: string, bodies: Body[], attempts = 1) {
+  const batch = createMessageBatch(
+    queueName,
+    bodies.map((body, i) => ({ id: `m${i}`, timestamp: new Date(), attempts, body })),
+  );
+  const ctx = createExecutionContext();
+  return { batch, ctx };
 }

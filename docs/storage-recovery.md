@@ -10,6 +10,11 @@ activation workflow (issue #28), because they share the same Workflow and
 Queue machinery and the same "D1 is truth, everything else is a resumable
 follow-up" rule.
 
+Click ingestion (issue #16) rides the same Queue/DLQ shape but a different
+consistency model: a click is the analytics write itself, not a follow-up to
+one, and losing some under overload is accepted rather than guarded against.
+See [click-ingestion.md](click-ingestion.md).
+
 ## How writes work
 
 A request handler commits its D1 change, then awaits a send to the storage

@@ -1,8 +1,6 @@
 import { Hono } from "hono";
 import type { Context } from "hono";
 import { HTTPException } from "hono/http-exception";
-import { drizzle } from "drizzle-orm/d1";
-import * as schema from "./db/schema";
 import type { AppEnv, Env } from "./env";
 import { withSession } from "./auth";
 import { getAuth } from "./better-auth";
@@ -14,13 +12,15 @@ import { adminRoutes } from "./routes/admin";
 import { billingRoutes, handlePolarWebhook } from "./routes/billing";
 import { domainRoutes } from "./routes/domains";
 import { resolveSlug, resolveDomain, type KVLink } from "./kv";
-import { now, deviceFromUA, RESERVED_SLUGS } from "./util";
-import {
-  clickAnalyticsAllowed,
-  enforcePublicAuthRateLimit,
-  enforceSignedApiRateLimit,
-} from "./rate-limit";
+import { RESERVED_SLUGS } from "./util";
+import { enforcePublicAuthRateLimit, enforceSignedApiRateLimit } from "./rate-limit";
 import { consumeStorageBatch, logDeadLetterBatch, type StorageMessage } from "./storage";
+import {
+  enqueueClick,
+  consumeClickBatch,
+  logClickDeadLetterBatch,
+  type ClickMessage,
+} from "./clicks";
 
 export { OrgDeleteWorkflow, DomainActivateWorkflow } from "./workflows";
 
@@ -40,26 +40,10 @@ app.onError((err, c) => {
 /* ---------------- redirect hot path ---------------- */
 
 // Click recording happens after the redirect is already on its way
-// (waitUntil), so redirects stay fast.
+// (waitUntil): the request enqueues an event and returns rather than
+// touching D1 itself. See clicks.ts.
 function redirectWithClick(c: Context<AppEnv>, hit: KVLink): Response {
-  c.executionCtx.waitUntil(
-    (async () => {
-      try {
-        if (!(await clickAnalyticsAllowed(c.env, hit.orgId, c.req.method))) return;
-        const db = drizzle(c.env.DB, { schema });
-        await db.insert(schema.clicks).values({
-          linkId: hit.linkId,
-          orgId: hit.orgId,
-          ts: now(),
-          country: (c.req.raw.cf?.country as string) ?? "",
-          referrer: c.req.header("referer") ?? "",
-          device: deviceFromUA(c.req.header("user-agent") ?? ""),
-        });
-      } catch (e) {
-        console.error("click insert failed", e);
-      }
-    })(),
-  );
+  c.executionCtx.waitUntil(enqueueClick(c, hit));
   return c.redirect(hit.url, 302);
 }
 
@@ -122,15 +106,26 @@ app.get("/:slug", async (c, next) => {
 
 app.all("*", (c) => c.env.ASSETS.fetch(c.req.raw));
 
-/* ---------------- Queue consumer: KV + R2 follow-up work ---------------- */
+/* ---------------- Queue consumer: KV/R2 follow-up work + click ingestion ---------------- */
 
 export default {
   fetch: app.fetch,
-  async queue(batch: MessageBatch<StorageMessage>, env: Env, _ctx: ExecutionContext) {
-    // The dead-letter queue routes to this same handler (see wrangler.jsonc);
-    // its messages only get logged, never retried or repaired.
-    if (batch.queue.endsWith("-dlq")) return logDeadLetterBatch(env, batch);
-    await consumeStorageBatch(env, batch);
+  async queue(
+    batch: MessageBatch<StorageMessage | ClickMessage>,
+    env: Env,
+    _ctx: ExecutionContext,
+  ) {
+    // Every queue's dead-letter consumer routes to this same handler (see
+    // wrangler.jsonc); a DLQ's messages only get logged, never retried or
+    // repaired. Check "-clicks-dlq" ahead of the generic "-dlq" suffix, since
+    // it ends with both.
+    if (batch.queue.endsWith("-clicks-dlq"))
+      return logClickDeadLetterBatch(env, batch as MessageBatch<ClickMessage>);
+    if (batch.queue.endsWith("-clicks"))
+      return consumeClickBatch(env, batch as MessageBatch<ClickMessage>);
+    if (batch.queue.endsWith("-dlq"))
+      return logDeadLetterBatch(env, batch as MessageBatch<StorageMessage>);
+    await consumeStorageBatch(env, batch as MessageBatch<StorageMessage>);
   },
   async scheduled(event: ScheduledEvent, env: Env, _ctx: ExecutionContext) {
     // Daily: trim old clicks.

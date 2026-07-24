@@ -18,7 +18,7 @@ reserved for rdyrct in the Cloudflare account.
 | `RL_QR_UPLOAD`       |     5 | User + org                        | R2 QR logo uploads                              |
 | `RL_DOMAIN_SETUP`    |    12 | User + org                        | Domain reads and mutations that call Cloudflare |
 | `RL_BILLING`         |     3 | User + billing action             | Polar checkout and portal sessions              |
-| `RL_CLICK_RECORDING` |   600 | Organization                      | D1 click analytics writes                       |
+| `RL_CLICK_RECORDING` |   600 | Organization                      | Click ingestion (queued analytics writes)       |
 
 API limits return HTTP `429`, `Retry-After: 60`, and the stable error code
 `rate_limited`. Binding failures fail open for signed API work so a Cloudflare

@@ -214,6 +214,12 @@ export const clicks = sqliteTable(
     country: text("country").notNull().default(""),
     referrer: text("referrer").notNull().default(""),
     device: text("device").notNull().default(""),
+    // Set by the click queue producer (crypto.randomUUID()); lets the queue
+    // consumer's batch insert dedupe a redelivered message. Null on rows from
+    // before this column existed, which is fine: SQLite's unique index treats
+    // every NULL as distinct, so old rows never collide with each other or
+    // with real dedupe ids.
+    dedupeId: text("dedupe_id").unique(),
   },
   (t) => [
     index("idx_clicks_link_ts").on(t.linkId, t.ts),
