@@ -144,6 +144,23 @@ orgRoutes.patch("/:orgId", requireOrgRole("admin"), async (c) => {
  * created, Workflows runs every step to completion. See
  * docs/storage-recovery.md.
  */
+const TERMINAL_WORKFLOW_STATUSES = new Set(["errored", "terminated", "complete"]);
+
+/**
+ * True if a workflow instance keyed to this org exists and is still doing
+ * something. `create()` can fail on the client side (a timeout, say) while
+ * still having started the instance server-side, so a create() error alone
+ * does not mean nothing is running.
+ */
+async function orgDeleteWorkflowActive(env: Env, orgId: string): Promise<boolean> {
+  try {
+    const status = await (await env.ORG_DELETE.get(orgId)).status();
+    return !TERMINAL_WORKFLOW_STATUSES.has(status.status);
+  } catch {
+    return false;
+  }
+}
+
 export async function deleteOrg(db: DB, env: Env, orgId: string): Promise<void> {
   // Only the request that actually flips the flag tries to start the
   // workflow, so a double-submitted delete is a no-op on the second call
@@ -156,15 +173,19 @@ export async function deleteOrg(db: DB, env: Env, orgId: string): Promise<void> 
   try {
     await env.ORG_DELETE.create({ id: orgId, params: { orgId } });
   } catch (err) {
-    // Starting the workflow failed: undo the flag so the org stays fully
-    // intact and writable, same as before it was marked, and the delete can
-    // be retried from scratch instead of being stuck deleting forever.
-    await db.update(schema.orgs).set({ deletingAt: null }).where(eq(schema.orgs.id, orgId));
+    // A failed create() does not prove nothing started: only undo the flag
+    // if there is truly no instance driving teardown, so a client-side
+    // timeout can never reopen the write window under a workflow that is
+    // actually running. If a real instance is running, leave deleting_at set
+    // and let it finish; the caller still sees this error and can decide
+    // whether to look into it.
+    if (!(await orgDeleteWorkflowActive(env, orgId)))
+      await db.update(schema.orgs).set({ deletingAt: null }).where(eq(schema.orgs.id, orgId));
     throw err;
   }
 }
 
-orgRoutes.delete("/:orgId", requireOrgRole("owner"), async (c) => {
+orgRoutes.delete("/:orgId", requireOrgRole("owner", { allowWhileDeleting: true }), async (c) => {
   await deleteOrg(c.var.db, c.env, c.req.param("orgId"));
   return c.json({ ok: true });
 });

@@ -58,7 +58,7 @@ export async function orgRole(db: DB, user: SessionUser, orgId: string): Promise
   return rows[0]?.role ?? null;
 }
 
-export function requireOrgRole(min: OrgRole) {
+export function requireOrgRole(min: OrgRole, opts?: { allowWhileDeleting?: boolean }) {
   return createMiddleware<AppEnv>(async (c, next) => {
     const user = c.var.user;
     if (!user) throw new HTTPException(401, { message: "Not signed in" });
@@ -69,8 +69,10 @@ export function requireOrgRole(min: OrgRole) {
       throw new HTTPException(403, { message: "Insufficient role" });
     // Reads stay allowed while an org tears down; only block writes, so a
     // link or domain created in that window is never missed by the teardown
-    // workflow's gather step. See deleteOrg in routes/orgs.ts.
-    if (c.req.method !== "GET" && (await orgDeleting(c.var.db, orgId)))
+    // workflow's gather step. See deleteOrg in routes/orgs.ts. The delete
+    // route itself opts out: deleteOrg already makes a repeat DELETE a
+    // no-op, and blocking it here would surface that as a 409 instead.
+    if (!opts?.allowWhileDeleting && c.req.method !== "GET" && (await orgDeleting(c.var.db, orgId)))
       throw new HTTPException(409, { message: "Organization is being deleted" });
     await next();
   });

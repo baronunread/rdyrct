@@ -76,16 +76,32 @@ first marks the org `deleting_at` in a single `UPDATE`, then creates the
 instance. Marking it first, not the workflow's own first step, matters:
 `requireOrgRole` rejects every org-scoped write (anything but a `GET`) once
 that column is set, so a link or domain created after a delete request lands
-can never slip in ahead of the workflow's gather step. A delete that races
+can no longer slip in ahead of the workflow's gather step. A delete that races
 itself (a double-submitted `DELETE`) is a no-op on the second call: only the
 request whose `UPDATE` actually flips the flag starts the workflow, since the
-column already keys the workflow instance by org id.
+column already keys the workflow instance by org id. The DELETE route itself
+opts out of the write block (`allowWhileDeleting`), so that no-op is a normal
+200, not a 409.
+
+The check is a preflight read in `requireOrgRole`, not a condition on each
+write's own D1 statement, so it narrows the race rather than sealing it to
+zero: a write whose preflight check ran just before a concurrent delete's
+`UPDATE` can still land after the org is marked deleting. Making every write
+across links, domains, and invites conditional on `deleting_at IS NULL` at the
+statement level would close that too, but the window it closes is now a
+single request's duration instead of the whole time between gather and
+d1-delete, so we have not built that; revisit if it ever turns out to matter
+in practice.
 
 If creating the workflow instance fails, `deleteOrg` clears `deleting_at`
 again before returning the error, so a lost trigger leaves the org fully
-intact and writable, same as before this two-step version: the caller can
-just retry the delete. Once the instance is created, Workflows runs every
-step to completion and retries each on its own.
+intact and writable, same as before this two-step version, and the caller can
+retry the delete. `create()` is not guaranteed atomic with the client seeing
+that error though: a timeout can still leave the instance running
+server-side. So the failure path first checks `ORG_DELETE.get(orgId)`, and
+only clears `deleting_at` if no instance is actually running, never
+undermining a teardown that is genuinely in flight. Once the instance is
+created, Workflows runs every step to completion and retries each on its own.
 
 The steps run in this order:
 
@@ -107,10 +123,8 @@ signal to intervene by hand.
 
 A link or domain created in the window between gather and d1-delete would
 never make the gathered KV key list, and would cascade out of D1 without its
-KV entry ever being deleted. `deleting_at` closes that window rather than
-accepting it: it is set before the workflow instance is even created, so
-`requireOrgRole` has already started rejecting every org-scoped write by the
-time gather runs.
+KV entry ever being deleted. `deleting_at` is what closes most of that window,
+described above, rather than accepting it outright.
 
 ## Custom-domain activation (a Workflow)
 
@@ -227,11 +241,14 @@ silently no-ops, which is the case in dev and tests). Read the logs with
 
 ### Recovering from a give-up, by hand
 
-Every message is self-healing: it re-derives its result from current D1 state
-when it runs, rather than carrying a fixed value. So recovery is not resending
-the exact message, it is making the app touch the same row again, which
-enqueues an equivalent message and runs it through the normal path. The alert
-gives you `op` and `target`; use `target` to find the row.
+A `kv_sync` message is self-healing: it re-derives its result from current D1
+state when it runs, rather than carrying a fixed value, so recovery is not
+resending the exact message, it is making the app touch the same row again,
+which enqueues an equivalent message and runs it through the normal path.
+`r2_delete` and `r2_delete_prefix` carry no D1-derived state to re-run at all:
+they just delete the object or prefix named in the message, so recovering one
+means deleting that same target directly. The alert gives you `op` and
+`target`; use `target` to find the row or object.
 
 - **`kv_sync` on a link key** (`slug:...`): open the link and save it, even
   with no changes. `PATCH /:linkId` unconditionally re-enqueues `syncLinkMsg`
