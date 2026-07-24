@@ -364,10 +364,11 @@ export function QrLogoInput({
           e.target.value = "";
         }}
       />
-      <button
+      <Button
         type="button"
+        variant="outline"
         aria-label="Upload a logo image"
-        disabled={disabled}
+        disabled={disabled || busy}
         onClick={() => !busy && open()}
         onDragOver={(e) => {
           e.preventDefault();
@@ -380,7 +381,7 @@ export function QrLogoInput({
           readFile(e.dataTransfer.files?.[0]);
         }}
         className={cn(
-          "flex w-full cursor-pointer flex-col items-center justify-center gap-1.5 rounded-md border border-dashed border-border bg-bg px-3 h-24 text-xs text-muted transition-colors select-none focus-visible:outline-2 focus-visible:outline-accent/60 disabled:cursor-default disabled:opacity-50",
+          "h-24 w-full flex-col gap-1.5 border-dashed bg-bg px-3 text-xs font-normal text-muted select-none",
           dragging
             ? "border-accent text-text"
             : "enabled:hover:border-accent/60 enabled:hover:text-text",
@@ -414,7 +415,7 @@ export function QrLogoInput({
             </span>
           </>
         )}
-      </button>
+      </Button>
       {value && onClear && !busy && (
         <button
           type="button"
