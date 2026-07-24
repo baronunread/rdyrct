@@ -138,7 +138,7 @@ export function SettingsPage() {
               </div>
             </Card>
 
-            <QrDefaultsCard />
+            <QrDefaultsCard key={org.id} />
           </>
         )}
 

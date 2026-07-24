@@ -79,17 +79,10 @@ export function AppShell() {
 
   const switchOrg = (id: string) => {
     setOrg(id);
-    const path = window.location.pathname;
-    const orgRoutes = [
-      "/dashboard",
-      "/analytics",
-      "/links",
-      "/domains",
-      "/members",
-      "/billing",
-      "/settings",
-    ];
-    navigate(orgRoutes.includes(path) ? path : "/dashboard");
+    // A link detail page's slug may not exist under the new org; every other
+    // route (including platform admin) has nothing org-specific in its URL,
+    // so switching org there should leave the user right where they are.
+    if (window.location.pathname.startsWith("/links/")) navigate("/dashboard");
   };
 
   const createOrg = async () => {
