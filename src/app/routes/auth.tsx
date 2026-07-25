@@ -273,7 +273,9 @@ function clearPending() {
   }
 }
 
-export function AuthPage({ mode }: { mode: "login" | "signup" }) {
+/** Login/signup state machine: view transitions, the OTP/password-reset
+ * flows, and the post-auth redirect. Everything AuthPage's views need. */
+function useAuthFlow(mode: "login" | "signup") {
   const navigate = useNavigate();
   const location = useLocation();
   const [params] = useSearchParams();
@@ -441,28 +443,49 @@ export function AuthPage({ mode }: { mode: "login" | "signup" }) {
     }
   };
 
-  if (view === "verify-otp") {
+  return {
+    view,
+    setView,
+    authEmail,
+    setAuthEmail,
+    busy,
+    shake,
+    forgotBusy,
+    resent,
+    next,
+    submit,
+    runVerify,
+    resendOtp,
+    submitForgot,
+    backToForm,
+  };
+}
+
+export function AuthPage({ mode }: { mode: "login" | "signup" }) {
+  const flow = useAuthFlow(mode);
+
+  if (flow.view === "verify-otp") {
     return (
       <VerifyOtpView
-        email={authEmail}
-        busy={busy}
-        resent={resent}
-        onSubmit={runVerify}
-        onComplete={runVerify}
-        onResend={resendOtp}
-        onBack={backToForm}
+        email={flow.authEmail}
+        busy={flow.busy}
+        resent={flow.resent}
+        onSubmit={flow.runVerify}
+        onComplete={flow.runVerify}
+        onResend={flow.resendOtp}
+        onBack={flow.backToForm}
       />
     );
   }
 
-  if (view === "forgot" || view === "forgot-sent") {
+  if (flow.view === "forgot" || flow.view === "forgot-sent") {
     return (
       <ForgotView
-        initialEmail={authEmail}
-        sent={view === "forgot-sent"}
-        busy={forgotBusy}
-        onSubmit={submitForgot}
-        onBack={() => setView("form")}
+        initialEmail={flow.authEmail}
+        sent={flow.view === "forgot-sent"}
+        busy={flow.forgotBusy}
+        onSubmit={flow.submitForgot}
+        onBack={() => flow.setView("form")}
       />
     );
   }
@@ -470,13 +493,13 @@ export function AuthPage({ mode }: { mode: "login" | "signup" }) {
   return (
     <AuthFormView
       mode={mode}
-      busy={busy}
-      shake={shake}
-      next={next}
-      onSubmit={submit}
+      busy={flow.busy}
+      shake={flow.shake}
+      next={flow.next}
+      onSubmit={flow.submit}
       onForgot={(email) => {
-        setAuthEmail(email);
-        setView("forgot");
+        flow.setAuthEmail(email);
+        flow.setView("forgot");
       }}
     />
   );

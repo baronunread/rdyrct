@@ -30,15 +30,13 @@ const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const linkPath = (l: { slug: string; domain?: string | null }) =>
   l.domain ? `/links/${l.slug}?domain=${encodeURIComponent(l.domain)}` : `/links/${l.slug}`;
 
-export function Dashboard() {
-  const { org, orgId, limits, activeDomains, orgQr } = useOrgLimits();
+/** Loads and shapes every data source the dashboard renders from. */
+function useDashboardData(orgId: string) {
   const stats = useStats(orgId);
   const links = useLinks(orgId);
   const members = useMembers(orgId);
   const clicks = useRecentClicks(orgId);
   const { create } = useLinkMutations(orgId);
-
-  const [created, setCreated] = useState<LinkDTO | null>(null);
 
   const recentLinks = useMemo(
     () => [...(links.data ?? [])].sort((a, b) => b.createdAt - a.createdAt).slice(0, 5),
@@ -51,11 +49,26 @@ export function Dashboard() {
   );
   const creatorName = (id: string | null) => (id && memberNames.get(id)) || "A former member";
 
+  return {
+    isLoading: stats.isLoading || links.isLoading || members.isLoading || clicks.isLoading,
+    stats: stats.data,
+    recentLinks,
+    creatorName,
+    clicks: clicks.data ?? [],
+    memberCount: members.data?.length ?? 0,
+    create,
+  };
+}
+
+export function Dashboard() {
+  const { org, orgId, limits, activeDomains, orgQr } = useOrgLimits();
+  const data = useDashboardData(orgId);
+  const [created, setCreated] = useState<LinkDTO | null>(null);
+
   if (!org) return <NoOrgState />;
-  if (stats.isLoading || links.isLoading || members.isLoading || clicks.isLoading)
-    return <DashboardSkeleton />;
-  if (!stats.data) return <p className="text-sm text-danger">Could not load stats.</p>;
-  const s = stats.data;
+  if (data.isLoading) return <DashboardSkeleton />;
+  if (!data.stats) return <p className="text-sm text-danger">Could not load stats.</p>;
+  const s = data.stats;
 
   const decaying = s.decayingLinks.slice(0, 3);
   const dead = s.deadLinks.slice(0, 3);
@@ -69,7 +82,7 @@ export function Dashboard() {
       <PageHeader title="Dashboard" sub="See your organization's link activity at a glance" />
 
       <QuickCreateCard
-        create={create}
+        create={data.create}
         activeDomains={activeDomains}
         atLimit={s.totalLinks >= limits.links}
         onCreated={setCreated}
@@ -78,12 +91,12 @@ export function Dashboard() {
       <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-3">
         <StatCard label="Links" value={s.totalLinks} />
         <StatCard label="Clicks · 7d" value={s.clicks7d} delta={s.clicks7dDelta} />
-        <StatCard label="Members" value={members.data?.length ?? 0} />
+        <StatCard label="Members" value={data.memberCount} />
       </div>
 
       <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <RecentClicksCard clicks={clicks.data ?? []} />
-        <ActivityCard links={recentLinks} creatorName={creatorName} />
+        <RecentClicksCard clicks={data.clicks} />
+        <ActivityCard links={data.recentLinks} creatorName={data.creatorName} />
       </div>
 
       <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-3">
