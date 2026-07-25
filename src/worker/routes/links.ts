@@ -17,7 +17,7 @@ import {
   resolveUtm,
   validateQrFields,
 } from "../util";
-import type { LinkDTO, LinkInput } from "@/shared/types";
+import type { LinkDTO, LinkInput, OrgPlan, PlanLimits } from "@/shared/types";
 
 // Mounted at /api/orgs/:orgId/links
 export const linkRoutes = new Hono<AppEnv>();
@@ -153,6 +153,66 @@ async function domainHostname(
   return rows[0].hostname;
 }
 
+function assertLinkQuota(count: number, plan: OrgPlan, limits: PlanLimits): void {
+  if (count >= limits.links)
+    throw new HTTPException(402, {
+      message:
+        plan === "free"
+          ? `The free plan allows ${limits.links} links, upgrade to a paid plan for more`
+          : `This plan allows at most ${limits.links} links`,
+    });
+}
+
+function assertQrAllowed(body: LinkInput, limits: PlanLimits): void {
+  if (hasQrOverride(body) && !limits.qr)
+    throw new HTTPException(402, {
+      message: "QR customization is a paid feature: upgrade to use it",
+    });
+}
+
+/**
+ * Resolves the slug for a new link: honors a chosen slug (custom domains
+ * only) or allocates a random one, retrying on the unlikely collision.
+ */
+async function resolveNewSlug(db: DB, requested: string, domainId: string | null): Promise<string> {
+  if (requested && domainId === null)
+    throw new HTTPException(400, {
+      message:
+        "Links on the shared domain get random slugs: connect a custom domain (paid plans) to choose your own",
+    });
+  if (requested) {
+    if (await slugTaken(db, requested, domainId)) throw slugConflict(requested, domainId === null);
+    return requested;
+  }
+  for (let i = 0; i < 5; i++) {
+    const candidate = randomSlug();
+    if (!(await slugTaken(db, candidate, domainId))) return candidate;
+  }
+  throw new HTTPException(500, { message: "Could not allocate slug" });
+}
+
+/**
+ * Resolves the slug for a rename: keeps the existing slug unless a new one
+ * is requested. Chosen slugs exist only on custom domains.
+ */
+async function resolveRenamedSlug(
+  db: DB,
+  existing: typeof schema.links.$inferSelect,
+  requested: string,
+  domainId: string | null,
+): Promise<string> {
+  const newSlug = requested || existing.slug;
+  if (newSlug !== existing.slug && domainId === null)
+    throw new HTTPException(400, {
+      message:
+        "Links on the shared domain keep their random slug: move the link to a custom domain to choose one",
+    });
+  const moved = newSlug !== existing.slug || domainId !== existing.domainId;
+  if (moved && (await slugTaken(db, newSlug, domainId, existing.id)))
+    throw slugConflict(newSlug, domainId === null);
+  return newSlug;
+}
+
 linkRoutes.get("/", requireOrgRole("member"), async (c) => {
   const rows = await c.var.db
     .select({
@@ -180,40 +240,16 @@ linkRoutes.post("/", requireOrgRole("member"), async (c) => {
       .from(schema.links)
       .where(eq(schema.links.orgId, orgId)),
   ]);
-  if ((linkCount[0]?.n ?? 0) >= limits.links)
-    throw new HTTPException(402, {
-      message:
-        plan === "free"
-          ? `The free plan allows ${limits.links} links, upgrade to a paid plan for more`
-          : `This plan allows at most ${limits.links} links`,
-    });
-  if (hasQrOverride(body) && !limits.qr)
-    throw new HTTPException(402, {
-      message: "QR customization is a paid feature: upgrade to use it",
-    });
+  assertLinkQuota(linkCount[0]?.n ?? 0, plan, limits);
+  assertQrAllowed(body, limits);
 
   const domainId = body.domainId ?? null;
-  const hostname = await domainHostname(db, orgId, domainId);
-
-  let slug = body.slug?.trim() || "";
   // Slugs on the shared domain are always random (every plan): chosen slugs
   // exist only on custom domains, so the shared namespace can't be squatted.
-  if (slug && domainId === null)
-    throw new HTTPException(400, {
-      message:
-        "Links on the shared domain get random slugs: connect a custom domain (paid plans) to choose your own",
-    });
-  if (slug) {
-    if (await slugTaken(db, slug, domainId)) throw slugConflict(slug, domainId === null);
-  } else {
-    // random slugs: retry on the (unlikely) collision
-    for (let i = 0; i < 5; i++) {
-      slug = randomSlug();
-      if (!(await slugTaken(db, slug, domainId))) break;
-      slug = "";
-    }
-    if (!slug) throw new HTTPException(500, { message: "Could not allocate slug" });
-  }
+  const [hostname, slug] = await Promise.all([
+    domainHostname(db, orgId, domainId),
+    resolveNewSlug(db, body.slug?.trim() || "", domainId),
+  ]);
 
   // UTM params already in the destination are extracted into the columns so
   // analytics group-bys see them; explicit fields fill whatever is missing.
@@ -252,29 +288,18 @@ linkRoutes.patch("/:linkId", requireOrgRole("member"), async (c) => {
   validateInput(body, orgId, true);
   const db = c.var.db;
   const { limits } = await orgPlan(db, orgId);
-  if (hasQrOverride(body) && !limits.qr)
-    throw new HTTPException(402, {
-      message: "QR customization is a paid feature: upgrade to use it",
-    });
+  assertQrAllowed(body, limits);
   const existing = await findLink(db, orgId, c.req.param("linkId")!);
 
   const domainId = body.domainId !== undefined ? body.domainId : existing.domainId;
-  const [hostname, oldHostname] = await Promise.all([
-    domainHostname(db, orgId, domainId),
-    domainHostname(db, orgId, existing.domainId),
-  ]);
-
-  const newSlug = body.slug?.trim() || existing.slug;
   // Chosen slugs exist only on custom domains; renaming a shared-domain link
   // is out for every plan, but keeping its existing slug stays allowed.
-  if (newSlug !== existing.slug && domainId === null)
-    throw new HTTPException(400, {
-      message:
-        "Links on the shared domain keep their random slug: move the link to a custom domain to choose one",
-    });
+  const [hostname, oldHostname, newSlug] = await Promise.all([
+    domainHostname(db, orgId, domainId),
+    domainHostname(db, orgId, existing.domainId),
+    resolveRenamedSlug(db, existing, body.slug?.trim() || "", domainId),
+  ]);
   const moved = newSlug !== existing.slug || domainId !== existing.domainId;
-  if (moved && (await slugTaken(db, newSlug, domainId, existing.id)))
-    throw slugConflict(newSlug, domainId === null);
 
   const destination = body.destination ?? existing.destination;
   // Re-resolve against the final destination: its params win, explicit

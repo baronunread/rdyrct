@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import { eq, ne, gte, and, desc, lt, inArray, sql } from "drizzle-orm";
 import * as schema from "../db/schema";
-import type { AppEnv } from "../env";
+import type { AppEnv, DB } from "../env";
 import { requireAdmin } from "../auth";
 import { now } from "../util";
 import {
@@ -59,6 +59,92 @@ function cumulativeSeries(
     result.push({ day: key, clicks: prev });
   }
   return result;
+}
+
+function computePlanStats(planCountRows: { plan: string; n: number }[]) {
+  const planCounts = { free: 0, hobby: 0, pro: 0 };
+  for (const r of planCountRows) planCounts[r.plan as OrgPlan] = r.n;
+  const mrr = planCounts.hobby * 4 + planCounts.pro * 9;
+  return { planCounts, mrr };
+}
+
+type AnomalyCandidate = { orgId: string; clicks24h: number; avg14d: number; ratio: number };
+
+// Orgs whose 24h clicks exceed 5x their trailing 14d daily average.
+function findAnomalies(
+  recentRows: { orgId: string; clicks: number }[],
+  baselineRows: { orgId: string; clicks: number }[],
+): AnomalyCandidate[] {
+  const baselineMap = new Map(baselineRows.map((r) => [r.orgId, r.clicks]));
+  const anomalies: AnomalyCandidate[] = [];
+  for (const h of recentRows) {
+    const total14d = baselineMap.get(h.orgId) ?? 0;
+    const avg14d = total14d / 14;
+    if (avg14d >= 1 && h.clicks > 5 * avg14d) {
+      anomalies.push({
+        orgId: h.orgId,
+        clicks24h: h.clicks,
+        avg14d: Math.round(avg14d * 10) / 10,
+        ratio: Math.round((h.clicks / avg14d) * 10) / 10,
+      });
+    }
+  }
+  return anomalies.sort((a, b) => b.ratio - a.ratio);
+}
+
+type CapPressureRow = {
+  id: string;
+  name: string;
+  plan: OrgPlan;
+  linkCount: number;
+  memberCount: number;
+  domainCount: number;
+};
+
+// Orgs at >=80% of any plan limit.
+function findCapPressure(orgs: CapPressureRow[]) {
+  const capPressure: Array<{
+    orgId: string;
+    orgName: string;
+    plan: OrgPlan;
+    linksPct: number;
+    membersPct: number;
+    domainsPct: number;
+  }> = [];
+  for (const orgRow of orgs) {
+    const limits = PLAN_LIMITS[orgRow.plan];
+    const linksPct = Math.round((orgRow.linkCount / Math.max(1, limits.links)) * 100);
+    const membersPct = Math.round((orgRow.memberCount / Math.max(1, limits.members)) * 100);
+    const domainsPct = Math.round((orgRow.domainCount / Math.max(1, limits.domains)) * 100);
+    if (linksPct >= 80 || membersPct >= 80 || domainsPct >= 80) {
+      capPressure.push({
+        orgId: orgRow.id,
+        orgName: orgRow.name,
+        plan: orgRow.plan,
+        linksPct,
+        membersPct,
+        domainsPct,
+      });
+    }
+  }
+  return capPressure.sort(
+    (a, b) =>
+      Math.max(b.linksPct, b.membersPct, b.domainsPct) -
+      Math.max(a.linksPct, a.membersPct, a.domainsPct),
+  );
+}
+
+// D1 caps at 10 GB; ~100 bytes per click row → ~107M max rows.
+const MAX_CLICK_ROWS = 107_000_000;
+
+function projectTableGrowth(seriesRows: { day: string; clicks: number }[], tableSize: number) {
+  const recentDailyAvg =
+    seriesRows.length > 0 ? seriesRows.reduce((s, r) => s + r.clicks, 0) / seriesRows.length : 0;
+  const projectedDays =
+    recentDailyAvg > 0 ? Math.round((MAX_CLICK_ROWS - tableSize) / recentDailyAvg) : null;
+  // Beyond ~10 years the projection isn't a useful signal, and a tiny daily
+  // average can project far enough out to overflow JS's Date range.
+  return projectedDays !== null && projectedDays <= 3650 ? projectedDays : null;
 }
 
 /* ─────────── /usage ─────────── */
@@ -222,12 +308,7 @@ adminRoutes.get("/usage", async (c) => {
   const totalUsers = users[0]?.n ?? 0;
   const paidUsers = proUsers[0]?.n ?? 0;
 
-  const planCounts = { free: 0, hobby: 0, pro: 0 };
-  for (const r of planCountRows) {
-    planCounts[r.plan as OrgPlan] = r.n;
-  }
-
-  const mrr = planCounts.hobby * 4 + planCounts.pro * 9;
+  const { planCounts, mrr } = computePlanStats(planCountRows);
 
   const paidConversionRate = totalUsers > 0 ? Math.round((paidUsers / totalUsers) * 100) : null;
 
@@ -246,41 +327,27 @@ adminRoutes.get("/usage", async (c) => {
 
   const botSeries = fillSeries(botSeriesRows, days);
 
-  // Anomalies: orgs whose 24h clicks exceed 5x trailing 14d daily avg
-  const anomalyMap = new Map(anomaly14dRows.map((r) => [r.orgId, r.clicks]));
-  const anomalies: Array<{
-    orgId: string;
-    orgName: string;
-    clicks24h: number;
-    avg14d: number;
-    ratio: number;
-  }> = [];
-  for (const h of anomaly24hRows) {
-    const total14d = anomalyMap.get(h.orgId) ?? 0;
-    const avg14d = total14d / 14;
-    if (avg14d >= 1 && h.clicks > 5 * avg14d) {
-      anomalies.push({
-        orgId: h.orgId,
-        orgName: "",
-        clicks24h: h.clicks,
-        avg14d: Math.round(avg14d * 10) / 10,
-        ratio: Math.round((h.clicks / avg14d) * 10) / 10,
-      });
-    }
-  }
-  // Fetch names for anomalous orgs
-  if (anomalies.length > 0) {
-    const ids = anomalies.map((a) => a.orgId);
-    const orgRows = await db
-      .select({ id: schema.orgs.id, name: schema.orgs.name })
-      .from(schema.orgs)
-      .where(inArray(schema.orgs.id, ids));
-    const nameMap = new Map(orgRows.map((r) => [r.id, r.name]));
-    for (const a of anomalies) a.orgName = nameMap.get(a.orgId) ?? "Unknown";
-  }
-  anomalies.sort((a, b) => b.ratio - a.ratio);
+  const anomalyCandidates = findAnomalies(anomaly24hRows, anomaly14dRows);
+  const anomalyNames = anomalyCandidates.length
+    ? new Map(
+        (
+          await db
+            .select({ id: schema.orgs.id, name: schema.orgs.name })
+            .from(schema.orgs)
+            .where(
+              inArray(
+                schema.orgs.id,
+                anomalyCandidates.map((a) => a.orgId),
+              ),
+            )
+        ).map((r) => [r.id, r.name]),
+      )
+    : new Map<string, string>();
+  const anomalies = anomalyCandidates.map((a) => ({
+    ...a,
+    orgName: anomalyNames.get(a.orgId) ?? "Unknown",
+  }));
 
-  // Cap pressure: orgs at >=80% of any plan limit
   const allOrgs = await db
     .select({
       id: schema.orgs.id,
@@ -297,48 +364,12 @@ adminRoutes.get("/usage", async (c) => {
       )`,
     })
     .from(schema.orgs);
-  const capPressure: Array<{
-    orgId: string;
-    orgName: string;
-    plan: OrgPlan;
-    linksPct: number;
-    membersPct: number;
-    domainsPct: number;
-  }> = [];
-  for (const orgRow of allOrgs) {
-    const limits = PLAN_LIMITS[orgRow.plan];
-    const linksPct = Math.round((orgRow.linkCount / Math.max(1, limits.links)) * 100);
-    const membersPct = Math.round((orgRow.memberCount / Math.max(1, limits.members)) * 100);
-    const domainsPct = Math.round((orgRow.domainCount / Math.max(1, limits.domains)) * 100);
-    if (linksPct >= 80 || membersPct >= 80 || domainsPct >= 80) {
-      capPressure.push({
-        orgId: orgRow.id,
-        orgName: orgRow.name,
-        plan: orgRow.plan,
-        linksPct,
-        membersPct,
-        domainsPct,
-      });
-    }
-  }
-  capPressure.sort(
-    (a, b) =>
-      Math.max(b.linksPct, b.membersPct, b.domainsPct) -
-      Math.max(a.linksPct, a.membersPct, a.domainsPct),
-  );
+  const capPressure = findCapPressure(allOrgs);
 
   // Table size and growth projection
   const tableSize = clicks[0]?.n ?? 0;
   const tableGrowth = fillSeries(seriesRows, days);
-  // D1 caps at 10 GB; ~100 bytes per click row → ~107M max rows
-  const MAX_ROWS = 107_000_000;
-  const recentDailyAvg =
-    seriesRows.length > 0 ? seriesRows.reduce((s, r) => s + r.clicks, 0) / seriesRows.length : 0;
-  const projectedDays =
-    recentDailyAvg > 0 ? Math.round((MAX_ROWS - tableSize) / recentDailyAvg) : null;
-  // Beyond ~10 years the projection isn't a useful signal, and a tiny daily
-  // average can project far enough out to overflow JS's Date range.
-  const tableProjectedDays = projectedDays !== null && projectedDays <= 3650 ? projectedDays : null;
+  const tableProjectedDays = projectTableGrowth(seriesRows, tableSize);
 
   return c.json({
     users: totalUsers,
@@ -488,6 +519,47 @@ adminRoutes.get("/users", async (c) => {
   );
 });
 
+function validateIsAdminPatch(
+  value: boolean | undefined,
+  targetId: string,
+  selfId: string,
+): boolean | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value !== "boolean")
+    throw new HTTPException(400, { message: "isAdmin must be boolean" });
+  if (targetId === selfId && !value)
+    throw new HTTPException(400, { message: "Cannot demote yourself" });
+  return value;
+}
+
+async function validateBannedPatch(
+  db: DB,
+  value: boolean | undefined,
+  targetId: string,
+  selfId: string,
+): Promise<boolean | undefined> {
+  if (value === undefined) return undefined;
+  if (typeof value !== "boolean")
+    throw new HTTPException(400, { message: "banned must be boolean" });
+  if (targetId === selfId) throw new HTTPException(400, { message: "Cannot ban yourself" });
+  if (value) {
+    const target = await db
+      .select({ isAdmin: schema.user.isAdmin })
+      .from(schema.user)
+      .where(eq(schema.user.id, targetId));
+    if (target[0]?.isAdmin)
+      throw new HTTPException(400, { message: "Cannot ban a platform admin" });
+  }
+  return value;
+}
+
+function validatePlanPatch(value: string | undefined): OrgPlan | undefined {
+  if (value === undefined) return undefined;
+  if (value !== "free" && value !== "hobby" && value !== "pro")
+    throw new HTTPException(400, { message: "plan must be free, hobby or pro" });
+  return value;
+}
+
 // Superadmin controls: toggle platform-admin, ban/unban, and/or comp a user's
 // plan (free/hobby/pro). Plan lives on the user, so comping a paid plan
 // unlocks every org they own.
@@ -499,42 +571,20 @@ adminRoutes.patch("/users/:userId", async (c) => {
   }>();
   const targetId = c.req.param("userId");
   const self = c.var.user!;
-  const patch: { isAdmin?: boolean; banned?: boolean; plan?: OrgPlan } = {};
-  if (body.isAdmin !== undefined) {
-    if (typeof body.isAdmin !== "boolean")
-      throw new HTTPException(400, { message: "isAdmin must be boolean" });
-    if (targetId === self.id && !body.isAdmin)
-      throw new HTTPException(400, { message: "Cannot demote yourself" });
-    patch.isAdmin = body.isAdmin;
-  }
-  if (body.banned !== undefined) {
-    if (typeof body.banned !== "boolean")
-      throw new HTTPException(400, { message: "banned must be boolean" });
-    if (targetId === self.id) throw new HTTPException(400, { message: "Cannot ban yourself" });
-    if (body.banned) {
-      const target = await c.var.db
-        .select({ isAdmin: schema.user.isAdmin })
-        .from(schema.user)
-        .where(eq(schema.user.id, targetId));
-      if (target[0]?.isAdmin)
-        throw new HTTPException(400, { message: "Cannot ban a platform admin" });
-    }
-    patch.banned = body.banned;
-  }
-  if (body.plan !== undefined) {
-    if (body.plan !== "free" && body.plan !== "hobby" && body.plan !== "pro")
-      throw new HTTPException(400, {
-        message: "plan must be free, hobby or pro",
-      });
-    patch.plan = body.plan;
-  }
+  const db = c.var.db;
+
+  const patch: { isAdmin?: boolean; banned?: boolean; plan?: OrgPlan } = {
+    isAdmin: validateIsAdminPatch(body.isAdmin, targetId, self.id),
+    banned: await validateBannedPatch(db, body.banned, targetId, self.id),
+    plan: validatePlanPatch(body.plan),
+  };
   if (patch.isAdmin === undefined && patch.banned === undefined && patch.plan === undefined)
     throw new HTTPException(400, { message: "Nothing to update" });
-  await c.var.db.update(schema.user).set(patch).where(eq(schema.user.id, targetId));
+
+  await db.update(schema.user).set(patch).where(eq(schema.user.id, targetId));
   // Banning kicks the user out immediately: all their sessions are wiped, and
   // better-auth refuses to create new ones (see better-auth.ts).
-  if (patch.banned)
-    await c.var.db.delete(schema.session).where(eq(schema.session.userId, targetId));
+  if (patch.banned) await db.delete(schema.session).where(eq(schema.session.userId, targetId));
   return c.json({ ok: true });
 });
 
