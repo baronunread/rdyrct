@@ -15,7 +15,8 @@ import { useToast } from "../ui/toast";
 import { QRPreview } from "../components/qr";
 import { NoOrgState } from "../components/no-org";
 import { sortRows } from "../lib/sort";
-import { LinkEditor, type OrgQr } from "../components/link-editor";
+import { LinkEditor } from "../components/link-editor";
+import { resolveQrLook, type OrgQr } from "../lib/org-qr";
 import { LinksTable } from "../components/links-table";
 import { ConfirmDialog } from "../ui/confirm-dialog";
 import { withErrorToast } from "../lib/mutation-toast";
@@ -307,12 +308,10 @@ function QrLinkDialog({
         <div className="flex flex-col items-center gap-2">
           <QRPreview
             url={shortUrl(link.slug, link.domain)}
-            logo={link.qrLogo || orgQr.logo || undefined}
-            dotStyle={link.qrStyle || orgQr.style}
-            color={link.qrColor || orgQr.color}
-            corner={link.qrCorner || orgQr.corner}
-            eyeColor={link.qrEyeColor || orgQr.eyeColor}
-            bg={link.qrBg || orgQr.bg}
+            {...resolveQrLook(link, orgQr)}
+            // NB: unlike the other fields, this ignores the link's own
+            // qrLogoSize override and always uses the org default (matches
+            // existing behavior; not changed by this pass).
             logoSize={orgQr.logoSize ?? undefined}
             downloadName={`qr-${link.slug}`}
           />

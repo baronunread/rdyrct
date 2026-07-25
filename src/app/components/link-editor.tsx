@@ -4,14 +4,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { Link as RouterLink } from "react-router";
 import { Lock, Info } from "lucide-react";
 import { shortUrl } from "../lib/api";
-import {
-  QR_CORNER_STYLES,
-  QR_DEFAULT_BG,
-  QR_DEFAULT_COLOR,
-  QR_DOT_STYLES,
-  type DomainDTO,
-  type LinkInput,
-} from "@/shared/types";
+import { QR_CORNER_STYLES, QR_DOT_STYLES, type DomainDTO, type LinkInput } from "@/shared/types";
 import { Button } from "../ui/button";
 import { Dialog } from "../ui/dialog";
 import { Field, Input } from "../ui/field";
@@ -21,16 +14,7 @@ import { useToast } from "../ui/toast";
 import { Tooltip } from "../ui/tooltip";
 import { QRPreview, QrLogoInput, QrColorField } from "./qr";
 import { linkInputSchema } from "../lib/schemas";
-
-export interface OrgQr {
-  logo: string;
-  style: string;
-  color: string;
-  corner: string;
-  bg: string;
-  eyeColor: string;
-  logoSize: number | null;
-}
+import { qrFallbacks, resolveQrLook, type OrgQr } from "../lib/org-qr";
 
 const defaultForm: LinkInput = {
   destination: "",
@@ -101,30 +85,29 @@ function QrPreviewSidebar({
   qrEnabled: boolean;
   previewUrl: string;
 }) {
-  if (qrEnabled) {
+  if (!qrEnabled) {
     return (
-      <div className="flex flex-col gap-2 sm:w-60">
-        <p className="text-2xs tracking-wider text-muted uppercase">QR code</p>
-        <QRPreview
-          url={previewUrl}
-          logo={form.qrLogo || orgQr.logo || undefined}
-          dotStyle={form.qrStyle || orgQr.style}
-          color={form.qrColor || orgQr.color}
-          corner={form.qrCorner || orgQr.corner}
-          eyeColor={form.qrEyeColor || orgQr.eyeColor}
-          bg={form.qrBg || orgQr.bg}
-          logoSize={
-            form.qrLogoSize != null ? Number(form.qrLogoSize) : (orgQr.logoSize ?? undefined)
-          }
-          size={192}
-        />
+      <div className="flex flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-border p-4 text-center sm:w-60">
+        <Lock size={20} className="text-muted" />
+        <p className="text-xs text-muted">QR codes are a paid feature: upgrade in Billing.</p>
       </div>
     );
   }
+  const look = resolveQrLook(form, orgQr);
   return (
-    <div className="flex flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-border p-4 text-center sm:w-60">
-      <Lock size={20} className="text-muted" />
-      <p className="text-xs text-muted">QR codes are a paid feature: upgrade in Billing.</p>
+    <div className="flex flex-col gap-2 sm:w-60">
+      <p className="text-2xs tracking-wider text-muted uppercase">QR code</p>
+      <QRPreview
+        url={previewUrl}
+        logo={look.logo}
+        dotStyle={look.dotStyle}
+        color={look.color}
+        corner={look.corner}
+        eyeColor={look.eyeColor}
+        bg={look.bg}
+        logoSize={look.logoSize}
+        size={192}
+      />
     </div>
   );
 }
@@ -138,6 +121,7 @@ function QrCustomization({
   setForm: (f: LinkInput) => void;
   orgQr: OrgQr;
 }) {
+  const fallbacks = qrFallbacks(form, orgQr);
   return (
     <div className="flex flex-col gap-4">
       <p className="text-2xs tracking-wider text-muted uppercase">QR customization</p>
@@ -168,13 +152,13 @@ function QrCustomization({
         <QrColorField
           label="Dot color"
           value={form.qrColor ?? ""}
-          fallback={orgQr.color || QR_DEFAULT_COLOR}
+          fallback={fallbacks.dotColor}
           onChange={(v) => setForm({ ...form, qrColor: v })}
         />
         <QrColorField
           label="Eye color"
           value={form.qrEyeColor ?? ""}
-          fallback={form.qrColor || orgQr.eyeColor || orgQr.color || QR_DEFAULT_COLOR}
+          fallback={fallbacks.eyeColor}
           onChange={(v) => setForm({ ...form, qrEyeColor: v })}
         />
       </div>
@@ -183,7 +167,7 @@ function QrCustomization({
         <QrColorField
           label="Background"
           value={form.qrBg ?? ""}
-          fallback={orgQr.bg && orgQr.bg !== "transparent" ? orgQr.bg : QR_DEFAULT_BG}
+          fallback={fallbacks.bg}
           allowTransparent
           onChange={(v) => setForm({ ...form, qrBg: v })}
         />

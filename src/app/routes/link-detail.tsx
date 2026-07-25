@@ -9,6 +9,14 @@ import { AreaChart, StatCard, ClickBreakdown } from "../components/charts";
 import { NoOrgState } from "../components/no-org";
 import { Card } from "../ui/misc";
 
+/** The link's display title: its custom domain, or the app host, or just
+ * the slug when neither is known yet. */
+function linkDisplayTitle(appHost: string | undefined, domain: string | null, slug: string) {
+  if (appHost && domain) return `${domain}/${slug}`;
+  if (appHost) return `${new URL(appHost).host}/${slug}`;
+  return `/${slug}`;
+}
+
 export function LinkDetailPage() {
   const { slug } = useParams<{ slug: string }>();
   const [searchParams] = useSearchParams();
@@ -39,11 +47,7 @@ export function LinkDetailPage() {
         </Link>
         <div className="min-w-0 flex-1">
           <h1 className="truncate text-lg font-bold tracking-wide">
-            {config?.appHost && s.domain
-              ? `${s.domain}/${s.slug}`
-              : config?.appHost
-                ? `${new URL(config.appHost).host}/${s.slug}`
-                : `/${s.slug}`}
+            {linkDisplayTitle(config?.appHost, s.domain, s.slug)}
           </h1>
           {s.title && <p className="mt-0.5 truncate text-sm text-muted">{s.title}</p>}
         </div>

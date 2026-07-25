@@ -10,7 +10,7 @@ import { BarList, StatCard } from "../components/charts";
 import { DashboardSkeleton } from "../components/skeletons";
 import { NoOrgState } from "../components/no-org";
 import { QRPreview } from "../components/qr";
-import type { OrgQr } from "../components/link-editor";
+import type { OrgQr } from "../lib/org-qr";
 import { Button } from "../ui/button";
 import { Dialog } from "../ui/dialog";
 import { Input } from "../ui/field";

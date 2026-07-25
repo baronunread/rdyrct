@@ -19,20 +19,35 @@ import { BusyContent } from "../ui/spinner";
 import { useToast } from "../ui/toast";
 import { QRPreview, QrLogoInput, QrColorField } from "./qr";
 
+interface QrDefaultsValues {
+  qrStyle: string;
+  qrColor: string;
+  qrLogo: string;
+  qrCorner: string;
+  qrBg: string;
+  qrEyeColor: string;
+  qrLogoSize: string;
+}
+
 function useQrDefaultsForm(
   orgId: string,
   org: NonNullable<ReturnType<typeof useCurrentOrg>["org"]>,
 ) {
   const qc = useQueryClient();
   const toast = useToast();
-  const [qrStyle, setQrStyle] = useState(org?.qrStyle ?? "");
-  const [qrColor, setQrColor] = useState(org?.qrColor ?? "");
-  const [qrLogo, setQrLogo] = useState(org?.qrLogo ?? "");
-  const [qrCorner, setQrCorner] = useState(org?.qrCorner ?? "");
-  const [qrBg, setQrBg] = useState(org?.qrBg ?? "");
-  const [qrEyeColor, setQrEyeColor] = useState(org?.qrEyeColor ?? "");
-  const [qrLogoSize, setQrLogoSize] = useState(() => org?.qrLogoSize?.toString() ?? "");
+  const [values, setValues] = useState<QrDefaultsValues>({
+    qrStyle: org?.qrStyle ?? "",
+    qrColor: org?.qrColor ?? "",
+    qrLogo: org?.qrLogo ?? "",
+    qrCorner: org?.qrCorner ?? "",
+    qrBg: org?.qrBg ?? "",
+    qrEyeColor: org?.qrEyeColor ?? "",
+    qrLogoSize: org?.qrLogoSize?.toString() ?? "",
+  });
   const [savingQr, setSavingQr] = useState(false);
+
+  const setField = <K extends keyof QrDefaultsValues>(key: K, value: QrDefaultsValues[K]) =>
+    setValues((v) => ({ ...v, [key]: value }));
 
   const save = async () => {
     setSavingQr(true);
@@ -40,13 +55,13 @@ function useQrDefaultsForm(
       await api(`/orgs/${orgId}`, {
         method: "PATCH",
         body: {
-          qrLogo,
-          qrStyle,
-          qrColor,
-          qrCorner,
-          qrBg,
-          qrEyeColor,
-          qrLogoSize: qrLogoSize === "" ? null : Number(qrLogoSize),
+          qrLogo: values.qrLogo,
+          qrStyle: values.qrStyle,
+          qrColor: values.qrColor,
+          qrCorner: values.qrCorner,
+          qrBg: values.qrBg,
+          qrEyeColor: values.qrEyeColor,
+          qrLogoSize: values.qrLogoSize === "" ? null : Number(values.qrLogoSize),
         },
       });
       await qc.invalidateQueries({ queryKey: ["user"] });
@@ -58,43 +73,18 @@ function useQrDefaultsForm(
     }
   };
 
-  return {
-    qrStyle,
-    setQrStyle,
-    qrColor,
-    setQrColor,
-    qrLogo,
-    setQrLogo,
-    qrCorner,
-    setQrCorner,
-    qrBg,
-    setQrBg,
-    qrEyeColor,
-    setQrEyeColor,
-    qrLogoSize,
-    setQrLogoSize,
-    savingQr,
-    save,
-  };
+  return { values, setField, savingQr, save };
 }
 
 function QrDefaultsFormFields({
-  qrStyle,
-  setQrStyle,
-  qrCorner,
-  setQrCorner,
-  qrColor,
-  setQrColor,
-  qrEyeColor,
-  setQrEyeColor,
-  qrBg,
-  setQrBg,
-  qrLogoSize,
-  setQrLogoSize,
-  qrLogo,
-  setQrLogo,
+  values,
+  setField,
   isAdmin,
-}: ReturnType<typeof useQrDefaultsForm> & { isAdmin: boolean }) {
+}: {
+  values: QrDefaultsValues;
+  setField: <K extends keyof QrDefaultsValues>(key: K, value: QrDefaultsValues[K]) => void;
+  isAdmin: boolean;
+}) {
   return (
     <div className="flex flex-col gap-6">
       <div className="grid grid-cols-[1fr_auto] gap-6 items-center">
@@ -102,8 +92,8 @@ function QrDefaultsFormFields({
           <Field label="Dot style">
             <MenuSelect
               label="Dot style"
-              value={qrStyle}
-              onChange={setQrStyle}
+              value={values.qrStyle}
+              onChange={(v) => setField("qrStyle", v)}
               disabled={!isAdmin}
               options={[
                 { value: "", label: "Rounded (default)" },
@@ -114,8 +104,8 @@ function QrDefaultsFormFields({
           <Field label="Corner style">
             <MenuSelect
               label="Corner style"
-              value={qrCorner}
-              onChange={setQrCorner}
+              value={values.qrCorner}
+              onChange={(v) => setField("qrCorner", v)}
               disabled={!isAdmin}
               options={[
                 { value: "", label: "Extra-rounded (default)" },
@@ -128,13 +118,13 @@ function QrDefaultsFormFields({
         </div>
         <QRPreview
           url={shortUrl("preview")}
-          logo={qrLogo || undefined}
-          dotStyle={qrStyle}
-          color={qrColor}
-          corner={qrCorner}
-          eyeColor={qrEyeColor}
-          bg={qrBg}
-          logoSize={qrLogoSize === "" ? undefined : Number(qrLogoSize)}
+          logo={values.qrLogo || undefined}
+          dotStyle={values.qrStyle}
+          color={values.qrColor}
+          corner={values.qrCorner}
+          eyeColor={values.qrEyeColor}
+          bg={values.qrBg}
+          logoSize={values.qrLogoSize === "" ? undefined : Number(values.qrLogoSize)}
           size={160}
         />
       </div>
@@ -142,26 +132,26 @@ function QrDefaultsFormFields({
         <div className="grid grid-cols-2 gap-3">
           <QrColorField
             label="Dot color"
-            value={qrColor}
+            value={values.qrColor}
             fallback={QR_DEFAULT_COLOR}
-            onChange={setQrColor}
+            onChange={(v) => setField("qrColor", v)}
             disabled={!isAdmin}
           />
           <QrColorField
             label="Eye color"
-            value={qrEyeColor}
-            fallback={qrColor || QR_DEFAULT_COLOR}
-            onChange={setQrEyeColor}
+            value={values.qrEyeColor}
+            fallback={values.qrColor || QR_DEFAULT_COLOR}
+            onChange={(v) => setField("qrEyeColor", v)}
             disabled={!isAdmin}
           />
         </div>
         <div className="grid grid-cols-2 gap-3">
           <QrColorField
             label="Background"
-            value={qrBg}
+            value={values.qrBg}
             fallback={QR_DEFAULT_BG}
             allowTransparent
-            onChange={setQrBg}
+            onChange={(v) => setField("qrBg", v)}
             disabled={!isAdmin}
           />
           <Field
@@ -170,8 +160,8 @@ function QrDefaultsFormFields({
           >
             <MenuSelect
               label="Logo size"
-              value={qrLogoSize}
-              onChange={setQrLogoSize}
+              value={values.qrLogoSize}
+              onChange={(v) => setField("qrLogoSize", v)}
               disabled={!isAdmin}
               options={[
                 { value: "", label: "Medium (default)" },
@@ -185,10 +175,10 @@ function QrDefaultsFormFields({
         <div>
           <span className="mb-1.5 block text-2xs tracking-wider text-muted uppercase">Logo</span>
           <QrLogoInput
-            value={qrLogo}
+            value={values.qrLogo}
             disabled={!isAdmin}
-            onLoad={setQrLogo}
-            onClear={isAdmin ? () => setQrLogo("") : undefined}
+            onLoad={(v) => setField("qrLogo", v)}
+            onClear={isAdmin ? () => setField("qrLogo", "") : undefined}
           />
         </div>
       </div>
@@ -203,8 +193,7 @@ export function QrDefaultsCard() {
   const isAdmin = me.data?.user.isAdmin || org?.role === "owner" || org?.role === "admin";
   const hasQr = org ? PLAN_LIMITS[org.plan].qr : false;
 
-  const form = useQrDefaultsForm(orgId, org!);
-  const { savingQr, save } = form;
+  const { values, setField, savingQr, save } = useQrDefaultsForm(orgId, org!);
 
   return (
     <Card className="max-w-2xl">
@@ -225,7 +214,7 @@ export function QrDefaultsCard() {
           </p>
         ) : (
           <div className="flex flex-col gap-6">
-            <QrDefaultsFormFields {...form} isAdmin={isAdmin} />
+            <QrDefaultsFormFields values={values} setField={setField} isAdmin={isAdmin} />
             {isAdmin ? (
               <div>
                 <Button variant="primary" onClick={save} disabled={savingQr}>
