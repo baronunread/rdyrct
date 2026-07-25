@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useStats } from "../lib/hooks";
 import { useCurrentOrg } from "../lib/current-org";
-import { PLAN_LIMITS } from "@/shared/types";
+import { PLAN_LIMITS, type HeatmapRow, type SeriesPoint } from "@/shared/types";
 import {
   AreaChart,
   BarList,
@@ -90,6 +90,65 @@ function UtmBreakdownSection({
   );
 }
 
+/** Clicks-over-time chart: switches between the hourly and daily series
+ * (and their label/tick format) based on the active bucket. */
+function ClicksChart({
+  bucket,
+  series,
+  hourSeries,
+}: {
+  bucket: "day" | "hour";
+  series: SeriesPoint[];
+  hourSeries: SeriesPoint[];
+}) {
+  const isHourly = bucket === "hour";
+  return (
+    <Card className="mt-4">
+      <p className="mb-3 text-2xs tracking-wider text-muted uppercase">
+        {isHourly ? "Clicks per hour" : "Clicks per day"}
+      </p>
+      <AreaChart
+        data={isHourly ? hourSeries : series}
+        tickFormat={isHourly ? (day) => day.slice(11, 16) : undefined}
+      />
+    </Card>
+  );
+}
+
+function TopLinksCard({
+  topLinks,
+}: {
+  topLinks: { id: string; slug: string; title: string; clicks: number }[];
+}) {
+  return (
+    <Card>
+      <p className="mb-3 text-2xs tracking-wider text-muted uppercase">Top links</p>
+      {topLinks.length ? (
+        <BarList
+          items={topLinks.map((l) => ({
+            key: `/${l.slug}${l.title ? ` · ${l.title}` : ""}`,
+            clicks: l.clicks,
+          }))}
+        />
+      ) : (
+        <p className="py-4 text-sm text-muted">No data yet</p>
+      )}
+    </Card>
+  );
+}
+
+/** Only shown for daily buckets with data: hourly ranges are too short for
+ * a day-of-week/hour heatmap to be meaningful. */
+function ActivityHeatmap({ heatmap, bucket }: { heatmap: HeatmapRow[]; bucket: "day" | "hour" }) {
+  if (!heatmap.length || bucket === "hour") return null;
+  return (
+    <Card className="mt-4">
+      <p className="mb-3 text-2xs tracking-wider text-muted uppercase">Activity heatmap</p>
+      <Heatmap data={heatmap} />
+    </Card>
+  );
+}
+
 export function Analytics() {
   const { org } = useCurrentOrg();
   const [range, setRange] = useState<{ days?: number; bucket?: "day" | "hour" }>({});
@@ -131,32 +190,12 @@ export function Analytics() {
         <StatCard label="Active links" value={s.totalLinks} />
       </div>
 
-      <Card className="mt-4">
-        <p className="mb-3 text-2xs tracking-wider text-muted uppercase">
-          {s.bucket === "hour" ? "Clicks per hour" : "Clicks per day"}
-        </p>
-        <AreaChart
-          data={s.bucket === "hour" ? s.hourSeries : s.series}
-          tickFormat={s.bucket === "hour" ? (day) => day.slice(11, 16) : undefined}
-        />
-      </Card>
+      <ClicksChart bucket={s.bucket} series={s.series} hourSeries={s.hourSeries} />
 
       <UtmBreakdownSection campaigns={s.campaigns} sources={s.sources} mediums={s.mediums} />
 
       <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <Card>
-          <p className="mb-3 text-2xs tracking-wider text-muted uppercase">Top links</p>
-          {s.topLinks.length ? (
-            <BarList
-              items={s.topLinks.map((l) => ({
-                key: `/${l.slug}${l.title ? ` · ${l.title}` : ""}`,
-                clicks: l.clicks,
-              }))}
-            />
-          ) : (
-            <p className="py-4 text-sm text-muted">No data yet</p>
-          )}
-        </Card>
+        <TopLinksCard topLinks={s.topLinks} />
         <ClickBreakdown countries={s.countries} referrers={s.referrers} devices={s.devices} />
       </div>
 
@@ -171,12 +210,7 @@ export function Analytics() {
         />
       </div>
 
-      {s.heatmap.length > 0 && s.bucket !== "hour" && (
-        <Card className="mt-4">
-          <p className="mb-3 text-2xs tracking-wider text-muted uppercase">Activity heatmap</p>
-          <Heatmap data={s.heatmap} />
-        </Card>
-      )}
+      <ActivityHeatmap heatmap={s.heatmap} bucket={s.bucket} />
     </div>
   );
 }
