@@ -20,6 +20,7 @@ export const RESERVED_SLUGS = new Set([
   "api",
   "app",
   "assets",
+  "robots.txt",
   // public
   "login",
   "signup",
