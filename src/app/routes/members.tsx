@@ -133,6 +133,103 @@ function useMemberManagement(orgId: string, canManage: boolean) {
   };
 }
 
+function MemberRow({
+  member,
+  canManage,
+  isSelf,
+  onSetRole,
+  onRemove,
+}: {
+  member: { userId: string; name: string; email: string; role: OrgRole; createdAt: number };
+  canManage: boolean;
+  isSelf: boolean;
+  onSetRole: (role: string) => void;
+  onRemove: () => void;
+}) {
+  return (
+    <tr>
+      <Td className="truncate">{member.name}</Td>
+      <Td className="truncate text-muted">{member.email}</Td>
+      <Td>
+        {member.role === "owner" ? (
+          <MenuSelect
+            label="Owner"
+            value="owner"
+            disabled
+            onChange={() => {}}
+            options={[{ value: "owner", label: "owner" }]}
+          />
+        ) : canManage ? (
+          <MenuSelect
+            label={`Role for ${member.name}`}
+            value={member.role}
+            onChange={onSetRole}
+            options={[
+              { value: "member", label: "member" },
+              { value: "admin", label: "admin" },
+            ]}
+          />
+        ) : (
+          <Badge color={roleColor[member.role]}>{member.role}</Badge>
+        )}
+      </Td>
+      <Td className="text-xs text-muted">{shortDate(member.createdAt)}</Td>
+      {canManage && (
+        <Td>
+          {member.role !== "owner" && !isSelf && (
+            <div className="flex justify-end">
+              <IconButton label={`Remove ${member.name}`} danger onClick={onRemove}>
+                <Trash2 size={15} />
+              </IconButton>
+            </div>
+          )}
+        </Td>
+      )}
+    </tr>
+  );
+}
+
+function PendingInvitesCard({
+  invites,
+  inviteUrl,
+  copyInvite,
+  revokeInvite,
+}: {
+  invites: InviteDTO[];
+  inviteUrl: (token: string) => string;
+  copyInvite: (text: string) => Promise<void>;
+  revokeInvite: { mutate: (token: string) => void };
+}) {
+  return (
+    <Card className="mt-4">
+      <p className="mb-3 text-2xs tracking-wider text-muted uppercase">Pending invites</p>
+      <ul className="flex flex-col gap-2">
+        {invites.map((inv) => (
+          <li key={inv.token} className="flex items-center justify-between gap-3 text-sm">
+            <span className="truncate text-muted">{inv.email ?? "link invite"}</span>
+            <span className="flex items-center gap-2">
+              <Badge color={inv.role === "admin" ? "mint" : "muted"}>{inv.role}</Badge>
+              <span className="text-xs text-muted">expires {shortDate(inv.expiresAt)}</span>
+              <CopyButton
+                text={inviteUrl(inv.token)}
+                label="Copy invite link"
+                onCopy={copyInvite}
+              />
+              <IconButton
+                label="Revoke invite"
+                danger
+                onClick={() => revokeInvite.mutate(inv.token)}
+              >
+                <Trash2 size={14} />
+              </IconButton>
+            </span>
+          </li>
+        ))}
+      </ul>
+    </Card>
+  );
+}
+
 export function MembersPage() {
   const { org } = useCurrentOrg();
   const orgId = org?.id ?? "";
@@ -204,86 +301,26 @@ export function MembersPage() {
           </thead>
           <tbody>
             {sorted.map((m) => (
-              <tr key={m.userId}>
-                <Td className="truncate">{m.name}</Td>
-                <Td className="truncate text-muted">{m.email}</Td>
-                <Td>
-                  {m.role === "owner" ? (
-                    <MenuSelect
-                      label="Owner"
-                      value="owner"
-                      disabled
-                      onChange={() => {}}
-                      options={[{ value: "owner", label: "owner" }]}
-                    />
-                  ) : canManage ? (
-                    <MenuSelect
-                      label={`Role for ${m.name}`}
-                      value={m.role}
-                      onChange={(v) =>
-                        setRole.mutate({
-                          userId: m.userId,
-                          role: v,
-                        })
-                      }
-                      options={[
-                        { value: "member", label: "member" },
-                        { value: "admin", label: "admin" },
-                      ]}
-                    />
-                  ) : (
-                    <Badge color={roleColor[m.role]}>{m.role}</Badge>
-                  )}
-                </Td>
-                <Td className="text-xs text-muted">{shortDate(m.createdAt)}</Td>
-                {canManage && (
-                  <Td>
-                    {m.role !== "owner" && m.userId !== me.data?.user.id && (
-                      <div className="flex justify-end">
-                        <IconButton
-                          label={`Remove ${m.name}`}
-                          danger
-                          onClick={() => setRemoving({ userId: m.userId, name: m.name })}
-                        >
-                          <Trash2 size={15} />
-                        </IconButton>
-                      </div>
-                    )}
-                  </Td>
-                )}
-              </tr>
+              <MemberRow
+                key={m.userId}
+                member={m}
+                canManage={canManage}
+                isSelf={m.userId === me.data?.user.id}
+                onSetRole={(role) => setRole.mutate({ userId: m.userId, role })}
+                onRemove={() => setRemoving({ userId: m.userId, name: m.name })}
+              />
             ))}
           </tbody>
         </Table>
       )}
 
       {canManage && !!invites.data?.length && (
-        <Card className="mt-4">
-          <p className="mb-3 text-2xs tracking-wider text-muted uppercase">Pending invites</p>
-          <ul className="flex flex-col gap-2">
-            {invites.data.map((inv) => (
-              <li key={inv.token} className="flex items-center justify-between gap-3 text-sm">
-                <span className="truncate text-muted">{inv.email ?? "link invite"}</span>
-                <span className="flex items-center gap-2">
-                  <Badge color={inv.role === "admin" ? "mint" : "muted"}>{inv.role}</Badge>
-                  <span className="text-xs text-muted">expires {shortDate(inv.expiresAt)}</span>
-                  <CopyButton
-                    text={inviteUrl(inv.token)}
-                    label="Copy invite link"
-                    onCopy={copyInvite}
-                  />
-                  <IconButton
-                    label="Revoke invite"
-                    danger
-                    onClick={() => revokeInvite.mutate(inv.token)}
-                  >
-                    <Trash2 size={14} />
-                  </IconButton>
-                </span>
-              </li>
-            ))}
-          </ul>
-        </Card>
+        <PendingInvitesCard
+          invites={invites.data}
+          inviteUrl={inviteUrl}
+          copyInvite={copyInvite}
+          revokeInvite={revokeInvite}
+        />
       )}
 
       {removing && (

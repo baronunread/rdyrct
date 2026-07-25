@@ -28,6 +28,13 @@ const domainStatusColor: Record<DomainDTO["status"], "accent" | "butter" | "mint
   error: "pink",
 };
 
+const domainStatusLabel: Record<DomainDTO["status"], string> = {
+  checking_dns: "Checking DNS",
+  issuing_tls: "Issuing TLS",
+  active: "active",
+  error: "Failed",
+};
+
 const transitional = (status: DomainDTO["status"]) =>
   status === "checking_dns" || status === "issuing_tls";
 
@@ -279,6 +286,8 @@ function DomainRow({
   onSaveRedirect: () => void;
   onCopy: (text: string) => void;
 }) {
+  const tabVisible = document.visibilityState === "visible";
+
   return (
     <div className="rounded-lg border border-border p-3">
       <div className="flex items-center justify-between gap-2">
@@ -287,31 +296,13 @@ function DomainRow({
           <AnimatePresence mode="popLayout">
             <m.span
               key={d.status}
-              initial={
-                document.visibilityState === "visible"
-                  ? { x: 16, opacity: 0 }
-                  : { x: 0, opacity: 1 }
-              }
+              initial={tabVisible ? { x: 16, opacity: 0 } : { x: 0, opacity: 1 }}
               animate={{ x: 0, opacity: 1 }}
-              exit={
-                document.visibilityState === "visible"
-                  ? { x: -16, opacity: 0 }
-                  : { x: 0, opacity: 1 }
-              }
-              transition={{
-                duration: document.visibilityState === "visible" ? 0.2 : 0,
-              }}
+              exit={tabVisible ? { x: -16, opacity: 0 } : { x: 0, opacity: 1 }}
+              transition={{ duration: tabVisible ? 0.2 : 0 }}
               className="inline-flex"
             >
-              <Badge color={domainStatusColor[d.status]}>
-                {d.status === "checking_dns"
-                  ? "Checking DNS"
-                  : d.status === "issuing_tls"
-                    ? "Issuing TLS"
-                    : d.status === "error"
-                      ? "Failed"
-                      : d.status}
-              </Badge>
+              <Badge color={domainStatusColor[d.status]}>{domainStatusLabel[d.status]}</Badge>
             </m.span>
           </AnimatePresence>
           {transitional(d.status) && (
@@ -325,59 +316,95 @@ function DomainRow({
         </div>
       </div>
 
-      {transitional(d.status) && (
-        <div className="mt-3 flex flex-col gap-1.5 rounded-md bg-surface-2/50 p-3 text-xs text-muted">
-          <p>
-            {d.status === "checking_dns"
-              ? "To activate, create this record at your DNS provider:"
-              : "DNS resolved. Waiting for the TLS certificate to be issued."}
-          </p>
-          {d.status === "checking_dns" && (
-            <div className="flex flex-wrap items-center gap-1.5">
-              <code className="rounded bg-bg px-1.5 py-0.5 text-text">
-                {d.hostname} CNAME {appHost}
-              </code>
-              <CopyButton text={appHost} label="Copy CNAME target" onCopy={onCopy} />
-            </div>
-          )}
-          <p>
-            {d.status === "checking_dns"
-              ? "We re-check automatically every few seconds. "
-              : "This usually takes a few minutes. "}
-            Hit the refresh button above to check progress manually.
-          </p>
-        </div>
-      )}
+      <DomainStatusDetail
+        domain={d}
+        appHost={appHost}
+        redirectDraft={redirectDraft}
+        savingRedirect={savingRedirect}
+        onRedirectDraft={onRedirectDraft}
+        onSaveRedirect={onSaveRedirect}
+        onCopy={onCopy}
+      />
+    </div>
+  );
+}
 
-      {d.status === "error" && (
-        <div className="mt-3 flex flex-col gap-1.5 rounded-md bg-danger/10 p-3 text-xs text-danger">
-          <p>{d.statusReason || "Activation failed. Delete and re-add the domain to try again."}</p>
-        </div>
-      )}
-
-      {d.status === "active" && (
-        <div className="mt-3">
-          <span className="mb-1.5 block text-xs tracking-wider text-muted uppercase">
-            Root redirect
-          </span>
-          <div className="flex items-center gap-2">
-            <div className="min-w-0 flex-1">
-              <Input
-                aria-label="Root redirect"
-                value={redirectDraft}
-                onChange={(e) => onRedirectDraft(e.target.value)}
-                placeholder="https://example.com"
-              />
-            </div>
-            <Button size="sm" disabled={savingRedirect} onClick={onSaveRedirect}>
-              Save
-            </Button>
+/** The section below a domain's status badge: DNS/TLS guidance while
+ * transitional, the failure reason on error, or the root-redirect editor
+ * once active. Exactly one of these renders per domain. */
+function DomainStatusDetail({
+  domain: d,
+  appHost,
+  redirectDraft,
+  savingRedirect,
+  onRedirectDraft,
+  onSaveRedirect,
+  onCopy,
+}: {
+  domain: DomainDTO;
+  appHost: string;
+  redirectDraft: string;
+  savingRedirect: boolean;
+  onRedirectDraft: (v: string) => void;
+  onSaveRedirect: () => void;
+  onCopy: (text: string) => void;
+}) {
+  if (transitional(d.status)) {
+    const checkingDns = d.status === "checking_dns";
+    return (
+      <div className="mt-3 flex flex-col gap-1.5 rounded-md bg-surface-2/50 p-3 text-xs text-muted">
+        <p>
+          {checkingDns
+            ? "To activate, create this record at your DNS provider:"
+            : "DNS resolved. Waiting for the TLS certificate to be issued."}
+        </p>
+        {checkingDns && (
+          <div className="flex flex-wrap items-center gap-1.5">
+            <code className="rounded bg-bg px-1.5 py-0.5 text-text">
+              {d.hostname} CNAME {appHost}
+            </code>
+            <CopyButton text={appHost} label="Copy CNAME target" onCopy={onCopy} />
           </div>
-          <span className="mt-1 block text-xs text-muted/80">
-            Where the bare domain (no slug) sends visitors, e.g. your homepage
-          </span>
+        )}
+        <p>
+          {checkingDns
+            ? "We re-check automatically every few seconds. "
+            : "This usually takes a few minutes. "}
+          Hit the refresh button above to check progress manually.
+        </p>
+      </div>
+    );
+  }
+
+  if (d.status === "error") {
+    return (
+      <div className="mt-3 flex flex-col gap-1.5 rounded-md bg-danger/10 p-3 text-xs text-danger">
+        <p>{d.statusReason || "Activation failed. Delete and re-add the domain to try again."}</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-3">
+      <span className="mb-1.5 block text-xs tracking-wider text-muted uppercase">
+        Root redirect
+      </span>
+      <div className="flex items-center gap-2">
+        <div className="min-w-0 flex-1">
+          <Input
+            aria-label="Root redirect"
+            value={redirectDraft}
+            onChange={(e) => onRedirectDraft(e.target.value)}
+            placeholder="https://example.com"
+          />
         </div>
-      )}
+        <Button size="sm" disabled={savingRedirect} onClick={onSaveRedirect}>
+          Save
+        </Button>
+      </div>
+      <span className="mt-1 block text-xs text-muted/80">
+        Where the bare domain (no slug) sends visitors, e.g. your homepage
+      </span>
     </div>
   );
 }

@@ -96,6 +96,91 @@ const userActionMeta: Record<
   },
 };
 
+function UserRow({
+  user,
+  isSelf,
+  onSetPlan,
+  onConfirm,
+}: {
+  user: AdminUserRow;
+  isSelf: boolean;
+  onSetPlan: (plan: OrgPlan) => void;
+  onConfirm: (kind: UserAction) => void;
+}) {
+  return (
+    <tr>
+      <Td>
+        <span className="mr-1.5">{user.name}</span>
+        {user.isAdmin && <Badge color="butter">admin</Badge>}{" "}
+        {user.banned && <Badge color="pink">banned</Badge>}{" "}
+        {!user.emailVerified && <Badge color="muted">unverified</Badge>}
+      </Td>
+      <Td className="text-muted">{user.email}</Td>
+      <Td className="tnum text-right">{user.orgCount}</Td>
+      <Td>
+        <Badge color={user.plan === "pro" ? "mint" : user.plan === "hobby" ? "accent" : "muted"}>
+          {user.plan}
+        </Badge>
+      </Td>
+      <Td className="text-xs text-muted">{shortDate(user.createdAt)}</Td>
+      <Td className="text-xs text-muted">{lastSeenLabel(user.lastSeen)}</Td>
+      <Td>
+        <Menu
+          align="end"
+          label={`Actions for ${user.name}`}
+          trigger={
+            <div className="flex justify-end">
+              <span className="rounded p-1.5 text-muted hover:bg-surface-2 hover:text-text">
+                <Ellipsis size={15} />
+              </span>
+            </div>
+          }
+        >
+          {!isSelf && (
+            <MenuItem onClick={() => onConfirm(user.isAdmin ? "removeAdmin" : "makeAdmin")}>
+              {user.isAdmin ? <ShieldMinus size={14} /> : <ShieldPlus size={14} />}
+              {user.isAdmin ? "Remove platform admin" : "Make platform admin"}
+            </MenuItem>
+          )}
+          <MenuItem onClick={() => onSetPlan("free")}>
+            <span className="w-3.5">
+              {user.plan === "free" && <Check size={13} className="text-accent" />}
+            </span>
+            Set plan: free
+          </MenuItem>
+          <MenuItem onClick={() => onSetPlan("hobby")}>
+            <span className="w-3.5">
+              {user.plan === "hobby" && <Check size={13} className="text-accent" />}
+            </span>
+            Set plan: hobby
+          </MenuItem>
+          <MenuItem onClick={() => onSetPlan("pro")}>
+            <span className="w-3.5">
+              {user.plan === "pro" && <Check size={13} className="text-accent" />}
+            </span>
+            Set plan: pro
+          </MenuItem>
+          {!isSelf && <MenuSeparator />}
+          {!isSelf && !user.isAdmin && (
+            <MenuItem
+              className="text-danger"
+              onClick={() => onConfirm(user.banned ? "unban" : "ban")}
+            >
+              <Ban size={14} />
+              {user.banned ? "Unban user" : "Ban user"}
+            </MenuItem>
+          )}
+          {!isSelf && (
+            <MenuItem className="text-danger" onClick={() => onConfirm("delete")}>
+              <Trash2 size={14} /> Delete user
+            </MenuItem>
+          )}
+        </Menu>
+      </Td>
+    </tr>
+  );
+}
+
 export function AdminUsersPage() {
   const users = useAdminUsers();
   const me = useCurrentUser();
@@ -213,119 +298,20 @@ export function AdminUsersPage() {
           </tr>
         </thead>
         <tbody>
-          {rows.map((u) => {
-            const isSelf = u.id === me.data?.user.id;
-            return (
-              <tr key={u.id}>
-                <Td>
-                  <span className="mr-1.5">{u.name}</span>
-                  {u.isAdmin && <Badge color="butter">admin</Badge>}{" "}
-                  {u.banned && <Badge color="pink">banned</Badge>}{" "}
-                  {!u.emailVerified && <Badge color="muted">unverified</Badge>}
-                </Td>
-                <Td className="text-muted">{u.email}</Td>
-                <Td className="tnum text-right">{u.orgCount}</Td>
-                <Td>
-                  <Badge
-                    color={u.plan === "pro" ? "mint" : u.plan === "hobby" ? "accent" : "muted"}
-                  >
-                    {u.plan}
-                  </Badge>
-                </Td>
-                <Td className="text-xs text-muted">{shortDate(u.createdAt)}</Td>
-                <Td className="text-xs text-muted">{lastSeenLabel(u.lastSeen)}</Td>
-                <Td>
-                  <Menu
-                    align="end"
-                    label={`Actions for ${u.name}`}
-                    trigger={
-                      <div className="flex justify-end">
-                        <span className="rounded p-1.5 text-muted hover:bg-surface-2 hover:text-text">
-                          <Ellipsis size={15} />
-                        </span>
-                      </div>
-                    }
-                  >
-                    {!isSelf && (
-                      <MenuItem
-                        onClick={() =>
-                          setConfirm({
-                            kind: u.isAdmin ? "removeAdmin" : "makeAdmin",
-                            user: u,
-                          })
-                        }
-                      >
-                        {u.isAdmin ? <ShieldMinus size={14} /> : <ShieldPlus size={14} />}
-                        {u.isAdmin ? "Remove platform admin" : "Make platform admin"}
-                      </MenuItem>
-                    )}
-                    <MenuItem
-                      onClick={() =>
-                        patchUser.mutate(
-                          { userId: u.id, body: { plan: "free" } },
-                          { onSuccess: () => toast("Plan updated") },
-                        )
-                      }
-                    >
-                      <span className="w-3.5">
-                        {u.plan === "free" && <Check size={13} className="text-accent" />}
-                      </span>
-                      Set plan: free
-                    </MenuItem>
-                    <MenuItem
-                      onClick={() =>
-                        patchUser.mutate(
-                          { userId: u.id, body: { plan: "hobby" } },
-                          { onSuccess: () => toast("Plan updated") },
-                        )
-                      }
-                    >
-                      <span className="w-3.5">
-                        {u.plan === "hobby" && <Check size={13} className="text-accent" />}
-                      </span>
-                      Set plan: hobby
-                    </MenuItem>
-                    <MenuItem
-                      onClick={() =>
-                        patchUser.mutate(
-                          { userId: u.id, body: { plan: "pro" } },
-                          { onSuccess: () => toast("Plan updated") },
-                        )
-                      }
-                    >
-                      <span className="w-3.5">
-                        {u.plan === "pro" && <Check size={13} className="text-accent" />}
-                      </span>
-                      Set plan: pro
-                    </MenuItem>
-                    {!isSelf && <MenuSeparator />}
-                    {!isSelf && !u.isAdmin && (
-                      <MenuItem
-                        className="text-danger"
-                        onClick={() =>
-                          setConfirm({
-                            kind: u.banned ? "unban" : "ban",
-                            user: u,
-                          })
-                        }
-                      >
-                        <Ban size={14} />
-                        {u.banned ? "Unban user" : "Ban user"}
-                      </MenuItem>
-                    )}
-                    {!isSelf && (
-                      <MenuItem
-                        className="text-danger"
-                        onClick={() => setConfirm({ kind: "delete", user: u })}
-                      >
-                        <Trash2 size={14} /> Delete user
-                      </MenuItem>
-                    )}
-                  </Menu>
-                </Td>
-              </tr>
-            );
-          })}
+          {rows.map((u) => (
+            <UserRow
+              key={u.id}
+              user={u}
+              isSelf={u.id === me.data?.user.id}
+              onSetPlan={(plan) =>
+                patchUser.mutate(
+                  { userId: u.id, body: { plan } },
+                  { onSuccess: () => toast("Plan updated") },
+                )
+              }
+              onConfirm={(kind) => setConfirm({ kind, user: u })}
+            />
+          ))}
           {rows.length === 0 && (
             <tr>
               <Td colSpan={7} className="py-8 text-center text-muted">
