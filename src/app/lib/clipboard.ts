@@ -1,11 +1,15 @@
 type Toast = (message: string, kind?: "info" | "error") => void;
 
-export async function copyToClipboard(text: string, toast: Toast) {
+export async function copyToClipboard(
+  text: string,
+  toast: Toast,
+  messages?: { success?: string; error?: string },
+) {
   try {
     await navigator.clipboard.writeText(text);
-    toast("Copied to clipboard");
+    toast(messages?.success ?? "Copied to clipboard");
   } catch (error) {
-    toast("Could not copy to clipboard", "error");
+    toast(messages?.error ?? "Could not copy to clipboard", "error");
     throw error;
   }
 }

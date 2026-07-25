@@ -13,6 +13,7 @@ import { BusyContent } from "../ui/spinner";
 import { useToast } from "../ui/toast";
 import { CopyButton } from "../ui/copy-button";
 import { ConfirmDialog } from "../ui/confirm-dialog";
+import { copyToClipboard } from "../lib/clipboard";
 import { QrDefaultsCard } from "../components/qr-defaults-card";
 import { orgNameSchema } from "../lib/schemas";
 
@@ -68,11 +69,6 @@ export function SettingsPage() {
     },
     (errors) => toast(errors.name?.message ?? "Enter an organization name", "error"),
   );
-
-  const copyOrgName = async (text: string) => {
-    await navigator.clipboard.writeText(text);
-    toast("Copied to clipboard");
-  };
 
   const deleteOrg = async () => {
     setDeletingOrg(true);
@@ -196,7 +192,11 @@ export function SettingsPage() {
               <div className="mb-1.5 flex flex-wrap items-center gap-1.5 text-sm text-muted">
                 <span>To confirm, type</span>
                 <code className="rounded bg-bg px-1.5 py-0.5 text-text">{org.name}</code>
-                <CopyButton text={org.name} label="Copy organization name" onCopy={copyOrgName} />
+                <CopyButton
+                  text={org.name}
+                  label="Copy organization name"
+                  onCopy={(text) => copyToClipboard(text, toast)}
+                />
               </div>
               <Input
                 value={confirmName}

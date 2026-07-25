@@ -19,6 +19,7 @@ import { NoOrgState } from "../components/no-org";
 import { CopyButton } from "../ui/copy-button";
 import { useToast } from "../ui/toast";
 import { cn } from "../ui/cn";
+import { copyToClipboard } from "../lib/clipboard";
 
 const domainStatusColor: Record<DomainDTO["status"], "accent" | "butter" | "mint" | "pink"> = {
   checking_dns: "butter",
@@ -66,10 +67,7 @@ function DomainsCard({ orgId, plan }: { orgId: string; plan: "free" | "hobby" | 
     defaultValues: { hostname: "" },
   });
 
-  const copy = async (text: string) => {
-    await navigator.clipboard.writeText(text);
-    toast("Copied to clipboard");
-  };
+  const copy = (text: string) => copyToClipboard(text, toast);
 
   const addDomain = useCallback(
     ({ hostname }: { hostname: string }) => {

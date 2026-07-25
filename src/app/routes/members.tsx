@@ -18,6 +18,7 @@ import { TableSkeleton } from "../ui/skeleton";
 import { BusyContent } from "../ui/spinner";
 import { useToast } from "../ui/toast";
 import { NoOrgState } from "../components/no-org";
+import { copyToClipboard } from "../lib/clipboard";
 import { SortTh } from "../ui/sort-th";
 import { sortRows } from "../lib/sort";
 import { withErrorToast } from "../lib/mutation-toast";
@@ -68,9 +69,7 @@ function useMemberManagement(orgId: string, canManage: boolean) {
       invalidateInvites();
       const invite = invites[0];
       if (invite) {
-        void copyInvite(inviteUrl(invite.token)).catch(() =>
-          toast("Could not copy invite link", "error"),
-        );
+        void copyInvite(inviteUrl(invite.token)).catch(() => {});
       }
       setInviteOpen(false);
     },
@@ -95,10 +94,11 @@ function useMemberManagement(orgId: string, canManage: boolean) {
     onError: withErrorToast(toast),
   });
 
-  const copyInvite = async (text: string) => {
-    await navigator.clipboard.writeText(text);
-    toast("Invite link copied");
-  };
+  const copyInvite = (text: string) =>
+    copyToClipboard(text, toast, {
+      success: "Invite link copied",
+      error: "Could not copy invite link",
+    });
 
   const sorted = useMemo(
     () =>
