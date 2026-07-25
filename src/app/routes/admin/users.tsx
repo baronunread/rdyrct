@@ -96,6 +96,83 @@ const userActionMeta: Record<
   },
 };
 
+const planBadgeColor: Record<OrgPlan, "mint" | "accent" | "muted"> = {
+  pro: "mint",
+  hobby: "accent",
+  free: "muted",
+};
+
+const PLAN_OPTIONS: OrgPlan[] = ["free", "hobby", "pro"];
+
+/** The three "Set plan: …" menu items, with a checkmark on the current one. */
+function PlanMenuItems({
+  current,
+  onSetPlan,
+}: {
+  current: OrgPlan;
+  onSetPlan: (plan: OrgPlan) => void;
+}) {
+  return (
+    <>
+      {PLAN_OPTIONS.map((plan) => (
+        <MenuItem key={plan} onClick={() => onSetPlan(plan)}>
+          <span className="w-3.5">
+            {current === plan && <Check size={13} className="text-accent" />}
+          </span>
+          Set plan: {plan}
+        </MenuItem>
+      ))}
+    </>
+  );
+}
+
+/** "Make/remove platform admin", hidden for your own row. */
+function AdminToggleMenuItem({
+  user,
+  isSelf,
+  onConfirm,
+}: {
+  user: AdminUserRow;
+  isSelf: boolean;
+  onConfirm: (kind: UserAction) => void;
+}) {
+  if (isSelf) return null;
+  return (
+    <MenuItem onClick={() => onConfirm(user.isAdmin ? "removeAdmin" : "makeAdmin")}>
+      {user.isAdmin ? <ShieldMinus size={14} /> : <ShieldPlus size={14} />}
+      {user.isAdmin ? "Remove platform admin" : "Make platform admin"}
+    </MenuItem>
+  );
+}
+
+/** Ban/unban and delete, hidden for your own row; ban is also hidden for
+ * other platform admins. */
+function DangerMenuItems({
+  user,
+  isSelf,
+  onConfirm,
+}: {
+  user: AdminUserRow;
+  isSelf: boolean;
+  onConfirm: (kind: UserAction) => void;
+}) {
+  if (isSelf) return null;
+  return (
+    <>
+      <MenuSeparator />
+      {!user.isAdmin && (
+        <MenuItem className="text-danger" onClick={() => onConfirm(user.banned ? "unban" : "ban")}>
+          <Ban size={14} />
+          {user.banned ? "Unban user" : "Ban user"}
+        </MenuItem>
+      )}
+      <MenuItem className="text-danger" onClick={() => onConfirm("delete")}>
+        <Trash2 size={14} /> Delete user
+      </MenuItem>
+    </>
+  );
+}
+
 function UserRow({
   user,
   isSelf,
@@ -118,9 +195,7 @@ function UserRow({
       <Td className="text-muted">{user.email}</Td>
       <Td className="tnum text-right">{user.orgCount}</Td>
       <Td>
-        <Badge color={user.plan === "pro" ? "mint" : user.plan === "hobby" ? "accent" : "muted"}>
-          {user.plan}
-        </Badge>
+        <Badge color={planBadgeColor[user.plan]}>{user.plan}</Badge>
       </Td>
       <Td className="text-xs text-muted">{shortDate(user.createdAt)}</Td>
       <Td className="text-xs text-muted">{lastSeenLabel(user.lastSeen)}</Td>
@@ -136,45 +211,9 @@ function UserRow({
             </div>
           }
         >
-          {!isSelf && (
-            <MenuItem onClick={() => onConfirm(user.isAdmin ? "removeAdmin" : "makeAdmin")}>
-              {user.isAdmin ? <ShieldMinus size={14} /> : <ShieldPlus size={14} />}
-              {user.isAdmin ? "Remove platform admin" : "Make platform admin"}
-            </MenuItem>
-          )}
-          <MenuItem onClick={() => onSetPlan("free")}>
-            <span className="w-3.5">
-              {user.plan === "free" && <Check size={13} className="text-accent" />}
-            </span>
-            Set plan: free
-          </MenuItem>
-          <MenuItem onClick={() => onSetPlan("hobby")}>
-            <span className="w-3.5">
-              {user.plan === "hobby" && <Check size={13} className="text-accent" />}
-            </span>
-            Set plan: hobby
-          </MenuItem>
-          <MenuItem onClick={() => onSetPlan("pro")}>
-            <span className="w-3.5">
-              {user.plan === "pro" && <Check size={13} className="text-accent" />}
-            </span>
-            Set plan: pro
-          </MenuItem>
-          {!isSelf && <MenuSeparator />}
-          {!isSelf && !user.isAdmin && (
-            <MenuItem
-              className="text-danger"
-              onClick={() => onConfirm(user.banned ? "unban" : "ban")}
-            >
-              <Ban size={14} />
-              {user.banned ? "Unban user" : "Ban user"}
-            </MenuItem>
-          )}
-          {!isSelf && (
-            <MenuItem className="text-danger" onClick={() => onConfirm("delete")}>
-              <Trash2 size={14} /> Delete user
-            </MenuItem>
-          )}
+          <AdminToggleMenuItem user={user} isSelf={isSelf} onConfirm={onConfirm} />
+          <PlanMenuItems current={user.plan} onSetPlan={onSetPlan} />
+          <DangerMenuItems user={user} isSelf={isSelf} onConfirm={onConfirm} />
         </Menu>
       </Td>
     </tr>
@@ -223,35 +262,30 @@ export function AdminUsersPage() {
   const runAction = () => {
     if (!confirm) return;
     const { kind, user } = confirm;
-    switch (kind) {
-      case "delete":
-        remove.mutate(user.id);
-        break;
-      case "ban":
+    const actions: Record<UserAction, () => void> = {
+      delete: () => remove.mutate(user.id),
+      ban: () =>
         patchUser.mutate(
           { userId: user.id, body: { banned: true } },
           { onSuccess: () => toast("User banned") },
-        );
-        break;
-      case "unban":
+        ),
+      unban: () =>
         patchUser.mutate(
           { userId: user.id, body: { banned: false } },
           { onSuccess: () => toast("User unbanned") },
-        );
-        break;
-      case "makeAdmin":
+        ),
+      makeAdmin: () =>
         patchUser.mutate(
           { userId: user.id, body: { isAdmin: true } },
           { onSuccess: () => toast(`${user.name} is now a platform admin`) },
-        );
-        break;
-      case "removeAdmin":
+        ),
+      removeAdmin: () =>
         patchUser.mutate(
           { userId: user.id, body: { isAdmin: false } },
           { onSuccess: () => toast("Platform admin removed") },
-        );
-        break;
-    }
+        ),
+    };
+    actions[kind]();
   };
 
   const rows = useMemo(() => {
