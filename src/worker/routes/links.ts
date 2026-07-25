@@ -86,7 +86,7 @@ function hasQrOverride(body: LinkInput): boolean {
     body.qrCorner ||
     body.qrBg ||
     body.qrEyeColor ||
-    body.qrLogoSize !== undefined
+    body.qrLogoSize != null
   );
 }
 
