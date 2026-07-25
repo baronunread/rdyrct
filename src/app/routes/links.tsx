@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { useNavigate } from "react-router";
 import { Plus } from "lucide-react";
 import { useLinks, useLinkMutations } from "../lib/hooks";
@@ -83,6 +83,40 @@ function useLinkFilter(links: { data?: LinkDTO[] }) {
   };
 }
 
+/** Builds the LinkEditor's onSave handler: PATCH when editing, POST when
+ * creating, sharing one success/error path (and flagging a slug clash so
+ * the editor can shake the field). */
+function buildOnSave({
+  editing,
+  create,
+  update,
+  toast,
+  closeEditor,
+  onSlugTaken,
+}: {
+  editing: LinkDTO | null;
+  create: ReturnType<typeof useLinkMutations>["create"];
+  update: ReturnType<typeof useLinkMutations>["update"];
+  toast: ReturnType<typeof useToast>;
+  closeEditor: () => void;
+  onSlugTaken: () => void;
+}) {
+  return (data: LinkInput) => {
+    const done = {
+      onSuccess: () => {
+        closeEditor();
+        toast(editing ? "Link updated" : "Link created");
+      },
+      onError: (e: Error) => {
+        if (e instanceof ApiError && e.code === "slug_taken") onSlugTaken();
+        toast(e.message, "error");
+      },
+    };
+    if (editing) update.mutate({ id: editing.id, ...data }, done);
+    else create.mutate(data, done);
+  };
+}
+
 export function LinksPage() {
   const { org, orgId, limits, activeDomains, orgQr, domains } = useOrgLimits();
   const links = useLinks(orgId);
@@ -128,20 +162,14 @@ export function LinksPage() {
 
   if (!org) return <NoOrgState />;
 
-  const onSave = (data: LinkInput) => {
-    const done = {
-      onSuccess: () => {
-        setEditorOpen(false);
-        toast(editing ? "Link updated" : "Link created");
-      },
-      onError: (e: Error) => {
-        if (e instanceof ApiError && e.code === "slug_taken") setShakeKey((k) => k + 1);
-        toast(e.message, "error");
-      },
-    };
-    if (editing) update.mutate({ id: editing.id, ...data }, done);
-    else create.mutate(data, done);
-  };
+  const onSave = buildOnSave({
+    editing,
+    create,
+    update,
+    toast,
+    closeEditor: () => setEditorOpen(false),
+    onSlugTaken: () => setShakeKey((k) => k + 1),
+  });
 
   return (
     <div>
@@ -160,45 +188,37 @@ export function LinksPage() {
         }
       />
 
-      {links.isLoading ? (
-        <TableSkeleton rows={5} />
-      ) : !links.data?.length ? (
-        <EmptyState
-          title="No links yet"
-          hint="Create your first short link. UTM parameters and a QR logo are optional."
-          action={
-            <Button variant="primary" onClick={openCreate} disabled={atLimit} title={limitHint}>
-              <Plus size={15} /> New link
-            </Button>
-          }
+      <LinksListArea
+        isLoading={links.isLoading}
+        hasLinks={!!links.data?.length}
+        atLimit={atLimit}
+        limitHint={limitHint}
+        onCreate={openCreate}
+      >
+        <LinksToolbar
+          search={search}
+          onSearchChange={onSearchChange}
+          domainFilter={domainFilter}
+          onDomainFilterChange={onDomainFilterChange}
+          domains={domains.data ?? []}
+          filteredCount={filtered.length}
+          totalCount={links.data?.length ?? 0}
         />
-      ) : (
-        <>
-          <LinksToolbar
-            search={search}
-            onSearchChange={onSearchChange}
-            domainFilter={domainFilter}
-            onDomainFilterChange={onDomainFilterChange}
-            domains={domains.data ?? []}
-            filteredCount={filtered.length}
-            totalCount={links.data.length}
-          />
-          <LinksTable
-            paged={paged}
-            navigate={navigate}
-            limits={limits}
-            onQrClick={setQrLink}
-            onEdit={openEdit}
-            onDelete={setDeleting}
-            sort={sort}
-            onSort={setSort}
-            totalPages={totalPages}
-            currentPage={safePage}
-            onPageChange={setPage}
-            noQrToast={noQrToast}
-          />
-        </>
-      )}
+        <LinksTable
+          paged={paged}
+          navigate={navigate}
+          limits={limits}
+          onQrClick={setQrLink}
+          onEdit={openEdit}
+          onDelete={setDeleting}
+          sort={sort}
+          onSort={setSort}
+          totalPages={totalPages}
+          currentPage={safePage}
+          onPageChange={setPage}
+          noQrToast={noQrToast}
+        />
+      </LinksListArea>
 
       <LinkEditor
         open={editorOpen}
@@ -214,28 +234,84 @@ export function LinksPage() {
 
       {limits.qr && <QrLinkDialog link={qrLink} onClose={() => setQrLink(null)} orgQr={orgQr} />}
 
-      <ConfirmDialog
-        title="Delete link"
-        open={!!deleting}
+      <DeleteLinkDialog
+        deleting={deleting}
         onClose={() => setDeleting(null)}
-        onConfirm={() => {
-          if (!deleting) return;
-          remove.mutate(deleting.id, {
-            onSuccess: () => {
-              toast("Link deleted");
-              setDeleting(null);
-            },
-            onError: withErrorToast(toast),
-          });
-        }}
-        confirmLabel="Delete"
-        danger
-        pending={remove.isPending}
-      >
-        Delete <span className="font-bold text-accent">/{deleting?.slug}</span>? The short link
-        stops working immediately and its click history is removed.
-      </ConfirmDialog>
+        remove={remove}
+        toast={toast}
+      />
     </div>
+  );
+}
+
+/** Gates the links table area on load/empty state; renders its children
+ * (toolbar + table) only once there's data to show. */
+function LinksListArea({
+  isLoading,
+  hasLinks,
+  atLimit,
+  limitHint,
+  onCreate,
+  children,
+}: {
+  isLoading: boolean;
+  hasLinks: boolean;
+  atLimit: boolean;
+  limitHint: string | undefined;
+  onCreate: () => void;
+  children: ReactNode;
+}) {
+  if (isLoading) return <TableSkeleton rows={5} />;
+  if (!hasLinks) {
+    return (
+      <EmptyState
+        title="No links yet"
+        hint="Create your first short link. UTM parameters and a QR logo are optional."
+        action={
+          <Button variant="primary" onClick={onCreate} disabled={atLimit} title={limitHint}>
+            <Plus size={15} /> New link
+          </Button>
+        }
+      />
+    );
+  }
+  return <>{children}</>;
+}
+
+function DeleteLinkDialog({
+  deleting,
+  onClose,
+  remove,
+  toast,
+}: {
+  deleting: LinkDTO | null;
+  onClose: () => void;
+  remove: ReturnType<typeof useLinkMutations>["remove"];
+  toast: ReturnType<typeof useToast>;
+}) {
+  const confirmDelete = () => {
+    if (!deleting) return;
+    remove.mutate(deleting.id, {
+      onSuccess: () => {
+        toast("Link deleted");
+        onClose();
+      },
+      onError: withErrorToast(toast),
+    });
+  };
+  return (
+    <ConfirmDialog
+      title="Delete link"
+      open={!!deleting}
+      onClose={onClose}
+      onConfirm={confirmDelete}
+      confirmLabel="Delete"
+      danger
+      pending={remove.isPending}
+    >
+      Delete <span className="font-bold text-accent">/{deleting?.slug}</span>? The short link stops
+      working immediately and its click history is removed.
+    </ConfirmDialog>
   );
 }
 
