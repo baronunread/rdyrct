@@ -189,6 +189,59 @@ function MemberRow({
   );
 }
 
+function MemberTable({
+  isLoading,
+  sorted,
+  canManage,
+  sort,
+  setSort,
+  meId,
+  onSetRole,
+  onRemove,
+}: {
+  isLoading: boolean;
+  sorted: { userId: string; name: string; email: string; role: OrgRole; createdAt: number }[];
+  canManage: boolean;
+  sort: Sort;
+  setSort: (s: Sort) => void;
+  meId: string | undefined;
+  onSetRole: (userId: string, role: string) => void;
+  onRemove: (userId: string, name: string) => void;
+}) {
+  if (isLoading) return <TableSkeleton rows={4} />;
+  return (
+    <Table fixed>
+      <thead>
+        <tr>
+          <SortTh label="Name" sortKey="name" sort={sort} onSort={setSort} className="w-36" />
+          <SortTh label="Email" sortKey="email" sort={sort} onSort={setSort} className="w-48" />
+          <SortTh label="Role" sortKey="role" sort={sort} onSort={setSort} className="w-32" />
+          <SortTh
+            label="Joined"
+            sortKey="createdAt"
+            sort={sort}
+            onSort={setSort}
+            className="w-24"
+          />
+          {canManage && <Th className="w-16 text-right">Actions</Th>}
+        </tr>
+      </thead>
+      <tbody>
+        {sorted.map((m) => (
+          <MemberRow
+            key={m.userId}
+            member={m}
+            canManage={canManage}
+            isSelf={m.userId === meId}
+            onSetRole={(role) => onSetRole(m.userId, role)}
+            onRemove={() => onRemove(m.userId, m.name)}
+          />
+        ))}
+      </tbody>
+    </Table>
+  );
+}
+
 function PendingInvitesCard({
   invites,
   inviteUrl,
@@ -280,39 +333,16 @@ export function MembersPage() {
         <InviteByEmailCard org={org} memberLimit={memberLimit} sendEmailInvite={sendEmailInvite} />
       )}
 
-      {members.isLoading ? (
-        <TableSkeleton rows={4} />
-      ) : (
-        <Table fixed>
-          <thead>
-            <tr>
-              <SortTh label="Name" sortKey="name" sort={sort} onSort={setSort} className="w-36" />
-              <SortTh label="Email" sortKey="email" sort={sort} onSort={setSort} className="w-48" />
-              <SortTh label="Role" sortKey="role" sort={sort} onSort={setSort} className="w-32" />
-              <SortTh
-                label="Joined"
-                sortKey="createdAt"
-                sort={sort}
-                onSort={setSort}
-                className="w-24"
-              />
-              {canManage && <Th className="w-16 text-right">Actions</Th>}
-            </tr>
-          </thead>
-          <tbody>
-            {sorted.map((m) => (
-              <MemberRow
-                key={m.userId}
-                member={m}
-                canManage={canManage}
-                isSelf={m.userId === me.data?.user.id}
-                onSetRole={(role) => setRole.mutate({ userId: m.userId, role })}
-                onRemove={() => setRemoving({ userId: m.userId, name: m.name })}
-              />
-            ))}
-          </tbody>
-        </Table>
-      )}
+      <MemberTable
+        isLoading={members.isLoading}
+        sorted={sorted}
+        canManage={canManage}
+        sort={sort}
+        setSort={setSort}
+        meId={me.data?.user.id}
+        onSetRole={(userId, role) => setRole.mutate({ userId, role })}
+        onRemove={(userId, name) => setRemoving({ userId, name })}
+      />
 
       {canManage && !!invites.data?.length && (
         <PendingInvitesCard
