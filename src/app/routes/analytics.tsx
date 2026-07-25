@@ -9,6 +9,7 @@ import {
   Heatmap,
   LinkListCard,
   ClickBreakdown,
+  TopLinksCard,
 } from "../components/charts";
 import { AnalyticsSkeleton } from "../components/skeletons";
 import { NoOrgState } from "../components/no-org";
@@ -111,28 +112,6 @@ function ClicksChart({
         data={isHourly ? hourSeries : series}
         tickFormat={isHourly ? (day) => day.slice(11, 16) : undefined}
       />
-    </Card>
-  );
-}
-
-function TopLinksCard({
-  topLinks,
-}: {
-  topLinks: { id: string; slug: string; title: string; clicks: number }[];
-}) {
-  return (
-    <Card>
-      <p className="mb-3 text-2xs tracking-wider text-muted uppercase">Top links</p>
-      {topLinks.length ? (
-        <BarList
-          items={topLinks.map((l) => ({
-            key: `/${l.slug}${l.title ? ` · ${l.title}` : ""}`,
-            clicks: l.clicks,
-          }))}
-        />
-      ) : (
-        <p className="py-4 text-sm text-muted">No data yet</p>
-      )}
     </Card>
   );
 }

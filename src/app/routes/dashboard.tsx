@@ -6,7 +6,7 @@ import { useStats, useLinks, useMembers, useLinkMutations, useRecentClicks } fro
 import { useOrgLimits } from "../lib/org-limits";
 import { shortUrl } from "../lib/api";
 import { type DomainDTO, type LinkDTO, type RecentClick } from "@/shared/types";
-import { BarList, StatCard } from "../components/charts";
+import { StatCard, TopLinksCard } from "../components/charts";
 import { DashboardSkeleton } from "../components/skeletons";
 import { NoOrgState } from "../components/no-org";
 import { QRPreview } from "../components/qr";
@@ -100,7 +100,7 @@ export function Dashboard() {
       </div>
 
       <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <TopLinksCard topLinks={s.topLinks} />
+        <TopLinksCard topLinks={s.topLinks} limit={5} />
         <NeedsAttentionCard decaying={decaying} dead={dead} />
         <PeakCard peak={peak} rangeDays={s.rangeDays} />
       </div>
@@ -248,28 +248,6 @@ function ActivityCard({
             </li>
           ))}
         </ul>
-      )}
-    </Card>
-  );
-}
-
-function TopLinksCard({
-  topLinks,
-}: {
-  topLinks: { id: string; slug: string; title: string; clicks: number }[];
-}) {
-  return (
-    <Card>
-      <p className="mb-3 text-2xs tracking-wider text-muted uppercase">Top links</p>
-      {topLinks.length ? (
-        <BarList
-          items={topLinks.slice(0, 5).map((l) => ({
-            key: `/${l.slug}${l.title ? ` · ${l.title}` : ""}`,
-            clicks: l.clicks,
-          }))}
-        />
-      ) : (
-        <p className="py-4 text-sm text-muted">No data yet</p>
       )}
     </Card>
   );

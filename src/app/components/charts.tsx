@@ -176,6 +176,29 @@ export function BarList({
   );
 }
 
+/** A card of top links by clicks, rendered as a BarList (which already
+ * shows its own "No data yet" for an empty list). */
+export function TopLinksCard({
+  topLinks,
+  limit,
+}: {
+  topLinks: { id: string; slug: string; title: string; clicks: number }[];
+  limit?: number;
+}) {
+  const rows = limit ? topLinks.slice(0, limit) : topLinks;
+  return (
+    <Card>
+      <p className="mb-3 text-2xs tracking-wider text-muted uppercase">Top links</p>
+      <BarList
+        items={rows.map((l) => ({
+          key: `/${l.slug}${l.title ? ` · ${l.title}` : ""}`,
+          clicks: l.clicks,
+        }))}
+      />
+    </Card>
+  );
+}
+
 export function StatCard({
   label,
   value,
