@@ -68,6 +68,52 @@ function computePlanStats(planCountRows: { plan: string; n: number }[]) {
   return { planCounts, mrr };
 }
 
+// The "Business" row of /usage: signup/conversion/revenue figures pulled
+// out of their raw count-query rows.
+function computeBusinessMetrics(rows: {
+  users: { n: number }[];
+  proUsers: { n: number }[];
+  planCountRows: { plan: string; n: number }[];
+  signups7dRows: { n: number }[];
+  signups7dPrevRows: { n: number }[];
+  wauRows: { n: number }[];
+}) {
+  const totalUsers = rows.users[0]?.n ?? 0;
+  const paidUsers = rows.proUsers[0]?.n ?? 0;
+  const { planCounts, mrr } = computePlanStats(rows.planCountRows);
+  const paidConversionRate = totalUsers > 0 ? Math.round((paidUsers / totalUsers) * 100) : null;
+  const signups7d = rows.signups7dRows[0]?.n ?? 0;
+  const signups7dPrev = rows.signups7dPrevRows[0]?.n ?? 0;
+  const signups7dDelta = computeDelta(signups7d, signups7dPrev);
+  const wau = rows.wauRows[0]?.n ?? 0;
+  return {
+    totalUsers,
+    paidUsers,
+    planCounts,
+    mrr,
+    paidConversionRate,
+    signups7d,
+    signups7dDelta,
+    wau,
+  };
+}
+
+// Anomaly candidates only carry org ids: resolve their display names in one
+// batched lookup, skipping the query entirely when there's nothing to name.
+async function resolveAnomalyNames(db: DB, candidates: AnomalyCandidate[]) {
+  if (!candidates.length) return new Map<string, string>();
+  const rows = await db
+    .select({ id: schema.orgs.id, name: schema.orgs.name })
+    .from(schema.orgs)
+    .where(
+      inArray(
+        schema.orgs.id,
+        candidates.map((a) => a.orgId),
+      ),
+    );
+  return new Map(rows.map((r) => [r.id, r.name]));
+}
+
 type AnomalyCandidate = { orgId: string; clicks24h: number; avg14d: number; ratio: number };
 
 // Orgs whose 24h clicks exceed 5x their trailing 14d daily average.
@@ -305,18 +351,23 @@ adminRoutes.get("/usage", async (c) => {
 
   // ── Business row ──
 
-  const totalUsers = users[0]?.n ?? 0;
-  const paidUsers = proUsers[0]?.n ?? 0;
-
-  const { planCounts, mrr } = computePlanStats(planCountRows);
-
-  const paidConversionRate = totalUsers > 0 ? Math.round((paidUsers / totalUsers) * 100) : null;
-
-  const signups7d = signups7dRows[0]?.n ?? 0;
-  const signups7dPrev = signups7dPrevRows[0]?.n ?? 0;
-  const signups7dDelta = computeDelta(signups7d, signups7dPrev);
-
-  const wau = wauRows[0]?.n ?? 0;
+  const {
+    totalUsers,
+    paidUsers,
+    planCounts,
+    mrr,
+    paidConversionRate,
+    signups7d,
+    signups7dDelta,
+    wau,
+  } = computeBusinessMetrics({
+    users,
+    proUsers,
+    planCountRows,
+    signups7dRows,
+    signups7dPrevRows,
+    wauRows,
+  });
 
   // ── Growth row ──
 
@@ -328,21 +379,7 @@ adminRoutes.get("/usage", async (c) => {
   const botSeries = fillSeries(botSeriesRows, days);
 
   const anomalyCandidates = findAnomalies(anomaly24hRows, anomaly14dRows);
-  const anomalyNames = anomalyCandidates.length
-    ? new Map(
-        (
-          await db
-            .select({ id: schema.orgs.id, name: schema.orgs.name })
-            .from(schema.orgs)
-            .where(
-              inArray(
-                schema.orgs.id,
-                anomalyCandidates.map((a) => a.orgId),
-              ),
-            )
-        ).map((r) => [r.id, r.name]),
-      )
-    : new Map<string, string>();
+  const anomalyNames = await resolveAnomalyNames(db, anomalyCandidates);
   const anomalies = anomalyCandidates.map((a) => ({
     ...a,
     orgName: anomalyNames.get(a.orgId) ?? "Unknown",
