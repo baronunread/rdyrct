@@ -18,6 +18,7 @@ import { Card } from "../ui/misc";
 import { BusyContent } from "../ui/spinner";
 import { useToast } from "../ui/toast";
 import { QRPreview, QrLogoInput, QrColorField } from "./qr";
+import { orgQrFrom } from "../lib/org-qr";
 
 interface QrDefaultsValues {
   qrStyle: string;
@@ -29,21 +30,30 @@ interface QrDefaultsValues {
   qrLogoSize: string;
 }
 
+/** The org's current QR defaults, as the string-only form the settings
+ * fields edit (reuses orgQrFrom's already-tested `??` defaulting). */
+function initialQrValues(
+  org?: NonNullable<ReturnType<typeof useCurrentOrg>["org"]>,
+): QrDefaultsValues {
+  const qr = orgQrFrom(org);
+  return {
+    qrStyle: qr.style,
+    qrColor: qr.color,
+    qrLogo: qr.logo,
+    qrCorner: qr.corner,
+    qrBg: qr.bg,
+    qrEyeColor: qr.eyeColor,
+    qrLogoSize: qr.logoSize?.toString() ?? "",
+  };
+}
+
 function useQrDefaultsForm(
   orgId: string,
   org: NonNullable<ReturnType<typeof useCurrentOrg>["org"]>,
 ) {
   const qc = useQueryClient();
   const toast = useToast();
-  const [values, setValues] = useState<QrDefaultsValues>({
-    qrStyle: org?.qrStyle ?? "",
-    qrColor: org?.qrColor ?? "",
-    qrLogo: org?.qrLogo ?? "",
-    qrCorner: org?.qrCorner ?? "",
-    qrBg: org?.qrBg ?? "",
-    qrEyeColor: org?.qrEyeColor ?? "",
-    qrLogoSize: org?.qrLogoSize?.toString() ?? "",
-  });
+  const [values, setValues] = useState<QrDefaultsValues>(() => initialQrValues(org));
   const [savingQr, setSavingQr] = useState(false);
 
   const setField = <K extends keyof QrDefaultsValues>(key: K, value: QrDefaultsValues[K]) =>
@@ -186,11 +196,54 @@ function QrDefaultsFormFields({
   );
 }
 
+/** Owner/admin (or platform admin) can edit; everyone else can only view. */
+function canManageQrDefaults(
+  isPlatformAdmin: boolean | undefined,
+  role: "owner" | "admin" | "member" | undefined,
+) {
+  return !!isPlatformAdmin || role === "owner" || role === "admin";
+}
+
+function UpgradeQrPrompt() {
+  return (
+    <p className="text-sm text-muted">
+      QR customization is a paid feature.{" "}
+      <Link to="/billing" className="text-accent hover:underline">
+        Upgrade
+      </Link>{" "}
+      to put your logo and style on every QR code.
+    </p>
+  );
+}
+
+function SaveQrDefaultsAction({
+  isAdmin,
+  savingQr,
+  save,
+}: {
+  isAdmin: boolean;
+  savingQr: boolean;
+  save: () => void;
+}) {
+  if (!isAdmin) {
+    return (
+      <p className="text-xs text-muted">Only the owner and admins can change these settings.</p>
+    );
+  }
+  return (
+    <div>
+      <Button variant="primary" onClick={save} disabled={savingQr}>
+        <BusyContent busy={savingQr}>Save QR defaults</BusyContent>
+      </Button>
+    </div>
+  );
+}
+
 export function QrDefaultsCard() {
   const { org } = useCurrentOrg();
   const orgId = org?.id ?? "";
   const me = useCurrentUser();
-  const isAdmin = me.data?.user.isAdmin || org?.role === "owner" || org?.role === "admin";
+  const isAdmin = canManageQrDefaults(me.data?.user.isAdmin, org?.role);
   const hasQr = org ? PLAN_LIMITS[org.plan].qr : false;
 
   const { values, setField, savingQr, save } = useQrDefaultsForm(orgId, org!);
@@ -205,27 +258,11 @@ export function QrDefaultsCard() {
           </p>
         </div>
         {!hasQr ? (
-          <p className="text-sm text-muted">
-            QR customization is a paid feature.{" "}
-            <Link to="/billing" className="text-accent hover:underline">
-              Upgrade
-            </Link>{" "}
-            to put your logo and style on every QR code.
-          </p>
+          <UpgradeQrPrompt />
         ) : (
           <div className="flex flex-col gap-6">
             <QrDefaultsFormFields values={values} setField={setField} isAdmin={isAdmin} />
-            {isAdmin ? (
-              <div>
-                <Button variant="primary" onClick={save} disabled={savingQr}>
-                  <BusyContent busy={savingQr}>Save QR defaults</BusyContent>
-                </Button>
-              </div>
-            ) : (
-              <p className="text-xs text-muted">
-                Only the owner and admins can change these settings.
-              </p>
-            )}
+            <SaveQrDefaultsAction isAdmin={isAdmin} savingQr={savingQr} save={save} />
           </div>
         )}
       </div>
