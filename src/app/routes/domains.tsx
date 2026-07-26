@@ -1,12 +1,12 @@
-import { useState, type ReactNode, useCallback } from "react";
-import { useForm } from "react-hook-form";
+import { useState, type FormEvent, type ReactNode, useCallback } from "react";
+import { useForm, type UseFormRegister } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Link } from "react-router";
 import { AnimatePresence, LazyMotion, MotionConfig, domAnimation, m } from "motion/react";
 import { Trash2, RefreshCw } from "lucide-react";
 import { useCurrentUser, useConfig, useDomains, useDomainMutations } from "../lib/hooks";
 import { useCurrentOrg } from "../lib/current-org";
-import { PLAN_LIMITS, type DomainDTO } from "@/shared/types";
+import { PLAN_LIMITS, type DomainDTO, type OrgRole } from "@/shared/types";
 import { Button, IconButton } from "../ui/button";
 import { Input } from "../ui/field";
 import { ConfirmDialog } from "../ui/confirm-dialog";
@@ -20,6 +20,7 @@ import { CopyButton } from "../ui/copy-button";
 import { useToast } from "../ui/toast";
 import { cn } from "../ui/cn";
 import { copyToClipboard } from "../lib/clipboard";
+import { addDomainMessage, recheckMessage } from "../lib/domain-messages";
 
 const domainStatusColor: Record<DomainDTO["status"], "accent" | "butter" | "mint" | "pink"> = {
   checking_dns: "butter",
@@ -38,6 +39,10 @@ const domainStatusLabel: Record<DomainDTO["status"], string> = {
 const transitional = (status: DomainDTO["status"]) =>
   status === "checking_dns" || status === "issuing_tls";
 
+function canManageDomains(isPlatformAdmin: boolean, role: OrgRole): boolean {
+  return isPlatformAdmin || role === "owner" || role === "admin";
+}
+
 export function DomainsPage() {
   const { org } = useCurrentOrg();
   const orgId = org?.id ?? "";
@@ -46,7 +51,7 @@ export function DomainsPage() {
   if (me.isLoading) return <DomainsSkeleton />;
   if (!org) return <NoOrgState />;
 
-  const isAdmin = me.data?.user.isAdmin || org.role === "owner" || org.role === "admin";
+  const isAdmin = canManageDomains(!!me.data?.user.isAdmin, org.role);
 
   return (
     <div>
@@ -57,6 +62,112 @@ export function DomainsPage() {
         <DomainsCard orgId={orgId} plan={org.plan} />
       )}
     </div>
+  );
+}
+
+function UpgradeDomainsCard() {
+  return (
+    <Card className="max-w-2xl">
+      <div className="flex flex-col gap-3">
+        <p className="text-2xs tracking-wider text-muted uppercase">Custom domains</p>
+        <p className="text-sm text-muted">
+          Use your own domain for short links instead of the shared default. Custom domains are a
+          paid feature.
+        </p>
+        <div>
+          <Link to="/billing">
+            <Button variant="primary">Upgrade to add a domain</Button>
+          </Link>
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+function AddDomainForm({
+  hasDomains,
+  register,
+  onSubmit,
+  pending,
+}: {
+  hasDomains: boolean;
+  register: UseFormRegister<{ hostname: string }>;
+  onSubmit: (e: FormEvent) => void;
+  pending: boolean;
+}) {
+  return (
+    <form
+      className={cn("flex flex-col gap-3", hasDomains ? "border-t border-border pt-4" : "")}
+      onSubmit={onSubmit}
+    >
+      <div>
+        <span className="mb-1.5 block text-xs tracking-wider text-muted uppercase">
+          Add a domain
+        </span>
+        <div className="flex items-center gap-2">
+          <div className="min-w-0 flex-1">
+            <Input
+              {...register("hostname")}
+              placeholder="links.example.com"
+              aria-label="Add a domain"
+            />
+          </div>
+          <Button type="submit" variant="primary" size="sm" disabled={pending} className="w-24">
+            <BusyContent busy={pending}>Add domain</BusyContent>
+          </Button>
+        </div>
+        <span className="mt-1 block text-xs text-muted/80">
+          After adding, we check for the CNAME record every few seconds. Once detected, we issue a
+          TLS certificate automatically. You can also hit the refresh button to check progress.
+        </span>
+      </div>
+    </form>
+  );
+}
+
+function HowItWorksSteps({ appHost }: { appHost: string }) {
+  return (
+    <aside className="w-full shrink-0 lg:w-72">
+      <p className="text-2xs tracking-wider text-muted uppercase">How it works</p>
+      <ol className="mt-3 flex flex-col gap-3">
+        <Step n={1}>
+          At your DNS provider, create a CNAME record pointing a hostname you own (e.g.{" "}
+          <code className="text-text">links.example.com</code>) at{" "}
+          <code className="text-text">{appHost}</code>.
+        </Step>
+        <Step n={2}>Add the hostname below. We detect the CNAME and issue TLS automatically.</Step>
+        <Step n={3}>
+          Your short links go live under your brand. Certificates and renewals are handled for you.
+        </Step>
+      </ol>
+    </aside>
+  );
+}
+
+function DeleteDomainDialog({
+  deleting,
+  onClose,
+  onConfirm,
+  pending,
+}: {
+  deleting: DomainDTO | null;
+  onClose: () => void;
+  onConfirm: () => void;
+  pending: boolean;
+}) {
+  return (
+    <ConfirmDialog
+      title="Delete domain"
+      open={!!deleting}
+      onClose={onClose}
+      onConfirm={onConfirm}
+      confirmLabel="Delete"
+      danger
+      pending={pending}
+    >
+      Delete <span className="font-bold">{deleting?.hostname}</span>? Links still using this domain
+      must be moved or deleted first.
+    </ConfirmDialog>
   );
 }
 
@@ -81,13 +192,7 @@ function DomainsCard({ orgId, plan }: { orgId: string; plan: "free" | "hobby" | 
       add.mutate(hostname, {
         onSuccess: (d) => {
           reset();
-          toast(
-            d.status === "active"
-              ? "Domain added successfully"
-              : d.status === "issuing_tls"
-                ? "Domain added, DNS resolved, issuing certificate…"
-                : "Domain added, checking DNS…",
-          );
+          toast(addDomainMessage(d.status));
         },
         onError: withErrorToast(toast),
       });
@@ -99,16 +204,8 @@ function DomainsCard({ orgId, plan }: { orgId: string; plan: "free" | "hobby" | 
     const oldStatus = d.status;
     refresh.mutate(d.id, {
       onSuccess: (updated) => {
-        if (updated.status === oldStatus) {
-          if (oldStatus === "checking_dns")
-            toast("CNAME record not detected yet: create it at your DNS provider to continue");
-          else if (oldStatus === "issuing_tls")
-            toast("Certificate still being issued, usually takes a few minutes");
-        } else if (updated.status === "active") {
-          toast("Domain is live!");
-        } else if (oldStatus === "checking_dns" && updated.status === "issuing_tls") {
-          toast("DNS resolved! Issuing TLS certificate…");
-        }
+        const message = recheckMessage(oldStatus, updated.status);
+        if (message) toast(message);
       },
       onError: withErrorToast(toast),
     });
@@ -125,23 +222,18 @@ function DomainsCard({ orgId, plan }: { orgId: string; plan: "free" | "hobby" | 
     );
   };
 
-  if (limits.domains === 0)
-    return (
-      <Card className="max-w-2xl">
-        <div className="flex flex-col gap-3">
-          <p className="text-2xs tracking-wider text-muted uppercase">Custom domains</p>
-          <p className="text-sm text-muted">
-            Use your own domain for short links instead of the shared default. Custom domains are a
-            paid feature.
-          </p>
-          <div>
-            <Link to="/billing">
-              <Button variant="primary">Upgrade to add a domain</Button>
-            </Link>
-          </div>
-        </div>
-      </Card>
-    );
+  const confirmDelete = () => {
+    if (!deleting) return;
+    remove.mutate(deleting.id, {
+      onSuccess: () => {
+        setDeleting(null);
+        toast("Domain deleted");
+      },
+      onError: withErrorToast(toast),
+    });
+  };
+
+  if (limits.domains === 0) return <UpgradeDomainsCard />;
 
   return (
     <>
@@ -174,89 +266,61 @@ function DomainsCard({ orgId, plan }: { orgId: string; plan: "free" | "hobby" | 
                   </LazyMotion>
                 </MotionConfig>
 
-                <form
-                  className={cn(
-                    "flex flex-col gap-3",
-                    domains.data?.length ? "border-t border-border pt-4" : "",
-                  )}
+                <AddDomainForm
+                  hasDomains={!!domains.data?.length}
+                  register={register}
                   onSubmit={handleSubmit(addDomain, (errors) =>
                     toast(errors.hostname?.message ?? "Enter a valid hostname", "error"),
                   )}
-                >
-                  <div>
-                    <span className="mb-1.5 block text-xs tracking-wider text-muted uppercase">
-                      Add a domain
-                    </span>
-                    <div className="flex items-center gap-2">
-                      <div className="min-w-0 flex-1">
-                        <Input
-                          {...register("hostname")}
-                          placeholder="links.example.com"
-                          aria-label="Add a domain"
-                        />
-                      </div>
-                      <Button
-                        type="submit"
-                        variant="primary"
-                        size="sm"
-                        disabled={add.isPending}
-                        className="w-24"
-                      >
-                        <BusyContent busy={add.isPending}>Add domain</BusyContent>
-                      </Button>
-                    </div>
-                    <span className="mt-1 block text-xs text-muted/80">
-                      After adding, we check for the CNAME record every few seconds. Once detected,
-                      we issue a TLS certificate automatically. You can also hit the refresh button
-                      to check progress.
-                    </span>
-                  </div>
-                </form>
+                  pending={add.isPending}
+                />
               </div>
             )}
           </div>
         </Card>
 
-        <aside className="w-full shrink-0 lg:w-72">
-          <p className="text-2xs tracking-wider text-muted uppercase">How it works</p>
-          <ol className="mt-3 flex flex-col gap-3">
-            <Step n={1}>
-              At your DNS provider, create a CNAME record pointing a hostname you own (e.g.{" "}
-              <code className="text-text">links.example.com</code>) at{" "}
-              <code className="text-text">{appHost}</code>.
-            </Step>
-            <Step n={2}>
-              Add the hostname below. We detect the CNAME and issue TLS automatically.
-            </Step>
-            <Step n={3}>
-              Your short links go live under your brand. Certificates and renewals are handled for
-              you.
-            </Step>
-          </ol>
-        </aside>
+        <HowItWorksSteps appHost={appHost} />
       </div>
 
-      <ConfirmDialog
-        title="Delete domain"
-        open={!!deleting}
+      <DeleteDomainDialog
+        deleting={deleting}
         onClose={() => setDeleting(null)}
-        onConfirm={() => {
-          if (!deleting) return;
-          remove.mutate(deleting.id, {
-            onSuccess: () => {
-              setDeleting(null);
-              toast("Domain deleted");
-            },
-            onError: withErrorToast(toast),
-          });
-        }}
-        confirmLabel="Delete"
-        danger
+        onConfirm={confirmDelete}
         pending={remove.isPending}
-      >
-        Delete <span className="font-bold">{deleting?.hostname}</span>? Links still using this
-        domain must be moved or deleted first.
-      </ConfirmDialog>
+      />
+    </>
+  );
+}
+
+function DomainStatusBadge({
+  domain: d,
+  refreshing,
+  onRecheck,
+}: {
+  domain: DomainDTO;
+  refreshing: boolean;
+  onRecheck: () => void;
+}) {
+  const tabVisible = document.visibilityState === "visible";
+  return (
+    <>
+      <AnimatePresence mode="popLayout">
+        <m.span
+          key={d.status}
+          initial={tabVisible ? { x: 16, opacity: 0 } : { x: 0, opacity: 1 }}
+          animate={{ x: 0, opacity: 1 }}
+          exit={tabVisible ? { x: -16, opacity: 0 } : { x: 0, opacity: 1 }}
+          transition={{ duration: tabVisible ? 0.2 : 0 }}
+          className="inline-flex"
+        >
+          <Badge color={domainStatusColor[d.status]}>{domainStatusLabel[d.status]}</Badge>
+        </m.span>
+      </AnimatePresence>
+      {transitional(d.status) && (
+        <IconButton label="Re-check now" disabled={refreshing} onClick={onRecheck}>
+          <RefreshCw size={14} className={refreshing ? "animate-spin" : ""} />
+        </IconButton>
+      )}
     </>
   );
 }
@@ -286,30 +350,12 @@ function DomainRow({
   onSaveRedirect: () => void;
   onCopy: (text: string) => void;
 }) {
-  const tabVisible = document.visibilityState === "visible";
-
   return (
     <div className="rounded-lg border border-border p-3">
       <div className="flex items-center justify-between gap-2">
         <span className="font-bold">{d.hostname}</span>
         <div className="relative flex items-center gap-1">
-          <AnimatePresence mode="popLayout">
-            <m.span
-              key={d.status}
-              initial={tabVisible ? { x: 16, opacity: 0 } : { x: 0, opacity: 1 }}
-              animate={{ x: 0, opacity: 1 }}
-              exit={tabVisible ? { x: -16, opacity: 0 } : { x: 0, opacity: 1 }}
-              transition={{ duration: tabVisible ? 0.2 : 0 }}
-              className="inline-flex"
-            >
-              <Badge color={domainStatusColor[d.status]}>{domainStatusLabel[d.status]}</Badge>
-            </m.span>
-          </AnimatePresence>
-          {transitional(d.status) && (
-            <IconButton label="Re-check now" disabled={refreshing} onClick={onRecheck}>
-              <RefreshCw size={14} className={refreshing ? "animate-spin" : ""} />
-            </IconButton>
-          )}
+          <DomainStatusBadge domain={d} refreshing={refreshing} onRecheck={onRecheck} />
           <IconButton label={`Delete ${d.hostname}`} danger onClick={onDelete}>
             <Trash2 size={14} />
           </IconButton>
@@ -325,6 +371,85 @@ function DomainRow({
         onSaveRedirect={onSaveRedirect}
         onCopy={onCopy}
       />
+    </div>
+  );
+}
+
+function TransitionalDomainDetail({
+  domain: d,
+  appHost,
+  onCopy,
+}: {
+  domain: DomainDTO;
+  appHost: string;
+  onCopy: (text: string) => void;
+}) {
+  const checkingDns = d.status === "checking_dns";
+  return (
+    <div className="mt-3 flex flex-col gap-1.5 rounded-md bg-surface-2/50 p-3 text-xs text-muted">
+      <p>
+        {checkingDns
+          ? "To activate, create this record at your DNS provider:"
+          : "DNS resolved. Waiting for the TLS certificate to be issued."}
+      </p>
+      {checkingDns && (
+        <div className="flex flex-wrap items-center gap-1.5">
+          <code className="rounded bg-bg px-1.5 py-0.5 text-text">
+            {d.hostname} CNAME {appHost}
+          </code>
+          <CopyButton text={appHost} label="Copy CNAME target" onCopy={onCopy} />
+        </div>
+      )}
+      <p>
+        {checkingDns
+          ? "We re-check automatically every few seconds. "
+          : "This usually takes a few minutes. "}
+        Hit the refresh button above to check progress manually.
+      </p>
+    </div>
+  );
+}
+
+function ErrorDomainDetail({ domain: d }: { domain: DomainDTO }) {
+  return (
+    <div className="mt-3 flex flex-col gap-1.5 rounded-md bg-danger/10 p-3 text-xs text-danger">
+      <p>{d.statusReason || "Activation failed. Delete and re-add the domain to try again."}</p>
+    </div>
+  );
+}
+
+function RootRedirectEditor({
+  redirectDraft,
+  savingRedirect,
+  onRedirectDraft,
+  onSaveRedirect,
+}: {
+  redirectDraft: string;
+  savingRedirect: boolean;
+  onRedirectDraft: (v: string) => void;
+  onSaveRedirect: () => void;
+}) {
+  return (
+    <div className="mt-3">
+      <span className="mb-1.5 block text-xs tracking-wider text-muted uppercase">
+        Root redirect
+      </span>
+      <div className="flex items-center gap-2">
+        <div className="min-w-0 flex-1">
+          <Input
+            aria-label="Root redirect"
+            value={redirectDraft}
+            onChange={(e) => onRedirectDraft(e.target.value)}
+            placeholder="https://example.com"
+          />
+        </div>
+        <Button size="sm" disabled={savingRedirect} onClick={onSaveRedirect}>
+          Save
+        </Button>
+      </div>
+      <span className="mt-1 block text-xs text-muted/80">
+        Where the bare domain (no slug) sends visitors, e.g. your homepage
+      </span>
     </div>
   );
 }
@@ -349,63 +474,16 @@ function DomainStatusDetail({
   onSaveRedirect: () => void;
   onCopy: (text: string) => void;
 }) {
-  if (transitional(d.status)) {
-    const checkingDns = d.status === "checking_dns";
-    return (
-      <div className="mt-3 flex flex-col gap-1.5 rounded-md bg-surface-2/50 p-3 text-xs text-muted">
-        <p>
-          {checkingDns
-            ? "To activate, create this record at your DNS provider:"
-            : "DNS resolved. Waiting for the TLS certificate to be issued."}
-        </p>
-        {checkingDns && (
-          <div className="flex flex-wrap items-center gap-1.5">
-            <code className="rounded bg-bg px-1.5 py-0.5 text-text">
-              {d.hostname} CNAME {appHost}
-            </code>
-            <CopyButton text={appHost} label="Copy CNAME target" onCopy={onCopy} />
-          </div>
-        )}
-        <p>
-          {checkingDns
-            ? "We re-check automatically every few seconds. "
-            : "This usually takes a few minutes. "}
-          Hit the refresh button above to check progress manually.
-        </p>
-      </div>
-    );
-  }
-
-  if (d.status === "error") {
-    return (
-      <div className="mt-3 flex flex-col gap-1.5 rounded-md bg-danger/10 p-3 text-xs text-danger">
-        <p>{d.statusReason || "Activation failed. Delete and re-add the domain to try again."}</p>
-      </div>
-    );
-  }
-
+  if (transitional(d.status))
+    return <TransitionalDomainDetail domain={d} appHost={appHost} onCopy={onCopy} />;
+  if (d.status === "error") return <ErrorDomainDetail domain={d} />;
   return (
-    <div className="mt-3">
-      <span className="mb-1.5 block text-xs tracking-wider text-muted uppercase">
-        Root redirect
-      </span>
-      <div className="flex items-center gap-2">
-        <div className="min-w-0 flex-1">
-          <Input
-            aria-label="Root redirect"
-            value={redirectDraft}
-            onChange={(e) => onRedirectDraft(e.target.value)}
-            placeholder="https://example.com"
-          />
-        </div>
-        <Button size="sm" disabled={savingRedirect} onClick={onSaveRedirect}>
-          Save
-        </Button>
-      </div>
-      <span className="mt-1 block text-xs text-muted/80">
-        Where the bare domain (no slug) sends visitors, e.g. your homepage
-      </span>
-    </div>
+    <RootRedirectEditor
+      redirectDraft={redirectDraft}
+      savingRedirect={savingRedirect}
+      onRedirectDraft={onRedirectDraft}
+      onSaveRedirect={onSaveRedirect}
+    />
   );
 }
 
