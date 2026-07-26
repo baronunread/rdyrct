@@ -12,18 +12,9 @@ import { ConfirmDialog } from "../../ui/confirm-dialog";
 import { SearchInput } from "./search-input";
 import { SortTh } from "../../ui/sort-th";
 import { withErrorToast } from "../../lib/mutation-toast";
-import { shortDate } from "../../lib/dates";
 import { sortRows } from "../../lib/sort";
-
-/** "today" / "3d ago" / a date, for the users table's last-seen column. */
-const lastSeenLabel = (ts: number | null) => {
-  if (!ts) return "never";
-  const days = Math.floor((Date.now() - ts) / 86_400_000);
-  if (days <= 0) return "today";
-  if (days === 1) return "yesterday";
-  if (days < 30) return `${days}d ago`;
-  return shortDate(ts);
-};
+import { shortDate } from "../../lib/dates";
+import { lastSeenLabel } from "../../lib/last-seen";
 
 type UserAction = "delete" | "ban" | "unban" | "makeAdmin" | "removeAdmin";
 
@@ -220,6 +211,86 @@ function UserRow({
   );
 }
 
+function UsersTable({
+  rows,
+  meId,
+  sort,
+  setSort,
+  onSetPlan,
+  onConfirm,
+  searchTerm,
+}: {
+  rows: AdminUserRow[];
+  meId: string | undefined;
+  sort: Sort;
+  setSort: (s: Sort) => void;
+  onSetPlan: (user: AdminUserRow, plan: OrgPlan) => void;
+  onConfirm: (kind: UserAction, user: AdminUserRow) => void;
+  searchTerm: string;
+}) {
+  return (
+    <Table>
+      <thead>
+        <tr>
+          <SortTh label="Name" sortKey="name" sort={sort} onSort={setSort} />
+          <Th>Email</Th>
+          <SortTh label="Orgs" sortKey="orgs" sort={sort} onSort={setSort} className="text-right" />
+          <Th>Plan</Th>
+          <SortTh label="Joined" sortKey="joined" sort={sort} onSort={setSort} />
+          <SortTh label="Last seen" sortKey="lastSeen" sort={sort} onSort={setSort} />
+          <Th className="text-right">Actions</Th>
+        </tr>
+      </thead>
+      <tbody>
+        {rows.map((u) => (
+          <UserRow
+            key={u.id}
+            user={u}
+            isSelf={u.id === meId}
+            onSetPlan={(plan) => onSetPlan(u, plan)}
+            onConfirm={(kind) => onConfirm(kind, u)}
+          />
+        ))}
+        {rows.length === 0 && (
+          <tr>
+            <Td colSpan={7} className="py-8 text-center text-muted">
+              No users match “{searchTerm}”.
+            </Td>
+          </tr>
+        )}
+      </tbody>
+    </Table>
+  );
+}
+
+function UserActionConfirmDialog({
+  confirm,
+  onClose,
+  onConfirm,
+  pending,
+}: {
+  confirm: { kind: UserAction; user: AdminUserRow } | null;
+  onClose: () => void;
+  onConfirm: () => void;
+  pending: boolean;
+}) {
+  if (!confirm) return null;
+  const meta = userActionMeta[confirm.kind];
+  return (
+    <ConfirmDialog
+      title={meta.title}
+      open
+      onClose={onClose}
+      onConfirm={onConfirm}
+      confirmLabel={meta.confirmLabel}
+      danger={meta.danger}
+      pending={pending}
+    >
+      {meta.body(confirm.user)}
+    </ConfirmDialog>
+  );
+}
+
 export function AdminUsersPage() {
   const users = useAdminUsers();
   const me = useCurrentUser();
@@ -303,7 +374,6 @@ export function AdminUsersPage() {
   }, [users.data, q, sort]);
 
   if (users.isLoading) return <AdminTableSkeleton />;
-  const meta = confirm ? userActionMeta[confirm.kind] : null;
   return (
     <div>
       <PageHeader title="Users" sub="All accounts on this instance" />
@@ -313,62 +383,27 @@ export function AdminUsersPage() {
         placeholder="Search name or email…"
         label="Search users"
       />
-      <Table>
-        <thead>
-          <tr>
-            <SortTh label="Name" sortKey="name" sort={sort} onSort={setSort} />
-            <Th>Email</Th>
-            <SortTh
-              label="Orgs"
-              sortKey="orgs"
-              sort={sort}
-              onSort={setSort}
-              className="text-right"
-            />
-            <Th>Plan</Th>
-            <SortTh label="Joined" sortKey="joined" sort={sort} onSort={setSort} />
-            <SortTh label="Last seen" sortKey="lastSeen" sort={sort} onSort={setSort} />
-            <Th className="text-right">Actions</Th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((u) => (
-            <UserRow
-              key={u.id}
-              user={u}
-              isSelf={u.id === me.data?.user.id}
-              onSetPlan={(plan) =>
-                patchUser.mutate(
-                  { userId: u.id, body: { plan } },
-                  { onSuccess: () => toast("Plan updated") },
-                )
-              }
-              onConfirm={(kind) => setConfirm({ kind, user: u })}
-            />
-          ))}
-          {rows.length === 0 && (
-            <tr>
-              <Td colSpan={7} className="py-8 text-center text-muted">
-                No users match “{q.trim()}”.
-              </Td>
-            </tr>
-          )}
-        </tbody>
-      </Table>
+      <UsersTable
+        rows={rows}
+        meId={me.data?.user.id}
+        sort={sort}
+        setSort={setSort}
+        onSetPlan={(u, plan) =>
+          patchUser.mutate(
+            { userId: u.id, body: { plan } },
+            { onSuccess: () => toast("Plan updated") },
+          )
+        }
+        onConfirm={(kind, u) => setConfirm({ kind, user: u })}
+        searchTerm={q.trim()}
+      />
 
-      {meta && confirm && (
-        <ConfirmDialog
-          title={meta.title}
-          open
-          onClose={() => setConfirm(null)}
-          onConfirm={runAction}
-          confirmLabel={meta.confirmLabel}
-          danger={meta.danger}
-          pending={patchUser.isPending || remove.isPending}
-        >
-          {meta.body(confirm.user)}
-        </ConfirmDialog>
-      )}
+      <UserActionConfirmDialog
+        confirm={confirm}
+        onClose={() => setConfirm(null)}
+        onConfirm={runAction}
+        pending={patchUser.isPending || remove.isPending}
+      />
     </div>
   );
 }
