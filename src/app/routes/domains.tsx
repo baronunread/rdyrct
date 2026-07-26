@@ -292,6 +292,25 @@ function DomainsCard({ orgId, plan }: { orgId: string; plan: "free" | "hobby" | 
   );
 }
 
+/** Slide-in/out variants for the status badge swap: skip the motion (and
+ * its delay) when the tab isn't visible, so a backgrounded tab doesn't
+ * queue up animation work. */
+function statusSlideVariants(tabVisible: boolean) {
+  return {
+    initial: tabVisible ? { x: 16, opacity: 0 } : { x: 0, opacity: 1 },
+    exit: tabVisible ? { x: -16, opacity: 0 } : { x: 0, opacity: 1 },
+    duration: tabVisible ? 0.2 : 0,
+  };
+}
+
+function RecheckButton({ refreshing, onRecheck }: { refreshing: boolean; onRecheck: () => void }) {
+  return (
+    <IconButton label="Re-check now" disabled={refreshing} onClick={onRecheck}>
+      <RefreshCw size={14} className={refreshing ? "animate-spin" : ""} />
+    </IconButton>
+  );
+}
+
 function DomainStatusBadge({
   domain: d,
   refreshing,
@@ -301,26 +320,22 @@ function DomainStatusBadge({
   refreshing: boolean;
   onRecheck: () => void;
 }) {
-  const tabVisible = document.visibilityState === "visible";
+  const { initial, exit, duration } = statusSlideVariants(document.visibilityState === "visible");
   return (
     <>
       <AnimatePresence mode="popLayout">
         <m.span
           key={d.status}
-          initial={tabVisible ? { x: 16, opacity: 0 } : { x: 0, opacity: 1 }}
+          initial={initial}
           animate={{ x: 0, opacity: 1 }}
-          exit={tabVisible ? { x: -16, opacity: 0 } : { x: 0, opacity: 1 }}
-          transition={{ duration: tabVisible ? 0.2 : 0 }}
+          exit={exit}
+          transition={{ duration }}
           className="inline-flex"
         >
           <Badge color={domainStatusColor[d.status]}>{domainStatusLabel[d.status]}</Badge>
         </m.span>
       </AnimatePresence>
-      {transitional(d.status) && (
-        <IconButton label="Re-check now" disabled={refreshing} onClick={onRecheck}>
-          <RefreshCw size={14} className={refreshing ? "animate-spin" : ""} />
-        </IconButton>
-      )}
+      {transitional(d.status) && <RecheckButton refreshing={refreshing} onRecheck={onRecheck} />}
     </>
   );
 }
