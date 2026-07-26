@@ -17,7 +17,9 @@ import { MenuSelect } from "../ui/menu";
 import { Card } from "../ui/misc";
 import { BusyContent } from "../ui/spinner";
 import { useToast } from "../ui/toast";
-import { QRPreview, QrLogoInput, QrColorField } from "./qr";
+import { QRPreview } from "./qr";
+import { QrLogoInput } from "./qr-logo-input";
+import { QrColorField } from "./qr-color-field";
 import { orgQrFrom } from "../lib/org-qr";
 
 interface QrDefaultsValues {

@@ -12,7 +12,9 @@ import { MenuSelect } from "../ui/menu";
 import { BusyContent } from "../ui/spinner";
 import { useToast } from "../ui/toast";
 import { Tooltip } from "../ui/tooltip";
-import { QRPreview, QrLogoInput, QrColorField } from "./qr";
+import { QRPreview } from "./qr";
+import { QrLogoInput } from "./qr-logo-input";
+import { QrColorField } from "./qr-color-field";
 import { linkInputSchema } from "../lib/schemas";
 import { qrFallbacks, resolveQrLook, type OrgQr } from "../lib/org-qr";
 
