@@ -105,37 +105,45 @@ function qrPatchFields(body: OrgQrPatchBody): Partial<typeof schema.orgs.$inferI
   return set;
 }
 
+function requireOrgName(name: string): string {
+  const trimmed = name.trim();
+  if (!trimmed) throw new HTTPException(400, { message: "Name required" });
+  return trimmed;
+}
+
+/** Applies the QR fields onto `set` and returns the logo being replaced (""
+ * if none), so a cleared/replaced one can be swept from R2. Throws if QR
+ * customization isn't on the org's plan. */
+async function applyQrPatch(
+  db: DB,
+  orgId: string,
+  body: OrgQrPatchBody,
+  set: Partial<typeof schema.orgs.$inferInsert>,
+): Promise<string> {
+  validateQrFields(body, orgId);
+  // QR customization is a paid feature, so are the org-level defaults.
+  const { limits } = await orgPlan(db, orgId);
+  if (!limits.qr)
+    throw new HTTPException(402, {
+      message: "QR customization is a paid feature: upgrade to use it",
+    });
+  Object.assign(set, qrPatchFields(body));
+  if (body.qrLogo === undefined) return "";
+  const rows = await db
+    .select({ qrLogo: schema.orgs.qrLogo })
+    .from(schema.orgs)
+    .where(eq(schema.orgs.id, orgId));
+  return rows[0]?.qrLogo ?? "";
+}
+
 orgRoutes.patch("/:orgId", requireOrgRole("admin"), async (c) => {
   const body = await c.req.json<{ name?: string } & OrgQrPatchBody>();
   const orgId = c.req.param("orgId");
   const db = c.var.db;
 
   const set: Partial<typeof schema.orgs.$inferInsert> = {};
-  if (body.name !== undefined) {
-    const name = body.name.trim();
-    if (!name) throw new HTTPException(400, { message: "Name required" });
-    set.name = name;
-  }
-
-  // Read the current logo so a replaced/cleared one can leave R2.
-  let oldLogo = "";
-  if (wantsQrUpdate(body)) {
-    validateQrFields(body, orgId);
-    // QR customization is a paid feature, so are the org-level defaults.
-    const { limits } = await orgPlan(db, orgId);
-    if (!limits.qr)
-      throw new HTTPException(402, {
-        message: "QR customization is a paid feature: upgrade to use it",
-      });
-    if (body.qrLogo !== undefined) {
-      const rows = await db
-        .select({ qrLogo: schema.orgs.qrLogo })
-        .from(schema.orgs)
-        .where(eq(schema.orgs.id, orgId));
-      oldLogo = rows[0]?.qrLogo ?? "";
-    }
-    Object.assign(set, qrPatchFields(body));
-  }
+  if (body.name !== undefined) set.name = requireOrgName(body.name);
+  const oldLogo = wantsQrUpdate(body) ? await applyQrPatch(db, orgId, body, set) : "";
 
   if (Object.keys(set).length === 0) throw new HTTPException(400, { message: "Nothing to update" });
   await db.update(schema.orgs).set(set).where(eq(schema.orgs.id, orgId));
