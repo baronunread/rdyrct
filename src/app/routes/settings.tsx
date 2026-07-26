@@ -5,7 +5,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useCurrentUser } from "../lib/hooks";
 import { useCurrentOrg } from "../lib/current-org";
 import { api } from "../lib/api";
-import type { UserOrg } from "@/shared/types";
+import type { OrgRole, UserOrg } from "@/shared/types";
 import { authClient } from "../lib/auth-client";
 import { Button } from "../ui/button";
 import { Field, Input } from "../ui/field";
@@ -256,11 +256,48 @@ function DeleteOrgDialog({
   );
 }
 
+function isOrgOwner(isPlatformAdmin: boolean, role: OrgRole | undefined): boolean {
+  return isPlatformAdmin || role === "owner";
+}
+
+function OrgSettingsCards({
+  org,
+  orgId,
+  isOwner,
+  register,
+  rename,
+  currentName,
+  isSubmitting,
+}: {
+  org: UserOrg | null;
+  orgId: string;
+  isOwner: boolean;
+  register: ReturnType<typeof useOrgRenameForm>["register"];
+  rename: () => void;
+  currentName: string | undefined;
+  isSubmitting: boolean;
+}) {
+  if (!org) return null;
+  return (
+    <>
+      <OrgNameCard
+        orgId={orgId}
+        isOwner={isOwner}
+        register={register}
+        rename={rename}
+        currentName={currentName}
+        isSubmitting={isSubmitting}
+      />
+      <QrDefaultsCard key={org.id} />
+    </>
+  );
+}
+
 export function SettingsPage() {
   const { org } = useCurrentOrg();
   const orgId = org?.id ?? "";
   const me = useCurrentUser();
-  const isOwner = me.data?.user.isAdmin || org?.role === "owner";
+  const isOwner = isOrgOwner(!!me.data?.user.isAdmin, org?.role);
 
   const { register, rename, currentName, isSubmitting, clearName } = useOrgRenameForm(org);
   const deleteOrgFlow = useDeleteOrgFlow(orgId, clearName);
@@ -271,19 +308,15 @@ export function SettingsPage() {
       <PageHeader title="Settings" sub="Account and organization settings" />
       <div className="flex flex-col gap-4">
         {/* org cards only when an org exists; account deletion always */}
-        {org && (
-          <>
-            <OrgNameCard
-              orgId={orgId}
-              isOwner={isOwner}
-              register={register}
-              rename={rename}
-              currentName={currentName}
-              isSubmitting={isSubmitting}
-            />
-            <QrDefaultsCard key={org.id} />
-          </>
-        )}
+        <OrgSettingsCards
+          org={org}
+          orgId={orgId}
+          isOwner={isOwner}
+          register={register}
+          rename={rename}
+          currentName={currentName}
+          isSubmitting={isSubmitting}
+        />
 
         <DangerZoneCard
           org={org}
