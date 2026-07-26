@@ -26,6 +26,12 @@ const RANGE_PRESETS: {
   { label: "365d", days: 365 },
 ];
 
+function rangeButtonClass(active: boolean): string {
+  return `cursor-pointer rounded-md px-2 py-1 text-xs transition-colors ${
+    active ? "bg-accent text-bg" : "text-muted hover:bg-surface-2 hover:text-text"
+  }`;
+}
+
 function RangePicker({
   presets,
   activeDays,
@@ -44,11 +50,9 @@ function RangePicker({
           key={`${p.days}-${p.bucket ?? "day"}`}
           type="button"
           onClick={() => onChoose(p.days, p.bucket)}
-          className={`cursor-pointer rounded-md px-2 py-1 text-xs transition-colors ${
-            activeDays === p.days && activeBucket === (p.bucket ?? "day")
-              ? "bg-accent text-bg"
-              : "text-muted hover:bg-surface-2 hover:text-text"
-          }`}
+          className={rangeButtonClass(
+            activeDays === p.days && activeBucket === (p.bucket ?? "day"),
+          )}
         >
           {p.label}
         </button>
@@ -66,27 +70,21 @@ function UtmBreakdownSection({
   sources: { source: string; clicks: number }[];
   mediums: { medium: string; clicks: number }[];
 }) {
-  if (!campaigns.length && !sources.length && !mediums.length) return null;
+  const groups = [
+    { label: "Campaigns", items: campaigns.map((c) => ({ key: c.campaign, clicks: c.clicks })) },
+    { label: "Sources", items: sources.map((x) => ({ key: x.source, clicks: x.clicks })) },
+    { label: "Mediums", items: mediums.map((x) => ({ key: x.medium, clicks: x.clicks })) },
+  ].filter((g) => g.items.length > 0);
+
+  if (!groups.length) return null;
   return (
     <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-      {campaigns.length > 0 && (
-        <Card>
-          <p className="mb-3 text-2xs tracking-wider text-muted uppercase">Campaigns</p>
-          <BarList items={campaigns.map((c) => ({ key: c.campaign, clicks: c.clicks }))} />
+      {groups.map((g) => (
+        <Card key={g.label}>
+          <p className="mb-3 text-2xs tracking-wider text-muted uppercase">{g.label}</p>
+          <BarList items={g.items} />
         </Card>
-      )}
-      {sources.length > 0 && (
-        <Card>
-          <p className="mb-3 text-2xs tracking-wider text-muted uppercase">Sources</p>
-          <BarList items={sources.map((x) => ({ key: x.source, clicks: x.clicks }))} />
-        </Card>
-      )}
-      {mediums.length > 0 && (
-        <Card>
-          <p className="mb-3 text-2xs tracking-wider text-muted uppercase">Mediums</p>
-          <BarList items={mediums.map((x) => ({ key: x.medium, clicks: x.clicks }))} />
-        </Card>
-      )}
+      ))}
     </div>
   );
 }
