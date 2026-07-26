@@ -6,7 +6,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { UserPlus, Trash2, Info } from "lucide-react";
 import { useCurrentUser, useMembers, useInvites } from "../lib/hooks";
 import { api } from "../lib/api";
-import { PLAN_LIMITS, type InviteDTO, type OrgRole, type Sort } from "@/shared/types";
+import { PLAN_LIMITS, type InviteDTO, type OrgRole, type Sort, type UserOrg } from "@/shared/types";
 import { Button, IconButton } from "../ui/button";
 import { CopyButton } from "../ui/copy-button";
 import { Field, Input, Select } from "../ui/field";
@@ -312,12 +312,34 @@ function PendingInvitesCard({
   );
 }
 
+/** Platform admins act as owner everywhere; otherwise fall back to the
+ * caller's actual role in this org, or "member" while org/role is unknown. */
+function resolveMyRole(
+  isPlatformAdmin: boolean | undefined,
+  orgRole: OrgRole | undefined,
+): OrgRole {
+  if (isPlatformAdmin) return "owner";
+  return orgRole ?? "member";
+}
+
+function memberLimitFor(org: UserOrg | null): number {
+  return org ? PLAN_LIMITS[org.plan].members : 0;
+}
+
+function hasPendingInvites(invites: InviteDTO[] | undefined): boolean {
+  return (invites?.length ?? 0) > 0;
+}
+
+function canManageOrg(role: OrgRole): boolean {
+  return role === "owner" || role === "admin";
+}
+
 export function MembersPage() {
   const { org } = useCurrentOrg();
   const orgId = org?.id ?? "";
   const me = useCurrentUser();
-  const myRole: OrgRole = me.data?.user.isAdmin ? "owner" : (org?.role ?? "member");
-  const canManage = myRole === "owner" || myRole === "admin";
+  const myRole = resolveMyRole(me.data?.user.isAdmin, org?.role);
+  const canManage = canManageOrg(myRole);
 
   const {
     members,
@@ -340,7 +362,7 @@ export function MembersPage() {
     copyInvite,
   } = useMemberManagement(orgId, canManage);
 
-  const memberLimit = org ? PLAN_LIMITS[org.plan].members : 0;
+  const memberLimit = memberLimitFor(org);
 
   if (!org) return <NoOrgState />;
 
@@ -358,7 +380,7 @@ export function MembersPage() {
         }
       />
 
-      {canManage && org && (
+      {canManage && (
         <InviteByEmailCard org={org} memberLimit={memberLimit} sendEmailInvite={sendEmailInvite} />
       )}
 
@@ -373,9 +395,9 @@ export function MembersPage() {
         onRemove={(userId, name) => setRemoving({ userId, name })}
       />
 
-      {canManage && !!invites.data?.length && (
+      {canManage && hasPendingInvites(invites.data) && (
         <PendingInvitesCard
-          invites={invites.data}
+          invites={invites.data!}
           inviteUrl={inviteUrl}
           copyInvite={copyInvite}
           revokeInvite={revokeInvite}

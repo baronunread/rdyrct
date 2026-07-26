@@ -7,6 +7,18 @@ import { useToast } from "../ui/toast";
 import { Spinner } from "../ui/spinner";
 import { uploadQrLogo } from "../lib/api";
 import { useCurrentOrg } from "../lib/current-org";
+import type { UserOrg } from "@/shared/types";
+
+/** A picked file can only upload when the input isn't gated, nothing's
+ * already in flight, and the org (needed for the upload URL) is known. */
+function canUploadLogo(
+  file: File | undefined,
+  disabled: boolean | undefined,
+  busy: boolean,
+  org: UserOrg | null,
+): file is File {
+  return !!file && !disabled && !busy && !!org;
+}
 
 /**
  * Strip source metadata and animation by drawing the image into a fixed square
@@ -179,7 +191,7 @@ export function QrLogoInput({
   const [busy, setBusy] = useState(false);
 
   const readFile = async (file: File | undefined) => {
-    if (!file || disabled || busy || !org) return;
+    if (!canUploadLogo(file, disabled, busy, org)) return;
     // Dragged files bypass the input's accept filter, so check the type.
     if (!file.type.startsWith("image/")) {
       toast("Logo must be an image file", "error");
@@ -187,7 +199,8 @@ export function QrLogoInput({
     }
     setBusy(true);
     try {
-      onLoad(await uploadQrLogo(org.id, await prepareQrLogo(file)));
+      // canUploadLogo already checked org is non-null.
+      onLoad(await uploadQrLogo(org!.id, await prepareQrLogo(file)));
     } catch (e) {
       toast((e as Error).message, "error");
     } finally {
