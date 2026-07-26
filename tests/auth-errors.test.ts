@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { friendlyAuthError } from "../src/app/lib/auth-form";
+import { friendlyAuthError } from "../src/app/lib/auth-errors";
 
 describe("friendlyAuthError", () => {
   test("password too short", () => {

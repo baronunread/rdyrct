@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { useNavigate, useSearchParams } from "react-router";
 import { AuthCard, PasswordMeter } from "../components/auth-form";
-import { useShake } from "../lib/auth-form";
+import { useShake } from "../lib/use-shake";
 import { submitResetPassword } from "../lib/reset-password";
 import { Button } from "../ui/button";
 import { Field, Input } from "../ui/field";

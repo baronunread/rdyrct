@@ -1,6 +1,6 @@
 import type { NavigateFunction } from "react-router";
 import { authClient } from "./auth-client";
-import { friendlyAuthError } from "./auth-form";
+import { friendlyAuthError } from "./auth-errors";
 
 /** Same manual, in-field-order checks as the sign-up form. Returns the
  * first validation error, or null when the fields are ready to submit. */

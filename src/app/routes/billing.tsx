@@ -17,7 +17,7 @@ import { Button } from "../ui/button";
 import { Badge, Card, PageHeader, Table, Th, Td } from "../ui/misc";
 import { BusyContent } from "../ui/spinner";
 import { Skeleton } from "../ui/skeleton";
-import { useShake } from "../lib/auth-form";
+import { useShake } from "../lib/use-shake";
 import { useToast } from "../ui/toast";
 
 const PLAN_LABEL: Record<OrgPlan, string> = {

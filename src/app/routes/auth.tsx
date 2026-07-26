@@ -11,7 +11,8 @@ import {
 import { useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { AuthCard, PasswordMeter } from "../components/auth-form";
 import { authClient } from "../lib/auth-client";
-import { friendlyAuthError, useShake } from "../lib/auth-form";
+import { friendlyAuthError } from "../lib/auth-errors";
+import { useShake } from "../lib/use-shake";
 import { useCurrentUser } from "../lib/hooks";
 import { firstFormError } from "../lib/form-errors";
 import { Button } from "../ui/button";
