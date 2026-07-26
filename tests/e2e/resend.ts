@@ -1,12 +1,11 @@
 import { expect, type Page } from "@playwright/test";
 
-function otpForEmail(value: unknown, email: string): string {
+/** Depth-first search through an arbitrary JSON value (the emulator's
+ * /emails response) for the email object that mentions `email`, then pulls
+ * the 6-digit code out of its body. */
+export function otpForEmail(value: unknown, email: string): string {
   if (Array.isArray(value)) {
-    for (const item of value) {
-      const otp = otpForEmail(item, email);
-      if (otp) return otp;
-    }
-    return "";
+    return value.map((item) => otpForEmail(item, email)).find(Boolean) ?? "";
   }
   if (!value || typeof value !== "object") return "";
 
@@ -15,11 +14,11 @@ function otpForEmail(value: unknown, email: string): string {
   if (serialized.includes(email) && ("html" in record || "text" in record)) {
     return serialized.match(/\b\d{6}\b/)?.[0] ?? "";
   }
-  for (const item of Object.values(record)) {
-    const otp = otpForEmail(item, email);
-    if (otp) return otp;
-  }
-  return "";
+  return (
+    Object.values(record)
+      .map((item) => otpForEmail(item, email))
+      .find(Boolean) ?? ""
+  );
 }
 
 export async function latestOtp(page: Page, email: string) {
