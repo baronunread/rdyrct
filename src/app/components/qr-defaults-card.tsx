@@ -88,112 +88,122 @@ function useQrDefaultsForm(
   return { values, setField, savingQr, save };
 }
 
-function QrDefaultsFormFields({
-  values,
-  setField,
-  isAdmin,
-}: {
+interface QrDefaultsFieldsProps {
   values: QrDefaultsValues;
   setField: <K extends keyof QrDefaultsValues>(key: K, value: QrDefaultsValues[K]) => void;
   isAdmin: boolean;
-}) {
+}
+
+function QrShapeFields({ values, setField, isAdmin }: QrDefaultsFieldsProps) {
   return (
-    <div className="flex flex-col gap-6">
-      <div className="grid grid-cols-[1fr_auto] gap-6 items-center">
-        <div className="flex flex-col gap-4">
-          <Field label="Dot style">
-            <MenuSelect
-              label="Dot style"
-              value={values.qrStyle}
-              onChange={(v) => setField("qrStyle", v)}
-              disabled={!isAdmin}
-              options={[
-                { value: "", label: "Rounded (default)" },
-                ...QR_DOT_STYLES.flatMap((s) => (s === "rounded" ? [] : [{ value: s, label: s }])),
-              ]}
-            />
-          </Field>
-          <Field label="Corner style">
-            <MenuSelect
-              label="Corner style"
-              value={values.qrCorner}
-              onChange={(v) => setField("qrCorner", v)}
-              disabled={!isAdmin}
-              options={[
-                { value: "", label: "Extra-rounded (default)" },
-                ...QR_CORNER_STYLES.flatMap((s) =>
-                  s === "extra-rounded" ? [] : [{ value: s, label: s }],
-                ),
-              ]}
-            />
-          </Field>
-        </div>
-        <QRPreview
-          url={shortUrl("preview")}
-          logo={values.qrLogo || undefined}
-          dotStyle={values.qrStyle}
-          color={values.qrColor}
-          corner={values.qrCorner}
-          eyeColor={values.qrEyeColor}
-          bg={values.qrBg}
-          logoSize={values.qrLogoSize === "" ? undefined : Number(values.qrLogoSize)}
-          size={160}
+    <div className="grid grid-cols-[1fr_auto] gap-6 items-center">
+      <div className="flex flex-col gap-4">
+        <Field label="Dot style">
+          <MenuSelect
+            label="Dot style"
+            value={values.qrStyle}
+            onChange={(v) => setField("qrStyle", v)}
+            disabled={!isAdmin}
+            options={[
+              { value: "", label: "Rounded (default)" },
+              ...QR_DOT_STYLES.flatMap((s) => (s === "rounded" ? [] : [{ value: s, label: s }])),
+            ]}
+          />
+        </Field>
+        <Field label="Corner style">
+          <MenuSelect
+            label="Corner style"
+            value={values.qrCorner}
+            onChange={(v) => setField("qrCorner", v)}
+            disabled={!isAdmin}
+            options={[
+              { value: "", label: "Extra-rounded (default)" },
+              ...QR_CORNER_STYLES.flatMap((s) =>
+                s === "extra-rounded" ? [] : [{ value: s, label: s }],
+              ),
+            ]}
+          />
+        </Field>
+      </div>
+      <QRPreview
+        url={shortUrl("preview")}
+        logo={values.qrLogo || undefined}
+        dotStyle={values.qrStyle}
+        color={values.qrColor}
+        corner={values.qrCorner}
+        eyeColor={values.qrEyeColor}
+        bg={values.qrBg}
+        logoSize={values.qrLogoSize === "" ? undefined : Number(values.qrLogoSize)}
+        size={160}
+      />
+    </div>
+  );
+}
+
+function QrColorAndLogoFields({ values, setField, isAdmin }: QrDefaultsFieldsProps) {
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="grid grid-cols-2 gap-3">
+        <QrColorField
+          label="Dot color"
+          value={values.qrColor}
+          fallback={QR_DEFAULT_COLOR}
+          onChange={(v) => setField("qrColor", v)}
+          disabled={!isAdmin}
+        />
+        <QrColorField
+          label="Eye color"
+          value={values.qrEyeColor}
+          fallback={values.qrColor || QR_DEFAULT_COLOR}
+          onChange={(v) => setField("qrEyeColor", v)}
+          disabled={!isAdmin}
         />
       </div>
-      <div className="flex flex-col gap-4">
-        <div className="grid grid-cols-2 gap-3">
-          <QrColorField
-            label="Dot color"
-            value={values.qrColor}
-            fallback={QR_DEFAULT_COLOR}
-            onChange={(v) => setField("qrColor", v)}
-            disabled={!isAdmin}
-          />
-          <QrColorField
-            label="Eye color"
-            value={values.qrEyeColor}
-            fallback={values.qrColor || QR_DEFAULT_COLOR}
-            onChange={(v) => setField("qrEyeColor", v)}
-            disabled={!isAdmin}
-          />
-        </div>
-        <div className="grid grid-cols-2 gap-3">
-          <QrColorField
-            label="Background"
-            value={values.qrBg}
-            fallback={QR_DEFAULT_BG}
-            allowTransparent
-            onChange={(v) => setField("qrBg", v)}
-            disabled={!isAdmin}
-          />
-          <Field
+      <div className="grid grid-cols-2 gap-3">
+        <QrColorField
+          label="Background"
+          value={values.qrBg}
+          fallback={QR_DEFAULT_BG}
+          allowTransparent
+          onChange={(v) => setField("qrBg", v)}
+          disabled={!isAdmin}
+        />
+        <Field
+          label="Logo size"
+          hint="How much of the QR code the logo covers. Bigger can hurt scannability"
+        >
+          <MenuSelect
             label="Logo size"
-            hint="How much of the QR code the logo covers. Bigger can hurt scannability"
-          >
-            <MenuSelect
-              label="Logo size"
-              value={values.qrLogoSize}
-              onChange={(v) => setField("qrLogoSize", v)}
-              disabled={!isAdmin}
-              options={[
-                { value: "", label: "Medium (default)" },
-                { value: "0.25", label: "Small" },
-                { value: "0.5", label: "Large" },
-                { value: "0.65", label: "Extra large" },
-              ]}
-            />
-          </Field>
-        </div>
-        <div>
-          <span className="mb-1.5 block text-2xs tracking-wider text-muted uppercase">Logo</span>
-          <QrLogoInput
-            value={values.qrLogo}
+            value={values.qrLogoSize}
+            onChange={(v) => setField("qrLogoSize", v)}
             disabled={!isAdmin}
-            onLoad={(v) => setField("qrLogo", v)}
-            onClear={isAdmin ? () => setField("qrLogo", "") : undefined}
+            options={[
+              { value: "", label: "Medium (default)" },
+              { value: "0.25", label: "Small" },
+              { value: "0.5", label: "Large" },
+              { value: "0.65", label: "Extra large" },
+            ]}
           />
-        </div>
+        </Field>
       </div>
+      <div>
+        <span className="mb-1.5 block text-2xs tracking-wider text-muted uppercase">Logo</span>
+        <QrLogoInput
+          value={values.qrLogo}
+          disabled={!isAdmin}
+          onLoad={(v) => setField("qrLogo", v)}
+          onClear={isAdmin ? () => setField("qrLogo", "") : undefined}
+        />
+      </div>
+    </div>
+  );
+}
+
+function QrDefaultsFormFields({ values, setField, isAdmin }: QrDefaultsFieldsProps) {
+  return (
+    <div className="flex flex-col gap-6">
+      <QrShapeFields values={values} setField={setField} isAdmin={isAdmin} />
+      <QrColorAndLogoFields values={values} setField={setField} isAdmin={isAdmin} />
     </div>
   );
 }
