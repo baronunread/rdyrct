@@ -282,6 +282,58 @@ linkRoutes.post("/", requireOrgRole("member"), async (c) => {
   return c.json(toDTO(link, 0, hostname), 201);
 });
 
+/** Merges a PATCH body over the existing row: an unset field (undefined)
+ * keeps its existing value: `??` here is "not provided", not "falsy". */
+function mergedLinkUpdate(
+  existing: typeof schema.links.$inferSelect,
+  body: LinkInput,
+  fields: {
+    domainId: string | null;
+    slug: string;
+    destination: string;
+    utm: ReturnType<typeof resolveUtm>;
+  },
+): typeof schema.links.$inferSelect {
+  return {
+    ...existing,
+    domainId: fields.domainId,
+    slug: fields.slug,
+    destination: fields.destination,
+    title: body.title?.trim() ?? existing.title,
+    utmSource: fields.utm.utmSource,
+    utmMedium: fields.utm.utmMedium,
+    utmCampaign: fields.utm.utmCampaign,
+    utmTerm: fields.utm.utmTerm,
+    utmContent: fields.utm.utmContent,
+    qrLogo: body.qrLogo ?? existing.qrLogo,
+    qrStyle: body.qrStyle ?? existing.qrStyle,
+    qrColor: body.qrColor ?? existing.qrColor,
+    qrCorner: body.qrCorner ?? existing.qrCorner,
+    qrBg: body.qrBg ?? existing.qrBg,
+    qrEyeColor: body.qrEyeColor ?? existing.qrEyeColor,
+    qrLogoSize: body.qrLogoSize ?? existing.qrLogoSize,
+  };
+}
+
+/** A moved link leaves a stale key behind: syncing that old key finds no row
+ * and deletes it. Syncing the new key publishes the updated row. */
+function renameSyncMessages(
+  existing: typeof schema.links.$inferSelect,
+  updated: typeof schema.links.$inferSelect,
+  body: LinkInput,
+  moved: boolean,
+  hostname: string | null,
+  oldHostname: string | null,
+) {
+  return [
+    moved ? syncLinkMsg(existing.slug, oldHostname) : null,
+    syncLinkMsg(updated.slug, hostname),
+    body.qrLogo !== undefined && body.qrLogo !== existing.qrLogo
+      ? deleteQrLogoMsg(existing.qrLogo)
+      : null,
+  ];
+}
+
 linkRoutes.patch("/:linkId", requireOrgRole("member"), async (c) => {
   const body = await c.req.json<LinkInput>();
   const orgId = c.req.param("orgId")!;
@@ -306,34 +358,8 @@ linkRoutes.patch("/:linkId", requireOrgRole("member"), async (c) => {
   // fields fill gaps or clear, anything else keeps the existing value.
   const utm = resolveUtm(destination, body, existing);
 
-  const updated = {
-    ...existing,
-    domainId,
-    slug: newSlug,
-    destination,
-    title: body.title?.trim() ?? existing.title,
-    utmSource: utm.utmSource,
-    utmMedium: utm.utmMedium,
-    utmCampaign: utm.utmCampaign,
-    utmTerm: utm.utmTerm,
-    utmContent: utm.utmContent,
-    qrLogo: body.qrLogo ?? existing.qrLogo,
-    qrStyle: body.qrStyle ?? existing.qrStyle,
-    qrColor: body.qrColor ?? existing.qrColor,
-    qrCorner: body.qrCorner ?? existing.qrCorner,
-    qrBg: body.qrBg ?? existing.qrBg,
-    qrEyeColor: body.qrEyeColor ?? existing.qrEyeColor,
-    qrLogoSize: body.qrLogoSize ?? existing.qrLogoSize,
-  };
-  // A moved link leaves a stale key behind: syncing that old key finds no row
-  // and deletes it. Syncing the new key publishes the updated row.
-  const messages = [
-    moved ? syncLinkMsg(existing.slug, oldHostname) : null,
-    syncLinkMsg(updated.slug, hostname),
-    body.qrLogo !== undefined && body.qrLogo !== existing.qrLogo
-      ? deleteQrLogoMsg(existing.qrLogo)
-      : null,
-  ];
+  const updated = mergedLinkUpdate(existing, body, { domainId, slug: newSlug, destination, utm });
+  const messages = renameSyncMessages(existing, updated, body, moved, hostname, oldHostname);
   await db.update(schema.links).set(updated).where(eq(schema.links.id, existing.id));
   await enqueueStorage(c.env, messages);
 
