@@ -17,6 +17,7 @@ import { QrLogoInput } from "./qr-logo-input";
 import { QrColorField } from "./qr-color-field";
 import { linkInputSchema } from "../lib/schemas";
 import { qrFallbacks, resolveQrLook, type OrgQr } from "../lib/org-qr";
+import { firstFormError } from "../lib/form-errors";
 
 const defaultForm: LinkInput = {
   destination: "",
@@ -373,13 +374,8 @@ export function LinkEditor({
 
   const form = watch();
   const setForm = (next: LinkInput) => reset(next);
-  const onInvalid: SubmitErrorHandler<LinkInput> = (errors) => {
-    const firstError = Object.values(errors).find((entry) => entry?.message);
-    toast(
-      typeof firstError?.message === "string" ? firstError.message : "Check the link details",
-      "error",
-    );
-  };
+  const onInvalid: SubmitErrorHandler<LinkInput> = (errors) =>
+    toast(firstFormError(errors, "Check the link details"), "error");
 
   const selectedDomain = activeDomains.find((d) => d.id === form.domainId)?.hostname ?? null;
   const slugLocked = !form.domainId;

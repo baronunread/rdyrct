@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { useForm, Controller, type FieldErrors } from "react-hook-form";
+import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
   Link,
@@ -13,6 +13,7 @@ import { AuthCard, PasswordMeter } from "../components/auth-form";
 import { authClient } from "../lib/auth-client";
 import { friendlyAuthError, useShake } from "../lib/auth-form";
 import { useCurrentUser } from "../lib/hooks";
+import { firstFormError } from "../lib/form-errors";
 import { Button } from "../ui/button";
 import { Field, Input } from "../ui/field";
 import { OtpInput } from "../ui/otp";
@@ -25,11 +26,6 @@ type View = "form" | "forgot" | "forgot-sent" | "verify-otp";
 type AuthForm = { email: string; password: string };
 type ForgotForm = { email: string };
 type OtpForm = { otp: string };
-
-function firstFormError(errors: FieldErrors, fallback: string): string {
-  const firstError = Object.values(errors).find((entry) => entry?.message);
-  return typeof firstError?.message === "string" ? firstError.message : fallback;
-}
 
 function ForgotView({
   initialEmail,
