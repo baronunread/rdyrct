@@ -227,6 +227,40 @@ linkRoutes.get("/", requireOrgRole("member"), async (c) => {
   return c.json(rows.map((r) => toDTO(r.link, r.clicks, r.domain)));
 });
 
+/** Builds a new link row: unset appearance/UTM fields fall back to their
+ * column default ("" or null), not to an existing row like an update would. */
+function newLinkRow(
+  orgId: string,
+  domainId: string | null,
+  slug: string,
+  body: LinkInput,
+  utm: ReturnType<typeof resolveUtm>,
+  createdBy: string,
+): typeof schema.links.$inferSelect {
+  return {
+    id: uid(),
+    orgId,
+    domainId,
+    slug,
+    destination: body.destination,
+    title: body.title?.trim() ?? "",
+    utmSource: utm.utmSource,
+    utmMedium: utm.utmMedium,
+    utmCampaign: utm.utmCampaign,
+    utmTerm: utm.utmTerm,
+    utmContent: utm.utmContent,
+    qrLogo: body.qrLogo ?? "",
+    qrStyle: body.qrStyle ?? "",
+    qrColor: body.qrColor ?? "",
+    qrCorner: body.qrCorner ?? "",
+    qrBg: body.qrBg ?? "",
+    qrEyeColor: body.qrEyeColor ?? "",
+    qrLogoSize: body.qrLogoSize ?? null,
+    createdBy,
+    createdAt: now(),
+  };
+}
+
 linkRoutes.post("/", requireOrgRole("member"), async (c) => {
   const body = await c.req.json<LinkInput>();
   const orgId = c.req.param("orgId")!;
@@ -254,29 +288,7 @@ linkRoutes.post("/", requireOrgRole("member"), async (c) => {
   // UTM params already in the destination are extracted into the columns so
   // analytics group-bys see them; explicit fields fill whatever is missing.
   const utm = resolveUtm(body.destination, body);
-
-  const link: typeof schema.links.$inferSelect = {
-    id: uid(),
-    orgId,
-    domainId,
-    slug,
-    destination: body.destination,
-    title: body.title?.trim() ?? "",
-    utmSource: utm.utmSource,
-    utmMedium: utm.utmMedium,
-    utmCampaign: utm.utmCampaign,
-    utmTerm: utm.utmTerm,
-    utmContent: utm.utmContent,
-    qrLogo: body.qrLogo ?? "",
-    qrStyle: body.qrStyle ?? "",
-    qrColor: body.qrColor ?? "",
-    qrCorner: body.qrCorner ?? "",
-    qrBg: body.qrBg ?? "",
-    qrEyeColor: body.qrEyeColor ?? "",
-    qrLogoSize: body.qrLogoSize ?? null,
-    createdBy: c.var.user!.id,
-    createdAt: now(),
-  };
+  const link = newLinkRow(orgId, domainId, slug, body, utm, c.var.user!.id);
   await db.insert(schema.links).values(link);
   await enqueueStorage(c.env, [syncLinkMsg(link.slug, hostname)]);
   return c.json(toDTO(link, 0, hostname), 201);
