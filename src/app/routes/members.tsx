@@ -133,6 +133,61 @@ function useMemberManagement(orgId: string, canManage: boolean) {
   };
 }
 
+function MemberRoleCell({
+  member,
+  canManage,
+  onSetRole,
+}: {
+  member: { name: string; role: OrgRole };
+  canManage: boolean;
+  onSetRole: (role: string) => void;
+}) {
+  if (member.role === "owner") {
+    return (
+      <MenuSelect
+        label="Owner"
+        value="owner"
+        disabled
+        onChange={() => {}}
+        options={[{ value: "owner", label: "owner" }]}
+      />
+    );
+  }
+  if (canManage) {
+    return (
+      <MenuSelect
+        label={`Role for ${member.name}`}
+        value={member.role}
+        onChange={onSetRole}
+        options={[
+          { value: "member", label: "member" },
+          { value: "admin", label: "admin" },
+        ]}
+      />
+    );
+  }
+  return <Badge color={roleColor[member.role]}>{member.role}</Badge>;
+}
+
+function MemberRemoveCell({
+  member,
+  isSelf,
+  onRemove,
+}: {
+  member: { name: string; role: OrgRole };
+  isSelf: boolean;
+  onRemove: () => void;
+}) {
+  if (member.role === "owner" || isSelf) return null;
+  return (
+    <div className="flex justify-end">
+      <IconButton label={`Remove ${member.name}`} danger onClick={onRemove}>
+        <Trash2 size={15} />
+      </IconButton>
+    </div>
+  );
+}
+
 function MemberRow({
   member,
   canManage,
@@ -151,38 +206,12 @@ function MemberRow({
       <Td className="truncate">{member.name}</Td>
       <Td className="truncate text-muted">{member.email}</Td>
       <Td>
-        {member.role === "owner" ? (
-          <MenuSelect
-            label="Owner"
-            value="owner"
-            disabled
-            onChange={() => {}}
-            options={[{ value: "owner", label: "owner" }]}
-          />
-        ) : canManage ? (
-          <MenuSelect
-            label={`Role for ${member.name}`}
-            value={member.role}
-            onChange={onSetRole}
-            options={[
-              { value: "member", label: "member" },
-              { value: "admin", label: "admin" },
-            ]}
-          />
-        ) : (
-          <Badge color={roleColor[member.role]}>{member.role}</Badge>
-        )}
+        <MemberRoleCell member={member} canManage={canManage} onSetRole={onSetRole} />
       </Td>
       <Td className="text-xs text-muted">{shortDate(member.createdAt)}</Td>
       {canManage && (
         <Td>
-          {member.role !== "owner" && !isSelf && (
-            <div className="flex justify-end">
-              <IconButton label={`Remove ${member.name}`} danger onClick={onRemove}>
-                <Trash2 size={15} />
-              </IconButton>
-            </div>
-          )}
+          <MemberRemoveCell member={member} isSelf={isSelf} onRemove={onRemove} />
         </Td>
       )}
     </tr>
