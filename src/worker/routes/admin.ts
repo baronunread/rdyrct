@@ -68,9 +68,15 @@ function computePlanStats(planCountRows: { plan: string; n: number }[]) {
   return { planCounts, mrr };
 }
 
+/** Every business-metrics query returns its count as the first row's `n`,
+ * or no rows at all when the count is zero. */
+export function firstCount(rows: { n: number }[]): number {
+  return rows[0]?.n ?? 0;
+}
+
 // The "Business" row of /usage: signup/conversion/revenue figures pulled
 // out of their raw count-query rows.
-function computeBusinessMetrics(rows: {
+export function computeBusinessMetrics(rows: {
   users: { n: number }[];
   proUsers: { n: number }[];
   planCountRows: { plan: string; n: number }[];
@@ -78,14 +84,14 @@ function computeBusinessMetrics(rows: {
   signups7dPrevRows: { n: number }[];
   wauRows: { n: number }[];
 }) {
-  const totalUsers = rows.users[0]?.n ?? 0;
-  const paidUsers = rows.proUsers[0]?.n ?? 0;
+  const totalUsers = firstCount(rows.users);
+  const paidUsers = firstCount(rows.proUsers);
   const { planCounts, mrr } = computePlanStats(rows.planCountRows);
   const paidConversionRate = totalUsers > 0 ? Math.round((paidUsers / totalUsers) * 100) : null;
-  const signups7d = rows.signups7dRows[0]?.n ?? 0;
-  const signups7dPrev = rows.signups7dPrevRows[0]?.n ?? 0;
+  const signups7d = firstCount(rows.signups7dRows);
+  const signups7dPrev = firstCount(rows.signups7dPrevRows);
   const signups7dDelta = computeDelta(signups7d, signups7dPrev);
-  const wau = rows.wauRows[0]?.n ?? 0;
+  const wau = firstCount(rows.wauRows);
   return {
     totalUsers,
     paidUsers,
