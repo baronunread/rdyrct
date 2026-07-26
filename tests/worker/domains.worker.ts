@@ -21,6 +21,15 @@ const cfJson = (body: unknown) =>
     headers: { "content-type": "application/json" },
   });
 
+/** Whether a mocked fetch call matches one of the three custom-hostname
+ * routes this test double stands in for. */
+function matchesRoute(method: string, url: string, target: "GET" | "POST" | "DELETE"): boolean {
+  if (method !== target) return false;
+  if (target === "GET") return url.includes("/custom_hostnames?hostname=");
+  if (target === "POST") return url.endsWith("/custom_hostnames");
+  return true;
+}
+
 function mockCustomHostnames(handlers: {
   get?: () => Response | Promise<Response>;
   post?: () => Response | Promise<Response>;
@@ -29,11 +38,9 @@ function mockCustomHostnames(handlers: {
   return vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
     const url = String(input);
     const method = init?.method ?? "GET";
-    if (method === "GET" && url.includes("/custom_hostnames?hostname=") && handlers.get)
-      return handlers.get();
-    if (method === "POST" && url.endsWith("/custom_hostnames") && handlers.post)
-      return handlers.post();
-    if (method === "DELETE" && handlers.delete) return handlers.delete(url);
+    if (matchesRoute(method, url, "GET") && handlers.get) return handlers.get();
+    if (matchesRoute(method, url, "POST") && handlers.post) return handlers.post();
+    if (matchesRoute(method, url, "DELETE") && handlers.delete) return handlers.delete(url);
     throw new Error(`unexpected ${method} ${url}`);
   });
 }
