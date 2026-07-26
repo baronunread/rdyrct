@@ -18,6 +18,7 @@ import { Badge, Card, PageHeader, Table, Th, Td } from "../ui/misc";
 import { BusyContent } from "../ui/spinner";
 import { Skeleton } from "../ui/skeleton";
 import { useShake } from "../lib/use-shake";
+import { showsCancelNotice, showsConfirmingNotice } from "../lib/plan-status-notes";
 import { useToast } from "../ui/toast";
 
 const PLAN_LABEL: Record<OrgPlan, string> = {
@@ -84,6 +85,23 @@ function PlanFeatureComparison() {
 
 /** The cancel-scheduled and still-confirming status notes above the plan
  * actions; either, both, or neither can show depending on account state. */
+function CancelScheduledNotice({ plan, periodEnd }: { plan: OrgPlan; periodEnd: number }) {
+  return (
+    <p className="text-sm text-amber-400">
+      Your {PLAN_LABEL[plan]} plan is scheduled to cancel on {shortDate(periodEnd)}. Paid features
+      remain available until then.
+    </p>
+  );
+}
+
+function ConfirmingPaymentNotice() {
+  return (
+    <p className="text-sm text-muted">
+      Still confirming your payment. Your plan should activate shortly: refresh in a moment.
+    </p>
+  );
+}
+
 function PlanStatusNotes({
   plan,
   cancelAtPeriodEnd,
@@ -97,17 +115,10 @@ function PlanStatusNotes({
 }) {
   return (
     <>
-      {cancelAtPeriodEnd && periodEnd && (
-        <p className="text-sm text-amber-400">
-          Your {PLAN_LABEL[plan]} plan is scheduled to cancel on {shortDate(periodEnd)}. Paid
-          features remain available until then.
-        </p>
+      {showsCancelNotice(cancelAtPeriodEnd, periodEnd) && (
+        <CancelScheduledNotice plan={plan} periodEnd={periodEnd} />
       )}
-      {confirmTimedOut && plan === "free" && (
-        <p className="text-sm text-muted">
-          Still confirming your payment. Your plan should activate shortly: refresh in a moment.
-        </p>
-      )}
+      {showsConfirmingNotice(confirmTimedOut, plan) && <ConfirmingPaymentNotice />}
     </>
   );
 }
