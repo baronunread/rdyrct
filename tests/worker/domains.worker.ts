@@ -27,7 +27,7 @@ function matchesRoute(method: string, url: string, target: "GET" | "POST" | "DEL
   if (method !== target) return false;
   if (target === "GET") return url.includes("/custom_hostnames?hostname=");
   if (target === "POST") return url.endsWith("/custom_hostnames");
-  return true;
+  return url.includes("/custom_hostnames/");
 }
 
 function mockCustomHostnames(handlers: {

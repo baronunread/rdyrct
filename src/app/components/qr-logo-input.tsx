@@ -72,9 +72,12 @@ async function optimizeQrLogoSvg(file: File): Promise<File> {
     plugins: [
       "preset-default",
       "removeScripts",
+      // removeAttrs patterns split on ":", so "*:xlink:href" can't target the
+      // namespaced xlink:href attribute; migrate it to plain href first.
+      "removeXlink",
       {
         name: "removeAttrs",
-        params: { attrs: ["*:href", "*:xlink:href"] },
+        params: { attrs: ["*:href"] },
       },
     ],
   });
