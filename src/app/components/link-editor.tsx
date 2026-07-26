@@ -37,6 +37,14 @@ const defaultForm: LinkInput = {
   qrLogoSize: null,
 };
 
+const UTM_FIELDS: { key: keyof LinkInput; label: string; placeholder: string }[] = [
+  { key: "utmSource", label: "Source", placeholder: "newsletter" },
+  { key: "utmMedium", label: "Medium", placeholder: "email" },
+  { key: "utmCampaign", label: "Campaign", placeholder: "spring-launch" },
+  { key: "utmTerm", label: "Term", placeholder: "running-shoes" },
+  { key: "utmContent", label: "Content", placeholder: "ad-variant-a" },
+];
+
 function UtmFields({ form, setForm }: { form: LinkInput; setForm: (f: LinkInput) => void }) {
   const set = (key: keyof LinkInput) => (e: ChangeEvent<HTMLInputElement>) =>
     setForm({ ...form, [key]: e.target.value });
@@ -44,33 +52,15 @@ function UtmFields({ form, setForm }: { form: LinkInput; setForm: (f: LinkInput)
     <fieldset className="rounded-lg border border-border p-3">
       <legend className="px-1 text-2xs tracking-wider text-muted uppercase">UTM parameters</legend>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-        <Field label="Source">
-          <Input
-            value={form.utmSource ?? ""}
-            onChange={set("utmSource")}
-            placeholder="newsletter"
-          />
-        </Field>
-        <Field label="Medium">
-          <Input value={form.utmMedium ?? ""} onChange={set("utmMedium")} placeholder="email" />
-        </Field>
-        <Field label="Campaign">
-          <Input
-            value={form.utmCampaign ?? ""}
-            onChange={set("utmCampaign")}
-            placeholder="spring-launch"
-          />
-        </Field>
-        <Field label="Term">
-          <Input value={form.utmTerm ?? ""} onChange={set("utmTerm")} placeholder="running-shoes" />
-        </Field>
-        <Field label="Content">
-          <Input
-            value={form.utmContent ?? ""}
-            onChange={set("utmContent")}
-            placeholder="ad-variant-a"
-          />
-        </Field>
+        {UTM_FIELDS.map(({ key, label, placeholder }) => (
+          <Field key={key} label={label}>
+            <Input
+              value={(form[key] as string) ?? ""}
+              onChange={set(key)}
+              placeholder={placeholder}
+            />
+          </Field>
+        ))}
       </div>
     </fieldset>
   );
@@ -114,6 +104,115 @@ function QrPreviewSidebar({
   );
 }
 
+function QrShapeFields({
+  form,
+  setForm,
+  fallbacks,
+}: {
+  form: LinkInput;
+  setForm: (f: LinkInput) => void;
+  fallbacks: ReturnType<typeof qrFallbacks>;
+}) {
+  return (
+    <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <Field label="Dots">
+        <MenuSelect
+          label="Dots"
+          value={form.qrStyle ?? ""}
+          onChange={(v) => setForm({ ...form, qrStyle: v })}
+          options={[
+            { value: "", label: "Org default" },
+            ...QR_DOT_STYLES.map((s) => ({ value: s, label: s })),
+          ]}
+        />
+      </Field>
+      <Field label="Corners">
+        <MenuSelect
+          label="Corners"
+          value={form.qrCorner ?? ""}
+          onChange={(v) => setForm({ ...form, qrCorner: v })}
+          options={[
+            { value: "", label: "Org default" },
+            ...QR_CORNER_STYLES.map((s) => ({ value: s, label: s })),
+          ]}
+        />
+      </Field>
+      <QrColorField
+        label="Dot color"
+        value={form.qrColor ?? ""}
+        fallback={fallbacks.dotColor}
+        onChange={(v) => setForm({ ...form, qrColor: v })}
+      />
+      <QrColorField
+        label="Eye color"
+        value={form.qrEyeColor ?? ""}
+        fallback={fallbacks.eyeColor}
+        onChange={(v) => setForm({ ...form, qrEyeColor: v })}
+      />
+    </div>
+  );
+}
+
+function QrBackgroundFields({
+  form,
+  setForm,
+  fallbacks,
+}: {
+  form: LinkInput;
+  setForm: (f: LinkInput) => void;
+  fallbacks: ReturnType<typeof qrFallbacks>;
+}) {
+  return (
+    <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <QrColorField
+        label="Background"
+        value={form.qrBg ?? ""}
+        fallback={fallbacks.bg}
+        allowTransparent
+        onChange={(v) => setForm({ ...form, qrBg: v })}
+      />
+      <Field label="Logo size">
+        <MenuSelect
+          label="Logo size"
+          value={form.qrLogoSize == null ? "" : String(form.qrLogoSize)}
+          onChange={(v) => setForm({ ...form, qrLogoSize: v === "" ? null : Number(v) })}
+          options={[
+            { value: "", label: "Org default" },
+            { value: "0.25", label: "Small" },
+            { value: "0.35", label: "Medium" },
+            { value: "0.5", label: "Large" },
+            { value: "0.65", label: "Extra large" },
+          ]}
+        />
+      </Field>
+    </div>
+  );
+}
+
+function QrLogoField({ form, setForm }: { form: LinkInput; setForm: (f: LinkInput) => void }) {
+  return (
+    <div>
+      <span className="mb-1.5 flex items-center gap-1.5 text-2xs tracking-wider text-muted uppercase">
+        Logo
+        <Tooltip content="Embedded in the center of the QR code. Use a small, square image with some breathing room so the code stays easy to scan. Leave empty to use your organization's default logo from Settings.">
+          <button
+            type="button"
+            aria-label="About QR logos"
+            className="cursor-pointer text-muted normal-case hover:text-text"
+          >
+            <Info size={13} />
+          </button>
+        </Tooltip>
+      </span>
+      <QrLogoInput
+        value={form.qrLogo ?? ""}
+        onLoad={(url) => setForm({ ...form, qrLogo: url })}
+        onClear={() => setForm({ ...form, qrLogo: "" })}
+      />
+    </div>
+  );
+}
+
 function QrCustomization({
   form,
   setForm,
@@ -127,93 +226,74 @@ function QrCustomization({
   return (
     <div className="flex flex-col gap-4">
       <p className="text-2xs tracking-wider text-muted uppercase">QR customization</p>
-
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <Field label="Dots">
-          <MenuSelect
-            label="Dots"
-            value={form.qrStyle ?? ""}
-            onChange={(v) => setForm({ ...form, qrStyle: v })}
-            options={[
-              { value: "", label: "Org default" },
-              ...QR_DOT_STYLES.map((s) => ({ value: s, label: s })),
-            ]}
-          />
-        </Field>
-        <Field label="Corners">
-          <MenuSelect
-            label="Corners"
-            value={form.qrCorner ?? ""}
-            onChange={(v) => setForm({ ...form, qrCorner: v })}
-            options={[
-              { value: "", label: "Org default" },
-              ...QR_CORNER_STYLES.map((s) => ({ value: s, label: s })),
-            ]}
-          />
-        </Field>
-        <QrColorField
-          label="Dot color"
-          value={form.qrColor ?? ""}
-          fallback={fallbacks.dotColor}
-          onChange={(v) => setForm({ ...form, qrColor: v })}
-        />
-        <QrColorField
-          label="Eye color"
-          value={form.qrEyeColor ?? ""}
-          fallback={fallbacks.eyeColor}
-          onChange={(v) => setForm({ ...form, qrEyeColor: v })}
-        />
-      </div>
-
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <QrColorField
-          label="Background"
-          value={form.qrBg ?? ""}
-          fallback={fallbacks.bg}
-          allowTransparent
-          onChange={(v) => setForm({ ...form, qrBg: v })}
-        />
-        <Field label="Logo size">
-          <MenuSelect
-            label="Logo size"
-            value={form.qrLogoSize == null ? "" : String(form.qrLogoSize)}
-            onChange={(v) =>
-              setForm({
-                ...form,
-                qrLogoSize: v === "" ? null : Number(v),
-              })
-            }
-            options={[
-              { value: "", label: "Org default" },
-              { value: "0.25", label: "Small" },
-              { value: "0.35", label: "Medium" },
-              { value: "0.5", label: "Large" },
-              { value: "0.65", label: "Extra large" },
-            ]}
-          />
-        </Field>
-      </div>
-
-      <div>
-        <span className="mb-1.5 flex items-center gap-1.5 text-2xs tracking-wider text-muted uppercase">
-          Logo
-          <Tooltip content="Embedded in the center of the QR code. Use a small, square image with some breathing room so the code stays easy to scan. Leave empty to use your organization's default logo from Settings.">
-            <button
-              type="button"
-              aria-label="About QR logos"
-              className="cursor-pointer text-muted normal-case hover:text-text"
-            >
-              <Info size={13} />
-            </button>
-          </Tooltip>
-        </span>
-        <QrLogoInput
-          value={form.qrLogo ?? ""}
-          onLoad={(url) => setForm({ ...form, qrLogo: url })}
-          onClear={() => setForm({ ...form, qrLogo: "" })}
-        />
-      </div>
+      <QrShapeFields form={form} setForm={setForm} fallbacks={fallbacks} />
+      <QrBackgroundFields form={form} setForm={setForm} fallbacks={fallbacks} />
+      <QrLogoField form={form} setForm={setForm} />
     </div>
+  );
+}
+
+function DomainField({
+  form,
+  setForm,
+  editing,
+  activeDomains,
+}: {
+  form: LinkInput;
+  setForm: (f: LinkInput) => void;
+  editing: boolean;
+  activeDomains: DomainDTO[];
+}) {
+  if (!activeDomains.length) return null;
+  const onDomainChange = (v: string) =>
+    setForm({ ...form, domainId: v || null, ...(!v && !editing ? { slug: "" } : {}) });
+  return (
+    <Field label="Domain">
+      <MenuSelect
+        label="Domain"
+        value={form.domainId ?? ""}
+        onChange={onDomainChange}
+        options={[
+          { value: "", label: `shared: ${window.location.host}` },
+          ...activeDomains.map((d) => ({ value: d.id, label: d.hostname })),
+        ]}
+      />
+    </Field>
+  );
+}
+
+function SlugField({
+  value,
+  onChange,
+  slugLocked,
+}: {
+  value: string;
+  onChange: (e: ChangeEvent<HTMLInputElement>) => void;
+  slugLocked: boolean;
+}) {
+  return (
+    <Field
+      label="Slug"
+      hint={
+        slugLocked ? (
+          <>
+            <RouterLink to="/billing" className="text-accent hover:underline">
+              Upgrade
+            </RouterLink>{" "}
+            for custom slugs.
+          </>
+        ) : (
+          "Leave empty for a random one"
+        )
+      }
+    >
+      <Input
+        value={value}
+        onChange={onChange}
+        placeholder={slugLocked ? "random" : "launch-2026"}
+        disabled={slugLocked}
+      />
+    </Field>
   );
 }
 
@@ -244,49 +324,10 @@ function LinkFormFields({
         />
       </Field>
 
-      {activeDomains.length > 0 && (
-        <Field label="Domain">
-          <MenuSelect
-            label="Domain"
-            value={form.domainId ?? ""}
-            onChange={(v) =>
-              setForm({
-                ...form,
-                domainId: v || null,
-                ...(!v && !editing ? { slug: "" } : {}),
-              })
-            }
-            options={[
-              { value: "", label: `shared: ${window.location.host}` },
-              ...activeDomains.map((d) => ({ value: d.id, label: d.hostname })),
-            ]}
-          />
-        </Field>
-      )}
+      <DomainField form={form} setForm={setForm} editing={editing} activeDomains={activeDomains} />
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <Field
-          label="Slug"
-          hint={
-            slugLocked ? (
-              <>
-                <RouterLink to="/billing" className="text-accent hover:underline">
-                  Upgrade
-                </RouterLink>{" "}
-                for custom slugs.
-              </>
-            ) : (
-              "Leave empty for a random one"
-            )
-          }
-        >
-          <Input
-            value={form.slug ?? ""}
-            onChange={set("slug")}
-            placeholder={slugLocked ? "random" : "launch-2026"}
-            disabled={slugLocked}
-          />
-        </Field>
+        <SlugField value={form.slug ?? ""} onChange={set("slug")} slugLocked={slugLocked} />
         <Field label="Title">
           <Input value={form.title ?? ""} onChange={set("title")} placeholder="Spring launch" />
         </Field>
