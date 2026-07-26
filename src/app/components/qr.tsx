@@ -1,35 +1,14 @@
 import { useEffect, useRef, useState } from "react";
-import QRCodeStyling, {
-  type DotType,
-  type CornerSquareType,
-  type CornerDotType,
-} from "qr-code-styling";
+import QRCodeStyling, { type CornerSquareType, type CornerDotType } from "qr-code-styling";
 import { Button } from "../ui/button";
 import { Check, Download, ImagePlus, X } from "lucide-react";
 import { cn } from "../ui/cn";
-import {
-  QR_DEFAULT_BG,
-  QR_DEFAULT_COLOR,
-  QR_DEFAULT_CORNER,
-  QR_DEFAULT_LOGO_SIZE,
-  QR_LOGO_MAX_BYTES,
-  QR_LOGO_MAX_DIMENSION,
-} from "@/shared/types";
+import { QR_LOGO_MAX_BYTES, QR_LOGO_MAX_DIMENSION } from "@/shared/types";
 import { useToast } from "../ui/toast";
 import { Spinner } from "../ui/spinner";
 import { uploadQrLogo } from "../lib/api";
 import { useCurrentOrg } from "../lib/current-org";
-
-/** All of a QR code's appearance, already resolved to concrete values. */
-interface QrLook {
-  dot: DotType;
-  corner: string;
-  ink: string;
-  eye: string;
-  bg: string;
-  logo: string | undefined;
-  logoSize: number;
-}
+import { resolveLook, type QrLook } from "../lib/qr-look";
 
 function looksOptions(look: QrLook) {
   return {
@@ -98,16 +77,7 @@ export function QRPreview({
   const holder = useRef<HTMLDivElement>(null);
   const qr = useRef<QRCodeStyling | null>(null);
 
-  const ink = color || QR_DEFAULT_COLOR;
-  const look: QrLook = {
-    dot: (dotStyle || "rounded") as DotType,
-    corner: corner || QR_DEFAULT_CORNER,
-    ink,
-    eye: eyeColor || ink,
-    bg: bg === "transparent" ? "transparent" : bg || QR_DEFAULT_BG,
-    logo: logo || undefined,
-    logoSize: logoSize || QR_DEFAULT_LOGO_SIZE,
-  };
+  const look = resolveLook({ logo, dotStyle, color, corner, eyeColor, bg, logoSize });
 
   useEffect(() => {
     if (!holder.current) return;
