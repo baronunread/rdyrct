@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import type { Context } from "hono";
 import { HTTPException } from "hono/http-exception";
 import type { AppEnv, Env } from "./env";
-import { withSession } from "./auth";
+import { withSession } from "./session";
 import { getAuth } from "./better-auth";
 import { userRoutes } from "./routes/auth";
 import { orgRoutes, inviteRoutes } from "./routes/orgs";

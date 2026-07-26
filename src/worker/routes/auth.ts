@@ -3,7 +3,7 @@ import { and, eq } from "drizzle-orm";
 import { alias } from "drizzle-orm/sqlite-core";
 import * as schema from "../db/schema";
 import type { AppEnv } from "../env";
-import { requireUser } from "../auth";
+import { requireUser } from "../guards";
 import type { AppConfig, CurrentUser, OrgPlan } from "@/shared/types";
 
 // Signup/login/logout/verification live under /api/auth/* (BetterAuth).

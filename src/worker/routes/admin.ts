@@ -3,7 +3,7 @@ import { HTTPException } from "hono/http-exception";
 import { eq, ne, gte, and, desc, lt, inArray, sql } from "drizzle-orm";
 import * as schema from "../db/schema";
 import type { AppEnv, DB } from "../env";
-import { requireAdmin } from "../auth";
+import { requireAdmin } from "../guards";
 import { now } from "../util";
 import {
   PLAN_LIMITS,

@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import type { AppEnv } from "../env";
-import { requireOrgRole, orgRole } from "../auth";
+import { requireOrgRole, orgRole } from "../org-role";
 import { orgPlan } from "../plan";
 import { uid, qrLogoUrl, QR_LOGO_FILE_RE } from "../util";
 import { QR_LOGO_MAX_BYTES } from "@/shared/types";

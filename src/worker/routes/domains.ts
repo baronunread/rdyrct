@@ -4,7 +4,7 @@ import { eq, and, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import * as schema from "../db/schema";
 import type { AppEnv, DB, Env } from "../env";
-import { requireOrgRole } from "../auth";
+import { requireOrgRole } from "../org-role";
 import { orgPlan } from "../plan";
 import { enqueueStorage, syncDomainMsg } from "../storage";
 import { uid, now } from "../util";

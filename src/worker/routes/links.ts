@@ -3,7 +3,7 @@ import { HTTPException } from "hono/http-exception";
 import { eq, and, desc, sql } from "drizzle-orm";
 import * as schema from "../db/schema";
 import type { AppEnv, DB } from "../env";
-import { requireOrgRole } from "../auth";
+import { requireOrgRole } from "../org-role";
 import { deleteQrLogoMsg, enqueueStorage, syncLinkMsg } from "../storage";
 import { orgPlan } from "../plan";
 import {
