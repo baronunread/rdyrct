@@ -31,6 +31,15 @@ import { cn } from "../ui/cn";
 import { NotFound } from "./not-found";
 import { PLAN_LIMITS, type User, type UserOrg } from "@/shared/types";
 
+const ORG_LIMIT_MESSAGE = "Upgrade to Pro to create more organizations";
+
+/** Friendly message for a failed org-create request: the org-limit error
+ * gets an upgrade nudge, everything else shows the server's own message. */
+function orgCreateErrorMessage(e: unknown): string {
+  if (e instanceof ApiError && e.code === "org_limit") return ORG_LIMIT_MESSAGE;
+  return (e as Error).message;
+}
+
 export function RequireAuth({ children }: { children: ReactNode }) {
   const me = useCurrentUser();
   const location = useLocation();
@@ -314,16 +323,11 @@ export function AppShell() {
       setOrg(created.id);
       navigate("/dashboard");
     } catch (e) {
-      if (e instanceof ApiError && e.code === "org_limit")
-        toast("Upgrade to Pro to create more organizations", "error");
-      else toast((e as Error).message, "error");
+      toast(orgCreateErrorMessage(e), "error");
     }
   };
 
-  const onNewOrg = () =>
-    canCreateOrg
-      ? setNewOrgOpen(true)
-      : toast("Upgrade to Pro to create more organizations", "error");
+  const onNewOrg = () => (canCreateOrg ? setNewOrgOpen(true) : toast(ORG_LIMIT_MESSAGE, "error"));
   const onSignOut = () =>
     logout.mutate(undefined, {
       onSuccess: () => navigate("/login"),
