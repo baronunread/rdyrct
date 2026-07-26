@@ -1,8 +1,8 @@
 import { useState, type FormEvent } from "react";
 import { useNavigate, useSearchParams } from "react-router";
 import { AuthCard, PasswordMeter } from "../components/auth-form";
-import { authClient } from "../lib/auth-client";
-import { friendlyAuthError, useShake } from "../lib/auth-form";
+import { useShake } from "../lib/auth-form";
+import { submitResetPassword } from "../lib/reset-password";
 import { Button } from "../ui/button";
 import { Field, Input } from "../ui/field";
 import { BusyContent } from "../ui/spinner";
@@ -25,33 +25,10 @@ export function ResetPasswordPage() {
     shake.start();
   };
 
-  const submit = async (e: FormEvent) => {
+  const submit = (e: FormEvent) => {
     e.preventDefault();
-    // The form is noValidate: same manual, in-field-order checks as the
-    // sign-up form. Keep any previous error on screen while a retry runs.
-    if (password.length < 8) {
-      failSubmit("Password must be at least 8 characters.");
-      return;
-    }
-    if (confirm !== password) {
-      failSubmit("Passwords do not match.");
-      return;
-    }
-    setBusy(true);
-    try {
-      const { error: resetError } = await authClient.resetPassword({
-        newPassword: password,
-        token,
-      });
-      if (resetError) {
-        failSubmit(friendlyAuthError(resetError));
-        return;
-      }
-      toast("Password updated, sign in with your new password");
-      navigate("/login", { replace: true });
-    } finally {
-      setBusy(false);
-    }
+    // The form is noValidate. Keep any previous error on screen while a retry runs.
+    void submitResetPassword({ password, confirm, token, toast, navigate, failSubmit, setBusy });
   };
 
   return (
