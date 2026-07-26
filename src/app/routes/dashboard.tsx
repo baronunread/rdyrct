@@ -30,6 +30,11 @@ const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const linkPath = (l: { slug: string; domain?: string | null }) =>
   l.domain ? `/links/${l.slug}?domain=${encodeURIComponent(l.domain)}` : `/links/${l.slug}`;
 
+/** Link rows carry only the creator's user id; names come from the roster. */
+function creatorNameFrom(memberNames: Map<string, string>, id: string | null): string {
+  return (id && memberNames.get(id)) || "A former member";
+}
+
 /** Loads and shapes every data source the dashboard renders from. */
 function useDashboardData(orgId: string) {
   const stats = useStats(orgId);
@@ -42,22 +47,29 @@ function useDashboardData(orgId: string) {
     () => [...(links.data ?? [])].sort((a, b) => b.createdAt - a.createdAt).slice(0, 5),
     [links.data],
   );
-  // Link rows carry only the creator's user id; names come from the roster.
   const memberNames = useMemo(
     () => new Map((members.data ?? []).map((m) => [m.userId, m.name])),
     [members.data],
   );
-  const creatorName = (id: string | null) => (id && memberNames.get(id)) || "A former member";
 
   return {
-    isLoading: stats.isLoading || links.isLoading || members.isLoading || clicks.isLoading,
+    isLoading: [stats, links, members, clicks].some((q) => q.isLoading),
     stats: stats.data,
     recentLinks,
-    creatorName,
+    creatorName: (id: string | null) => creatorNameFrom(memberNames, id),
     clicks: clicks.data ?? [],
     memberCount: members.data?.length ?? 0,
     create,
   };
+}
+
+/** The busiest heatmap cell, or null when there's no activity to report. */
+function peakActivityCell(
+  heatmap: { dayOfWeek: number; hour: number; clicks: number }[],
+): { dayOfWeek: number; hour: number; clicks: number } | null {
+  if (!heatmap.length) return null;
+  const peakCell = heatmap.reduce((max, cell) => (cell.clicks > max.clicks ? cell : max));
+  return peakCell.clicks > 0 ? peakCell : null;
 }
 
 export function Dashboard() {
@@ -72,10 +84,7 @@ export function Dashboard() {
 
   const decaying = s.decayingLinks.slice(0, 3);
   const dead = s.deadLinks.slice(0, 3);
-  const peakCell = s.heatmap.length
-    ? s.heatmap.reduce((max, cell) => (cell.clicks > max.clicks ? cell : max))
-    : null;
-  const peak = peakCell && peakCell.clicks > 0 ? peakCell : null;
+  const peak = peakActivityCell(s.heatmap);
 
   return (
     <div>
@@ -110,6 +119,31 @@ export function Dashboard() {
         onClose={() => setCreated(null)}
         qrEnabled={limits.qr}
         orgQr={orgQr}
+      />
+    </div>
+  );
+}
+
+function QuickCreateDomainSelect({
+  activeDomains,
+  domainId,
+  onChange,
+}: {
+  activeDomains: DomainDTO[];
+  domainId: string | null;
+  onChange: (id: string | null) => void;
+}) {
+  if (!activeDomains.length) return null;
+  return (
+    <div className="sm:w-56">
+      <MenuSelect
+        label="Domain"
+        value={domainId ?? ""}
+        onChange={(v) => onChange(v || null)}
+        options={[
+          { value: "", label: `shared: ${window.location.host}` },
+          ...activeDomains.map((d) => ({ value: d.id, label: d.hostname })),
+        ]}
       />
     </div>
   );
@@ -165,22 +199,11 @@ function QuickCreateCard({
             autoFocus
           />
         </div>
-        {activeDomains.length > 0 && (
-          <div className="sm:w-56">
-            <MenuSelect
-              label="Domain"
-              value={domainId ?? ""}
-              onChange={(v) => setDomainId(v || null)}
-              options={[
-                { value: "", label: `shared: ${window.location.host}` },
-                ...activeDomains.map((d) => ({
-                  value: d.id,
-                  label: d.hostname,
-                })),
-              ]}
-            />
-          </div>
-        )}
+        <QuickCreateDomainSelect
+          activeDomains={activeDomains}
+          domainId={domainId}
+          onChange={setDomainId}
+        />
         <Button
           variant="primary"
           type="submit"
@@ -260,25 +283,21 @@ function NeedsAttentionCard({
   decaying: { id: string; slug: string; title: string; drop: number }[];
   dead: { id: string; slug: string; title: string }[];
 }) {
+  const groups = [
+    { label: "Decaying", rows: decaying.map((l) => ({ ...l, suffix: `${l.drop}% drop` })) },
+    { label: "Dead", rows: dead.map((l) => ({ ...l, suffix: "0 clicks in 30d" })) },
+  ].filter((g) => g.rows.length > 0);
+
   return (
     <Card>
       <p className="mb-3 text-2xs tracking-wider text-muted uppercase">Needs attention</p>
-      {!decaying.length && !dead.length ? (
+      {!groups.length ? (
         <p className="py-2 text-sm text-muted">No decaying or dead links</p>
       ) : (
         <div className="flex flex-col gap-3">
-          {decaying.length > 0 && (
-            <AttentionList
-              label="Decaying"
-              rows={decaying.map((l) => ({ ...l, suffix: `${l.drop}% drop` }))}
-            />
-          )}
-          {dead.length > 0 && (
-            <AttentionList
-              label="Dead"
-              rows={dead.map((l) => ({ ...l, suffix: "0 clicks in 30d" }))}
-            />
-          )}
+          {groups.map((g) => (
+            <AttentionList key={g.label} label={g.label} rows={g.rows} />
+          ))}
         </div>
       )}
     </Card>
@@ -335,6 +354,46 @@ function PeakCard({
   );
 }
 
+function CreatedLinkContent({
+  link,
+  url,
+  qrEnabled,
+  orgQr,
+}: {
+  link: LinkDTO;
+  url: string;
+  qrEnabled: boolean;
+  orgQr: OrgQr;
+}) {
+  const toast = useToast();
+  return (
+    <div className="flex flex-col items-center gap-3">
+      {qrEnabled && (
+        <QRPreview
+          url={url}
+          logo={orgQr.logo || undefined}
+          dotStyle={orgQr.style}
+          color={orgQr.color}
+          corner={orgQr.corner}
+          eyeColor={orgQr.eyeColor}
+          bg={orgQr.bg}
+          logoSize={orgQr.logoSize ?? undefined}
+          downloadName={`qr-${link.slug}`}
+        />
+      )}
+      <p className="text-sm font-bold break-all">{url}</p>
+      <CopyButton
+        text={url}
+        label="Copy link"
+        onCopy={(text) => copyToClipboard(text, toast)}
+        display="button"
+      >
+        Copy link
+      </CopyButton>
+    </div>
+  );
+}
+
 /** Shown right after a quick create: the short URL, its QR code when the
  * plan includes QR codes, and a copy button. */
 function CreatedDialog({
@@ -348,37 +407,11 @@ function CreatedDialog({
   qrEnabled: boolean;
   orgQr: OrgQr;
 }) {
-  const toast = useToast();
   const url = link ? shortUrl(link.slug, link.domain) : "";
 
   return (
     <Dialog open={!!link} onOpenChange={(o) => !o && onClose()} title="Link created">
-      {link && (
-        <div className="flex flex-col items-center gap-3">
-          {qrEnabled && (
-            <QRPreview
-              url={url}
-              logo={orgQr.logo || undefined}
-              dotStyle={orgQr.style}
-              color={orgQr.color}
-              corner={orgQr.corner}
-              eyeColor={orgQr.eyeColor}
-              bg={orgQr.bg}
-              logoSize={orgQr.logoSize ?? undefined}
-              downloadName={`qr-${link.slug}`}
-            />
-          )}
-          <p className="text-sm font-bold break-all">{url}</p>
-          <CopyButton
-            text={url}
-            label="Copy link"
-            onCopy={(text) => copyToClipboard(text, toast)}
-            display="button"
-          >
-            Copy link
-          </CopyButton>
-        </div>
-      )}
+      {link && <CreatedLinkContent link={link} url={url} qrEnabled={qrEnabled} orgQr={orgQr} />}
     </Dialog>
   );
 }
