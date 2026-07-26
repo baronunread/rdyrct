@@ -134,6 +134,33 @@ function useAutoPlay() {
 
 type Reduce = ReturnType<typeof useReducedMotion>;
 
+/** The typed text, blinking cursor (while typing), and placeholder — the
+ * part of the URL field whose content depends on phase. */
+function TypedUrlDisplay({
+  phase,
+  typed,
+  reduce,
+}: {
+  phase: Phase;
+  typed: string;
+  reduce: Reduce;
+}) {
+  return (
+    <span className="flex h-full items-center truncate font-mono text-text">
+      {typed}
+      {phase === "typing" && (
+        <m.span
+          aria-hidden="true"
+          className="ml-px inline-block h-4 w-[7px] shrink-0 bg-accent"
+          animate={reduce ? undefined : { opacity: [1, 0, 1] }}
+          transition={{ duration: 0.9, repeat: Infinity }}
+        />
+      )}
+      {phase !== "typing" && typed.length === 0 && <span className="text-muted/60">https://…</span>}
+    </span>
+  );
+}
+
 /** The "type a URL, hit shorten" form at the top of the mockup. */
 function ShortenFormMock({
   phase,
@@ -151,20 +178,7 @@ function ShortenFormMock({
       </p>
       <div className="flex gap-2">
         <div className="relative h-9 flex-1 overflow-hidden rounded-md border border-border bg-bg px-3 text-sm">
-          <span className="flex h-full items-center truncate font-mono text-text">
-            {typed}
-            {phase === "typing" && (
-              <m.span
-                aria-hidden="true"
-                className="ml-px inline-block h-4 w-[7px] shrink-0 bg-accent"
-                animate={reduce ? undefined : { opacity: [1, 0, 1] }}
-                transition={{ duration: 0.9, repeat: Infinity }}
-              />
-            )}
-            {phase !== "typing" && typed.length === 0 && (
-              <span className="text-muted/60">https://…</span>
-            )}
-          </span>
+          <TypedUrlDisplay phase={phase} typed={typed} reduce={reduce} />
         </div>
         <m.button
           type="button"
@@ -231,47 +245,134 @@ function ResultSkeleton({ isResult, phase }: { isResult: boolean; phase: Phase }
   );
 }
 
+function UploadingLogo({ reduce }: { reduce: Reduce }) {
+  return (
+    <m.div
+      initial={reduce ? undefined : { y: -26, opacity: 0 }}
+      animate={reduce ? undefined : { y: 0, opacity: 1 }}
+      transition={{ duration: 0.45, ease: "easeOut" }}
+      className="flex items-center gap-2"
+    >
+      <FileImage size={14} />
+      <span className="font-mono text-text">acme.svg</span>
+      <Loader2 size={13} className="animate-spin text-accent" />
+    </m.div>
+  );
+}
+
+function BrandedLogo({ reduce }: { reduce: Reduce }) {
+  return (
+    <m.div
+      initial={reduce ? undefined : { opacity: 0 }}
+      animate={{ opacity: 1 }}
+      className="flex items-center gap-2"
+    >
+      <Check size={14} className="text-accent-2" />
+      <span className="font-mono text-text">acme.svg</span>
+      <span>logo added</span>
+    </m.div>
+  );
+}
+
+function EmptyLogoHint() {
+  return (
+    <span>
+      Drop an image or <span className="text-accent">browse</span>
+    </span>
+  );
+}
+
 /** The fake logo dropzone inside the result panel: idle, "uploading", then
  * "branded" once the logo lands. */
 function ResultLogoZone({ phase, reduce }: { phase: Phase; reduce: Reduce }) {
   return (
     <div className="flex h-11 items-center justify-center gap-2 overflow-hidden rounded-md border border-dashed border-border px-3 text-xs text-muted">
       {phase === "uploading" ? (
-        <m.div
-          initial={reduce ? undefined : { y: -26, opacity: 0 }}
-          animate={reduce ? undefined : { y: 0, opacity: 1 }}
-          transition={{ duration: 0.45, ease: "easeOut" }}
-          className="flex items-center gap-2"
-        >
-          <FileImage size={14} />
-          <span className="font-mono text-text">acme.svg</span>
-          <Loader2 size={13} className="animate-spin text-accent" />
-        </m.div>
+        <UploadingLogo reduce={reduce} />
       ) : phase === "branded" ? (
-        <m.div
-          initial={reduce ? undefined : { opacity: 0 }}
-          animate={{ opacity: 1 }}
-          className="flex items-center gap-2"
-        >
-          <Check size={14} className="text-accent-2" />
-          <span className="font-mono text-text">acme.svg</span>
-          <span>logo added</span>
-        </m.div>
+        <BrandedLogo reduce={reduce} />
       ) : (
-        <span>
-          Drop an image or <span className="text-accent">browse</span>
-        </span>
+        <EmptyLogoHint />
       )}
     </div>
   );
 }
 
-/**
- * Real result panel: the short link, click sparkline, logo dropzone and QR
- * preview. Both QR variants stay mounted and crossfade: updating one
- * instance's `image` would make qr-code-styling re-load the logo on every
- * loop.
- */
+/** The short link + copy button row at the top of the result panel. */
+function ShortLinkRow({
+  isResult,
+  copied,
+  copy,
+}: {
+  isResult: boolean;
+  copied: boolean;
+  copy: () => void;
+}) {
+  return (
+    <div>
+      <p className="mb-1.5 text-xs tracking-wide text-muted uppercase">Your short link</p>
+      <div className="flex items-center gap-2">
+        {/* A working demo of the redirect: the "short link" opens
+         * the typed destination in a new tab, just like the real
+         * thing would. */}
+        <a
+          href={LONG_URL}
+          target="_blank"
+          rel="noreferrer"
+          tabIndex={isResult ? 0 : -1}
+          title="Try it: opens the destination like a real redirect"
+          className="truncate font-mono text-base font-bold text-accent hover:underline"
+        >
+          {SHORT_URL}
+        </a>
+        <button
+          type="button"
+          onClick={copy}
+          tabIndex={isResult ? 0 : -1}
+          aria-label="Copy short link"
+          className="inline-flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center rounded-md border border-border text-muted transition-colors hover:border-accent hover:text-accent"
+        >
+          {copied ? <Check size={13} className="text-accent-2" /> : <Copy size={13} />}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/** Shared crossfade layer: `active` picks visibility and a11y for one of
+ * the two same-position QR variants in <QrCrossfade>. */
+function qrLayerProps(active: boolean) {
+  return {
+    "aria-hidden": !active,
+    className: cn(
+      "col-start-1 row-start-1 transition-opacity duration-300",
+      active ? "opacity-100" : "opacity-0",
+    ),
+  };
+}
+
+/** Both QR variants stay mounted and crossfade: updating one instance's
+ * `image` would make qr-code-styling re-load the logo on every loop. */
+function QrCrossfade({ phase, reduce }: { phase: Phase; reduce: Reduce }) {
+  const branded = phase === "branded";
+  return (
+    <m.div
+      animate={branded && !reduce ? { scale: [1, 1.04, 1] } : undefined}
+      transition={{ duration: 0.5, ease: "easeOut" }}
+      className="grid"
+    >
+      <div {...qrLayerProps(!branded)}>
+        <QRPreview url={SHORT_HREF} size={160} />
+      </div>
+      <div {...qrLayerProps(branded)}>
+        <QRPreview url={SHORT_HREF} logo={ACME_LOGO} size={160} />
+      </div>
+    </m.div>
+  );
+}
+
+/** Real result panel: the short link, click sparkline, logo dropzone and QR
+ * preview. */
 function ResultPanel({
   phase,
   isResult,
@@ -297,33 +398,7 @@ function ResultPanel({
       )}
     >
       <div className="flex min-w-0 flex-1 flex-col gap-4">
-        <div>
-          <p className="mb-1.5 text-xs tracking-wide text-muted uppercase">Your short link</p>
-          <div className="flex items-center gap-2">
-            {/* A working demo of the redirect: the "short link" opens
-             * the typed destination in a new tab, just like the real
-             * thing would. */}
-            <a
-              href={LONG_URL}
-              target="_blank"
-              rel="noreferrer"
-              tabIndex={isResult ? 0 : -1}
-              title="Try it: opens the destination like a real redirect"
-              className="truncate font-mono text-base font-bold text-accent hover:underline"
-            >
-              {SHORT_URL}
-            </a>
-            <button
-              type="button"
-              onClick={copy}
-              tabIndex={isResult ? 0 : -1}
-              aria-label="Copy short link"
-              className="inline-flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center rounded-md border border-border text-muted transition-colors hover:border-accent hover:text-accent"
-            >
-              {copied ? <Check size={13} className="text-accent-2" /> : <Copy size={13} />}
-            </button>
-          </div>
-        </div>
+        <ShortLinkRow isResult={isResult} copied={copied} copy={copy} />
         <div className="flex flex-col gap-2">
           <p className="flex items-center gap-1.5 text-xs tracking-wide text-muted uppercase">
             <MousePointerClick size={14} /> Clicks (7d)
@@ -339,30 +414,7 @@ function ResultPanel({
         </div>
       </div>
       <div className="flex shrink-0 flex-col items-center gap-2 self-center">
-        <m.div
-          animate={phase === "branded" && !reduce ? { scale: [1, 1.04, 1] } : undefined}
-          transition={{ duration: 0.5, ease: "easeOut" }}
-          className="grid"
-        >
-          <div
-            aria-hidden={phase === "branded"}
-            className={cn(
-              "col-start-1 row-start-1 transition-opacity duration-300",
-              phase === "branded" ? "opacity-0" : "opacity-100",
-            )}
-          >
-            <QRPreview url={SHORT_HREF} size={160} />
-          </div>
-          <div
-            aria-hidden={phase !== "branded"}
-            className={cn(
-              "col-start-1 row-start-1 transition-opacity duration-300",
-              phase === "branded" ? "opacity-100" : "opacity-0",
-            )}
-          >
-            <QRPreview url={SHORT_HREF} logo={ACME_LOGO} size={160} />
-          </div>
-        </m.div>
+        <QrCrossfade phase={phase} reduce={reduce} />
         <p className="text-2xs tracking-wide text-muted uppercase">Scan me, it works</p>
       </div>
     </m.div>
