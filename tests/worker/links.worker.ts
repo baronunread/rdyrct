@@ -3,41 +3,25 @@ import { env } from "cloudflare:workers";
 import { createExecutionContext, reset, waitOnExecutionContext } from "cloudflare:test";
 import worker from "../../src/worker";
 import { hashPassword } from "../../src/worker/password";
-import { applyTestMigrations, authEnv } from "./support";
+import { applyTestMigrations, authEnv, signInCookie, TEST_PASSWORD } from "./support";
 
 // A real (non-admin) free-plan user who owns "org-1" — unlike adminCookie(),
 // which is both a platform admin and on the pro plan, so it bypasses both
 // the org-membership check and the QR paid-plan gate this file exercises.
 async function freeOwnerCookie(): Promise<string> {
-  const password = "correct-horse-battery";
   await env.DB.batch([
     env.DB.prepare(
       "insert into user (id, name, email, email_verified, is_admin, plan, created_at, updated_at) values ('free-1', 'Free', 'free@example.com', 1, 0, 'free', 0, 0)",
     ),
     env.DB.prepare(
       "insert into account (id, account_id, provider_id, user_id, password, created_at, updated_at) values ('acct-free-1', 'free-1', 'credential', 'free-1', ?, 0, 0)",
-    ).bind(await hashPassword(password)),
+    ).bind(await hashPassword(TEST_PASSWORD)),
     env.DB.prepare("insert into orgs (id, name, created_at) values ('org-1', 'Test', 0)"),
     env.DB.prepare(
       "insert into org_members (org_id, user_id, role, created_at) values ('org-1', 'free-1', 'owner', 0)",
     ),
   ]);
-  const ctx = createExecutionContext();
-  const res = await worker.fetch(
-    new Request("http://localhost/api/auth/sign-in/email", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ email: "free@example.com", password }),
-    }),
-    authEnv(),
-    ctx,
-  );
-  await waitOnExecutionContext(ctx);
-  expect(res.status).toBe(200);
-  return res.headers
-    .getSetCookie()
-    .map((c) => c.split(";")[0])
-    .join("; ");
+  return signInCookie("free@example.com", TEST_PASSWORD);
 }
 
 async function postLink(cookie: string, body: Record<string, unknown>): Promise<Response> {
