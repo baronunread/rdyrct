@@ -82,6 +82,97 @@ function PlanFeatureComparison() {
   );
 }
 
+/** The cancel-scheduled and still-confirming status notes above the plan
+ * actions; either, both, or neither can show depending on account state. */
+function PlanStatusNotes({
+  plan,
+  cancelAtPeriodEnd,
+  periodEnd,
+  confirmTimedOut,
+}: {
+  plan: OrgPlan;
+  cancelAtPeriodEnd: boolean;
+  periodEnd: number | null;
+  confirmTimedOut: boolean;
+}) {
+  return (
+    <>
+      {cancelAtPeriodEnd && periodEnd && (
+        <p className="text-sm text-amber-400">
+          Your {PLAN_LABEL[plan]} plan is scheduled to cancel on {shortDate(periodEnd)}. Paid
+          features remain available until then.
+        </p>
+      )}
+      {confirmTimedOut && plan === "free" && (
+        <p className="text-sm text-muted">
+          Still confirming your payment. Your plan should activate shortly: refresh in a moment.
+        </p>
+      )}
+    </>
+  );
+}
+
+function FreeUpgradeButtons({
+  checkoutPlan,
+  shakeHobby,
+  shakePro,
+  onUpgrade,
+}: {
+  checkoutPlan: "hobby" | "pro" | null;
+  shakeHobby: ReturnType<typeof useShake>;
+  shakePro: ReturnType<typeof useShake>;
+  onUpgrade: (target: "hobby" | "pro") => void;
+}) {
+  return (
+    <div className="grid grid-cols-2 gap-3">
+      <Button
+        variant="primary"
+        disabled={checkoutPlan !== null}
+        className={shakeHobby.className}
+        onAnimationEnd={shakeHobby.end}
+        onClick={() => onUpgrade("hobby")}
+      >
+        <BusyContent busy={checkoutPlan === "hobby"}>
+          Upgrade to Hobby · {PLAN_PRICES.hobby}/mo
+        </BusyContent>
+      </Button>
+      <Button
+        variant="primary"
+        disabled={checkoutPlan !== null}
+        className={shakePro.className}
+        onAnimationEnd={shakePro.end}
+        onClick={() => onUpgrade("pro")}
+      >
+        <BusyContent busy={checkoutPlan === "pro"}>
+          Upgrade to Pro · {PLAN_PRICES.pro}/mo
+        </BusyContent>
+      </Button>
+    </div>
+  );
+}
+
+function ManageSubscriptionButton({
+  showPortalOverlay,
+  shakePortal,
+  onPortal,
+}: {
+  showPortalOverlay: boolean;
+  shakePortal: ReturnType<typeof useShake>;
+  onPortal: () => void;
+}) {
+  return (
+    <Button
+      variant="primary"
+      disabled={showPortalOverlay}
+      className={shakePortal.className}
+      onAnimationEnd={shakePortal.end}
+      onClick={onPortal}
+    >
+      <BusyContent busy={showPortalOverlay}>Manage subscription</BusyContent>
+    </Button>
+  );
+}
+
 function PlanActions({
   plan,
   checkoutPlan,
@@ -117,54 +208,27 @@ function PlanActions({
         <p className="text-sm text-muted">
           Billing is per account: your plan applies to every organization you own.
         </p>
-        {cancelAtPeriodEnd && periodEnd && (
-          <p className="text-sm text-amber-400">
-            Your {PLAN_LABEL[plan]} plan is scheduled to cancel on {shortDate(periodEnd)}. Paid
-            features remain available until then.
-          </p>
-        )}
-        {confirmTimedOut && plan === "free" && (
-          <p className="text-sm text-muted">
-            Still confirming your payment. Your plan should activate shortly: refresh in a moment.
-          </p>
-        )}
+        <PlanStatusNotes
+          plan={plan}
+          cancelAtPeriodEnd={cancelAtPeriodEnd}
+          periodEnd={periodEnd}
+          confirmTimedOut={confirmTimedOut}
+        />
         {plan === "free" && <PlanFeatureComparison />}
         <div>
           {plan === "free" ? (
-            <div className="grid grid-cols-2 gap-3">
-              <Button
-                variant="primary"
-                disabled={checkoutPlan !== null}
-                className={shakeHobby.className}
-                onAnimationEnd={shakeHobby.end}
-                onClick={() => onUpgrade("hobby")}
-              >
-                <BusyContent busy={checkoutPlan === "hobby"}>
-                  Upgrade to Hobby · {PLAN_PRICES.hobby}/mo
-                </BusyContent>
-              </Button>
-              <Button
-                variant="primary"
-                disabled={checkoutPlan !== null}
-                className={shakePro.className}
-                onAnimationEnd={shakePro.end}
-                onClick={() => onUpgrade("pro")}
-              >
-                <BusyContent busy={checkoutPlan === "pro"}>
-                  Upgrade to Pro · {PLAN_PRICES.pro}/mo
-                </BusyContent>
-              </Button>
-            </div>
+            <FreeUpgradeButtons
+              checkoutPlan={checkoutPlan}
+              shakeHobby={shakeHobby}
+              shakePro={shakePro}
+              onUpgrade={onUpgrade}
+            />
           ) : (
-            <Button
-              variant="primary"
-              disabled={showPortalOverlay}
-              className={shakePortal.className}
-              onAnimationEnd={shakePortal.end}
-              onClick={onPortal}
-            >
-              <BusyContent busy={showPortalOverlay}>Manage subscription</BusyContent>
-            </Button>
+            <ManageSubscriptionButton
+              showPortalOverlay={showPortalOverlay}
+              shakePortal={shakePortal}
+              onPortal={onPortal}
+            />
           )}
           {plan === "hobby" && (
             <p className="mt-2 text-xs text-muted">
@@ -174,6 +238,24 @@ function PlanActions({
         </div>
       </div>
     </Card>
+  );
+}
+
+function UsageLine({ label, count, limit }: { label: string; count: number; limit: number }) {
+  return (
+    <p className="text-sm text-muted tnum">
+      {label} {count} / {limit}
+    </p>
+  );
+}
+
+function UsageMeterSkeleton() {
+  return (
+    <div className="flex flex-col gap-3 py-1">
+      <Skeleton className="h-3.5 w-32" />
+      <Skeleton className="h-3.5 w-36" />
+      <Skeleton className="h-3.5 w-28" />
+    </div>
   );
 }
 
@@ -200,32 +282,21 @@ function UsageMeter({
 }) {
   if (!org) return null;
   const loading = linksPending || membersPending || domainsPending;
+  const limits = PLAN_LIMITS[org.plan];
   return (
     <Card className="max-w-2xl">
       <div className="flex flex-col gap-1">
         <p className="mb-2 text-2xs tracking-wider text-muted uppercase">Usage: {org.name}</p>
         {loading ? (
-          <div className="flex flex-col gap-3 py-1">
-            <Skeleton className="h-3.5 w-32" />
-            <Skeleton className="h-3.5 w-36" />
-            <Skeleton className="h-3.5 w-28" />
-          </div>
+          <UsageMeterSkeleton />
         ) : (
           <>
-            <p className="text-sm text-muted tnum">
-              Links {linkData?.length ?? 0} / {PLAN_LIMITS[org.plan].links}
-            </p>
-            <p className="text-sm text-muted tnum">
-              Members {memberData?.length ?? 0} / {PLAN_LIMITS[org.plan].members}
-            </p>
-            <p className="text-sm text-muted tnum">
-              Domains {domainData?.length ?? 0} / {PLAN_LIMITS[org.plan].domains}
-            </p>
+            <UsageLine label="Links" count={linkData.length} limit={limits.links} />
+            <UsageLine label="Members" count={memberData.length} limit={limits.members} />
+            <UsageLine label="Domains" count={domainData.length} limit={limits.domains} />
           </>
         )}
-        <p className="text-sm text-muted tnum">
-          Orgs you own {ownedOrgs} / {PLAN_LIMITS[plan].orgs}
-        </p>
+        <UsageLine label="Orgs you own" count={ownedOrgs} limit={PLAN_LIMITS[plan].orgs} />
       </div>
     </Card>
   );
@@ -446,6 +517,25 @@ function useCheckoutFlow() {
   };
 }
 
+/** How many orgs the user owns (vs. member/admin of), for the "Orgs you
+ * own / plan limit" usage line. */
+function ownedOrgCount(orgs: { role: string }[] | undefined): number {
+  return orgs?.filter((o) => o.role === "owner").length ?? 0;
+}
+
+/** The full-page loading overlay's visibility and message: shown for an
+ * in-flight checkout/portal redirect, or while confirming a completed one. */
+function billingOverlayState(
+  checkoutPlan: "hobby" | "pro" | null,
+  showPortalOverlay: boolean,
+  confirming: boolean,
+) {
+  return {
+    show: checkoutPlan !== null || showPortalOverlay || confirming,
+    message: confirming ? "Confirming your upgrade…" : "Redirecting to Polar…",
+  };
+}
+
 export function BillingPage() {
   const me = useCurrentUser();
   const { org } = useCurrentOrg();
@@ -453,7 +543,7 @@ export function BillingPage() {
   const { data: linkData, isPending: linksPending } = useLinks(orgId);
   const { data: memberData, isPending: membersPending } = useMembers(orgId);
   const { data: domainData, isPending: domainsPending } = useDomains(orgId);
-  const ownedOrgs = me.data?.orgs.filter((o) => o.role === "owner").length ?? 0;
+  const ownedOrgs = ownedOrgCount(me.data?.orgs);
 
   const {
     plan,
@@ -472,6 +562,7 @@ export function BillingPage() {
 
   const cancelAtPeriodEnd = me.data?.user.polarSubscriptionCancelAtPeriodEnd ?? false;
   const periodEnd = me.data?.user.polarSubscriptionCurrentPeriodEnd ?? null;
+  const overlay = billingOverlayState(checkoutPlan, showPortalOverlay, confirming);
 
   return (
     <div>
@@ -504,10 +595,7 @@ export function BillingPage() {
       </div>
 
       <LazyMotion features={domAnimation}>
-        <BillingOverlay
-          show={checkoutPlan !== null || showPortalOverlay || confirming}
-          message={confirming ? "Confirming your upgrade…" : "Redirecting to Polar…"}
-        />
+        <BillingOverlay show={overlay.show} message={overlay.message} />
         <CelebrationOverlay
           show={showCelebration}
           plan={plan}
