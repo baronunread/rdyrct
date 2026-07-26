@@ -27,6 +27,21 @@ export function overrideEnv(overrides: Partial<Env>): Env {
 // sign-in's rate-limit key derivation has a key to HMAC with.
 export const authEnv = () => overrideEnv({ BETTER_AUTH_SECRET: "test-secret" });
 
+// Deterministic Polar product ids and webhook secret for billing tests,
+// independent of the ambient .dev.vars. Keeps the same auth secret as
+// authEnv() so a cookie minted via signInCookie()/adminCookie() still
+// validates on requests made with this env.
+export const POLAR_HOBBY_PRODUCT_ID = "prod_hobby";
+export const POLAR_PRO_PRODUCT_ID = "prod_pro";
+export const POLAR_WEBHOOK_SECRET = "test-webhook-secret";
+export const billingEnv = () =>
+  overrideEnv({
+    BETTER_AUTH_SECRET: "test-secret",
+    POLAR_WEBHOOK_SECRET,
+    POLAR_HOBBY_PRODUCT_ID,
+    POLAR_PRO_PRODUCT_ID,
+  });
+
 export async function applyTestMigrations(): Promise<void> {
   const testEnv = env as TestEnv;
   await applyD1Migrations(testEnv.DB, testEnv.TEST_MIGRATIONS);
