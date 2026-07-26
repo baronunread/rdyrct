@@ -9,7 +9,7 @@ import { orgPlan } from "../plan";
 import { enqueueStorage, syncDomainMsg } from "../storage";
 import { uid, now } from "../util";
 import { isValidHttpUrl, normalizeUrl } from "../util";
-import type { DomainDTO } from "@/shared/types";
+import type { DomainDTO, PlanLimits } from "@/shared/types";
 
 // e.g. links.example.com: at least one dot, no scheme/port/path
 const HOSTNAME_RE = /^(?=.{4,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,}$/;
@@ -260,13 +260,7 @@ domainRoutes.get("/", async (c) => {
   return c.json(rows.map(toDTO));
 });
 
-// Add a domain: commit the D1 row, then hand activation to the background
-// workflow. The request never calls Cloudflare, so provider latency and partial
-// failures stay out of the user-facing path.
-domainRoutes.post("/", async (c) => {
-  const db = c.var.db;
-  const orgId = c.req.param("orgId")!;
-  const { limits } = await orgPlan(db, orgId);
+async function assertDomainQuota(db: DB, orgId: string, limits: PlanLimits): Promise<void> {
   if (limits.domains === 0)
     throw new HTTPException(402, {
       message: "Custom domains are a paid feature: upgrade to connect one",
@@ -279,20 +273,41 @@ domainRoutes.post("/", async (c) => {
     throw new HTTPException(402, {
       message: `Your plan allows ${limits.domains} custom domains`,
     });
+}
 
-  const body = await c.req.json<{ hostname?: string }>();
+/** Validates and normalizes a requested hostname: well-formed, not this
+ * app's own host, and not already connected to another org. */
+async function resolveNewHostname(
+  db: DB,
+  body: { hostname?: string },
+  appHost: string,
+): Promise<string> {
   const hostname = body.hostname?.trim().toLowerCase() ?? "";
   if (!HOSTNAME_RE.test(hostname))
     throw new HTTPException(400, {
       message: "Enter a bare hostname like links.example.com",
     });
-  if (hostname === c.env.APP_HOST)
+  if (hostname === appHost)
     throw new HTTPException(400, { message: "That is this app's own domain" });
   const taken = await db
     .select({ id: schema.domains.id })
     .from(schema.domains)
     .where(eq(schema.domains.hostname, hostname));
   if (taken.length) throw new HTTPException(409, { message: "Domain already connected" });
+  return hostname;
+}
+
+// Add a domain: commit the D1 row, then hand activation to the background
+// workflow. The request never calls Cloudflare, so provider latency and partial
+// failures stay out of the user-facing path.
+domainRoutes.post("/", async (c) => {
+  const db = c.var.db;
+  const orgId = c.req.param("orgId")!;
+  const { limits } = await orgPlan(db, orgId);
+  await assertDomainQuota(db, orgId, limits);
+
+  const body = await c.req.json<{ hostname?: string }>();
+  const hostname = await resolveNewHostname(db, body, c.env.APP_HOST);
 
   const id = uid();
   const row = {

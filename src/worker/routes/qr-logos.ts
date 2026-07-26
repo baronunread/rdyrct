@@ -30,6 +30,22 @@ function isSvg(body: ArrayBuffer) {
   return /^\s*(?:<\?xml[^>]*\?>\s*)?<svg(?:\s|>)/i.test(text);
 }
 
+/** Validates an uploaded logo's declared type, size, and that its bytes
+ * actually match that type. Returns the file extension to store it under. */
+function validateQrLogoBody(type: string, body: ArrayBuffer): string {
+  const ext = EXT_BY_TYPE[type];
+  if (!ext)
+    throw new HTTPException(400, {
+      message: "Logo must be a compressed WebP or SVG image",
+    });
+  if (!body.byteLength) throw new HTTPException(400, { message: "Empty file" });
+  if ((type === "image/webp" && !isWebp(body)) || (type === "image/svg+xml" && !isSvg(body)))
+    throw new HTTPException(400, { message: "Logo file does not match its format" });
+  if (body.byteLength > QR_LOGO_MAX_BYTES)
+    throw new HTTPException(400, { message: "Logo too large (max 256 KB)" });
+  return ext;
+}
+
 qrLogoRoutes.post("/", requireOrgRole("member"), async (c) => {
   // A logo is QR customization: a paid feature.
   const { limits } = await orgPlan(c.var.db, c.req.param("orgId")!);
@@ -39,18 +55,8 @@ qrLogoRoutes.post("/", requireOrgRole("member"), async (c) => {
     });
 
   const type = c.req.header("content-type")?.split(";")[0].trim().toLowerCase() ?? "";
-  const ext = EXT_BY_TYPE[type];
-  if (!ext)
-    throw new HTTPException(400, {
-      message: "Logo must be a compressed WebP or SVG image",
-    });
-
   const body = await c.req.arrayBuffer();
-  if (!body.byteLength) throw new HTTPException(400, { message: "Empty file" });
-  if ((type === "image/webp" && !isWebp(body)) || (type === "image/svg+xml" && !isSvg(body)))
-    throw new HTTPException(400, { message: "Logo file does not match its format" });
-  if (body.byteLength > QR_LOGO_MAX_BYTES)
-    throw new HTTPException(400, { message: "Logo too large (max 256 KB)" });
+  const ext = validateQrLogoBody(type, body);
 
   const file = `${uid()}.${ext}`;
   const orgId = c.req.param("orgId")!;
