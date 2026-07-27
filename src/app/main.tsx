@@ -4,8 +4,6 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import "@fontsource/jetbrains-mono/latin-400.css";
 import "@fontsource/jetbrains-mono/latin-700.css";
-import fontRegular from "@fontsource/jetbrains-mono/files/jetbrains-mono-latin-400-normal.woff2?url";
-import fontBold from "@fontsource/jetbrains-mono/files/jetbrains-mono-latin-700-normal.woff2?url";
 import "./styles.css";
 import { ToastProvider } from "./ui/toast";
 import { ConsentBanner } from "./ui/consent-banner";
@@ -70,11 +68,6 @@ const queryClient = new QueryClient({
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
-    {/* React 19 hoists these into <head>: preloading the two above-the-fold
-        weights (latin subset only) means no fallback swap, no layout shift,
-        once the font is ready. */}
-    <link rel="preload" as="font" type="font/woff2" href={fontRegular} crossOrigin="anonymous" />
-    <link rel="preload" as="font" type="font/woff2" href={fontBold} crossOrigin="anonymous" />
     <QueryClientProvider client={queryClient}>
       <ToastProvider>
         <BrowserRouter>

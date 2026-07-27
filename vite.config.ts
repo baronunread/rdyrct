@@ -1,13 +1,63 @@
+import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { defineConfig } from "vite";
+import { defineConfig, type Plugin } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import { cloudflare } from "@cloudflare/vite-plugin";
+
+const PRELOAD_FONTS = [
+  "jetbrains-mono-latin-400-normal.woff2",
+  "jetbrains-mono-latin-700-normal.woff2",
+];
+
+/**
+ * Preloads the two above-the-fold JetBrains Mono weights (latin subset) as a
+ * real <link> in index.html. index.html is static, so it can't run the `?url`
+ * import Fontsource's own docs recommend, and rendering the <link> from React
+ * doesn't help either: this app is client-rendered, so the tag would only
+ * land in <head> once the same JS that triggers the real paint has already
+ * run. Emitting the font files through Vite's asset pipeline here and writing
+ * the resolved href straight into the HTML makes the browser's preload
+ * scanner discover it while parsing the initial HTML, before the JS bundle
+ * even finishes loading.
+ */
+function preloadFonts(): Plugin {
+  let isServe = false;
+  const fileNames = new Map<string, string>();
+
+  return {
+    name: "preload-jetbrains-mono",
+    config(_config, { command }) {
+      isServe = command === "serve";
+    },
+    buildStart() {
+      if (isServe) return;
+      for (const file of PRELOAD_FONTS) {
+        const filePath = fileURLToPath(
+          import.meta.resolve(`@fontsource/jetbrains-mono/files/${file}`),
+        );
+        const refId = this.emitFile({ type: "asset", name: file, source: readFileSync(filePath) });
+        fileNames.set(file, this.getFileName(refId));
+      }
+    },
+    transformIndexHtml() {
+      const hrefs = isServe
+        ? PRELOAD_FONTS.map((file) => `/node_modules/@fontsource/jetbrains-mono/files/${file}`)
+        : PRELOAD_FONTS.map((file) => `/${fileNames.get(file)}`);
+      return hrefs.map((href) => ({
+        tag: "link",
+        injectTo: "head-prepend" as const,
+        attrs: { rel: "preload", href, as: "font", type: "font/woff2", crossorigin: true },
+      }));
+    },
+  };
+}
 
 export default defineConfig({
   plugins: [
     react(),
     tailwindcss(),
+    preloadFonts(),
     cloudflare({
       // Browser tests use short-lived in-memory bindings, never a developer's
       // persisted D1, KV, or R2 state.
