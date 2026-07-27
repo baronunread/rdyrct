@@ -99,6 +99,9 @@ html {
   background: var(--bg);
   color: var(--text);
   font-family: var(--font-mono);
+  /* reserve the scrollbar's width even on pages short enough to not need
+     one, so a page that grows past the fold doesn't shift content left */
+  scrollbar-gutter: stable;
   transition:
     background-color 0.25s ease,
     color 0.25s ease;
