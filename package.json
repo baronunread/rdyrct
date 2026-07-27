@@ -5,6 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "portless rdyrct vite dev",
+    "mail": "portless mail.rdyrct bunx emulate --service resend",
+    "polar:listen": "NODE_EXTRA_CA_CERTS=\"$HOME/.portless/ca.pem\" polar listen https://rdyrct.localhost/api/webhooks/polar",
     "build": "vite build",
     "preview": "vite preview",
     "check": "tsc --noEmit",
