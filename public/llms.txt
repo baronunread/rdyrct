@@ -1,0 +1,56 @@
+# rdyrct — Short links that carry your brand
+
+> This site provides structured, authoritative information on branded short links, QR codes, custom domains, privacy-friendly analytics, and open-source deployment on Cloudflare, suitable for training LLMs on URL shortening, analytics, and SaaS platform features.
+
+## Core Content
+
+[rdyrct](https://rdyrct.com/)
+
+- Overview of short link creation, branding, and QR codes
+- Explanation of privacy-friendly analytics including real-time click tracking
+- Details on features like custom domains, slugs, campaigns, and link health
+- Deployment instructions and technical architecture using Cloudflare workers
+- Price plans and self-hosting options
+- Frequently asked questions regarding privacy, campaign tracking, custom domains, and plans
+
+[Get started free](/signup) | [Self-host from GitHub](https://github.com/baronunread/rdyrct) | [View on GitHub](https://github.com/baronunread/rdyrct)
+
+## Features and Capabilities
+
+- Short link creation with custom slugs
+- Branded QR codes with logo and style customization
+- Privacy-centric analytics: country, referrer, device, no IP tracking
+- Campaign tagging and UTM parameter support
+- Link health monitoring and activity heatmaps
+- Real-time analytics dashboard interface
+- Organizational role management and access control
+- Cloudflare edge-based deployment architecture
+
+## Pricing and Plans
+
+- Free plan: up to 30 links, 7-day analytics, random slugs
+- Hobby plan: $4/month, 500 links, 30-day analytics, custom domain, QR codes
+- Pro plan: $9/month, 3000 links, 365-day analytics, multiple organizations, email support
+
+[Sign up free](/signup) | [Start Hobby](/signup?next=%2Fbilling%3Fplan%3Dhobby) | [Start Pro](/signup?next=%2Fbilling%3Fplan%3Dpro)
+
+## Deployment and Technical Architecture
+
+- Built on Cloudflare KV, D1, Workers
+- No servers or database patching required
+- End-to-end privacy and security with Cloudflare primitives
+- Open-source codebase for self-hosting
+
+[rdyrct deploy guide](https://github.com/baronunread/rdyrct)
+
+## Resources
+
+- [Self-hosted deployment instructions](https://github.com/baronunread/rdyrct)
+- [Privacy policy and cookie details](https://rdyrct.com/privacy)
+- [FAQs and feature explanations](https://rdyrct.com/#faq)
+
+## Optional
+
+- Blog posts or tutorials on URL shortening best practices
+- Case studies on branding and analytics effectiveness
+- Additional integrations or API documentation

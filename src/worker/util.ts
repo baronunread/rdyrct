@@ -21,6 +21,8 @@ export const RESERVED_SLUGS = new Set([
   "app",
   "assets",
   "robots.txt",
+  "sitemap.xml",
+  "llms.txt",
   // public
   "login",
   "signup",

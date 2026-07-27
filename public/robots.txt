@@ -1,0 +1,16 @@
+User-agent: *
+Allow: /
+Disallow: /api/
+Disallow: /dashboard
+Disallow: /analytics
+Disallow: /links
+Disallow: /members
+Disallow: /billing
+Disallow: /domains
+Disallow: /settings
+Disallow: /admin
+Disallow: /onboarding
+Disallow: /reset-password
+Disallow: /invite/
+
+Sitemap: https://rdyrct.com/sitemap.xml
