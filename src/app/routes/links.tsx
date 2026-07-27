@@ -385,10 +385,6 @@ function QrLinkDialog({
           <QRPreview
             url={shortUrl(link.slug, link.domain)}
             {...resolveQrLook(link, orgQr)}
-            // NB: unlike the other fields, this ignores the link's own
-            // qrLogoSize override and always uses the org default (matches
-            // existing behavior; not changed by this pass).
-            logoSize={orgQr.logoSize ?? undefined}
             downloadName={`qr-${link.slug}`}
           />
           <p className="text-xs text-muted">{shortUrl(link.slug, link.domain)}</p>
