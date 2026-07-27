@@ -29,6 +29,7 @@ export const RESERVED_SLUGS = new Set([
   "invite",
   "privacy",
   "terms",
+  "blog",
   // authenticated app tabs
   "dashboard",
   "analytics",

@@ -49,6 +49,9 @@ export interface Env {
   /* alerting: dead-lettered storage messages (best-effort, never blocks acking) */
   BETTERSTACK_SOURCE_TOKEN?: string; // secret
   BETTERSTACK_INGEST_URL?: string; // var, e.g. https://in.logs.betterstack.com
+
+  /* blog: rdyrct-blog (Next.js on Vercel), reverse-proxied at /blog */
+  BLOG_ORIGIN_URL?: string; // var, e.g. https://rdyrct-blog.vercel.app; unset skips the proxy
 }
 
 export type DB = DrizzleD1Database<typeof schema>;

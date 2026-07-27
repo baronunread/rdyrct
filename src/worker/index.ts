@@ -90,6 +90,36 @@ api.route("/invites", inviteRoutes);
 api.route("/admin", adminRoutes);
 app.route("/api", api);
 
+/* ---------------- blog: reverse-proxied Next.js app on Vercel ---------------- */
+
+// The blog (rdyrct-blog, a separate Next.js repo) deploys to Vercel on its
+// own; this keeps DNS and every other route on Cloudflare while the
+// generated backlinks still resolve at rdyrct.com/blog. Next's `basePath`
+// there mirrors this prefix, so the whole path tree (pages, /_next assets
+// under /blog, sitemap) forwards unchanged.
+function proxyBlog(c: Context<AppEnv>, next: () => Promise<void>) {
+  if (!c.env.BLOG_ORIGIN_URL) return next();
+  const url = new URL(c.req.url);
+  const target = new URL(c.env.BLOG_ORIGIN_URL);
+  target.pathname = url.pathname;
+  target.search = url.search;
+
+  const headers = new Headers(c.req.raw.headers);
+  headers.set("host", target.hostname);
+  const hasBody = !["GET", "HEAD"].includes(c.req.raw.method);
+
+  return fetch(target, {
+    method: c.req.raw.method,
+    headers,
+    body: hasBody ? c.req.raw.body : undefined,
+    // a streamed body requires this on Workers' fetch
+    ...(hasBody ? { duplex: "half" } : {}),
+    redirect: "manual",
+  });
+}
+app.all("/blog", proxyBlog);
+app.all("/blog/*", proxyBlog);
+
 /* ---------------- shared-domain slug redirect ---------------- */
 
 app.get("/:slug", async (c, next) => {
