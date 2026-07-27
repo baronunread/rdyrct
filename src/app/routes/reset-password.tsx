@@ -16,18 +16,16 @@ export function ResetPasswordPage() {
 
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
-  const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const shake = useShake();
 
   const failSubmit = (message: string) => {
-    setError(message);
+    toast(message, "error");
     shake.start();
   };
 
   const submit = (e: FormEvent) => {
     e.preventDefault();
-    // The form is noValidate. Keep any previous error on screen while a retry runs.
     void submitResetPassword({ password, confirm, token, toast, navigate, failSubmit, setBusy });
   };
 
@@ -62,7 +60,6 @@ export function ResetPasswordPage() {
             autoComplete="new-password"
           />
         </Field>
-        {error && <p className="text-sm text-danger">{error}</p>}
         <Button
           type="submit"
           variant="primary"
