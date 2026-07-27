@@ -1,5 +1,14 @@
-import { expect, test } from "@playwright/test";
+import { expect, type Page, test } from "@playwright/test";
 import { signUpAndVerify } from "./resend";
+
+async function blockAuthRequests(page: Page) {
+  const counter = { count: 0 };
+  await page.route("**/api/auth/**", async (route) => {
+    counter.count++;
+    await route.fulfill({ status: 500 });
+  });
+  return counter;
+}
 
 test.describe("authentication forms", () => {
   test("signs in with a verified account", async ({ page }) => {
@@ -22,11 +31,7 @@ test.describe("authentication forms", () => {
   test("keeps invalid login details in the browser instead of sending an auth request", async ({
     page,
   }) => {
-    let authRequests = 0;
-    await page.route("**/api/auth/**", async (route) => {
-      authRequests++;
-      await route.fulfill({ status: 500 });
-    });
+    const authRequests = await blockAuthRequests(page);
 
     await page.goto("/login");
     await page.getByLabel("Email").fill("person@localhost");
@@ -37,15 +42,11 @@ test.describe("authentication forms", () => {
     await expect(page.getByLabel("Password")).toHaveValue("password");
     await expect(page.getByRole("button", { name: "Sign in" })).toHaveClass(/animate-shake/);
     await expect(page.getByText("Enter a valid email address")).toBeVisible();
-    expect(authRequests).toBe(0);
+    expect(authRequests.count).toBe(0);
   });
 
   test("keeps a short sign-up password intact and does not submit it", async ({ page }) => {
-    let authRequests = 0;
-    await page.route("**/api/auth/**", async (route) => {
-      authRequests++;
-      await route.fulfill({ status: 500 });
-    });
+    const authRequests = await blockAuthRequests(page);
 
     await page.goto("/signup");
     await page.getByLabel("Email").fill("person@example.com");
@@ -56,7 +57,7 @@ test.describe("authentication forms", () => {
     await expect(page.getByLabel("Password")).toHaveValue("short");
     await expect(page.getByRole("button", { name: "Sign up" })).toHaveClass(/animate-shake/);
     await expect(page.getByText("Password must be at least 8 characters")).toBeVisible();
-    expect(authRequests).toBe(0);
+    expect(authRequests.count).toBe(0);
   });
 
   test("stays on sign-up when verification-code delivery fails", async ({ page }) => {

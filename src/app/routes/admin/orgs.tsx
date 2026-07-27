@@ -3,7 +3,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Ellipsis, Eye, Trash2 } from "lucide-react";
 import { useAdminOrgDetail, useAdminOrgs } from "../../lib/hooks";
 import { api } from "../../lib/api";
-import type { AdminOrgRow, OrgRole, Sort } from "@/shared/types";
+import type { AdminOrgRow, OrgPlan, OrgRole, Sort } from "@/shared/types";
 import { AreaChart } from "../../components/charts";
 import { Dialog } from "../../ui/dialog";
 import { Menu, MenuItem, MenuSeparator } from "../../ui/menu";
@@ -24,6 +24,74 @@ const roleColor: Record<OrgRole, "accent" | "mint" | "muted"> = {
   member: "muted",
 };
 
+const planBadgeColor: Record<OrgPlan, "accent" | "mint" | "muted"> = {
+  pro: "mint",
+  hobby: "accent",
+  free: "muted",
+};
+
+function OrgMembersTable({
+  members,
+}: {
+  members: NonNullable<ReturnType<typeof useAdminOrgDetail>["data"]>["members"];
+}) {
+  return (
+    <div>
+      <p className="mb-2 text-2xs tracking-wider text-muted uppercase">Members</p>
+      <Table>
+        <thead>
+          <tr>
+            <Th>Name</Th>
+            <Th>Email</Th>
+            <Th>Role</Th>
+          </tr>
+        </thead>
+        <tbody>
+          {members.map((m) => (
+            <tr key={m.userId}>
+              <Td>{m.name}</Td>
+              <Td className="text-muted">{m.email}</Td>
+              <Td>
+                <Badge color={roleColor[m.role]}>{m.role}</Badge>
+              </Td>
+            </tr>
+          ))}
+        </tbody>
+      </Table>
+    </div>
+  );
+}
+
+function OrgLinksTable({
+  links,
+}: {
+  links: NonNullable<ReturnType<typeof useAdminOrgDetail>["data"]>["links"];
+}) {
+  return (
+    <div>
+      <p className="mb-2 text-2xs tracking-wider text-muted uppercase">Links</p>
+      <Table>
+        <thead>
+          <tr>
+            <Th>Short link</Th>
+            <Th>Destination</Th>
+            <Th className="text-right">Clicks</Th>
+          </tr>
+        </thead>
+        <tbody>
+          {links.map((l) => (
+            <tr key={l.id}>
+              <Td className="font-bold text-accent">{linkLabel(l)}</Td>
+              <Td className="max-w-64 truncate text-muted">{l.destination}</Td>
+              <Td className="tnum text-right">{l.clicks}</Td>
+            </tr>
+          ))}
+        </tbody>
+      </Table>
+    </div>
+  );
+}
+
 function OrgDetailDialog({ org, onClose }: { org: AdminOrgRow | null; onClose: () => void }) {
   const detail = useAdminOrgDetail(org?.id ?? null);
   return (
@@ -31,9 +99,7 @@ function OrgDetailDialog({ org, onClose }: { org: AdminOrgRow | null; onClose: (
       {org && (
         <div className="flex flex-col gap-4">
           <div className="flex items-center gap-2">
-            <Badge color={org.plan === "pro" ? "mint" : org.plan === "hobby" ? "accent" : "muted"}>
-              {org.plan}
-            </Badge>
+            <Badge color={planBadgeColor[org.plan]}>{org.plan}</Badge>
             <span className="text-xs text-muted">Created {shortDate(org.createdAt)}</span>
           </div>
 
@@ -48,51 +114,8 @@ function OrgDetailDialog({ org, onClose }: { org: AdminOrgRow | null; onClose: (
                 <AreaChart data={detail.data.series} />
               </Card>
 
-              <div>
-                <p className="mb-2 text-2xs tracking-wider text-muted uppercase">Members</p>
-                <Table>
-                  <thead>
-                    <tr>
-                      <Th>Name</Th>
-                      <Th>Email</Th>
-                      <Th>Role</Th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {detail.data.members.map((m) => (
-                      <tr key={m.userId}>
-                        <Td>{m.name}</Td>
-                        <Td className="text-muted">{m.email}</Td>
-                        <Td>
-                          <Badge color={roleColor[m.role]}>{m.role}</Badge>
-                        </Td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </Table>
-              </div>
-
-              <div>
-                <p className="mb-2 text-2xs tracking-wider text-muted uppercase">Links</p>
-                <Table>
-                  <thead>
-                    <tr>
-                      <Th>Short link</Th>
-                      <Th>Destination</Th>
-                      <Th className="text-right">Clicks</Th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {detail.data.links.map((l) => (
-                      <tr key={l.id}>
-                        <Td className="font-bold text-accent">{linkLabel(l)}</Td>
-                        <Td className="max-w-64 truncate text-muted">{l.destination}</Td>
-                        <Td className="tnum text-right">{l.clicks}</Td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </Table>
-              </div>
+              <OrgMembersTable members={detail.data.members} />
+              <OrgLinksTable links={detail.data.links} />
             </>
           )}
         </div>
@@ -188,11 +211,7 @@ export function AdminOrgsPage() {
                 </button>
               </Td>
               <Td>
-                <Badge
-                  color={org.plan === "pro" ? "mint" : org.plan === "hobby" ? "accent" : "muted"}
-                >
-                  {org.plan}
-                </Badge>
+                <Badge color={planBadgeColor[org.plan]}>{org.plan}</Badge>
               </Td>
               <Td className="tnum text-right">{org.members}</Td>
               <Td className="tnum text-right">{org.links}</Td>

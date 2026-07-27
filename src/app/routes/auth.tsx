@@ -1,12 +1,20 @@
 import { useEffect, useRef, useState } from "react";
-import { useForm, Controller, type FieldErrors } from "react-hook-form";
+import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Link, useLocation, useNavigate, useSearchParams } from "react-router";
-import { useQueryClient } from "@tanstack/react-query";
+import {
+  Link,
+  useLocation,
+  useNavigate,
+  useSearchParams,
+  type NavigateFunction,
+} from "react-router";
+import { useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { AuthCard, PasswordMeter } from "../components/auth-form";
 import { authClient } from "../lib/auth-client";
-import { friendlyAuthError, useShake } from "../lib/auth-form";
+import { friendlyAuthError } from "../lib/auth-errors";
+import { useShake } from "../lib/use-shake";
 import { useCurrentUser } from "../lib/hooks";
+import { firstFormError } from "../lib/form-errors";
 import { Button } from "../ui/button";
 import { Field, Input } from "../ui/field";
 import { OtpInput } from "../ui/otp";
@@ -19,11 +27,6 @@ type View = "form" | "forgot" | "forgot-sent" | "verify-otp";
 type AuthForm = { email: string; password: string };
 type ForgotForm = { email: string };
 type OtpForm = { otp: string };
-
-function firstFormError(errors: FieldErrors, fallback: string): string {
-  const firstError = Object.values(errors).find((entry) => entry?.message);
-  return typeof firstError?.message === "string" ? firstError.message : fallback;
-}
 
 function ForgotView({
   initialEmail,
@@ -155,6 +158,46 @@ function VerifyOtpView({
   );
 }
 
+const AUTH_MODE_COPY = {
+  login: {
+    schema: loginSchema,
+    title: "Sign in",
+    submitLabel: "Sign in",
+    passwordAutoComplete: "current-password" as const,
+    footerPrompt: "No account?",
+    footerTo: "/signup",
+    footerLabel: "Sign up",
+  },
+  signup: {
+    schema: signupSchema,
+    title: "Create an account",
+    submitLabel: "Sign up",
+    passwordAutoComplete: "new-password" as const,
+    footerPrompt: "Have an account?",
+    footerTo: "/login",
+    footerLabel: "Sign in",
+  },
+};
+
+function PasswordHint({
+  mode,
+  password,
+  onForgot,
+}: {
+  mode: "login" | "signup";
+  password: string;
+  onForgot: () => void;
+}) {
+  if (mode === "login") {
+    return (
+      <button type="button" className="text-muted hover:text-accent" onClick={onForgot}>
+        Forgot password?
+      </button>
+    );
+  }
+  return <PasswordMeter password={password} />;
+}
+
 function AuthFormView({
   mode,
   busy,
@@ -170,10 +213,10 @@ function AuthFormView({
   onSubmit: (email: string, password: string) => void;
   onForgot: (email: string) => void;
 }) {
-  const schema = mode === "login" ? loginSchema : signupSchema;
+  const copy = AUTH_MODE_COPY[mode];
   const toast = useToast();
   const { register, handleSubmit, watch, getValues } = useForm<AuthForm>({
-    resolver: zodResolver(schema),
+    resolver: zodResolver(copy.schema),
     defaultValues: { email: "", password: "" },
   });
 
@@ -193,31 +236,25 @@ function AuthFormView({
         noValidate
         className="flex flex-col gap-4 rounded-xl border border-border bg-surface p-6"
       >
-        <h1 className="font-bold">{mode === "login" ? "Sign in" : "Create an account"}</h1>
+        <h1 className="font-bold">{copy.title}</h1>
         <Field label="Email">
           <Input type="email" {...register("email")} required autoComplete="email" />
         </Field>
         <Field
           label="Password"
           hint={
-            mode === "login" ? (
-              <button
-                type="button"
-                className="text-muted hover:text-accent"
-                onClick={() => onForgot(getValues("email"))}
-              >
-                Forgot password?
-              </button>
-            ) : (
-              <PasswordMeter password={password} />
-            )
+            <PasswordHint
+              mode={mode}
+              password={password}
+              onForgot={() => onForgot(getValues("email"))}
+            />
           }
         >
           <Input
             type="password"
             {...register("password")}
             required
-            autoComplete={mode === "login" ? "current-password" : "new-password"}
+            autoComplete={copy.passwordAutoComplete}
           />
         </Field>
         <Button
@@ -227,18 +264,11 @@ function AuthFormView({
           className={shake.className}
           onAnimationEnd={shake.end}
         >
-          <BusyContent busy={busy}>{mode === "login" ? "Sign in" : "Sign up"}</BusyContent>
+          <BusyContent busy={busy}>{copy.submitLabel}</BusyContent>
         </Button>
         <p className="text-center text-xs text-muted">
-          {mode === "login" ? (
-            <>
-              No account? <Link to={`/signup?next=${encodeURIComponent(next)}`}>Sign up</Link>
-            </>
-          ) : (
-            <>
-              Have an account? <Link to={`/login?next=${encodeURIComponent(next)}`}>Sign in</Link>
-            </>
-          )}
+          {copy.footerPrompt}{" "}
+          <Link to={`${copy.footerTo}?next=${encodeURIComponent(next)}`}>{copy.footerLabel}</Link>
         </p>
       </form>
     </AuthCard>
@@ -273,7 +303,80 @@ function clearPending() {
   }
 }
 
-export function AuthPage({ mode }: { mode: "login" | "signup" }) {
+interface SubmitDeps {
+  goVerify: (email: string) => Promise<void>;
+  failSubmit: (message: string) => void;
+  qc: QueryClient;
+  navigate: NavigateFunction;
+  next: string;
+}
+
+async function trySignIn(email: string, password: string, deps: SubmitDeps) {
+  const { error: signInError } = await authClient.signIn.email({ email, password });
+  if (!signInError) {
+    await deps.qc.refetchQueries({ queryKey: ["user"] });
+    deps.navigate(deps.next, { replace: true });
+    return;
+  }
+  if (signInError.code === "EMAIL_NOT_VERIFIED") {
+    await deps.goVerify(email);
+  } else {
+    deps.failSubmit(friendlyAuthError(signInError));
+  }
+}
+
+async function trySignUp(
+  email: string,
+  password: string,
+  deps: Pick<SubmitDeps, "goVerify" | "failSubmit">,
+) {
+  const { error: signUpError } = await authClient.signUp.email({
+    email,
+    password,
+    name: email.split("@")[0],
+  });
+  if (signUpError) {
+    deps.failSubmit(friendlyAuthError(signUpError));
+  } else {
+    await deps.goVerify(email);
+  }
+}
+
+interface VerifyDeps {
+  authEmail: string;
+  authPassword: string;
+  next: string;
+  navigate: NavigateFunction;
+  toast: ReturnType<typeof useToast>;
+}
+
+/** After OTP verification, better-auth may or may not have already created a
+ * session. If not, sign in with the password cached during submit, or, if
+ * there's none (e.g. a page reload lost it), send the user to log in by
+ * hand. Returns false when it already handled navigation itself. */
+async function establishSessionAfterVerify(deps: VerifyDeps): Promise<boolean> {
+  const sess = await authClient.getSession();
+  if (sess?.data) return true;
+  if (!deps.authPassword) {
+    clearPending();
+    deps.toast("Email verified. Sign in to continue.");
+    deps.navigate(`/login?next=${encodeURIComponent(deps.next)}`, { replace: true });
+    return false;
+  }
+  const { error: signInError } = await authClient.signIn.email({
+    email: deps.authEmail,
+    password: deps.authPassword,
+  });
+  if (signInError) {
+    deps.toast(friendlyAuthError(signInError), "error");
+    return false;
+  }
+  return true;
+}
+
+/** Login/signup state machine: view transitions, the OTP/password-reset
+ * flows, and the post-auth redirect. Everything AuthPage's views need. */
+function useAuthFlow(mode: "login" | "signup") {
   const navigate = useNavigate();
   const location = useLocation();
   const [params] = useSearchParams();
@@ -339,33 +442,10 @@ export function AuthPage({ mode }: { mode: "login" | "signup" }) {
     authPasswordRef.current = password;
     setBusy(true);
     try {
-      if (mode === "login") {
-        const { error: signInError } = await authClient.signIn.email({
-          email,
-          password,
-        });
-        if (signInError) {
-          if (signInError.code === "EMAIL_NOT_VERIFIED") {
-            await goVerify(email);
-          } else {
-            failSubmit(friendlyAuthError(signInError));
-          }
-        } else {
-          await qc.refetchQueries({ queryKey: ["user"] });
-          navigate(next, { replace: true });
-        }
-      } else {
-        const { error: signUpError } = await authClient.signUp.email({
-          email,
-          password,
-          name: email.split("@")[0],
-        });
-        if (signUpError) {
-          failSubmit(friendlyAuthError(signUpError));
-        } else {
-          await goVerify(email);
-        }
-      }
+      const deps = { goVerify, failSubmit, qc, navigate, next };
+      await (mode === "login"
+        ? trySignIn(email, password, deps)
+        : trySignUp(email, password, deps));
     } catch (error) {
       failSubmit(error instanceof Error ? error.message : "Something went wrong");
     } finally {
@@ -385,24 +465,14 @@ export function AuthPage({ mode }: { mode: "login" | "signup" }) {
         toast(verifyError.message ?? "That code is invalid or expired", "error");
         return;
       }
-      const sess = await authClient.getSession();
-      if (!sess?.data) {
-        const password = authPasswordRef.current;
-        if (!password) {
-          clearPending();
-          toast("Email verified. Sign in to continue.");
-          navigate(`/login?next=${encodeURIComponent(next)}`, { replace: true });
-          return;
-        }
-        const { error: signInError } = await authClient.signIn.email({
-          email: authEmail,
-          password,
-        });
-        if (signInError) {
-          toast(friendlyAuthError(signInError), "error");
-          return;
-        }
-      }
+      const established = await establishSessionAfterVerify({
+        authEmail,
+        authPassword: authPasswordRef.current,
+        next,
+        navigate,
+        toast,
+      });
+      if (!established) return;
       clearPending();
       await qc.refetchQueries({ queryKey: ["user"] });
       navigate(next, { replace: true });
@@ -441,42 +511,64 @@ export function AuthPage({ mode }: { mode: "login" | "signup" }) {
     }
   };
 
-  if (view === "verify-otp") {
+  return {
+    view,
+    setView,
+    authEmail,
+    setAuthEmail,
+    busy,
+    shake,
+    forgotBusy,
+    resent,
+    next,
+    submit,
+    runVerify,
+    resendOtp,
+    submitForgot,
+    backToForm,
+  };
+}
+
+export function AuthPage({ mode }: { mode: "login" | "signup" }) {
+  const flow = useAuthFlow(mode);
+
+  if (flow.view === "verify-otp") {
     return (
       <VerifyOtpView
-        email={authEmail}
-        busy={busy}
-        resent={resent}
-        onSubmit={runVerify}
-        onComplete={runVerify}
-        onResend={resendOtp}
-        onBack={backToForm}
+        email={flow.authEmail}
+        busy={flow.busy}
+        resent={flow.resent}
+        onSubmit={flow.runVerify}
+        onComplete={flow.runVerify}
+        onResend={flow.resendOtp}
+        onBack={flow.backToForm}
       />
     );
   }
 
-  if (view === "forgot" || view === "forgot-sent") {
+  if (flow.view === "forgot" || flow.view === "forgot-sent") {
     return (
       <ForgotView
-        initialEmail={authEmail}
-        sent={view === "forgot-sent"}
-        busy={forgotBusy}
-        onSubmit={submitForgot}
-        onBack={() => setView("form")}
+        initialEmail={flow.authEmail}
+        sent={flow.view === "forgot-sent"}
+        busy={flow.forgotBusy}
+        onSubmit={flow.submitForgot}
+        onBack={() => flow.setView("form")}
       />
     );
   }
 
   return (
     <AuthFormView
+      key={mode}
       mode={mode}
-      busy={busy}
-      shake={shake}
-      next={next}
-      onSubmit={submit}
+      busy={flow.busy}
+      shake={flow.shake}
+      next={flow.next}
+      onSubmit={flow.submit}
       onForgot={(email) => {
-        setAuthEmail(email);
-        setView("forgot");
+        flow.setAuthEmail(email);
+        flow.setView("forgot");
       }}
     />
   );

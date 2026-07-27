@@ -6,7 +6,7 @@ import { Webhook } from "standardwebhooks";
 import { drizzle } from "drizzle-orm/d1";
 import * as schema from "../db/schema";
 import type { AppEnv, Env } from "../env";
-import { requireUser } from "../auth";
+import { requireUser } from "../guards";
 
 const polarFor = (env: Env) =>
   new Polar({

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useStats } from "../lib/hooks";
 import { useCurrentOrg } from "../lib/current-org";
-import { PLAN_LIMITS } from "@/shared/types";
+import { PLAN_LIMITS, type HeatmapRow, type SeriesPoint } from "@/shared/types";
 import {
   AreaChart,
   BarList,
@@ -9,6 +9,7 @@ import {
   Heatmap,
   LinkListCard,
   ClickBreakdown,
+  TopLinksCard,
 } from "../components/charts";
 import { AnalyticsSkeleton } from "../components/skeletons";
 import { NoOrgState } from "../components/no-org";
@@ -24,6 +25,106 @@ const RANGE_PRESETS: {
   { label: "30d", days: 30 },
   { label: "365d", days: 365 },
 ];
+
+function rangeButtonClass(active: boolean): string {
+  return `cursor-pointer rounded-md px-2 py-1 text-xs transition-colors ${
+    active ? "bg-accent text-bg" : "text-muted hover:bg-surface-2 hover:text-text"
+  }`;
+}
+
+function RangePicker({
+  presets,
+  activeDays,
+  activeBucket,
+  onChoose,
+}: {
+  presets: typeof RANGE_PRESETS;
+  activeDays: number;
+  activeBucket: "day" | "hour";
+  onChoose: (days: number, bucket?: "day" | "hour") => void;
+}) {
+  return (
+    <div className="flex items-center gap-1.5">
+      {presets.map((p) => (
+        <button
+          key={`${p.days}-${p.bucket ?? "day"}`}
+          type="button"
+          onClick={() => onChoose(p.days, p.bucket)}
+          className={rangeButtonClass(
+            activeDays === p.days && activeBucket === (p.bucket ?? "day"),
+          )}
+        >
+          {p.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function UtmBreakdownSection({
+  campaigns,
+  sources,
+  mediums,
+}: {
+  campaigns: { campaign: string; clicks: number }[];
+  sources: { source: string; clicks: number }[];
+  mediums: { medium: string; clicks: number }[];
+}) {
+  const groups = [
+    { label: "Campaigns", items: campaigns.map((c) => ({ key: c.campaign, clicks: c.clicks })) },
+    { label: "Sources", items: sources.map((x) => ({ key: x.source, clicks: x.clicks })) },
+    { label: "Mediums", items: mediums.map((x) => ({ key: x.medium, clicks: x.clicks })) },
+  ].filter((g) => g.items.length > 0);
+
+  if (!groups.length) return null;
+  return (
+    <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      {groups.map((g) => (
+        <Card key={g.label}>
+          <p className="mb-3 text-2xs tracking-wider text-muted uppercase">{g.label}</p>
+          <BarList items={g.items} />
+        </Card>
+      ))}
+    </div>
+  );
+}
+
+/** Clicks-over-time chart: switches between the hourly and daily series
+ * (and their label/tick format) based on the active bucket. */
+function ClicksChart({
+  bucket,
+  series,
+  hourSeries,
+}: {
+  bucket: "day" | "hour";
+  series: SeriesPoint[];
+  hourSeries: SeriesPoint[];
+}) {
+  const isHourly = bucket === "hour";
+  return (
+    <Card className="mt-4">
+      <p className="mb-3 text-2xs tracking-wider text-muted uppercase">
+        {isHourly ? "Clicks per hour" : "Clicks per day"}
+      </p>
+      <AreaChart
+        data={isHourly ? hourSeries : series}
+        tickFormat={isHourly ? (day) => day.slice(11, 16) : undefined}
+      />
+    </Card>
+  );
+}
+
+/** Only shown for daily buckets with data: hourly ranges are too short for
+ * a day-of-week/hour heatmap to be meaningful. */
+function ActivityHeatmap({ heatmap, bucket }: { heatmap: HeatmapRow[]; bucket: "day" | "hour" }) {
+  if (!heatmap.length || bucket === "hour") return null;
+  return (
+    <Card className="mt-4">
+      <p className="mb-3 text-2xs tracking-wider text-muted uppercase">Activity heatmap</p>
+      <Heatmap data={heatmap} />
+    </Card>
+  );
+}
 
 export function Analytics() {
   const { org } = useCurrentOrg();
@@ -52,22 +153,12 @@ export function Analytics() {
         title="Analytics"
         sub={s.bucket === "hour" ? "Last 24 hours" : `Last ${s.rangeDays} days`}
         action={
-          <div className="flex items-center gap-1.5">
-            {presets.map((p) => (
-              <button
-                key={`${p.days}-${p.bucket ?? "day"}`}
-                type="button"
-                onClick={() => chooseRange(p.days, p.bucket)}
-                className={`cursor-pointer rounded-md px-2 py-1 text-xs transition-colors ${
-                  activeDays === p.days && activeBucket === (p.bucket ?? "day")
-                    ? "bg-accent text-bg"
-                    : "text-muted hover:bg-surface-2 hover:text-text"
-                }`}
-              >
-                {p.label}
-              </button>
-            ))}
-          </div>
+          <RangePicker
+            presets={presets}
+            activeDays={activeDays}
+            activeBucket={activeBucket}
+            onChoose={chooseRange}
+          />
         }
       />
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
@@ -76,68 +167,12 @@ export function Analytics() {
         <StatCard label="Active links" value={s.totalLinks} />
       </div>
 
-      <Card className="mt-4">
-        <p className="mb-3 text-2xs tracking-wider text-muted uppercase">
-          {s.bucket === "hour" ? "Clicks per hour" : "Clicks per day"}
-        </p>
-        <AreaChart
-          data={s.bucket === "hour" ? s.hourSeries : s.series}
-          tickFormat={s.bucket === "hour" ? (day) => day.slice(11, 16) : undefined}
-        />
-      </Card>
+      <ClicksChart bucket={s.bucket} series={s.series} hourSeries={s.hourSeries} />
 
-      {(s.campaigns.length > 0 || s.sources.length > 0 || s.mediums.length > 0) && (
-        <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {s.campaigns.length > 0 && (
-            <Card>
-              <p className="mb-3 text-2xs tracking-wider text-muted uppercase">Campaigns</p>
-              <BarList
-                items={s.campaigns.map((c) => ({
-                  key: c.campaign,
-                  clicks: c.clicks,
-                }))}
-              />
-            </Card>
-          )}
-          {s.sources.length > 0 && (
-            <Card>
-              <p className="mb-3 text-2xs tracking-wider text-muted uppercase">Sources</p>
-              <BarList
-                items={s.sources.map((x) => ({
-                  key: x.source,
-                  clicks: x.clicks,
-                }))}
-              />
-            </Card>
-          )}
-          {s.mediums.length > 0 && (
-            <Card>
-              <p className="mb-3 text-2xs tracking-wider text-muted uppercase">Mediums</p>
-              <BarList
-                items={s.mediums.map((x) => ({
-                  key: x.medium,
-                  clicks: x.clicks,
-                }))}
-              />
-            </Card>
-          )}
-        </div>
-      )}
+      <UtmBreakdownSection campaigns={s.campaigns} sources={s.sources} mediums={s.mediums} />
 
       <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <Card>
-          <p className="mb-3 text-2xs tracking-wider text-muted uppercase">Top links</p>
-          {s.topLinks.length ? (
-            <BarList
-              items={s.topLinks.map((l) => ({
-                key: `/${l.slug}${l.title ? ` · ${l.title}` : ""}`,
-                clicks: l.clicks,
-              }))}
-            />
-          ) : (
-            <p className="py-4 text-sm text-muted">No data yet</p>
-          )}
-        </Card>
+        <TopLinksCard topLinks={s.topLinks} />
         <ClickBreakdown countries={s.countries} referrers={s.referrers} devices={s.devices} />
       </div>
 
@@ -152,12 +187,7 @@ export function Analytics() {
         />
       </div>
 
-      {s.heatmap.length > 0 && s.bucket !== "hour" && (
-        <Card className="mt-4">
-          <p className="mb-3 text-2xs tracking-wider text-muted uppercase">Activity heatmap</p>
-          <Heatmap data={s.heatmap} />
-        </Card>
-      )}
+      <ActivityHeatmap heatmap={s.heatmap} bucket={s.bucket} />
     </div>
   );
 }

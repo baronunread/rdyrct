@@ -8,6 +8,63 @@ import { Button } from "../ui/button";
 import { InviteSkeleton } from "../components/skeletons";
 import { useToast } from "../ui/toast";
 
+function InviteAuthActions({
+  signedIn,
+  accept,
+  onSignIn,
+  here,
+}: {
+  signedIn: boolean;
+  accept: () => void;
+  onSignIn: () => void;
+  here: string;
+}) {
+  if (signedIn) {
+    return (
+      <Button variant="primary" onClick={accept}>
+        Accept invite
+      </Button>
+    );
+  }
+  return (
+    <>
+      <Button variant="primary" onClick={onSignIn}>
+        Sign in to accept
+      </Button>
+      <p className="text-xs text-muted">
+        New here? <Link to={`/signup?next=${encodeURIComponent(here)}`}>Create an account</Link>
+      </p>
+    </>
+  );
+}
+
+function InviteDetails({
+  preview,
+  signedIn,
+  accept,
+  onSignIn,
+  here,
+}: {
+  preview: InvitePreview;
+  signedIn: boolean;
+  accept: () => void;
+  onSignIn: () => void;
+  here: string;
+}) {
+  return (
+    <>
+      <p className="text-sm">
+        You have been invited to join{" "}
+        <span className="font-bold text-accent">{preview.orgName}</span> as{" "}
+        <span className="text-accent-2">{preview.role}</span>.
+      </p>
+      <div className="mt-5 flex flex-col gap-2">
+        <InviteAuthActions signedIn={signedIn} accept={accept} onSignIn={onSignIn} here={here} />
+      </div>
+    </>
+  );
+}
+
 export function InvitePage() {
   const { token } = useParams<{ token: string }>();
   const me = useCurrentUser();
@@ -46,33 +103,13 @@ export function InvitePage() {
         ) : preview.isError ? (
           <p className="text-sm text-muted">This invite is invalid or has expired.</p>
         ) : (
-          <>
-            <p className="text-sm">
-              You have been invited to join{" "}
-              <span className="font-bold text-accent">{preview.data!.orgName}</span> as{" "}
-              <span className="text-accent-2">{preview.data!.role}</span>.
-            </p>
-            <div className="mt-5 flex flex-col gap-2">
-              {me.data ? (
-                <Button variant="primary" onClick={accept}>
-                  Accept invite
-                </Button>
-              ) : (
-                <>
-                  <Button
-                    variant="primary"
-                    onClick={() => navigate(`/login?next=${encodeURIComponent(here)}`)}
-                  >
-                    Sign in to accept
-                  </Button>
-                  <p className="text-xs text-muted">
-                    New here?{" "}
-                    <Link to={`/signup?next=${encodeURIComponent(here)}`}>Create an account</Link>
-                  </p>
-                </>
-              )}
-            </div>
-          </>
+          <InviteDetails
+            preview={preview.data!}
+            signedIn={!!me.data}
+            accept={accept}
+            onSignIn={() => navigate(`/login?next=${encodeURIComponent(here)}`)}
+            here={here}
+          />
         )}
       </div>
     </div>

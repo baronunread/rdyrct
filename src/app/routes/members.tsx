@@ -6,7 +6,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { UserPlus, Trash2, Info } from "lucide-react";
 import { useCurrentUser, useMembers, useInvites } from "../lib/hooks";
 import { api } from "../lib/api";
-import { PLAN_LIMITS, type InviteDTO, type OrgRole, type Sort } from "@/shared/types";
+import { PLAN_LIMITS, type InviteDTO, type OrgRole, type Sort, type UserOrg } from "@/shared/types";
 import { Button, IconButton } from "../ui/button";
 import { CopyButton } from "../ui/copy-button";
 import { Field, Input, Select } from "../ui/field";
@@ -133,12 +133,213 @@ function useMemberManagement(orgId: string, canManage: boolean) {
   };
 }
 
+function MemberRoleCell({
+  member,
+  canManage,
+  onSetRole,
+}: {
+  member: { name: string; role: OrgRole };
+  canManage: boolean;
+  onSetRole: (role: string) => void;
+}) {
+  if (member.role === "owner") {
+    return (
+      <MenuSelect
+        label="Owner"
+        value="owner"
+        disabled
+        onChange={() => {}}
+        options={[{ value: "owner", label: "owner" }]}
+      />
+    );
+  }
+  if (canManage) {
+    return (
+      <MenuSelect
+        label={`Role for ${member.name}`}
+        value={member.role}
+        onChange={onSetRole}
+        options={[
+          { value: "member", label: "member" },
+          { value: "admin", label: "admin" },
+        ]}
+      />
+    );
+  }
+  return <Badge color={roleColor[member.role]}>{member.role}</Badge>;
+}
+
+function MemberRemoveCell({
+  member,
+  isSelf,
+  onRemove,
+}: {
+  member: { name: string; role: OrgRole };
+  isSelf: boolean;
+  onRemove: () => void;
+}) {
+  if (member.role === "owner" || isSelf) return null;
+  return (
+    <div className="flex justify-end">
+      <IconButton label={`Remove ${member.name}`} danger onClick={onRemove}>
+        <Trash2 size={15} />
+      </IconButton>
+    </div>
+  );
+}
+
+function MemberRow({
+  member,
+  canManage,
+  isSelf,
+  onSetRole,
+  onRemove,
+}: {
+  member: { userId: string; name: string; email: string; role: OrgRole; createdAt: number };
+  canManage: boolean;
+  isSelf: boolean;
+  onSetRole: (role: string) => void;
+  onRemove: () => void;
+}) {
+  return (
+    <tr>
+      <Td className="truncate">{member.name}</Td>
+      <Td className="truncate text-muted">{member.email}</Td>
+      <Td>
+        <MemberRoleCell member={member} canManage={canManage} onSetRole={onSetRole} />
+      </Td>
+      <Td className="text-xs text-muted">{shortDate(member.createdAt)}</Td>
+      {canManage && (
+        <Td>
+          <MemberRemoveCell member={member} isSelf={isSelf} onRemove={onRemove} />
+        </Td>
+      )}
+    </tr>
+  );
+}
+
+function MemberTable({
+  isLoading,
+  sorted,
+  canManage,
+  sort,
+  setSort,
+  meId,
+  onSetRole,
+  onRemove,
+}: {
+  isLoading: boolean;
+  sorted: { userId: string; name: string; email: string; role: OrgRole; createdAt: number }[];
+  canManage: boolean;
+  sort: Sort;
+  setSort: (s: Sort) => void;
+  meId: string | undefined;
+  onSetRole: (userId: string, role: string) => void;
+  onRemove: (userId: string, name: string) => void;
+}) {
+  if (isLoading) return <TableSkeleton rows={4} />;
+  return (
+    <Table fixed>
+      <thead>
+        <tr>
+          <SortTh label="Name" sortKey="name" sort={sort} onSort={setSort} className="w-36" />
+          <SortTh label="Email" sortKey="email" sort={sort} onSort={setSort} className="w-48" />
+          <SortTh label="Role" sortKey="role" sort={sort} onSort={setSort} className="w-32" />
+          <SortTh
+            label="Joined"
+            sortKey="createdAt"
+            sort={sort}
+            onSort={setSort}
+            className="w-24"
+          />
+          {canManage && <Th className="w-16 text-right">Actions</Th>}
+        </tr>
+      </thead>
+      <tbody>
+        {sorted.map((m) => (
+          <MemberRow
+            key={m.userId}
+            member={m}
+            canManage={canManage}
+            isSelf={m.userId === meId}
+            onSetRole={(role) => onSetRole(m.userId, role)}
+            onRemove={() => onRemove(m.userId, m.name)}
+          />
+        ))}
+      </tbody>
+    </Table>
+  );
+}
+
+function PendingInvitesCard({
+  invites,
+  inviteUrl,
+  copyInvite,
+  revokeInvite,
+}: {
+  invites: InviteDTO[];
+  inviteUrl: (token: string) => string;
+  copyInvite: (text: string) => Promise<void>;
+  revokeInvite: { mutate: (token: string) => void };
+}) {
+  return (
+    <Card className="mt-4">
+      <p className="mb-3 text-2xs tracking-wider text-muted uppercase">Pending invites</p>
+      <ul className="flex flex-col gap-2">
+        {invites.map((inv) => (
+          <li key={inv.token} className="flex items-center justify-between gap-3 text-sm">
+            <span className="truncate text-muted">{inv.email ?? "link invite"}</span>
+            <span className="flex items-center gap-2">
+              <Badge color={inv.role === "admin" ? "mint" : "muted"}>{inv.role}</Badge>
+              <span className="text-xs text-muted">expires {shortDate(inv.expiresAt)}</span>
+              <CopyButton
+                text={inviteUrl(inv.token)}
+                label="Copy invite link"
+                onCopy={copyInvite}
+              />
+              <IconButton
+                label="Revoke invite"
+                danger
+                onClick={() => revokeInvite.mutate(inv.token)}
+              >
+                <Trash2 size={14} />
+              </IconButton>
+            </span>
+          </li>
+        ))}
+      </ul>
+    </Card>
+  );
+}
+
+/** Platform admins act as owner everywhere; otherwise fall back to the
+ * caller's actual role in this org, or "member" while org/role is unknown. */
+function resolveMyRole(
+  isPlatformAdmin: boolean | undefined,
+  orgRole: OrgRole | undefined,
+): OrgRole {
+  if (isPlatformAdmin) return "owner";
+  return orgRole ?? "member";
+}
+
+function memberLimitFor(org: UserOrg | null): number {
+  return org ? PLAN_LIMITS[org.plan].members : 0;
+}
+
+function hasPendingInvites(invites: InviteDTO[] | undefined): boolean {
+  return (invites?.length ?? 0) > 0;
+}
+
+function canManageOrg(role: OrgRole): boolean {
+  return role === "owner" || role === "admin";
+}
+
 export function MembersPage() {
   const { org } = useCurrentOrg();
   const orgId = org?.id ?? "";
   const me = useCurrentUser();
-  const myRole: OrgRole = me.data?.user.isAdmin ? "owner" : (org?.role ?? "member");
-  const canManage = myRole === "owner" || myRole === "admin";
+  const myRole = resolveMyRole(me.data?.user.isAdmin, org?.role);
+  const canManage = canManageOrg(myRole);
 
   const {
     members,
@@ -161,7 +362,7 @@ export function MembersPage() {
     copyInvite,
   } = useMemberManagement(orgId, canManage);
 
-  const memberLimit = org ? PLAN_LIMITS[org.plan].members : 0;
+  const memberLimit = memberLimitFor(org);
 
   if (!org) return <NoOrgState />;
 
@@ -179,111 +380,28 @@ export function MembersPage() {
         }
       />
 
-      {canManage && org && (
+      {canManage && (
         <InviteByEmailCard org={org} memberLimit={memberLimit} sendEmailInvite={sendEmailInvite} />
       )}
 
-      {members.isLoading ? (
-        <TableSkeleton rows={4} />
-      ) : (
-        <Table fixed>
-          <thead>
-            <tr>
-              <SortTh label="Name" sortKey="name" sort={sort} onSort={setSort} className="w-36" />
-              <SortTh label="Email" sortKey="email" sort={sort} onSort={setSort} className="w-48" />
-              <SortTh label="Role" sortKey="role" sort={sort} onSort={setSort} className="w-32" />
-              <SortTh
-                label="Joined"
-                sortKey="createdAt"
-                sort={sort}
-                onSort={setSort}
-                className="w-24"
-              />
-              {canManage && <Th className="w-16 text-right">Actions</Th>}
-            </tr>
-          </thead>
-          <tbody>
-            {sorted.map((m) => (
-              <tr key={m.userId}>
-                <Td className="truncate">{m.name}</Td>
-                <Td className="truncate text-muted">{m.email}</Td>
-                <Td>
-                  {m.role === "owner" ? (
-                    <MenuSelect
-                      label="Owner"
-                      value="owner"
-                      disabled
-                      onChange={() => {}}
-                      options={[{ value: "owner", label: "owner" }]}
-                    />
-                  ) : canManage ? (
-                    <MenuSelect
-                      label={`Role for ${m.name}`}
-                      value={m.role}
-                      onChange={(v) =>
-                        setRole.mutate({
-                          userId: m.userId,
-                          role: v,
-                        })
-                      }
-                      options={[
-                        { value: "member", label: "member" },
-                        { value: "admin", label: "admin" },
-                      ]}
-                    />
-                  ) : (
-                    <Badge color={roleColor[m.role]}>{m.role}</Badge>
-                  )}
-                </Td>
-                <Td className="text-xs text-muted">{shortDate(m.createdAt)}</Td>
-                {canManage && (
-                  <Td>
-                    {m.role !== "owner" && m.userId !== me.data?.user.id && (
-                      <div className="flex justify-end">
-                        <IconButton
-                          label={`Remove ${m.name}`}
-                          danger
-                          onClick={() => setRemoving({ userId: m.userId, name: m.name })}
-                        >
-                          <Trash2 size={15} />
-                        </IconButton>
-                      </div>
-                    )}
-                  </Td>
-                )}
-              </tr>
-            ))}
-          </tbody>
-        </Table>
-      )}
+      <MemberTable
+        isLoading={members.isLoading}
+        sorted={sorted}
+        canManage={canManage}
+        sort={sort}
+        setSort={setSort}
+        meId={me.data?.user.id}
+        onSetRole={(userId, role) => setRole.mutate({ userId, role })}
+        onRemove={(userId, name) => setRemoving({ userId, name })}
+      />
 
-      {canManage && !!invites.data?.length && (
-        <Card className="mt-4">
-          <p className="mb-3 text-2xs tracking-wider text-muted uppercase">Pending invites</p>
-          <ul className="flex flex-col gap-2">
-            {invites.data.map((inv) => (
-              <li key={inv.token} className="flex items-center justify-between gap-3 text-sm">
-                <span className="truncate text-muted">{inv.email ?? "link invite"}</span>
-                <span className="flex items-center gap-2">
-                  <Badge color={inv.role === "admin" ? "mint" : "muted"}>{inv.role}</Badge>
-                  <span className="text-xs text-muted">expires {shortDate(inv.expiresAt)}</span>
-                  <CopyButton
-                    text={inviteUrl(inv.token)}
-                    label="Copy invite link"
-                    onCopy={copyInvite}
-                  />
-                  <IconButton
-                    label="Revoke invite"
-                    danger
-                    onClick={() => revokeInvite.mutate(inv.token)}
-                  >
-                    <Trash2 size={14} />
-                  </IconButton>
-                </span>
-              </li>
-            ))}
-          </ul>
-        </Card>
+      {canManage && hasPendingInvites(invites.data) && (
+        <PendingInvitesCard
+          invites={invites.data!}
+          inviteUrl={inviteUrl}
+          copyInvite={copyInvite}
+          revokeInvite={revokeInvite}
+        />
       )}
 
       {removing && (

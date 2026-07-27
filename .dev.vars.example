@@ -5,9 +5,9 @@ SUPERADMIN_EMAIL=you@example.com
 APP_URL=https://rdyrct.localhost
 APP_HOST=rdyrct.localhost
 
-# Email: point at the emulate.dev Resend emulator (bunx emulate --service resend)
+# Email: point at the emulate.dev Resend emulator (bun run mail)
 RESEND_API_KEY=re_local_emulated
-RESEND_BASE_URL=http://localhost:4000
+RESEND_BASE_URL=https://mail.rdyrct.localhost
 MAIL_FROM=rdyrct <no-reply@localhost>
 
 # Polar (sandbox): https://sandbox.polar.sh

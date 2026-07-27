@@ -8,6 +8,138 @@ import { Card } from "../ui/misc";
 const WIDTH = 640; // viewBox units; scales to container
 const PAD = { top: 12, right: 8, bottom: 22, left: 34 };
 
+type AreaChartPoint = SeriesPoint & { x: number; y: number };
+
+/** Pure geometry for one AreaChart render: axis scales, the line/fill path
+ * strings, and which points get an x-axis tick label. */
+function areaChartGeometry(
+  data: SeriesPoint[],
+  innerW: number,
+  innerH: number,
+): { max: number; points: AreaChartPoint[]; path: string; area: string; ticks: AreaChartPoint[] } {
+  const max = Math.max(1, ...data.map((d) => d.clicks));
+  const x = (i: number) =>
+    PAD.left + (data.length === 1 ? innerW / 2 : (i / (data.length - 1)) * innerW);
+  const y = (v: number) => PAD.top + innerH - (v / max) * innerH;
+  const points = data.map((d, i) => ({ x: x(i), y: y(d.clicks), ...d }));
+  const path = points
+    .map((p, i) => `${i === 0 ? "M" : "L"}${p.x.toFixed(1)},${p.y.toFixed(1)}`)
+    .join("");
+  const area = `${path}L${points.at(-1)!.x.toFixed(1)},${PAD.top + innerH}L${points[0].x.toFixed(1)},${PAD.top + innerH}Z`;
+  const step = Math.max(1, Math.floor(data.length / 5));
+  const ticks = points.filter((_, i) => i % step === 0);
+  return { max, points, path, area, ticks };
+}
+
+/** Index of the point closest to a hovered x position (viewBox units). */
+function closestPointIndex(points: { x: number }[], px: number): number {
+  let best = 0;
+  for (let i = 1; i < points.length; i++)
+    if (Math.abs(points[i].x - px) < Math.abs(points[best].x - px)) best = i;
+  return best;
+}
+
+/** Recessive grid: three horizontal lines with their y-axis value labels. */
+function ChartGridLines({ innerH, max }: { innerH: number; max: number }) {
+  return (
+    <>
+      {[0, 0.5, 1].map((f) => (
+        <g key={f}>
+          <line
+            x1={PAD.left}
+            x2={WIDTH - PAD.right}
+            y1={PAD.top + innerH * f}
+            y2={PAD.top + innerH * f}
+            stroke="var(--border)"
+            strokeWidth="1"
+            strokeDasharray={f === 1 ? undefined : "3 5"}
+          />
+          <text
+            x={PAD.left - 6}
+            y={PAD.top + innerH * f + 3}
+            textAnchor="end"
+            fontSize="9"
+            fill="var(--muted)"
+            className="tnum"
+          >
+            {Math.round(max * (1 - f))}
+          </text>
+        </g>
+      ))}
+    </>
+  );
+}
+
+function ChartXTicks({
+  ticks,
+  height,
+  tickFormat,
+}: {
+  ticks: AreaChartPoint[];
+  height: number;
+  tickFormat: (day: string) => string;
+}) {
+  return (
+    <>
+      {ticks.map((t) => (
+        <text
+          key={t.day}
+          x={t.x}
+          y={height - 6}
+          textAnchor="middle"
+          fontSize="9"
+          fill="var(--muted)"
+        >
+          {tickFormat(t.day)}
+        </text>
+      ))}
+    </>
+  );
+}
+
+/** Vertical hover line + marker dot over the hovered point, if any. */
+function ChartCrosshair({ point, innerH }: { point: AreaChartPoint | null; innerH: number }) {
+  if (!point) return null;
+  return (
+    <g>
+      <line
+        x1={point.x}
+        x2={point.x}
+        y1={PAD.top}
+        y2={PAD.top + innerH}
+        stroke="var(--muted)"
+        strokeWidth="1"
+        strokeDasharray="3 3"
+      />
+      {/* 2px surface ring so the marker separates from the line */}
+      <circle
+        cx={point.x}
+        cy={point.y}
+        r="4"
+        fill="var(--chart)"
+        stroke="var(--surface)"
+        strokeWidth="2"
+      />
+    </g>
+  );
+}
+
+function ChartTooltip({ point }: { point: AreaChartPoint | null }) {
+  if (!point) return null;
+  return (
+    <div
+      className="pointer-events-none absolute -top-1 rounded-md border border-border bg-surface-2 px-2.5 py-1.5 text-xs shadow-lg"
+      style={{
+        left: `${(point.x / WIDTH) * 100}%`,
+        transform: point.x > WIDTH * 0.7 ? "translateX(-105%)" : "translateX(8px)",
+      }}
+    >
+      <span className="text-muted">{point.day}</span>{" "}
+      <span className="tnum font-bold">{point.clicks}</span>
+    </div>
+  );
+}
+
 /**
  * Single-series area chart (clicks over time). One hue (--chart), recessive
  * grid, crosshair + tooltip on hover. No legend: the card title names the
@@ -27,30 +159,17 @@ export function AreaChart({
   const innerW = WIDTH - PAD.left - PAD.right;
   const innerH = height - PAD.top - PAD.bottom;
 
-  const { max, points, path, area, ticks } = useMemo(() => {
-    const max = Math.max(1, ...data.map((d) => d.clicks));
-    const x = (i: number) =>
-      PAD.left + (data.length === 1 ? innerW / 2 : (i / (data.length - 1)) * innerW);
-    const y = (v: number) => PAD.top + innerH - (v / max) * innerH;
-    const points = data.map((d, i) => ({ x: x(i), y: y(d.clicks), ...d }));
-    const path = points
-      .map((p, i) => `${i === 0 ? "M" : "L"}${p.x.toFixed(1)},${p.y.toFixed(1)}`)
-      .join("");
-    const area = `${path}L${points.at(-1)!.x.toFixed(1)},${PAD.top + innerH}L${points[0].x.toFixed(1)},${PAD.top + innerH}Z`;
-    const step = Math.max(1, Math.floor(data.length / 5));
-    const ticks = points.filter((_, i) => i % step === 0);
-    return { max, points, path, area, ticks };
-  }, [data, innerH, innerW]);
+  const { max, points, path, area, ticks } = useMemo(
+    () => areaChartGeometry(data, innerW, innerH),
+    [data, innerH, innerW],
+  );
 
   if (!data.length) return null;
 
   const onMove = (e: React.MouseEvent) => {
     const rect = ref.current!.getBoundingClientRect();
     const px = ((e.clientX - rect.left) / rect.width) * WIDTH;
-    let best = 0;
-    for (let i = 1; i < points.length; i++)
-      if (Math.abs(points[i].x - px) < Math.abs(points[best].x - px)) best = i;
-    setHover(best);
+    setHover(closestPointIndex(points, px));
   };
 
   const h = hover !== null ? points[hover] : null;
@@ -66,79 +185,13 @@ export function AreaChart({
         role="img"
         aria-label="Clicks per day"
       >
-        {/* recessive grid: three horizontal lines */}
-        {[0, 0.5, 1].map((f) => (
-          <g key={f}>
-            <line
-              x1={PAD.left}
-              x2={WIDTH - PAD.right}
-              y1={PAD.top + innerH * f}
-              y2={PAD.top + innerH * f}
-              stroke="var(--border)"
-              strokeWidth="1"
-              strokeDasharray={f === 1 ? undefined : "3 5"}
-            />
-            <text
-              x={PAD.left - 6}
-              y={PAD.top + innerH * f + 3}
-              textAnchor="end"
-              fontSize="9"
-              fill="var(--muted)"
-              className="tnum"
-            >
-              {Math.round(max * (1 - f))}
-            </text>
-          </g>
-        ))}
-        {ticks.map((t) => (
-          <text
-            key={t.day}
-            x={t.x}
-            y={height - 6}
-            textAnchor="middle"
-            fontSize="9"
-            fill="var(--muted)"
-          >
-            {tickFormat(t.day)}
-          </text>
-        ))}
+        <ChartGridLines innerH={innerH} max={max} />
+        <ChartXTicks ticks={ticks} height={height} tickFormat={tickFormat} />
         <path d={area} fill="var(--chart)" opacity="0.14" />
         <path d={path} fill="none" stroke="var(--chart)" strokeWidth="2" />
-        {h && (
-          <g>
-            <line
-              x1={h.x}
-              x2={h.x}
-              y1={PAD.top}
-              y2={PAD.top + innerH}
-              stroke="var(--muted)"
-              strokeWidth="1"
-              strokeDasharray="3 3"
-            />
-            {/* 2px surface ring so the marker separates from the line */}
-            <circle
-              cx={h.x}
-              cy={h.y}
-              r="4"
-              fill="var(--chart)"
-              stroke="var(--surface)"
-              strokeWidth="2"
-            />
-          </g>
-        )}
+        <ChartCrosshair point={h} innerH={innerH} />
       </svg>
-      {h && (
-        <div
-          className="pointer-events-none absolute -top-1 rounded-md border border-border bg-surface-2 px-2.5 py-1.5 text-xs shadow-lg"
-          style={{
-            left: `${(h.x / WIDTH) * 100}%`,
-            transform: h.x > WIDTH * 0.7 ? "translateX(-105%)" : "translateX(8px)",
-          }}
-        >
-          <span className="text-muted">{h.day}</span>{" "}
-          <span className="tnum font-bold">{h.clicks}</span>
-        </div>
-      )}
+      <ChartTooltip point={h} />
     </div>
   );
 }
@@ -173,6 +226,29 @@ export function BarList({
         </li>
       ))}
     </ul>
+  );
+}
+
+/** A card of top links by clicks, rendered as a BarList (which already
+ * shows its own "No data yet" for an empty list). */
+export function TopLinksCard({
+  topLinks,
+  limit,
+}: {
+  topLinks: { id: string; slug: string; title: string; clicks: number }[];
+  limit?: number;
+}) {
+  const rows = limit ? topLinks.slice(0, limit) : topLinks;
+  return (
+    <Card>
+      <p className="mb-3 text-2xs tracking-wider text-muted uppercase">Top links</p>
+      <BarList
+        items={rows.map((l) => ({
+          key: `/${l.slug}${l.title ? ` · ${l.title}` : ""}`,
+          clicks: l.clicks,
+        }))}
+      />
+    </Card>
   );
 }
 

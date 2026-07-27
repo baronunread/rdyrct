@@ -3,7 +3,8 @@ import { HTTPException } from "hono/http-exception";
 import { eq, and, gte, desc, sql, isNull } from "drizzle-orm";
 import * as schema from "../db/schema";
 import type { AppEnv, DB, Env } from "../env";
-import { requireUser, requireOrgRole, orgRole } from "../auth";
+import { requireUser } from "../guards";
+import { requireOrgRole, orgRole } from "../org-role";
 import { orgPlan, userPlan } from "../plan";
 import { sendEmail } from "../email";
 import { deleteQrLogoMsg, enqueueStorage } from "../storage";
@@ -71,62 +72,82 @@ orgRoutes.post("/", requireUser, async (c) => {
   );
 });
 
-orgRoutes.patch("/:orgId", requireOrgRole("admin"), async (c) => {
-  const body = await c.req.json<{
-    name?: string;
-    qrLogo?: string;
-    qrStyle?: string;
-    qrColor?: string;
-    qrCorner?: string;
-    qrBg?: string;
-    qrEyeColor?: string;
-    qrLogoSize?: number | null;
-  }>();
-  const orgId = c.req.param("orgId");
+type OrgQrPatchBody = {
+  qrLogo?: string;
+  qrStyle?: string;
+  qrColor?: string;
+  qrCorner?: string;
+  qrBg?: string;
+  qrEyeColor?: string;
+  qrLogoSize?: number | null;
+};
 
-  const set: Partial<typeof schema.orgs.$inferInsert> = {};
-  if (body.name !== undefined) {
-    const name = body.name.trim();
-    if (!name) throw new HTTPException(400, { message: "Name required" });
-    set.name = name;
-  }
-
-  const wantsQr =
+function wantsQrUpdate(body: OrgQrPatchBody): boolean {
+  return (
     body.qrLogo !== undefined ||
     body.qrStyle !== undefined ||
     body.qrColor !== undefined ||
     body.qrCorner !== undefined ||
     body.qrBg !== undefined ||
     body.qrEyeColor !== undefined ||
-    body.qrLogoSize !== undefined;
-  // Read the current logo so a replaced/cleared one can leave R2.
-  let oldLogo = "";
-  if (wantsQr) {
-    validateQrFields(body, orgId);
-    // QR customization is a paid feature, so are the org-level defaults.
-    const { limits } = await orgPlan(c.var.db, orgId);
-    if (!limits.qr)
-      throw new HTTPException(402, {
-        message: "QR customization is a paid feature: upgrade to use it",
-      });
-    if (body.qrLogo !== undefined) {
-      const rows = await c.var.db
-        .select({ qrLogo: schema.orgs.qrLogo })
-        .from(schema.orgs)
-        .where(eq(schema.orgs.id, orgId));
-      oldLogo = rows[0]?.qrLogo ?? "";
-      set.qrLogo = body.qrLogo;
-    }
-    if (body.qrStyle !== undefined) set.qrStyle = body.qrStyle;
-    if (body.qrColor !== undefined) set.qrColor = body.qrColor;
-    if (body.qrCorner !== undefined) set.qrCorner = body.qrCorner;
-    if (body.qrBg !== undefined) set.qrBg = body.qrBg;
-    if (body.qrEyeColor !== undefined) set.qrEyeColor = body.qrEyeColor;
-    if (body.qrLogoSize !== undefined) set.qrLogoSize = body.qrLogoSize;
-  }
+    body.qrLogoSize !== undefined
+  );
+}
+
+function qrPatchFields(body: OrgQrPatchBody): Partial<typeof schema.orgs.$inferInsert> {
+  const set: Partial<typeof schema.orgs.$inferInsert> = {};
+  if (body.qrLogo !== undefined) set.qrLogo = body.qrLogo;
+  if (body.qrStyle !== undefined) set.qrStyle = body.qrStyle;
+  if (body.qrColor !== undefined) set.qrColor = body.qrColor;
+  if (body.qrCorner !== undefined) set.qrCorner = body.qrCorner;
+  if (body.qrBg !== undefined) set.qrBg = body.qrBg;
+  if (body.qrEyeColor !== undefined) set.qrEyeColor = body.qrEyeColor;
+  if (body.qrLogoSize !== undefined) set.qrLogoSize = body.qrLogoSize;
+  return set;
+}
+
+function requireOrgName(name: string): string {
+  const trimmed = name.trim();
+  if (!trimmed) throw new HTTPException(400, { message: "Name required" });
+  return trimmed;
+}
+
+/** Applies the QR fields onto `set` and returns the logo being replaced (""
+ * if none), so a cleared/replaced one can be swept from R2. Throws if QR
+ * customization isn't on the org's plan. */
+async function applyQrPatch(
+  db: DB,
+  orgId: string,
+  body: OrgQrPatchBody,
+  set: Partial<typeof schema.orgs.$inferInsert>,
+): Promise<string> {
+  validateQrFields(body, orgId);
+  // QR customization is a paid feature, so are the org-level defaults.
+  const { limits } = await orgPlan(db, orgId);
+  if (!limits.qr)
+    throw new HTTPException(402, {
+      message: "QR customization is a paid feature: upgrade to use it",
+    });
+  Object.assign(set, qrPatchFields(body));
+  if (body.qrLogo === undefined) return "";
+  const rows = await db
+    .select({ qrLogo: schema.orgs.qrLogo })
+    .from(schema.orgs)
+    .where(eq(schema.orgs.id, orgId));
+  return rows[0]?.qrLogo ?? "";
+}
+
+orgRoutes.patch("/:orgId", requireOrgRole("admin"), async (c) => {
+  const body = await c.req.json<{ name?: string } & OrgQrPatchBody>();
+  const orgId = c.req.param("orgId");
+  const db = c.var.db;
+
+  const set: Partial<typeof schema.orgs.$inferInsert> = {};
+  if (body.name !== undefined) set.name = requireOrgName(body.name);
+  const oldLogo = wantsQrUpdate(body) ? await applyQrPatch(db, orgId, body, set) : "";
 
   if (Object.keys(set).length === 0) throw new HTTPException(400, { message: "Nothing to update" });
-  await c.var.db.update(schema.orgs).set(set).where(eq(schema.orgs.id, orgId));
+  await db.update(schema.orgs).set(set).where(eq(schema.orgs.id, orgId));
   await enqueueStorage(c.env, [
     body.qrLogo !== undefined && body.qrLogo !== oldLogo ? deleteQrLogoMsg(oldLogo) : null,
   ]);

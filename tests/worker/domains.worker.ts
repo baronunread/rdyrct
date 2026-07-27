@@ -21,6 +21,30 @@ const cfJson = (body: unknown) =>
     headers: { "content-type": "application/json" },
   });
 
+/** Whether a mocked fetch call matches one of the three custom-hostname
+ * routes this test double stands in for. */
+function matchesRoute(method: string, url: string, target: "GET" | "POST" | "DELETE"): boolean {
+  if (method !== target) return false;
+  if (target === "GET") return url.includes("/custom_hostnames?hostname=");
+  if (target === "POST") return url.endsWith("/custom_hostnames");
+  return url.includes("/custom_hostnames/");
+}
+
+function mockCustomHostnames(handlers: {
+  get?: () => Response | Promise<Response>;
+  post?: () => Response | Promise<Response>;
+  delete?: (url: string) => Response | Promise<Response>;
+}) {
+  return vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+    const url = String(input);
+    const method = init?.method ?? "GET";
+    if (matchesRoute(method, url, "GET") && handlers.get) return handlers.get();
+    if (matchesRoute(method, url, "POST") && handlers.post) return handlers.post();
+    if (matchesRoute(method, url, "DELETE") && handlers.delete) return handlers.delete(url);
+    throw new Error(`unexpected ${method} ${url}`);
+  });
+}
+
 async function seedDomain(overrides: Record<string, unknown> = {}) {
   const row = {
     id: "domain-1",
@@ -57,16 +81,12 @@ describe("ensureHostname: get-or-create idempotency", () => {
   it("creates a hostname once and persists its id", async () => {
     await seedDomain();
     let creates = 0;
-    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
-      const url = String(input);
-      const method = init?.method ?? "GET";
-      if (method === "GET" && url.includes("/custom_hostnames?hostname="))
-        return cfJson({ result: [] });
-      if (method === "POST" && url.endsWith("/custom_hostnames")) {
+    mockCustomHostnames({
+      get: () => cfJson({ result: [] }),
+      post: () => {
         creates++;
         return cfJson({ result: { id: "cf-new" } });
-      }
-      throw new Error(`unexpected ${method} ${url}`);
+      },
     });
 
     const id = await ensureHostname(realCfEnv(), "domain-1", "go.example.com");
@@ -90,16 +110,12 @@ describe("ensureHostname: get-or-create idempotency", () => {
     // create a second one.
     await seedDomain();
     let creates = 0;
-    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
-      const url = String(input);
-      const method = init?.method ?? "GET";
-      if (method === "GET" && url.includes("/custom_hostnames?hostname="))
-        return cfJson({ result: [{ id: "cf-first", hostname: "go.example.com" }] });
-      if (method === "POST" && url.endsWith("/custom_hostnames")) {
+    mockCustomHostnames({
+      get: () => cfJson({ result: [{ id: "cf-first", hostname: "go.example.com" }] }),
+      post: () => {
         creates++;
         return cfJson({ result: { id: "cf-second" } });
-      }
-      throw new Error(`unexpected ${method} ${url}`);
+      },
     });
 
     const id = await ensureHostname(realCfEnv(), "domain-1", "go.example.com");
@@ -111,21 +127,19 @@ describe("ensureHostname: get-or-create idempotency", () => {
   it("compensates by deleting the hostname when the domain is removed mid-activation", async () => {
     await seedDomain();
     const deleted: string[] = [];
-    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
-      const url = String(input);
-      const method = init?.method ?? "GET";
-      if (method === "GET" && url.includes("/custom_hostnames?hostname="))
-        return cfJson({ result: [] });
-      if (method === "POST" && url.endsWith("/custom_hostnames")) {
+    mockCustomHostnames({
+      get: () => cfJson({ result: [] }),
+      post: async () => {
         // The user deletes the domain in the window between create and persist.
         await env.DB.prepare("delete from domains where id = 'domain-1'").run();
         return cfJson({ result: { id: "cf-orphan" } });
-      }
-      if (method === "DELETE" && url.endsWith("/custom_hostnames/cf-orphan")) {
+      },
+      delete: (url) => {
+        if (!url.endsWith("/custom_hostnames/cf-orphan"))
+          throw new Error(`unexpected DELETE ${url}`);
         deleted.push("cf-orphan");
         return cfJson({ result: { id: "cf-orphan" } });
-      }
-      throw new Error(`unexpected ${method} ${url}`);
+      },
     });
 
     const id = await ensureHostname(realCfEnv(), "domain-1", "go.example.com");

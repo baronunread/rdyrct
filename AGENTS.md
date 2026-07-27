@@ -18,7 +18,7 @@ Always use **bun**, never npm/npx.
 ```sh
 bun install
 bun run dev                 # vite dev (Worker + SPA) via portless: https://rdyrct.localhost
-bunx emulate --service resend   # local Resend inbox on :4000 (read: curl :4000/emails -H 'authorization: Bearer test_token_admin')
+bun run mail                # local Resend inbox via portless: https://mail.rdyrct.localhost (read: curl https://mail.rdyrct.localhost/emails -H 'authorization: Bearer test_token_admin')
 bun run db:migrate:local    # apply migrations to local D1
 bun run db:reset:local      # wipe local D1 + KV, re-apply migrations (start from scratch; restart dev after)
 bun add <pkg>               # dependencies

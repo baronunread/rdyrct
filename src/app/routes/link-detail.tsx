@@ -8,6 +8,85 @@ import { shortUrl } from "../lib/api";
 import { AreaChart, StatCard, ClickBreakdown } from "../components/charts";
 import { NoOrgState } from "../components/no-org";
 import { Card } from "../ui/misc";
+import { linkDisplayTitle } from "../lib/link-display";
+
+function LinkDetailHeader({
+  title,
+  subtitle,
+  fullUrl,
+}: {
+  title: string;
+  subtitle?: string | null;
+  fullUrl: string;
+}) {
+  return (
+    <div className="mb-6 flex items-center gap-3">
+      <Link to="/links">
+        <button
+          type="button"
+          aria-label="Back to links"
+          className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-surface-2 hover:text-text"
+        >
+          <ArrowLeft size={16} />
+        </button>
+      </Link>
+      <div className="min-w-0 flex-1">
+        <h1 className="truncate text-lg font-bold tracking-wide">{title}</h1>
+        {subtitle && <p className="mt-0.5 truncate text-sm text-muted">{subtitle}</p>}
+      </div>
+      <a
+        href={fullUrl}
+        target="_blank"
+        rel="noreferrer"
+        type="button"
+        className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-surface-2 hover:text-text"
+        aria-label="Open link in new tab"
+        title={fullUrl}
+      >
+        <ExternalLink size={14} />
+      </a>
+    </div>
+  );
+}
+
+function LinkInfoCard({
+  destination,
+  createdAt,
+  lastClick,
+}: {
+  destination: string;
+  createdAt: number;
+  lastClick: number | null;
+}) {
+  return (
+    <Card>
+      <p className="mb-3 text-2xs tracking-wider text-muted uppercase">Info</p>
+      <div className="flex flex-col gap-2 text-sm">
+        <div className="min-w-0">
+          <p className="text-3xs tracking-wider text-muted uppercase">Destination</p>
+          <a
+            href={destination}
+            target="_blank"
+            rel="noreferrer"
+            className="block truncate text-accent hover:underline"
+          >
+            {destination}
+          </a>
+        </div>
+        <div>
+          <p className="text-3xs tracking-wider text-muted uppercase">Created</p>
+          <p className="tnum text-text">{shortDate(createdAt)}</p>
+        </div>
+        {lastClick && (
+          <div>
+            <p className="text-3xs tracking-wider text-muted uppercase">Last click</p>
+            <p className="tnum text-text">{shortDate(lastClick)}</p>
+          </div>
+        )}
+      </div>
+    </Card>
+  );
+}
 
 export function LinkDetailPage() {
   const { slug } = useParams<{ slug: string }>();
@@ -27,38 +106,11 @@ export function LinkDetailPage() {
 
   return (
     <div>
-      <div className="mb-6 flex items-center gap-3">
-        <Link to="/links">
-          <button
-            type="button"
-            aria-label="Back to links"
-            className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-surface-2 hover:text-text"
-          >
-            <ArrowLeft size={16} />
-          </button>
-        </Link>
-        <div className="min-w-0 flex-1">
-          <h1 className="truncate text-lg font-bold tracking-wide">
-            {config?.appHost && s.domain
-              ? `${s.domain}/${s.slug}`
-              : config?.appHost
-                ? `${new URL(config.appHost).host}/${s.slug}`
-                : `/${s.slug}`}
-          </h1>
-          {s.title && <p className="mt-0.5 truncate text-sm text-muted">{s.title}</p>}
-        </div>
-        <a
-          href={fullUrl}
-          target="_blank"
-          rel="noreferrer"
-          type="button"
-          className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-surface-2 hover:text-text"
-          aria-label="Open link in new tab"
-          title={fullUrl}
-        >
-          <ExternalLink size={14} />
-        </a>
-      </div>
+      <LinkDetailHeader
+        title={linkDisplayTitle(config?.appHost, s.domain, s.slug)}
+        subtitle={s.title}
+        fullUrl={fullUrl}
+      />
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <StatCard label="Total clicks" value={s.totalClicks} delta={s.totalClicksDelta} />
@@ -72,32 +124,7 @@ export function LinkDetailPage() {
           <AreaChart data={s.series} />
         </Card>
 
-        <Card>
-          <p className="mb-3 text-2xs tracking-wider text-muted uppercase">Info</p>
-          <div className="flex flex-col gap-2 text-sm">
-            <div className="min-w-0">
-              <p className="text-3xs tracking-wider text-muted uppercase">Destination</p>
-              <a
-                href={s.destination}
-                target="_blank"
-                rel="noreferrer"
-                className="block truncate text-accent hover:underline"
-              >
-                {s.destination}
-              </a>
-            </div>
-            <div>
-              <p className="text-3xs tracking-wider text-muted uppercase">Created</p>
-              <p className="tnum text-text">{shortDate(s.createdAt)}</p>
-            </div>
-            {s.lastClick && (
-              <div>
-                <p className="text-3xs tracking-wider text-muted uppercase">Last click</p>
-                <p className="tnum text-text">{shortDate(s.lastClick)}</p>
-              </div>
-            )}
-          </div>
-        </Card>
+        <LinkInfoCard destination={s.destination} createdAt={s.createdAt} lastClick={s.lastClick} />
       </div>
 
       <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-3">

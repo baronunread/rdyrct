@@ -1,47 +1,9 @@
 import { createMiddleware } from "hono/factory";
 import { eq, and } from "drizzle-orm";
 import { HTTPException } from "hono/http-exception";
-import { drizzle } from "drizzle-orm/d1";
 import * as schema from "./db/schema";
 import type { AppEnv, DB, SessionUser } from "./env";
 import type { OrgRole } from "@/shared/types";
-import { getAuth } from "./better-auth";
-
-/** Attaches db + user (from the BetterAuth session, if any) to context. */
-export const withSession = createMiddleware<AppEnv>(async (c, next) => {
-  const db = drizzle(c.env.DB, { schema });
-  c.set("db", db);
-  c.set("user", null);
-
-  const session = await getAuth(c.env).api.getSession({
-    headers: c.req.raw.headers,
-  });
-  if (session) {
-    c.set("user", {
-      id: session.user.id,
-      email: session.user.email,
-      name: session.user.name,
-      isAdmin: session.user.isAdmin ?? false,
-      emailVerified: session.user.emailVerified,
-      plan: (session.user.plan ?? "free") as "free" | "hobby" | "pro",
-      polarSubscriptionCancelAtPeriodEnd: session.user.polarSubscriptionCancelAtPeriodEnd ?? false,
-      polarSubscriptionCurrentPeriodEnd:
-        (session.user.polarSubscriptionCurrentPeriodEnd as number | null) ?? null,
-    } satisfies SessionUser);
-  }
-  await next();
-});
-
-export const requireUser = createMiddleware<AppEnv>(async (c, next) => {
-  if (!c.var.user) throw new HTTPException(401, { message: "Not signed in" });
-  await next();
-});
-
-export const requireAdmin = createMiddleware<AppEnv>(async (c, next) => {
-  // 404, not 403: non-admins shouldn't learn this surface exists at all.
-  if (!c.var.user?.isAdmin) throw new HTTPException(404, { message: "Not found" });
-  await next();
-});
 
 const ROLE_RANK: Record<OrgRole, number> = { member: 0, admin: 1, owner: 2 };
 

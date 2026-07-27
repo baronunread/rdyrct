@@ -3,7 +3,7 @@ import { HTTPException } from "hono/http-exception";
 import { eq, and, desc, sql } from "drizzle-orm";
 import * as schema from "../db/schema";
 import type { AppEnv, DB } from "../env";
-import { requireOrgRole } from "../auth";
+import { requireOrgRole } from "../org-role";
 import { deleteQrLogoMsg, enqueueStorage, syncLinkMsg } from "../storage";
 import { orgPlan } from "../plan";
 import {
@@ -17,7 +17,7 @@ import {
   resolveUtm,
   validateQrFields,
 } from "../util";
-import type { LinkDTO, LinkInput } from "@/shared/types";
+import type { LinkDTO, LinkInput, OrgPlan, PlanLimits } from "@/shared/types";
 
 // Mounted at /api/orgs/:orgId/links
 export const linkRoutes = new Hono<AppEnv>();
@@ -86,7 +86,7 @@ function hasQrOverride(body: LinkInput): boolean {
     body.qrCorner ||
     body.qrBg ||
     body.qrEyeColor ||
-    body.qrLogoSize !== undefined
+    body.qrLogoSize != null
   );
 }
 
@@ -153,6 +153,66 @@ async function domainHostname(
   return rows[0].hostname;
 }
 
+function assertLinkQuota(count: number, plan: OrgPlan, limits: PlanLimits): void {
+  if (count >= limits.links)
+    throw new HTTPException(402, {
+      message:
+        plan === "free"
+          ? `The free plan allows ${limits.links} links, upgrade to a paid plan for more`
+          : `This plan allows at most ${limits.links} links`,
+    });
+}
+
+function assertQrAllowed(body: LinkInput, limits: PlanLimits): void {
+  if (hasQrOverride(body) && !limits.qr)
+    throw new HTTPException(402, {
+      message: "QR customization is a paid feature: upgrade to use it",
+    });
+}
+
+/**
+ * Resolves the slug for a new link: honors a chosen slug (custom domains
+ * only) or allocates a random one, retrying on the unlikely collision.
+ */
+async function resolveNewSlug(db: DB, requested: string, domainId: string | null): Promise<string> {
+  if (requested && domainId === null)
+    throw new HTTPException(400, {
+      message:
+        "Links on the shared domain get random slugs: connect a custom domain (paid plans) to choose your own",
+    });
+  if (requested) {
+    if (await slugTaken(db, requested, domainId)) throw slugConflict(requested, domainId === null);
+    return requested;
+  }
+  for (let i = 0; i < 5; i++) {
+    const candidate = randomSlug();
+    if (!(await slugTaken(db, candidate, domainId))) return candidate;
+  }
+  throw new HTTPException(500, { message: "Could not allocate slug" });
+}
+
+/**
+ * Resolves the slug for a rename: keeps the existing slug unless a new one
+ * is requested. Chosen slugs exist only on custom domains.
+ */
+async function resolveRenamedSlug(
+  db: DB,
+  existing: typeof schema.links.$inferSelect,
+  requested: string,
+  domainId: string | null,
+): Promise<string> {
+  const newSlug = requested || existing.slug;
+  if (newSlug !== existing.slug && domainId === null)
+    throw new HTTPException(400, {
+      message:
+        "Links on the shared domain keep their random slug: move the link to a custom domain to choose one",
+    });
+  const moved = newSlug !== existing.slug || domainId !== existing.domainId;
+  if (moved && (await slugTaken(db, newSlug, domainId, existing.id)))
+    throw slugConflict(newSlug, domainId === null);
+  return newSlug;
+}
+
 linkRoutes.get("/", requireOrgRole("member"), async (c) => {
   const rows = await c.var.db
     .select({
@@ -167,59 +227,17 @@ linkRoutes.get("/", requireOrgRole("member"), async (c) => {
   return c.json(rows.map((r) => toDTO(r.link, r.clicks, r.domain)));
 });
 
-linkRoutes.post("/", requireOrgRole("member"), async (c) => {
-  const body = await c.req.json<LinkInput>();
-  const orgId = c.req.param("orgId")!;
-  validateInput(body, orgId);
-  const db = c.var.db;
-
-  const [{ plan, limits }, linkCount] = await Promise.all([
-    orgPlan(db, orgId),
-    db
-      .select({ n: sql<number>`count(*)` })
-      .from(schema.links)
-      .where(eq(schema.links.orgId, orgId)),
-  ]);
-  if ((linkCount[0]?.n ?? 0) >= limits.links)
-    throw new HTTPException(402, {
-      message:
-        plan === "free"
-          ? `The free plan allows ${limits.links} links, upgrade to a paid plan for more`
-          : `This plan allows at most ${limits.links} links`,
-    });
-  if (hasQrOverride(body) && !limits.qr)
-    throw new HTTPException(402, {
-      message: "QR customization is a paid feature: upgrade to use it",
-    });
-
-  const domainId = body.domainId ?? null;
-  const hostname = await domainHostname(db, orgId, domainId);
-
-  let slug = body.slug?.trim() || "";
-  // Slugs on the shared domain are always random (every plan): chosen slugs
-  // exist only on custom domains, so the shared namespace can't be squatted.
-  if (slug && domainId === null)
-    throw new HTTPException(400, {
-      message:
-        "Links on the shared domain get random slugs: connect a custom domain (paid plans) to choose your own",
-    });
-  if (slug) {
-    if (await slugTaken(db, slug, domainId)) throw slugConflict(slug, domainId === null);
-  } else {
-    // random slugs: retry on the (unlikely) collision
-    for (let i = 0; i < 5; i++) {
-      slug = randomSlug();
-      if (!(await slugTaken(db, slug, domainId))) break;
-      slug = "";
-    }
-    if (!slug) throw new HTTPException(500, { message: "Could not allocate slug" });
-  }
-
-  // UTM params already in the destination are extracted into the columns so
-  // analytics group-bys see them; explicit fields fill whatever is missing.
-  const utm = resolveUtm(body.destination, body);
-
-  const link: typeof schema.links.$inferSelect = {
+/** Builds a new link row: unset appearance/UTM fields fall back to their
+ * column default ("" or null), not to an existing row like an update would. */
+function newLinkRow(
+  orgId: string,
+  domainId: string | null,
+  slug: string,
+  body: LinkInput,
+  utm: ReturnType<typeof resolveUtm>,
+  createdBy: string,
+): typeof schema.links.$inferSelect {
+  return {
     id: uid(),
     orgId,
     domainId,
@@ -238,60 +256,67 @@ linkRoutes.post("/", requireOrgRole("member"), async (c) => {
     qrBg: body.qrBg ?? "",
     qrEyeColor: body.qrEyeColor ?? "",
     qrLogoSize: body.qrLogoSize ?? null,
-    createdBy: c.var.user!.id,
+    createdBy,
     createdAt: now(),
   };
+}
+
+linkRoutes.post("/", requireOrgRole("member"), async (c) => {
+  const body = await c.req.json<LinkInput>();
+  const orgId = c.req.param("orgId")!;
+  validateInput(body, orgId);
+  const db = c.var.db;
+
+  const [{ plan, limits }, linkCount] = await Promise.all([
+    orgPlan(db, orgId),
+    db
+      .select({ n: sql<number>`count(*)` })
+      .from(schema.links)
+      .where(eq(schema.links.orgId, orgId)),
+  ]);
+  assertLinkQuota(linkCount[0]?.n ?? 0, plan, limits);
+  assertQrAllowed(body, limits);
+
+  const domainId = body.domainId ?? null;
+  // Slugs on the shared domain are always random (every plan): chosen slugs
+  // exist only on custom domains, so the shared namespace can't be squatted.
+  const [hostname, slug] = await Promise.all([
+    domainHostname(db, orgId, domainId),
+    resolveNewSlug(db, body.slug?.trim() || "", domainId),
+  ]);
+
+  // UTM params already in the destination are extracted into the columns so
+  // analytics group-bys see them; explicit fields fill whatever is missing.
+  const utm = resolveUtm(body.destination, body);
+  const link = newLinkRow(orgId, domainId, slug, body, utm, c.var.user!.id);
   await db.insert(schema.links).values(link);
   await enqueueStorage(c.env, [syncLinkMsg(link.slug, hostname)]);
   return c.json(toDTO(link, 0, hostname), 201);
 });
 
-linkRoutes.patch("/:linkId", requireOrgRole("member"), async (c) => {
-  const body = await c.req.json<LinkInput>();
-  const orgId = c.req.param("orgId")!;
-  validateInput(body, orgId, true);
-  const db = c.var.db;
-  const { limits } = await orgPlan(db, orgId);
-  if (hasQrOverride(body) && !limits.qr)
-    throw new HTTPException(402, {
-      message: "QR customization is a paid feature: upgrade to use it",
-    });
-  const existing = await findLink(db, orgId, c.req.param("linkId")!);
-
-  const domainId = body.domainId !== undefined ? body.domainId : existing.domainId;
-  const [hostname, oldHostname] = await Promise.all([
-    domainHostname(db, orgId, domainId),
-    domainHostname(db, orgId, existing.domainId),
-  ]);
-
-  const newSlug = body.slug?.trim() || existing.slug;
-  // Chosen slugs exist only on custom domains; renaming a shared-domain link
-  // is out for every plan, but keeping its existing slug stays allowed.
-  if (newSlug !== existing.slug && domainId === null)
-    throw new HTTPException(400, {
-      message:
-        "Links on the shared domain keep their random slug: move the link to a custom domain to choose one",
-    });
-  const moved = newSlug !== existing.slug || domainId !== existing.domainId;
-  if (moved && (await slugTaken(db, newSlug, domainId, existing.id)))
-    throw slugConflict(newSlug, domainId === null);
-
-  const destination = body.destination ?? existing.destination;
-  // Re-resolve against the final destination: its params win, explicit
-  // fields fill gaps or clear, anything else keeps the existing value.
-  const utm = resolveUtm(destination, body, existing);
-
-  const updated = {
+/** Merges a PATCH body over the existing row: an unset field (undefined)
+ * keeps its existing value: `??` here is "not provided", not "falsy". */
+function mergedLinkUpdate(
+  existing: typeof schema.links.$inferSelect,
+  body: LinkInput,
+  fields: {
+    domainId: string | null;
+    slug: string;
+    destination: string;
+    utm: ReturnType<typeof resolveUtm>;
+  },
+): typeof schema.links.$inferSelect {
+  return {
     ...existing,
-    domainId,
-    slug: newSlug,
-    destination,
+    domainId: fields.domainId,
+    slug: fields.slug,
+    destination: fields.destination,
     title: body.title?.trim() ?? existing.title,
-    utmSource: utm.utmSource,
-    utmMedium: utm.utmMedium,
-    utmCampaign: utm.utmCampaign,
-    utmTerm: utm.utmTerm,
-    utmContent: utm.utmContent,
+    utmSource: fields.utm.utmSource,
+    utmMedium: fields.utm.utmMedium,
+    utmCampaign: fields.utm.utmCampaign,
+    utmTerm: fields.utm.utmTerm,
+    utmContent: fields.utm.utmContent,
     qrLogo: body.qrLogo ?? existing.qrLogo,
     qrStyle: body.qrStyle ?? existing.qrStyle,
     qrColor: body.qrColor ?? existing.qrColor,
@@ -300,15 +325,53 @@ linkRoutes.patch("/:linkId", requireOrgRole("member"), async (c) => {
     qrEyeColor: body.qrEyeColor ?? existing.qrEyeColor,
     qrLogoSize: body.qrLogoSize ?? existing.qrLogoSize,
   };
-  // A moved link leaves a stale key behind: syncing that old key finds no row
-  // and deletes it. Syncing the new key publishes the updated row.
-  const messages = [
+}
+
+/** A moved link leaves a stale key behind: syncing that old key finds no row
+ * and deletes it. Syncing the new key publishes the updated row. */
+function renameSyncMessages(
+  existing: typeof schema.links.$inferSelect,
+  updated: typeof schema.links.$inferSelect,
+  body: LinkInput,
+  moved: boolean,
+  hostname: string | null,
+  oldHostname: string | null,
+) {
+  return [
     moved ? syncLinkMsg(existing.slug, oldHostname) : null,
     syncLinkMsg(updated.slug, hostname),
     body.qrLogo !== undefined && body.qrLogo !== existing.qrLogo
       ? deleteQrLogoMsg(existing.qrLogo)
       : null,
   ];
+}
+
+linkRoutes.patch("/:linkId", requireOrgRole("member"), async (c) => {
+  const body = await c.req.json<LinkInput>();
+  const orgId = c.req.param("orgId")!;
+  validateInput(body, orgId, true);
+  const db = c.var.db;
+  const { limits } = await orgPlan(db, orgId);
+  assertQrAllowed(body, limits);
+  const existing = await findLink(db, orgId, c.req.param("linkId")!);
+
+  const domainId = body.domainId !== undefined ? body.domainId : existing.domainId;
+  // Chosen slugs exist only on custom domains; renaming a shared-domain link
+  // is out for every plan, but keeping its existing slug stays allowed.
+  const [hostname, oldHostname, newSlug] = await Promise.all([
+    domainHostname(db, orgId, domainId),
+    domainHostname(db, orgId, existing.domainId),
+    resolveRenamedSlug(db, existing, body.slug?.trim() || "", domainId),
+  ]);
+  const moved = newSlug !== existing.slug || domainId !== existing.domainId;
+
+  const destination = body.destination ?? existing.destination;
+  // Re-resolve against the final destination: its params win, explicit
+  // fields fill gaps or clear, anything else keeps the existing value.
+  const utm = resolveUtm(destination, body, existing);
+
+  const updated = mergedLinkUpdate(existing, body, { domainId, slug: newSlug, destination, utm });
+  const messages = renameSyncMessages(existing, updated, body, moved, hostname, oldHostname);
   await db.update(schema.links).set(updated).where(eq(schema.links.id, existing.id));
   await enqueueStorage(c.env, messages);
 

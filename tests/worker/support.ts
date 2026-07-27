@@ -27,29 +27,39 @@ export function overrideEnv(overrides: Partial<Env>): Env {
 // sign-in's rate-limit key derivation has a key to HMAC with.
 export const authEnv = () => overrideEnv({ BETTER_AUTH_SECRET: "test-secret" });
 
+// Deterministic Polar product ids and webhook secret for billing tests,
+// independent of the ambient .dev.vars. Keeps the same auth secret as
+// authEnv() so a cookie minted via signInCookie()/adminCookie() still
+// validates on requests made with this env.
+export const POLAR_HOBBY_PRODUCT_ID = "prod_hobby";
+export const POLAR_PRO_PRODUCT_ID = "prod_pro";
+export const POLAR_WEBHOOK_SECRET = "test-webhook-secret";
+export const billingEnv = () =>
+  overrideEnv({
+    BETTER_AUTH_SECRET: "test-secret",
+    POLAR_WEBHOOK_SECRET,
+    POLAR_HOBBY_PRODUCT_ID,
+    POLAR_PRO_PRODUCT_ID,
+  });
+
 export async function applyTestMigrations(): Promise<void> {
   const testEnv = env as TestEnv;
   await applyD1Migrations(testEnv.DB, testEnv.TEST_MIGRATIONS);
 }
 
-// Seeds a platform admin and signs in, returning a cookie header ready to
+// The password every seeded test user shares: fine since each test's DB is
+// wiped between runs and nothing depends on a real secret.
+export const TEST_PASSWORD = "correct-horse-battery";
+
+// Signs in a previously-seeded user and returns a cookie header ready to
 // attach to a follow-up request.
-export async function adminCookie(): Promise<string> {
-  const password = "correct-horse-battery";
-  await env.DB.batch([
-    env.DB.prepare(
-      "insert into user (id, name, email, email_verified, is_admin, plan, created_at, updated_at) values ('admin-1', 'Admin', 'admin@example.com', 1, 1, 'pro', 0, 0)",
-    ),
-    env.DB.prepare(
-      "insert into account (id, account_id, provider_id, user_id, password, created_at, updated_at) values ('acct-1', 'admin-1', 'credential', 'admin-1', ?, 0, 0)",
-    ).bind(await hashPassword(password)),
-  ]);
+export async function signInCookie(email: string, password: string): Promise<string> {
   const ctx = createExecutionContext();
   const res = await worker.fetch(
     new Request("http://localhost/api/auth/sign-in/email", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ email: "admin@example.com", password }),
+      body: JSON.stringify({ email, password }),
     }),
     authEnv(),
     ctx,
@@ -60,6 +70,20 @@ export async function adminCookie(): Promise<string> {
     .getSetCookie()
     .map((c) => c.split(";")[0])
     .join("; ");
+}
+
+// Seeds a platform admin and signs in, returning a cookie header ready to
+// attach to a follow-up request.
+export async function adminCookie(): Promise<string> {
+  await env.DB.batch([
+    env.DB.prepare(
+      "insert into user (id, name, email, email_verified, is_admin, plan, created_at, updated_at) values ('admin-1', 'Admin', 'admin@example.com', 1, 1, 'pro', 0, 0)",
+    ),
+    env.DB.prepare(
+      "insert into account (id, account_id, provider_id, user_id, password, created_at, updated_at) values ('acct-1', 'admin-1', 'credential', 'admin-1', ?, 0, 0)",
+    ).bind(await hashPassword(TEST_PASSWORD)),
+  ]);
+  return signInCookie("admin@example.com", TEST_PASSWORD);
 }
 
 export const sampleLink = {
