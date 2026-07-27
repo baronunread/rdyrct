@@ -560,6 +560,7 @@ export function AuthPage({ mode }: { mode: "login" | "signup" }) {
 
   return (
     <AuthFormView
+      key={mode}
       mode={mode}
       busy={flow.busy}
       shake={flow.shake}
