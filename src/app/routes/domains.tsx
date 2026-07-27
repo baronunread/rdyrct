@@ -1,6 +1,6 @@
 import { useState, type FormEvent, type ReactNode, useCallback } from "react";
 import { useForm, type UseFormRegister } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
+import { valibotResolver } from "@hookform/resolvers/valibot";
 import { Link } from "react-router";
 import { AnimatePresence, LazyMotion, MotionConfig, domAnimation, m } from "motion/react";
 import { Trash2, RefreshCw } from "lucide-react";
@@ -181,7 +181,7 @@ function DomainsCard({ orgId, plan }: { orgId: string; plan: "free" | "hobby" | 
   const [deleting, setDeleting] = useState<DomainDTO | null>(null);
   const [redirectDraft, setRedirectDraft] = useState<Record<string, string>>({});
   const { register, handleSubmit, reset } = useForm<{ hostname: string }>({
-    resolver: zodResolver(hostnameSchema),
+    resolver: valibotResolver(hostnameSchema),
     defaultValues: { hostname: "" },
   });
 

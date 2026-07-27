@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useForm, Controller } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
+import { valibotResolver } from "@hookform/resolvers/valibot";
 import {
   Link,
   useLocation,
@@ -43,7 +43,7 @@ function ForgotView({
 }) {
   const toast = useToast();
   const { register, handleSubmit, getValues } = useForm<ForgotForm>({
-    resolver: zodResolver(forgotSchema),
+    resolver: valibotResolver(forgotSchema),
     defaultValues: { email: initialEmail },
   });
 
@@ -100,7 +100,7 @@ function VerifyOtpView({
 }) {
   const toast = useToast();
   const { control, handleSubmit } = useForm<OtpForm>({
-    resolver: zodResolver(otpSchema),
+    resolver: valibotResolver(otpSchema),
     defaultValues: { otp: "" },
   });
 
@@ -216,7 +216,7 @@ function AuthFormView({
   const copy = AUTH_MODE_COPY[mode];
   const toast = useToast();
   const { register, handleSubmit, watch, getValues } = useForm<AuthForm>({
-    resolver: zodResolver(copy.schema),
+    resolver: valibotResolver(copy.schema),
     defaultValues: { email: "", password: "" },
   });
 
