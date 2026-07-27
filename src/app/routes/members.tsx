@@ -9,7 +9,7 @@ import { api } from "../lib/api";
 import { PLAN_LIMITS, type InviteDTO, type OrgRole, type Sort, type UserOrg } from "@/shared/types";
 import { Button, IconButton } from "../ui/button";
 import { CopyButton } from "../ui/copy-button";
-import { Field, Input, Select } from "../ui/field";
+import { Field, Input } from "../ui/field";
 import { MenuSelect } from "../ui/menu";
 import { Tooltip } from "../ui/tooltip";
 import { RemoveMemberDialog, InviteMemberDialog } from "../components/member-dialogs";
@@ -498,13 +498,15 @@ function InviteByEmailCard({
         </div>
         <div className="w-36">
           <Field label="Role">
-            <Select
+            <MenuSelect
+              label="Role"
               value={selectedRole}
-              onChange={(e) => setValue("role", e.target.value as "member" | "admin")}
-            >
-              <option value="member">member</option>
-              <option value="admin">admin</option>
-            </Select>
+              onChange={(role) => setValue("role", role as "member" | "admin")}
+              options={[
+                { value: "member", label: "member" },
+                { value: "admin", label: "admin" },
+              ]}
+            />
           </Field>
         </div>
         <Button type="submit" variant="primary" disabled={sendEmailInvite.isPending}>
