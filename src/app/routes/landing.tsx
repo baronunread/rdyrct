@@ -675,6 +675,11 @@ export function LandingPage() {
               <a href="#faq" className="text-muted hover:text-accent">
                 FAQ
               </a>
+              {/* /blog is served by the Worker's reverse proxy, not the SPA
+                  router, so this is a real navigation, not a <Link>. */}
+              <a href="/blog" className="text-muted hover:text-accent">
+                Blog
+              </a>
               {authed ? (
                 <Link to="/dashboard">
                   <Button variant="primary">Dashboard</Button>
