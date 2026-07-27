@@ -108,6 +108,16 @@ function buildAuth(env: Env) {
         sendVerificationOnSignUp: true,
         sendVerificationOTP: async ({ email, otp, type }) => {
           if (type !== "email-verification") return;
+          // Unauthenticated: anyone can trigger this for any email. Skip
+          // already-verified accounts so a code that would auto-sign-in
+          // (autoSignInAfterVerification) never goes out for one, since that
+          // would hand a full session to whoever reads that inbox, not just
+          // confirm ownership during signup.
+          const [existing] = await db
+            .select({ emailVerified: schema.user.emailVerified })
+            .from(schema.user)
+            .where(eq(schema.user.email, email.toLowerCase()));
+          if (existing?.emailVerified) return;
           await sendEmail(
             env,
             email,
