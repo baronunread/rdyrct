@@ -44,9 +44,8 @@
     // Better Stack source's ingesting host (Data ingestion tab), e.g.
     // "https://in.logs.betterstack.com". Alerts no-op until this is set.
     "BETTERSTACK_INGEST_URL": "https://s2624707.eu-central-1a.betterstackdata.com",
-    // rdyrct-blog (Next.js on Vercel), reverse-proxied at /blog. Replace with
-    // the real Vercel deployment URL; unset skips the proxy, so /blog falls
-    // through to the slug redirect / SPA 404.
+    // rdyrct-blog (Next.js on Vercel), reverse-proxied at /blog. Unset skips
+    // the proxy, so /blog falls through to the slug redirect / SPA 404.
     "BLOG_ORIGIN_URL": "https://rdyrct-blog.vercel.app",
   },
   "d1_databases": [
