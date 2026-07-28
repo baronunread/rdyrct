@@ -6,14 +6,14 @@ import { ensureHostname, probeDelaySeconds, probeDomain } from "../../src/worker
 import { now } from "../../src/worker/util";
 import { adminCookie, applyTestMigrations, authEnv, overrideEnv } from "./support";
 
-// Env with a token present, so the real get-or-create path runs against a
-// mocked global fetch.
-const realCfEnv = () => overrideEnv({ CF_ZONE_ID: "zone", CF_API_TOKEN: "tok" });
+// Env with a token present and the dev fake off, so the real get-or-create
+// path runs against a mocked global fetch.
+const realCfEnv = () =>
+  overrideEnv({ CF_ZONE_ID: "zone", CF_API_TOKEN: "tok", CF_DEV_ENV: undefined });
 
-// Env with no token, independent of whatever CF_API_TOKEN happens to be in
-// the ambient .dev.vars (CI runs unit tests before .dev.vars exists), so the
-// CF fake is used.
-const fakeCfEnv = () => overrideEnv({ CF_API_TOKEN: undefined });
+// CF_DEV_ENV=1, independent of whatever CF_API_TOKEN/CF_DEV_ENV happen to be
+// in the ambient .dev.vars, so the CF fake is used.
+const fakeCfEnv = () => overrideEnv({ CF_DEV_ENV: "1" });
 
 const cfJson = (body: unknown) =>
   new Response(JSON.stringify(body), {
@@ -152,6 +152,18 @@ describe("ensureHostname: get-or-create idempotency", () => {
     const id = await ensureHostname(realCfEnv(), "missing", "go.example.com");
     expect(id).toBeNull();
     expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it("fails closed instead of faking Cloudflare when credentials are missing and CF_DEV_ENV is unset", async () => {
+    await seedDomain();
+    const misconfigured = overrideEnv({
+      CF_API_TOKEN: undefined,
+      CF_ZONE_ID: undefined,
+      CF_DEV_ENV: undefined,
+    });
+    await expect(ensureHostname(misconfigured, "domain-1", "go.example.com")).rejects.toThrow(
+      "Custom domains are not configured on this deployment",
+    );
   });
 });
 

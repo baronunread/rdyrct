@@ -42,8 +42,9 @@ export interface Env {
 
   /* custom domains (Cloudflare for SaaS) */
   APP_HOST: string; // var, e.g. "rdyrct.com"; the shared redirect host
-  CF_API_TOKEN?: string; // secret, Custom Hostnames edit; unset in dev/test to use the fake
+  CF_API_TOKEN?: string; // secret, Custom Hostnames edit
   CF_ZONE_ID?: string; // var
+  CF_DEV_ENV?: string; // var, "1" in dev/test only: fakes the Custom Hostnames API
 
   /* alerting: dead-lettered storage messages (best-effort, never blocks acking) */
   BETTERSTACK_SOURCE_TOKEN?: string; // secret

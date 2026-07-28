@@ -221,6 +221,7 @@
         "POLAR_PRO_PRODUCT_ID": "playwright_pro_product",
         "POLAR_HOBBY_PRODUCT_ID": "playwright_hobby_product",
         "CF_ZONE_ID": "",
+        "CF_DEV_ENV": "1",
       },
       "kv_namespaces": [
         {
