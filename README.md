@@ -79,7 +79,7 @@ bun run dev                        # https://rdyrct.localhost
 
   and copy the 6-digit code out of the latest message.
 
-- Leaving `CF_API_TOKEN` unset (the `.dev.vars.example` default) stubs the Cloudflare Custom Hostnames API locally, so custom domains activate instantly on "Check status" without a real zone.
+- Leaving `CF_API_TOKEN` unset (the `.dev.vars.example` default) stubs the Cloudflare Custom Hostnames API locally: DNS becomes ready after about 5 seconds and TLS after about 20 seconds, so "Check status" shows the same progression without a real zone.
 - Billing against a real [Polar sandbox](https://sandbox.polar.sh) account needs a public URL (`wrangler dev --remote` or a tunnel) for webhooks to reach `/api/webhooks/polar`.
 
 ---
