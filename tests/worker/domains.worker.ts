@@ -6,14 +6,14 @@ import { ensureHostname, probeDelaySeconds, probeDomain } from "../../src/worker
 import { now } from "../../src/worker/util";
 import { adminCookie, applyTestMigrations, authEnv, overrideEnv } from "./support";
 
-// Env with the CF fake off and credentials present, so the real get-or-create
+// Env with a token present and the dev fake off, so the real get-or-create
 // path runs against a mocked global fetch.
 const realCfEnv = () =>
-  overrideEnv({ DEV_FAKE_CF: undefined, CF_ZONE_ID: "zone", CF_API_TOKEN: "tok" });
+  overrideEnv({ CF_ZONE_ID: "zone", CF_API_TOKEN: "tok", CF_DEV_ENV: undefined });
 
-// Env with the CF fake forced on, independent of whatever DEV_FAKE_CF happens
-// to be in the ambient .dev.vars (CI runs unit tests before .dev.vars exists).
-const fakeCfEnv = () => overrideEnv({ DEV_FAKE_CF: "1" });
+// CF_DEV_ENV=1, independent of whatever CF_API_TOKEN/CF_DEV_ENV happen to be
+// in the ambient .dev.vars, so the CF fake is used.
+const fakeCfEnv = () => overrideEnv({ CF_DEV_ENV: "1" });
 
 const cfJson = (body: unknown) =>
   new Response(JSON.stringify(body), {
@@ -153,13 +153,25 @@ describe("ensureHostname: get-or-create idempotency", () => {
     expect(id).toBeNull();
     expect(fetchSpy).not.toHaveBeenCalled();
   });
+
+  it("fails closed instead of faking Cloudflare when credentials are missing and CF_DEV_ENV is unset", async () => {
+    await seedDomain();
+    const misconfigured = overrideEnv({
+      CF_API_TOKEN: undefined,
+      CF_ZONE_ID: undefined,
+      CF_DEV_ENV: undefined,
+    });
+    await expect(ensureHostname(misconfigured, "domain-1", "go.example.com")).rejects.toThrow(
+      "Custom domains are not configured on this deployment",
+    );
+  });
 });
 
 describe("probeDomain: one durable step at a time", () => {
   it("advances checking_dns to issuing_tls, then to active (fake CF)", async () => {
-    // createdAt 9s ago: the fake reports DNS + TLS as ready, and it is well
+    // createdAt 21s ago: the fake reports DNS + TLS as ready, and it is well
     // under the 24h deadline.
-    await seedDomain({ createdAt: now() - 9_000 });
+    await seedDomain({ createdAt: now() - 21_000 });
 
     const first = await probeDomain(fakeCfEnv(), "domain-1");
     expect(first).toEqual({ state: "pending", status: "issuing_tls" });

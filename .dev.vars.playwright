@@ -13,5 +13,6 @@ POLAR_PRO_PRODUCT_ID=playwright_pro_product
 POLAR_HOBBY_PRODUCT_ID=playwright_hobby_product
 POLAR_SERVER=sandbox
 
-DEV_FAKE_CF=1
+CF_API_TOKEN=
 CF_ZONE_ID=
+CF_DEV_ENV=1

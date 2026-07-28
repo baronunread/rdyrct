@@ -60,6 +60,50 @@ test.describe("authentication forms", () => {
     expect(authRequests.count).toBe(0);
   });
 
+  test("rejects an invalid forgot-password email before accepting a valid one", async ({
+    page,
+  }) => {
+    const authRequests = await blockAuthRequests(page);
+    const email = `forgot-${Date.now()}@gmail.com`;
+
+    await page.goto("/login");
+    await page.getByRole("button", { name: "Forgot password?" }).click();
+    await expect(page.getByRole("heading", { name: "Reset your password" })).toBeVisible();
+
+    await page.getByLabel("Email").fill("person@localhost");
+    await page.getByRole("button", { name: "Send reset link" }).click();
+    await expect(page.getByText("Enter a valid email address")).toBeVisible();
+    expect(authRequests.count).toBe(0);
+
+    await page.unroute("**/api/auth/**");
+    await page.getByLabel("Email").fill(email);
+    await page.getByRole("button", { name: "Send reset link" }).click();
+    await expect(page.getByText(email)).toBeVisible();
+  });
+
+  test("keeps an incomplete verification code in the browser instead of submitting it", async ({
+    page,
+  }) => {
+    // Seeds the same sessionStorage key the app writes after a real sign-up
+    // (see PENDING_KEY in auth.tsx) so the verify-otp view renders without
+    // spending the shared sign-up/email rate-limit budget on a real request.
+    const email = `otp-${Date.now()}@gmail.com`;
+    await page.goto("/signup");
+    await page.evaluate(
+      ({ key, email, next }) => sessionStorage.setItem(key, JSON.stringify({ email, next })),
+      { key: "rdyrct:pendingVerify", email, next: "/dashboard" },
+    );
+    await page.reload();
+    await expect(page.getByRole("heading", { name: "Enter your code" })).toBeVisible();
+
+    const authRequests = await blockAuthRequests(page);
+    await page.getByRole("button", { name: "Verify & continue" }).click();
+
+    await expect(page.getByRole("heading", { name: "Enter your code" })).toBeVisible();
+    await expect(page.getByText("Enter a 6-digit code")).toBeVisible();
+    expect(authRequests.count).toBe(0);
+  });
+
   test("stays on sign-up when verification-code delivery fails", async ({ page }) => {
     const email = `delivery-failure-${Date.now()}@gmail.com`;
     await page.route("**/api/auth/email-otp/send-verification-otp", async (route) => {

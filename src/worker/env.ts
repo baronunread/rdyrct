@@ -44,7 +44,7 @@ export interface Env {
   APP_HOST: string; // var, e.g. "rdyrct.com"; the shared redirect host
   CF_API_TOKEN?: string; // secret, Custom Hostnames edit
   CF_ZONE_ID?: string; // var
-  DEV_FAKE_CF?: string; // var, "1" fakes the CF API in local dev
+  CF_DEV_ENV?: string; // var, "1" in dev/test only: fakes the Custom Hostnames API
 
   /* alerting: dead-lettered storage messages (best-effort, never blocks acking) */
   BETTERSTACK_SOURCE_TOKEN?: string; // secret

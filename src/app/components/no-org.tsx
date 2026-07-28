@@ -1,6 +1,6 @@
 import { useCallback } from "react";
 import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
+import { valibotResolver } from "@hookform/resolvers/valibot";
 import { useQueryClient } from "@tanstack/react-query";
 import { api } from "../lib/api";
 import { useCurrentOrg } from "../lib/current-org";
@@ -21,7 +21,7 @@ export function NoOrgState() {
     handleSubmit,
     formState: { isSubmitting },
   } = useForm<OrgNameForm>({
-    resolver: zodResolver(orgNameSchema),
+    resolver: valibotResolver(orgNameSchema),
     defaultValues: { name: "" },
   });
 

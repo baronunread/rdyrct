@@ -1,6 +1,6 @@
 import { useState, useMemo, useCallback } from "react";
 import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
+import { valibotResolver } from "@hookform/resolvers/valibot";
 import { useCurrentOrg } from "../lib/current-org";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { UserPlus, Trash2, Info } from "lucide-react";
@@ -444,7 +444,7 @@ function InviteByEmailCard({
     email: string;
     role: "member" | "admin";
   }>({
-    resolver: zodResolver(inviteEmailSchema),
+    resolver: valibotResolver(inviteEmailSchema),
     defaultValues: { email: "", role: "member" },
   });
   const selectedRole = watch("role");

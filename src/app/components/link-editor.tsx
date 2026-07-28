@@ -1,6 +1,6 @@
 import { useMemo, useEffect, type ChangeEvent } from "react";
 import { useForm, type SubmitErrorHandler } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
+import { valibotResolver } from "@hookform/resolvers/valibot";
 import { Link as RouterLink } from "react-router";
 import { Lock, Info } from "lucide-react";
 import { shortUrl } from "../lib/api";
@@ -362,7 +362,7 @@ export function LinkEditor({
   const toast = useToast();
 
   const { handleSubmit, watch, reset } = useForm<LinkInput>({
-    resolver: zodResolver(linkInputSchema),
+    resolver: valibotResolver(linkInputSchema),
     defaultValues: defaultForm,
   });
 

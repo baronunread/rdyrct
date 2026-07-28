@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
+import { valibotResolver } from "@hookform/resolvers/valibot";
 import { Link } from "react-router";
 import { useStats, useLinks, useMembers, useLinkMutations, useRecentClicks } from "../lib/hooks";
 import { useOrgLimits } from "../lib/org-limits";
@@ -165,7 +165,7 @@ function QuickCreateCard({
   const [domainId, setDomainId] = useState<string | null>(null);
 
   const { register, handleSubmit, reset, watch } = useForm({
-    resolver: zodResolver(destinationSchema),
+    resolver: valibotResolver(destinationSchema),
     defaultValues: { destination: "" },
   });
 

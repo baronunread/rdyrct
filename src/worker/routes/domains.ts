@@ -59,8 +59,23 @@ async function cfRequest<T = Record<string, unknown>>(
   return res.json();
 }
 
+// Fake Cloudflare responses only when explicitly opted into (local dev/e2e),
+// never merely because credentials happen to be unset: a misconfigured
+// deployment must fail closed, not silently mint fake hostnames.
+function useFakeCf(env: Env): boolean {
+  return env.CF_DEV_ENV === "1";
+}
+
+function assertCfConfigured(env: Env): void {
+  if (!env.CF_API_TOKEN || !env.CF_ZONE_ID)
+    throw new HTTPException(500, {
+      message: "Custom domains are not configured on this deployment",
+    });
+}
+
 async function cfCreateHostname(env: Env, hostname: string): Promise<CfHostname> {
-  if (env.DEV_FAKE_CF === "1") return { id: `fake_${uid(8)}`, active: false };
+  if (useFakeCf(env)) return { id: `fake_${uid(8)}`, active: false };
+  assertCfConfigured(env);
   const data = await cfRequest(env, "POST", "/custom_hostnames", {
     hostname,
     ssl: { method: "http", type: "dv" },
@@ -75,7 +90,8 @@ async function cfCreateHostname(env: Env, hostname: string): Promise<CfHostname>
  * than creating a duplicate. Fake CF owns no hostnames.
  */
 async function cfFindHostname(env: Env, hostname: string): Promise<string | null> {
-  if (env.DEV_FAKE_CF === "1") return null;
+  if (useFakeCf(env)) return null;
+  assertCfConfigured(env);
   const data = await cfRequest<Array<{ id: string; hostname: string }>>(
     env,
     "GET",
@@ -89,14 +105,16 @@ async function cfGetHostnameStatus(
   row: typeof schema.domains.$inferSelect,
 ): Promise<CfHostnameResult | null> {
   // The fake keeps new domains in checking_dns for ~5s before showing DNS as
-  // resolved, then another ~3s before the certificate is "issued".
-  if (env.DEV_FAKE_CF === "1") {
+  // resolved, then another ~15s before the certificate is "issued" (long
+  // enough to see/click through the issuing_tls state in a browser or e2e run).
+  if (useFakeCf(env)) {
     const age = now() - row.createdAt;
     return {
       status: age > 5_000 ? "active" : "pending",
-      ssl: age > 8_000 ? { status: "active" } : { status: "pending_validation" },
+      ssl: age > 20_000 ? { status: "active" } : { status: "pending_validation" },
     };
   }
+  assertCfConfigured(env);
   if (!row.cfHostnameId) return null;
   const data = await cfRequest(env, "GET", `/custom_hostnames/${row.cfHostnameId}`);
   if (!data) return null;
@@ -104,7 +122,8 @@ async function cfGetHostnameStatus(
 }
 
 export async function cfDeleteHostname(env: Env, cfHostnameId: string): Promise<void> {
-  if (env.DEV_FAKE_CF === "1") return;
+  if (useFakeCf(env)) return;
+  assertCfConfigured(env);
   // Tolerate an already-gone hostname (see okNotFound) so delete is idempotent.
   await cfRequest(env, "DELETE", `/custom_hostnames/${cfHostnameId}`, undefined, {
     okNotFound: true,

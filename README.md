@@ -79,7 +79,7 @@ bun run dev                        # https://rdyrct.localhost
 
   and copy the 6-digit code out of the latest message.
 
-- `DEV_FAKE_CF=1` (the `.dev.vars.example` default) stubs the Cloudflare Custom Hostnames API locally, so custom domains activate instantly on "Check status" without a real zone.
+- Setting `CF_DEV_ENV=1` (the `.dev.vars.example` default) stubs the Cloudflare Custom Hostnames API locally: DNS becomes ready after about 5 seconds and TLS after about 20 seconds, so "Check status" shows the same progression without a real zone. Without it, missing `CF_API_TOKEN`/`CF_ZONE_ID` fails closed instead of faking a response.
 - Billing against a real [Polar sandbox](https://sandbox.polar.sh) account needs a public URL (`wrangler dev --remote` or a tunnel) for webhooks to reach `/api/webhooks/polar`.
 
 ---
@@ -181,7 +181,7 @@ before changing link, domain, logo, or organization delete flows.
 | `POLAR_PRO_PRODUCT_ID`   | var            | Polar product id for the Pro plan                                                   |
 | `POLAR_HOBBY_PRODUCT_ID` | var            | Polar product id for the Hobby plan                                                 |
 | `CF_ZONE_ID`             | var            | Zone id used for Custom Hostnames                                                   |
-| `DEV_FAKE_CF`            | var (dev only) | `1` to stub the Cloudflare API locally                                              |
+| `CF_DEV_ENV`             | var (dev only) | Set to `1` to fake the Custom Hostnames API instead of calling Cloudflare           |
 
 Secrets are set with `wrangler secret put NAME` or `wrangler secret bulk prod.secrets.env` in production; locally they all come from `.dev.vars` (see `.dev.vars.example`).
 
@@ -194,7 +194,8 @@ migrations/            D1 schema (numbered SQL migrations, applied in order)
 scripts/               Local dev utilities (e.g. seed-local.ts)
 src/worker/            Hono API, BetterAuth, KV publishing, redirect hot path
   routes/              auth/user, orgs, links, qr-logos, domains, billing, admin
-  plan.ts util.ts email.ts password.ts kv.ts storage.ts
+  better-auth.ts plan.ts util.ts guards.ts org-role.ts rate-limit.ts session.ts
+  email.ts password.ts kv.ts storage.ts alerts.ts clicks.ts workflows.ts
 src/shared/types.ts    DTOs + PLAN_LIMITS (shared worker ↔ app)
 src/app/               React SPA
   routes/              page-level route components

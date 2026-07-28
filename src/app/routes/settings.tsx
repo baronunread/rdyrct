@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
+import { valibotResolver } from "@hookform/resolvers/valibot";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCurrentUser } from "../lib/hooks";
 import { useCurrentOrg } from "../lib/current-org";
@@ -33,7 +33,7 @@ function useOrgRenameForm(org: UserOrg | null) {
     watch,
     formState: { isSubmitting },
   } = useForm<OrgNameForm>({
-    resolver: zodResolver(orgNameSchema),
+    resolver: valibotResolver(orgNameSchema),
     defaultValues: { name: "" },
   });
   const resetOrgId = useRef<string | undefined>(undefined);
