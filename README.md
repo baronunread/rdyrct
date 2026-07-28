@@ -79,7 +79,7 @@ bun run dev                        # https://rdyrct.localhost
 
   and copy the 6-digit code out of the latest message.
 
-- `DEV_FAKE_CF=1` (the `.dev.vars.example` default) stubs the Cloudflare Custom Hostnames API locally, so custom domains activate instantly on "Check status" without a real zone.
+- Leaving `CF_API_TOKEN` unset (the `.dev.vars.example` default) stubs the Cloudflare Custom Hostnames API locally, so custom domains activate instantly on "Check status" without a real zone.
 - Billing against a real [Polar sandbox](https://sandbox.polar.sh) account needs a public URL (`wrangler dev --remote` or a tunnel) for webhooks to reach `/api/webhooks/polar`.
 
 ---
@@ -181,7 +181,6 @@ before changing link, domain, logo, or organization delete flows.
 | `POLAR_PRO_PRODUCT_ID`   | var            | Polar product id for the Pro plan                                                   |
 | `POLAR_HOBBY_PRODUCT_ID` | var            | Polar product id for the Hobby plan                                                 |
 | `CF_ZONE_ID`             | var            | Zone id used for Custom Hostnames                                                   |
-| `DEV_FAKE_CF`            | var (dev only) | `1` to stub the Cloudflare API locally                                              |
 
 Secrets are set with `wrangler secret put NAME` or `wrangler secret bulk prod.secrets.env` in production; locally they all come from `.dev.vars` (see `.dev.vars.example`).
 

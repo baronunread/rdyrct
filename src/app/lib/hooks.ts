@@ -149,8 +149,8 @@ export const useDomains = (orgId: string, enabled = true) =>
     queryKey: ["domains", orgId],
     queryFn: () => api(`/orgs/${orgId}/domains`),
     enabled: enabled && !!orgId,
-    // The backend advances the pipeline on read, so polling the list is all
-    // it takes — poll while any domain is still in a transitional state.
+    // A background Workflow drives DNS/TLS activation independently; this
+    // just polls to reflect that progress while any domain is transitional.
     refetchInterval: (query) =>
       query.state.data?.some((d) => d.status !== "active" && d.status !== "error") ? 10_000 : false,
   });
