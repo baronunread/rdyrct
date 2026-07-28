@@ -46,8 +46,56 @@ async function domainHasMailRecords(domain: string): Promise<boolean> {
   }
 }
 
+function makeDb(env: Env) {
+  return drizzle(env.DB, { schema });
+}
+type Db = ReturnType<typeof makeDb>;
+
+// Unauthenticated: anyone can trigger this for any email. Reject
+// already-verified accounts so a code that would auto-sign-in
+// (autoSignInAfterVerification) never goes out for one, since that
+// would hand a full session to whoever reads that inbox, not just
+// confirm ownership during signup.
+async function guardVerificationOTPSend(db: Db, body: { email?: unknown; type?: unknown } | null) {
+  if (body?.type !== "email-verification" || typeof body.email !== "string") return;
+  const [existing] = await db
+    .select({ emailVerified: schema.user.emailVerified })
+    .from(schema.user)
+    .where(eq(schema.user.email, body.email.toLowerCase()));
+  if (existing?.emailVerified)
+    throw new APIError(400, {
+      message: "This email is already verified. Sign in instead.",
+      code: "EMAIL_VERIFIED",
+    });
+}
+
+// better-auth 1.6+ answers a duplicate sign-up with a fake success so
+// outsiders can't probe which emails have accounts. For us that meant the
+// form jumped to the OTP screen, mailed a working code, and signed the
+// visitor into the existing account while the password they had just
+// typed went nowhere. We take the plain error over the disguise.
+async function guardSignUp(db: Db, email: unknown) {
+  if (typeof email !== "string") return;
+  const normalized = email.toLowerCase();
+  const rows = await db
+    .select({ id: schema.user.id })
+    .from(schema.user)
+    .where(eq(schema.user.email, normalized));
+  if (rows.length > 0)
+    throw new APIError(422, {
+      message: "This email already has an account. Sign in instead.",
+      code: "USER_ALREADY_EXISTS",
+    });
+  const domain = normalized.split("@")[1];
+  if (domain && !(await domainHasMailRecords(domain)))
+    throw new APIError(422, {
+      message: "Enter a valid email address.",
+      code: "INVALID_EMAIL_DOMAIN",
+    });
+}
+
 function buildAuth(env: Env) {
-  const db = drizzle(env.DB, { schema });
+  const db = makeDb(env);
   return betterAuth({
     baseURL: env.APP_URL,
     basePath: "/api/auth",
@@ -108,16 +156,11 @@ function buildAuth(env: Env) {
         sendVerificationOnSignUp: true,
         sendVerificationOTP: async ({ email, otp, type }) => {
           if (type !== "email-verification") return;
-          // Unauthenticated: anyone can trigger this for any email. Skip
-          // already-verified accounts so a code that would auto-sign-in
-          // (autoSignInAfterVerification) never goes out for one, since that
-          // would hand a full session to whoever reads that inbox, not just
-          // confirm ownership during signup.
-          const [existing] = await db
-            .select({ emailVerified: schema.user.emailVerified })
-            .from(schema.user)
-            .where(eq(schema.user.email, email.toLowerCase()));
-          if (existing?.emailVerified) return;
+          // The already-verified case is rejected up front in hooks.before
+          // (see below): the plugin swallows whatever this callback returns
+          // or throws, so blocking there is the only way for the caller to
+          // learn "already verified" instead of waiting on a code that never
+          // arrives.
           await sendEmail(
             env,
             email,
@@ -165,32 +208,18 @@ function buildAuth(env: Env) {
         },
       },
     },
-    // better-auth 1.6+ answers a duplicate sign-up with a fake success so
-    // outsiders can't probe which emails have accounts. For us that meant the
-    // form jumped to the OTP screen, mailed a working code, and signed the
-    // visitor into the existing account while the password they had just
-    // typed went nowhere. We take the plain error over the disguise.
     hooks: {
       before: createAuthMiddleware(async (ctx) => {
-        if (ctx.path !== "/sign-up/email") return;
-        const email = (ctx.body as { email?: unknown } | null)?.email;
-        if (typeof email !== "string") return;
-        const normalized = email.toLowerCase();
-        const rows = await db
-          .select({ id: schema.user.id })
-          .from(schema.user)
-          .where(eq(schema.user.email, normalized));
-        if (rows.length > 0)
-          throw new APIError(422, {
-            message: "This email already has an account. Sign in instead.",
-            code: "USER_ALREADY_EXISTS",
-          });
-        const domain = normalized.split("@")[1];
-        if (domain && !(await domainHasMailRecords(domain)))
-          throw new APIError(422, {
-            message: "Enter a valid email address.",
-            code: "INVALID_EMAIL_DOMAIN",
-          });
+        if (ctx.path === "/email-otp/send-verification-otp") {
+          await guardVerificationOTPSend(
+            db,
+            ctx.body as { email?: unknown; type?: unknown } | null,
+          );
+          return;
+        }
+        if (ctx.path === "/sign-up/email") {
+          await guardSignUp(db, (ctx.body as { email?: unknown } | null)?.email);
+        }
       }),
     },
     databaseHooks: {

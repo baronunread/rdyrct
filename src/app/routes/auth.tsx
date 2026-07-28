@@ -424,6 +424,11 @@ function useAuthFlow(mode: "login" | "signup") {
       type: "email-verification",
     });
     if (error) {
+      if (error.code === "EMAIL_VERIFIED") {
+        toast("This email is already verified. Sign in to continue.");
+        setView("form");
+        return;
+      }
       failSubmit(error.message ?? "Could not send the verification code");
       return;
     }
@@ -488,6 +493,11 @@ function useAuthFlow(mode: "login" | "signup") {
       type: "email-verification",
     });
     if (resendError) {
+      if (resendError.code === "EMAIL_VERIFIED") {
+        toast("This email is already verified. Sign in to continue.");
+        backToForm();
+        return;
+      }
       toast(resendError.message ?? "Could not resend the code", "error");
       return;
     }
