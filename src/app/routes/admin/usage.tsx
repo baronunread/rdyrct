@@ -123,19 +123,15 @@ function TableSizeCard({ s }: { s: AdminUsage }) {
       : null;
   return (
     <Card>
-      <p className="mb-3 text-2xs tracking-wider text-muted uppercase">Table size</p>
-      <div className="flex items-baseline gap-3">
-        <span className="tnum text-2xl font-bold">{s.tableSize.toLocaleString()}</span>
-        <span className="text-xs text-muted">rows</span>
-      </div>
-      <div className="mt-3">
-        <AreaChart data={s.tableGrowth} height={60} />
-      </div>
+      <p className="mb-3 text-2xs tracking-wider text-muted uppercase">
+        Table size · {s.tableSize.toLocaleString()} rows
+      </p>
+      <AreaChart data={s.tableGrowth} />
       {projectedDate && (
-        <div className="mt-2 text-xs text-muted">
-          <p>~{s.tableProjectedDays!.toLocaleString()} days until 10 GB cap</p>
-          <p>Estimated {shortDate(projectedDate)}</p>
-        </div>
+        <p className="mt-3 text-xs text-muted">
+          ~{s.tableProjectedDays!.toLocaleString()} days until 10 GB cap · estimated{" "}
+          {shortDate(projectedDate)}
+        </p>
       )}
     </Card>
   );

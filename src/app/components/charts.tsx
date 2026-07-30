@@ -1,144 +1,136 @@
-import { Fragment, useMemo, useRef, useState } from "react";
+import { Fragment, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import { Link } from "react-router";
+import { scaleLinear, scalePoint } from "d3-scale";
+import {
+  areaY,
+  defineChart,
+  lineY,
+  type ChartPoint,
+  type ConfiguredScaleLike,
+} from "@tanstack/charts";
+import { focusNearestX } from "@tanstack/charts/focus";
+import { Chart } from "@tanstack/react-charts";
 import type { SeriesPoint, DeltaValue, HeatmapRow, TopEntry } from "@/shared/types";
 import { Card } from "../ui/misc";
 
-// Chart geometry constants — shared by every AreaChart render.
-const WIDTH = 640; // viewBox units; scales to container
-const PAD = { top: 12, right: 8, bottom: 22, left: 34 };
-
-type AreaChartPoint = SeriesPoint & { x: number; y: number };
-
-/** Pure geometry for one AreaChart render: axis scales, the line/fill path
- * strings, and which points get an x-axis tick label. */
-function areaChartGeometry(
-  data: SeriesPoint[],
-  innerW: number,
-  innerH: number,
-): { max: number; points: AreaChartPoint[]; path: string; area: string; ticks: AreaChartPoint[] } {
-  const max = Math.max(1, ...data.map((d) => d.clicks));
-  const x = (i: number) =>
-    PAD.left + (data.length === 1 ? innerW / 2 : (i / (data.length - 1)) * innerW);
-  const y = (v: number) => PAD.top + innerH - (v / max) * innerH;
-  const points = data.map((d, i) => ({ x: x(i), y: y(d.clicks), ...d }));
-  const path = points
-    .map((p, i) => `${i === 0 ? "M" : "L"}${p.x.toFixed(1)},${p.y.toFixed(1)}`)
-    .join("");
-  const area = `${path}L${points.at(-1)!.x.toFixed(1)},${PAD.top + innerH}L${points[0].x.toFixed(1)},${PAD.top + innerH}Z`;
-  const step = Math.max(1, Math.floor(data.length / 5));
-  const ticks = points.filter((_, i) => i % step === 0);
-  return { max, points, path, area, ticks };
+/**
+ * d3's scalePoint has no tick-thinning: without it TanStack Charts falls
+ * back to labeling every point, which is unreadable at 30-90 days. `.copy()`
+ * (called internally before the scale is used) returns a fresh scalePoint
+ * without our patch, so `ticks`/`copy` are re-attached on every copy.
+ */
+function thinnedPointScale(domain: readonly string[]): ConfiguredScaleLike<string> {
+  function attach(scale: ReturnType<typeof scalePoint<string>>): ConfiguredScaleLike<string> {
+    const rawCopy = scale.copy.bind(scale);
+    const s = scale as unknown as ConfiguredScaleLike<string>;
+    s.ticks = (count: number) => {
+      const step = Math.max(1, Math.ceil(domain.length / count));
+      return domain.filter((_, i) => i % step === 0);
+    };
+    s.copy = () => attach(rawCopy());
+    return s;
+  }
+  return attach(scalePoint<string>().domain(domain));
 }
 
-/** Index of the point closest to a hovered x position (viewBox units). */
-function closestPointIndex(points: { x: number }[], px: number): number {
-  let best = 0;
-  for (let i = 1; i < points.length; i++)
-    if (Math.abs(points[i].x - px) < Math.abs(points[best].x - px)) best = i;
-  return best;
-}
-
-/** Recessive grid: three horizontal lines with their y-axis value labels. */
-function ChartGridLines({ innerH, max }: { innerH: number; max: number }) {
-  return (
-    <>
-      {[0, 0.5, 1].map((f) => (
-        <g key={f}>
-          <line
-            x1={PAD.left}
-            x2={WIDTH - PAD.right}
-            y1={PAD.top + innerH * f}
-            y2={PAD.top + innerH * f}
-            stroke="var(--border)"
-            strokeWidth="1"
-            strokeDasharray={f === 1 ? undefined : "3 5"}
-          />
-          <text
-            x={PAD.left - 6}
-            y={PAD.top + innerH * f + 3}
-            textAnchor="end"
-            fontSize="9"
-            fill="var(--muted)"
-            className="tnum"
-          >
-            {Math.round(max * (1 - f))}
-          </text>
-        </g>
-      ))}
-    </>
-  );
-}
-
-function ChartXTicks({
-  ticks,
-  height,
-  tickFormat,
-}: {
-  ticks: AreaChartPoint[];
-  height: number;
+interface AreaChartInput {
+  data: readonly SeriesPoint[];
   tickFormat: (day: string) => string;
-}) {
-  return (
-    <>
-      {ticks.map((t) => (
-        <text
-          key={t.day}
-          x={t.x}
-          y={height - 6}
-          textAnchor="middle"
-          fontSize="9"
-          fill="var(--muted)"
-        >
-          {tickFormat(t.day)}
-        </text>
-      ))}
-    </>
-  );
 }
+
+const areaChartDefinition = defineChart<AreaChartInput>()(({ input }) => {
+  const max = Math.max(1, ...input.data.map((d) => d.clicks));
+  return {
+    marks: [
+      areaY(input.data, {
+        x: "day",
+        y: "clicks",
+        key: "day",
+        fill: "var(--chart)",
+        fillOpacity: 0.14,
+      }),
+      lineY(input.data, {
+        x: "day",
+        y: "clicks",
+        key: "day",
+        stroke: "var(--chart)",
+        strokeWidth: 2,
+      }),
+    ],
+    x: {
+      scale: thinnedPointScale(input.data.map((d) => d.day)),
+      grid: false,
+      format: input.tickFormat,
+    },
+    y: {
+      scale: scaleLinear().domain([0, max]).nice(),
+      grid: true,
+    },
+    theme: { foreground: "var(--text)", muted: "var(--muted)", grid: "var(--border)" },
+  };
+});
+
+type AreaChartPoint = ChartPoint<SeriesPoint, string, number>;
 
 /** Vertical hover line + marker dot over the hovered point, if any. */
-function ChartCrosshair({ point, innerH }: { point: AreaChartPoint | null; innerH: number }) {
-  if (!point) return null;
+function ChartCrosshair({
+  point,
+  scene,
+}: {
+  point: AreaChartPoint;
+  scene: { width: number; height: number; chartTop: number; chartHeight: number };
+}) {
+  const leftPct = (point.x / scene.width) * 100;
   return (
-    <g>
-      <line
-        x1={point.x}
-        x2={point.x}
-        y1={PAD.top}
-        y2={PAD.top + innerH}
-        stroke="var(--muted)"
-        strokeWidth="1"
-        strokeDasharray="3 3"
+    <>
+      <div
+        className="pointer-events-none absolute w-px bg-border"
+        style={{
+          left: `${leftPct}%`,
+          top: `${(scene.chartTop / scene.height) * 100}%`,
+          height: `${(scene.chartHeight / scene.height) * 100}%`,
+        }}
       />
       {/* 2px surface ring so the marker separates from the line */}
-      <circle
-        cx={point.x}
-        cy={point.y}
-        r="4"
-        fill="var(--chart)"
-        stroke="var(--surface)"
-        strokeWidth="2"
+      <div
+        className="pointer-events-none absolute size-2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-chart"
+        style={{
+          left: `${leftPct}%`,
+          top: `${(point.y / scene.height) * 100}%`,
+          border: "2px solid var(--surface)",
+        }}
       />
-    </g>
+    </>
   );
 }
 
-function ChartTooltip({ point }: { point: AreaChartPoint | null }) {
-  if (!point) return null;
+/** Tracks the raw cursor position, not the snapped data point, so it reads
+ * as gliding next to the mouse instead of hopping between points. */
+function ChartTooltip({
+  point,
+  mouse,
+}: {
+  point: AreaChartPoint;
+  mouse: { leftPct: number; topPct: number };
+}) {
+  const flip = mouse.leftPct > 70;
   return (
     <div
-      className="pointer-events-none absolute -top-1 rounded-md border border-border bg-surface-2 px-2.5 py-1.5 text-xs shadow-lg"
+      className="pointer-events-none absolute rounded-md border border-border bg-surface-2 px-2.5 py-1.5 text-xs whitespace-nowrap shadow-lg transition-[left,top] duration-75 ease-out"
       style={{
-        left: `${(point.x / WIDTH) * 100}%`,
-        transform: point.x > WIDTH * 0.7 ? "translateX(-105%)" : "translateX(8px)",
+        left: `${mouse.leftPct}%`,
+        top: `${mouse.topPct}%`,
+        transform: `translate(${flip ? "-105%" : "16px"}, -50%)`,
       }}
     >
-      <span className="text-muted">{point.day}</span>{" "}
-      <span className="tnum font-bold">{point.clicks}</span>
+      <span className="text-muted">{point.datum.day}</span>{" "}
+      <span className="tnum font-bold">{point.datum.clicks}</span>
     </div>
   );
 }
+
+const defaultTickFormat = (day: string) => day.slice(5);
 
 /**
  * Single-series area chart (clicks over time). One hue (--chart), recessive
@@ -148,50 +140,65 @@ function ChartTooltip({ point }: { point: AreaChartPoint | null }) {
 export function AreaChart({
   data,
   height = 180,
-  tickFormat = (day) => day.slice(5),
+  tickFormat = defaultTickFormat,
 }: {
   data: SeriesPoint[];
   height?: number;
   tickFormat?: (day: string) => string;
 }) {
-  const ref = useRef<SVGSVGElement>(null);
-  const [hover, setHover] = useState<number | null>(null);
-  const innerW = WIDTH - PAD.left - PAD.right;
-  const innerH = height - PAD.top - PAD.bottom;
-
-  const { max, points, path, area, ticks } = useMemo(
-    () => areaChartGeometry(data, innerW, innerH),
-    [data, innerH, innerW],
-  );
+  const [focus, setFocus] = useState<AreaChartPoint | null>(null);
+  const [mouse, setMouse] = useState({ leftPct: 0, topPct: 0 });
+  const [scene, setScene] = useState<{
+    width: number;
+    height: number;
+    chartTop: number;
+    chartHeight: number;
+  } | null>(null);
+  // Stable identity across hover-driven re-renders: a fresh object every
+  // render reads as changed input to the chart runtime and re-triggers it.
+  const input = useMemo(() => ({ data, tickFormat }), [data, tickFormat]);
 
   if (!data.length) return null;
 
-  const onMove = (e: React.MouseEvent) => {
-    const rect = ref.current!.getBoundingClientRect();
-    const px = ((e.clientX - rect.left) / rect.width) * WIDTH;
-    setHover(closestPointIndex(points, px));
+  const onMouseMove = (e: React.MouseEvent) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    setMouse({
+      leftPct: (100 * (e.clientX - rect.left)) / rect.width,
+      topPct: (100 * (e.clientY - rect.top)) / rect.height,
+    });
   };
 
-  const h = hover !== null ? points[hover] : null;
-
   return (
-    <div className="relative">
-      <svg
-        ref={ref}
-        viewBox={`0 0 ${WIDTH} ${height}`}
-        className="block w-full"
-        onMouseMove={onMove}
-        onMouseLeave={() => setHover(null)}
-        role="img"
-        aria-label="Clicks per day"
-      >
-        <ChartGridLines innerH={innerH} max={max} />
-        <ChartXTicks ticks={ticks} height={height} tickFormat={tickFormat} />
-        <path d={area} fill="var(--chart)" opacity="0.14" />
-        <path d={path} fill="none" stroke="var(--chart)" strokeWidth="2" />
-        <ChartCrosshair point={h} innerH={innerH} />
-      </svg>
-      <ChartTooltip point={h} />
+    <div className="relative" onMouseMove={onMouseMove}>
+      <Chart
+        definition={areaChartDefinition}
+        input={input}
+        height={height}
+        ariaLabel="Clicks per day"
+        // Nearest-x, unbounded distance: the slice shows anywhere over the
+        // chart, not only within a few px of the line itself.
+        focus={focusNearestX}
+        maxFocusDistance={Infinity}
+        onFocusChange={setFocus}
+        onRender={({ scene: s }) =>
+          setScene((prev) =>
+            prev &&
+            prev.width === s.width &&
+            prev.height === s.height &&
+            prev.chartTop === s.chart.y &&
+            prev.chartHeight === s.chart.height
+              ? prev
+              : {
+                  width: s.width,
+                  height: s.height,
+                  chartTop: s.chart.y,
+                  chartHeight: s.chart.height,
+                },
+          )
+        }
+      />
+      {focus && scene && <ChartCrosshair point={focus} scene={scene} />}
+      {focus && <ChartTooltip point={focus} mouse={mouse} />}
     </div>
   );
 }
