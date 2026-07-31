@@ -9,18 +9,28 @@ import {
   type NavigateFunction,
 } from "react-router";
 import { useQueryClient, type QueryClient } from "@tanstack/react-query";
+import { Check } from "lucide-react";
 import { AuthCard, PasswordMeter } from "../components/auth-form";
 import { authClient } from "../lib/auth-client";
 import { friendlyAuthError } from "../lib/auth-errors";
 import { useShake } from "../lib/use-shake";
 import { useCurrentUser } from "../lib/hooks";
 import { firstFormError } from "../lib/form-errors";
+import { cn } from "../ui/cn";
 import { Button } from "../ui/button";
 import { Field, Input } from "../ui/field";
 import { OtpInput } from "../ui/otp";
 import { BusyContent } from "../ui/spinner";
 import { useToast } from "../ui/toast";
 import { loginSchema, signupSchema, forgotSchema, otpSchema } from "../lib/schemas";
+import type { CurrentUser } from "@/shared/types";
+
+/** Admin routes 404 in-app for non-admins, so a stale `next` pointed at
+ * `/admin` (e.g. someone bookmarked it while logged out) shouldn't strand a
+ * regular user there right after they sign in. */
+function sanitizeNext(next: string, isAdmin: boolean): string {
+  return next.startsWith("/admin") && !isAdmin ? "/dashboard" : next;
+}
 
 type View = "form" | "forgot" | "forgot-sent" | "verify-otp";
 
@@ -84,6 +94,8 @@ function ForgotView({
 function VerifyOtpView({
   email,
   busy,
+  verifyPhase,
+  shake,
   resent,
   onSubmit,
   onComplete,
@@ -92,25 +104,30 @@ function VerifyOtpView({
 }: {
   email: string;
   busy: boolean;
+  verifyPhase: "idle" | "success" | "leaving";
+  shake: ReturnType<typeof useShake>;
   resent: boolean;
-  onSubmit: (code: string) => void;
-  onComplete: (code: string) => void;
+  onSubmit: (code: string, onInvalid?: () => void) => Promise<boolean>;
+  onComplete: (code: string, onInvalid?: () => void) => Promise<boolean>;
   onResend: () => void;
   onBack: () => void;
 }) {
   const toast = useToast();
-  const { control, handleSubmit } = useForm<OtpForm>({
+  const { control, handleSubmit, resetField } = useForm<OtpForm>({
     resolver: valibotResolver(otpSchema),
     defaultValues: { otp: "" },
   });
+  const clearOtp = () => resetField("otp");
 
   const onFormSubmit = handleSubmit(
-    (data) => onSubmit(data.otp),
+    (data) => onSubmit(data.otp, clearOtp),
     (errors) => toast(firstFormError(errors, "Enter a 6-digit code"), "error"),
   );
 
+  const verified = verifyPhase !== "idle";
+
   return (
-    <AuthCard>
+    <AuthCard className={verifyPhase === "leaving" ? "auth-card-leaving" : undefined}>
       <form
         onSubmit={onFormSubmit}
         className="flex flex-col gap-4 rounded-xl border border-border bg-surface p-6"
@@ -130,7 +147,7 @@ function VerifyOtpView({
                 onChange={field.onChange}
                 onComplete={(v) => {
                   field.onChange(v);
-                  onComplete(v);
+                  onComplete(v, clearOtp);
                 }}
                 disabled={busy}
                 autoFocus
@@ -138,8 +155,21 @@ function VerifyOtpView({
             )}
           />
         </Field>
-        <Button type="submit" variant="primary" disabled={busy}>
-          <BusyContent busy={busy}>Verify & continue</BusyContent>
+        <Button
+          type="submit"
+          variant="primary"
+          disabled={busy}
+          className={cn(
+            shake.className,
+            // `disabled` keeps the button inert through the fade, but its
+            // own opacity-50 was washing the checkmark's green out.
+            verified && "!bg-accent-2 disabled:opacity-100 saturate-150",
+          )}
+          onAnimationEnd={shake.end}
+        >
+          <BusyContent busy={busy} icon={verified ? <Check className="h-4 w-4" /> : undefined}>
+            Verify & continue
+          </BusyContent>
         </Button>
         <div className="flex items-center justify-between text-xs text-muted">
           {resent ? (
@@ -315,7 +345,8 @@ async function trySignIn(email: string, password: string, deps: SubmitDeps) {
   const { error: signInError } = await authClient.signIn.email({ email, password });
   if (!signInError) {
     await deps.qc.refetchQueries({ queryKey: ["user"] });
-    deps.navigate(deps.next, { replace: true });
+    const isAdmin = deps.qc.getQueryData<CurrentUser | null>(["user"])?.user.isAdmin ?? false;
+    deps.navigate(sanitizeNext(deps.next, isAdmin), { replace: true });
     return;
   }
   if (signInError.code === "EMAIL_NOT_VERIFIED") {
@@ -387,6 +418,7 @@ function useAuthFlow(mode: "login" | "signup") {
   const [authEmail, setAuthEmail] = useState(() => readPending()?.email ?? "");
   const authPasswordRef = useRef("");
   const [busy, setBusy] = useState(false);
+  const [verifyPhase, setVerifyPhase] = useState<"idle" | "success" | "leaving">("idle");
   const shake = useShake();
 
   const [prevMode, setPrevMode] = useState(mode);
@@ -413,10 +445,15 @@ function useAuthFlow(mode: "login" | "signup") {
 
   const { data: user } = useCurrentUser();
   useEffect(() => {
-    if (!user) return;
+    // Only a fallback for landing on /login or /signup while already
+    // signed in. During the OTP success/leaving sequence, runVerify's own
+    // navigate (after its checkmark + fade delay) owns the redirect —
+    // this would otherwise race ahead of it the moment the `user` query
+    // refetch resolves, skipping the transition entirely.
+    if (!user || verifyPhase !== "idle") return;
     clearPending();
-    navigate(next, { replace: true });
-  }, [user, navigate, next]);
+    navigate(sanitizeNext(next, user.user.isAdmin), { replace: true });
+  }, [user, navigate, next, verifyPhase]);
 
   const goVerify = async (email: string) => {
     const { error } = await authClient.emailOtp.sendVerificationOtp({
@@ -458,8 +495,8 @@ function useAuthFlow(mode: "login" | "signup") {
     }
   };
 
-  const runVerify = async (code: string) => {
-    if (busy) return;
+  const runVerify = async (code: string, onInvalid?: () => void) => {
+    if (busy) return true;
     setBusy(true);
     try {
       const { error: verifyError } = await authClient.emailOtp.verifyEmail({
@@ -467,8 +504,12 @@ function useAuthFlow(mode: "login" | "signup") {
         otp: code.trim(),
       });
       if (verifyError) {
-        toast(verifyError.message ?? "That code is invalid or expired", "error");
-        return;
+        failSubmit(verifyError.message ?? "That code is invalid or expired");
+        // Clear before `finally` flips `busy` back to false, so OtpInput's
+        // re-enable effect focuses an already-empty field instead of the
+        // last-filled digit.
+        onInvalid?.();
+        return false;
       }
       const established = await establishSessionAfterVerify({
         authEmail,
@@ -477,10 +518,19 @@ function useAuthFlow(mode: "login" | "signup") {
         navigate,
         toast,
       });
-      if (!established) return;
+      if (!established) return false;
+      // Show a green checkmark on the button for a beat so the code getting
+      // accepted actually registers, then fade the whole card out before
+      // leaving instead of cutting straight to the dashboard.
+      setVerifyPhase("success");
+      await new Promise((resolve) => setTimeout(resolve, 900));
       clearPending();
       await qc.refetchQueries({ queryKey: ["user"] });
-      navigate(next, { replace: true });
+      const isAdmin = qc.getQueryData<CurrentUser | null>(["user"])?.user.isAdmin ?? false;
+      setVerifyPhase("leaving");
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      navigate(sanitizeNext(next, isAdmin), { replace: true });
+      return true;
     } finally {
       setBusy(false);
     }
@@ -527,6 +577,7 @@ function useAuthFlow(mode: "login" | "signup") {
     authEmail,
     setAuthEmail,
     busy,
+    verifyPhase,
     shake,
     forgotBusy,
     resent,
@@ -547,6 +598,8 @@ export function AuthPage({ mode }: { mode: "login" | "signup" }) {
       <VerifyOtpView
         email={flow.authEmail}
         busy={flow.busy}
+        verifyPhase={flow.verifyPhase}
+        shake={flow.shake}
         resent={flow.resent}
         onSubmit={flow.runVerify}
         onComplete={flow.runVerify}

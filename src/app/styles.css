@@ -330,11 +330,23 @@ body {
     transform 200ms 200ms;
 }
 
+/* Auth card fading out on OTP success, right before the app takes over.
+   The global `html *` rule above only transitions color/background/border,
+   so opacity/transform need their own explicit transition here too. */
+.auth-card-leaving {
+  opacity: 0;
+  transform: scale(0.96);
+  transition:
+    opacity 280ms ease,
+    transform 280ms ease;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .busy-label,
   .busy-label[data-busy],
   .busy-spinner,
-  .busy-spinner[data-busy] {
+  .busy-spinner[data-busy],
+  .auth-card-leaving {
     transition: opacity 100ms !important;
     filter: none !important;
     transform: none !important;

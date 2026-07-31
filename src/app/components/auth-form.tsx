@@ -5,10 +5,10 @@ import { Tooltip } from "../ui/tooltip";
 import { passwordScore, passwordTips } from "../lib/password-strength";
 
 /** Centered card with the wordmark on top; wraps every auth screen. */
-export function AuthCard({ children }: { children: ReactNode }) {
+export function AuthCard({ children, className }: { children: ReactNode; className?: string }) {
   return (
     <div className="grid min-h-dvh place-items-center px-4">
-      <div className="w-full max-w-sm">
+      <div className={cn("w-full max-w-sm", className)}>
         <p className="mb-6 text-center text-xl font-bold tracking-widest">
           <Link to="/" className="hover:text-accent">
             rdyrct
