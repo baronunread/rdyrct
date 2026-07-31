@@ -7,12 +7,20 @@ import {
   logClickDeadLetterBatch,
   type ClickMessage,
 } from "../../src/worker/clicks";
-import { applyTestMigrations, batchOf, overrideEnv, sampleLink, seedLink } from "./support";
+import {
+  applyTestMigrations,
+  batchOf,
+  overrideEnv,
+  sampleAddress,
+  sampleLink,
+  seedLink,
+} from "./support";
 
 function clickMessage(overrides: Partial<ClickMessage> = {}): ClickMessage {
   return {
     dedupeId: crypto.randomUUID(),
     linkId: sampleLink.id,
+    addressId: sampleAddress.id,
     orgId: sampleLink.orgId,
     ts: 0,
     country: "US",
@@ -48,6 +56,18 @@ describe("click queue: consumer", () => {
     expect(await clickCount()).toBe(3);
     const result = await getQueueResult(batch, ctx);
     expect(result.ackAll).toBe(true);
+  });
+
+  it("attributes each inserted click to its address, not just its link (#38)", async () => {
+    await seedLink();
+    const { batch } = batchOf("rdyrct-clicks", [clickMessage()]);
+
+    await consumeClickBatch(env as Env, batch);
+
+    const row = await env.DB.prepare("select address_id from clicks limit 1").first<{
+      address_id: string | null;
+    }>();
+    expect(row?.address_id).toBe(sampleAddress.id);
   });
 
   it("persists a full-size batch that would exceed D1's bound-parameter limit as one insert", async () => {

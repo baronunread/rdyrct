@@ -19,6 +19,7 @@ import { LinkEditor } from "../components/link-editor";
 import { resolveQrLook, type OrgQr } from "../lib/org-qr";
 import { LinksTable } from "../components/links-table";
 import { ConfirmDialog } from "../ui/confirm-dialog";
+import { SameDestinationDialog } from "../components/same-destination-dialog";
 import { withErrorToast } from "../lib/mutation-toast";
 
 const PAGE_SIZE = 25;
@@ -93,6 +94,7 @@ function buildOnSave({
   toast,
   closeEditor,
   onSlugTaken,
+  onSameDestinationMatch,
 }: {
   editing: LinkDTO | null;
   create: ReturnType<typeof useLinkMutations>["create"];
@@ -100,6 +102,7 @@ function buildOnSave({
   toast: ReturnType<typeof useToast>;
   closeEditor: () => void;
   onSlugTaken: () => void;
+  onSameDestinationMatch: (input: LinkInput, matchedLink: LinkDTO) => void;
 }) {
   return (data: LinkInput) => {
     const done = {
@@ -109,6 +112,11 @@ function buildOnSave({
       },
       onError: (e: Error) => {
         if (e instanceof ApiError && e.code === "slug_taken") onSlugTaken();
+        else if (e instanceof ApiError && e.code === "same_destination_match") {
+          const { matchedLink } = e.data as { matchedLink: LinkDTO };
+          onSameDestinationMatch(data, matchedLink);
+          return;
+        }
         toast(e.message, "error");
       },
     };
@@ -133,6 +141,10 @@ export function LinksPage() {
   const [qrLink, setQrLink] = useState<LinkDTO | null>(null);
   const [deleting, setDeleting] = useState<LinkDTO | null>(null);
   const [shakeKey, setShakeKey] = useState(0);
+  const [sameDestination, setSameDestination] = useState<{
+    input: LinkInput;
+    matchedLink: LinkDTO;
+  } | null>(null);
 
   const {
     search,
@@ -169,6 +181,7 @@ export function LinksPage() {
     toast,
     closeEditor: () => setEditorOpen(false),
     onSlugTaken: () => setShakeKey((k) => k + 1),
+    onSameDestinationMatch: (input, matchedLink) => setSameDestination({ input, matchedLink }),
   });
 
   return (
@@ -239,6 +252,42 @@ export function LinksPage() {
         onClose={() => setDeleting(null)}
         remove={remove}
         toast={toast}
+      />
+
+      <SameDestinationDialog
+        matchedLink={sameDestination?.matchedLink ?? null}
+        pending={create.isPending}
+        onClose={() => setSameDestination(null)}
+        onAddToExisting={() => {
+          if (!sameDestination) return;
+          const { input, matchedLink } = sameDestination;
+          create.mutate(
+            { ...input, mergeIntoLinkId: matchedLink.id },
+            {
+              onSuccess: () => {
+                setSameDestination(null);
+                setEditorOpen(false);
+                toast("Address added to the existing link");
+              },
+              onError: (e) => toast(e.message, "error"),
+            },
+          );
+        }}
+        onCreateSeparate={() => {
+          if (!sameDestination) return;
+          const { input } = sameDestination;
+          create.mutate(
+            { ...input, forceSeparateLink: true },
+            {
+              onSuccess: () => {
+                setSameDestination(null);
+                setEditorOpen(false);
+                toast("Link created");
+              },
+              onError: (e) => toast(e.message, "error"),
+            },
+          );
+        }}
       />
     </div>
   );

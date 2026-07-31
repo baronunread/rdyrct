@@ -151,6 +151,36 @@ export interface LinkDTO extends QrOverrides {
   createdBy: string | null;
 }
 
+/** One address (primary or alias) a link answers to. See #38. */
+export interface AddressDTO {
+  id: string;
+  domainId: string | null;
+  /** hostname of the custom domain, null = shared default domain */
+  domain: string | null;
+  slug: string;
+  kind: "primary" | "temp_alias" | "permanent_alias";
+  creationReason: "created" | "renamed" | "promoted" | "same_destination_merge" | "";
+  /** Epoch ms; null = never expires. Set only on a temp_alias. */
+  expiresAt: number | null;
+  /** Epoch ms once removed or swept; null while still active. */
+  retiredAt: number | null;
+  createdAt: number;
+  /** Clicks in the last 7 days; only meaningful for a non-primary address. */
+  recentClicks: number;
+  lastUse: number | null;
+  referrers: TopEntry[];
+}
+
+/** Returned as a 409 when a new address's effective destination already
+ * matches another link in the org (see #38): the caller must explicitly pick
+ * "add to that link" (mergeIntoLinkId) or "create separate link anyway"
+ * (forceSeparateLink) and resubmit. */
+export interface SameDestinationMatch {
+  code: "same_destination_match";
+  matchedLinkId: string;
+  matchedLink: LinkDTO;
+}
+
 export type LinkInput = {
   domainId?: string | null;
   slug?: string;
@@ -161,6 +191,11 @@ export type LinkInput = {
   utmCampaign?: string;
   utmTerm?: string;
   utmContent?: string;
+  /** Create only: skip the same-destination match and always start a new link. */
+  forceSeparateLink?: boolean;
+  /** Create only: add this address to an existing link (from a same-destination
+   * match) instead of creating a new one. */
+  mergeIntoLinkId?: string;
 } & Partial<QrOverrides>;
 
 export interface SeriesPoint {
@@ -230,6 +265,7 @@ export interface RecentClick {
 }
 
 export interface LinkStats {
+  id: string;
   totalClicks: number;
   clicks7d: number;
   rangeDays: number;

@@ -98,14 +98,31 @@ export const sampleLink = {
   utmContent: "",
 };
 
-// Seeds one org ("org-1") and one link ("link-1", slug "sale"), the fixture
-// shared by tests that need a real link row to satisfy a foreign key
-// (clicks, KV publish) without caring about its other fields.
+// The primary address row every link carries alongside it (see #38): a slug
+// only resolves via link_addresses now, so seedLink() must create this row
+// too, not just the links row.
+export const sampleAddress = {
+  id: "addr-1",
+  linkId: "link-1",
+  orgId: "org-1",
+  domainId: null as string | null,
+  slug: "sale",
+  kind: "primary" as const,
+  creationReason: "" as const,
+  expiresAt: null as number | null,
+  retiredAt: null as number | null,
+};
+
+// Seeds one org ("org-1"), one link ("link-1", slug "sale"), and that link's
+// primary address row ("addr-1") — the fixture shared by tests that need a
+// real link row to satisfy a foreign key (clicks, KV publish) without caring
+// about its other fields.
 export async function seedLink(destination = "https://example.com") {
   const db = drizzle(env.DB, { schema });
   await db.batch([
     db.insert(schema.orgs).values({ id: "org-1", name: "Test", createdAt: 0 }),
     db.insert(schema.links).values({ ...sampleLink, destination, createdAt: 0 }),
+    db.insert(schema.linkAddresses).values({ ...sampleAddress, createdAt: 0 }),
   ]);
   return db;
 }

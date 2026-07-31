@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import * as schema from "./db/schema";
 import type { DB } from "./env";
 import { PLAN_LIMITS, type OrgPlan, type PlanLimits } from "@/shared/types";
@@ -19,6 +19,27 @@ export async function orgPlan(
     .where(and(eq(schema.orgMembers.orgId, orgId), eq(schema.orgMembers.role, "owner")));
   const plan = rows[0]?.plan ?? "free";
   return { plan, limits: PLAN_LIMITS[plan] };
+}
+
+/**
+ * How many addresses in this org count toward its `links` plan limit: every
+ * link's primary address plus every alias a user chose to keep forever. A
+ * rename's automatic 48h temp_alias never counts (see #38) — it's excluded
+ * by `kind`, not by any caller-side special case, so every gate (new link,
+ * same-destination merge, "keep forever") can share this one count.
+ */
+export async function countActiveAddresses(db: DB, orgId: string): Promise<number> {
+  const rows = await db
+    .select({ n: sql<number>`count(*)` })
+    .from(schema.linkAddresses)
+    .where(
+      and(
+        eq(schema.linkAddresses.orgId, orgId),
+        isNull(schema.linkAddresses.retiredAt),
+        inArray(schema.linkAddresses.kind, ["primary", "permanent_alias"]),
+      ),
+    );
+  return rows[0]?.n ?? 0;
 }
 
 /** A user's own subscription: gates multi-org creation and the billing tab. */

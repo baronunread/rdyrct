@@ -5,6 +5,7 @@ import { writeAuthHint } from "./auth-hint";
 import type {
   CurrentUser,
   AppConfig,
+  AddressDTO,
   LinkDTO,
   LinkInput,
   MemberDTO,
@@ -119,6 +120,45 @@ export const useLinkStats = (orgId: string, slug: string | null, domain?: string
     },
     enabled: !!orgId && !!slug,
   });
+
+// A link's primary address plus every alias (temporary, permanent, expired).
+// See #38.
+export const useAddresses = (orgId: string, linkId: string | null) =>
+  useQuery<AddressDTO[]>({
+    queryKey: ["addresses", orgId, linkId],
+    queryFn: () => api(`/orgs/${orgId}/links/${linkId}/addresses`),
+    enabled: !!orgId && !!linkId,
+  });
+
+export function useAddressMutations(orgId: string, linkId: string) {
+  const qc = useQueryClient();
+  const invalidate = () => {
+    qc.invalidateQueries({ queryKey: ["addresses", orgId, linkId] });
+    qc.invalidateQueries({ queryKey: ["links", orgId] });
+    qc.invalidateQueries({ queryKey: ["linkStats", orgId] });
+  };
+  const keepForever = useMutation({
+    mutationFn: (addressId: string) =>
+      api(`/orgs/${orgId}/links/${linkId}/addresses/${addressId}/keep-forever`, { method: "POST" }),
+    onSuccess: invalidate,
+  });
+  const remove = useMutation({
+    mutationFn: (addressId: string) =>
+      api(`/orgs/${orgId}/links/${linkId}/addresses/${addressId}/remove`, {
+        method: "POST",
+        body: { confirm: true },
+      }),
+    onSuccess: invalidate,
+  });
+  const promote = useMutation({
+    mutationFn: (addressId: string) =>
+      api<LinkDTO>(`/orgs/${orgId}/links/${linkId}/addresses/${addressId}/promote`, {
+        method: "POST",
+      }),
+    onSuccess: invalidate,
+  });
+  return { keepForever, remove, promote };
+}
 
 // The dashboard's live pulse: a cheap indexed read (limit rows by ts desc),
 // so it polls while the page is open.

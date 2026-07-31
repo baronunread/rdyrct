@@ -14,7 +14,15 @@ import { domainRoutes } from "./routes/domains";
 import { resolveSlug, resolveDomain, type KVLink } from "./kv";
 import { RESERVED_SLUGS } from "./util";
 import { enforcePublicAuthRateLimit, enforceSignedApiRateLimit } from "./rate-limit";
-import { consumeStorageBatch, logDeadLetterBatch, type StorageMessage } from "./storage";
+import { drizzle } from "drizzle-orm/d1";
+import * as schema from "./db/schema";
+import {
+  consumeStorageBatch,
+  logDeadLetterBatch,
+  sweepExpiredAliases,
+  type StorageMessage,
+} from "./storage";
+
 import {
   enqueueClick,
   consumeClickBatch,
@@ -27,11 +35,13 @@ export { OrgDeleteWorkflow, DomainActivateWorkflow } from "./workflows";
 const app = new Hono<AppEnv>();
 
 app.onError((err, c) => {
-  // JSON errors always: the SPA's api() reads res.json().message (and an
-  // optional machine-readable code, carried via HTTPException's cause)
+  // JSON errors always: the SPA's api() reads res.json().message and spreads
+  // the rest of the body onto ApiError.data, so a route's `cause` can carry
+  // more than just a machine-readable `code` (e.g. same_destination_match's
+  // matchedLinkId/matchedLink) straight through to the caller.
   if (err instanceof HTTPException) {
-    const code = (err.cause as { code?: string } | undefined)?.code;
-    return c.json({ message: err.message, ...(code ? { code } : {}) }, err.status);
+    const cause = err.cause && typeof err.cause === "object" ? err.cause : {};
+    return c.json({ message: err.message, ...cause }, err.status);
   }
   console.error(err);
   return c.json({ message: "Internal error" }, 500);
@@ -47,6 +57,15 @@ function redirectWithClick(c: Context<AppEnv>, hit: KVLink): Response {
   return c.redirect(hit.url, 302);
 }
 
+// A temporary alias past its expiry stops resolving the instant it's asked
+// for, with no D1 read: the sweep in scheduled() retires the row and clears
+// the KV key later, but this check is what actually enforces the deadline.
+// `== null` (not `===`) on purpose: a KV value written before this field
+// existed has it `undefined`, which must mean "never expires" too.
+function isLive(hit: KVLink): boolean {
+  return hit.expiresAt == null || hit.expiresAt > Date.now();
+}
+
 // Custom domains (Cloudflare for SaaS) are redirect-only: no API, no SPA.
 // Hosts we don't know (e.g. *.workers.dev previews) fall through to the app.
 app.use("*", async (c, next) => {
@@ -59,7 +78,7 @@ app.use("*", async (c, next) => {
   const slug = path.slice(1);
   if (slug && !slug.includes("/")) {
     const hit = await resolveSlug(c.env, slug, host);
-    if (hit) return redirectWithClick(c, hit);
+    if (hit && isLive(hit)) return redirectWithClick(c, hit);
   }
   // root and misses land on the org's configured root redirect
   if (domain.rootRedirect) return c.redirect(domain.rootRedirect, 302);
@@ -128,7 +147,7 @@ app.get("/:slug", async (c, next) => {
   // slugs; they can't be created as slugs either, this is belt-and-suspenders.
   if (RESERVED_SLUGS.has(slug.toLowerCase())) return next();
   const hit = await resolveSlug(c.env, slug, null);
-  if (!hit) return next(); // fall through to the SPA (404 page)
+  if (!hit || !isLive(hit)) return next(); // fall through to the SPA (404 page)
   return redirectWithClick(c, hit);
 });
 
@@ -169,5 +188,9 @@ export default {
     do {
       changes = (await stmt.bind(cutoff).run()).meta.changes;
     } while (changes > 0);
+
+    // Daily: retire rename aliases past their 48h deadline (see #38). The
+    // redirect path already stopped resolving them; this frees their slugs.
+    await sweepExpiredAliases(env, drizzle(env.DB, { schema }));
   },
 };
