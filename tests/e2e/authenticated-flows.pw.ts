@@ -1,24 +1,9 @@
-import { expect, test, type Page } from "@playwright/test";
-import { appUrl, explorerUrl } from "./environment";
+import { expect, test } from "@playwright/test";
+import { appUrl } from "./environment";
 import { signUpAndVerify } from "./resend";
+import { setPlan } from "./db";
 
 const password = "test-password-123";
-
-async function setPlan(page: Page, email: string) {
-  const databases = await page.request.get(`${explorerUrl}/d1/database`);
-  expect(databases.ok()).toBe(true);
-  const body = await databases.json();
-  const databaseId = body.result.find((database: { name: string }) => database.name === "DB")?.uuid;
-  expect(databaseId).toBeTruthy();
-
-  const response = await page.request.post(`${explorerUrl}/d1/database/${databaseId}/raw`, {
-    data: {
-      sql: "UPDATE user SET plan = ? WHERE email = ?",
-      params: ["hobby", email],
-    },
-  });
-  expect(response.ok()).toBe(true);
-}
 
 test("a new owner can create an organization and a scheme-less quick link", async ({ page }) => {
   const email = `playwright-${Date.now()}@gmail.com`;

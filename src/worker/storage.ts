@@ -1,4 +1,4 @@
-import { eq, isNull, and } from "drizzle-orm";
+import { eq, isNull, and, lt, inArray } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import * as schema from "./db/schema";
 import type { DB, Env } from "./env";
@@ -90,11 +90,18 @@ function parseSlugKey(key: string): { hostname: string | null; slug: string } {
 async function desiredKvValue(db: DB, key: string): Promise<string | null> {
   if (key.startsWith("slug:")) {
     const { hostname, slug } = parseSlugKey(key);
+    // Resolved through link_addresses, not links directly: a slug key names
+    // one active address (primary or alias), which always answers with its
+    // parent link's effective destination, never one of its own. An
+    // already-expired-but-not-yet-swept temp_alias still resolves here (its
+    // retiredAt is still null) — the redirect path's own expiresAt check is
+    // what actually stops it resolving; see index.ts.
     const rows = await db
       .select({
-        id: schema.links.id,
+        addressId: schema.linkAddresses.id,
+        expiresAt: schema.linkAddresses.expiresAt,
+        linkId: schema.links.id,
         orgId: schema.links.orgId,
-        slug: schema.links.slug,
         destination: schema.links.destination,
         utmSource: schema.links.utmSource,
         utmMedium: schema.links.utmMedium,
@@ -103,21 +110,27 @@ async function desiredKvValue(db: DB, key: string): Promise<string | null> {
         utmContent: schema.links.utmContent,
         hostname: schema.domains.hostname,
       })
-      .from(schema.links)
-      .leftJoin(schema.domains, eq(schema.links.domainId, schema.domains.id))
+      .from(schema.linkAddresses)
+      .innerJoin(schema.links, eq(schema.linkAddresses.linkId, schema.links.id))
+      .leftJoin(schema.domains, eq(schema.linkAddresses.domainId, schema.domains.id))
       .where(
         and(
-          eq(schema.links.slug, slug),
-          hostname === null ? isNull(schema.links.domainId) : eq(schema.domains.hostname, hostname),
+          eq(schema.linkAddresses.slug, slug),
+          isNull(schema.linkAddresses.retiredAt),
+          hostname === null
+            ? isNull(schema.linkAddresses.domainId)
+            : eq(schema.domains.hostname, hostname),
         ),
       )
       .limit(1);
-    const link = rows[0];
-    if (!link) return null;
+    const address = rows[0];
+    if (!address) return null;
     return JSON.stringify({
-      linkId: link.id,
-      orgId: link.orgId,
-      url: buildDestination(link.destination, link),
+      linkId: address.linkId,
+      addressId: address.addressId,
+      orgId: address.orgId,
+      url: buildDestination(address.destination, address),
+      expiresAt: address.expiresAt,
     });
   }
 
@@ -255,19 +268,21 @@ export async function orgDeleteGather(
   db: DB,
   orgId: string,
 ): Promise<{ cfHostnameIds: string[]; kvKeys: string[] }> {
-  const [domains, links] = await Promise.all([
+  const [domains, addresses] = await Promise.all([
     db
       .select({ hostname: schema.domains.hostname, cfHostnameId: schema.domains.cfHostnameId })
       .from(schema.domains)
       .where(eq(schema.domains.orgId, orgId)),
+    // Every active address (primary and alias), not just links: an alias
+    // has its own KV key that a links-only gather would miss.
     db
-      .select({ slug: schema.links.slug, hostname: schema.domains.hostname })
-      .from(schema.links)
-      .leftJoin(schema.domains, eq(schema.links.domainId, schema.domains.id))
-      .where(eq(schema.links.orgId, orgId)),
+      .select({ slug: schema.linkAddresses.slug, hostname: schema.domains.hostname })
+      .from(schema.linkAddresses)
+      .leftJoin(schema.domains, eq(schema.linkAddresses.domainId, schema.domains.id))
+      .where(and(eq(schema.linkAddresses.orgId, orgId), isNull(schema.linkAddresses.retiredAt))),
   ]);
   const kvKeys = [
-    ...links.map((l) => slugKey(l.hostname, l.slug)),
+    ...addresses.map((a) => slugKey(a.hostname, a.slug)),
     ...domains.map((d) => domainKey(d.hostname)),
   ];
   const cfHostnameIds = domains.flatMap((d) => (d.cfHostnameId ? [d.cfHostnameId] : []));
@@ -277,4 +292,54 @@ export async function orgDeleteGather(
 /** Delete a set of KV keys. Idempotent: deleting a missing key is a no-op. */
 export async function deleteKvKeys(env: Env, keys: string[]): Promise<void> {
   await Promise.all(keys.map((key) => env.LINKS.delete(key)));
+}
+
+const ALIAS_SWEEP_BATCH_SIZE = 200;
+
+/**
+ * Retire every rename alias past its 48-hour deadline, in bounded batches.
+ * The redirect path (index.ts) already stops resolving an expired alias the
+ * instant it's asked for, using only the expiry baked into its KV value: this
+ * sweep just catches D1 and KV up afterward, so the slug frees for reuse and
+ * the row stops looking active. Run daily (see scheduled() in index.ts); the
+ * up-to-a-day gap between "stopped resolving" and "freed for reuse" is
+ * accepted slop, not a correctness issue.
+ */
+export async function sweepExpiredAliases(env: Env, db: DB): Promise<void> {
+  for (;;) {
+    const expired = await db
+      .select({
+        id: schema.linkAddresses.id,
+        slug: schema.linkAddresses.slug,
+        hostname: schema.domains.hostname,
+      })
+      .from(schema.linkAddresses)
+      .leftJoin(schema.domains, eq(schema.linkAddresses.domainId, schema.domains.id))
+      .where(
+        and(
+          eq(schema.linkAddresses.kind, "temp_alias"),
+          isNull(schema.linkAddresses.retiredAt),
+          lt(schema.linkAddresses.expiresAt, Date.now()),
+        ),
+      )
+      .limit(ALIAS_SWEEP_BATCH_SIZE);
+    if (!expired.length) return;
+
+    await db
+      .update(schema.linkAddresses)
+      .set({ retiredAt: Date.now() })
+      .where(
+        inArray(
+          schema.linkAddresses.id,
+          expired.map((a) => a.id),
+        ),
+      );
+    // Re-sync each freed key: desiredKvValue now finds no active row for it
+    // (the update above just retired it), so this converges to a delete.
+    await enqueueStorage(
+      env,
+      expired.map((a) => syncLinkMsg(a.slug, a.hostname)),
+    );
+    if (expired.length < ALIAS_SWEEP_BATCH_SIZE) return;
+  }
 }

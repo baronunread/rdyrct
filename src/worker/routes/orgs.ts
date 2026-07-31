@@ -793,7 +793,14 @@ orgRoutes.get("/:orgId/links/stats/:slug", requireOrgRole("member"), async (c) =
   const days = limits.analyticsDays;
   const { since, prevSince, since7, prev7Since } = computeWindows(days);
 
-  const conditions = [eq(schema.links.slug, slug), eq(schema.links.orgId, orgId)];
+  // Matched through link_addresses (any active address, not just the link's
+  // current primary), so a bookmarked or QR'd URL for an address that has
+  // since become a rename alias still lands on the right link (see #38).
+  const conditions = [
+    eq(schema.linkAddresses.slug, slug),
+    eq(schema.linkAddresses.orgId, orgId),
+    isNull(schema.linkAddresses.retiredAt),
+  ];
   if (domain) conditions.push(eq(schema.domains.hostname, domain));
 
   const [link] = await db
@@ -806,10 +813,11 @@ orgRoutes.get("/:orgId/links/stats/:slug", requireOrgRole("member"), async (c) =
       createdBy: schema.links.createdBy,
       domain: schema.domains.hostname,
     })
-    .from(schema.links)
-    .leftJoin(schema.domains, eq(schema.links.domainId, schema.domains.id))
+    .from(schema.linkAddresses)
+    .innerJoin(schema.links, eq(schema.linkAddresses.linkId, schema.links.id))
+    .leftJoin(schema.domains, eq(schema.linkAddresses.domainId, schema.domains.id))
     .where(and(...conditions))
-    .orderBy(sql`case when ${schema.links.domainId} is null then 0 else 1 end`)
+    .orderBy(sql`case when ${schema.linkAddresses.domainId} is null then 0 else 1 end`)
     .limit(1);
 
   if (!link) throw new HTTPException(404, { message: "Link not found" });
@@ -885,6 +893,7 @@ orgRoutes.get("/:orgId/links/stats/:slug", requireOrgRole("member"), async (c) =
   );
 
   return c.json({
+    id: link.id,
     totalClicks,
     clicks7d: clicks7dVal,
     rangeDays: days,

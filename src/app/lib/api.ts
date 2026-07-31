@@ -2,10 +2,14 @@ export class ApiError extends Error {
   status: number;
   /** machine-readable code from the error body, e.g. "slug_taken" */
   code?: string;
-  constructor(status: number, message: string, code?: string) {
+  /** The full parsed error body, for a code that carries extra fields beyond
+   * message/code (e.g. "same_destination_match"'s matchedLinkId/matchedLink). */
+  data?: unknown;
+  constructor(status: number, message: string, code?: string, data?: unknown) {
     super(message);
     this.status = status;
     this.code = code;
+    this.data = data;
   }
 }
 
@@ -13,14 +17,16 @@ async function throwIfNotOk(res: Response): Promise<void> {
   if (res.ok) return;
   let message = res.statusText;
   let code: string | undefined;
+  let data: unknown;
   try {
-    const data = (await res.json()) as { message?: string; code?: string };
-    if (data.message) message = data.message;
-    code = data.code;
+    data = (await res.json()) as { message?: string; code?: string };
+    const body = data as { message?: string; code?: string };
+    if (body.message) message = body.message;
+    code = body.code;
   } catch {
     /* non-JSON error body */
   }
-  throw new ApiError(res.status, message, code);
+  throw new ApiError(res.status, message, code, data);
 }
 
 export async function api<T>(
