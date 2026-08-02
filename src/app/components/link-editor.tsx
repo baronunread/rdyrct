@@ -1,4 +1,4 @@
-import { useMemo, useEffect, type ChangeEvent } from "react";
+import { useMemo, useEffect, useRef, type ChangeEvent } from "react";
 import { useForm, type SubmitErrorHandler } from "react-hook-form";
 import { valibotResolver } from "@hookform/resolvers/valibot";
 import { Link as RouterLink } from "react-router";
@@ -18,6 +18,7 @@ import { QrColorField } from "./qr-color-field";
 import { linkInputSchema } from "../lib/schemas";
 import { qrFallbacks, resolveQrLook, type OrgQr } from "../lib/org-qr";
 import { firstFormError } from "../lib/form-errors";
+import { useShake } from "../lib/use-shake";
 
 const defaultForm: LinkInput = {
   destination: "",
@@ -267,22 +268,39 @@ function SlugField({
   value,
   onChange,
   slugLocked,
+  domainsAllowed,
+  hasDomains,
 }: {
   value: string;
   onChange: (e: ChangeEvent<HTMLInputElement>) => void;
   slugLocked: boolean;
+  domainsAllowed: boolean;
+  /** A domain is already connected: picking it (above) unlocks the slug, so
+   * the hint just names that instead of pointing at /domains or /billing. */
+  hasDomains: boolean;
 }) {
   return (
     <Field
       label="Slug"
       hint={
         slugLocked ? (
-          <>
-            <RouterLink to="/billing" className="text-accent hover:underline">
-              Upgrade
-            </RouterLink>{" "}
-            for custom slugs.
-          </>
+          hasDomains ? (
+            "Use a custom domain for custom slugs."
+          ) : domainsAllowed ? (
+            <>
+              <RouterLink to="/domains" className="text-accent hover:underline">
+                Connect a domain
+              </RouterLink>{" "}
+              for custom slugs.
+            </>
+          ) : (
+            <>
+              <RouterLink to="/billing" className="text-accent hover:underline">
+                Upgrade
+              </RouterLink>{" "}
+              for custom slugs.
+            </>
+          )
         ) : (
           "Leave empty for a random one"
         )
@@ -304,12 +322,14 @@ function LinkFormFields({
   editing,
   activeDomains,
   slugLocked,
+  domainsAllowed,
 }: {
   form: LinkInput;
   setForm: (f: LinkInput) => void;
   editing: boolean;
   activeDomains: DomainDTO[];
   slugLocked: boolean;
+  domainsAllowed: boolean;
 }) {
   const set = (key: keyof LinkInput) => (e: ChangeEvent<HTMLInputElement>) =>
     setForm({ ...form, [key]: e.target.value });
@@ -328,7 +348,13 @@ function LinkFormFields({
       <DomainField form={form} setForm={setForm} editing={editing} activeDomains={activeDomains} />
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <SlugField value={form.slug ?? ""} onChange={set("slug")} slugLocked={slugLocked} />
+        <SlugField
+          value={form.slug ?? ""}
+          onChange={set("slug")}
+          slugLocked={slugLocked}
+          domainsAllowed={domainsAllowed}
+          hasDomains={activeDomains.length > 0}
+        />
         <Field label="Title">
           <Input value={form.title ?? ""} onChange={set("title")} placeholder="Spring launch" />
         </Field>
@@ -344,6 +370,7 @@ export function LinkEditor({
   busy,
   onSave,
   activeDomains,
+  domainsAllowed,
   qrEnabled,
   orgQr,
   shakeKey,
@@ -354,12 +381,16 @@ export function LinkEditor({
   busy: boolean;
   onSave: (data: LinkInput) => void;
   activeDomains: DomainDTO[];
+  /** Whether the org's plan allows a custom domain at all (regardless of
+   * whether one is connected yet): governs the shared-domain slug hint. */
+  domainsAllowed: boolean;
   qrEnabled: boolean;
   orgQr: OrgQr;
   shakeKey: number;
 }) {
   const editing = editingLink != null;
   const toast = useToast();
+  const shake = useShake();
 
   const { handleSubmit, watch, reset } = useForm<LinkInput>({
     resolver: valibotResolver(linkInputSchema),
@@ -372,10 +403,24 @@ export function LinkEditor({
     }
   }, [open, editingLink, reset]);
 
+  // shakeKey bumps on every save failure (client validation or server
+  // error): the button shakes either way, without the parent needing to
+  // know shake is button-level, not whole-dialog.
+  const lastShakeKey = useRef(shakeKey);
+  useEffect(() => {
+    if (shakeKey !== lastShakeKey.current) {
+      lastShakeKey.current = shakeKey;
+      shake.start();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [shakeKey]);
+
   const form = watch();
   const setForm = (next: LinkInput) => reset(next);
-  const onInvalid: SubmitErrorHandler<LinkInput> = (errors) =>
+  const onInvalid: SubmitErrorHandler<LinkInput> = (errors) => {
     toast(firstFormError(errors, "Check the link details"), "error");
+    shake.start();
+  };
 
   const selectedDomain = activeDomains.find((d) => d.id === form.domainId)?.hostname ?? null;
   const slugLocked = !form.domainId;
@@ -386,13 +431,7 @@ export function LinkEditor({
   );
 
   return (
-    <Dialog
-      open={open}
-      onOpenChange={onOpenChange}
-      title={editing ? "Edit link" : "New link"}
-      wide
-      shakeKey={shakeKey}
-    >
+    <Dialog open={open} onOpenChange={onOpenChange} title={editing ? "Edit link" : "New link"} wide>
       <form onSubmit={handleSubmit(onSave, onInvalid)} className="flex flex-col gap-6">
         <div className="grid gap-6 sm:grid-cols-[1fr_auto]">
           <LinkFormFields
@@ -401,6 +440,7 @@ export function LinkEditor({
             editing={editing}
             activeDomains={activeDomains}
             slugLocked={slugLocked}
+            domainsAllowed={domainsAllowed}
           />
           <QrPreviewSidebar
             form={form}
@@ -424,6 +464,8 @@ export function LinkEditor({
           type="submit"
           disabled={busy}
           onClick={handleSubmit(onSave, onInvalid)}
+          className={shake.className}
+          onAnimationEnd={shake.end}
         >
           <BusyContent busy={busy}>{editing ? "Save changes" : "Create link"}</BusyContent>
         </Button>

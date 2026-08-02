@@ -23,6 +23,10 @@ import type { AddressDTO, LinkDTO, LinkInput, OrgPlan, PlanLimits, TopEntry } fr
 // the daily sweep (storage.ts's sweepExpiredAliases) retires it.
 const ALIAS_TTL_MS = 48 * 60 * 60 * 1000;
 const RECENT_CLICKS_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
+// Active aliases (temp + permanent) a single link may hold at once: keeps the
+// alias thread readable and caps how much of the org's link quota one link
+// can soak up through kept-forever aliases.
+const MAX_ALIASES_PER_LINK = 5;
 
 // Mounted at /api/orgs/:orgId/links
 export const linkRoutes = new Hono<AppEnv>();
@@ -52,10 +56,17 @@ const clickCount = sql<number>`(
   select count(*) from clicks where clicks.link_id = links.id
 )`.as("clicks");
 
+// NB: same literal-`links.id` note as clickCount above.
+const addressCount = sql<number>`(
+  select count(*) from link_addresses
+  where link_addresses.link_id = links.id and link_addresses.retired_at is null
+)`.as("addressCount");
+
 function toDTO(
   row: typeof schema.links.$inferSelect,
   clicks: number,
   domain: string | null,
+  addressCount: number,
 ): LinkDTO {
   return {
     id: row.id,
@@ -78,8 +89,30 @@ function toDTO(
     qrLogoSize: row.qrLogoSize,
     createdAt: row.createdAt,
     clicks,
+    addressCount,
     createdBy: row.createdBy,
   };
+}
+
+/** Count active addresses for a single link, for call sites that don't
+ * already have it from a batched query. */
+async function countAddressesForLink(db: DB, linkId: string): Promise<number> {
+  const rows = await db
+    .select({ n: sql<number>`count(*)` })
+    .from(schema.linkAddresses)
+    .where(and(eq(schema.linkAddresses.linkId, linkId), isNull(schema.linkAddresses.retiredAt)));
+  return rows[0]?.n ?? 0;
+}
+
+/** Rejects adding another alias once a link already holds MAX_ALIASES_PER_LINK
+ * (temp + permanent combined, matching what the alias thread shows). */
+async function assertAliasQuota(db: DB, linkId: string): Promise<void> {
+  const activeAliases = (await countAddressesForLink(db, linkId)) - 1; // exclude primary
+  if (activeAliases >= MAX_ALIASES_PER_LINK)
+    throw new HTTPException(409, {
+      message: `This link already has ${MAX_ALIASES_PER_LINK} aliases, the most allowed. Remove one before adding another.`,
+      cause: { code: "alias_limit_reached" },
+    });
 }
 
 /** True when the body carries any QR appearance override (a paid feature). */
@@ -215,18 +248,20 @@ function addressToDTO(
 }
 
 /**
- * A link in the org whose primary destination and UTM set exactly matches
- * (see #38): different UTM values never match, by construction, since they
- * are part of the comparison tuple. Aliases don't carry their own
- * destination, so this only ever needs to look at `links` itself.
+ * Every link in the org whose primary destination and UTM set exactly
+ * matches (see #38): different UTM values never match, by construction,
+ * since they are part of the comparison tuple. Aliases don't carry their own
+ * destination, so this only ever needs to look at `links` itself. Usually
+ * one row, but "create separate link anyway" lets a caller end up with
+ * several, so the match dialog must offer all of them, not just the first.
  */
-async function findSameDestinationLink(
+async function findSameDestinationLinks(
   db: DB,
   orgId: string,
   destination: string,
   utm: ReturnType<typeof resolveUtm>,
-): Promise<typeof schema.links.$inferSelect | null> {
-  const rows = await db
+): Promise<(typeof schema.links.$inferSelect)[]> {
+  return db
     .select()
     .from(schema.links)
     .where(
@@ -240,8 +275,7 @@ async function findSameDestinationLink(
         eq(schema.links.utmContent, utm.utmContent),
       ),
     )
-    .limit(1);
-  return rows[0] ?? null;
+    .orderBy(desc(schema.links.createdAt));
 }
 
 /**
@@ -270,6 +304,31 @@ async function slugTaken(
       ),
     );
   return rows.some((r) => r.linkId !== excludeLinkId);
+}
+
+/** True when this link already has an active address (an alias, since the
+ * caller only checks this for a slug that differs from the current primary)
+ * sitting on the given slug: renaming onto it would collide with that row
+ * instead of freeing it up, so the caller must reject before writing. */
+async function ownsSlugAsAlias(
+  db: DB,
+  linkId: string,
+  slug: string,
+  domainId: string | null,
+): Promise<boolean> {
+  const rows = await db
+    .select({ id: schema.linkAddresses.id })
+    .from(schema.linkAddresses)
+    .where(
+      and(
+        eq(schema.linkAddresses.linkId, linkId),
+        eq(schema.linkAddresses.slug, slug),
+        isNull(schema.linkAddresses.retiredAt),
+        sql`ifnull(${schema.linkAddresses.domainId}, '') = ${domainId ?? ""}`,
+      ),
+    )
+    .limit(1);
+  return rows.length > 0;
 }
 
 /**
@@ -346,6 +405,12 @@ async function resolveRenamedSlug(
         "Links on the shared domain keep their random slug: move the link to a custom domain to choose one",
     });
   const moved = newSlug !== existing.slug || domainId !== existing.domainId;
+  if (moved && (await ownsSlugAsAlias(db, existing.id, newSlug, domainId)))
+    throw new HTTPException(409, {
+      message:
+        "That address is already an alias of this link: make it primary instead of renaming.",
+      cause: { code: "slug_is_own_alias" },
+    });
   if (moved && (await slugTaken(db, newSlug, domainId, existing.id)))
     throw slugConflict(newSlug, domainId === null);
   return newSlug;
@@ -357,12 +422,22 @@ linkRoutes.get("/", requireOrgRole("member"), async (c) => {
       link: schema.links,
       clicks: clickCount,
       domain: schema.domains.hostname,
+      addressCount,
     })
     .from(schema.links)
     .leftJoin(schema.domains, eq(schema.links.domainId, schema.domains.id))
     .where(eq(schema.links.orgId, c.req.param("orgId")!))
     .orderBy(desc(schema.links.createdAt));
-  return c.json(rows.map((r) => toDTO(r.link, r.clicks, r.domain)));
+  return c.json(rows.map((r) => toDTO(r.link, r.clicks, r.domain, r.addressCount)));
+});
+
+// Distinct from the links list's own count: a link plus its kept-forever
+// aliases can consume more than one unit of the plan's `links` cap (a
+// rename's automatic 48h temp_alias never does, see countActiveAddresses),
+// so the UI needs this to show usage and gate creation accurately.
+linkRoutes.get("/quota-usage", requireOrgRole("member"), async (c) => {
+  const count = await countActiveAddresses(c.var.db, c.req.param("orgId")!);
+  return c.json({ count });
 });
 
 /** Builds a new link row: unset appearance/UTM fields fall back to their
@@ -429,6 +504,7 @@ linkRoutes.post("/", requireOrgRole("member"), async (c) => {
   if (body.mergeIntoLinkId) {
     const target = await findLink(db, orgId, body.mergeIntoLinkId);
     assertLinkQuota(activeCount, plan, limits);
+    await assertAliasQuota(db, target.id);
     const address = newAddressRow(
       target.id,
       orgId,
@@ -440,32 +516,39 @@ linkRoutes.post("/", requireOrgRole("member"), async (c) => {
     await db.insert(schema.linkAddresses).values(address);
     await enqueueStorage(c.env, [syncLinkMsg(slug, hostname)]);
     const targetHostname = await domainHostname(db, orgId, target.domainId);
-    const clicks = await db
-      .select({ n: sql<number>`count(*)` })
-      .from(schema.clicks)
-      .where(eq(schema.clicks.linkId, target.id));
-    return c.json(toDTO(target, clicks[0]?.n ?? 0, targetHostname), 200);
+    const [clicks, targetAddressCount] = await Promise.all([
+      db
+        .select({ n: sql<number>`count(*)` })
+        .from(schema.clicks)
+        .where(eq(schema.clicks.linkId, target.id)),
+      countAddressesForLink(db, target.id),
+    ]);
+    return c.json(toDTO(target, clicks[0]?.n ?? 0, targetHostname, targetAddressCount), 200);
   }
 
   // An exact destination+UTM match already exists in the org: offer to add
   // this address there instead of silently forking a second link. Different
   // UTM values are part of the match tuple, so they never trigger this.
   if (!body.forceSeparateLink) {
-    const match = await findSameDestinationLink(db, orgId, body.destination, utm);
-    if (match) {
-      const matchHostname = await domainHostname(db, orgId, match.domainId);
-      const matchClicks = await db
-        .select({ n: sql<number>`count(*)` })
-        .from(schema.clicks)
-        .where(eq(schema.clicks.linkId, match.id));
+    const matches = await findSameDestinationLinks(db, orgId, body.destination, utm);
+    if (matches.length) {
+      const matchedLinks = await Promise.all(
+        matches.map(async (match) => {
+          const [matchHostname, matchClicks, matchAddressCount] = await Promise.all([
+            domainHostname(db, orgId, match.domainId),
+            db
+              .select({ n: sql<number>`count(*)` })
+              .from(schema.clicks)
+              .where(eq(schema.clicks.linkId, match.id)),
+            countAddressesForLink(db, match.id),
+          ]);
+          return toDTO(match, matchClicks[0]?.n ?? 0, matchHostname, matchAddressCount);
+        }),
+      );
       throw new HTTPException(409, {
         message:
           "This destination already belongs to a link. Add this address to the same link so its settings and analytics stay together.",
-        cause: {
-          code: "same_destination_match",
-          matchedLinkId: match.id,
-          matchedLink: toDTO(match, matchClicks[0]?.n ?? 0, matchHostname),
-        },
+        cause: { code: "same_destination_match", matchedLinks },
       });
     }
   }
@@ -478,7 +561,7 @@ linkRoutes.post("/", requireOrgRole("member"), async (c) => {
     db.insert(schema.linkAddresses).values(address),
   ]);
   await enqueueStorage(c.env, [syncLinkMsg(link.slug, hostname)]);
-  return c.json(toDTO(link, 0, hostname), 201);
+  return c.json(toDTO(link, 0, hostname, 1), 201);
 });
 
 /** Merges a PATCH body over the existing row: an unset field (undefined)
@@ -556,6 +639,7 @@ linkRoutes.patch("/:linkId", requireOrgRole("member"), async (c) => {
   // already forbids choosing one), so a link moving away from the shared
   // domain just drops its old key like before.
   const createsAlias = moved && existing.domainId !== null;
+  if (createsAlias) await assertAliasQuota(db, existing.id);
 
   const destination = body.destination ?? existing.destination;
   // Re-resolve against the final destination: its params win, explicit
@@ -597,11 +681,14 @@ linkRoutes.patch("/:linkId", requireOrgRole("member"), async (c) => {
   await db.batch(writes as [(typeof writes)[number], ...(typeof writes)[number][]]);
   await enqueueStorage(c.env, messages);
 
-  const clicks = await db
-    .select({ n: sql<number>`count(*)` })
-    .from(schema.clicks)
-    .where(eq(schema.clicks.linkId, existing.id));
-  return c.json(toDTO(updated, clicks[0]?.n ?? 0, hostname));
+  const [clicks, updatedAddressCount] = await Promise.all([
+    db
+      .select({ n: sql<number>`count(*)` })
+      .from(schema.clicks)
+      .where(eq(schema.clicks.linkId, existing.id)),
+    countAddressesForLink(db, existing.id),
+  ]);
+  return c.json(toDTO(updated, clicks[0]?.n ?? 0, hostname, updatedAddressCount));
 });
 
 linkRoutes.delete("/:linkId", requireOrgRole("member"), async (c) => {
@@ -646,6 +733,49 @@ linkRoutes.get("/:linkId/addresses", requireOrgRole("member"), async (c) => {
     }),
   );
   return c.json(dtos);
+});
+
+linkRoutes.post("/:linkId/addresses", requireOrgRole("member"), async (c) => {
+  const body = await c.req.json<{ slug?: string; domainId?: string | null }>();
+  const orgId = c.req.param("orgId")!;
+  const db = c.var.db;
+  const link = await findLink(db, orgId, c.req.param("linkId")!);
+
+  if (body.slug !== undefined && body.slug !== "") {
+    if (!SLUG_RE.test(body.slug))
+      throw new HTTPException(400, {
+        message: "Slug may only contain letters, numbers, - and _ (max 64)",
+      });
+    if (RESERVED_SLUGS.has(body.slug.toLowerCase()))
+      throw new HTTPException(400, { message: "That slug is reserved" });
+  }
+
+  const [{ plan, limits }, activeCount] = await Promise.all([
+    orgPlan(db, orgId),
+    countActiveAddresses(db, orgId),
+  ]);
+  assertLinkQuota(activeCount, plan, limits);
+  await assertAliasQuota(db, link.id);
+
+  const domainId = body.domainId ?? null;
+  const [hostname, slug] = await Promise.all([
+    domainHostname(db, orgId, domainId),
+    resolveNewSlug(db, body.slug?.trim() || "", domainId),
+  ]);
+
+  const address = newAddressRow(link.id, orgId, domainId, slug, "permanent_alias", "created");
+  await db.insert(schema.linkAddresses).values(address);
+  await enqueueStorage(c.env, [syncLinkMsg(slug, hostname)]);
+
+  const [linkHostname, clicks, updatedAddressCount] = await Promise.all([
+    domainHostname(db, orgId, link.domainId),
+    db
+      .select({ n: sql<number>`count(*)` })
+      .from(schema.clicks)
+      .where(eq(schema.clicks.linkId, link.id)),
+    countAddressesForLink(db, link.id),
+  ]);
+  return c.json(toDTO(link, clicks[0]?.n ?? 0, linkHostname, updatedAddressCount), 201);
 });
 
 linkRoutes.post(
@@ -724,11 +854,14 @@ linkRoutes.post("/:linkId/addresses/:addressId/promote", requireOrgRole("member"
   ]);
   if (address.kind === "primary") {
     const hostname = await domainHostname(db, orgId, existing.domainId);
-    const clicks = await db
-      .select({ n: sql<number>`count(*)` })
-      .from(schema.clicks)
-      .where(eq(schema.clicks.linkId, existing.id));
-    return c.json(toDTO(existing, clicks[0]?.n ?? 0, hostname));
+    const [clicks, existingAddressCount] = await Promise.all([
+      db
+        .select({ n: sql<number>`count(*)` })
+        .from(schema.clicks)
+        .where(eq(schema.clicks.linkId, existing.id)),
+      countAddressesForLink(db, existing.id),
+    ]);
+    return c.json(toDTO(existing, clicks[0]?.n ?? 0, hostname, existingAddressCount));
   }
   if (address.retiredAt !== null)
     throw new HTTPException(409, { message: "This address is no longer active" });
@@ -786,9 +919,12 @@ linkRoutes.post("/:linkId/addresses/:addressId/promote", requireOrgRole("member"
     syncLinkMsg(address.slug, hostname),
   ]);
 
-  const clicks = await db
-    .select({ n: sql<number>`count(*)` })
-    .from(schema.clicks)
-    .where(eq(schema.clicks.linkId, existing.id));
-  return c.json(toDTO(updated, clicks[0]?.n ?? 0, hostname));
+  const [clicks, updatedAddressCount] = await Promise.all([
+    db
+      .select({ n: sql<number>`count(*)` })
+      .from(schema.clicks)
+      .where(eq(schema.clicks.linkId, existing.id)),
+    countAddressesForLink(db, existing.id),
+  ]);
+  return c.json(toDTO(updated, clicks[0]?.n ?? 0, hostname, updatedAddressCount));
 });

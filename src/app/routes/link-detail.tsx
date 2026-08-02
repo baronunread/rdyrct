@@ -6,7 +6,6 @@ import { useCurrentOrg } from "../lib/current-org";
 import { useConfig } from "../lib/hooks";
 import { shortUrl } from "../lib/api";
 import { AreaChart, StatCard, ClickBreakdown } from "../components/charts";
-import { AddressesCard } from "../components/addresses-card";
 import { NoOrgState } from "../components/no-org";
 import { Card } from "../ui/misc";
 import { linkDisplayTitle } from "../lib/link-display";
@@ -130,10 +129,6 @@ export function LinkDetailPage() {
 
       <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-3">
         <ClickBreakdown countries={s.countries} referrers={s.referrers} devices={s.devices} />
-      </div>
-
-      <div className="mt-4">
-        <AddressesCard orgId={org.id} linkId={s.id} />
       </div>
     </div>
   );

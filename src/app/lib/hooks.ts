@@ -75,11 +75,25 @@ export const useLinks = (orgId: string) =>
     enabled: !!orgId,
   });
 
+/** Links used against the plan's `links` cap: a link plus its kept-forever
+ * aliases each count (a rename's automatic 48h temp_alias never does), so
+ * this can run ahead of `useLinks(...).data.length`. */
+export const useLinkQuotaUsage = (orgId: string) =>
+  useQuery<{ count: number }>({
+    queryKey: ["linkQuotaUsage", orgId],
+    queryFn: () => api(`/orgs/${orgId}/links/quota-usage`),
+    enabled: !!orgId,
+  });
+
 export function useLinkMutations(orgId: string) {
   const qc = useQueryClient();
   const invalidate = () => {
     qc.invalidateQueries({ queryKey: ["links", orgId] });
     qc.invalidateQueries({ queryKey: ["stats", orgId] });
+    qc.invalidateQueries({ queryKey: ["linkQuotaUsage", orgId] });
+    // A rename can leave the old slug behind as a temp alias: refetch any
+    // addresses list already open for this org's links, not just on remount.
+    qc.invalidateQueries({ queryKey: ["addresses", orgId] });
   };
   const create = useMutation({
     mutationFn: (body: LinkInput) => api<LinkDTO>(`/orgs/${orgId}/links`, { method: "POST", body }),
@@ -136,6 +150,7 @@ export function useAddressMutations(orgId: string, linkId: string) {
     qc.invalidateQueries({ queryKey: ["addresses", orgId, linkId] });
     qc.invalidateQueries({ queryKey: ["links", orgId] });
     qc.invalidateQueries({ queryKey: ["linkStats", orgId] });
+    qc.invalidateQueries({ queryKey: ["linkQuotaUsage", orgId] });
   };
   const keepForever = useMutation({
     mutationFn: (addressId: string) =>
@@ -157,7 +172,12 @@ export function useAddressMutations(orgId: string, linkId: string) {
       }),
     onSuccess: invalidate,
   });
-  return { keepForever, remove, promote };
+  const create = useMutation({
+    mutationFn: (body: { slug?: string; domainId?: string | null }) =>
+      api<LinkDTO>(`/orgs/${orgId}/links/${linkId}/addresses`, { method: "POST", body }),
+    onSuccess: invalidate,
+  });
+  return { keepForever, remove, promote, create };
 }
 
 // The dashboard's live pulse: a cheap indexed read (limit rows by ts desc),
