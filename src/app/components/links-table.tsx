@@ -84,10 +84,10 @@ export function LinksTable({
               sortKey="slug"
               sort={sort}
               onSort={onSort}
-              className="w-1/2 sm:w-[32%]"
+              className="w-1/2 sm:w-2/5 lg:w-[30%] xl:w-[26%]"
             />
-            <Th className="hidden sm:table-cell sm:w-[18%]">Title</Th>
-            <Th className="hidden sm:table-cell sm:w-[20%]">Destination</Th>
+            <Th className="hidden lg:table-cell lg:w-[16%]">Title</Th>
+            <Th className="hidden xl:table-cell xl:w-[22%]">Destination</Th>
             <SortTh
               label="Clicks"
               sortKey="clicks"
@@ -156,10 +156,10 @@ export function LinksTable({
                       </span>
                     </div>
                   </Td>
-                  <Td className="hidden truncate text-xs text-muted sm:table-cell">
+                  <Td className="hidden truncate text-xs text-muted lg:table-cell">
                     {link.title || <span className="text-muted/50">—</span>}
                   </Td>
-                  <Td className="hidden max-w-64 sm:table-cell">
+                  <Td className="hidden max-w-64 xl:table-cell">
                     <a
                       href={link.destination}
                       target="_blank"

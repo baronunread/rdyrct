@@ -98,7 +98,7 @@ interface QrDefaultsFieldsProps {
 
 function QrShapeFields({ values, setField, isAdmin }: QrDefaultsFieldsProps) {
   return (
-    <div className="grid grid-cols-[1fr_auto] gap-6 items-center">
+    <div className="grid grid-cols-1 items-center gap-6 sm:grid-cols-[1fr_auto]">
       <div className="flex flex-col gap-4">
         <Field label="Dot style">
           <MenuSelect
