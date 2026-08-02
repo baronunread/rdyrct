@@ -113,7 +113,7 @@ export function LinksTable({
               <Fragment key={link.id}>
                 <tr className="group">
                   <Td>
-                    <div className="flex min-w-0 items-center gap-2.5">
+                    <div className="flex min-w-0 items-center gap-2.5 overflow-hidden">
                       {hasAliases ? (
                         <button
                           type="button"
