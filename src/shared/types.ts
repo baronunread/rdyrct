@@ -147,6 +147,8 @@ export interface LinkDTO extends QrOverrides {
   utmContent: string;
   createdAt: number;
   clicks: number;
+  /** Count of active addresses (primary + aliases) this link answers to. See #38. */
+  addressCount: number;
   /** User id of the creator, null when that account is gone. */
   createdBy: string | null;
 }
@@ -177,8 +179,9 @@ export interface AddressDTO {
  * (forceSeparateLink) and resubmit. */
 export interface SameDestinationMatch {
   code: "same_destination_match";
-  matchedLinkId: string;
-  matchedLink: LinkDTO;
+  /** Every existing link sharing this exact destination + UTM set: usually
+   * one, but "create separate link anyway" can leave several. */
+  matchedLinks: LinkDTO[];
 }
 
 export type LinkInput = {

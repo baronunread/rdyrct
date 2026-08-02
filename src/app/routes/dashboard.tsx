@@ -4,8 +4,8 @@ import { valibotResolver } from "@hookform/resolvers/valibot";
 import { Link } from "react-router";
 import { useStats, useLinks, useMembers, useLinkMutations, useRecentClicks } from "../lib/hooks";
 import { useOrgLimits } from "../lib/org-limits";
-import { shortUrl } from "../lib/api";
-import { type DomainDTO, type LinkDTO, type RecentClick } from "@/shared/types";
+import { shortUrl, ApiError } from "../lib/api";
+import { type DomainDTO, type LinkDTO, type LinkInput, type RecentClick } from "@/shared/types";
 import { StatCard, TopLinksCard } from "../components/charts";
 import { DashboardSkeleton } from "../components/skeletons";
 import { NoOrgState } from "../components/no-org";
@@ -23,6 +23,7 @@ import { withErrorToast } from "../lib/mutation-toast";
 import { destinationSchema } from "../lib/schemas";
 import { relativeDate } from "../lib/dates";
 import { copyToClipboard } from "../lib/clipboard";
+import { SameDestinationDialog } from "../components/same-destination-dialog";
 
 /** Heatmap rows come back Monday-first (see the stats query). */
 const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -75,7 +76,12 @@ function peakActivityCell(
 export function Dashboard() {
   const { org, orgId, limits, activeDomains, orgQr } = useOrgLimits();
   const data = useDashboardData(orgId);
+  const toast = useToast();
   const [created, setCreated] = useState<LinkDTO | null>(null);
+  const [sameDestination, setSameDestination] = useState<{
+    input: LinkInput;
+    matchedLinks: LinkDTO[];
+  } | null>(null);
 
   if (!org) return <NoOrgState />;
   if (data.isLoading) return <DashboardSkeleton />;
@@ -95,6 +101,9 @@ export function Dashboard() {
         activeDomains={activeDomains}
         atLimit={s.totalLinks >= limits.links}
         onCreated={setCreated}
+        onSameDestinationMatch={(input, matchedLinks) =>
+          setSameDestination({ input, matchedLinks })
+        }
       />
 
       <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-3">
@@ -119,6 +128,40 @@ export function Dashboard() {
         onClose={() => setCreated(null)}
         qrEnabled={limits.qr}
         orgQr={orgQr}
+      />
+
+      <SameDestinationDialog
+        matchedLinks={sameDestination?.matchedLinks ?? null}
+        pending={data.create.isPending}
+        onClose={() => setSameDestination(null)}
+        onAddToExisting={(matchedLink) => {
+          if (!sameDestination) return;
+          const { input } = sameDestination;
+          data.create.mutate(
+            { ...input, mergeIntoLinkId: matchedLink.id },
+            {
+              onSuccess: (link) => {
+                setSameDestination(null);
+                setCreated(link);
+              },
+              onError: withErrorToast(toast),
+            },
+          );
+        }}
+        onCreateSeparate={() => {
+          if (!sameDestination) return;
+          const { input } = sameDestination;
+          data.create.mutate(
+            { ...input, forceSeparateLink: true },
+            {
+              onSuccess: (link) => {
+                setSameDestination(null);
+                setCreated(link);
+              },
+              onError: withErrorToast(toast),
+            },
+          );
+        }}
       />
     </div>
   );
@@ -155,11 +198,13 @@ function QuickCreateCard({
   activeDomains,
   atLimit,
   onCreated,
+  onSameDestinationMatch,
 }: {
   create: ReturnType<typeof useLinkMutations>["create"];
   activeDomains: DomainDTO[];
   atLimit: boolean;
   onCreated: (link: LinkDTO) => void;
+  onSameDestinationMatch: (input: LinkInput, matchedLinks: LinkDTO[]) => void;
 }) {
   const toast = useToast();
   const [domainId, setDomainId] = useState<string | null>(null);
@@ -174,16 +219,21 @@ function QuickCreateCard({
   const submit = handleSubmit(
     (data) => {
       if (create.isPending) return;
-      create.mutate(
-        { destination: data.destination.trim(), domainId },
-        {
-          onSuccess: (link) => {
-            reset({ destination: "" });
-            onCreated(link);
-          },
-          onError: withErrorToast(toast),
+      const input: LinkInput = { destination: data.destination.trim(), domainId };
+      create.mutate(input, {
+        onSuccess: (link) => {
+          reset({ destination: "" });
+          onCreated(link);
         },
-      );
+        onError: (e) => {
+          if (e instanceof ApiError && e.code === "same_destination_match") {
+            const { matchedLinks } = e.data as { matchedLinks: LinkDTO[] };
+            onSameDestinationMatch(input, matchedLinks);
+            return;
+          }
+          withErrorToast(toast)(e);
+        },
+      });
     },
     () => toast("Enter a valid URL", "error"),
   );

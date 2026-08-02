@@ -250,8 +250,9 @@ describe("same-destination grouping", () => {
 
     const res = await api(cookie, "POST", "/links", { destination: "https://example.com/pricing" });
     expect(res.status).toBe(409);
-    const body = (await res.json()) as { code: string; matchedLinkId: string };
+    const body = (await res.json()) as { code: string; matchedLinks: { id: string }[] };
     expect(body.code).toBe("same_destination_match");
+    expect(body.matchedLinks).toHaveLength(1);
 
     const linkCount = await env.DB.prepare("select count(*) as n from links").first<{
       n: number;
