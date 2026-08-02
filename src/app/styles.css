@@ -140,25 +140,6 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
-/* one-shot horizontal shake for rejected form submissions (e.g. slug taken) */
-@keyframes shake {
-  0%,
-  100% {
-    transform: translateX(0);
-  }
-  20%,
-  60% {
-    transform: translateX(-6px);
-  }
-  40%,
-  80% {
-    transform: translateX(6px);
-  }
-}
-.animate-shake {
-  animation: shake 0.4s ease-in-out;
-}
-
 /* Toasts share one grid cell (true overlap, not just visual stacking) so a
    collapsed toast can sit exactly behind the one in front of it. Collapsed
    position/scale/opacity are index-based (a fixed per-slot look, matching
@@ -289,12 +270,6 @@ body {
     transition: none;
   }
 }
-@media (prefers-reduced-motion: reduce) {
-  .animate-shake {
-    animation: none;
-  }
-}
-
 /* busy-button transition: text blurs then shrinks away while the spinner
    fades in with a delay. Each direction uses different timings so the
    forward direction feels sequenced and the reverse (error) is instant. */
