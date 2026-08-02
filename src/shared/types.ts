@@ -350,6 +350,8 @@ export interface AdminOrgRow {
   members: number;
   links: number;
   clicks: number;
+  ownerName: string | null;
+  ownerEmail: string | null;
 }
 
 export interface AdminOrgDetail {

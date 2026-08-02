@@ -21,6 +21,7 @@ import { useToast } from "../ui/toast";
 import { copyToClipboard } from "../lib/clipboard";
 import { cn } from "../ui/cn";
 import { AliasThread } from "./alias-thread";
+import { Pager } from "../ui/pagination";
 
 function linkDetailPath(link: LinkDTO): string {
   return link.domain
@@ -206,29 +207,7 @@ export function LinksTable({
           })}
         </tbody>
       </Table>
-      {totalPages > 1 && (
-        <div className="mt-4 flex items-center justify-center gap-2">
-          <button
-            type="button"
-            onClick={() => onPageChange((p) => Math.max(0, p - 1))}
-            disabled={currentPage === 0}
-            className="cursor-pointer rounded-md px-2.5 py-1 text-xs text-muted hover:text-text disabled:opacity-40"
-          >
-            Previous
-          </button>
-          <span className="text-xs text-muted tnum">
-            {currentPage + 1} / {totalPages}
-          </span>
-          <button
-            type="button"
-            onClick={() => onPageChange((p) => Math.min(totalPages - 1, p + 1))}
-            disabled={currentPage >= totalPages - 1}
-            className="cursor-pointer rounded-md px-2.5 py-1 text-xs text-muted hover:text-text disabled:opacity-40"
-          >
-            Next
-          </button>
-        </div>
-      )}
+      <Pager page={currentPage} totalPages={totalPages} onPageChange={onPageChange} />
     </>
   );
 }

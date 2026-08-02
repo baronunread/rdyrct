@@ -26,6 +26,19 @@ const ownerPlan = sql<OrgPlan>`coalesce((
   limit 1
 ), 'free')`;
 
+const ownerName = sql<string | null>`(
+  select "user".name from org_members
+  join "user" on "user".id = org_members.user_id
+  where org_members.org_id = orgs.id and org_members.role = 'owner'
+  limit 1
+)`;
+const ownerEmail = sql<string | null>`(
+  select "user".email from org_members
+  join "user" on "user".id = org_members.user_id
+  where org_members.org_id = orgs.id and org_members.role = 'owner'
+  limit 1
+)`;
+
 // Mounted at /api/admin: platform-level views for the instance admin.
 export const adminRoutes = new Hono<AppEnv>();
 
@@ -453,6 +466,8 @@ adminRoutes.get("/orgs", async (c) => {
       name: schema.orgs.name,
       plan: ownerPlan,
       createdAt: schema.orgs.createdAt,
+      ownerName,
+      ownerEmail,
       // literal orgs.id: interpolated columns render unqualified inside
       // correlated subqueries and bind to the wrong table
       members: sql<number>`(
