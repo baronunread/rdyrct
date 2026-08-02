@@ -609,6 +609,7 @@ orgRoutes.get("/:orgId/stats", requireOrgRole("member"), async (c) => {
       .leftJoin(schema.clicks, eq(schema.clicks.linkId, schema.links.id))
       .where(eq(schema.links.orgId, orgId))
       .groupBy(schema.links.id)
+      .having(sql`count(${schema.clicks.id}) > 0`)
       .orderBy(desc(sql`count(${schema.clicks.id})`))
       .limit(8),
     db
@@ -641,6 +642,10 @@ orgRoutes.get("/:orgId/stats", requireOrgRole("member"), async (c) => {
       .where(
         and(
           eq(schema.links.orgId, orgId),
+          // Went cold, not stillborn: had clicks at some point, just none in
+          // the last 30 days. A link that never got a single click isn't
+          // "dead", it's just new or unshared.
+          sql`${schema.links.id} in (select distinct link_id from clicks where org_id = ${orgId})`,
           sql`${schema.links.id} not in (select distinct link_id from clicks where org_id = ${orgId} and ts >= ${now() - 30 * 24 * 60 * 60 * 1000})`,
         ),
       )

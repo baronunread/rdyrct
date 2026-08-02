@@ -300,17 +300,76 @@ function DeltaBadge({ pct }: { pct: number }) {
 const HEATMAP_DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const HEATMAP_HOURS = Array.from({ length: 24 }, (_, i) => i);
 
+/** Cell position in px, relative to the grid's own offset parent: unaffected
+ * by horizontal scroll, unlike a viewport-relative bounding rect. */
+function HeatmapTooltip({
+  day,
+  hour,
+  clicks,
+  cellLeft,
+  cellTop,
+  cellWidth,
+  flip,
+}: {
+  day: string;
+  hour: number;
+  clicks: number;
+  cellLeft: number;
+  cellTop: number;
+  cellWidth: number;
+  flip: boolean;
+}) {
+  return (
+    <div
+      className="pointer-events-none absolute z-10 rounded-md border border-border bg-surface-2 px-2.5 py-1.5 text-xs whitespace-nowrap shadow-lg"
+      style={{
+        left: cellLeft + cellWidth / 2,
+        top: cellTop,
+        transform: `translate(${flip ? "-100%" : "0%"}, calc(-100% - 6px))`,
+      }}
+    >
+      <span className="text-muted">
+        {day} {hour}:00
+      </span>{" "}
+      <span className="tnum font-bold">{clicks}</span>
+    </div>
+  );
+}
+
 /**
  * Day-of-week × hour-of-day activity heatmap. Sequential color scale from
- * the --chart hue. Compact enough to live inside a card.
+ * the --chart hue. Compact enough to live inside a card. Tooltip appears
+ * immediately on hover (no native-title delay), matching the other charts.
  */
 export function Heatmap({ data }: { data: HeatmapRow[] }) {
   const max = Math.max(1, ...data.map((r) => r.clicks));
   const grid: (HeatmapRow | null)[][] = Array.from({ length: 7 }, () => Array(24).fill(null));
   for (const row of data) grid[row.dayOfWeek][row.hour] = row;
 
+  const [hover, setHover] = useState<{
+    day: string;
+    hour: number;
+    clicks: number;
+    cellLeft: number;
+    cellTop: number;
+    cellWidth: number;
+  } | null>(null);
+
+  const onEnter =
+    (day: string, hour: number, clicks: number) => (e: React.MouseEvent<HTMLDivElement>) => {
+      const cell = e.currentTarget;
+      setHover({
+        day,
+        hour,
+        clicks,
+        cellLeft: cell.offsetLeft,
+        cellTop: cell.offsetTop,
+        cellWidth: cell.offsetWidth,
+      });
+    };
+
   return (
-    <div className="overflow-x-auto">
+    <div className="relative overflow-x-auto">
       <div className="grid grid-cols-[auto_repeat(24,1fr)] gap-px text-4xs">
         <div />
         {HEATMAP_HOURS.map((h) => (
@@ -331,13 +390,25 @@ export function Heatmap({ data }: { data: HeatmapRow[] }) {
                   style={{
                     backgroundColor: `color-mix(in srgb, var(--chart) ${opacity * 100}%, transparent)`,
                   }}
-                  title={cell ? `${day} ${h}:00 — ${cell.clicks} clicks` : ""}
+                  onMouseEnter={cell ? onEnter(day, h, cell.clicks) : undefined}
+                  onMouseLeave={() => setHover(null)}
                 />
               );
             })}
           </Fragment>
         ))}
       </div>
+      {hover && (
+        <HeatmapTooltip
+          day={hover.day}
+          hour={hover.hour}
+          clicks={hover.clicks}
+          cellLeft={hover.cellLeft}
+          cellTop={hover.cellTop}
+          cellWidth={hover.cellWidth}
+          flip={hover.hour > 18}
+        />
+      )}
     </div>
   );
 }
