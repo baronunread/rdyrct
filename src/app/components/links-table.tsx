@@ -84,9 +84,10 @@ export function LinksTable({
               sortKey="slug"
               sort={sort}
               onSort={onSort}
-              className="w-1/2 sm:w-[40%]"
+              className="w-1/2 sm:w-[32%]"
             />
-            <Th className="hidden sm:table-cell sm:w-[25%]">Destination</Th>
+            <Th className="hidden sm:table-cell sm:w-[18%]">Title</Th>
+            <Th className="hidden sm:table-cell sm:w-[20%]">Destination</Th>
             <SortTh
               label="Clicks"
               sortKey="clicks"
@@ -154,7 +155,9 @@ export function LinksTable({
                         />
                       </span>
                     </div>
-                    {link.title && <p className="truncate text-xs text-muted">{link.title}</p>}
+                  </Td>
+                  <Td className="hidden truncate text-xs text-muted sm:table-cell">
+                    {link.title || <span className="text-muted/50">—</span>}
                   </Td>
                   <Td className="hidden max-w-64 sm:table-cell">
                     <a
@@ -177,7 +180,7 @@ export function LinksTable({
                       label={`Actions for ${link.slug}`}
                       trigger={
                         <div className="flex justify-end">
-                          <span className="rounded p-1.5 text-muted hover:bg-surface-2 hover:text-text">
+                          <span className="rounded p-1.5 text-muted transition-transform duration-150 active:scale-[0.96] hover:bg-surface-2 hover:text-text">
                             <Ellipsis size={15} />
                           </span>
                         </div>

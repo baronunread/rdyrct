@@ -66,7 +66,8 @@ function AliasRow({
           </span>
         </div>
       </Td>
-      <Td className="py-1.5 text-xs text-muted">
+      <Td className="hidden py-1.5 text-xs text-muted/50 sm:table-cell">—</Td>
+      <Td className="hidden py-1.5 text-xs text-muted sm:table-cell">
         {isTemp ? (
           <span className="inline-flex items-center gap-1">
             Expires in {timeLeft(address.expiresAt!)}
@@ -84,8 +85,8 @@ function AliasRow({
           "Permanent alias"
         )}
       </Td>
-      <Td className="tnum py-1.5 text-right">{address.recentClicks}</Td>
-      <Td className="py-1.5 text-xs whitespace-nowrap text-muted">
+      <Td className="tnum py-1.5 text-end">{address.recentClicks}</Td>
+      <Td className="hidden py-1.5 text-xs whitespace-nowrap text-muted sm:table-cell">
         {shortDate(address.createdAt)}
       </Td>
       <Td className="py-1.5">
@@ -129,7 +130,7 @@ export function AliasThread({ orgId, link }: { orgId: string; link: LinkDTO }) {
   if (addresses.isLoading)
     return (
       <tr>
-        <Td colSpan={5} className="bg-surface-2/30">
+        <Td colSpan={6} className="bg-surface-2/30">
           <SkeletonStatus className="flex justify-center py-1">
             <Skeleton className="h-4 w-32" />
           </SkeletonStatus>
