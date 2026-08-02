@@ -54,7 +54,8 @@ function AliasRow({
       transition={{ duration: 0.2, ease: "easeOut" }}
     >
       <Td className="py-1.5">
-        <div className="flex min-w-0 items-center gap-1.5 pl-5">
+        <div className="flex min-w-0 items-center gap-2.5">
+          <span className="w-5.5 shrink-0" />
           <span
             className="min-w-0 truncate font-mono text-xs text-muted"
             title={address.domain ? `${address.domain}/${address.slug}` : `/${address.slug}`}
@@ -70,7 +71,8 @@ function AliasRow({
           </span>
         </div>
       </Td>
-      <Td className="py-1.5 text-xs text-muted">
+      <Td className="hidden py-1.5 text-xs text-muted/50 sm:table-cell">—</Td>
+      <Td className="hidden py-1.5 text-xs text-muted sm:table-cell">
         {isTemp ? (
           <span className="inline-flex items-center gap-1">
             Expires in {timeLeft(address.expiresAt!)}
@@ -88,8 +90,8 @@ function AliasRow({
           "Permanent alias"
         )}
       </Td>
-      <Td className="tnum py-1.5 text-right">{address.recentClicks}</Td>
-      <Td className="py-1.5 text-xs whitespace-nowrap text-muted">
+      <Td className="tnum py-1.5 text-end">{address.recentClicks}</Td>
+      <Td className="hidden py-1.5 text-xs whitespace-nowrap text-muted sm:table-cell">
         {shortDate(address.createdAt)}
       </Td>
       <Td className="py-1.5">
@@ -139,7 +141,7 @@ export function AliasThread({ orgId, link }: { orgId: string; link: LinkDTO }) {
   if (addresses.isLoading)
     return (
       <tr>
-        <Td colSpan={5} className="bg-surface-2/30">
+        <Td colSpan={6} className="bg-surface-2/30">
           <div className="flex justify-center py-1 text-muted">
             <Spinner />
           </div>
