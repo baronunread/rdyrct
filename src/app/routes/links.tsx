@@ -399,7 +399,7 @@ function LinksToolbar({
   totalCount: number;
 }) {
   return (
-    <div className="mb-4 flex flex-wrap items-center gap-2">
+    <div className="mb-4 flex flex-wrap items-center gap-3">
       <Input
         value={search}
         onChange={(e) => onSearchChange(e.target.value)}
@@ -423,7 +423,7 @@ function LinksToolbar({
           />
         </div>
       )}
-      <span className="ml-auto text-xs text-muted tnum">
+      <span className="ms-auto text-xs text-muted tnum">
         {filteredCount} / {totalCount}
       </span>
     </div>

@@ -80,24 +80,24 @@ export function LinksTable({
               sortKey="slug"
               sort={sort}
               onSort={onSort}
-              className="w-[40%]"
+              className="w-1/2 sm:w-[40%]"
             />
-            <Th className="w-[25%]">Destination</Th>
+            <Th className="hidden sm:table-cell sm:w-[25%]">Destination</Th>
             <SortTh
               label="Clicks"
               sortKey="clicks"
               sort={sort}
               onSort={onSort}
-              className="w-20 text-right"
+              className="w-20 text-end"
             />
             <SortTh
               label="Created"
               sortKey="createdAt"
               sort={sort}
               onSort={onSort}
-              className="w-28"
+              className="hidden sm:table-cell sm:w-28"
             />
-            <Th className="w-16 text-right whitespace-nowrap">Actions</Th>
+            <Th className="w-16 text-end whitespace-nowrap">Actions</Th>
           </tr>
         </thead>
         <tbody>
@@ -108,7 +108,7 @@ export function LinksTable({
               <Fragment key={link.id}>
                 <tr className="group">
                   <Td>
-                    <div className="flex min-w-0 items-center gap-1.5">
+                    <div className="flex min-w-0 items-center gap-2.5">
                       {hasAliases ? (
                         <button
                           type="button"
@@ -120,7 +120,7 @@ export function LinksTable({
                           }
                           title={`${link.addressCount - 1} alias${link.addressCount - 1 === 1 ? "" : "es"}`}
                           aria-expanded={isExpanded}
-                          className="flex shrink-0 cursor-pointer items-center justify-center text-muted hover:text-text"
+                          className="flex shrink-0 cursor-pointer items-center justify-center p-1 text-muted hover:text-text"
                         >
                           <ChevronRight
                             size={14}
@@ -128,7 +128,7 @@ export function LinksTable({
                           />
                         </button>
                       ) : (
-                        <span className="w-3.5 shrink-0" />
+                        <span className="w-5.5 shrink-0" />
                       )}
                       <button
                         type="button"
@@ -155,7 +155,7 @@ export function LinksTable({
                     </div>
                     {link.title && <p className="truncate text-xs text-muted">{link.title}</p>}
                   </Td>
-                  <Td className="max-w-64">
+                  <Td className="hidden max-w-64 sm:table-cell">
                     <a
                       href={link.destination}
                       target="_blank"
@@ -166,8 +166,8 @@ export function LinksTable({
                       <ExternalLink size={12} className="shrink-0" />
                     </a>
                   </Td>
-                  <Td className="tnum text-right">{link.clicks}</Td>
-                  <Td className="text-xs whitespace-nowrap text-muted">
+                  <Td className="tnum text-end">{link.clicks}</Td>
+                  <Td className="hidden text-xs whitespace-nowrap text-muted sm:table-cell">
                     {shortDate(link.createdAt)}
                   </Td>
                   <Td>
