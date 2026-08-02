@@ -110,7 +110,7 @@ export function LinksTable({
               <Fragment key={link.id}>
                 <tr className="group">
                   <Td>
-                    <div className="flex min-w-0 items-center gap-2.5">
+                    <div className="flex min-w-0 items-center gap-2.5 overflow-hidden">
                       {hasAliases ? (
                         <button
                           type="button"
@@ -136,14 +136,14 @@ export function LinksTable({
                         type="button"
                         onClick={() => navigate(linkDetailPath(link))}
                         title={link.domain ? `${link.domain}/${link.slug}` : `/${link.slug}`}
-                        className="group flex min-w-0 cursor-pointer items-baseline"
+                        className="group grid max-w-full cursor-pointer grid-cols-[minmax(0,auto)_max-content] items-baseline"
                       >
                         {link.domain && (
                           <span className="min-w-0 truncate font-normal text-muted group-hover:underline">
                             {link.domain}
                           </span>
                         )}
-                        <span className="shrink-0 font-bold text-accent group-hover:underline">
+                        <span className="font-bold text-accent group-hover:underline">
                           /{link.slug}
                         </span>
                       </button>

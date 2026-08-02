@@ -54,16 +54,16 @@ function AliasRow({
       transition={{ duration: 0.2, ease: "easeOut" }}
     >
       <Td className="py-1.5">
-        <div className="flex min-w-0 items-center gap-2.5">
+        <div className="flex min-w-0 items-center gap-2.5 overflow-hidden">
           <span className="w-5.5 shrink-0" />
           <span
-            className="flex min-w-0 items-baseline font-mono text-xs"
+            className="grid max-w-full grid-cols-[minmax(0,auto)_max-content] items-baseline font-mono text-xs"
             title={address.domain ? `${address.domain}/${address.slug}` : `/${address.slug}`}
           >
             {address.domain && (
               <span className="min-w-0 truncate text-muted/70">{address.domain}</span>
             )}
-            <span className="shrink-0 text-muted">/{address.slug}</span>
+            <span className="text-muted">/{address.slug}</span>
           </span>
           <span className="shrink-0">
             <CopyButton
