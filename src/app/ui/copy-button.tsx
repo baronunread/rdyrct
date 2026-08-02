@@ -45,14 +45,14 @@ export function CopyButton({
         size={12}
         className={cn(
           "absolute inset-0 transition-all duration-200",
-          copied ? "scale-50 opacity-0 blur-xs" : "scale-100 opacity-100",
+          copied ? "scale-[0.25] opacity-0 blur-xs" : "scale-100 opacity-100",
         )}
       />
       <Check
         size={12}
         className={cn(
           "absolute inset-0 text-accent-2 transition-all duration-200",
-          copied ? "scale-100 opacity-100" : "scale-50 opacity-0 blur-xs",
+          copied ? "scale-100 opacity-100" : "scale-[0.25] opacity-0 blur-xs",
         )}
       />
     </span>

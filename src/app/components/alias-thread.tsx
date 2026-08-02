@@ -1,5 +1,7 @@
 import { useState } from "react";
 import { Clock, Ellipsis, Info, Star, Trash2 } from "lucide-react";
+// m.tr renders inside a LazyMotion provider set up by the caller (LinksTable).
+import { m } from "motion/react";
 import { useAddresses, useAddressMutations } from "../lib/hooks";
 import { withErrorToast } from "../lib/mutation-toast";
 import { useToast } from "../ui/toast";
@@ -44,7 +46,13 @@ function AliasRow({
   const isTemp = address.kind === "temp_alias";
 
   return (
-    <tr className="bg-surface-2/30">
+    <m.tr
+      className="bg-surface-2/30"
+      initial={{ opacity: 0, y: -4 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: 2 }}
+      transition={{ duration: 0.2, ease: "easeOut" }}
+    >
       <Td className="py-1.5">
         <div className="flex min-w-0 items-center gap-1.5 pl-5">
           <span
@@ -90,7 +98,7 @@ function AliasRow({
           label={`Actions for ${address.slug}`}
           trigger={
             <div className="flex justify-end">
-              <span className="rounded p-1.5 text-muted hover:bg-surface-2 hover:text-text">
+              <span className="rounded p-1.5 text-muted transition-transform duration-150 active:scale-[0.96] hover:bg-surface-2 hover:text-text">
                 <Ellipsis size={15} />
               </span>
             </div>
@@ -116,7 +124,7 @@ function AliasRow({
           </MenuItem>
         </Menu>
       </Td>
-    </tr>
+    </m.tr>
   );
 }
 
