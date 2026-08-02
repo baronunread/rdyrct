@@ -17,6 +17,9 @@ import { SortTh } from "../../ui/sort-th";
 import { sortRows } from "../../lib/sort";
 import { withErrorToast } from "../../lib/mutation-toast";
 import { shortDate } from "../../lib/dates";
+import { Pager } from "../../ui/pagination";
+
+const PAGE_SIZE = 25;
 
 const roleColor: Record<OrgRole, "accent" | "mint" | "muted"> = {
   owner: "accent",
@@ -132,6 +135,7 @@ export function AdminOrgsPage() {
   const [viewing, setViewing] = useState<AdminOrgRow | null>(null);
   const [q, setQ] = useState("");
   const [sort, setSort] = useState<Sort>({ key: "created", dir: -1 });
+  const [page, setPage] = useState(0);
 
   const remove = useMutation({
     mutationFn: (orgId: string) => api(`/admin/orgs/${orgId}`, { method: "DELETE" }),
@@ -144,13 +148,18 @@ export function AdminOrgsPage() {
     onError: withErrorToast(toast),
   });
 
-  const rows = useMemo(() => {
+  const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase();
-    const filtered = (orgs.data ?? []).filter(
-      (o) => !needle || o.name.toLowerCase().includes(needle),
+    const matches = (orgs.data ?? []).filter(
+      (o) =>
+        !needle ||
+        o.name.toLowerCase().includes(needle) ||
+        (o.ownerName?.toLowerCase().includes(needle) ?? false) ||
+        (o.ownerEmail?.toLowerCase().includes(needle) ?? false),
     );
-    return sortRows(filtered, sort, {
+    return sortRows(matches, sort, {
       name: (o) => o.name.toLowerCase(),
+      owner: (o) => o.ownerName?.toLowerCase() ?? "",
       members: (o) => o.members,
       links: (o) => o.links,
       clicks: (o) => o.clicks,
@@ -158,20 +167,28 @@ export function AdminOrgsPage() {
     });
   }, [orgs.data, q, sort]);
 
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const safePage = Math.min(page, totalPages - 1);
+  const rows = filtered.slice(safePage * PAGE_SIZE, (safePage + 1) * PAGE_SIZE);
+
   if (orgs.isLoading) return <AdminTableSkeleton />;
   return (
     <div>
       <PageHeader title="Organizations" sub="All organizations on this instance" />
       <SearchInput
         value={q}
-        onChange={setQ}
-        placeholder="Search organizations…"
+        onChange={(v) => {
+          setQ(v);
+          setPage(0);
+        }}
+        placeholder="Search by org name or owner…"
         label="Search organizations"
       />
       <Table>
         <thead>
           <tr>
             <SortTh label="Name" sortKey="name" sort={sort} onSort={setSort} />
+            <SortTh label="Owner" sortKey="owner" sort={sort} onSort={setSort} />
             <Th>Plan</Th>
             <SortTh
               label="Members"
@@ -201,14 +218,32 @@ export function AdminOrgsPage() {
         <tbody>
           {rows.map((org) => (
             <tr key={org.id}>
-              <Td className="font-bold">
+              <Td className="max-w-48 font-bold">
                 <button
                   type="button"
                   onClick={() => setViewing(org)}
-                  className="cursor-pointer text-accent hover:underline"
+                  title={org.name}
+                  className="block max-w-full cursor-pointer truncate text-accent hover:underline"
                 >
                   {org.name}
                 </button>
+              </Td>
+              <Td className="max-w-48">
+                {org.ownerName ? (
+                  <>
+                    <span className="block truncate" title={org.ownerName}>
+                      {org.ownerName}
+                    </span>
+                    <span
+                      className="block truncate text-xs text-muted"
+                      title={org.ownerEmail ?? ""}
+                    >
+                      {org.ownerEmail}
+                    </span>
+                  </>
+                ) : (
+                  <span className="text-muted">—</span>
+                )}
               </Td>
               <Td>
                 <Badge color={planBadgeColor[org.plan]}>{org.plan}</Badge>
@@ -242,13 +277,14 @@ export function AdminOrgsPage() {
           ))}
           {rows.length === 0 && (
             <tr>
-              <Td colSpan={7} className="py-8 text-center text-muted">
+              <Td colSpan={8} className="py-8 text-center text-muted">
                 No organizations match “{q.trim()}”.
               </Td>
             </tr>
           )}
         </tbody>
       </Table>
+      <Pager page={safePage} totalPages={totalPages} onPageChange={setPage} />
 
       <OrgDetailDialog org={viewing} onClose={() => setViewing(null)} />
 
