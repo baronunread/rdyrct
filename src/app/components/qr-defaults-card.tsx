@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
+import { Info } from "lucide-react";
 import { useCurrentUser } from "../lib/hooks";
 import { useCurrentOrg } from "../lib/current-org";
 import { api, shortUrl } from "../lib/api";
@@ -17,6 +18,7 @@ import { MenuSelect } from "../ui/menu";
 import { Card } from "../ui/misc";
 import { BusyContent } from "../ui/spinner";
 import { useToast } from "../ui/toast";
+import { Tooltip } from "../ui/tooltip";
 import { QRPreview } from "./qr";
 import { QrLogoInput } from "./qr-logo-input";
 import { QrColorField } from "./qr-color-field";
@@ -164,9 +166,9 @@ function QrColorAndLogoFields({ values, setField, isAdmin }: QrDefaultsFieldsPro
           label="Background"
           value={values.qrBg}
           fallback={QR_DEFAULT_BG}
-          allowTransparent
           onChange={(v) => setField("qrBg", v)}
           disabled={!isAdmin}
+          alpha
         />
         <Field
           label="Logo size"
@@ -187,7 +189,18 @@ function QrColorAndLogoFields({ values, setField, isAdmin }: QrDefaultsFieldsPro
         </Field>
       </div>
       <div>
-        <span className="mb-1.5 block text-2xs tracking-wider text-muted uppercase">Logo</span>
+        <span className="mb-1.5 flex items-center gap-1.5 text-2xs tracking-wider text-muted uppercase">
+          Logo
+          <Tooltip content="Embedded in the center of every QR code by default. Use a small, square image with some breathing room so the code stays easy to scan. A link can upload its own logo to override this.">
+            <button
+              type="button"
+              aria-label="About QR logos"
+              className="cursor-pointer text-muted normal-case hover:text-text"
+            >
+              <Info size={13} />
+            </button>
+          </Tooltip>
+        </span>
         <QrLogoInput
           value={values.qrLogo}
           disabled={!isAdmin}

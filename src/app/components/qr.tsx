@@ -2,7 +2,7 @@ import { useEffect, useRef } from "react";
 import QRCodeStyling, { type CornerSquareType, type CornerDotType } from "qr-code-styling";
 import { Button } from "../ui/button";
 import { Download } from "lucide-react";
-import { resolveLook, type QrLook } from "../lib/qr-look";
+import { hasTransparency, resolveLook, type QrLook } from "../lib/qr-look";
 
 function looksOptions(look: QrLook) {
   return {
@@ -102,10 +102,9 @@ export function QRPreview({
           height: size,
           // A checkerboard shows through where the QR is transparent.
           backgroundColor: "#ffffff",
-          backgroundImage:
-            look.bg === "transparent"
-              ? "conic-gradient(from 90deg, #e7e7ea 90deg, #f7f7f9 0 180deg, #e7e7ea 0 270deg, #f7f7f9 0)"
-              : undefined,
+          backgroundImage: hasTransparency(look.bg)
+            ? "conic-gradient(from 90deg, #e7e7ea 90deg, #f7f7f9 0 180deg, #e7e7ea 0 270deg, #f7f7f9 0)"
+            : undefined,
           backgroundSize: "16px 16px",
         }}
       />
