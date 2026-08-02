@@ -219,7 +219,7 @@ export function BarList({
   return (
     <ul className="flex flex-col gap-2.5">
       {items.map((item) => (
-        <li key={item.key} title={`${item.key}: ${item.clicks}`}>
+        <li key={item.key}>
           <div className="mb-1 flex items-baseline justify-between gap-3 text-xs">
             <span className="truncate">{formatKey(item.key)}</span>
             <span className="tnum text-muted">{item.clicks}</span>
