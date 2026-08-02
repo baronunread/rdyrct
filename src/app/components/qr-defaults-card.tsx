@@ -98,46 +98,33 @@ interface QrDefaultsFieldsProps {
 
 function QrShapeFields({ values, setField, isAdmin }: QrDefaultsFieldsProps) {
   return (
-    <div className="grid grid-cols-1 items-center gap-6 sm:grid-cols-[1fr_auto]">
-      <div className="flex flex-col gap-4">
-        <Field label="Dot style">
-          <MenuSelect
-            label="Dot style"
-            value={values.qrStyle}
-            onChange={(v) => setField("qrStyle", v)}
-            disabled={!isAdmin}
-            options={[
-              { value: "", label: "Rounded (default)" },
-              ...QR_DOT_STYLES.flatMap((s) => (s === "rounded" ? [] : [{ value: s, label: s }])),
-            ]}
-          />
-        </Field>
-        <Field label="Corner style">
-          <MenuSelect
-            label="Corner style"
-            value={values.qrCorner}
-            onChange={(v) => setField("qrCorner", v)}
-            disabled={!isAdmin}
-            options={[
-              { value: "", label: "Extra-rounded (default)" },
-              ...QR_CORNER_STYLES.flatMap((s) =>
-                s === "extra-rounded" ? [] : [{ value: s, label: s }],
-              ),
-            ]}
-          />
-        </Field>
-      </div>
-      <QRPreview
-        url={shortUrl("preview")}
-        logo={values.qrLogo || undefined}
-        dotStyle={values.qrStyle}
-        color={values.qrColor}
-        corner={values.qrCorner}
-        eyeColor={values.qrEyeColor}
-        bg={values.qrBg}
-        logoSize={values.qrLogoSize === "" ? undefined : Number(values.qrLogoSize)}
-        size={160}
-      />
+    <div className="flex flex-col gap-4">
+      <Field label="Dot style">
+        <MenuSelect
+          label="Dot style"
+          value={values.qrStyle}
+          onChange={(v) => setField("qrStyle", v)}
+          disabled={!isAdmin}
+          options={[
+            { value: "", label: "Rounded (default)" },
+            ...QR_DOT_STYLES.flatMap((s) => (s === "rounded" ? [] : [{ value: s, label: s }])),
+          ]}
+        />
+      </Field>
+      <Field label="Corner style">
+        <MenuSelect
+          label="Corner style"
+          value={values.qrCorner}
+          onChange={(v) => setField("qrCorner", v)}
+          disabled={!isAdmin}
+          options={[
+            { value: "", label: "Extra-rounded (default)" },
+            ...QR_CORNER_STYLES.flatMap((s) =>
+              s === "extra-rounded" ? [] : [{ value: s, label: s }],
+            ),
+          ]}
+        />
+      </Field>
     </div>
   );
 }
@@ -217,6 +204,17 @@ function QrDefaultsFormFields({ values, setField, isAdmin }: QrDefaultsFieldsPro
     <div className="flex flex-col gap-6">
       <QrShapeFields values={values} setField={setField} isAdmin={isAdmin} />
       <QrColorAndLogoFields values={values} setField={setField} isAdmin={isAdmin} />
+      <QRPreview
+        url={shortUrl("preview")}
+        logo={values.qrLogo || undefined}
+        dotStyle={values.qrStyle}
+        color={values.qrColor}
+        corner={values.qrCorner}
+        eyeColor={values.qrEyeColor}
+        bg={values.qrBg}
+        logoSize={values.qrLogoSize === "" ? undefined : Number(values.qrLogoSize)}
+        size={160}
+      />
     </div>
   );
 }
