@@ -57,10 +57,13 @@ function AliasRow({
         <div className="flex min-w-0 items-center gap-2.5">
           <span className="w-5.5 shrink-0" />
           <span
-            className="min-w-0 truncate font-mono text-xs text-muted"
+            className="flex min-w-0 items-baseline font-mono text-xs"
             title={address.domain ? `${address.domain}/${address.slug}` : `/${address.slug}`}
           >
-            {address.domain ? `${address.domain}/${address.slug}` : `/${address.slug}`}
+            {address.domain && (
+              <span className="min-w-0 truncate text-muted/70">{address.domain}</span>
+            )}
+            <span className="shrink-0 text-muted">/{address.slug}</span>
           </span>
           <span className="shrink-0">
             <CopyButton
@@ -71,8 +74,8 @@ function AliasRow({
           </span>
         </div>
       </Td>
-      <Td className="hidden py-1.5 text-xs text-muted/50 sm:table-cell">—</Td>
-      <Td className="hidden py-1.5 text-xs text-muted sm:table-cell">
+      <Td className="hidden py-1.5 text-xs text-muted/50 lg:table-cell">—</Td>
+      <Td className="hidden py-1.5 text-xs text-muted xl:table-cell">
         {isTemp ? (
           <span className="inline-flex items-center gap-1">
             Expires in {timeLeft(address.expiresAt!)}

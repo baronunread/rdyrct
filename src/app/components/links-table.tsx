@@ -81,10 +81,10 @@ export function LinksTable({
               sortKey="slug"
               sort={sort}
               onSort={onSort}
-              className="w-1/2 sm:w-[32%]"
+              className="w-1/2 sm:w-2/5 lg:w-[30%] xl:w-[26%]"
             />
-            <Th className="hidden sm:table-cell sm:w-[18%]">Title</Th>
-            <Th className="hidden sm:table-cell sm:w-[20%]">Destination</Th>
+            <Th className="hidden lg:table-cell lg:w-[16%]">Title</Th>
+            <Th className="hidden xl:table-cell xl:w-[22%]">Destination</Th>
             <SortTh
               label="Clicks"
               sortKey="clicks"
@@ -136,9 +136,16 @@ export function LinksTable({
                         type="button"
                         onClick={() => navigate(linkDetailPath(link))}
                         title={link.domain ? `${link.domain}/${link.slug}` : `/${link.slug}`}
-                        className="min-w-0 truncate cursor-pointer font-bold text-accent hover:underline"
+                        className="group flex min-w-0 cursor-pointer items-baseline"
                       >
-                        {link.domain ? `${link.domain}/${link.slug}` : `/${link.slug}`}
+                        {link.domain && (
+                          <span className="min-w-0 truncate font-normal text-muted group-hover:underline">
+                            {link.domain}
+                          </span>
+                        )}
+                        <span className="shrink-0 font-bold text-accent group-hover:underline">
+                          /{link.slug}
+                        </span>
                       </button>
                       <span className="shrink-0">
                         <CopyButton
@@ -160,10 +167,10 @@ export function LinksTable({
                       )}
                     </div>
                   </Td>
-                  <Td className="hidden truncate text-xs text-muted sm:table-cell">
+                  <Td className="hidden truncate text-xs text-muted lg:table-cell">
                     {link.title || <span className="text-muted/50">—</span>}
                   </Td>
-                  <Td className="hidden max-w-64 sm:table-cell">
+                  <Td className="hidden max-w-64 xl:table-cell">
                     <a
                       href={link.destination}
                       target="_blank"
