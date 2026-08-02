@@ -17,6 +17,14 @@ export interface QrLook {
   logoSize: number;
 }
 
+/** Whether a resolved `bg` value has any transparency: the legacy
+ * 'transparent' sentinel, or a hex color whose alpha byte is below 0xff. */
+export function hasTransparency(bg: string): boolean {
+  if (bg === "transparent") return true;
+  const alpha = /^#[0-9a-fA-F]{6}([0-9a-fA-F]{2})$/.exec(bg)?.[1];
+  return alpha != null && parseInt(alpha, 16) < 255;
+}
+
 /** Resolves QRPreview's individual appearance props (each an override:
  * empty/undefined falls back to the built-in default) into a concrete QrLook. */
 export function resolveLook({
