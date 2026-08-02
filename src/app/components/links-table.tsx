@@ -10,6 +10,7 @@ import {
   QrCode,
   Trash2,
 } from "lucide-react";
+import { AnimatePresence, LazyMotion, domAnimation } from "motion/react";
 import { shortUrl } from "../lib/api";
 import { type LinkDTO, type Sort } from "@/shared/types";
 import { Badge, Table, Th, Td } from "../ui/misc";
@@ -74,7 +75,7 @@ export function LinksTable({
     });
 
   return (
-    <>
+    <LazyMotion features={domAnimation}>
       <Table fixed>
         <thead>
           <tr>
@@ -123,7 +124,7 @@ export function LinksTable({
                           }
                           title={`${link.addressCount - 1} alias${link.addressCount - 1 === 1 ? "" : "es"}`}
                           aria-expanded={isExpanded}
-                          className="flex shrink-0 cursor-pointer items-center justify-center p-1 text-muted hover:text-text"
+                          className="flex shrink-0 cursor-pointer items-center justify-center p-1 text-muted transition-transform duration-150 active:scale-[0.96] hover:text-text"
                         >
                           <ChevronRight
                             size={14}
@@ -201,13 +202,15 @@ export function LinksTable({
                     </Menu>
                   </Td>
                 </tr>
-                {isExpanded && <AliasThread orgId={orgId} link={link} />}
+                <AnimatePresence>
+                  {isExpanded && <AliasThread key="alias-thread" orgId={orgId} link={link} />}
+                </AnimatePresence>
               </Fragment>
             );
           })}
         </tbody>
       </Table>
       <Pager page={currentPage} totalPages={totalPages} onPageChange={onPageChange} />
-    </>
+    </LazyMotion>
   );
 }
