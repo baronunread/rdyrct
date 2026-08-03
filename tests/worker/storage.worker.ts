@@ -186,7 +186,7 @@ describe("storage queue: dead-letter visibility", () => {
     const result = await getQueueResult(batch, ctx);
     expect(result.explicitAcks).toHaveLength(2);
     expect(result.retryMessages).toEqual([]);
-    const logged = errors.mock.calls.map(([a]) => String(a));
+    const logged = errors.mock.calls.map((call) => call.map(String).join(" "));
     expect(logged.some((line) => line.includes("storage_message_gave_up"))).toBe(true);
     expect(logged.some((line) => line.includes("slug:sale"))).toBe(true);
     errors.mockRestore();
