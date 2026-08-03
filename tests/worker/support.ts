@@ -152,7 +152,8 @@ export function rawLinkRow(
   row: Pick<
     typeof schema.links.$inferInsert,
     "id" | "orgId" | "slug" | "destination" | "createdAt"
-  >,
+  > &
+    Partial<typeof schema.links.$inferInsert>,
 ): typeof schema.links.$inferInsert {
   return { ...rawLinkDefaults, ...row };
 }

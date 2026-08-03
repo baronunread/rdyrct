@@ -288,7 +288,10 @@ export async function deleteKvKeys(env: Env, keys: string[]): Promise<void> {
   await Promise.all(keys.map((key) => env.LINKS.delete(key)));
 }
 
-const ALIAS_SWEEP_BATCH_SIZE = 200;
+// Cloudflare Queues caps sendBatch at 100 messages: this sweep enqueues one
+// sync message per expired row in a single sendBatch call below, so the page
+// size can't exceed that.
+const ALIAS_SWEEP_BATCH_SIZE = 100;
 
 /**
  * Retire every rename alias past its 48-hour deadline, in bounded batches.

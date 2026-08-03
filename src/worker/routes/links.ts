@@ -16,12 +16,10 @@ import {
   normalizeUrl,
   resolveUtm,
   validateQrFields,
+  ALIAS_TTL_MS,
 } from "../util";
 import type { AddressDTO, LinkDTO, LinkInput, OrgPlan, PlanLimits, TopEntry } from "@/shared/types";
 
-// A renamed custom-domain address keeps working for exactly this long before
-// the daily sweep (storage.ts's sweepExpiredAliases) retires it.
-const ALIAS_TTL_MS = 48 * 60 * 60 * 1000;
 const RECENT_CLICKS_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 // Active aliases (temp + permanent) a single link may hold at once: keeps the
 // alias thread readable and caps how much of the org's link quota one link
@@ -573,6 +571,20 @@ linkRoutes.post("/", requireOrgRole("member"), async (c) => {
       throw new HTTPException(400, {
         message: "An address can only be added to a link on the same domain",
       });
+    // The match list the caller acted on can be stale: confirm the target
+    // still points at the destination the caller asked to merge into.
+    if (
+      target.destination !== body.destination ||
+      target.utmSource !== utm.utmSource ||
+      target.utmMedium !== utm.utmMedium ||
+      target.utmCampaign !== utm.utmCampaign ||
+      target.utmTerm !== utm.utmTerm ||
+      target.utmContent !== utm.utmContent
+    )
+      throw new HTTPException(409, {
+        message: "That link no longer has this destination. Review the link and try again.",
+        cause: { code: "merge_target_changed" },
+      });
     assertLinkQuota(activeCount, plan, limits);
     await assertAliasQuota(db, target.id);
     const address = newAddressRow(
@@ -700,6 +712,13 @@ linkRoutes.patch("/:linkId", requireOrgRole("member"), async (c) => {
   const existing = await findLink(db, orgId, c.req.param("linkId")!);
 
   const domainId = body.domainId !== undefined ? body.domainId : existing.domainId;
+  // A link's domain is fixed after creation (see `#38`): its aliases are
+  // bound to that domain, so moving the primary would strand them. The
+  // editor UI already greys the field out; this guards direct API calls.
+  if (domainId !== existing.domainId)
+    throw new HTTPException(400, {
+      message: "A link's domain can't change. Create a new link on the other domain instead.",
+    });
   // Chosen slugs exist only on custom domains; renaming a shared-domain link
   // is out for every plan, but keeping its existing slug stays allowed.
   const [hostname, oldHostname, newSlug, aliases] = await Promise.all([
@@ -910,6 +929,16 @@ linkRoutes.post("/:linkId/addresses/:addressId/promote", requireOrgRole("member"
   if (address.kind === "primary") return c.json(await linkToDTO(db, orgId, existing));
   if (address.retiredAt !== null)
     throw new HTTPException(409, { message: "This address is no longer active" });
+
+  // A temp_alias is free (see countActiveAddresses), but the old primary
+  // becomes a permanent_alias below, so the org's counted total grows by one.
+  if (address.kind === "temp_alias") {
+    const [{ plan, limits }, activeCount] = await Promise.all([
+      orgPlan(db, orgId),
+      countActiveAddresses(db, orgId),
+    ]);
+    assertLinkQuota(activeCount, plan, limits);
+  }
 
   // Promoting reuses the rename mechanics: the target's slug/domain becomes
   // the new primary, and the current primary's slug/domain becomes a new

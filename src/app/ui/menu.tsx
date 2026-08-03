@@ -41,16 +41,19 @@ export function MenuItem({
   onClick,
   children,
   className,
+  disabled,
 }: {
   onClick?: () => void;
   children: ReactNode;
   className?: string;
+  disabled?: boolean;
 }) {
   return (
     <BaseMenu.Item
       onClick={onClick}
+      disabled={disabled}
       className={cn(
-        "flex cursor-pointer items-center gap-2 rounded-md px-2.5 py-2 text-sm text-text outline-none select-none data-[highlighted]:bg-surface-2",
+        "flex cursor-pointer items-center gap-2 rounded-md px-2.5 py-2 text-sm text-text outline-none select-none data-[highlighted]:bg-surface-2 data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
         className,
       )}
     >

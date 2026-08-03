@@ -9,7 +9,7 @@ import { CopyButton } from "../ui/copy-button";
 import { copyToClipboard } from "../lib/clipboard";
 import { shortUrl } from "../lib/api";
 import { shortDate } from "../lib/dates";
-import { Spinner } from "../ui/spinner";
+import { Skeleton, SkeletonStatus } from "../ui/skeleton";
 import { Tooltip } from "../ui/tooltip";
 import { ConfirmDialog } from "../ui/confirm-dialog";
 import type { AddressDTO, LinkDTO } from "@/shared/types";
@@ -93,21 +93,15 @@ function AliasRow({
           }
         >
           {isTemp && (
-            <MenuItem
-              onClick={onKeepForever}
-              className={pending ? "pointer-events-none opacity-50" : ""}
-            >
+            <MenuItem onClick={onKeepForever} disabled={pending}>
               <Clock size={14} /> Keep forever
             </MenuItem>
           )}
-          <MenuItem onClick={onPromote} className={pending ? "pointer-events-none opacity-50" : ""}>
+          <MenuItem onClick={onPromote} disabled={pending}>
             <Star size={14} /> Make primary
           </MenuItem>
           <MenuSeparator />
-          <MenuItem
-            className={`text-danger ${pending ? "pointer-events-none opacity-50" : ""}`}
-            onClick={onRemove}
-          >
+          <MenuItem className="text-danger" onClick={onRemove} disabled={pending}>
             <Trash2 size={14} /> Remove
           </MenuItem>
         </Menu>
@@ -128,9 +122,9 @@ export function AliasThread({ orgId, link }: { orgId: string; link: LinkDTO }) {
     return (
       <tr>
         <Td colSpan={5} className="bg-surface-2/30">
-          <div className="flex justify-center py-1 text-muted">
-            <Spinner />
-          </div>
+          <SkeletonStatus className="flex justify-center py-1">
+            <Skeleton className="h-4 w-32" />
+          </SkeletonStatus>
         </Td>
       </tr>
     );

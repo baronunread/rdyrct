@@ -17,5 +17,11 @@ export async function rawSql(page: Page, sql: string, params: unknown[] = []): P
 }
 
 export async function setPlan(page: Page, email: string, plan: "hobby" | "pro" = "hobby") {
-  await rawSql(page, "UPDATE user SET plan = ? WHERE email = ?", [plan, email]);
+  const result = (await rawSql(page, "UPDATE user SET plan = ? WHERE email = ?", [
+    plan,
+    email,
+  ])) as { result: { meta: { changes: number } }[] };
+  // An unmatched email leaves the UPDATE a silent no-op: fail here instead of
+  // at some unrelated paid-plan gate downstream.
+  expect(result.result[0].meta.changes).toBe(1);
 }

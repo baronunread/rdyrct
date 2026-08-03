@@ -12,6 +12,8 @@
  * password below and have verified emails, so you can log in as any of them.
  */
 
+import { ALIAS_TTL_MS } from "../src/worker/util";
+
 const API = "https://rdyrct.localhost/cdn-cgi/explorer/api";
 const PASSWORD = "seed-password-123";
 
@@ -20,9 +22,6 @@ const CONFIG = {
   extraUsersPool: 220, // non-owner users to spread across orgs as members
   clickDays: 90, // how far back click history goes
 };
-
-// 48h temp-alias lifetime, mirrors ALIAS_TTL_MS in src/worker/routes/links.ts.
-const ALIAS_TTL_MS = 48 * 60 * 60 * 1000;
 
 /* ---------------- deterministic PRNG (stable re-runs) ---------------- */
 
@@ -191,9 +190,13 @@ const ORG_NAME_SUFFIX = [
 const usedOrgNames = new Set<string>();
 function makeOrgName(): string {
   let name = "";
-  do {
+  // ORG_NAME_PREFIX x ORG_NAME_SUFFIX is a finite pool: once CONFIG.orgs
+  // approaches it, fall back to a numbered suffix instead of spinning forever.
+  for (let attempt = 0; attempt < 50; attempt++) {
     name = `${pick(ORG_NAME_PREFIX)} ${pick(ORG_NAME_SUFFIX)}`;
-  } while (usedOrgNames.has(name));
+    if (!usedOrgNames.has(name)) break;
+  }
+  while (usedOrgNames.has(name)) name = `${name} ${usedOrgNames.size}`;
   usedOrgNames.add(name);
   return name;
 }
@@ -614,18 +617,29 @@ async function seed() {
   }
 
   const linkById = new Map(links.map((l) => [l.id, l]));
+  const liveAddresses = addresses.filter((a) => a.retiredAt === null); // retired addresses resolve to nothing
+  // Same reasoning as the click inserts above: one KV PUT per address is
+  // thousands of serial round trips at this scale, so run a few at once.
+  const KV_CONCURRENCY = 8;
   let publishedAddresses = 0;
-  for (const address of addresses) {
-    if (address.retiredAt !== null) continue; // retired addresses resolve to nothing
-    const link = linkById.get(address.linkId)!;
-    await kvPut(address.host ? `slug:${address.host}:${address.slug}` : `slug:${address.slug}`, {
-      linkId: link.id,
-      addressId: address.id,
-      orgId: address.org.id,
-      url: link.url,
-      expiresAt: address.expiresAt,
-    });
-    publishedAddresses++;
+  for (let i = 0; i < liveAddresses.length; i += KV_CONCURRENCY) {
+    const slice = liveAddresses.slice(i, i + KV_CONCURRENCY);
+    await Promise.all(
+      slice.map((address) => {
+        const link = linkById.get(address.linkId)!;
+        return kvPut(
+          address.host ? `slug:${address.host}:${address.slug}` : `slug:${address.slug}`,
+          {
+            linkId: link.id,
+            addressId: address.id,
+            orgId: address.org.id,
+            url: link.url,
+            expiresAt: address.expiresAt,
+          },
+        );
+      }),
+    );
+    publishedAddresses += slice.length;
   }
   console.log(
     `  links published to KV: ${publishedAddresses} (${links.length} links, ${addresses.length - links.length} aliases)`,

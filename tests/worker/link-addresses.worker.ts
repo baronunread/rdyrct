@@ -5,7 +5,7 @@ import { drizzle } from "drizzle-orm/d1";
 import { eq } from "drizzle-orm";
 import worker from "../../src/worker";
 import * as schema from "../../src/worker/db/schema";
-import { now } from "../../src/worker/util";
+import { now, ALIAS_TTL_MS } from "../../src/worker/util";
 import type { StorageMessage } from "../../src/worker/storage";
 import type { Env } from "../../src/worker/env";
 import {
@@ -16,8 +16,6 @@ import {
   rawAddressRow,
   rawLinkRow,
 } from "./support";
-
-const ALIAS_TTL_MS = 48 * 60 * 60 * 1000;
 
 /** A free-plan owner of "org-1", with an active custom domain "go.example.com". */
 const seed = () => freeOwnerCookie({ id: "domain-1", hostname: "go.example.com" });
@@ -144,20 +142,17 @@ describe("PATCH /orgs/:orgId/links/:linkId: renaming a custom-domain address", (
     expect(alias.expiresAt).toBeLessThan(beforeRename + ALIAS_TTL_MS + 5000);
   });
 
-  it("does not create an alias when renaming a shared-domain link (it has no chosen slug to preserve)", async () => {
+  it("rejects a domain change: a link's aliases are bound to its domain, so it can't move", async () => {
     const cookie = await seed();
     const created = await api(cookie, "POST", "/links", { destination: "https://example.com/a" });
     const { id } = (await created.json()) as { id: string };
 
-    // Moving a shared-domain link onto a custom domain is a "moved" rename
-    // (domainId changed), but the address it's moving away from was never on
-    // a custom domain, so no alias should be created for it.
     const moved = await api(cookie, "PATCH", `/links/${id}`, { domainId: "domain-1" });
-    expect(moved.status).toBe(200);
+    expect(moved.status).toBe(400);
 
     const addresses = await addressesOf(id);
     expect(addresses).toHaveLength(1);
-    expect(addresses[0]).toMatchObject({ kind: "primary", domainId: "domain-1" });
+    expect(addresses[0]).toMatchObject({ kind: "primary", domainId: null });
   });
 
   it("resyncs every alias's KV key on any edit, not just the primary's", async () => {
@@ -368,6 +363,29 @@ describe("same-destination grouping", () => {
     expect(res.status).toBe(400);
   });
 
+  it("rejects mergeIntoLinkId once the target's destination no longer matches", async () => {
+    const cookie = await seed();
+    const { id: targetId } = await createLink(cookie, {
+      destination: "https://example.com/pricing",
+    });
+
+    // Someone else edits the target's destination between the client seeing
+    // the same_destination_match response and posting mergeIntoLinkId back.
+    await api(cookie, "PATCH", `/links/${targetId}`, {
+      destination: "https://example.com/somewhere-else",
+    });
+
+    const res = await api(cookie, "POST", "/links", {
+      destination: "https://example.com/pricing",
+      mergeIntoLinkId: targetId,
+    });
+    expect(res.status).toBe(409);
+    const body = (await res.json()) as { code: string };
+    expect(body.code).toBe("merge_target_changed");
+
+    await expectLinkCount(1);
+  });
+
   it("forceSeparateLink creates a genuinely new link despite the match", async () => {
     const cookie = await seed();
     await api(cookie, "POST", "/links", { destination: "https://example.com/pricing" });
@@ -415,7 +433,9 @@ describe("DELETE /orgs/:orgId/links/:linkId", () => {
 
 describe("plan limits (#38)", () => {
   // Free plan allows 30 links; fill it with permanent addresses directly so
-  // the org sits exactly at its cap without creating 30 real links.
+  // the org sits at its cap without creating 30 real links. A caller that
+  // creates a link first before calling this ends up one over the cap,
+  // which is the point: it's testing that the next write is still rejected.
   async function fillOrgToLimit() {
     const rows = Array.from({ length: 30 }, (_, i) =>
       rawLinkRow({
@@ -486,6 +506,21 @@ describe("plan limits (#38)", () => {
     await fillOrgToLimit();
 
     const res = await api(cookie, "POST", `/links/${id}/addresses/${alias.id}/keep-forever`);
+    expect(res.status).toBe(402);
+  });
+
+  it("402s promoting a temp alias at the limit: the old primary becomes a counted permanent_alias", async () => {
+    const cookie = await seed();
+    const { id } = await createLink(cookie, {
+      destination: "https://example.com/a",
+      domainId: "domain-1",
+      slug: "old-slug",
+    });
+    await api(cookie, "PATCH", `/links/${id}`, { slug: "new-slug" });
+    const alias = (await addressesOf(id)).find((a) => a.kind === "temp_alias")!;
+    await fillOrgToLimit();
+
+    const res = await api(cookie, "POST", `/links/${id}/addresses/${alias.id}/promote`);
     expect(res.status).toBe(402);
   });
 });

@@ -73,6 +73,18 @@ function peakActivityCell(
   return peakCell.clicks > 0 ? peakCell : null;
 }
 
+/** Shared shape of the same-destination dialog's two "go ahead" actions:
+ * differ only in which extra field they send. */
+function submitSameDestination(
+  create: ReturnType<typeof useLinkMutations>["create"],
+  input: LinkInput,
+  extra: Partial<LinkInput>,
+  onDone: (link: LinkDTO) => void,
+  onError: (e: Error) => void,
+) {
+  create.mutate({ ...input, ...extra }, { onSuccess: onDone, onError });
+}
+
 export function Dashboard() {
   const { org, orgId, limits, activeDomains, orgQr } = useOrgLimits();
   const data = useDashboardData(orgId);
@@ -136,30 +148,28 @@ export function Dashboard() {
         onClose={() => setSameDestination(null)}
         onAddToExisting={(matchedLink) => {
           if (!sameDestination) return;
-          const { input } = sameDestination;
-          data.create.mutate(
-            { ...input, mergeIntoLinkId: matchedLink.id },
-            {
-              onSuccess: (link) => {
-                setSameDestination(null);
-                setCreated(link);
-              },
-              onError: withErrorToast(toast),
+          submitSameDestination(
+            data.create,
+            sameDestination.input,
+            { mergeIntoLinkId: matchedLink.id },
+            (link) => {
+              setSameDestination(null);
+              setCreated(link);
             },
+            withErrorToast(toast),
           );
         }}
         onCreateSeparate={() => {
           if (!sameDestination) return;
-          const { input } = sameDestination;
-          data.create.mutate(
-            { ...input, forceSeparateLink: true },
-            {
-              onSuccess: (link) => {
-                setSameDestination(null);
-                setCreated(link);
-              },
-              onError: withErrorToast(toast),
+          submitSameDestination(
+            data.create,
+            sameDestination.input,
+            { forceSeparateLink: true },
+            (link) => {
+              setSameDestination(null);
+              setCreated(link);
             },
+            withErrorToast(toast),
           );
         }}
       />
