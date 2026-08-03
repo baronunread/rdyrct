@@ -26,15 +26,7 @@ function rateLimitLog(
   group: RateLimitGroup,
   details: { method: string; plan?: SessionUser["plan"]; error?: unknown },
 ) {
-  const payload: Record<string, unknown> = {
-    event,
-    group,
-    method: details.method,
-  };
-  if (details.plan) payload.plan = details.plan;
-  if (details.error)
-    payload.error = details.error instanceof Error ? details.error.name : "unknown";
-  console.warn(JSON.stringify(payload));
+  console.warn(event, group, details.method, details.plan ?? "", details.error ?? "");
 }
 
 export async function rateLimitAllows(

@@ -123,9 +123,7 @@ export async function consumeClickBatch(
   } catch (error) {
     console.error("click batch insert failed", batch.messages.length, error);
     if (batch.messages.some((m) => m.attempts >= CLICK_MAX_DELIVERIES)) {
-      console.error(
-        JSON.stringify({ event: "click_batch_dead_letter", size: batch.messages.length }),
-      );
+      console.error("click_batch_dead_letter", batch.messages.length);
     }
     batch.retryAll();
   }
@@ -145,7 +143,7 @@ export async function logClickDeadLetterBatch(
     linkId: m.body.linkId,
     orgId: m.body.orgId,
   }));
-  for (const event of events) console.error(JSON.stringify(event));
+  for (const event of events) console.error(event.event, event.linkId, event.orgId);
   await alertBetterStack(env, events);
   batch.ackAll();
 }

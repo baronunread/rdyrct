@@ -220,13 +220,7 @@ export async function consumeStorageBatch(
       } catch (error) {
         console.error("storage message failed", targetOf(message.body), error);
         if (message.attempts >= STORAGE_MAX_DELIVERIES) {
-          console.error(
-            JSON.stringify({
-              event: "storage_message_dead_letter",
-              op: message.body.op,
-              target: targetOf(message.body),
-            }),
-          );
+          console.error("storage_message_dead_letter", message.body.op, targetOf(message.body));
         }
         message.retry();
       }
@@ -249,7 +243,7 @@ export async function logDeadLetterBatch(
     op: message.body.op,
     target: targetOf(message.body),
   }));
-  for (const event of events) console.error(JSON.stringify(event));
+  for (const event of events) console.error(event.event, event.op, event.target);
   await alertBetterStack(env, events);
   for (const message of batch.messages) message.ack();
 }
