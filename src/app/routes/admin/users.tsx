@@ -1,6 +1,8 @@
 import { useMemo, useState, type ReactNode } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Ban, Check, Ellipsis, ShieldMinus, ShieldPlus, Trash2 } from "lucide-react";
+import { Ban, Check, Ellipsis, Trash2 } from "lucide-react";
+import { ShieldMinus, ShieldPlus } from "lucide";
+import { MorphIcon } from "morphicons/react";
 import { useAdminUsers, useCurrentUser } from "../../lib/hooks";
 import { api } from "../../lib/api";
 import type { AdminUserRow, OrgPlan, Sort } from "@/shared/types";
@@ -133,7 +135,7 @@ function AdminToggleMenuItem({
   if (isSelf) return null;
   return (
     <MenuItem onClick={() => onConfirm(user.isAdmin ? "removeAdmin" : "makeAdmin")}>
-      {user.isAdmin ? <ShieldMinus size={14} /> : <ShieldPlus size={14} />}
+      <MorphIcon icon={user.isAdmin ? ShieldMinus : ShieldPlus} size={14} spring="snappy" />
       {user.isAdmin ? "Remove platform admin" : "Make platform admin"}
     </MenuItem>
   );

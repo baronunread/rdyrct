@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Copy, Check } from "lucide-react";
+import { Copy, Check } from "lucide";
+import { MorphIcon } from "morphicons/react";
 import { Button, IconButton } from "./button";
-import { cn } from "./cn";
 
-// Copy-to-clipboard button whose icon animates into a tick on success. The
+// Copy-to-clipboard button whose icon morphs into a tick on success. The
 // tick holds for a couple of seconds and repeat clicks while ticked don't
 // replay the animation — the icon only flips back once the timeout elapses.
 export function CopyButton({
@@ -40,22 +40,12 @@ export function CopyButton({
   };
 
   const icon = (
-    <span className="relative block h-3 w-3">
-      <Copy
-        size={12}
-        className={cn(
-          "absolute inset-0 transition-all duration-200",
-          copied ? "scale-[0.25] opacity-0 blur-xs" : "scale-100 opacity-100",
-        )}
-      />
-      <Check
-        size={12}
-        className={cn(
-          "absolute inset-0 text-accent-2 transition-all duration-200",
-          copied ? "scale-100 opacity-100" : "scale-[0.25] opacity-0 blur-xs",
-        )}
-      />
-    </span>
+    <MorphIcon
+      icon={copied ? Check : Copy}
+      size={12}
+      spring="snappy"
+      className={copied ? "text-accent-2" : undefined}
+    />
   );
 
   if (display === "button") {

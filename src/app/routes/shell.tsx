@@ -2,19 +2,9 @@ import { Suspense, useState, type ReactNode } from "react";
 import { NavLink, Navigate, Outlet, useNavigate, useLocation } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, LazyMotion, domAnimation, m } from "motion/react";
-import {
-  Globe,
-  Building2,
-  UserCog,
-  ChevronsUpDown,
-  Plus,
-  Check,
-  Sun,
-  Moon,
-  LogOut,
-  Menu as MenuIcon,
-  X,
-} from "lucide-react";
+import { Globe, Building2, UserCog, ChevronsUpDown, Plus, Check, LogOut } from "lucide-react";
+import { Sun, Moon, Menu as MenuIcon, X } from "lucide";
+import { MorphIcon } from "morphicons/react";
 import { useCurrentUser, useLogout } from "../lib/hooks";
 import { useCurrentOrg } from "../lib/current-org";
 import { api, ApiError } from "../lib/api";
@@ -188,7 +178,7 @@ function AppSidebar({
             <p className="truncate text-xs text-muted">{user.email}</p>
           </div>
           <IconButton label="Toggle theme" className="p-2" onClick={onToggleTheme}>
-            {theme === "dark" ? <Sun size={15} /> : <Moon size={15} />}
+            <MorphIcon icon={theme === "dark" ? Sun : Moon} size={15} spring="snappy" />
           </IconButton>
           <IconButton
             label="Sign out"
@@ -365,7 +355,7 @@ export function AppShell() {
           aria-label="Menu"
           className="cursor-pointer rounded-md p-1.5 text-muted hover:text-text"
         >
-          {mobileOpen ? <X size={18} /> : <MenuIcon size={18} />}
+          <MorphIcon icon={mobileOpen ? X : MenuIcon} size={18} spring="snappy" />
         </button>
         <span className="text-sm font-bold tracking-widest">rdyrct</span>
       </div>

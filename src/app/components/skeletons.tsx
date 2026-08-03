@@ -1,4 +1,6 @@
-import { ChevronsUpDown, LogOut, Menu as MenuIcon, Moon, Sun } from "lucide-react";
+import { ChevronsUpDown, LogOut, Menu as MenuIcon } from "lucide-react";
+import { Moon, Sun } from "lucide";
+import { MorphIcon } from "morphicons/react";
 import { useTheme } from "../lib/theme";
 import { appNavItems } from "./nav-items";
 import { IconButton } from "../ui/button";
@@ -261,7 +263,7 @@ function SidebarSkeleton() {
             </span>
           </div>
           <IconButton label="Toggle theme" className="p-2" onClick={toggleTheme}>
-            {theme === "dark" ? <Sun size={15} /> : <Moon size={15} />}
+            <MorphIcon icon={theme === "dark" ? Sun : Moon} size={15} spring="snappy" />
           </IconButton>
           <IconButton label="Sign out" danger className="p-2" disabled>
             <LogOut size={15} />
