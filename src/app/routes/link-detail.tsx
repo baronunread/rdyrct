@@ -127,7 +127,7 @@ export function LinkDetailPage() {
         <LinkInfoCard destination={s.destination} createdAt={s.createdAt} lastClick={s.lastClick} />
       </div>
 
-      <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-3">
+      <div className="mt-4">
         <ClickBreakdown countries={s.countries} referrers={s.referrers} devices={s.devices} />
       </div>
     </div>

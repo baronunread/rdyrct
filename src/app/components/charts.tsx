@@ -469,22 +469,24 @@ export function ClickBreakdown({
   devices: TopEntry[];
 }) {
   return (
-    <>
-      <Card className="lg:col-span-2">
+    <div className="flex flex-col gap-4">
+      <Card>
         <p className="mb-3 text-2xs tracking-wider text-muted uppercase">Countries</p>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-[2fr_1fr]">
           <CountryMap countries={countries} />
           <BarList items={countries.map((c) => ({ ...c, key: fmtCountry(c.key) }))} />
         </div>
       </Card>
-      <Card>
-        <p className="mb-3 text-2xs tracking-wider text-muted uppercase">Referrers</p>
-        <BarList items={referrers} />
-      </Card>
-      <Card>
-        <p className="mb-3 text-2xs tracking-wider text-muted uppercase">Devices</p>
-        <BarList items={devices} />
-      </Card>
-    </>
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <Card>
+          <p className="mb-3 text-2xs tracking-wider text-muted uppercase">Referrers</p>
+          <BarList items={referrers} />
+        </Card>
+        <Card>
+          <p className="mb-3 text-2xs tracking-wider text-muted uppercase">Devices</p>
+          <BarList items={devices} />
+        </Card>
+      </div>
+    </div>
   );
 }

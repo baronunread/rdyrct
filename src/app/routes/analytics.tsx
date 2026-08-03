@@ -171,8 +171,11 @@ export function Analytics() {
 
       <UtmBreakdownSection campaigns={s.campaigns} sources={s.sources} mediums={s.mediums} />
 
-      <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
+      <div className="mt-4">
         <TopLinksCard topLinks={s.topLinks} />
+      </div>
+
+      <div className="mt-4">
         <ClickBreakdown countries={s.countries} referrers={s.referrers} devices={s.devices} />
       </div>
 
