@@ -3,6 +3,7 @@ dist/
 .wrangler/
 .dev.vars
 prod.secrets.env
+.env
 *.local
 playwright-report/
 test-results/
