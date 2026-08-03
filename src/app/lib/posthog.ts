@@ -4,7 +4,7 @@ import type { default as PosthogClient } from "posthog-js";
 // analytics in the consent banner (see consent-banner.tsx): before that,
 // capture/identify/reset are no-ops and the library is never even
 // downloaded, so anonymous visitors (landing page, login) pay nothing.
-export const CONSENT_KEY = "rdyrct:consent";
+export const CONSENT_KEY = "rdyrct:consent:v2";
 
 function hasAnalyticsConsent(): boolean {
   try {
