@@ -182,7 +182,7 @@ function QrColorAndLogoFields({ values, setField, isAdmin }: QrDefaultsFieldsPro
             <button
               type="button"
               aria-label="About QR logos"
-              className="cursor-pointer text-muted normal-case hover:text-text"
+              className="cursor-help text-muted normal-case hover:text-text"
             >
               <Info size={13} />
             </button>

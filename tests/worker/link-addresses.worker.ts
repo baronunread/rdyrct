@@ -5,31 +5,19 @@ import { drizzle } from "drizzle-orm/d1";
 import { eq } from "drizzle-orm";
 import worker from "../../src/worker";
 import * as schema from "../../src/worker/db/schema";
-import { hashPassword } from "../../src/worker/password";
 import { now } from "../../src/worker/util";
-import { applyTestMigrations, authEnv, signInCookie, TEST_PASSWORD } from "./support";
+import {
+  applyTestMigrations,
+  authEnv,
+  freeOwnerCookie,
+  rawAddressRow,
+  rawLinkRow,
+} from "./support";
 
 const ALIAS_TTL_MS = 48 * 60 * 60 * 1000;
 
 /** A free-plan owner of "org-1", with an active custom domain "go.example.com". */
-async function seed(): Promise<string> {
-  await env.DB.batch([
-    env.DB.prepare(
-      "insert into user (id, name, email, email_verified, is_admin, plan, created_at, updated_at) values ('free-1', 'Free', 'free@example.com', 1, 0, 'free', 0, 0)",
-    ),
-    env.DB.prepare(
-      "insert into account (id, account_id, provider_id, user_id, password, created_at, updated_at) values ('acct-free-1', 'free-1', 'credential', 'free-1', ?, 0, 0)",
-    ).bind(await hashPassword(TEST_PASSWORD)),
-    env.DB.prepare("insert into orgs (id, name, created_at) values ('org-1', 'Test', 0)"),
-    env.DB.prepare(
-      "insert into org_members (org_id, user_id, role, created_at) values ('org-1', 'free-1', 'owner', 0)",
-    ),
-    env.DB.prepare(
-      "insert into domains (id, org_id, hostname, status, created_at) values ('domain-1', 'org-1', 'go.example.com', 'active', 0)",
-    ),
-  ]);
-  return signInCookie("free@example.com", TEST_PASSWORD);
-}
+const seed = () => freeOwnerCookie({ id: "domain-1", hostname: "go.example.com" });
 
 async function api(
   cookie: string,
@@ -57,6 +45,24 @@ function db() {
 
 async function addressesOf(linkId: string) {
   return db().select().from(schema.linkAddresses).where(eq(schema.linkAddresses.linkId, linkId));
+}
+
+async function addressById(addressId: string) {
+  const [row] = await db()
+    .select()
+    .from(schema.linkAddresses)
+    .where(eq(schema.linkAddresses.id, addressId));
+  return row;
+}
+
+async function createLink(cookie: string, body: Record<string, unknown>): Promise<{ id: string }> {
+  const res = await api(cookie, "POST", "/links", body);
+  return res.json() as Promise<{ id: string }>;
+}
+
+async function expectLinkCount(n: number) {
+  const linkCount = await env.DB.prepare("select count(*) as n from links").first<{ n: number }>();
+  expect(linkCount?.n).toBe(n);
 }
 
 beforeEach(applyTestMigrations);
@@ -134,17 +140,30 @@ describe("PATCH /orgs/:orgId/links/:linkId: renaming a custom-domain address", (
 
 describe("addresses sub-resource", () => {
   async function createRenamedLink(cookie: string) {
-    const created = await api(cookie, "POST", "/links", {
+    const { id } = await createLink(cookie, {
       destination: "https://example.com/a",
       domainId: "domain-1",
       slug: "old-slug",
     });
-    const { id } = (await created.json()) as { id: string };
     await api(cookie, "PATCH", `/links/${id}`, { slug: "new-slug" });
     const addresses = await addressesOf(id);
     const alias = addresses.find((a) => a.kind === "temp_alias")!;
     return { linkId: id, aliasId: alias.id };
   }
+
+  it("POST always creates the address on the link's own domain, ignoring any domainId in the body (#38)", async () => {
+    const cookie = await seed();
+    const { id: linkId } = await createLink(cookie, { destination: "https://example.com/a" });
+
+    const res = await api(cookie, "POST", `/links/${linkId}/addresses`, {
+      domainId: "domain-1",
+    });
+    expect(res.status).toBe(201);
+
+    const addresses = await addressesOf(linkId);
+    const alias = addresses.find((a) => a.kind === "permanent_alias")!;
+    expect(alias.domainId).toBeNull();
+  });
 
   it("GET lists every address with its kind and expiry", async () => {
     const cookie = await seed();
@@ -163,17 +182,11 @@ describe("addresses sub-resource", () => {
     const res = await api(cookie, "POST", `/links/${linkId}/addresses/${aliasId}/keep-forever`);
     expect(res.status).toBe(200);
 
-    const [row] = await db()
-      .select()
-      .from(schema.linkAddresses)
-      .where(eq(schema.linkAddresses.id, aliasId));
+    const row = await addressById(aliasId);
     expect(row).toMatchObject({ kind: "permanent_alias", expiresAt: null, retiredAt: null });
 
     // Still one link: keeping forever never creates a second links row.
-    const linkCount = await env.DB.prepare("select count(*) as n from links").first<{
-      n: number;
-    }>();
-    expect(linkCount?.n).toBe(1);
+    await expectLinkCount(1);
   });
 
   it("keep-forever 409s once the alias has already been retired (e.g. by the sweep)", async () => {
@@ -205,10 +218,7 @@ describe("addresses sub-resource", () => {
     });
     expect(confirmed.status).toBe(200);
 
-    const [row] = await db()
-      .select()
-      .from(schema.linkAddresses)
-      .where(eq(schema.linkAddresses.id, aliasId));
+    const row = await addressById(aliasId);
     expect(row.retiredAt).not.toBeNull();
   });
 
@@ -254,18 +264,16 @@ describe("same-destination grouping", () => {
     expect(body.code).toBe("same_destination_match");
     expect(body.matchedLinks).toHaveLength(1);
 
-    const linkCount = await env.DB.prepare("select count(*) as n from links").first<{
-      n: number;
-    }>();
-    expect(linkCount?.n).toBe(1);
+    await expectLinkCount(1);
   });
 
   it("mergeIntoLinkId adds a permanent alias to the existing link instead of a new one", async () => {
     const cookie = await seed();
-    const first = await api(cookie, "POST", "/links", {
+    const { id: matchedLinkId } = await createLink(cookie, {
       destination: "https://example.com/pricing",
+      domainId: "domain-1",
+      slug: "first-address",
     });
-    const { id: matchedLinkId } = (await first.json()) as { id: string };
 
     const res = await api(cookie, "POST", "/links", {
       destination: "https://example.com/pricing",
@@ -277,16 +285,44 @@ describe("same-destination grouping", () => {
     const body = (await res.json()) as { id: string };
     expect(body.id).toBe(matchedLinkId);
 
-    const linkCount = await env.DB.prepare("select count(*) as n from links").first<{
-      n: number;
-    }>();
-    expect(linkCount?.n).toBe(1);
+    await expectLinkCount(1);
     const addresses = await addressesOf(matchedLinkId);
     expect(addresses).toHaveLength(2);
     expect(addresses.find((a) => a.slug === "second-address")).toMatchObject({
       kind: "permanent_alias",
       creationReason: "same_destination_merge",
     });
+  });
+
+  it("only matches an existing link on the same domain, never suggesting a cross-domain merge (#38)", async () => {
+    const cookie = await seed();
+    await api(cookie, "POST", "/links", {
+      destination: "https://example.com/pricing",
+      domainId: "domain-1",
+      slug: "on-custom-domain",
+    });
+
+    // Same destination, but on the shared domain: no match, so this creates
+    // a genuinely separate link instead of offering to merge.
+    const res = await api(cookie, "POST", "/links", { destination: "https://example.com/pricing" });
+    expect(res.status).toBe(201);
+
+    await expectLinkCount(2);
+  });
+
+  it("rejects mergeIntoLinkId onto a link on a different domain", async () => {
+    const cookie = await seed();
+    const { id: targetId } = await createLink(cookie, {
+      destination: "https://example.com/pricing",
+      domainId: "domain-1",
+      slug: "on-custom-domain",
+    });
+
+    const res = await api(cookie, "POST", "/links", {
+      destination: "https://example.com/pricing",
+      mergeIntoLinkId: targetId,
+    });
+    expect(res.status).toBe(400);
   });
 
   it("forceSeparateLink creates a genuinely new link despite the match", async () => {
@@ -299,10 +335,7 @@ describe("same-destination grouping", () => {
     });
     expect(res.status).toBe(201);
 
-    const linkCount = await env.DB.prepare("select count(*) as n from links").first<{
-      n: number;
-    }>();
-    expect(linkCount?.n).toBe(2);
+    await expectLinkCount(2);
   });
 
   it("never matches when UTM values differ, even with the same destination", async () => {
@@ -323,12 +356,11 @@ describe("same-destination grouping", () => {
 describe("DELETE /orgs/:orgId/links/:linkId", () => {
   it("cascades every address row (primary and alias)", async () => {
     const cookie = await seed();
-    const created = await api(cookie, "POST", "/links", {
+    const { id } = await createLink(cookie, {
       destination: "https://example.com/a",
       domainId: "domain-1",
       slug: "old-slug",
     });
-    const { id } = (await created.json()) as { id: string };
     await api(cookie, "PATCH", `/links/${id}`, { slug: "new-slug" });
     expect(await addressesOf(id)).toHaveLength(2);
 
@@ -342,39 +374,25 @@ describe("plan limits (#38)", () => {
   // Free plan allows 30 links; fill it with permanent addresses directly so
   // the org sits exactly at its cap without creating 30 real links.
   async function fillOrgToLimit() {
-    const rows = Array.from({ length: 30 }, (_, i) => ({
-      id: `filler-link-${i}`,
-      orgId: "org-1",
-      slug: `filler-${i}`,
-      destination: `https://example.com/filler-${i}`,
-      title: "",
-      utmSource: "",
-      utmMedium: "",
-      utmCampaign: "",
-      utmTerm: "",
-      utmContent: "",
-      qrLogo: "",
-      qrStyle: "",
-      qrColor: "",
-      qrCorner: "",
-      qrBg: "",
-      qrEyeColor: "",
-      qrLogoSize: null,
-      createdBy: null,
-      createdAt: 0,
-    }));
-    const addressRows = rows.map((r) => ({
-      id: `filler-addr-${r.id}`,
-      linkId: r.id,
-      orgId: "org-1",
-      domainId: null as string | null,
-      slug: r.slug,
-      kind: "primary" as const,
-      creationReason: "" as const,
-      expiresAt: null as number | null,
-      retiredAt: null as number | null,
-      createdAt: 0,
-    }));
+    const rows = Array.from({ length: 30 }, (_, i) =>
+      rawLinkRow({
+        id: `filler-link-${i}`,
+        orgId: "org-1",
+        slug: `filler-${i}`,
+        destination: `https://example.com/filler-${i}`,
+        createdAt: 0,
+      }),
+    );
+    const addressRows = rows.map((r) =>
+      rawAddressRow({
+        id: `filler-addr-${r.id}`,
+        linkId: r.id,
+        orgId: "org-1",
+        slug: r.slug,
+        kind: "primary",
+        createdAt: 0,
+      }),
+    );
     // D1 caps bound parameters per statement, so chunk the inserts: ~20
     // columns per links row and ~10 per address row.
     function chunk<T>(items: T[], size: number): T[][] {
@@ -400,12 +418,11 @@ describe("plan limits (#38)", () => {
 
   it("still allows a rename at the limit: the automatic temp_alias never counts against quota", async () => {
     const cookie = await seed();
-    const created = await api(cookie, "POST", "/links", {
+    const { id } = await createLink(cookie, {
       destination: "https://example.com/a",
       domainId: "domain-1",
       slug: "old-slug",
     });
-    const { id } = (await created.json()) as { id: string };
     await fillOrgToLimit();
 
     const res = await api(cookie, "PATCH", `/links/${id}`, { slug: "new-slug" });
@@ -416,12 +433,11 @@ describe("plan limits (#38)", () => {
 
   it("402s keep-forever at the limit: making a temp alias permanent needs room", async () => {
     const cookie = await seed();
-    const created = await api(cookie, "POST", "/links", {
+    const { id } = await createLink(cookie, {
       destination: "https://example.com/a",
       domainId: "domain-1",
       slug: "old-slug",
     });
-    const { id } = (await created.json()) as { id: string };
     await api(cookie, "PATCH", `/links/${id}`, { slug: "new-slug" });
     const alias = (await addressesOf(id)).find((a) => a.kind === "temp_alias")!;
     await fillOrgToLimit();

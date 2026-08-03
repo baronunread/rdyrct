@@ -255,13 +255,7 @@ export function LinksPage() {
 
       {limits.qr && <QrLinkDialog link={qrLink} onClose={() => setQrLink(null)} orgQr={orgQr} />}
 
-      <CreateAliasDialog
-        orgId={orgId}
-        link={aliasLink}
-        onClose={() => setAliasLink(null)}
-        activeDomains={activeDomains}
-        domainsAllowed={limits.domains > 0}
-      />
+      <CreateAliasDialog orgId={orgId} link={aliasLink} onClose={() => setAliasLink(null)} />
 
       <DeleteLinkDialog
         deleting={deleting}

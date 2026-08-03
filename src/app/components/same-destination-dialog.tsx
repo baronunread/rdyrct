@@ -55,7 +55,7 @@ export function SameDestinationDialog({
             <button
               type="button"
               aria-label="Alias vs. UTM parameters"
-              className="mt-0.5 shrink-0 cursor-pointer text-muted hover:text-text"
+              className="mt-0.5 shrink-0 cursor-help text-muted hover:text-text"
             >
               <Info size={13} />
             </button>

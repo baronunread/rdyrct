@@ -213,7 +213,7 @@ function QrLogoField({ form, setForm }: { form: LinkInput; setForm: (f: LinkInpu
           <button
             type="button"
             aria-label="About QR logos"
-            className="cursor-pointer text-muted normal-case hover:text-text"
+            className="cursor-help text-muted normal-case hover:text-text"
           >
             <Info size={13} />
           </button>

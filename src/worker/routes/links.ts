@@ -1,8 +1,8 @@
-import { Hono } from "hono";
+import { Hono, type Context } from "hono";
 import { HTTPException } from "hono/http-exception";
 import { eq, and, desc, isNull, sql } from "drizzle-orm";
 import * as schema from "../db/schema";
-import type { AppEnv, DB } from "../env";
+import type { AppEnv, DB, Env } from "../env";
 import { requireOrgRole } from "../org-role";
 import { deleteQrLogoMsg, enqueueStorage, syncLinkMsg } from "../storage";
 import { orgPlan, countActiveAddresses } from "../plan";
@@ -31,6 +31,19 @@ const MAX_ALIASES_PER_LINK = 5;
 // Mounted at /api/orgs/:orgId/links
 export const linkRoutes = new Hono<AppEnv>();
 
+/** Shared by link creation/rename and standalone address creation: a
+ * provided slug must match the allowed charset and not be reserved. Empty or
+ * missing is fine everywhere this is called (means "allocate a random one"). */
+function validateSlug(slug: string | undefined): void {
+  if (slug === undefined || slug === "") return;
+  if (!SLUG_RE.test(slug))
+    throw new HTTPException(400, {
+      message: "Slug may only contain letters, numbers, - and _ (max 64)",
+    });
+  if (RESERVED_SLUGS.has(slug.toLowerCase()))
+    throw new HTTPException(400, { message: "That slug is reserved" });
+}
+
 function validateInput(body: LinkInput, orgId: string, partial = false) {
   if ((!partial || body.destination !== undefined) && body.destination) {
     body.destination = normalizeUrl(body.destination.trim());
@@ -39,14 +52,7 @@ function validateInput(body: LinkInput, orgId: string, partial = false) {
         message: "Destination must be a valid http(s) URL",
       });
   }
-  if (body.slug !== undefined && body.slug !== "") {
-    if (!SLUG_RE.test(body.slug))
-      throw new HTTPException(400, {
-        message: "Slug may only contain letters, numbers, - and _ (max 64)",
-      });
-    if (RESERVED_SLUGS.has(body.slug.toLowerCase()))
-      throw new HTTPException(400, { message: "That slug is reserved" });
-  }
+  validateSlug(body.slug);
   validateQrFields(body, orgId);
 }
 
@@ -92,6 +98,42 @@ function toDTO(
     addressCount,
     createdBy: row.createdBy,
   };
+}
+
+/** Fetches a link's total click count and current address count, then builds
+ * its DTO: the shape every route handler needs after writing to a link, so
+ * they all funnel through here instead of repeating the same two queries. */
+async function linkToDTO(
+  db: DB,
+  orgId: string,
+  row: typeof schema.links.$inferSelect,
+): Promise<LinkDTO> {
+  const [hostname, clicks, addressCount] = await Promise.all([
+    domainHostname(db, orgId, row.domainId),
+    db
+      .select({ n: sql<number>`count(*)` })
+      .from(schema.clicks)
+      .where(eq(schema.clicks.linkId, row.id)),
+    countAddressesForLink(db, row.id),
+  ]);
+  return toDTO(row, clicks[0]?.n ?? 0, hostname, addressCount);
+}
+
+/** Inserts a new address row, publishes its KV key, and responds with the
+ * link's fresh DTO: the shape both "add a standalone alias" and "merge into
+ * an existing link" end with, once the address row itself is built. */
+async function insertAddressAndRespond(
+  env: Env,
+  db: DB,
+  orgId: string,
+  link: typeof schema.links.$inferSelect,
+  address: typeof schema.linkAddresses.$inferInsert,
+  hostname: string | null,
+  status: 200 | 201,
+) {
+  await db.insert(schema.linkAddresses).values(address);
+  await enqueueStorage(env, [syncLinkMsg(address.slug, hostname)]);
+  return { dto: await linkToDTO(db, orgId, link), status } as const;
 }
 
 /** Count active addresses for a single link, for call sites that don't
@@ -168,6 +210,20 @@ async function findAddress(db: DB, orgId: string, linkId: string, addressId: str
   const address = rows[0];
   if (!address) throw new HTTPException(404, { message: "Address not found" });
   return address;
+}
+
+/** Resolves the `:linkId`/`:addressId` params every address-mutation route
+ * (keep-forever, remove, promote) starts from: the link and address, 404ing
+ * if either doesn't belong to this org. */
+async function findLinkAndAddress(c: Context<AppEnv>) {
+  const db = c.var.db;
+  const orgId = c.req.param("orgId")!;
+  const linkId = c.req.param("linkId")!;
+  const [link, address] = await Promise.all([
+    findLink(db, orgId, linkId),
+    findAddress(db, orgId, linkId, c.req.param("addressId")!),
+  ]);
+  return { db, orgId, link, address };
 }
 
 function newAddressRow(
@@ -254,12 +310,18 @@ function addressToDTO(
  * destination, so this only ever needs to look at `links` itself. Usually
  * one row, but "create separate link anyway" lets a caller end up with
  * several, so the match dialog must offer all of them, not just the first.
+ *
+ * Restricted to `domainId`: an alias can only live on the same domain as the
+ * link it addresses (see #38 grouped addresses), so a match on a different
+ * domain could never actually be merged into and would just be a dead-end
+ * suggestion.
  */
 async function findSameDestinationLinks(
   db: DB,
   orgId: string,
   destination: string,
   utm: ReturnType<typeof resolveUtm>,
+  domainId: string | null,
 ): Promise<(typeof schema.links.$inferSelect)[]> {
   return db
     .select()
@@ -273,6 +335,7 @@ async function findSameDestinationLinks(
         eq(schema.links.utmCampaign, utm.utmCampaign),
         eq(schema.links.utmTerm, utm.utmTerm),
         eq(schema.links.utmContent, utm.utmContent),
+        domainId === null ? isNull(schema.links.domainId) : eq(schema.links.domainId, domainId),
       ),
     )
     .orderBy(desc(schema.links.createdAt));
@@ -503,6 +566,13 @@ linkRoutes.post("/", requireOrgRole("member"), async (c) => {
   // alias on that link, and return its DTO — no new `links` row.
   if (body.mergeIntoLinkId) {
     const target = await findLink(db, orgId, body.mergeIntoLinkId);
+    // An alias can only live on the same domain as the link it addresses
+    // (see #38): the match list is already domain-filtered, but re-check
+    // here in case the caller sent a stale mergeIntoLinkId.
+    if (target.domainId !== domainId)
+      throw new HTTPException(400, {
+        message: "An address can only be added to a link on the same domain",
+      });
     assertLinkQuota(activeCount, plan, limits);
     await assertAliasQuota(db, target.id);
     const address = newAddressRow(
@@ -513,38 +583,25 @@ linkRoutes.post("/", requireOrgRole("member"), async (c) => {
       "permanent_alias",
       "same_destination_merge",
     );
-    await db.insert(schema.linkAddresses).values(address);
-    await enqueueStorage(c.env, [syncLinkMsg(slug, hostname)]);
-    const targetHostname = await domainHostname(db, orgId, target.domainId);
-    const [clicks, targetAddressCount] = await Promise.all([
-      db
-        .select({ n: sql<number>`count(*)` })
-        .from(schema.clicks)
-        .where(eq(schema.clicks.linkId, target.id)),
-      countAddressesForLink(db, target.id),
-    ]);
-    return c.json(toDTO(target, clicks[0]?.n ?? 0, targetHostname, targetAddressCount), 200);
+    const { dto, status } = await insertAddressAndRespond(
+      c.env,
+      db,
+      orgId,
+      target,
+      address,
+      hostname,
+      200,
+    );
+    return c.json(dto, status);
   }
 
   // An exact destination+UTM match already exists in the org: offer to add
   // this address there instead of silently forking a second link. Different
   // UTM values are part of the match tuple, so they never trigger this.
   if (!body.forceSeparateLink) {
-    const matches = await findSameDestinationLinks(db, orgId, body.destination, utm);
+    const matches = await findSameDestinationLinks(db, orgId, body.destination, utm, domainId);
     if (matches.length) {
-      const matchedLinks = await Promise.all(
-        matches.map(async (match) => {
-          const [matchHostname, matchClicks, matchAddressCount] = await Promise.all([
-            domainHostname(db, orgId, match.domainId),
-            db
-              .select({ n: sql<number>`count(*)` })
-              .from(schema.clicks)
-              .where(eq(schema.clicks.linkId, match.id)),
-            countAddressesForLink(db, match.id),
-          ]);
-          return toDTO(match, matchClicks[0]?.n ?? 0, matchHostname, matchAddressCount);
-        }),
-      );
+      const matchedLinks = await Promise.all(matches.map((match) => linkToDTO(db, orgId, match)));
       throw new HTTPException(409, {
         message:
           "This destination already belongs to a link. Add this address to the same link so its settings and analytics stay together.",
@@ -681,14 +738,7 @@ linkRoutes.patch("/:linkId", requireOrgRole("member"), async (c) => {
   await db.batch(writes as [(typeof writes)[number], ...(typeof writes)[number][]]);
   await enqueueStorage(c.env, messages);
 
-  const [clicks, updatedAddressCount] = await Promise.all([
-    db
-      .select({ n: sql<number>`count(*)` })
-      .from(schema.clicks)
-      .where(eq(schema.clicks.linkId, existing.id)),
-    countAddressesForLink(db, existing.id),
-  ]);
-  return c.json(toDTO(updated, clicks[0]?.n ?? 0, hostname, updatedAddressCount));
+  return c.json(await linkToDTO(db, orgId, updated));
 });
 
 linkRoutes.delete("/:linkId", requireOrgRole("member"), async (c) => {
@@ -736,19 +786,11 @@ linkRoutes.get("/:linkId/addresses", requireOrgRole("member"), async (c) => {
 });
 
 linkRoutes.post("/:linkId/addresses", requireOrgRole("member"), async (c) => {
-  const body = await c.req.json<{ slug?: string; domainId?: string | null }>();
+  const body = await c.req.json<{ slug?: string }>();
   const orgId = c.req.param("orgId")!;
   const db = c.var.db;
   const link = await findLink(db, orgId, c.req.param("linkId")!);
-
-  if (body.slug !== undefined && body.slug !== "") {
-    if (!SLUG_RE.test(body.slug))
-      throw new HTTPException(400, {
-        message: "Slug may only contain letters, numbers, - and _ (max 64)",
-      });
-    if (RESERVED_SLUGS.has(body.slug.toLowerCase()))
-      throw new HTTPException(400, { message: "That slug is reserved" });
-  }
+  validateSlug(body.slug);
 
   const [{ plan, limits }, activeCount] = await Promise.all([
     orgPlan(db, orgId),
@@ -757,36 +799,32 @@ linkRoutes.post("/:linkId/addresses", requireOrgRole("member"), async (c) => {
   assertLinkQuota(activeCount, plan, limits);
   await assertAliasQuota(db, link.id);
 
-  const domainId = body.domainId ?? null;
+  // An alias always lives on the same domain as the link it addresses (#38):
+  // no domain picker, so there's nothing for a caller to get wrong here.
+  const domainId = link.domainId;
   const [hostname, slug] = await Promise.all([
     domainHostname(db, orgId, domainId),
     resolveNewSlug(db, body.slug?.trim() || "", domainId),
   ]);
 
   const address = newAddressRow(link.id, orgId, domainId, slug, "permanent_alias", "created");
-  await db.insert(schema.linkAddresses).values(address);
-  await enqueueStorage(c.env, [syncLinkMsg(slug, hostname)]);
-
-  const [linkHostname, clicks, updatedAddressCount] = await Promise.all([
-    domainHostname(db, orgId, link.domainId),
-    db
-      .select({ n: sql<number>`count(*)` })
-      .from(schema.clicks)
-      .where(eq(schema.clicks.linkId, link.id)),
-    countAddressesForLink(db, link.id),
-  ]);
-  return c.json(toDTO(link, clicks[0]?.n ?? 0, linkHostname, updatedAddressCount), 201);
+  const { dto, status } = await insertAddressAndRespond(
+    c.env,
+    db,
+    orgId,
+    link,
+    address,
+    hostname,
+    201,
+  );
+  return c.json(dto, status);
 });
 
 linkRoutes.post(
   "/:linkId/addresses/:addressId/keep-forever",
   requireOrgRole("member"),
   async (c) => {
-    const db = c.var.db;
-    const orgId = c.req.param("orgId")!;
-    const linkId = c.req.param("linkId")!;
-    await findLink(db, orgId, linkId);
-    const address = await findAddress(db, orgId, linkId, c.req.param("addressId")!);
+    const { db, orgId, address } = await findLinkAndAddress(c);
     if (address.kind !== "temp_alias")
       throw new HTTPException(400, { message: "Only a temporary alias can be kept forever" });
 
@@ -819,11 +857,7 @@ linkRoutes.post("/:linkId/addresses/:addressId/remove", requireOrgRole("member")
   const body = await c.req.json<{ confirm?: boolean }>().catch(() => ({ confirm: false }));
   if (!body.confirm) throw new HTTPException(400, { message: "Confirm removal to continue" });
 
-  const db = c.var.db;
-  const orgId = c.req.param("orgId")!;
-  const linkId = c.req.param("linkId")!;
-  await findLink(db, orgId, linkId);
-  const address = await findAddress(db, orgId, linkId, c.req.param("addressId")!);
+  const { db, orgId, address } = await findLinkAndAddress(c);
   if (address.kind === "primary")
     throw new HTTPException(400, {
       message: "Promote another address to primary before removing this one",
@@ -845,24 +879,8 @@ linkRoutes.post("/:linkId/addresses/:addressId/remove", requireOrgRole("member")
 });
 
 linkRoutes.post("/:linkId/addresses/:addressId/promote", requireOrgRole("member"), async (c) => {
-  const db = c.var.db;
-  const orgId = c.req.param("orgId")!;
-  const linkId = c.req.param("linkId")!;
-  const [existing, address] = await Promise.all([
-    findLink(db, orgId, linkId),
-    findAddress(db, orgId, linkId, c.req.param("addressId")!),
-  ]);
-  if (address.kind === "primary") {
-    const hostname = await domainHostname(db, orgId, existing.domainId);
-    const [clicks, existingAddressCount] = await Promise.all([
-      db
-        .select({ n: sql<number>`count(*)` })
-        .from(schema.clicks)
-        .where(eq(schema.clicks.linkId, existing.id)),
-      countAddressesForLink(db, existing.id),
-    ]);
-    return c.json(toDTO(existing, clicks[0]?.n ?? 0, hostname, existingAddressCount));
-  }
+  const { db, orgId, link: existing, address } = await findLinkAndAddress(c);
+  if (address.kind === "primary") return c.json(await linkToDTO(db, orgId, existing));
   if (address.retiredAt !== null)
     throw new HTTPException(409, { message: "This address is no longer active" });
 
@@ -919,12 +937,5 @@ linkRoutes.post("/:linkId/addresses/:addressId/promote", requireOrgRole("member"
     syncLinkMsg(address.slug, hostname),
   ]);
 
-  const [clicks, updatedAddressCount] = await Promise.all([
-    db
-      .select({ n: sql<number>`count(*)` })
-      .from(schema.clicks)
-      .where(eq(schema.clicks.linkId, existing.id)),
-    countAddressesForLink(db, existing.id),
-  ]);
-  return c.json(toDTO(updated, clicks[0]?.n ?? 0, hostname, updatedAddressCount));
+  return c.json(await linkToDTO(db, orgId, updated));
 });

@@ -23,6 +23,7 @@ import { copyToClipboard } from "../lib/clipboard";
 import { cn } from "../ui/cn";
 import { AliasThread } from "./alias-thread";
 import { Pager } from "../ui/pagination";
+import { useConfig } from "../lib/hooks";
 
 function linkDetailPath(link: LinkDTO): string {
   return link.domain
@@ -62,6 +63,8 @@ export function LinksTable({
   noQrToast: () => void;
 }) {
   const toast = useToast();
+  const config = useConfig();
+  const appHost = config.data?.appHost ?? window.location.host;
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const toggleExpanded = (id: string) =>
     setExpanded((prev) => {
@@ -135,14 +138,11 @@ export function LinksTable({
                       <button
                         type="button"
                         onClick={() => navigate(linkDetailPath(link))}
-                        title={link.domain ? `${link.domain}/${link.slug}` : `/${link.slug}`}
-                        className="group grid max-w-full cursor-pointer grid-cols-[minmax(0,auto)_max-content] items-baseline"
+                        className="group flex min-w-0 max-w-full cursor-pointer flex-col items-start gap-0.5 text-start"
                       >
-                        {link.domain && (
-                          <span className="min-w-0 truncate font-normal text-muted group-hover:underline">
-                            {link.domain}
-                          </span>
-                        )}
+                        <Badge className="min-w-0 max-w-full">
+                          <span className="truncate">{link.domain || appHost}</span>
+                        </Badge>
                         <span className="font-bold text-accent group-hover:underline">
                           /{link.slug}
                         </span>
@@ -154,17 +154,6 @@ export function LinksTable({
                           onCopy={(text) => copyToClipboard(text, toast)}
                         />
                       </span>
-                      {hasAliases && (
-                        <span className="shrink-0">
-                          <Badge color="accent">
-                            {link.addressCount - 1}
-                            <span className="hidden sm:inline">
-                              {" "}
-                              alias{link.addressCount - 1 === 1 ? "" : "es"}
-                            </span>
-                          </Badge>
-                        </span>
-                      )}
                     </div>
                   </Td>
                   <Td className="hidden truncate text-xs text-muted lg:table-cell">

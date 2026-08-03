@@ -13,9 +13,11 @@ const badgeColors = {
 
 export function Badge({
   color = "muted",
+  className,
   children,
 }: {
   color?: "muted" | "accent" | "mint" | "pink" | "butter";
+  className?: string;
   children: ReactNode;
 }) {
   return (
@@ -23,6 +25,7 @@ export function Badge({
       className={cn(
         "inline-flex items-center rounded-full border px-2 py-0.5 text-2xs tracking-wide",
         badgeColors[color],
+        className,
       )}
     >
       {children}
