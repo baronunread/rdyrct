@@ -14,7 +14,18 @@ export default defineConfig({
     screenshot: "only-on-failure",
     trace: "retain-on-failure",
   },
-  projects: [{ name: "chromium", use: devices["Desktop Chrome"] }],
+  projects: [
+    {
+      name: "chromium",
+      use: {
+        ...devices["Desktop Chrome"],
+        // CI runners ship Google Chrome preinstalled: launch that instead of
+        // downloading Playwright's own Chromium build. Local dev keeps using
+        // the bundled build from `bun run e2e:install`.
+        channel: process.env.CI ? "chrome" : undefined,
+      },
+    },
+  ],
   webServer: [
     {
       command: "bunx emulate --service resend",
