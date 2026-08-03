@@ -40,13 +40,61 @@ const defaultForm: LinkInput = {
   qrLogoSize: null,
 };
 
-const UTM_FIELDS: { key: keyof LinkInput; label: string; placeholder: string }[] = [
+type UtmKey = "utmSource" | "utmMedium" | "utmCampaign" | "utmTerm" | "utmContent";
+
+const UTM_FIELDS: { key: UtmKey; label: string; placeholder: string }[] = [
   { key: "utmSource", label: "Source", placeholder: "newsletter" },
   { key: "utmMedium", label: "Medium", placeholder: "email" },
   { key: "utmCampaign", label: "Campaign", placeholder: "spring-launch" },
   { key: "utmTerm", label: "Term", placeholder: "running-shoes" },
   { key: "utmContent", label: "Content", placeholder: "ad-variant-a" },
 ];
+
+const UTM_PARAMS: { param: string; key: UtmKey }[] = [
+  { param: "utm_source", key: "utmSource" },
+  { param: "utm_medium", key: "utmMedium" },
+  { param: "utm_campaign", key: "utmCampaign" },
+  { param: "utm_term", key: "utmTerm" },
+  { param: "utm_content", key: "utmContent" },
+];
+
+const UTM_PARAM_BY_KEY: Record<UtmKey, string> = Object.fromEntries(
+  UTM_PARAMS.map(({ param, key }) => [key, param]),
+) as Record<UtmKey, string>;
+
+/** UTM params already in the pasted/typed URL, mirroring the server's
+ * resolveUtm: params present in the destination win over whatever is in
+ * the form fields. A param that's present but empty still wins (so
+ * backspacing its value out clears the field instead of leaving a stale
+ * one behind); a param that's absent leaves the field alone. */
+function utmFromDestination(destination: string): Partial<Record<UtmKey, string>> {
+  let url: URL;
+  try {
+    url = new URL(destination);
+  } catch {
+    return {};
+  }
+  const out: Partial<Record<UtmKey, string>> = {};
+  for (const { param, key } of UTM_PARAMS) {
+    if (url.searchParams.has(param)) out[key] = url.searchParams.get(param)!.trim();
+  }
+  return out;
+}
+
+/** Drop a UTM param from the destination's query string, if present. Used
+ * when a UTM field is edited by hand, so the field's value (not a stale
+ * copy baked into the destination) is what wins on submit. */
+function withoutUtmParam(destination: string, param: string): string {
+  let url: URL;
+  try {
+    url = new URL(destination);
+  } catch {
+    return destination;
+  }
+  if (!url.searchParams.has(param)) return destination;
+  url.searchParams.delete(param);
+  return url.toString();
+}
 
 function UtmFields({
   form,
@@ -57,8 +105,13 @@ function UtmFields({
   setForm: (f: LinkInput) => void;
   className?: string;
 }) {
-  const set = (key: keyof LinkInput) => (e: ChangeEvent<HTMLInputElement>) =>
-    setForm({ ...form, [key]: e.target.value });
+  const set = (key: UtmKey) => (e: ChangeEvent<HTMLInputElement>) => {
+    setForm({
+      ...form,
+      [key]: e.target.value,
+      destination: withoutUtmParam(form.destination, UTM_PARAM_BY_KEY[key]),
+    });
+  };
   return (
     <fieldset className={cn("rounded-lg border border-border p-3", className)}>
       <legend className="px-1 text-2xs tracking-wider text-muted uppercase">UTM parameters</legend>
@@ -360,13 +413,18 @@ function LinkFormFields({
   const set = (key: keyof LinkInput) => (e: ChangeEvent<HTMLInputElement>) =>
     setForm({ ...form, [key]: e.target.value });
 
+  const onDestinationChange = (e: ChangeEvent<HTMLInputElement>) => {
+    const destination = e.target.value;
+    setForm({ ...form, destination, ...utmFromDestination(destination) });
+  };
+
   return (
     <div className="flex min-w-0 flex-col gap-4">
       <Field label="Destination URL">
         <Input
           ref={destinationRef}
           value={form.destination}
-          onChange={set("destination")}
+          onChange={onDestinationChange}
           placeholder="https://example.com/launch"
           autoFocus={!editing}
         />
