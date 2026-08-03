@@ -116,6 +116,15 @@ function stripUtmFromDestination(destination: string): string {
   return url.toString();
 }
 
+/** Splice pasted text into an input's current selection, the way the
+ * browser's own paste would, so a partial selection is respected instead of
+ * always replacing the whole field. */
+function mergePastedText(input: HTMLInputElement, pasted: string): string {
+  const start = input.selectionStart ?? input.value.length;
+  const end = input.selectionEnd ?? input.value.length;
+  return input.value.slice(0, start) + pasted + input.value.slice(end);
+}
+
 function UtmFields({
   form,
   setForm,
@@ -447,10 +456,7 @@ function LinkFormFields({
   const onDestinationPaste = (e: ClipboardEvent<HTMLInputElement>) => {
     const pasted = e.clipboardData.getData("text");
     if (!pasted) return;
-    const input = e.currentTarget;
-    const start = input.selectionStart ?? input.value.length;
-    const end = input.selectionEnd ?? input.value.length;
-    const merged = input.value.slice(0, start) + pasted + input.value.slice(end);
+    const merged = mergePastedText(e.currentTarget, pasted);
     const utm = utmFromDestination(merged);
     if (Object.keys(utm).length === 0) return;
     e.preventDefault();
