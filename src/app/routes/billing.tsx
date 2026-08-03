@@ -20,6 +20,7 @@ import { Skeleton } from "../ui/skeleton";
 import { useShake } from "../lib/use-shake";
 import { showsCancelNotice, showsConfirmingNotice } from "../lib/plan-status-notes";
 import { useToast } from "../ui/toast";
+import posthog from "../lib/posthog";
 
 const PLAN_LABEL: Record<OrgPlan, string> = {
   free: "Free",
@@ -419,6 +420,7 @@ function useCheckoutFlow() {
   }, []);
 
   const handleUpgrade = async (target: "hobby" | "pro") => {
+    posthog.capture("checkout_started", { target_plan: target });
     setCheckoutPlan(target);
     try {
       const data = await checkout.mutateAsync(target);
@@ -431,6 +433,7 @@ function useCheckoutFlow() {
   };
 
   const handlePortal = async () => {
+    posthog.capture("subscription_portal_opened");
     setShowPortalOverlay(true);
     try {
       const data = await portal.mutateAsync();

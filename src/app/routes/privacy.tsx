@@ -29,10 +29,15 @@ export function PrivacyPage() {
         <h2 className="mb-2 font-bold">Data we collect</h2>
         <p className="text-muted">
           We collect your account email address and name, and the organizations, links, domains, and
-          settings you create. For click analytics we store only an approximate country, the
-          referrer host, device type, and a timestamp for each click. We explicitly do{" "}
-          <span className="text-text">not</span> store your IP address, precise location, or any
-          data that would allow cross-site tracking.
+          settings you create. For click analytics on your links we store only an approximate
+          country, the referrer host, device type, and a timestamp for each click: we explicitly do{" "}
+          <span className="text-text">not</span> store the IP address of the people who click your
+          links, their precise location, or any data that would allow cross-site tracking.
+          Separately, if you accept analytics in the cookie banner, we use PostHog to understand how
+          the product itself is used: which features you use and app events such as signing in or
+          creating a link, tied to your account email and name. We turn off autocapture and session
+          recording, so PostHog never records what you type or a replay of your screen. Nothing is
+          sent to PostHog, and no PostHog cookie is set, unless you accept.
         </p>
       </section>
 
@@ -41,17 +46,20 @@ export function PrivacyPage() {
         <p className="text-muted">
           Under the GDPR, we process account and organization data to provide the service you sign
           up for (performance of a contract), send transactional email such as verification codes
-          and team invites (contract), and produce privacy-preserving click analytics for your own
-          links (our legitimate interest in offering a useful product). The session cookie is
-          strictly necessary and requires no consent.
+          and team invites (contract), and produce click analytics for your own links (our
+          legitimate interest in offering a useful product). The session cookie is strictly
+          necessary and requires no consent. Product usage analytics through PostHog runs only on
+          your consent, given or withdrawn at any time through the cookie banner.
         </p>
       </section>
 
       <section>
         <h2 className="mb-2 font-bold">Cookies</h2>
         <p className="text-muted">
-          rdyrct uses a single strictly-necessary session cookie to keep you signed in. We do not
-          use advertising or tracking cookies of any kind.
+          rdyrct sets a strictly-necessary session cookie to keep you signed in. If you accept
+          analytics in the cookie banner, PostHog also sets a cookie to recognize you across visits;
+          if you reject or ignore the banner, that cookie is never set. We do not use advertising
+          cookies of any kind.
         </p>
       </section>
 
@@ -59,9 +67,10 @@ export function PrivacyPage() {
         <h2 className="mb-2 font-bold">Sub-processors</h2>
         <p className="text-muted">
           We rely on a small number of sub-processors to run the service: Cloudflare (hosting, the
-          D1 database, and KV storage), Resend (transactional email), and Polar (billing, acting as
-          merchant of record). Some may process data outside the EU/EEA; where they do, transfers
-          are covered by the appropriate safeguards, such as the EU Standard Contractual Clauses.
+          D1 database, and KV storage), Resend (transactional email), Polar (billing, acting as
+          merchant of record), and PostHog, EU region (product usage analytics). Some may process
+          data outside the EU/EEA; where they do, transfers are covered by the appropriate
+          safeguards, such as the EU Standard Contractual Clauses.
         </p>
       </section>
 

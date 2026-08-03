@@ -7,6 +7,7 @@ import { useCurrentOrg } from "../lib/current-org";
 import { Button } from "../ui/button";
 import { InviteSkeleton } from "../components/skeletons";
 import { useToast } from "../ui/toast";
+import posthog from "../lib/posthog";
 
 function InviteAuthActions({
   signedIn,
@@ -85,6 +86,7 @@ export function InvitePage() {
         method: "POST",
       });
       await qc.invalidateQueries({ queryKey: ["user"] });
+      posthog.capture("organization_invite_accepted");
       setOrg(res.orgId);
       navigate("/dashboard");
     } catch (e) {

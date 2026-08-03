@@ -6,6 +6,7 @@ import { BusyContent } from "../ui/spinner";
 import { useToast } from "../ui/toast";
 import { useAddressMutations } from "../lib/hooks";
 import { withErrorToast } from "../lib/mutation-toast";
+import posthog from "../lib/posthog";
 import type { LinkDTO } from "@/shared/types";
 
 /** Owns the form state, freshly initialized from `link` on every mount: keyed
@@ -33,6 +34,7 @@ function CreateAliasForm({
       { slug: slug.trim() },
       {
         onSuccess: () => {
+          posthog.capture("link_alias_created", { has_custom_slug: Boolean(slug.trim()) });
           toast("Alias added");
           onClose();
         },

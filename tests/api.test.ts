@@ -1,9 +1,14 @@
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeAll, describe, expect, test } from "bun:test";
 import { api, ApiError, shortUrl } from "../src/app/lib/api";
 
-(globalThis as { window?: unknown }).window = {
-  location: { origin: "http://localhost:5173" },
-};
+// Set only once tests start running, not at module load: other test files'
+// modules (loaded up front, before any test runs) must see a real absence of
+// `window`, not this shim.
+beforeAll(() => {
+  (globalThis as { window?: unknown }).window = {
+    location: { origin: "http://localhost:5173" },
+  };
+});
 
 const realFetch = globalThis.fetch;
 afterEach(() => {

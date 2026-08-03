@@ -21,6 +21,7 @@ import { useToast } from "../ui/toast";
 import { cn } from "../ui/cn";
 import { copyToClipboard } from "../lib/clipboard";
 import { addDomainMessage, recheckMessage } from "../lib/domain-messages";
+import posthog from "../lib/posthog";
 
 const domainStatusColor: Record<DomainDTO["status"], "accent" | "butter" | "mint" | "pink"> = {
   checking_dns: "butter",
@@ -191,6 +192,7 @@ function DomainsCard({ orgId, plan }: { orgId: string; plan: "free" | "hobby" | 
     ({ hostname }: { hostname: string }) => {
       add.mutate(hostname, {
         onSuccess: (d) => {
+          posthog.capture("domain_added", { initial_status: d.status });
           reset();
           toast(addDomainMessage(d.status));
         },
@@ -226,6 +228,7 @@ function DomainsCard({ orgId, plan }: { orgId: string; plan: "free" | "hobby" | 
     if (!deleting) return;
     remove.mutate(deleting.id, {
       onSuccess: () => {
+        posthog.capture("domain_deleted");
         setDeleting(null);
         toast("Domain deleted");
       },
