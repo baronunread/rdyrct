@@ -218,7 +218,10 @@ function DomainsCard({ orgId, plan }: { orgId: string; plan: "free" | "hobby" | 
     setRootRedirect.mutate(
       { id: domain.id, rootRedirect: value },
       {
-        onSuccess: () => toast("Root redirect updated"),
+        onSuccess: () => {
+          posthog.capture("domain_root_redirect_updated");
+          toast("Root redirect updated");
+        },
         onError: withErrorToast(toast),
       },
     );

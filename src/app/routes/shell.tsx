@@ -20,6 +20,7 @@ import { appNavItems } from "../components/nav-items";
 import { cn } from "../ui/cn";
 import { NotFound } from "./not-found";
 import { PLAN_LIMITS, type User, type UserOrg } from "@/shared/types";
+import posthog from "../lib/posthog";
 
 const ORG_LIMIT_MESSAGE = "Upgrade to Pro to create more organizations";
 
@@ -309,6 +310,7 @@ export function AppShell() {
         body: { name },
       });
       await qc.invalidateQueries({ queryKey: ["user"] });
+      posthog.capture("organization_created");
       setNewOrgOpen(false);
       setNewOrgName("");
       setOrg(created.id);

@@ -3,6 +3,7 @@ import QRCodeStyling, { type CornerSquareType, type CornerDotType } from "qr-cod
 import { Button } from "../ui/button";
 import { Download } from "lucide-react";
 import { hasTransparency, resolveLook, type QrLook } from "../lib/qr-look";
+import posthog from "../lib/posthog";
 
 function looksOptions(look: QrLook) {
   return {
@@ -89,8 +90,10 @@ export function QRPreview({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [url, size, look.dot, look.corner, look.ink, look.eye, look.bg, look.logo, look.logoSize]);
 
-  const download = (extension: "png" | "svg") =>
+  const download = (extension: "png" | "svg") => {
     qr.current?.download({ name: downloadName ?? "qr", extension });
+    posthog.capture("qr_code_downloaded", { format: extension });
+  };
 
   return (
     <div className="flex flex-col items-center gap-3">

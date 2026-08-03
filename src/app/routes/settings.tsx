@@ -17,6 +17,7 @@ import { ConfirmDialog } from "../ui/confirm-dialog";
 import { copyToClipboard } from "../lib/clipboard";
 import { QrDefaultsCard } from "../components/qr-defaults-card";
 import { orgNameSchema } from "../lib/schemas";
+import posthog from "../lib/posthog";
 
 type OrgNameForm = { name: string };
 
@@ -55,6 +56,7 @@ function useOrgRenameForm(org: UserOrg | null) {
       try {
         await api(`/orgs/${org?.id ?? ""}`, { method: "PATCH", body: { name: data.name } });
         await qc.invalidateQueries({ queryKey: ["user"] });
+        posthog.capture("organization_renamed");
         toast("Organization renamed");
       } catch (e) {
         toast((e as Error).message, "error");
@@ -83,6 +85,7 @@ function useDeleteOrgFlow(orgId: string, clearNameField: () => void) {
     setPending(true);
     try {
       await api(`/orgs/${orgId}`, { method: "DELETE" });
+      posthog.capture("organization_deleted");
       close();
       clearNameField();
       toast("Organization deleted");
@@ -112,6 +115,7 @@ function useDeleteAccountFlow() {
         toast(error.message ?? "Failed to delete account", "error");
         return;
       }
+      posthog.capture("account_deleted");
       window.location.assign("/");
     } catch (e) {
       toast((e as Error).message, "error");

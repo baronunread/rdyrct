@@ -24,6 +24,7 @@ import { QRPreview } from "./qr";
 import { QrLogoInput } from "./qr-logo-input";
 import { QrColorField } from "./qr-color-field";
 import { orgQrFrom } from "../lib/org-qr";
+import posthog from "../lib/posthog";
 
 interface QrDefaultsValues {
   qrStyle: string;
@@ -80,6 +81,7 @@ function useQrDefaultsForm(
         },
       });
       await qc.invalidateQueries({ queryKey: ["user"] });
+      posthog.capture("qr_defaults_saved");
       toast("QR defaults saved");
     } catch (e) {
       toast((e as Error).message, "error");

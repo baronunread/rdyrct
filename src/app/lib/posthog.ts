@@ -14,37 +14,46 @@ function hasAnalyticsConsent(): boolean {
   }
 }
 
-let clientPromise: Promise<typeof PosthogClient> | null = null;
+let clientPromise: Promise<typeof PosthogClient | null> | null = null;
+let pendingIdentity: { id: string; properties?: Record<string, unknown> } | null = null;
+let identifiedId: string | null = null;
 
-function loadClient(): Promise<typeof PosthogClient> | null {
+function identifyPendingUser(posthog: typeof PosthogClient | null) {
+  if (!posthog || !pendingIdentity || pendingIdentity.id === identifiedId) return;
+  const { id, properties } = pendingIdentity;
+  pendingIdentity = null;
+  identifiedId = id;
+  posthog.identify(id, properties);
+}
+
+function loadClient(): Promise<typeof PosthogClient | null> | null {
   if (typeof window === "undefined" || !hasAnalyticsConsent()) return null;
   if (!clientPromise) {
     clientPromise = import("posthog-js").then(({ default: posthog }) => {
       const token = import.meta.env.VITE_PUBLIC_POSTHOG_PROJECT_TOKEN as string | undefined;
       const host = import.meta.env.VITE_PUBLIC_POSTHOG_HOST as string | undefined;
-      if (!token || !host) {
+      const missingVariable = !token
+        ? "VITE_PUBLIC_POSTHOG_PROJECT_TOKEN"
+        : !host
+          ? "VITE_PUBLIC_POSTHOG_HOST"
+          : null;
+      if (missingVariable) {
         if (import.meta.env.DEV) {
           throw new Error(
-            "VITE_PUBLIC_POSTHOG_PROJECT_TOKEN / VITE_PUBLIC_POSTHOG_HOST required by PostHog is missing or un-configured, this causes events to be silently missed. This error stops appearing once both are configured",
+            `${missingVariable} variable required by PostHog is missing or un-configured, this causes events to be silently missed. This error stops appearing once ${missingVariable} is configured`,
           );
         }
-        return posthog;
+        return null;
       }
-      posthog.init(token, {
-        api_host: host,
+      posthog.init(token!, {
+        api_host: host!,
         defaults: "2026-01-30",
-        // Only the explicit capture() calls sprinkled through the app count
-        // as product analytics here: no autocapture of clicks/inputs (could
-        // pick up form values), no session recording, and no profile for a
-        // visitor until they sign in and get identified.
-        autocapture: false,
-        disable_session_recording: true,
-        person_profiles: "identified_only",
         capture_exceptions: {
           capture_unhandled_errors: true,
           capture_unhandled_rejections: true,
         },
       });
+      identifyPendingUser(posthog);
       return posthog;
     });
   }
@@ -75,19 +84,23 @@ export function revokeAnalyticsConsent() {
     /* ignore */
   }
   if (clientPromise) {
-    void clientPromise.then((posthog) => posthog.opt_out_capturing());
+    void clientPromise.then((posthog) => posthog?.opt_out_capturing());
   }
 }
 
 const posthog = {
   capture(event: string, properties?: Record<string, unknown>) {
-    void loadClient()?.then((p) => p.capture(event, properties));
+    void loadClient()?.then((p) => p?.capture(event, properties));
   },
   identify(id: string, properties?: Record<string, unknown>) {
-    void loadClient()?.then((p) => p.identify(id, properties));
+    if (identifiedId === id) return;
+    pendingIdentity = { id, properties };
+    void loadClient()?.then(identifyPendingUser);
   },
   reset() {
-    void loadClient()?.then((p) => p.reset());
+    pendingIdentity = null;
+    identifiedId = null;
+    void loadClient()?.then((p) => p?.reset());
   },
 };
 
