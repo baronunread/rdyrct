@@ -673,6 +673,23 @@ function renameSyncMessages(
   ];
 }
 
+/** Every active address of a link (primary + aliases), each with its own
+ * hostname: the full set of KV keys that answer for it. Every message the
+ * storage queue processes is self-healing (the consumer re-reads current D1
+ * truth for that one key), so callers can freely resync this whole set
+ * without first figuring out which fields actually changed. */
+async function activeAddressesOf(db: DB, linkId: string) {
+  return db
+    .select({
+      slug: schema.linkAddresses.slug,
+      hostname: schema.domains.hostname,
+      kind: schema.linkAddresses.kind,
+    })
+    .from(schema.linkAddresses)
+    .leftJoin(schema.domains, eq(schema.linkAddresses.domainId, schema.domains.id))
+    .where(and(eq(schema.linkAddresses.linkId, linkId), isNull(schema.linkAddresses.retiredAt)));
+}
+
 linkRoutes.patch("/:linkId", requireOrgRole("member"), async (c) => {
   const body = await c.req.json<LinkInput>();
   const orgId = c.req.param("orgId")!;
@@ -685,10 +702,14 @@ linkRoutes.patch("/:linkId", requireOrgRole("member"), async (c) => {
   const domainId = body.domainId !== undefined ? body.domainId : existing.domainId;
   // Chosen slugs exist only on custom domains; renaming a shared-domain link
   // is out for every plan, but keeping its existing slug stays allowed.
-  const [hostname, oldHostname, newSlug] = await Promise.all([
+  const [hostname, oldHostname, newSlug, aliases] = await Promise.all([
     domainHostname(db, orgId, domainId),
     domainHostname(db, orgId, existing.domainId),
     resolveRenamedSlug(db, existing, body.slug?.trim() || "", domainId),
+    // Gathered up front (pre-write): the primary's own before/after keys are
+    // handled separately below, so this only ever needs each alias's own
+    // (unaffected-by-this-write) slug/hostname.
+    activeAddressesOf(db, existing.id),
   ]);
   const moved = newSlug !== existing.slug || domainId !== existing.domainId;
   // Only a custom-domain address leaves a temporary alias behind: shared-domain
@@ -704,7 +725,17 @@ linkRoutes.patch("/:linkId", requireOrgRole("member"), async (c) => {
   const utm = resolveUtm(destination, body, existing);
 
   const updated = mergedLinkUpdate(existing, body, { domainId, slug: newSlug, destination, utm });
-  const messages = renameSyncMessages(existing, updated, body, moved, hostname, oldHostname);
+  const messages = [
+    ...renameSyncMessages(existing, updated, body, moved, hostname, oldHostname),
+    // KV caches each address's fully-built redirect URL (destination + UTM
+    // already applied), not just a pointer to the link: every other active
+    // address needs resyncing too, or it would keep serving the pre-edit URL
+    // until something else happened to touch it. Unconditional, not gated on
+    // "did destination/UTM actually change" — these messages are cheap and
+    // self-healing (see activeAddressesOf), so there's nothing to gain from
+    // detecting a no-op edit that a routine PATCH doesn't already cost.
+    ...aliases.flatMap((a) => (a.kind === "primary" ? [] : [syncLinkMsg(a.slug, a.hostname)])),
+  ];
 
   // The primary link_addresses row is kept in sync with links.domainId/slug
   // in the same batch as the links write, never as a separate follow-up: the
@@ -747,11 +778,7 @@ linkRoutes.delete("/:linkId", requireOrgRole("member"), async (c) => {
   const link = await findLink(db, orgId, c.req.param("linkId")!);
   // Gathered before the delete: every active address (primary + aliases) has
   // its own KV key, and the cascade only removes the D1 rows, not those keys.
-  const addresses = await db
-    .select({ slug: schema.linkAddresses.slug, hostname: schema.domains.hostname })
-    .from(schema.linkAddresses)
-    .leftJoin(schema.domains, eq(schema.linkAddresses.domainId, schema.domains.id))
-    .where(and(eq(schema.linkAddresses.linkId, link.id), isNull(schema.linkAddresses.retiredAt)));
+  const addresses = await activeAddressesOf(db, link.id);
   await db.delete(schema.links).where(eq(schema.links.id, link.id));
   // Syncing each now-orphaned key deletes it; the logo delete clears R2.
   await enqueueStorage(c.env, [

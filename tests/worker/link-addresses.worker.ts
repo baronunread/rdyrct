@@ -6,10 +6,13 @@ import { eq } from "drizzle-orm";
 import worker from "../../src/worker";
 import * as schema from "../../src/worker/db/schema";
 import { now } from "../../src/worker/util";
+import type { StorageMessage } from "../../src/worker/storage";
+import type { Env } from "../../src/worker/env";
 import {
   applyTestMigrations,
   authEnv,
   freeOwnerCookie,
+  overrideEnv,
   rawAddressRow,
   rawLinkRow,
 } from "./support";
@@ -19,7 +22,8 @@ const ALIAS_TTL_MS = 48 * 60 * 60 * 1000;
 /** A free-plan owner of "org-1", with an active custom domain "go.example.com". */
 const seed = () => freeOwnerCookie({ id: "domain-1", hostname: "go.example.com" });
 
-async function api(
+async function apiWithEnv(
+  testEnv: Env,
   cookie: string,
   method: string,
   path: string,
@@ -32,11 +36,30 @@ async function api(
       headers: { cookie, "content-type": "application/json" },
       body: body === undefined ? undefined : JSON.stringify(body),
     }),
-    authEnv(),
+    testEnv,
     ctx,
   );
   await waitOnExecutionContext(ctx);
   return res;
+}
+
+const api = (cookie: string, method: string, path: string, body?: unknown) =>
+  apiWithEnv(authEnv(), cookie, method, path, body);
+
+// A queue that records what was sent instead of delivering it, so a route's
+// KV-sync fan-out can be asserted without a live queue consumer running
+// inside the same test.
+function captureQueue(): { queue: Queue<StorageMessage>; sent: StorageMessage[] } {
+  const sent: StorageMessage[] = [];
+  const queue = {
+    async send(message: StorageMessage) {
+      sent.push(message);
+    },
+    async sendBatch(messages: Iterable<{ body: StorageMessage }>) {
+      for (const m of messages) sent.push(m.body);
+    },
+  } as unknown as Queue<StorageMessage>;
+  return { queue, sent };
 }
 
 function db() {
@@ -135,6 +158,26 @@ describe("PATCH /orgs/:orgId/links/:linkId: renaming a custom-domain address", (
     const addresses = await addressesOf(id);
     expect(addresses).toHaveLength(1);
     expect(addresses[0]).toMatchObject({ kind: "primary", domainId: "domain-1" });
+  });
+
+  it("resyncs every alias's KV key on any edit, not just the primary's", async () => {
+    const cookie = await seed();
+    const { id } = await createLink(cookie, { destination: "https://example.com/a" });
+    await api(cookie, "POST", `/links/${id}/addresses`, {});
+    const { slug: aliasSlug } = (await addressesOf(id)).find((a) => a.kind === "permanent_alias")!;
+
+    const { queue, sent } = captureQueue();
+    const res = await apiWithEnv(
+      overrideEnv({ BETTER_AUTH_SECRET: "test-secret", STORAGE_QUEUE: queue }),
+      cookie,
+      "PATCH",
+      `/links/${id}`,
+      { destination: "https://example.com/b" },
+    );
+    expect(res.status).toBe(200);
+
+    const syncedKeys = sent.filter((m) => m.op === "kv_sync").map((m) => m.key);
+    expect(syncedKeys).toContain(`slug:${aliasSlug}`);
   });
 });
 
