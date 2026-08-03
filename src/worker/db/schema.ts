@@ -202,6 +202,41 @@ export const links = sqliteTable(
   (t) => [index("idx_links_org").on(t.orgId)],
 );
 
+// Every address a link answers to, including its own primary as a row kept
+// in sync with links.domainId/slug (see routes/links.ts). Slug uniqueness
+// lives on the active subset of this table (idx_link_addresses_domain_slug_active,
+// a partial index migrations must create; drizzle cannot express partial
+// indexes), not on `links` itself, so a renamed-away slug can keep working as
+// a retired-later temp_alias without colliding with the link's new primary.
+export const linkAddresses = sqliteTable(
+  "link_addresses",
+  {
+    id: text("id").primaryKey(),
+    linkId: text("link_id")
+      .notNull()
+      .references(() => links.id, { onDelete: "cascade" }),
+    orgId: text("org_id").notNull(),
+    domainId: text("domain_id").references(() => domains.id),
+    slug: text("slug").notNull(),
+    kind: text("kind", { enum: ["primary", "temp_alias", "permanent_alias"] }).notNull(),
+    creationReason: text("creation_reason", {
+      enum: ["created", "renamed", "promoted", "same_destination_merge", ""],
+    })
+      .notNull()
+      .default(""),
+    // Null = never expires (primary, permanent_alias). Set only on temp_alias.
+    expiresAt: integer("expires_at"),
+    // Null = active. Set once, by "Remove now" or the expiry sweep, and never
+    // cleared: the row stays for its historical clicks.
+    retiredAt: integer("retired_at"),
+    createdAt: integer("created_at").notNull(),
+  },
+  (t) => [
+    index("idx_link_addresses_link").on(t.linkId),
+    index("idx_link_addresses_org").on(t.orgId),
+  ],
+);
+
 export const clicks = sqliteTable(
   "clicks",
   {
@@ -220,10 +255,15 @@ export const clicks = sqliteTable(
     // every NULL as distinct, so old rows never collide with each other or
     // with real dedupe ids.
     dedupeId: text("dedupe_id").unique(),
+    // Which address the click came in on (primary or an alias). Null on rows
+    // from before this column existed: not backfilled, same reasoning as
+    // dedupeId above. Link-level aggregates roll up by linkId regardless.
+    addressId: text("address_id").references(() => linkAddresses.id, { onDelete: "set null" }),
   },
   (t) => [
     index("idx_clicks_link_ts").on(t.linkId, t.ts),
     index("idx_clicks_org_ts").on(t.orgId, t.ts),
+    index("idx_clicks_address_ts").on(t.addressId, t.ts),
   ],
 );
 

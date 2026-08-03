@@ -1,7 +1,7 @@
 import { useMemo, useState, type ReactNode } from "react";
 import { useNavigate } from "react-router";
 import { Plus } from "lucide-react";
-import { useLinks, useLinkMutations } from "../lib/hooks";
+import { useLinks, useLinkMutations, useLinkQuotaUsage } from "../lib/hooks";
 import { useOrgLimits } from "../lib/org-limits";
 import { shortUrl, ApiError } from "../lib/api";
 import { type DomainDTO, type LinkDTO, type LinkInput, type Sort } from "@/shared/types";
@@ -19,6 +19,8 @@ import { LinkEditor } from "../components/link-editor";
 import { resolveQrLook, type OrgQr } from "../lib/org-qr";
 import { LinksTable } from "../components/links-table";
 import { ConfirmDialog } from "../ui/confirm-dialog";
+import { SameDestinationDialog } from "../components/same-destination-dialog";
+import { CreateAliasDialog } from "../components/create-alias-dialog";
 import { withErrorToast } from "../lib/mutation-toast";
 
 const PAGE_SIZE = 25;
@@ -84,22 +86,24 @@ function useLinkFilter(links: { data?: LinkDTO[] }) {
 }
 
 /** Builds the LinkEditor's onSave handler: PATCH when editing, POST when
- * creating, sharing one success/error path (and flagging a slug clash so
- * the editor can shake the field). */
+ * creating, sharing one success/error path (and bumping the editor's shake
+ * counter on any rejected save, so its Save button flags the failure). */
 function buildOnSave({
   editing,
   create,
   update,
   toast,
   closeEditor,
-  onSlugTaken,
+  onSaveError,
+  onSameDestinationMatch,
 }: {
   editing: LinkDTO | null;
   create: ReturnType<typeof useLinkMutations>["create"];
   update: ReturnType<typeof useLinkMutations>["update"];
   toast: ReturnType<typeof useToast>;
   closeEditor: () => void;
-  onSlugTaken: () => void;
+  onSaveError: () => void;
+  onSameDestinationMatch: (input: LinkInput, matchedLinks: LinkDTO[]) => void;
 }) {
   return (data: LinkInput) => {
     const done = {
@@ -108,8 +112,13 @@ function buildOnSave({
         toast(editing ? "Link updated" : "Link created");
       },
       onError: (e: Error) => {
-        if (e instanceof ApiError && e.code === "slug_taken") onSlugTaken();
+        if (e instanceof ApiError && e.code === "same_destination_match") {
+          const { matchedLinks } = e.data as { matchedLinks: LinkDTO[] };
+          onSameDestinationMatch(data, matchedLinks);
+          return;
+        }
         toast(e.message, "error");
+        onSaveError();
       },
     };
     if (editing) update.mutate({ id: editing.id, ...data }, done);
@@ -120,19 +129,27 @@ function buildOnSave({
 export function LinksPage() {
   const { org, orgId, limits, activeDomains, orgQr, domains } = useOrgLimits();
   const links = useLinks(orgId);
+  const quotaUsage = useLinkQuotaUsage(orgId);
   const { create, update, remove } = useLinkMutations(orgId);
   const toast = useToast();
   const navigate = useNavigate();
 
-  const linkCount = links.data?.length ?? 0;
+  // Links used against the plan cap, not the number of rows in the table: a
+  // link plus its kept-forever aliases each count. See useLinkQuotaUsage.
+  const linkCount = quotaUsage.data?.count ?? 0;
   const atLimit = linkCount >= limits.links;
   const limitHint = atLimit ? "Link limit reached: upgrade for more links" : undefined;
 
   const [editorOpen, setEditorOpen] = useState(false);
   const [editing, setEditing] = useState<LinkDTO | null>(null);
   const [qrLink, setQrLink] = useState<LinkDTO | null>(null);
+  const [aliasLink, setAliasLink] = useState<LinkDTO | null>(null);
   const [deleting, setDeleting] = useState<LinkDTO | null>(null);
   const [shakeKey, setShakeKey] = useState(0);
+  const [sameDestination, setSameDestination] = useState<{
+    input: LinkInput;
+    matchedLinks: LinkDTO[];
+  } | null>(null);
 
   const {
     search,
@@ -168,7 +185,8 @@ export function LinksPage() {
     update,
     toast,
     closeEditor: () => setEditorOpen(false),
-    onSlugTaken: () => setShakeKey((k) => k + 1),
+    onSaveError: () => setShakeKey((k) => k + 1),
+    onSameDestinationMatch: (input, matchedLinks) => setSameDestination({ input, matchedLinks }),
   });
 
   return (
@@ -205,12 +223,14 @@ export function LinksPage() {
           totalCount={links.data?.length ?? 0}
         />
         <LinksTable
+          orgId={orgId}
           paged={paged}
           navigate={navigate}
           limits={limits}
           onQrClick={setQrLink}
           onEdit={openEdit}
           onDelete={setDeleting}
+          onCreateAlias={setAliasLink}
           sort={sort}
           onSort={setSort}
           totalPages={totalPages}
@@ -227,6 +247,7 @@ export function LinksPage() {
         busy={create.isPending || update.isPending}
         onSave={onSave}
         activeDomains={activeDomains}
+        domainsAllowed={limits.domains > 0}
         qrEnabled={limits.qr}
         orgQr={orgQr}
         shakeKey={shakeKey}
@@ -234,11 +255,49 @@ export function LinksPage() {
 
       {limits.qr && <QrLinkDialog link={qrLink} onClose={() => setQrLink(null)} orgQr={orgQr} />}
 
+      <CreateAliasDialog orgId={orgId} link={aliasLink} onClose={() => setAliasLink(null)} />
+
       <DeleteLinkDialog
         deleting={deleting}
         onClose={() => setDeleting(null)}
         remove={remove}
         toast={toast}
+      />
+
+      <SameDestinationDialog
+        matchedLinks={sameDestination?.matchedLinks ?? null}
+        pending={create.isPending}
+        onClose={() => setSameDestination(null)}
+        onAddToExisting={(matchedLink) => {
+          if (!sameDestination) return;
+          const { input } = sameDestination;
+          create.mutate(
+            { ...input, mergeIntoLinkId: matchedLink.id },
+            {
+              onSuccess: () => {
+                setSameDestination(null);
+                setEditorOpen(false);
+                toast("Address added to the existing link");
+              },
+              onError: (e) => toast(e.message, "error"),
+            },
+          );
+        }}
+        onCreateSeparate={() => {
+          if (!sameDestination) return;
+          const { input } = sameDestination;
+          create.mutate(
+            { ...input, forceSeparateLink: true },
+            {
+              onSuccess: () => {
+                setSameDestination(null);
+                setEditorOpen(false);
+                toast("Link created");
+              },
+              onError: (e) => toast(e.message, "error"),
+            },
+          );
+        }}
       />
     </div>
   );

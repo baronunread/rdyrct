@@ -5,6 +5,7 @@ import { writeAuthHint } from "./auth-hint";
 import type {
   CurrentUser,
   AppConfig,
+  AddressDTO,
   LinkDTO,
   LinkInput,
   MemberDTO,
@@ -74,11 +75,25 @@ export const useLinks = (orgId: string) =>
     enabled: !!orgId,
   });
 
+/** Links used against the plan's `links` cap: a link plus its kept-forever
+ * aliases each count (a rename's automatic 48h temp_alias never does), so
+ * this can run ahead of `useLinks(...).data.length`. */
+export const useLinkQuotaUsage = (orgId: string) =>
+  useQuery<{ count: number }>({
+    queryKey: ["linkQuotaUsage", orgId],
+    queryFn: () => api(`/orgs/${orgId}/links/quota-usage`),
+    enabled: !!orgId,
+  });
+
 export function useLinkMutations(orgId: string) {
   const qc = useQueryClient();
   const invalidate = () => {
     qc.invalidateQueries({ queryKey: ["links", orgId] });
     qc.invalidateQueries({ queryKey: ["stats", orgId] });
+    qc.invalidateQueries({ queryKey: ["linkQuotaUsage", orgId] });
+    // A rename can leave the old slug behind as a temp alias: refetch any
+    // addresses list already open for this org's links, not just on remount.
+    qc.invalidateQueries({ queryKey: ["addresses", orgId] });
   };
   const create = useMutation({
     mutationFn: (body: LinkInput) => api<LinkDTO>(`/orgs/${orgId}/links`, { method: "POST", body }),
@@ -119,6 +134,51 @@ export const useLinkStats = (orgId: string, slug: string | null, domain?: string
     },
     enabled: !!orgId && !!slug,
   });
+
+// A link's primary address plus every alias (temporary, permanent, expired).
+// See #38.
+export const useAddresses = (orgId: string, linkId: string | null) =>
+  useQuery<AddressDTO[]>({
+    queryKey: ["addresses", orgId, linkId],
+    queryFn: () => api(`/orgs/${orgId}/links/${linkId}/addresses`),
+    enabled: !!orgId && !!linkId,
+  });
+
+export function useAddressMutations(orgId: string, linkId: string) {
+  const qc = useQueryClient();
+  const invalidate = () => {
+    qc.invalidateQueries({ queryKey: ["addresses", orgId, linkId] });
+    qc.invalidateQueries({ queryKey: ["links", orgId] });
+    qc.invalidateQueries({ queryKey: ["linkStats", orgId] });
+    qc.invalidateQueries({ queryKey: ["linkQuotaUsage", orgId] });
+  };
+  const keepForever = useMutation({
+    mutationFn: (addressId: string) =>
+      api(`/orgs/${orgId}/links/${linkId}/addresses/${addressId}/keep-forever`, { method: "POST" }),
+    onSuccess: invalidate,
+  });
+  const remove = useMutation({
+    mutationFn: (addressId: string) =>
+      api(`/orgs/${orgId}/links/${linkId}/addresses/${addressId}/remove`, {
+        method: "POST",
+        body: { confirm: true },
+      }),
+    onSuccess: invalidate,
+  });
+  const promote = useMutation({
+    mutationFn: (addressId: string) =>
+      api<LinkDTO>(`/orgs/${orgId}/links/${linkId}/addresses/${addressId}/promote`, {
+        method: "POST",
+      }),
+    onSuccess: invalidate,
+  });
+  const create = useMutation({
+    mutationFn: (body: { slug?: string }) =>
+      api<LinkDTO>(`/orgs/${orgId}/links/${linkId}/addresses`, { method: "POST", body }),
+    onSuccess: invalidate,
+  });
+  return { keepForever, remove, promote, create };
+}
 
 // The dashboard's live pulse: a cheap indexed read (limit rows by ts desc),
 // so it polls while the page is open.

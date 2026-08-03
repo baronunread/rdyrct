@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
-import { eq, and, sql } from "drizzle-orm";
+import { eq, and, isNull, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import * as schema from "../db/schema";
 import type { AppEnv, DB, Env } from "../env";
@@ -385,10 +385,13 @@ domainRoutes.patch("/:id", async (c) => {
 domainRoutes.delete("/:id", async (c) => {
   const db = c.var.db;
   const row = await getDomain(c, c.req.param("orgId")!, c.req.param("id"));
+  // link_addresses covers both a link's primary address and its aliases, so
+  // this one check is enough: an alias-only reference (no link primarily on
+  // this domain) still blocks the delete, same as a primary reference would.
   const inUse = await db
     .select({ n: sql<number>`count(*)` })
-    .from(schema.links)
-    .where(eq(schema.links.domainId, row.id));
+    .from(schema.linkAddresses)
+    .where(and(eq(schema.linkAddresses.domainId, row.id), isNull(schema.linkAddresses.retiredAt)));
   if ((inUse[0]?.n ?? 0) > 0)
     throw new HTTPException(409, {
       message: "Links still use this domain, move or delete them first",

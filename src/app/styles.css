@@ -73,7 +73,7 @@
   --text-4xs: 9px;
   --animate-shake: shake 300ms ease;
   /* above dialogs (z-50): toasts must stay visible over an open modal */
-  --z-toast: 60;
+  --z-index-toast: 60;
 }
 
 @keyframes shake {

@@ -33,6 +33,7 @@ let env: Env;
 
 const LINK = {
   id: "link1",
+  addressId: "addr1",
   orgId: "org1",
   slug: "abc123",
   destination: "https://example.com/landing",
@@ -56,8 +57,10 @@ describe("link publishing", () => {
     const resolved = await resolveSlug(env, "abc123", null);
     expect(resolved).toEqual({
       linkId: "link1",
+      addressId: "addr1",
       orgId: "org1",
       url: "https://example.com/landing?utm_source=newsletter",
+      expiresAt: null,
     });
   });
 

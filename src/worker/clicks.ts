@@ -26,6 +26,7 @@ export type ClickMessage = {
   // Producer-assigned, so a redelivered message can't double-insert.
   dedupeId: string;
   linkId: string;
+  addressId: string;
   orgId: string;
   ts: number;
   country: string;
@@ -37,12 +38,12 @@ export type ClickMessage = {
 // with the click consumer's max_retries + 1 in wrangler.jsonc.
 const CLICK_MAX_DELIVERIES = 6;
 
-// D1 caps bound parameters at 100 per statement. A click row binds 7 values,
-// so a single multi-row insert statement can hold at most floor(100 / 7) = 14
+// D1 caps bound parameters at 100 per statement. A click row binds 8 values,
+// so a single multi-row insert statement can hold at most floor(100 / 8) = 12
 // rows before it would exceed that cap. A queue batch (up to 100 messages)
 // splits into several insert statements run in one db.batch() call: D1 runs
 // them as one atomic unit, so the batch still acks or retries as a whole.
-const CLICK_INSERT_CHUNK_SIZE = 14;
+const CLICK_INSERT_CHUNK_SIZE = 12;
 
 function chunk<T>(items: readonly T[], size: number): T[][] {
   const chunks: T[][] = [];
@@ -63,6 +64,7 @@ export async function enqueueClick(c: Context<AppEnv>, hit: KVLink): Promise<voi
     const message: ClickMessage = {
       dedupeId: crypto.randomUUID(),
       linkId: hit.linkId,
+      addressId: hit.addressId,
       orgId: hit.orgId,
       ts: now(),
       country: (c.req.raw.cf?.country as string) ?? "",
@@ -105,6 +107,7 @@ export async function consumeClickBatch(
         .values(
           rows.map((m) => ({
             linkId: m.body.linkId,
+            addressId: m.body.addressId,
             orgId: m.body.orgId,
             ts: m.body.ts,
             country: m.body.country,
@@ -120,9 +123,7 @@ export async function consumeClickBatch(
   } catch (error) {
     console.error("click batch insert failed", batch.messages.length, error);
     if (batch.messages.some((m) => m.attempts >= CLICK_MAX_DELIVERIES)) {
-      console.error(
-        JSON.stringify({ event: "click_batch_dead_letter", size: batch.messages.length }),
-      );
+      console.error("click_batch_dead_letter", batch.messages.length);
     }
     batch.retryAll();
   }
@@ -142,7 +143,7 @@ export async function logClickDeadLetterBatch(
     linkId: m.body.linkId,
     orgId: m.body.orgId,
   }));
-  for (const event of events) console.error(JSON.stringify(event));
+  for (const event of events) console.error(event.event, event.linkId, event.orgId);
   await alertBetterStack(env, events);
   batch.ackAll();
 }

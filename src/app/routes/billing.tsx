@@ -4,7 +4,7 @@ import { AnimatePresence, LazyMotion, domAnimation, m } from "motion/react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   useCurrentUser,
-  useLinks,
+  useLinkQuotaUsage,
   useMembers,
   useDomains,
   useCheckout,
@@ -273,7 +273,7 @@ function UsageMeterSkeleton() {
 function UsageMeter({
   plan,
   org,
-  linkData,
+  linkQuotaCount,
   memberData,
   domainData,
   ownedOrgs,
@@ -283,7 +283,7 @@ function UsageMeter({
 }: {
   plan: OrgPlan;
   org: { id: string; name: string; plan: OrgPlan } | null;
-  linkData: unknown[];
+  linkQuotaCount: number;
   memberData: unknown[];
   domainData: unknown[];
   ownedOrgs: number;
@@ -302,7 +302,7 @@ function UsageMeter({
           <UsageMeterSkeleton />
         ) : (
           <>
-            <UsageLine label="Links" count={linkData.length} limit={limits.links} />
+            <UsageLine label="Links" count={linkQuotaCount} limit={limits.links} />
             <UsageLine label="Members" count={memberData.length} limit={limits.members} />
             <UsageLine label="Domains" count={domainData.length} limit={limits.domains} />
           </>
@@ -551,7 +551,7 @@ export function BillingPage() {
   const me = useCurrentUser();
   const { org } = useCurrentOrg();
   const orgId = org?.id ?? "";
-  const { data: linkData, isPending: linksPending } = useLinks(orgId);
+  const { data: linkQuota, isPending: linksPending } = useLinkQuotaUsage(orgId);
   const { data: memberData, isPending: membersPending } = useMembers(orgId);
   const { data: domainData, isPending: domainsPending } = useDomains(orgId);
   const ownedOrgs = ownedOrgCount(me.data?.orgs);
@@ -595,7 +595,7 @@ export function BillingPage() {
         <UsageMeter
           plan={plan}
           org={org}
-          linkData={linkData ?? []}
+          linkQuotaCount={linkQuota?.count ?? 0}
           memberData={memberData ?? []}
           domainData={domainData ?? []}
           ownedOrgs={ownedOrgs}

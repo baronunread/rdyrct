@@ -9,8 +9,15 @@ import { buildDestination, type UtmFields } from "./util";
  */
 export interface KVLink {
   linkId: string;
+  // The specific address this key resolves for (primary or an alias):
+  // carried through to the click event for per-address attribution.
+  addressId: string;
   orgId: string;
   url: string;
+  // Epoch ms; null = never expires. The redirect path compares this against
+  // Date.now() to lazily stop resolving an expired temporary alias without a
+  // D1 read (see index.ts's redirect middleware).
+  expiresAt: number | null;
 }
 
 export interface KVDomain {
@@ -26,16 +33,20 @@ export async function publishLink(
   env: Env,
   link: {
     id: string;
+    addressId: string;
     orgId: string;
     slug: string;
     destination: string;
+    expiresAt?: number | null;
   } & UtmFields,
   hostname: string | null,
 ): Promise<void> {
   const value: KVLink = {
     linkId: link.id,
+    addressId: link.addressId,
     orgId: link.orgId,
     url: buildDestination(link.destination, link),
+    expiresAt: link.expiresAt ?? null,
   };
   await env.LINKS.put(slugKey(hostname, link.slug), JSON.stringify(value));
 }

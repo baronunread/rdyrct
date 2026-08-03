@@ -86,6 +86,7 @@ function OrgSwitcherMenu({
           <ChevronsUpDown size={14} className="shrink-0 text-muted" />
         </div>
       }
+      label="Switch organization"
     >
       {orgs.map((o) => (
         <MenuItem key={o.id} onClick={() => onSwitchOrg(o.id)}>

@@ -12,13 +12,15 @@
  * password below and have verified emails, so you can log in as any of them.
  */
 
+import { ALIAS_TTL_MS } from "../src/worker/util";
+
 const API = "https://rdyrct.localhost/cdn-cgi/explorer/api";
 const PASSWORD = "seed-password-123";
 
 const CONFIG = {
-  orgs: 10,
-  extraUsersPool: 28, // non-owner users to spread across orgs as members
-  clickDays: 120, // how far back click history goes
+  orgs: 60,
+  extraUsersPool: 220, // non-owner users to spread across orgs as members
+  clickDays: 90, // how far back click history goes
 };
 
 /* ---------------- deterministic PRNG (stable re-runs) ---------------- */
@@ -132,20 +134,72 @@ async function hashPassword(password: string): Promise<string> {
 
 /* ---------------- data pools ---------------- */
 
-const ORG_NAMES = [
-  "Nimbus Labs",
-  "Cactus Coffee",
-  "Orbit Fitness",
-  "Paper Trail Co",
-  "Bluegill Media",
-  "Tundra Analytics",
-  "Hearth & Home",
-  "Velo Cycles",
-  "Sundial Travel",
+const ORG_NAME_PREFIX = [
+  "Nimbus",
+  "Cactus",
+  "Orbit",
+  "Paper Trail",
+  "Bluegill",
+  "Tundra",
+  "Hearth",
+  "Velo",
+  "Sundial",
   "Copper Kettle",
-  "Moss Studio",
-  "Lighthouse Legal",
+  "Moss",
+  "Lighthouse",
+  "Granite",
+  "Amber",
+  "Cobalt",
+  "Ember",
+  "Willow",
+  "Cedar",
+  "Harbor",
+  "Meridian",
+  "Juniper",
+  "Solace",
+  "Anchor",
+  "Foundry",
+  "Marrow",
+  "Thistle",
+  "Vantage",
+  "Wren",
+  "Ashgrove",
+  "Beacon",
 ];
+const ORG_NAME_SUFFIX = [
+  "Labs",
+  "Coffee",
+  "Fitness",
+  "Co",
+  "Media",
+  "Analytics",
+  "Home",
+  "Cycles",
+  "Travel",
+  "Studio",
+  "Legal",
+  "Works",
+  "Collective",
+  "Group",
+  "Partners",
+  "Supply",
+  "Kitchen",
+  "Press",
+  "Goods",
+];
+const usedOrgNames = new Set<string>();
+function makeOrgName(): string {
+  let name = "";
+  // ORG_NAME_PREFIX x ORG_NAME_SUFFIX is a finite pool: once CONFIG.orgs
+  // approaches it, fall back to a numbered suffix instead of spinning forever.
+  for (let attempt = 0; attempt < 50; attempt++) {
+    name = `${pick(ORG_NAME_PREFIX)} ${pick(ORG_NAME_SUFFIX)}`;
+    if (!usedOrgNames.has(name)) break;
+  }
+  while (usedOrgNames.has(name)) name = `${name} ${usedOrgNames.size}`;
+  usedOrgNames.add(name);
+  return name;
+}
 const FIRST = [
   "Ana",
   "Bruno",
@@ -246,6 +300,9 @@ const DEVICES: readonly (readonly [string, number])[] = [
 
 async function wipe(): Promise<number> {
   const links = await sql("SELECT slug, domain_id FROM links WHERE id LIKE 'seed-%'");
+  const addresses = await sql(
+    "SELECT slug, domain_id FROM link_addresses WHERE org_id LIKE 'seed-%'",
+  );
   const domains = await sql("SELECT hostname FROM domains WHERE id LIKE 'seed-%'");
   const hostById = new Map(
     (await sql("SELECT id, hostname FROM domains WHERE id LIKE 'seed-%'")).map((d) => [
@@ -253,15 +310,16 @@ async function wipe(): Promise<number> {
       d.hostname,
     ]),
   );
-  for (const l of links) {
-    const host = l.domain_id ? hostById.get(l.domain_id) : null;
-    await kvDelete(host ? `slug:${host}:${l.slug}` : `slug:${l.slug}`);
+  for (const a of addresses) {
+    const host = a.domain_id ? hostById.get(a.domain_id) : null;
+    await kvDelete(host ? `slug:${host}:${a.slug}` : `slug:${a.slug}`);
   }
   for (const d of domains) await kvDelete(`domain:${d.hostname}`);
 
   // Explicit order instead of trusting cascades.
   await sqlBatch([
     "DELETE FROM clicks WHERE org_id LIKE 'seed-%'",
+    "DELETE FROM link_addresses WHERE org_id LIKE 'seed-%'",
     "DELETE FROM links WHERE id LIKE 'seed-%'",
     "DELETE FROM domains WHERE id LIKE 'seed-%'",
     "DELETE FROM invites WHERE org_id LIKE 'seed-%'",
@@ -311,19 +369,16 @@ async function seed() {
     return u;
   };
 
-  const ownerPlans: SeedUser["plan"][] = [
-    "pro",
-    "pro",
-    "hobby",
-    "hobby",
-    "hobby",
-    "free",
-    "free",
-    "free",
-    "free",
-    "free",
-  ];
-  const owners = ownerPlans.slice(0, CONFIG.orgs).map((p) => makeUser(p));
+  // Same 20% pro / 30% hobby / 50% free split as before, scaled to any org count.
+  const owners = Array.from({ length: CONFIG.orgs }, () =>
+    makeUser(
+      pickW([
+        ["pro", 20],
+        ["hobby", 30],
+        ["free", 50],
+      ]),
+    ),
+  );
   const pool = Array.from({ length: CONFIG.extraUsersPool }, () => makeUser("free"));
 
   const userRows = users.map(
@@ -358,7 +413,7 @@ async function seed() {
     const owner = owners[i];
     const org: SeedOrg = {
       id: uid(),
-      name: ORG_NAMES[i],
+      name: makeOrgName(),
       plan: owner.plan,
       ownerId: owner.id,
       createdAt: owner.createdAt + randInt(0, 3) * day,
@@ -402,18 +457,42 @@ async function seed() {
       });
   }
 
-  /* links + KV + clicks */
+  /* links + addresses (primary + aliases, #38) + KV + clicks */
   interface SeedLink {
     id: string;
     org: SeedOrg;
     slug: string;
+    domainId: string | null;
     host: string | null;
     url: string;
     createdAt: number;
     weight: number; // relative popularity
   }
+  interface SeedAddress {
+    id: string;
+    linkId: string;
+    org: SeedOrg;
+    slug: string;
+    domainId: string | null;
+    host: string | null;
+    kind: "primary" | "temp_alias" | "permanent_alias";
+    creationReason: "created" | "renamed" | "promoted" | "same_destination_merge" | "";
+    expiresAt: number | null;
+    retiredAt: number | null;
+    createdAt: number;
+  }
   const links: SeedLink[] = [];
+  const addresses: SeedAddress[] = [];
   const usedSlugs = new Set<string>();
+
+  const nextSlug = (custom: boolean) => {
+    let slug = custom
+      ? `${pick(["promo", "menu", "app", "event", "docs", "join", "sale"])}-${randomFrom(SLUG_ALPHABET, 3)}`
+      : randomSlug();
+    while (usedSlugs.has(slug)) slug = randomSlug();
+    usedSlugs.add(slug);
+    return slug;
+  };
 
   for (const org of orgs) {
     const [lo, hi] = linkRange[org.plan];
@@ -423,14 +502,12 @@ async function seed() {
     ).map((r) => r.user_id as string);
 
     const rows: string[] = [];
+    const addressRows: string[] = [];
     for (let i = 0; i < count; i++) {
       const onCustomDomain = org.domain !== null && rand() < 0.25;
-      let slug =
-        onCustomDomain && rand() < 0.6
-          ? `${pick(["promo", "menu", "app", "event", "docs", "join", "sale"])}-${randomFrom(SLUG_ALPHABET, 3)}`
-          : randomSlug();
-      while (usedSlugs.has(slug)) slug = randomSlug();
-      usedSlugs.add(slug);
+      const slug = nextSlug(onCustomDomain && rand() < 0.6);
+      const domainId = onCustomDomain ? org.domain!.id : null;
+      const host = onCustomDomain ? org.domain!.hostname : null;
 
       const [destBase, title] = pick(DESTINATIONS);
       const dest = `${destBase}?ref=${org.name.toLowerCase().split(" ")[0]}`;
@@ -444,15 +521,87 @@ async function seed() {
         id: uid(),
         org,
         slug,
-        host: onCustomDomain ? org.domain!.hostname : null,
+        domainId,
+        host,
         url: dest,
         createdAt,
-        // Pareto-ish: a few hot links, a long tail, some dead ones.
-        weight: rand() < 0.15 ? randInt(40, 100) : rand() < 0.75 ? randInt(1, 12) : 0,
+        // Pareto-ish: a few hot links, a long tail, some dead ones. Kept
+        // modest (not the pre-#38 40-100) because `orgs` (and so total link
+        // count) now scales much higher: unbounded weight here means clicks
+        // grow as orgs x links/org x days, which made local seeding crawl.
+        weight: rand() < 0.15 ? randInt(20, 55) : rand() < 0.75 ? randInt(1, 10) : 0,
       };
       links.push(link);
       rows.push(
-        `(${q(link.id)}, ${q(org.id)}, ${link.host ? q(org.domain!.id) : "NULL"}, ${q(slug)}, ${q(dest)}, ${q(title)}, ${q(utmSource)}, ${q(utmMedium)}, ${q(utmCampaign)}, ${q(pick(memberIds))}, ${createdAt})`,
+        `(${q(link.id)}, ${q(org.id)}, ${domainId ? q(domainId) : "NULL"}, ${q(slug)}, ${q(dest)}, ${q(title)}, ${q(utmSource)}, ${q(utmMedium)}, ${q(utmCampaign)}, ${q(pick(memberIds))}, ${createdAt})`,
+      );
+
+      const primary: SeedAddress = {
+        id: uid(),
+        linkId: link.id,
+        org,
+        slug,
+        domainId,
+        host,
+        kind: "primary",
+        creationReason: "",
+        expiresAt: null,
+        retiredAt: null,
+        createdAt,
+      };
+      addresses.push(primary);
+
+      // Aliases mirror how real links pick them up: renaming a custom-domain
+      // slug leaves a 48h temp_alias, and links occasionally accumulate a
+      // permanent_alias from an explicit add or a same-destination merge.
+      const aliasChance = onCustomDomain ? 0.35 : 0.08;
+      if (rand() < aliasChance) {
+        const aliasCount = rand() < 0.25 ? 2 : 1;
+        for (let a = 0; a < aliasCount; a++) {
+          const aliasSlug = nextSlug(onCustomDomain);
+          const aliasCreatedAt = Math.min(
+            now,
+            createdAt + randInt(1, Math.max(1, Math.floor((now - createdAt) / day))) * day,
+          );
+          const isTemp = onCustomDomain && rand() < 0.6;
+          const alias: SeedAddress = isTemp
+            ? {
+                id: uid(),
+                linkId: link.id,
+                org,
+                slug: aliasSlug,
+                domainId,
+                host,
+                kind: "temp_alias",
+                creationReason: "renamed",
+                expiresAt: aliasCreatedAt + ALIAS_TTL_MS,
+                retiredAt:
+                  aliasCreatedAt + ALIAS_TTL_MS < now ? aliasCreatedAt + ALIAS_TTL_MS : null,
+                createdAt: aliasCreatedAt,
+              }
+            : {
+                id: uid(),
+                linkId: link.id,
+                org,
+                slug: aliasSlug,
+                domainId,
+                host,
+                kind: "permanent_alias",
+                creationReason: rand() < 0.3 ? "same_destination_merge" : "created",
+                expiresAt: null,
+                // A small share were later removed by hand and kept for history.
+                retiredAt:
+                  rand() < 0.1 ? Math.min(now, aliasCreatedAt + randInt(1, 30) * day) : null,
+                createdAt: aliasCreatedAt,
+              };
+          addresses.push(alias);
+          addressRows.push(
+            `(${q(alias.id)}, ${q(alias.linkId)}, ${q(org.id)}, ${alias.domainId ? q(alias.domainId) : "NULL"}, ${q(alias.slug)}, ${q(alias.kind)}, ${q(alias.creationReason)}, ${alias.expiresAt ?? "NULL"}, ${alias.retiredAt ?? "NULL"}, ${alias.createdAt})`,
+          );
+        }
+      }
+      addressRows.push(
+        `(${q(primary.id)}, ${q(primary.linkId)}, ${q(org.id)}, ${primary.domainId ? q(primary.domainId) : "NULL"}, ${q(primary.slug)}, 'primary', '', NULL, NULL, ${primary.createdAt})`,
       );
     }
     for (let i = 0; i < rows.length; i += 50) {
@@ -460,16 +609,41 @@ async function seed() {
         `INSERT INTO links (id, org_id, domain_id, slug, destination, title, utm_source, utm_medium, utm_campaign, created_by, created_at) VALUES ${rows.slice(i, i + 50).join(",")}`,
       ]);
     }
+    for (let i = 0; i < addressRows.length; i += 50) {
+      await sqlBatch([
+        `INSERT INTO link_addresses (id, link_id, org_id, domain_id, slug, kind, creation_reason, expires_at, retired_at, created_at) VALUES ${addressRows.slice(i, i + 50).join(",")}`,
+      ]);
+    }
   }
 
-  for (const link of links) {
-    await kvPut(link.host ? `slug:${link.host}:${link.slug}` : `slug:${link.slug}`, {
-      linkId: link.id,
-      orgId: link.org.id,
-      url: link.url,
-    });
+  const linkById = new Map(links.map((l) => [l.id, l]));
+  const liveAddresses = addresses.filter((a) => a.retiredAt === null); // retired addresses resolve to nothing
+  // Same reasoning as the click inserts above: one KV PUT per address is
+  // thousands of serial round trips at this scale, so run a few at once.
+  const KV_CONCURRENCY = 8;
+  let publishedAddresses = 0;
+  for (let i = 0; i < liveAddresses.length; i += KV_CONCURRENCY) {
+    const slice = liveAddresses.slice(i, i + KV_CONCURRENCY);
+    await Promise.all(
+      slice.map((address) => {
+        const link = linkById.get(address.linkId)!;
+        return kvPut(
+          address.host ? `slug:${address.host}:${address.slug}` : `slug:${address.slug}`,
+          {
+            linkId: link.id,
+            addressId: address.id,
+            orgId: address.org.id,
+            url: link.url,
+            expiresAt: address.expiresAt,
+          },
+        );
+      }),
+    );
+    publishedAddresses += slice.length;
   }
-  console.log(`  links published to KV: ${links.length}`);
+  console.log(
+    `  links published to KV: ${publishedAddresses} (${links.length} links, ${addresses.length - links.length} aliases)`,
+  );
 
   /* clicks: random per-day spikes + random per-hour spikes */
   let totalClicks = 0;
@@ -508,7 +682,7 @@ async function seed() {
       if (dailyMult[d] === 0) continue;
       const recency = Math.pow((ageDays - d) / ageDays, 1.5) * 0.6 + 0.4;
       const n = Math.min(
-        60,
+        35,
         Math.max(0, Math.round(link.weight * dailyMult[d] * recency * (0.5 + rand()))),
       );
       if (n <= 0) continue;
@@ -528,11 +702,25 @@ async function seed() {
       }
     }
   }
-  for (let i = 0; i < clickValues.length; i += 400) {
-    await sqlBatch([
-      `INSERT INTO clicks (link_id, org_id, ts, country, referrer, device) VALUES ${clickValues.slice(i, i + 400).join(",")}`,
-    ]);
-    if (i % 4000 === 0 && i > 0) console.log(`  clicks inserted: ${i}/${clickValues.length}`);
+  // Bigger batches + a few requests in flight at once: sequential single-row
+  // batches slow down as the clicks table (and its 4 indexes) grows, since
+  // each batch is its own HTTP round trip to the local D1 emulator. Running
+  // several concurrently keeps wall-clock time roughly flat instead of
+  // climbing over the run.
+  const CLICK_BATCH = 500; // D1 caps statement text size; larger batches hit SQLITE_TOOBIG
+  const CLICK_CONCURRENCY = 8;
+  const clickBatches: string[] = [];
+  for (let i = 0; i < clickValues.length; i += CLICK_BATCH) {
+    clickBatches.push(
+      `INSERT INTO clicks (link_id, org_id, ts, country, referrer, device) VALUES ${clickValues.slice(i, i + CLICK_BATCH).join(",")}`,
+    );
+  }
+  let clicksInserted = 0;
+  for (let i = 0; i < clickBatches.length; i += CLICK_CONCURRENCY) {
+    const slice = clickBatches.slice(i, i + CLICK_CONCURRENCY);
+    await Promise.all(slice.map((stmt) => sqlBatch([stmt])));
+    clicksInserted = Math.min(clickValues.length, (i + slice.length) * CLICK_BATCH);
+    console.log(`  clicks inserted: ${clicksInserted}/${clickValues.length}`);
   }
 
   /* summary */

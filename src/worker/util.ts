@@ -12,6 +12,10 @@ export const uid = (len = 16) => randomFrom(ID_ALPHABET, len);
 export const randomSlug = () => randomFrom(SLUG_ALPHABET, 7);
 export const now = () => Date.now();
 
+// A renamed custom-domain address keeps working for exactly this long before
+// the daily sweep (storage.ts's sweepExpiredAliases) retires it.
+export const ALIAS_TTL_MS = 48 * 60 * 60 * 1000;
+
 export const SLUG_RE = /^[a-zA-Z0-9_-]{1,64}$/;
 
 // Paths the SPA owns at the top level; slugs may not shadow them. There is no

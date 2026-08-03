@@ -479,7 +479,7 @@ function InviteByEmailCard({
           <button
             type="button"
             aria-label="Member limit info"
-            className="cursor-pointer text-muted hover:text-text"
+            className="cursor-help text-muted hover:text-text"
           >
             <Info size={13} />
           </button>
