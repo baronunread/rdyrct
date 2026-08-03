@@ -7,6 +7,17 @@ export async function createOrg(page: Page, name: string) {
   await page.getByRole("button", { name: "Create organization" }).click();
 }
 
+/** Opens the org switcher and creates another org under the same signed-in
+ * account, for tests that share one user (see link-addresses.pw.ts) and so
+ * have already left the no-org state behind by the time they need this. */
+export async function createAdditionalOrg(page: Page, name: string) {
+  await page.getByTitle("Switch organization").click();
+  await page.getByRole("menuitem", { name: "New organization" }).click();
+  const dialog = page.getByRole("dialog", { name: "New organization" });
+  await dialog.getByLabel("Name").fill(name);
+  await dialog.getByRole("button", { name: "Create" }).click();
+}
+
 /** Adds a custom domain from the Domains page and returns its hostname.
  * Does not wait for activation: callers that need "active" (DNS+TLS have
  * resolved against the fake Cloudflare backend) poll for that themselves,

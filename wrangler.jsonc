@@ -312,7 +312,10 @@
           "name": "RL_EMAIL",
           "namespace_id": "24002",
           "simple": {
-            "limit": 3,
+            // Higher than production's (3): the e2e suite's real sign-ups
+            // and password-reset sends across files share this one budget,
+            // and production's abuse-control number is too tight for that.
+            "limit": 20,
             "period": 60,
           },
         },
