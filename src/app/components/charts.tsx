@@ -1,6 +1,5 @@
 import { Fragment, useMemo, useState } from "react";
 import type { ReactNode } from "react";
-import { Link } from "react-router";
 import { scaleLinear, scalePoint } from "d3-scale";
 import {
   areaY,
@@ -12,7 +11,7 @@ import {
 import { focusNearestX } from "@tanstack/charts/focus";
 import { Chart } from "@tanstack/react-charts";
 import type { SeriesPoint, DeltaValue, HeatmapRow, TopEntry } from "@/shared/types";
-import { Card } from "../ui/misc";
+import { Card, SlugLink } from "../ui/misc";
 
 /**
  * d3's scalePoint has no tick-thinning: without it TanStack Charts falls
@@ -221,8 +220,8 @@ export function BarList({
       {items.map((item) => (
         <li key={item.key}>
           <div className="mb-1 flex items-baseline justify-between gap-3 text-xs">
-            <span className="truncate">{formatKey(item.key)}</span>
-            <span className="tnum text-muted">{item.clicks}</span>
+            <span className="min-w-0 truncate">{formatKey(item.key)}</span>
+            <span className="tnum shrink-0 text-muted">{item.clicks}</span>
           </div>
           <div className="h-1.5 rounded-full bg-surface-2">
             <div
@@ -431,19 +430,17 @@ export function LinkListCard({
       ) : (
         <ul className="flex flex-col gap-2">
           {links.map((l) => (
-            <li key={l.id} className="flex items-center justify-between text-xs">
-              <Link
+            <li key={l.id} className="flex items-center justify-between gap-3 text-xs">
+              <SlugLink
                 to={
                   l.domain
                     ? `/links/${l.slug}?domain=${encodeURIComponent(l.domain)}`
                     : `/links/${l.slug}`
                 }
-                className="truncate text-accent hover:underline"
-              >
-                /{l.slug}
-                {l.title ? ` · ${l.title}` : ""}
-              </Link>
-              {l.suffix && <span className="tnum text-muted">{l.suffix}</span>}
+                slug={l.slug}
+                title={l.title}
+              />
+              {l.suffix && <span className="tnum shrink-0 text-muted">{l.suffix}</span>}
             </li>
           ))}
         </ul>
