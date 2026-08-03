@@ -1,4 +1,11 @@
-import { useMemo, useEffect, useRef, type ChangeEvent, type RefObject } from "react";
+import {
+  useMemo,
+  useEffect,
+  useRef,
+  type ChangeEvent,
+  type ClipboardEvent,
+  type RefObject,
+} from "react";
 import { useForm, type SubmitErrorHandler } from "react-hook-form";
 import { valibotResolver } from "@hookform/resolvers/valibot";
 import { Link as RouterLink } from "react-router";
@@ -93,6 +100,19 @@ function withoutUtmParam(destination: string, param: string): string {
   }
   if (!url.searchParams.has(param)) return destination;
   url.searchParams.delete(param);
+  return url.toString();
+}
+
+/** Same normalization the server applies on save (see stripUtmParams in
+ * src/worker/util.ts): drop every utm_* param, leave the rest alone. */
+function stripUtmFromDestination(destination: string): string {
+  let url: URL;
+  try {
+    url = new URL(destination);
+  } catch {
+    return destination;
+  }
+  for (const { param } of UTM_PARAMS) url.searchParams.delete(param);
   return url.toString();
 }
 
@@ -410,12 +430,32 @@ function LinkFormFields({
   domainsAllowed: boolean;
   destinationRef: RefObject<HTMLInputElement | null>;
 }) {
+  const toast = useToast();
   const set = (key: keyof LinkInput) => (e: ChangeEvent<HTMLInputElement>) =>
     setForm({ ...form, [key]: e.target.value });
 
   const onDestinationChange = (e: ChangeEvent<HTMLInputElement>) => {
     const destination = e.target.value;
     setForm({ ...form, destination, ...utmFromDestination(destination) });
+  };
+
+  // Pasting a link with utm_* params already on it shows the cleaned link
+  // right away, not the raw paste: extract into the UTM fields below and
+  // strip them from what lands in this field. Typing a URL out by hand
+  // still shows exactly what's typed (see onDestinationChange) until it's
+  // stripped on save.
+  const onDestinationPaste = (e: ClipboardEvent<HTMLInputElement>) => {
+    const pasted = e.clipboardData.getData("text");
+    if (!pasted) return;
+    const input = e.currentTarget;
+    const start = input.selectionStart ?? input.value.length;
+    const end = input.selectionEnd ?? input.value.length;
+    const merged = input.value.slice(0, start) + pasted + input.value.slice(end);
+    const utm = utmFromDestination(merged);
+    if (Object.keys(utm).length === 0) return;
+    e.preventDefault();
+    setForm({ ...form, destination: stripUtmFromDestination(merged), ...utm });
+    toast("UTM parameters found");
   };
 
   return (
@@ -425,6 +465,7 @@ function LinkFormFields({
           ref={destinationRef}
           value={form.destination}
           onChange={onDestinationChange}
+          onPaste={onDestinationPaste}
           placeholder="https://example.com/launch"
           autoFocus={!editing}
         />
