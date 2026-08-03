@@ -360,7 +360,10 @@ export function Heatmap({ data }: { data: HeatmapRow[] }) {
 
   return (
     <div className="relative overflow-x-auto">
-      <div className="grid grid-cols-[auto_repeat(24,1fr)] gap-px text-4xs">
+      <div
+        className="grid grid-cols-[auto_repeat(24,1fr)] gap-px text-4xs"
+        onMouseLeave={() => setHover(null)}
+      >
         <div />
         {HEATMAP_HOURS.map((h) => (
           <div key={h} className="text-center text-muted">
@@ -381,7 +384,7 @@ export function Heatmap({ data }: { data: HeatmapRow[] }) {
                     backgroundColor: `color-mix(in srgb, var(--chart) ${opacity * 100}%, transparent)`,
                   }}
                   onMouseMove={cell ? onMove(day, h, cell.clicks) : undefined}
-                  onMouseLeave={() => setHover(null)}
+                  onMouseEnter={cell ? undefined : () => setHover(null)}
                 />
               );
             })}
