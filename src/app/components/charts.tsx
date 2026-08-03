@@ -9,7 +9,8 @@ import {
   type ConfiguredScaleLike,
 } from "@tanstack/charts";
 import { focusNearestX } from "@tanstack/charts/focus";
-import { Chart } from "@tanstack/react-charts";
+import { motion } from "@tanstack/charts/motion";
+import { Chart } from "@tanstack/react-charts/core";
 import type { SeriesPoint, DeltaValue, HeatmapRow, TopEntry } from "@/shared/types";
 import { Card, SlugLink } from "../ui/misc";
 import { CountryMap } from "./country-map";
@@ -34,44 +35,11 @@ function thinnedPointScale(domain: readonly string[]): ConfiguredScaleLike<strin
   return attach(scalePoint<string>().domain(domain));
 }
 
-interface AreaChartInput {
-  data: readonly SeriesPoint[];
-  tickFormat: (day: string) => string;
-}
-
-const areaChartDefinition = defineChart<AreaChartInput>()(({ input }) => {
-  const max = Math.max(1, ...input.data.map((d) => d.clicks));
-  return {
-    marks: [
-      areaY(input.data, {
-        x: "day",
-        y: "clicks",
-        key: "day",
-        fill: "var(--chart)",
-        fillOpacity: 0.14,
-      }),
-      lineY(input.data, {
-        x: "day",
-        y: "clicks",
-        key: "day",
-        stroke: "var(--chart)",
-        strokeWidth: 2,
-      }),
-    ],
-    x: {
-      scale: thinnedPointScale(input.data.map((d) => d.day)),
-      grid: false,
-      format: input.tickFormat,
-    },
-    y: {
-      scale: scaleLinear().domain([0, max]).nice(),
-      grid: true,
-    },
-    theme: { foreground: "var(--text)", muted: "var(--muted)", grid: "var(--border)" },
-  };
-});
-
 type AreaChartPoint = ChartPoint<SeriesPoint, string, number>;
+
+// One motion renderer per chart type: it holds no per-instance state, so a
+// module-level instance avoids reallocating it on every render.
+const areaChartMotion = motion<SeriesPoint, string, number>();
 
 /** Vertical hover line + marker dot over the hovered point, if any. */
 function ChartCrosshair({
@@ -154,9 +122,48 @@ export function AreaChart({
     chartTop: number;
     chartHeight: number;
   } | null>(null);
-  // Stable identity across hover-driven re-renders: a fresh object every
-  // render reads as changed input to the chart runtime and re-triggers it.
-  const input = useMemo(() => ({ data, tickFormat }), [data, tickFormat]);
+  // Definition identity is the update boundary: recreate it only when the
+  // data or formatter actually change, so hover-driven re-renders don't
+  // read as a changed chart to the runtime.
+  const definition = useMemo(() => {
+    const max = Math.max(1, ...data.map((d) => d.clicks));
+    return defineChart({
+      marks: [
+        areaY(data, {
+          x: "day",
+          y: "clicks",
+          key: "day",
+          fill: "var(--chart)",
+          fillOpacity: 0.14,
+        }),
+        lineY(data, {
+          x: "day",
+          y: "clicks",
+          key: "day",
+          stroke: "var(--chart)",
+          strokeWidth: 2,
+        }),
+      ],
+      x: {
+        scale: thinnedPointScale(data.map((d) => d.day)),
+        grid: false,
+        format: tickFormat,
+      },
+      y: {
+        scale: scaleLinear().domain([0, max]).nice(),
+        grid: true,
+      },
+      theme: { foreground: "var(--text)", muted: "var(--muted)", grid: "var(--border)" },
+      // Nearest-x, unbounded distance: the slice shows anywhere over the
+      // chart, not only within a few px of the line itself.
+      focus: focusNearestX,
+      maxFocusDistance: Infinity,
+      // We paint our own crosshair dot below; the built-in ring would double up.
+      focusRing: false,
+      // Spring settle on range changes (7d/30d/90d) instead of a hard jump.
+      motion: { transition: { type: "spring", stiffness: 170, damping: 22, mass: 1 } },
+    });
+  }, [data, tickFormat]);
 
   if (!data.length) return null;
 
@@ -171,14 +178,10 @@ export function AreaChart({
   return (
     <div className="relative" onMouseMove={onMouseMove}>
       <Chart
-        definition={areaChartDefinition}
-        input={input}
+        definition={definition}
+        renderer={areaChartMotion}
         height={height}
         ariaLabel="Clicks per day"
-        // Nearest-x, unbounded distance: the slice shows anywhere over the
-        // chart, not only within a few px of the line itself.
-        focus={focusNearestX}
-        maxFocusDistance={Infinity}
         onFocusChange={setFocus}
         onRender={({ scene: s }) =>
           setScene((prev) =>
