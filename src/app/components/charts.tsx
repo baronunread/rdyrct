@@ -300,32 +300,31 @@ function DeltaBadge({ pct }: { pct: number }) {
 const HEATMAP_DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const HEATMAP_HOURS = Array.from({ length: 24 }, (_, i) => i);
 
-/** Cell position in px, relative to the grid's own offset parent: unaffected
- * by horizontal scroll, unlike a viewport-relative bounding rect. */
+/** Fixed to the viewport (escapes the heatmap's overflow-x-auto clipping,
+ * unlike an absolutely-positioned tooltip nested inside it) and follows the
+ * raw cursor position, flipping near the window edges so it stays visible. */
 function HeatmapTooltip({
   day,
   hour,
   clicks,
-  cellLeft,
-  cellTop,
-  cellWidth,
-  flip,
+  x,
+  y,
 }: {
   day: string;
   hour: number;
   clicks: number;
-  cellLeft: number;
-  cellTop: number;
-  cellWidth: number;
-  flip: boolean;
+  x: number;
+  y: number;
 }) {
+  const flipX = x > window.innerWidth - 80;
+  const flipY = y < 60;
   return (
     <div
-      className="pointer-events-none absolute z-10 rounded-md border border-border bg-surface-2 px-2.5 py-1.5 text-xs whitespace-nowrap shadow-lg"
+      className="pointer-events-none fixed z-50 rounded-md border border-border bg-surface-2 px-2.5 py-1.5 text-xs whitespace-nowrap shadow-lg"
       style={{
-        left: cellLeft + cellWidth / 2,
-        top: cellTop,
-        transform: `translate(${flip ? "-100%" : "0%"}, calc(-100% - 6px))`,
+        left: x,
+        top: y,
+        transform: `translate(${flipX ? "-100%" : "-50%"}, calc(${flipY ? "12px" : "-100% - 12px"}))`,
       }}
     >
       <span className="text-muted">
@@ -350,22 +349,13 @@ export function Heatmap({ data }: { data: HeatmapRow[] }) {
     day: string;
     hour: number;
     clicks: number;
-    cellLeft: number;
-    cellTop: number;
-    cellWidth: number;
+    x: number;
+    y: number;
   } | null>(null);
 
-  const onEnter =
+  const onMove =
     (day: string, hour: number, clicks: number) => (e: React.MouseEvent<HTMLDivElement>) => {
-      const cell = e.currentTarget;
-      setHover({
-        day,
-        hour,
-        clicks,
-        cellLeft: cell.offsetLeft,
-        cellTop: cell.offsetTop,
-        cellWidth: cell.offsetWidth,
-      });
+      setHover({ day, hour, clicks, x: e.clientX, y: e.clientY });
     };
 
   return (
@@ -390,7 +380,7 @@ export function Heatmap({ data }: { data: HeatmapRow[] }) {
                   style={{
                     backgroundColor: `color-mix(in srgb, var(--chart) ${opacity * 100}%, transparent)`,
                   }}
-                  onMouseEnter={cell ? onEnter(day, h, cell.clicks) : undefined}
+                  onMouseMove={cell ? onMove(day, h, cell.clicks) : undefined}
                   onMouseLeave={() => setHover(null)}
                 />
               );
@@ -403,10 +393,8 @@ export function Heatmap({ data }: { data: HeatmapRow[] }) {
           day={hover.day}
           hour={hover.hour}
           clicks={hover.clicks}
-          cellLeft={hover.cellLeft}
-          cellTop={hover.cellTop}
-          cellWidth={hover.cellWidth}
-          flip={hover.hour > 18}
+          x={hover.x}
+          y={hover.y}
         />
       )}
     </div>
