@@ -13,6 +13,7 @@ import {
   QR_DOT_STYLES,
 } from "@/shared/types";
 import { Button } from "../ui/button";
+import { cn } from "../ui/cn";
 import { Field } from "../ui/field";
 import { MenuSelect } from "../ui/menu";
 import { Card } from "../ui/misc";
@@ -94,11 +95,12 @@ interface QrDefaultsFieldsProps {
   values: QrDefaultsValues;
   setField: <K extends keyof QrDefaultsValues>(key: K, value: QrDefaultsValues[K]) => void;
   isAdmin: boolean;
+  className?: string;
 }
 
 function QrShapeFields({ values, setField, isAdmin }: QrDefaultsFieldsProps) {
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex min-w-0 flex-col gap-4">
       <Field label="Dot style">
         <MenuSelect
           label="Dot style"
@@ -129,9 +131,9 @@ function QrShapeFields({ values, setField, isAdmin }: QrDefaultsFieldsProps) {
   );
 }
 
-function QrColorAndLogoFields({ values, setField, isAdmin }: QrDefaultsFieldsProps) {
+function QrColorAndLogoFields({ values, setField, isAdmin, className }: QrDefaultsFieldsProps) {
   return (
-    <div className="flex flex-col gap-4">
+    <div className={cn("flex flex-col gap-4", className)}>
       <div className="grid grid-cols-2 gap-3">
         <QrColorField
           label="Dot color"
@@ -199,11 +201,14 @@ function QrColorAndLogoFields({ values, setField, isAdmin }: QrDefaultsFieldsPro
   );
 }
 
-function QrDefaultsFormFields({ values, setField, isAdmin }: QrDefaultsFieldsProps) {
+/** Mirrors LinkEditor's QrPreviewSidebar (link-editor.tsx): beside the shape
+ * fields on sm+ (via the caller's grid), moved after them (`order-last
+ * sm:order-none`) on mobile, where it's more useful after the controls it's
+ * previewing than pushed above them. */
+function QrPreviewSidebar({ values }: { values: QrDefaultsValues }) {
   return (
-    <div className="flex flex-col gap-6">
-      <QrShapeFields values={values} setField={setField} isAdmin={isAdmin} />
-      <QrColorAndLogoFields values={values} setField={setField} isAdmin={isAdmin} />
+    <div className="flex flex-col gap-2 sm:w-40">
+      <p className="text-2xs tracking-wider text-muted uppercase">Preview</p>
       <QRPreview
         url={shortUrl("preview")}
         logo={values.qrLogo || undefined}
@@ -283,9 +288,20 @@ export function QrDefaultsCard() {
         {!hasQr ? (
           <UpgradeQrPrompt />
         ) : (
-          <div className="flex flex-col gap-6">
-            <QrDefaultsFormFields values={values} setField={setField} isAdmin={isAdmin} />
-            <SaveQrDefaultsAction isAdmin={isAdmin} savingQr={savingQr} save={save} />
+          <div className="grid gap-6 sm:grid-cols-[1fr_auto]">
+            <QrShapeFields values={values} setField={setField} isAdmin={isAdmin} />
+            <div className="order-last sm:order-none">
+              <QrPreviewSidebar values={values} />
+            </div>
+            <QrColorAndLogoFields
+              values={values}
+              setField={setField}
+              isAdmin={isAdmin}
+              className="sm:col-span-2"
+            />
+            <div className="sm:col-span-2">
+              <SaveQrDefaultsAction isAdmin={isAdmin} savingQr={savingQr} save={save} />
+            </div>
           </div>
         )}
       </div>
