@@ -401,7 +401,6 @@ export function LinkEditor({
   qrEnabled,
   orgQr,
   shakeKey,
-  hideBackdrop,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -415,9 +414,6 @@ export function LinkEditor({
   qrEnabled: boolean;
   orgQr: OrgQr;
   shakeKey: number;
-  /** Left open underneath the same-destination match dialog: see Dialog's
-   * own `hideBackdrop` for why. */
-  hideBackdrop?: boolean;
 }) {
   const editing = editingLink != null;
   const toast = useToast();
@@ -470,13 +466,7 @@ export function LinkEditor({
   );
 
   return (
-    <Dialog
-      open={open}
-      onOpenChange={onOpenChange}
-      title={editing ? "Edit link" : "New link"}
-      wide
-      hideBackdrop={hideBackdrop}
-    >
+    <Dialog open={open} onOpenChange={onOpenChange} title={editing ? "Edit link" : "New link"} wide>
       <form
         onSubmit={handleSubmit(onSave, onInvalid)}
         className="grid gap-6 sm:grid-cols-[1fr_auto]"
