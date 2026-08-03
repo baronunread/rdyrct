@@ -46,13 +46,9 @@ function AliasRow({
   return (
     <tr className="bg-surface-2/30">
       <Td className="py-1.5">
-        <div className="flex min-w-0 items-center gap-1.5 pl-5">
-          <span
-            className="min-w-0 truncate font-mono text-xs text-muted"
-            title={address.domain ? `${address.domain}/${address.slug}` : `/${address.slug}`}
-          >
-            {address.domain ? `${address.domain}/${address.slug}` : `/${address.slug}`}
-          </span>
+        <div className="flex min-w-0 items-center gap-2.5 overflow-hidden">
+          <span className="w-5.5 shrink-0" />
+          <span className="max-w-full truncate font-mono text-xs text-muted">/{address.slug}</span>
           <span className="shrink-0">
             <CopyButton
               text={shortUrl(address.slug, address.domain)}
@@ -70,7 +66,7 @@ function AliasRow({
               <button
                 type="button"
                 aria-label="About temporary aliases"
-                className="cursor-pointer text-muted hover:text-text"
+                className="cursor-help text-muted hover:text-text"
               >
                 <Info size={12} />
               </button>

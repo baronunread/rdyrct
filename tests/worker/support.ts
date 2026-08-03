@@ -86,6 +86,33 @@ export async function adminCookie(): Promise<string> {
   return signInCookie("admin@example.com", TEST_PASSWORD);
 }
 
+// A real (non-admin) free-plan user who owns "org-1" — unlike adminCookie(),
+// which is both a platform admin and on the pro plan, so it bypasses checks
+// tests often want exercised (org membership, paid-plan gates). Pass `domain`
+// to also seed an active custom domain for that org.
+export async function freeOwnerCookie(domain?: { id: string; hostname: string }): Promise<string> {
+  const statements = [
+    env.DB.prepare(
+      "insert into user (id, name, email, email_verified, is_admin, plan, created_at, updated_at) values ('free-1', 'Free', 'free@example.com', 1, 0, 'free', 0, 0)",
+    ),
+    env.DB.prepare(
+      "insert into account (id, account_id, provider_id, user_id, password, created_at, updated_at) values ('acct-free-1', 'free-1', 'credential', 'free-1', ?, 0, 0)",
+    ).bind(await hashPassword(TEST_PASSWORD)),
+    env.DB.prepare("insert into orgs (id, name, created_at) values ('org-1', 'Test', 0)"),
+    env.DB.prepare(
+      "insert into org_members (org_id, user_id, role, created_at) values ('org-1', 'free-1', 'owner', 0)",
+    ),
+  ];
+  if (domain)
+    statements.push(
+      env.DB.prepare(
+        "insert into domains (id, org_id, hostname, status, created_at) values (?, 'org-1', ?, 'active', 0)",
+      ).bind(domain.id, domain.hostname),
+    );
+  await env.DB.batch(statements);
+  return signInCookie("free@example.com", TEST_PASSWORD);
+}
+
 export const sampleLink = {
   id: "link-1",
   orgId: "org-1",
@@ -97,6 +124,56 @@ export const sampleLink = {
   utmTerm: "",
   utmContent: "",
 };
+
+// Every links column beyond the ones a test usually cares about
+// (id/orgId/slug/destination/createdAt), spelled out because raw D1 inserts
+// (unlike the API route) don't fall back to the schema's column defaults for
+// columns left out of a batch insert alongside other rows that do specify
+// them. Tests that need a raw `links` row — bypassing the API to seed data
+// directly — spread this in and override just what they're testing.
+const rawLinkDefaults = {
+  title: "",
+  utmSource: "",
+  utmMedium: "",
+  utmCampaign: "",
+  utmTerm: "",
+  utmContent: "",
+  qrLogo: "",
+  qrStyle: "",
+  qrColor: "",
+  qrCorner: "",
+  qrBg: "",
+  qrEyeColor: "",
+  qrLogoSize: null as number | null,
+  createdBy: null as string | null,
+};
+
+export function rawLinkRow(
+  row: Pick<
+    typeof schema.links.$inferInsert,
+    "id" | "orgId" | "slug" | "destination" | "createdAt"
+  >,
+): typeof schema.links.$inferInsert {
+  return { ...rawLinkDefaults, ...row };
+}
+
+// Same idea as rawLinkDefaults, for a raw `link_addresses` row.
+const rawAddressDefaults = {
+  domainId: null as string | null,
+  creationReason: "" as const,
+  expiresAt: null as number | null,
+  retiredAt: null as number | null,
+};
+
+export function rawAddressRow(
+  row: Pick<
+    typeof schema.linkAddresses.$inferInsert,
+    "id" | "linkId" | "orgId" | "slug" | "kind" | "createdAt"
+  > &
+    Partial<typeof schema.linkAddresses.$inferInsert>,
+): typeof schema.linkAddresses.$inferInsert {
+  return { ...rawAddressDefaults, ...row };
+}
 
 // The primary address row every link carries alongside it (see #38): a slug
 // only resolves via link_addresses now, so seedLink() must create this row

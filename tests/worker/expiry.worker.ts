@@ -7,63 +7,56 @@ import worker from "../../src/worker";
 import * as schema from "../../src/worker/db/schema";
 import { applyStorageMessage, sweepExpiredAliases, syncLinkMsg } from "../../src/worker/storage";
 import { now } from "../../src/worker/util";
-import { applyTestMigrations } from "./support";
+import { applyTestMigrations, rawAddressRow, rawLinkRow } from "./support";
 
 function db() {
   return drizzle(env.DB, { schema });
 }
 
+async function addressById(addressId: string) {
+  const [row] = await db()
+    .select()
+    .from(schema.linkAddresses)
+    .where(eq(schema.linkAddresses.id, addressId));
+  return row;
+}
+
 async function seedLinkWithAddresses() {
   await db().batch([
     db().insert(schema.orgs).values({ id: "org-1", name: "Test", createdAt: 0 }),
-    db().insert(schema.links).values({
-      id: "link-1",
-      orgId: "org-1",
-      slug: "new-slug",
-      destination: "https://example.com",
-      title: "",
-      utmSource: "",
-      utmMedium: "",
-      utmCampaign: "",
-      utmTerm: "",
-      utmContent: "",
-      qrLogo: "",
-      qrStyle: "",
-      qrColor: "",
-      qrCorner: "",
-      qrBg: "",
-      qrEyeColor: "",
-      qrLogoSize: null,
-      createdBy: null,
-      createdAt: 0,
-    }),
+    db()
+      .insert(schema.links)
+      .values(
+        rawLinkRow({
+          id: "link-1",
+          orgId: "org-1",
+          slug: "new-slug",
+          destination: "https://example.com",
+          createdAt: 0,
+        }),
+      ),
     db()
       .insert(schema.linkAddresses)
       .values([
-        {
+        rawAddressRow({
           id: "addr-primary",
           linkId: "link-1",
           orgId: "org-1",
-          domainId: null,
           slug: "new-slug",
           kind: "primary",
           creationReason: "created",
-          expiresAt: null,
-          retiredAt: null,
           createdAt: 0,
-        },
-        {
+        }),
+        rawAddressRow({
           id: "addr-alias",
           linkId: "link-1",
           orgId: "org-1",
-          domainId: null,
           slug: "old-slug",
           kind: "temp_alias",
           creationReason: "renamed",
           expiresAt: now() - 1000, // already past its 48h deadline
-          retiredAt: null,
           createdAt: 0,
-        },
+        }),
       ]),
   ]);
 }
@@ -152,16 +145,10 @@ describe("sweepExpiredAliases", () => {
 
     await sweepExpiredAliases(env as never, db());
 
-    const [alias] = await db()
-      .select()
-      .from(schema.linkAddresses)
-      .where(eq(schema.linkAddresses.id, "addr-alias"));
+    const alias = await addressById("addr-alias");
     expect(alias.retiredAt).not.toBeNull();
 
-    const [primary] = await db()
-      .select()
-      .from(schema.linkAddresses)
-      .where(eq(schema.linkAddresses.id, "addr-primary"));
+    const primary = await addressById("addr-primary");
     expect(primary.retiredAt).toBeNull();
 
     // The sweep only retires the D1 row; syncing the queue message is what
@@ -180,30 +167,17 @@ describe("sweepExpiredAliases", () => {
 
     await sweepExpiredAliases(env as never, db());
 
-    const [alias] = await db()
-      .select()
-      .from(schema.linkAddresses)
-      .where(eq(schema.linkAddresses.id, "addr-alias"));
+    const alias = await addressById("addr-alias");
     expect(alias.retiredAt).toBeNull();
   });
 
   it("is a no-op re-run against an already-retired row", async () => {
     await seedLinkWithAddresses();
     await sweepExpiredAliases(env as never, db());
-    const first = (
-      await db()
-        .select()
-        .from(schema.linkAddresses)
-        .where(eq(schema.linkAddresses.id, "addr-alias"))
-    )[0].retiredAt;
+    const first = (await addressById("addr-alias")).retiredAt;
 
     await sweepExpiredAliases(env as never, db());
-    const second = (
-      await db()
-        .select()
-        .from(schema.linkAddresses)
-        .where(eq(schema.linkAddresses.id, "addr-alias"))
-    )[0].retiredAt;
+    const second = (await addressById("addr-alias")).retiredAt;
     expect(second).toBe(first);
   });
 });

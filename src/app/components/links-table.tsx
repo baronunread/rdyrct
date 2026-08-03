@@ -21,6 +21,7 @@ import { useToast } from "../ui/toast";
 import { copyToClipboard } from "../lib/clipboard";
 import { cn } from "../ui/cn";
 import { AliasThread } from "./alias-thread";
+import { useConfig } from "../lib/hooks";
 
 function linkDetailPath(link: LinkDTO): string {
   return link.domain
@@ -60,6 +61,8 @@ export function LinksTable({
   noQrToast: () => void;
 }) {
   const toast = useToast();
+  const config = useConfig();
+  const appHost = config.data?.appHost ?? window.location.host;
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const toggleExpanded = (id: string) =>
     setExpanded((prev) => {
@@ -132,10 +135,14 @@ export function LinksTable({
                       <button
                         type="button"
                         onClick={() => navigate(linkDetailPath(link))}
-                        title={link.domain ? `${link.domain}/${link.slug}` : `/${link.slug}`}
-                        className="min-w-0 truncate cursor-pointer font-bold text-accent hover:underline"
+                        className="group flex min-w-0 max-w-full cursor-pointer flex-col items-start gap-0.5 text-start"
                       >
-                        {link.domain ? `${link.domain}/${link.slug}` : `/${link.slug}`}
+                        <Badge className="min-w-0 max-w-full">
+                          <span className="truncate">{link.domain || appHost}</span>
+                        </Badge>
+                        <span className="font-bold text-accent group-hover:underline">
+                          /{link.slug}
+                        </span>
                       </button>
                       <span className="shrink-0">
                         <CopyButton
@@ -144,13 +151,6 @@ export function LinksTable({
                           onCopy={(text) => copyToClipboard(text, toast)}
                         />
                       </span>
-                      {hasAliases && (
-                        <span className="shrink-0">
-                          <Badge color="accent">
-                            {link.addressCount - 1} alias{link.addressCount - 1 === 1 ? "" : "es"}
-                          </Badge>
-                        </span>
-                      )}
                     </div>
                     {link.title && <p className="truncate text-xs text-muted">{link.title}</p>}
                   </Td>

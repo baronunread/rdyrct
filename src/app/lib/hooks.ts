@@ -173,7 +173,7 @@ export function useAddressMutations(orgId: string, linkId: string) {
     onSuccess: invalidate,
   });
   const create = useMutation({
-    mutationFn: (body: { slug?: string; domainId?: string | null }) =>
+    mutationFn: (body: { slug?: string }) =>
       api<LinkDTO>(`/orgs/${orgId}/links/${linkId}/addresses`, { method: "POST", body }),
     onSuccess: invalidate,
   });

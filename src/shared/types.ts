@@ -173,17 +173,6 @@ export interface AddressDTO {
   referrers: TopEntry[];
 }
 
-/** Returned as a 409 when a new address's effective destination already
- * matches another link in the org (see #38): the caller must explicitly pick
- * "add to that link" (mergeIntoLinkId) or "create separate link anyway"
- * (forceSeparateLink) and resubmit. */
-export interface SameDestinationMatch {
-  code: "same_destination_match";
-  /** Every existing link sharing this exact destination + UTM set: usually
-   * one, but "create separate link anyway" can leave several. */
-  matchedLinks: LinkDTO[];
-}
-
 export type LinkInput = {
   domainId?: string | null;
   slug?: string;

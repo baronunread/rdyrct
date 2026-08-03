@@ -1,25 +1,51 @@
-import { expect, test } from "@playwright/test";
+import { expect, type Page, test } from "@playwright/test";
 import { signUpAndVerify } from "./resend";
 import { setPlan } from "./db";
+import { addCustomDomain, createOrg } from "./orgs";
 
 const password = "test-password-123";
+
+/** Signs up a fresh user, verifies their email, and creates an org: the
+ * common setup every test in this file needs before it can create links. */
+async function signUpWithOrg(page: Page, orgName: string): Promise<string> {
+  const email = `playwright-${Date.now()}@gmail.com`;
+  await signUpAndVerify(page, email, password);
+  await createOrg(page, orgName);
+  return email;
+}
+
+/** Fills the dashboard's quick-create destination field and submits it,
+ * waiting for the "Link created" confirmation dialog. */
+async function createQuickLink(page: Page, destination: string) {
+  const field = page.getByPlaceholder("https://example.com/launch").first();
+  await field.fill(destination);
+  await page.getByRole("button", { name: "Create link" }).click();
+  await expect(page.getByRole("dialog", { name: "Link created" })).toBeVisible();
+}
+
+/** Fills the "New link" dialog with `destination` and submits it, for tests
+ * that expect the same-destination conflict dialog to show up. */
+async function createLinkExpectingConflict(page: Page, destination: string) {
+  await page.goto("/links");
+  await page.getByRole("button", { name: "New link" }).first().click();
+  const editor = page.getByRole("dialog", { name: "New link" });
+  await editor.getByPlaceholder("https://example.com/launch").fill(destination);
+  await editor.getByRole("button", { name: "Create link" }).click();
+
+  const conflict = page.getByRole("dialog", { name: "This destination already has a link" });
+  await expect(conflict).toBeVisible();
+  return conflict;
+}
 
 test("renaming a custom-domain link leaves a temporary alias, which can be kept forever (#38)", async ({
   page,
 }) => {
-  const email = `playwright-${Date.now()}@gmail.com`;
-  await signUpAndVerify(page, email, password);
+  const email = await signUpWithOrg(page, "Alias Org");
   await setPlan(page, email);
-
-  await page.getByLabel("Organization name").fill("Alias Org");
-  await page.getByRole("button", { name: "Create organization" }).click();
 
   // A custom domain is required: renaming only leaves an alias on a
   // custom-domain address, never on the shared, always-random domain.
-  await page.goto("/domains");
-  const hostname = `alias-${Date.now()}.example.com`;
-  await page.getByPlaceholder("links.example.com").fill(hostname);
-  await page.getByRole("button", { name: "Add domain" }).click();
+  const hostname = await addCustomDomain(page, `alias-${Date.now()}.example.com`);
   await expect(page.getByText("active", { exact: true })).toBeVisible({ timeout: 30_000 });
 
   await page.goto("/links");
@@ -60,27 +86,10 @@ test("renaming a custom-domain link leaves a temporary alias, which can be kept 
 test("creating a link to an already-shortened destination offers to reuse it (#38)", async ({
   page,
 }) => {
-  const email = `playwright-${Date.now()}@gmail.com`;
-  await signUpAndVerify(page, email, password);
+  await signUpWithOrg(page, "Same Destination Org");
+  await createQuickLink(page, "https://example.com/shared-page");
 
-  await page.getByLabel("Organization name").fill("Same Destination Org");
-  await page.getByRole("button", { name: "Create organization" }).click();
-
-  const destination = page.getByPlaceholder("https://example.com/launch").first();
-  await destination.fill("https://example.com/shared-page");
-  await page.getByRole("button", { name: "Create link" }).click();
-  await expect(page.getByRole("dialog", { name: "Link created" })).toBeVisible();
-
-  await page.goto("/links");
-  await page.getByRole("button", { name: "New link" }).first().click();
-  const editor = page.getByRole("dialog", { name: "New link" });
-  await editor
-    .getByPlaceholder("https://example.com/launch")
-    .fill("https://example.com/shared-page");
-  await editor.getByRole("button", { name: "Create link" }).click();
-
-  const conflict = page.getByRole("dialog", { name: "This destination already has a link" });
-  await expect(conflict).toBeVisible();
+  const conflict = await createLinkExpectingConflict(page, "https://example.com/shared-page");
   await conflict.getByRole("button", { name: "Create separate link" }).click();
   await expect(page.getByText("Link created")).toBeVisible();
 
@@ -93,27 +102,10 @@ test("creating a link to an already-shortened destination offers to reuse it (#3
 test("choosing to add to the existing link merges the address instead of forking (#38)", async ({
   page,
 }) => {
-  const email = `playwright-${Date.now()}@gmail.com`;
-  await signUpAndVerify(page, email, password);
+  await signUpWithOrg(page, "Merge Org");
+  await createQuickLink(page, "https://example.com/merge-page");
 
-  await page.getByLabel("Organization name").fill("Merge Org");
-  await page.getByRole("button", { name: "Create organization" }).click();
-
-  const destination = page.getByPlaceholder("https://example.com/launch").first();
-  await destination.fill("https://example.com/merge-page");
-  await page.getByRole("button", { name: "Create link" }).click();
-  await expect(page.getByRole("dialog", { name: "Link created" })).toBeVisible();
-
-  await page.goto("/links");
-  await page.getByRole("button", { name: "New link" }).first().click();
-  const editor = page.getByRole("dialog", { name: "New link" });
-  await editor
-    .getByPlaceholder("https://example.com/launch")
-    .fill("https://example.com/merge-page");
-  await editor.getByRole("button", { name: "Create link" }).click();
-
-  const conflict = page.getByRole("dialog", { name: "This destination already has a link" });
-  await expect(conflict).toBeVisible();
+  const conflict = await createLinkExpectingConflict(page, "https://example.com/merge-page");
   await conflict.getByRole("button", { name: "Add to existing link" }).click();
   await expect(page.getByText("Address added to the existing link")).toBeVisible();
 
