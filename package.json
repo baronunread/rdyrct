@@ -56,6 +56,7 @@
     "react-dom": "^19.2.8",
     "react-hook-form": "^7.83.0",
     "react-router": "^8.3.0",
+    "shadow-plugin": "^1.2.7",
     "standardwebhooks": "^1.0.0",
     "svgo": "^4.0.2",
     "tailwind-merge": "^3.6.0",

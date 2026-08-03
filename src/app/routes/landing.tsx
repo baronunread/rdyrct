@@ -650,7 +650,7 @@ function DeployTerminal() {
   );
 
   return (
-    <div className="overflow-hidden rounded-[10px] border border-border bg-surface shadow-lg shadow-black/20">
+    <div className="overflow-hidden rounded-[10px] bg-surface smooth-shadow-ring-lg">
       <div className="flex items-center border-b border-border bg-surface-2 px-4 py-2.5">
         <div className="flex items-center gap-1.5">
           <span className="h-[9px] w-[9px] rounded-full bg-[#ff5f56]" />
@@ -774,7 +774,7 @@ function HowItWorksSection() {
       </div>
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         {steps.map(({ title, body }, i) => (
-          <div key={title} className="rounded-lg border border-border bg-surface p-4">
+          <div key={title} className="rounded-lg bg-surface p-4 smooth-shadow-ring-xs">
             <span className="mb-3 inline-flex h-7 w-7 items-center justify-center rounded-full border border-accent/40 font-mono text-xs font-bold text-accent">
               {i + 1}
             </span>
@@ -888,7 +888,7 @@ function FaqSection() {
 function FinalCtaSection({ ctaTo, ctaLabel }: { ctaTo: string; ctaLabel: string }) {
   return (
     <Section>
-      <div className="flex flex-col items-center gap-5 rounded-2xl border border-border bg-surface px-6 py-14 text-center">
+      <div className="flex flex-col items-center gap-5 rounded-2xl bg-surface px-6 py-14 text-center smooth-shadow-ring-sm">
         <h2 className="max-w-xl text-2xl font-bold tracking-tight sm:text-3xl">
           Start shortening in seconds.
         </h2>

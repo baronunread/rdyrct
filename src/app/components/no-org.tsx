@@ -45,7 +45,7 @@ export function NoOrgState() {
     <div className="grid place-items-center py-20">
       <form
         onSubmit={handleSubmit(submit, () => toast("Enter an organization name", "error"))}
-        className="flex w-full max-w-md flex-col gap-4 rounded-xl border border-border bg-surface p-6"
+        className="flex w-full max-w-md flex-col gap-4 rounded-xl bg-surface p-6 smooth-shadow-ring-sm"
       >
         <div>
           <h1 className="font-bold">Create your organization</h1>

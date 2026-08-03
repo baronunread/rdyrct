@@ -103,7 +103,7 @@ export function LandingAnalyticsMock() {
   const series = useMemo(() => SERIES[range], [range]);
 
   return (
-    <div className="w-full max-w-4xl rounded-2xl border border-border bg-surface shadow-2xl shadow-black/10">
+    <div className="w-full max-w-4xl rounded-2xl bg-surface smooth-shadow-ring-2xl">
       {/* fake browser chrome, mirrors the hero mockup */}
       <div className="flex items-center gap-2 border-b border-border px-6 py-4">
         <span className="h-3 w-3 rounded-full bg-pink/60" />

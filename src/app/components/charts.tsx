@@ -85,7 +85,7 @@ function ChartTooltip({
   const flip = mouse.leftPct > 70;
   return (
     <div
-      className="pointer-events-none absolute rounded-md border border-border bg-surface-2 px-2.5 py-1.5 text-xs whitespace-nowrap shadow-lg transition-[left,top] duration-75 ease-out"
+      className="pointer-events-none absolute rounded-md bg-surface-2 px-2.5 py-1.5 text-xs whitespace-nowrap smooth-shadow-ring-lg transition-[left,top] duration-75 ease-out"
       style={{
         left: `${mouse.leftPct}%`,
         top: `${mouse.topPct}%`,
@@ -276,7 +276,7 @@ export function StatCard({
   suffix?: string;
 }) {
   return (
-    <div className="rounded-lg border border-border bg-surface p-4">
+    <div className="rounded-lg bg-surface p-4 smooth-shadow-ring-xs">
       <p className="truncate text-2xs tracking-wider text-muted uppercase">{label}</p>
       <p className="tnum mt-1 text-2xl font-bold">
         {prefix}
@@ -323,7 +323,7 @@ function HeatmapTooltip({
   const flipY = y < 60;
   return (
     <div
-      className="pointer-events-none fixed z-50 rounded-md border border-border bg-surface-2 px-2.5 py-1.5 text-xs whitespace-nowrap shadow-lg"
+      className="pointer-events-none fixed z-50 rounded-md bg-surface-2 px-2.5 py-1.5 text-xs whitespace-nowrap smooth-shadow-ring-lg"
       style={{
         left: x,
         top: y,
@@ -418,7 +418,7 @@ export function LinkListCard({
   links: { id: string; slug: string; title: string; suffix?: string; domain?: string | null }[];
 }) {
   return (
-    <div className="rounded-lg border border-border bg-surface p-4">
+    <div className="rounded-lg bg-surface p-4 smooth-shadow-ring-xs">
       <p className="mb-2 text-2xs tracking-wider text-muted uppercase">{title}</p>
       {links.length === 0 ? (
         <p className="py-2 text-sm text-muted">No data yet</p>

@@ -65,7 +65,7 @@ function ForgotView({
 
   return (
     <AuthCard>
-      <div className="flex flex-col gap-4 rounded-xl border border-border bg-surface p-6">
+      <div className="flex flex-col gap-4 rounded-xl bg-surface p-6 smooth-shadow-ring-sm">
         <h1 className="font-bold">Reset your password</h1>
         {sent ? (
           <p className="text-sm text-muted">
@@ -131,7 +131,7 @@ function VerifyOtpView({
     <AuthCard className={verifyPhase === "leaving" ? "auth-card-leaving" : undefined}>
       <form
         onSubmit={onFormSubmit}
-        className="flex flex-col gap-4 rounded-xl border border-border bg-surface p-6"
+        className="flex flex-col gap-4 rounded-xl bg-surface p-6 smooth-shadow-ring-sm"
       >
         <h1 className="font-bold">Enter your code</h1>
         <p className="text-sm text-muted">
@@ -265,7 +265,7 @@ function AuthFormView({
       <form
         onSubmit={onFormSubmit}
         noValidate
-        className="flex flex-col gap-4 rounded-xl border border-border bg-surface p-6"
+        className="flex flex-col gap-4 rounded-xl bg-surface p-6 smooth-shadow-ring-sm"
       >
         <h1 className="font-bold">{copy.title}</h1>
         <Field label="Email">

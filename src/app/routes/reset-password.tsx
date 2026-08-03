@@ -34,7 +34,7 @@ export function ResetPasswordPage() {
       <form
         onSubmit={submit}
         noValidate
-        className="flex flex-col gap-4 rounded-xl border border-border bg-surface p-6"
+        className="flex flex-col gap-4 rounded-xl bg-surface p-6 smooth-shadow-ring-sm"
       >
         <h1 className="font-bold">Set a new password</h1>
         {!token && (

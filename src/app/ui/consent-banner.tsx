@@ -21,7 +21,7 @@ export function ConsentBanner() {
     setDismissed(true);
   };
   return (
-    <div className="fixed bottom-4 right-4 z-50 max-w-xs rounded-xl border border-border bg-surface/95 p-4 text-xs text-muted shadow-xl backdrop-blur">
+    <div className="fixed bottom-4 right-4 z-50 max-w-xs rounded-xl bg-surface/95 p-4 text-xs text-muted smooth-shadow-ring-xl backdrop-blur">
       <p className="leading-relaxed">
         rdyrct uses a strictly-necessary cookie to keep you signed in. We'd also like to use PostHog
         to understand how the product is used, no advertising. See our{" "}

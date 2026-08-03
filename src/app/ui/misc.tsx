@@ -77,7 +77,7 @@ export function SlugLink({
 
 export function Card({ className, children }: { className?: string; children: ReactNode }) {
   return (
-    <div className={cn("rounded-lg border border-border bg-surface p-4", className)}>
+    <div className={cn("rounded-lg bg-surface p-4 smooth-shadow-ring-xs", className)}>
       {children}
     </div>
   );
@@ -85,7 +85,7 @@ export function Card({ className, children }: { className?: string; children: Re
 
 export function Table({ children, fixed }: { children: ReactNode; fixed?: boolean }) {
   return (
-    <div className="overflow-x-auto rounded-lg border border-border bg-surface">
+    <div className="overflow-x-auto rounded-lg bg-surface smooth-shadow-ring-xs">
       <table
         className={`w-full text-sm [&_tbody_tr]:transition-colors [&_tbody_tr:hover]:bg-surface-2/40 ${fixed ? "table-fixed" : ""}`}
       >

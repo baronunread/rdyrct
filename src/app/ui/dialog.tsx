@@ -54,7 +54,7 @@ export function Dialog({
               />
               <BaseDialog.Popup
                 className={cn(
-                  "fixed top-1/2 left-1/2 max-h-[85dvh] w-[calc(100vw-2rem)] -translate-x-1/2 -translate-y-1/2 overflow-y-auto overscroll-none rounded-xl border border-border bg-surface p-6 text-text shadow-2xl",
+                  "fixed top-1/2 left-1/2 max-h-[85dvh] w-[calc(100vw-2rem)] -translate-x-1/2 -translate-y-1/2 overflow-y-auto overscroll-none rounded-xl bg-surface p-6 text-text smooth-shadow-ring-2xl",
                   nested ? "z-[70]" : "z-50",
                   wide ? "max-w-2xl" : "max-w-md",
                 )}

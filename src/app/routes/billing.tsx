@@ -325,7 +325,7 @@ function BillingOverlay({ show, message }: { show: boolean; message: string }) {
         transition={{ duration: 0.2 }}
       />
       <m.div
-        className="relative z-10 flex flex-col items-center gap-4 rounded-xl border border-border bg-surface p-8 text-center shadow-2xl"
+        className="relative z-10 flex flex-col items-center gap-4 rounded-xl bg-surface p-8 text-center smooth-shadow-ring-2xl"
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
         transition={{ duration: 0.2 }}

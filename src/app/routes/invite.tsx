@@ -98,7 +98,7 @@ export function InvitePage() {
 
   return (
     <div className="grid min-h-dvh place-items-center px-4">
-      <div className="w-full max-w-sm rounded-xl border border-border bg-surface p-6 text-center">
+      <div className="w-full max-w-sm rounded-xl bg-surface p-6 text-center smooth-shadow-ring-sm">
         <p className="mb-4 text-xl font-bold tracking-widest">rdyrct</p>
         {preview.isLoading || me.isLoading ? (
           <InviteSkeleton />

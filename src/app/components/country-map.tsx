@@ -91,7 +91,7 @@ export function CountryMap({ countries: data }: { countries: TopEntry[] }) {
       </svg>
       {hover && (
         <div
-          className="pointer-events-none absolute rounded-md border border-border bg-surface-2 px-2.5 py-1.5 text-xs whitespace-nowrap shadow-lg"
+          className="pointer-events-none absolute rounded-md bg-surface-2 px-2.5 py-1.5 text-xs whitespace-nowrap smooth-shadow-ring-lg"
           style={{
             left: `${hover.x}%`,
             top: `${hover.y}%`,

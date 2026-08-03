@@ -33,7 +33,7 @@ function StatCardsSkeleton({
   return (
     <div className={cn("grid grid-cols-1 gap-4", gridClass)}>
       {Array.from({ length: count }, (_, i) => (
-        <div key={i} className="rounded-lg border border-border bg-surface p-4">
+        <div key={i} className="rounded-lg bg-surface p-4 smooth-shadow-ring-xs">
           <Skeleton className="h-2.5 w-16" />
           <Skeleton className="mt-3 h-6 w-20" />
         </div>
@@ -184,7 +184,7 @@ export function OrgDetailSkeleton() {
       {detailTables.map((labelW) => (
         <div key={labelW}>
           <Skeleton className={cn("mb-2 h-2.5", labelW)} />
-          <div className="overflow-hidden rounded-lg border border-border bg-surface">
+          <div className="overflow-hidden rounded-lg bg-surface smooth-shadow-ring-xs">
             {[0, 1, 2].map((r) => (
               <div
                 key={r}

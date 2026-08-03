@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "shadow-plugin";
 
 /* ---------------------------------------------------------------- */
 /* Theme tokens: dark pastel / paper pair                            */
@@ -46,6 +47,21 @@
   --danger: #c2607f;
 
   color-scheme: light;
+}
+
+/* shadow-plugin's default dark-mode ring is a flat white hairline; tint it
+   with our own --border instead so elevated surfaces pick up the app's
+   palette rather than a generic gray edge. Lift the hue toward white first
+   (still opaque), then mix *that* toward transparent — mixing --border
+   straight toward transparent stays too dark to read at UI scale, and
+   mixing it straight toward white (skipping the transparent step) produces
+   a fully opaque line that's too bright over light backdrops. */
+[data-theme="dark"] {
+  --smooth-ring-color: color-mix(
+    in srgb,
+    color-mix(in srgb, var(--border), white 22%) 30%,
+    transparent
+  );
 }
 
 @theme inline {
