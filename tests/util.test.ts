@@ -11,6 +11,7 @@ import {
   RESERVED_SLUGS,
   resolveUtm,
   SLUG_RE,
+  stripUtmParams,
   uid,
   validateQrFields,
 } from "../src/worker/util";
@@ -160,6 +161,28 @@ describe("resolveUtm", () => {
     );
     expect(out.utmMedium).toBe("email");
     expect(out.utmSource).toBe("keep");
+  });
+});
+
+describe("stripUtmParams", () => {
+  test("removes utm_* params, leaving other query params and the fragment", () => {
+    const out = stripUtmParams(
+      "https://example.com/p?utm_source=nl&foo=1&utm_campaign=launch&bar=2#frag",
+    );
+    const url = new URL(out);
+    expect(url.searchParams.has("utm_source")).toBe(false);
+    expect(url.searchParams.has("utm_campaign")).toBe(false);
+    expect(url.searchParams.get("foo")).toBe("1");
+    expect(url.searchParams.get("bar")).toBe("2");
+    expect(url.hash).toBe("#frag");
+  });
+
+  test("a destination with no utm params is unchanged", () => {
+    expect(stripUtmParams("https://example.com/p?foo=1")).toBe("https://example.com/p?foo=1");
+  });
+
+  test("invalid destinations are returned untouched", () => {
+    expect(stripUtmParams("not a url")).toBe("not a url");
   });
 });
 

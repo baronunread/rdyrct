@@ -101,6 +101,22 @@ export function resolveUtm(
   return out;
 }
 
+/**
+ * Strip utm_* params out of a destination, leaving every other query param
+ * alone. Called right after resolveUtm has already pulled any of them into
+ * the UTM columns, so nothing is lost: `destination` stays the bare link,
+ * buildDestination re-applies the stored columns at redirect time.
+ */
+export function stripUtmParams(destination: string): string {
+  try {
+    const url = new URL(destination);
+    for (const [param] of UTM_KEYS) url.searchParams.delete(param);
+    return url.toString();
+  } catch {
+    return destination;
+  }
+}
+
 /** Destination with the link's UTM params applied (existing params win). */
 export function buildDestination(destination: string, utm: UtmFields): string {
   try {

@@ -15,6 +15,7 @@ import {
   isValidHttpUrl,
   normalizeUrl,
   resolveUtm,
+  stripUtmParams,
   validateQrFields,
 } from "../util";
 import type { AddressDTO, LinkDTO, LinkInput, OrgPlan, PlanLimits, TopEntry } from "@/shared/types";
@@ -559,7 +560,10 @@ linkRoutes.post("/", requireOrgRole("member"), async (c) => {
 
   // UTM params already in the destination are extracted into the columns so
   // analytics group-bys see them; explicit fields fill whatever is missing.
+  // Then stripped back out of the destination itself, so it stays the bare
+  // link and the columns are the only place UTM data lives.
   const utm = resolveUtm(body.destination, body);
+  body.destination = stripUtmParams(body.destination);
 
   // Adding an address to a link the caller already resolved a same-destination
   // match against (see below): skip matching entirely, insert a permanent
@@ -722,9 +726,18 @@ linkRoutes.patch("/:linkId", requireOrgRole("member"), async (c) => {
   const destination = body.destination ?? existing.destination;
   // Re-resolve against the final destination: its params win, explicit
   // fields fill gaps or clear, anything else keeps the existing value.
+  // Then stripped back out, same as on create: destination stays the bare
+  // link, existing.destination already is (or, pre-migration, may still
+  // carry legacy embedded params, which this cleans up on next edit).
   const utm = resolveUtm(destination, body, existing);
+  const cleanDestination = stripUtmParams(destination);
 
-  const updated = mergedLinkUpdate(existing, body, { domainId, slug: newSlug, destination, utm });
+  const updated = mergedLinkUpdate(existing, body, {
+    domainId,
+    slug: newSlug,
+    destination: cleanDestination,
+    utm,
+  });
   const messages = [
     ...renameSyncMessages(existing, updated, body, moved, hostname, oldHostname),
     // KV caches each address's fully-built redirect URL (destination + UTM
