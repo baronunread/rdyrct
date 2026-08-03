@@ -13,6 +13,7 @@ import { Check } from "lucide-react";
 import { AuthCard, PasswordMeter } from "../components/auth-form";
 import { authClient } from "../lib/auth-client";
 import { friendlyAuthError } from "../lib/auth-errors";
+import posthog from "../lib/posthog";
 import { useShake } from "../lib/use-shake";
 import { useCurrentUser } from "../lib/hooks";
 import { firstFormError } from "../lib/form-errors";
@@ -346,6 +347,7 @@ async function trySignIn(email: string, password: string, deps: SubmitDeps) {
   if (!signInError) {
     await deps.qc.refetchQueries({ queryKey: ["user"] });
     const isAdmin = deps.qc.getQueryData<CurrentUser | null>(["user"])?.user.isAdmin ?? false;
+    posthog.capture("user_signed_in");
     deps.navigate(sanitizeNext(deps.next, isAdmin), { replace: true });
     return;
   }
@@ -526,6 +528,7 @@ function useAuthFlow(mode: "login" | "signup") {
       await new Promise((resolve) => setTimeout(resolve, 900));
       clearPending();
       await qc.refetchQueries({ queryKey: ["user"] });
+      if (mode === "signup") posthog.capture("user_signed_up");
       const isAdmin = qc.getQueryData<CurrentUser | null>(["user"])?.user.isAdmin ?? false;
       setVerifyPhase("leaving");
       await new Promise((resolve) => setTimeout(resolve, 300));
@@ -565,6 +568,7 @@ function useAuthFlow(mode: "login" | "signup") {
         toast(resetError.message ?? "Something went wrong", "error");
         return;
       }
+      posthog.capture("password_reset_requested");
       setView("forgot-sent");
     } finally {
       setForgotBusy(false);

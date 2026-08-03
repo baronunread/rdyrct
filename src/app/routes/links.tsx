@@ -20,6 +20,7 @@ import { SameDestinationDialog } from "../components/same-destination-dialog";
 import { CreateAliasDialog } from "../components/create-alias-dialog";
 import { LinkPreviewDialog } from "../components/link-preview-dialog";
 import { withErrorToast } from "../lib/mutation-toast";
+import posthog from "../lib/posthog";
 
 const PAGE_SIZE = 25;
 
@@ -106,6 +107,16 @@ function buildOnSave({
   return (data: LinkInput) => {
     const done = {
       onSuccess: () => {
+        posthog.capture(editing ? "link_updated" : "link_created", {
+          has_custom_domain: data.domainId !== null,
+          has_custom_slug: Boolean(data.slug?.trim()),
+          has_qr_customization: Boolean(
+            data.qrStyle || data.qrColor || data.qrCorner || data.qrLogo,
+          ),
+          has_utm_parameters: Boolean(
+            data.utmSource || data.utmMedium || data.utmCampaign || data.utmTerm || data.utmContent,
+          ),
+        });
         closeEditor();
         toast(editing ? "Link updated" : "Link created");
       },
@@ -281,6 +292,7 @@ export function LinksPage() {
             { ...input, mergeIntoLinkId: matchedLink.id },
             {
               onSuccess: () => {
+                posthog.capture("link_alias_created", { created_from_duplicate_destination: true });
                 setSameDestination(null);
                 setEditorOpen(false);
                 toast("Address added to the existing link");
@@ -296,6 +308,7 @@ export function LinksPage() {
             { ...input, forceSeparateLink: true },
             {
               onSuccess: () => {
+                posthog.capture("link_created", { created_from_duplicate_destination: true });
                 setSameDestination(null);
                 setEditorOpen(false);
                 toast("Link created");
@@ -358,6 +371,7 @@ function DeleteLinkDialog({
     if (!deleting) return;
     remove.mutate(deleting.id, {
       onSuccess: () => {
+        posthog.capture("link_deleted", { had_custom_domain: deleting.domainId !== null });
         toast("Link deleted");
         onClose();
       },

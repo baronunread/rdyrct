@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, ApiError } from "./api";
 import { authClient } from "./auth-client";
 import { writeAuthHint } from "./auth-hint";
+import posthog from "./posthog";
 import type {
   CurrentUser,
   AppConfig,
@@ -27,6 +28,12 @@ export function useCurrentUser() {
       try {
         const user = await api<CurrentUser>("/user");
         writeAuthHint(true);
+        posthog.identify(user.user.id, {
+          email: user.user.email,
+          name: user.user.name,
+          plan: user.user.plan,
+          is_admin: user.user.isAdmin,
+        });
         return user;
       } catch (e) {
         if (e instanceof ApiError && e.status === 401) {
@@ -57,6 +64,7 @@ export function useLogout() {
       if (error) throw new Error(error.message ?? "Could not sign out");
     },
     onSuccess: () => {
+      posthog.reset();
       writeAuthHint(false);
       qc.setQueryData(["user"], null);
       qc.removeQueries({

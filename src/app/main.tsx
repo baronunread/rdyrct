@@ -8,6 +8,7 @@ import "./styles.css";
 import { ToastProvider } from "./ui/toast";
 import { ConsentBanner } from "./ui/consent-banner";
 import { AppShellSkeleton } from "./components/skeletons";
+import "./lib/posthog";
 
 // Every route loads lazily so the entry chunk stays small: visitors on the
 // marketing landing never download the app, and the app never downloads the

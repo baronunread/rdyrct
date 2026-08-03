@@ -24,6 +24,7 @@ import { sortRows } from "../lib/sort";
 import { withErrorToast } from "../lib/mutation-toast";
 import { shortDate } from "../lib/dates";
 import { inviteEmailSchema } from "../lib/schemas";
+import posthog from "../lib/posthog";
 
 const roleColor: Record<OrgRole, "accent" | "mint" | "muted"> = {
   owner: "accent",
@@ -66,6 +67,7 @@ function useMemberManagement(orgId: string, canManage: boolean) {
         body: { role: inviteRole },
       }),
     onSuccess: ({ invites }) => {
+      posthog.capture("member_invited", { invite_type: "link", role: inviteRole });
       invalidateInvites();
       const invite = invites[0];
       if (invite) {
@@ -82,7 +84,8 @@ function useMemberManagement(orgId: string, canManage: boolean) {
         method: "POST",
         body: { role: params.role, emails: [params.email] },
       }),
-    onSuccess: () => {
+    onSuccess: (_data, variables) => {
+      posthog.capture("member_invited", { invite_type: "email", role: variables.role });
       invalidateInvites();
     },
     onError: withErrorToast(toast),
