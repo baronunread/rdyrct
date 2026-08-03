@@ -247,14 +247,21 @@ function DomainField({
   activeDomains: DomainDTO[];
 }) {
   if (!activeDomains.length) return null;
-  const onDomainChange = (v: string) =>
-    setForm({ ...form, domainId: v || null, ...(!v && !editing ? { slug: "" } : {}) });
+  const onDomainChange = (v: string) => setForm({ ...form, domainId: v || null, slug: "" });
   return (
-    <Field label="Domain">
+    <Field
+      label="Domain"
+      hint={
+        editing
+          ? "A link's domain can't change: create a new link on the other domain instead."
+          : undefined
+      }
+    >
       <MenuSelect
         label="Domain"
         value={form.domainId ?? ""}
         onChange={onDomainChange}
+        disabled={editing}
         options={[
           { value: "", label: `shared: ${window.location.host}` },
           ...activeDomains.map((d) => ({ value: d.id, label: d.hostname })),
