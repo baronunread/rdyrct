@@ -249,7 +249,6 @@ export function LinksPage() {
         qrEnabled={limits.qr}
         orgQr={orgQr}
         shakeKey={shakeKey}
-        hideBackdrop={!!sameDestination}
       />
 
       {limits.qr && (

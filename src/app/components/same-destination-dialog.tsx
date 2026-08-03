@@ -45,6 +45,9 @@ export function SameDestinationDialog({
       title={
         multiple ? "This destination already has links" : "This destination already has a link"
       }
+      // Can open while the link editor (dashboard's quick-create or the
+      // Links page's New/Edit link dialog) is still open behind it.
+      nested
     >
       <div className="flex flex-col gap-4">
         <p className="flex items-start gap-1.5 text-sm">
