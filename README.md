@@ -24,6 +24,7 @@ This provisions the Worker from the Cloudflare dashboard and may prompt you to c
 ## Features
 
 - **Short links** with custom or random slugs, optional UTM parameters (source, medium, campaign, term, content) applied at redirect time.
+- **Grouped link addresses**: renaming a link keeps the old slug redirecting for 48 hours before it's freed, and a link can carry extra aliases that all redirect to the same destination.
 - **QR codes** per link (paid plans), with an optional logo in the center, live preview, and PNG/SVG download.
 - **Custom domains** (Pro): connect `links.yourbrand.com` via Cloudflare for SaaS, with slugs namespaced per domain.
 - **Organizations** with `owner` / `admin` / `member` roles: admins manage the team, domains, and billing; members manage links.

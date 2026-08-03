@@ -14,6 +14,9 @@ import {
   Target,
   TrendingDown,
   Activity,
+  Layers,
+  GitMerge,
+  Mail,
 } from "lucide-react";
 import {
   LazyMotion,
@@ -49,53 +52,83 @@ const steps = [
   },
 ];
 
-const features = [
+const featureGroups = [
   {
-    icon: Link2,
-    title: "Short links + UTM builder",
-    body: "Turn unreadable URLs into short links, with a built-in UTM builder that also reads parameters already in the URL you paste. On every plan.",
+    title: "Create & share",
+    items: [
+      {
+        icon: Link2,
+        title: "Short links + UTM builder",
+        body: "Turn unreadable URLs into short links, with a built-in UTM builder that also reads parameters already in the URL you paste. On every plan.",
+      },
+      {
+        icon: QrCode,
+        title: "Branded QR codes",
+        body: "One click turns any link into a QR code with your logo, colors, and dot styles baked in. Set org-wide defaults, override per link, and print it anywhere.",
+        plan: "Paid",
+      },
+      {
+        icon: Globe,
+        title: "Custom domains & slugs",
+        body: "Serve short links from your own domain with automatic TLS and any slug you like, so every click reinforces your brand, not ours.",
+        plan: "Paid",
+      },
+      {
+        icon: Layers,
+        title: "Rename without breaking links",
+        body: "Change a slug and the old one keeps redirecting for 48 hours, so links already printed or shared never break. Add extra aliases to route a slug to a link on purpose.",
+      },
+    ],
   },
   {
-    icon: QrCode,
-    title: "Branded QR codes",
-    body: "One click turns any link into a QR code with your logo, colors, and dot styles baked in. Set org-wide defaults, override per link, and print it anywhere.",
-    plan: "Paid",
+    title: "Track what works",
+    items: [
+      {
+        icon: BarChart3,
+        title: "Click analytics",
+        body: "Zoom from the last 24 hours to a full year, compare any period with the one before, and spot your busiest hours on the heatmap.",
+      },
+      {
+        icon: Target,
+        title: "Campaign tracking",
+        body: "UTM campaigns, sources, and mediums ranked by clicks, so you can see which channel earns its keep.",
+      },
+      {
+        icon: TrendingDown,
+        title: "Link health",
+        body: "rdyrct flags links that go quiet: zero clicks in 30 days, or a drop of more than half week over week.",
+      },
+      {
+        icon: Activity,
+        title: "Live click feed",
+        body: "A feed of the latest clicks sits on your dashboard and refreshes on its own: slug, referrer, country, and device.",
+      },
+    ],
   },
   {
-    icon: Globe,
-    title: "Custom domains & slugs",
-    body: "Serve short links from your own domain with automatic TLS and any slug you like, so every click reinforces your brand, not ours.",
-    plan: "Paid",
-  },
-  {
-    icon: Users,
-    title: "Organizations & roles",
-    body: "Owner, admin, and member roles control who can edit links, connect domains, and invite people.",
-  },
-  {
-    icon: BarChart3,
-    title: "Click analytics",
-    body: "Zoom from the last 24 hours to a full year, compare any period with the one before, and spot your busiest hours on the heatmap.",
-  },
-  {
-    icon: Target,
-    title: "Campaign tracking",
-    body: "UTM campaigns, sources, and mediums ranked by clicks, so you can see which channel earns its keep.",
-  },
-  {
-    icon: TrendingDown,
-    title: "Link health",
-    body: "rdyrct flags links that go quiet: zero clicks in 30 days, or a drop of more than half week over week.",
-  },
-  {
-    icon: Activity,
-    title: "Live click feed",
-    body: "A feed of the latest clicks sits on your dashboard and refreshes on its own: slug, referrer, country, and device.",
-  },
-  {
-    icon: ShieldCheck,
-    title: "Privacy-friendly",
-    body: "No IP addresses, no precise location, no cross-site tracking. Analytics your legal team can sign off on.",
+    title: "Built for teams",
+    items: [
+      {
+        icon: Users,
+        title: "Organizations & roles",
+        body: "Owner, admin, and member roles control who can edit links, connect domains, and invite people.",
+      },
+      {
+        icon: Mail,
+        title: "Magic-link invites",
+        body: "Invite teammates by email. Each invite is single-use and stays valid for 7 days.",
+      },
+      {
+        icon: GitMerge,
+        title: "No duplicate links",
+        body: "Shorten a URL you've already shortened and rdyrct offers to add it as an alias on the existing link instead of creating a copy, so its stats stay in one place.",
+      },
+      {
+        icon: ShieldCheck,
+        title: "Privacy-friendly",
+        body: "No IP addresses, no precise location, no cross-site tracking. Analytics your legal team can sign off on.",
+      },
+    ],
   },
 ];
 
@@ -781,18 +814,27 @@ function FeaturesSection() {
           Built for marketing teams and developers.
         </p>
       </div>
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-        {features.map(({ icon: Icon, title, body, plan }) => (
-          <div
-            key={title}
-            className="rounded-lg border border-border bg-surface p-4 transition-colors hover:border-accent/40"
-          >
-            <div className="mb-2 flex items-center gap-2">
-              <Icon size={16} className="text-accent" />
-              <p className="font-bold">{title}</p>
-              {plan && <span className="text-2xs tracking-wide text-muted uppercase">{plan}</span>}
+      <div className="space-y-10">
+        {featureGroups.map(({ title, items }) => (
+          <div key={title}>
+            <h3 className="mb-4 text-xs font-bold tracking-wide text-muted uppercase">{title}</h3>
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
+              {items.map(({ icon: Icon, title, body, plan }) => (
+                <div
+                  key={title}
+                  className="rounded-lg border border-border bg-surface p-4 transition-colors hover:border-accent/40"
+                >
+                  <div className="mb-2 flex items-center gap-2">
+                    <Icon size={16} className="text-accent" />
+                    <p className="font-bold">{title}</p>
+                    {plan && (
+                      <span className="text-2xs tracking-wide text-muted uppercase">{plan}</span>
+                    )}
+                  </div>
+                  <p className="text-sm text-muted">{body}</p>
+                </div>
+              ))}
             </div>
-            <p className="text-sm text-muted">{body}</p>
           </div>
         ))}
       </div>
