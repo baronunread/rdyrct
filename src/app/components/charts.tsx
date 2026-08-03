@@ -12,6 +12,7 @@ import { focusNearestX } from "@tanstack/charts/focus";
 import { Chart } from "@tanstack/react-charts";
 import type { SeriesPoint, DeltaValue, HeatmapRow, TopEntry } from "@/shared/types";
 import { Card, SlugLink } from "../ui/misc";
+import { CountryMap } from "./country-map";
 
 /**
  * d3's scalePoint has no tick-thinning: without it TanStack Charts falls
@@ -469,9 +470,12 @@ export function ClickBreakdown({
 }) {
   return (
     <>
-      <Card>
+      <Card className="lg:col-span-2">
         <p className="mb-3 text-2xs tracking-wider text-muted uppercase">Countries</p>
-        <BarList items={countries.map((c) => ({ ...c, key: fmtCountry(c.key) }))} />
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-[2fr_1fr]">
+          <CountryMap countries={countries} />
+          <BarList items={countries.map((c) => ({ ...c, key: fmtCountry(c.key) }))} />
+        </div>
       </Card>
       <Card>
         <p className="mb-3 text-2xs tracking-wider text-muted uppercase">Referrers</p>

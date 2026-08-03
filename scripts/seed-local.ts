@@ -263,21 +263,78 @@ const UTM_SOURCES = ["newsletter", "twitter", "linkedin", "print", "qr", ""];
 const UTM_MEDIUMS = ["email", "social", "offline", "cpc", ""];
 const CAMPAIGNS = ["spring-2026", "launch", "always-on", "summer-promo", ""];
 
-const COUNTRIES: readonly (readonly [string, number])[] = [
-  ["US", 30],
-  ["IT", 18],
-  ["DE", 12],
-  ["GB", 10],
-  ["FR", 8],
-  ["ES", 6],
-  ["BR", 5],
-  ["NL", 4],
-  ["JP", 3],
-  ["IN", 3],
-  ["CA", 3],
-  ["AU", 2],
-  ["", 2],
-];
+/** Broad pool spanning every populated continent, so different orgs land on
+ * different parts of the world map instead of all skewing US/Western Europe. */
+const COUNTRY_POOL = [
+  "US",
+  "CA",
+  "MX",
+  "BR",
+  "AR",
+  "CL",
+  "CO",
+  "PE",
+  "GB",
+  "IE",
+  "FR",
+  "DE",
+  "NL",
+  "BE",
+  "ES",
+  "PT",
+  "IT",
+  "CH",
+  "AT",
+  "SE",
+  "NO",
+  "DK",
+  "FI",
+  "PL",
+  "CZ",
+  "RO",
+  "GR",
+  "TR",
+  "UA",
+  "RU",
+  "ZA",
+  "NG",
+  "KE",
+  "EG",
+  "MA",
+  "AE",
+  "SA",
+  "IL",
+  "IN",
+  "PK",
+  "BD",
+  "CN",
+  "JP",
+  "KR",
+  "TW",
+  "HK",
+  "SG",
+  "MY",
+  "ID",
+  "TH",
+  "VN",
+  "PH",
+  "AU",
+  "NZ",
+] as const;
+/** Each org gets its own randomized subset and weighting of the pool, so
+ * click distributions (and the country ranking + map) vary org to org. */
+function randomCountryMix(): (readonly [string, number])[] {
+  const count = randInt(6, 12);
+  const shuffled = [...COUNTRY_POOL].sort(() => rand() - 0.5).slice(0, count);
+  // Descending random weights so each mix still has a clear "top country"
+  // instead of a flat spread.
+  const mix = shuffled
+    .map((code) => [code, rand() ** 2] as const)
+    .sort((a, b) => b[1] - a[1])
+    .map(([code, w], i) => [code, Math.round(w * 100) / (i + 1)] as const);
+  mix.push(["", 2]);
+  return mix;
+}
 const REFERRERS: readonly (readonly [string, number])[] = [
   ["", 40],
   ["google.com", 20],
@@ -408,6 +465,7 @@ async function seed() {
   }
   const orgs: SeedOrg[] = [];
   const orgStatements: string[] = [];
+  const orgCountries = new Map<string, (readonly [string, number])[]>();
 
   for (let i = 0; i < CONFIG.orgs; i++) {
     const owner = owners[i];
@@ -420,6 +478,7 @@ async function seed() {
       domain: null,
     };
     orgs.push(org);
+    orgCountries.set(org.id, randomCountryMix());
     orgStatements.push(
       `INSERT INTO orgs (id, name, created_at) VALUES (${q(org.id)}, ${q(org.name)}, ${org.createdAt})`,
     );
@@ -696,7 +755,7 @@ async function seed() {
         const h = pickW(hourWeights);
         const t = Math.min(now, dayStart + h * 3_600_000 + randInt(0, 3_599_999));
         clickValues.push(
-          `(${q(link.id)}, ${q(link.org.id)}, ${t}, ${q(pickW(COUNTRIES))}, ${q(pickW(REFERRERS))}, ${q(pickW(DEVICES))})`,
+          `(${q(link.id)}, ${q(link.org.id)}, ${t}, ${q(pickW(orgCountries.get(link.org.id)!))}, ${q(pickW(REFERRERS))}, ${q(pickW(DEVICES))})`,
         );
         totalClicks++;
       }

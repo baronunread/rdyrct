@@ -618,7 +618,7 @@ orgRoutes.get("/:orgId/stats", requireOrgRole("member"), async (c) => {
       .where(and(inOrg, gte(schema.clicks.ts, since)))
       .groupBy(schema.clicks.country)
       .orderBy(desc(sql`count(*)`))
-      .limit(8),
+      .limit(10),
     db
       .select({ key: schema.clicks.referrer, clicks: sql<number>`count(*)` })
       .from(schema.clicks)
@@ -868,7 +868,7 @@ orgRoutes.get("/:orgId/links/stats/:slug", requireOrgRole("member"), async (c) =
       .where(and(onLink, gte(schema.clicks.ts, since)))
       .groupBy(schema.clicks.country)
       .orderBy(desc(sql`count(*)`))
-      .limit(8),
+      .limit(10),
     db
       .select({ key: schema.clicks.referrer, clicks: sql<number>`count(*)` })
       .from(schema.clicks)
