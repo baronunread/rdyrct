@@ -123,7 +123,6 @@ export function LinksTable({
                               ? `Hide ${link.addressCount - 1} alias${link.addressCount - 1 === 1 ? "" : "es"}`
                               : `Show ${link.addressCount - 1} alias${link.addressCount - 1 === 1 ? "" : "es"}`
                           }
-                          title={`${link.addressCount - 1} alias${link.addressCount - 1 === 1 ? "" : "es"}`}
                           aria-expanded={isExpanded}
                           className="flex shrink-0 cursor-pointer items-center justify-center p-1 text-muted transition-transform duration-150 active:scale-[0.96] hover:text-text"
                         >

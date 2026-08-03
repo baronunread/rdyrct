@@ -2,6 +2,7 @@ import type { ReactNode, ThHTMLAttributes, TdHTMLAttributes } from "react";
 import { Link } from "react-router";
 import { cn } from "./cn";
 import { Footer } from "./footer";
+import { Tooltip } from "./tooltip";
 
 const badgeColors = {
   muted: "border-border text-muted",
@@ -38,12 +39,12 @@ export function Badge({
  * a flex row) and `max-w-full` (cap width in a flex column, where
  * `align-items: flex-start` sizes to content otherwise) cover both layouts
  * `truncate` shows up in around the app. The full slug still shows on hover
- * via `title`. */
+ * via a tooltip. */
 export function Slug({ slug, className }: { slug: string; className?: string }) {
   return (
-    <span className={cn("min-w-0 max-w-full truncate", className)} title={`/${slug}`}>
-      /{slug}
-    </span>
+    <Tooltip content={`/${slug}`}>
+      <span className={cn("min-w-0 max-w-full truncate", className)}>/{slug}</span>
+    </Tooltip>
   );
 }
 

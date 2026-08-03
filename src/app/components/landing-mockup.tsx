@@ -320,7 +320,6 @@ function ShortLinkRow({
           target="_blank"
           rel="noreferrer"
           tabIndex={isResult ? 0 : -1}
-          title="Try it: opens the destination like a real redirect"
           className="truncate font-mono text-base font-bold text-accent hover:underline"
         >
           {SHORT_URL}
