@@ -29,7 +29,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
       ref={ref}
       type={type ?? "button"}
       className={cn(
-        "inline-flex cursor-pointer items-center justify-center rounded-md transition-[background,border-color,color,filter,scale] duration-150 disabled:pointer-events-none disabled:opacity-50",
+        "inline-flex cursor-pointer items-center justify-center rounded-md transition-[background,border-color,color,filter,scale] duration-150 ease-out disabled:pointer-events-none disabled:opacity-50",
         !staticProp && "active:scale-[0.96]",
         variants[variant],
         sizes[size],
@@ -58,7 +58,7 @@ export const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>(
       aria-label={label}
       title={label}
       className={cn(
-        "inline-flex cursor-pointer items-center justify-center rounded-md p-1.5 text-muted transition-[background-color,color,scale] duration-150 hover:bg-surface-2 disabled:pointer-events-none disabled:opacity-50",
+        "inline-flex cursor-pointer items-center justify-center rounded-md p-1.5 text-muted transition-[background-color,color,scale] duration-150 ease-out hover:bg-surface-2 disabled:pointer-events-none disabled:opacity-50",
         !staticProp && "active:scale-[0.96]",
         danger ? "hover:text-danger" : "hover:text-text",
         className,
