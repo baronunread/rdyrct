@@ -33,6 +33,47 @@ export function Badge({
   );
 }
 
+/** A link's slug ("/name"), truncated with an ellipsis instead of wrapping
+ * or overflowing its row when it's long. `min-w-0` (shrink below content in
+ * a flex row) and `max-w-full` (cap width in a flex column, where
+ * `align-items: flex-start` sizes to content otherwise) cover both layouts
+ * `truncate` shows up in around the app. The full slug still shows on hover
+ * via `title`. */
+export function Slug({ slug, className }: { slug: string; className?: string }) {
+  return (
+    <span className={cn("min-w-0 max-w-full truncate", className)} title={`/${slug}`}>
+      /{slug}
+    </span>
+  );
+}
+
+/** A row linking to a link's detail page by slug, with an optional title
+ * suffix: the shape repeated across the dashboard's and analytics' link
+ * lists (top links, decaying, dead). Truncates instead of wrapping or
+ * overflowing; the full text still shows on hover via `title`. */
+export function SlugLink({
+  to,
+  slug,
+  title,
+  className,
+}: {
+  to: string;
+  slug: string;
+  title?: string;
+  className?: string;
+}) {
+  const text = title ? `/${slug} · ${title}` : `/${slug}`;
+  return (
+    <Link
+      to={to}
+      title={text}
+      className={cn("min-w-0 max-w-full truncate text-accent hover:underline", className)}
+    >
+      {text}
+    </Link>
+  );
+}
+
 export function Card({ className, children }: { className?: string; children: ReactNode }) {
   return (
     <div className={cn("rounded-lg border border-border bg-surface p-4", className)}>

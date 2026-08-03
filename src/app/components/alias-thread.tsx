@@ -5,7 +5,7 @@ import { m } from "motion/react";
 import { useAddresses, useAddressMutations } from "../lib/hooks";
 import { withErrorToast } from "../lib/mutation-toast";
 import { useToast } from "../ui/toast";
-import { Td } from "../ui/misc";
+import { Slug, Td } from "../ui/misc";
 import { Menu, MenuItem, MenuSeparator } from "../ui/menu";
 import { CopyButton } from "../ui/copy-button";
 import { copyToClipboard } from "../lib/clipboard";
@@ -56,7 +56,7 @@ function AliasRow({
       <Td className="py-1.5">
         <div className="flex min-w-0 items-center gap-2.5 overflow-hidden">
           <span className="w-5.5 shrink-0" />
-          <span className="max-w-full truncate font-mono text-xs text-muted">/{address.slug}</span>
+          <Slug slug={address.slug} className="font-mono text-xs text-muted" />
           <span className="shrink-0">
             <CopyButton
               text={shortUrl(address.slug, address.domain)}
@@ -193,10 +193,15 @@ export function AliasThread({ orgId, link }: { orgId: string; link: LinkDTO }) {
         }}
       >
         {removing && (
-          <>
-            <span className="font-mono">{shortUrl(removing.slug, removing.domain)}</span> will stop
-            resolving immediately. This can't be undone.
-          </>
+          <div className="flex flex-col gap-2">
+            <p
+              className="max-w-full truncate rounded-lg border border-border bg-surface-2 px-3 py-2 font-mono text-xs"
+              title={shortUrl(removing.slug, removing.domain)}
+            >
+              {shortUrl(removing.slug, removing.domain)}
+            </p>
+            <p>will stop resolving immediately. This can't be undone.</p>
+          </div>
         )}
       </ConfirmDialog>
     </>

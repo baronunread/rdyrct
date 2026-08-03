@@ -13,12 +13,18 @@ export function Dialog({
   title,
   children,
   wide,
+  hideBackdrop,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   title: string;
   children: ReactNode;
   wide?: boolean;
+  /** Skips this dialog's own backdrop: for a dialog left open underneath
+   * another one (e.g. the same-destination match), so the two don't stack
+   * into a double-dark overlay. The dialog above still darkens this one, via
+   * its own backdrop. */
+  hideBackdrop?: boolean;
 }) {
   return (
     <LazyMotion features={domAnimation}>
@@ -26,17 +32,19 @@ export function Dialog({
         {open && (
           <BaseDialog.Root open onOpenChange={onOpenChange}>
             <BaseDialog.Portal keepMounted>
-              <BaseDialog.Backdrop
-                className="fixed inset-0 z-40 bg-black/55 backdrop-blur-[2px]"
-                render={
-                  <m.div
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    exit={{ opacity: 0 }}
-                    transition={{ duration: 0.2 }}
-                  />
-                }
-              />
+              {!hideBackdrop && (
+                <BaseDialog.Backdrop
+                  className="fixed inset-0 z-40 bg-black/55 backdrop-blur-[2px]"
+                  render={
+                    <m.div
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      exit={{ opacity: 0 }}
+                      transition={{ duration: 0.2 }}
+                    />
+                  }
+                />
+              )}
               <BaseDialog.Popup
                 className={cn(
                   "fixed top-1/2 left-1/2 z-50 max-h-[85dvh] w-[calc(100vw-2rem)] -translate-x-1/2 -translate-y-1/2 overflow-y-auto overscroll-none rounded-xl border border-border bg-surface p-6 text-text shadow-2xl",

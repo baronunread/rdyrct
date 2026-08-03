@@ -13,7 +13,7 @@ import {
 import { AnimatePresence, LazyMotion, domAnimation } from "motion/react";
 import { shortUrl } from "../lib/api";
 import { type LinkDTO, type Sort } from "@/shared/types";
-import { Badge, Table, Th, Td } from "../ui/misc";
+import { Badge, Slug, Table, Th, Td } from "../ui/misc";
 import { Menu, MenuItem, MenuSeparator } from "../ui/menu";
 import { SortTh } from "../ui/sort-th";
 import { shortDate } from "../lib/dates";
@@ -143,9 +143,10 @@ export function LinksTable({
                         <Badge className="min-w-0 max-w-full">
                           <span className="truncate">{link.domain || appHost}</span>
                         </Badge>
-                        <span className="font-bold text-accent group-hover:underline">
-                          /{link.slug}
-                        </span>
+                        <Slug
+                          slug={link.slug}
+                          className="font-bold text-accent group-hover:underline"
+                        />
                       </button>
                       <span className="shrink-0">
                         <CopyButton
