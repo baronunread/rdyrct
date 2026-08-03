@@ -13,12 +13,24 @@ export function Dialog({
   title,
   children,
   wide,
+  nested,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   title: string;
   children: ReactNode;
   wide?: boolean;
+  /** Bumps this dialog a full stacking level above the default, for one that
+   * can open while another Dialog is still open underneath it (e.g. the
+   * same-destination match, over the link editor). Without this, both
+   * dialogs render at the same z-index, so the top one's own backdrop sits
+   * *below* the bottom one's popup instead of dimming/blurring it — leaving
+   * the bottom dialog fully sharp and undimmed, which reads wrong, and
+   * hiding it outright would just flash the backdrop's blur off and back on
+   * as the two dialogs swap. Nested instead keeps both backdrops: the top
+   * one's now covers the bottom dialog's popup too, same as it covers the
+   * page. */
+  nested?: boolean;
 }) {
   return (
     <LazyMotion features={domAnimation}>
@@ -27,7 +39,10 @@ export function Dialog({
           <BaseDialog.Root open onOpenChange={onOpenChange}>
             <BaseDialog.Portal keepMounted>
               <BaseDialog.Backdrop
-                className="fixed inset-0 z-40 bg-black/55 backdrop-blur-[2px]"
+                className={cn(
+                  "fixed inset-0 bg-black/55 backdrop-blur-[2px]",
+                  nested ? "z-[60]" : "z-40",
+                )}
                 render={
                   <m.div
                     initial={{ opacity: 0 }}
@@ -39,7 +54,8 @@ export function Dialog({
               />
               <BaseDialog.Popup
                 className={cn(
-                  "fixed top-1/2 left-1/2 z-50 max-h-[85dvh] w-[calc(100vw-2rem)] -translate-x-1/2 -translate-y-1/2 overflow-y-auto overscroll-none rounded-xl border border-border bg-surface p-6 text-text shadow-2xl",
+                  "fixed top-1/2 left-1/2 max-h-[85dvh] w-[calc(100vw-2rem)] -translate-x-1/2 -translate-y-1/2 overflow-y-auto overscroll-none rounded-xl border border-border bg-surface p-6 text-text shadow-2xl",
+                  nested ? "z-[70]" : "z-50",
                   wide ? "max-w-2xl" : "max-w-md",
                 )}
                 render={

@@ -4,26 +4,22 @@ import { valibotResolver } from "@hookform/resolvers/valibot";
 import { Link } from "react-router";
 import { useStats, useLinks, useMembers, useLinkMutations, useRecentClicks } from "../lib/hooks";
 import { useOrgLimits } from "../lib/org-limits";
-import { shortUrl, ApiError } from "../lib/api";
+import { ApiError } from "../lib/api";
 import { type DomainDTO, type LinkDTO, type LinkInput, type RecentClick } from "@/shared/types";
 import { StatCard, TopLinksCard } from "../components/charts";
 import { DashboardSkeleton } from "../components/skeletons";
 import { NoOrgState } from "../components/no-org";
-import { QRPreview } from "../components/qr";
-import type { OrgQr } from "../lib/org-qr";
 import { Button } from "../ui/button";
-import { Dialog } from "../ui/dialog";
 import { Input } from "../ui/field";
 import { MenuSelect } from "../ui/menu";
-import { Card, PageHeader } from "../ui/misc";
+import { Card, PageHeader, SlugLink } from "../ui/misc";
 import { BusyContent } from "../ui/spinner";
 import { useToast } from "../ui/toast";
-import { CopyButton } from "../ui/copy-button";
 import { withErrorToast } from "../lib/mutation-toast";
 import { destinationSchema } from "../lib/schemas";
 import { relativeDate } from "../lib/dates";
-import { copyToClipboard } from "../lib/clipboard";
 import { SameDestinationDialog } from "../components/same-destination-dialog";
+import { LinkPreviewDialog } from "../components/link-preview-dialog";
 
 /** Heatmap rows come back Monday-first (see the stats query). */
 const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -135,7 +131,8 @@ export function Dashboard() {
         <PeakCard peak={peak} rangeDays={s.rangeDays} />
       </div>
 
-      <CreatedDialog
+      <LinkPreviewDialog
+        title="Link created"
         link={created}
         onClose={() => setCreated(null)}
         qrEnabled={limits.qr}
@@ -378,10 +375,7 @@ function AttentionList({
       <ul className="flex flex-col gap-2">
         {rows.map((l) => (
           <li key={l.id} className="flex items-center justify-between gap-3 text-xs">
-            <Link to={`/links/${l.slug}`} className="truncate text-accent hover:underline">
-              /{l.slug}
-              {l.title ? ` · ${l.title}` : ""}
-            </Link>
+            <SlugLink to={`/links/${l.slug}`} slug={l.slug} title={l.title} />
             <span className="tnum shrink-0 text-muted">{l.suffix}</span>
           </li>
         ))}
@@ -411,67 +405,5 @@ function PeakCard({
         </>
       )}
     </Card>
-  );
-}
-
-function CreatedLinkContent({
-  link,
-  url,
-  qrEnabled,
-  orgQr,
-}: {
-  link: LinkDTO;
-  url: string;
-  qrEnabled: boolean;
-  orgQr: OrgQr;
-}) {
-  const toast = useToast();
-  return (
-    <div className="flex flex-col items-center gap-3">
-      {qrEnabled && (
-        <QRPreview
-          url={url}
-          logo={orgQr.logo || undefined}
-          dotStyle={orgQr.style}
-          color={orgQr.color}
-          corner={orgQr.corner}
-          eyeColor={orgQr.eyeColor}
-          bg={orgQr.bg}
-          logoSize={orgQr.logoSize ?? undefined}
-          downloadName={`qr-${link.slug}`}
-        />
-      )}
-      <p className="text-sm font-bold break-all">{url}</p>
-      <CopyButton
-        text={url}
-        label="Copy link"
-        onCopy={(text) => copyToClipboard(text, toast)}
-        display="button"
-      >
-        Copy link
-      </CopyButton>
-    </div>
-  );
-}
-
-/** Shown right after a quick create: the short URL, its QR code when the
- * plan includes QR codes, and a copy button. */
-function CreatedDialog({
-  link,
-  onClose,
-  qrEnabled,
-  orgQr,
-}: {
-  link: LinkDTO | null;
-  onClose: () => void;
-  qrEnabled: boolean;
-  orgQr: OrgQr;
-}) {
-  const url = link ? shortUrl(link.slug, link.domain) : "";
-
-  return (
-    <Dialog open={!!link} onOpenChange={(o) => !o && onClose()} title="Link created">
-      {link && <CreatedLinkContent link={link} url={url} qrEnabled={qrEnabled} orgQr={orgQr} />}
-    </Dialog>
   );
 }

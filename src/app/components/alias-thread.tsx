@@ -1,9 +1,11 @@
 import { useState } from "react";
 import { Clock, Ellipsis, Info, Star, Trash2 } from "lucide-react";
+// m.tr renders inside a LazyMotion provider set up by the caller (LinksTable).
+import { m } from "motion/react";
 import { useAddresses, useAddressMutations } from "../lib/hooks";
 import { withErrorToast } from "../lib/mutation-toast";
 import { useToast } from "../ui/toast";
-import { Td } from "../ui/misc";
+import { Slug, Td } from "../ui/misc";
 import { Menu, MenuItem, MenuSeparator } from "../ui/menu";
 import { CopyButton } from "../ui/copy-button";
 import { copyToClipboard } from "../lib/clipboard";
@@ -44,11 +46,17 @@ function AliasRow({
   const isTemp = address.kind === "temp_alias";
 
   return (
-    <tr className="bg-surface-2/30">
+    <m.tr
+      className="bg-surface-2/30"
+      initial={{ opacity: 0, y: -4 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: 2 }}
+      transition={{ duration: 0.2, ease: "easeOut" }}
+    >
       <Td className="py-1.5">
         <div className="flex min-w-0 items-center gap-2.5 overflow-hidden">
           <span className="w-5.5 shrink-0" />
-          <span className="max-w-full truncate font-mono text-xs text-muted">/{address.slug}</span>
+          <Slug slug={address.slug} className="font-mono text-xs text-muted" />
           <span className="shrink-0">
             <CopyButton
               text={shortUrl(address.slug, address.domain)}
@@ -58,7 +66,8 @@ function AliasRow({
           </span>
         </div>
       </Td>
-      <Td className="py-1.5 text-xs text-muted">
+      <Td className="hidden py-1.5 text-xs text-muted/50 lg:table-cell">—</Td>
+      <Td className="hidden py-1.5 text-xs text-muted xl:table-cell">
         {isTemp ? (
           <span className="inline-flex items-center gap-1">
             Expires in {timeLeft(address.expiresAt!)}
@@ -76,8 +85,8 @@ function AliasRow({
           "Permanent alias"
         )}
       </Td>
-      <Td className="tnum py-1.5 text-right">{address.recentClicks}</Td>
-      <Td className="py-1.5 text-xs whitespace-nowrap text-muted">
+      <Td className="tnum py-1.5 text-end">{address.recentClicks}</Td>
+      <Td className="hidden py-1.5 text-xs whitespace-nowrap text-muted sm:table-cell">
         {shortDate(address.createdAt)}
       </Td>
       <Td className="py-1.5">
@@ -86,7 +95,7 @@ function AliasRow({
           label={`Actions for ${address.slug}`}
           trigger={
             <div className="flex justify-end">
-              <span className="rounded p-1.5 text-muted hover:bg-surface-2 hover:text-text">
+              <span className="rounded p-1.5 text-muted transition-transform duration-150 active:scale-[0.96] hover:bg-surface-2 hover:text-text">
                 <Ellipsis size={15} />
               </span>
             </div>
@@ -106,7 +115,7 @@ function AliasRow({
           </MenuItem>
         </Menu>
       </Td>
-    </tr>
+    </m.tr>
   );
 }
 
@@ -121,7 +130,7 @@ export function AliasThread({ orgId, link }: { orgId: string; link: LinkDTO }) {
   if (addresses.isLoading)
     return (
       <tr>
-        <Td colSpan={5} className="bg-surface-2/30">
+        <Td colSpan={6} className="bg-surface-2/30">
           <SkeletonStatus className="flex justify-center py-1">
             <Skeleton className="h-4 w-32" />
           </SkeletonStatus>
@@ -178,10 +187,15 @@ export function AliasThread({ orgId, link }: { orgId: string; link: LinkDTO }) {
         }}
       >
         {removing && (
-          <>
-            <span className="font-mono">{shortUrl(removing.slug, removing.domain)}</span> will stop
-            resolving immediately. This can't be undone.
-          </>
+          <div className="flex flex-col gap-2">
+            <p
+              className="max-w-full truncate rounded-lg border border-border bg-surface-2 px-3 py-2 font-mono text-xs"
+              title={shortUrl(removing.slug, removing.domain)}
+            >
+              {shortUrl(removing.slug, removing.domain)}
+            </p>
+            <p>will stop resolving immediately. This can't be undone.</p>
+          </div>
         )}
       </ConfirmDialog>
     </>

@@ -3,24 +3,22 @@ import { useNavigate } from "react-router";
 import { Plus } from "lucide-react";
 import { useLinks, useLinkMutations, useLinkQuotaUsage } from "../lib/hooks";
 import { useOrgLimits } from "../lib/org-limits";
-import { shortUrl, ApiError } from "../lib/api";
+import { ApiError } from "../lib/api";
 import { type DomainDTO, type LinkDTO, type LinkInput, type Sort } from "@/shared/types";
 import { Button } from "../ui/button";
-import { Dialog } from "../ui/dialog";
 import { Input } from "../ui/field";
 import { MenuSelect } from "../ui/menu";
 import { EmptyState, PageHeader } from "../ui/misc";
 import { TableSkeleton } from "../ui/skeleton";
 import { useToast } from "../ui/toast";
-import { QRPreview } from "../components/qr";
 import { NoOrgState } from "../components/no-org";
 import { sortRows } from "../lib/sort";
 import { LinkEditor } from "../components/link-editor";
-import { resolveQrLook, type OrgQr } from "../lib/org-qr";
 import { LinksTable } from "../components/links-table";
 import { ConfirmDialog } from "../ui/confirm-dialog";
 import { SameDestinationDialog } from "../components/same-destination-dialog";
 import { CreateAliasDialog } from "../components/create-alias-dialog";
+import { LinkPreviewDialog } from "../components/link-preview-dialog";
 import { withErrorToast } from "../lib/mutation-toast";
 
 const PAGE_SIZE = 25;
@@ -253,7 +251,15 @@ export function LinksPage() {
         shakeKey={shakeKey}
       />
 
-      {limits.qr && <QrLinkDialog link={qrLink} onClose={() => setQrLink(null)} orgQr={orgQr} />}
+      {limits.qr && (
+        <LinkPreviewDialog
+          title={qrLink ? `QR · /${qrLink.slug}` : "QR"}
+          link={qrLink}
+          onClose={() => setQrLink(null)}
+          qrEnabled
+          orgQr={orgQr}
+        />
+      )}
 
       <CreateAliasDialog orgId={orgId} link={aliasLink} onClose={() => setAliasLink(null)} />
 
@@ -393,7 +399,7 @@ function LinksToolbar({
   totalCount: number;
 }) {
   return (
-    <div className="mb-4 flex flex-wrap items-center gap-2">
+    <div className="mb-4 flex flex-wrap items-center gap-3">
       <Input
         value={search}
         onChange={(e) => onSearchChange(e.target.value)}
@@ -417,38 +423,9 @@ function LinksToolbar({
           />
         </div>
       )}
-      <span className="ml-auto text-xs text-muted tnum">
+      <span className="ms-auto text-xs text-muted tnum">
         {filteredCount} / {totalCount}
       </span>
     </div>
-  );
-}
-
-function QrLinkDialog({
-  link,
-  onClose,
-  orgQr,
-}: {
-  link: LinkDTO | null;
-  onClose: () => void;
-  orgQr: OrgQr;
-}) {
-  return (
-    <Dialog
-      open={!!link}
-      onOpenChange={(o) => !o && onClose()}
-      title={link ? `QR · /${link.slug}` : "QR"}
-    >
-      {link && (
-        <div className="flex flex-col items-center gap-2">
-          <QRPreview
-            url={shortUrl(link.slug, link.domain)}
-            {...resolveQrLook(link, orgQr)}
-            downloadName={`qr-${link.slug}`}
-          />
-          <p className="text-xs text-muted">{shortUrl(link.slug, link.domain)}</p>
-        </div>
-      )}
-    </Dialog>
   );
 }

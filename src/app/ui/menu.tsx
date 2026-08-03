@@ -86,7 +86,7 @@ export function MenuSelect({
   disabled?: boolean;
 }) {
   const box = cn(
-    "flex h-9 w-full items-center justify-between gap-2 rounded-md border border-border bg-bg px-3 text-sm transition-colors select-none",
+    "flex h-9 w-full items-center justify-between gap-2 rounded-md border border-border bg-bg px-3 text-sm transition-colors duration-150 select-none",
     disabled ? "opacity-50" : "hover:border-accent",
   );
   const face = (

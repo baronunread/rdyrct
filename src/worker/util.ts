@@ -105,6 +105,22 @@ export function resolveUtm(
   return out;
 }
 
+/**
+ * Strip utm_* params out of a destination, leaving every other query param
+ * alone. Called right after resolveUtm has already pulled any of them into
+ * the UTM columns, so nothing is lost: `destination` stays the bare link,
+ * buildDestination re-applies the stored columns at redirect time.
+ */
+export function stripUtmParams(destination: string): string {
+  try {
+    const url = new URL(destination);
+    for (const [param] of UTM_KEYS) url.searchParams.delete(param);
+    return url.toString();
+  } catch {
+    return destination;
+  }
+}
+
 /** Destination with the link's UTM params applied (existing params win). */
 export function buildDestination(destination: string, utm: UtmFields): string {
   try {
@@ -182,6 +198,9 @@ export function qrLogoKeyFromUrl(url: string): string | null {
 }
 
 const HEX_COLOR_RE = /^#[0-9a-fA-F]{6}$/;
+// Background alone supports an alpha channel (the color picker's
+// HexAlphaColorPicker emits 8-digit hex, or 6-digit when fully opaque).
+const HEX_COLOR_ALPHA_RE = /^#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$/;
 
 type QrFields = {
   qrLogo?: string;
@@ -214,6 +233,16 @@ function validateQrColor(value: string | undefined, label: string) {
   }
 }
 
+function validateQrBg(value: string | undefined) {
+  if (!value) return;
+  // 'transparent' is a legacy sentinel kept readable for old data; the
+  // picker now expresses transparency through the hex string's alpha byte.
+  if (value === "transparent") return;
+  if (!HEX_COLOR_ALPHA_RE.test(value)) {
+    invalidQrField("QR background must be a hex color like #17151f or #17151f80");
+  }
+}
+
 function validateQrLogoSize(value: number | null | undefined) {
   if (value != null && (!Number.isFinite(value) || value < 0.2 || value > 0.7)) {
     invalidQrField("QR logo size must be a ratio between 0.2 and 0.7");
@@ -225,10 +254,7 @@ export function validateQrFields(fields: QrFields, orgId: string) {
   validateQrLogo(fields.qrLogo, orgId);
   validateQrChoice(fields.qrStyle, QR_DOT_STYLES, "Unknown QR dot style");
   validateQrChoice(fields.qrCorner, QR_CORNER_STYLES, "Unknown QR corner style");
-  // 'transparent' is the one non-hex background we allow (see the QR preview).
-  if (fields.qrBg && fields.qrBg !== "transparent") {
-    validateQrColor(fields.qrBg, "QR background");
-  }
+  validateQrBg(fields.qrBg);
   validateQrColor(fields.qrColor, "QR color");
   validateQrColor(fields.qrEyeColor, "QR eye color");
   // null = inherit; otherwise a sane footprint ratio (bigger stops scanning).

@@ -1,6 +1,5 @@
 import { Fragment, useMemo, useState } from "react";
 import type { ReactNode } from "react";
-import { Link } from "react-router";
 import { scaleLinear, scalePoint } from "d3-scale";
 import {
   areaY,
@@ -12,7 +11,7 @@ import {
 import { focusNearestX } from "@tanstack/charts/focus";
 import { Chart } from "@tanstack/react-charts";
 import type { SeriesPoint, DeltaValue, HeatmapRow, TopEntry } from "@/shared/types";
-import { Card } from "../ui/misc";
+import { Card, SlugLink } from "../ui/misc";
 
 /**
  * d3's scalePoint has no tick-thinning: without it TanStack Charts falls
@@ -219,10 +218,10 @@ export function BarList({
   return (
     <ul className="flex flex-col gap-2.5">
       {items.map((item) => (
-        <li key={item.key} title={`${item.key}: ${item.clicks}`}>
+        <li key={item.key}>
           <div className="mb-1 flex items-baseline justify-between gap-3 text-xs">
-            <span className="truncate">{formatKey(item.key)}</span>
-            <span className="tnum text-muted">{item.clicks}</span>
+            <span className="min-w-0 truncate">{formatKey(item.key)}</span>
+            <span className="tnum shrink-0 text-muted">{item.clicks}</span>
           </div>
           <div className="h-1.5 rounded-full bg-surface-2">
             <div
@@ -300,17 +299,76 @@ function DeltaBadge({ pct }: { pct: number }) {
 const HEATMAP_DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const HEATMAP_HOURS = Array.from({ length: 24 }, (_, i) => i);
 
+/** Cell position in px, relative to the grid's own offset parent: unaffected
+ * by horizontal scroll, unlike a viewport-relative bounding rect. */
+function HeatmapTooltip({
+  day,
+  hour,
+  clicks,
+  cellLeft,
+  cellTop,
+  cellWidth,
+  flip,
+}: {
+  day: string;
+  hour: number;
+  clicks: number;
+  cellLeft: number;
+  cellTop: number;
+  cellWidth: number;
+  flip: boolean;
+}) {
+  return (
+    <div
+      className="pointer-events-none absolute z-10 rounded-md border border-border bg-surface-2 px-2.5 py-1.5 text-xs whitespace-nowrap shadow-lg"
+      style={{
+        left: cellLeft + cellWidth / 2,
+        top: cellTop,
+        transform: `translate(${flip ? "-100%" : "0%"}, calc(-100% - 6px))`,
+      }}
+    >
+      <span className="text-muted">
+        {day} {hour}:00
+      </span>{" "}
+      <span className="tnum font-bold">{clicks}</span>
+    </div>
+  );
+}
+
 /**
  * Day-of-week × hour-of-day activity heatmap. Sequential color scale from
- * the --chart hue. Compact enough to live inside a card.
+ * the --chart hue. Compact enough to live inside a card. Tooltip appears
+ * immediately on hover (no native-title delay), matching the other charts.
  */
 export function Heatmap({ data }: { data: HeatmapRow[] }) {
   const max = Math.max(1, ...data.map((r) => r.clicks));
   const grid: (HeatmapRow | null)[][] = Array.from({ length: 7 }, () => Array(24).fill(null));
   for (const row of data) grid[row.dayOfWeek][row.hour] = row;
 
+  const [hover, setHover] = useState<{
+    day: string;
+    hour: number;
+    clicks: number;
+    cellLeft: number;
+    cellTop: number;
+    cellWidth: number;
+  } | null>(null);
+
+  const onEnter =
+    (day: string, hour: number, clicks: number) => (e: React.MouseEvent<HTMLDivElement>) => {
+      const cell = e.currentTarget;
+      setHover({
+        day,
+        hour,
+        clicks,
+        cellLeft: cell.offsetLeft,
+        cellTop: cell.offsetTop,
+        cellWidth: cell.offsetWidth,
+      });
+    };
+
   return (
-    <div className="overflow-x-auto">
+    <div className="relative overflow-x-auto">
       <div className="grid grid-cols-[auto_repeat(24,1fr)] gap-px text-4xs">
         <div />
         {HEATMAP_HOURS.map((h) => (
@@ -331,13 +389,25 @@ export function Heatmap({ data }: { data: HeatmapRow[] }) {
                   style={{
                     backgroundColor: `color-mix(in srgb, var(--chart) ${opacity * 100}%, transparent)`,
                   }}
-                  title={cell ? `${day} ${h}:00 — ${cell.clicks} clicks` : ""}
+                  onMouseEnter={cell ? onEnter(day, h, cell.clicks) : undefined}
+                  onMouseLeave={() => setHover(null)}
                 />
               );
             })}
           </Fragment>
         ))}
       </div>
+      {hover && (
+        <HeatmapTooltip
+          day={hover.day}
+          hour={hover.hour}
+          clicks={hover.clicks}
+          cellLeft={hover.cellLeft}
+          cellTop={hover.cellTop}
+          cellWidth={hover.cellWidth}
+          flip={hover.hour > 18}
+        />
+      )}
     </div>
   );
 }
@@ -360,19 +430,17 @@ export function LinkListCard({
       ) : (
         <ul className="flex flex-col gap-2">
           {links.map((l) => (
-            <li key={l.id} className="flex items-center justify-between text-xs">
-              <Link
+            <li key={l.id} className="flex items-center justify-between gap-3 text-xs">
+              <SlugLink
                 to={
                   l.domain
                     ? `/links/${l.slug}?domain=${encodeURIComponent(l.domain)}`
                     : `/links/${l.slug}`
                 }
-                className="truncate text-accent hover:underline"
-              >
-                /{l.slug}
-                {l.title ? ` · ${l.title}` : ""}
-              </Link>
-              {l.suffix && <span className="tnum text-muted">{l.suffix}</span>}
+                slug={l.slug}
+                title={l.title}
+              />
+              {l.suffix && <span className="tnum shrink-0 text-muted">{l.suffix}</span>}
             </li>
           ))}
         </ul>

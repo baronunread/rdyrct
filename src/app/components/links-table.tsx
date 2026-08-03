@@ -10,9 +10,10 @@ import {
   QrCode,
   Trash2,
 } from "lucide-react";
+import { AnimatePresence, LazyMotion, domAnimation } from "motion/react";
 import { shortUrl } from "../lib/api";
 import { type LinkDTO, type Sort } from "@/shared/types";
-import { Badge, Table, Th, Td } from "../ui/misc";
+import { Badge, Slug, Table, Th, Td } from "../ui/misc";
 import { Menu, MenuItem, MenuSeparator } from "../ui/menu";
 import { SortTh } from "../ui/sort-th";
 import { shortDate } from "../lib/dates";
@@ -22,6 +23,7 @@ import { copyToClipboard } from "../lib/clipboard";
 import { cn } from "../ui/cn";
 import { AliasThread } from "./alias-thread";
 import { useConfig } from "../lib/hooks";
+import { Pager } from "../ui/pagination";
 
 function linkDetailPath(link: LinkDTO): string {
   return link.domain
@@ -73,7 +75,7 @@ export function LinksTable({
     });
 
   return (
-    <>
+    <LazyMotion features={domAnimation}>
       <Table fixed>
         <thead>
           <tr>
@@ -82,24 +84,25 @@ export function LinksTable({
               sortKey="slug"
               sort={sort}
               onSort={onSort}
-              className="w-[40%]"
+              className="w-1/2 sm:w-2/5 lg:w-[30%] xl:w-[26%]"
             />
-            <Th className="w-[25%]">Destination</Th>
+            <Th className="hidden lg:table-cell lg:w-[16%]">Title</Th>
+            <Th className="hidden xl:table-cell xl:w-[22%]">Destination</Th>
             <SortTh
               label="Clicks"
               sortKey="clicks"
               sort={sort}
               onSort={onSort}
-              className="w-20 text-right"
+              className="w-20 text-end"
             />
             <SortTh
               label="Created"
               sortKey="createdAt"
               sort={sort}
               onSort={onSort}
-              className="w-28"
+              className="hidden sm:table-cell sm:w-28"
             />
-            <Th className="w-16 text-right whitespace-nowrap">Actions</Th>
+            <Th className="w-16 text-end whitespace-nowrap">Actions</Th>
           </tr>
         </thead>
         <tbody>
@@ -110,7 +113,7 @@ export function LinksTable({
               <Fragment key={link.id}>
                 <tr className="group">
                   <Td>
-                    <div className="flex min-w-0 items-center gap-1.5">
+                    <div className="flex min-w-0 items-center gap-2.5 overflow-hidden">
                       {hasAliases ? (
                         <button
                           type="button"
@@ -122,7 +125,7 @@ export function LinksTable({
                           }
                           title={`${link.addressCount - 1} alias${link.addressCount - 1 === 1 ? "" : "es"}`}
                           aria-expanded={isExpanded}
-                          className="flex shrink-0 cursor-pointer items-center justify-center text-muted hover:text-text"
+                          className="flex shrink-0 cursor-pointer items-center justify-center p-1 text-muted transition-transform duration-150 active:scale-[0.96] hover:text-text"
                         >
                           <ChevronRight
                             size={14}
@@ -130,7 +133,7 @@ export function LinksTable({
                           />
                         </button>
                       ) : (
-                        <span className="w-3.5 shrink-0" />
+                        <span className="w-5.5 shrink-0" />
                       )}
                       <button
                         type="button"
@@ -140,9 +143,10 @@ export function LinksTable({
                         <Badge className="min-w-0 max-w-full">
                           <span className="truncate">{link.domain || appHost}</span>
                         </Badge>
-                        <span className="font-bold text-accent group-hover:underline">
-                          /{link.slug}
-                        </span>
+                        <Slug
+                          slug={link.slug}
+                          className="font-bold text-accent group-hover:underline"
+                        />
                       </button>
                       <span className="shrink-0">
                         <CopyButton
@@ -152,9 +156,11 @@ export function LinksTable({
                         />
                       </span>
                     </div>
-                    {link.title && <p className="truncate text-xs text-muted">{link.title}</p>}
                   </Td>
-                  <Td className="max-w-64">
+                  <Td className="hidden truncate text-xs text-muted lg:table-cell">
+                    {link.title || <span className="text-muted/50">—</span>}
+                  </Td>
+                  <Td className="hidden max-w-64 xl:table-cell">
                     <a
                       href={link.destination}
                       target="_blank"
@@ -165,8 +171,8 @@ export function LinksTable({
                       <ExternalLink size={12} className="shrink-0" />
                     </a>
                   </Td>
-                  <Td className="tnum text-right">{link.clicks}</Td>
-                  <Td className="text-xs whitespace-nowrap text-muted">
+                  <Td className="tnum text-end">{link.clicks}</Td>
+                  <Td className="hidden text-xs whitespace-nowrap text-muted sm:table-cell">
                     {shortDate(link.createdAt)}
                   </Td>
                   <Td>
@@ -175,7 +181,7 @@ export function LinksTable({
                       label={`Actions for ${link.slug}`}
                       trigger={
                         <div className="flex justify-end">
-                          <span className="rounded p-1.5 text-muted hover:bg-surface-2 hover:text-text">
+                          <span className="rounded p-1.5 text-muted transition-transform duration-150 active:scale-[0.96] hover:bg-surface-2 hover:text-text">
                             <Ellipsis size={15} />
                           </span>
                         </div>
@@ -200,35 +206,15 @@ export function LinksTable({
                     </Menu>
                   </Td>
                 </tr>
-                {isExpanded && <AliasThread orgId={orgId} link={link} />}
+                <AnimatePresence>
+                  {isExpanded && <AliasThread key="alias-thread" orgId={orgId} link={link} />}
+                </AnimatePresence>
               </Fragment>
             );
           })}
         </tbody>
       </Table>
-      {totalPages > 1 && (
-        <div className="mt-4 flex items-center justify-center gap-2">
-          <button
-            type="button"
-            onClick={() => onPageChange((p) => Math.max(0, p - 1))}
-            disabled={currentPage === 0}
-            className="cursor-pointer rounded-md px-2.5 py-1 text-xs text-muted hover:text-text disabled:opacity-40"
-          >
-            Previous
-          </button>
-          <span className="text-xs text-muted tnum">
-            {currentPage + 1} / {totalPages}
-          </span>
-          <button
-            type="button"
-            onClick={() => onPageChange((p) => Math.min(totalPages - 1, p + 1))}
-            disabled={currentPage >= totalPages - 1}
-            className="cursor-pointer rounded-md px-2.5 py-1 text-xs text-muted hover:text-text disabled:opacity-40"
-          >
-            Next
-          </button>
-        </div>
-      )}
-    </>
+      <Pager page={currentPage} totalPages={totalPages} onPageChange={onPageChange} />
+    </LazyMotion>
   );
 }

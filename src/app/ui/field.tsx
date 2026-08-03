@@ -47,7 +47,7 @@ export function Field({
   children: ReactNode;
 }) {
   return (
-    <label className={cn("block", className)}>
+    <label className={cn("block min-w-0", className)}>
       <span className="mb-1.5 block text-xs tracking-wider text-muted uppercase">{label}</span>
       {children}
       {hint && <span className="mt-1 block text-xs text-muted/80">{hint}</span>}

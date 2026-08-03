@@ -15,6 +15,9 @@ import { withErrorToast } from "../../lib/mutation-toast";
 import { sortRows } from "../../lib/sort";
 import { shortDate } from "../../lib/dates";
 import { lastSeenLabel } from "../../lib/last-seen";
+import { Pager } from "../../ui/pagination";
+
+const PAGE_SIZE = 25;
 
 type UserAction = "delete" | "ban" | "unban" | "makeAdmin" | "removeAdmin";
 
@@ -302,6 +305,7 @@ export function AdminUsersPage() {
   } | null>(null);
   const [q, setQ] = useState("");
   const [sort, setSort] = useState<Sort>({ key: "joined", dir: -1 });
+  const [page, setPage] = useState(0);
 
   // All privileged changes go through one PATCH; the confirm popup closes on
   // success and each call site adds its own toast.
@@ -359,13 +363,13 @@ export function AdminUsersPage() {
     actions[kind]();
   };
 
-  const rows = useMemo(() => {
+  const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase();
-    const filtered = (users.data ?? []).filter(
+    const matches = (users.data ?? []).filter(
       (u) =>
         !needle || u.name.toLowerCase().includes(needle) || u.email.toLowerCase().includes(needle),
     );
-    return sortRows(filtered, sort, {
+    return sortRows(matches, sort, {
       name: (u) => u.name.toLowerCase(),
       orgs: (u) => u.orgCount,
       joined: (u) => u.createdAt,
@@ -373,13 +377,20 @@ export function AdminUsersPage() {
     });
   }, [users.data, q, sort]);
 
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const safePage = Math.min(page, totalPages - 1);
+  const rows = filtered.slice(safePage * PAGE_SIZE, (safePage + 1) * PAGE_SIZE);
+
   if (users.isLoading) return <AdminTableSkeleton />;
   return (
     <div>
       <PageHeader title="Users" sub="All accounts on this instance" />
       <SearchInput
         value={q}
-        onChange={setQ}
+        onChange={(v) => {
+          setQ(v);
+          setPage(0);
+        }}
         placeholder="Search name or email…"
         label="Search users"
       />
@@ -397,6 +408,7 @@ export function AdminUsersPage() {
         onConfirm={(kind, u) => setConfirm({ kind, user: u })}
         searchTerm={q.trim()}
       />
+      <Pager page={safePage} totalPages={totalPages} onPageChange={setPage} />
 
       <UserActionConfirmDialog
         confirm={confirm}

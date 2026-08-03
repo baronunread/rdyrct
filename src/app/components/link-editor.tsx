@@ -1,4 +1,11 @@
-import { useMemo, useEffect, useRef, type ChangeEvent } from "react";
+import {
+  useMemo,
+  useEffect,
+  useRef,
+  type ChangeEvent,
+  type ClipboardEvent,
+  type RefObject,
+} from "react";
 import { useForm, type SubmitErrorHandler } from "react-hook-form";
 import { valibotResolver } from "@hookform/resolvers/valibot";
 import { Link as RouterLink } from "react-router";
@@ -6,6 +13,7 @@ import { Lock, Info } from "lucide-react";
 import { shortUrl } from "../lib/api";
 import { QR_CORNER_STYLES, QR_DOT_STYLES, type DomainDTO, type LinkInput } from "@/shared/types";
 import { Button } from "../ui/button";
+import { cn } from "../ui/cn";
 import { Dialog } from "../ui/dialog";
 import { Field, Input } from "../ui/field";
 import { MenuSelect } from "../ui/menu";
@@ -39,7 +47,9 @@ const defaultForm: LinkInput = {
   qrLogoSize: null,
 };
 
-const UTM_FIELDS: { key: keyof LinkInput; label: string; placeholder: string }[] = [
+type UtmKey = "utmSource" | "utmMedium" | "utmCampaign" | "utmTerm" | "utmContent";
+
+const UTM_FIELDS: { key: UtmKey; label: string; placeholder: string }[] = [
   { key: "utmSource", label: "Source", placeholder: "newsletter" },
   { key: "utmMedium", label: "Medium", placeholder: "email" },
   { key: "utmCampaign", label: "Campaign", placeholder: "spring-launch" },
@@ -47,11 +57,92 @@ const UTM_FIELDS: { key: keyof LinkInput; label: string; placeholder: string }[]
   { key: "utmContent", label: "Content", placeholder: "ad-variant-a" },
 ];
 
-function UtmFields({ form, setForm }: { form: LinkInput; setForm: (f: LinkInput) => void }) {
-  const set = (key: keyof LinkInput) => (e: ChangeEvent<HTMLInputElement>) =>
-    setForm({ ...form, [key]: e.target.value });
+const UTM_PARAMS: { param: string; key: UtmKey }[] = [
+  { param: "utm_source", key: "utmSource" },
+  { param: "utm_medium", key: "utmMedium" },
+  { param: "utm_campaign", key: "utmCampaign" },
+  { param: "utm_term", key: "utmTerm" },
+  { param: "utm_content", key: "utmContent" },
+];
+
+const UTM_PARAM_BY_KEY: Record<UtmKey, string> = Object.fromEntries(
+  UTM_PARAMS.map(({ param, key }) => [key, param]),
+) as Record<UtmKey, string>;
+
+/** UTM params already in the pasted/typed URL, mirroring the server's
+ * resolveUtm: params present in the destination win over whatever is in
+ * the form fields. A param that's present but empty still wins (so
+ * backspacing its value out clears the field instead of leaving a stale
+ * one behind); a param that's absent leaves the field alone. */
+function utmFromDestination(destination: string): Partial<Record<UtmKey, string>> {
+  let url: URL;
+  try {
+    url = new URL(destination);
+  } catch {
+    return {};
+  }
+  const out: Partial<Record<UtmKey, string>> = {};
+  for (const { param, key } of UTM_PARAMS) {
+    if (url.searchParams.has(param)) out[key] = url.searchParams.get(param)!.trim();
+  }
+  return out;
+}
+
+/** Drop a UTM param from the destination's query string, if present. Used
+ * when a UTM field is edited by hand, so the field's value (not a stale
+ * copy baked into the destination) is what wins on submit. */
+function withoutUtmParam(destination: string, param: string): string {
+  let url: URL;
+  try {
+    url = new URL(destination);
+  } catch {
+    return destination;
+  }
+  if (!url.searchParams.has(param)) return destination;
+  url.searchParams.delete(param);
+  return url.toString();
+}
+
+/** Same normalization the server applies on save (see stripUtmParams in
+ * src/worker/util.ts): drop every utm_* param, leave the rest alone. */
+function stripUtmFromDestination(destination: string): string {
+  let url: URL;
+  try {
+    url = new URL(destination);
+  } catch {
+    return destination;
+  }
+  for (const { param } of UTM_PARAMS) url.searchParams.delete(param);
+  return url.toString();
+}
+
+/** Splice pasted text into an input's current selection, the way the
+ * browser's own paste would, so a partial selection is respected instead of
+ * always replacing the whole field. */
+function mergePastedText(input: HTMLInputElement, pasted: string): string {
+  const start = input.selectionStart ?? input.value.length;
+  const end = input.selectionEnd ?? input.value.length;
+  return input.value.slice(0, start) + pasted + input.value.slice(end);
+}
+
+function UtmFields({
+  form,
+  setForm,
+  className,
+}: {
+  form: LinkInput;
+  setForm: (f: LinkInput) => void;
+  className?: string;
+}) {
+  const set = (key: UtmKey) => (e: ChangeEvent<HTMLInputElement>) => {
+    setForm({
+      ...form,
+      [key]: e.target.value,
+      destination: withoutUtmParam(form.destination, UTM_PARAM_BY_KEY[key]),
+    });
+  };
   return (
-    <fieldset className="rounded-lg border border-border p-3">
+    <fieldset className={cn("rounded-lg border border-border p-3", className)}>
       <legend className="px-1 text-2xs tracking-wider text-muted uppercase">UTM parameters</legend>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         {UTM_FIELDS.map(({ key, label, placeholder }) => (
@@ -116,41 +207,45 @@ function QrShapeFields({
   fallbacks: ReturnType<typeof qrFallbacks>;
 }) {
   return (
-    <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-      <Field label="Dots">
-        <MenuSelect
-          label="Dots"
-          value={form.qrStyle ?? ""}
-          onChange={(v) => setForm({ ...form, qrStyle: v })}
-          options={[
-            { value: "", label: "Org default" },
-            ...QR_DOT_STYLES.map((s) => ({ value: s, label: s })),
-          ]}
+    <div className="flex flex-col gap-3">
+      <div className="grid grid-cols-2 gap-3">
+        <Field label="Dots">
+          <MenuSelect
+            label="Dots"
+            value={form.qrStyle ?? ""}
+            onChange={(v) => setForm({ ...form, qrStyle: v })}
+            options={[
+              { value: "", label: "Org default" },
+              ...QR_DOT_STYLES.map((s) => ({ value: s, label: s })),
+            ]}
+          />
+        </Field>
+        <Field label="Corners">
+          <MenuSelect
+            label="Corners"
+            value={form.qrCorner ?? ""}
+            onChange={(v) => setForm({ ...form, qrCorner: v })}
+            options={[
+              { value: "", label: "Org default" },
+              ...QR_CORNER_STYLES.map((s) => ({ value: s, label: s })),
+            ]}
+          />
+        </Field>
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <QrColorField
+          label="Dot color"
+          value={form.qrColor ?? ""}
+          fallback={fallbacks.dotColor}
+          onChange={(v) => setForm({ ...form, qrColor: v })}
         />
-      </Field>
-      <Field label="Corners">
-        <MenuSelect
-          label="Corners"
-          value={form.qrCorner ?? ""}
-          onChange={(v) => setForm({ ...form, qrCorner: v })}
-          options={[
-            { value: "", label: "Org default" },
-            ...QR_CORNER_STYLES.map((s) => ({ value: s, label: s })),
-          ]}
+        <QrColorField
+          label="Eye color"
+          value={form.qrEyeColor ?? ""}
+          fallback={fallbacks.eyeColor}
+          onChange={(v) => setForm({ ...form, qrEyeColor: v })}
         />
-      </Field>
-      <QrColorField
-        label="Dot color"
-        value={form.qrColor ?? ""}
-        fallback={fallbacks.dotColor}
-        onChange={(v) => setForm({ ...form, qrColor: v })}
-      />
-      <QrColorField
-        label="Eye color"
-        value={form.qrEyeColor ?? ""}
-        fallback={fallbacks.eyeColor}
-        onChange={(v) => setForm({ ...form, qrEyeColor: v })}
-      />
+      </div>
     </div>
   );
 }
@@ -165,13 +260,13 @@ function QrBackgroundFields({
   fallbacks: ReturnType<typeof qrFallbacks>;
 }) {
   return (
-    <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+    <div className="grid grid-cols-2 gap-3">
       <QrColorField
         label="Background"
         value={form.qrBg ?? ""}
         fallback={fallbacks.bg}
-        allowTransparent
         onChange={(v) => setForm({ ...form, qrBg: v })}
+        alpha
       />
       <Field label="Logo size">
         <MenuSelect
@@ -219,19 +314,23 @@ function QrCustomization({
   form,
   setForm,
   orgQr,
+  className,
 }: {
   form: LinkInput;
   setForm: (f: LinkInput) => void;
   orgQr: OrgQr;
+  className?: string;
 }) {
   const fallbacks = qrFallbacks(form, orgQr);
   return (
-    <div className="flex flex-col gap-4">
-      <p className="text-2xs tracking-wider text-muted uppercase">QR customization</p>
+    <fieldset className={cn("flex flex-col gap-4 rounded-lg border border-border p-3", className)}>
+      <legend className="px-1 text-2xs tracking-wider text-muted uppercase">
+        QR customization
+      </legend>
       <QrShapeFields form={form} setForm={setForm} fallbacks={fallbacks} />
       <QrBackgroundFields form={form} setForm={setForm} fallbacks={fallbacks} />
       <QrLogoField form={form} setForm={setForm} />
-    </div>
+    </fieldset>
   );
 }
 
@@ -330,6 +429,7 @@ function LinkFormFields({
   activeDomains,
   slugLocked,
   domainsAllowed,
+  destinationRef,
 }: {
   form: LinkInput;
   setForm: (f: LinkInput) => void;
@@ -337,16 +437,41 @@ function LinkFormFields({
   activeDomains: DomainDTO[];
   slugLocked: boolean;
   domainsAllowed: boolean;
+  destinationRef: RefObject<HTMLInputElement | null>;
 }) {
+  const toast = useToast();
   const set = (key: keyof LinkInput) => (e: ChangeEvent<HTMLInputElement>) =>
     setForm({ ...form, [key]: e.target.value });
+
+  const onDestinationChange = (e: ChangeEvent<HTMLInputElement>) => {
+    const destination = e.target.value;
+    setForm({ ...form, destination, ...utmFromDestination(destination) });
+  };
+
+  // Pasting a link with utm_* params already on it shows the cleaned link
+  // right away, not the raw paste: extract into the UTM fields below and
+  // strip them from what lands in this field. Typing a URL out by hand
+  // still shows exactly what's typed (see onDestinationChange) until it's
+  // stripped on save.
+  const onDestinationPaste = (e: ClipboardEvent<HTMLInputElement>) => {
+    const pasted = e.clipboardData.getData("text");
+    if (!pasted) return;
+    const merged = mergePastedText(e.currentTarget, pasted);
+    const utm = utmFromDestination(merged);
+    if (Object.keys(utm).length === 0) return;
+    e.preventDefault();
+    setForm({ ...form, destination: stripUtmFromDestination(merged), ...utm });
+    toast("UTM parameters found");
+  };
 
   return (
     <div className="flex min-w-0 flex-col gap-4">
       <Field label="Destination URL">
         <Input
+          ref={destinationRef}
           value={form.destination}
-          onChange={set("destination")}
+          onChange={onDestinationChange}
+          onPaste={onDestinationPaste}
           placeholder="https://example.com/launch"
           autoFocus={!editing}
         />
@@ -398,6 +523,7 @@ export function LinkEditor({
   const editing = editingLink != null;
   const toast = useToast();
   const shake = useShake();
+  const destinationRef = useRef<HTMLInputElement>(null);
 
   const { handleSubmit, watch, reset } = useForm<LinkInput>({
     resolver: valibotResolver(linkInputSchema),
@@ -427,6 +553,13 @@ export function LinkEditor({
   const onInvalid: SubmitErrorHandler<LinkInput> = (errors) => {
     toast(firstFormError(errors, "Check the link details"), "error");
     shake.start();
+    // destination is the only field this schema can reject, so it's always
+    // the culprit; scroll it into view since QR customization can push it
+    // off-screen above a long, scrolled dialog.
+    if (errors.destination) {
+      destinationRef.current?.scrollIntoView({ block: "center", behavior: "smooth" });
+      destinationRef.current?.focus();
+    }
   };
 
   const selectedDomain = activeDomains.find((d) => d.id === form.domainId)?.hostname ?? null;
@@ -439,16 +572,23 @@ export function LinkEditor({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange} title={editing ? "Edit link" : "New link"} wide>
-      <form onSubmit={handleSubmit(onSave, onInvalid)} className="flex flex-col gap-6">
-        <div className="grid gap-6 sm:grid-cols-[1fr_auto]">
-          <LinkFormFields
-            form={form}
-            setForm={setForm}
-            editing={editing}
-            activeDomains={activeDomains}
-            slugLocked={slugLocked}
-            domainsAllowed={domainsAllowed}
-          />
+      <form
+        onSubmit={handleSubmit(onSave, onInvalid)}
+        className="grid gap-6 sm:grid-cols-[1fr_auto]"
+      >
+        <LinkFormFields
+          form={form}
+          setForm={setForm}
+          editing={editing}
+          activeDomains={activeDomains}
+          slugLocked={slugLocked}
+          domainsAllowed={domainsAllowed}
+          destinationRef={destinationRef}
+        />
+        {/* QR preview sits beside the core fields on sm+; on mobile it's more useful
+            after QR customization (the controls it's actually previewing) than
+            wedged above UTM parameters, so it's last in source order there. */}
+        <div className="order-last sm:order-none">
           <QrPreviewSidebar
             form={form}
             orgQr={orgQr}
@@ -457,9 +597,11 @@ export function LinkEditor({
           />
         </div>
 
-        <UtmFields form={form} setForm={setForm} />
+        <UtmFields form={form} setForm={setForm} className="sm:col-span-2" />
 
-        {qrEnabled && <QrCustomization form={form} setForm={setForm} orgQr={orgQr} />}
+        {qrEnabled && (
+          <QrCustomization form={form} setForm={setForm} orgQr={orgQr} className="sm:col-span-2" />
+        )}
       </form>
 
       <div className="mt-6 flex justify-end gap-2">
