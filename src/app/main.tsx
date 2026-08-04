@@ -6,6 +6,7 @@ import "@fontsource/jetbrains-mono/latin-400.css";
 import "@fontsource/jetbrains-mono/latin-700.css";
 import "./styles.css";
 import { ToastProvider } from "./ui/toast";
+import { ErrorBoundary } from "./components/error-boundary";
 import { ConsentBanner } from "./ui/consent-banner";
 import { AppShellSkeleton } from "./components/skeletons";
 import { resumeAnalyticsIfConsented } from "./lib/posthog";
@@ -73,73 +74,75 @@ createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
       <ToastProvider>
-        <BrowserRouter>
-          {/* public pages get a blank fallback; the app shell branch below has
+        <ErrorBoundary>
+          <BrowserRouter>
+            {/* public pages get a blank fallback; the app shell branch below has
               its own skeleton fallbacks */}
-          <Suspense fallback={null}>
-            <Routes>
-              {/* public */}
-              <Route path="/" element={<LandingPage />} />
-              <Route path="/login" element={<AuthPage mode="login" />} />
-              <Route path="/signup" element={<AuthPage mode="signup" />} />
-              <Route path="/reset-password" element={<ResetPasswordPage />} />
-              <Route path="/privacy" element={<PrivacyPage />} />
-              <Route path="/terms" element={<TermsPage />} />
-              <Route path="/invite/:token" element={<InvitePage />} />
+            <Suspense fallback={null}>
+              <Routes>
+                {/* public */}
+                <Route path="/" element={<LandingPage />} />
+                <Route path="/login" element={<AuthPage mode="login" />} />
+                <Route path="/signup" element={<AuthPage mode="signup" />} />
+                <Route path="/reset-password" element={<ResetPasswordPage />} />
+                <Route path="/privacy" element={<PrivacyPage />} />
+                <Route path="/terms" element={<TermsPage />} />
+                <Route path="/invite/:token" element={<InvitePage />} />
 
-              {/* onboarding is gone: the app renders a create-org empty state
+                {/* onboarding is gone: the app renders a create-org empty state
                   instead; keep stale links working */}
-              <Route path="/onboarding" element={<Navigate to="/dashboard" replace />} />
+                <Route path="/onboarding" element={<Navigate to="/dashboard" replace />} />
 
-              {/* authenticated app: root keywords, no /app prefix, no org id */}
-              <Route
-                element={
-                  <Suspense fallback={<AppShellSkeleton />}>
-                    <RequireAuth>
-                      <AppShell />
-                    </RequireAuth>
-                  </Suspense>
-                }
-              >
-                <Route path="/dashboard" element={<Dashboard />} />
-                <Route path="/analytics" element={<Analytics />} />
-                <Route path="/links" element={<LinksPage />} />
-                <Route path="/links/:slug" element={<LinkDetailPage />} />
-                <Route path="/members" element={<MembersPage />} />
-                <Route path="/billing" element={<BillingPage />} />
-                <Route path="/domains" element={<DomainsPage />} />
-                <Route path="/settings" element={<SettingsPage />} />
+                {/* authenticated app: root keywords, no /app prefix, no org id */}
                 <Route
-                  path="/admin"
                   element={
-                    <RequireAdmin>
-                      <AdminUsagePage />
-                    </RequireAdmin>
+                    <Suspense fallback={<AppShellSkeleton />}>
+                      <RequireAuth>
+                        <AppShell />
+                      </RequireAuth>
+                    </Suspense>
                   }
-                />
-                <Route
-                  path="/admin/orgs"
-                  element={
-                    <RequireAdmin>
-                      <AdminOrgsPage />
-                    </RequireAdmin>
-                  }
-                />
-                <Route
-                  path="/admin/users"
-                  element={
-                    <RequireAdmin>
-                      <AdminUsersPage />
-                    </RequireAdmin>
-                  }
-                />
-              </Route>
+                >
+                  <Route path="/dashboard" element={<Dashboard />} />
+                  <Route path="/analytics" element={<Analytics />} />
+                  <Route path="/links" element={<LinksPage />} />
+                  <Route path="/links/:slug" element={<LinkDetailPage />} />
+                  <Route path="/members" element={<MembersPage />} />
+                  <Route path="/billing" element={<BillingPage />} />
+                  <Route path="/domains" element={<DomainsPage />} />
+                  <Route path="/settings" element={<SettingsPage />} />
+                  <Route
+                    path="/admin"
+                    element={
+                      <RequireAdmin>
+                        <AdminUsagePage />
+                      </RequireAdmin>
+                    }
+                  />
+                  <Route
+                    path="/admin/orgs"
+                    element={
+                      <RequireAdmin>
+                        <AdminOrgsPage />
+                      </RequireAdmin>
+                    }
+                  />
+                  <Route
+                    path="/admin/users"
+                    element={
+                      <RequireAdmin>
+                        <AdminUsersPage />
+                      </RequireAdmin>
+                    }
+                  />
+                </Route>
 
-              <Route path="*" element={<NotFound />} />
-            </Routes>
-          </Suspense>
-          <ConsentBanner />
-        </BrowserRouter>
+                <Route path="*" element={<NotFound />} />
+              </Routes>
+            </Suspense>
+            <ConsentBanner />
+          </BrowserRouter>
+        </ErrorBoundary>
       </ToastProvider>
     </QueryClientProvider>
   </StrictMode>,

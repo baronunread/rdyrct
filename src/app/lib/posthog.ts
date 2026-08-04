@@ -102,6 +102,9 @@ const posthog = {
     identifiedId = null;
     void loadClient()?.then((p) => p?.reset());
   },
+  captureException(error: unknown, properties?: Record<string, unknown>) {
+    void loadClient()?.then((p) => p?.captureException(error, properties));
+  },
 };
 
 export default posthog;
