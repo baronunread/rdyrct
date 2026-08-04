@@ -650,7 +650,10 @@ function DeployTerminal() {
   );
 
   return (
-    <div className="overflow-hidden rounded-[10px] bg-surface smooth-shadow-ring-lg">
+    // translate="no": the animated terminal mounts/unmounts text nodes on a
+    // loop, and a page translator rewriting them would break React's
+    // placement anchors and blank the page. Keep the translator out.
+    <div translate="no" className="overflow-hidden rounded-[10px] bg-surface smooth-shadow-ring-lg">
       <div className="flex items-center border-b border-border bg-surface-2 px-4 py-2.5">
         <div className="flex items-center gap-1.5">
           <span className="h-[9px] w-[9px] rounded-full bg-[#ff5f56]" />

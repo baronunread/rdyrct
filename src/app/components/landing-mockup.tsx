@@ -147,7 +147,11 @@ function TypedUrlDisplay({
 }) {
   return (
     <span className="flex h-full items-center truncate font-mono text-text">
-      {typed}
+      {/* Wrap the typed text in its own element: a bare text node here would
+       * be React's `insertBefore` anchor for the sibling cursor/placeholder,
+       * and if the browser's page translator swaps that text node out, the
+       * commit-phase insert throws (NotFoundError) and blanks the page. */}
+      <span>{typed}</span>
       {phase === "typing" && (
         <m.span
           aria-hidden="true"
@@ -427,7 +431,13 @@ export function LandingMockup() {
 
   return (
     <LazyMotion features={domAnimation}>
-      <div className="w-full max-w-4xl rounded-2xl bg-surface smooth-shadow-ring-2xl">
+      {/* translate="no": this subtree mounts and unmounts nodes on a loop
+       * forever, and page translators rewriting its text nodes would break
+       * React's placement anchors. Keep the browser translator out of it. */}
+      <div
+        translate="no"
+        className="w-full max-w-4xl rounded-2xl bg-surface smooth-shadow-ring-2xl"
+      >
         {/* fake browser chrome */}
         <div className="flex items-center gap-2 border-b border-border px-6 py-4">
           <span className="h-3 w-3 rounded-full bg-pink/60" />
