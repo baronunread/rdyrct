@@ -64,7 +64,7 @@ async function cfRequest<T = Record<string, unknown>>(
 // never merely because credentials happen to be unset: a misconfigured
 // deployment must fail closed, not silently mint fake hostnames.
 function useFakeCf(env: Env): boolean {
-  return env.CF_DEV_ENV === "1" || env.CF_DEV_ENV === "instant";
+  return env.CF_DEV_ENV === "simulated" || env.CF_DEV_ENV === "instant";
 }
 
 function assertCfConfigured(env: Env): void {
