@@ -18,6 +18,7 @@ export interface Env {
   CLICK_QUEUE: Queue<ClickMessage>;
   RL_AUTH_PUBLIC: RateLimit;
   RL_EMAIL: RateLimit;
+  RL_EMAIL_RECIPIENT: RateLimit;
   RL_WRITE_FREE: RateLimit;
   RL_WRITE_PAID: RateLimit;
   RL_QR_UPLOAD: RateLimit;

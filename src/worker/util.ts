@@ -190,6 +190,69 @@ export function isDisposableEmail(email: string): boolean {
   return DISPOSABLE_EMAIL_DOMAINS.has(domain);
 }
 
+/**
+ * The longest hostname the DNS spec allows. A referrer longer than this is
+ * not a hostname we failed to shorten, it's junk, so it stores as "".
+ */
+const REFERRER_MAX_LENGTH = 253;
+
+/** The longest single dot-separated label DNS allows. */
+const REFERRER_MAX_LABEL_LENGTH = 63;
+
+/**
+ * What a stored referrer may look like: lowercase letters, digits, hyphens,
+ * and the dots between labels. Unicode domains arrive from `URL.hostname`
+ * already punycoded (`xn--…`), so they fit without an exception.
+ *
+ * Migration 0016 applies the same shape to the rows written before this
+ * existed. Keep the two in step: a value one accepts and the other clears
+ * would leave the table holding referrers ingestion would now refuse.
+ */
+const REFERRER_ALLOWED_CHARS = /^[a-z0-9.-]+$/;
+
+/**
+ * True when `host` is shaped like a name we could report on: within the DNS
+ * length limits, no empty labels (so no leading, trailing, or doubled dot),
+ * and at least one dot, which rules out bare words like "localhost".
+ */
+function isReportableHost(host: string): boolean {
+  if (host.length > REFERRER_MAX_LENGTH) return false;
+  if (!REFERRER_ALLOWED_CHARS.test(host)) return false;
+  const labels = host.split(".");
+  if (labels.length < 2) return false;
+  return labels.every((label) => label.length > 0 && label.length <= REFERRER_MAX_LABEL_LENGTH);
+}
+
+/**
+ * What a click may remember about where it came from: a bare lowercase
+ * hostname, or "" for direct and for anything we can't read (see issue #20).
+ *
+ * A raw Referer header is a whole URL, and other people's URLs carry search
+ * terms, session tokens, and account identifiers in their paths and query
+ * strings. None of that is ours to keep, and storing it would contradict the
+ * promise the analytics page makes. `URL.hostname` drops the path, query,
+ * fragment, port, and any user:password credentials in one step; everything
+ * else here rejects rather than repairs.
+ *
+ * Applied when the click is recorded, not when it's read: the read path
+ * cannot un-store what ingestion already wrote down.
+ */
+export function normalizeReferrer(referrer: string): string {
+  if (!referrer) return "";
+  let url: URL;
+  try {
+    url = new URL(referrer);
+  } catch {
+    return "";
+  }
+  // A referrer arrives over http(s). Anything else (data:, javascript:,
+  // file:, an app's custom scheme) is not a site we can name.
+  if (url.protocol !== "http:" && url.protocol !== "https:") return "";
+  const host = url.hostname.toLowerCase();
+  if (!isReportableHost(host)) return "";
+  return host;
+}
+
 export function normalizeUrl(value: string): string {
   return /^https?:\/\//i.test(value) ? value : `https://${value}`;
 }

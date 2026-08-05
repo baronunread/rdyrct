@@ -10,6 +10,7 @@ import { drizzle } from "drizzle-orm/d1";
 import worker from "../../src/worker";
 import * as schema from "../../src/worker/db/schema";
 import type { Env } from "../../src/worker/env";
+import type { ClickMessage } from "../../src/worker/clicks";
 import { hashPassword } from "../../src/worker/password";
 
 type TestEnv = typeof env & { TEST_MIGRATIONS: D1Migration[] };
@@ -21,6 +22,21 @@ export function overrideEnv(overrides: Partial<Env>): Env {
       return Reflect.get(target, property, receiver);
     },
   }) as unknown as Env;
+}
+
+/**
+ * A CLICK_QUEUE that records what was sent, so the redirect path's enqueue
+ * can be asserted without a live queue delivering the message back into the
+ * worker under test (consumption is covered by tests/worker/clicks.worker.ts).
+ */
+export function captureClickQueue(): { env: Env; sent: ClickMessage[] } {
+  const sent: ClickMessage[] = [];
+  const CLICK_QUEUE = {
+    async send(message: ClickMessage) {
+      sent.push(message);
+    },
+  } as unknown as Queue<ClickMessage>;
+  return { env: overrideEnv({ CLICK_QUEUE }), sent };
 }
 
 // Env with a non-empty auth secret, independent of the ambient .dev.vars, so

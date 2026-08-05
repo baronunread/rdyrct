@@ -16,6 +16,27 @@ export async function rawSql(page: Page, sql: string, params: unknown[] = []): P
   return response.json();
 }
 
+/**
+ * Runs a SELECT and returns its rows as objects.
+ *
+ * The Explorer's /raw endpoint answers column-oriented
+ * (`{ columns: [...], rows: [[...]] }`), which is easy to misread as a list
+ * of row objects: indexing one by column name yields `undefined` rather than
+ * an error, so the mistake surfaces later as a confusing assertion failure.
+ * Callers get objects instead.
+ */
+export async function queryRows<T extends Record<string, unknown>>(
+  page: Page,
+  sql: string,
+  params: unknown[] = [],
+): Promise<T[]> {
+  const body = (await rawSql(page, sql, params)) as {
+    result: { results: { columns: string[]; rows: unknown[][] } }[];
+  };
+  const { columns, rows } = body.result[0].results;
+  return rows.map((row) => Object.fromEntries(columns.map((c, i) => [c, row[i]])) as T);
+}
+
 export async function setPlan(page: Page, email: string, plan: "hobby" | "pro" = "hobby") {
   const result = (await rawSql(page, "UPDATE user SET plan = ? WHERE email = ?", [
     plan,
