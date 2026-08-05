@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { env } from "cloudflare:workers";
 import { createExecutionContext, reset, waitOnExecutionContext } from "cloudflare:test";
 import worker from "../../src/worker";
+import { applySecurityHeaders } from "../../src/worker/security-headers";
 import type { Env } from "../../src/worker/env";
 import { applyTestMigrations, overrideEnv } from "./support";
 
@@ -60,6 +61,28 @@ describe("security headers (#21)", () => {
 
   it("applies to a 404 SPA fallback response", async () => {
     const res = await fetchWorker(new Request("http://localhost/no-such-page"));
+    expectSecurityHeaders(res);
+  });
+
+  // Regression: applySecurityHeaders used to write straight onto the
+  // response it was handed, which throws "Can't modify immutable headers"
+  // for anything the ASSETS binding returns (every static file, so the whole
+  // SPA) and for Response.redirect.
+  //
+  // The SPA-fallback test above cannot catch this: there is no built asset
+  // bundle in this environment, so app.all("*") never reaches a real
+  // env.ASSETS.fetch response and the fallback it does return has mutable
+  // headers. Only the e2e smoke test exercises the real binding, which is
+  // where this first showed up. Response.redirect gives us the same
+  // immutable Headers guard here, deterministically and with no bundle.
+  it("works on a response whose headers are immutable", () => {
+    const immutable = Response.redirect("https://example.com/", 302);
+    expect(() => immutable.headers.set("x-probe", "1")).toThrow();
+
+    const res = applySecurityHeaders(immutable);
+
+    expect(res.status).toBe(302);
+    expect(res.headers.get("location")).toBe("https://example.com/");
     expectSecurityHeaders(res);
   });
 

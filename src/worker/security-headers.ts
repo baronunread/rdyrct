@@ -14,9 +14,21 @@
  * connect-src/img-src include PostHog's ingest host: analytics-consent
  * capture calls (posthog-js) go straight to it, not through this Worker.
  */
+// `@vitejs/plugin-react` injects an inline module preamble (the React Refresh
+// runtime) into index.html when Vite serves the app in dev. `script-src
+// 'self'` refuses it, the runtime never installs, and the SPA renders
+// nothing at all — which is how the e2e smoke test found this.
+//
+// A built bundle has no preamble, so the allowance is compiled out rather
+// than switched at runtime: `import.meta.env.DEV` is a build-time constant,
+// so a deployed Worker cannot ship 'unsafe-inline' through a misread var.
+// The tradeoff is that e2e exercises a marginally looser policy than
+// production; everything except this one directive is identical.
+const SCRIPT_SRC = import.meta.env.DEV ? "script-src 'self' 'unsafe-inline'" : "script-src 'self'";
+
 const CSP = [
   "default-src 'self'",
-  "script-src 'self'",
+  SCRIPT_SRC,
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: https://*.posthog.com",
   "font-src 'self'",
@@ -27,15 +39,26 @@ const CSP = [
   "frame-ancestors 'none'",
 ].join("; ");
 
+/**
+ * Returns a copy carrying the baseline, rather than setting headers on the
+ * response passed in. Not every response has mutable headers: anything from
+ * the ASSETS binding (every static file and the SPA fallback) and anything
+ * built by Response.redirect() carries an immutable Headers guard, and
+ * writing to one throws "Can't modify immutable headers". Mutating in place
+ * therefore broke every static asset request, not just an exotic edge case.
+ *
+ * The copy is cheap: the body is handed over by reference, never read.
+ */
 export function applySecurityHeaders(res: Response): Response {
-  res.headers.set("Content-Security-Policy", CSP);
-  res.headers.set("X-Content-Type-Options", "nosniff");
-  res.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
-  res.headers.set(
+  const out = new Response(res.body, res);
+  out.headers.set("Content-Security-Policy", CSP);
+  out.headers.set("X-Content-Type-Options", "nosniff");
+  out.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
+  out.headers.set(
     "Permissions-Policy",
     "camera=(), microphone=(), geolocation=(), payment=(), usb=()",
   );
-  return res;
+  return out;
 }
 
 export function isBlogPath(pathname: string): boolean {

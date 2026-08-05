@@ -58,9 +58,15 @@ app.onError((err, c) => {
 // Worker sends (see security-headers.ts): registered first, so it wraps
 // every handler below (custom-domain redirects, the API, the blog proxy,
 // shared-domain slug redirects, the SPA asset fallback).
+//
+// Assigning c.res, not mutating it: applySecurityHeaders returns a copy
+// because some responses (ASSETS, Response.redirect) refuse header writes.
+// Returning the response from here would not work — after next() the
+// context is finalized, and hono's compose only adopts a returned response
+// while it isn't.
 app.use("*", async (c, next) => {
   await next();
-  if (!isBlogPath(new URL(c.req.url).pathname)) applySecurityHeaders(c.res);
+  if (!isBlogPath(new URL(c.req.url).pathname)) c.res = applySecurityHeaders(c.res);
 });
 
 /* ---------------- redirect hot path ---------------- */
