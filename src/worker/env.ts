@@ -44,7 +44,11 @@ export interface Env {
   APP_HOST: string; // var, e.g. "rdyrct.com"; the shared redirect host
   CF_API_TOKEN?: string; // secret, Custom Hostnames edit
   CF_ZONE_ID?: string; // var
-  CF_DEV_ENV?: string; // var, "1" in dev/test only: fakes the Custom Hostnames API
+  // var, dev/test only: fakes the Custom Hostnames API. "1" walks a new domain
+  // through checking_dns and issuing_tls on a timer, so both states are
+  // visible in a browser; "instant" reports both ready at once, for e2e runs
+  // that assert on the end state and should not wait out a staged delay.
+  CF_DEV_ENV?: string;
 
   /* alerting: dead-lettered storage messages (best-effort, never blocks acking) */
   BETTERSTACK_SOURCE_TOKEN?: string; // secret

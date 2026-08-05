@@ -92,6 +92,9 @@ test("renaming a custom-domain link leaves a temporary alias, which can be kept 
   // A custom domain is required: renaming only leaves an alias on a
   // custom-domain address, never on the shared, always-random domain.
   const hostname = await addCustomDomain(page, `alias-${Date.now()}.example.com`);
+  // The playwright env reports DNS and TLS ready immediately (CF_DEV_ENV
+  // "instant"), so this waits on one probe-ramp sleep plus a domains poll, not
+  // on the staged delays local dev uses.
   await expect(page.getByText("active", { exact: true })).toBeVisible({ timeout: 30_000 });
 
   await page.goto("/links");

@@ -15,4 +15,6 @@ POLAR_SERVER=sandbox
 
 CF_API_TOKEN=
 CF_ZONE_ID=
-CF_DEV_ENV=1
+# "instant", not "1": the e2e suite asserts a domain reaches active, so the
+# staged DNS/TLS delays local dev shows off are only a timer to race.
+CF_DEV_ENV=instant
