@@ -7,6 +7,7 @@ import { and, eq } from "drizzle-orm";
 import * as schema from "./db/schema";
 import type { Env } from "./env";
 import { sendEmail } from "./email";
+import { emailHtml, safeUrl } from "./email-html";
 import { hashPassword, verifyPassword } from "./password";
 
 const DNS_CHECK_TIMEOUT = 3000;
@@ -128,9 +129,9 @@ function buildAuth(env: Env) {
           env,
           user.email,
           "Reset your rdyrct password",
-          `<p>Hi ${user.name},</p>
+          emailHtml`<p>Hi ${user.name},</p>
            <p>Someone requested a password reset for this account. If that was
-           you, <a href="${url}">reset your password</a>. The link expires in
+           you, <a href="${safeUrl(url)}">reset your password</a>. The link expires in
            one hour; otherwise you can ignore this email.</p>`,
         );
       },
@@ -165,7 +166,7 @@ function buildAuth(env: Env) {
             env,
             email,
             "Your rdyrct verification code",
-            `<p>Your rdyrct verification code is
+            emailHtml`<p>Your rdyrct verification code is
              <strong style="font-size:20px;letter-spacing:2px">${otp}</strong>.</p>
              <p>It expires in 10 minutes.</p>`,
           );
