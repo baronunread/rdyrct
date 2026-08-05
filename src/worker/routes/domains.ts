@@ -9,6 +9,7 @@ import { orgPlan, insertDomainWithinLimit } from "../plan";
 import { enqueueStorage, syncDomainMsg } from "../storage";
 import { uid, now } from "../util";
 import { isValidHttpUrl, normalizeUrl } from "../util";
+import { jsonBodyLimit } from "../body-limit";
 import type { DomainDTO, PlanLimits } from "@/shared/types";
 
 // e.g. links.example.com: at least one dot, no scheme/port/path
@@ -246,6 +247,7 @@ export function probeDelaySeconds(attempt: number): number {
 
 // Mounted at /api/orgs/:orgId/domains: org admins, paid plans only.
 export const domainRoutes = new Hono<AppEnv>();
+domainRoutes.use("*", jsonBodyLimit());
 
 domainRoutes.use("*", requireOrgRole("admin"));
 

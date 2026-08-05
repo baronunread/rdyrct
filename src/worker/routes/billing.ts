@@ -8,6 +8,7 @@ import * as schema from "../db/schema";
 import type { AppEnv, Env } from "../env";
 import { requireUser } from "../guards";
 import { alertBetterStack } from "../alerts";
+import { jsonBodyLimit } from "../body-limit";
 
 const polarFor = (env: Env) =>
   new Polar({
@@ -16,7 +17,10 @@ const polarFor = (env: Env) =>
   });
 
 // Mounted at /api/billing: the caller's own subscription (per-user billing).
+// (The Polar webhook itself is mounted separately, outside this router and
+// its body limit — see handlePolarWebhook below and index.ts.)
 export const billingRoutes = new Hono<AppEnv>();
+billingRoutes.use("*", jsonBodyLimit());
 
 /**
  * Which plan a Polar product grants: an explicit allowlist that fails

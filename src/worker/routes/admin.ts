@@ -15,6 +15,7 @@ import {
 } from "@/shared/types";
 import { fillSeries, computeDelta, deleteOrg } from "./orgs";
 import { orgPlan } from "../plan";
+import { jsonBodyLimit } from "../body-limit";
 
 // An org's effective plan is its owner's plan (billing is per-user). A single
 // correlated subquery pulls it for list views. Note: `user` is a SQL keyword,
@@ -41,6 +42,7 @@ const ownerEmail = sql<string | null>`(
 
 // Mounted at /api/admin: platform-level views for the instance admin.
 export const adminRoutes = new Hono<AppEnv>();
+adminRoutes.use("*", jsonBodyLimit());
 
 adminRoutes.use("*", requireAdmin);
 
