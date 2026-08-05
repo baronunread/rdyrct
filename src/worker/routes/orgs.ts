@@ -6,7 +6,7 @@ import type { AppEnv, DB, Env } from "../env";
 import { requireUser } from "../guards";
 import { requireOrgRole, orgRole } from "../org-role";
 import { orgPlan, userPlan, createOwnedOrg, acceptInviteAtomically } from "../plan";
-import { sendEmail } from "../email";
+import { sendEmail, renderEmail, p, button } from "../email";
 import { deleteQrLogoMsg, enqueueStorage } from "../storage";
 import { uid, now, referrerHost, validateQrFields } from "../util";
 import type {
@@ -369,9 +369,15 @@ orgRoutes.post("/:orgId/invites", requireOrgRole("admin"), async (c) => {
         c.env,
         invite.email,
         `You're invited to ${orgName} on rdyrct`,
-        `<p>You've been invited to join <strong>${orgName}</strong> on rdyrct.</p>
-         <p><a href="${c.env.APP_URL}/invite/${invite.token}">Accept the invite</a>.
-         The link expires in 7 days.</p>`,
+        renderEmail({
+          heading: "You're invited",
+          preheader: `Join ${orgName} on rdyrct. The invite expires in 7 days.`,
+          blocks: [
+            p(`You've been invited to join ${orgName} on rdyrct.`),
+            button("Accept the invite", `${c.env.APP_URL}/invite/${invite.token}`),
+            p("The link expires in 7 days."),
+          ],
+        }),
       ),
     ),
   );
