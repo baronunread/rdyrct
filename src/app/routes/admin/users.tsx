@@ -186,7 +186,8 @@ function UserRow({
         <span className="mr-1.5">{user.name}</span>
         {user.isAdmin && <Badge color="butter">admin</Badge>}{" "}
         {user.banned && <Badge color="pink">banned</Badge>}{" "}
-        {!user.emailVerified && <Badge color="muted">unverified</Badge>}
+        {!user.emailVerified && <Badge color="muted">unverified</Badge>}{" "}
+        {user.disposable && <Badge color="accent">disposable</Badge>}
       </Td>
       <Td className="text-muted">{user.email}</Td>
       <Td className="tnum text-right">{user.orgCount}</Td>

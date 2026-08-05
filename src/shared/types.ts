@@ -367,6 +367,8 @@ export interface AdminUserRow {
   isAdmin: boolean;
   banned: boolean;
   emailVerified: boolean;
+  /** Email domain is a known throwaway provider. Display-only, computed on read. */
+  disposable: boolean;
   plan: OrgPlan;
   createdAt: number;
   orgCount: number;
