@@ -38,9 +38,20 @@ without wrangler CLI calls).
 bun run check                          # app + shared (tsconfig.json → src/app, src/shared)
 bunx tsc -p tsconfig.worker.json --noEmit   # worker (src/worker)
 bun run test                           # unit tests (bun test, tests/)
+bun run test:worker                    # worker tests (vitest-pool-workers, tests/worker/)
+bun run e2e:smoke                      # browser tests (playwright, tests/e2e/); needs .dev.vars
+bun run verify                         # all of the above, in order: the gate
 bun run doctor                         # react-doctor audit (React health score; --verbose for details)
 bun run fallow                         # fallow codebase intelligence audit
 ```
+
+**`bun run verify` ends with the browser tests, and every new feature ships
+with an e2e scenario.** Both are rules, not suggestions. The worker test
+environment has no built asset bundle, so it never touches the real `ASSETS`
+binding: checks that stop at `test` and `test:worker` have already let two
+bugs through that broke the app for every visitor. Green means the app runs
+in a browser, or it means nothing. Add a `tests/e2e/*.pw.ts` scenario
+alongside the feature, in the same commit.
 
 react-doctor runs in CI through `.github/workflows/react-doctor.yml` (advisory,
 PRs + main). Run fallow locally when auditing codebase health; track its
