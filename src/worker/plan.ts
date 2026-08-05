@@ -97,23 +97,38 @@ export async function acceptInviteAtomically(
  * both insertAddressWithinLimit and insertLinkWithinLimit below: a
  * primary/permanent_alias row only writes if the org is still under its
  * `links` cap at write time, re-checked inside this one statement. */
+/**
+ * Bind values for a link_addresses row, in column order.
+ *
+ * These statements are raw SQL, so Drizzle never gets a chance to apply the
+ * schema's defaults: whatever is in the object reaches `bind()` as-is, and
+ * D1 rejects `undefined` outright ("D1_TYPE_ERROR: Type 'undefined' not
+ * supported"). Four of these columns are optional in `$inferInsert`, so a
+ * caller that builds the row inline instead of through `newAddressRow` would
+ * fail at runtime rather than at the type level. Normalizing here matches
+ * what insertDomainWithinLimit below already does.
+ */
+function addressColumns(address: typeof schema.linkAddresses.$inferInsert) {
+  return [
+    address.id,
+    address.linkId,
+    address.orgId,
+    address.domainId ?? null,
+    address.slug,
+    address.kind,
+    address.creationReason ?? "",
+    address.expiresAt ?? null,
+    address.retiredAt ?? null,
+    address.createdAt,
+  ];
+}
+
 function guardedAddressInsertStatement(
   env: Env,
   address: typeof schema.linkAddresses.$inferInsert,
   linkLimit: number,
 ) {
-  const columns = [
-    address.id,
-    address.linkId,
-    address.orgId,
-    address.domainId,
-    address.slug,
-    address.kind,
-    address.creationReason,
-    address.expiresAt,
-    address.retiredAt,
-    address.createdAt,
-  ];
+  const columns = addressColumns(address);
   return env.DB.prepare(
     `insert into link_addresses
        (id, link_id, org_id, domain_id, slug, kind, creation_reason, expires_at, retired_at, created_at)
@@ -146,18 +161,7 @@ export async function insertAddressWithinLimit(
       `insert into link_addresses
          (id, link_id, org_id, domain_id, slug, kind, creation_reason, expires_at, retired_at, created_at)
        values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [
-        address.id,
-        address.linkId,
-        address.orgId,
-        address.domainId,
-        address.slug,
-        address.kind,
-        address.creationReason,
-        address.expiresAt,
-        address.retiredAt,
-        address.createdAt,
-      ],
+      addressColumns(address),
     );
   }
   const result = await guardedAddressInsertStatement(env, address, linkLimit).run();

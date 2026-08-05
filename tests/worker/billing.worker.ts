@@ -10,6 +10,7 @@ import {
   applyTestMigrations,
   adminCookie,
   billingEnv,
+  overrideEnv,
   POLAR_HOBBY_PRODUCT_ID,
   POLAR_PRO_PRODUCT_ID,
   POLAR_WEBHOOK_SECRET,
@@ -491,6 +492,89 @@ describe("POST /api/webhooks/polar", () => {
     const user = await getUser();
     expect(user.plan).toBe("pro");
     expect(user.polarSubscriptionCancelAtPeriodEnd).toBe(true);
+  });
+
+  it("alerts when an event names a user we hold no row for (#17)", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(null));
+    const alerting = overrideEnv({
+      BETTER_AUTH_SECRET: "test-secret",
+      POLAR_WEBHOOK_SECRET,
+      POLAR_HOBBY_PRODUCT_ID,
+      POLAR_PRO_PRODUCT_ID,
+      BETTERSTACK_SOURCE_TOKEN: "tok_test",
+      BETTERSTACK_INGEST_URL: "https://in.logs.betterstack.example",
+    });
+
+    // No seeded user: the checkout metadata points at nobody, so the plan
+    // this event paid for lands on no one. Silent 200 is still the right
+    // answer to Polar, but it must not be silent to us.
+    const res = await postWebhook(
+      {
+        type: "subscription.active",
+        data: {
+          id: "sub_ghost",
+          product_id: POLAR_PRO_PRODUCT_ID,
+          metadata: { userId: "user-does-not-exist" },
+        },
+      },
+      undefined,
+      alerting,
+    );
+
+    expect(res.status).toBe(200);
+    const body = JSON.parse(String(fetchSpy.mock.calls[0]?.[1]?.body));
+    expect(body).toEqual([
+      {
+        event: "polar_webhook_no_matching_user",
+        type: "subscription.active",
+        subscriptionId: "sub_ghost",
+        userId: "user-does-not-exist",
+      },
+    ]);
+    fetchSpy.mockRestore();
+  });
+
+  it("does not alert when a real user's event is merely stale (#17)", async () => {
+    await seedUser({ plan: "free" });
+    const alerting = overrideEnv({
+      BETTER_AUTH_SECRET: "test-secret",
+      POLAR_WEBHOOK_SECRET,
+      POLAR_HOBBY_PRODUCT_ID,
+      POLAR_PRO_PRODUCT_ID,
+      BETTERSTACK_SOURCE_TOKEN: "tok_test",
+      BETTERSTACK_INGEST_URL: "https://in.logs.betterstack.example",
+    });
+    await postWebhook(
+      {
+        type: "subscription.active",
+        data: {
+          id: "sub_1",
+          product_id: POLAR_PRO_PRODUCT_ID,
+          metadata: { userId: "user-1" },
+          modified_at: "2026-03-02T00:00:00Z",
+        },
+      },
+      undefined,
+      alerting,
+    );
+
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(null));
+    await postWebhook(
+      {
+        type: "subscription.revoked",
+        data: {
+          id: "sub_1",
+          metadata: { userId: "user-1" },
+          modified_at: "2026-03-01T00:00:00Z",
+        },
+      },
+      undefined,
+      alerting,
+    );
+
+    // The row exists and the guard did its job: nothing to report.
+    expect(fetchSpy).not.toHaveBeenCalled();
+    fetchSpy.mockRestore();
   });
 
   it("falls back to created_at when modified_at is null (#17)", async () => {

@@ -262,6 +262,32 @@ export async function handlePolarWebhook(req: Request, env: Env): Promise<Respon
   // 2xx here earns a retry, and ten consecutive non-2xx responses disable
   // the endpoint outright.
   const mutation = await mutationFor(db, env, event);
-  if (mutation) await mutation;
+  if (mutation) {
+    const result = await mutation;
+    if (result.meta.changes === 0) await alertIfNoSuchSubject(db, env, event);
+  }
   return Response.json({ received: true });
+}
+
+/**
+ * A mutation that changed nothing is usually a stale delivery losing to
+ * `notStale`, which is the system working. It means something else when the
+ * event names a user or a subscription we hold no row for at all: a checkout
+ * whose metadata never carried a usable userId, or a subscription that
+ * outlived the account it belonged to. That silently costs someone the plan
+ * they paid for, so it is worth a look even though the response stays 200.
+ *
+ * The extra read only happens on the zero-row path, which is the rare one.
+ */
+async function alertIfNoSuchSubject(db: Db, env: Env, event: PolarEvent): Promise<void> {
+  const rows = await db.select({ id: schema.user.id }).from(schema.user).where(subjectOf(event));
+  if (rows.length > 0) return;
+  await alertBetterStack(env, [
+    {
+      event: "polar_webhook_no_matching_user",
+      type: event.type,
+      subscriptionId: event.data.id,
+      userId: String(event.data.metadata?.userId ?? "") || null,
+    },
+  ]);
 }
