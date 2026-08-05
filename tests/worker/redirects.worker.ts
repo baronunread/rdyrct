@@ -9,7 +9,7 @@ import {
 import worker from "../../src/worker";
 import type { Env } from "../../src/worker/env";
 import type { ClickMessage } from "../../src/worker/clicks";
-import { overrideEnv } from "./support";
+import { captureClickQueue, overrideEnv } from "./support";
 
 type TestEnv = typeof env & { TEST_MIGRATIONS: D1Migration[] };
 
@@ -18,19 +18,6 @@ async function fetchWorker(request: Request, testEnv: Env = env as Env): Promise
   const response = await worker.fetch(request, testEnv, ctx);
   await waitOnExecutionContext(ctx);
   return response;
-}
-
-// A CLICK_QUEUE that records what was sent, so the redirect path's enqueue
-// can be asserted without a live queue delivering the message back into the
-// worker under test (consumption is covered by tests/worker/clicks.worker.ts).
-function captureClickQueue(): { env: Env; sent: ClickMessage[] } {
-  const sent: ClickMessage[] = [];
-  const CLICK_QUEUE = {
-    async send(message: ClickMessage) {
-      sent.push(message);
-    },
-  } as unknown as Queue<ClickMessage>;
-  return { env: overrideEnv({ CLICK_QUEUE }), sent };
 }
 
 afterEach(async () => {

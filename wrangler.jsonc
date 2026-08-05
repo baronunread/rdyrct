@@ -200,6 +200,22 @@
         "period": 60,
       },
     },
+    // Keyed by the recipient address rather than the caller, so many callers
+    // cannot each stay under RL_EMAIL while all aiming at one inbox (#50).
+    // Tighter than RL_EMAIL's 3: one address has no legitimate reason to
+    // want a second code in the same minute, let alone a third.
+    //
+    // `period` only accepts 10 or 60, so this caps the rate, not the daily
+    // total. Closing that needs a durable counter rather than Cloudflare's
+    // per-location one; see the follow-up noted on #50.
+    {
+      "name": "RL_EMAIL_RECIPIENT",
+      "namespace_id": "14009",
+      "simple": {
+        "limit": 2,
+        "period": 60,
+      },
+    },
   ],
   "workers_dev": false,
   "preview_urls": false,
@@ -372,6 +388,19 @@
           "namespace_id": "24008",
           "simple": {
             "limit": 600,
+            "period": 60,
+          },
+        },
+        {
+          "name": "RL_EMAIL_RECIPIENT",
+          "namespace_id": "24009",
+          "simple": {
+            // One above production's (2), leaving the two sends a sign-up
+            // costs (submit, then the resend on the code screen's reload)
+            // some headroom. Every test mints its own
+            // `something-${Date.now()}@gmail.com`, so no other address is
+            // near this; the e2e scenario trips it deliberately.
+            "limit": 3,
             "period": 60,
           },
         },

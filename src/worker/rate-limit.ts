@@ -68,12 +68,10 @@ function hex(bytes: ArrayBuffer): string {
   return Array.from(new Uint8Array(bytes), (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
-/** Builds an ephemeral public-client key without exposing an IP address to
- * application storage or logs. The HMAC output exists only in Cloudflare's
- * rate-limit counter. */
-export async function publicClientKey(request: Request, secret: string): Promise<string> {
-  const forwarded = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim();
-  const address = request.headers.get("cf-connecting-ip") ?? forwarded ?? "unknown";
+/** Keyed HMAC over `value`. The digest is the only form an identifier takes
+ * once it leaves the request: what ends up in a rate-limit counter is never
+ * the address itself. */
+async function keyedDigest(secret: string, value: string): Promise<string> {
   const encoder = new TextEncoder();
   const key = await crypto.subtle.importKey(
     "raw",
@@ -82,7 +80,39 @@ export async function publicClientKey(request: Request, secret: string): Promise
     false,
     ["sign"],
   );
-  return hex(await crypto.subtle.sign("HMAC", key, encoder.encode(address)));
+  return hex(await crypto.subtle.sign("HMAC", key, encoder.encode(value)));
+}
+
+/** Builds an ephemeral public-client key without exposing an IP address to
+ * application storage or logs. The HMAC output exists only in Cloudflare's
+ * rate-limit counter. */
+export async function publicClientKey(request: Request, secret: string): Promise<string> {
+  const forwarded = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim();
+  const address = request.headers.get("cf-connecting-ip") ?? forwarded ?? "unknown";
+  return keyedDigest(secret, address);
+}
+
+/**
+ * The address an email-sending auth route would deliver to, hashed, or null
+ * when the request names none.
+ *
+ * Clones before reading: BetterAuth is handed `c.req.raw` afterwards and
+ * needs its body stream untouched. A body we can't read (missing, not JSON,
+ * no `email`) yields null and the recipient limit simply doesn't apply,
+ * since there is no recipient to protect.
+ */
+async function recipientKey(request: Request, secret: string): Promise<string | null> {
+  let parsed: unknown;
+  try {
+    parsed = await request.clone().json();
+  } catch {
+    return null;
+  }
+  const email = (parsed as { email?: unknown } | null)?.email;
+  if (typeof email !== "string") return null;
+  const normalized = email.trim().toLowerCase();
+  if (!normalized) return null;
+  return keyedDigest(secret, normalized);
 }
 
 export function publicAuthGroup(path: string): "auth" | "email" | null {
@@ -105,7 +135,29 @@ export async function enforcePublicAuthRateLimit(c: Context<AppEnv>): Promise<Re
     group,
     method: c.req.method,
   });
-  return allowed ? null : rateLimitedResponse(c, group);
+  if (!allowed) return rateLimitedResponse(c, group);
+
+  // Second, independent budget for the routes that put mail in someone's
+  // inbox, counted against the recipient instead of the caller (#50). The
+  // per-caller limit above does nothing when the callers are many and the
+  // target is one: distributed requests each stay under it while the same
+  // address absorbs all of them.
+  //
+  // Deliberately the same 429 as the caller limit: which budget ran out is
+  // not something an anonymous caller gets to learn, or asking "did this
+  // address just get throttled?" would answer "does this address exist?".
+  if (group === "email") {
+    const recipient = await recipientKey(c.req.raw, c.env.BETTER_AUTH_SECRET);
+    if (recipient) {
+      const withinRecipientBudget = await rateLimitAllows(
+        c.env.RL_EMAIL_RECIPIENT,
+        `email-recipient:${recipient}`,
+        { group, method: c.req.method },
+      );
+      if (!withinRecipientBudget) return rateLimitedResponse(c, group);
+    }
+  }
+  return null;
 }
 
 export function signedApiGroup(

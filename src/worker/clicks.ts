@@ -3,7 +3,7 @@ import { drizzle } from "drizzle-orm/d1";
 import * as schema from "./db/schema";
 import type { AppEnv, Env } from "./env";
 import type { KVLink } from "./kv";
-import { now, deviceFromUA } from "./util";
+import { now, deviceFromUA, normalizeReferrer } from "./util";
 import { clickAnalyticsAllowed } from "./rate-limit";
 import { alertBetterStack } from "./alerts";
 
@@ -68,7 +68,9 @@ export async function enqueueClick(c: Context<AppEnv>, hit: KVLink): Promise<voi
       orgId: hit.orgId,
       ts: now(),
       country: (c.req.raw.cf?.country as string) ?? "",
-      referrer: c.req.header("referer") ?? "",
+      // Hostname only, never the full URL the header carries: see
+      // normalizeReferrer in util.ts and issue #20.
+      referrer: normalizeReferrer(c.req.header("referer") ?? ""),
       device: deviceFromUA(c.req.header("user-agent") ?? ""),
     };
     await c.env.CLICK_QUEUE.send(message);

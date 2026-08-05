@@ -190,6 +190,42 @@ export function isDisposableEmail(email: string): boolean {
   return DISPOSABLE_EMAIL_DOMAINS.has(domain);
 }
 
+/**
+ * The longest hostname the DNS spec allows. A referrer longer than this is
+ * not a hostname we failed to shorten, it's junk, so it stores as "".
+ */
+const REFERRER_MAX_LENGTH = 253;
+
+/**
+ * What a click may remember about where it came from: a bare lowercase
+ * hostname, or "" for direct and for anything we can't read (see issue #20).
+ *
+ * A raw Referer header is a whole URL, and other people's URLs carry search
+ * terms, session tokens, and account identifiers in their paths and query
+ * strings. None of that is ours to keep, and storing it would contradict the
+ * promise the analytics page makes. `URL.hostname` drops the path, query,
+ * fragment, port, and any user:password credentials in one step; everything
+ * else here rejects rather than repairs.
+ *
+ * Applied when the click is recorded, not when it's read: the read path
+ * cannot un-store what ingestion already wrote down.
+ */
+export function normalizeReferrer(referrer: string): string {
+  if (!referrer) return "";
+  let url: URL;
+  try {
+    url = new URL(referrer);
+  } catch {
+    return "";
+  }
+  // A referrer arrives over http(s). Anything else (data:, javascript:,
+  // file:, an app's custom scheme) is not a site we can name.
+  if (url.protocol !== "http:" && url.protocol !== "https:") return "";
+  const host = url.hostname.toLowerCase();
+  if (!host || host.length > REFERRER_MAX_LENGTH) return "";
+  return host;
+}
+
 export function normalizeUrl(value: string): string {
   return /^https?:\/\//i.test(value) ? value : `https://${value}`;
 }
