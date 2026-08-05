@@ -9,6 +9,7 @@ import type { Env } from "./env";
 import { sendEmail } from "./email";
 import { renderEmail } from "./email-layout";
 import { hashPassword, verifyPassword } from "./password";
+import { uid } from "./util";
 
 const DNS_CHECK_TIMEOUT = 3000;
 
@@ -52,47 +53,123 @@ function makeDb(env: Env) {
 }
 type Db = ReturnType<typeof makeDb>;
 
-// Unauthenticated: anyone can trigger this for any email. Reject
-// already-verified accounts so a code that would auto-sign-in
-// (autoSignInAfterVerification) never goes out for one, since that
-// would hand a full session to whoever reads that inbox, not just
-// confirm ownership during signup.
+/**
+ * Unauthenticated: anyone can post any address here. An already-verified
+ * account must never receive a code, because verification auto-signs-in
+ * (autoSignInAfterVerification), so a code would hand a full session to
+ * whoever reads that inbox rather than merely confirm ownership.
+ *
+ * It answers as though it sent one anyway. Saying "already verified" told
+ * an anonymous caller which addresses have verified accounts, one address
+ * per request (#53). The reply is byte-identical to a real send; what
+ * differs is that nothing goes out.
+ */
 async function guardVerificationOTPSend(db: Db, body: { email?: unknown; type?: unknown } | null) {
   if (body?.type !== "email-verification" || typeof body.email !== "string") return;
   const [existing] = await db
     .select({ emailVerified: schema.user.emailVerified })
     .from(schema.user)
     .where(eq(schema.user.email, body.email.toLowerCase()));
-  if (existing?.emailVerified)
-    throw new APIError(400, {
-      message: "This email is already verified. Sign in instead.",
-      code: "EMAIL_VERIFIED",
-    });
+  return existing?.emailVerified ? { success: true } : undefined;
 }
 
-// better-auth 1.6+ answers a duplicate sign-up with a fake success so
-// outsiders can't probe which emails have accounts. For us that meant the
-// form jumped to the OTP screen, mailed a working code, and signed the
-// visitor into the existing account while the password they had just
-// typed went nowhere. We take the plain error over the disguise.
-async function guardSignUp(db: Db, email: unknown) {
+/**
+ * The reply a real signup gives when verification is still pending,
+ * rebuilt from the caller's own input.
+ *
+ * Every field is either theirs (email, name), a fresh value (a new id, the
+ * current time), or the column default a new row would carry, so it matches
+ * a genuine response field for field. A shape that differed would be the
+ * same oracle in a new place.
+ */
+function pendingSignUpResponse(email: string, name: string) {
+  const timestamp = new Date().toISOString();
+  return {
+    token: null,
+    user: {
+      name,
+      email,
+      emailVerified: false,
+      image: null,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+      isAdmin: false,
+      banned: false,
+      plan: "free",
+      polarSubscriptionCancelAtPeriodEnd: false,
+      polarSubscriptionCurrentPeriodEnd: null,
+      // Never the existing row's id: this account is not the caller's to
+      // learn anything about. Same alphabet and length as better-auth's.
+      id: uid(32),
+    },
+  };
+}
+
+/** Tells the address's real owner that someone tried to sign up as them. */
+async function sendExistingAccountNotice(env: Env, email: string) {
+  await sendEmail(
+    env,
+    email,
+    "Someone tried to sign up with your rdyrct address",
+    renderEmail({
+      preheader: "You already have an rdyrct account.",
+      heading: "You already have an account",
+      paragraphs: [
+        "Someone just tried to create an rdyrct account with this address. Nothing changed, and no new account was made.",
+        "If that was you, sign in instead. If you cannot remember your password, reset it.",
+      ],
+      cta: { label: "Sign in", url: `${env.APP_URL}/login` },
+      note: "If this was not you, you can ignore this email. Nobody can use your address without reading this inbox.",
+    }),
+  );
+}
+
+/**
+ * Signup used to answer a taken address with a plain USER_ALREADY_EXISTS,
+ * which let anyone test addresses one at a time (#53). It now answers as it
+ * would for a new account and creates nothing, and the address's real owner
+ * gets an email saying so, since they are the only person entitled to know.
+ *
+ * That email carries no code and no session, which is the part better-auth's
+ * own disguise got wrong for us: its version let the form walk on to the OTP
+ * screen, mail a working code, and sign the visitor into the existing
+ * account while the password they had just typed went nowhere.
+ *
+ * The cost is real and worth stating: someone who forgot they had an account
+ * no longer learns it on screen. They learn it in the inbox they own.
+ */
+async function guardSignUp(
+  env: Env,
+  db: Db,
+  body: { email?: unknown; name?: unknown } | null,
+): Promise<ReturnType<typeof pendingSignUpResponse> | undefined> {
+  const email = body?.email;
   if (typeof email !== "string") return;
   const normalized = email.toLowerCase();
-  const rows = await db
-    .select({ id: schema.user.id })
-    .from(schema.user)
-    .where(eq(schema.user.email, normalized));
-  if (rows.length > 0)
-    throw new APIError(422, {
-      message: "This email already has an account. Sign in instead.",
-      code: "USER_ALREADY_EXISTS",
-    });
+
+  // Before the existence check, so both branches answer a dead domain the
+  // same way. Reversed, a 422 here would mean "no account on a domain that
+  // cannot receive mail", and a success would mean "there is one".
   const domain = normalized.split("@")[1];
   if (domain && !(await domainHasMailRecords(domain)))
     throw new APIError(422, {
       message: "Enter a valid email address.",
       code: "INVALID_EMAIL_DOMAIN",
     });
+
+  const [existing] = await db
+    .select({ emailVerified: schema.user.emailVerified })
+    .from(schema.user)
+    .where(eq(schema.user.email, normalized));
+  if (!existing) return;
+
+  // Only for a verified account. An unverified one carries on through the
+  // OTP flow it was already in the middle of, and a code is on its way
+  // there anyway: two emails would say the same thing twice.
+  if (existing.emailVerified) await sendExistingAccountNotice(env, normalized);
+
+  const name = typeof body?.name === "string" ? body.name : normalized.split("@")[0];
+  return pendingSignUpResponse(normalized, name);
 }
 
 function buildAuth(env: Env) {
@@ -220,16 +297,18 @@ function buildAuth(env: Env) {
       },
     },
     hooks: {
+      // Returning a value here short-circuits: better-auth sends it as the
+      // response instead of running the endpoint. Both guards use that to
+      // answer exactly as the real path would while doing nothing (#53).
       before: createAuthMiddleware(async (ctx) => {
         if (ctx.path === "/email-otp/send-verification-otp") {
-          await guardVerificationOTPSend(
+          return guardVerificationOTPSend(
             db,
             ctx.body as { email?: unknown; type?: unknown } | null,
           );
-          return;
         }
         if (ctx.path === "/sign-up/email") {
-          await guardSignUp(db, (ctx.body as { email?: unknown } | null)?.email);
+          return guardSignUp(env, db, ctx.body as { email?: unknown; name?: unknown } | null);
         }
       }),
     },
