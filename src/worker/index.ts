@@ -123,7 +123,11 @@ function proxyBlog(c: Context<AppEnv>, next: () => Promise<void>) {
   target.pathname = url.pathname;
   target.search = url.search;
 
+  // The blog needs no authenticated context: strip anything credential-bearing
+  // before it leaves Cloudflare for a lower-trust, independently-deployed origin.
   const headers = new Headers(c.req.raw.headers);
+  headers.delete("cookie");
+  headers.delete("authorization");
   headers.set("host", target.hostname);
   const hasBody = !["GET", "HEAD"].includes(c.req.raw.method);
 

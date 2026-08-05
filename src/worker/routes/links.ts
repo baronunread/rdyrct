@@ -5,7 +5,13 @@ import * as schema from "../db/schema";
 import type { AppEnv, DB, Env } from "../env";
 import { requireOrgRole } from "../org-role";
 import { deleteQrLogoMsg, enqueueStorage, syncLinkMsg } from "../storage";
-import { orgPlan, countActiveAddresses } from "../plan";
+import {
+  orgPlan,
+  countActiveAddresses,
+  insertAddressWithinLimit,
+  insertLinkWithinLimit,
+  keepAddressForeverWithinLimit,
+} from "../plan";
 import {
   uid,
   now,
@@ -129,8 +135,16 @@ async function insertAddressAndRespond(
   address: typeof schema.linkAddresses.$inferInsert,
   hostname: string | null,
   status: 200 | 201,
+  linkLimit: number,
 ) {
-  await db.insert(schema.linkAddresses).values(address);
+  // Atomic: the org's links cap is re-checked at write time inside one D1
+  // statement, not from a count fetched earlier (see issue #18).
+  const inserted = await insertAddressWithinLimit(env, address, linkLimit);
+  if (!inserted)
+    throw new HTTPException(402, {
+      message: "Upgrade your plan to create more links",
+      cause: { code: "link_limit" },
+    });
   await enqueueStorage(env, [syncLinkMsg(address.slug, hostname)]);
   return { dto: await linkToDTO(db, orgId, link), status } as const;
 }
@@ -607,6 +621,7 @@ linkRoutes.post("/", requireOrgRole("member"), async (c) => {
       address,
       hostname,
       200,
+      limits.links,
     );
     return c.json(dto, status);
   }
@@ -629,10 +644,18 @@ linkRoutes.post("/", requireOrgRole("member"), async (c) => {
   assertLinkQuota(activeCount, plan, limits);
   const link = newLinkRow(orgId, domainId, slug, body, utm, c.var.user!.id);
   const address = newAddressRow(link.id, orgId, domainId, slug, "primary", "created");
-  await db.batch([
-    db.insert(schema.links).values(link),
-    db.insert(schema.linkAddresses).values(address),
-  ]);
+  // Atomic: the link insert, the org's links-cap-guarded address insert, and
+  // a compensating delete (only if the cap was hit) all run in one D1 batch,
+  // not from `activeCount` fetched above (see issue #18) — so no link ever
+  // persists without its primary address, and the rollback can't itself fail
+  // as a separate call.
+  const inserted = await insertLinkWithinLimit(db, c.env, link, address, limits.links);
+  if (!inserted) {
+    throw new HTTPException(402, {
+      message: "Upgrade your plan to create more links",
+      cause: { code: "link_limit" },
+    });
+  }
   await enqueueStorage(c.env, [syncLinkMsg(link.slug, hostname)]);
   return c.json(toDTO(link, 0, hostname, 1), 201);
 });
@@ -875,6 +898,7 @@ linkRoutes.post("/:linkId/addresses", requireOrgRole("member"), async (c) => {
     address,
     hostname,
     201,
+    limits.links,
   );
   return c.json(dto, status);
 });
@@ -887,21 +911,36 @@ linkRoutes.post(
     if (address.kind !== "temp_alias")
       throw new HTTPException(400, { message: "Only a temporary alias can be kept forever" });
 
-    const [{ plan, limits }, activeCount] = await Promise.all([
-      orgPlan(db, orgId),
-      countActiveAddresses(db, orgId),
-    ]);
-    assertLinkQuota(activeCount, plan, limits);
+    const { limits } = await orgPlan(db, orgId);
 
-    // Guarded on retired_at IS NULL: if the daily sweep already retired this
-    // alias (it missed the window between expiring and this request), the
-    // update affects zero rows rather than reviving a dead one.
-    const kept = await db
-      .update(schema.linkAddresses)
-      .set({ kind: "permanent_alias", expiresAt: null })
-      .where(and(eq(schema.linkAddresses.id, address.id), isNull(schema.linkAddresses.retiredAt)))
-      .returning({ id: schema.linkAddresses.id });
-    if (!kept.length) throw new HTTPException(409, { message: "This address already expired" });
+    // Atomic: the org's links cap is re-checked at write time inside one D1
+    // statement (see issue #18). Also guarded on retired_at IS NULL: if the
+    // daily sweep already retired this alias (it missed the window between
+    // expiring and this request), the update affects zero rows rather than
+    // reviving a dead one.
+    const kept = await keepAddressForeverWithinLimit(c.env, {
+      addressId: address.id,
+      orgId,
+      linkLimit: limits.links,
+    });
+    if (!kept) {
+      const [current] = await db
+        .select({ kind: schema.linkAddresses.kind, retiredAt: schema.linkAddresses.retiredAt })
+        .from(schema.linkAddresses)
+        .where(eq(schema.linkAddresses.id, address.id));
+      if (!current || current.retiredAt !== null)
+        throw new HTTPException(409, { message: "This address already expired" });
+      // Still an active temp_alias: the guard failed on the cap, not a race.
+      // If it's no longer temp_alias, a concurrent keep-forever already
+      // promoted it — the caller's intent is already satisfied, so fall
+      // through to the re-publish + success response below instead of a
+      // false upgrade prompt.
+      if (current.kind === "temp_alias")
+        throw new HTTPException(402, {
+          message: "Upgrade your plan to keep more links",
+          cause: { code: "link_limit" },
+        });
+    }
 
     // Re-publish is required, not optional: the cached expiresAt in KV must
     // clear too, or the redirect path's lazy-expiry check would still treat

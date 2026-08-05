@@ -5,7 +5,7 @@ import * as schema from "../db/schema";
 import type { AppEnv, DB, Env } from "../env";
 import { requireUser } from "../guards";
 import { requireOrgRole, orgRole } from "../org-role";
-import { orgPlan, userPlan } from "../plan";
+import { orgPlan, userPlan, createOwnedOrg, acceptInviteAtomically } from "../plan";
 import { sendEmail } from "../email";
 import { deleteQrLogoMsg, enqueueStorage } from "../storage";
 import { uid, now, referrerHost, validateQrFields } from "../util";
@@ -28,32 +28,24 @@ orgRoutes.post("/", requireUser, async (c) => {
   const name = body.name?.trim();
   if (!name) throw new HTTPException(400, { message: "Name required" });
 
-  const [ownedCount, { limits }] = await Promise.all([
-    c.var.db
-      .select({ n: sql<number>`count(*)` })
-      .from(schema.orgMembers)
-      .where(
-        and(eq(schema.orgMembers.userId, c.var.user!.id), eq(schema.orgMembers.role, "owner")),
-      ),
-    userPlan(c.var.db, c.var.user!.id),
-  ]);
-  if ((ownedCount[0]?.n ?? 0) >= limits.orgs)
+  const { limits } = await userPlan(c.var.db, c.var.user!.id);
+
+  const orgId = uid();
+  const ts = now();
+  // Atomic: the owned-org cap is re-checked at write time inside one D1
+  // statement, and an org never persists without an owner (see issue #18).
+  const created = await createOwnedOrg(c.var.db, c.env, {
+    orgId,
+    userId: c.var.user!.id,
+    name,
+    ts,
+    ownedOrgLimit: limits.orgs,
+  });
+  if (!created)
     throw new HTTPException(402, {
       message: "Upgrade to Pro to create more organizations",
       cause: { code: "org_limit" },
     });
-
-  const orgId = uid();
-  const ts = now();
-  await c.var.db.batch([
-    c.var.db.insert(schema.orgs).values({ id: orgId, name, createdAt: ts }),
-    c.var.db.insert(schema.orgMembers).values({
-      orgId,
-      userId: c.var.user!.id,
-      role: "owner",
-      createdAt: ts,
-    }),
-  ]);
   return c.json(
     {
       id: orgId,
@@ -959,34 +951,34 @@ inviteRoutes.post("/:token/accept", requireUser, async (c) => {
         "This invite was sent to a different email address: sign in with the invited account",
     });
 
-  const existing = await db
-    .select({ role: schema.orgMembers.role })
-    .from(schema.orgMembers)
-    .where(
-      and(eq(schema.orgMembers.orgId, invite.orgId), eq(schema.orgMembers.userId, c.var.user!.id)),
-    );
-  if (existing.length) throw new HTTPException(409, { message: "Already a member of this org" });
-
   // The cap may have been reached (or the plan downgraded) since the invite
-  // was created; recheck against actual members at accept time.
-  const [{ limits }, members] = await Promise.all([
-    orgPlan(db, invite.orgId),
-    db
-      .select({ n: sql<number>`count(*)` })
-      .from(schema.orgMembers)
-      .where(eq(schema.orgMembers.orgId, invite.orgId)),
-  ]);
-  if ((members[0]?.n ?? 0) >= limits.members)
-    throw new HTTPException(402, {
-      message: "This organization is full on its current plan",
-    });
-
-  await db.insert(schema.orgMembers).values({
+  // was created; recheck against actual members at accept time. Both that
+  // recheck and the "already a member" check happen inside one atomic
+  // statement (see issue #18), so two concurrent accepts (or a retried one)
+  // can't both pass separate pre-checks.
+  const { limits } = await orgPlan(db, invite.orgId);
+  const accepted = await acceptInviteAtomically(c.env, {
     orgId: invite.orgId,
     userId: c.var.user!.id,
     role: invite.role,
-    createdAt: now(),
+    ts: now(),
+    memberLimit: limits.members,
   });
+  if (!accepted) {
+    const existing = await db
+      .select({ role: schema.orgMembers.role })
+      .from(schema.orgMembers)
+      .where(
+        and(
+          eq(schema.orgMembers.orgId, invite.orgId),
+          eq(schema.orgMembers.userId, c.var.user!.id),
+        ),
+      );
+    if (existing.length) throw new HTTPException(409, { message: "Already a member of this org" });
+    throw new HTTPException(402, {
+      message: "This organization is full on its current plan",
+    });
+  }
   await db
     .update(schema.invites)
     .set({ acceptedBy: c.var.user!.id })

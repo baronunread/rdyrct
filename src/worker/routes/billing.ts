@@ -1,12 +1,13 @@
 import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
-import { eq } from "drizzle-orm";
+import { and, eq, isNull, lte, or } from "drizzle-orm";
 import { Polar } from "@polar-sh/sdk";
 import { Webhook } from "standardwebhooks";
 import { drizzle } from "drizzle-orm/d1";
 import * as schema from "../db/schema";
 import type { AppEnv, Env } from "../env";
 import { requireUser } from "../guards";
+import { alertBetterStack } from "../alerts";
 
 const polarFor = (env: Env) =>
   new Polar({
@@ -17,10 +18,19 @@ const polarFor = (env: Env) =>
 // Mounted at /api/billing: the caller's own subscription (per-user billing).
 export const billingRoutes = new Hono<AppEnv>();
 
-/** Which plan a Polar product grants. Unknown products fall back to pro so a
- * paying customer is never left on free limits by a mapping mistake. */
-const planForProduct = (env: Env, productId: string | undefined): "hobby" | "pro" =>
-  productId === env.POLAR_HOBBY_PRODUCT_ID ? "hobby" : "pro";
+/**
+ * Which plan a Polar product grants: an explicit allowlist that fails
+ * closed. An unrecognized product id (a misconfigured env var, a new Polar
+ * product nobody wired up, a stale id from a deleted product) must never
+ * grant a plan by falling through to the highest tier — that's how a mapping
+ * mistake used to hand out Pro for free (see issue #17).
+ */
+function planForProduct(env: Env, productId: string | undefined): "hobby" | "pro" | null {
+  if (!productId) return null;
+  if (productId === env.POLAR_HOBBY_PRODUCT_ID) return "hobby";
+  if (productId === env.POLAR_PRO_PRODUCT_ID) return "pro";
+  return null;
+}
 
 billingRoutes.post("/checkout", requireUser, async (c) => {
   const user = c.var.user!;
@@ -66,97 +76,170 @@ interface PolarEvent {
     cancel_at_period_end?: boolean;
     current_period_end?: string;
     ends_at?: string | null;
+    // How fresh this snapshot is. `modified_at` is null until the
+    // subscription's first change, so `created_at` is the fallback; both are
+    // on every Polar object (see @polar-sh/sdk's Subscription model).
+    created_at?: string;
+    modified_at?: string | null;
   };
 }
 
-async function handleSubscriptionActive(
-  db: ReturnType<typeof drizzle>,
-  env: Env,
-  event: PolarEvent,
-) {
+type Db = ReturnType<typeof drizzle>;
+
+/**
+ * When the state an event describes was set at Polar. Events without either
+ * timestamp sort as epoch 0, so they can only ever write over a row that has
+ * never been touched by a webhook.
+ */
+function eventAt(event: PolarEvent): Date {
+  const raw = event.data.modified_at ?? event.data.created_at;
+  const parsed = raw ? Date.parse(raw) : NaN;
+  return new Date(Number.isNaN(parsed) ? 0 : parsed);
+}
+
+/**
+ * Refuses to write over state a *newer* Polar event already wrote.
+ *
+ * Polar delivers at-least-once with no ordering guarantee, so a delayed
+ * `subscription.revoked` can land after the `subscription.active` that
+ * replaced it and downgrade a paying customer. Pairing every mutation's own
+ * WHERE with this one makes that stale write match no row.
+ *
+ * There is deliberately no delivery-id ledger. Each mutation below is a
+ * blind `UPDATE ... SET`, so applying one twice leaves the same row as
+ * applying it once — duplicate deliveries need no defence, only out-of-order
+ * ones do. `<=` follows from that: a repeat is harmless, while a strict `<`
+ * would drop the second of two sibling events that share a `modified_at`
+ * (Polar can emit `subscription.canceled` and `subscription.updated` from a
+ * single change).
+ */
+function notStale(at: Date) {
+  return or(isNull(schema.user.polarEventAt), lte(schema.user.polarEventAt, at));
+}
+
+/**
+ * Each of these applies one event's entitlement change, guarded by
+ * `notStale`. `null` means "nothing to write" (e.g. no userId in metadata).
+ */
+
+/** Which user an event addresses: its checkout metadata, or the subscription
+ * id we already stored for them. */
+function subjectOf(event: PolarEvent) {
   const userId = String(event.data.metadata?.userId ?? "");
-  if (!userId) return;
-  await db
+  return userId ? eq(schema.user.id, userId) : eq(schema.user.polarSubscriptionId, event.data.id);
+}
+
+async function subscriptionActiveMutation(db: Db, env: Env, event: PolarEvent) {
+  const userId = String(event.data.metadata?.userId ?? "");
+  if (!userId) return null;
+  const plan = planForProduct(env, event.data.product_id);
+  if (!plan) {
+    await alertBetterStack(env, [
+      {
+        event: "polar_webhook_unknown_product",
+        subscriptionId: event.data.id,
+        productId: event.data.product_id ?? null,
+        userId,
+      },
+    ]);
+    return null;
+  }
+  const at = eventAt(event);
+  return db
     .update(schema.user)
     .set({
-      plan: planForProduct(env, event.data.product_id),
+      plan,
       polarCustomerId: event.data.customer_id ?? null,
       polarSubscriptionId: event.data.id,
       polarSubscriptionCancelAtPeriodEnd: false,
       polarSubscriptionCurrentPeriodEnd: null,
+      polarEventAt: at,
     })
-    .where(eq(schema.user.id, userId));
+    .where(and(eq(schema.user.id, userId), notStale(at)));
 }
 
-async function handleSubscriptionRevoked(
-  db: ReturnType<typeof drizzle>,
-  env: Env,
-  event: PolarEvent,
-) {
-  const userId = String(event.data.metadata?.userId ?? "");
-  await db
+function subscriptionRevokedMutation(db: Db, event: PolarEvent) {
+  const at = eventAt(event);
+  return db
     .update(schema.user)
     .set({
       plan: "free",
       polarSubscriptionId: null,
       polarSubscriptionCancelAtPeriodEnd: false,
       polarSubscriptionCurrentPeriodEnd: null,
+      polarEventAt: at,
     })
-    .where(
-      userId ? eq(schema.user.id, userId) : eq(schema.user.polarSubscriptionId, event.data.id),
-    );
+    .where(and(subjectOf(event), notStale(at)));
 }
 
-async function handleSubscriptionCanceled(
-  db: ReturnType<typeof drizzle>,
-  env: Env,
-  event: PolarEvent,
-) {
+function subscriptionCanceledMutation(db: Db, event: PolarEvent) {
   const userId = String(event.data.metadata?.userId ?? "");
   const periodEnd = event.data.current_period_end ?? event.data.ends_at;
-  if (!userId && !event.data.id) return;
-  await db
+  if (!userId && !event.data.id) return null;
+  const at = eventAt(event);
+  return db
     .update(schema.user)
     .set({
       polarSubscriptionCancelAtPeriodEnd: true,
       polarSubscriptionCurrentPeriodEnd: periodEnd ? new Date(periodEnd) : null,
+      polarEventAt: at,
     })
-    .where(
-      userId ? eq(schema.user.id, userId) : eq(schema.user.polarSubscriptionId, event.data.id),
-    );
+    .where(and(subjectOf(event), notStale(at)));
 }
 
-async function handleSubscriptionUpdated(
-  db: ReturnType<typeof drizzle>,
-  env: Env,
-  event: PolarEvent,
-) {
-  if (event.data.status !== "active" || !event.data.product_id) return;
+async function subscriptionUpdatedMutation(db: Db, env: Env, event: PolarEvent) {
+  if (event.data.status !== "active" || !event.data.product_id) return null;
   const userId = String(event.data.metadata?.userId ?? "");
-  await db
+  const plan = planForProduct(env, event.data.product_id);
+  if (!plan) {
+    await alertBetterStack(env, [
+      {
+        event: "polar_webhook_unknown_product",
+        subscriptionId: event.data.id,
+        productId: event.data.product_id,
+        userId: userId || null,
+      },
+    ]);
+    return null;
+  }
+  const at = eventAt(event);
+  return db
     .update(schema.user)
-    .set({ plan: planForProduct(env, event.data.product_id) })
-    .where(
-      userId ? eq(schema.user.id, userId) : eq(schema.user.polarSubscriptionId, event.data.id),
-    );
+    .set({ plan, polarEventAt: at })
+    .where(and(subjectOf(event), notStale(at)));
 }
 
-async function handleSubscriptionUncanceled(
-  db: ReturnType<typeof drizzle>,
-  env: Env,
-  event: PolarEvent,
-) {
+function subscriptionUncanceledMutation(db: Db, event: PolarEvent) {
   const userId = String(event.data.metadata?.userId ?? "");
-  if (!userId && !event.data.id) return;
-  await db
+  if (!userId && !event.data.id) return null;
+  const at = eventAt(event);
+  return db
     .update(schema.user)
     .set({
       polarSubscriptionCancelAtPeriodEnd: false,
       polarSubscriptionCurrentPeriodEnd: null,
+      polarEventAt: at,
     })
-    .where(
-      userId ? eq(schema.user.id, userId) : eq(schema.user.polarSubscriptionId, event.data.id),
-    );
+    .where(and(subjectOf(event), notStale(at)));
+}
+
+/** The mutation for a recognized event type, or null for an unrecognized
+ * type (nothing to apply) or an event with nothing to write. */
+async function mutationFor(db: Db, env: Env, event: PolarEvent) {
+  switch (event.type) {
+    case "subscription.active":
+      return subscriptionActiveMutation(db, env, event);
+    case "subscription.revoked":
+      return subscriptionRevokedMutation(db, event);
+    case "subscription.canceled":
+      return subscriptionCanceledMutation(db, event);
+    case "subscription.updated":
+      return subscriptionUpdatedMutation(db, env, event);
+    case "subscription.uncanceled":
+      return subscriptionUncanceledMutation(db, event);
+    default:
+      return null;
+  }
 }
 
 export async function handlePolarWebhook(req: Request, env: Env): Promise<Response> {
@@ -170,19 +253,41 @@ export async function handlePolarWebhook(req: Request, env: Env): Promise<Respon
     return Response.json({ message: "Invalid signature" }, { status: 403 });
   }
   const event = JSON.parse(body) as PolarEvent;
-
   const db = drizzle(env.DB, { schema });
-  const handlers: Record<
-    string,
-    (db: ReturnType<typeof drizzle>, env: Env, event: PolarEvent) => Promise<void>
-  > = {
-    "subscription.active": handleSubscriptionActive,
-    "subscription.revoked": handleSubscriptionRevoked,
-    "subscription.canceled": handleSubscriptionCanceled,
-    "subscription.updated": handleSubscriptionUpdated,
-    "subscription.uncanceled": handleSubscriptionUncanceled,
-  };
-  const handler = handlers[event.type];
-  if (handler) await handler(db, env, event);
+
+  // One guarded statement, no delivery ledger: see `notStale` for why
+  // out-of-order deliveries are the case worth defending against and
+  // duplicates are not. A stale event matches no row and changes nothing,
+  // which is a success as far as Polar is concerned — anything other than a
+  // 2xx here earns a retry, and ten consecutive non-2xx responses disable
+  // the endpoint outright.
+  const mutation = await mutationFor(db, env, event);
+  if (mutation) {
+    const result = await mutation;
+    if (result.meta.changes === 0) await alertIfNoSuchSubject(db, env, event);
+  }
   return Response.json({ received: true });
+}
+
+/**
+ * A mutation that changed nothing is usually a stale delivery losing to
+ * `notStale`, which is the system working. It means something else when the
+ * event names a user or a subscription we hold no row for at all: a checkout
+ * whose metadata never carried a usable userId, or a subscription that
+ * outlived the account it belonged to. That silently costs someone the plan
+ * they paid for, so it is worth a look even though the response stays 200.
+ *
+ * The extra read only happens on the zero-row path, which is the rare one.
+ */
+async function alertIfNoSuchSubject(db: Db, env: Env, event: PolarEvent): Promise<void> {
+  const rows = await db.select({ id: schema.user.id }).from(schema.user).where(subjectOf(event));
+  if (rows.length > 0) return;
+  await alertBetterStack(env, [
+    {
+      event: "polar_webhook_no_matching_user",
+      type: event.type,
+      subscriptionId: event.data.id,
+      userId: String(event.data.metadata?.userId ?? "") || null,
+    },
+  ]);
 }

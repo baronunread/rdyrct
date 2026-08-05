@@ -10,10 +10,12 @@ import {
   applyTestMigrations,
   adminCookie,
   billingEnv,
+  overrideEnv,
   POLAR_HOBBY_PRODUCT_ID,
   POLAR_PRO_PRODUCT_ID,
   POLAR_WEBHOOK_SECRET,
 } from "./support";
+import type { Env } from "../../src/worker/env";
 
 // The Polar SDK makes real HTTP calls and expects a large, version-specific
 // response schema back; mocking the SDK class itself (rather than faking its
@@ -93,10 +95,19 @@ async function portal(cookie?: string): Promise<Response> {
   return res;
 }
 
+let nextMsgId = 0;
+
 /** Signs a Polar webhook payload the same way `standardwebhooks` verifies
- * it, so posting through the real handler round-trips correctly. */
+ * it, so posting through the real handler round-trips correctly. Each call
+ * gets its own delivery id, matching real Polar/Svix deliveries, which never
+ * reuse one across distinct events. */
 function signPayload(payload: string) {
-  const msgId = "msg-1";
+  return signPayloadWithId(payload, `msg-${++nextMsgId}`);
+}
+
+/** Same as signPayload, but with an explicit delivery id: for tests that
+ * simulate a redelivered (or spoofed-id) webhook. */
+function signPayloadWithId(payload: string, msgId: string) {
   const timestamp = new Date();
   const signature = new Webhook(btoa(POLAR_WEBHOOK_SECRET)).sign(msgId, timestamp, payload);
   return {
@@ -106,7 +117,25 @@ function signPayload(payload: string) {
   };
 }
 
-async function postWebhook(event: unknown, headers?: Record<string, string>): Promise<Response> {
+/** The standard subscription.active payload the redelivery tests build a
+ * scenario on top of. */
+function subscriptionActivePayload(): string {
+  return JSON.stringify({
+    type: "subscription.active",
+    data: {
+      id: "sub_1",
+      customer_id: "cus_1",
+      product_id: POLAR_PRO_PRODUCT_ID,
+      metadata: { userId: "user-1" },
+    },
+  });
+}
+
+async function postWebhook(
+  event: unknown,
+  headers?: Record<string, string>,
+  testEnv: Env = billingEnv(),
+): Promise<Response> {
   const payload = JSON.stringify(event);
   const ctx = createExecutionContext();
   const res = await worker.fetch(
@@ -115,7 +144,7 @@ async function postWebhook(event: unknown, headers?: Record<string, string>): Pr
       headers: { "content-type": "application/json", ...(headers ?? signPayload(payload)) },
       body: payload,
     }),
-    billingEnv(),
+    testEnv,
     ctx,
   );
   await waitOnExecutionContext(ctx);
@@ -324,5 +353,254 @@ describe("POST /api/webhooks/polar", () => {
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ received: true });
     expect((await getUser()).plan).toBe("free");
+  });
+
+  it("subscription.active never grants a plan for an unrecognized product id (#17)", async () => {
+    await seedUser({ plan: "free" });
+    const res = await postWebhook({
+      type: "subscription.active",
+      data: {
+        id: "sub_1",
+        customer_id: "cus_1",
+        product_id: "prod_unknown_or_stale",
+        metadata: { userId: "user-1" },
+      },
+    });
+    expect(res.status).toBe(200);
+    const user = await getUser();
+    expect(user.plan).toBe("free");
+    expect(user.polarSubscriptionId).toBeNull();
+  });
+
+  it("subscription.updated never grants a plan for an unrecognized product id (#17)", async () => {
+    await seedUser({ plan: "free" });
+    await postWebhook({
+      type: "subscription.updated",
+      data: {
+        id: "sub_1",
+        status: "active",
+        product_id: "prod_unknown_or_stale",
+        metadata: { userId: "user-1" },
+      },
+    });
+    expect((await getUser()).plan).toBe("free");
+  });
+
+  it("redelivering the same event is a no-op, because applying it twice lands the same state (#17)", async () => {
+    await seedUser({ plan: "free" });
+    const payload = subscriptionActivePayload();
+    const headers = signPayloadWithId(payload, "redelivered-1");
+
+    expect((await postWebhook(JSON.parse(payload), headers)).status).toBe(200);
+    const afterFirst = await getUser();
+    expect(afterFirst.plan).toBe("pro");
+
+    const redelivered = await postWebhook(JSON.parse(payload), headers);
+    expect(redelivered.status).toBe(200);
+    const afterSecond = await getUser();
+    expect(afterSecond.plan).toBe("pro");
+    expect(afterSecond.polarSubscriptionId).toBe(afterFirst.polarSubscriptionId);
+    expect(afterSecond.polarSubscriptionCancelAtPeriodEnd).toBe(
+      afterFirst.polarSubscriptionCancelAtPeriodEnd,
+    );
+  });
+
+  it("a late subscription.revoked cannot downgrade a user a newer event already upgraded (#17)", async () => {
+    await seedUser({ plan: "free" });
+
+    // The revoke happened first at Polar, the activation after it. Delivery
+    // arrives in the opposite order, which Polar explicitly does not
+    // guarantee against: the stale revoke must not win.
+    await postWebhook({
+      type: "subscription.active",
+      data: {
+        id: "sub_2",
+        product_id: POLAR_PRO_PRODUCT_ID,
+        metadata: { userId: "user-1" },
+        modified_at: "2026-03-02T00:00:00Z",
+      },
+    });
+    expect((await getUser()).plan).toBe("pro");
+
+    const stale = await postWebhook({
+      type: "subscription.revoked",
+      data: {
+        id: "sub_1",
+        metadata: { userId: "user-1" },
+        modified_at: "2026-03-01T00:00:00Z",
+      },
+    });
+
+    // 200, not an error: nothing is wrong, the event is simply obsolete.
+    // A non-2xx would earn a retry, and ten in a row disable the endpoint.
+    expect(stale.status).toBe(200);
+    const user = await getUser();
+    expect(user.plan).toBe("pro");
+    expect(user.polarSubscriptionId).toBe("sub_2");
+  });
+
+  it("a newer event still applies over an older one (#17)", async () => {
+    await seedUser({ plan: "free" });
+
+    await postWebhook({
+      type: "subscription.active",
+      data: {
+        id: "sub_1",
+        product_id: POLAR_PRO_PRODUCT_ID,
+        metadata: { userId: "user-1" },
+        modified_at: "2026-03-01T00:00:00Z",
+      },
+    });
+    expect((await getUser()).plan).toBe("pro");
+
+    await postWebhook({
+      type: "subscription.revoked",
+      data: {
+        id: "sub_1",
+        metadata: { userId: "user-1" },
+        modified_at: "2026-03-02T00:00:00Z",
+      },
+    });
+    expect((await getUser()).plan).toBe("free");
+  });
+
+  it("applies both of two sibling events that share a modified_at (#17)", async () => {
+    await seedUser({ plan: "free" });
+    const at = "2026-03-01T00:00:00Z";
+
+    await postWebhook({
+      type: "subscription.active",
+      data: {
+        id: "sub_1",
+        product_id: POLAR_PRO_PRODUCT_ID,
+        metadata: { userId: "user-1" },
+        modified_at: at,
+      },
+    });
+    // Same timestamp, different event: a strict `<` guard would silently
+    // drop this one and lose the scheduled cancellation.
+    await postWebhook({
+      type: "subscription.canceled",
+      data: {
+        id: "sub_1",
+        metadata: { userId: "user-1" },
+        current_period_end: "2026-04-01T00:00:00Z",
+        modified_at: at,
+      },
+    });
+
+    const user = await getUser();
+    expect(user.plan).toBe("pro");
+    expect(user.polarSubscriptionCancelAtPeriodEnd).toBe(true);
+  });
+
+  it("alerts when an event names a user we hold no row for (#17)", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(null));
+    const alerting = overrideEnv({
+      BETTER_AUTH_SECRET: "test-secret",
+      POLAR_WEBHOOK_SECRET,
+      POLAR_HOBBY_PRODUCT_ID,
+      POLAR_PRO_PRODUCT_ID,
+      BETTERSTACK_SOURCE_TOKEN: "tok_test",
+      BETTERSTACK_INGEST_URL: "https://in.logs.betterstack.example",
+    });
+
+    // No seeded user: the checkout metadata points at nobody, so the plan
+    // this event paid for lands on no one. Silent 200 is still the right
+    // answer to Polar, but it must not be silent to us.
+    const res = await postWebhook(
+      {
+        type: "subscription.active",
+        data: {
+          id: "sub_ghost",
+          product_id: POLAR_PRO_PRODUCT_ID,
+          metadata: { userId: "user-does-not-exist" },
+        },
+      },
+      undefined,
+      alerting,
+    );
+
+    expect(res.status).toBe(200);
+    const body = JSON.parse(String(fetchSpy.mock.calls[0]?.[1]?.body));
+    expect(body).toEqual([
+      {
+        event: "polar_webhook_no_matching_user",
+        type: "subscription.active",
+        subscriptionId: "sub_ghost",
+        userId: "user-does-not-exist",
+      },
+    ]);
+    fetchSpy.mockRestore();
+  });
+
+  it("does not alert when a real user's event is merely stale (#17)", async () => {
+    await seedUser({ plan: "free" });
+    const alerting = overrideEnv({
+      BETTER_AUTH_SECRET: "test-secret",
+      POLAR_WEBHOOK_SECRET,
+      POLAR_HOBBY_PRODUCT_ID,
+      POLAR_PRO_PRODUCT_ID,
+      BETTERSTACK_SOURCE_TOKEN: "tok_test",
+      BETTERSTACK_INGEST_URL: "https://in.logs.betterstack.example",
+    });
+    await postWebhook(
+      {
+        type: "subscription.active",
+        data: {
+          id: "sub_1",
+          product_id: POLAR_PRO_PRODUCT_ID,
+          metadata: { userId: "user-1" },
+          modified_at: "2026-03-02T00:00:00Z",
+        },
+      },
+      undefined,
+      alerting,
+    );
+
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(null));
+    await postWebhook(
+      {
+        type: "subscription.revoked",
+        data: {
+          id: "sub_1",
+          metadata: { userId: "user-1" },
+          modified_at: "2026-03-01T00:00:00Z",
+        },
+      },
+      undefined,
+      alerting,
+    );
+
+    // The row exists and the guard did its job: nothing to report.
+    expect(fetchSpy).not.toHaveBeenCalled();
+    fetchSpy.mockRestore();
+  });
+
+  it("falls back to created_at when modified_at is null (#17)", async () => {
+    await seedUser({ plan: "free" });
+    await postWebhook({
+      type: "subscription.active",
+      data: {
+        id: "sub_1",
+        product_id: POLAR_PRO_PRODUCT_ID,
+        metadata: { userId: "user-1" },
+        created_at: "2026-03-01T00:00:00Z",
+        modified_at: null,
+      },
+    });
+    expect((await getUser()).plan).toBe("pro");
+
+    const stale = await postWebhook({
+      type: "subscription.revoked",
+      data: {
+        id: "sub_1",
+        metadata: { userId: "user-1" },
+        created_at: "2026-02-01T00:00:00Z",
+        modified_at: null,
+      },
+    });
+    expect(stale.status).toBe(200);
+    expect((await getUser()).plan).toBe("pro");
   });
 });

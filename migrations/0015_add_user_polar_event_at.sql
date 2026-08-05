@@ -1,0 +1,24 @@
+-- Order guard for Polar webhook deliveries (#17).
+--
+-- Polar delivers at-least-once, retries up to 10 times with exponential
+-- backoff, and guarantees no ordering. The dangerous case is not a repeat of
+-- one event (every mutation is a blind UPDATE ... SET, so re-applying one
+-- lands on the same row state); it is an *older* event arriving after a
+-- newer one, which would quietly downgrade a paying customer when a delayed
+-- `subscription.revoked` lands after `subscription.active`.
+--
+-- This column records how fresh the state in the polar_* columns is, taken
+-- from the subscription's own `modified_at` (or `created_at` before its
+-- first change). Every webhook mutation carries
+-- `and (polar_event_at is null or polar_event_at <= ?)`, so a stale delivery
+-- matches no row and does nothing.
+--
+-- `<=` rather than `<` on purpose: duplicates are allowed through, because
+-- re-applying an idempotent SET costs nothing, and a strict `<` would drop
+-- the second of two sibling events (Polar can emit `subscription.canceled`
+-- and `subscription.updated` from one change, sharing a `modified_at`).
+--
+-- Null on existing rows: a user who has never had a webhook applied has no
+-- state to protect, and the `is null` branch lets the first one through.
+
+ALTER TABLE user ADD COLUMN polar_event_at INTEGER;
