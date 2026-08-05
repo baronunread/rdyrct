@@ -18,8 +18,12 @@ afterEach(() => {
 describe("blog reverse proxy", () => {
   it("never forwards the session cookie or an authorization header to the blog origin", async () => {
     const capturedHeaders: Headers[] = [];
-    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
-      capturedHeaders.push(new Headers((input as Request).headers));
+    // proxyBlog calls fetch(target, { headers, ... }): the forwarded headers
+    // live in the second (init) argument, not on `input` (a URL, not a
+    // Request). Reading `(input as Request).headers` would always be empty,
+    // so the assertions below would pass even if cookies leaked through.
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      capturedHeaders.push(new Request(input, init).headers);
       return new Response("ok");
     });
     const testEnv = overrideEnv({ BLOG_ORIGIN_URL: "https://rdyrct-blog.vercel.app" });

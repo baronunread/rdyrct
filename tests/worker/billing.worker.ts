@@ -10,10 +10,12 @@ import {
   applyTestMigrations,
   adminCookie,
   billingEnv,
+  overrideEnv,
   POLAR_HOBBY_PRODUCT_ID,
   POLAR_PRO_PRODUCT_ID,
   POLAR_WEBHOOK_SECRET,
 } from "./support";
+import type { Env } from "../../src/worker/env";
 
 // The Polar SDK makes real HTTP calls and expects a large, version-specific
 // response schema back; mocking the SDK class itself (rather than faking its
@@ -117,7 +119,25 @@ function signPayloadWithId(payload: string, msgId: string) {
   };
 }
 
-async function postWebhook(event: unknown, headers?: Record<string, string>): Promise<Response> {
+/** The standard subscription.active payload the redelivery tests build a
+ * scenario on top of. */
+function subscriptionActivePayload(): string {
+  return JSON.stringify({
+    type: "subscription.active",
+    data: {
+      id: "sub_1",
+      customer_id: "cus_1",
+      product_id: POLAR_PRO_PRODUCT_ID,
+      metadata: { userId: "user-1" },
+    },
+  });
+}
+
+async function postWebhook(
+  event: unknown,
+  headers?: Record<string, string>,
+  testEnv: Env = billingEnv(),
+): Promise<Response> {
   const payload = JSON.stringify(event);
   const ctx = createExecutionContext();
   const res = await worker.fetch(
@@ -126,11 +146,34 @@ async function postWebhook(event: unknown, headers?: Record<string, string>): Pr
       headers: { "content-type": "application/json", ...(headers ?? signPayload(payload)) },
       body: payload,
     }),
-    billingEnv(),
+    testEnv,
     ctx,
   );
   await waitOnExecutionContext(ctx);
   return res;
+}
+
+// A DB binding that fails any multi-statement batch (the ledger insert +
+// entitlement mutation pair) while every other D1 call passes through to the
+// real local D1, so a test can prove the two commit or fail together: see
+// issue #17 review — a mutation failing after the ledger already committed
+// used to make a Polar retry of the same delivery a silent no-op.
+function billingEnvWithFailingMutationBatch(): Env {
+  const realDB = env.DB;
+  const fakeDB: Pick<D1Database, "prepare" | "batch"> = {
+    prepare: (sql: string) => realDB.prepare(sql),
+    batch: (async (statements: D1PreparedStatement[]) => {
+      if (statements.length > 1) throw new Error("injected mutation failure");
+      return realDB.batch(statements as [D1PreparedStatement]);
+    }) as D1Database["batch"],
+  };
+  return overrideEnv({
+    BETTER_AUTH_SECRET: "test-secret",
+    POLAR_WEBHOOK_SECRET,
+    POLAR_HOBBY_PRODUCT_ID,
+    POLAR_PRO_PRODUCT_ID,
+    DB: fakeDB as D1Database,
+  });
 }
 
 describe("POST /api/billing/checkout", () => {
@@ -370,15 +413,7 @@ describe("POST /api/webhooks/polar", () => {
 
   it("redelivering the same event id is a harmless no-op, not reapplied (#17)", async () => {
     await seedUser({ plan: "free" });
-    const payload = JSON.stringify({
-      type: "subscription.active",
-      data: {
-        id: "sub_1",
-        customer_id: "cus_1",
-        product_id: POLAR_PRO_PRODUCT_ID,
-        metadata: { userId: "user-1" },
-      },
-    });
+    const payload = subscriptionActivePayload();
     const headers = signPayloadWithId(payload, "redelivered-1");
 
     const first = await postWebhook(JSON.parse(payload), headers);
@@ -392,6 +427,33 @@ describe("POST /api/webhooks/polar", () => {
     const redelivered = await postWebhook(JSON.parse(payload), headers);
     expect(redelivered.status).toBe(200);
     expect((await getUser()).plan).toBe("free");
+  });
+
+  it("rolls back the ledger entry when the entitlement mutation fails, so a retry re-applies it (#17)", async () => {
+    await seedUser({ plan: "free" });
+    const payload = subscriptionActivePayload();
+    const headers = signPayloadWithId(payload, "atomic-1");
+
+    // The mutation write fails: the ledger insert in the same batch must
+    // roll back with it, not commit on its own.
+    const failed = await postWebhook(
+      JSON.parse(payload),
+      headers,
+      billingEnvWithFailingMutationBatch(),
+    );
+    expect(failed.status).toBe(500);
+    expect((await getUser()).plan).toBe("free");
+    const ledgerRow = await env.DB.prepare("select id from polar_webhook_events where id = ?")
+      .bind("atomic-1")
+      .first();
+    expect(ledgerRow).toBeNull();
+
+    // Retrying the exact same delivery (Polar would, since the first attempt
+    // never returned 200) now succeeds and actually applies the entitlement,
+    // instead of finding a committed ledger row and silently no-op'ing.
+    const retried = await postWebhook(JSON.parse(payload), headers);
+    expect(retried.status).toBe(200);
+    expect((await getUser()).plan).toBe("pro");
   });
 
   it("rejects a redelivered id whose payload doesn't match what was recorded (#17)", async () => {

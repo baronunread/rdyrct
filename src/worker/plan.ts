@@ -17,28 +17,45 @@ async function runGuarded(env: Env, sql: string, bindings: unknown[]): Promise<b
   return result.meta.changes > 0;
 }
 
+/** Converts a Drizzle query into a raw D1 prepared statement, so a
+ * type-checked builder can still take part in a batch built from raw
+ * conditional SQL (D1 batch() takes D1PreparedStatement[], not a mix of
+ * Drizzle query builders and raw SQL). */
+function toD1Statement(env: Env, query: { sql: string; params: unknown[] }) {
+  return env.DB.prepare(query.sql).bind(...query.params);
+}
+
 /**
- * Creates an org and its owner membership: the org row always writes, but the
- * owner-membership row only writes if the caller is still under their
- * owned-org cap at write time (re-checked inside this one statement, not from
- * a value fetched earlier). If the cap was hit, the org row is rolled back by
- * hand so no org ever persists without an owner (see issue #18).
+ * Creates an org and its owner membership: the owner-membership row only
+ * writes if the caller is still under their owned-org cap at write time
+ * (re-checked inside its own statement, not from a value fetched earlier).
+ * All three statements — the org insert, the guarded membership insert, and
+ * a compensating delete that only fires when the guard found no room — run
+ * in one D1 batch (one atomic transaction), so no org ever persists without
+ * an owner (see issue #18) and the compensation can't itself fail as a
+ * separate, non-atomic follow-up call.
  */
 export async function createOwnedOrg(
   db: DB,
   env: Env,
   args: { orgId: string; userId: string; name: string; ts: number; ownedOrgLimit: number },
 ): Promise<boolean> {
-  await db.insert(schema.orgs).values({ id: args.orgId, name: args.name, createdAt: args.ts });
-  const gotOwnership = await runGuarded(
-    env,
-    `insert into org_members (org_id, user_id, role, created_at)
-     select ?, ?, 'owner', ?
-     where (select count(*) from org_members where user_id = ? and role = 'owner') < ?`,
-    [args.orgId, args.userId, args.ts, args.userId, args.ownedOrgLimit],
-  );
-  if (!gotOwnership) await db.delete(schema.orgs).where(eq(schema.orgs.id, args.orgId));
-  return gotOwnership;
+  const orgInsert = db
+    .insert(schema.orgs)
+    .values({ id: args.orgId, name: args.name, createdAt: args.ts })
+    .toSQL();
+  const results = await env.DB.batch([
+    toD1Statement(env, orgInsert),
+    env.DB.prepare(
+      `insert into org_members (org_id, user_id, role, created_at)
+       select ?, ?, 'owner', ?
+       where (select count(*) from org_members where user_id = ? and role = 'owner') < ?`,
+    ).bind(args.orgId, args.userId, args.ts, args.userId, args.ownedOrgLimit),
+    env.DB.prepare(
+      `delete from orgs where id = ? and not exists (select 1 from org_members where org_id = ?)`,
+    ).bind(args.orgId, args.orgId),
+  ]);
+  return results[1].meta.changes > 0;
 }
 
 /**
@@ -76,17 +93,15 @@ export async function acceptInviteAtomically(
   );
 }
 
-/**
- * Inserts a link_addresses row, honoring the org's `links` cap atomically: a
- * temp_alias never counts toward that cap (see countActiveAddresses) and
- * always writes; a primary/permanent_alias row only writes if the org is
- * still under its cap at write time, re-checked inside this one statement.
- */
-export async function insertAddressWithinLimit(
+/** Builds (without executing) the conditional link_addresses insert used by
+ * both insertAddressWithinLimit and insertLinkWithinLimit below: a
+ * primary/permanent_alias row only writes if the org is still under its
+ * `links` cap at write time, re-checked inside this one statement. */
+function guardedAddressInsertStatement(
   env: Env,
   address: typeof schema.linkAddresses.$inferInsert,
   linkLimit: number,
-): Promise<boolean> {
+) {
   const columns = [
     address.id,
     address.linkId,
@@ -99,18 +114,7 @@ export async function insertAddressWithinLimit(
     address.retiredAt,
     address.createdAt,
   ];
-  if (address.kind === "temp_alias") {
-    await runGuarded(
-      env,
-      `insert into link_addresses
-         (id, link_id, org_id, domain_id, slug, kind, creation_reason, expires_at, retired_at, created_at)
-       values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      columns,
-    );
-    return true;
-  }
-  return runGuarded(
-    env,
+  return env.DB.prepare(
     `insert into link_addresses
        (id, link_id, org_id, domain_id, slug, kind, creation_reason, expires_at, retired_at, created_at)
      select ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
@@ -118,8 +122,73 @@ export async function insertAddressWithinLimit(
        select count(*) from link_addresses
        where org_id = ? and retired_at is null and kind in ('primary', 'permanent_alias')
      ) < ?`,
-    [...columns, address.orgId, linkLimit],
-  );
+  ).bind(...columns, address.orgId, linkLimit);
+}
+
+/**
+ * Inserts a link_addresses row, honoring the org's `links` cap atomically: a
+ * temp_alias never counts toward that cap (see countActiveAddresses) and
+ * always writes; a primary/permanent_alias row only writes if the org is
+ * still under its cap at write time, re-checked inside this one statement.
+ */
+export async function insertAddressWithinLimit(
+  env: Env,
+  address: typeof schema.linkAddresses.$inferInsert,
+  linkLimit: number,
+): Promise<boolean> {
+  if (address.kind === "temp_alias") {
+    // Unconditional insert (a temp_alias never counts toward the cap): it
+    // either writes the row or throws, so `changes` is always > 0. Returning
+    // the guard's own result (rather than a hardcoded true) keeps this
+    // honest if the statement ever gains a WHERE clause.
+    return runGuarded(
+      env,
+      `insert into link_addresses
+         (id, link_id, org_id, domain_id, slug, kind, creation_reason, expires_at, retired_at, created_at)
+       values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        address.id,
+        address.linkId,
+        address.orgId,
+        address.domainId,
+        address.slug,
+        address.kind,
+        address.creationReason,
+        address.expiresAt,
+        address.retiredAt,
+        address.createdAt,
+      ],
+    );
+  }
+  const result = await guardedAddressInsertStatement(env, address, linkLimit).run();
+  return result.meta.changes > 0;
+}
+
+/**
+ * Creates a link and its primary address: the address only writes if the org
+ * is still under its `links` cap at write time. All three statements — the
+ * link insert, the guarded primary-address insert, and a compensating
+ * delete that only fires when the guard found no room — run in one D1 batch,
+ * so no link ever persists without its primary address (see issue #18) and
+ * the compensation can't itself fail as a separate, non-atomic follow-up
+ * call.
+ */
+export async function insertLinkWithinLimit(
+  db: DB,
+  env: Env,
+  link: typeof schema.links.$inferInsert,
+  address: typeof schema.linkAddresses.$inferInsert,
+  linkLimit: number,
+): Promise<boolean> {
+  const linkInsert = db.insert(schema.links).values(link).toSQL();
+  const results = await env.DB.batch([
+    toD1Statement(env, linkInsert),
+    guardedAddressInsertStatement(env, address, linkLimit),
+    env.DB.prepare(
+      `delete from links where id = ? and not exists (select 1 from link_addresses where link_id = ?)`,
+    ).bind(link.id, link.id),
+  ]);
+  return results[1].meta.changes > 0;
 }
 
 /**

@@ -9,6 +9,7 @@ import {
   orgPlan,
   countActiveAddresses,
   insertAddressWithinLimit,
+  insertLinkWithinLimit,
   keepAddressForeverWithinLimit,
 } from "../plan";
 import {
@@ -643,14 +644,13 @@ linkRoutes.post("/", requireOrgRole("member"), async (c) => {
   assertLinkQuota(activeCount, plan, limits);
   const link = newLinkRow(orgId, domainId, slug, body, utm, c.var.user!.id);
   const address = newAddressRow(link.id, orgId, domainId, slug, "primary", "created");
-  await db.insert(schema.links).values(link);
-  // Atomic: the org's links cap is re-checked at write time inside one D1
-  // statement, not from `activeCount` fetched above (see issue #18). If the
-  // cap was hit in the meantime, roll the link row back so no link ever
-  // persists without its primary address.
-  const inserted = await insertAddressWithinLimit(c.env, address, limits.links);
+  // Atomic: the link insert, the org's links-cap-guarded address insert, and
+  // a compensating delete (only if the cap was hit) all run in one D1 batch,
+  // not from `activeCount` fetched above (see issue #18) — so no link ever
+  // persists without its primary address, and the rollback can't itself fail
+  // as a separate call.
+  const inserted = await insertLinkWithinLimit(db, c.env, link, address, limits.links);
   if (!inserted) {
-    await db.delete(schema.links).where(eq(schema.links.id, link.id));
     throw new HTTPException(402, {
       message: "Upgrade your plan to create more links",
       cause: { code: "link_limit" },
@@ -924,18 +924,22 @@ linkRoutes.post(
       linkLimit: limits.links,
     });
     if (!kept) {
-      const stillActive = await db
-        .select({ id: schema.linkAddresses.id })
+      const [current] = await db
+        .select({ kind: schema.linkAddresses.kind, retiredAt: schema.linkAddresses.retiredAt })
         .from(schema.linkAddresses)
-        .where(
-          and(eq(schema.linkAddresses.id, address.id), isNull(schema.linkAddresses.retiredAt)),
-        );
-      if (!stillActive.length)
+        .where(eq(schema.linkAddresses.id, address.id));
+      if (!current || current.retiredAt !== null)
         throw new HTTPException(409, { message: "This address already expired" });
-      throw new HTTPException(402, {
-        message: "Upgrade your plan to keep more links",
-        cause: { code: "link_limit" },
-      });
+      // Still an active temp_alias: the guard failed on the cap, not a race.
+      // If it's no longer temp_alias, a concurrent keep-forever already
+      // promoted it — the caller's intent is already satisfied, so fall
+      // through to the re-publish + success response below instead of a
+      // false upgrade prompt.
+      if (current.kind === "temp_alias")
+        throw new HTTPException(402, {
+          message: "Upgrade your plan to keep more links",
+          cause: { code: "link_limit" },
+        });
     }
 
     // Re-publish is required, not optional: the cached expiresAt in KV must
