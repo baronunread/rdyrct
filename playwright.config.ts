@@ -67,9 +67,11 @@ export default defineConfig({
       reuseExistingServer: false,
       timeout: 180_000,
       gracefulShutdown: { signal: "SIGTERM", timeout: 500 },
+      // No CLOUDFLARE_ENV here: the built wrangler.json carries no
+      // `playwright` environment, so setting it only produces a warning.
+      // These tests are about response headers and need no backend state.
       env: {
         PLAYWRIGHT_TEST: "1",
-        CLOUDFLARE_ENV: "playwright",
       },
     },
   ],

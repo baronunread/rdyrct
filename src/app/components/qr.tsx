@@ -20,6 +20,18 @@ function looksOptions(look: QrLook) {
   };
 }
 
+/** Pixel size of a downloaded code, independent of how big the preview is
+ * on screen. A PNG is a bitmap: exported at preview size (~208px) it is
+ * about 17mm wide at print resolution, which is unusable on anything
+ * physical. SVG is vector and would scale either way. */
+const DOWNLOAD_SIZE = 1024;
+
+// qr-code-styling takes margin in pixels, so a fixed value would shrink the
+// quiet zone to nothing relative to a 1024px code. Held as a ratio of the
+// code's size instead, chosen to give exactly the previous 8px at the 208px
+// default so the preview is unchanged.
+const MARGIN_RATIO = 8 / 208;
+
 function makeQR(url: string, size: number, look: QrLook) {
   return new QRCodeStyling({
     width: size,
@@ -27,7 +39,7 @@ function makeQR(url: string, size: number, look: QrLook) {
     type: "svg",
     data: url,
     image: look.logo,
-    margin: 8,
+    margin: Math.round(size * MARGIN_RATIO),
     qrOptions: { errorCorrectionLevel: "H" },
     imageOptions: { margin: 4, imageSize: look.logoSize },
     ...looksOptions(look),
@@ -90,8 +102,14 @@ export function QRPreview({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [url, size, look.dot, look.corner, look.ink, look.eye, look.bg, look.logo, look.logoSize]);
 
-  const download = (extension: "png" | "svg") => {
-    qr.current?.download({ name: downloadName ?? "qr", extension });
+  const download = async (extension: "png" | "svg") => {
+    // Exported from a throwaway instance at DOWNLOAD_SIZE, not from the one
+    // on screen: qr-code-styling rasterizes to a canvas at its own
+    // width/height, so downloading from the preview inherits the preview's
+    // pixel size. Resizing the visible instance instead would work but makes
+    // it jump mid-download.
+    const full = makeQR(url, DOWNLOAD_SIZE, look);
+    await full.download({ name: downloadName ?? "qr", extension });
     posthog.capture("qr_code_downloaded", { format: extension });
   };
 
@@ -113,10 +131,10 @@ export function QRPreview({
       />
       {downloadName !== undefined && (
         <div className="flex gap-2">
-          <Button size="sm" onClick={() => download("png")}>
+          <Button size="sm" onClick={() => void download("png")}>
             <Download size={13} /> PNG
           </Button>
-          <Button size="sm" onClick={() => download("svg")}>
+          <Button size="sm" onClick={() => void download("svg")}>
             <Download size={13} /> SVG
           </Button>
         </div>
