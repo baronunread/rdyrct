@@ -6,6 +6,12 @@ export default defineConfig({
   testMatch: "**/*.pw.ts",
   globalSetup: "./tests/e2e/global-setup.ts",
   fullyParallel: true,
+  // Playwright defaults to half the machine's cores, which is 2 on a CI runner
+  // and 4 or more on a dev machine. Every worker talks to the same single
+  // Miniflare dev server, so the extra ones only queue behind each other:
+  // tests that pass in CI time out locally, and the whole suite runs slower
+  // (1.6m at 4 workers, 1.3m at 2). Pinned so both match.
+  workers: 2,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
   reporter: process.env.CI ? [["github"], ["html", { open: "never" }]] : "list",
