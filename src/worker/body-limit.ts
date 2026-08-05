@@ -6,7 +6,7 @@ import { bodyLimit } from "hono/body-limit";
 // malformed request reaching a route handler at all before any other
 // validation runs (see issue #19). Binary uploads (the QR logo route) set
 // their own, much larger limit instead of using this one.
-export const DEFAULT_JSON_BODY_LIMIT = 32 * 1024;
+const DEFAULT_JSON_BODY_LIMIT = 32 * 1024;
 
 export function jsonBodyLimit() {
   return bodyLimit({

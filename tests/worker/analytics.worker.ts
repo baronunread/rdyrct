@@ -39,6 +39,16 @@ async function seedLinkOnExistingOrg() {
   return db;
 }
 
+async function seedClicks(db: ReturnType<typeof drizzle>, timestamps: number[]) {
+  await db.insert(schema.clicks).values(
+    timestamps.map((ts) => ({
+      linkId: "link-1",
+      orgId: "org-1",
+      ts,
+    })),
+  );
+}
+
 beforeEach(applyTestMigrations);
 afterEach(reset);
 
@@ -63,13 +73,7 @@ describe("GET /orgs/:orgId/stats: totalClicks vs totalClicksDelta (#24)", () => 
       t - 500 * DAY_MS,
     ];
 
-    await db.insert(schema.clicks).values(
-      [...currentPeriod, ...previousPeriod, ...ancient].map((ts) => ({
-        linkId: "link-1",
-        orgId: "org-1",
-        ts,
-      })),
-    );
+    await seedClicks(db, [...currentPeriod, ...previousPeriod, ...ancient]);
 
     const res = await getStats(cookie);
     expect(res.status).toBe(200);
@@ -89,13 +93,7 @@ describe("GET /orgs/:orgId/links/stats/:slug: totalClicks vs totalClicksDelta (#
     const previousPeriod = [t - 8 * DAY_MS]; // 1 click
     const ancient = [t - 200 * DAY_MS, t - 300 * DAY_MS];
 
-    await db.insert(schema.clicks).values(
-      [...currentPeriod, ...previousPeriod, ...ancient].map((ts) => ({
-        linkId: "link-1",
-        orgId: "org-1",
-        ts,
-      })),
-    );
+    await seedClicks(db, [...currentPeriod, ...previousPeriod, ...ancient]);
 
     const res = await fetchWorker(
       new Request("http://localhost/api/orgs/org-1/links/stats/sale", {

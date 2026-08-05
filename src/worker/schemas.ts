@@ -24,7 +24,7 @@ export function parseBody<const TSchema extends v.GenericSchema>(
 // A bulk-invite request pasting far more than this is almost certainly a
 // mistake or abuse, not a real team roster; the org's member-cap check
 // below still applies on top of this.
-export const MAX_INVITE_EMAILS = 50;
+const MAX_INVITE_EMAILS = 50;
 
 export const inviteBodySchema = v.object({
   role: v.optional(v.picklist(["admin", "member"]), "member"),
