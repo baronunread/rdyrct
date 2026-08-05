@@ -10,7 +10,6 @@ import {
   applyTestMigrations,
   adminCookie,
   billingEnv,
-  overrideEnv,
   POLAR_HOBBY_PRODUCT_ID,
   POLAR_PRO_PRODUCT_ID,
   POLAR_WEBHOOK_SECRET,
@@ -99,10 +98,8 @@ let nextMsgId = 0;
 
 /** Signs a Polar webhook payload the same way `standardwebhooks` verifies
  * it, so posting through the real handler round-trips correctly. Each call
- * gets its own delivery id, matching real Polar/Svix deliveries (never
- * reused across distinct events) and the webhook handler's own dedupe
- * ledger (see issue #17), which would otherwise treat two same-id-but-
- * different-payload calls as a conflicting duplicate. */
+ * gets its own delivery id, matching real Polar/Svix deliveries, which never
+ * reuse one across distinct events. */
 function signPayload(payload: string) {
   return signPayloadWithId(payload, `msg-${++nextMsgId}`);
 }
@@ -151,29 +148,6 @@ async function postWebhook(
   );
   await waitOnExecutionContext(ctx);
   return res;
-}
-
-// A DB binding that fails any multi-statement batch (the ledger insert +
-// entitlement mutation pair) while every other D1 call passes through to the
-// real local D1, so a test can prove the two commit or fail together: see
-// issue #17 review — a mutation failing after the ledger already committed
-// used to make a Polar retry of the same delivery a silent no-op.
-function billingEnvWithFailingMutationBatch(): Env {
-  const realDB = env.DB;
-  const fakeDB: Pick<D1Database, "prepare" | "batch"> = {
-    prepare: (sql: string) => realDB.prepare(sql),
-    batch: (async (statements: D1PreparedStatement[]) => {
-      if (statements.length > 1) throw new Error("injected mutation failure");
-      return realDB.batch(statements as [D1PreparedStatement]);
-    }) as D1Database["batch"],
-  };
-  return overrideEnv({
-    BETTER_AUTH_SECRET: "test-secret",
-    POLAR_WEBHOOK_SECRET,
-    POLAR_HOBBY_PRODUCT_ID,
-    POLAR_PRO_PRODUCT_ID,
-    DB: fakeDB as D1Database,
-  });
 }
 
 describe("POST /api/billing/checkout", () => {
@@ -411,81 +385,138 @@ describe("POST /api/webhooks/polar", () => {
     expect((await getUser()).plan).toBe("free");
   });
 
-  it("redelivering the same event id is a harmless no-op, not reapplied (#17)", async () => {
+  it("redelivering the same event is a no-op, because applying it twice lands the same state (#17)", async () => {
     await seedUser({ plan: "free" });
     const payload = subscriptionActivePayload();
     const headers = signPayloadWithId(payload, "redelivered-1");
 
-    const first = await postWebhook(JSON.parse(payload), headers);
-    expect(first.status).toBe(200);
-    expect((await getUser()).plan).toBe("pro");
+    expect((await postWebhook(JSON.parse(payload), headers)).status).toBe(200);
+    const afterFirst = await getUser();
+    expect(afterFirst.plan).toBe("pro");
 
-    // Simulate the plan changing after the first delivery, then the exact
-    // same delivery landing again: it must not re-apply subscription.active
-    // and stomp the plan a downgrade webhook already set.
-    await db().update(schema.user).set({ plan: "free" }).where(eq(schema.user.id, "user-1"));
     const redelivered = await postWebhook(JSON.parse(payload), headers);
     expect(redelivered.status).toBe(200);
-    expect((await getUser()).plan).toBe("free");
-  });
-
-  it("rolls back the ledger entry when the entitlement mutation fails, so a retry re-applies it (#17)", async () => {
-    await seedUser({ plan: "free" });
-    const payload = subscriptionActivePayload();
-    const headers = signPayloadWithId(payload, "atomic-1");
-
-    // The mutation write fails: the ledger insert in the same batch must
-    // roll back with it, not commit on its own.
-    const failed = await postWebhook(
-      JSON.parse(payload),
-      headers,
-      billingEnvWithFailingMutationBatch(),
+    const afterSecond = await getUser();
+    expect(afterSecond.plan).toBe("pro");
+    expect(afterSecond.polarSubscriptionId).toBe(afterFirst.polarSubscriptionId);
+    expect(afterSecond.polarSubscriptionCancelAtPeriodEnd).toBe(
+      afterFirst.polarSubscriptionCancelAtPeriodEnd,
     );
-    expect(failed.status).toBe(500);
-    expect((await getUser()).plan).toBe("free");
-    const ledgerRow = await env.DB.prepare("select id from polar_webhook_events where id = ?")
-      .bind("atomic-1")
-      .first();
-    expect(ledgerRow).toBeNull();
-
-    // Retrying the exact same delivery (Polar would, since the first attempt
-    // never returned 200) now succeeds and actually applies the entitlement,
-    // instead of finding a committed ledger row and silently no-op'ing.
-    const retried = await postWebhook(JSON.parse(payload), headers);
-    expect(retried.status).toBe(200);
-    expect((await getUser()).plan).toBe("pro");
   });
 
-  it("rejects a redelivered id whose payload doesn't match what was recorded (#17)", async () => {
+  it("a late subscription.revoked cannot downgrade a user a newer event already upgraded (#17)", async () => {
     await seedUser({ plan: "free" });
-    const first = JSON.stringify({
+
+    // The revoke happened first at Polar, the activation after it. Delivery
+    // arrives in the opposite order, which Polar explicitly does not
+    // guarantee against: the stale revoke must not win.
+    await postWebhook({
+      type: "subscription.active",
+      data: {
+        id: "sub_2",
+        product_id: POLAR_PRO_PRODUCT_ID,
+        metadata: { userId: "user-1" },
+        modified_at: "2026-03-02T00:00:00Z",
+      },
+    });
+    expect((await getUser()).plan).toBe("pro");
+
+    const stale = await postWebhook({
+      type: "subscription.revoked",
+      data: {
+        id: "sub_1",
+        metadata: { userId: "user-1" },
+        modified_at: "2026-03-01T00:00:00Z",
+      },
+    });
+
+    // 200, not an error: nothing is wrong, the event is simply obsolete.
+    // A non-2xx would earn a retry, and ten in a row disable the endpoint.
+    expect(stale.status).toBe(200);
+    const user = await getUser();
+    expect(user.plan).toBe("pro");
+    expect(user.polarSubscriptionId).toBe("sub_2");
+  });
+
+  it("a newer event still applies over an older one (#17)", async () => {
+    await seedUser({ plan: "free" });
+
+    await postWebhook({
       type: "subscription.active",
       data: {
         id: "sub_1",
         product_id: POLAR_PRO_PRODUCT_ID,
         metadata: { userId: "user-1" },
+        modified_at: "2026-03-01T00:00:00Z",
       },
     });
-    const headers = signPayloadWithId(first, "conflict-1");
-    expect((await postWebhook(JSON.parse(first), headers)).status).toBe(200);
     expect((await getUser()).plan).toBe("pro");
 
-    // Same delivery id, different body: not a real retry, so it must be
-    // rejected rather than silently ignored or applied.
-    const conflicting = JSON.stringify({
+    await postWebhook({
       type: "subscription.revoked",
-      data: { id: "sub_1", metadata: { userId: "user-1" } },
+      data: {
+        id: "sub_1",
+        metadata: { userId: "user-1" },
+        modified_at: "2026-03-02T00:00:00Z",
+      },
     });
-    const conflictHeaders = {
-      ...headers,
-      "webhook-signature": new Webhook(btoa(POLAR_WEBHOOK_SECRET)).sign(
-        "conflict-1",
-        new Date(Number(headers["webhook-timestamp"]) * 1000),
-        conflicting,
-      ),
-    };
-    const res = await postWebhook(JSON.parse(conflicting), conflictHeaders);
-    expect(res.status).toBe(409);
+    expect((await getUser()).plan).toBe("free");
+  });
+
+  it("applies both of two sibling events that share a modified_at (#17)", async () => {
+    await seedUser({ plan: "free" });
+    const at = "2026-03-01T00:00:00Z";
+
+    await postWebhook({
+      type: "subscription.active",
+      data: {
+        id: "sub_1",
+        product_id: POLAR_PRO_PRODUCT_ID,
+        metadata: { userId: "user-1" },
+        modified_at: at,
+      },
+    });
+    // Same timestamp, different event: a strict `<` guard would silently
+    // drop this one and lose the scheduled cancellation.
+    await postWebhook({
+      type: "subscription.canceled",
+      data: {
+        id: "sub_1",
+        metadata: { userId: "user-1" },
+        current_period_end: "2026-04-01T00:00:00Z",
+        modified_at: at,
+      },
+    });
+
+    const user = await getUser();
+    expect(user.plan).toBe("pro");
+    expect(user.polarSubscriptionCancelAtPeriodEnd).toBe(true);
+  });
+
+  it("falls back to created_at when modified_at is null (#17)", async () => {
+    await seedUser({ plan: "free" });
+    await postWebhook({
+      type: "subscription.active",
+      data: {
+        id: "sub_1",
+        product_id: POLAR_PRO_PRODUCT_ID,
+        metadata: { userId: "user-1" },
+        created_at: "2026-03-01T00:00:00Z",
+        modified_at: null,
+      },
+    });
+    expect((await getUser()).plan).toBe("pro");
+
+    const stale = await postWebhook({
+      type: "subscription.revoked",
+      data: {
+        id: "sub_1",
+        metadata: { userId: "user-1" },
+        created_at: "2026-02-01T00:00:00Z",
+        modified_at: null,
+      },
+    });
+    expect(stale.status).toBe(200);
     expect((await getUser()).plan).toBe("pro");
   });
 });

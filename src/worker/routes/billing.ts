@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
-import { eq } from "drizzle-orm";
+import { and, eq, isNull, lte, or } from "drizzle-orm";
 import { Polar } from "@polar-sh/sdk";
 import { Webhook } from "standardwebhooks";
 import { drizzle } from "drizzle-orm/d1";
@@ -76,28 +76,58 @@ interface PolarEvent {
     cancel_at_period_end?: boolean;
     current_period_end?: string;
     ends_at?: string | null;
+    // How fresh this snapshot is. `modified_at` is null until the
+    // subscription's first change, so `created_at` is the fallback; both are
+    // on every Polar object (see @polar-sh/sdk's Subscription model).
+    created_at?: string;
+    modified_at?: string | null;
   };
 }
 
 type Db = ReturnType<typeof drizzle>;
 
-/** A built-but-unexecuted statement: `db.update(...).toSQL()` output,
- * converted to a raw D1 prepared statement so it can share a batch (one
- * atomic transaction) with a statement from a differently-shaped Drizzle
- * query — Drizzle's own typed `.batch()` rejects a tuple of otherwise-valid
- * query builders whose `.set()` calls touch different columns. */
-function toD1Statement(env: Env, query: { sql: string; params: unknown[] }) {
-  return env.DB.prepare(query.sql).bind(...query.params);
+/**
+ * When the state an event describes was set at Polar. Events without either
+ * timestamp sort as epoch 0, so they can only ever write over a row that has
+ * never been touched by a webhook.
+ */
+function eventAt(event: PolarEvent): Date {
+  const raw = event.data.modified_at ?? event.data.created_at;
+  const parsed = raw ? Date.parse(raw) : NaN;
+  return new Date(Number.isNaN(parsed) ? 0 : parsed);
 }
 
 /**
- * Each of these *builds* the entitlement mutation without executing it (no
- * `await`): the caller runs it in the same D1 batch as the webhook-delivery
- * ledger insert, so the two commit or fail together (see issue #17 review —
- * a mutation that failed after the ledger already committed used to make a
- * Polar retry of the same event a silent no-op instead of re-applying it).
- * `null` means "nothing to write" (e.g. no userId in metadata).
+ * Refuses to write over state a *newer* Polar event already wrote.
+ *
+ * Polar delivers at-least-once with no ordering guarantee, so a delayed
+ * `subscription.revoked` can land after the `subscription.active` that
+ * replaced it and downgrade a paying customer. Pairing every mutation's own
+ * WHERE with this one makes that stale write match no row.
+ *
+ * There is deliberately no delivery-id ledger. Each mutation below is a
+ * blind `UPDATE ... SET`, so applying one twice leaves the same row as
+ * applying it once — duplicate deliveries need no defence, only out-of-order
+ * ones do. `<=` follows from that: a repeat is harmless, while a strict `<`
+ * would drop the second of two sibling events that share a `modified_at`
+ * (Polar can emit `subscription.canceled` and `subscription.updated` from a
+ * single change).
  */
+function notStale(at: Date) {
+  return or(isNull(schema.user.polarEventAt), lte(schema.user.polarEventAt, at));
+}
+
+/**
+ * Each of these applies one event's entitlement change, guarded by
+ * `notStale`. `null` means "nothing to write" (e.g. no userId in metadata).
+ */
+
+/** Which user an event addresses: its checkout metadata, or the subscription
+ * id we already stored for them. */
+function subjectOf(event: PolarEvent) {
+  const userId = String(event.data.metadata?.userId ?? "");
+  return userId ? eq(schema.user.id, userId) : eq(schema.user.polarSubscriptionId, event.data.id);
+}
 
 async function subscriptionActiveMutation(db: Db, env: Env, event: PolarEvent) {
   const userId = String(event.data.metadata?.userId ?? "");
@@ -114,6 +144,7 @@ async function subscriptionActiveMutation(db: Db, env: Env, event: PolarEvent) {
     ]);
     return null;
   }
+  const at = eventAt(event);
   return db
     .update(schema.user)
     .set({
@@ -122,13 +153,13 @@ async function subscriptionActiveMutation(db: Db, env: Env, event: PolarEvent) {
       polarSubscriptionId: event.data.id,
       polarSubscriptionCancelAtPeriodEnd: false,
       polarSubscriptionCurrentPeriodEnd: null,
+      polarEventAt: at,
     })
-    .where(eq(schema.user.id, userId))
-    .toSQL();
+    .where(and(eq(schema.user.id, userId), notStale(at)));
 }
 
 function subscriptionRevokedMutation(db: Db, event: PolarEvent) {
-  const userId = String(event.data.metadata?.userId ?? "");
+  const at = eventAt(event);
   return db
     .update(schema.user)
     .set({
@@ -136,23 +167,24 @@ function subscriptionRevokedMutation(db: Db, event: PolarEvent) {
       polarSubscriptionId: null,
       polarSubscriptionCancelAtPeriodEnd: false,
       polarSubscriptionCurrentPeriodEnd: null,
+      polarEventAt: at,
     })
-    .where(userId ? eq(schema.user.id, userId) : eq(schema.user.polarSubscriptionId, event.data.id))
-    .toSQL();
+    .where(and(subjectOf(event), notStale(at)));
 }
 
 function subscriptionCanceledMutation(db: Db, event: PolarEvent) {
   const userId = String(event.data.metadata?.userId ?? "");
   const periodEnd = event.data.current_period_end ?? event.data.ends_at;
   if (!userId && !event.data.id) return null;
+  const at = eventAt(event);
   return db
     .update(schema.user)
     .set({
       polarSubscriptionCancelAtPeriodEnd: true,
       polarSubscriptionCurrentPeriodEnd: periodEnd ? new Date(periodEnd) : null,
+      polarEventAt: at,
     })
-    .where(userId ? eq(schema.user.id, userId) : eq(schema.user.polarSubscriptionId, event.data.id))
-    .toSQL();
+    .where(and(subjectOf(event), notStale(at)));
 }
 
 async function subscriptionUpdatedMutation(db: Db, env: Env, event: PolarEvent) {
@@ -170,29 +202,30 @@ async function subscriptionUpdatedMutation(db: Db, env: Env, event: PolarEvent) 
     ]);
     return null;
   }
+  const at = eventAt(event);
   return db
     .update(schema.user)
-    .set({ plan })
-    .where(userId ? eq(schema.user.id, userId) : eq(schema.user.polarSubscriptionId, event.data.id))
-    .toSQL();
+    .set({ plan, polarEventAt: at })
+    .where(and(subjectOf(event), notStale(at)));
 }
 
 function subscriptionUncanceledMutation(db: Db, event: PolarEvent) {
   const userId = String(event.data.metadata?.userId ?? "");
   if (!userId && !event.data.id) return null;
+  const at = eventAt(event);
   return db
     .update(schema.user)
     .set({
       polarSubscriptionCancelAtPeriodEnd: false,
       polarSubscriptionCurrentPeriodEnd: null,
+      polarEventAt: at,
     })
-    .where(userId ? eq(schema.user.id, userId) : eq(schema.user.polarSubscriptionId, event.data.id))
-    .toSQL();
+    .where(and(subjectOf(event), notStale(at)));
 }
 
-/** Builds the mutation for a recognized event type, or null for an
- * unrecognized type (nothing to apply) or an event with nothing to write. */
-async function buildMutation(db: Db, env: Env, event: PolarEvent) {
+/** The mutation for a recognized event type, or null for an unrecognized
+ * type (nothing to apply) or an event with nothing to write. */
+async function mutationFor(db: Db, env: Env, event: PolarEvent) {
   switch (event.type) {
     case "subscription.active":
       return subscriptionActiveMutation(db, env, event);
@@ -209,13 +242,6 @@ async function buildMutation(db: Db, env: Env, event: PolarEvent) {
   }
 }
 
-async function sha256Hex(body: string): Promise<string> {
-  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(body));
-  return Array.from(new Uint8Array(digest))
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("");
-}
-
 export async function handlePolarWebhook(req: Request, env: Env): Promise<Response> {
   const body = await req.text();
   try {
@@ -229,56 +255,13 @@ export async function handlePolarWebhook(req: Request, env: Env): Promise<Respon
   const event = JSON.parse(body) as PolarEvent;
   const db = drizzle(env.DB, { schema });
 
-  // The `webhook-id` header is Polar/Svix's per-delivery id: a durable
-  // ledger of it closes the "duplicate delivery re-applies state" hole (see
-  // issue #17). The ledger insert and the entitlement mutation run in the
-  // *same* D1 batch (one atomic transaction): if the mutation fails, the
-  // ledger insert rolls back with it, so a Polar retry of the same delivery
-  // finds no ledger row and re-applies the event instead of silently
-  // no-op'ing on an already-"processed" id.
-  const deliveryId = req.headers.get("webhook-id");
-  if (!deliveryId) {
-    const mutation = await buildMutation(db, env, event);
-    if (mutation) await toD1Statement(env, mutation).run();
-    return Response.json({ received: true });
-  }
-
-  const payloadHash = await sha256Hex(body);
-  const receivedAt = Date.now();
-  const ledgerInsert = db
-    .insert(schema.polarWebhookEvents)
-    .values({ id: deliveryId, type: event.type, receivedAt, payloadHash })
-    .onConflictDoNothing()
-    .toSQL();
-  const mutation = await buildMutation(db, env, event);
-  const statements = [toD1Statement(env, ledgerInsert)];
-  if (mutation) {
-    // Gated on this exact insert having actually written the ledger row (not
-    // just "a row with this id exists", which would also be true for an
-    // already-processed duplicate): `received_at` is unique to this attempt,
-    // so a conflicting duplicate's mutation becomes a no-op instead of
-    // re-applying on every redelivery.
-    statements.push(
-      toD1Statement(env, {
-        sql: `${mutation.sql} and exists (select 1 from polar_webhook_events where id = ? and received_at = ?)`,
-        params: [...mutation.params, deliveryId, receivedAt],
-      }),
-    );
-  }
-  const results = await env.DB.batch(statements);
-
-  if (results[0].meta.changes === 0) {
-    const existing = await env.DB.prepare(
-      "select payload_hash from polar_webhook_events where id = ?",
-    )
-      .bind(deliveryId)
-      .first<{ payload_hash: string }>();
-    // Same id, same payload: a harmless retry of a delivery already
-    // applied. Same id, different payload: a genuine conflict, not a
-    // retry, rejected rather than silently ignored or re-applied.
-    if (existing?.payload_hash === payloadHash) return Response.json({ received: true });
-    console.error("polar webhook: conflicting duplicate delivery id", deliveryId);
-    return Response.json({ message: "Conflicting duplicate event id" }, { status: 409 });
-  }
+  // One guarded statement, no delivery ledger: see `notStale` for why
+  // out-of-order deliveries are the case worth defending against and
+  // duplicates are not. A stale event matches no row and changes nothing,
+  // which is a success as far as Polar is concerned — anything other than a
+  // 2xx here earns a retry, and ten consecutive non-2xx responses disable
+  // the endpoint outright.
+  const mutation = await mutationFor(db, env, event);
+  if (mutation) await mutation;
   return Response.json({ received: true });
 }
