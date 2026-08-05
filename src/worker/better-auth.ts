@@ -7,7 +7,7 @@ import { and, eq } from "drizzle-orm";
 import * as schema from "./db/schema";
 import type { Env } from "./env";
 import { sendEmail } from "./email";
-import { emailHtml, safeUrl } from "./email-html";
+import { renderEmail } from "./email-layout";
 import { hashPassword, verifyPassword } from "./password";
 
 const DNS_CHECK_TIMEOUT = 3000;
@@ -129,10 +129,16 @@ function buildAuth(env: Env) {
           env,
           user.email,
           "Reset your rdyrct password",
-          emailHtml`<p>Hi ${user.name},</p>
-           <p>Someone requested a password reset for this account. If that was
-           you, <a href="${safeUrl(url)}">reset your password</a>. The link expires in
-           one hour; otherwise you can ignore this email.</p>`,
+          renderEmail({
+            preheader: "Reset your password. The link lasts one hour.",
+            heading: "Reset your password",
+            paragraphs: [
+              `Hi ${user.name},`,
+              "Someone asked to reset the password for this account.",
+            ],
+            cta: { label: "Reset your password", url },
+            note: "The link expires in one hour. If this was not you, ignore this email and nothing changes.",
+          }),
         );
       },
     },
@@ -166,9 +172,13 @@ function buildAuth(env: Env) {
             env,
             email,
             "Your rdyrct verification code",
-            emailHtml`<p>Your rdyrct verification code is
-             <strong style="font-size:20px;letter-spacing:2px">${otp}</strong>.</p>
-             <p>It expires in 10 minutes.</p>`,
+            renderEmail({
+              preheader: `${otp} is your rdyrct verification code.`,
+              heading: "Your verification code",
+              paragraphs: ["Enter this code to finish signing in."],
+              code: otp,
+              note: "The code expires in 10 minutes.",
+            }),
           );
         },
       }),

@@ -11,13 +11,20 @@ import { applyTestMigrations, fetchWorker, freeOwnerCookie } from "./support";
  * replacing the global is the honest seam: the request under assertion is
  * the one the worker would really send.
  */
-function captureSends(): { sent: { subject: string; html: string }[]; restore: () => void } {
-  const sent: { subject: string; html: string }[] = [];
+function captureSends(): {
+  sent: { subject: string; html: string; text: string }[];
+  restore: () => void;
+} {
+  const sent: { subject: string; html: string; text: string }[] = [];
   const original = globalThis.fetch;
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input instanceof Request ? input.url : input);
     if (url.includes("/emails")) {
-      const body = JSON.parse(String(init?.body ?? "{}")) as { subject: string; html: string };
+      const body = JSON.parse(String(init?.body ?? "{}")) as {
+        subject: string;
+        html: string;
+        text: string;
+      };
       sent.push(body);
       return new Response(JSON.stringify({ id: "sent" }), {
         status: 200,
@@ -89,5 +96,27 @@ describe("outbound email escapes user-controlled values (#72)", () => {
     // A subject is plain text to every client, so escaping it would show the
     // entities to the reader rather than protect them.
     expect(sent[0]!.subject).toContain(hostileOrgName);
+  });
+
+  it("sends a plain-text part alongside the HTML (#73)", async () => {
+    const cookie = await freeOwnerCookie();
+    const { sent, restore } = captureSends();
+
+    try {
+      await fetchWorker(
+        new Request("http://localhost/api/orgs/org-1/invites", {
+          method: "POST",
+          headers: { "content-type": "application/json", cookie },
+          body: JSON.stringify({ emails: ["recruit@example.com"], role: "member" }),
+        }),
+      );
+    } finally {
+      restore();
+    }
+
+    const { text } = sent[0]!;
+    expect(text).toContain("You're invited to join Test");
+    expect(text).toContain("Accept the invite: http://localhost/invite/");
+    expect(text).not.toContain("<");
   });
 });

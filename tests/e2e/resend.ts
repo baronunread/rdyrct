@@ -2,7 +2,12 @@ import { expect, type Page } from "@playwright/test";
 
 /** Depth-first search through an arbitrary JSON value (the emulator's
  * /emails response) for the email object that mentions `email`, then pulls
- * the 6-digit code out of its body. */
+ * the 6-digit code out of its body.
+ *
+ * The plain-text part is read first, and only a line that is nothing but the
+ * six digits counts. Scanning the whole serialized object for `\d{6}` used to
+ * work, but the shared layout carries hex colours, and `#262336` is six
+ * digits with word boundaries on both sides: it would be read as the code. */
 export function otpForEmail(value: unknown, email: string): string {
   if (Array.isArray(value)) {
     return value.map((item) => otpForEmail(item, email)).find(Boolean) ?? "";
@@ -12,6 +17,9 @@ export function otpForEmail(value: unknown, email: string): string {
   const record = value as Record<string, unknown>;
   const serialized = JSON.stringify(record);
   if (serialized.includes(email) && ("html" in record || "text" in record)) {
+    const text = typeof record.text === "string" ? record.text : "";
+    const onItsOwnLine = text.match(/^\s*(\d{6})\s*$/m)?.[1];
+    if (onItsOwnLine) return onItsOwnLine;
     return serialized.match(/\b\d{6}\b/)?.[0] ?? "";
   }
   return (
