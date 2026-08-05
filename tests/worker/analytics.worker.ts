@@ -1,24 +1,16 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { env } from "cloudflare:workers";
-import { createExecutionContext, reset, waitOnExecutionContext } from "cloudflare:test";
+import { reset } from "cloudflare:test";
 import { drizzle } from "drizzle-orm/d1";
-import worker from "../../src/worker";
 import * as schema from "../../src/worker/db/schema";
 import { now } from "../../src/worker/util";
 import {
   applyTestMigrations,
-  authEnv,
+  fetchWorker,
   freeOwnerCookie,
   sampleAddress,
   sampleLink,
 } from "./support";
-
-async function fetchWorker(request: Request): Promise<Response> {
-  const ctx = createExecutionContext();
-  const res = await worker.fetch(request, authEnv(), ctx);
-  await waitOnExecutionContext(ctx);
-  return res;
-}
 
 async function getStats(cookie: string, orgId = "org-1"): Promise<Response> {
   return fetchWorker(

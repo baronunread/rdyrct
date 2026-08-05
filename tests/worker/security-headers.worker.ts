@@ -1,17 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { env } from "cloudflare:workers";
-import { createExecutionContext, reset, waitOnExecutionContext } from "cloudflare:test";
-import worker from "../../src/worker";
+import { reset } from "cloudflare:test";
 import { applySecurityHeaders } from "../../src/worker/security-headers";
-import type { Env } from "../../src/worker/env";
-import { applyTestMigrations, overrideEnv } from "./support";
-
-async function fetchWorker(request: Request, testEnv: Env = env as Env): Promise<Response> {
-  const ctx = createExecutionContext();
-  const response = await worker.fetch(request, testEnv, ctx);
-  await waitOnExecutionContext(ctx);
-  return response;
-}
+import { applyTestMigrations, fetchWorker, overrideEnv } from "./support";
 
 const HEADER_NAMES = [
   "content-security-policy",

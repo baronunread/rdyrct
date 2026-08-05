@@ -1,14 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createExecutionContext, reset, waitOnExecutionContext } from "cloudflare:test";
 import worker from "../../src/worker";
-import { applyTestMigrations, authEnv, freeOwnerCookie } from "./support";
-
-async function fetchWorker(request: Request): Promise<Response> {
-  const ctx = createExecutionContext();
-  const res = await worker.fetch(request, authEnv(), ctx);
-  await waitOnExecutionContext(ctx);
-  return res;
-}
+import { applyTestMigrations, authEnv, fetchWorker, freeOwnerCookie } from "./support";
 
 async function postJson(cookie: string, path: string, body: unknown): Promise<Response> {
   return fetchWorker(
