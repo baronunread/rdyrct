@@ -19,6 +19,20 @@
 -- Best effort by design: a value this cannot reduce to something
 -- hostname-shaped is emptied rather than kept, matching normalizeReferrer,
 -- which returns "" rather than guessing.
+--
+-- The closing filters mirror isReportableHost() in src/worker/util.ts, so a
+-- row that survives this is a row ingestion would accept today. Change one
+-- and change the other, or the table keeps referrers the live path refuses.
+
+-- A referrer arrives over http(s). Anything else (data:, javascript:, ftp:,
+-- an app's custom scheme) is not a site we can name, and normalizeReferrer
+-- refuses it. Clear those first: after the scheme strip below,
+-- "ftp://collector.example" is indistinguishable from a real hostname.
+UPDATE clicks SET referrer = ''
+  WHERE referrer <> ''
+    AND instr(referrer, '://') > 0
+    AND lower(referrer) NOT LIKE 'http://%'
+    AND lower(referrer) NOT LIKE 'https://%';
 
 -- scheme: "https://host/..." -> "host/..."
 UPDATE clicks SET referrer = substr(referrer, instr(referrer, '://') + 3)
@@ -43,8 +57,32 @@ UPDATE clicks SET referrer = substr(referrer, 1, instr(referrer, ':') - 1)
 
 UPDATE clicks SET referrer = lower(referrer) WHERE referrer <> '';
 
--- Anything that is still not hostname-shaped (no dot, a space, or longer
--- than DNS allows) was never a site name we could report on.
+-- Anything still not hostname-shaped was never a site name we could report
+-- on: too long for DNS, no dot (a bare word like "localhost"), an empty
+-- label from a leading, trailing, or doubled dot, or a character a hostname
+-- cannot hold. The GLOB carries the character rule, and rejects control
+-- characters, spaces, and stray punctuation in one pass; it runs after the
+-- lower() above, so an uppercase letter here really is a leftover.
 UPDATE clicks SET referrer = ''
   WHERE referrer <> ''
-    AND (instr(referrer, '.') = 0 OR instr(referrer, ' ') > 0 OR length(referrer) > 253);
+    AND (length(referrer) > 253
+      OR instr(referrer, '.') = 0
+      OR instr(referrer, '..') > 0
+      OR referrer LIKE '.%'
+      OR referrer LIKE '%.'
+      OR referrer GLOB '*[^a-z0-9.-]*');
+
+-- The one rule the filters above cannot express: no single label may run
+-- past 63 characters. GLOB cannot say "64 characters that are not a dot"
+-- (SQLite rejects that pattern as too complex), so peel the labels off one
+-- at a time and measure them. The trailing '.' the seed row appends gives
+-- the last label a delimiter to be found by, so it is measured like the
+-- rest.
+WITH RECURSIVE labels(id, rest, label) AS (
+  SELECT id, referrer || '.', '' FROM clicks WHERE referrer <> ''
+  UNION ALL
+  SELECT id, substr(rest, instr(rest, '.') + 1), substr(rest, 1, instr(rest, '.') - 1)
+    FROM labels WHERE instr(rest, '.') > 0
+)
+UPDATE clicks SET referrer = ''
+  WHERE id IN (SELECT id FROM labels WHERE length(label) > 63);

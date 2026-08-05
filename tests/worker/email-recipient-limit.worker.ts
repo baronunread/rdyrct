@@ -31,12 +31,22 @@ function recordingLimit(keys: string[]): RateLimit {
   } as unknown as RateLimit;
 }
 
-async function requestReset(testEnv: Env, email: unknown): Promise<Response> {
+/**
+ * One password-reset request. `callerIp` fills cf-connecting-ip, which is
+ * the only input to the per-caller key: without it every request in a test
+ * looks like the same caller, and a limiter that keyed on the caller by
+ * mistake would pass the distributed-caller cases below.
+ */
+async function requestReset(
+  testEnv: Env,
+  email: unknown,
+  callerIp = "203.0.113.1",
+): Promise<Response> {
   const ctx = createExecutionContext();
   const res = await worker.fetch(
     new Request(`http://localhost${RESET_PATH}`, {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: { "content-type": "application/json", "cf-connecting-ip": callerIp },
       body: JSON.stringify({ email }),
     }),
     testEnv,
@@ -80,20 +90,52 @@ describe("recipient-keyed email rate limit (#50)", () => {
   });
 
   it("keys on the recipient, not the caller, so distributed callers share one budget", async () => {
-    const keys: string[] = [];
+    const callerKeys: string[] = [];
+    const recipientKeys: string[] = [];
     const testEnv = overrideEnv({
-      RL_EMAIL: openLimit(),
-      RL_EMAIL_RECIPIENT: recordingLimit(keys),
+      RL_EMAIL: recordingLimit(callerKeys),
+      RL_EMAIL_RECIPIENT: recordingLimit(recipientKeys),
     });
 
-    // Same recipient, different callers: Cloudflare fills cf-connecting-ip,
-    // and the caller key is an HMAC of it, so what matters is that the
-    // recipient key is identical across both.
-    await requestReset(testEnv, "victim@example.com");
-    await requestReset(testEnv, "VICTIM@Example.com  ");
+    // One recipient, two callers. Recording both budgets' keys is what makes
+    // this an assertion rather than a coincidence: the callers have to come
+    // out different for "the recipient key is the same anyway" to mean
+    // anything.
+    await requestReset(testEnv, "victim@example.com", "203.0.113.7");
+    await requestReset(testEnv, "VICTIM@Example.com  ", "198.51.100.4");
 
-    expect(keys).toHaveLength(2);
-    expect(keys[0]).toBe(keys[1]);
+    expect(callerKeys).toHaveLength(2);
+    expect(callerKeys[0]).not.toBe(callerKeys[1]);
+    expect(recipientKeys).toHaveLength(2);
+    expect(recipientKeys[0]).toBe(recipientKeys[1]);
+  });
+
+  it("stops a second caller once the recipient's budget is gone", async () => {
+    // The behaviour the key assertion above implies, spelled out: a fresh
+    // caller with its own untouched per-caller budget still gets refused,
+    // because the budget that ran out belongs to the address.
+    const spent = new Set<string>();
+    const recipientBudgetOfOne: RateLimit = {
+      limit: async ({ key }: { key: string }) => {
+        const success = !spent.has(key);
+        spent.add(key);
+        return { success };
+      },
+    } as unknown as RateLimit;
+    const testEnv = overrideEnv({
+      RL_EMAIL: openLimit(),
+      RL_EMAIL_RECIPIENT: recipientBudgetOfOne,
+    });
+
+    const first = await requestReset(testEnv, "victim@example.com", "203.0.113.7");
+    const second = await requestReset(testEnv, "victim@example.com", "198.51.100.4");
+    const other = await requestReset(testEnv, "bystander@example.com", "198.51.100.4");
+
+    expect(first.status).not.toBe(429);
+    expect(second.status).toBe(429);
+    // The bystander shares the second caller's IP, so only a recipient-keyed
+    // budget lets this one through.
+    expect(other.status).not.toBe(429);
   });
 
   it("gives a different recipient its own budget", async () => {

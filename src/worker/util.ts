@@ -196,6 +196,33 @@ export function isDisposableEmail(email: string): boolean {
  */
 const REFERRER_MAX_LENGTH = 253;
 
+/** The longest single dot-separated label DNS allows. */
+const REFERRER_MAX_LABEL_LENGTH = 63;
+
+/**
+ * What a stored referrer may look like: lowercase letters, digits, hyphens,
+ * and the dots between labels. Unicode domains arrive from `URL.hostname`
+ * already punycoded (`xn--…`), so they fit without an exception.
+ *
+ * Migration 0016 applies the same shape to the rows written before this
+ * existed. Keep the two in step: a value one accepts and the other clears
+ * would leave the table holding referrers ingestion would now refuse.
+ */
+const REFERRER_ALLOWED_CHARS = /^[a-z0-9.-]+$/;
+
+/**
+ * True when `host` is shaped like a name we could report on: within the DNS
+ * length limits, no empty labels (so no leading, trailing, or doubled dot),
+ * and at least one dot, which rules out bare words like "localhost".
+ */
+function isReportableHost(host: string): boolean {
+  if (host.length > REFERRER_MAX_LENGTH) return false;
+  if (!REFERRER_ALLOWED_CHARS.test(host)) return false;
+  const labels = host.split(".");
+  if (labels.length < 2) return false;
+  return labels.every((label) => label.length > 0 && label.length <= REFERRER_MAX_LABEL_LENGTH);
+}
+
 /**
  * What a click may remember about where it came from: a bare lowercase
  * hostname, or "" for direct and for anything we can't read (see issue #20).
@@ -222,7 +249,7 @@ export function normalizeReferrer(referrer: string): string {
   // file:, an app's custom scheme) is not a site we can name.
   if (url.protocol !== "http:" && url.protocol !== "https:") return "";
   const host = url.hostname.toLowerCase();
-  if (!host || host.length > REFERRER_MAX_LENGTH) return "";
+  if (!isReportableHost(host)) return "";
   return host;
 }
 

@@ -81,15 +81,20 @@ test("a click records the referring host, never the URL it came from (#20)", asy
 test("one address cannot be mailed without limit by many callers (#50)", async ({ page }) => {
   const victim = `victim-${Date.now()}@gmail.com`;
 
-  // Every request looks like a different caller as far as the per-caller
-  // budget is concerned; only the recipient is shared. Without a
-  // recipient-keyed limit every one of these would be accepted.
+  // Each attempt claims its own caller address, which the worker reads from
+  // cf-connecting-ip. That is what makes this a test of the recipient budget:
+  // no caller's own budget is spent twice, so the per-caller limit cannot be
+  // what refuses, and without a recipient-keyed limit every one of these
+  // would be accepted.
   const statuses: number[] = [];
   for (let attempt = 0; attempt < 6; attempt++) {
     const response = await page.request.post(
       `${appUrl}/api/auth/email-otp/request-password-reset`,
       {
-        headers: { "content-type": "application/json" },
+        headers: {
+          "content-type": "application/json",
+          "cf-connecting-ip": `203.0.113.${10 + attempt}`,
+        },
         data: { email: victim },
         failOnStatusCode: false,
       },
@@ -98,5 +103,9 @@ test("one address cannot be mailed without limit by many callers (#50)", async (
     if (response.status() === 429) break;
   }
 
-  expect(statuses).toContain(429);
+  // Refused on the fourth, not merely somewhere: RL_EMAIL_RECIPIENT allows 3
+  // a minute in this environment, so the position of the 429 is what names
+  // which budget ran out. Anything later would mean the recipient limit let
+  // a fourth send through.
+  expect(statuses.indexOf(429)).toBe(3);
 });
