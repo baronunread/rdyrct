@@ -158,7 +158,7 @@ export function referrerHost(referrer: string): string {
 // blocklist: it is display-only and never blocks a signup, so a miss costs
 // nothing. Mainstream regional providers stay OFF: qq.com (Tencent) reads as
 // unfamiliar, not throwaway, and its users are real. Keep entries lowercase.
-export const DISPOSABLE_EMAIL_DOMAINS = new Set([
+const DISPOSABLE_EMAIL_DOMAINS = new Set([
   "mailinator.com",
   "yopmail.com",
   "guerrillamail.com",
