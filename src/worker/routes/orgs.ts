@@ -162,8 +162,7 @@ orgRoutes.patch("/:orgId", requireOrgRole("admin"), async (c) => {
  * runs the ordered, per-step-retried sequence: capture the org's hostnames
  * and KV keys, delete the org row (D1 cascade), then deprovision Cloudflare
  * hostnames, KV entries, and the R2 logo prefix. Once the instance is
- * created, Workflows runs every step to completion. See
- * docs/storage-recovery.md.
+ * created, Workflows runs every step to completion.
  */
 const TERMINAL_WORKFLOW_STATUSES = new Set(["errored", "terminated", "complete"]);
 

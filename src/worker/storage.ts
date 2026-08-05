@@ -256,7 +256,7 @@ export async function logDeadLetterBatch(
  * A link or domain created after this snapshot would miss this gather step,
  * but by the time this runs `deleteOrg` (routes/orgs.ts) has already marked
  * the org deleting, and every write route rejects on that before it can
- * happen. See "Org deletion" in docs/storage-recovery.md.
+ * happen.
  */
 export async function orgDeleteGather(
   db: DB,

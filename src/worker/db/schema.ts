@@ -269,4 +269,4 @@ export const clicks = sqliteTable(
 
 // No storage outbox or failure table: KV/R2 follow-up work rides Cloudflare
 // Queues, and the queue's own dead-letter queue holds give-ups (four days) for
-// an operator to re-drive. See docs/storage-recovery.md.
+// an operator to re-drive.
