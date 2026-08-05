@@ -153,6 +153,16 @@ export const invites = sqliteTable(
   (t) => [index("idx_invites_org").on(t.orgId)],
 );
 
+// A durable ledger of processed Polar webhook deliveries (#17): `id` is the
+// `webhook-id` header (Svix-style delivery id), so a duplicate delivery of
+// the same event can be recognized and skipped instead of re-applied.
+export const polarWebhookEvents = sqliteTable("polar_webhook_events", {
+  id: text("id").primaryKey(),
+  type: text("type").notNull(),
+  receivedAt: integer("received_at").notNull(),
+  payloadHash: text("payload_hash").notNull(),
+});
+
 export const domains = sqliteTable(
   "domains",
   {

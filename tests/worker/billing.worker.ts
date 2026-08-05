@@ -93,10 +93,21 @@ async function portal(cookie?: string): Promise<Response> {
   return res;
 }
 
+let nextMsgId = 0;
+
 /** Signs a Polar webhook payload the same way `standardwebhooks` verifies
- * it, so posting through the real handler round-trips correctly. */
+ * it, so posting through the real handler round-trips correctly. Each call
+ * gets its own delivery id, matching real Polar/Svix deliveries (never
+ * reused across distinct events) and the webhook handler's own dedupe
+ * ledger (see issue #17), which would otherwise treat two same-id-but-
+ * different-payload calls as a conflicting duplicate. */
 function signPayload(payload: string) {
-  const msgId = "msg-1";
+  return signPayloadWithId(payload, `msg-${++nextMsgId}`);
+}
+
+/** Same as signPayload, but with an explicit delivery id: for tests that
+ * simulate a redelivered (or spoofed-id) webhook. */
+function signPayloadWithId(payload: string, msgId: string) {
   const timestamp = new Date();
   const signature = new Webhook(btoa(POLAR_WEBHOOK_SECRET)).sign(msgId, timestamp, payload);
   return {
@@ -324,5 +335,95 @@ describe("POST /api/webhooks/polar", () => {
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ received: true });
     expect((await getUser()).plan).toBe("free");
+  });
+
+  it("subscription.active never grants a plan for an unrecognized product id (#17)", async () => {
+    await seedUser({ plan: "free" });
+    const res = await postWebhook({
+      type: "subscription.active",
+      data: {
+        id: "sub_1",
+        customer_id: "cus_1",
+        product_id: "prod_unknown_or_stale",
+        metadata: { userId: "user-1" },
+      },
+    });
+    expect(res.status).toBe(200);
+    const user = await getUser();
+    expect(user.plan).toBe("free");
+    expect(user.polarSubscriptionId).toBeNull();
+  });
+
+  it("subscription.updated never grants a plan for an unrecognized product id (#17)", async () => {
+    await seedUser({ plan: "free" });
+    await postWebhook({
+      type: "subscription.updated",
+      data: {
+        id: "sub_1",
+        status: "active",
+        product_id: "prod_unknown_or_stale",
+        metadata: { userId: "user-1" },
+      },
+    });
+    expect((await getUser()).plan).toBe("free");
+  });
+
+  it("redelivering the same event id is a harmless no-op, not reapplied (#17)", async () => {
+    await seedUser({ plan: "free" });
+    const payload = JSON.stringify({
+      type: "subscription.active",
+      data: {
+        id: "sub_1",
+        customer_id: "cus_1",
+        product_id: POLAR_PRO_PRODUCT_ID,
+        metadata: { userId: "user-1" },
+      },
+    });
+    const headers = signPayloadWithId(payload, "redelivered-1");
+
+    const first = await postWebhook(JSON.parse(payload), headers);
+    expect(first.status).toBe(200);
+    expect((await getUser()).plan).toBe("pro");
+
+    // Simulate the plan changing after the first delivery, then the exact
+    // same delivery landing again: it must not re-apply subscription.active
+    // and stomp the plan a downgrade webhook already set.
+    await db().update(schema.user).set({ plan: "free" }).where(eq(schema.user.id, "user-1"));
+    const redelivered = await postWebhook(JSON.parse(payload), headers);
+    expect(redelivered.status).toBe(200);
+    expect((await getUser()).plan).toBe("free");
+  });
+
+  it("rejects a redelivered id whose payload doesn't match what was recorded (#17)", async () => {
+    await seedUser({ plan: "free" });
+    const first = JSON.stringify({
+      type: "subscription.active",
+      data: {
+        id: "sub_1",
+        product_id: POLAR_PRO_PRODUCT_ID,
+        metadata: { userId: "user-1" },
+      },
+    });
+    const headers = signPayloadWithId(first, "conflict-1");
+    expect((await postWebhook(JSON.parse(first), headers)).status).toBe(200);
+    expect((await getUser()).plan).toBe("pro");
+
+    // Same delivery id, different body: not a real retry, so it must be
+    // rejected rather than silently ignored or applied.
+    const conflicting = JSON.stringify({
+      type: "subscription.revoked",
+      data: { id: "sub_1", metadata: { userId: "user-1" } },
+    });
+    const conflictHeaders = {
+      ...headers,
+      "webhook-signature": new Webhook(btoa(POLAR_WEBHOOK_SECRET)).sign(
+        "conflict-1",
+        new Date(Number(headers["webhook-timestamp"]) * 1000),
+        conflicting,
+      ),
+    };
+    const res = await postWebhook(JSON.parse(conflicting), conflictHeaders);
+    expect(res.status).toBe(409);
+    expect((await getUser()).plan).toBe("pro");
   });
 });

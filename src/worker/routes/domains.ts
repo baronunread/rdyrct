@@ -5,7 +5,7 @@ import { drizzle } from "drizzle-orm/d1";
 import * as schema from "../db/schema";
 import type { AppEnv, DB, Env } from "../env";
 import { requireOrgRole } from "../org-role";
-import { orgPlan } from "../plan";
+import { orgPlan, insertDomainWithinLimit } from "../plan";
 import { enqueueStorage, syncDomainMsg } from "../storage";
 import { uid, now } from "../util";
 import { isValidHttpUrl, normalizeUrl } from "../util";
@@ -339,7 +339,15 @@ domainRoutes.post("/", async (c) => {
     cfHostnameId: null,
     createdAt: now(),
   };
-  await db.insert(schema.domains).values(row);
+  // Atomic: the org's domains cap is re-checked at write time inside one D1
+  // statement, not from the assertDomainQuota() count fetched above (see
+  // issue #18).
+  const inserted = await insertDomainWithinLimit(c.env, row, limits.domains);
+  if (!inserted)
+    throw new HTTPException(402, {
+      message: "Upgrade your plan to connect more domains",
+      cause: { code: "domain_limit" },
+    });
   // Keyed by the row id, so a duplicate create can never spawn a second
   // activation (and so never a second custom hostname) for this domain.
   try {
