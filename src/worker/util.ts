@@ -152,6 +152,44 @@ export function referrerHost(referrer: string): string {
   }
 }
 
+// Throwaway inbox providers. A signup from one of these is worth spotting in
+// the admin user list, so support can watch for abuse patterns. This is a
+// deliberately short, hand-picked list of the well-known ones, not a 50k-entry
+// blocklist: it is display-only and never blocks a signup, so a miss costs
+// nothing. Mainstream regional providers stay OFF: qq.com (Tencent) reads as
+// unfamiliar, not throwaway, and its users are real. Keep entries lowercase.
+const DISPOSABLE_EMAIL_DOMAINS = new Set([
+  "mailinator.com",
+  "yopmail.com",
+  "guerrillamail.com",
+  "guerrillamail.info",
+  "sharklasers.com",
+  "grr.la",
+  "10minutemail.com",
+  "temp-mail.org",
+  "tempmail.com",
+  "throwawaymail.com",
+  "getnada.com",
+  "trashmail.com",
+  "maildrop.cc",
+  "dispostable.com",
+  "fakeinbox.com",
+  "mohmal.com",
+  "emailondeck.com",
+  "moakt.com",
+]);
+
+/** True when an email's domain is a known throwaway inbox provider. */
+export function isDisposableEmail(email: string): boolean {
+  const at = email.lastIndexOf("@");
+  if (at === -1) return false;
+  const domain = email
+    .slice(at + 1)
+    .trim()
+    .toLowerCase();
+  return DISPOSABLE_EMAIL_DOMAINS.has(domain);
+}
+
 export function normalizeUrl(value: string): string {
   return /^https?:\/\//i.test(value) ? value : `https://${value}`;
 }

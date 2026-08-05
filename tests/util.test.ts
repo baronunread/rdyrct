@@ -5,6 +5,7 @@ import {
   buildDestination,
   deviceFromUA,
   EMPTY_UTM,
+  isDisposableEmail,
   isValidHttpUrl,
   normalizeUrl,
   qrLogoKeyFromUrl,
@@ -254,6 +255,35 @@ describe("isValidHttpUrl", () => {
     expect(isValidHttpUrl("https://example.")).toBe(false);
     expect(isValidHttpUrl("https://example.c")).toBe(false);
     expect(isValidHttpUrl("http./path")).toBe(false);
+  });
+});
+
+describe("isDisposableEmail", () => {
+  test("flags known throwaway providers", () => {
+    expect(isDisposableEmail("someone@mailinator.com")).toBe(true);
+    expect(isDisposableEmail("test@yopmail.com")).toBe(true);
+    expect(isDisposableEmail("a@guerrillamail.com")).toBe(true);
+  });
+
+  test("is case-insensitive and ignores surrounding whitespace", () => {
+    expect(isDisposableEmail("Test@Mailinator.com")).toBe(true);
+    expect(isDisposableEmail("test@YOPMAIL.COM ")).toBe(true);
+  });
+
+  test("leaves ordinary providers alone", () => {
+    expect(isDisposableEmail("me@gmail.com")).toBe(false);
+    expect(isDisposableEmail("dev@rdyrct.com")).toBe(false);
+  });
+
+  test("does not flag mainstream regional providers like qq.com", () => {
+    // Tencent's consumer mail reads as unfamiliar, not throwaway; its users
+    // are real, so keep it off the list.
+    expect(isDisposableEmail("user@qq.com")).toBe(false);
+  });
+
+  test("a string with no @ is not disposable", () => {
+    expect(isDisposableEmail("not-an-email")).toBe(false);
+    expect(isDisposableEmail("")).toBe(false);
   });
 });
 

@@ -4,7 +4,7 @@ import { eq, ne, gte, and, desc, lt, inArray, sql } from "drizzle-orm";
 import * as schema from "../db/schema";
 import type { AppEnv, DB } from "../env";
 import { requireAdmin } from "../guards";
-import { now } from "../util";
+import { isDisposableEmail, now } from "../util";
 import {
   PLAN_LIMITS,
   type AdminUsage,
@@ -574,6 +574,7 @@ adminRoutes.get("/users", async (c) => {
   return c.json(
     rows.map((r) => ({
       ...r,
+      disposable: isDisposableEmail(r.email),
       createdAt: r.createdAt.getTime(),
     })) satisfies AdminUserRow[],
   );
