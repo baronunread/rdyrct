@@ -11,9 +11,16 @@
  * Inline *script* has no such allowance — the one script this app used to
  * inline (the pre-paint theme bootstrap) now lives at /theme-init.js instead.
  *
- * connect-src/img-src include PostHog's ingest host: analytics-consent
- * capture calls (posthog-js) go straight to it, not through this Worker.
+ * PostHog appears in script-src, connect-src and img-src. All three are
+ * needed: posthog-js does not bundle its optional features, it builds
+ * `<assets host>/static/<name>.js` and injects it with createElement("script")
+ * the first time one is used, and lib/posthog.ts enables `capture_exceptions`.
+ * Allowing the ingest calls but not the script left exception capture dead in
+ * production while every test stayed green, because the dev server never
+ * loads PostHog. Covered now by tests/e2e/production/csp.pw.ts.
  */
+const POSTHOG = "https://*.posthog.com";
+
 // `@vitejs/plugin-react` injects an inline module preamble (the React Refresh
 // runtime) into index.html when Vite serves the app in dev. `script-src
 // 'self'` refuses it, the runtime never installs, and the SPA renders
@@ -24,15 +31,17 @@
 // so a deployed Worker cannot ship 'unsafe-inline' through a misread var.
 // The tradeoff is that e2e exercises a marginally looser policy than
 // production; everything except this one directive is identical.
-const SCRIPT_SRC = import.meta.env.DEV ? "script-src 'self' 'unsafe-inline'" : "script-src 'self'";
+const SCRIPT_SRC = import.meta.env.DEV
+  ? `script-src 'self' 'unsafe-inline' ${POSTHOG}`
+  : `script-src 'self' ${POSTHOG}`;
 
 const CSP = [
   "default-src 'self'",
   SCRIPT_SRC,
   "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' data: https://*.posthog.com",
+  `img-src 'self' data: ${POSTHOG}`,
   "font-src 'self'",
-  "connect-src 'self' https://*.posthog.com",
+  `connect-src 'self' ${POSTHOG}`,
   "object-src 'none'",
   "base-uri 'self'",
   "form-action 'self'",

@@ -1,5 +1,5 @@
 import { defineConfig, devices } from "@playwright/test";
-import { appUrl, playwrightPort } from "./tests/e2e/environment";
+import { appUrl, playwrightPort, previewPort, previewUrl } from "./tests/e2e/environment";
 
 export default defineConfig({
   testDir: "./tests/e2e",
@@ -17,12 +17,26 @@ export default defineConfig({
   projects: [
     {
       name: "chromium",
+      // The production suite has its own base URL and server; everything else
+      // runs against `vite dev`.
+      testIgnore: "**/production/**",
       use: {
         ...devices["Desktop Chrome"],
         // CI runners ship Google Chrome preinstalled: launch that instead of
         // downloading Playwright's own Chromium build. Local dev keeps using
         // the bundled build from `bun run e2e:install`.
         channel: process.env.CI ? "chrome" : undefined,
+      },
+    },
+    {
+      // Runs against the built worker and assets, where the real
+      // Content-Security-Policy applies. See tests/e2e/production/csp.pw.ts.
+      name: "production",
+      testDir: "./tests/e2e/production",
+      use: {
+        ...devices["Desktop Chrome"],
+        channel: process.env.CI ? "chrome" : undefined,
+        baseURL: previewUrl,
       },
     },
   ],
@@ -37,6 +51,21 @@ export default defineConfig({
       command: `bunx vite dev --host localhost --port ${playwrightPort} --strictPort`,
       url: appUrl,
       reuseExistingServer: false,
+      gracefulShutdown: { signal: "SIGTERM", timeout: 500 },
+      env: {
+        PLAYWRIGHT_TEST: "1",
+        CLOUDFLARE_ENV: "playwright",
+      },
+    },
+    {
+      // Built output, not the dev server: `vite dev` relaxes script-src for
+      // Vite's inline React Refresh preamble, so only this one serves the
+      // policy that actually ships. The build is part of the command so the
+      // suite can never assert against a stale dist/.
+      command: `bunx vite build && bunx vite preview --port ${previewPort} --strictPort`,
+      url: previewUrl,
+      reuseExistingServer: false,
+      timeout: 180_000,
       gracefulShutdown: { signal: "SIGTERM", timeout: 500 },
       env: {
         PLAYWRIGHT_TEST: "1",
