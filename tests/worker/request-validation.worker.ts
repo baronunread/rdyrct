@@ -20,6 +20,16 @@ async function postJson(cookie: string, path: string, body: unknown): Promise<Re
   );
 }
 
+async function postRawBody(cookie: string, path: string, rawBody: string): Promise<Response> {
+  return fetchWorker(
+    new Request(`http://localhost${path}`, {
+      method: "POST",
+      headers: { cookie, "content-type": "application/json" },
+      body: rawBody,
+    }),
+  );
+}
+
 beforeEach(applyTestMigrations);
 afterEach(reset);
 
@@ -64,6 +74,12 @@ describe("org name validation (#19)", () => {
     const res = await postJson(cookie, "/api/orgs", { name: "a".repeat(100) });
     expect(res.status).toBe(402);
   });
+
+  it("rejects a non-string name with 400 instead of a 500 from calling .trim() on it", async () => {
+    const cookie = await freeOwnerCookie();
+    const res = await postJson(cookie, "/api/orgs", { name: 1 });
+    expect(res.status).toBe(400);
+  });
 });
 
 describe("invite creation request validation (#19)", () => {
@@ -90,5 +106,11 @@ describe("invite creation request validation (#19)", () => {
     const cookie = await freeOwnerCookie();
     const res = await postJson(cookie, "/api/orgs/org-1/invites", {});
     expect(res.status).toBe(201);
+  });
+
+  it("rejects malformed JSON with 400 instead of silently creating a bearer invite", async () => {
+    const cookie = await freeOwnerCookie();
+    const res = await postRawBody(cookie, "/api/orgs/org-1/invites", "{not valid json");
+    expect(res.status).toBe(400);
   });
 });

@@ -105,7 +105,8 @@ function qrPatchFields(body: OrgQrPatchBody): Partial<typeof schema.orgs.$inferI
 // validation can't store an unbounded name (see issue #19).
 const ORG_NAME_MAX_LENGTH = 100;
 
-function requireOrgName(name: string): string {
+function requireOrgName(name: unknown): string {
+  if (typeof name !== "string") throw new HTTPException(400, { message: "Name must be a string" });
   const trimmed = name.trim();
   if (!trimmed) throw new HTTPException(400, { message: "Name required" });
   if (trimmed.length > ORG_NAME_MAX_LENGTH)
@@ -300,7 +301,13 @@ async function occupiedSeats(db: AppEnv["Variables"]["db"], orgId: string): Prom
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 orgRoutes.post("/:orgId/invites", requireOrgRole("admin"), async (c) => {
-  const body = parseBody(inviteBodySchema, await c.req.json().catch(() => ({})));
+  let rawBody: unknown;
+  try {
+    rawBody = await c.req.json();
+  } catch {
+    throw new HTTPException(400, { message: "Invalid request body" });
+  }
+  const body = parseBody(inviteBodySchema, rawBody);
   const role = body.role;
   const orgIdParam = c.req.param("orgId");
   const { plan, limits } = await orgPlan(c.var.db, orgIdParam);
