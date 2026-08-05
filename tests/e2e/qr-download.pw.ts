@@ -48,6 +48,6 @@ test("a downloaded QR PNG is big enough to print, not preview-sized (#88)", asyn
 
   // The preview renders at 208px; exporting from that instance is the bug.
   const { width, height } = await pngSize(path!);
-  expect(width).toBeGreaterThanOrEqual(1024);
-  expect(height).toBeGreaterThanOrEqual(1024);
+  expect(width).toBe(1024);
+  expect(height).toBe(1024);
 });

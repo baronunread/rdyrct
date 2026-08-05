@@ -93,6 +93,12 @@ export function QRPreview({
       qr.current.append(holder.current);
     } else {
       qr.current.update({
+        // Dimensions travel with the rest: `size` is a dependency here, and
+        // update() keeps whatever it is not given, so leaving these out would
+        // strand a resized preview at its first size and quiet zone.
+        width: size,
+        height: size,
+        margin: Math.round(size * MARGIN_RATIO),
         data: url,
         image: look.logo,
         imageOptions: { margin: 4, imageSize: look.logoSize },

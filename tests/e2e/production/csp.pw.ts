@@ -14,6 +14,21 @@ test.beforeEach(async ({ page }) => {
   await collectCspViolations(page);
 });
 
+test("the built worker serves the production CSP", async ({ page }) => {
+  // Every other test here asks the browser what the policy refused, which a
+  // page carrying no policy at all answers with silence. Pin the header first,
+  // so a preview server that stopped running applySecurityHeaders fails loudly
+  // instead of turning the rest of this file green.
+  const response = await page.goto("/");
+  const csp = response?.headers()["content-security-policy"];
+
+  expect(csp).toBeTruthy();
+  // style-src carries 'unsafe-inline' by design (React inline `style`), so the
+  // check that matters is script-src alone, read as its own directive.
+  const scriptSrc = csp?.split(";").find((part) => part.trim().startsWith("script-src"));
+  expect(scriptSrc?.trim()).toBe("script-src 'self' https://*.posthog.com");
+});
+
 test("the landing page renders under the production CSP without violations", async ({ page }) => {
   await page.goto("/");
 
@@ -41,9 +56,12 @@ test("QR previews render under the production CSP without violations", async ({ 
 });
 
 test("legal pages render under the production CSP without violations", async ({ page }) => {
-  await visitLegalPages(page);
-
-  expect(await cspViolations(page)).toEqual([]);
+  // Violations are recorded on `window`, and the collector re-runs on every
+  // navigation, so /privacy's record is already gone by the time /terms has
+  // loaded. Each page has to be asserted before we leave it.
+  await visitLegalPages(page, async (path) => {
+    expect(await cspViolations(page), path).toEqual([]);
+  });
 });
 
 test("the production CSP permits the scripts PostHog fetches at runtime", async ({ page }) => {
