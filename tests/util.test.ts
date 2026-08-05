@@ -1,4 +1,6 @@
 import { describe, expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import {
   buildDestination,
   deviceFromUA,
@@ -23,6 +25,24 @@ const UTM = {
   utmTerm: "shoes",
   utmContent: "banner",
 };
+
+const readSource = (rel: string) => readFileSync(join(import.meta.dir, "..", rel), "utf8");
+
+/**
+ * Pull the top-level path segments a set of route registrations owns. `re`'s
+ * last capture group is the path string; `/`, `*`, and `:params` are dropped
+ * (nothing can claim those as a slug). Used to derive the reserved set from
+ * the actual routers instead of hardcoding a third copy of the list.
+ */
+function topSegments(source: string, re: RegExp): string[] {
+  const segs = new Set<string>();
+  for (const m of source.matchAll(re)) {
+    const seg = m[m.length - 1].replace(/^\//, "").split("/")[0];
+    if (!seg || seg === "*" || seg.startsWith(":")) continue;
+    segs.add(seg.toLowerCase());
+  }
+  return [...segs];
+}
 
 describe("uid / randomSlug", () => {
   test("uid has the requested length and uses the id alphabet", () => {
@@ -57,21 +77,33 @@ describe("SLUG_RE / RESERVED_SLUGS", () => {
     expect(SLUG_RE.test("x".repeat(65))).toBe(false);
   });
 
-  test("app routes are reserved", () => {
-    for (const kw of [
-      "api",
-      "dashboard",
-      "analytics",
-      "links",
-      "domains",
-      "members",
-      "billing",
-      "settings",
-      "admin",
-      "login",
-      "signup",
-    ])
-      expect(RESERVED_SLUGS.has(kw)).toBe(true);
+  // A top-level path is owned in two places: the React router (src/app/main.tsx)
+  // and the Worker (src/worker/index.ts, which owns /api and the /blog proxy on
+  // top of the SPA's routes). A slug that shadows either sits a stranger's
+  // redirect on one of our own pages, and both slug guards (the /:slug redirect
+  // and slug creation) only check RESERVED_SLUGS. So derive the owned segments
+  // from both routers and assert every one is reserved: a new route added
+  // without a matching entry fails here instead of becoming a claimable slug.
+  test("every top-level route is reserved (drift guard)", () => {
+    const reactRoutes = topSegments(readSource("src/app/main.tsx"), /path="([^"]+)"/g);
+    const workerRoutes = topSegments(
+      readSource("src/worker/index.ts"),
+      /\bapp\.(?:all|get|post|put|patch|delete|on|route|use)\(\s*(?:\[[^\]]*\]\s*,\s*)?"([^"]+)"/g,
+    );
+
+    // Guard against a regex that silently matches nothing after a refactor,
+    // which would make the assertion below vacuously pass. `blog` is only in
+    // the Worker; `dashboard` is only in the React router.
+    expect(reactRoutes).toContain("dashboard");
+    expect(workerRoutes).toContain("blog");
+    expect(workerRoutes).toContain("api");
+
+    const owned = [...new Set([...reactRoutes, ...workerRoutes])];
+    const unreserved = owned.filter((seg) => !RESERVED_SLUGS.has(seg));
+    expect(unreserved).toEqual([]);
+  });
+
+  test("a random word is not reserved", () => {
     expect(RESERVED_SLUGS.has("some-random-word")).toBe(false);
   });
 });
