@@ -31,7 +31,7 @@ function LinkDetailHeader({
         </button>
       </Link>
       <div className="min-w-0 flex-1">
-        <h1 className="truncate text-lg font-bold tracking-wide">{title}</h1>
+        <h1 className="truncate text-lg font-bold tracking-tight">{title}</h1>
         {subtitle && <p className="mt-0.5 truncate text-sm text-muted">{subtitle}</p>}
       </div>
       <a

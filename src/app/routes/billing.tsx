@@ -187,6 +187,7 @@ function ManageSubscriptionButton({
 
 function PlanActions({
   plan,
+  hasBillingAccount,
   checkoutPlan,
   showPortalOverlay,
   confirmTimedOut,
@@ -199,6 +200,7 @@ function PlanActions({
   onPortal,
 }: {
   plan: OrgPlan;
+  hasBillingAccount: boolean;
   checkoutPlan: "hobby" | "pro" | null;
   showPortalOverlay: boolean;
   confirmTimedOut: boolean;
@@ -235,14 +237,22 @@ function PlanActions({
               shakePro={shakePro}
               onUpgrade={onUpgrade}
             />
-          ) : (
+          ) : hasBillingAccount ? (
             <ManageSubscriptionButton
               showPortalOverlay={showPortalOverlay}
               shakePortal={shakePortal}
               onPortal={onPortal}
             />
+          ) : (
+            // A paid plan with no billing account: comped, or a subscription
+            // that arrived without a customer id. The portal cannot open for
+            // them, so offer the truth instead of a button that errors (#85).
+            <p className="text-sm text-muted">
+              This plan was granted directly, so there is no subscription to manage. Email support
+              to change it.
+            </p>
           )}
-          {plan === "hobby" && (
+          {plan === "hobby" && hasBillingAccount && (
             <p className="mt-2 text-xs text-muted">
               Want Pro? Switch plans from the subscription portal.
             </p>
@@ -584,6 +594,7 @@ export function BillingPage() {
       <div className="flex flex-col gap-4">
         <PlanActions
           plan={plan}
+          hasBillingAccount={me.data?.user.hasBillingAccount ?? false}
           checkoutPlan={checkoutPlan}
           showPortalOverlay={showPortalOverlay}
           confirmTimedOut={confirmTimedOut}

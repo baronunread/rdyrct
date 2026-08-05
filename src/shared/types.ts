@@ -74,6 +74,15 @@ export interface User {
   plan: OrgPlan;
   polarSubscriptionCancelAtPeriodEnd: boolean;
   polarSubscriptionCurrentPeriodEnd: number | null;
+  /**
+   * Whether a Polar customer exists for this user, which is what the
+   * subscription portal needs. A paid plan does not imply one: an admin can
+   * comp a plan, and a webhook can carry a null customer id. Without this the
+   * billing page cannot tell a subscriber from a comped user, and offers both
+   * a portal only one of them has (#85). Never the customer id itself: the
+   * client has no use for a provider identifier.
+   */
+  hasBillingAccount: boolean;
 }
 
 export interface QrOverrides {

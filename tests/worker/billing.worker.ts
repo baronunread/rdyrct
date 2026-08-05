@@ -216,6 +216,68 @@ describe("GET /api/billing/portal", () => {
   });
 });
 
+describe("GET /api/user reports whether a billing account exists (#85)", () => {
+  async function currentUser(cookie: string) {
+    const ctx = createExecutionContext();
+    const res = await worker.fetch(
+      new Request("http://localhost/api/user", { headers: { cookie } }),
+      billingEnv(),
+      ctx,
+    );
+    await waitOnExecutionContext(ctx);
+    return (await res.json()) as { user: { plan: string; hasBillingAccount: boolean } };
+  }
+
+  it("is false for a comped user, whose portal would error", async () => {
+    const cookie = await adminCookie();
+    // What "Set plan" in the admin UI does: a paid plan, no Polar customer.
+    await db().update(schema.user).set({ plan: "pro" }).where(eq(schema.user.id, "admin-1"));
+
+    const { user } = await currentUser(cookie);
+
+    expect(user.plan).toBe("pro");
+    expect(user.hasBillingAccount).toBe(false);
+    // The signal has to agree with the route it guards, or the button is
+    // dead again.
+    expect((await portal(cookie)).status).toBe(400);
+  });
+
+  it("is true once a Polar customer exists", async () => {
+    const cookie = await adminCookie();
+    await db()
+      .update(schema.user)
+      .set({ plan: "pro", polarCustomerId: "cus_123" })
+      .where(eq(schema.user.id, "admin-1"));
+
+    expect((await currentUser(cookie)).user.hasBillingAccount).toBe(true);
+    expect((await portal(cookie)).status).toBe(200);
+  });
+
+  it("is false on the free plan, which has no customer either", async () => {
+    const cookie = await adminCookie();
+    await db().update(schema.user).set({ plan: "free" }).where(eq(schema.user.id, "admin-1"));
+
+    expect((await currentUser(cookie)).user.hasBillingAccount).toBe(false);
+  });
+
+  it("never exposes the Polar customer id itself", async () => {
+    const cookie = await adminCookie();
+    await db()
+      .update(schema.user)
+      .set({ polarCustomerId: "cus_secret" })
+      .where(eq(schema.user.id, "admin-1"));
+
+    const ctx = createExecutionContext();
+    const res = await worker.fetch(
+      new Request("http://localhost/api/user", { headers: { cookie } }),
+      billingEnv(),
+      ctx,
+    );
+    await waitOnExecutionContext(ctx);
+    expect(await res.text()).not.toContain("cus_secret");
+  });
+});
+
 describe("POST /api/webhooks/polar", () => {
   it("rejects a payload with an invalid signature", async () => {
     await seedUser();

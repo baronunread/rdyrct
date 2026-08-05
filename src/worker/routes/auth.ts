@@ -20,28 +20,39 @@ async function currentUserFor(
   // owner membership to that user's subscription (self-joins on members/user).
   const ownerMember = alias(schema.orgMembers, "owner_member");
   const ownerUser = alias(schema.user, "owner_user");
-  const rows = await db
-    .select({
-      id: schema.orgs.id,
-      name: schema.orgs.name,
-      role: schema.orgMembers.role,
-      ownerPlan: ownerUser.plan,
-      qrLogo: schema.orgs.qrLogo,
-      qrStyle: schema.orgs.qrStyle,
-      qrColor: schema.orgs.qrColor,
-      qrCorner: schema.orgs.qrCorner,
-      qrBg: schema.orgs.qrBg,
-      qrEyeColor: schema.orgs.qrEyeColor,
-      qrLogoSize: schema.orgs.qrLogoSize,
-    })
-    .from(schema.orgMembers)
-    .innerJoin(schema.orgs, eq(schema.orgMembers.orgId, schema.orgs.id))
-    .leftJoin(
-      ownerMember,
-      and(eq(ownerMember.orgId, schema.orgs.id), eq(ownerMember.role, "owner")),
-    )
-    .leftJoin(ownerUser, eq(ownerMember.userId, ownerUser.id))
-    .where(eq(schema.orgMembers.userId, user.id));
+  // Both queries answer to the same user and neither feeds the other, so
+  // they go out together rather than costing this route two round trips.
+  const [rows, billingRows] = await Promise.all([
+    db
+      .select({
+        id: schema.orgs.id,
+        name: schema.orgs.name,
+        role: schema.orgMembers.role,
+        ownerPlan: ownerUser.plan,
+        qrLogo: schema.orgs.qrLogo,
+        qrStyle: schema.orgs.qrStyle,
+        qrColor: schema.orgs.qrColor,
+        qrCorner: schema.orgs.qrCorner,
+        qrBg: schema.orgs.qrBg,
+        qrEyeColor: schema.orgs.qrEyeColor,
+        qrLogoSize: schema.orgs.qrLogoSize,
+      })
+      .from(schema.orgMembers)
+      .innerJoin(schema.orgs, eq(schema.orgMembers.orgId, schema.orgs.id))
+      .leftJoin(
+        ownerMember,
+        and(eq(ownerMember.orgId, schema.orgs.id), eq(ownerMember.role, "owner")),
+      )
+      .leftJoin(ownerUser, eq(ownerMember.userId, ownerUser.id))
+      .where(eq(schema.orgMembers.userId, user.id)),
+    // Not on the session: polarCustomerId is not one of BetterAuth's
+    // additional fields, and adding it there would carry a provider id
+    // through every request to serve one boolean on one page.
+    db
+      .select({ customerId: schema.user.polarCustomerId })
+      .from(schema.user)
+      .where(eq(schema.user.id, user.id)),
+  ]);
 
   const orgs = rows.map((r) => ({
     id: r.id,
@@ -56,7 +67,7 @@ async function currentUserFor(
     qrEyeColor: r.qrEyeColor,
     qrLogoSize: r.qrLogoSize,
   }));
-  return { user, orgs };
+  return { user: { ...user, hasBillingAccount: Boolean(billingRows[0]?.customerId) }, orgs };
 }
 
 userRoutes.get("/user", requireUser, async (c) => {
