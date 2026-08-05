@@ -27,6 +27,23 @@ export function overrideEnv(overrides: Partial<Env>): Env {
 // sign-in's rate-limit key derivation has a key to HMAC with.
 export const authEnv = () => overrideEnv({ BETTER_AUTH_SECRET: "test-secret" });
 
+/**
+ * Drive one request through the real worker and wait for anything it
+ * deferred with waitUntil (click enqueues, storage sends) before returning,
+ * so a test can assert on those without racing them.
+ *
+ * Defaults to authEnv() rather than the ambient env: it is the same binding
+ * with a known BETTER_AUTH_SECRET, which is what cookies from
+ * signInCookie()/adminCookie() are signed against. Tests needing a different
+ * binding pass one.
+ */
+export async function fetchWorker(request: Request, testEnv: Env = authEnv()): Promise<Response> {
+  const ctx = createExecutionContext();
+  const response = await worker.fetch(request, testEnv, ctx);
+  await waitOnExecutionContext(ctx);
+  return response;
+}
+
 // Deterministic Polar product ids and webhook secret for billing tests,
 // independent of the ambient .dev.vars. Keeps the same auth secret as
 // authEnv() so a cookie minted via signInCookie()/adminCookie() still

@@ -4,11 +4,13 @@ import { alias } from "drizzle-orm/sqlite-core";
 import * as schema from "../db/schema";
 import type { AppEnv } from "../env";
 import { requireUser } from "../guards";
+import { jsonBodyLimit } from "../body-limit";
 import type { AppConfig, CurrentUser, OrgPlan } from "@/shared/types";
 
 // Signup/login/logout/verification live under /api/auth/* (BetterAuth).
 // This router only exposes the app-level session view, mounted at /api.
 export const userRoutes = new Hono<AppEnv>();
+userRoutes.use("*", jsonBodyLimit());
 
 async function currentUserFor(
   db: AppEnv["Variables"]["db"],

@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import type { Context } from "hono";
 import { HTTPException } from "hono/http-exception";
+import type { ContentfulStatusCode } from "hono/utils/http-status";
 import type { AppEnv, Env } from "./env";
 import { withSession } from "./session";
 import { getAuth } from "./better-auth";
@@ -14,6 +15,7 @@ import { domainRoutes } from "./routes/domains";
 import { resolveSlug, resolveDomain, type KVLink } from "./kv";
 import { RESERVED_SLUGS } from "./util";
 import { enforcePublicAuthRateLimit, enforceSignedApiRateLimit } from "./rate-limit";
+import { applySecurityHeaders, isBlogPath } from "./security-headers";
 import { drizzle } from "drizzle-orm/d1";
 import * as schema from "./db/schema";
 import {
@@ -39,12 +41,32 @@ app.onError((err, c) => {
   // the rest of the body onto ApiError.data, so a route's `cause` can carry
   // more than just a machine-readable `code` (e.g. same_destination_match's
   // matchedLinkId/matchedLink) straight through to the caller.
+  const path = new URL(c.req.url).pathname;
+  const respond = (body: unknown, status: ContentfulStatusCode) => {
+    const res = c.json(body, status);
+    return isBlogPath(path) ? res : applySecurityHeaders(res);
+  };
   if (err instanceof HTTPException) {
     const cause = err.cause && typeof err.cause === "object" ? err.cause : {};
-    return c.json({ message: err.message, ...cause }, err.status);
+    return respond({ message: err.message, ...cause }, err.status);
   }
   console.error(err);
-  return c.json({ message: "Internal error" }, 500);
+  return respond({ message: "Internal error" }, 500);
+});
+
+// Applies the security header baseline to every non-error response this
+// Worker sends (see security-headers.ts): registered first, so it wraps
+// every handler below (custom-domain redirects, the API, the blog proxy,
+// shared-domain slug redirects, the SPA asset fallback).
+//
+// Assigning c.res, not mutating it: applySecurityHeaders returns a copy
+// because some responses (ASSETS, Response.redirect) refuse header writes.
+// Returning the response from here would not work — after next() the
+// context is finalized, and hono's compose only adopts a returned response
+// while it isn't.
+app.use("*", async (c, next) => {
+  await next();
+  if (!isBlogPath(new URL(c.req.url).pathname)) c.res = applySecurityHeaders(c.res);
 });
 
 /* ---------------- redirect hot path ---------------- */

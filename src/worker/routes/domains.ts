@@ -9,6 +9,7 @@ import { orgPlan, insertDomainWithinLimit } from "../plan";
 import { enqueueStorage, syncDomainMsg } from "../storage";
 import { uid, now } from "../util";
 import { isValidHttpUrl, normalizeUrl } from "../util";
+import { jsonBodyLimit } from "../body-limit";
 import type { DomainDTO, PlanLimits } from "@/shared/types";
 
 // e.g. links.example.com: at least one dot, no scheme/port/path
@@ -63,7 +64,7 @@ async function cfRequest<T = Record<string, unknown>>(
 // never merely because credentials happen to be unset: a misconfigured
 // deployment must fail closed, not silently mint fake hostnames.
 function useFakeCf(env: Env): boolean {
-  return env.CF_DEV_ENV === "1";
+  return env.CF_DEV_ENV === "simulated" || env.CF_DEV_ENV === "instant";
 }
 
 function assertCfConfigured(env: Env): void {
@@ -104,14 +105,20 @@ async function cfGetHostnameStatus(
   env: Env,
   row: typeof schema.domains.$inferSelect,
 ): Promise<CfHostnameResult | null> {
-  // The fake keeps new domains in checking_dns for ~5s before showing DNS as
-  // resolved, then another ~15s before the certificate is "issued" (long
-  // enough to see/click through the issuing_tls state in a browser or e2e run).
   if (useFakeCf(env)) {
+    // "instant" skips the staged delays entirely: an e2e run asserts on the
+    // end state, and waiting out an artificial timer only buys a race against
+    // whatever budget the test picked.
+    if (env.CF_DEV_ENV === "instant") return { status: "active", ssl: { status: "active" } };
+    // Otherwise walk the states on a timer so both are visible in a browser.
+    // Each threshold sits strictly between two probes: probeDelaySeconds puts
+    // them at 0s, 5s, 10s, 20s, 40s, and a threshold landing *on* one of those
+    // is a coin flip. The TLS one used to be 20s, exactly probe 4, so losing
+    // the toss pushed activation out to 40s.
     const age = now() - row.createdAt;
     return {
-      status: age > 5_000 ? "active" : "pending",
-      ssl: age > 20_000 ? { status: "active" } : { status: "pending_validation" },
+      status: age > 3_000 ? "active" : "pending",
+      ssl: age > 12_000 ? { status: "active" } : { status: "pending_validation" },
     };
   }
   assertCfConfigured(env);
@@ -246,6 +253,7 @@ export function probeDelaySeconds(attempt: number): number {
 
 // Mounted at /api/orgs/:orgId/domains: org admins, paid plans only.
 export const domainRoutes = new Hono<AppEnv>();
+domainRoutes.use("*", jsonBodyLimit());
 
 domainRoutes.use("*", requireOrgRole("admin"));
 

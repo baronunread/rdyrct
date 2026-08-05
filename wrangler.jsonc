@@ -221,7 +221,10 @@
         "POLAR_PRO_PRODUCT_ID": "playwright_pro_product",
         "POLAR_HOBBY_PRODUCT_ID": "playwright_hobby_product",
         "CF_ZONE_ID": "",
-        "CF_DEV_ENV": "1",
+        // "instant", not "1": the e2e suite asserts a domain reaches active,
+        // so the staged DNS/TLS delays local dev shows off would only be a
+        // timer for the test to race.
+        "CF_DEV_ENV": "instant",
         // env vars aren't inherited from the top-level "vars": both left
         // unset (alerts/blog proxy no-op) so e2e never calls out to Better
         // Stack or the real blog origin.

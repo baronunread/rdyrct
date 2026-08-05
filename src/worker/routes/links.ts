@@ -25,6 +25,7 @@ import {
   validateQrFields,
   ALIAS_TTL_MS,
 } from "../util";
+import { jsonBodyLimit } from "../body-limit";
 import type { AddressDTO, LinkDTO, LinkInput, OrgPlan, PlanLimits, TopEntry } from "@/shared/types";
 
 const RECENT_CLICKS_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
@@ -35,6 +36,7 @@ const MAX_ALIASES_PER_LINK = 5;
 
 // Mounted at /api/orgs/:orgId/links
 export const linkRoutes = new Hono<AppEnv>();
+linkRoutes.use("*", jsonBodyLimit());
 
 /** Shared by link creation/rename and standalone address creation: a
  * provided slug must match the allowed charset and not be reserved. Empty or

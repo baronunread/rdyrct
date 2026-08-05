@@ -98,8 +98,11 @@ analyticsDays }`). Slugs on the **shared** domain are always random (every
   are the same org-scoped route (`POST`/`GET /api/orgs/:orgId/qr-logo[/:file]`),
   gated to org members: only the signed-in app ever fetches a logo (QR
   previews/downloads bake the image in client-side), and a row may only
-  reference its own org's logos. Paid plans, ≤ 2 MB =
-  `QR_LOGO_MAX_BYTES` in `src/shared/types.ts`. Serving is immutable and
+  reference its own org's logos. Paid plans, ≤ 256 KB
+  (`QR_LOGO_MAX_BYTES`) and ≤ 512 px on a side (`QR_LOGO_MAX_DIMENSION`),
+  both in `src/shared/types.ts`; the client downscales and compresses to fit
+  before uploading, and the server rejects whatever still exceeds them.
+  Serving is immutable and
   `private`-cached. Deletes follow the row: replace/clear/delete on
   links and orgs removes the object; org teardown wipes the `{orgId}/` prefix
   (`src/worker/storage.ts`).

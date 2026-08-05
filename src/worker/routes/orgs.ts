@@ -9,6 +9,8 @@ import { orgPlan, userPlan, createOwnedOrg, acceptInviteAtomically } from "../pl
 import { sendEmail } from "../email";
 import { deleteQrLogoMsg, enqueueStorage } from "../storage";
 import { uid, now, referrerHost, validateQrFields } from "../util";
+import { jsonBodyLimit } from "../body-limit";
+import { parseBody, inviteBodySchema } from "../schemas";
 import type {
   MemberDTO,
   InviteDTO,
@@ -20,13 +22,13 @@ import type {
 } from "@/shared/types";
 
 export const orgRoutes = new Hono<AppEnv>();
+orgRoutes.use("*", jsonBodyLimit());
 
 const INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
 orgRoutes.post("/", requireUser, async (c) => {
   const body = await c.req.json<{ name?: string }>();
-  const name = body.name?.trim();
-  if (!name) throw new HTTPException(400, { message: "Name required" });
+  const name = requireOrgName(body.name ?? "");
 
   const { limits } = await userPlan(c.var.db, c.var.user!.id);
 
@@ -98,9 +100,19 @@ function qrPatchFields(body: OrgQrPatchBody): Partial<typeof schema.orgs.$inferI
   return set;
 }
 
-function requireOrgName(name: string): string {
+// Matches the client's own cap (src/app/lib/schemas.ts orgNameSchema): the
+// server enforces it too, so a caller that bypasses the client's form
+// validation can't store an unbounded name (see issue #19).
+const ORG_NAME_MAX_LENGTH = 100;
+
+function requireOrgName(name: unknown): string {
+  if (typeof name !== "string") throw new HTTPException(400, { message: "Name must be a string" });
   const trimmed = name.trim();
   if (!trimmed) throw new HTTPException(400, { message: "Name required" });
+  if (trimmed.length > ORG_NAME_MAX_LENGTH)
+    throw new HTTPException(400, {
+      message: `Name must be ${ORG_NAME_MAX_LENGTH} characters or fewer`,
+    });
   return trimmed;
 }
 
@@ -289,17 +301,20 @@ async function occupiedSeats(db: AppEnv["Variables"]["db"], orgId: string): Prom
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 orgRoutes.post("/:orgId/invites", requireOrgRole("admin"), async (c) => {
-  const body = await c.req.json<{
-    role?: "admin" | "member";
-    emails?: string[];
-  }>();
-  const role: "admin" | "member" = body.role === "admin" ? "admin" : "member";
+  let rawBody: unknown;
+  try {
+    rawBody = await c.req.json();
+  } catch {
+    throw new HTTPException(400, { message: "Invalid request body" });
+  }
+  const body = parseBody(inviteBodySchema, rawBody);
+  const role = body.role;
   const orgIdParam = c.req.param("orgId");
   const { plan, limits } = await orgPlan(c.var.db, orgIdParam);
 
   const emails = [
     ...new Set(
-      (body.emails ?? []).flatMap((e) => {
+      body.emails.flatMap((e) => {
         const email = e.trim().toLowerCase();
         return EMAIL_RE.test(email) ? [email] : [];
       }),
@@ -566,7 +581,11 @@ orgRoutes.get("/:orgId/stats", requireOrgRole("member"), async (c) => {
     db
       .select({ clicks: sql<number>`count(*)` })
       .from(schema.clicks)
-      .where(inOrg),
+      // Bounded to the selected range (matching totalsPrev's equal-length
+      // window below), not an unbounded all-time count: comparing an
+      // ever-growing total against one period's worth of prior clicks used
+      // to produce a meaningless delta (see issue #24).
+      .where(and(inOrg, gte(schema.clicks.ts, since))),
     db
       .select({ clicks: sql<number>`count(*)` })
       .from(schema.clicks)
@@ -835,7 +854,9 @@ orgRoutes.get("/:orgId/links/stats/:slug", requireOrgRole("member"), async (c) =
     db
       .select({ clicks: sql<number>`count(*)` })
       .from(schema.clicks)
-      .where(onLink),
+      // Bounded to the selected range, same reasoning as the org stats
+      // route's totals query above (see issue #24).
+      .where(and(onLink, gte(schema.clicks.ts, since))),
     db
       .select({ clicks: sql<number>`count(*)` })
       .from(schema.clicks)
@@ -918,6 +939,7 @@ orgRoutes.get("/:orgId/links/stats/:slug", requireOrgRole("member"), async (c) =
 /* ---------------- invite acceptance (not org-scoped) ---------------- */
 
 export const inviteRoutes = new Hono<AppEnv>();
+inviteRoutes.use("*", jsonBodyLimit());
 
 inviteRoutes.get("/:token", async (c) => {
   const rows = await c.var.db

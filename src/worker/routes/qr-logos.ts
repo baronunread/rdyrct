@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
+import { bodyLimit } from "hono/body-limit";
 import type { AppEnv } from "../env";
 import { requireOrgRole, orgRole } from "../org-role";
 import { orgPlan } from "../plan";
@@ -10,6 +11,18 @@ import { QR_LOGO_MAX_BYTES } from "@/shared/types";
 // org members: a logo is only ever fetched by the signed-in app (QR previews
 // and downloads bake the image in client-side, nothing fetches it later).
 export const qrLogoRoutes = new Hono<AppEnv>();
+
+// A generous margin over QR_LOGO_MAX_BYTES (the real business limit,
+// enforced below once the org's plan is known): this is just a coarse,
+// cheap-to-check ceiling so an oversized upload is rejected before the
+// handler even runs (see issue #19).
+qrLogoRoutes.use(
+  "*",
+  bodyLimit({
+    maxSize: QR_LOGO_MAX_BYTES + 4096,
+    onError: (c) => c.json({ message: "File too large" }, 413),
+  }),
+);
 
 const EXT_BY_TYPE: Record<string, string> = {
   "image/webp": "webp",

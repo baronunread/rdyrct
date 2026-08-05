@@ -11,9 +11,9 @@ import { adminCookie, applyTestMigrations, authEnv, overrideEnv } from "./suppor
 const realCfEnv = () =>
   overrideEnv({ CF_ZONE_ID: "zone", CF_API_TOKEN: "tok", CF_DEV_ENV: undefined });
 
-// CF_DEV_ENV=1, independent of whatever CF_API_TOKEN/CF_DEV_ENV happen to be
-// in the ambient .dev.vars, so the CF fake is used.
-const fakeCfEnv = () => overrideEnv({ CF_DEV_ENV: "1" });
+// CF_DEV_ENV=simulated, independent of whatever CF_API_TOKEN/CF_DEV_ENV happen
+// to be in the ambient .dev.vars, so the CF fake is used on its timer.
+const fakeCfEnv = () => overrideEnv({ CF_DEV_ENV: "simulated" });
 
 const cfJson = (body: unknown) =>
   new Response(JSON.stringify(body), {
