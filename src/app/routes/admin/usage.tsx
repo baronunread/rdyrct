@@ -36,21 +36,6 @@ function BusinessStats({ s }: { s: AdminUsage }) {
   );
 }
 
-/** What the subscriber count alone hides: how much of the paid base pays
- * nothing, and how much of it is leaving. */
-function SubscriptionDetail({ s }: { s: AdminUsage }) {
-  return (
-    <Card>
-      <p className="mb-3 text-2xs tracking-wider text-muted uppercase">Subscriptions</p>
-      <div className="grid grid-cols-2 gap-4">
-        <StatCard label="Comped" value={s.compedUsers} />
-        <StatCard label="Cancelling" value={s.pendingCancellations} />
-      </div>
-      <p className="mt-3 text-xs text-muted">Revenue lives in the Polar dashboard.</p>
-    </Card>
-  );
-}
-
 function ResourceStats({ s }: { s: AdminUsage }) {
   return (
     <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-4">
@@ -74,11 +59,14 @@ function BusinessRow({ s }: { s: AdminUsage }) {
             { key: "Pro", clicks: s.planCounts.pro },
           ]}
         />
-        {s.paidConversionRate !== null && (
-          <p className="mt-3 text-xs text-muted">{s.paidConversionRate}% paid conversion</p>
-        )}
+        {/* Comped belongs here rather than in a bar of its own: a comp is not
+            a fourth plan, it is how some of the Hobby and Pro rows above were
+            paid for, so a bar would count those people twice. */}
+        <p className="mt-3 text-xs text-muted">
+          {s.paidConversionRate !== null && `${s.paidConversionRate}% paid conversion · `}
+          {s.compedUsers} comped
+        </p>
       </Card>
-      <SubscriptionDetail s={s} />
       <Card>
         <p className="mb-3 text-2xs tracking-wider text-muted uppercase">Signups per day · 30d</p>
         <AreaChart data={s.signups} />

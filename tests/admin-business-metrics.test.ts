@@ -17,10 +17,7 @@ describe("computeBusinessMetrics", () => {
       users: [{ n: 100 }],
       proUsers: [{ n: 25 }],
       compedUserRows: [{ n: 3 }],
-      subscriptionRows: [
-        { status: "active", cancelAtPeriodEnd: false },
-        { status: "active", cancelAtPeriodEnd: false },
-      ],
+      subscriptionRows: [{ status: "active" }, { status: "active" }],
       planCountRows: [
         { plan: "free", n: 60 },
         { plan: "hobby", n: 15 },

@@ -85,28 +85,25 @@ function computePlanCounts(planCountRows: { plan: string; n: number }[]) {
 
 export interface SubscriptionCountRow {
   status: string | null;
-  cancelAtPeriodEnd: boolean;
 }
 
 /**
- * How many people pay, and how many are on their way out (#82).
+ * How many people actually pay (#82).
  *
- * Deliberately counts and nothing else. `mrr` used to be
+ * Deliberately a count and nothing else. `mrr` used to be
  * `hobby * 4 + pro * 9` over the `plan` column, which counted comps as money,
  * read every discount at list price and rewrote history whenever prices
  * changed. Polar already knows what it charged, net of discounts, tax and
  * refunds, so revenue is read there and this reports only what Polar cannot:
  * how the numbers split against our own plans and comps.
+ *
+ * A subscription is counted while it entitles anything, which includes one
+ * scheduled to cancel: the customer has not left yet. Who is leaving shows on
+ * their own row in the user list, where it names someone to act on rather
+ * than being one more number on a dashboard.
  */
 export function computeSubscriptionCounts(rows: SubscriptionCountRow[]) {
-  let payingSubscribers = 0;
-  let pendingCancellations = 0;
-  for (const row of rows) {
-    if (!subscriptionGrantsAccess(row.status)) continue;
-    payingSubscribers += 1;
-    if (row.cancelAtPeriodEnd) pendingCancellations += 1;
-  }
-  return { payingSubscribers, pendingCancellations };
+  return { payingSubscribers: rows.filter((row) => subscriptionGrantsAccess(row.status)).length };
 }
 
 /** Every business-metrics query returns its count as the first row's `n`,
@@ -409,10 +406,7 @@ adminRoutes.get("/usage", async (c) => {
       .where(isNotNull(schema.user.compPlan)),
     // live subscriptions: counted, never priced. Money is Polar's figure.
     db
-      .select({
-        status: schema.user.subscriptionStatus,
-        cancelAtPeriodEnd: schema.user.polarSubscriptionCancelAtPeriodEnd,
-      })
+      .select({ status: schema.user.subscriptionStatus })
       .from(schema.user)
       .where(isNotNull(schema.user.subscriptionPlan)),
   ]);
@@ -425,7 +419,6 @@ adminRoutes.get("/usage", async (c) => {
     planCounts,
     compedUsers,
     payingSubscribers,
-    pendingCancellations,
     paidConversionRate,
     signups7d,
     signups7dDelta,
@@ -497,7 +490,6 @@ adminRoutes.get("/usage", async (c) => {
     planCounts,
     payingSubscribers,
     compedUsers,
-    pendingCancellations,
     paidConversionRate,
     signups7d,
     signups7dDelta,

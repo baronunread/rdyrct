@@ -3,7 +3,6 @@ import { computeSubscriptionCounts, type SubscriptionCountRow } from "../src/wor
 
 const sub = (over: Partial<SubscriptionCountRow> = {}): SubscriptionCountRow => ({
   status: "active",
-  cancelAtPeriodEnd: false,
   ...over,
 });
 
@@ -12,12 +11,10 @@ describe("computeSubscriptionCounts", () => {
     expect(computeSubscriptionCounts([sub(), sub()]).payingSubscribers).toBe(2);
   });
 
-  test("a subscription scheduled to cancel still counts, and is flagged", () => {
+  test("a subscription scheduled to cancel still counts", () => {
     // It has not ended: the customer keeps access and keeps paying until the
-    // period does.
-    const r = computeSubscriptionCounts([sub({ cancelAtPeriodEnd: true }), sub()]);
-    expect(r.payingSubscribers).toBe(2);
-    expect(r.pendingCancellations).toBe(1);
+    // period does. Who is leaving shows on their own row in the user list.
+    expect(computeSubscriptionCounts([sub(), sub()]).payingSubscribers).toBe(2);
   });
 
   test("past_due still counts, since access is kept too", () => {
@@ -36,9 +33,6 @@ describe("computeSubscriptionCounts", () => {
   });
 
   test("no subscriptions is zero", () => {
-    expect(computeSubscriptionCounts([])).toEqual({
-      payingSubscribers: 0,
-      pendingCancellations: 0,
-    });
+    expect(computeSubscriptionCounts([])).toEqual({ payingSubscribers: 0 });
   });
 });

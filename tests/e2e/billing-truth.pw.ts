@@ -17,6 +17,14 @@ async function stat(page: Page, label: string): Promise<number> {
   return Number(text.replace(label, "").replace(/[^0-9.-]/g, "")) || 0;
 }
 
+/** The comped count, which sits in the plan-mix card's footnote rather than
+ * on a card of its own: a comp is not a fourth plan, it is how some of the
+ * paid rows were paid for. */
+async function compedCount(page: Page): Promise<number> {
+  const line = await page.getByText(/\d+ comped/).textContent();
+  return Number(/(\d+) comped/.exec(line ?? "")?.[1] ?? NaN);
+}
+
 /**
  * A comp and a subscription grant the same access and are not the same fact
  * (#81), and only one of them is somebody paying (#82). This walks both
@@ -44,7 +52,7 @@ test("an admin can comp a user, and the comp never counts as a subscriber", asyn
   const before = {
     paidUsers: await stat(page, "Paid users"),
     subscribers: await stat(page, "Subscribers"),
-    comped: await stat(page, "Comped"),
+    comped: await compedCount(page),
   };
   expect(before.subscribers).toBeGreaterThanOrEqual(1);
 
@@ -68,7 +76,7 @@ test("an admin can comp a user, and the comp never counts as a subscriber", asyn
   // whole point of splitting the two facts.
   await page.goto("/admin");
   await expect(page.getByText("Subscribers", { exact: true })).toBeVisible();
-  expect(await stat(page, "Comped")).toBe(before.comped + 1);
+  expect(await compedCount(page)).toBe(before.comped + 1);
   expect(await stat(page, "Paid users")).toBe(before.paidUsers + 1);
   expect(await stat(page, "Subscribers")).toBe(before.subscribers);
 

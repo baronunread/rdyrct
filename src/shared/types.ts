@@ -314,7 +314,6 @@ export interface AdminUsage {
   planCounts: { free: number; hobby: number; pro: number };
   payingSubscribers: number;
   compedUsers: number;
-  pendingCancellations: number;
   paidConversionRate: number | null;
   signups7d: number;
   signups7dDelta: DeltaValue | null;

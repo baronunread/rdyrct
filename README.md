@@ -164,7 +164,7 @@ Which subscription statuses keep access is one decision, in `src/worker/entitlem
 
 Paid access an admin grants by hand is a **comp**, stored apart from the subscription and never counted as a subscriber. A comp outranks the subscription underneath it, so revoking a subscription cannot take away access an admin gave.
 
-The admin console reports counts, never money: how many people hold a paid plan, how many pay for it, how many are comped, how many are cancelling. Revenue is read in the Polar dashboard, which knows what it charged net of discounts, tax and refunds.
+The admin console reports counts, never money: how many people hold a paid plan, how many pay for it, and how many are comped. Who is cancelling shows on their own row in the user list, where it names someone. Revenue is read in the Polar dashboard, which knows what it charged net of discounts, tax and refunds.
 
 Finally, point `rdyrct.com` at the Worker as a **custom domain**: Cloudflare dashboard → Workers → your worker → **Settings → Domains & Routes**. Short links live at the root (`https://rdyrct.com/<slug>`); the app is served on every other path.
 
