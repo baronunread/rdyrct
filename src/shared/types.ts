@@ -295,9 +295,23 @@ export interface AdminUsage {
     orgName: string;
     clicks: number;
   }[];
-  /** Business row */
+  /** Business row.
+   *
+   * These are separate figures on purpose (#82). `planCounts` describes
+   * feature access and includes comped users; `payingSubscribers` counts real
+   * Polar subscriptions and excludes them. `mrr` is monthly-normalized from
+   * the amounts Polar reported, so a yearly subscription contributes a
+   * twelfth and a discounted one contributes what it charges.
+   * `committedMrr` drops subscriptions scheduled to cancel. */
   planCounts: { free: number; hobby: number; pro: number };
+  payingSubscribers: number;
+  compedUsers: number;
+  pendingCancellations: number;
   mrr: number;
+  committedMrr: number;
+  /** Currencies seen across live subscriptions. More than one means `mrr`
+   * mixes them and the figure needs conversion before it means anything. */
+  mrrCurrencies: string[];
   paidConversionRate: number | null;
   signups7d: number;
   signups7dDelta: DeltaValue | null;
@@ -369,7 +383,18 @@ export interface AdminUserRow {
   emailVerified: boolean;
   /** Email domain is a known throwaway provider. Display-only, computed on read. */
   disposable: boolean;
+  /** Effective plan: what this user may do. A comp counts here (#81). */
   plan: OrgPlan;
+  /** What Polar says, separately from what the user may do. `null` means no
+   * subscription; the status is Polar's own string (`active`, `past_due`, …). */
+  subscriptionPlan: Exclude<OrgPlan, "free"> | null;
+  subscriptionStatus: string | null;
+  cancelAtPeriodEnd: boolean;
+  /** What an admin granted by hand, and who granted it. */
+  compPlan: Exclude<OrgPlan, "free"> | null;
+  compReason: string | null;
+  compGrantedAt: number | null;
+  compGrantedBy: string | null;
   createdAt: number;
   orgCount: number;
   /** Last session activity (ms epoch), null if never signed in. */

@@ -15,9 +15,32 @@ export const user = sqliteTable("user", {
   banned: integer("banned", { mode: "boolean" }).notNull().default(false),
   // Billing lives on the user, not the org: one Free/Hobby/Pro subscription
   // per person. An org's effective limits are its owner's plan (see plan.ts).
+  //
+  // DERIVED. `plan` is what the user may do, and it is coalesce(comp_plan,
+  // entitling subscription_plan, 'free'). Only entitlement.ts writes it, and
+  // it always writes it from the two columns below in the same statement.
+  // Anything that sets it by hand puts entitlement out of step with billing,
+  // which is the bug #81 fixed.
   plan: text("plan", { enum: ["free", "hobby", "pro"] })
     .notNull()
     .default("free"),
+  // What Polar says: written by the webhook, never by an admin. Null means no
+  // subscription. `subscriptionStatus` is Polar's own status string, kept raw
+  // so a status we have no rule for is still visible (see entitlement.ts).
+  subscriptionPlan: text("subscription_plan", { enum: ["hobby", "pro"] }),
+  subscriptionStatus: text("subscription_status"),
+  // Pricing as actually charged, in the currency's minor units, so revenue is
+  // computed from facts rather than from list-price constants (#82).
+  subscriptionAmount: integer("subscription_amount"),
+  subscriptionCurrency: text("subscription_currency"),
+  subscriptionInterval: text("subscription_interval"),
+  // What an admin granted by hand: written by the comp routes, never by a
+  // webhook. A comp outranks the subscription, so revoking a subscription
+  // cannot take away access an admin gave.
+  compPlan: text("comp_plan", { enum: ["hobby", "pro"] }),
+  compGrantedBy: text("comp_granted_by"),
+  compGrantedAt: integer("comp_granted_at", { mode: "timestamp_ms" }),
+  compReason: text("comp_reason"),
   polarCustomerId: text("polar_customer_id"),
   polarSubscriptionId: text("polar_subscription_id"),
   polarSubscriptionCancelAtPeriodEnd: integer("polar_subscription_cancel_at_period_end", {

@@ -322,7 +322,9 @@ describe("POST /api/webhooks/polar", () => {
     expect(user.polarSubscriptionCurrentPeriodEnd).toBeNull();
   });
 
-  it("subscription.updated only applies the plan when the status is active", async () => {
+  // What each status does to access now lives in entitlement.worker.ts (#84);
+  // this keeps the original pair, which is still the common case.
+  it("subscription.updated grants the plan on an active status and not on a canceled one", async () => {
     await seedUser({ plan: "free" });
     await postWebhook({
       type: "subscription.updated",
