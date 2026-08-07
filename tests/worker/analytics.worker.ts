@@ -3,7 +3,6 @@ import { env } from "cloudflare:workers";
 import { reset } from "cloudflare:test";
 import { drizzle } from "drizzle-orm/d1";
 import * as schema from "../../src/worker/db/schema";
-import { now } from "../../src/worker/util";
 import {
   applyTestMigrations,
   fetchWorker,
@@ -48,7 +47,7 @@ describe("GET /orgs/:orgId/stats: totalClicks vs totalClicksDelta (#24)", () => 
   it("only counts clicks inside the selected range, not every click ever", async () => {
     const cookie = await freeOwnerCookie();
     const db = await seedLinkOnExistingOrg();
-    const t = now();
+    const t = Date.now();
 
     // Free plan's analyticsDays is 7: "current period" is the last 7 days,
     // "previous period" the 7 days before that, both equal-length.
@@ -80,7 +79,7 @@ describe("GET /orgs/:orgId/links/stats/:slug: totalClicks vs totalClicksDelta (#
   it("only counts clicks inside the selected range, not every click ever", async () => {
     const cookie = await freeOwnerCookie();
     const db = await seedLinkOnExistingOrg();
-    const t = now();
+    const t = Date.now();
     const currentPeriod = [t - 1 * DAY_MS, t - 2 * DAY_MS]; // 2 clicks
     const previousPeriod = [t - 8 * DAY_MS]; // 1 click
     const ancient = [t - 200 * DAY_MS, t - 300 * DAY_MS];

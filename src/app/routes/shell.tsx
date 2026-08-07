@@ -3,6 +3,8 @@ import { NavLink, Navigate, Outlet, useNavigate, useLocation } from "react-route
 import { useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, LazyMotion, domAnimation, m } from "motion/react";
 import { Globe, Building2, UserCog, ChevronsUpDown, Plus, Check, LogOut } from "lucide-react";
+// MorphIcon animates between two icons, so it takes lucide icon nodes, not
+// the React components lucide-react exports.
 import { Sun, Moon, Menu as MenuIcon, X } from "lucide";
 import { MorphIcon } from "morphicons/react";
 import { useCurrentUser, useLogout } from "../lib/hooks";

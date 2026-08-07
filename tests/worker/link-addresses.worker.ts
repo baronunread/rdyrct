@@ -5,7 +5,7 @@ import { drizzle } from "drizzle-orm/d1";
 import { eq } from "drizzle-orm";
 import worker from "../../src/worker";
 import * as schema from "../../src/worker/db/schema";
-import { now, ALIAS_TTL_MS } from "../../src/worker/util";
+import { ALIAS_TTL_MS } from "../../src/worker/util";
 import type { StorageMessage } from "../../src/worker/storage";
 import type { Env } from "../../src/worker/env";
 import {
@@ -122,7 +122,7 @@ describe("PATCH /orgs/:orgId/links/:linkId: renaming a custom-domain address", (
       slug: "old-slug",
     });
     const { id } = (await created.json()) as { id: string };
-    const beforeRename = now();
+    const beforeRename = Date.now();
 
     const renamed = await api(cookie, "PATCH", `/links/${id}`, { slug: "new-slug" });
     expect(renamed.status).toBe(200);
@@ -232,7 +232,7 @@ describe("addresses sub-resource", () => {
     const { linkId, aliasId } = await createRenamedLink(cookie);
     await db()
       .update(schema.linkAddresses)
-      .set({ retiredAt: now() })
+      .set({ retiredAt: Date.now() })
       .where(eq(schema.linkAddresses.id, aliasId));
 
     const res = await api(cookie, "POST", `/links/${linkId}/addresses/${aliasId}/keep-forever`);

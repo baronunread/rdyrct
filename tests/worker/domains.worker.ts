@@ -3,7 +3,6 @@ import { env } from "cloudflare:workers";
 import { createExecutionContext, reset, waitOnExecutionContext } from "cloudflare:test";
 import worker from "../../src/worker";
 import { ensureHostname, probeDelaySeconds, probeDomain } from "../../src/worker/routes/domains";
-import { now } from "../../src/worker/util";
 import { adminCookie, applyTestMigrations, authEnv, overrideEnv } from "./support";
 
 // Env with a token present and the dev fake off, so the real get-or-create
@@ -52,7 +51,7 @@ async function seedDomain(overrides: Record<string, unknown> = {}) {
     hostname: "go.example.com",
     status: "checking_dns",
     cfHostnameId: null as string | null,
-    createdAt: now(),
+    createdAt: Date.now(),
     ...overrides,
   };
   await env.DB.batch([
@@ -171,7 +170,7 @@ describe("probeDomain: one durable step at a time", () => {
   it("advances checking_dns to issuing_tls, then to active (fake CF)", async () => {
     // createdAt 21s ago: the fake reports DNS + TLS as ready, and it is well
     // under the 24h deadline.
-    await seedDomain({ createdAt: now() - 21_000 });
+    await seedDomain({ createdAt: Date.now() - 21_000 });
 
     const first = await probeDomain(fakeCfEnv(), "domain-1");
     expect(first).toEqual({ state: "pending", status: "issuing_tls" });
@@ -183,14 +182,14 @@ describe("probeDomain: one durable step at a time", () => {
   });
 
   it("leaves checking_dns in place while the fake DNS is still pending", async () => {
-    await seedDomain({ createdAt: now() }); // age < 5s: fake DNS not resolved yet
+    await seedDomain({ createdAt: Date.now() }); // age < 5s: fake DNS not resolved yet
     const probe = await probeDomain(fakeCfEnv(), "domain-1");
     expect(probe).toEqual({ state: "pending", status: "checking_dns" });
     expect((await statusOf("domain-1"))?.status).toBe("checking_dns");
   });
 
   it("fails a domain that has not resolved within the deadline", async () => {
-    await seedDomain({ createdAt: now() - 25 * 60 * 60 * 1000 }); // 25h old
+    await seedDomain({ createdAt: Date.now() - 25 * 60 * 60 * 1000 }); // 25h old
     const probe = await probeDomain(fakeCfEnv(), "domain-1");
     expect(probe.state).toBe("error");
     const after = await statusOf("domain-1");
@@ -199,7 +198,7 @@ describe("probeDomain: one durable step at a time", () => {
   });
 
   it("reports active and error as terminal without re-checking", async () => {
-    await seedDomain({ status: "active", cfHostnameId: "cf-1", createdAt: now() });
+    await seedDomain({ status: "active", cfHostnameId: "cf-1", createdAt: Date.now() });
     expect(await probeDomain(fakeCfEnv(), "domain-1")).toEqual({ state: "active" });
 
     await env.DB.prepare(
@@ -239,7 +238,7 @@ describe("domain reads do not mutate", () => {
   it("GET list and POST refresh leave status alone and never call Cloudflare", async () => {
     const cookie = await adminCookie();
     // 10s old: the old on-read pipeline would have advanced this past checking_dns.
-    await seedDomain({ cfHostnameId: "cf-1", createdAt: now() - 10_000 });
+    await seedDomain({ cfHostnameId: "cf-1", createdAt: Date.now() - 10_000 });
 
     const cfCalls = vi
       .spyOn(globalThis, "fetch")

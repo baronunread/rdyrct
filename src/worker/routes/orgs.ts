@@ -9,7 +9,7 @@ import { orgPlan, userPlan, createOwnedOrg, acceptInviteAtomically } from "../pl
 import { sendEmail } from "../email";
 import { renderEmail } from "../email-layout";
 import { deleteQrLogoMsg, enqueueStorage } from "../storage";
-import { uid, now, referrerHost, validateQrFields } from "../util";
+import { uid, referrerHost, validateQrFields } from "../util";
 import { jsonBodyLimit } from "../body-limit";
 import { parseBody, inviteBodySchema } from "../schemas";
 import type {
@@ -34,7 +34,7 @@ orgRoutes.post("/", requireUser, async (c) => {
   const { limits } = await userPlan(c.var.db, c.var.user!.id);
 
   const orgId = uid();
-  const ts = now();
+  const ts = Date.now();
   // Atomic: the owned-org cap is re-checked at write time inside one D1
   // statement, and an org never persists without an owner (see issue #18).
   const created = await createOwnedOrg(c.var.db, c.env, {
@@ -192,7 +192,7 @@ export async function deleteOrg(db: DB, env: Env, orgId: string): Promise<void> 
   // instead of racing ORG_DELETE.create against its own keyed instance id.
   const result = await db
     .update(schema.orgs)
-    .set({ deletingAt: now() })
+    .set({ deletingAt: Date.now() })
     .where(and(eq(schema.orgs.id, orgId), isNull(schema.orgs.deletingAt)));
   if (result.meta.changes === 0) return;
   try {
@@ -273,13 +273,13 @@ orgRoutes.get("/:orgId/invites", requireOrgRole("admin"), async (c) => {
     .from(schema.invites)
     .where(eq(schema.invites.orgId, c.req.param("orgId")))
     .orderBy(desc(schema.invites.createdAt));
-  const ts = now();
+  const ts = Date.now();
   return c.json(rows.filter((r) => !r.acceptedBy && r.expiresAt > ts) satisfies InviteDTO[]);
 });
 
 /** Members + open (unaccepted, unexpired) invites, for the plan member cap. */
 async function occupiedSeats(db: AppEnv["Variables"]["db"], orgId: string): Promise<number> {
-  const ts = now();
+  const ts = Date.now();
   const [members, pending] = await Promise.all([
     db
       .select({ n: sql<number>`count(*)` })
@@ -330,7 +330,7 @@ orgRoutes.post("/:orgId/invites", requireOrgRole("admin"), async (c) => {
           : `This plan allows at most ${limits.members} members`,
     });
 
-  const ts = now();
+  const ts = Date.now();
 
   if (emails.length === 0) {
     const invite = {
@@ -454,7 +454,7 @@ const hour = sql<string>`strftime('%Y-%m-%d %H:00', ts / 1000, 'unixepoch')`;
 function emptyHours(): Map<string, number> {
   const map = new Map<string, number>();
   const hourMs = 60 * 60 * 1000;
-  const start = Math.floor((now() - 23 * hourMs) / hourMs) * hourMs;
+  const start = Math.floor((Date.now() - 23 * hourMs) / hourMs) * hourMs;
   for (let i = 0; i < 24; i++) {
     const d = new Date(start + i * hourMs);
     const label = `${d.toISOString().slice(0, 10)} ${d.toISOString().slice(11, 13)}:00`;
@@ -490,13 +490,13 @@ function clampDays(requested: number | null, planDays: number): number {
 }
 
 function computeWindows(days: number) {
-  const since = now() - days * 24 * 60 * 60 * 1000;
+  const since = Date.now() - days * 24 * 60 * 60 * 1000;
   return {
     since,
     prevSince: since - days * 24 * 60 * 60 * 1000,
-    since7: now() - 7 * 24 * 60 * 60 * 1000,
-    prev7Since: now() - 14 * 24 * 60 * 60 * 1000,
-    since24: now() - 24 * 60 * 60 * 1000,
+    since7: Date.now() - 7 * 24 * 60 * 60 * 1000,
+    prev7Since: Date.now() - 14 * 24 * 60 * 60 * 1000,
+    since24: Date.now() - 24 * 60 * 60 * 1000,
   };
 }
 
@@ -550,7 +550,7 @@ async function assertMember(
 async function lookupInvite(db: DB, token: string) {
   const rows = await db.select().from(schema.invites).where(eq(schema.invites.token, token));
   const invite = rows[0];
-  if (!invite || invite.acceptedBy || invite.expiresAt < now())
+  if (!invite || invite.acceptedBy || invite.expiresAt < Date.now())
     throw new HTTPException(404, { message: "Invite not found or expired" });
   return invite;
 }
@@ -664,7 +664,7 @@ orgRoutes.get("/:orgId/stats", requireOrgRole("member"), async (c) => {
           // the last 30 days. A link that never got a single click isn't
           // "dead", it's just new or unshared.
           sql`${schema.links.id} in (select distinct link_id from clicks where org_id = ${orgId})`,
-          sql`${schema.links.id} not in (select distinct link_id from clicks where org_id = ${orgId} and ts >= ${now() - 30 * 24 * 60 * 60 * 1000})`,
+          sql`${schema.links.id} not in (select distinct link_id from clicks where org_id = ${orgId} and ts >= ${Date.now() - 30 * 24 * 60 * 60 * 1000})`,
         ),
       )
       .limit(5),
@@ -961,7 +961,7 @@ inviteRoutes.get("/:token", async (c) => {
     .innerJoin(schema.orgs, eq(schema.invites.orgId, schema.orgs.id))
     .where(eq(schema.invites.token, c.req.param("token")));
   const invite = rows[0];
-  if (!invite || invite.acceptedBy || invite.expiresAt < now())
+  if (!invite || invite.acceptedBy || invite.expiresAt < Date.now())
     throw new HTTPException(404, { message: "Invite not found or expired" });
   return c.json({
     orgName: invite.orgName,
@@ -991,7 +991,7 @@ inviteRoutes.post("/:token/accept", requireUser, async (c) => {
     orgId: invite.orgId,
     userId: c.var.user!.id,
     role: invite.role,
-    ts: now(),
+    ts: Date.now(),
     memberLimit: limits.members,
   });
   if (!accepted) {

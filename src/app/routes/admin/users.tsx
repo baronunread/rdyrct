@@ -1,7 +1,7 @@
 import { useMemo, useState, type ReactNode } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Ban, Check, Ellipsis, Trash2 } from "lucide-react";
-import { ShieldMinus, ShieldPlus } from "lucide";
+import { ShieldMinus, ShieldPlus } from "lucide"; // icon nodes for MorphIcon
 import { MorphIcon } from "morphicons/react";
 import { useAdminUsers, useCurrentUser } from "../../lib/hooks";
 import { api } from "../../lib/api";

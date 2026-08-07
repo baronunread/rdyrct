@@ -4,7 +4,7 @@ import { eq, ne, gte, and, desc, lt, inArray, isNotNull, sql } from "drizzle-orm
 import * as schema from "../db/schema";
 import type { AppEnv, DB } from "../env";
 import { requireAdmin } from "../guards";
-import { isDisposableEmail, now } from "../util";
+import { isDisposableEmail } from "../util";
 import {
   PLAN_LIMITS,
   type AdminUsage,
@@ -249,10 +249,10 @@ adminRoutes.get("/usage", async (c) => {
   const db = c.var.db;
   const days = 30;
   const cumDays = 90;
-  const since = now() - days * 24 * 60 * 60 * 1000;
-  const since7 = now() - 7 * 24 * 60 * 60 * 1000;
-  const since14d = now() - 14 * 24 * 60 * 60 * 1000;
-  const since24h = now() - 24 * 60 * 60 * 1000;
+  const since = Date.now() - days * 24 * 60 * 60 * 1000;
+  const since7 = Date.now() - 7 * 24 * 60 * 60 * 1000;
+  const since14d = Date.now() - 14 * 24 * 60 * 60 * 1000;
+  const since24h = Date.now() - 24 * 60 * 60 * 1000;
   const [
     users,
     orgs,
@@ -540,7 +540,7 @@ adminRoutes.get("/orgs/:orgId", async (c) => {
   const { plan } = await orgPlan(db, orgId);
 
   const days = 30;
-  const since = now() - days * 24 * 60 * 60 * 1000;
+  const since = Date.now() - days * 24 * 60 * 60 * 1000;
 
   const [members, links, seriesRows] = await Promise.all([
     db
@@ -705,13 +705,34 @@ adminRoutes.patch("/users/:userId", async (c) => {
 });
 
 /**
- * Grant a comp: paid access an admin gives by hand, recorded as such (#81).
+ * Writes the `comp_*` columns and re-derives `plan` from them.
  *
- * The write touches `comp_*` and re-derives `plan`, and never the
- * `subscription_*` columns: a comp says nothing about what Polar knows, so it
- * must not be able to invent a subscription. The reverse holds in
- * routes/billing.ts, where a webhook cannot clear a comp.
+ * Never the `subscription_*` columns: a comp says nothing about what Polar
+ * knows, so it must not be able to invent a subscription. The reverse holds
+ * in routes/billing.ts, where a webhook cannot clear a comp (#81).
+ *
+ * Granting and revoking are the same statement with opposite values, so they
+ * share one, and with it the 404 that means the id matched nobody.
  */
+async function writeComp(
+  db: DB,
+  targetId: string,
+  comp: { plan: "hobby" | "pro"; reason: string; grantedBy: string } | null,
+) {
+  const result = await db
+    .update(schema.user)
+    .set({
+      compPlan: comp?.plan ?? null,
+      compReason: comp?.reason ?? null,
+      compGrantedBy: comp?.grantedBy ?? null,
+      compGrantedAt: comp ? new Date() : null,
+      plan: effectivePlanSql({ compPlan: comp?.plan ?? null }),
+    })
+    .where(eq(schema.user.id, targetId));
+  if (result.meta.changes === 0) throw new HTTPException(404, { message: "User not found" });
+}
+
+/** Grant a comp: paid access an admin gives by hand, recorded as such (#81). */
 adminRoutes.post("/users/:userId/comp", async (c) => {
   const body = await c.req
     .json<{ plan?: string; reason?: string }>()
@@ -725,36 +746,18 @@ adminRoutes.post("/users/:userId/comp", async (c) => {
   if (!reason) throw new HTTPException(400, { message: "reason is required" });
   if (reason.length > 500) throw new HTTPException(400, { message: "reason is too long" });
 
-  const targetId = c.req.param("userId");
-  const result = await c.var.db
-    .update(schema.user)
-    .set({
-      compPlan: plan,
-      compReason: reason,
-      compGrantedBy: c.var.user!.id,
-      compGrantedAt: new Date(),
-      plan: effectivePlanSql({ compPlan: plan }),
-    })
-    .where(eq(schema.user.id, targetId));
-  if (result.meta.changes === 0) throw new HTTPException(404, { message: "User not found" });
+  await writeComp(c.var.db, c.req.param("userId"), {
+    plan,
+    reason,
+    grantedBy: c.var.user!.id,
+  });
   return c.json({ ok: true });
 });
 
 /** Revoke a comp. The subscription underneath, if there is one, comes back:
  * `plan` re-derives from the columns the webhook owns. */
 adminRoutes.delete("/users/:userId/comp", async (c) => {
-  const targetId = c.req.param("userId");
-  const result = await c.var.db
-    .update(schema.user)
-    .set({
-      compPlan: null,
-      compReason: null,
-      compGrantedBy: null,
-      compGrantedAt: null,
-      plan: effectivePlanSql({ compPlan: null }),
-    })
-    .where(eq(schema.user.id, targetId));
-  if (result.meta.changes === 0) throw new HTTPException(404, { message: "User not found" });
+  await writeComp(c.var.db, c.req.param("userId"), null);
   return c.json({ ok: true });
 });
 

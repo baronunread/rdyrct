@@ -7,7 +7,7 @@ import type { AppEnv, DB, Env } from "../env";
 import { requireOrgRole } from "../org-role";
 import { orgPlan, insertDomainWithinLimit } from "../plan";
 import { enqueueStorage, syncDomainMsg } from "../storage";
-import { uid, now } from "../util";
+import { uid } from "../util";
 import { isValidHttpUrl, normalizeUrl } from "../util";
 import { jsonBodyLimit } from "../body-limit";
 import type { DomainDTO, PlanLimits } from "@/shared/types";
@@ -115,7 +115,7 @@ async function cfGetHostnameStatus(
     // them at 0s, 5s, 10s, 20s, 40s, and a threshold landing *on* one of those
     // is a coin flip. The TLS one used to be 20s, exactly probe 4, so losing
     // the toss pushed activation out to 40s.
-    const age = now() - row.createdAt;
+    const age = Date.now() - row.createdAt;
     return {
       status: age > 3_000 ? "active" : "pending",
       ssl: age > 12_000 ? { status: "active" } : { status: "pending_validation" },
@@ -209,7 +209,7 @@ export async function probeDomain(env: Env, domainId: string): Promise<DomainPro
   if (row.status === "active") return { state: "active" };
   if (row.status === "error") return { state: "error", reason: row.statusReason };
 
-  if (now() - row.createdAt > ACTIVATION_TIMEOUT_MS) {
+  if (Date.now() - row.createdAt > ACTIVATION_TIMEOUT_MS) {
     const reason =
       row.status === "checking_dns"
         ? "We never saw the CNAME record resolve. Check it at your DNS provider, then delete and re-add the domain."
@@ -345,7 +345,7 @@ domainRoutes.post("/", async (c) => {
     statusReason: "",
     rootRedirect: "",
     cfHostnameId: null,
-    createdAt: now(),
+    createdAt: Date.now(),
   };
   // Atomic: the org's domains cap is re-checked at write time inside one D1
   // statement, not from the assertDomainQuota() count fetched above (see

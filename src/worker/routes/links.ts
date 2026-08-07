@@ -14,7 +14,6 @@ import {
 } from "../plan";
 import {
   uid,
-  now,
   randomSlug,
   SLUG_RE,
   RESERVED_SLUGS,
@@ -260,7 +259,7 @@ function newAddressRow(
     creationReason,
     expiresAt,
     retiredAt: null,
-    createdAt: now(),
+    createdAt: Date.now(),
   };
 }
 
@@ -272,7 +271,7 @@ async function addressClickStats(
   db: DB,
   addressId: string,
 ): Promise<{ recentClicks: number; lastUse: number | null; referrers: TopEntry[] }> {
-  const cutoff = now() - RECENT_CLICKS_WINDOW_MS;
+  const cutoff = Date.now() - RECENT_CLICKS_WINDOW_MS;
   const recent = sql`${schema.clicks.addressId} = ${addressId} and ${schema.clicks.ts} >= ${cutoff}`;
   const [summary, referrers] = await Promise.all([
     db
@@ -548,7 +547,7 @@ function newLinkRow(
     qrEyeColor: body.qrEyeColor ?? "",
     qrLogoSize: body.qrLogoSize ?? null,
     createdBy,
-    createdAt: now(),
+    createdAt: Date.now(),
   };
 }
 
@@ -817,7 +816,7 @@ linkRoutes.patch("/:linkId", requireOrgRole("member"), async (c) => {
                 existing.slug,
                 "temp_alias",
                 "renamed",
-                now() + ALIAS_TTL_MS,
+                Date.now() + ALIAS_TTL_MS,
               ),
             ),
         ]
@@ -967,7 +966,7 @@ linkRoutes.post("/:linkId/addresses/:addressId/remove", requireOrgRole("member")
     domainHostname(db, orgId, address.domainId),
     db
       .update(schema.linkAddresses)
-      .set({ retiredAt: now() })
+      .set({ retiredAt: Date.now() })
       .where(and(eq(schema.linkAddresses.id, address.id), isNull(schema.linkAddresses.retiredAt)))
       .returning({ id: schema.linkAddresses.id }),
   ]);

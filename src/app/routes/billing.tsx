@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import confetti from "canvas-confetti";
 import { AnimatePresence, LazyMotion, domAnimation, m } from "motion/react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -21,6 +21,9 @@ import { useShake } from "../lib/use-shake";
 import { showsCancelNotice, showsConfirmingNotice } from "../lib/plan-status-notes";
 import { useToast } from "../ui/toast";
 import posthog from "../lib/posthog";
+
+/** The three shake handles the page owns, one per button it can bounce. */
+type Shake = Record<"hobby" | "pro" | "portal", ReturnType<typeof useShake>>;
 
 const PLAN_LABEL: Record<OrgPlan, string> = {
   free: "Free",
@@ -126,13 +129,11 @@ function PlanStatusNotes({
 
 function FreeUpgradeButtons({
   checkoutPlan,
-  shakeHobby,
-  shakePro,
+  shake,
   onUpgrade,
 }: {
   checkoutPlan: "hobby" | "pro" | null;
-  shakeHobby: ReturnType<typeof useShake>;
-  shakePro: ReturnType<typeof useShake>;
+  shake: Shake;
   onUpgrade: (target: "hobby" | "pro") => void;
 }) {
   return (
@@ -140,8 +141,8 @@ function FreeUpgradeButtons({
       <Button
         variant="primary"
         disabled={checkoutPlan !== null}
-        className={shakeHobby.className}
-        onAnimationEnd={shakeHobby.end}
+        className={shake.hobby.className}
+        onAnimationEnd={shake.hobby.end}
         onClick={() => onUpgrade("hobby")}
       >
         <BusyContent busy={checkoutPlan === "hobby"}>
@@ -151,8 +152,8 @@ function FreeUpgradeButtons({
       <Button
         variant="primary"
         disabled={checkoutPlan !== null}
-        className={shakePro.className}
-        onAnimationEnd={shakePro.end}
+        className={shake.pro.className}
+        onAnimationEnd={shake.pro.end}
         onClick={() => onUpgrade("pro")}
       >
         <BusyContent busy={checkoutPlan === "pro"}>
@@ -165,19 +166,19 @@ function FreeUpgradeButtons({
 
 function ManageSubscriptionButton({
   showPortalOverlay,
-  shakePortal,
+  shake,
   onPortal,
 }: {
   showPortalOverlay: boolean;
-  shakePortal: ReturnType<typeof useShake>;
+  shake: Shake;
   onPortal: () => void;
 }) {
   return (
     <Button
       variant="primary"
       disabled={showPortalOverlay}
-      className={shakePortal.className}
-      onAnimationEnd={shakePortal.end}
+      className={shake.portal.className}
+      onAnimationEnd={shake.portal.end}
       onClick={onPortal}
     >
       <BusyContent busy={showPortalOverlay}>Manage subscription</BusyContent>
@@ -194,9 +195,7 @@ function PlanActions({
   confirmTimedOut,
   cancelAtPeriodEnd,
   periodEnd,
-  shakeHobby,
-  shakePro,
-  shakePortal,
+  shake,
   onUpgrade,
   onPortal,
 }: {
@@ -208,9 +207,7 @@ function PlanActions({
   confirmTimedOut: boolean;
   cancelAtPeriodEnd: boolean;
   periodEnd: number | null;
-  shakeHobby: ReturnType<typeof useShake>;
-  shakePro: ReturnType<typeof useShake>;
-  shakePortal: ReturnType<typeof useShake>;
+  shake: Shake;
   onUpgrade: (target: "hobby" | "pro") => void;
   onPortal: () => void;
 }) {
@@ -233,16 +230,11 @@ function PlanActions({
         {plan === "free" && <PlanFeatureComparison />}
         <div>
           {plan === "free" ? (
-            <FreeUpgradeButtons
-              checkoutPlan={checkoutPlan}
-              shakeHobby={shakeHobby}
-              shakePro={shakePro}
-              onUpgrade={onUpgrade}
-            />
+            <FreeUpgradeButtons checkoutPlan={checkoutPlan} shake={shake} onUpgrade={onUpgrade} />
           ) : hasBillingAccount ? (
             <ManageSubscriptionButton
               showPortalOverlay={showPortalOverlay}
-              shakePortal={shakePortal}
+              shake={shake}
               onPortal={onPortal}
             />
           ) : (
@@ -401,9 +393,16 @@ function useCheckoutFlow() {
   const checkout = useCheckout();
   const portal = usePortal();
   const toast = useToast();
+  // One handle per button, kept here because the mutation error handlers
+  // below are what call `start()`. Grouped so the three travel as one prop,
+  // and memoized so the group changes only when a button actually shakes.
   const shakeHobby = useShake();
   const shakePro = useShake();
   const shakePortal = useShake();
+  const shake = useMemo(
+    () => ({ hobby: shakeHobby, pro: shakePro, portal: shakePortal }),
+    [shakeHobby, shakePro, shakePortal],
+  );
   const qc = useQueryClient();
 
   const [checkoutPlan, setCheckoutPlan] = useState<"hobby" | "pro" | null>(null);
@@ -442,7 +441,7 @@ function useCheckoutFlow() {
       setTimeout(() => window.location.assign(data.url), 300);
     } catch (e) {
       setCheckoutPlan(null);
-      (target === "hobby" ? shakeHobby : shakePro).start();
+      shake[target].start();
       toast((e as Error).message, "error");
     }
   };
@@ -455,7 +454,7 @@ function useCheckoutFlow() {
       setTimeout(() => window.location.assign(data.url), 800);
     } catch (e) {
       setShowPortalOverlay(false);
-      shakePortal.start();
+      shake.portal.start();
       toast((e as Error).message, "error");
     }
   };
@@ -540,9 +539,7 @@ function useCheckoutFlow() {
     setShowCelebration,
     handleUpgrade,
     handlePortal,
-    shakeHobby,
-    shakePro,
-    shakePortal,
+    shake,
   };
 }
 
@@ -584,9 +581,7 @@ export function BillingPage() {
     setShowCelebration,
     handleUpgrade,
     handlePortal,
-    shakeHobby,
-    shakePro,
-    shakePortal,
+    shake,
   } = useCheckoutFlow();
 
   const cancelAtPeriodEnd = me.data?.user.polarSubscriptionCancelAtPeriodEnd ?? false;
@@ -606,9 +601,7 @@ export function BillingPage() {
           confirmTimedOut={confirmTimedOut}
           cancelAtPeriodEnd={cancelAtPeriodEnd}
           periodEnd={periodEnd}
-          shakeHobby={shakeHobby}
-          shakePro={shakePro}
-          shakePortal={shakePortal}
+          shake={shake}
           onUpgrade={handleUpgrade}
           onPortal={handlePortal}
         />

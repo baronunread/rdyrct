@@ -15,9 +15,6 @@
 /** Markup that has already been through the tag, so it is safe to embed. */
 export class SafeHtml {
   constructor(readonly html: string) {}
-  toString(): string {
-    return this.html;
-  }
 }
 
 /**
