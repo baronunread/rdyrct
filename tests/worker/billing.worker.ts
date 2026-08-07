@@ -225,21 +225,41 @@ describe("GET /api/user reports whether a billing account exists (#85)", () => {
       ctx,
     );
     await waitOnExecutionContext(ctx);
-    return (await res.json()) as { user: { plan: string; hasBillingAccount: boolean } };
+    return (await res.json()) as {
+      user: { plan: string; hasBillingAccount: boolean; comped: boolean };
+    };
   }
 
-  it("is false for a comped user, whose portal would error", async () => {
+  it("is false for a paid plan with no Polar customer, whose portal would error", async () => {
     const cookie = await adminCookie();
-    // What "Set plan" in the admin UI does: a paid plan, no Polar customer.
-    await db().update(schema.user).set({ plan: "pro" }).where(eq(schema.user.id, "admin-1"));
+    await db()
+      .update(schema.user)
+      .set({ plan: "pro", subscriptionPlan: "pro", subscriptionStatus: "active" })
+      .where(eq(schema.user.id, "admin-1"));
 
     const { user } = await currentUser(cookie);
 
     expect(user.plan).toBe("pro");
     expect(user.hasBillingAccount).toBe(false);
+    // A subscription with no customer id is not a comp, and the page says so
+    // rather than telling them their plan was granted by hand (#81).
+    expect(user.comped).toBe(false);
     // The signal has to agree with the route it guards, or the button is
     // dead again.
     expect((await portal(cookie)).status).toBe(400);
+  });
+
+  it("tells a comp apart from a subscription with no customer", async () => {
+    const cookie = await adminCookie();
+    await db()
+      .update(schema.user)
+      .set({ plan: "pro", compPlan: "pro", compReason: "Design partner" })
+      .where(eq(schema.user.id, "admin-1"));
+
+    const { user } = await currentUser(cookie);
+
+    expect(user.hasBillingAccount).toBe(false);
+    expect(user.comped).toBe(true);
   });
 
   it("is true once a Polar customer exists", async () => {

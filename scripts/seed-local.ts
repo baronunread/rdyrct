@@ -460,11 +460,16 @@ async function seed() {
 
   const userRows = users.map((u) => {
     const { sub, comp } = billingFor(u);
+    // A subscriber has Polar ids; a comped user has none. Leaving them off
+    // made every seeded subscriber look comped on /billing, which is the one
+    // page where the difference is the whole point.
     return `(${q(u.id)}, ${q(u.name)}, ${q(u.email)}, 1, ${q(u.plan)}, ${
       sub ? q(u.plan) : "NULL"
-    }, ${sub ? "'active'" : "NULL"}, ${comp ? q(comp) : "NULL"}, ${
-      comp ? "'Seeded comp'" : "NULL"
-    }, ${comp ? u.createdAt : "NULL"}, ${u.createdAt}, ${u.createdAt})`;
+    }, ${sub ? "'active'" : "NULL"}, ${sub ? q(`sub_seed_${u.id.slice(5)}`) : "NULL"}, ${
+      sub ? q(`cus_seed_${u.id.slice(5)}`) : "NULL"
+    }, ${comp ? q(comp) : "NULL"}, ${comp ? "'Seeded comp'" : "NULL"}, ${
+      comp ? u.createdAt : "NULL"
+    }, ${u.createdAt}, ${u.createdAt})`;
   });
   const accountRows = users.map(
     (u) =>
@@ -472,7 +477,8 @@ async function seed() {
   );
   await sqlBatch([
     `INSERT INTO user (id, name, email, email_verified, plan, subscription_plan,
-       subscription_status, comp_plan, comp_reason, comp_granted_at, created_at, updated_at)
+       subscription_status, polar_subscription_id, polar_customer_id,
+       comp_plan, comp_reason, comp_granted_at, created_at, updated_at)
      VALUES ${userRows.join(",")}`,
     `INSERT INTO account (id, account_id, provider_id, user_id, password, created_at, updated_at) VALUES ${accountRows.join(",")}`,
   ]);

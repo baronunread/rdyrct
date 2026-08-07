@@ -83,6 +83,16 @@ export interface User {
    * client has no use for a provider identifier.
    */
   hasBillingAccount: boolean;
+  /**
+   * Whether this plan was granted by an admin rather than bought (#81).
+   *
+   * Separate from `hasBillingAccount`, because the two answer different
+   * questions and can disagree: a comped user has no portal, and so does a
+   * subscriber whose webhook carried no customer id. Telling the second group
+   * their plan "was granted directly" would be a plain lie, so the page needs
+   * to know which one it is talking to.
+   */
+  comped: boolean;
 }
 
 export interface QrOverrides {

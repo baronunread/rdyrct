@@ -188,6 +188,7 @@ function ManageSubscriptionButton({
 function PlanActions({
   plan,
   hasBillingAccount,
+  comped,
   checkoutPlan,
   showPortalOverlay,
   confirmTimedOut,
@@ -201,6 +202,7 @@ function PlanActions({
 }: {
   plan: OrgPlan;
   hasBillingAccount: boolean;
+  comped: boolean;
   checkoutPlan: "hobby" | "pro" | null;
   showPortalOverlay: boolean;
   confirmTimedOut: boolean;
@@ -244,12 +246,15 @@ function PlanActions({
               onPortal={onPortal}
             />
           ) : (
-            // A paid plan with no billing account: comped, or a subscription
-            // that arrived without a customer id. The portal cannot open for
+            // A paid plan with no billing account. The portal cannot open for
             // them, so offer the truth instead of a button that errors (#85).
+            // Which truth depends on how they got the plan: comped, or a
+            // subscription that arrived without a customer id. Saying
+            // "granted directly" to the second group would be false (#81).
             <p className="text-sm text-muted">
-              This plan was granted directly, so there is no subscription to manage. Email support
-              to change it.
+              {comped
+                ? "This plan was granted by the rdyrct team, so there is no subscription to manage. Email support to change it."
+                : "No billing account is linked to this plan, so the subscription portal cannot open. Email support to sort it out."}
             </p>
           )}
           {plan === "hobby" && hasBillingAccount && (
@@ -595,6 +600,7 @@ export function BillingPage() {
         <PlanActions
           plan={plan}
           hasBillingAccount={me.data?.user.hasBillingAccount ?? false}
+          comped={me.data?.user.comped ?? false}
           checkoutPlan={checkoutPlan}
           showPortalOverlay={showPortalOverlay}
           confirmTimedOut={confirmTimedOut}

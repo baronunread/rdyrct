@@ -45,11 +45,11 @@ async function currentUserFor(
       )
       .leftJoin(ownerUser, eq(ownerMember.userId, ownerUser.id))
       .where(eq(schema.orgMembers.userId, user.id)),
-    // Not on the session: polarCustomerId is not one of BetterAuth's
-    // additional fields, and adding it there would carry a provider id
-    // through every request to serve one boolean on one page.
+    // Not on the session: neither column is one of BetterAuth's additional
+    // fields, and adding them there would carry a provider id through every
+    // request to serve two booleans on one page.
     db
-      .select({ customerId: schema.user.polarCustomerId })
+      .select({ customerId: schema.user.polarCustomerId, compPlan: schema.user.compPlan })
       .from(schema.user)
       .where(eq(schema.user.id, user.id)),
   ]);
@@ -67,7 +67,14 @@ async function currentUserFor(
     qrEyeColor: r.qrEyeColor,
     qrLogoSize: r.qrLogoSize,
   }));
-  return { user: { ...user, hasBillingAccount: Boolean(billingRows[0]?.customerId) }, orgs };
+  return {
+    user: {
+      ...user,
+      hasBillingAccount: Boolean(billingRows[0]?.customerId),
+      comped: Boolean(billingRows[0]?.compPlan),
+    },
+    orgs,
+  };
 }
 
 userRoutes.get("/user", requireUser, async (c) => {
