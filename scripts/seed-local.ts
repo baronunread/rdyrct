@@ -374,10 +374,20 @@ async function wipe(): Promise<number> {
   for (const d of domains) await kvDelete(`domain:${d.hostname}`);
 
   // Explicit order instead of trusting cascades.
+  //
+  // A seed row is not the only thing that can point at a seed domain: sign in
+  // as a seeded user, add a link on their domain through the app, and that
+  // link carries a real id and a real org. `links.domain_id` and
+  // `link_addresses.domain_id` are both NO ACTION, so those rows block the
+  // domain delete and the whole wipe fails on a foreign key. Clearing by
+  // domain as well as by `seed-` prefix covers them. It cannot take anything
+  // else with it: the domain being freed is a seed domain either way.
   await sqlBatch([
     "DELETE FROM clicks WHERE org_id LIKE 'seed-%'",
     "DELETE FROM link_addresses WHERE org_id LIKE 'seed-%'",
+    "DELETE FROM link_addresses WHERE domain_id IN (SELECT id FROM domains WHERE id LIKE 'seed-%')",
     "DELETE FROM links WHERE id LIKE 'seed-%'",
+    "DELETE FROM links WHERE domain_id IN (SELECT id FROM domains WHERE id LIKE 'seed-%')",
     "DELETE FROM domains WHERE id LIKE 'seed-%'",
     "DELETE FROM invites WHERE org_id LIKE 'seed-%'",
     "DELETE FROM org_members WHERE org_id LIKE 'seed-%'",
