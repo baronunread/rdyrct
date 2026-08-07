@@ -1,5 +1,6 @@
 import { expect, type Page } from "@playwright/test";
 import { explorerUrl } from "./environment";
+import { subscriptionGrantsAccess } from "../../src/worker/entitlement";
 
 /** Runs raw SQL against the local D1 database via the dev Explorer API. */
 export async function rawSql(page: Page, sql: string, params: unknown[] = []): Promise<unknown> {
@@ -75,7 +76,10 @@ export async function setPlan(
          polar_subscription_id = 'sub_e2e_' || id, polar_customer_id = 'cus_e2e_' || id,
          plan = ?
      WHERE email = ?`,
-    [plan, status, interval, status === "active" ? plan : "free", email],
+    // The same rule the Worker applies, from the same table: `trialing` and
+    // `past_due` also entitle, so deciding on `active` alone would build a
+    // fixture no webhook can produce.
+    [plan, status, interval, subscriptionGrantsAccess(status) ? plan : "free", email],
     `no user with email ${email}`,
   );
 }

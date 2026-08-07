@@ -18,6 +18,22 @@ function AdminTableCard({ title, children }: { title: string; children: ReactNod
   );
 }
 
+const CURRENCY_SYMBOL: Record<string, string> = { usd: "$", eur: "€", gbp: "£" };
+
+/**
+ * What to put in front of an MRR figure.
+ *
+ * MRR is a sum of the amounts subscriptions charge, so it is only in a
+ * currency when they all share one. Several currencies add up to a number in
+ * none of them, and a hardcoded `$` would report euros as dollars, so the
+ * mark comes off and the warning under the card says why.
+ */
+function mrrPrefix(currencies: string[]): string | undefined {
+  if (currencies.length !== 1) return undefined;
+  const code = currencies[0];
+  return CURRENCY_SYMBOL[code] ?? `${code.toUpperCase()} `;
+}
+
 /**
  * Access and money are separate figures (#82). "Paid users" is how many people
  * hold a paid plan, comps included; "Subscribers" is how many people pay.
@@ -29,7 +45,7 @@ function BusinessStats({ s }: { s: AdminUsage }) {
       <StatCard label="Users" value={s.users} />
       <StatCard label="Paid users" value={s.proUsers} />
       <StatCard label="Subscribers" value={s.payingSubscribers} />
-      <StatCard label="MRR" value={s.mrr} prefix="$" />
+      <StatCard label="MRR" value={s.mrr} prefix={mrrPrefix(s.mrrCurrencies)} />
       <StatCard label="Signups · 7d" value={s.signups7d} delta={s.signups7dDelta} />
       <StatCard label="Weekly active users" value={s.wau} />
     </div>
@@ -43,7 +59,11 @@ function RevenueDetail({ s }: { s: AdminUsage }) {
     <Card>
       <p className="mb-3 text-2xs tracking-wider text-muted uppercase">Revenue detail</p>
       <div className="grid grid-cols-3 gap-4">
-        <StatCard label="Committed MRR" value={s.committedMrr} prefix="$" />
+        <StatCard
+          label="Committed MRR"
+          value={s.committedMrr}
+          prefix={mrrPrefix(s.mrrCurrencies)}
+        />
         <StatCard label="Comped" value={s.compedUsers} />
         <StatCard label="Cancelling" value={s.pendingCancellations} />
       </div>

@@ -61,6 +61,15 @@ describe("computeRevenue", () => {
     expect(r.mrrCurrencies).toEqual(["eur", "usd"]);
   });
 
+  test("a subscription with no currency is a subscriber but not revenue", () => {
+    // An amount with no currency cannot be added to anything: counting it
+    // would leave MRR a number in no currency the card can name.
+    const r = computeRevenue([sub({ currency: null })]);
+    expect(r.payingSubscribers).toBe(1);
+    expect(r.mrr).toBe(0);
+    expect(r.mrrCurrencies).toEqual([]);
+  });
+
   test("no subscriptions is zero, not a division by anything", () => {
     expect(computeRevenue([])).toEqual({
       payingSubscribers: 0,

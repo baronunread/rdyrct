@@ -255,6 +255,11 @@ async function subscriptionUpdatedMutation(db: Db, env: Env, event: PolarEvent) 
     .update(schema.user)
     .set({
       ...subscriptionFacts(event, plan, status),
+      // Identity moves with the facts. The row holds one subscription, the
+      // most recently changed one, so writing another subscription's plan,
+      // status and price while leaving the old id in place would describe a
+      // subscription that does not exist.
+      polarSubscriptionId: event.data.id,
       polarSubscriptionCancelAtPeriodEnd: event.data.cancel_at_period_end ?? false,
       polarSubscriptionCurrentPeriodEnd: periodEnd ? new Date(periodEnd) : null,
       polarEventAt: at,

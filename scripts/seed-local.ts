@@ -446,10 +446,13 @@ async function seed() {
   let paidSeen = 0;
   const billingFor = (u: SeedUser) => {
     if (u.plan === "free") return { sub: null, comp: null };
-    const comped = paidSeen++ % 5 === 4;
-    if (comped) return { sub: null, comp: u.plan };
+    // One counter, read before it moves. Testing the incremented value for the
+    // yearly case can never fire: every tenth is also every fifth, and every
+    // fifth already returned above as a comp.
+    const nth = paidSeen++;
+    if (nth % 5 === 4) return { sub: null, comp: u.plan };
     // A tenth of subscriptions are yearly, so MRR has something to normalize.
-    return { sub: { interval: paidSeen % 10 === 0 ? "year" : "month" }, comp: null };
+    return { sub: { interval: nth % 10 === 2 ? "year" : "month" }, comp: null };
   };
 
   const userRows = users.map((u) => {

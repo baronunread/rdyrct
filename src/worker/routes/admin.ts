@@ -122,8 +122,12 @@ export function computeRevenue(rows: SubscriptionRevenueRow[]) {
     payingSubscribers += 1;
     if (row.cancelAtPeriodEnd) pendingCancellations += 1;
     const months = row.interval ? MONTHS_PER_INTERVAL[row.interval] : undefined;
-    if (row.amount === null || !months) continue;
-    if (row.currency) currencies.add(row.currency);
+    // A row missing any of the three cannot be priced. That includes the
+    // currency: an amount added without one leaves MRR a number in no stated
+    // currency, which is worse than a figure that admits it is short a
+    // subscription. The subscriber count above still has them all.
+    if (row.amount === null || !row.currency || !months) continue;
+    currencies.add(row.currency);
     const monthly = row.amount / months;
     mrrMinor += monthly;
     // Committed MRR is what renews. Someone who cancelled today still has

@@ -335,4 +335,31 @@ describe("subscription statuses (#84)", () => {
     expect(user.polarSubscriptionId).toBe("sub_new");
     expect(user.plan).toBe("pro");
   });
+
+  it("an updated event moves the subscription id along with the facts", async () => {
+    // Otherwise the row would describe a subscription that does not exist:
+    // one subscription's plan, status and price under another one's id.
+    await seedUser();
+    await postWebhook({
+      type: "subscription.active",
+      data: {
+        id: "sub_new",
+        product_id: POLAR_PRO_PRODUCT_ID,
+        metadata: { userId: "user-1" },
+        created_at: "2026-02-01T00:00:00Z",
+      },
+    });
+    await postWebhook(
+      updated({
+        id: "sub_other",
+        product_id: POLAR_HOBBY_PRODUCT_ID,
+        status: "active",
+        modified_at: "2026-02-03T00:00:00Z",
+      }),
+    );
+
+    const user = await getUser();
+    expect(user.subscriptionPlan).toBe("hobby");
+    expect(user.polarSubscriptionId).toBe("sub_other");
+  });
 });

@@ -121,6 +121,17 @@ function BillingCell({ user }: { user: AdminUserRow }) {
         <div className="mt-0.5 text-xs text-muted">payment failing, access kept</div>
       </>
     );
+  // `subscriptionPlan` is the Polar snapshot, not a grant: `unpaid`,
+  // `canceled` and anything Polar adds later leave the subscription on the row
+  // while it entitles nothing. `plan` is derived from the status (#81), so a
+  // free plan here means exactly that. Name the status instead of "paid".
+  if (user.plan === "free")
+    return (
+      <>
+        <Badge color="muted">{user.subscriptionStatus ?? "unknown"}</Badge>
+        <div className="mt-0.5 text-xs text-muted">subscription grants no access</div>
+      </>
+    );
   return (
     <>
       <Badge color="mint">paid</Badge>
