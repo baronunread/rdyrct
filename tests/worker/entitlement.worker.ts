@@ -107,9 +107,6 @@ const paying = {
   plan: "pro" as const,
   subscriptionPlan: "pro" as const,
   subscriptionStatus: "active",
-  subscriptionAmount: 900,
-  subscriptionCurrency: "usd",
-  subscriptionInterval: "month",
   polarSubscriptionId: "sub_1",
 };
 
@@ -137,7 +134,6 @@ describe("comps (#81)", () => {
     const user = await getUser();
     expect(user.subscriptionPlan).toBeNull();
     expect(user.subscriptionStatus).toBeNull();
-    expect(user.subscriptionAmount).toBeNull();
     expect(user.polarSubscriptionId).toBeNull();
   });
 
@@ -287,7 +283,7 @@ describe("subscription statuses (#84)", () => {
     expect(user.polarSubscriptionCurrentPeriodEnd?.toISOString()).toBe("2026-03-01T00:00:00.000Z");
   });
 
-  it("records the price as charged, not the list price (#82)", async () => {
+  it("stores no price: revenue is Polar's figure, not a copy of it (#82)", async () => {
     await seedUser();
     await postWebhook({
       type: "subscription.active",
@@ -302,10 +298,12 @@ describe("subscription statuses (#84)", () => {
       },
     });
 
+    // The event carried a price and the row has nowhere to put it, on purpose:
+    // one number, in Polar, net of discounts, tax and refunds.
     const user = await getUser();
-    expect(user.subscriptionAmount).toBe(450);
-    expect(user.subscriptionCurrency).toBe("eur");
-    expect(user.subscriptionInterval).toBe("month");
+    expect(user).not.toHaveProperty("subscriptionAmount");
+    expect(user.subscriptionPlan).toBe("pro");
+    expect(user.plan).toBe("pro");
   });
 
   it("keeps the most recently changed subscription when a user has two", async () => {

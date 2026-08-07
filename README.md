@@ -162,7 +162,9 @@ bun run deploy
 
 Which subscription statuses keep access is one decision, in `src/worker/entitlement.ts`. `active`, `trialing` and `past_due` keep it, on the grounds that Polar retries a failed payment for days and sends `subscription.revoked` when it gives up. `unpaid`, `canceled`, `incomplete` and `incomplete_expired` do not, and a status with no rule keeps nothing.
 
-Paid access an admin grants by hand is a **comp**, stored apart from the subscription and never counted as revenue. A comp outranks the subscription underneath it, so revoking a subscription cannot take away access an admin gave.
+Paid access an admin grants by hand is a **comp**, stored apart from the subscription and never counted as a subscriber. A comp outranks the subscription underneath it, so revoking a subscription cannot take away access an admin gave.
+
+The admin console reports counts, never money: how many people hold a paid plan, how many pay for it, how many are comped, how many are cancelling. Revenue is read in the Polar dashboard, which knows what it charged net of discounts, tax and refunds.
 
 Finally, point `rdyrct.com` at the Worker as a **custom domain**: Cloudflare dashboard → Workers → your worker → **Settings → Domains & Routes**. Short links live at the root (`https://rdyrct.com/<slug>`); the app is served on every other path.
 

@@ -83,64 +83,30 @@ function computePlanCounts(planCountRows: { plan: string; n: number }[]) {
   return planCounts;
 }
 
-/** One month's worth of a recurring amount. Anything else is left out rather
- * than guessed: a wrong interval quietly multiplies revenue by twelve. */
-const MONTHS_PER_INTERVAL: Record<string, number> = {
-  day: 1 / 30,
-  week: 1 / 4,
-  month: 1,
-  year: 12,
-};
-
-export interface SubscriptionRevenueRow {
-  amount: number | null;
-  currency: string | null;
-  interval: string | null;
+export interface SubscriptionCountRow {
   status: string | null;
   cancelAtPeriodEnd: boolean;
 }
 
 /**
- * Revenue from what subscriptions actually charge (#82).
+ * How many people pay, and how many are on their way out (#82).
  *
- * The old figure was `hobby * 4 + pro * 9` over the `plan` column, so it
- * counted comps as money, read every discount at list price, counted a yearly
- * subscription as if it were monthly, and rewrote history whenever prices
- * changed. Each of those is fixed by reading the stored amount, currency and
- * interval Polar reported, and by counting subscriptions rather than plans.
- *
- * Amounts are stored in minor units; MRR is reported in whole currency units.
+ * Deliberately counts and nothing else. `mrr` used to be
+ * `hobby * 4 + pro * 9` over the `plan` column, which counted comps as money,
+ * read every discount at list price and rewrote history whenever prices
+ * changed. Polar already knows what it charged, net of discounts, tax and
+ * refunds, so revenue is read there and this reports only what Polar cannot:
+ * how the numbers split against our own plans and comps.
  */
-export function computeRevenue(rows: SubscriptionRevenueRow[]) {
-  let mrrMinor = 0;
-  let committedMinor = 0;
+export function computeSubscriptionCounts(rows: SubscriptionCountRow[]) {
   let payingSubscribers = 0;
   let pendingCancellations = 0;
-  const currencies = new Set<string>();
   for (const row of rows) {
     if (!subscriptionGrantsAccess(row.status)) continue;
     payingSubscribers += 1;
     if (row.cancelAtPeriodEnd) pendingCancellations += 1;
-    const months = row.interval ? MONTHS_PER_INTERVAL[row.interval] : undefined;
-    // A row missing any of the three cannot be priced. That includes the
-    // currency: an amount added without one leaves MRR a number in no stated
-    // currency, which is worse than a figure that admits it is short a
-    // subscription. The subscriber count above still has them all.
-    if (row.amount === null || !row.currency || !months) continue;
-    currencies.add(row.currency);
-    const monthly = row.amount / months;
-    mrrMinor += monthly;
-    // Committed MRR is what renews. Someone who cancelled today still has
-    // access until the period ends, and still is not revenue next month.
-    if (!row.cancelAtPeriodEnd) committedMinor += monthly;
   }
-  return {
-    payingSubscribers,
-    pendingCancellations,
-    mrr: Math.round(mrrMinor / 100),
-    committedMrr: Math.round(committedMinor / 100),
-    mrrCurrencies: [...currencies].sort(),
-  };
+  return { payingSubscribers, pendingCancellations };
 }
 
 /** Every business-metrics query returns its count as the first row's `n`,
@@ -155,7 +121,7 @@ export function computeBusinessMetrics(rows: {
   users: { n: number }[];
   proUsers: { n: number }[];
   compedUserRows: { n: number }[];
-  subscriptionRows: SubscriptionRevenueRow[];
+  subscriptionRows: SubscriptionCountRow[];
   planCountRows: { plan: string; n: number }[];
   signups7dRows: { n: number }[];
   signups7dPrevRows: { n: number }[];
@@ -166,7 +132,7 @@ export function computeBusinessMetrics(rows: {
   // plan", which is a different question from "how many people pay".
   const paidUsers = firstCount(rows.proUsers);
   const planCounts = computePlanCounts(rows.planCountRows);
-  const revenue = computeRevenue(rows.subscriptionRows);
+  const subscriptions = computeSubscriptionCounts(rows.subscriptionRows);
   const paidConversionRate = totalUsers > 0 ? Math.round((paidUsers / totalUsers) * 100) : null;
   const signups7d = firstCount(rows.signups7dRows);
   const signups7dPrev = firstCount(rows.signups7dPrevRows);
@@ -177,7 +143,7 @@ export function computeBusinessMetrics(rows: {
     paidUsers,
     planCounts,
     compedUsers: firstCount(rows.compedUserRows),
-    ...revenue,
+    ...subscriptions,
     paidConversionRate,
     signups7d,
     signups7dDelta,
@@ -441,12 +407,9 @@ adminRoutes.get("/usage", async (c) => {
       .select({ n: sql<number>`count(*)` })
       .from(schema.user)
       .where(isNotNull(schema.user.compPlan)),
-    // live subscriptions, priced as Polar reported them
+    // live subscriptions: counted, never priced. Money is Polar's figure.
     db
       .select({
-        amount: schema.user.subscriptionAmount,
-        currency: schema.user.subscriptionCurrency,
-        interval: schema.user.subscriptionInterval,
         status: schema.user.subscriptionStatus,
         cancelAtPeriodEnd: schema.user.polarSubscriptionCancelAtPeriodEnd,
       })
@@ -463,9 +426,6 @@ adminRoutes.get("/usage", async (c) => {
     compedUsers,
     payingSubscribers,
     pendingCancellations,
-    mrr,
-    committedMrr,
-    mrrCurrencies,
     paidConversionRate,
     signups7d,
     signups7dDelta,
@@ -538,9 +498,6 @@ adminRoutes.get("/usage", async (c) => {
     payingSubscribers,
     compedUsers,
     pendingCancellations,
-    mrr,
-    committedMrr,
-    mrrCurrencies,
     paidConversionRate,
     signups7d,
     signups7dDelta,

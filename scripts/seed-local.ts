@@ -452,32 +452,19 @@ async function seed() {
   // admin views have something to tell apart (#81): most paid owners have a
   // real subscription, and every fifth is comped instead. `plan` is derived
   // from whichever it is.
-  const AMOUNTS = { hobby: 400, pro: 900 } as const;
   let paidSeen = 0;
   const billingFor = (u: SeedUser) => {
-    if (u.plan === "free") return { sub: null, comp: null };
-    // One counter, read before it moves. Testing the incremented value for the
-    // yearly case can never fire: every tenth is also every fifth, and every
-    // fifth already returned above as a comp.
-    const nth = paidSeen++;
-    if (nth % 5 === 4) return { sub: null, comp: u.plan };
-    // A tenth of subscriptions are yearly, so MRR has something to normalize.
-    return { sub: { interval: nth % 10 === 2 ? "year" : "month" }, comp: null };
+    if (u.plan === "free") return { sub: false, comp: null };
+    return paidSeen++ % 5 === 4 ? { sub: false, comp: u.plan } : { sub: true, comp: null };
   };
 
   const userRows = users.map((u) => {
     const { sub, comp } = billingFor(u);
-    const amount =
-      u.plan === "free" || !sub
-        ? "NULL"
-        : String(AMOUNTS[u.plan] * (sub.interval === "year" ? 10 : 1));
     return `(${q(u.id)}, ${q(u.name)}, ${q(u.email)}, 1, ${q(u.plan)}, ${
       sub ? q(u.plan) : "NULL"
-    }, ${sub ? "'active'" : "NULL"}, ${amount}, ${sub ? "'usd'" : "NULL"}, ${
-      sub ? q(sub.interval) : "NULL"
-    }, ${comp ? q(comp) : "NULL"}, ${comp ? "'Seeded comp'" : "NULL"}, ${
-      comp ? u.createdAt : "NULL"
-    }, ${u.createdAt}, ${u.createdAt})`;
+    }, ${sub ? "'active'" : "NULL"}, ${comp ? q(comp) : "NULL"}, ${
+      comp ? "'Seeded comp'" : "NULL"
+    }, ${comp ? u.createdAt : "NULL"}, ${u.createdAt}, ${u.createdAt})`;
   });
   const accountRows = users.map(
     (u) =>
@@ -485,8 +472,7 @@ async function seed() {
   );
   await sqlBatch([
     `INSERT INTO user (id, name, email, email_verified, plan, subscription_plan,
-       subscription_status, subscription_amount, subscription_currency, subscription_interval,
-       comp_plan, comp_reason, comp_granted_at, created_at, updated_at)
+       subscription_status, comp_plan, comp_reason, comp_granted_at, created_at, updated_at)
      VALUES ${userRows.join(",")}`,
     `INSERT INTO account (id, account_id, provider_id, user_id, password, created_at, updated_at) VALUES ${accountRows.join(",")}`,
   ]);

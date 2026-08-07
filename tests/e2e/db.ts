@@ -61,25 +61,20 @@ export async function setPlan(
   page: Page,
   email: string,
   plan: "hobby" | "pro" = "hobby",
-  opts: { amount?: number; interval?: string; status?: string } = {},
+  opts: { status?: string } = {},
 ) {
-  const { amount = plan === "pro" ? 900 : 400, interval = "month", status = "active" } = opts;
-  // The Explorer's /raw endpoint only binds string parameters, so the amount
-  // is interpolated. It is a test-controlled integer; the assertion below
-  // keeps it that way.
-  expect(Number.isInteger(amount)).toBe(true);
+  const { status = "active" } = opts;
   await expectOneRowChanged(
     page,
     `UPDATE user
-     SET subscription_plan = ?, subscription_status = ?, subscription_amount = ${amount},
-         subscription_currency = 'usd', subscription_interval = ?,
+     SET subscription_plan = ?, subscription_status = ?,
          polar_subscription_id = 'sub_e2e_' || id, polar_customer_id = 'cus_e2e_' || id,
          plan = ?
      WHERE email = ?`,
     // The same rule the Worker applies, from the same table: `trialing` and
     // `past_due` also entitle, so deciding on `active` alone would build a
     // fixture no webhook can produce.
-    [plan, status, interval, subscriptionGrantsAccess(status) ? plan : "free", email],
+    [plan, status, subscriptionGrantsAccess(status) ? plan : "free", email],
     `no user with email ${email}`,
   );
 }
@@ -89,19 +84,12 @@ export async function setPlan(
  * that needs one never signs in as them, and a second signup in the same
  * browser context would have to sign the first user out first.
  */
-export async function seedSubscriber(
-  page: Page,
-  email: string,
-  plan: "hobby" | "pro" = "pro",
-  amountMinor = 900,
-) {
-  expect(Number.isInteger(amountMinor)).toBe(true);
+export async function seedSubscriber(page: Page, email: string, plan: "hobby" | "pro" = "pro") {
   await expectOneRowChanged(
     page,
     `INSERT INTO user (id, name, email, email_verified, plan, subscription_plan,
-       subscription_status, subscription_amount, subscription_currency, subscription_interval,
-       polar_subscription_id, polar_customer_id, created_at, updated_at)
-     VALUES (?, 'Paying Customer', ?, 1, ?, ?, 'active', ${amountMinor}, 'usd', 'month',
+       subscription_status, polar_subscription_id, polar_customer_id, created_at, updated_at)
+     VALUES (?, 'Paying Customer', ?, 1, ?, ?, 'active',
        ?, ?, unixepoch() * 1000, unixepoch() * 1000)`,
     [`e2e-sub-${Date.now()}`, email, plan, plan, `sub_e2e_${Date.now()}`, `cus_e2e_${Date.now()}`],
     `could not insert ${email}`,

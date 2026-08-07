@@ -81,13 +81,10 @@ interface PolarEvent {
     cancel_at_period_end?: boolean;
     current_period_end?: string;
     ends_at?: string | null;
-    // What this subscription actually charges, in the currency's minor units,
-    // as Polar reports it on the subscription itself (so a discounted
-    // subscription reports the discounted amount). Revenue is computed from
-    // these rather than from list-price constants (#82).
-    amount?: number | null;
-    currency?: string | null;
-    recurring_interval?: string | null;
+    // Polar also sends amount, currency and recurring_interval. They are
+    // deliberately not read: revenue is Polar's figure, in Polar's dashboard,
+    // and a copy here would be a second number to keep true (#82).
+    //
     // How fresh this snapshot is. `modified_at` is null until the
     // subscription's first change, so `created_at` is the fallback; both are
     // on every Polar object (see @polar-sh/sdk's Subscription model).
@@ -154,13 +151,10 @@ function subjectOf(event: PolarEvent) {
  * comp outranks it, so `effectivePlanSql` reads the comp column off the row
  * and a revoked subscription cannot strip granted access (#81).
  */
-function subscriptionFacts(event: PolarEvent, plan: "hobby" | "pro" | null, status: string) {
+function subscriptionFacts(plan: "hobby" | "pro" | null, status: string) {
   return {
     subscriptionPlan: plan,
     subscriptionStatus: status,
-    subscriptionAmount: event.data.amount ?? null,
-    subscriptionCurrency: event.data.currency ?? null,
-    subscriptionInterval: event.data.recurring_interval ?? null,
     plan: effectivePlanSql({ subscriptionPlan: plan, subscriptionStatus: status }),
   };
 }
@@ -191,7 +185,7 @@ async function subscriptionActiveMutation(db: Db, env: Env, event: PolarEvent) {
   return db
     .update(schema.user)
     .set({
-      ...subscriptionFacts(event, plan, event.data.status ?? "active"),
+      ...subscriptionFacts(plan, event.data.status ?? "active"),
       polarCustomerId: event.data.customer_id ?? null,
       polarSubscriptionId: event.data.id,
       polarSubscriptionCancelAtPeriodEnd: false,
@@ -208,7 +202,7 @@ function subscriptionRevokedMutation(db: Db, event: PolarEvent) {
     .set({
       // The subscription is over, so its facts go with it. A comped user
       // keeps their comp, and `effectivePlanSql` keeps returning it.
-      ...subscriptionFacts(event, null, event.data.status ?? "canceled"),
+      ...subscriptionFacts(null, event.data.status ?? "canceled"),
       polarSubscriptionId: null,
       polarSubscriptionCancelAtPeriodEnd: false,
       polarSubscriptionCurrentPeriodEnd: null,
@@ -254,7 +248,7 @@ async function subscriptionUpdatedMutation(db: Db, env: Env, event: PolarEvent) 
   return db
     .update(schema.user)
     .set({
-      ...subscriptionFacts(event, plan, status),
+      ...subscriptionFacts(plan, status),
       // Identity moves with the facts. The row holds one subscription, the
       // most recently changed one, so writing another subscription's plan,
       // status and price while leaving the old id in place would describe a

@@ -11,11 +11,9 @@
 -- What Polar says. Only the webhook writes these.
 alter table user add column subscription_plan text;
 alter table user add column subscription_status text;
--- Pricing as charged, for revenue that comes from facts rather than from
--- hardcoded list prices (#82). Amount is in the currency's minor units.
-alter table user add column subscription_amount integer;
-alter table user add column subscription_currency text;
-alter table user add column subscription_interval text;
+-- No price is stored (#82). Polar knows what it charged, net of discounts,
+-- tax and refunds, so revenue is read in its dashboard rather than recomputed
+-- here from a copy that would have to be kept true.
 
 -- What an admin granted by hand. Only the comp routes write these, and a
 -- webhook can never clear them.

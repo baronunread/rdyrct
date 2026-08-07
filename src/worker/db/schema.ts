@@ -29,11 +29,11 @@ export const user = sqliteTable("user", {
   // so a status we have no rule for is still visible (see entitlement.ts).
   subscriptionPlan: text("subscription_plan", { enum: ["hobby", "pro"] }),
   subscriptionStatus: text("subscription_status"),
-  // Pricing as actually charged, in the currency's minor units, so revenue is
-  // computed from facts rather than from list-price constants (#82).
-  subscriptionAmount: integer("subscription_amount"),
-  subscriptionCurrency: text("subscription_currency"),
-  subscriptionInterval: text("subscription_interval"),
+  // No price here on purpose (#82). Polar knows what it charged, net of
+  // discounts, tax and refunds, so revenue is read in its dashboard. A copy
+  // kept here would be a second figure to keep true, and the wrong one to
+  // trust when the two disagree.
+  //
   // What an admin granted by hand: written by the comp routes, never by a
   // webhook. A comp outranks the subscription, so revoking a subscription
   // cannot take away access an admin gave.

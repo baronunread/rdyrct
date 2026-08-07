@@ -306,21 +306,15 @@ export interface AdminUsage {
   }[];
   /** Business row.
    *
-   * These are separate figures on purpose (#82). `planCounts` describes
-   * feature access and includes comped users; `payingSubscribers` counts real
-   * Polar subscriptions and excludes them. `mrr` is monthly-normalized from
-   * the amounts Polar reported, so a yearly subscription contributes a
-   * twelfth and a discounted one contributes what it charges.
-   * `committedMrr` drops subscriptions scheduled to cancel. */
+   * Counts, never money (#82). `planCounts` describes feature access and
+   * includes comped users; `payingSubscribers` counts real Polar
+   * subscriptions and excludes them; `compedUsers` is the difference. Revenue
+   * is read in the Polar dashboard, which knows what it charged net of
+   * discounts, tax and refunds. */
   planCounts: { free: number; hobby: number; pro: number };
   payingSubscribers: number;
   compedUsers: number;
   pendingCancellations: number;
-  mrr: number;
-  committedMrr: number;
-  /** Currencies seen across live subscriptions. More than one means `mrr`
-   * mixes them and the figure needs conversion before it means anything. */
-  mrrCurrencies: string[];
   paidConversionRate: number | null;
   signups7d: number;
   signups7dDelta: DeltaValue | null;
