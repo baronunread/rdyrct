@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
-import { eq, ne, gte, and, desc, lt, inArray, sql } from "drizzle-orm";
+import { eq, ne, gte, and, desc, lt, inArray, isNotNull, sql } from "drizzle-orm";
 import * as schema from "../db/schema";
 import type { AppEnv, DB } from "../env";
 import { requireAdmin } from "../guards";
@@ -15,6 +15,7 @@ import {
 } from "@/shared/types";
 import { fillSeries, computeDelta, deleteOrg } from "./orgs";
 import { orgPlan } from "../plan";
+import { effectivePlanSql, subscriptionGrantsAccess } from "../entitlement";
 import { jsonBodyLimit } from "../body-limit";
 
 // An org's effective plan is its owner's plan (billing is per-user). A single
@@ -76,11 +77,70 @@ function cumulativeSeries(
   return result;
 }
 
-function computePlanStats(planCountRows: { plan: string; n: number }[]) {
+function computePlanCounts(planCountRows: { plan: string; n: number }[]) {
   const planCounts = { free: 0, hobby: 0, pro: 0 };
   for (const r of planCountRows) planCounts[r.plan as OrgPlan] = r.n;
-  const mrr = planCounts.hobby * 4 + planCounts.pro * 9;
-  return { planCounts, mrr };
+  return planCounts;
+}
+
+/** One month's worth of a recurring amount. Anything else is left out rather
+ * than guessed: a wrong interval quietly multiplies revenue by twelve. */
+const MONTHS_PER_INTERVAL: Record<string, number> = {
+  day: 1 / 30,
+  week: 1 / 4,
+  month: 1,
+  year: 12,
+};
+
+export interface SubscriptionRevenueRow {
+  amount: number | null;
+  currency: string | null;
+  interval: string | null;
+  status: string | null;
+  cancelAtPeriodEnd: boolean;
+}
+
+/**
+ * Revenue from what subscriptions actually charge (#82).
+ *
+ * The old figure was `hobby * 4 + pro * 9` over the `plan` column, so it
+ * counted comps as money, read every discount at list price, counted a yearly
+ * subscription as if it were monthly, and rewrote history whenever prices
+ * changed. Each of those is fixed by reading the stored amount, currency and
+ * interval Polar reported, and by counting subscriptions rather than plans.
+ *
+ * Amounts are stored in minor units; MRR is reported in whole currency units.
+ */
+export function computeRevenue(rows: SubscriptionRevenueRow[]) {
+  let mrrMinor = 0;
+  let committedMinor = 0;
+  let payingSubscribers = 0;
+  let pendingCancellations = 0;
+  const currencies = new Set<string>();
+  for (const row of rows) {
+    if (!subscriptionGrantsAccess(row.status)) continue;
+    payingSubscribers += 1;
+    if (row.cancelAtPeriodEnd) pendingCancellations += 1;
+    const months = row.interval ? MONTHS_PER_INTERVAL[row.interval] : undefined;
+    // A row missing any of the three cannot be priced. That includes the
+    // currency: an amount added without one leaves MRR a number in no stated
+    // currency, which is worse than a figure that admits it is short a
+    // subscription. The subscriber count above still has them all.
+    if (row.amount === null || !row.currency || !months) continue;
+    currencies.add(row.currency);
+    const monthly = row.amount / months;
+    mrrMinor += monthly;
+    // Committed MRR is what renews. Someone who cancelled today still has
+    // access until the period ends, and still is not revenue next month.
+    if (!row.cancelAtPeriodEnd) committedMinor += monthly;
+  }
+  return {
+    payingSubscribers,
+    pendingCancellations,
+    mrr: Math.round(mrrMinor / 100),
+    committedMrr: Math.round(committedMinor / 100),
+    mrrCurrencies: [...currencies].sort(),
+  };
 }
 
 /** Every business-metrics query returns its count as the first row's `n`,
@@ -94,14 +154,19 @@ export function firstCount(rows: { n: number }[]): number {
 export function computeBusinessMetrics(rows: {
   users: { n: number }[];
   proUsers: { n: number }[];
+  compedUserRows: { n: number }[];
+  subscriptionRows: SubscriptionRevenueRow[];
   planCountRows: { plan: string; n: number }[];
   signups7dRows: { n: number }[];
   signups7dPrevRows: { n: number }[];
   wauRows: { n: number }[];
 }) {
   const totalUsers = firstCount(rows.users);
+  // Feature access, comps included: this is "how many people are on a paid
+  // plan", which is a different question from "how many people pay".
   const paidUsers = firstCount(rows.proUsers);
-  const { planCounts, mrr } = computePlanStats(rows.planCountRows);
+  const planCounts = computePlanCounts(rows.planCountRows);
+  const revenue = computeRevenue(rows.subscriptionRows);
   const paidConversionRate = totalUsers > 0 ? Math.round((paidUsers / totalUsers) * 100) : null;
   const signups7d = firstCount(rows.signups7dRows);
   const signups7dPrev = firstCount(rows.signups7dPrevRows);
@@ -111,7 +176,8 @@ export function computeBusinessMetrics(rows: {
     totalUsers,
     paidUsers,
     planCounts,
-    mrr,
+    compedUsers: firstCount(rows.compedUserRows),
+    ...revenue,
     paidConversionRate,
     signups7d,
     signups7dDelta,
@@ -244,6 +310,8 @@ adminRoutes.get("/usage", async (c) => {
     orgCreationRows,
     anomaly24hRows,
     anomaly14dRows,
+    compedUserRows,
+    subscriptionRows,
   ] = await Promise.all([
     db.select({ n: sql<number>`count(*)` }).from(schema.user),
     db.select({ n: sql<number>`count(*)` }).from(schema.orgs),
@@ -368,6 +436,22 @@ adminRoutes.get("/usage", async (c) => {
       .from(schema.clicks)
       .where(gte(schema.clicks.ts, since14d))
       .groupBy(schema.clicks.orgId),
+    // comped users: paid access an admin granted, which is not revenue (#82)
+    db
+      .select({ n: sql<number>`count(*)` })
+      .from(schema.user)
+      .where(isNotNull(schema.user.compPlan)),
+    // live subscriptions, priced as Polar reported them
+    db
+      .select({
+        amount: schema.user.subscriptionAmount,
+        currency: schema.user.subscriptionCurrency,
+        interval: schema.user.subscriptionInterval,
+        status: schema.user.subscriptionStatus,
+        cancelAtPeriodEnd: schema.user.polarSubscriptionCancelAtPeriodEnd,
+      })
+      .from(schema.user)
+      .where(isNotNull(schema.user.subscriptionPlan)),
   ]);
 
   // ── Business row ──
@@ -376,7 +460,12 @@ adminRoutes.get("/usage", async (c) => {
     totalUsers,
     paidUsers,
     planCounts,
+    compedUsers,
+    payingSubscribers,
+    pendingCancellations,
     mrr,
+    committedMrr,
+    mrrCurrencies,
     paidConversionRate,
     signups7d,
     signups7dDelta,
@@ -384,6 +473,8 @@ adminRoutes.get("/usage", async (c) => {
   } = computeBusinessMetrics({
     users,
     proUsers,
+    compedUserRows,
+    subscriptionRows,
     planCountRows,
     signups7dRows,
     signups7dPrevRows,
@@ -444,7 +535,12 @@ adminRoutes.get("/usage", async (c) => {
     })),
     topLinks: topLinkRows,
     planCounts,
+    payingSubscribers,
+    compedUsers,
+    pendingCancellations,
     mrr,
+    committedMrr,
+    mrrCurrencies,
     paidConversionRate,
     signups7d,
     signups7dDelta,
@@ -559,6 +655,18 @@ adminRoutes.get("/users", async (c) => {
       banned: schema.user.banned,
       emailVerified: schema.user.emailVerified,
       plan: schema.user.plan,
+      subscriptionPlan: schema.user.subscriptionPlan,
+      subscriptionStatus: schema.user.subscriptionStatus,
+      cancelAtPeriodEnd: schema.user.polarSubscriptionCancelAtPeriodEnd,
+      compPlan: schema.user.compPlan,
+      compReason: schema.user.compReason,
+      compGrantedAt: schema.user.compGrantedAt,
+      // Who granted the comp, by email: an admin reading this list wants a
+      // person, not an id. Null once that admin's account is gone.
+      compGrantedBy: sql<string | null>`(
+        select grantor.email from "user" as grantor
+        where grantor.id = "user".comp_granted_by
+      )`,
       createdAt: schema.user.createdAt,
       orgCount: sql<number>`(
         select count(*) from org_members where org_members.user_id = "user".id
@@ -576,6 +684,7 @@ adminRoutes.get("/users", async (c) => {
       ...r,
       disposable: isDisposableEmail(r.email),
       createdAt: r.createdAt.getTime(),
+      compGrantedAt: r.compGrantedAt?.getTime() ?? null,
     })) satisfies AdminUserRow[],
   );
 });
@@ -614,16 +723,10 @@ async function validateBannedPatch(
   return value;
 }
 
-function validatePlanPatch(value: string | undefined): OrgPlan | undefined {
-  if (value === undefined) return undefined;
-  if (value !== "free" && value !== "hobby" && value !== "pro")
-    throw new HTTPException(400, { message: "plan must be free, hobby or pro" });
-  return value;
-}
-
-// Superadmin controls: toggle platform-admin, ban/unban, and/or comp a user's
-// plan (free/hobby/pro). Plan lives on the user, so comping a paid plan
-// unlocks every org they own.
+// Superadmin controls: toggle platform-admin and ban/unban. Granting a plan
+// by hand is not here: it is a comp, and it has its own routes below, because
+// a comp written into `plan` was indistinguishable from a paid subscription
+// (#81).
 adminRoutes.patch("/users/:userId", async (c) => {
   const body = await c.req.json<{
     isAdmin?: boolean;
@@ -634,18 +737,75 @@ adminRoutes.patch("/users/:userId", async (c) => {
   const self = c.var.user!;
   const db = c.var.db;
 
-  const patch: { isAdmin?: boolean; banned?: boolean; plan?: OrgPlan } = {
+  if (body.plan !== undefined)
+    throw new HTTPException(400, {
+      message: "Plan is derived from a subscription or a comp: use the comp routes",
+    });
+  const patch: { isAdmin?: boolean; banned?: boolean } = {
     isAdmin: validateIsAdminPatch(body.isAdmin, targetId, self.id),
     banned: await validateBannedPatch(db, body.banned, targetId, self.id),
-    plan: validatePlanPatch(body.plan),
   };
-  if (patch.isAdmin === undefined && patch.banned === undefined && patch.plan === undefined)
+  if (patch.isAdmin === undefined && patch.banned === undefined)
     throw new HTTPException(400, { message: "Nothing to update" });
 
   await db.update(schema.user).set(patch).where(eq(schema.user.id, targetId));
   // Banning kicks the user out immediately: all their sessions are wiped, and
   // better-auth refuses to create new ones (see better-auth.ts).
   if (patch.banned) await db.delete(schema.session).where(eq(schema.session.userId, targetId));
+  return c.json({ ok: true });
+});
+
+/**
+ * Grant a comp: paid access an admin gives by hand, recorded as such (#81).
+ *
+ * The write touches `comp_*` and re-derives `plan`, and never the
+ * `subscription_*` columns: a comp says nothing about what Polar knows, so it
+ * must not be able to invent a subscription. The reverse holds in
+ * routes/billing.ts, where a webhook cannot clear a comp.
+ */
+adminRoutes.post("/users/:userId/comp", async (c) => {
+  const body = await c.req
+    .json<{ plan?: string; reason?: string }>()
+    .catch(() => ({}) as { plan?: string; reason?: string });
+  const plan = body.plan;
+  if (plan !== "hobby" && plan !== "pro")
+    throw new HTTPException(400, { message: "plan must be hobby or pro" });
+  const reason = (body.reason ?? "").trim();
+  // A comp with no reason is the state #81 was written about: access nobody
+  // can account for later.
+  if (!reason) throw new HTTPException(400, { message: "reason is required" });
+  if (reason.length > 500) throw new HTTPException(400, { message: "reason is too long" });
+
+  const targetId = c.req.param("userId");
+  const result = await c.var.db
+    .update(schema.user)
+    .set({
+      compPlan: plan,
+      compReason: reason,
+      compGrantedBy: c.var.user!.id,
+      compGrantedAt: new Date(),
+      plan: effectivePlanSql({ compPlan: plan }),
+    })
+    .where(eq(schema.user.id, targetId));
+  if (result.meta.changes === 0) throw new HTTPException(404, { message: "User not found" });
+  return c.json({ ok: true });
+});
+
+/** Revoke a comp. The subscription underneath, if there is one, comes back:
+ * `plan` re-derives from the columns the webhook owns. */
+adminRoutes.delete("/users/:userId/comp", async (c) => {
+  const targetId = c.req.param("userId");
+  const result = await c.var.db
+    .update(schema.user)
+    .set({
+      compPlan: null,
+      compReason: null,
+      compGrantedBy: null,
+      compGrantedAt: null,
+      plan: effectivePlanSql({ compPlan: null }),
+    })
+    .where(eq(schema.user.id, targetId));
+  if (result.meta.changes === 0) throw new HTTPException(404, { message: "User not found" });
   return c.json({ ok: true });
 });
 

@@ -18,15 +18,61 @@ function AdminTableCard({ title, children }: { title: string; children: ReactNod
   );
 }
 
+const CURRENCY_SYMBOL: Record<string, string> = { usd: "$", eur: "€", gbp: "£" };
+
+/**
+ * What to put in front of an MRR figure.
+ *
+ * MRR is a sum of the amounts subscriptions charge, so it is only in a
+ * currency when they all share one. Several currencies add up to a number in
+ * none of them, and a hardcoded `$` would report euros as dollars, so the
+ * mark comes off and the warning under the card says why.
+ */
+function mrrPrefix(currencies: string[]): string | undefined {
+  if (currencies.length !== 1) return undefined;
+  const code = currencies[0];
+  return CURRENCY_SYMBOL[code] ?? `${code.toUpperCase()} `;
+}
+
+/**
+ * Access and money are separate figures (#82). "Paid users" is how many people
+ * hold a paid plan, comps included; "Subscribers" is how many people pay.
+ * MRR counts only the second group, at the amounts Polar reported.
+ */
 function BusinessStats({ s }: { s: AdminUsage }) {
   return (
-    <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
+    <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
       <StatCard label="Users" value={s.users} />
       <StatCard label="Paid users" value={s.proUsers} />
-      <StatCard label="MRR" value={s.mrr} prefix="$" />
+      <StatCard label="Subscribers" value={s.payingSubscribers} />
+      <StatCard label="MRR" value={s.mrr} prefix={mrrPrefix(s.mrrCurrencies)} />
       <StatCard label="Signups · 7d" value={s.signups7d} delta={s.signups7dDelta} />
       <StatCard label="Weekly active users" value={s.wau} />
     </div>
+  );
+}
+
+/** The figures behind MRR, which a single number hides: what renews, what is
+ * comped, and what is on its way out. */
+function RevenueDetail({ s }: { s: AdminUsage }) {
+  return (
+    <Card>
+      <p className="mb-3 text-2xs tracking-wider text-muted uppercase">Revenue detail</p>
+      <div className="grid grid-cols-3 gap-4">
+        <StatCard
+          label="Committed MRR"
+          value={s.committedMrr}
+          prefix={mrrPrefix(s.mrrCurrencies)}
+        />
+        <StatCard label="Comped" value={s.compedUsers} />
+        <StatCard label="Cancelling" value={s.pendingCancellations} />
+      </div>
+      {s.mrrCurrencies.length > 1 && (
+        <p className="mt-3 text-xs text-danger">
+          Mixed currencies ({s.mrrCurrencies.join(", ")}): MRR adds them up without converting.
+        </p>
+      )}
+    </Card>
   );
 }
 
@@ -57,6 +103,7 @@ function BusinessRow({ s }: { s: AdminUsage }) {
           <p className="mt-3 text-xs text-muted">{s.paidConversionRate}% paid conversion</p>
         )}
       </Card>
+      <RevenueDetail s={s} />
       <Card>
         <p className="mb-3 text-2xs tracking-wider text-muted uppercase">Signups per day · 30d</p>
         <AreaChart data={s.signups} />

@@ -8,6 +8,7 @@ import * as schema from "../db/schema";
 import type { AppEnv, Env } from "../env";
 import { requireUser } from "../guards";
 import { alertBetterStack } from "../alerts";
+import { effectivePlanSql } from "../entitlement";
 import { jsonBodyLimit } from "../body-limit";
 
 const polarFor = (env: Env) =>
@@ -80,6 +81,13 @@ interface PolarEvent {
     cancel_at_period_end?: boolean;
     current_period_end?: string;
     ends_at?: string | null;
+    // What this subscription actually charges, in the currency's minor units,
+    // as Polar reports it on the subscription itself (so a discounted
+    // subscription reports the discounted amount). Revenue is computed from
+    // these rather than from list-price constants (#82).
+    amount?: number | null;
+    currency?: string | null;
+    recurring_interval?: string | null;
     // How fresh this snapshot is. `modified_at` is null until the
     // subscription's first change, so `created_at` is the fallback; both are
     // on every Polar object (see @polar-sh/sdk's Subscription model).
@@ -127,15 +135,39 @@ function notStale(at: Date) {
  */
 
 /** Which user an event addresses: its checkout metadata, or the subscription
- * id we already stored for them. */
+ * id we already stored for them.
+ *
+ * One row holds one subscription, and it is whichever subscription changed
+ * most recently: two concurrent subscriptions for one person resolve through
+ * `notStale`, so the later change wins and the earlier one cannot write back
+ * over it (#84). Nothing here sums two subscriptions, and the product does
+ * not sell a second one. */
 function subjectOf(event: PolarEvent) {
   const userId = String(event.data.metadata?.userId ?? "");
   return userId ? eq(schema.user.id, userId) : eq(schema.user.polarSubscriptionId, event.data.id);
 }
 
-async function subscriptionActiveMutation(db: Db, env: Env, event: PolarEvent) {
-  const userId = String(event.data.metadata?.userId ?? "");
-  if (!userId) return null;
+/**
+ * The subscription facts an event carries, plus the `plan` they derive to.
+ *
+ * A webhook writes what Polar says and never touches `comp_*`: an admin's
+ * comp outranks it, so `effectivePlanSql` reads the comp column off the row
+ * and a revoked subscription cannot strip granted access (#81).
+ */
+function subscriptionFacts(event: PolarEvent, plan: "hobby" | "pro" | null, status: string) {
+  return {
+    subscriptionPlan: plan,
+    subscriptionStatus: status,
+    subscriptionAmount: event.data.amount ?? null,
+    subscriptionCurrency: event.data.currency ?? null,
+    subscriptionInterval: event.data.recurring_interval ?? null,
+    plan: effectivePlanSql({ subscriptionPlan: plan, subscriptionStatus: status }),
+  };
+}
+
+/** Alerts and declines to write when a product id maps to no plan. Fails
+ * closed: an unrecognized product must never grant a plan (#17). */
+async function planForProductOrAlert(env: Env, event: PolarEvent, userId: string | null) {
   const plan = planForProduct(env, event.data.product_id);
   if (!plan) {
     await alertBetterStack(env, [
@@ -146,13 +178,20 @@ async function subscriptionActiveMutation(db: Db, env: Env, event: PolarEvent) {
         userId,
       },
     ]);
-    return null;
   }
+  return plan;
+}
+
+async function subscriptionActiveMutation(db: Db, env: Env, event: PolarEvent) {
+  const userId = String(event.data.metadata?.userId ?? "");
+  if (!userId) return null;
+  const plan = await planForProductOrAlert(env, event, userId);
+  if (!plan) return null;
   const at = eventAt(event);
   return db
     .update(schema.user)
     .set({
-      plan,
+      ...subscriptionFacts(event, plan, event.data.status ?? "active"),
       polarCustomerId: event.data.customer_id ?? null,
       polarSubscriptionId: event.data.id,
       polarSubscriptionCancelAtPeriodEnd: false,
@@ -167,7 +206,9 @@ function subscriptionRevokedMutation(db: Db, event: PolarEvent) {
   return db
     .update(schema.user)
     .set({
-      plan: "free",
+      // The subscription is over, so its facts go with it. A comped user
+      // keeps their comp, and `effectivePlanSql` keeps returning it.
+      ...subscriptionFacts(event, null, event.data.status ?? "canceled"),
       polarSubscriptionId: null,
       polarSubscriptionCancelAtPeriodEnd: false,
       polarSubscriptionCurrentPeriodEnd: null,
@@ -191,25 +232,38 @@ function subscriptionCanceledMutation(db: Db, event: PolarEvent) {
     .where(and(subjectOf(event), notStale(at)));
 }
 
+/**
+ * `subscription.updated` is the complete subscription, not a plan signal
+ * (#84). It used to apply only `plan`, and only while `status === "active"`,
+ * so every transition *out* of active, every cancellation state, and every
+ * period end that arrived through this event was discarded.
+ *
+ * It now writes the whole snapshot. Which statuses keep access is one
+ * decision, made in `entitlement.ts` and applied through `effectivePlanSql`.
+ */
 async function subscriptionUpdatedMutation(db: Db, env: Env, event: PolarEvent) {
-  if (event.data.status !== "active" || !event.data.product_id) return null;
+  const status = event.data.status;
+  // Polar puts both on every subscription payload. Without them there is no
+  // snapshot to apply, and guessing the missing half would write fiction.
+  if (!status || !event.data.product_id) return null;
   const userId = String(event.data.metadata?.userId ?? "");
-  const plan = planForProduct(env, event.data.product_id);
-  if (!plan) {
-    await alertBetterStack(env, [
-      {
-        event: "polar_webhook_unknown_product",
-        subscriptionId: event.data.id,
-        productId: event.data.product_id,
-        userId: userId || null,
-      },
-    ]);
-    return null;
-  }
+  const plan = await planForProductOrAlert(env, event, userId || null);
+  if (!plan) return null;
   const at = eventAt(event);
+  const periodEnd = event.data.current_period_end ?? event.data.ends_at;
   return db
     .update(schema.user)
-    .set({ plan, polarEventAt: at })
+    .set({
+      ...subscriptionFacts(event, plan, status),
+      // Identity moves with the facts. The row holds one subscription, the
+      // most recently changed one, so writing another subscription's plan,
+      // status and price while leaving the old id in place would describe a
+      // subscription that does not exist.
+      polarSubscriptionId: event.data.id,
+      polarSubscriptionCancelAtPeriodEnd: event.data.cancel_at_period_end ?? false,
+      polarSubscriptionCurrentPeriodEnd: periodEnd ? new Date(periodEnd) : null,
+      polarEventAt: at,
+    })
     .where(and(subjectOf(event), notStale(at)));
 }
 
