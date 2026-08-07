@@ -141,7 +141,7 @@ export function PageHeader({
   return (
     <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
       <div>
-        <h1 className="text-lg font-bold tracking-tight">{title}</h1>
+        <h1 className="text-lg font-bold tracking-wide">{title}</h1>
         {sub && <p className="mt-1 text-sm text-muted">{sub}</p>}
       </div>
       {action}

@@ -141,17 +141,6 @@ body {
   min-height: 100dvh;
 }
 
-/* The whole product is set in JetBrains Mono, and a monospace face carries
-   the same advance width at every size: what reads as even at 14px reads as
-   loose at 20px and up, so headings drift toward looking like labels.
-   Negative tracking is the correction (#71, step 1). Element selectors, so
-   any utility class on a specific heading still wins. */
-h1,
-h2,
-h3 {
-  letter-spacing: -0.02em;
-}
-
 ::selection {
   background: var(--accent);
   color: var(--bg);
