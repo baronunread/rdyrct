@@ -374,10 +374,20 @@ async function wipe(): Promise<number> {
   for (const d of domains) await kvDelete(`domain:${d.hostname}`);
 
   // Explicit order instead of trusting cascades.
+  //
+  // A seed row is not the only thing that can point at a seed domain: sign in
+  // as a seeded user, add a link on their domain through the app, and that
+  // link carries a real id and a real org. `links.domain_id` and
+  // `link_addresses.domain_id` are both NO ACTION, so those rows block the
+  // domain delete and the whole wipe fails on a foreign key. Clearing by
+  // domain as well as by `seed-` prefix covers them. It cannot take anything
+  // else with it: the domain being freed is a seed domain either way.
   await sqlBatch([
     "DELETE FROM clicks WHERE org_id LIKE 'seed-%'",
     "DELETE FROM link_addresses WHERE org_id LIKE 'seed-%'",
+    "DELETE FROM link_addresses WHERE domain_id IN (SELECT id FROM domains WHERE id LIKE 'seed-%')",
     "DELETE FROM links WHERE id LIKE 'seed-%'",
+    "DELETE FROM links WHERE domain_id IN (SELECT id FROM domains WHERE id LIKE 'seed-%')",
     "DELETE FROM domains WHERE id LIKE 'seed-%'",
     "DELETE FROM invites WHERE org_id LIKE 'seed-%'",
     "DELETE FROM org_members WHERE org_id LIKE 'seed-%'",
@@ -438,16 +448,44 @@ async function seed() {
   );
   const pool = Array.from({ length: CONFIG.extraUsersPool }, () => makeUser("free"));
 
-  const userRows = users.map(
-    (u) =>
-      `(${q(u.id)}, ${q(u.name)}, ${q(u.email)}, 1, ${q(u.plan)}, ${u.createdAt}, ${u.createdAt})`,
-  );
+  // Paid access comes from one of two places, and the seed has both so the
+  // admin views have something to tell apart (#81): most paid owners have a
+  // real subscription, and every fifth is comped instead. `plan` is derived
+  // from whichever it is.
+  // Every third subscriber is on the way out: still paying, still entitled,
+  // and gone at the period end. The admin list has its own badge for that
+  // state, which needs a row to land on.
+  let paidSeen = 0;
+  const billingFor = (u: SeedUser) => {
+    if (u.plan === "free") return { sub: false, comp: null, leaving: false };
+    const seen = paidSeen++;
+    if (seen % 5 === 4) return { sub: false, comp: u.plan, leaving: false };
+    return { sub: true, comp: null, leaving: seen % 3 === 0 };
+  };
+
+  const userRows = users.map((u) => {
+    const { sub, comp, leaving } = billingFor(u);
+    // A subscriber has Polar ids; a comped user has none. Leaving them off
+    // made every seeded subscriber look comped on /billing, which is the one
+    // page where the difference is the whole point.
+    return `(${q(u.id)}, ${q(u.name)}, ${q(u.email)}, 1, ${q(u.plan)}, ${
+      sub ? q(u.plan) : "NULL"
+    }, ${sub ? "'active'" : "NULL"}, ${sub ? q(`sub_seed_${u.id.slice(5)}`) : "NULL"}, ${
+      sub ? q(`cus_seed_${u.id.slice(5)}`) : "NULL"
+    }, ${leaving ? 1 : 0}, ${comp ? q(comp) : "NULL"}, ${comp ? "'Seeded comp'" : "NULL"}, ${
+      comp ? u.createdAt : "NULL"
+    }, ${u.createdAt}, ${u.createdAt})`;
+  });
   const accountRows = users.map(
     (u) =>
       `(${q(`seed-acc-${u.id.slice(5)}`)}, ${q(u.id)}, 'credential', ${q(u.id)}, ${q(passwordHash)}, ${u.createdAt}, ${u.createdAt})`,
   );
   await sqlBatch([
-    `INSERT INTO user (id, name, email, email_verified, plan, created_at, updated_at) VALUES ${userRows.join(",")}`,
+    `INSERT INTO user (id, name, email, email_verified, plan, subscription_plan,
+       subscription_status, polar_subscription_id, polar_customer_id,
+       polar_subscription_cancel_at_period_end,
+       comp_plan, comp_reason, comp_granted_at, created_at, updated_at)
+     VALUES ${userRows.join(",")}`,
     `INSERT INTO account (id, account_id, provider_id, user_id, password, created_at, updated_at) VALUES ${accountRows.join(",")}`,
   ]);
 

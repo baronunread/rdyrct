@@ -18,12 +18,18 @@ function AdminTableCard({ title, children }: { title: string; children: ReactNod
   );
 }
 
+/**
+ * Access and money are separate questions (#82). "Paid users" is how many
+ * people hold a paid plan, comps included; "Subscribers" is how many people
+ * pay. No money here: Polar knows what it charged, net of discounts, tax and
+ * refunds, so revenue is read there.
+ */
 function BusinessStats({ s }: { s: AdminUsage }) {
   return (
     <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
       <StatCard label="Users" value={s.users} />
       <StatCard label="Paid users" value={s.proUsers} />
-      <StatCard label="MRR" value={s.mrr} prefix="$" />
+      <StatCard label="Subscribers" value={s.payingSubscribers} />
       <StatCard label="Signups · 7d" value={s.signups7d} delta={s.signups7dDelta} />
       <StatCard label="Weekly active users" value={s.wau} />
     </div>
@@ -53,9 +59,13 @@ function BusinessRow({ s }: { s: AdminUsage }) {
             { key: "Pro", clicks: s.planCounts.pro },
           ]}
         />
-        {s.paidConversionRate !== null && (
-          <p className="mt-3 text-xs text-muted">{s.paidConversionRate}% paid conversion</p>
-        )}
+        {/* Comped belongs here rather than in a bar of its own: a comp is not
+            a fourth plan, it is how some of the Hobby and Pro rows above were
+            paid for, so a bar would count those people twice. */}
+        <p className="mt-3 text-xs text-muted">
+          {s.paidConversionRate !== null && `${s.paidConversionRate}% paid conversion · `}
+          {s.compedUsers} comped
+        </p>
       </Card>
       <Card>
         <p className="mb-3 text-2xs tracking-wider text-muted uppercase">Signups per day · 30d</p>

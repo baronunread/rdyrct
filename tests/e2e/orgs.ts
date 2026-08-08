@@ -33,3 +33,22 @@ export async function addCustomDomain(page: Page, hostname = `e2e-${Date.now()}.
   await page.getByRole("button", { name: "Add domain" }).click();
   return hostname;
 }
+
+/** Adds a custom domain and waits for it to serve, for the tests that need a
+ * working custom address rather than the act of adding one. The playwright
+ * env reports DNS and TLS ready immediately (CF_DEV_ENV "instant"), so this
+ * waits on one probe-ramp sleep plus a domains poll, not on the staged delays
+ * local dev uses. Callers should mark themselves `test.slow()`: this alone can
+ * take most of the default budget. */
+export async function addActiveCustomDomain(page: Page, hostname?: string) {
+  const added = await addCustomDomain(page, hostname);
+  await expect(page.getByText("active", { exact: true })).toBeVisible({ timeout: 30_000 });
+  return added;
+}
+
+/** Opens the Links page's "New link" dialog and returns it. */
+export async function openNewLinkDialog(page: Page) {
+  await page.goto("/links");
+  await page.getByRole("button", { name: "New link" }).first().click();
+  return page.getByRole("dialog", { name: "New link" });
+}

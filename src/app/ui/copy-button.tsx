@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Copy, Check } from "lucide";
+import { Copy, Check } from "lucide"; // icon nodes for MorphIcon
 import { MorphIcon } from "morphicons/react";
 import { Button, IconButton } from "./button";
 

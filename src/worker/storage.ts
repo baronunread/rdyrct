@@ -1,4 +1,4 @@
-import { eq, isNull, and, lt, inArray } from "drizzle-orm";
+import { eq, isNull, and, lt, ne, inArray } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import * as schema from "./db/schema";
 import type { DB, Env } from "./env";
@@ -166,6 +166,64 @@ export async function deleteR2Prefix(env: Env, prefix: string): Promise<void> {
     const page = await env.QR_LOGOS.list({ prefix, limit: R2_LIST_LIMIT });
     if (!page.objects.length) return;
     await env.QR_LOGOS.delete(page.objects.map((object) => object.key));
+  }
+}
+
+/**
+ * How long an unreferenced logo is left alone (#49).
+ *
+ * The upload route writes the R2 object and hands back its URL; the row that
+ * points at it is written by a later request. Between those two an object is
+ * legitimately unreferenced, so anything younger than this is not an orphan,
+ * it is an upload still in progress. A day is far longer than that gap and
+ * far shorter than the cost of keeping the object forever.
+ */
+const QR_LOGO_ORPHAN_GRACE_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Delete QR logos no row points at (#49).
+ *
+ * An upload creates an immutable R2 object before anything claims it, so an
+ * abandoned upload (a client that never sends the follow-up, a retry with a
+ * different image) leaves bytes with no owner, no quota and no delete path.
+ * Replace, clear and delete all clean up after themselves; nothing cleaned
+ * up after the uploads that never got that far.
+ *
+ * D1 stays the source of truth: this reads every logo URL still referenced,
+ * then deletes the objects missing from that set. Being wrong in the safe
+ * direction matters more than being thorough, so an object is only touched
+ * once it is older than the grace period above.
+ *
+ * ponytail: reads every referencing row into memory, which is fine while a
+ * logo is one short URL per link. If that stops being true, page the listing
+ * against a per-org query instead.
+ */
+export async function sweepOrphanQrLogos(env: Env): Promise<number> {
+  const db = drizzle(env.DB, { schema });
+  const [linkRows, orgRows] = await Promise.all([
+    db.select({ url: schema.links.qrLogo }).from(schema.links).where(ne(schema.links.qrLogo, "")),
+    db.select({ url: schema.orgs.qrLogo }).from(schema.orgs).where(ne(schema.orgs.qrLogo, "")),
+  ]);
+  const referenced = new Set<string>();
+  for (const { url } of [...linkRows, ...orgRows]) {
+    const key = qrLogoKeyFromUrl(url);
+    if (key) referenced.add(key);
+  }
+
+  const cutoff = Date.now() - QR_LOGO_ORPHAN_GRACE_MS;
+  let cursor: string | undefined;
+  let deleted = 0;
+  for (;;) {
+    const page = await env.QR_LOGOS.list({ cursor, limit: R2_LIST_LIMIT });
+    const orphans = page.objects.flatMap((object) =>
+      object.uploaded.getTime() < cutoff && !referenced.has(object.key) ? [object.key] : [],
+    );
+    if (orphans.length) {
+      await env.QR_LOGOS.delete(orphans);
+      deleted += orphans.length;
+    }
+    if (!page.truncated) return deleted;
+    cursor = page.cursor;
   }
 }
 

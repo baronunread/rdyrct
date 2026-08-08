@@ -1,10 +1,10 @@
 import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
-import { eq, ne, gte, and, desc, lt, inArray, sql } from "drizzle-orm";
+import { eq, ne, gte, and, desc, lt, inArray, isNotNull, sql } from "drizzle-orm";
 import * as schema from "../db/schema";
 import type { AppEnv, DB } from "../env";
 import { requireAdmin } from "../guards";
-import { isDisposableEmail, now } from "../util";
+import { isDisposableEmail } from "../util";
 import {
   PLAN_LIMITS,
   type AdminUsage,
@@ -15,6 +15,7 @@ import {
 } from "@/shared/types";
 import { fillSeries, computeDelta, deleteOrg } from "./orgs";
 import { orgPlan } from "../plan";
+import { effectivePlanSql, subscriptionGrantsAccess } from "../entitlement";
 import { jsonBodyLimit } from "../body-limit";
 
 // An org's effective plan is its owner's plan (billing is per-user). A single
@@ -76,11 +77,33 @@ function cumulativeSeries(
   return result;
 }
 
-function computePlanStats(planCountRows: { plan: string; n: number }[]) {
+function computePlanCounts(planCountRows: { plan: string; n: number }[]) {
   const planCounts = { free: 0, hobby: 0, pro: 0 };
   for (const r of planCountRows) planCounts[r.plan as OrgPlan] = r.n;
-  const mrr = planCounts.hobby * 4 + planCounts.pro * 9;
-  return { planCounts, mrr };
+  return planCounts;
+}
+
+export interface SubscriptionCountRow {
+  status: string | null;
+}
+
+/**
+ * How many people actually pay (#82).
+ *
+ * Deliberately a count and nothing else. `mrr` used to be
+ * `hobby * 4 + pro * 9` over the `plan` column, which counted comps as money,
+ * read every discount at list price and rewrote history whenever prices
+ * changed. Polar already knows what it charged, net of discounts, tax and
+ * refunds, so revenue is read there and this reports only what Polar cannot:
+ * how the numbers split against our own plans and comps.
+ *
+ * A subscription is counted while it entitles anything, which includes one
+ * scheduled to cancel: the customer has not left yet. Who is leaving shows on
+ * their own row in the user list, where it names someone to act on rather
+ * than being one more number on a dashboard.
+ */
+export function computeSubscriptionCounts(rows: SubscriptionCountRow[]) {
+  return { payingSubscribers: rows.filter((row) => subscriptionGrantsAccess(row.status)).length };
 }
 
 /** Every business-metrics query returns its count as the first row's `n`,
@@ -94,14 +117,19 @@ export function firstCount(rows: { n: number }[]): number {
 export function computeBusinessMetrics(rows: {
   users: { n: number }[];
   proUsers: { n: number }[];
+  compedUserRows: { n: number }[];
+  subscriptionRows: SubscriptionCountRow[];
   planCountRows: { plan: string; n: number }[];
   signups7dRows: { n: number }[];
   signups7dPrevRows: { n: number }[];
   wauRows: { n: number }[];
 }) {
   const totalUsers = firstCount(rows.users);
+  // Feature access, comps included: this is "how many people are on a paid
+  // plan", which is a different question from "how many people pay".
   const paidUsers = firstCount(rows.proUsers);
-  const { planCounts, mrr } = computePlanStats(rows.planCountRows);
+  const planCounts = computePlanCounts(rows.planCountRows);
+  const subscriptions = computeSubscriptionCounts(rows.subscriptionRows);
   const paidConversionRate = totalUsers > 0 ? Math.round((paidUsers / totalUsers) * 100) : null;
   const signups7d = firstCount(rows.signups7dRows);
   const signups7dPrev = firstCount(rows.signups7dPrevRows);
@@ -111,7 +139,8 @@ export function computeBusinessMetrics(rows: {
     totalUsers,
     paidUsers,
     planCounts,
-    mrr,
+    compedUsers: firstCount(rows.compedUserRows),
+    ...subscriptions,
     paidConversionRate,
     signups7d,
     signups7dDelta,
@@ -220,10 +249,10 @@ adminRoutes.get("/usage", async (c) => {
   const db = c.var.db;
   const days = 30;
   const cumDays = 90;
-  const since = now() - days * 24 * 60 * 60 * 1000;
-  const since7 = now() - 7 * 24 * 60 * 60 * 1000;
-  const since14d = now() - 14 * 24 * 60 * 60 * 1000;
-  const since24h = now() - 24 * 60 * 60 * 1000;
+  const since = Date.now() - days * 24 * 60 * 60 * 1000;
+  const since7 = Date.now() - 7 * 24 * 60 * 60 * 1000;
+  const since14d = Date.now() - 14 * 24 * 60 * 60 * 1000;
+  const since24h = Date.now() - 24 * 60 * 60 * 1000;
   const [
     users,
     orgs,
@@ -244,6 +273,8 @@ adminRoutes.get("/usage", async (c) => {
     orgCreationRows,
     anomaly24hRows,
     anomaly14dRows,
+    compedUserRows,
+    subscriptionRows,
   ] = await Promise.all([
     db.select({ n: sql<number>`count(*)` }).from(schema.user),
     db.select({ n: sql<number>`count(*)` }).from(schema.orgs),
@@ -368,6 +399,16 @@ adminRoutes.get("/usage", async (c) => {
       .from(schema.clicks)
       .where(gte(schema.clicks.ts, since14d))
       .groupBy(schema.clicks.orgId),
+    // comped users: paid access an admin granted, which is not revenue (#82)
+    db
+      .select({ n: sql<number>`count(*)` })
+      .from(schema.user)
+      .where(isNotNull(schema.user.compPlan)),
+    // live subscriptions: counted, never priced. Money is Polar's figure.
+    db
+      .select({ status: schema.user.subscriptionStatus })
+      .from(schema.user)
+      .where(isNotNull(schema.user.subscriptionPlan)),
   ]);
 
   // ── Business row ──
@@ -376,7 +417,8 @@ adminRoutes.get("/usage", async (c) => {
     totalUsers,
     paidUsers,
     planCounts,
-    mrr,
+    compedUsers,
+    payingSubscribers,
     paidConversionRate,
     signups7d,
     signups7dDelta,
@@ -384,6 +426,8 @@ adminRoutes.get("/usage", async (c) => {
   } = computeBusinessMetrics({
     users,
     proUsers,
+    compedUserRows,
+    subscriptionRows,
     planCountRows,
     signups7dRows,
     signups7dPrevRows,
@@ -444,7 +488,8 @@ adminRoutes.get("/usage", async (c) => {
     })),
     topLinks: topLinkRows,
     planCounts,
-    mrr,
+    payingSubscribers,
+    compedUsers,
     paidConversionRate,
     signups7d,
     signups7dDelta,
@@ -495,7 +540,7 @@ adminRoutes.get("/orgs/:orgId", async (c) => {
   const { plan } = await orgPlan(db, orgId);
 
   const days = 30;
-  const since = now() - days * 24 * 60 * 60 * 1000;
+  const since = Date.now() - days * 24 * 60 * 60 * 1000;
 
   const [members, links, seriesRows] = await Promise.all([
     db
@@ -559,6 +604,18 @@ adminRoutes.get("/users", async (c) => {
       banned: schema.user.banned,
       emailVerified: schema.user.emailVerified,
       plan: schema.user.plan,
+      subscriptionPlan: schema.user.subscriptionPlan,
+      subscriptionStatus: schema.user.subscriptionStatus,
+      cancelAtPeriodEnd: schema.user.polarSubscriptionCancelAtPeriodEnd,
+      compPlan: schema.user.compPlan,
+      compReason: schema.user.compReason,
+      compGrantedAt: schema.user.compGrantedAt,
+      // Who granted the comp, by email: an admin reading this list wants a
+      // person, not an id. Null once that admin's account is gone.
+      compGrantedBy: sql<string | null>`(
+        select grantor.email from "user" as grantor
+        where grantor.id = "user".comp_granted_by
+      )`,
       createdAt: schema.user.createdAt,
       orgCount: sql<number>`(
         select count(*) from org_members where org_members.user_id = "user".id
@@ -576,6 +633,7 @@ adminRoutes.get("/users", async (c) => {
       ...r,
       disposable: isDisposableEmail(r.email),
       createdAt: r.createdAt.getTime(),
+      compGrantedAt: r.compGrantedAt?.getTime() ?? null,
     })) satisfies AdminUserRow[],
   );
 });
@@ -614,16 +672,10 @@ async function validateBannedPatch(
   return value;
 }
 
-function validatePlanPatch(value: string | undefined): OrgPlan | undefined {
-  if (value === undefined) return undefined;
-  if (value !== "free" && value !== "hobby" && value !== "pro")
-    throw new HTTPException(400, { message: "plan must be free, hobby or pro" });
-  return value;
-}
-
-// Superadmin controls: toggle platform-admin, ban/unban, and/or comp a user's
-// plan (free/hobby/pro). Plan lives on the user, so comping a paid plan
-// unlocks every org they own.
+// Superadmin controls: toggle platform-admin and ban/unban. Granting a plan
+// by hand is not here: it is a comp, and it has its own routes below, because
+// a comp written into `plan` was indistinguishable from a paid subscription
+// (#81).
 adminRoutes.patch("/users/:userId", async (c) => {
   const body = await c.req.json<{
     isAdmin?: boolean;
@@ -634,18 +686,78 @@ adminRoutes.patch("/users/:userId", async (c) => {
   const self = c.var.user!;
   const db = c.var.db;
 
-  const patch: { isAdmin?: boolean; banned?: boolean; plan?: OrgPlan } = {
+  if (body.plan !== undefined)
+    throw new HTTPException(400, {
+      message: "Plan is derived from a subscription or a comp: use the comp routes",
+    });
+  const patch: { isAdmin?: boolean; banned?: boolean } = {
     isAdmin: validateIsAdminPatch(body.isAdmin, targetId, self.id),
     banned: await validateBannedPatch(db, body.banned, targetId, self.id),
-    plan: validatePlanPatch(body.plan),
   };
-  if (patch.isAdmin === undefined && patch.banned === undefined && patch.plan === undefined)
+  if (patch.isAdmin === undefined && patch.banned === undefined)
     throw new HTTPException(400, { message: "Nothing to update" });
 
   await db.update(schema.user).set(patch).where(eq(schema.user.id, targetId));
   // Banning kicks the user out immediately: all their sessions are wiped, and
   // better-auth refuses to create new ones (see better-auth.ts).
   if (patch.banned) await db.delete(schema.session).where(eq(schema.session.userId, targetId));
+  return c.json({ ok: true });
+});
+
+/**
+ * Writes the `comp_*` columns and re-derives `plan` from them.
+ *
+ * Never the `subscription_*` columns: a comp says nothing about what Polar
+ * knows, so it must not be able to invent a subscription. The reverse holds
+ * in routes/billing.ts, where a webhook cannot clear a comp (#81).
+ *
+ * Granting and revoking are the same statement with opposite values, so they
+ * share one, and with it the 404 that means the id matched nobody.
+ */
+async function writeComp(
+  db: DB,
+  targetId: string,
+  comp: { plan: "hobby" | "pro"; reason: string; grantedBy: string } | null,
+) {
+  const result = await db
+    .update(schema.user)
+    .set({
+      compPlan: comp?.plan ?? null,
+      compReason: comp?.reason ?? null,
+      compGrantedBy: comp?.grantedBy ?? null,
+      compGrantedAt: comp ? new Date() : null,
+      plan: effectivePlanSql({ compPlan: comp?.plan ?? null }),
+    })
+    .where(eq(schema.user.id, targetId));
+  if (result.meta.changes === 0) throw new HTTPException(404, { message: "User not found" });
+}
+
+/** Grant a comp: paid access an admin gives by hand, recorded as such (#81). */
+adminRoutes.post("/users/:userId/comp", async (c) => {
+  const body = await c.req
+    .json<{ plan?: string; reason?: string }>()
+    .catch(() => ({}) as { plan?: string; reason?: string });
+  const plan = body.plan;
+  if (plan !== "hobby" && plan !== "pro")
+    throw new HTTPException(400, { message: "plan must be hobby or pro" });
+  const reason = (body.reason ?? "").trim();
+  // A comp with no reason is the state #81 was written about: access nobody
+  // can account for later.
+  if (!reason) throw new HTTPException(400, { message: "reason is required" });
+  if (reason.length > 500) throw new HTTPException(400, { message: "reason is too long" });
+
+  await writeComp(c.var.db, c.req.param("userId"), {
+    plan,
+    reason,
+    grantedBy: c.var.user!.id,
+  });
+  return c.json({ ok: true });
+});
+
+/** Revoke a comp. The subscription underneath, if there is one, comes back:
+ * `plan` re-derives from the columns the webhook owns. */
+adminRoutes.delete("/users/:userId/comp", async (c) => {
+  await writeComp(c.var.db, c.req.param("userId"), null);
   return c.json({ ok: true });
 });
 

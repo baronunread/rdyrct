@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import confetti from "canvas-confetti";
-import { AnimatePresence, LazyMotion, domAnimation, m } from "motion/react";
+import { AnimatePresence, LazyMotion, domAnimation, m, useReducedMotion } from "motion/react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   useCurrentUser,
@@ -21,6 +21,29 @@ import { useShake } from "../lib/use-shake";
 import { showsCancelNotice, showsConfirmingNotice } from "../lib/plan-status-notes";
 import { useToast } from "../ui/toast";
 import posthog from "../lib/posthog";
+
+/** The three shake handles the page owns, one per button it can bounce. */
+type Shake = Record<"hobby" | "pro" | "portal", ReturnType<typeof useShake>>;
+
+const PORTAL_SNAPSHOT_KEY = "billing:portal-snapshot";
+
+/** Everything the subscription portal can change, as one comparable string:
+ * the plan, whether a cancel is scheduled, and when the period ends. Enough
+ * to tell "the webhook has landed" from "it has not landed yet". */
+function billingSnapshot(user?: {
+  plan: OrgPlan;
+  polarSubscriptionCancelAtPeriodEnd?: boolean;
+  polarSubscriptionCurrentPeriodEnd?: number | null;
+}) {
+  // JSON, not join: a join renders null as an empty string, so "no period
+  // end" and "period end of ''" would compare equal and the wait would end
+  // on a change that never happened.
+  return JSON.stringify([
+    user?.plan ?? "free",
+    user?.polarSubscriptionCancelAtPeriodEnd ?? false,
+    user?.polarSubscriptionCurrentPeriodEnd ?? null,
+  ]);
+}
 
 const PLAN_LABEL: Record<OrgPlan, string> = {
   free: "Free",
@@ -103,36 +126,65 @@ function ConfirmingPaymentNotice() {
   );
 }
 
+/**
+ * The notes arrive on their own, seconds after the page settles, when the
+ * webhook behind a portal visit lands. Appearing outright reads as a glitch,
+ * so they grow in instead.
+ *
+ * `initial={false}` keeps that to the arrival: a note already true when the
+ * page loads is simply there, with nothing to watch.
+ */
 function PlanStatusNotes({
   plan,
+  comped,
   cancelAtPeriodEnd,
   periodEnd,
   confirmTimedOut,
 }: {
   plan: OrgPlan;
+  comped: boolean;
   cancelAtPeriodEnd: boolean;
   periodEnd: number | null;
   confirmTimedOut: boolean;
 }) {
+  const reduced = useReducedMotion();
+  const grow = reduced
+    ? { initial: { opacity: 0 }, animate: { opacity: 1 }, exit: { opacity: 0 } }
+    : {
+        initial: { opacity: 0, height: 0 },
+        animate: { opacity: 1, height: "auto" as const },
+        exit: { opacity: 0, height: 0 },
+      };
   return (
-    <>
-      {showsCancelNotice(cancelAtPeriodEnd, periodEnd) && (
-        <CancelScheduledNotice plan={plan} periodEnd={periodEnd} />
-      )}
-      {showsConfirmingNotice(confirmTimedOut, plan) && <ConfirmingPaymentNotice />}
-    </>
+    <LazyMotion features={domAnimation}>
+      <AnimatePresence initial={false}>
+        {showsCancelNotice(cancelAtPeriodEnd, periodEnd, comped) && (
+          <m.div key="cancel" {...grow} transition={{ duration: 0.2 }} className="overflow-hidden">
+            <CancelScheduledNotice plan={plan} periodEnd={periodEnd} />
+          </m.div>
+        )}
+        {showsConfirmingNotice(confirmTimedOut, plan) && (
+          <m.div
+            key="confirming"
+            {...grow}
+            transition={{ duration: 0.2 }}
+            className="overflow-hidden"
+          >
+            <ConfirmingPaymentNotice />
+          </m.div>
+        )}
+      </AnimatePresence>
+    </LazyMotion>
   );
 }
 
 function FreeUpgradeButtons({
   checkoutPlan,
-  shakeHobby,
-  shakePro,
+  shake,
   onUpgrade,
 }: {
   checkoutPlan: "hobby" | "pro" | null;
-  shakeHobby: ReturnType<typeof useShake>;
-  shakePro: ReturnType<typeof useShake>;
+  shake: Shake;
   onUpgrade: (target: "hobby" | "pro") => void;
 }) {
   return (
@@ -140,8 +192,8 @@ function FreeUpgradeButtons({
       <Button
         variant="primary"
         disabled={checkoutPlan !== null}
-        className={shakeHobby.className}
-        onAnimationEnd={shakeHobby.end}
+        className={shake.hobby.className}
+        onAnimationEnd={shake.hobby.end}
         onClick={() => onUpgrade("hobby")}
       >
         <BusyContent busy={checkoutPlan === "hobby"}>
@@ -151,8 +203,8 @@ function FreeUpgradeButtons({
       <Button
         variant="primary"
         disabled={checkoutPlan !== null}
-        className={shakePro.className}
-        onAnimationEnd={shakePro.end}
+        className={shake.pro.className}
+        onAnimationEnd={shake.pro.end}
         onClick={() => onUpgrade("pro")}
       >
         <BusyContent busy={checkoutPlan === "pro"}>
@@ -165,19 +217,19 @@ function FreeUpgradeButtons({
 
 function ManageSubscriptionButton({
   showPortalOverlay,
-  shakePortal,
+  shake,
   onPortal,
 }: {
   showPortalOverlay: boolean;
-  shakePortal: ReturnType<typeof useShake>;
+  shake: Shake;
   onPortal: () => void;
 }) {
   return (
     <Button
       variant="primary"
       disabled={showPortalOverlay}
-      className={shakePortal.className}
-      onAnimationEnd={shakePortal.end}
+      className={shake.portal.className}
+      onAnimationEnd={shake.portal.end}
       onClick={onPortal}
     >
       <BusyContent busy={showPortalOverlay}>Manage subscription</BusyContent>
@@ -185,28 +237,77 @@ function ManageSubscriptionButton({
   );
 }
 
+/** A paid plan with no billing account. The portal cannot open for them, so
+ * offer the truth instead of a button that errors (#85). Which truth depends
+ * on how they got the plan: comped, or a subscription that arrived without a
+ * customer id. Thanking the second group for a gift nobody gave them would be
+ * false (#81). */
+function NoBillingAccountNote({ plan, comped }: { plan: OrgPlan; comped: boolean }) {
+  return (
+    <p className="text-sm text-muted">
+      {comped
+        ? `You have ${PLAN_LABEL[plan]} for free, with our thanks. There is no subscription to manage, and nothing to pay. Email support if you want anything changed.`
+        : "No billing account is linked to this plan, so the subscription portal cannot open. Email support and we will link it."}
+    </p>
+  );
+}
+
+/** The one control the plan card offers: upgrade buttons on free, the portal
+ * button on a paid plan that has an account, and an explanation when it does
+ * not. */
+function PlanActionControl({
+  plan,
+  hasBillingAccount,
+  comped,
+  checkoutPlan,
+  showPortalOverlay,
+  shake,
+  onUpgrade,
+  onPortal,
+}: {
+  plan: OrgPlan;
+  hasBillingAccount: boolean;
+  comped: boolean;
+  checkoutPlan: "hobby" | "pro" | null;
+  showPortalOverlay: boolean;
+  shake: Shake;
+  onUpgrade: (target: "hobby" | "pro") => void;
+  onPortal: () => void;
+}) {
+  if (plan === "free")
+    return <FreeUpgradeButtons checkoutPlan={checkoutPlan} shake={shake} onUpgrade={onUpgrade} />;
+  if (!hasBillingAccount) return <NoBillingAccountNote plan={plan} comped={comped} />;
+  return (
+    <ManageSubscriptionButton
+      showPortalOverlay={showPortalOverlay}
+      shake={shake}
+      onPortal={onPortal}
+    />
+  );
+}
+
 function PlanActions({
   plan,
+  hasBillingAccount,
+  comped,
   checkoutPlan,
   showPortalOverlay,
   confirmTimedOut,
   cancelAtPeriodEnd,
   periodEnd,
-  shakeHobby,
-  shakePro,
-  shakePortal,
+  shake,
   onUpgrade,
   onPortal,
 }: {
   plan: OrgPlan;
+  hasBillingAccount: boolean;
+  comped: boolean;
   checkoutPlan: "hobby" | "pro" | null;
   showPortalOverlay: boolean;
   confirmTimedOut: boolean;
   cancelAtPeriodEnd: boolean;
   periodEnd: number | null;
-  shakeHobby: ReturnType<typeof useShake>;
-  shakePro: ReturnType<typeof useShake>;
-  shakePortal: ReturnType<typeof useShake>;
+  shake: Shake;
   onUpgrade: (target: "hobby" | "pro") => void;
   onPortal: () => void;
 }) {
@@ -222,27 +323,26 @@ function PlanActions({
         </p>
         <PlanStatusNotes
           plan={plan}
+          comped={comped}
           cancelAtPeriodEnd={cancelAtPeriodEnd}
           periodEnd={periodEnd}
           confirmTimedOut={confirmTimedOut}
         />
         {plan === "free" && <PlanFeatureComparison />}
         <div>
-          {plan === "free" ? (
-            <FreeUpgradeButtons
-              checkoutPlan={checkoutPlan}
-              shakeHobby={shakeHobby}
-              shakePro={shakePro}
-              onUpgrade={onUpgrade}
-            />
-          ) : (
-            <ManageSubscriptionButton
-              showPortalOverlay={showPortalOverlay}
-              shakePortal={shakePortal}
-              onPortal={onPortal}
-            />
-          )}
-          {plan === "hobby" && (
+          <PlanActionControl
+            plan={plan}
+            hasBillingAccount={hasBillingAccount}
+            comped={comped}
+            checkoutPlan={checkoutPlan}
+            showPortalOverlay={showPortalOverlay}
+            shake={shake}
+            onUpgrade={onUpgrade}
+            onPortal={onPortal}
+          />
+          {/* Not for a comped Hobby: the portal changes the subscription, and
+              the comp would still outrank whatever it changed to. */}
+          {plan === "hobby" && hasBillingAccount && !comped && (
             <p className="mt-2 text-xs text-muted">
               Want Pro? Switch plans from the subscription portal.
             </p>
@@ -381,43 +481,133 @@ function CelebrationOverlay({
   );
 }
 
+const WEBHOOK_POLL_MS = 2000;
+const WEBHOOK_POLL_TRIES = 10;
+
+/**
+ * Waits for a Polar webhook to land, by asking the server again.
+ *
+ * Polar sends the browser back before it delivers the webhook, so both
+ * returns (from checkout and from the subscription portal) read the row as it
+ * was. One refetch races the delivery, so keep asking while `waiting` until
+ * `arrived`, then give up rather than poll forever.
+ *
+ * The callbacks live in a ref: they close over state setters that change
+ * every render, and re-running the interval on each of those would reset the
+ * try count and make "give up" unreachable.
+ */
+function useAwaitWebhook({
+  waiting,
+  arrived,
+  onArrived,
+  onGaveUp,
+}: {
+  waiting: boolean;
+  arrived: boolean;
+  onArrived: () => void;
+  onGaveUp: () => void;
+}) {
+  const qc = useQueryClient();
+  const callbacks = useRef({ onArrived, onGaveUp });
+  useEffect(() => {
+    callbacks.current = { onArrived, onGaveUp };
+  });
+
+  useEffect(() => {
+    if (!waiting) return;
+    if (arrived) {
+      callbacks.current.onArrived();
+      return;
+    }
+    let tries = 0;
+    const id = window.setInterval(() => {
+      tries += 1;
+      if (tries > WEBHOOK_POLL_TRIES) {
+        window.clearInterval(id);
+        callbacks.current.onGaveUp();
+        return;
+      }
+      void qc.refetchQueries({ queryKey: ["user"] });
+    }, WEBHOOK_POLL_MS);
+    return () => window.clearInterval(id);
+  }, [waiting, arrived, qc]);
+}
+
+/** Confetti and the overlay that goes with it, for four seconds. */
+function useCelebration() {
+  const [showCelebration, setShowCelebration] = useState(false);
+  const celebrate = useCallback(() => {
+    setShowCelebration(true);
+    const colors = ["#cdb9f5", "#b9e6c9", "#f5b8c8", "#f2e3b3", "#b9d9f0"];
+    for (const angle of [60, 120]) {
+      confetti({
+        particleCount: 40,
+        angle,
+        spread: 70,
+        startVelocity: 50,
+        origin: { x: angle === 60 ? 0 : 1, y: 0.75 },
+        colors,
+      });
+    }
+    setTimeout(() => setShowCelebration(false), 4000);
+  }, []);
+  return { showCelebration, setShowCelebration, celebrate };
+}
+
+/**
+ * `?plan=hobby` on the landing CTAs sends someone straight to checkout, so a
+ * visitor who picked a plan before signing up does not have to pick it twice.
+ *
+ * Once only, and only for a free account: re-running it would open checkout
+ * again behind the person's back. The URL is cleaned either way, so a reload
+ * is an ordinary visit to the billing page.
+ */
+function useAutoUpgradeFromUrl(
+  user: { plan: OrgPlan } | undefined,
+  onUpgrade: (target: "hobby" | "pro") => void,
+) {
+  const done = useRef(false);
+  const upgrade = useRef(onUpgrade);
+  useEffect(() => {
+    upgrade.current = onUpgrade;
+  });
+  useEffect(() => {
+    if (!user || done.current) return;
+    done.current = true;
+    const url = new URL(window.location.href);
+    const target = url.searchParams.get("plan");
+    if (target !== "hobby" && target !== "pro") return;
+    url.searchParams.delete("plan");
+    window.history.replaceState({}, "", url.toString());
+    if (user.plan === "free") upgrade.current(target);
+  }, [user]);
+}
+
 function useCheckoutFlow() {
   const me = useCurrentUser();
   const checkout = useCheckout();
   const portal = usePortal();
   const toast = useToast();
+  // One handle per button, kept here because the mutation error handlers
+  // below are what call `start()`. Grouped so the three travel as one prop,
+  // and memoized so the group changes only when a button actually shakes.
   const shakeHobby = useShake();
   const shakePro = useShake();
   const shakePortal = useShake();
+  const shake = useMemo(
+    () => ({ hobby: shakeHobby, pro: shakePro, portal: shakePortal }),
+    [shakeHobby, shakePro, shakePortal],
+  );
   const qc = useQueryClient();
 
   const [checkoutPlan, setCheckoutPlan] = useState<"hobby" | "pro" | null>(null);
   const [showPortalOverlay, setShowPortalOverlay] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const [confirmTimedOut, setConfirmTimedOut] = useState(false);
-  const [showCelebration, setShowCelebration] = useState(false);
-
-  const celebrat = useCallback(() => {
-    setShowCelebration(true);
-    const colors = ["#cdb9f5", "#b9e6c9", "#f5b8c8", "#f2e3b3", "#b9d9f0"];
-    confetti({
-      particleCount: 40,
-      angle: 60,
-      spread: 70,
-      startVelocity: 50,
-      origin: { x: 0, y: 0.75 },
-      colors,
-    });
-    confetti({
-      particleCount: 40,
-      angle: 120,
-      spread: 70,
-      startVelocity: 50,
-      origin: { x: 1, y: 0.75 },
-      colors,
-    });
-    setTimeout(() => setShowCelebration(false), 4000);
-  }, []);
+  // The billing state as it was before a trip to the portal, while we wait
+  // for the webhook to move it. Null when we are not waiting.
+  const [portalSnapshot, setPortalSnapshot] = useState<string | null>(null);
+  const { showCelebration, setShowCelebration, celebrate } = useCelebration();
 
   const handleUpgrade = async (target: "hobby" | "pro") => {
     posthog.capture("checkout_started", { target_plan: target });
@@ -427,7 +617,7 @@ function useCheckoutFlow() {
       setTimeout(() => window.location.assign(data.url), 300);
     } catch (e) {
       setCheckoutPlan(null);
-      (target === "hobby" ? shakeHobby : shakePro).start();
+      shake[target].start();
       toast((e as Error).message, "error");
     }
   };
@@ -437,10 +627,14 @@ function useCheckoutFlow() {
     setShowPortalOverlay(true);
     try {
       const data = await portal.mutateAsync();
+      // Remembered across the trip to Polar, so the return can tell whether
+      // the webhook has landed yet. sessionStorage because the browser back
+      // button is the only way back and nothing survives that in memory.
+      sessionStorage.setItem(PORTAL_SNAPSHOT_KEY, billingSnapshot(me.data?.user));
       setTimeout(() => window.location.assign(data.url), 800);
     } catch (e) {
       setShowPortalOverlay(false);
-      shakePortal.start();
+      shake.portal.start();
       toast((e as Error).message, "error");
     }
   };
@@ -453,12 +647,40 @@ function useCheckoutFlow() {
       setConfirming(false);
       setConfirmTimedOut(false);
       setShowCelebration(false);
+      // The portal is where a plan changes, a cancel is scheduled, and a
+      // cancel is undone, and none of the three sends the browser back here
+      // with anything in the URL to notice. Without this the page restores
+      // from bfcache and shows the state from before the visit, because
+      // refetchOnWindowFocus is off for every query (src/app/main.tsx).
+      void qc.refetchQueries({ queryKey: ["user"] });
+      const before = sessionStorage.getItem(PORTAL_SNAPSHOT_KEY);
+      if (before !== null) {
+        sessionStorage.removeItem(PORTAL_SNAPSHOT_KEY);
+        setPortalSnapshot(before);
+      }
     };
     window.addEventListener("pageshow", handler);
     return () => window.removeEventListener("pageshow", handler);
-  }, []);
+    // setShowCelebration now arrives from useCelebration rather than a
+    // useState in this scope. It is still the same stable setter, so listing
+    // it costs nothing and keeps the dependency honest.
+  }, [qc, setShowCelebration]);
 
   const plan = me.data?.user.plan ?? "free";
+  const snapshot = billingSnapshot(me.data?.user);
+
+  /**
+   * The portal return. Silent, with no overlay: unlike the checkout return,
+   * we do not know that anything changed in the portal, and most visits
+   * change nothing. A visit that really changed nothing polls quietly and
+   * gives up.
+   */
+  useAwaitWebhook({
+    waiting: portalSnapshot !== null,
+    arrived: snapshot !== portalSnapshot,
+    onArrived: () => setPortalSnapshot(null),
+    onGaveUp: () => setPortalSnapshot(null),
+  });
 
   // Detect the checkout return once on mount.
   useEffect(() => {
@@ -472,48 +694,21 @@ function useCheckoutFlow() {
     }
   }, []);
 
-  // While confirming, poll /user until plan flips to paid.
-  const celebratRef = useRef(celebrat);
-  useEffect(() => {
-    celebratRef.current = celebrat;
-  }, [celebrat]);
-  useEffect(() => {
-    if (!confirming) return;
-    if (plan !== "free") {
+  // The checkout return: the plan flipping to paid is the webhook landing.
+  useAwaitWebhook({
+    waiting: confirming,
+    arrived: plan !== "free",
+    onArrived: () => {
       setConfirming(false);
-      celebratRef.current?.();
-      return;
-    }
-    let tries = 0;
-    const id = window.setInterval(() => {
-      tries += 1;
-      if (tries > 10) {
-        window.clearInterval(id);
-        setConfirming(false);
-        setConfirmTimedOut(true);
-        return;
-      }
-      void qc.refetchQueries({ queryKey: ["user"] });
-    }, 2000);
-    return () => window.clearInterval(id);
-  }, [confirming, plan, qc]);
-
-  // Auto-upgrade from ?plan= param
-  const planParamDone = useRef(false);
-  const upgradeRef = useRef(handleUpgrade);
-  useEffect(() => {
-    upgradeRef.current = handleUpgrade;
+      celebrate();
+    },
+    onGaveUp: () => {
+      setConfirming(false);
+      setConfirmTimedOut(true);
+    },
   });
-  useEffect(() => {
-    if (!me.data || planParamDone.current) return;
-    planParamDone.current = true;
-    const url = new URL(window.location.href);
-    const target = url.searchParams.get("plan");
-    if (target !== "hobby" && target !== "pro") return;
-    url.searchParams.delete("plan");
-    window.history.replaceState({}, "", url.toString());
-    if (me.data.user.plan === "free") void upgradeRef.current(target);
-  }, [me.data]);
+
+  useAutoUpgradeFromUrl(me.data?.user, (target) => void handleUpgrade(target));
 
   return {
     plan,
@@ -525,9 +720,7 @@ function useCheckoutFlow() {
     setShowCelebration,
     handleUpgrade,
     handlePortal,
-    shakeHobby,
-    shakePro,
-    shakePortal,
+    shake,
   };
 }
 
@@ -569,9 +762,7 @@ export function BillingPage() {
     setShowCelebration,
     handleUpgrade,
     handlePortal,
-    shakeHobby,
-    shakePro,
-    shakePortal,
+    shake,
   } = useCheckoutFlow();
 
   const cancelAtPeriodEnd = me.data?.user.polarSubscriptionCancelAtPeriodEnd ?? false;
@@ -584,14 +775,14 @@ export function BillingPage() {
       <div className="flex flex-col gap-4">
         <PlanActions
           plan={plan}
+          hasBillingAccount={me.data?.user.hasBillingAccount ?? false}
+          comped={me.data?.user.comped ?? false}
           checkoutPlan={checkoutPlan}
           showPortalOverlay={showPortalOverlay}
           confirmTimedOut={confirmTimedOut}
           cancelAtPeriodEnd={cancelAtPeriodEnd}
           periodEnd={periodEnd}
-          shakeHobby={shakeHobby}
-          shakePro={shakePro}
-          shakePortal={shakePortal}
+          shake={shake}
           onUpgrade={handleUpgrade}
           onPortal={handlePortal}
         />

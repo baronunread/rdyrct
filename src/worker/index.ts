@@ -5,6 +5,7 @@ import type { ContentfulStatusCode } from "hono/utils/http-status";
 import type { AppEnv, Env } from "./env";
 import { withSession } from "./session";
 import { getAuth } from "./better-auth";
+import { withBackground } from "./background";
 import { userRoutes } from "./routes/auth";
 import { orgRoutes, inviteRoutes } from "./routes/orgs";
 import { linkRoutes } from "./routes/links";
@@ -22,6 +23,7 @@ import {
   consumeStorageBatch,
   logDeadLetterBatch,
   sweepExpiredAliases,
+  sweepOrphanQrLogos,
   type StorageMessage,
 } from "./storage";
 
@@ -29,6 +31,7 @@ import {
   enqueueClick,
   consumeClickBatch,
   logClickDeadLetterBatch,
+  sweepDedupeIds,
   type ClickMessage,
 } from "./clicks";
 
@@ -112,7 +115,11 @@ app.use("*", async (c, next) => {
 // BetterAuth owns /api/auth/* (signup, login, logout, verify, reset).
 app.on(["GET", "POST"], "/api/auth/*", async (c) => {
   const limited = await enforcePublicAuthRateLimit(c);
-  return limited ?? getAuth(c.env).handler(c.req.raw);
+  if (limited) return limited;
+  // withBackground so an auth hook can send mail after the response instead
+  // of inside it: the signup guard's timing must not depend on whether the
+  // address exists (#53).
+  return withBackground(c.executionCtx, () => getAuth(c.env).handler(c.req.raw));
 });
 
 // Polar webhook: public, signature-verified, no session middleware.
@@ -214,6 +221,15 @@ export default {
     do {
       changes = (await stmt.bind(cutoff).run()).meta.changes;
     } while (changes > 0);
+
+    // Daily: drop dedupe ids the queue can no longer redeliver, so a unique
+    // index over 400 days of history stops carrying a guarantee that only
+    // has to hold for minutes (#70).
+    await sweepDedupeIds(env);
+
+    // Daily: delete QR logos no row points at, which an abandoned upload
+    // leaves behind with no owner and no delete path (#49).
+    await sweepOrphanQrLogos(env);
 
     // Daily: retire rename aliases past their 48h deadline (see #38). The
     // redirect path already stopped resolving them; this frees their slugs.

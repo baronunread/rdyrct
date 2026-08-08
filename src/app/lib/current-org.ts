@@ -1,8 +1,41 @@
-import { useEffect } from "react";
-import { useSyncExternalStore } from "react";
+import { useEffect, useSyncExternalStore } from "react";
 import { useCurrentUser } from "./hooks";
-import { getCurrentOrgId, setCurrentOrgId, subscribeToOrg } from "./org-store";
 import type { UserOrg } from "@/shared/types";
+
+// There is no org id in the URL: the current org lives here, backed by
+// localStorage so a reload keeps it. Store and hook share one file because
+// the hook was the store's only reader.
+
+const KEY = "rdyrct:currentOrg";
+
+function read(): string | null {
+  try {
+    return localStorage.getItem(KEY);
+  } catch {
+    return null;
+  }
+}
+
+let currentId: string | null = read();
+const listeners = new Set<() => void>();
+
+function setCurrentOrgId(id: string | null) {
+  currentId = id;
+  try {
+    if (id) localStorage.setItem(KEY, id);
+    else localStorage.removeItem(KEY);
+  } catch {
+    /* ignore */
+  }
+  listeners.forEach((l) => l());
+}
+
+const getCurrentOrgId = () => currentId;
+
+function subscribeToOrg(l: () => void) {
+  listeners.add(l);
+  return () => listeners.delete(l);
+}
 
 export function useCurrentOrg(): {
   org: UserOrg | null;

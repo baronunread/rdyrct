@@ -1,5 +1,6 @@
 import { expect, type Page, test } from "@playwright/test";
 import { signUpAndVerify } from "./resend";
+import { rawSql } from "./db";
 
 async function blockAuthRequests(page: Page) {
   const counter = { count: 0 };
@@ -122,5 +123,40 @@ test.describe("authentication forms", () => {
 
     await expect(page.getByRole("heading", { name: "Create an account" })).toBeVisible();
     await expect(page.getByText("Email delivery unavailable")).toBeVisible();
+  });
+
+  test("signing up with a taken address looks like a fresh signup (#53)", async ({ page }) => {
+    const victim = `taken-${Date.now()}@gmail.com`;
+    // Seeded straight into D1 rather than signed up through the UI: a real
+    // signup would spend this address's per-recipient email budget (#50),
+    // and the probe below needs it. Nothing here signs in as them.
+    await rawSql(
+      page,
+      "INSERT INTO user (id, name, email, email_verified, is_admin, banned, plan, created_at, updated_at) VALUES (?, 'Victim', ?, 1, 0, 0, 'free', 0, 0)",
+      [`victim-${Date.now()}`, victim],
+    );
+
+    // Same address, a password of the prober's choosing: an outsider must
+    // not be able to tell from the screen that this address is registered.
+    await page.goto("/signup");
+    await page.getByLabel("Email").fill(victim);
+    await page.getByLabel("Password").fill("another-password-456");
+    await page.getByRole("button", { name: "Sign up" }).click();
+
+    // Exactly what a free address gives: on to the code screen, no hint.
+    await expect(page.getByRole("heading", { name: "Enter your code" })).toBeVisible();
+    await expect(page.getByText("already has an account")).toBeHidden();
+
+    // The owner is told, in the one place only they can read.
+    await expect
+      .poll(async () => {
+        const response = await page.request.get("http://localhost:4000/emails", {
+          headers: { authorization: "Bearer test_token_admin" },
+        });
+        if (!response.ok()) return "";
+        const body = JSON.stringify(await response.json());
+        return body.includes(victim) && body.includes("Someone tried to sign up") ? "notified" : "";
+      })
+      .toBe("notified");
   });
 });

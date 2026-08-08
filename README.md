@@ -150,7 +150,21 @@ bun run db:migrate:remote
 bun run deploy
 ```
 
-**Polar setup:** create an Organization Access Token with scopes `checkouts:write` and `customer_sessions:write`. Add a webhook endpoint at `https://rdyrct.com/api/webhooks/polar` and subscribe to `subscription.active`, `subscription.revoked`, `subscription.canceled`, and `subscription.uncanceled`.
+**Polar setup:** create an Organization Access Token with scopes `checkouts:write` and `customer_sessions:write`. Add a webhook endpoint at `https://rdyrct.com/api/webhooks/polar` and subscribe to all five events the Worker handles. Miss one and billing state drifts:
+
+| Event                     | What it does                                                                    |
+| ------------------------- | ------------------------------------------------------------------------------- |
+| `subscription.active`     | Starts the subscription: plan, customer, price, and access                      |
+| `subscription.updated`    | The full subscription snapshot: status, product, cancellation state, period end |
+| `subscription.canceled`   | Marks it as ending at the period end; access continues until then               |
+| `subscription.uncanceled` | Clears a scheduled cancellation                                                 |
+| `subscription.revoked`    | Ends it: the subscription and its access go away                                |
+
+Which subscription statuses keep access is one decision, in `src/worker/entitlement.ts`. `active`, `trialing` and `past_due` keep it, because Polar retries a failed payment for days and sends `subscription.revoked` when it gives up. `unpaid`, `canceled`, `incomplete` and `incomplete_expired` do not, and a status with no rule keeps nothing.
+
+Paid access an admin grants by hand is a **comp**, stored apart from the subscription and never counted as a subscriber. A comp outranks the subscription underneath it, so revoking a subscription cannot take away access an admin gave.
+
+The admin console reports counts, never money: how many people hold a paid plan, how many pay for it, and how many are comped. Who is cancelling shows on their own row in the user list, where it names someone. Revenue is read in the Polar dashboard, which knows what it charged net of discounts, tax and refunds.
 
 Finally, point `rdyrct.com` at the Worker as a **custom domain**: Cloudflare dashboard → Workers → your worker → **Settings → Domains & Routes**. Short links live at the root (`https://rdyrct.com/<slug>`); the app is served on every other path.
 

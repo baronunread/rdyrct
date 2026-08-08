@@ -82,7 +82,7 @@ function submitSameDestination(
 }
 
 export function Dashboard() {
-  const { org, orgId, limits, activeDomains, orgQr } = useOrgLimits();
+  const { org, orgId, limits, activeDomains, defaultDomainId, orgQr } = useOrgLimits();
   const data = useDashboardData(orgId);
   const toast = useToast();
   const [created, setCreated] = useState<LinkDTO | null>(null);
@@ -107,6 +107,7 @@ export function Dashboard() {
       <QuickCreateCard
         create={data.create}
         activeDomains={activeDomains}
+        defaultDomainId={defaultDomainId}
         atLimit={s.totalLinks >= limits.links}
         onCreated={setCreated}
         onSameDestinationMatch={(input, matchedLinks) =>
@@ -203,18 +204,25 @@ function QuickCreateDomainSelect({
 function QuickCreateCard({
   create,
   activeDomains,
+  defaultDomainId,
   atLimit,
   onCreated,
   onSameDestinationMatch,
 }: {
   create: ReturnType<typeof useLinkMutations>["create"];
   activeDomains: DomainDTO[];
+  /** The org's default domain (#69), already checked against activeDomains. */
+  defaultDomainId: string | null;
   atLimit: boolean;
   onCreated: (link: LinkDTO) => void;
   onSameDestinationMatch: (input: LinkInput, matchedLinks: LinkDTO[]) => void;
 }) {
   const toast = useToast();
-  const [domainId, setDomainId] = useState<string | null>(null);
+  // undefined means "not chosen yet", which is not the same as choosing the
+  // shared domain: until someone picks, the card follows the org default,
+  // including when the domains query answers after this first render.
+  const [picked, setPicked] = useState<string | null | undefined>(undefined);
+  const domainId = picked === undefined ? defaultDomainId : picked;
 
   const { register, handleSubmit, reset, watch } = useForm({
     resolver: valibotResolver(destinationSchema),
@@ -259,7 +267,7 @@ function QuickCreateCard({
         <QuickCreateDomainSelect
           activeDomains={activeDomains}
           domainId={domainId}
-          onChange={setDomainId}
+          onChange={setPicked}
         />
         <Button
           variant="primary"

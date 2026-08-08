@@ -1,25 +1,26 @@
 import { useMemo, useState, type ReactNode } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Ban, Check, Ellipsis, Trash2 } from "lucide-react";
-import { ShieldMinus, ShieldPlus } from "lucide";
+import { ShieldMinus, ShieldPlus } from "lucide"; // icon nodes for MorphIcon
 import { MorphIcon } from "morphicons/react";
 import { useAdminUsers, useCurrentUser } from "../../lib/hooks";
 import { api } from "../../lib/api";
 import type { AdminUserRow, OrgPlan, Sort } from "@/shared/types";
 import { Menu, MenuItem, MenuSeparator } from "../../ui/menu";
 import { Badge, PageHeader, Table, Td, Th } from "../../ui/misc";
+import { Tooltip } from "../../ui/tooltip";
 import { AdminTableSkeleton } from "../../components/skeletons";
 import { useToast } from "../../ui/toast";
 import { ConfirmDialog } from "../../ui/confirm-dialog";
 import { SearchInput } from "./search-input";
+import { paginate } from "./util";
 import { SortTh } from "../../ui/sort-th";
 import { withErrorToast } from "../../lib/mutation-toast";
 import { sortRows } from "../../lib/sort";
 import { shortDate } from "../../lib/dates";
 import { lastSeenLabel } from "../../lib/last-seen";
 import { Pager } from "../../ui/pagination";
-
-const PAGE_SIZE = 25;
+import { GrantCompDialog, type CompPlan } from "./comp-dialog";
 
 type UserAction = "delete" | "ban" | "unban" | "makeAdmin" | "removeAdmin";
 
@@ -98,26 +99,107 @@ const planBadgeColor: Record<OrgPlan, "mint" | "accent" | "muted"> = {
   free: "muted",
 };
 
-const PLAN_OPTIONS: OrgPlan[] = ["free", "hobby", "pro"];
+/** Where a user's paid access comes from, which is not the same question as
+ * what it unlocks (#81). A comp outranks a subscription, so it is named
+ * first. */
+function BillingCell({ user }: { user: AdminUserRow }) {
+  if (user.compPlan)
+    return (
+      <BillingBadge
+        color="butter"
+        label="comped"
+        detail={[user.compReason ?? "No reason recorded.", user.compGrantedBy]
+          .filter(Boolean)
+          .join(" · ")}
+      />
+    );
+  if (!user.subscriptionPlan)
+    return (
+      <BillingBadge color="muted" label="no sub" detail="No subscription: never paid for a plan." />
+    );
+  if (user.subscriptionStatus === "past_due")
+    return (
+      <BillingBadge
+        color="pink"
+        label="past due"
+        detail="A payment is failing. Polar keeps retrying for days, so access stays until it gives up."
+      />
+    );
+  // `subscriptionPlan` is the Polar snapshot, not a grant: `unpaid`,
+  // `canceled` and anything Polar adds later leave the subscription on the row
+  // while it entitles nothing. `plan` is derived from the status (#81), so a
+  // free plan here means exactly that. Name the status instead of "paid".
+  if (user.plan === "free")
+    return (
+      <BillingBadge
+        color="muted"
+        label={user.subscriptionStatus ?? "unknown"}
+        detail="The subscription is on the row, and it grants nothing."
+      />
+    );
+  // "cancels", not "cancelled": the subscription is still paid and still
+  // entitles everything until the period ends. Polar only reports the status
+  // as `canceled` once it is actually over, and that lands on the muted badge
+  // above.
+  if (user.cancelAtPeriodEnd)
+    return (
+      <BillingBadge
+        color="pink"
+        label="cancels"
+        detail="Paid until the current period ends, then it stops. Nothing has been taken away yet."
+      />
+    );
+  return (
+    <BillingBadge color="mint" label="paid" detail="A live subscription pays for this plan." />
+  );
+}
 
-/** The three "Set plan: …" menu items, with a checkmark on the current one. */
-function PlanMenuItems({
-  current,
-  onSetPlan,
+/** One badge, and what it means on hover. The explanations are a sentence
+ * each and some are free text an admin typed, so they hang off the badge
+ * instead of setting the height of every row in the table. */
+function BillingBadge({
+  color,
+  label,
+  detail,
 }: {
-  current: OrgPlan;
-  onSetPlan: (plan: OrgPlan) => void;
+  color: "muted" | "mint" | "pink" | "butter";
+  label: string;
+  detail: string;
+}) {
+  return (
+    <Tooltip content={detail}>
+      <span className="inline-flex">
+        <Badge color={color}>{label}</Badge>
+      </span>
+    </Tooltip>
+  );
+}
+
+/** Grant, change, or revoke a comp. There is no "set plan": a plan an admin
+ * writes by hand is a comp, and it is recorded as one. */
+function CompMenuItems({
+  user,
+  onGrant,
+  onRevoke,
+}: {
+  user: AdminUserRow;
+  onGrant: () => void;
+  onRevoke: () => void;
 }) {
   return (
     <>
-      {PLAN_OPTIONS.map((plan) => (
-        <MenuItem key={plan} onClick={() => onSetPlan(plan)}>
-          <span className="w-3.5">
-            {current === plan && <Check size={13} className="text-accent" />}
-          </span>
-          Set plan: {plan}
+      <MenuItem onClick={onGrant}>
+        <span className="w-3.5">
+          {user.compPlan && <Check size={13} className="text-accent" />}
+        </span>
+        {user.compPlan ? `Change comp (${user.compPlan})` : "Comp a paid plan…"}
+      </MenuItem>
+      {user.compPlan && (
+        <MenuItem onClick={onRevoke}>
+          <span className="w-3.5" />
+          Revoke comp
         </MenuItem>
-      ))}
+      )}
     </>
   );
 }
@@ -172,12 +254,14 @@ function DangerMenuItems({
 function UserRow({
   user,
   isSelf,
-  onSetPlan,
+  onGrantComp,
+  onRevokeComp,
   onConfirm,
 }: {
   user: AdminUserRow;
   isSelf: boolean;
-  onSetPlan: (plan: OrgPlan) => void;
+  onGrantComp: () => void;
+  onRevokeComp: () => void;
   onConfirm: (kind: UserAction) => void;
 }) {
   return (
@@ -194,6 +278,9 @@ function UserRow({
       <Td>
         <Badge color={planBadgeColor[user.plan]}>{user.plan}</Badge>
       </Td>
+      <Td>
+        <BillingCell user={user} />
+      </Td>
       <Td className="text-xs text-muted">{shortDate(user.createdAt)}</Td>
       <Td className="text-xs text-muted">{lastSeenLabel(user.lastSeen)}</Td>
       <Td>
@@ -209,7 +296,7 @@ function UserRow({
           }
         >
           <AdminToggleMenuItem user={user} isSelf={isSelf} onConfirm={onConfirm} />
-          <PlanMenuItems current={user.plan} onSetPlan={onSetPlan} />
+          <CompMenuItems user={user} onGrant={onGrantComp} onRevoke={onRevokeComp} />
           <DangerMenuItems user={user} isSelf={isSelf} onConfirm={onConfirm} />
         </Menu>
       </Td>
@@ -222,7 +309,8 @@ function UsersTable({
   meId,
   sort,
   setSort,
-  onSetPlan,
+  onGrantComp,
+  onRevokeComp,
   onConfirm,
   searchTerm,
 }: {
@@ -230,7 +318,8 @@ function UsersTable({
   meId: string | undefined;
   sort: Sort;
   setSort: (s: Sort) => void;
-  onSetPlan: (user: AdminUserRow, plan: OrgPlan) => void;
+  onGrantComp: (user: AdminUserRow) => void;
+  onRevokeComp: (user: AdminUserRow) => void;
   onConfirm: (kind: UserAction, user: AdminUserRow) => void;
   searchTerm: string;
 }) {
@@ -242,6 +331,7 @@ function UsersTable({
           <Th>Email</Th>
           <SortTh label="Orgs" sortKey="orgs" sort={sort} onSort={setSort} className="text-right" />
           <Th>Plan</Th>
+          <Th>Billing</Th>
           <SortTh label="Joined" sortKey="joined" sort={sort} onSort={setSort} />
           <SortTh label="Last seen" sortKey="lastSeen" sort={sort} onSort={setSort} />
           <Th className="text-right">Actions</Th>
@@ -253,13 +343,14 @@ function UsersTable({
             key={u.id}
             user={u}
             isSelf={u.id === meId}
-            onSetPlan={(plan) => onSetPlan(u, plan)}
+            onGrantComp={() => onGrantComp(u)}
+            onRevokeComp={() => onRevokeComp(u)}
             onConfirm={(kind) => onConfirm(kind, u)}
           />
         ))}
         {rows.length === 0 && (
           <tr>
-            <Td colSpan={7} className="py-8 text-center text-muted">
+            <Td colSpan={8} className="py-8 text-center text-muted">
               No users match “{searchTerm}”.
             </Td>
           </tr>
@@ -297,18 +388,16 @@ function UserActionConfirmDialog({
   );
 }
 
-export function AdminUsersPage() {
-  const users = useAdminUsers();
-  const me = useCurrentUser();
+/**
+ * Every privileged change an admin can make to a user, plus which user is
+ * under the pointer for each. The page below is a table and two dialogs; this
+ * is the part that writes.
+ */
+function useAdminUserActions() {
   const qc = useQueryClient();
   const toast = useToast();
-  const [confirm, setConfirm] = useState<{
-    kind: UserAction;
-    user: AdminUserRow;
-  } | null>(null);
-  const [q, setQ] = useState("");
-  const [sort, setSort] = useState<Sort>({ key: "joined", dir: -1 });
-  const [page, setPage] = useState(0);
+  const [confirm, setConfirm] = useState<{ kind: UserAction; user: AdminUserRow } | null>(null);
+  const [compFor, setCompFor] = useState<AdminUserRow | null>(null);
 
   // All privileged changes go through one PATCH; the confirm popup closes on
   // success and each call site adds its own toast.
@@ -318,11 +407,33 @@ export function AdminUsersPage() {
       body,
     }: {
       userId: string;
-      body: { isAdmin?: boolean; banned?: boolean; plan?: OrgPlan };
+      body: { isAdmin?: boolean; banned?: boolean };
     }) => api(`/admin/users/${userId}`, { method: "PATCH", body }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["admin", "users"] });
       setConfirm(null);
+    },
+    onError: withErrorToast(toast),
+  });
+
+  // Comps have their own routes: they write the comp columns and re-derive
+  // the plan, and they can never be mistaken for a Polar subscription (#81).
+  const grantComp = useMutation({
+    mutationFn: ({ userId, plan, reason }: { userId: string; plan: CompPlan; reason: string }) =>
+      api(`/admin/users/${userId}/comp`, { method: "POST", body: { plan, reason } }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin", "users"] });
+      setCompFor(null);
+      toast("Comp granted");
+    },
+    onError: withErrorToast(toast),
+  });
+
+  const revokeComp = useMutation({
+    mutationFn: (userId: string) => api(`/admin/users/${userId}/comp`, { method: "DELETE" }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin", "users"] });
+      toast("Comp revoked");
     },
     onError: withErrorToast(toast),
   });
@@ -366,6 +477,35 @@ export function AdminUsersPage() {
     actions[kind]();
   };
 
+  return {
+    confirm,
+    setConfirm,
+    compFor,
+    setCompFor,
+    runAction,
+    grantComp,
+    revokeComp,
+    actionPending: patchUser.isPending || remove.isPending,
+  };
+}
+
+export function AdminUsersPage() {
+  const users = useAdminUsers();
+  const me = useCurrentUser();
+  const {
+    confirm,
+    setConfirm,
+    compFor,
+    setCompFor,
+    runAction,
+    grantComp,
+    revokeComp,
+    actionPending,
+  } = useAdminUserActions();
+  const [q, setQ] = useState("");
+  const [sort, setSort] = useState<Sort>({ key: "joined", dir: -1 });
+  const [page, setPage] = useState(0);
+
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase();
     const matches = (users.data ?? []).filter(
@@ -380,9 +520,7 @@ export function AdminUsersPage() {
     });
   }, [users.data, q, sort]);
 
-  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-  const safePage = Math.min(page, totalPages - 1);
-  const rows = filtered.slice(safePage * PAGE_SIZE, (safePage + 1) * PAGE_SIZE);
+  const { totalPages, safePage, rows } = paginate(filtered, page);
 
   if (users.isLoading) return <AdminTableSkeleton />;
   return (
@@ -402,12 +540,8 @@ export function AdminUsersPage() {
         meId={me.data?.user.id}
         sort={sort}
         setSort={setSort}
-        onSetPlan={(u, plan) =>
-          patchUser.mutate(
-            { userId: u.id, body: { plan } },
-            { onSuccess: () => toast("Plan updated") },
-          )
-        }
+        onGrantComp={(u) => setCompFor(u)}
+        onRevokeComp={(u) => revokeComp.mutate(u.id)}
         onConfirm={(kind, u) => setConfirm({ kind, user: u })}
         searchTerm={q.trim()}
       />
@@ -417,8 +551,17 @@ export function AdminUsersPage() {
         confirm={confirm}
         onClose={() => setConfirm(null)}
         onConfirm={runAction}
-        pending={patchUser.isPending || remove.isPending}
+        pending={actionPending}
       />
+
+      {compFor && (
+        <GrantCompDialog
+          user={compFor}
+          onClose={() => setCompFor(null)}
+          onGrant={(plan, reason) => grantComp.mutate({ userId: compFor.id, plan, reason })}
+          pending={grantComp.isPending}
+        />
+      )}
     </div>
   );
 }

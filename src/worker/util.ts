@@ -10,7 +10,6 @@ function randomFrom(alphabet: string, len: number): string {
 
 export const uid = (len = 16) => randomFrom(ID_ALPHABET, len);
 export const randomSlug = () => randomFrom(SLUG_ALPHABET, 7);
-export const now = () => Date.now();
 
 // A renamed custom-domain address keeps working for exactly this long before
 // the daily sweep (storage.ts's sweepExpiredAliases) retires it.

@@ -74,6 +74,25 @@ export interface User {
   plan: OrgPlan;
   polarSubscriptionCancelAtPeriodEnd: boolean;
   polarSubscriptionCurrentPeriodEnd: number | null;
+  /**
+   * Whether a Polar customer exists for this user, which is what the
+   * subscription portal needs. A paid plan does not imply one: an admin can
+   * comp a plan, and a webhook can carry a null customer id. Without this the
+   * billing page cannot tell a subscriber from a comped user, and offers both
+   * a portal only one of them has (#85). Never the customer id itself: the
+   * client has no use for a provider identifier.
+   */
+  hasBillingAccount: boolean;
+  /**
+   * Whether this plan was granted by an admin rather than bought (#81).
+   *
+   * Separate from `hasBillingAccount`, because the two answer different
+   * questions and can disagree: a comped user has no portal, and so does a
+   * subscriber whose webhook carried no customer id. Telling the second group
+   * their plan "was granted directly" would be a plain lie, so the page needs
+   * to know which one it is talking to.
+   */
+  comped: boolean;
 }
 
 export interface QrOverrides {
@@ -92,6 +111,14 @@ export interface UserOrg extends QrOverrides {
   role: OrgRole;
   // Effective plan for this org = its owner's plan (not the caller's).
   plan: OrgPlan;
+  /**
+   * Which domain new links start on (#69), or null for the shared one.
+   *
+   * A preference, not a permission: the id can point at a domain that has
+   * since stopped serving, so a reader resolves it against the org's active
+   * domains rather than trusting it (`resolveDefaultDomainId`).
+   */
+  defaultDomainId: string | null;
 }
 
 export interface CurrentUser {
@@ -295,9 +322,16 @@ export interface AdminUsage {
     orgName: string;
     clicks: number;
   }[];
-  /** Business row */
+  /** Business row.
+   *
+   * Counts, never money (#82). `planCounts` describes feature access and
+   * includes comped users; `payingSubscribers` counts real Polar
+   * subscriptions and excludes them; `compedUsers` is the difference. Revenue
+   * is read in the Polar dashboard, which knows what it charged net of
+   * discounts, tax and refunds. */
   planCounts: { free: number; hobby: number; pro: number };
-  mrr: number;
+  payingSubscribers: number;
+  compedUsers: number;
   paidConversionRate: number | null;
   signups7d: number;
   signups7dDelta: DeltaValue | null;
@@ -369,7 +403,18 @@ export interface AdminUserRow {
   emailVerified: boolean;
   /** Email domain is a known throwaway provider. Display-only, computed on read. */
   disposable: boolean;
+  /** Effective plan: what this user may do. A comp counts here (#81). */
   plan: OrgPlan;
+  /** What Polar says, separately from what the user may do. `null` means no
+   * subscription; the status is Polar's own string (`active`, `past_due`, …). */
+  subscriptionPlan: Exclude<OrgPlan, "free"> | null;
+  subscriptionStatus: string | null;
+  cancelAtPeriodEnd: boolean;
+  /** What an admin granted by hand, and who granted it. */
+  compPlan: Exclude<OrgPlan, "free"> | null;
+  compReason: string | null;
+  compGrantedAt: number | null;
+  compGrantedBy: string | null;
   createdAt: number;
   orgCount: number;
   /** Last session activity (ms epoch), null if never signed in. */

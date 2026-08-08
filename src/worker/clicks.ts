@@ -3,7 +3,7 @@ import { drizzle } from "drizzle-orm/d1";
 import * as schema from "./db/schema";
 import type { AppEnv, Env } from "./env";
 import type { KVLink } from "./kv";
-import { now, deviceFromUA, normalizeReferrer } from "./util";
+import { deviceFromUA, normalizeReferrer } from "./util";
 import { clickAnalyticsAllowed } from "./rate-limit";
 import { alertBetterStack } from "./alerts";
 
@@ -66,7 +66,7 @@ export async function enqueueClick(c: Context<AppEnv>, hit: KVLink): Promise<voi
       linkId: hit.linkId,
       addressId: hit.addressId,
       orgId: hit.orgId,
-      ts: now(),
+      ts: Date.now(),
       country: (c.req.raw.cf?.country as string) ?? "",
       // Hostname only, never the full URL the header carries: see
       // normalizeReferrer in util.ts and issue #20.
@@ -129,6 +129,49 @@ export async function consumeClickBatch(
     }
     batch.retryAll();
   }
+}
+
+/* ---------------- sweeping ---------------- */
+
+/**
+ * How long a dedupe id stays useful (#70).
+ *
+ * A dedupe id exists so the consumer above can discard a *redelivered*
+ * message, and Cloudflare Queues stops redelivering long before this: the
+ * click consumer gives up after CLICK_MAX_DELIVERIES, and a message cannot
+ * outlive the queue's own retention of 4 days. Seven days is that ceiling
+ * with room to spare.
+ */
+const DEDUPE_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
+
+// Same bound as the retention delete in scheduled(): one unbounded UPDATE on
+// this table can exceed D1's statement limits once it is large.
+const DEDUPE_SWEEP_CHUNK = 1000;
+
+/**
+ * Clear dedupe ids the queue can no longer redeliver.
+ *
+ * `clicks` is the only unbounded table here and keeps 400 days, so a unique
+ * index over every dedupe id ever issued was paying permanent cost for a
+ * guarantee that lasts minutes (#70). The column and its index stay, because
+ * the dedupe still has to work; what goes is the 36-character value on rows
+ * old enough that no redelivery can reach them. SQLite's unique index allows
+ * any number of NULLs, so the freed rows never collide with each other.
+ */
+export async function sweepDedupeIds(env: Env): Promise<number> {
+  const cutoff = Date.now() - DEDUPE_WINDOW_MS;
+  const stmt = env.DB.prepare(
+    `update clicks set dedupe_id = null where id in (
+       select id from clicks where dedupe_id is not null and ts < ? limit ?
+     )`,
+  );
+  let cleared = 0;
+  let changes = 0;
+  do {
+    changes = (await stmt.bind(cutoff, DEDUPE_SWEEP_CHUNK).run()).meta.changes;
+    cleared += changes;
+  } while (changes > 0);
+  return cleared;
 }
 
 /**

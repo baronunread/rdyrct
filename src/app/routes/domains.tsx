@@ -3,7 +3,7 @@ import { useForm, type UseFormRegister } from "react-hook-form";
 import { valibotResolver } from "@hookform/resolvers/valibot";
 import { Link } from "react-router";
 import { AnimatePresence, LazyMotion, MotionConfig, domAnimation, m } from "motion/react";
-import { Trash2, RefreshCw } from "lucide-react";
+import { Trash2, RefreshCw, Star } from "lucide-react";
 import { useCurrentUser, useConfig, useDomains, useDomainMutations } from "../lib/hooks";
 import { useCurrentOrg } from "../lib/current-org";
 import { PLAN_LIMITS, type DomainDTO, type OrgRole } from "@/shared/types";
@@ -174,7 +174,8 @@ function DeleteDomainDialog({
 
 function DomainsCard({ orgId, plan }: { orgId: string; plan: "free" | "hobby" | "pro" }) {
   const domains = useDomains(orgId);
-  const { add, refresh, setRootRedirect, remove } = useDomainMutations(orgId);
+  const { add, refresh, setRootRedirect, remove, setDefault } = useDomainMutations(orgId);
+  const { org } = useCurrentOrg();
   const config = useConfig();
   const appHost = config.data?.appHost ?? window.location.host;
   const toast = useToast();
@@ -227,6 +228,17 @@ function DomainsCard({ orgId, plan }: { orgId: string; plan: "free" | "hobby" | 
     );
   };
 
+  const toggleDefault = (d: DomainDTO) => {
+    const next = org?.defaultDomainId === d.id ? null : d.id;
+    setDefault.mutate(next, {
+      onSuccess: () => {
+        posthog.capture("domain_default_set", { cleared: next === null });
+        toast(next ? `New links will use ${d.hostname}` : "New links will use the shared domain");
+      },
+      onError: withErrorToast(toast),
+    });
+  };
+
   const confirmDelete = () => {
     if (!deleting) return;
     remove.mutate(deleting.id, {
@@ -261,6 +273,9 @@ function DomainsCard({ orgId, plan }: { orgId: string; plan: "free" | "hobby" | 
                         appHost={appHost}
                         refreshing={refresh.isPending}
                         savingRedirect={setRootRedirect.isPending}
+                        isDefault={org?.defaultDomainId === d.id}
+                        savingDefault={setDefault.isPending}
+                        onToggleDefault={() => toggleDefault(d)}
                         redirectDraft={redirectDraft[d.id] ?? d.rootRedirect}
                         onRecheck={() => recheck(d)}
                         onDelete={() => setDeleting(d)}
@@ -348,13 +363,46 @@ function DomainStatusBadge({
 
 /** One connected domain: status badge (animated on change), DNS/TLS guidance
  * while it's transitional, and the root-redirect editor once it's active. */
+/**
+ * Makes this domain the one new links start on, or gives that up (#69).
+ *
+ * Only offered on a domain that is actually serving: preselecting one still
+ * waiting on DNS would hand every new link an address that resolves nowhere,
+ * and the server refuses it anyway.
+ */
+function DefaultDomainButton({
+  domain: d,
+  isDefault,
+  pending,
+  onToggle,
+}: {
+  domain: DomainDTO;
+  isDefault: boolean;
+  pending: boolean;
+  onToggle: () => void;
+}) {
+  if (d.status !== "active") return null;
+  return (
+    <IconButton
+      label={isDefault ? `Stop defaulting to ${d.hostname}` : `Default new links to ${d.hostname}`}
+      disabled={pending}
+      onClick={onToggle}
+    >
+      <Star size={14} className={isDefault ? "fill-accent text-accent" : ""} />
+    </IconButton>
+  );
+}
+
 function DomainRow({
   domain: d,
   appHost,
   refreshing,
   savingRedirect,
+  isDefault,
+  savingDefault,
   redirectDraft,
   onRecheck,
+  onToggleDefault,
   onDelete,
   onRedirectDraft,
   onSaveRedirect,
@@ -364,8 +412,11 @@ function DomainRow({
   appHost: string;
   refreshing: boolean;
   savingRedirect: boolean;
+  isDefault: boolean;
+  savingDefault: boolean;
   redirectDraft: string;
   onRecheck: () => void;
+  onToggleDefault: () => void;
   onDelete: () => void;
   onRedirectDraft: (v: string) => void;
   onSaveRedirect: () => void;
@@ -376,7 +427,14 @@ function DomainRow({
       <div className="flex items-center justify-between gap-2">
         <span className="font-bold">{d.hostname}</span>
         <div className="relative flex items-center gap-1">
+          {isDefault && <Badge color="mint">default</Badge>}
           <DomainStatusBadge domain={d} refreshing={refreshing} onRecheck={onRecheck} />
+          <DefaultDomainButton
+            domain={d}
+            isDefault={isDefault}
+            pending={savingDefault}
+            onToggle={onToggleDefault}
+          />
           <IconButton label={`Delete ${d.hostname}`} danger onClick={onDelete}>
             <Trash2 size={14} />
           </IconButton>

@@ -14,7 +14,6 @@ import {
 } from "../plan";
 import {
   uid,
-  now,
   randomSlug,
   SLUG_RE,
   RESERVED_SLUGS,
@@ -230,6 +229,13 @@ async function findAddress(db: DB, orgId: string, linkId: string, addressId: str
 /** Resolves the `:linkId`/`:addressId` params every address-mutation route
  * (keep-forever, remove, promote) starts from: the link and address, 404ing
  * if either doesn't belong to this org. */
+/** The three lines every :linkId route opens with. */
+async function linkFromRequest(c: Context<AppEnv>) {
+  const db = c.var.db;
+  const orgId = c.req.param("orgId")!;
+  return { db, orgId, link: await findLink(db, orgId, c.req.param("linkId")!) };
+}
+
 async function findLinkAndAddress(c: Context<AppEnv>) {
   const db = c.var.db;
   const orgId = c.req.param("orgId")!;
@@ -260,7 +266,7 @@ function newAddressRow(
     creationReason,
     expiresAt,
     retiredAt: null,
-    createdAt: now(),
+    createdAt: Date.now(),
   };
 }
 
@@ -272,7 +278,7 @@ async function addressClickStats(
   db: DB,
   addressId: string,
 ): Promise<{ recentClicks: number; lastUse: number | null; referrers: TopEntry[] }> {
-  const cutoff = now() - RECENT_CLICKS_WINDOW_MS;
+  const cutoff = Date.now() - RECENT_CLICKS_WINDOW_MS;
   const recent = sql`${schema.clicks.addressId} = ${addressId} and ${schema.clicks.ts} >= ${cutoff}`;
   const [summary, referrers] = await Promise.all([
     db
@@ -548,7 +554,7 @@ function newLinkRow(
     qrEyeColor: body.qrEyeColor ?? "",
     qrLogoSize: body.qrLogoSize ?? null,
     createdBy,
-    createdAt: now(),
+    createdAt: Date.now(),
   };
 }
 
@@ -817,7 +823,7 @@ linkRoutes.patch("/:linkId", requireOrgRole("member"), async (c) => {
                 existing.slug,
                 "temp_alias",
                 "renamed",
-                now() + ALIAS_TTL_MS,
+                Date.now() + ALIAS_TTL_MS,
               ),
             ),
         ]
@@ -830,9 +836,7 @@ linkRoutes.patch("/:linkId", requireOrgRole("member"), async (c) => {
 });
 
 linkRoutes.delete("/:linkId", requireOrgRole("member"), async (c) => {
-  const db = c.var.db;
-  const orgId = c.req.param("orgId")!;
-  const link = await findLink(db, orgId, c.req.param("linkId")!);
+  const { db, link } = await linkFromRequest(c);
   // Gathered before the delete: every active address (primary + aliases) has
   // its own KV key, and the cascade only removes the D1 rows, not those keys.
   const addresses = await activeAddressesOf(db, link.id);
@@ -848,9 +852,7 @@ linkRoutes.delete("/:linkId", requireOrgRole("member"), async (c) => {
 /* ---------------- addresses (aliases + primary) ---------------- */
 
 linkRoutes.get("/:linkId/addresses", requireOrgRole("member"), async (c) => {
-  const db = c.var.db;
-  const orgId = c.req.param("orgId")!;
-  const link = await findLink(db, orgId, c.req.param("linkId")!);
+  const { db, link } = await linkFromRequest(c);
   const rows = await db
     .select({ address: schema.linkAddresses, hostname: schema.domains.hostname })
     .from(schema.linkAddresses)
@@ -870,10 +872,10 @@ linkRoutes.get("/:linkId/addresses", requireOrgRole("member"), async (c) => {
 });
 
 linkRoutes.post("/:linkId/addresses", requireOrgRole("member"), async (c) => {
-  const body = await c.req.json<{ slug?: string }>();
-  const orgId = c.req.param("orgId")!;
-  const db = c.var.db;
-  const link = await findLink(db, orgId, c.req.param("linkId")!);
+  const [body, { db, orgId, link }] = await Promise.all([
+    c.req.json<{ slug?: string }>(),
+    linkFromRequest(c),
+  ]);
   validateSlug(body.slug);
 
   const [{ plan, limits }, activeCount] = await Promise.all([
@@ -967,7 +969,7 @@ linkRoutes.post("/:linkId/addresses/:addressId/remove", requireOrgRole("member")
     domainHostname(db, orgId, address.domainId),
     db
       .update(schema.linkAddresses)
-      .set({ retiredAt: now() })
+      .set({ retiredAt: Date.now() })
       .where(and(eq(schema.linkAddresses.id, address.id), isNull(schema.linkAddresses.retiredAt)))
       .returning({ id: schema.linkAddresses.id }),
   ]);
