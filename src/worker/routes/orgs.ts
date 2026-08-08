@@ -142,13 +142,43 @@ async function applyQrPatch(
   return rows[0]?.qrLogo ?? "";
 }
 
+/**
+ * The org's default domain for new links (#69).
+ *
+ * Only a domain this org owns, and only one that is actually serving: an org
+ * cannot point new links at somebody else's hostname, and preselecting a
+ * domain still waiting on DNS would hand every new link an address that
+ * resolves nowhere. Null clears it, back to the shared domain.
+ */
+async function resolveDefaultDomain(
+  db: DB,
+  orgId: string,
+  domainId: string | null,
+): Promise<string | null> {
+  if (domainId === null) return null;
+  const rows = await db
+    .select({ status: schema.domains.status })
+    .from(schema.domains)
+    .where(and(eq(schema.domains.id, domainId), eq(schema.domains.orgId, orgId)));
+  if (!rows.length) throw new HTTPException(404, { message: "Unknown domain" });
+  if (rows[0].status !== "active")
+    throw new HTTPException(400, {
+      message: "That domain is not serving yet, so it cannot be the default",
+    });
+  return domainId;
+}
+
 orgRoutes.patch("/:orgId", requireOrgRole("admin"), async (c) => {
-  const body = await c.req.json<{ name?: string } & OrgQrPatchBody>();
+  const body = await c.req.json<
+    { name?: string; defaultDomainId?: string | null } & OrgQrPatchBody
+  >();
   const orgId = c.req.param("orgId");
   const db = c.var.db;
 
   const set: Partial<typeof schema.orgs.$inferInsert> = {};
   if (body.name !== undefined) set.name = requireOrgName(body.name);
+  if (body.defaultDomainId !== undefined)
+    set.defaultDomainId = await resolveDefaultDomain(db, orgId, body.defaultDomainId);
   const oldLogo = wantsQrUpdate(body) ? await applyQrPatch(db, orgId, body, set) : "";
 
   if (Object.keys(set).length === 0) throw new HTTPException(400, { message: "Nothing to update" });

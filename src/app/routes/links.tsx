@@ -194,7 +194,7 @@ function useLinkDialogs(atLimit: boolean) {
 }
 
 export function LinksPage() {
-  const { org, orgId, limits, activeDomains, orgQr, domains } = useOrgLimits();
+  const { org, orgId, limits, activeDomains, defaultDomainId, orgQr, domains } = useOrgLimits();
   const links = useLinks(orgId);
   const quotaUsage = useLinkQuotaUsage(orgId);
   const { create, update, remove } = useLinkMutations(orgId);
@@ -326,6 +326,7 @@ export function LinksPage() {
         orgId={orgId}
         limits={limits}
         activeDomains={activeDomains}
+        defaultDomainId={defaultDomainId}
         orgQr={orgQr}
         create={create}
         update={update}
@@ -472,6 +473,7 @@ function LinkDialogStack({
   orgId,
   limits,
   activeDomains,
+  defaultDomainId,
   orgQr,
   create,
   update,
@@ -484,6 +486,7 @@ function LinkDialogStack({
   orgId: string;
   limits: ReturnType<typeof useOrgLimits>["limits"];
   activeDomains: ReturnType<typeof useOrgLimits>["activeDomains"];
+  defaultDomainId: string | null;
   orgQr: ReturnType<typeof useOrgLimits>["orgQr"];
   create: ReturnType<typeof useLinkMutations>["create"];
   update: ReturnType<typeof useLinkMutations>["update"];
@@ -501,6 +504,7 @@ function LinkDialogStack({
         busy={create.isPending || update.isPending}
         onSave={onSave}
         activeDomains={activeDomains}
+        defaultDomainId={defaultDomainId}
         domainsAllowed={limits.domains > 0}
         qrEnabled={limits.qr}
         orgQr={orgQr}

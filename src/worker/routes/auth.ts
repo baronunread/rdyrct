@@ -36,6 +36,7 @@ async function currentUserFor(
         qrBg: schema.orgs.qrBg,
         qrEyeColor: schema.orgs.qrEyeColor,
         qrLogoSize: schema.orgs.qrLogoSize,
+        defaultDomainId: schema.orgs.defaultDomainId,
       })
       .from(schema.orgMembers)
       .innerJoin(schema.orgs, eq(schema.orgMembers.orgId, schema.orgs.id))
@@ -66,6 +67,7 @@ async function currentUserFor(
     qrBg: r.qrBg,
     qrEyeColor: r.qrEyeColor,
     qrLogoSize: r.qrLogoSize,
+    defaultDomainId: r.defaultDomainId,
   }));
   return {
     user: {

@@ -111,6 +111,14 @@ export interface UserOrg extends QrOverrides {
   role: OrgRole;
   // Effective plan for this org = its owner's plan (not the caller's).
   plan: OrgPlan;
+  /**
+   * Which domain new links start on (#69), or null for the shared one.
+   *
+   * A preference, not a permission: the id can point at a domain that has
+   * since stopped serving, so a reader resolves it against the org's active
+   * domains rather than trusting it (`resolveDefaultDomainId`).
+   */
+  defaultDomainId: string | null;
 }
 
 export interface CurrentUser {
