@@ -18,7 +18,13 @@ export function ExportCsvButton({
   scope: string;
   days: number;
 }) {
-  const empty = !stats.series.length && !stats.countries.length;
+  // Every section the CSV writes, not just the first two: a link with only
+  // device or referrer rows still has something to export.
+  const empty =
+    !stats.series.length &&
+    !stats.countries.length &&
+    !stats.devices.length &&
+    !stats.referrers.length;
   return (
     <Button
       variant="outline"

@@ -160,7 +160,7 @@ bun run deploy
 | `subscription.uncanceled` | Clears a scheduled cancellation                                                 |
 | `subscription.revoked`    | Ends it: the subscription and its access go away                                |
 
-Which subscription statuses keep access is one decision, in `src/worker/entitlement.ts`. `active`, `trialing` and `past_due` keep it, on the grounds that Polar retries a failed payment for days and sends `subscription.revoked` when it gives up. `unpaid`, `canceled`, `incomplete` and `incomplete_expired` do not, and a status with no rule keeps nothing.
+Which subscription statuses keep access is one decision, in `src/worker/entitlement.ts`. `active`, `trialing` and `past_due` keep it, because Polar retries a failed payment for days and sends `subscription.revoked` when it gives up. `unpaid`, `canceled`, `incomplete` and `incomplete_expired` do not, and a status with no rule keeps nothing.
 
 Paid access an admin grants by hand is a **comp**, stored apart from the subscription and never counted as a subscriber. A comp outranks the subscription underneath it, so revoking a subscription cannot take away access an admin gave.
 

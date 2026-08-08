@@ -3,15 +3,19 @@ import { showsCancelNotice, showsConfirmingNotice } from "../src/app/lib/plan-st
 
 describe("showsCancelNotice", () => {
   test("true when cancellation is scheduled and the period end is known", () => {
-    expect(showsCancelNotice(true, 1700000000000)).toBe(true);
+    expect(showsCancelNotice(true, 1700000000000, false)).toBe(true);
   });
 
   test("false when nothing is scheduled to cancel", () => {
-    expect(showsCancelNotice(false, 1700000000000)).toBe(false);
+    expect(showsCancelNotice(false, 1700000000000, false)).toBe(false);
   });
 
   test("false when the period end isn't known yet", () => {
-    expect(showsCancelNotice(true, null)).toBe(false);
+    expect(showsCancelNotice(true, null, false)).toBe(false);
+  });
+
+  test("false while a comp is granting the plan, which the cancellation cannot take away", () => {
+    expect(showsCancelNotice(true, 1700000000000, true)).toBe(false);
   });
 });
 

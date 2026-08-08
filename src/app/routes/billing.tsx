@@ -136,11 +136,13 @@ function ConfirmingPaymentNotice() {
  */
 function PlanStatusNotes({
   plan,
+  comped,
   cancelAtPeriodEnd,
   periodEnd,
   confirmTimedOut,
 }: {
   plan: OrgPlan;
+  comped: boolean;
   cancelAtPeriodEnd: boolean;
   periodEnd: number | null;
   confirmTimedOut: boolean;
@@ -156,7 +158,7 @@ function PlanStatusNotes({
   return (
     <LazyMotion features={domAnimation}>
       <AnimatePresence initial={false}>
-        {showsCancelNotice(cancelAtPeriodEnd, periodEnd) && (
+        {showsCancelNotice(cancelAtPeriodEnd, periodEnd, comped) && (
           <m.div key="cancel" {...grow} transition={{ duration: 0.2 }} className="overflow-hidden">
             <CancelScheduledNotice plan={plan} periodEnd={periodEnd} />
           </m.div>
@@ -321,6 +323,7 @@ function PlanActions({
         </p>
         <PlanStatusNotes
           plan={plan}
+          comped={comped}
           cancelAtPeriodEnd={cancelAtPeriodEnd}
           periodEnd={periodEnd}
           confirmTimedOut={confirmTimedOut}
@@ -337,7 +340,9 @@ function PlanActions({
             onUpgrade={onUpgrade}
             onPortal={onPortal}
           />
-          {plan === "hobby" && hasBillingAccount && (
+          {/* Not for a comped Hobby: the portal changes the subscription, and
+              the comp would still outrank whatever it changed to. */}
+          {plan === "hobby" && hasBillingAccount && !comped && (
             <p className="mt-2 text-xs text-muted">
               Want Pro? Switch plans from the subscription portal.
             </p>
