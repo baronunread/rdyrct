@@ -7,6 +7,7 @@ import { and, eq } from "drizzle-orm";
 import * as schema from "./db/schema";
 import type { Env } from "./env";
 import { alertBetterStack } from "./alerts";
+import { afterResponse } from "./background";
 import { sendEmail } from "./email";
 import { renderEmail } from "./email-layout";
 import { hashPassword, verifyPassword } from "./password";
@@ -168,19 +169,24 @@ async function guardSignUp(
   // OTP flow it was already in the middle of, and a code is on its way
   // there anyway: two emails would say the same thing twice.
   //
-  // The failure is swallowed on purpose. `sendEmail` throws on a non-2xx from
-  // Resend, and letting that throw reach the caller would rebuild the oracle
-  // this whole function exists to close: during a Resend outage a registered
-  // address would answer with an error and a free one would answer normally
-  // (#53). The owner missing one notice is the smaller loss, and the alert
-  // below means we hear about it even though they did not.
+  // Sent after the response, never inside it. Awaiting it leaked the answer
+  // twice over: a Resend outage made a registered address error while a free
+  // one succeeded, and even on a good day the extra round trip made the
+  // registered address measurably slower to answer. Both are the account
+  // probe #53 set out to close, rebuilt in the fix for it.
+  //
+  // The failure is swallowed and alerted instead. The owner missing one
+  // notice is the smaller loss, and we still hear about it even though they
+  // did not.
   if (existing.emailVerified)
-    await sendExistingAccountNotice(env, normalized).catch((e: unknown) =>
-      alertBetterStack(env, [
-        { event: "existing_account_notice_failed", error: String(e) },
-        // Deliberately no address: this log would otherwise be a list of
-        // registered emails, which is the thing being protected.
-      ]),
+    afterResponse(
+      sendExistingAccountNotice(env, normalized).catch((e: unknown) =>
+        alertBetterStack(env, [
+          { event: "existing_account_notice_failed", error: String(e) },
+          // Deliberately no address: this log would otherwise be a list of
+          // registered emails, which is the thing being protected.
+        ]),
+      ),
     );
 
   const name = typeof body?.name === "string" ? body.name : normalized.split("@")[0];

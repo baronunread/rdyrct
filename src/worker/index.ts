@@ -5,6 +5,7 @@ import type { ContentfulStatusCode } from "hono/utils/http-status";
 import type { AppEnv, Env } from "./env";
 import { withSession } from "./session";
 import { getAuth } from "./better-auth";
+import { withBackground } from "./background";
 import { userRoutes } from "./routes/auth";
 import { orgRoutes, inviteRoutes } from "./routes/orgs";
 import { linkRoutes } from "./routes/links";
@@ -112,7 +113,11 @@ app.use("*", async (c, next) => {
 // BetterAuth owns /api/auth/* (signup, login, logout, verify, reset).
 app.on(["GET", "POST"], "/api/auth/*", async (c) => {
   const limited = await enforcePublicAuthRateLimit(c);
-  return limited ?? getAuth(c.env).handler(c.req.raw);
+  if (limited) return limited;
+  // withBackground so an auth hook can send mail after the response instead
+  // of inside it: the signup guard's timing must not depend on whether the
+  // address exists (#53).
+  return withBackground(c.executionCtx, () => getAuth(c.env).handler(c.req.raw));
 });
 
 // Polar webhook: public, signature-verified, no session middleware.

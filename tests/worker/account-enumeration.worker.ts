@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { env } from "cloudflare:workers";
-import { reset } from "cloudflare:test";
+import { createExecutionContext, reset, waitOnExecutionContext } from "cloudflare:test";
+import worker from "../../src/worker";
 import { applyTestMigrations, authEnv, captureEmails, fetchWorker, TEST_PASSWORD } from "./support";
 import { hashPassword } from "../../src/worker/password";
 
@@ -72,6 +73,57 @@ describe("signup does not reveal which addresses have accounts (#53)", () => {
       expect(shapeOf(takenBody)).toEqual(shapeOf(freshBody));
     } finally {
       restore();
+    }
+  });
+
+  it("answers before the notice goes out, so a taken address is no slower (#53)", async () => {
+    await seedUser("known@gmail.com", true);
+
+    // A Resend that never answers until this test says so. If the notice were
+    // awaited inside the request, the response below could not arrive.
+    let release = () => {};
+    const held = new Promise<void>((resolve) => (release = resolve));
+    let sendStarted = false;
+    const original = globalThis.fetch;
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input instanceof Request ? input.url : input);
+      if (url.includes("cloudflare-dns.com")) {
+        return Response.json({ Status: 0, Answer: [{ data: "10 mx.example." }] });
+      }
+      if (url.includes("/emails")) {
+        sendStarted = true;
+        await held;
+        return Response.json({ id: "sent" });
+      }
+      return original(input as RequestInfo, init);
+    }) as typeof fetch;
+
+    const ctx = createExecutionContext();
+    try {
+      const res = await worker.fetch(
+        new Request("http://localhost/api/auth/sign-up/email", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            email: "known@gmail.com",
+            password: "a-different-password",
+            name: "probe",
+          }),
+        }),
+        authEnv(),
+        ctx,
+      );
+
+      // The answer is here while the send is still hanging: the timing an
+      // outsider can measure no longer depends on the address existing.
+      expect(res.status).toBe(200);
+      expect(sendStarted).toBe(true);
+
+      release();
+      await waitOnExecutionContext(ctx);
+    } finally {
+      release();
+      globalThis.fetch = original;
     }
   });
 
