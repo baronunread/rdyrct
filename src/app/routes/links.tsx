@@ -135,6 +135,54 @@ function buildOnSave({
   };
 }
 
+/**
+ * Which dialog is open, and what it is open about (#45).
+ *
+ * Six pieces of state that only ever describe one thing: the editor, the QR
+ * preview, the alias dialog, the delete confirmation, the duplicate-destination
+ * prompt, and the shake that fires when a save fails. They lived inline and
+ * made LinksPage the most complex function in the app; here they are one
+ * named thing the page reads off.
+ */
+function useLinkDialogs(atLimit: boolean) {
+  const [editorOpen, setEditorOpen] = useState(false);
+  const [editing, setEditing] = useState<LinkDTO | null>(null);
+  const [qrLink, setQrLink] = useState<LinkDTO | null>(null);
+  const [aliasLink, setAliasLink] = useState<LinkDTO | null>(null);
+  const [deleting, setDeleting] = useState<LinkDTO | null>(null);
+  const [shakeKey, setShakeKey] = useState(0);
+  const [sameDestination, setSameDestination] = useState<{
+    input: LinkInput;
+    matchedLinks: LinkDTO[];
+  } | null>(null);
+
+  return {
+    editorOpen,
+    setEditorOpen,
+    editing,
+    setEditing,
+    qrLink,
+    setQrLink,
+    aliasLink,
+    setAliasLink,
+    deleting,
+    setDeleting,
+    shakeKey,
+    setShakeKey,
+    sameDestination,
+    setSameDestination,
+    openCreate: () => {
+      if (atLimit) return;
+      setEditing(null);
+      setEditorOpen(true);
+    },
+    openEdit: (link: LinkDTO) => {
+      setEditing(link);
+      setEditorOpen(true);
+    },
+  };
+}
+
 export function LinksPage() {
   const { org, orgId, limits, activeDomains, orgQr, domains } = useOrgLimits();
   const links = useLinks(orgId);
@@ -149,16 +197,7 @@ export function LinksPage() {
   const atLimit = linkCount >= limits.links;
   const limitHint = atLimit ? "Link limit reached: upgrade for more links" : undefined;
 
-  const [editorOpen, setEditorOpen] = useState(false);
-  const [editing, setEditing] = useState<LinkDTO | null>(null);
-  const [qrLink, setQrLink] = useState<LinkDTO | null>(null);
-  const [aliasLink, setAliasLink] = useState<LinkDTO | null>(null);
-  const [deleting, setDeleting] = useState<LinkDTO | null>(null);
-  const [shakeKey, setShakeKey] = useState(0);
-  const [sameDestination, setSameDestination] = useState<{
-    input: LinkInput;
-    matchedLinks: LinkDTO[];
-  } | null>(null);
+  const dialogs = useLinkDialogs(atLimit);
 
   const {
     search,
@@ -174,28 +213,46 @@ export function LinksPage() {
     setPage,
   } = useLinkFilter(links);
 
-  const openCreate = () => {
-    if (atLimit) return;
-    setEditing(null);
-    setEditorOpen(true);
-  };
-  const openEdit = (link: LinkDTO) => {
-    setEditing(link);
-    setEditorOpen(true);
-  };
-
   const noQrToast = () => toast("QR codes are a paid feature: upgrade in Billing", "error");
+
+  /**
+   * Answer the duplicate-destination prompt (#45).
+   *
+   * Both answers are the same create with one flag swapped, so they share a
+   * call. The event name and the toast follow the flag, because merging an
+   * address into an existing link and making a second link are different
+   * things to have done.
+   */
+  const resolveDuplicate = (choice: { mergeIntoLinkId: string } | { forceSeparateLink: true }) => {
+    if (!dialogs.sameDestination) return;
+    const merging = "mergeIntoLinkId" in choice;
+    create.mutate(
+      { ...dialogs.sameDestination.input, ...choice },
+      {
+        onSuccess: () => {
+          posthog.capture(merging ? "link_alias_created" : "link_created", {
+            created_from_duplicate_destination: true,
+          });
+          dialogs.setSameDestination(null);
+          dialogs.setEditorOpen(false);
+          toast(merging ? "Address added to the existing link" : "Link created");
+        },
+        onError: (e) => toast(e.message, "error"),
+      },
+    );
+  };
 
   if (!org) return <NoOrgState />;
 
   const onSave = buildOnSave({
-    editing,
+    editing: dialogs.editing,
     create,
     update,
     toast,
-    closeEditor: () => setEditorOpen(false),
-    onSaveError: () => setShakeKey((k) => k + 1),
-    onSameDestinationMatch: (input, matchedLinks) => setSameDestination({ input, matchedLinks }),
+    closeEditor: () => dialogs.setEditorOpen(false),
+    onSaveError: () => dialogs.setShakeKey((k) => k + 1),
+    onSameDestinationMatch: (input, matchedLinks) =>
+      dialogs.setSameDestination({ input, matchedLinks }),
   });
 
   return (
@@ -208,7 +265,12 @@ export function LinksPage() {
             <span className="text-xs tnum text-muted">
               {linkCount} / {limits.links} links
             </span>
-            <Button variant="primary" onClick={openCreate} disabled={atLimit} title={limitHint}>
+            <Button
+              variant="primary"
+              onClick={dialogs.openCreate}
+              disabled={atLimit}
+              title={limitHint}
+            >
               <Plus size={15} /> New link
             </Button>
           </div>
@@ -220,7 +282,7 @@ export function LinksPage() {
         hasLinks={!!links.data?.length}
         atLimit={atLimit}
         limitHint={limitHint}
-        onCreate={openCreate}
+        onCreate={dialogs.openCreate}
       >
         <LinksToolbar
           search={search}
@@ -236,10 +298,10 @@ export function LinksPage() {
           paged={paged}
           navigate={navigate}
           limits={limits}
-          onQrClick={setQrLink}
-          onEdit={openEdit}
-          onDelete={setDeleting}
-          onCreateAlias={setAliasLink}
+          onQrClick={dialogs.setQrLink}
+          onEdit={dialogs.openEdit}
+          onDelete={dialogs.setDeleting}
+          onCreateAlias={dialogs.setAliasLink}
           sort={sort}
           onSort={setSort}
           totalPages={totalPages}
@@ -249,74 +311,18 @@ export function LinksPage() {
         />
       </LinksListArea>
 
-      <LinkEditor
-        open={editorOpen}
-        onOpenChange={setEditorOpen}
-        editingLink={editing}
-        busy={create.isPending || update.isPending}
-        onSave={onSave}
+      <LinkDialogStack
+        dialogs={dialogs}
+        orgId={orgId}
+        limits={limits}
         activeDomains={activeDomains}
-        domainsAllowed={limits.domains > 0}
-        qrEnabled={limits.qr}
         orgQr={orgQr}
-        shakeKey={shakeKey}
-      />
-
-      {limits.qr && (
-        <LinkPreviewDialog
-          title={qrLink ? `QR · /${qrLink.slug}` : "QR"}
-          link={qrLink}
-          onClose={() => setQrLink(null)}
-          qrEnabled
-          orgQr={orgQr}
-        />
-      )}
-
-      <CreateAliasDialog orgId={orgId} link={aliasLink} onClose={() => setAliasLink(null)} />
-
-      <DeleteLinkDialog
-        deleting={deleting}
-        onClose={() => setDeleting(null)}
+        create={create}
+        update={update}
         remove={remove}
+        onSave={onSave}
+        onResolveDuplicate={resolveDuplicate}
         toast={toast}
-      />
-
-      <SameDestinationDialog
-        matchedLinks={sameDestination?.matchedLinks ?? null}
-        pending={create.isPending}
-        onClose={() => setSameDestination(null)}
-        onAddToExisting={(matchedLink) => {
-          if (!sameDestination) return;
-          const { input } = sameDestination;
-          create.mutate(
-            { ...input, mergeIntoLinkId: matchedLink.id },
-            {
-              onSuccess: () => {
-                posthog.capture("link_alias_created", { created_from_duplicate_destination: true });
-                setSameDestination(null);
-                setEditorOpen(false);
-                toast("Address added to the existing link");
-              },
-              onError: (e) => toast(e.message, "error"),
-            },
-          );
-        }}
-        onCreateSeparate={() => {
-          if (!sameDestination) return;
-          const { input } = sameDestination;
-          create.mutate(
-            { ...input, forceSeparateLink: true },
-            {
-              onSuccess: () => {
-                posthog.capture("link_created", { created_from_duplicate_destination: true });
-                setSameDestination(null);
-                setEditorOpen(false);
-                toast("Link created");
-              },
-              onError: (e) => toast(e.message, "error"),
-            },
-          );
-        }}
       />
     </div>
   );
@@ -441,5 +447,86 @@ function LinksToolbar({
         {filteredCount} / {totalCount}
       </span>
     </div>
+  );
+}
+
+/**
+ * Every dialog the links page can open (#45).
+ *
+ * They are five separate concerns that happen to share a parent, and holding
+ * them in the page meant every one of their conditions counted against the
+ * page's own complexity. The page now says "and the dialogs", once.
+ */
+function LinkDialogStack({
+  dialogs,
+  orgId,
+  limits,
+  activeDomains,
+  orgQr,
+  create,
+  update,
+  remove,
+  onSave,
+  onResolveDuplicate,
+  toast,
+}: {
+  dialogs: ReturnType<typeof useLinkDialogs>;
+  orgId: string;
+  limits: ReturnType<typeof useOrgLimits>["limits"];
+  activeDomains: ReturnType<typeof useOrgLimits>["activeDomains"];
+  orgQr: ReturnType<typeof useOrgLimits>["orgQr"];
+  create: ReturnType<typeof useLinkMutations>["create"];
+  update: ReturnType<typeof useLinkMutations>["update"];
+  remove: ReturnType<typeof useLinkMutations>["remove"];
+  onSave: (data: LinkInput) => void;
+  onResolveDuplicate: (choice: { mergeIntoLinkId: string } | { forceSeparateLink: true }) => void;
+  toast: ReturnType<typeof useToast>;
+}) {
+  return (
+    <>
+      <LinkEditor
+        open={dialogs.editorOpen}
+        onOpenChange={dialogs.setEditorOpen}
+        editingLink={dialogs.editing}
+        busy={create.isPending || update.isPending}
+        onSave={onSave}
+        activeDomains={activeDomains}
+        domainsAllowed={limits.domains > 0}
+        qrEnabled={limits.qr}
+        orgQr={orgQr}
+        shakeKey={dialogs.shakeKey}
+      />
+
+      {limits.qr && (
+        <LinkPreviewDialog
+          title={dialogs.qrLink ? `QR · /${dialogs.qrLink.slug}` : "QR"}
+          link={dialogs.qrLink}
+          onClose={() => dialogs.setQrLink(null)}
+          qrEnabled
+          orgQr={orgQr}
+        />
+      )}
+
+      <CreateAliasDialog
+        orgId={orgId}
+        link={dialogs.aliasLink}
+        onClose={() => dialogs.setAliasLink(null)}
+      />
+
+      <DeleteLinkDialog
+        deleting={dialogs.deleting}
+        onClose={() => dialogs.setDeleting(null)}
+        remove={remove}
+        toast={toast}
+      />
+
+      <SameDestinationDialog
+        matchedLinks={dialogs.sameDestination?.matchedLinks ?? null}
+        pending={create.isPending}
+        onClose={() => dialogs.setSameDestination(null)}
+        onAddToExisting={(matchedLink) => onResolveDuplicate({ mergeIntoLinkId: matchedLink.id })}
+        onCreateSeparate={() => onResolveDuplicate({ forceSeparateLink: true })}
+      />
+    </>
   );
 }
