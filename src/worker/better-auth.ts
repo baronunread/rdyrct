@@ -6,6 +6,7 @@ import { drizzle } from "drizzle-orm/d1";
 import { and, eq } from "drizzle-orm";
 import * as schema from "./db/schema";
 import type { Env } from "./env";
+import { alertBetterStack } from "./alerts";
 import { sendEmail } from "./email";
 import { renderEmail } from "./email-layout";
 import { hashPassword, verifyPassword } from "./password";
@@ -113,7 +114,7 @@ async function sendExistingAccountNotice(env: Env, email: string) {
     "Someone tried to sign up with your rdyrct address",
     renderEmail({
       preheader: "You already have an rdyrct account.",
-      heading: "You already have an account",
+      heading: "Someone tried to sign up with your address",
       paragraphs: [
         "Someone just tried to create an rdyrct account with this address. Nothing changed, and no new account was made.",
         "If that was you, sign in instead. If you cannot remember your password, reset it.",
@@ -166,7 +167,21 @@ async function guardSignUp(
   // Only for a verified account. An unverified one carries on through the
   // OTP flow it was already in the middle of, and a code is on its way
   // there anyway: two emails would say the same thing twice.
-  if (existing.emailVerified) await sendExistingAccountNotice(env, normalized);
+  //
+  // The failure is swallowed on purpose. `sendEmail` throws on a non-2xx from
+  // Resend, and letting that throw reach the caller would rebuild the oracle
+  // this whole function exists to close: during a Resend outage a registered
+  // address would answer with an error and a free one would answer normally
+  // (#53). The owner missing one notice is the smaller loss, and the alert
+  // below means we hear about it even though they did not.
+  if (existing.emailVerified)
+    await sendExistingAccountNotice(env, normalized).catch((e: unknown) =>
+      alertBetterStack(env, [
+        { event: "existing_account_notice_failed", error: String(e) },
+        // Deliberately no address: this log would otherwise be a list of
+        // registered emails, which is the thing being protected.
+      ]),
+    );
 
   const name = typeof body?.name === "string" ? body.name : normalized.split("@")[0];
   return pendingSignUpResponse(normalized, name);
