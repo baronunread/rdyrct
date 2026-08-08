@@ -12,14 +12,13 @@ import { AdminTableSkeleton } from "../../components/skeletons";
 import { useToast } from "../../ui/toast";
 import { ConfirmDialog } from "../../ui/confirm-dialog";
 import { SearchInput } from "./search-input";
+import { paginate } from "./util";
 import { SortTh } from "../../ui/sort-th";
 import { withErrorToast } from "../../lib/mutation-toast";
 import { sortRows } from "../../lib/sort";
 import { shortDate } from "../../lib/dates";
 import { lastSeenLabel } from "../../lib/last-seen";
 import { Pager } from "../../ui/pagination";
-
-const PAGE_SIZE = 25;
 
 type UserAction = "delete" | "ban" | "unban" | "makeAdmin" | "removeAdmin";
 
@@ -380,9 +379,7 @@ export function AdminUsersPage() {
     });
   }, [users.data, q, sort]);
 
-  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-  const safePage = Math.min(page, totalPages - 1);
-  const rows = filtered.slice(safePage * PAGE_SIZE, (safePage + 1) * PAGE_SIZE);
+  const { totalPages, safePage, rows } = paginate(filtered, page);
 
   if (users.isLoading) return <AdminTableSkeleton />;
   return (

@@ -84,6 +84,25 @@ function useLinkFilter(links: { data?: LinkDTO[] }) {
   };
 }
 
+/** What a saved link used, for PostHog. Four questions, each of them "did they
+ * fill in any of these fields", which is why they read as one thing here and
+ * not as branches in the success handler. */
+function linkFeatures(data: LinkInput) {
+  const any = (...fields: (string | null | undefined)[]) => fields.some(Boolean);
+  return {
+    has_custom_domain: data.domainId !== null,
+    has_custom_slug: Boolean(data.slug?.trim()),
+    has_qr_customization: any(data.qrStyle, data.qrColor, data.qrCorner, data.qrLogo),
+    has_utm_parameters: any(
+      data.utmSource,
+      data.utmMedium,
+      data.utmCampaign,
+      data.utmTerm,
+      data.utmContent,
+    ),
+  };
+}
+
 /** Builds the LinkEditor's onSave handler: PATCH when editing, POST when
  * creating, sharing one success/error path (and bumping the editor's shake
  * counter on any rejected save, so its Save button flags the failure). */
@@ -107,16 +126,7 @@ function buildOnSave({
   return (data: LinkInput) => {
     const done = {
       onSuccess: () => {
-        posthog.capture(editing ? "link_updated" : "link_created", {
-          has_custom_domain: data.domainId !== null,
-          has_custom_slug: Boolean(data.slug?.trim()),
-          has_qr_customization: Boolean(
-            data.qrStyle || data.qrColor || data.qrCorner || data.qrLogo,
-          ),
-          has_utm_parameters: Boolean(
-            data.utmSource || data.utmMedium || data.utmCampaign || data.utmTerm || data.utmContent,
-          ),
-        });
+        posthog.capture(editing ? "link_updated" : "link_created", linkFeatures(data));
         closeEditor();
         toast(editing ? "Link updated" : "Link created");
       },

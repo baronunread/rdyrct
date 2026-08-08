@@ -1,25 +1,18 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { env } from "cloudflare:workers";
 import { createExecutionContext, reset, waitOnExecutionContext } from "cloudflare:test";
-import { drizzle } from "drizzle-orm/d1";
 import { eq } from "drizzle-orm";
 import worker from "../../src/worker";
 import * as schema from "../../src/worker/db/schema";
 import { applyStorageMessage, sweepExpiredAliases, syncLinkMsg } from "../../src/worker/storage";
 import { now } from "../../src/worker/util";
-import { applyTestMigrations, rawAddressRow, rawLinkRow } from "./support";
-
-function db() {
-  return drizzle(env.DB, { schema });
-}
-
-async function addressById(addressId: string) {
-  const [row] = await db()
-    .select()
-    .from(schema.linkAddresses)
-    .where(eq(schema.linkAddresses.id, addressId));
-  return row;
-}
+import {
+  addressById,
+  applyTestMigrations,
+  rawAddressRow,
+  rawLinkRow,
+  testDb as db,
+} from "./support";
 
 async function seedLinkWithAddresses() {
   await db().batch([

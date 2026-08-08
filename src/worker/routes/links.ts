@@ -230,6 +230,13 @@ async function findAddress(db: DB, orgId: string, linkId: string, addressId: str
 /** Resolves the `:linkId`/`:addressId` params every address-mutation route
  * (keep-forever, remove, promote) starts from: the link and address, 404ing
  * if either doesn't belong to this org. */
+/** The three lines every :linkId route opens with. */
+async function linkFromRequest(c: Context<AppEnv>) {
+  const db = c.var.db;
+  const orgId = c.req.param("orgId")!;
+  return { db, orgId, link: await findLink(db, orgId, c.req.param("linkId")!) };
+}
+
 async function findLinkAndAddress(c: Context<AppEnv>) {
   const db = c.var.db;
   const orgId = c.req.param("orgId")!;
@@ -830,9 +837,7 @@ linkRoutes.patch("/:linkId", requireOrgRole("member"), async (c) => {
 });
 
 linkRoutes.delete("/:linkId", requireOrgRole("member"), async (c) => {
-  const db = c.var.db;
-  const orgId = c.req.param("orgId")!;
-  const link = await findLink(db, orgId, c.req.param("linkId")!);
+  const { db, link } = await linkFromRequest(c);
   // Gathered before the delete: every active address (primary + aliases) has
   // its own KV key, and the cascade only removes the D1 rows, not those keys.
   const addresses = await activeAddressesOf(db, link.id);
@@ -848,9 +853,7 @@ linkRoutes.delete("/:linkId", requireOrgRole("member"), async (c) => {
 /* ---------------- addresses (aliases + primary) ---------------- */
 
 linkRoutes.get("/:linkId/addresses", requireOrgRole("member"), async (c) => {
-  const db = c.var.db;
-  const orgId = c.req.param("orgId")!;
-  const link = await findLink(db, orgId, c.req.param("linkId")!);
+  const { db, link } = await linkFromRequest(c);
   const rows = await db
     .select({ address: schema.linkAddresses, hostname: schema.domains.hostname })
     .from(schema.linkAddresses)
@@ -870,10 +873,10 @@ linkRoutes.get("/:linkId/addresses", requireOrgRole("member"), async (c) => {
 });
 
 linkRoutes.post("/:linkId/addresses", requireOrgRole("member"), async (c) => {
-  const body = await c.req.json<{ slug?: string }>();
-  const orgId = c.req.param("orgId")!;
-  const db = c.var.db;
-  const link = await findLink(db, orgId, c.req.param("linkId")!);
+  const [body, { db, orgId, link }] = await Promise.all([
+    c.req.json<{ slug?: string }>(),
+    linkFromRequest(c),
+  ]);
   validateSlug(body.slug);
 
   const [{ plan, limits }, activeCount] = await Promise.all([

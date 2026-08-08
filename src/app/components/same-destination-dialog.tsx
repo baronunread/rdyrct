@@ -15,6 +15,52 @@ import type { LinkDTO } from "@/shared/types";
  * separate link anyway. With several matches, nothing is picked by default:
  * the caller must choose which one, so "Add" starts disabled.
  */
+/** One match reads as a statement, several as a question. Both say the same
+ * thing, so they live together rather than as ternaries down the dialog. */
+const COPY = {
+  one: {
+    title: "This destination already has a link",
+    body: "This destination already belongs to a link. Add this address to it so its settings and analytics stay together.",
+  },
+  many: {
+    title: "This destination already has links",
+    body: "This destination already belongs to these links. Add this address to one of them so its settings and analytics stay together.",
+  },
+};
+
+/** With one match the dialog names it; with several the caller must pick, so
+ * nothing is selected by default and "Add" stays disabled until they do. */
+function MatchChoice({
+  matchedLinks,
+  selectedId,
+  onSelect,
+}: {
+  matchedLinks: LinkDTO[];
+  selectedId: string;
+  onSelect: (id: string) => void;
+}) {
+  const only = matchedLinks.length <= 1 ? matchedLinks[0] : null;
+  if (matchedLinks.length <= 1)
+    return (
+      <p className="truncate rounded-lg border border-border bg-surface-2 px-3 py-2 font-mono text-xs">
+        {only && shortUrl(only.slug, only.domain)}
+      </p>
+    );
+  return (
+    <Field label="Link">
+      <MenuSelect
+        label="Existing link"
+        value={selectedId}
+        onChange={onSelect}
+        options={[
+          { value: "", label: "Choose a link…" },
+          ...matchedLinks.map((l) => ({ value: l.id, label: shortUrl(l.slug, l.domain) })),
+        ]}
+      />
+    </Field>
+  );
+}
+
 export function SameDestinationDialog({
   matchedLinks,
   onClose,
@@ -29,31 +75,29 @@ export function SameDestinationDialog({
   pending: boolean;
 }) {
   const [selectedId, setSelectedId] = useState("");
-  const multiple = (matchedLinks?.length ?? 0) > 1;
 
   useEffect(() => {
     setSelectedId(matchedLinks?.length === 1 ? matchedLinks[0].id : "");
   }, [matchedLinks]);
 
-  const open = !!matchedLinks?.length;
-  const selected = matchedLinks?.find((l) => l.id === selectedId) ?? null;
+  // Stays mounted while closing so the Dialog can play its exit, which is why
+  // this reads the count rather than returning null.
+  const matches = matchedLinks ?? [];
+  const copy = matches.length > 1 ? COPY.many : COPY.one;
+  const selected = matches.find((l) => l.id === selectedId) ?? null;
 
   return (
     <Dialog
-      open={open}
+      open={matches.length > 0}
       onOpenChange={(o) => !o && onClose()}
-      title={
-        multiple ? "This destination already has links" : "This destination already has a link"
-      }
+      title={copy.title}
       // Can open while the link editor (dashboard's quick-create or the
       // Links page's New/Edit link dialog) is still open behind it.
       nested
     >
       <div className="flex flex-col gap-4">
         <p className="flex items-start gap-1.5 text-sm">
-          {multiple
-            ? "This destination already belongs to these links. Add this address to one of them so its settings and analytics stay together."
-            : "This destination already belongs to a link. Add this address to it so its settings and analytics stay together."}
+          {copy.body}
           <Tooltip content="Adding UTM parameters instead tracks each link on its own, with real numbers for that link. A plain alias just shares its clicks with the one you add it to: sometimes that's exactly what you want.">
             <button
               type="button"
@@ -65,25 +109,7 @@ export function SameDestinationDialog({
           </Tooltip>
         </p>
 
-        {multiple ? (
-          <Field label="Link">
-            <MenuSelect
-              label="Existing link"
-              value={selectedId}
-              onChange={setSelectedId}
-              options={[
-                { value: "", label: "Choose a link…" },
-                ...matchedLinks!.map((l) => ({ value: l.id, label: shortUrl(l.slug, l.domain) })),
-              ]}
-            />
-          </Field>
-        ) : (
-          matchedLinks?.[0] && (
-            <p className="truncate rounded-lg border border-border bg-surface-2 px-3 py-2 font-mono text-xs">
-              {shortUrl(matchedLinks[0].slug, matchedLinks[0].domain)}
-            </p>
-          )
-        )}
+        <MatchChoice matchedLinks={matches} selectedId={selectedId} onSelect={setSelectedId} />
 
         <div className="flex justify-end gap-2">
           <Button variant="ghost" onClick={onClose} disabled={pending}>

@@ -17,22 +17,14 @@ import {
   type StorageMessage,
   sweepOrphanQrLogos,
 } from "../../src/worker/storage";
-import { applyTestMigrations, batchOf, overrideEnv, sampleLink, seedLink } from "./support";
-
-// A queue that records what was sent, so producer paths can be asserted without
-// a live queue delivering messages back into the worker under test.
-function captureQueue(): { queue: Queue<StorageMessage>; sent: StorageMessage[] } {
-  const sent: StorageMessage[] = [];
-  const queue = {
-    async send(message: StorageMessage) {
-      sent.push(message);
-    },
-    async sendBatch(messages: Iterable<{ body: StorageMessage }>) {
-      for (const m of messages) sent.push(m.body);
-    },
-  } as unknown as Queue<StorageMessage>;
-  return { queue, sent };
-}
+import {
+  applyTestMigrations,
+  batchOf,
+  captureStorageQueue as captureQueue,
+  overrideEnv,
+  sampleLink,
+  seedLink,
+} from "./support";
 
 function failingKv(): KVNamespace {
   return new Proxy(env.LINKS, {
