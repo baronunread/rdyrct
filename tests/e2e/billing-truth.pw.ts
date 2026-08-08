@@ -45,7 +45,7 @@ test("an admin can comp a user, and the comp never counts as a subscriber", asyn
 
   // The admin's own row: free, and no subscription behind it.
   const adminRow = page.getByRole("row", { name: new RegExp(admin) });
-  await expect(adminRow).toContainText("no subscription");
+  await expect(adminRow).toContainText("no sub");
 
   await page.goto("/admin");
   await expect(page.getByText("Subscribers", { exact: true })).toBeVisible();
@@ -68,8 +68,16 @@ test("an admin can comp a user, and the comp never counts as a subscriber", asyn
 
   await expect(page.getByText("Comp granted")).toBeVisible();
   await expect(adminRow).toContainText("comped");
-  await expect(adminRow).toContainText("Design partner");
   await expect(adminRow).toContainText("pro");
+
+  // The reason an admin typed is kept, and reachable: it hangs off the badge
+  // on hover rather than adding a line to every comped row. Asserted as
+  // hidden first, so a reason that leaked back into the row would fail here
+  // rather than pass on the wrong element.
+  const reason = page.getByText("Design partner");
+  await expect(reason).toBeHidden();
+  await adminRow.getByText("comped").hover();
+  await expect(reason).toBeVisible();
 
   // Access went up and paying did not, which is the whole point of splitting
   // the two facts.
@@ -91,6 +99,6 @@ test("an admin can comp a user, and the comp never counts as a subscriber", asyn
   await adminRow.getByRole("button", { name: `Actions for` }).click();
   await page.getByRole("menuitem", { name: "Revoke comp" }).click();
   await expect(page.getByText("Comp revoked")).toBeVisible();
-  await expect(adminRow).toContainText("no subscription");
+  await expect(adminRow).toContainText("no sub");
   await expect(subscriberRow).toContainText("paid");
 });

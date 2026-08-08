@@ -8,6 +8,7 @@ import { api } from "../../lib/api";
 import type { AdminUserRow, OrgPlan, Sort } from "@/shared/types";
 import { Menu, MenuItem, MenuSeparator } from "../../ui/menu";
 import { Badge, PageHeader, Table, Td, Th } from "../../ui/misc";
+import { Tooltip } from "../../ui/tooltip";
 import { AdminTableSkeleton } from "../../components/skeletons";
 import { useToast } from "../../ui/toast";
 import { ConfirmDialog } from "../../ui/confirm-dialog";
@@ -104,21 +105,25 @@ const planBadgeColor: Record<OrgPlan, "mint" | "accent" | "muted"> = {
 function BillingCell({ user }: { user: AdminUserRow }) {
   if (user.compPlan)
     return (
-      <>
-        <Badge color="butter">comped</Badge>
-        <div className="mt-0.5 text-xs text-muted">
-          {user.compReason}
-          {user.compGrantedBy && ` · ${user.compGrantedBy}`}
-        </div>
-      </>
+      <BillingBadge
+        color="butter"
+        label="comped"
+        detail={[user.compReason ?? "No reason recorded.", user.compGrantedBy]
+          .filter(Boolean)
+          .join(" · ")}
+      />
     );
-  if (!user.subscriptionPlan) return <span className="text-xs text-muted">no subscription</span>;
+  if (!user.subscriptionPlan)
+    return (
+      <BillingBadge color="muted" label="no sub" detail="No subscription: never paid for a plan." />
+    );
   if (user.subscriptionStatus === "past_due")
     return (
-      <>
-        <Badge color="pink">past due</Badge>
-        <div className="mt-0.5 text-xs text-muted">payment failing, access kept</div>
-      </>
+      <BillingBadge
+        color="pink"
+        label="past due"
+        detail="A payment is failing. Polar keeps retrying for days, so access stays until it gives up."
+      />
     );
   // `subscriptionPlan` is the Polar snapshot, not a grant: `unpaid`,
   // `canceled` and anything Polar adds later leave the subscription on the row
@@ -126,18 +131,47 @@ function BillingCell({ user }: { user: AdminUserRow }) {
   // free plan here means exactly that. Name the status instead of "paid".
   if (user.plan === "free")
     return (
-      <>
-        <Badge color="muted">{user.subscriptionStatus ?? "unknown"}</Badge>
-        <div className="mt-0.5 text-xs text-muted">subscription grants no access</div>
-      </>
+      <BillingBadge
+        color="muted"
+        label={user.subscriptionStatus ?? "unknown"}
+        detail="The subscription is on the row, and it grants nothing."
+      />
+    );
+  // "cancels", not "cancelled": the subscription is still paid and still
+  // entitles everything until the period ends. Polar only reports the status
+  // as `canceled` once it is actually over, and that lands on the muted badge
+  // above.
+  if (user.cancelAtPeriodEnd)
+    return (
+      <BillingBadge
+        color="pink"
+        label="cancels"
+        detail="Paid until the current period ends, then it stops. Nothing has been taken away yet."
+      />
     );
   return (
-    <>
-      <Badge color="mint">paid</Badge>
-      {user.cancelAtPeriodEnd && (
-        <div className="mt-0.5 text-xs text-muted">cancels at period end</div>
-      )}
-    </>
+    <BillingBadge color="mint" label="paid" detail="A live subscription pays for this plan." />
+  );
+}
+
+/** One badge, and what it means on hover. The explanations are a sentence
+ * each and some are free text an admin typed, so they hang off the badge
+ * instead of setting the height of every row in the table. */
+function BillingBadge({
+  color,
+  label,
+  detail,
+}: {
+  color: "muted" | "mint" | "pink" | "butter";
+  label: string;
+  detail: string;
+}) {
+  return (
+    <Tooltip content={detail}>
+      <span className="inline-flex">
+        <Badge color={color}>{label}</Badge>
+      </span>
+    </Tooltip>
   );
 }
 
