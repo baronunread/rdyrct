@@ -218,6 +218,14 @@ export function LinksTable({
 
   return (
     <LazyMotion features={domAnimation}>
+      {/* Load-bearing widths: the table is `fixed`, so these decide the layout
+          rather than describing it, and columns drop in as the screen grows.
+            <sm   50%      + 9rem   (short link, clicks, actions)
+            sm    40%      + 16rem  (+ created)
+            lg    30 + 16% + 16rem  (+ title)
+            xl    26 + 16 + 22% + 16rem  (+ destination)
+          Percentages share the row with 16rem of fixed columns, so they cannot
+          add up to 100. */}
       <Table fixed>
         <thead>
           <tr>
