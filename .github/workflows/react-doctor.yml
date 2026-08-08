@@ -35,19 +35,19 @@ jobs:
           fetch-depth: 0
 
       - uses: millionco/react-doctor@v2
-        # Advisory by default: React Doctor reports findings on every PR — a
-        # sticky summary comment, inline review comments, and a commit status
-        # with the health score — but never fails the check, so it won't red-X
-        # a teammate's PR on day one. When your team trusts the signal, graduate
-        # the gate: uncomment the block below and set blocking to "error" (fail
-        # on new error-severity findings) or "warning" (fail on any finding).
+        # Blocking here, and nowhere else. This used to be advisory while the
+        # pre-commit hook blocked on warnings, which put the strict gate on the
+        # side you can skip with --no-verify and the loose one on the side you
+        # cannot. The hook now only formats.
+        #
+        # "warning" fails on any new finding, matching what the hook enforced.
+        # It still scans changed files against the merge base, so inherited
+        # findings do not red-X a PR.
         # Full reference: https://www.react.doctor/ci
-        # with:
-        #   blocking: error          # Gate level: "none" (advisory, the default) | "warning" | "error"
-        #   scope: full              # On PRs, scan the whole project instead of just changed files
-        #   comment: false           # Disable the sticky PR summary comment
-        #   review-comments: false   # Disable inline review comments on changed lines
-        #   commit-status: false     # Disable the commit status (score + counts, links to the run)
-        #   version: "0.4.0"         # Pin to a specific react-doctor version instead of "latest"
-        #   directory: apps/web      # Scan a sub-directory (default: ".")
-        #   project: "web,admin"     # In a monorepo, scan specific workspace project(s)
+        with:
+          blocking: warning
+          # scope: full            # On PRs, scan the whole project, not just changed files
+          # comment: false         # Drop the sticky PR summary comment
+          # review-comments: false # Drop inline review comments on changed lines
+          # commit-status: false   # Drop the commit status (score, counts, run link)
+          # version: "0.4.0"       # Pin a version instead of "latest"

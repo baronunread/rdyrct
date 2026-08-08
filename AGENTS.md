@@ -53,8 +53,15 @@ bugs through that broke the app for every visitor. Green means the app runs
 in a browser, or it means nothing. Add a `tests/e2e/*.pw.ts` scenario
 alongside the feature, in the same commit.
 
-react-doctor runs in CI through `.github/workflows/react-doctor.yml` (advisory,
-PRs + main).
+**Checks run in one place each.** The pre-commit hook only formats staged
+files, because that is the one job that repairs instead of complaining.
+Everything that reports runs in CI, where nobody can pass `--no-verify`:
+`.github/workflows/test.yml` runs `bun run verify`, and
+`.github/workflows/react-doctor.yml` blocks on any new react-doctor finding
+(changed files, against the merge base) for PRs and main.
+
+Lint and format take no path list: `.` plus the ignores in `.gitignore` and
+`.oxfmtrc.json`. One scope, so the hook and CI cannot check different files.
 
 `bun run fallow` is the gate: it scopes to the files this branch changed and
 fails only on findings the branch introduced, counted against
@@ -65,7 +72,6 @@ moved. For the whole-repo picture (refactoring targets, hotspots) run
 `bunx fallow`: it reports every finding and exits 1 by design, so it stays a
 reading exercise. Track what it turns up in issues rather than blocking CI.
 
-react-doctor also runs as a pre-commit hook on staged files (`--blocking warning`).
 react-doctor skill lives in `.agents/skills/react-doctor` and `.claude/skills/react-doctor`.
 fallow skill lives in `.claude/skills/fallow`.
 
