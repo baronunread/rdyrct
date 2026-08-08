@@ -419,6 +419,41 @@ describe("POST /api/webhooks/polar", () => {
     expect((await getUser()).plan).toBe("hobby");
   });
 
+  // The event that arrives first wins on freshness, and `subscription.active`
+  // is not guaranteed to be it. If only that event carried the customer id,
+  // the loser would take the id down with it and leave a paying user unable
+  // to open the billing portal.
+  it("subscription.updated stores the customer id, so the portal opens without an active event", async () => {
+    await seedUser({ plan: "free", polarCustomerId: null });
+    await postWebhook({
+      type: "subscription.updated",
+      data: {
+        id: "sub_1",
+        status: "active",
+        customer_id: "cus_1",
+        product_id: POLAR_PRO_PRODUCT_ID,
+        metadata: { userId: "user-1" },
+      },
+    });
+    const user = await getUser();
+    expect(user.plan).toBe("pro");
+    expect(user.polarCustomerId).toBe("cus_1");
+  });
+
+  it("a later snapshot without a customer id leaves the stored one alone", async () => {
+    await seedUser({ plan: "free", polarCustomerId: "cus_1" });
+    await postWebhook({
+      type: "subscription.updated",
+      data: {
+        id: "sub_1",
+        status: "active",
+        product_id: POLAR_PRO_PRODUCT_ID,
+        metadata: { userId: "user-1" },
+      },
+    });
+    expect((await getUser()).polarCustomerId).toBe("cus_1");
+  });
+
   it("ignores unrecognized event types without touching the user", async () => {
     await seedUser({ plan: "free" });
     const res = await postWebhook({ type: "checkout.updated", data: { id: "co_1" } });

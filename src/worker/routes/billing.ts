@@ -254,6 +254,12 @@ async function subscriptionUpdatedMutation(db: Db, env: Env, event: PolarEvent) 
       // status and price while leaving the old id in place would describe a
       // subscription that does not exist.
       polarSubscriptionId: event.data.id,
+      // The customer id comes with it. `subscription.updated` can land before
+      // an older `subscription.active`, and then `notStale` drops the active
+      // event that would have carried the id: the row pays for a plan it
+      // cannot open the billing portal for. Only written when the payload has
+      // one, so a snapshot that omits it cannot erase the id already there.
+      ...(event.data.customer_id ? { polarCustomerId: event.data.customer_id } : {}),
       polarSubscriptionCancelAtPeriodEnd: event.data.cancel_at_period_end ?? false,
       polarSubscriptionCurrentPeriodEnd: periodEnd ? new Date(periodEnd) : null,
       polarEventAt: at,

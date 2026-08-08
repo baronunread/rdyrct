@@ -418,11 +418,19 @@ function useAdminUserActions() {
 
   // Comps have their own routes: they write the comp columns and re-derive
   // the plan, and they can never be mistaken for a Polar subscription (#81).
+  //
+  // `["user"]` goes too: an admin can comp their own account, and the cached
+  // current user carries the plan that the rest of the app gates on.
+  const compChanged = () => {
+    qc.invalidateQueries({ queryKey: ["admin", "users"] });
+    qc.invalidateQueries({ queryKey: ["user"] });
+  };
+
   const grantComp = useMutation({
     mutationFn: ({ userId, plan, reason }: { userId: string; plan: CompPlan; reason: string }) =>
       api(`/admin/users/${userId}/comp`, { method: "POST", body: { plan, reason } }),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["admin", "users"] });
+      compChanged();
       setCompFor(null);
       toast("Comp granted");
     },
@@ -432,7 +440,7 @@ function useAdminUserActions() {
   const revokeComp = useMutation({
     mutationFn: (userId: string) => api(`/admin/users/${userId}/comp`, { method: "DELETE" }),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["admin", "users"] });
+      compChanged();
       toast("Comp revoked");
     },
     onError: withErrorToast(toast),

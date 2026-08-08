@@ -246,7 +246,10 @@ function NoBillingAccountNote({ plan, comped }: { plan: OrgPlan; comped: boolean
   return (
     <p className="text-sm text-muted">
       {comped
-        ? `You have ${PLAN_LABEL[plan]} for free, with our thanks. There is no subscription to manage, and nothing to pay. Email support if you want anything changed.`
+        ? // Not "nothing to pay": the comp is what grants the plan, and it
+          // says nothing about whether a subscription is still charging
+          // somewhere. Only support can see both and answer that.
+          `You have ${PLAN_LABEL[plan]} for free, with our thanks. There is no billing account linked, so the subscription portal cannot open. Email support if you want anything changed.`
         : "No billing account is linked to this plan, so the subscription portal cannot open. Email support and we will link it."}
     </p>
   );
