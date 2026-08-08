@@ -23,6 +23,7 @@ import {
   consumeStorageBatch,
   logDeadLetterBatch,
   sweepExpiredAliases,
+  sweepOrphanQrLogos,
   type StorageMessage,
 } from "./storage";
 
@@ -30,6 +31,7 @@ import {
   enqueueClick,
   consumeClickBatch,
   logClickDeadLetterBatch,
+  sweepDedupeIds,
   type ClickMessage,
 } from "./clicks";
 
@@ -219,6 +221,15 @@ export default {
     do {
       changes = (await stmt.bind(cutoff).run()).meta.changes;
     } while (changes > 0);
+
+    // Daily: drop dedupe ids the queue can no longer redeliver, so a unique
+    // index over 400 days of history stops carrying a guarantee that only
+    // has to hold for minutes (#70).
+    await sweepDedupeIds(env);
+
+    // Daily: delete QR logos no row points at, which an abandoned upload
+    // leaves behind with no owner and no delete path (#49).
+    await sweepOrphanQrLogos(env);
 
     // Daily: retire rename aliases past their 48h deadline (see #38). The
     // redirect path already stopped resolving them; this frees their slugs.

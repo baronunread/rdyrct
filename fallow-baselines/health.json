@@ -1,5 +1,20 @@
 {
   "finding_counts": {
+    "src/app/components/alias-thread.tsx": {
+      "crap_high": {
+        "count": 1
+      }
+    },
+    "src/app/components/charts.tsx": {
+      "crap_moderate": {
+        "count": 2
+      }
+    },
+    "src/app/components/country-map.tsx": {
+      "crap_high": {
+        "count": 1
+      }
+    },
     "src/app/components/landing-analytics.tsx": {
       "crap_moderate": {
         "count": 1
@@ -11,8 +26,16 @@
       }
     },
     "src/app/components/link-editor.tsx": {
+      "complexity_moderate": {
+        "count": 1
+      },
       "crap_moderate": {
-        "count": 2
+        "count": 3
+      }
+    },
+    "src/app/components/links-table.tsx": {
+      "crap_moderate": {
+        "count": 1
       }
     },
     "src/app/components/qr-color-field.tsx": {
@@ -30,8 +53,21 @@
         "count": 1
       }
     },
+    "src/app/components/same-destination-dialog.tsx": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
     "src/app/routes/admin/orgs.tsx": {
       "crap_high": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "src/app/routes/admin/users.tsx": {
+      "crap_moderate": {
         "count": 1
       }
     },
@@ -45,7 +81,7 @@
         "count": 1
       },
       "crap_high": {
-        "count": 1
+        "count": 2
       },
       "crap_moderate": {
         "count": 2
@@ -55,11 +91,16 @@
       "complexity_moderate": {
         "count": 1
       },
-      "crap_high": {
+      "crap_critical": {
         "count": 1
       },
       "crap_moderate": {
         "count": 3
+      }
+    },
+    "src/app/routes/dashboard.tsx": {
+      "crap_moderate": {
+        "count": 1
       }
     },
     "src/app/routes/domains.tsx": {
@@ -73,10 +114,10 @@
       }
     },
     "src/app/routes/links.tsx": {
-      "complexity_critical": {
+      "crap_high": {
         "count": 1
       },
-      "crap_critical": {
+      "crap_moderate": {
         "count": 1
       }
     },
@@ -85,17 +126,27 @@
         "count": 1
       }
     },
-    "src/app/routes/reset-password.tsx": {
+    "src/app/routes/settings.tsx": {
       "crap_moderate": {
         "count": 1
       }
     },
-    "src/app/routes/settings.tsx": {
+    "src/app/ui/dialog.tsx": {
       "crap_moderate": {
+        "count": 1
+      }
+    },
+    "src/app/ui/otp.tsx": {
+      "crap_high": {
+        "count": 1
+      }
+    },
+    "src/worker/routes/links.ts": {
+      "crap_high": {
         "count": 1
       }
     }
   },
   "runtime_coverage_findings": [],
-  "target_keys": []
+  "target_keys": ["tests/e2e/resend.ts:high impact", "src/app/lib/use-shake.ts:high impact"]
 }

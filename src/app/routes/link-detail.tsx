@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { Link, useParams, useSearchParams } from "react-router";
 import { ArrowLeft, ExternalLink } from "lucide-react";
 import { useLinkStats } from "../lib/hooks";
@@ -7,6 +8,7 @@ import { useConfig } from "../lib/hooks";
 import { shortUrl } from "../lib/api";
 import { AreaChart, StatCard, ClickBreakdown } from "../components/charts";
 import { NoOrgState } from "../components/no-org";
+import { ExportCsvButton } from "../components/export-csv-button";
 import { Card } from "../ui/misc";
 import { linkDisplayTitle } from "../lib/link-display";
 
@@ -14,10 +16,12 @@ function LinkDetailHeader({
   title,
   subtitle,
   fullUrl,
+  action,
 }: {
   title: string;
   subtitle?: string | null;
   fullUrl: string;
+  action?: ReactNode;
 }) {
   return (
     <div className="mb-6 flex items-center gap-3">
@@ -34,6 +38,7 @@ function LinkDetailHeader({
         <h1 className="truncate text-lg font-bold tracking-wide">{title}</h1>
         {subtitle && <p className="mt-0.5 truncate text-sm text-muted">{subtitle}</p>}
       </div>
+      {action}
       <a
         href={fullUrl}
         target="_blank"
@@ -110,6 +115,7 @@ export function LinkDetailPage() {
         title={linkDisplayTitle(config?.appHost, s.domain, s.slug)}
         subtitle={s.title}
         fullUrl={fullUrl}
+        action={<ExportCsvButton stats={s} scope={`link-${s.slug}`} days={s.rangeDays} />}
       />
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">

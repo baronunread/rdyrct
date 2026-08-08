@@ -13,6 +13,7 @@ import {
 } from "../components/charts";
 import { AnalyticsSkeleton } from "../components/skeletons";
 import { NoOrgState } from "../components/no-org";
+import { ExportCsvButton } from "../components/export-csv-button";
 import { Card, PageHeader } from "../ui/misc";
 
 const RANGE_PRESETS: {
@@ -153,12 +154,15 @@ export function Analytics() {
         title="Analytics"
         sub={s.bucket === "hour" ? "Last 24 hours" : `Last ${s.rangeDays} days`}
         action={
-          <RangePicker
-            presets={presets}
-            activeDays={activeDays}
-            activeBucket={activeBucket}
-            onChoose={chooseRange}
-          />
+          <div className="flex items-center gap-2">
+            <RangePicker
+              presets={presets}
+              activeDays={activeDays}
+              activeBucket={activeBucket}
+              onChoose={chooseRange}
+            />
+            <ExportCsvButton stats={s} scope="analytics" days={activeDays} />
+          </div>
         }
       />
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">

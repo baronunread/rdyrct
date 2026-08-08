@@ -1,20 +1,22 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { env } from "cloudflare:workers";
 import { createExecutionContext, reset, waitOnExecutionContext } from "cloudflare:test";
-import { drizzle } from "drizzle-orm/d1";
 import { eq } from "drizzle-orm";
 import worker from "../../src/worker";
 import * as schema from "../../src/worker/db/schema";
-import { ALIAS_TTL_MS } from "../../src/worker/util";
-import type { StorageMessage } from "../../src/worker/storage";
+import { now, ALIAS_TTL_MS } from "../../src/worker/util";
 import type { Env } from "../../src/worker/env";
 import {
+  addressById,
+  addressesOf,
   applyTestMigrations,
   authEnv,
+  captureStorageQueue as captureQueue,
   freeOwnerCookie,
   overrideEnv,
   rawAddressRow,
   rawLinkRow,
+  testDb as db,
 } from "./support";
 
 /** A free-plan owner of "org-1", with an active custom domain "go.example.com". */
@@ -44,41 +46,27 @@ async function apiWithEnv(
 const api = (cookie: string, method: string, path: string, body?: unknown) =>
   apiWithEnv(authEnv(), cookie, method, path, body);
 
-// A queue that records what was sent instead of delivering it, so a route's
-// KV-sync fan-out can be asserted without a live queue consumer running
-// inside the same test.
-function captureQueue(): { queue: Queue<StorageMessage>; sent: StorageMessage[] } {
-  const sent: StorageMessage[] = [];
-  const queue = {
-    async send(message: StorageMessage) {
-      sent.push(message);
-    },
-    async sendBatch(messages: Iterable<{ body: StorageMessage }>) {
-      for (const m of messages) sent.push(m.body);
-    },
-  } as unknown as Queue<StorageMessage>;
-  return { queue, sent };
-}
-
-function db() {
-  return drizzle(env.DB, { schema });
-}
-
-async function addressesOf(linkId: string) {
-  return db().select().from(schema.linkAddresses).where(eq(schema.linkAddresses.linkId, linkId));
-}
-
-async function addressById(addressId: string) {
-  const [row] = await db()
-    .select()
-    .from(schema.linkAddresses)
-    .where(eq(schema.linkAddresses.id, addressId));
-  return row;
-}
-
 async function createLink(cookie: string, body: Record<string, unknown>): Promise<{ id: string }> {
   const res = await api(cookie, "POST", "/links", body);
   return res.json() as Promise<{ id: string }>;
+}
+
+/** A custom-domain link renamed once, so it carries a live temp_alias: the
+ * starting point for every test about what can be done to an alias. */
+async function renamedLink() {
+  const cookie = await seed();
+  return { cookie, ...(await createRenamedLink(cookie)) };
+}
+
+async function createRenamedLink(cookie: string) {
+  const { id } = await createLink(cookie, {
+    destination: "https://example.com/a",
+    domainId: "domain-1",
+    slug: "old-slug",
+  });
+  await api(cookie, "PATCH", `/links/${id}`, { slug: "new-slug" });
+  const alias = (await addressesOf(id)).find((a) => a.kind === "temp_alias")!;
+  return { linkId: id, aliasId: alias.id };
 }
 
 async function expectLinkCount(n: number) {
@@ -122,7 +110,7 @@ describe("PATCH /orgs/:orgId/links/:linkId: renaming a custom-domain address", (
       slug: "old-slug",
     });
     const { id } = (await created.json()) as { id: string };
-    const beforeRename = Date.now();
+    const beforeRename = now();
 
     const renamed = await api(cookie, "PATCH", `/links/${id}`, { slug: "new-slug" });
     expect(renamed.status).toBe(200);
@@ -177,18 +165,6 @@ describe("PATCH /orgs/:orgId/links/:linkId: renaming a custom-domain address", (
 });
 
 describe("addresses sub-resource", () => {
-  async function createRenamedLink(cookie: string) {
-    const { id } = await createLink(cookie, {
-      destination: "https://example.com/a",
-      domainId: "domain-1",
-      slug: "old-slug",
-    });
-    await api(cookie, "PATCH", `/links/${id}`, { slug: "new-slug" });
-    const addresses = await addressesOf(id);
-    const alias = addresses.find((a) => a.kind === "temp_alias")!;
-    return { linkId: id, aliasId: alias.id };
-  }
-
   it("POST always creates the address on the link's own domain, ignoring any domainId in the body (#38)", async () => {
     const cookie = await seed();
     const { id: linkId } = await createLink(cookie, { destination: "https://example.com/a" });
@@ -204,8 +180,7 @@ describe("addresses sub-resource", () => {
   });
 
   it("GET lists every address with its kind and expiry", async () => {
-    const cookie = await seed();
-    const { linkId } = await createRenamedLink(cookie);
+    const { cookie, linkId } = await renamedLink();
 
     const res = await api(cookie, "GET", `/links/${linkId}/addresses`);
     expect(res.status).toBe(200);
@@ -214,8 +189,7 @@ describe("addresses sub-resource", () => {
   });
 
   it("keep-forever flips the alias to permanent and clears its expiry", async () => {
-    const cookie = await seed();
-    const { linkId, aliasId } = await createRenamedLink(cookie);
+    const { cookie, linkId, aliasId } = await renamedLink();
 
     const res = await api(cookie, "POST", `/links/${linkId}/addresses/${aliasId}/keep-forever`);
     expect(res.status).toBe(200);
@@ -228,11 +202,10 @@ describe("addresses sub-resource", () => {
   });
 
   it("keep-forever 409s once the alias has already been retired (e.g. by the sweep)", async () => {
-    const cookie = await seed();
-    const { linkId, aliasId } = await createRenamedLink(cookie);
+    const { cookie, linkId, aliasId } = await renamedLink();
     await db()
       .update(schema.linkAddresses)
-      .set({ retiredAt: Date.now() })
+      .set({ retiredAt: now() })
       .where(eq(schema.linkAddresses.id, aliasId));
 
     const res = await api(cookie, "POST", `/links/${linkId}/addresses/${aliasId}/keep-forever`);
@@ -240,8 +213,7 @@ describe("addresses sub-resource", () => {
   });
 
   it("remove requires confirmation, then retires the address", async () => {
-    const cookie = await seed();
-    const { linkId, aliasId } = await createRenamedLink(cookie);
+    const { cookie, linkId, aliasId } = await renamedLink();
 
     const unconfirmed = await api(
       cookie,
@@ -261,8 +233,7 @@ describe("addresses sub-resource", () => {
   });
 
   it("refuses to remove the primary address directly", async () => {
-    const cookie = await seed();
-    const { linkId } = await createRenamedLink(cookie);
+    const { cookie, linkId } = await renamedLink();
     const [primary] = (await addressesOf(linkId)).filter((a) => a.kind === "primary");
 
     const res = await api(cookie, "POST", `/links/${linkId}/addresses/${primary.id}/remove`, {
@@ -272,8 +243,7 @@ describe("addresses sub-resource", () => {
   });
 
   it("promote swaps the alias and primary slug/domain in place, on the same link", async () => {
-    const cookie = await seed();
-    const { linkId, aliasId } = await createRenamedLink(cookie);
+    const { cookie, linkId, aliasId } = await renamedLink();
 
     const res = await api(cookie, "POST", `/links/${linkId}/addresses/${aliasId}/promote`);
     expect(res.status).toBe(200);
@@ -416,18 +386,12 @@ describe("same-destination grouping", () => {
 
 describe("DELETE /orgs/:orgId/links/:linkId", () => {
   it("cascades every address row (primary and alias)", async () => {
-    const cookie = await seed();
-    const { id } = await createLink(cookie, {
-      destination: "https://example.com/a",
-      domainId: "domain-1",
-      slug: "old-slug",
-    });
-    await api(cookie, "PATCH", `/links/${id}`, { slug: "new-slug" });
-    expect(await addressesOf(id)).toHaveLength(2);
+    const { cookie, linkId } = await renamedLink();
+    expect(await addressesOf(linkId)).toHaveLength(2);
 
-    const res = await api(cookie, "DELETE", `/links/${id}`);
+    const res = await api(cookie, "DELETE", `/links/${linkId}`);
     expect(res.status).toBe(200);
-    expect(await addressesOf(id)).toHaveLength(0);
+    expect(await addressesOf(linkId)).toHaveLength(0);
   });
 });
 
@@ -494,33 +458,14 @@ describe("plan limits (#38)", () => {
     expect(addresses.some((a) => a.kind === "temp_alias")).toBe(true);
   });
 
-  it("402s keep-forever at the limit: making a temp alias permanent needs room", async () => {
-    const cookie = await seed();
-    const { id } = await createLink(cookie, {
-      destination: "https://example.com/a",
-      domainId: "domain-1",
-      slug: "old-slug",
-    });
-    await api(cookie, "PATCH", `/links/${id}`, { slug: "new-slug" });
-    const alias = (await addressesOf(id)).find((a) => a.kind === "temp_alias")!;
+  // Both actions leave the org holding one more counted address than it did:
+  // keep-forever makes the temp alias permanent, promote makes the old primary
+  // permanent. At the cap, neither has room.
+  it.each(["keep-forever", "promote"])("402s %s on a temp alias at the limit", async (action) => {
+    const { cookie, linkId, aliasId } = await renamedLink();
     await fillOrgToLimit();
 
-    const res = await api(cookie, "POST", `/links/${id}/addresses/${alias.id}/keep-forever`);
-    expect(res.status).toBe(402);
-  });
-
-  it("402s promoting a temp alias at the limit: the old primary becomes a counted permanent_alias", async () => {
-    const cookie = await seed();
-    const { id } = await createLink(cookie, {
-      destination: "https://example.com/a",
-      domainId: "domain-1",
-      slug: "old-slug",
-    });
-    await api(cookie, "PATCH", `/links/${id}`, { slug: "new-slug" });
-    const alias = (await addressesOf(id)).find((a) => a.kind === "temp_alias")!;
-    await fillOrgToLimit();
-
-    const res = await api(cookie, "POST", `/links/${id}/addresses/${alias.id}/promote`);
+    const res = await api(cookie, "POST", `/links/${linkId}/addresses/${aliasId}/${action}`);
     expect(res.status).toBe(402);
   });
 });

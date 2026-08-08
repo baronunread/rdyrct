@@ -7,10 +7,12 @@ import {
   waitOnExecutionContext,
 } from "cloudflare:test";
 import { drizzle } from "drizzle-orm/d1";
+import { eq } from "drizzle-orm";
 import worker from "../../src/worker";
 import * as schema from "../../src/worker/db/schema";
 import type { Env } from "../../src/worker/env";
 import type { ClickMessage } from "../../src/worker/clicks";
+import type { StorageMessage } from "../../src/worker/storage";
 import { hashPassword } from "../../src/worker/password";
 
 type TestEnv = typeof env & { TEST_MIGRATIONS: D1Migration[] };
@@ -294,6 +296,42 @@ export async function seedLink(destination = "https://example.com") {
     db.insert(schema.linkAddresses).values({ ...sampleAddress, createdAt: 0 }),
   ]);
   return db;
+}
+
+/** The schema-bound drizzle client every worker test reaches for. */
+export function testDb() {
+  return drizzle(env.DB, { schema });
+}
+
+export async function addressById(addressId: string) {
+  const [row] = await testDb()
+    .select()
+    .from(schema.linkAddresses)
+    .where(eq(schema.linkAddresses.id, addressId));
+  return row;
+}
+
+export async function addressesOf(linkId: string) {
+  return testDb()
+    .select()
+    .from(schema.linkAddresses)
+    .where(eq(schema.linkAddresses.linkId, linkId));
+}
+
+// A queue that records what was sent instead of delivering it, so a route's
+// KV-sync fan-out can be asserted without a live queue consumer running inside
+// the same test.
+export function captureStorageQueue(): { queue: Queue<StorageMessage>; sent: StorageMessage[] } {
+  const sent: StorageMessage[] = [];
+  const queue = {
+    async send(message: StorageMessage) {
+      sent.push(message);
+    },
+    async sendBatch(messages: Iterable<{ body: StorageMessage }>) {
+      for (const m of messages) sent.push(m.body);
+    },
+  } as unknown as Queue<StorageMessage>;
+  return { queue, sent };
 }
 
 // Builds a real MessageBatch via the official cloudflare:test helpers, so ack/

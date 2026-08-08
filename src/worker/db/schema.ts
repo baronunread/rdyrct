@@ -279,9 +279,10 @@ export const clicks = sqliteTable(
     device: text("device").notNull().default(""),
     // Set by the click queue producer (crypto.randomUUID()); lets the queue
     // consumer's batch insert dedupe a redelivered message. Null on rows from
-    // before this column existed, which is fine: SQLite's unique index treats
-    // every NULL as distinct, so old rows never collide with each other or
-    // with real dedupe ids.
+    // before this column existed, and on rows the daily sweep has cleared
+    // once no redelivery can reach them (sweepDedupeIds, #70). Either way
+    // SQLite's unique index treats every NULL as distinct, so those rows
+    // never collide with each other or with real dedupe ids.
     dedupeId: text("dedupe_id").unique(),
     // Which address the click came in on (primary or an alias). Null on rows
     // from before this column existed: not backfilled, same reasoning as
