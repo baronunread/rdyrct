@@ -42,7 +42,7 @@ bun run test:worker                    # worker tests (vitest-pool-workers, test
 bun run e2e:smoke                      # browser tests (playwright, tests/e2e/); needs .dev.vars
 bun run verify                         # all of the above, in order: the gate
 bun run doctor                         # react-doctor audit (React health score; --verbose for details)
-bun run fallow                         # fallow codebase intelligence audit
+bun run fallow                         # fallow gate: what this branch adds over main
 ```
 
 **`bun run verify` ends with the browser tests, and every new feature ships
@@ -54,8 +54,16 @@ in a browser, or it means nothing. Add a `tests/e2e/*.pw.ts` scenario
 alongside the feature, in the same commit.
 
 react-doctor runs in CI through `.github/workflows/react-doctor.yml` (advisory,
-PRs + main). Run fallow locally when auditing codebase health; track its
-findings in issues rather than blocking CI.
+PRs + main).
+
+`bun run fallow` is the gate: it scopes to the files this branch changed and
+fails only on findings the branch introduced, counted against
+`fallow-baselines/health.json`. Refresh that baseline with
+`bunx fallow health --save-baseline fallow-baselines/health.json` after a
+refactor moves findings around, and say in the commit message which counts
+moved. For the whole-repo picture (refactoring targets, hotspots) run
+`bunx fallow`: it reports every finding and exits 1 by design, so it stays a
+reading exercise. Track what it turns up in issues rather than blocking CI.
 
 react-doctor also runs as a pre-commit hook on staged files (`--blocking warning`).
 react-doctor skill lives in `.agents/skills/react-doctor` and `.claude/skills/react-doctor`.
