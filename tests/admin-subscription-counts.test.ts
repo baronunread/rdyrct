@@ -11,12 +11,6 @@ describe("computeSubscriptionCounts", () => {
     expect(computeSubscriptionCounts([sub(), sub()]).payingSubscribers).toBe(2);
   });
 
-  test("a subscription scheduled to cancel still counts", () => {
-    // It has not ended: the customer keeps access and keeps paying until the
-    // period does. Who is leaving shows on their own row in the user list.
-    expect(computeSubscriptionCounts([sub(), sub()]).payingSubscribers).toBe(2);
-  });
-
   test("past_due still counts, since access is kept too", () => {
     expect(computeSubscriptionCounts([sub({ status: "past_due" })]).payingSubscribers).toBe(1);
   });
