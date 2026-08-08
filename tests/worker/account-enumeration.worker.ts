@@ -1,36 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { env } from "cloudflare:workers";
 import { reset } from "cloudflare:test";
-import { applyTestMigrations, authEnv, fetchWorker, TEST_PASSWORD } from "./support";
+import { applyTestMigrations, authEnv, captureEmails, fetchWorker, TEST_PASSWORD } from "./support";
 import { hashPassword } from "../../src/worker/password";
 
-/**
- * Captures Resend sends and answers the MX lookup signup does, so a test
- * decides what exists rather than the network. sendEmail() and
- * domainHasMailRecords() both use plain fetch, which makes the global the
- * one seam that covers them.
- */
-function stubFetch(): {
-  sent: { to: string; subject: string; text: string }[];
-  restore: () => void;
-} {
-  const sent: { to: string; subject: string; text: string }[] = [];
-  const original = globalThis.fetch;
-  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
-    const url = String(input instanceof Request ? input.url : input);
-    if (url.includes("/emails")) {
-      sent.push(
-        JSON.parse(String(init?.body ?? "{}")) as { to: string; subject: string; text: string },
-      );
-      return Response.json({ id: "sent" });
-    }
-    if (url.includes("cloudflare-dns.com")) {
-      return Response.json({ Status: 0, Answer: [{ data: "10 mx.example." }] });
-    }
-    return original(input as RequestInfo, init);
-  }) as typeof fetch;
-  return { sent, restore: () => (globalThis.fetch = original) };
-}
+/** Signup's MX lookup must succeed for the enumeration branches to be the
+ * thing under test, so every domain looks deliverable here. */
+const stubFetch = () => captureEmails({ mx: "deliverable" });
 
 async function seedUser(email: string, emailVerified: boolean) {
   await env.DB.batch([
@@ -175,13 +151,7 @@ describe("signup does not reveal which addresses have accounts (#53)", () => {
 
   it("still refuses a domain that cannot receive mail, for taken and free alike", async () => {
     await seedUser("known@nomx.example", true);
-    const original = globalThis.fetch;
-    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
-      const url = String(input instanceof Request ? input.url : input);
-      if (url.includes("cloudflare-dns.com")) return Response.json({ Status: 0, Answer: [] });
-      if (url.includes("/emails")) return Response.json({ id: "sent" });
-      return original(input as RequestInfo, init);
-    }) as typeof fetch;
+    const { restore } = captureEmails({ mx: "unroutable" });
 
     try {
       const taken = await signUp("known@nomx.example");
@@ -189,7 +159,7 @@ describe("signup does not reveal which addresses have accounts (#53)", () => {
       expect(taken.status).toBe(422);
       expect(fresh.status).toBe(422);
     } finally {
-      globalThis.fetch = original;
+      restore();
     }
   });
 });

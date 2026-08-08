@@ -75,6 +75,64 @@ export const billingEnv = () =>
     POLAR_PRO_PRODUCT_ID,
   });
 
+/** One outbound Resend send, as the worker posted it. */
+export interface CapturedEmail {
+  to: string;
+  subject: string;
+  html: string;
+  text: string;
+}
+
+/**
+ * Captures what would go to Resend, and optionally answers the MX lookup
+ * signup does.
+ *
+ * `sendEmail()` and `domainHasMailRecords()` both post with plain `fetch`
+ * (the Resend SDK cannot repoint its base URL, which is what keeps the local
+ * emulator flow working), so replacing the global is the honest seam: the
+ * request under assertion is the one the worker would really send.
+ *
+ * `mx` answers the DNS lookup too, so a test decides which domains can
+ * receive mail rather than the network.
+ */
+export function captureEmails({ mx }: { mx?: "deliverable" | "unroutable" } = {}): {
+  sent: CapturedEmail[];
+  restore: () => void;
+} {
+  const sent: CapturedEmail[] = [];
+  const original = globalThis.fetch;
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input instanceof Request ? input.url : input);
+    if (url.includes("/emails")) {
+      sent.push(JSON.parse(String(init?.body ?? "{}")) as CapturedEmail);
+      return Response.json({ id: "sent" });
+    }
+    if (mx && url.includes("cloudflare-dns.com")) {
+      const Answer = mx === "deliverable" ? [{ data: "10 mx.example." }] : [];
+      return Response.json({ Status: 0, Answer });
+    }
+    return original(input as RequestInfo, init);
+  }) as typeof fetch;
+  return { sent, restore: () => (globalThis.fetch = original) };
+}
+
+/** The `user-1` row the billing and entitlement suites both write against,
+ * with only the columns under test spelled out at the call site. */
+export async function seedBillingUser(
+  overrides: Partial<typeof schema.user.$inferInsert> = {},
+): Promise<void> {
+  await drizzle(env.DB, { schema })
+    .insert(schema.user)
+    .values({
+      id: "user-1",
+      name: "Test User",
+      email: "user1@example.com",
+      createdAt: new Date(0),
+      updatedAt: new Date(0),
+      ...overrides,
+    });
+}
+
 export async function applyTestMigrations(): Promise<void> {
   const testEnv = env as TestEnv;
   await applyD1Migrations(testEnv.DB, testEnv.TEST_MIGRATIONS);

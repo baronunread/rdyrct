@@ -14,6 +14,7 @@ import {
   POLAR_HOBBY_PRODUCT_ID,
   POLAR_PRO_PRODUCT_ID,
   POLAR_WEBHOOK_SECRET,
+  seedBillingUser as seedUser,
 } from "./support";
 import type { Env } from "../../src/worker/env";
 
@@ -47,19 +48,6 @@ afterEach(async () => {
 
 function db() {
   return drizzle(env.DB, { schema });
-}
-
-async function seedUser(overrides: Partial<typeof schema.user.$inferInsert> = {}) {
-  await db()
-    .insert(schema.user)
-    .values({
-      id: "user-1",
-      name: "Test User",
-      email: "user1@example.com",
-      createdAt: new Date(0),
-      updatedAt: new Date(0),
-      ...overrides,
-    });
 }
 
 async function getUser() {

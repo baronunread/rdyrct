@@ -1,40 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { env } from "cloudflare:workers";
 import { reset } from "cloudflare:test";
-import { applyTestMigrations, fetchWorker, freeOwnerCookie } from "./support";
-
-/**
- * Captures what would go to Resend.
- *
- * sendEmail() posts with plain `fetch` (the Resend SDK cannot repoint its
- * base URL, which is what keeps the local emulator flow working), so
- * replacing the global is the honest seam: the request under assertion is
- * the one the worker would really send.
- */
-function captureSends(): {
-  sent: { subject: string; html: string; text: string }[];
-  restore: () => void;
-} {
-  const sent: { subject: string; html: string; text: string }[] = [];
-  const original = globalThis.fetch;
-  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
-    const url = String(input instanceof Request ? input.url : input);
-    if (url.includes("/emails")) {
-      const body = JSON.parse(String(init?.body ?? "{}")) as {
-        subject: string;
-        html: string;
-        text: string;
-      };
-      sent.push(body);
-      return new Response(JSON.stringify({ id: "sent" }), {
-        status: 200,
-        headers: { "content-type": "application/json" },
-      });
-    }
-    return original(input as RequestInfo, init);
-  }) as typeof fetch;
-  return { sent, restore: () => (globalThis.fetch = original) };
-}
+import {
+  applyTestMigrations,
+  captureEmails as captureSends,
+  type CapturedEmail,
+  fetchWorker,
+  freeOwnerCookie,
+} from "./support";
 
 beforeEach(async () => {
   await reset();
@@ -45,11 +18,14 @@ afterEach(reset);
 describe("outbound email escapes user-controlled values (#72)", () => {
   const hostileOrgName = `Acme</strong><a href="https://phish.example">Click to keep access</a>`;
 
-  it("renders a hostile org name as text in the invite, not as markup", async () => {
+  /** Invites one address from org-1 and hands back the mail that went out.
+   * `orgName` renames the org first, which is how a hostile name gets into
+   * the message in the first place. */
+  async function invite(orgName?: string): Promise<{ status: number; sent: CapturedEmail[] }> {
     const cookie = await freeOwnerCookie();
-    await env.DB.prepare("update orgs set name = ? where id = 'org-1'").bind(hostileOrgName).run();
+    if (orgName)
+      await env.DB.prepare("update orgs set name = ? where id = 'org-1'").bind(orgName).run();
     const { sent, restore } = captureSends();
-
     try {
       const res = await fetchWorker(
         new Request("http://localhost/api/orgs/org-1/invites", {
@@ -58,10 +34,15 @@ describe("outbound email escapes user-controlled values (#72)", () => {
           body: JSON.stringify({ emails: ["recruit@example.com"], role: "member" }),
         }),
       );
-      expect(res.status).toBe(201);
+      return { status: res.status, sent };
     } finally {
       restore();
     }
+  }
+
+  it("renders a hostile org name as text in the invite, not as markup", async () => {
+    const { status, sent } = await invite(hostileOrgName);
+    expect(status).toBe(201);
 
     expect(sent).toHaveLength(1);
     const { html } = sent[0]!;
@@ -77,21 +58,7 @@ describe("outbound email escapes user-controlled values (#72)", () => {
   });
 
   it("leaves the subject line readable, since it is not markup", async () => {
-    const cookie = await freeOwnerCookie();
-    await env.DB.prepare("update orgs set name = ? where id = 'org-1'").bind(hostileOrgName).run();
-    const { sent, restore } = captureSends();
-
-    try {
-      await fetchWorker(
-        new Request("http://localhost/api/orgs/org-1/invites", {
-          method: "POST",
-          headers: { "content-type": "application/json", cookie },
-          body: JSON.stringify({ emails: ["recruit@example.com"], role: "member" }),
-        }),
-      );
-    } finally {
-      restore();
-    }
+    const { sent } = await invite(hostileOrgName);
 
     // A subject is plain text to every client, so escaping it would show the
     // entities to the reader rather than protect them.
@@ -99,20 +66,7 @@ describe("outbound email escapes user-controlled values (#72)", () => {
   });
 
   it("sends a plain-text part alongside the HTML (#73)", async () => {
-    const cookie = await freeOwnerCookie();
-    const { sent, restore } = captureSends();
-
-    try {
-      await fetchWorker(
-        new Request("http://localhost/api/orgs/org-1/invites", {
-          method: "POST",
-          headers: { "content-type": "application/json", cookie },
-          body: JSON.stringify({ emails: ["recruit@example.com"], role: "member" }),
-        }),
-      );
-    } finally {
-      restore();
-    }
+    const { sent } = await invite();
 
     const { text } = sent[0]!;
     expect(text).toContain("You're invited to join Test");

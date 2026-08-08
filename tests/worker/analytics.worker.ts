@@ -43,11 +43,14 @@ async function seedClicks(db: ReturnType<typeof drizzle>, timestamps: number[]) 
 beforeEach(applyTestMigrations);
 afterEach(reset);
 
+/** The org, link and clock the range tests below both start from. */
+async function seededOrg() {
+  return { cookie: await freeOwnerCookie(), db: await seedLinkOnExistingOrg(), t: Date.now() };
+}
+
 describe("GET /orgs/:orgId/stats: totalClicks vs totalClicksDelta (#24)", () => {
   it("only counts clicks inside the selected range, not every click ever", async () => {
-    const cookie = await freeOwnerCookie();
-    const db = await seedLinkOnExistingOrg();
-    const t = Date.now();
+    const { cookie, db, t } = await seededOrg();
 
     // Free plan's analyticsDays is 7: "current period" is the last 7 days,
     // "previous period" the 7 days before that, both equal-length.
@@ -77,9 +80,7 @@ describe("GET /orgs/:orgId/stats: totalClicks vs totalClicksDelta (#24)", () => 
 
 describe("GET /orgs/:orgId/links/stats/:slug: totalClicks vs totalClicksDelta (#24)", () => {
   it("only counts clicks inside the selected range, not every click ever", async () => {
-    const cookie = await freeOwnerCookie();
-    const db = await seedLinkOnExistingOrg();
-    const t = Date.now();
+    const { cookie, db, t } = await seededOrg();
     const currentPeriod = [t - 1 * DAY_MS, t - 2 * DAY_MS]; // 2 clicks
     const previousPeriod = [t - 8 * DAY_MS]; // 1 click
     const ancient = [t - 200 * DAY_MS, t - 300 * DAY_MS];

@@ -13,6 +13,7 @@ import {
   POLAR_PRO_PRODUCT_ID,
   POLAR_HOBBY_PRODUCT_ID,
   POLAR_WEBHOOK_SECRET,
+  seedBillingUser as seedUser,
 } from "./support";
 
 // The Polar SDK is never reached by these tests (no checkout, no portal), but
@@ -34,19 +35,6 @@ afterEach(async () => {
 });
 
 const db = () => drizzle(env.DB, { schema });
-
-async function seedUser(overrides: Partial<typeof schema.user.$inferInsert> = {}) {
-  await db()
-    .insert(schema.user)
-    .values({
-      id: "user-1",
-      name: "Test User",
-      email: "user1@example.com",
-      createdAt: new Date(0),
-      updatedAt: new Date(0),
-      ...overrides,
-    });
-}
 
 async function getUser(id = "user-1") {
   const rows = await db().select().from(schema.user).where(eq(schema.user.id, id));
