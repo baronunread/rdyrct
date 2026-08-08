@@ -22,6 +22,7 @@ import {
   consumeStorageBatch,
   logDeadLetterBatch,
   sweepExpiredAliases,
+  sweepOrphanQrLogos,
   type StorageMessage,
 } from "./storage";
 
@@ -220,6 +221,10 @@ export default {
     // index over 400 days of history stops carrying a guarantee that only
     // has to hold for minutes (#70).
     await sweepDedupeIds(env);
+
+    // Daily: delete QR logos no row points at, which an abandoned upload
+    // leaves behind with no owner and no delete path (#49).
+    await sweepOrphanQrLogos(env);
 
     // Daily: retire rename aliases past their 48h deadline (see #38). The
     // redirect path already stopped resolving them; this frees their slugs.

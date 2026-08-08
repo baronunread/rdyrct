@@ -15,6 +15,7 @@ import {
   orgDeleteGather,
   syncLinkMsg,
   type StorageMessage,
+  sweepOrphanQrLogos,
 } from "../../src/worker/storage";
 import { applyTestMigrations, batchOf, overrideEnv, sampleLink, seedLink } from "./support";
 
@@ -290,5 +291,82 @@ describe("producing messages", () => {
     await expect(
       enqueueStorage(overrideEnv({ STORAGE_QUEUE: queue }), [syncLinkMsg("sale", null)]),
     ).rejects.toThrow("injected queue-send failure");
+  });
+});
+
+describe("sweepOrphanQrLogos (#49)", () => {
+  const DAY_MS = 24 * 60 * 60 * 1000;
+
+  /** Puts a logo object in R2 and, optionally, backdates it past the grace
+   * period. R2's `uploaded` is set by the store, so an old object is faked by
+   * overriding list() rather than by waiting a day. */
+  async function putLogo(key: string) {
+    await env.QR_LOGOS.put(key, new Uint8Array([1, 2, 3]));
+  }
+
+  /** The sweep only looks at objects older than the grace period, so run it
+   * against an R2 whose listing reports every object as a day and a half old. */
+  function agedEnv(): Env {
+    const real = env.QR_LOGOS;
+    const uploaded = new Date(Date.now() - 1.5 * DAY_MS);
+    const QR_LOGOS = {
+      ...real,
+      list: async (options?: R2ListOptions) => {
+        const page = await real.list(options);
+        return {
+          ...page,
+          objects: page.objects.map((object) => ({ ...object, uploaded })),
+        };
+      },
+      delete: (keys: string | string[]) => real.delete(keys),
+    } as unknown as R2Bucket;
+    return overrideEnv({ QR_LOGOS });
+  }
+
+  async function keysInBucket() {
+    return (await env.QR_LOGOS.list()).objects.map((o) => o.key).sort();
+  }
+
+  it("deletes an object no row points at, and keeps the one a link uses", async () => {
+    const db = await seedLink();
+    await db
+      .update(schema.links)
+      .set({ qrLogo: "/api/orgs/org-1/qr-logo/kept.webp" })
+      .where(eq(schema.links.id, sampleLink.id));
+    await putLogo("org-1/kept.webp");
+    await putLogo("org-1/abandoned.webp");
+
+    expect(await sweepOrphanQrLogos(agedEnv())).toBe(1);
+    expect(await keysInBucket()).toEqual(["org-1/kept.webp"]);
+  });
+
+  it("keeps a logo an org's QR defaults point at, not only a link's", async () => {
+    await seedLink();
+    await env.DB.prepare("update orgs set qr_logo = ? where id = 'org-1'")
+      .bind("/api/orgs/org-1/qr-logo/default.webp")
+      .run();
+    await putLogo("org-1/default.webp");
+    await putLogo("org-1/stray.webp");
+
+    expect(await sweepOrphanQrLogos(agedEnv())).toBe(1);
+    expect(await keysInBucket()).toEqual(["org-1/default.webp"]);
+  });
+
+  it("leaves a fresh upload alone, since its row may still be coming", async () => {
+    await seedLink();
+    await putLogo("org-1/just-uploaded.webp");
+
+    // The real env, so `uploaded` is now: inside the grace period.
+    expect(await sweepOrphanQrLogos(env as Env)).toBe(0);
+    expect(await keysInBucket()).toEqual(["org-1/just-uploaded.webp"]);
+  });
+
+  it("is safe to run twice", async () => {
+    await seedLink();
+    await putLogo("org-1/abandoned.webp");
+
+    expect(await sweepOrphanQrLogos(agedEnv())).toBe(1);
+    expect(await sweepOrphanQrLogos(agedEnv())).toBe(0);
+    expect(await keysInBucket()).toEqual([]);
   });
 });
