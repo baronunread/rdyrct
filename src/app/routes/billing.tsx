@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import confetti from "canvas-confetti";
-import { AnimatePresence, LazyMotion, domAnimation, m } from "motion/react";
+import { AnimatePresence, LazyMotion, domAnimation, m, useReducedMotion } from "motion/react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   useCurrentUser,
@@ -24,6 +24,26 @@ import posthog from "../lib/posthog";
 
 /** The three shake handles the page owns, one per button it can bounce. */
 type Shake = Record<"hobby" | "pro" | "portal", ReturnType<typeof useShake>>;
+
+const PORTAL_SNAPSHOT_KEY = "billing:portal-snapshot";
+
+/** Everything the subscription portal can change, as one comparable string:
+ * the plan, whether a cancel is scheduled, and when the period ends. Enough
+ * to tell "the webhook has landed" from "it has not landed yet". */
+function billingSnapshot(user?: {
+  plan: OrgPlan;
+  polarSubscriptionCancelAtPeriodEnd?: boolean;
+  polarSubscriptionCurrentPeriodEnd?: number | null;
+}) {
+  // JSON, not join: a join renders null as an empty string, so "no period
+  // end" and "period end of ''" would compare equal and the wait would end
+  // on a change that never happened.
+  return JSON.stringify([
+    user?.plan ?? "free",
+    user?.polarSubscriptionCancelAtPeriodEnd ?? false,
+    user?.polarSubscriptionCurrentPeriodEnd ?? null,
+  ]);
+}
 
 const PLAN_LABEL: Record<OrgPlan, string> = {
   free: "Free",
@@ -106,6 +126,14 @@ function ConfirmingPaymentNotice() {
   );
 }
 
+/**
+ * The notes arrive on their own, seconds after the page settles, when the
+ * webhook behind a portal visit lands. Appearing outright reads as a glitch,
+ * so they grow in instead.
+ *
+ * `initial={false}` keeps that to the arrival: a note already true when the
+ * page loads is simply there, with nothing to watch.
+ */
 function PlanStatusNotes({
   plan,
   cancelAtPeriodEnd,
@@ -117,13 +145,34 @@ function PlanStatusNotes({
   periodEnd: number | null;
   confirmTimedOut: boolean;
 }) {
+  const reduced = useReducedMotion();
+  const grow = reduced
+    ? { initial: { opacity: 0 }, animate: { opacity: 1 }, exit: { opacity: 0 } }
+    : {
+        initial: { opacity: 0, height: 0 },
+        animate: { opacity: 1, height: "auto" as const },
+        exit: { opacity: 0, height: 0 },
+      };
   return (
-    <>
-      {showsCancelNotice(cancelAtPeriodEnd, periodEnd) && (
-        <CancelScheduledNotice plan={plan} periodEnd={periodEnd} />
-      )}
-      {showsConfirmingNotice(confirmTimedOut, plan) && <ConfirmingPaymentNotice />}
-    </>
+    <LazyMotion features={domAnimation}>
+      <AnimatePresence initial={false}>
+        {showsCancelNotice(cancelAtPeriodEnd, periodEnd) && (
+          <m.div key="cancel" {...grow} transition={{ duration: 0.2 }} className="overflow-hidden">
+            <CancelScheduledNotice plan={plan} periodEnd={periodEnd} />
+          </m.div>
+        )}
+        {showsConfirmingNotice(confirmTimedOut, plan) && (
+          <m.div
+            key="confirming"
+            {...grow}
+            transition={{ duration: 0.2 }}
+            className="overflow-hidden"
+          >
+            <ConfirmingPaymentNotice />
+          </m.div>
+        )}
+      </AnimatePresence>
+    </LazyMotion>
   );
 }
 
@@ -241,12 +290,12 @@ function PlanActions({
             // A paid plan with no billing account. The portal cannot open for
             // them, so offer the truth instead of a button that errors (#85).
             // Which truth depends on how they got the plan: comped, or a
-            // subscription that arrived without a customer id. Saying
-            // "granted directly" to the second group would be false (#81).
+            // subscription that arrived without a customer id. Thanking the
+            // second group for a gift nobody gave them would be false (#81).
             <p className="text-sm text-muted">
               {comped
-                ? "This plan was granted by the rdyrct team, so there is no subscription to manage. Email support to change it."
-                : "No billing account is linked to this plan, so the subscription portal cannot open. Email support to sort it out."}
+                ? `You have ${PLAN_LABEL[plan]} for free, with our thanks. There is no subscription to manage, and nothing to pay. Email support if you want anything changed.`
+                : "No billing account is linked to this plan, so the subscription portal cannot open. Email support and we will link it."}
             </p>
           )}
           {plan === "hobby" && hasBillingAccount && (
@@ -410,6 +459,9 @@ function useCheckoutFlow() {
   const [confirming, setConfirming] = useState(false);
   const [confirmTimedOut, setConfirmTimedOut] = useState(false);
   const [showCelebration, setShowCelebration] = useState(false);
+  // The billing state as it was before a trip to the portal, while we wait
+  // for the webhook to move it. Null when we are not waiting.
+  const [portalSnapshot, setPortalSnapshot] = useState<string | null>(null);
 
   const celebrat = useCallback(() => {
     setShowCelebration(true);
@@ -451,6 +503,10 @@ function useCheckoutFlow() {
     setShowPortalOverlay(true);
     try {
       const data = await portal.mutateAsync();
+      // Remembered across the trip to Polar, so the return can tell whether
+      // the webhook has landed yet. sessionStorage because the browser back
+      // button is the only way back and nothing survives that in memory.
+      sessionStorage.setItem(PORTAL_SNAPSHOT_KEY, billingSnapshot(me.data?.user));
       setTimeout(() => window.location.assign(data.url), 800);
     } catch (e) {
       setShowPortalOverlay(false);
@@ -467,12 +523,53 @@ function useCheckoutFlow() {
       setConfirming(false);
       setConfirmTimedOut(false);
       setShowCelebration(false);
+      // The portal is where a plan changes, a cancel is scheduled, and a
+      // cancel is undone, and none of the three sends the browser back here
+      // with anything in the URL to notice. Without this the page restores
+      // from bfcache and shows the state from before the visit, because
+      // refetchOnWindowFocus is off for every query (src/app/main.tsx).
+      void qc.refetchQueries({ queryKey: ["user"] });
+      const before = sessionStorage.getItem(PORTAL_SNAPSHOT_KEY);
+      if (before !== null) {
+        sessionStorage.removeItem(PORTAL_SNAPSHOT_KEY);
+        setPortalSnapshot(before);
+      }
     };
     window.addEventListener("pageshow", handler);
     return () => window.removeEventListener("pageshow", handler);
-  }, []);
+  }, [qc]);
 
   const plan = me.data?.user.plan ?? "free";
+  const snapshot = billingSnapshot(me.data?.user);
+
+  /**
+   * One refetch on return is not enough: Polar redirects the browser before
+   * it delivers the webhook, so someone who cancels and comes straight back
+   * reads the row as it was and sees no cancel notice until they reload.
+   *
+   * So keep asking until the snapshot moves. Silent, with no overlay: unlike
+   * the checkout return, we do not know that anything changed in the portal,
+   * and most visits change nothing. A visit that really changed nothing just
+   * polls quietly and gives up.
+   */
+  useEffect(() => {
+    if (portalSnapshot === null) return;
+    if (snapshot !== portalSnapshot) {
+      setPortalSnapshot(null);
+      return;
+    }
+    let tries = 0;
+    const id = window.setInterval(() => {
+      tries += 1;
+      if (tries > 10) {
+        window.clearInterval(id);
+        setPortalSnapshot(null);
+        return;
+      }
+      void qc.refetchQueries({ queryKey: ["user"] });
+    }, 2000);
+    return () => window.clearInterval(id);
+  }, [portalSnapshot, snapshot, qc]);
 
   // Detect the checkout return once on mount.
   useEffect(() => {
