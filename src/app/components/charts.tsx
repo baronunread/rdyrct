@@ -291,7 +291,7 @@ export function StatCard({
 function DeltaBadge({ pct }: { pct: number }) {
   const up = pct > 0;
   const flat = pct === 0;
-  const color = flat ? "text-muted" : up ? "text-green-400" : "text-red-400";
+  const color = flat ? "text-muted" : up ? "text-accent-2" : "text-danger";
   return (
     <span className={`tnum mt-1 inline-flex items-center gap-0.5 text-xs ${color}`}>
       {up ? "+" : ""}
