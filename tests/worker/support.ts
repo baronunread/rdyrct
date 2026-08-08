@@ -96,17 +96,28 @@ export interface CapturedEmail {
  *
  * `mx` answers the DNS lookup too, so a test decides which domains can
  * receive mail rather than the network.
+ *
+ * `hold` keeps the send hanging until that promise resolves, which is how a
+ * test proves the worker answered without waiting for Resend. `started()`
+ * reports whether the send was reached at all.
  */
-export function captureEmails({ mx }: { mx?: "deliverable" | "unroutable" } = {}): {
+export function captureEmails({
+  mx,
+  hold,
+}: { mx?: "deliverable" | "unroutable"; hold?: Promise<void> } = {}): {
   sent: CapturedEmail[];
+  started: () => boolean;
   restore: () => void;
 } {
   const sent: CapturedEmail[] = [];
+  let started = false;
   const original = globalThis.fetch;
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input instanceof Request ? input.url : input);
     if (url.includes("/emails")) {
+      started = true;
       sent.push(JSON.parse(String(init?.body ?? "{}")) as CapturedEmail);
+      if (hold) await hold;
       return Response.json({ id: "sent" });
     }
     if (mx && url.includes("cloudflare-dns.com")) {
@@ -115,7 +126,7 @@ export function captureEmails({ mx }: { mx?: "deliverable" | "unroutable" } = {}
     }
     return original(input as RequestInfo, init);
   }) as typeof fetch;
-  return { sent, restore: () => (globalThis.fetch = original) };
+  return { sent, started: () => started, restore: () => (globalThis.fetch = original) };
 }
 
 /** The `user-1` row the billing and entitlement suites both write against,

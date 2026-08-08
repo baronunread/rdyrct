@@ -83,20 +83,7 @@ describe("signup does not reveal which addresses have accounts (#53)", () => {
     // awaited inside the request, the response below could not arrive.
     let release = () => {};
     const held = new Promise<void>((resolve) => (release = resolve));
-    let sendStarted = false;
-    const original = globalThis.fetch;
-    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
-      const url = String(input instanceof Request ? input.url : input);
-      if (url.includes("cloudflare-dns.com")) {
-        return Response.json({ Status: 0, Answer: [{ data: "10 mx.example." }] });
-      }
-      if (url.includes("/emails")) {
-        sendStarted = true;
-        await held;
-        return Response.json({ id: "sent" });
-      }
-      return original(input as RequestInfo, init);
-    }) as typeof fetch;
+    const { started, restore } = captureEmails({ mx: "deliverable", hold: held });
 
     const ctx = createExecutionContext();
     try {
@@ -117,13 +104,13 @@ describe("signup does not reveal which addresses have accounts (#53)", () => {
       // The answer is here while the send is still hanging: the timing an
       // outsider can measure no longer depends on the address existing.
       expect(res.status).toBe(200);
-      expect(sendStarted).toBe(true);
+      expect(started()).toBe(true);
 
       release();
       await waitOnExecutionContext(ctx);
     } finally {
       release();
-      globalThis.fetch = original;
+      restore();
     }
   });
 

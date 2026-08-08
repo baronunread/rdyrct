@@ -354,19 +354,16 @@ function UserActionConfirmDialog({
   );
 }
 
-export function AdminUsersPage() {
-  const users = useAdminUsers();
-  const me = useCurrentUser();
+/**
+ * Every privileged change an admin can make to a user, plus which user is
+ * under the pointer for each. The page below is a table and two dialogs; this
+ * is the part that writes.
+ */
+function useAdminUserActions() {
   const qc = useQueryClient();
   const toast = useToast();
-  const [confirm, setConfirm] = useState<{
-    kind: UserAction;
-    user: AdminUserRow;
-  } | null>(null);
+  const [confirm, setConfirm] = useState<{ kind: UserAction; user: AdminUserRow } | null>(null);
   const [compFor, setCompFor] = useState<AdminUserRow | null>(null);
-  const [q, setQ] = useState("");
-  const [sort, setSort] = useState<Sort>({ key: "joined", dir: -1 });
-  const [page, setPage] = useState(0);
 
   // All privileged changes go through one PATCH; the confirm popup closes on
   // success and each call site adds its own toast.
@@ -446,6 +443,35 @@ export function AdminUsersPage() {
     actions[kind]();
   };
 
+  return {
+    confirm,
+    setConfirm,
+    compFor,
+    setCompFor,
+    runAction,
+    grantComp,
+    revokeComp,
+    actionPending: patchUser.isPending || remove.isPending,
+  };
+}
+
+export function AdminUsersPage() {
+  const users = useAdminUsers();
+  const me = useCurrentUser();
+  const {
+    confirm,
+    setConfirm,
+    compFor,
+    setCompFor,
+    runAction,
+    grantComp,
+    revokeComp,
+    actionPending,
+  } = useAdminUserActions();
+  const [q, setQ] = useState("");
+  const [sort, setSort] = useState<Sort>({ key: "joined", dir: -1 });
+  const [page, setPage] = useState(0);
+
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase();
     const matches = (users.data ?? []).filter(
@@ -491,7 +517,7 @@ export function AdminUsersPage() {
         confirm={confirm}
         onClose={() => setConfirm(null)}
         onConfirm={runAction}
-        pending={patchUser.isPending || remove.isPending}
+        pending={actionPending}
       />
 
       {compFor && (

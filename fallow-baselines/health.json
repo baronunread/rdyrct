@@ -58,6 +58,11 @@
         "count": 1
       }
     },
+    "src/app/routes/admin/comp-dialog.tsx": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
     "src/app/routes/admin/orgs.tsx": {
       "crap_high": {
         "count": 1
@@ -67,6 +72,9 @@
       }
     },
     "src/app/routes/admin/users.tsx": {
+      "crap_high": {
+        "count": 1
+      },
       "crap_moderate": {
         "count": 1
       }
@@ -92,6 +100,9 @@
         "count": 1
       },
       "crap_critical": {
+        "count": 1
+      },
+      "crap_high": {
         "count": 1
       },
       "crap_moderate": {
@@ -141,6 +152,16 @@
         "count": 1
       }
     },
+    "src/worker/routes/admin.ts": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "src/worker/routes/billing.ts": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
     "src/worker/routes/links.ts": {
       "crap_high": {
         "count": 1
@@ -148,5 +169,9 @@
     }
   },
   "runtime_coverage_findings": [],
-  "target_keys": ["tests/e2e/resend.ts:high impact", "src/app/lib/use-shake.ts:high impact"]
+  "target_keys": [
+    "src/app/lib/current-org.ts:high impact",
+    "tests/e2e/resend.ts:high impact",
+    "src/app/lib/use-shake.ts:high impact"
+  ]
 }
