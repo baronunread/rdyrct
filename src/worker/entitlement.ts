@@ -54,10 +54,18 @@ export function resolveEffectivePlan(row: {
 }
 
 /** The statuses that keep access, as a SQL list, built from the table above so
- * the two cannot drift. */
-const ACCESS_STATUSES = Object.entries(SUBSCRIPTION_ACCESS)
-  .flatMap(([status, allowed]) => (allowed ? [`'${status}'`] : []))
-  .join(", ");
+ * the two cannot drift.
+ *
+ * Each one is a bound parameter rather than a quoted string spliced into the
+ * statement. These particular values are literals written above and could not
+ * carry an injection, but a raw splice is a habit worth not having in a file
+ * about who gets paid access. */
+const ACCESS_STATUSES = sql.join(
+  Object.entries(SUBSCRIPTION_ACCESS).flatMap(([status, allowed]) =>
+    allowed ? [sql`${status}`] : [],
+  ),
+  sql`, `,
+);
 
 /**
  * `plan` recomputed from the two source columns, for the SET clause of any
@@ -83,5 +91,5 @@ export function effectivePlanSql(overrides: {
     "subscriptionStatus" in overrides
       ? sql`${overrides.subscriptionStatus ?? null}`
       : sql`subscription_status`;
-  return sql`coalesce(${comp}, case when ${status} in (${sql.raw(ACCESS_STATUSES)}) then ${plan} end, 'free')`;
+  return sql`coalesce(${comp}, case when ${status} in (${ACCESS_STATUSES}) then ${plan} end, 'free')`;
 }
