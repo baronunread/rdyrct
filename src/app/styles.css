@@ -119,22 +119,25 @@ html {
   /* reserve the scrollbar's width even on pages short enough to not need
      one, so a page that grows past the fold doesn't shift content left */
   scrollbar-gutter: stable;
-  transition:
-    background-color 0.25s ease,
-    color 0.25s ease;
 }
 
-html * {
-  transition:
-    background-color 0.25s ease,
-    border-color 0.25s ease,
-    color 0.25s ease;
+/* Theme changes cross-fade through a view transition, not a CSS transition.
+   The old `html *` rule started an animation on every node in the document:
+   measured at ~46ms of main-thread work per toggle on the landing page,
+   against 4ms for the bare palette swap. A view transition fades two
+   snapshots on the compositor instead, so the cost no longer scales with
+   how many elements the page has. lib/theme.ts drives it, and falls back to
+   an instant swap where the API is missing. */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 0.18s;
+  animation-timing-function: ease;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  html,
-  html * {
-    transition: none;
+  ::view-transition-old(root),
+  ::view-transition-new(root) {
+    animation: none;
   }
 }
 
