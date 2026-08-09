@@ -7,12 +7,12 @@
   // there is no bundler step to point at the real files.
   "ignoreUnresolvedImports": [
     "/node_modules/@fontsource/jetbrains-mono/latin-400.css",
-    "/node_modules/@fontsource/jetbrains-mono/latin-700.css"
+    "/node_modules/@fontsource/jetbrains-mono/latin-700.css",
   ],
   // "run" is called by the Cloudflare Workflows runtime, not application code.
   "usedClassMembers": [{ "extends": "WorkflowEntrypoint", "members": ["run"] }],
   "audit": {
     "gate": "new-only",
-    "healthBaseline": "fallow-baselines/health.json"
-  }
+    "healthBaseline": "fallow-baselines/health.json",
+  },
 }
