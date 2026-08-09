@@ -528,30 +528,34 @@ function SelfHostSection() {
           Yes, you can just run it yourself.
         </h2>
 
-        <p className="max-w-xl text-sm text-muted">
-          One repository, MIT, no enterprise edition held back. Deploy it to your own Cloudflare
-          account and you are the platform admin, which means you set your own plan. We are not
-          going to email you about it.
-        </p>
+        <div className="flex w-full flex-col items-center gap-6 rounded-2xl bg-surface px-6 py-10 smooth-shadow-ring-sm">
+          <p className="max-w-xl text-sm text-muted">
+            One repository, MIT, no enterprise edition held back. Deploy it to your own Cloudflare
+            account and you are the platform admin, which means you set your own plan. We are not
+            going to email you about it.
+          </p>
 
-        {/* One soft pill: the mark, then the name over the count. */}
-        <a
-          href={GITHUB_URL}
-          target="_blank"
-          rel="noreferrer"
-          className="inline-flex items-center gap-3 rounded-full bg-surface-2 py-2.5 pr-7 pl-2.5 text-left transition-colors hover:bg-border"
-        >
-          <GithubMark size={38} />
-          <span className="flex flex-col leading-tight">
-            <span className="text-base font-bold">GitHub</span>
-            <span className="tnum text-sm text-muted">{STARS.toLocaleString()} stars</span>
-          </span>
-        </a>
+          {/* One soft pill: the mark, then the name over the count. The mark
+              is 38px inside a 58px pill, so pl-2.5 would put its centre exactly
+              on the 29px corner radius and read as if it were falling out of
+              the curve. Nudged right so it sits inside the arc. */}
+          <a
+            href={GITHUB_URL}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center gap-3 rounded-full bg-surface-2 py-2.5 pr-7 pl-4.5 text-left transition-colors hover:bg-border"
+          >
+            <GithubMark size={38} />
+            <span className="flex flex-col leading-tight">
+              <span className="text-base font-bold">GitHub</span>
+              <span className="tnum text-sm text-muted">{STARS.toLocaleString()} stars</span>
+            </span>
+          </a>
 
-        <p className="max-w-md text-xs text-muted">
-          The paid plans pay for the code you would be running. If rdyrct.com does the job, letting
-          us run it is the version that keeps it going.
-        </p>
+          <p className="max-w-md text-xs text-muted">
+            Paying us to run it funds the version you can run for free.
+          </p>
+        </div>
       </div>
     </Section>
   );
