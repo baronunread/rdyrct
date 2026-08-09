@@ -159,7 +159,7 @@ function LinkRow({
           />
         </Td>
         <Td className="hidden truncate text-xs text-muted lg:table-cell">
-          {link.title || <span className="text-muted/50">—</span>}
+          {link.title || <span className="text-muted">—</span>}
         </Td>
         <Td className="hidden max-w-64 xl:table-cell">
           <a

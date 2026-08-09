@@ -17,7 +17,6 @@ import {
   Layers,
   GitMerge,
   Mail,
-  Wrench,
 } from "lucide-react";
 import {
   LazyMotion,
@@ -378,13 +377,13 @@ function PricingSection() {
               <Th></Th>
               <Th>
                 Free
-                <span className="mt-0.5 block normal-case tracking-normal text-muted/80">
+                <span className="mt-0.5 block normal-case tracking-normal text-muted">
                   For side projects
                 </span>
               </Th>
               <Th>
                 Hobby
-                <span className="mt-0.5 block normal-case tracking-normal text-muted/80">
+                <span className="mt-0.5 block normal-case tracking-normal text-muted">
                   For creators & solo brands
                 </span>
               </Th>
@@ -395,7 +394,7 @@ function PricingSection() {
                     Most popular
                   </span>
                 </span>
-                <span className="mt-0.5 block normal-case tracking-normal text-accent/80">
+                <span className="mt-0.5 block normal-case tracking-normal text-accent">
                   For brands & growing teams
                 </span>
               </Th>
@@ -494,86 +493,46 @@ function PricingSection() {
   );
 }
 
-// Keep every line here to something the product actually does today. A
-// release cadence we do not commit to, or "abuse filtering" before #68 ships,
-// would be a promise the page cannot keep.
-const hostedWork = [
-  "Custom domains, with TLS issued and renewed for you",
-  "Rate limiting and uptime alerting, already wired up",
-  "Updates arrive without you deploying anything",
-  "A person on the other end of an email, on Pro",
-];
-
-const yourWork = [
-  "A Cloudflare account, and the migrations run by you",
-  "Resend for email, Polar if you want to charge anyone",
-  "Custom-domain onboarding wired to your own API token",
-  "Your pager, when a redirect stops redirecting",
-];
-
 /**
  * Self-hosting used to be the pricing table's first column, so a buyer read
  * "free, unlimited, your infra" before reaching a price. Every open-source
  * SaaS worth copying keeps it off the buying surface: Dub does not mention it
- * on /pricing at all, Cal.com and Ghost give it a footer link. Plausible is
- * the exception and the model, on its own page: name the commitment honestly,
- * then make paying the principled option rather than the lazy one.
+ * on /pricing at all, Cal.com and Ghost give it a footer link.
+ *
+ * So it gets a band of its own, after the prices, and it makes one claim
+ * rather than a table of them. No star count: 34 stars is a number that
+ * argues against us, the same way our click count would.
  */
 function SelfHostSection() {
   return (
-    <Section id="self-host">
-      <div className="mb-8 text-center">
-        <span className="mb-4 inline-flex items-center gap-2 rounded-full border border-accent/40 bg-accent/5 px-3 py-1 text-xs text-accent">
-          <Code2 size={13} /> Every line of it, on GitHub
+    <Section id="self-host" className="py-16">
+      <div className="flex flex-col items-center gap-5 rounded-2xl border border-border bg-surface px-6 py-12 text-center">
+        <span className="inline-flex items-center gap-2 rounded-full border border-accent/40 bg-accent/5 px-3 py-1 text-xs text-accent">
+          <Code2 size={13} /> MIT licensed
         </span>
-        <h2 className="text-xl font-bold text-balance">
-          You can run this yourself. Here is what that costs.
+
+        <h2 className="max-w-xl text-2xl font-bold tracking-tight text-balance">
+          Yes, you can just run it yourself.
         </h2>
-        <p className="mx-auto mt-2 max-w-xl text-sm text-muted">
-          Not a stripped-down community build. The same Worker we run, deployed to your own
-          Cloudflare account, with every limit removed. What you take on is the work.
-        </p>
-      </div>
 
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-        <div className="rounded-lg border border-accent/40 bg-accent/5 p-5">
-          <p className="font-bold text-accent">We run it</p>
-          <p className="mt-1 text-sm text-muted">rdyrct.com, from {PLAN_PRICES.hobby}/mo</p>
-          <ul className="mt-4 flex flex-col gap-2">
-            {hostedWork.map((item) => (
-              <li key={item} className="flex items-start gap-2 text-sm">
-                <Check size={14} className="mt-1 shrink-0 text-accent-2" />
-                {item}
-              </li>
-            ))}
-          </ul>
-        </div>
-
-        <div className="rounded-lg border border-border bg-surface p-5">
-          <p className="font-bold">You run it</p>
-          <p className="mt-1 text-sm text-muted">Your Cloudflare account, no bill from us</p>
-          <ul className="mt-4 flex flex-col gap-2">
-            {yourWork.map((item) => (
-              <li key={item} className="flex items-start gap-2 text-sm text-muted">
-                <Wrench size={14} className="mt-1 shrink-0 text-muted" />
-                {item}
-              </li>
-            ))}
-          </ul>
-        </div>
-      </div>
-
-      <div className="mt-6 flex flex-col items-center gap-4 text-center">
         <p className="max-w-xl text-sm text-muted">
-          We would rather you self-hosted than settled for a link shortener that sells your
-          visitors. But the paid plans are what pay for the code you would be running, so if
-          rdyrct.com does the job, letting us run it is the version that keeps it alive.
+          One repository, MIT, no enterprise edition held back. Deploy it to your own Cloudflare
+          account and you are the platform admin, which means you set your own plan. We are not
+          going to email you about it.
         </p>
-        <a href={GITHUB_URL} target="_blank" rel="noreferrer">
-          <Button variant="outline" size="sm">
-            Read the source
-          </Button>
-        </a>
+
+        <div className="flex flex-wrap items-center justify-center gap-3">
+          <a href={GITHUB_URL} target="_blank" rel="noreferrer">
+            <Button variant="outline" size="md" className="h-11 px-6 text-base">
+              Read the source on GitHub
+            </Button>
+          </a>
+        </div>
+
+        <p className="max-w-md text-xs text-muted">
+          The paid plans pay for the code you would be running. If rdyrct.com does the job, letting
+          us run it is the version that keeps it going.
+        </p>
       </div>
     </Section>
   );
@@ -653,35 +612,35 @@ function DeployTerminal() {
 
   const lines = [
     /* 0 */ <span key="prompt">
-      <span className="text-accent/70">$</span> bun run deploy{cursor}
+      <span className="text-accent">$</span> bun run deploy{cursor}
     </span>,
     /* 1 */ <span key="build">
       <span className="text-[#27c93f]">✓</span> src/worker/index.ts → dist/worker.js{" "}
-      <span className="text-muted/50">(2.4s)</span>
+      <span className="text-muted">(2.4s)</span>
     </span>,
     /* 2 */ <span key="upload">
       <span className="text-[#27c93f]">✓</span> Optimizing bundle...{" "}
-      <span className="text-muted/50">124 kB gzipped</span>
+      <span className="text-muted">124 kB gzipped</span>
     </span>,
     /* 3 */ <span key="deploy">
       <span className="text-[#27c93f]">✓</span> Deploying to Cloudflare global network
     </span>,
     /* 4 */ <span key="b1" />,
     /* 5 */ <span key="header">
-      <span className="text-muted/50">Deployed resources:</span>
+      <span className="text-muted">Deployed resources:</span>
     </span>,
     /* 6-10 */ ...resources.map((r) => (
       <span key={r.name}>
         <span className="text-accent font-semibold">{r.name}</span>
-        <span className="text-muted/40"> {r.id}</span>
-        <span className="text-muted/20"> · </span>
+        <span className="text-muted"> {r.id}</span>
+        <span className="text-muted"> · </span>
         <span className="text-muted">{r.desc}</span>
       </span>
     )),
     /* 11 */ <span key="b2" />,
     /* 12 */ <span key="summary">
-      <span className="text-accent/85">Deployed to prod.</span>{" "}
-      <span className="text-muted/50">330+ cities · 5 primitives</span>
+      <span className="text-accent">Deployed to prod.</span>{" "}
+      <span className="text-muted">330+ cities · 5 primitives</span>
     </span>,
   ];
 
@@ -722,9 +681,7 @@ function DeployTerminal() {
           <span className="h-[9px] w-[9px] rounded-full bg-[#ffbd2e]" />
           <span className="h-[9px] w-[9px] rounded-full bg-[#27c93f]" />
         </div>
-        <span className="flex-1 text-center font-mono text-[0.7rem] text-muted/60">
-          rdyrct deploy
-        </span>
+        <span className="flex-1 text-center font-mono text-[0.7rem] text-muted">rdyrct deploy</span>
         <div className="invisible flex items-center gap-1.5">
           <span className="h-[9px] w-[9px] rounded-full bg-[#ff5f56]" />
           <span className="h-[9px] w-[9px] rounded-full bg-[#ffbd2e]" />
