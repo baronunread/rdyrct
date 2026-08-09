@@ -50,6 +50,37 @@ test("the pricing table compares only the three paid-for plans", async ({ page }
   await expect(page.locator("#pricing thead")).not.toContainText(/self-hosted/i);
 });
 
+// Reading links sit on the page's centre line; doing links (theme, auth) stay
+// right. The centre must not drift when "Sign up" becomes "Dashboard", which
+// is what space-between used to do.
+test("header centres the reading links and keeps the auth actions right", async ({ page }) => {
+  await page.goto("/");
+
+  const header = page.locator("header");
+  const nav = header.locator("nav");
+  await expect(nav.getByRole("link", { name: "Pricing" })).toBeVisible();
+
+  const navBox = (await nav.boundingBox())!;
+  const headBox = (await header.boundingBox())!;
+  const navCentre = navBox.x + navBox.width / 2;
+  const headCentre = headBox.x + headBox.width / 2;
+  expect(Math.abs(navCentre - headCentre)).toBeLessThan(2);
+
+  // Auth actions sit to the right of the centred nav, not among it.
+  const signUp = (await header.getByRole("link", { name: "Sign up" }).boundingBox())!;
+  expect(signUp.x).toBeGreaterThan(navBox.x + navBox.width);
+
+  // On a phone the three columns do not fit, so the reading links drop out
+  // and the page must not scroll sideways.
+  await page.setViewportSize({ width: 390, height: 780 });
+  await expect(nav).toBeHidden();
+  await expect(header.getByRole("link", { name: "Sign up" })).toBeVisible();
+  const overflows = await page.evaluate(
+    () => document.documentElement.scrollWidth > window.innerWidth,
+  );
+  expect(overflows).toBe(false);
+});
+
 test("legal pages retain their baseline headings", async ({ page }) => {
   await visitLegalPages(page);
 });

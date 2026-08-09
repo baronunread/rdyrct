@@ -719,11 +719,17 @@ function DeployTerminal() {
 function LandingHeader({ authed }: { authed: boolean }) {
   const [theme, toggleTheme] = useTheme();
   return (
-    <header className="sticky top-0 z-20 -mx-6 flex items-center justify-between border-b border-border/50 bg-bg/85 px-6 py-4 backdrop-blur-md">
-      <Link to="/" className="text-lg font-bold tracking-widest">
+    // Three columns, not space-between: the two 1fr rails keep the nav on the
+    // page's centre line however wide the brand or the auth buttons get, so
+    // "Sign up" turning into "Dashboard" does not shift the links.
+    <header className="sticky top-0 z-20 -mx-6 grid grid-cols-[1fr_auto_1fr] items-center gap-3 border-b border-border/50 bg-bg/85 px-6 py-4 backdrop-blur-md">
+      <Link to="/" className="justify-self-start text-lg font-bold tracking-widest">
         rdyrct
       </Link>
-      <nav className="flex items-center gap-2.5 text-sm sm:gap-4">
+
+      {/* Where the visitor goes to read. Hidden on phones, where three columns
+          do not fit: those links still live in the footer. */}
+      <nav className="hidden items-center gap-5 text-sm sm:flex">
         <a href="#pricing" className="text-muted hover:text-accent">
           Pricing
         </a>
@@ -735,6 +741,11 @@ function LandingHeader({ authed }: { authed: boolean }) {
         <a href="/blog" className="text-muted hover:text-accent">
           Blog
         </a>
+      </nav>
+      <span className="sm:hidden" />
+
+      {/* What the visitor does. */}
+      <div className="flex items-center justify-self-end gap-2.5 text-sm sm:gap-4">
         <IconButton label="Toggle theme" className="p-2" onClick={toggleTheme}>
           <MorphIcon icon={theme === "dark" ? Sun : Moon} size={15} spring="snappy" />
         </IconButton>
@@ -752,7 +763,7 @@ function LandingHeader({ authed }: { authed: boolean }) {
             </Link>
           </>
         )}
-      </nav>
+      </div>
     </header>
   );
 }
