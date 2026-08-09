@@ -28,11 +28,13 @@ test("the hero's second CTA stays on the site and self-hosting sits under pricin
   await expect(page.locator("#analytics")).toBeInViewport();
 
   // Self-hosting keeps its own section after pricing, never a column inside it.
+  // The star count is baked in at build time, so it has to render as a real
+  // number: a failed build-time fetch falls back rather than emitting NaN.
   const selfHost = page.locator("#self-host");
-  await expect(selfHost.getByRole("link", { name: /read the source/i })).toHaveAttribute(
-    "href",
-    /github\.com/,
-  );
+  const pill = selfHost.getByRole("link", { name: /read the source code/i });
+  await expect(pill).toHaveAttribute("href", /github\.com/);
+  await expect(pill).toContainText(/\d/);
+  await expect(pill).not.toContainText(/NaN|undefined/);
 });
 
 // Self-hosted was the pricing table's first column, so the first thing a buyer
