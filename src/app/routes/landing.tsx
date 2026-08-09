@@ -551,10 +551,6 @@ function SelfHostSection() {
               <span className="tnum text-sm text-muted">{STARS.toLocaleString()} stars</span>
             </span>
           </a>
-
-          <p className="max-w-md text-xs text-muted">
-            Paying us to run it funds the version you can run for free.
-          </p>
         </div>
       </div>
     </Section>
