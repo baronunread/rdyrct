@@ -14,6 +14,7 @@ import { AuthCard, PasswordMeter } from "../components/auth-form";
 import { authClient } from "../lib/auth-client";
 import { friendlyAuthError } from "../lib/auth-errors";
 import posthog from "../lib/posthog";
+import { FUNNEL } from "../lib/funnel";
 import { useShake } from "../lib/use-shake";
 import { useCurrentUser } from "../lib/hooks";
 import { firstFormError } from "../lib/form-errors";
@@ -469,6 +470,11 @@ function useAuthFlow(mode: "login" | "signup") {
       failSubmit(error.message ?? "Could not send the verification code");
       return;
     }
+    // Funnel steps 4 and 5a (#64): the form was accepted and a code is on
+    // its way. `resend` distinguishes this from the resend path below, which
+    // is a repeat rather than a new person reaching the step.
+    posthog.capture(FUNNEL.signupSubmitted);
+    posthog.capture(FUNNEL.verificationSent, { resend: false });
     setAuthEmail(email);
     writePending({ email, next });
     setView("verify-otp");
@@ -526,7 +532,12 @@ function useAuthFlow(mode: "login" | "signup") {
       await new Promise((resolve) => setTimeout(resolve, 900));
       clearPending();
       await qc.refetchQueries({ queryKey: ["user"] });
-      if (mode === "signup") posthog.capture("user_signed_up");
+      if (mode === "signup") {
+        posthog.capture("user_signed_up");
+        // Funnel step 5b (#64). Only on signup: a sign-in that happens to
+        // re-verify is not someone crossing this step for the first time.
+        posthog.capture(FUNNEL.verificationCompleted);
+      }
       const isAdmin = qc.getQueryData<CurrentUser | null>(["user"])?.user.isAdmin ?? false;
       setVerifyPhase("leaving");
       await new Promise((resolve) => setTimeout(resolve, 300));
@@ -547,6 +558,7 @@ function useAuthFlow(mode: "login" | "signup") {
       toast(resendError.message ?? "Could not resend the code", "error");
       return;
     }
+    posthog.capture(FUNNEL.verificationSent, { resend: true });
     setResent(true);
   };
 

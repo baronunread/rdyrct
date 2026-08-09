@@ -3,6 +3,7 @@ import { api, ApiError } from "./api";
 import { authClient } from "./auth-client";
 import { writeAuthHint } from "./auth-hint";
 import posthog from "./posthog";
+import { FUNNEL } from "./funnel";
 import type {
   CurrentUser,
   AppConfig,
@@ -105,7 +106,13 @@ export function useLinkMutations(orgId: string) {
   };
   const create = useMutation({
     mutationFn: (body: LinkInput) => api<LinkDTO>(`/orgs/${orgId}/links`, { method: "POST", body }),
-    onSuccess: invalidate,
+    onSuccess: (link) => {
+      invalidate();
+      // Funnel step 7, the activation event (#64). On the hook rather than
+      // the call sites, so the dashboard's quick-create and the links page
+      // both count and neither can be forgotten.
+      posthog.capture(FUNNEL.linkCreated, { on_custom_domain: Boolean(link.domainId) });
+    },
   });
   const update = useMutation({
     mutationFn: ({ id, ...body }: LinkInput & { id: string }) =>

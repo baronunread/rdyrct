@@ -1,4 +1,5 @@
 import type { default as PosthogClient } from "posthog-js";
+import { isFunnelEvent } from "./funnel";
 
 // Nothing here loads posthog-js or contacts PostHog until the user accepts
 // analytics in the consent banner (see consent-banner.tsx): before that,
@@ -68,16 +69,47 @@ export function resumeAnalyticsIfConsented() {
   void loadClient();
 }
 
+/**
+ * Events that happened before the visitor answered the banner.
+ *
+ * The banner renders after the page does, so the landing view and any CTA
+ * click that beats it would otherwise be lost, and those are the first two
+ * steps of the funnel (#64). Held in memory only: nothing is written down and
+ * nothing leaves the browser unless the visitor later picks Accept, at which
+ * point the queue is sent with its original timestamps so the session reads
+ * as one path instead of starting halfway through.
+ *
+ * Rejecting drops the queue on the floor. The cap is there so a long session
+ * that never answers cannot grow without bound.
+ */
+const PENDING_LIMIT = 50;
+let pending: { event: string; properties?: Record<string, unknown>; at: string }[] = [];
+
+function queueBeforeConsent(event: string, properties?: Record<string, unknown>) {
+  if (pending.length >= PENDING_LIMIT) return;
+  pending.push({ event, properties, at: new Date().toISOString() });
+}
+
+function flushPending(posthog: typeof PosthogClient | null) {
+  if (!posthog) return;
+  const queued = pending;
+  pending = [];
+  for (const { event, properties, at } of queued) {
+    posthog.capture(event, { ...properties, $capture_before_consent: true, timestamp: at });
+  }
+}
+
 export function grantAnalyticsConsent() {
   try {
     localStorage.setItem(CONSENT_KEY, "accepted");
   } catch {
     /* ignore */
   }
-  void loadClient();
+  void loadClient()?.then(flushPending);
 }
 
 export function revokeAnalyticsConsent() {
+  pending = [];
   try {
     localStorage.setItem(CONSENT_KEY, "rejected");
   } catch {
@@ -90,7 +122,14 @@ export function revokeAnalyticsConsent() {
 
 const posthog = {
   capture(event: string, properties?: Record<string, unknown>) {
-    void loadClient()?.then((p) => p?.capture(event, properties));
+    const client = loadClient();
+    // Null means no consent yet. Hold funnel steps so the path survives a
+    // later Accept; everything else is dropped, as before.
+    if (!client) {
+      if (isFunnelEvent(event)) queueBeforeConsent(event, properties);
+      return;
+    }
+    void client.then((p) => p?.capture(event, properties));
   },
   identify(id: string, properties?: Record<string, unknown>) {
     if (identifiedId === id) return;

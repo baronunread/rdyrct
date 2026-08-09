@@ -30,10 +30,12 @@ import {
 // the lucide-react components used elsewhere on this page.
 import { Moon, Sun } from "lucide";
 import { MorphIcon } from "morphicons/react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useCurrentUser } from "../lib/hooks";
 import { readAuthHint } from "../lib/auth-hint";
 import { useTheme } from "../lib/theme";
+import posthog from "../lib/posthog";
+import { FUNNEL, landingContext, type CtaPlacement } from "../lib/funnel";
 import { PLAN_LIMITS, PLAN_PRICES } from "@/shared/types";
 import { Button, IconButton } from "../ui/button";
 import { Table, Th, Td } from "../ui/misc";
@@ -164,20 +166,31 @@ const faqs = [
   },
 ];
 
+/** Every call to action on this page reports through here, so the funnel
+ *  sees one event with a placement rather than eight differently-named ones. */
+function trackCta(placement: CtaPlacement) {
+  posthog.capture(FUNNEL.ctaClicked, { placement });
+}
+
 function Section({
   children,
   className = "py-16",
   id,
+  onEnter,
 }: {
   children: ReactNode;
   className?: string;
   id?: string;
+  /** Fires once when the section scrolls into view. Used for the funnel's
+   *  "pricing viewed" step, which is a scroll, not a click. */
+  onEnter?: () => void;
 }) {
   return (
     <m.section
       id={id}
       initial={{ opacity: 0, y: 16 }}
       whileInView={{ opacity: 1, y: 0 }}
+      onViewportEnter={onEnter}
       viewport={{ once: true, margin: "-80px" }}
       transition={{ duration: 0.5, ease: "easeOut" }}
       className={className}
@@ -255,7 +268,7 @@ function MobilePlans({ paidTo }: { paidTo: (p: "hobby" | "pro") => string }) {
         "Random slugs on the shared domain",
       ],
       cta: (
-        <Link to="/signup">
+        <Link to="/signup" onClick={() => trackCta("pricing_free")}>
           <Button variant="outline" size="sm" className="w-full">
             Sign up free
           </Button>
@@ -274,7 +287,7 @@ function MobilePlans({ paidTo }: { paidTo: (p: "hobby" | "pro") => string }) {
         `${PLAN_LIMITS.hobby.analyticsDays}-day click analytics`,
       ],
       cta: (
-        <Link to={paidTo("hobby")}>
+        <Link to={paidTo("hobby")} onClick={() => trackCta("pricing_hobby")}>
           <Button variant="outline" size="sm" className="w-full">
             Start Hobby
           </Button>
@@ -295,7 +308,7 @@ function MobilePlans({ paidTo }: { paidTo: (p: "hobby" | "pro") => string }) {
         "Direct email support",
       ],
       cta: (
-        <Link to={paidTo("pro")}>
+        <Link to={paidTo("pro")} onClick={() => trackCta("pricing_pro")}>
           <Button variant="primary" size="sm" className="w-full">
             Start Pro
           </Button>
@@ -359,7 +372,11 @@ function MobilePlans({ paidTo }: { paidTo: (p: "hobby" | "pro") => string }) {
 function PricingSection() {
   const paidTo = usePaidPlanTo();
   return (
-    <Section id="pricing" className="scroll-mt-16 py-16">
+    <Section
+      id="pricing"
+      className="scroll-mt-16 py-16"
+      onEnter={() => posthog.capture(FUNNEL.pricingViewed)}
+    >
       <div className="mb-8 text-center">
         <h2 className="text-xl font-bold">Simple pricing</h2>
         <p className="mx-auto mt-2 max-w-xl text-sm text-muted">
@@ -465,21 +482,21 @@ function PricingSection() {
             <tr>
               <Td />
               <Td>
-                <Link to="/signup">
+                <Link to="/signup" onClick={() => trackCta("pricing_free")}>
                   <Button variant="outline" size="sm" className="w-full">
                     Sign up free
                   </Button>
                 </Link>
               </Td>
               <Td>
-                <Link to={paidTo("hobby")}>
+                <Link to={paidTo("hobby")} onClick={() => trackCta("pricing_hobby")}>
                   <Button variant="outline" size="sm" className="w-full">
                     Start Hobby
                   </Button>
                 </Link>
               </Td>
               <Cell tier="pro">
-                <Link to={paidTo("pro")}>
+                <Link to={paidTo("pro")} onClick={() => trackCta("pricing_pro")}>
                   <Button variant="primary" size="sm" className="w-full">
                     Start Pro
                   </Button>
@@ -746,7 +763,7 @@ function LandingHeader({ authed }: { authed: boolean }) {
           <MorphIcon icon={theme === "dark" ? Sun : Moon} size={15} spring="snappy" />
         </IconButton>
         {authed ? (
-          <Link to="/dashboard">
+          <Link to="/dashboard" onClick={() => trackCta("header")}>
             <Button variant="primary">Dashboard</Button>
           </Link>
         ) : (
@@ -754,7 +771,7 @@ function LandingHeader({ authed }: { authed: boolean }) {
             <Link to="/login" className="text-muted hover:text-accent">
               Log in
             </Link>
-            <Link to="/signup">
+            <Link to="/signup" onClick={() => trackCta("header")}>
               <Button variant="primary">Sign up</Button>
             </Link>
           </>
@@ -786,12 +803,12 @@ function HeroSection({ ctaTo, ctaLabel }: { ctaTo: string; ctaLabel: string }) {
             the site sending people to a repository; it now lives in its own
             band under the pricing table. */}
         <div className="flex flex-wrap items-center justify-center gap-3">
-          <Link to={ctaTo}>
+          <Link to={ctaTo} onClick={() => trackCta("hero_primary")}>
             <Button variant="primary" size="md" className="h-11 px-6 text-base">
               {ctaLabel}
             </Button>
           </Link>
-          <a href="#analytics">
+          <a href="#analytics" onClick={() => trackCta("hero_secondary")}>
             <Button variant="outline" size="md" className="h-11 px-6 text-base">
               <BarChart3 size={16} /> See the analytics
             </Button>
@@ -954,7 +971,7 @@ function FinalCtaSection({ ctaTo, ctaLabel }: { ctaTo: string; ctaLabel: string 
           Create your first short link on the free plan. No credit card, no visitor tracking, no
           servers to run.
         </p>
-        <Link to={ctaTo}>
+        <Link to={ctaTo} onClick={() => trackCta("final_cta")}>
           <Button variant="primary" size="md" className="h-11 px-6 text-base">
             {ctaLabel}
           </Button>
@@ -973,6 +990,13 @@ export function LandingPage() {
   const authed = me.isPending ? authHint : !!me.data;
   const ctaTo = authed ? "/dashboard" : "/signup";
   const ctaLabel = authed ? "Open dashboard" : "Get started free";
+
+  // Step 1 of the funnel (#64). Once per mount, not per render, and not
+  // gated on `me` settling: a landing view is a view whether or not the
+  // session query has come back.
+  useEffect(() => {
+    posthog.capture(FUNNEL.landingViewed, landingContext());
+  }, []);
 
   return (
     <MotionConfig reducedMotion="user">
