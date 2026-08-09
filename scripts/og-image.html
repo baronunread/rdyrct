@@ -1,0 +1,164 @@
+<!doctype html>
+<!--
+  Source for public/og.png. Kept in the repo because the last OG image went
+  stale silently: it still carried a headline the landing page had dropped.
+
+  To regenerate, with `bun run dev` already running. It has to be served by
+  the dev server, because the JetBrains Mono stylesheets below resolve through
+  /node_modules, so copy it into public/ for the shot and delete it after:
+  anything left in public/ ships as a route on the live site.
+
+    cp scripts/og-image.html public/og-image.html
+    agent-browser set viewport 1200 630
+    agent-browser open https://rdyrct.localhost/og-image.html
+    agent-browser screenshot og.png     # writes to the CWD, not a subpath
+    mv og.png public/og.png && rm public/og-image.html
+
+  Light, not dark: the OG card is the only surface that cannot follow
+  prefers-color-scheme, so it matches the page it previews.
+
+  Keep the headline in step with the h1 in src/app/routes/landing.tsx. The
+  image this replaced was still advertising a headline the page had dropped.
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>rdyrct og</title>
+    <link rel="stylesheet" href="/node_modules/@fontsource/jetbrains-mono/latin-400.css" />
+    <link rel="stylesheet" href="/node_modules/@fontsource/jetbrains-mono/latin-700.css" />
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        width: 1200px;
+        height: 630px;
+        overflow: hidden;
+      }
+
+      body {
+        /* Light tokens, straight from src/app/styles.css */
+        --bg: #f7f4ef;
+        --surface: #ffffff;
+        --border: #ddd5c8;
+        --text: #2a2733;
+        --muted: #544f61;
+        --accent: #745ab8;
+        --mint: #35875e;
+
+        background: var(--bg);
+        color: var(--text);
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        /* An inset rule, so the card keeps a defined edge on a white feed
+           instead of dissolving into it. */
+        border: 1px solid var(--border);
+        position: relative;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        padding: 68px 96px 64px;
+      }
+
+      /* The mark, oversized and bled off the right edge, same arrow as the
+         favicon. Recessive: it frames, it does not compete. */
+      .watermark {
+        position: absolute;
+        right: -60px;
+        top: 50%;
+        transform: translateY(-50%);
+        width: 460px;
+        height: 460px;
+        color: var(--border);
+        opacity: 0.55;
+      }
+
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 24px;
+      }
+
+      .wordmark {
+        font-size: 52px;
+        font-weight: 700;
+        letter-spacing: 0.14em;
+      }
+
+      h1 {
+        font-size: 62px;
+        font-weight: 700;
+        line-height: 1.14;
+        letter-spacing: -0.03em;
+        max-width: 17ch;
+        position: relative;
+      }
+
+      h1 em {
+        font-style: normal;
+        color: var(--accent);
+      }
+
+      .chip {
+        margin-top: 34px;
+        align-self: flex-start;
+        display: inline-flex;
+        align-items: center;
+        gap: 14px;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 14px 22px;
+        font-size: 26px;
+        position: relative;
+      }
+
+      .chip .host {
+        color: var(--muted);
+      }
+      .chip .slug {
+        color: var(--mint);
+      }
+
+      .middle {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+      }
+
+      .foot {
+        font-size: 22px;
+        color: var(--muted);
+      }
+    </style>
+  </head>
+  <body>
+    <svg class="watermark" viewBox="0 0 32 32" fill="none" aria-hidden="true">
+      <path
+        d="M12 20l8-8M13 11h7v7"
+        stroke="currentColor"
+        stroke-width="2.5"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      />
+    </svg>
+
+    <div class="brand">
+      <img src="/favicon.svg" width="88" height="88" alt="" />
+      <span class="wordmark">rdyrct</span>
+    </div>
+
+    <div class="middle">
+      <h1>Know which channel <em>earned the click.</em></h1>
+
+      <span class="chip">
+        <span><span class="host">go.acme.com/</span><span class="slug">spring</span></span>
+      </span>
+    </div>
+
+    <p class="foot">Branded short links, QR codes, and analytics that never store an IP.</p>
+  </body>
+</html>

@@ -1,0 +1,18 @@
+{
+  "$schema": "https://raw.githubusercontent.com/fallow-rs/fallow/main/schema.json",
+  "ignorePatterns": ["scripts/seed-local.ts"],
+  "ignoreDependencies": ["tailwindcss"],
+  // scripts/og-image.html is the source for public/og.png. It is only ever
+  // opened through the dev server, which is what resolves these two hrefs;
+  // there is no bundler step to point at the real files.
+  "ignoreUnresolvedImports": [
+    "/node_modules/@fontsource/jetbrains-mono/latin-400.css",
+    "/node_modules/@fontsource/jetbrains-mono/latin-700.css",
+  ],
+  // "run" is called by the Cloudflare Workflows runtime, not application code.
+  "usedClassMembers": [{ "extends": "WorkflowEntrypoint", "members": ["run"] }],
+  "audit": {
+    "gate": "new-only",
+    "healthBaseline": "fallow-baselines/health.json",
+  },
+}

@@ -73,8 +73,19 @@ function ChartCrosshair({
   );
 }
 
-/** Tracks the raw cursor position, not the snapped data point, so it reads
- * as gliding next to the mouse instead of hopping between points. */
+/**
+ * Tracks the raw cursor position, not the snapped data point, so it moves
+ * smoothly instead of hopping between points.
+ *
+ * No transition on left/top: the tooltip has to sit under the cursor, and
+ * interpolating toward a target that moves every frame just renders it
+ * permanently behind. This used to carry `transition-[left,top] duration-75`,
+ * but a global `html *` transition rule was overriding every Tailwind
+ * transition utility in the app (unlayered rules beat Tailwind's
+ * `@layer utilities` whatever the specificity), so it never actually ran.
+ * Removing that rule switched it on and the trail became visible: measured
+ * 180px median behind the cursor, against 16px with it gone.
+ */
 function ChartTooltip({
   point,
   mouse,
@@ -85,7 +96,7 @@ function ChartTooltip({
   const flip = mouse.leftPct > 70;
   return (
     <div
-      className="pointer-events-none absolute rounded-md bg-surface-2 px-2.5 py-1.5 text-xs whitespace-nowrap smooth-shadow-ring-lg transition-[left,top] duration-75 ease-out"
+      className="pointer-events-none absolute rounded-md bg-surface-2 px-2.5 py-1.5 text-xs whitespace-nowrap smooth-shadow-ring-lg"
       style={{
         left: `${mouse.leftPct}%`,
         top: `${mouse.topPct}%`,

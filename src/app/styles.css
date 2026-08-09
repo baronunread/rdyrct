@@ -2,16 +2,50 @@
 @import "shadow-plugin";
 
 /* ---------------------------------------------------------------- */
-/* Theme tokens: dark pastel / paper pair                            */
+/* Theme tokens: paper / dark pastel pair                            */
+/*                                                                   */
+/* Light is the base, dark is the override, so a page that renders    */
+/* before theme-init.js runs (or without it) lands on light.          */
 /* ---------------------------------------------------------------- */
 
 :root {
+  --bg: #f7f4ef;
+  --surface: #ffffff;
+  --surface-2: #efeae2;
+  --border: #ddd5c8;
+  --text: #2a2733;
+  /* Secondary text, so it is held to APCA 75 (body threshold) on the worst
+     ground it ever sits on, --surface-2. The old #6e6880 measured APCA 64
+     there and WCAG 4.43, under AA. Now 75-87 / 6.57-7.87. */
+  --muted: #544f61;
+
+  --pink: #c2607f;
+  --mint: #35875e;
+  /* Link and label colour, held to WCAG AA 4.5 on all three grounds. The old
+     #7a5fc2 was 4.13 on --surface-2. Darkened just enough, hue kept. */
+  --lavender: #745ab8;
+  --butter: #a8842c;
+  --sky: #4f7fae;
+
+  --accent: var(--lavender);
+  --accent-2: var(--mint);
+  --chart: #7a5fc2;
+  --danger: #c2607f;
+
+  color-scheme: light;
+}
+
+[data-theme="dark"] {
   --bg: #17151f;
   --surface: #1f1c2b;
   --surface-2: #262336;
   --border: #34304a;
   --text: #eae7f2;
-  --muted: #9d95b3;
+  /* Light-on-dark scores far worse under APCA than WCAG suggests: the old
+     #9d95b3 read as a comfortable 6.35 WCAG but only APCA 44, which is why
+     dark mode felt as hard to read as light. Raised to APCA 68-70, still a
+     clear step below --text. */
+  --muted: #c6c2d3;
 
   --pink: #f5b8c8;
   --mint: #b9e6c9;
@@ -19,44 +53,20 @@
   --butter: #f2e3b3;
   --sky: #b9d9f0;
 
-  --accent: var(--lavender);
-  --accent-2: var(--mint);
   /* chart mark color: deeper than the UI accent so it passes the
      lightness/chroma band on dark surfaces (validated) */
   --chart: #9d7fe8;
   --danger: #f5b8c8;
 
   color-scheme: dark;
-}
 
-[data-theme="light"] {
-  --bg: #f7f4ef;
-  --surface: #ffffff;
-  --surface-2: #efeae2;
-  --border: #ddd5c8;
-  --text: #2a2733;
-  --muted: #6e6880;
-
-  --pink: #c2607f;
-  --mint: #35875e;
-  --lavender: #7a5fc2;
-  --butter: #a8842c;
-  --sky: #4f7fae;
-
-  --chart: #7a5fc2;
-  --danger: #c2607f;
-
-  color-scheme: light;
-}
-
-/* shadow-plugin's default dark-mode ring is a flat white hairline; tint it
-   with our own --border instead so elevated surfaces pick up the app's
-   palette rather than a generic gray edge. Lift the hue toward white first
-   (still opaque), then mix *that* toward transparent — mixing --border
-   straight toward transparent stays too dark to read at UI scale, and
-   mixing it straight toward white (skipping the transparent step) produces
-   a fully opaque line that's too bright over light backdrops. */
-[data-theme="dark"] {
+  /* shadow-plugin's default dark-mode ring is a flat white hairline; tint it
+     with our own --border instead so elevated surfaces pick up the app's
+     palette rather than a generic gray edge. Lift the hue toward white first
+     (still opaque), then mix *that* toward transparent — mixing --border
+     straight toward transparent stays too dark to read at UI scale, and
+     mixing it straight toward white (skipping the transparent step) produces
+     a fully opaque line that's too bright over light backdrops. */
   --smooth-ring-color: color-mix(
     in srgb,
     color-mix(in srgb, var(--border), white 22%) 30%,
@@ -118,22 +128,25 @@ html {
   /* reserve the scrollbar's width even on pages short enough to not need
      one, so a page that grows past the fold doesn't shift content left */
   scrollbar-gutter: stable;
-  transition:
-    background-color 0.25s ease,
-    color 0.25s ease;
 }
 
-html * {
-  transition:
-    background-color 0.25s ease,
-    border-color 0.25s ease,
-    color 0.25s ease;
+/* Theme changes cross-fade through a view transition, not a CSS transition.
+   The old `html *` rule started an animation on every node in the document:
+   measured at ~46ms of main-thread work per toggle on the landing page,
+   against 4ms for the bare palette swap. A view transition fades two
+   snapshots on the compositor instead, so the cost no longer scales with
+   how many elements the page has. lib/theme.ts drives it, and falls back to
+   an instant swap where the API is missing. */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 0.18s;
+  animation-timing-function: ease;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  html,
-  html * {
-    transition: none;
+  ::view-transition-old(root),
+  ::view-transition-new(root) {
+    animation: none;
   }
 }
 

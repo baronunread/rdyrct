@@ -160,7 +160,7 @@ function TypedUrlDisplay({
           transition={{ duration: 0.9, repeat: Infinity }}
         />
       )}
-      {phase !== "typing" && typed.length === 0 && <span className="text-muted/60">https://…</span>}
+      {phase !== "typing" && typed.length === 0 && <span className="text-muted">https://…</span>}
     </span>
   );
 }

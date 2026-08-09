@@ -26,11 +26,16 @@ import {
   useReducedMotion,
   type Variants,
 } from "motion/react";
+// MorphIcon animates between two icons, so it takes lucide icon nodes, not
+// the lucide-react components used elsewhere on this page.
+import { Moon, Sun } from "lucide";
+import { MorphIcon } from "morphicons/react";
 import { useState } from "react";
 import { useCurrentUser } from "../lib/hooks";
 import { readAuthHint } from "../lib/auth-hint";
+import { useTheme } from "../lib/theme";
 import { PLAN_LIMITS, PLAN_PRICES } from "@/shared/types";
-import { Button } from "../ui/button";
+import { Button, IconButton } from "../ui/button";
 import { Table, Th, Td } from "../ui/misc";
 import { Footer, GITHUB_URL } from "../ui/footer";
 import { LandingMockup } from "../components/landing-mockup";
@@ -197,7 +202,7 @@ function FaqJsonLd() {
   return <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: json }} />;
 }
 
-type Tier = "self" | "free" | "hobby" | "pro";
+type Tier = "free" | "hobby" | "pro";
 
 function Cell({ tier, children }: { tier?: Tier; children?: ReactNode }) {
   return (
@@ -371,20 +376,14 @@ function PricingSection() {
             <tr>
               <Th></Th>
               <Th>
-                Self-hosted
-                <span className="mt-0.5 block normal-case tracking-normal text-muted/80">
-                  Full control, your infra
-                </span>
-              </Th>
-              <Th>
                 Free
-                <span className="mt-0.5 block normal-case tracking-normal text-muted/80">
+                <span className="mt-0.5 block normal-case tracking-normal text-muted">
                   For side projects
                 </span>
               </Th>
               <Th>
                 Hobby
-                <span className="mt-0.5 block normal-case tracking-normal text-muted/80">
+                <span className="mt-0.5 block normal-case tracking-normal text-muted">
                   For creators & solo brands
                 </span>
               </Th>
@@ -395,7 +394,7 @@ function PricingSection() {
                     Most popular
                   </span>
                 </span>
-                <span className="mt-0.5 block normal-case tracking-normal text-accent/80">
+                <span className="mt-0.5 block normal-case tracking-normal text-accent">
                   For brands & growing teams
                 </span>
               </Th>
@@ -404,7 +403,6 @@ function PricingSection() {
           <tbody>
             <tr>
               <Td className="font-bold">Price</Td>
-              <Td>Free · open source</Td>
               <Td>$0</Td>
               <Td>
                 <span className="text-base font-bold">{PLAN_PRICES.hobby}/mo</span>
@@ -417,57 +415,43 @@ function PricingSection() {
               </Cell>
             </tr>
             <tr>
-              <Td className="font-bold">Hosting</Td>
-              <Td>Your own Cloudflare</Td>
-              <Td>Hosted on rdyrct.com</Td>
-              <Td>Hosted on rdyrct.com</Td>
-              <Cell tier="pro">Hosted on rdyrct.com</Cell>
-            </tr>
-            <tr>
               <Td className="font-bold">Organizations</Td>
-              <Td>Unlimited</Td>
               <Td>{PLAN_LIMITS.free.orgs}</Td>
               <Td>{PLAN_LIMITS.hobby.orgs}</Td>
               <Cell tier="pro">{PLAN_LIMITS.pro.orgs}</Cell>
             </tr>
             <tr>
               <Td className="font-bold">Links</Td>
-              <Td>Unlimited</Td>
               <Td>{PLAN_LIMITS.free.links}</Td>
               <Td>{PLAN_LIMITS.hobby.links}</Td>
               <Cell tier="pro">{PLAN_LIMITS.pro.links.toLocaleString()}</Cell>
             </tr>
             <tr>
               <Td className="font-bold">Custom slugs</Td>
-              <YesCell />
               <Td className="text-muted">Random only</Td>
               <Td>On your domain</Td>
               <Cell tier="pro">On your domains</Cell>
             </tr>
             <tr>
               <Td className="font-bold">Team members</Td>
-              <Td>Unlimited</Td>
               <Td>{PLAN_LIMITS.free.members}</Td>
               <Td>{PLAN_LIMITS.hobby.members}</Td>
               <Cell tier="pro">{PLAN_LIMITS.pro.members}</Cell>
             </tr>
             <tr>
               <Td className="font-bold">QR codes</Td>
-              <YesCell />
               <NoCell />
               <YesCell />
               <YesCell tier="pro" />
             </tr>
             <tr>
               <Td className="font-bold">Custom domains</Td>
-              <Td>Unlimited (your Cloudflare)</Td>
               <Td className="text-muted">No</Td>
               <Td>{PLAN_LIMITS.hobby.domains}</Td>
               <Cell tier="pro">{PLAN_LIMITS.pro.domains}</Cell>
             </tr>
             <tr>
               <Td className="font-bold">Analytics history</Td>
-              <Td>Unlimited</Td>
               <Td>{PLAN_LIMITS.free.analyticsDays} days</Td>
               <Td>{PLAN_LIMITS.hobby.analyticsDays} days</Td>
               <Cell tier="pro">{PLAN_LIMITS.pro.analyticsDays} days</Cell>
@@ -476,18 +460,10 @@ function PricingSection() {
               <Td className="font-bold">Support</Td>
               <Td>GitHub issues</Td>
               <Td>GitHub issues</Td>
-              <Td>GitHub issues</Td>
               <Cell tier="pro">Direct email support</Cell>
             </tr>
             <tr>
               <Td />
-              <Td>
-                <a href={GITHUB_URL} target="_blank" rel="noreferrer">
-                  <Button variant="outline" size="sm" className="w-full">
-                    View on GitHub
-                  </Button>
-                </a>
-              </Td>
               <Td>
                 <Link to="/signup">
                   <Button variant="outline" size="sm" className="w-full">
@@ -512,6 +488,70 @@ function PricingSection() {
             </tr>
           </tbody>
         </Table>
+      </div>
+    </Section>
+  );
+}
+
+/**
+ * Self-hosting used to be the pricing table's first column, so a buyer read
+ * "free, unlimited, your infra" before reaching a price. Every open-source
+ * SaaS worth copying keeps it off the buying surface: Dub does not mention it
+ * on /pricing at all, Cal.com and Ghost give it a footer link.
+ *
+ * So it gets a band of its own, after the prices, and it makes one claim
+ * rather than a table of them. No card around it: the claim carries itself.
+ */
+
+/** The GitHub mark, inline. lucide dropped its brand icons, and the CSP
+ *  forbids fetching one, so the path lives here. */
+function GithubMark({ size = 17 }: { size?: number }) {
+  return (
+    <svg viewBox="0 0 16 16" width={size} height={size} fill="currentColor" aria-hidden="true">
+      <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z" />
+    </svg>
+  );
+}
+
+/** Build-time constant, so the number is right at deploy and never fetched. */
+const STARS = __GITHUB_STARS__;
+
+function SelfHostSection() {
+  return (
+    <Section id="self-host" className="py-16">
+      <div className="flex flex-col items-center gap-5 text-center">
+        <span className="inline-flex items-center gap-2 rounded-full border border-accent/40 bg-accent/5 px-3 py-1 text-xs text-accent">
+          <Code2 size={13} /> MIT licensed
+        </span>
+
+        <h2 className="max-w-xl text-2xl font-bold tracking-tight text-balance">
+          Yes, you can just run it yourself.
+        </h2>
+
+        <div className="flex w-full flex-col items-center gap-6 rounded-2xl bg-surface px-6 py-10 smooth-shadow-ring-sm">
+          <p className="max-w-xl text-sm text-muted">
+            One repository, MIT, no enterprise edition held back. Deploy it to your own Cloudflare
+            account and you are the platform admin, which means you set your own plan. We are not
+            going to email you about it.
+          </p>
+
+          {/* One soft pill: the mark, then the name over the count. The mark
+              is 38px inside a 58px pill, so pl-2.5 would put its centre exactly
+              on the 29px corner radius and read as if it were falling out of
+              the curve. Nudged right so it sits inside the arc. */}
+          <a
+            href={GITHUB_URL}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center gap-3 rounded-full bg-surface-2 py-2.5 pr-7 pl-4.5 text-left transition-colors hover:bg-border"
+          >
+            <GithubMark size={38} />
+            <span className="flex flex-col leading-tight">
+              <span className="text-base font-bold">GitHub</span>
+              <span className="tnum text-sm text-muted">{STARS.toLocaleString()} stars</span>
+            </span>
+          </a>
+        </div>
       </div>
     </Section>
   );
@@ -591,35 +631,35 @@ function DeployTerminal() {
 
   const lines = [
     /* 0 */ <span key="prompt">
-      <span className="text-accent/70">$</span> bun run deploy{cursor}
+      <span className="text-accent">$</span> bun run deploy{cursor}
     </span>,
     /* 1 */ <span key="build">
       <span className="text-[#27c93f]">✓</span> src/worker/index.ts → dist/worker.js{" "}
-      <span className="text-muted/50">(2.4s)</span>
+      <span className="text-muted">(2.4s)</span>
     </span>,
     /* 2 */ <span key="upload">
       <span className="text-[#27c93f]">✓</span> Optimizing bundle...{" "}
-      <span className="text-muted/50">124 kB gzipped</span>
+      <span className="text-muted">124 kB gzipped</span>
     </span>,
     /* 3 */ <span key="deploy">
       <span className="text-[#27c93f]">✓</span> Deploying to Cloudflare global network
     </span>,
     /* 4 */ <span key="b1" />,
     /* 5 */ <span key="header">
-      <span className="text-muted/50">Deployed resources:</span>
+      <span className="text-muted">Deployed resources:</span>
     </span>,
     /* 6-10 */ ...resources.map((r) => (
       <span key={r.name}>
         <span className="text-accent font-semibold">{r.name}</span>
-        <span className="text-muted/40"> {r.id}</span>
-        <span className="text-muted/20"> · </span>
+        <span className="text-muted"> {r.id}</span>
+        <span className="text-muted"> · </span>
         <span className="text-muted">{r.desc}</span>
       </span>
     )),
     /* 11 */ <span key="b2" />,
     /* 12 */ <span key="summary">
-      <span className="text-accent/85">Deployed to prod.</span>{" "}
-      <span className="text-muted/50">330+ cities · 5 primitives</span>
+      <span className="text-accent">Deployed to prod.</span>{" "}
+      <span className="text-muted">330+ cities · 5 primitives</span>
     </span>,
   ];
 
@@ -660,9 +700,7 @@ function DeployTerminal() {
           <span className="h-[9px] w-[9px] rounded-full bg-[#ffbd2e]" />
           <span className="h-[9px] w-[9px] rounded-full bg-[#27c93f]" />
         </div>
-        <span className="flex-1 text-center font-mono text-[0.7rem] text-muted/60">
-          rdyrct deploy
-        </span>
+        <span className="flex-1 text-center font-mono text-[0.7rem] text-muted">rdyrct deploy</span>
         <div className="invisible flex items-center gap-1.5">
           <span className="h-[9px] w-[9px] rounded-full bg-[#ff5f56]" />
           <span className="h-[9px] w-[9px] rounded-full bg-[#ffbd2e]" />
@@ -675,12 +713,19 @@ function DeployTerminal() {
 }
 
 function LandingHeader({ authed }: { authed: boolean }) {
+  const [theme, toggleTheme] = useTheme();
   return (
-    <header className="sticky top-0 z-20 -mx-6 flex items-center justify-between border-b border-border/50 bg-bg/85 px-6 py-4 backdrop-blur-md">
-      <Link to="/" className="text-lg font-bold tracking-widest">
+    // Three columns, not space-between: the two 1fr rails keep the nav on the
+    // page's centre line however wide the brand or the auth buttons get, so
+    // "Sign up" turning into "Dashboard" does not shift the links.
+    <header className="sticky top-0 z-20 -mx-6 grid grid-cols-[1fr_auto_1fr] items-center gap-3 border-b border-border/50 bg-bg/85 px-6 py-4 backdrop-blur-md">
+      <Link to="/" className="justify-self-start text-lg font-bold tracking-widest">
         rdyrct
       </Link>
-      <nav className="flex items-center gap-2.5 text-sm sm:gap-4">
+
+      {/* Where the visitor goes to read. Hidden on phones, where three columns
+          do not fit: those links still live in the footer. */}
+      <nav className="hidden items-center gap-5 text-sm sm:flex">
         <a href="#pricing" className="text-muted hover:text-accent">
           Pricing
         </a>
@@ -692,6 +737,14 @@ function LandingHeader({ authed }: { authed: boolean }) {
         <a href="/blog" className="text-muted hover:text-accent">
           Blog
         </a>
+      </nav>
+      <span className="sm:hidden" />
+
+      {/* What the visitor does. */}
+      <div className="flex items-center justify-self-end gap-2.5 text-sm sm:gap-4">
+        <IconButton label="Toggle theme" className="p-2" onClick={toggleTheme}>
+          <MorphIcon icon={theme === "dark" ? Sun : Moon} size={15} spring="snappy" />
+        </IconButton>
         {authed ? (
           <Link to="/dashboard">
             <Button variant="primary">Dashboard</Button>
@@ -706,7 +759,7 @@ function LandingHeader({ authed }: { authed: boolean }) {
             </Link>
           </>
         )}
-      </nav>
+      </div>
     </header>
   );
 }
@@ -720,27 +773,27 @@ function HeroSection({ ctaTo, ctaLabel }: { ctaTo: string; ctaLabel: string }) {
         transition={{ duration: 0.5, ease: "easeOut" }}
         className="flex flex-col items-center gap-6 text-center"
       >
-        <span className="inline-flex items-center gap-2 rounded-full border border-border bg-surface px-3 py-1 text-xs text-muted">
-          <span className="h-1.5 w-1.5 rounded-full bg-accent-2" />
-          Open source · Runs on Cloudflare's edge
-        </span>
         <h1 className="max-w-3xl text-3xl font-bold tracking-tight text-balance sm:text-5xl">
-          Short links that carry your brand.
+          Know which channel earned the click.
         </h1>
         <p className="max-w-xl text-sm text-muted sm:text-base">
-          rdyrct gives your team short links, branded QR codes, and custom domains, with
-          privacy-friendly analytics that never store an IP address. Free to start, open source, and
-          built on Cloudflare's global network.
+          Every short link and QR code your team shares reports back: country, referrer, device, and
+          campaign, measured against the period before. On your own domain, and without a single IP
+          address in the database.
         </p>
+        {/* The second CTA points down the page, not off it. "Self-host from
+            GitHub" used to sit here, spending the highest-intent moment on
+            the site sending people to a repository; it now lives in its own
+            band under the pricing table. */}
         <div className="flex flex-wrap items-center justify-center gap-3">
           <Link to={ctaTo}>
             <Button variant="primary" size="md" className="h-11 px-6 text-base">
               {ctaLabel}
             </Button>
           </Link>
-          <a href={GITHUB_URL} target="_blank" rel="noreferrer">
+          <a href="#analytics">
             <Button variant="outline" size="md" className="h-11 px-6 text-base">
-              <Code2 size={16} /> Self-host from GitHub
+              <BarChart3 size={16} /> See the analytics
             </Button>
           </a>
         </div>
@@ -792,7 +845,9 @@ function HowItWorksSection() {
 
 function AnalyticsPreviewSection() {
   return (
-    <Section>
+    // The hero's second CTA lands here, so it needs an id and room under the
+    // sticky header.
+    <Section id="analytics" className="scroll-mt-16 py-16">
       <div className="mb-8 text-center">
         <h2 className="text-xl font-bold text-balance">See every click, respect every visitor</h2>
         <p className="mx-auto mt-2 max-w-xl text-sm text-muted">
@@ -812,7 +867,7 @@ function FeaturesSection() {
   return (
     <Section>
       <div className="mb-8 text-center">
-        <h2 className="text-xl font-bold">Everything a link needs to earn the click</h2>
+        <h2 className="text-xl font-bold">Everything your team needs on a link</h2>
         <p className="mx-auto mt-2 max-w-xl text-sm text-muted">
           Built for marketing teams and developers.
         </p>
@@ -942,6 +997,7 @@ export function LandingPage() {
           <FeaturesSection />
           <CloudflareSection />
           <PricingSection />
+          <SelfHostSection />
           <FaqSection />
           <FinalCtaSection ctaTo={ctaTo} ctaLabel={ctaLabel} />
 

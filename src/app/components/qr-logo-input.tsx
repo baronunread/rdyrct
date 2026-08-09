@@ -136,7 +136,7 @@ function QrLogoButtonContent({ busy, value }: { busy: boolean; value?: string })
         <span className="flex items-center gap-1 text-text">
           <Check size={12} className="text-accent" /> Logo added
         </span>
-        <span className="text-3xs text-muted/70">Drop a new image or browse to replace</span>
+        <span className="text-3xs text-muted">Drop a new image or browse to replace</span>
       </>
     );
   }
@@ -146,7 +146,7 @@ function QrLogoButtonContent({ busy, value }: { busy: boolean; value?: string })
       <span>
         Drop an image or <span className="text-accent">browse</span>
       </span>
-      <span className="text-3xs text-muted/70">
+      <span className="text-3xs text-muted">
         Bitmap files become 512 × 512 WebP, up to 256 KB. SVGs stay vector.
       </span>
     </>

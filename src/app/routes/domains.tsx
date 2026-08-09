@@ -117,7 +117,7 @@ function AddDomainForm({
             <BusyContent busy={pending}>Add domain</BusyContent>
           </Button>
         </div>
-        <span className="mt-1 block text-xs text-muted/80">
+        <span className="mt-1 block text-xs text-muted">
           After adding, we check for the CNAME record every few seconds. Once detected, we issue a
           TLS certificate automatically. You can also hit the refresh button to check progress.
         </span>
@@ -526,7 +526,7 @@ function RootRedirectEditor({
           Save
         </Button>
       </div>
-      <span className="mt-1 block text-xs text-muted/80">
+      <span className="mt-1 block text-xs text-muted">
         Where the bare domain (no slug) sends visitors, e.g. your homepage
       </span>
     </div>

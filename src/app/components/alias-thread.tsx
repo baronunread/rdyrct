@@ -66,7 +66,7 @@ function AliasRow({
           </span>
         </div>
       </Td>
-      <Td className="hidden py-1.5 text-xs text-muted/50 lg:table-cell">—</Td>
+      <Td className="hidden py-1.5 text-xs text-muted lg:table-cell">—</Td>
       <Td className="hidden py-1.5 text-xs text-muted xl:table-cell">
         {isTemp ? (
           <span className="inline-flex items-center gap-1">
