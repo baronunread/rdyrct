@@ -202,7 +202,7 @@ function FaqJsonLd() {
   return <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: json }} />;
 }
 
-type Tier = "self" | "free" | "hobby" | "pro";
+type Tier = "free" | "hobby" | "pro";
 
 function Cell({ tier, children }: { tier?: Tier; children?: ReactNode }) {
   return (
@@ -376,12 +376,6 @@ function PricingSection() {
             <tr>
               <Th></Th>
               <Th>
-                Self-hosted
-                <span className="mt-0.5 block normal-case tracking-normal text-muted/80">
-                  Full control, your infra
-                </span>
-              </Th>
-              <Th>
                 Free
                 <span className="mt-0.5 block normal-case tracking-normal text-muted/80">
                   For side projects
@@ -409,7 +403,6 @@ function PricingSection() {
           <tbody>
             <tr>
               <Td className="font-bold">Price</Td>
-              <Td>Free · open source</Td>
               <Td>$0</Td>
               <Td>
                 <span className="text-base font-bold">{PLAN_PRICES.hobby}/mo</span>
@@ -422,57 +415,43 @@ function PricingSection() {
               </Cell>
             </tr>
             <tr>
-              <Td className="font-bold">Hosting</Td>
-              <Td>Your own Cloudflare</Td>
-              <Td>Hosted on rdyrct.com</Td>
-              <Td>Hosted on rdyrct.com</Td>
-              <Cell tier="pro">Hosted on rdyrct.com</Cell>
-            </tr>
-            <tr>
               <Td className="font-bold">Organizations</Td>
-              <Td>Unlimited</Td>
               <Td>{PLAN_LIMITS.free.orgs}</Td>
               <Td>{PLAN_LIMITS.hobby.orgs}</Td>
               <Cell tier="pro">{PLAN_LIMITS.pro.orgs}</Cell>
             </tr>
             <tr>
               <Td className="font-bold">Links</Td>
-              <Td>Unlimited</Td>
               <Td>{PLAN_LIMITS.free.links}</Td>
               <Td>{PLAN_LIMITS.hobby.links}</Td>
               <Cell tier="pro">{PLAN_LIMITS.pro.links.toLocaleString()}</Cell>
             </tr>
             <tr>
               <Td className="font-bold">Custom slugs</Td>
-              <YesCell />
               <Td className="text-muted">Random only</Td>
               <Td>On your domain</Td>
               <Cell tier="pro">On your domains</Cell>
             </tr>
             <tr>
               <Td className="font-bold">Team members</Td>
-              <Td>Unlimited</Td>
               <Td>{PLAN_LIMITS.free.members}</Td>
               <Td>{PLAN_LIMITS.hobby.members}</Td>
               <Cell tier="pro">{PLAN_LIMITS.pro.members}</Cell>
             </tr>
             <tr>
               <Td className="font-bold">QR codes</Td>
-              <YesCell />
               <NoCell />
               <YesCell />
               <YesCell tier="pro" />
             </tr>
             <tr>
               <Td className="font-bold">Custom domains</Td>
-              <Td>Unlimited (your Cloudflare)</Td>
               <Td className="text-muted">No</Td>
               <Td>{PLAN_LIMITS.hobby.domains}</Td>
               <Cell tier="pro">{PLAN_LIMITS.pro.domains}</Cell>
             </tr>
             <tr>
               <Td className="font-bold">Analytics history</Td>
-              <Td>Unlimited</Td>
               <Td>{PLAN_LIMITS.free.analyticsDays} days</Td>
               <Td>{PLAN_LIMITS.hobby.analyticsDays} days</Td>
               <Cell tier="pro">{PLAN_LIMITS.pro.analyticsDays} days</Cell>
@@ -481,18 +460,10 @@ function PricingSection() {
               <Td className="font-bold">Support</Td>
               <Td>GitHub issues</Td>
               <Td>GitHub issues</Td>
-              <Td>GitHub issues</Td>
               <Cell tier="pro">Direct email support</Cell>
             </tr>
             <tr>
               <Td />
-              <Td>
-                <a href={GITHUB_URL} target="_blank" rel="noreferrer">
-                  <Button variant="outline" size="sm" className="w-full">
-                    View on GitHub
-                  </Button>
-                </a>
-              </Td>
               <Td>
                 <Link to="/signup">
                   <Button variant="outline" size="sm" className="w-full">
@@ -518,7 +489,37 @@ function PricingSection() {
           </tbody>
         </Table>
       </div>
+
+      <SelfHostBand />
     </Section>
+  );
+}
+
+/**
+ * Being open source is a trust asset, but it used to be the pricing table's
+ * first column, so the first thing a buyer read was a free unlimited version
+ * of what we were about to charge for. It sits under the table now: still
+ * findable, no longer competing with the prices.
+ */
+function SelfHostBand() {
+  return (
+    <div className="mt-6 flex flex-col items-center justify-between gap-4 rounded-lg border border-border bg-surface px-5 py-4 sm:flex-row">
+      <div className="flex items-start gap-3">
+        <Code2 size={18} className="mt-0.5 shrink-0 text-accent" />
+        <div>
+          <p className="text-sm font-bold">Or run it yourself</p>
+          <p className="mt-0.5 text-sm text-muted">
+            rdyrct is open source and deploys to your own Cloudflare account: everything Pro has,
+            minus direct email support.
+          </p>
+        </div>
+      </div>
+      <a href={GITHUB_URL} target="_blank" rel="noreferrer" className="w-full shrink-0 sm:w-auto">
+        <Button variant="outline" size="sm" className="w-full">
+          View on GitHub
+        </Button>
+      </a>
+    </div>
   );
 }
 
@@ -731,25 +732,29 @@ function HeroSection({ ctaTo, ctaLabel }: { ctaTo: string; ctaLabel: string }) {
       >
         <span className="inline-flex items-center gap-2 rounded-full border border-border bg-surface px-3 py-1 text-xs text-muted">
           <span className="h-1.5 w-1.5 rounded-full bg-accent-2" />
-          Open source · Runs on Cloudflare's edge
+          Open source · Never stores an IP address
         </span>
         <h1 className="max-w-3xl text-3xl font-bold tracking-tight text-balance sm:text-5xl">
-          Short links that carry your brand.
+          Know which channel earned the click.
         </h1>
         <p className="max-w-xl text-sm text-muted sm:text-base">
-          rdyrct gives your team short links, branded QR codes, and custom domains, with
-          privacy-friendly analytics that never store an IP address. Free to start, open source, and
-          built on Cloudflare's global network.
+          Every short link and QR code your team shares reports back: country, referrer, device, and
+          campaign, measured against the period before. On your own domain, and without a single IP
+          address in the database.
         </p>
+        {/* The second CTA points down the page, not off it. "Self-host from
+            GitHub" used to sit here, spending the highest-intent moment on
+            the site sending people to a repository; it now lives in its own
+            band under the pricing table. */}
         <div className="flex flex-wrap items-center justify-center gap-3">
           <Link to={ctaTo}>
             <Button variant="primary" size="md" className="h-11 px-6 text-base">
               {ctaLabel}
             </Button>
           </Link>
-          <a href={GITHUB_URL} target="_blank" rel="noreferrer">
+          <a href="#analytics">
             <Button variant="outline" size="md" className="h-11 px-6 text-base">
-              <Code2 size={16} /> Self-host from GitHub
+              <BarChart3 size={16} /> See the analytics
             </Button>
           </a>
         </div>
@@ -801,7 +806,9 @@ function HowItWorksSection() {
 
 function AnalyticsPreviewSection() {
   return (
-    <Section>
+    // The hero's second CTA lands here, so it needs an id and room under the
+    // sticky header.
+    <Section id="analytics" className="scroll-mt-16 py-16">
       <div className="mb-8 text-center">
         <h2 className="text-xl font-bold text-balance">See every click, respect every visitor</h2>
         <p className="mx-auto mt-2 max-w-xl text-sm text-muted">
@@ -821,7 +828,7 @@ function FeaturesSection() {
   return (
     <Section>
       <div className="mb-8 text-center">
-        <h2 className="text-xl font-bold">Everything a link needs to earn the click</h2>
+        <h2 className="text-xl font-bold">Everything your team needs on a link</h2>
         <p className="mx-auto mt-2 max-w-xl text-sm text-muted">
           Built for marketing teams and developers.
         </p>
