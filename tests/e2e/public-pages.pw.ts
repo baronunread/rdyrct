@@ -31,7 +31,7 @@ test("the hero's second CTA stays on the site and self-hosting sits under pricin
   // The star count is baked in at build time, so it has to render as a real
   // number: a failed build-time fetch falls back rather than emitting NaN.
   const selfHost = page.locator("#self-host");
-  const pill = selfHost.getByRole("link", { name: /read the source code/i });
+  const pill = selfHost.getByRole("link", { name: /github/i });
   await expect(pill).toHaveAttribute("href", /github\.com/);
   await expect(pill).toContainText(/\d/);
   await expect(pill).not.toContainText(/NaN|undefined/);

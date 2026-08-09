@@ -17,7 +17,6 @@ import {
   Layers,
   GitMerge,
   Mail,
-  Star,
 } from "lucide-react";
 import {
   LazyMotion,
@@ -535,20 +534,17 @@ function SelfHostSection() {
           going to email you about it.
         </p>
 
-        {/* One pill, split: the label on the left, the star count on the
-            right behind a divider, the way GitHub's own badge reads. */}
+        {/* One soft pill: the mark, then the name over the count. */}
         <a
           href={GITHUB_URL}
           target="_blank"
           rel="noreferrer"
-          className="inline-flex items-center overflow-hidden rounded-full border border-border bg-surface text-sm transition-colors hover:border-accent hover:text-accent"
+          className="inline-flex items-center gap-3 rounded-full bg-surface-2 py-2.5 pr-7 pl-2.5 text-left transition-colors hover:bg-border"
         >
-          <span className="flex items-center gap-2 py-2 pr-3 pl-4 font-bold">
-            <GithubMark /> Read the source code
-          </span>
-          <span className="flex items-center gap-1.5 self-stretch border-l border-border bg-surface-2 py-2 pr-4 pl-3">
-            <Star size={13} className="text-butter" fill="currentColor" />
-            <span className="tnum font-bold">{STARS.toLocaleString()}</span>
+          <GithubMark size={38} />
+          <span className="flex flex-col leading-tight">
+            <span className="text-base font-bold">GitHub</span>
+            <span className="tnum text-sm text-muted">{STARS.toLocaleString()} stars</span>
           </span>
         </a>
 
@@ -777,10 +773,6 @@ function HeroSection({ ctaTo, ctaLabel }: { ctaTo: string; ctaLabel: string }) {
         transition={{ duration: 0.5, ease: "easeOut" }}
         className="flex flex-col items-center gap-6 text-center"
       >
-        <span className="inline-flex items-center gap-2 rounded-full border border-border bg-surface px-3 py-1 text-xs text-muted">
-          <span className="h-1.5 w-1.5 rounded-full bg-accent-2" />
-          Open source · Never stores an IP address
-        </span>
         <h1 className="max-w-3xl text-3xl font-bold tracking-tight text-balance sm:text-5xl">
           Know which channel earned the click.
         </h1>
