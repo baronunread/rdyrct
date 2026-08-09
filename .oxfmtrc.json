@@ -1,4 +1,4 @@
 {
-  "$schema": "./node_modules/oxfmt/configuration_schema.json",
-  "printWidth": 100
+  "$schema": "https://raw.githubusercontent.com/oxc-project/oxc/main/npm/oxfmt/configuration_schema.json",
+  "ignorePatterns": [".agents/skills/**", ".claude/skills/**"]
 }

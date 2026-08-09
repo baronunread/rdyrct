@@ -463,11 +463,9 @@ function useAuthFlow(mode: "login" | "signup") {
       type: "email-verification",
     });
     if (error) {
-      if (error.code === "EMAIL_VERIFIED") {
-        toast("This email is already verified. Sign in to continue.");
-        setView("form");
-        return;
-      }
+      // No EMAIL_VERIFIED branch: the server answers an already-verified
+      // address exactly as it answers a fresh one, so an anonymous caller
+      // cannot tell them apart (#53). The account's owner is told by email.
       failSubmit(error.message ?? "Could not send the verification code");
       return;
     }
@@ -546,11 +544,6 @@ function useAuthFlow(mode: "login" | "signup") {
       type: "email-verification",
     });
     if (resendError) {
-      if (resendError.code === "EMAIL_VERIFIED") {
-        toast("This email is already verified. Sign in to continue.");
-        backToForm();
-        return;
-      }
       toast(resendError.message ?? "Could not resend the code", "error");
       return;
     }

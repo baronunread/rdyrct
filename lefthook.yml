@@ -1,13 +1,10 @@
 pre-commit:
   parallel: false
   jobs:
+    # The only hook job left: it repairs instead of complaining, which is the
+    # one thing worth spending commit time on. Everything that only reports
+    # (lint, react-doctor) runs in CI, where nobody can pass --no-verify.
     - name: format
-      glob: "*.{cjs,cts,css,js,json,jsonc,jsx,md,mjs,mts,ts,tsx}"
+      glob: "*.{cjs,cts,css,html,js,json,jsonc,jsx,md,mjs,mts,ts,tsx}"
       run: bunx oxfmt --write {staged_files}
       stage_fixed: true
-    - name: lint
-      glob: "*.{cjs,cts,js,jsx,mjs,mts,ts,tsx}"
-      run: bunx oxlint --deny-warnings {staged_files}
-    - name: react-doctor
-      glob: "*.{cjs,cts,js,jsx,mjs,mts,ts,tsx}"
-      run: bunx react-doctor --staged --blocking warning

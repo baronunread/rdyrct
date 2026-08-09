@@ -253,7 +253,14 @@ export function useDomainMutations(orgId: string) {
     mutationFn: (id: string) => api(`/orgs/${orgId}/domains/${id}`, { method: "DELETE" }),
     onSuccess: invalidate,
   });
-  return { add, refresh, setRootRedirect, remove };
+  // The default lives on the org, not the domain, so this invalidates
+  // ["user"]: that is where the app reads the org from (#69).
+  const setDefault = useMutation({
+    mutationFn: (id: string | null) =>
+      api(`/orgs/${orgId}`, { method: "PATCH", body: { defaultDomainId: id } }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["user"] }),
+  });
+  return { add, refresh, setRootRedirect, remove, setDefault };
 }
 
 // Billing is per-user (the caller's own subscription), so no orgId.

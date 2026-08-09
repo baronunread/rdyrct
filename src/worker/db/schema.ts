@@ -15,9 +15,32 @@ export const user = sqliteTable("user", {
   banned: integer("banned", { mode: "boolean" }).notNull().default(false),
   // Billing lives on the user, not the org: one Free/Hobby/Pro subscription
   // per person. An org's effective limits are its owner's plan (see plan.ts).
+  //
+  // DERIVED. `plan` is what the user may do, and it is coalesce(comp_plan,
+  // entitling subscription_plan, 'free'). Only entitlement.ts writes it, and
+  // it always writes it from the two columns below in the same statement.
+  // Anything that sets it by hand puts entitlement out of step with billing,
+  // which is the bug #81 fixed.
   plan: text("plan", { enum: ["free", "hobby", "pro"] })
     .notNull()
     .default("free"),
+  // What Polar says: written by the webhook, never by an admin. Null means no
+  // subscription. `subscriptionStatus` is Polar's own status string, kept raw
+  // so a status we have no rule for is still visible (see entitlement.ts).
+  subscriptionPlan: text("subscription_plan", { enum: ["hobby", "pro"] }),
+  subscriptionStatus: text("subscription_status"),
+  // No price here on purpose (#82). Polar knows what it charged, net of
+  // discounts, tax and refunds, so revenue is read in its dashboard. A copy
+  // kept here would be a second figure to keep true, and the wrong one to
+  // trust when the two disagree.
+  //
+  // What an admin granted by hand: written by the comp routes, never by a
+  // webhook. A comp outranks the subscription, so revoking a subscription
+  // cannot take away access an admin gave.
+  compPlan: text("comp_plan", { enum: ["hobby", "pro"] }),
+  compGrantedBy: text("comp_granted_by"),
+  compGrantedAt: integer("comp_granted_at", { mode: "timestamp_ms" }),
+  compReason: text("comp_reason"),
   polarCustomerId: text("polar_customer_id"),
   polarSubscriptionId: text("polar_subscription_id"),
   polarSubscriptionCancelAtPeriodEnd: integer("polar_subscription_cancel_at_period_end", {
@@ -112,6 +135,11 @@ export const orgs = sqliteTable("orgs", {
   name: text("name").notNull(),
   // No plan/billing columns: an org's plan is its owner's plan (plan.ts).
   ...qrColumns(),
+  // Which domain new links start on (#69). The foreign key and its ON DELETE
+  // SET NULL live in migration 0018; declaring the reference here too would
+  // need a lazy callback, because `domains` is defined below and already
+  // references this table.
+  defaultDomainId: text("default_domain_id"),
   createdAt: integer("created_at").notNull(),
   // Set right before the teardown workflow starts, so requireOrgRole can
   // reject writes before the workflow's gather step ever runs. Null means
@@ -256,9 +284,10 @@ export const clicks = sqliteTable(
     device: text("device").notNull().default(""),
     // Set by the click queue producer (crypto.randomUUID()); lets the queue
     // consumer's batch insert dedupe a redelivered message. Null on rows from
-    // before this column existed, which is fine: SQLite's unique index treats
-    // every NULL as distinct, so old rows never collide with each other or
-    // with real dedupe ids.
+    // before this column existed, and on rows the daily sweep has cleared
+    // once no redelivery can reach them (sweepDedupeIds, #70). Either way
+    // SQLite's unique index treats every NULL as distinct, so those rows
+    // never collide with each other or with real dedupe ids.
     dedupeId: text("dedupe_id").unique(),
     // Which address the click came in on (primary or an alias). Null on rows
     // from before this column existed: not backfilled, same reasoning as

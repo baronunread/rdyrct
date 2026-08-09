@@ -5,6 +5,7 @@ import type { Env } from "../../src/worker/env";
 import {
   consumeClickBatch,
   logClickDeadLetterBatch,
+  sweepDedupeIds,
   type ClickMessage,
 } from "../../src/worker/clicks";
 import {
@@ -166,5 +167,64 @@ describe("click queue: dead-letter visibility", () => {
 
     expect(fetchSpy).not.toHaveBeenCalled();
     fetchSpy.mockRestore();
+  });
+});
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+describe("sweepDedupeIds (#70)", () => {
+  /** One click row, straight into D1, at the age the test cares about. */
+  async function seedClick(id: number, ageDays: number, dedupeId: string | null) {
+    await env.DB.prepare(
+      "insert into clicks (id, link_id, org_id, ts, country, referrer, device, dedupe_id) values (?, ?, ?, ?, '', '', '', ?)",
+    )
+      .bind(id, sampleLink.id, sampleLink.orgId, Date.now() - ageDays * DAY_MS, dedupeId)
+      .run();
+  }
+
+  async function dedupeIdOf(id: number) {
+    const row = await env.DB.prepare("select dedupe_id from clicks where id = ?").bind(id).first();
+    return (row as { dedupe_id: string | null }).dedupe_id;
+  }
+
+  it("clears ids past the redelivery window and keeps the recent ones", async () => {
+    await seedLink();
+    await seedClick(1, 30, "dedupe-old");
+    await seedClick(2, 1, "dedupe-recent");
+
+    expect(await sweepDedupeIds(env as Env)).toBe(1);
+
+    // The old row keeps its click, and loses only the index weight.
+    expect(await dedupeIdOf(1)).toBeNull();
+    expect(await dedupeIdOf(2)).toBe("dedupe-recent");
+    const [{ n }] = (await env.DB.prepare("select count(*) as n from clicks").all()).results as {
+      n: number;
+    }[];
+    expect(n).toBe(2);
+  });
+
+  it("lets two swept rows sit side by side, since every NULL is distinct", async () => {
+    await seedLink();
+    await seedClick(1, 30, "dedupe-1");
+    await seedClick(2, 30, "dedupe-2");
+
+    expect(await sweepDedupeIds(env as Env)).toBe(2);
+
+    expect(await dedupeIdOf(1)).toBeNull();
+    expect(await dedupeIdOf(2)).toBeNull();
+  });
+
+  it("does nothing on a second run, so the daily job stays cheap", async () => {
+    await seedLink();
+    await seedClick(1, 30, "dedupe-old");
+
+    expect(await sweepDedupeIds(env as Env)).toBe(1);
+    expect(await sweepDedupeIds(env as Env)).toBe(0);
+  });
+
+  it("still refuses a duplicate dedupe id inside the window", async () => {
+    await seedLink();
+    await seedClick(1, 1, "same");
+    await expect(seedClick(2, 1, "same")).rejects.toThrow();
   });
 });

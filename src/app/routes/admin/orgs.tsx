@@ -12,14 +12,12 @@ import { AdminTableSkeleton, OrgDetailSkeleton } from "../../components/skeleton
 import { useToast } from "../../ui/toast";
 import { ConfirmDialog } from "../../ui/confirm-dialog";
 import { SearchInput } from "./search-input";
-import { linkLabel } from "./util";
+import { linkLabel, paginate } from "./util";
 import { SortTh } from "../../ui/sort-th";
 import { sortRows } from "../../lib/sort";
 import { withErrorToast } from "../../lib/mutation-toast";
 import { shortDate } from "../../lib/dates";
 import { Pager } from "../../ui/pagination";
-
-const PAGE_SIZE = 25;
 
 const roleColor: Record<OrgRole, "accent" | "mint" | "muted"> = {
   owner: "accent",
@@ -167,9 +165,7 @@ export function AdminOrgsPage() {
     });
   }, [orgs.data, q, sort]);
 
-  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-  const safePage = Math.min(page, totalPages - 1);
-  const rows = filtered.slice(safePage * PAGE_SIZE, (safePage + 1) * PAGE_SIZE);
+  const { totalPages, safePage, rows } = paginate(filtered, page);
 
   if (orgs.isLoading) return <AdminTableSkeleton />;
   return (

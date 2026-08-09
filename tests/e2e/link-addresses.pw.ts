@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { expect, type Page, test } from "@playwright/test";
 import { signUpAndVerify } from "./resend";
 import { setPlan } from "./db";
-import { addCustomDomain, createAdditionalOrg, createOrg } from "./orgs";
+import { addActiveCustomDomain, createAdditionalOrg, createOrg, openNewLinkDialog } from "./orgs";
 
 const password = "test-password-123";
 const authFile = join(mkdtempSync(join(tmpdir(), "rdyrct-e2e-")), "auth.json");
@@ -91,15 +91,9 @@ test("renaming a custom-domain link leaves a temporary alias, which can be kept 
 
   // A custom domain is required: renaming only leaves an alias on a
   // custom-domain address, never on the shared, always-random domain.
-  const hostname = await addCustomDomain(page, `alias-${Date.now()}.example.com`);
-  // The playwright env reports DNS and TLS ready immediately (CF_DEV_ENV
-  // "instant"), so this waits on one probe-ramp sleep plus a domains poll, not
-  // on the staged delays local dev uses.
-  await expect(page.getByText("active", { exact: true })).toBeVisible({ timeout: 30_000 });
+  const hostname = await addActiveCustomDomain(page, `alias-${Date.now()}.example.com`);
 
-  await page.goto("/links");
-  await page.getByRole("button", { name: "New link" }).first().click();
-  const editor = page.getByRole("dialog", { name: "New link" });
+  const editor = await openNewLinkDialog(page);
   await editor.getByPlaceholder("https://example.com/launch").fill("https://example.com/original");
   // exact: the Slug field's hint text ("Use a custom domain for custom
   // slugs.") also matches "Domain" as a substring once a domain is added.

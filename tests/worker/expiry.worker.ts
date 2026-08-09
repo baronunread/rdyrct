@@ -1,25 +1,17 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { env } from "cloudflare:workers";
 import { createExecutionContext, reset, waitOnExecutionContext } from "cloudflare:test";
-import { drizzle } from "drizzle-orm/d1";
 import { eq } from "drizzle-orm";
 import worker from "../../src/worker";
 import * as schema from "../../src/worker/db/schema";
 import { applyStorageMessage, sweepExpiredAliases, syncLinkMsg } from "../../src/worker/storage";
-import { now } from "../../src/worker/util";
-import { applyTestMigrations, rawAddressRow, rawLinkRow } from "./support";
-
-function db() {
-  return drizzle(env.DB, { schema });
-}
-
-async function addressById(addressId: string) {
-  const [row] = await db()
-    .select()
-    .from(schema.linkAddresses)
-    .where(eq(schema.linkAddresses.id, addressId));
-  return row;
-}
+import {
+  addressById,
+  applyTestMigrations,
+  rawAddressRow,
+  rawLinkRow,
+  testDb as db,
+} from "./support";
 
 async function seedLinkWithAddresses() {
   await db().batch([
@@ -54,7 +46,7 @@ async function seedLinkWithAddresses() {
           slug: "old-slug",
           kind: "temp_alias",
           creationReason: "renamed",
-          expiresAt: now() - 1000, // already past its 48h deadline
+          expiresAt: Date.now() - 1000, // already past its 48h deadline
           createdAt: 0,
         }),
       ]),
@@ -74,7 +66,7 @@ describe("desiredKvValue resolves through link_addresses", () => {
       "json",
     );
     expect(value).toMatchObject({ linkId: "link-1", addressId: "addr-alias" });
-    expect(value!.expiresAt).toBeLessThan(now());
+    expect(value!.expiresAt).toBeLessThan(Date.now());
   });
 
   it("deletes the key once the row is retired, even though it was still active when first published", async () => {
@@ -85,7 +77,7 @@ describe("desiredKvValue resolves through link_addresses", () => {
 
     await db()
       .update(schema.linkAddresses)
-      .set({ retiredAt: now() })
+      .set({ retiredAt: Date.now() })
       .where(eq(schema.linkAddresses.id, "addr-alias"));
     await applyStorageMessage(env as never, db(), message);
 
@@ -109,7 +101,7 @@ describe("redirect hot path: lazy expiry", () => {
         addressId: "addr-alias",
         orgId: "org-1",
         url: "https://example.com",
-        expiresAt: now() - 1000,
+        expiresAt: Date.now() - 1000,
       }),
     );
 
@@ -129,7 +121,7 @@ describe("redirect hot path: lazy expiry", () => {
         addressId: "addr-alias",
         orgId: "org-1",
         url: "https://example.com",
-        expiresAt: now() + 1000,
+        expiresAt: Date.now() + 1000,
       }),
     );
 
@@ -165,7 +157,7 @@ describe("sweepExpiredAliases", () => {
     await seedLinkWithAddresses();
     await db()
       .update(schema.linkAddresses)
-      .set({ expiresAt: now() + 1000 * 60 * 60 })
+      .set({ expiresAt: Date.now() + 1000 * 60 * 60 })
       .where(eq(schema.linkAddresses.id, "addr-alias"));
 
     await sweepExpiredAliases(env as never, db());

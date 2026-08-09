@@ -7,10 +7,12 @@ import {
   waitOnExecutionContext,
 } from "cloudflare:test";
 import { drizzle } from "drizzle-orm/d1";
+import { eq } from "drizzle-orm";
 import worker from "../../src/worker";
 import * as schema from "../../src/worker/db/schema";
 import type { Env } from "../../src/worker/env";
 import type { ClickMessage } from "../../src/worker/clicks";
+import type { StorageMessage } from "../../src/worker/storage";
 import { hashPassword } from "../../src/worker/password";
 
 type TestEnv = typeof env & { TEST_MIGRATIONS: D1Migration[] };
@@ -74,6 +76,75 @@ export const billingEnv = () =>
     POLAR_HOBBY_PRODUCT_ID,
     POLAR_PRO_PRODUCT_ID,
   });
+
+/** One outbound Resend send, as the worker posted it. */
+export interface CapturedEmail {
+  to: string;
+  subject: string;
+  html: string;
+  text: string;
+}
+
+/**
+ * Captures what would go to Resend, and optionally answers the MX lookup
+ * signup does.
+ *
+ * `sendEmail()` and `domainHasMailRecords()` both post with plain `fetch`
+ * (the Resend SDK cannot repoint its base URL, which is what keeps the local
+ * emulator flow working), so replacing the global is the honest seam: the
+ * request under assertion is the one the worker would really send.
+ *
+ * `mx` answers the DNS lookup too, so a test decides which domains can
+ * receive mail rather than the network.
+ *
+ * `hold` keeps the send hanging until that promise resolves, which is how a
+ * test proves the worker answered without waiting for Resend. `started()`
+ * reports whether the send was reached at all.
+ */
+export function captureEmails({
+  mx,
+  hold,
+}: { mx?: "deliverable" | "unroutable"; hold?: Promise<void> } = {}): {
+  sent: CapturedEmail[];
+  started: () => boolean;
+  restore: () => void;
+} {
+  const sent: CapturedEmail[] = [];
+  let started = false;
+  const original = globalThis.fetch;
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input instanceof Request ? input.url : input);
+    if (url.includes("/emails")) {
+      started = true;
+      sent.push(JSON.parse(String(init?.body ?? "{}")) as CapturedEmail);
+      if (hold) await hold;
+      return Response.json({ id: "sent" });
+    }
+    if (mx && url.includes("cloudflare-dns.com")) {
+      const Answer = mx === "deliverable" ? [{ data: "10 mx.example." }] : [];
+      return Response.json({ Status: 0, Answer });
+    }
+    return original(input as RequestInfo, init);
+  }) as typeof fetch;
+  return { sent, started: () => started, restore: () => (globalThis.fetch = original) };
+}
+
+/** The `user-1` row the billing and entitlement suites both write against,
+ * with only the columns under test spelled out at the call site. */
+export async function seedBillingUser(
+  overrides: Partial<typeof schema.user.$inferInsert> = {},
+): Promise<void> {
+  await drizzle(env.DB, { schema })
+    .insert(schema.user)
+    .values({
+      id: "user-1",
+      name: "Test User",
+      email: "user1@example.com",
+      createdAt: new Date(0),
+      updatedAt: new Date(0),
+      ...overrides,
+    });
+}
 
 export async function applyTestMigrations(): Promise<void> {
   const testEnv = env as TestEnv;
@@ -236,6 +307,42 @@ export async function seedLink(destination = "https://example.com") {
     db.insert(schema.linkAddresses).values({ ...sampleAddress, createdAt: 0 }),
   ]);
   return db;
+}
+
+/** The schema-bound drizzle client every worker test reaches for. */
+export function testDb() {
+  return drizzle(env.DB, { schema });
+}
+
+export async function addressById(addressId: string) {
+  const [row] = await testDb()
+    .select()
+    .from(schema.linkAddresses)
+    .where(eq(schema.linkAddresses.id, addressId));
+  return row;
+}
+
+export async function addressesOf(linkId: string) {
+  return testDb()
+    .select()
+    .from(schema.linkAddresses)
+    .where(eq(schema.linkAddresses.linkId, linkId));
+}
+
+// A queue that records what was sent instead of delivering it, so a route's
+// KV-sync fan-out can be asserted without a live queue consumer running inside
+// the same test.
+export function captureStorageQueue(): { queue: Queue<StorageMessage>; sent: StorageMessage[] } {
+  const sent: StorageMessage[] = [];
+  const queue = {
+    async send(message: StorageMessage) {
+      sent.push(message);
+    },
+    async sendBatch(messages: Iterable<{ body: StorageMessage }>) {
+      for (const m of messages) sent.push(m.body);
+    },
+  } as unknown as Queue<StorageMessage>;
+  return { queue, sent };
 }
 
 // Builds a real MessageBatch via the official cloudflare:test helpers, so ack/

@@ -22,6 +22,21 @@ describe("otpForEmail", () => {
     expect(otpForEmail(emails, "a@example.com")).toBe("");
   });
 
+  test("prefers the code on its own line in the text part over a six-digit colour", () => {
+    // The shared email layout inlines hex colours, and "#262336" matches a
+    // bare \d{6} search. The real code is the line that holds nothing else.
+    const emails = {
+      data: [
+        {
+          to: ["a@example.com"],
+          html: `<div style="background:#262336">Your code</div><div>654321</div>`,
+          text: "Your verification code\n\nEnter this code to finish signing in.\n\n654321\n",
+        },
+      ],
+    };
+    expect(otpForEmail(emails, "a@example.com")).toBe("654321");
+  });
+
   test("returns empty for primitives, null, and arrays with no match", () => {
     expect(otpForEmail(null, "a@example.com")).toBe("");
     expect(otpForEmail("just a string", "a@example.com")).toBe("");

@@ -12,10 +12,12 @@ describe("firstCount", () => {
 });
 
 describe("computeBusinessMetrics", () => {
-  test("computes conversion rate, MRR, and signup delta from raw count rows", () => {
+  test("computes conversion rate, subscriber counts, and signup delta from raw count rows", () => {
     const metrics = computeBusinessMetrics({
       users: [{ n: 100 }],
       proUsers: [{ n: 25 }],
+      compedUserRows: [{ n: 3 }],
+      subscriptionRows: [{ status: "active" }, { status: "active" }],
       planCountRows: [
         { plan: "free", n: 60 },
         { plan: "hobby", n: 15 },
@@ -29,7 +31,10 @@ describe("computeBusinessMetrics", () => {
     expect(metrics.paidUsers).toBe(25);
     expect(metrics.paidConversionRate).toBe(25);
     expect(metrics.planCounts).toEqual({ free: 60, hobby: 15, pro: 25 });
-    expect(metrics.mrr).toBe(15 * 4 + 25 * 9);
+    // 25 people hold a paid plan and 2 of them pay for it: access and paying
+    // are different counts now (#82).
+    expect(metrics.payingSubscribers).toBe(2);
+    expect(metrics.compedUsers).toBe(3);
     expect(metrics.signups7d).toBe(20);
     expect(metrics.signups7dDelta.pct).toBe(100);
     expect(metrics.wau).toBe(80);
@@ -39,6 +44,8 @@ describe("computeBusinessMetrics", () => {
     const metrics = computeBusinessMetrics({
       users: [],
       proUsers: [],
+      compedUserRows: [],
+      subscriptionRows: [],
       planCountRows: [],
       signups7dRows: [],
       signups7dPrevRows: [],
@@ -46,5 +53,6 @@ describe("computeBusinessMetrics", () => {
     });
     expect(metrics.totalUsers).toBe(0);
     expect(metrics.paidConversionRate).toBeNull();
+    expect(metrics.payingSubscribers).toBe(0);
   });
 });

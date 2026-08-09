@@ -14,6 +14,7 @@ import {
   POLAR_HOBBY_PRODUCT_ID,
   POLAR_PRO_PRODUCT_ID,
   POLAR_WEBHOOK_SECRET,
+  seedBillingUser as seedUser,
 } from "./support";
 import type { Env } from "../../src/worker/env";
 
@@ -47,19 +48,6 @@ afterEach(async () => {
 
 function db() {
   return drizzle(env.DB, { schema });
-}
-
-async function seedUser(overrides: Partial<typeof schema.user.$inferInsert> = {}) {
-  await db()
-    .insert(schema.user)
-    .values({
-      id: "user-1",
-      name: "Test User",
-      email: "user1@example.com",
-      createdAt: new Date(0),
-      updatedAt: new Date(0),
-      ...overrides,
-    });
 }
 
 async function getUser() {
@@ -216,6 +204,88 @@ describe("GET /api/billing/portal", () => {
   });
 });
 
+describe("GET /api/user reports whether a billing account exists (#85)", () => {
+  async function currentUser(cookie: string) {
+    const ctx = createExecutionContext();
+    const res = await worker.fetch(
+      new Request("http://localhost/api/user", { headers: { cookie } }),
+      billingEnv(),
+      ctx,
+    );
+    await waitOnExecutionContext(ctx);
+    return (await res.json()) as {
+      user: { plan: string; hasBillingAccount: boolean; comped: boolean };
+    };
+  }
+
+  it("is false for a paid plan with no Polar customer, whose portal would error", async () => {
+    const cookie = await adminCookie();
+    await db()
+      .update(schema.user)
+      .set({ plan: "pro", subscriptionPlan: "pro", subscriptionStatus: "active" })
+      .where(eq(schema.user.id, "admin-1"));
+
+    const { user } = await currentUser(cookie);
+
+    expect(user.plan).toBe("pro");
+    expect(user.hasBillingAccount).toBe(false);
+    // A subscription with no customer id is not a comp, and the page says so
+    // rather than telling them their plan was granted by hand (#81).
+    expect(user.comped).toBe(false);
+    // The signal has to agree with the route it guards, or the button is
+    // dead again.
+    expect((await portal(cookie)).status).toBe(400);
+  });
+
+  it("tells a comp apart from a subscription with no customer", async () => {
+    const cookie = await adminCookie();
+    await db()
+      .update(schema.user)
+      .set({ plan: "pro", compPlan: "pro", compReason: "Design partner" })
+      .where(eq(schema.user.id, "admin-1"));
+
+    const { user } = await currentUser(cookie);
+
+    expect(user.hasBillingAccount).toBe(false);
+    expect(user.comped).toBe(true);
+  });
+
+  it("is true once a Polar customer exists", async () => {
+    const cookie = await adminCookie();
+    await db()
+      .update(schema.user)
+      .set({ plan: "pro", polarCustomerId: "cus_123" })
+      .where(eq(schema.user.id, "admin-1"));
+
+    expect((await currentUser(cookie)).user.hasBillingAccount).toBe(true);
+    expect((await portal(cookie)).status).toBe(200);
+  });
+
+  it("is false on the free plan, which has no customer either", async () => {
+    const cookie = await adminCookie();
+    await db().update(schema.user).set({ plan: "free" }).where(eq(schema.user.id, "admin-1"));
+
+    expect((await currentUser(cookie)).user.hasBillingAccount).toBe(false);
+  });
+
+  it("never exposes the Polar customer id itself", async () => {
+    const cookie = await adminCookie();
+    await db()
+      .update(schema.user)
+      .set({ polarCustomerId: "cus_secret" })
+      .where(eq(schema.user.id, "admin-1"));
+
+    const ctx = createExecutionContext();
+    const res = await worker.fetch(
+      new Request("http://localhost/api/user", { headers: { cookie } }),
+      billingEnv(),
+      ctx,
+    );
+    await waitOnExecutionContext(ctx);
+    expect(await res.text()).not.toContain("cus_secret");
+  });
+});
+
 describe("POST /api/webhooks/polar", () => {
   it("rejects a payload with an invalid signature", async () => {
     await seedUser();
@@ -322,7 +392,9 @@ describe("POST /api/webhooks/polar", () => {
     expect(user.polarSubscriptionCurrentPeriodEnd).toBeNull();
   });
 
-  it("subscription.updated only applies the plan when the status is active", async () => {
+  // What each status does to access now lives in entitlement.worker.ts (#84);
+  // this keeps the original pair, which is still the common case.
+  it("subscription.updated grants the plan on an active status and not on a canceled one", async () => {
     await seedUser({ plan: "free" });
     await postWebhook({
       type: "subscription.updated",
@@ -345,6 +417,41 @@ describe("POST /api/webhooks/polar", () => {
       },
     });
     expect((await getUser()).plan).toBe("hobby");
+  });
+
+  // The event that arrives first wins on freshness, and `subscription.active`
+  // is not guaranteed to be it. If only that event carried the customer id,
+  // the loser would take the id down with it and leave a paying user unable
+  // to open the billing portal.
+  it("subscription.updated stores the customer id, so the portal opens without an active event", async () => {
+    await seedUser({ plan: "free", polarCustomerId: null });
+    await postWebhook({
+      type: "subscription.updated",
+      data: {
+        id: "sub_1",
+        status: "active",
+        customer_id: "cus_1",
+        product_id: POLAR_PRO_PRODUCT_ID,
+        metadata: { userId: "user-1" },
+      },
+    });
+    const user = await getUser();
+    expect(user.plan).toBe("pro");
+    expect(user.polarCustomerId).toBe("cus_1");
+  });
+
+  it("a later snapshot without a customer id leaves the stored one alone", async () => {
+    await seedUser({ plan: "free", polarCustomerId: "cus_1" });
+    await postWebhook({
+      type: "subscription.updated",
+      data: {
+        id: "sub_1",
+        status: "active",
+        product_id: POLAR_PRO_PRODUCT_ID,
+        metadata: { userId: "user-1" },
+      },
+    });
+    expect((await getUser()).polarCustomerId).toBe("cus_1");
   });
 
   it("ignores unrecognized event types without touching the user", async () => {

@@ -26,6 +26,7 @@ import { QrColorField } from "./qr-color-field";
 import { linkInputSchema } from "../lib/schemas";
 import { qrFallbacks, resolveQrLook, type OrgQr } from "../lib/org-qr";
 import { firstFormError } from "../lib/form-errors";
+import { resolveDefaultDomainId } from "../lib/default-domain";
 import { useShake } from "../lib/use-shake";
 
 const defaultForm: LinkInput = {
@@ -502,6 +503,7 @@ export function LinkEditor({
   busy,
   onSave,
   activeDomains,
+  defaultDomainId,
   domainsAllowed,
   qrEnabled,
   orgQr,
@@ -513,6 +515,9 @@ export function LinkEditor({
   busy: boolean;
   onSave: (data: LinkInput) => void;
   activeDomains: DomainDTO[];
+  /** The org's default domain for new links (#69), or null for the shared
+   * one. Ignored when editing: that link already has an address. */
+  defaultDomainId: string | null;
   /** Whether the org's plan allows a custom domain at all (regardless of
    * whether one is connected yet): governs the shared-domain slug hint. */
   domainsAllowed: boolean;
@@ -530,10 +535,20 @@ export function LinkEditor({
     defaultValues: defaultForm,
   });
 
+  // A new link starts on the org's default domain, which also unlocks the
+  // slug field: chosen slugs only exist on custom domains, so the customer
+  // who set a default is exactly the one who wants to name their links.
+  //
+  const newDomainId = resolveDefaultDomainId(defaultDomainId, activeDomains);
+
+  // Deliberately not a dependency: the default is read when the dialog opens
+  // and not again, so a background refetch of the org's domains cannot re-run
+  // this and wipe whatever the person had already typed.
   useEffect(() => {
     if (open) {
-      reset(editingLink ?? defaultForm);
+      reset(editingLink ?? { ...defaultForm, domainId: newDomainId });
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, editingLink, reset]);
 
   // shakeKey bumps on every save failure (client validation or server
