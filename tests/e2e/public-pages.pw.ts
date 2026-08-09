@@ -27,8 +27,12 @@ test("the hero's second CTA stays on the site and self-hosting sits under pricin
   await expect(page).toHaveURL(/#analytics$/);
   await expect(page.locator("#analytics")).toBeInViewport();
 
-  const band = page.locator("#pricing").getByRole("link", { name: /view on github/i });
-  await expect(band).toHaveAttribute("href", /github\.com/);
+  // Self-hosting keeps its own section after pricing, never a column inside it.
+  const selfHost = page.locator("#self-host");
+  await expect(selfHost.getByRole("link", { name: /read the source/i })).toHaveAttribute(
+    "href",
+    /github\.com/,
+  );
 });
 
 // Self-hosted was the pricing table's first column, so the first thing a buyer

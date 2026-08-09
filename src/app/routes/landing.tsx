@@ -17,6 +17,7 @@ import {
   Layers,
   GitMerge,
   Mail,
+  Wrench,
 } from "lucide-react";
 import {
   LazyMotion,
@@ -489,37 +490,92 @@ function PricingSection() {
           </tbody>
         </Table>
       </div>
-
-      <SelfHostBand />
     </Section>
   );
 }
 
+// Keep every line here to something the product actually does today. A
+// release cadence we do not commit to, or "abuse filtering" before #68 ships,
+// would be a promise the page cannot keep.
+const hostedWork = [
+  "Custom domains, with TLS issued and renewed for you",
+  "Rate limiting and uptime alerting, already wired up",
+  "Updates arrive without you deploying anything",
+  "A person on the other end of an email, on Pro",
+];
+
+const yourWork = [
+  "A Cloudflare account, and the migrations run by you",
+  "Resend for email, Polar if you want to charge anyone",
+  "Custom-domain onboarding wired to your own API token",
+  "Your pager, when a redirect stops redirecting",
+];
+
 /**
- * Being open source is a trust asset, but it used to be the pricing table's
- * first column, so the first thing a buyer read was a free unlimited version
- * of what we were about to charge for. It sits under the table now: still
- * findable, no longer competing with the prices.
+ * Self-hosting used to be the pricing table's first column, so a buyer read
+ * "free, unlimited, your infra" before reaching a price. Every open-source
+ * SaaS worth copying keeps it off the buying surface: Dub does not mention it
+ * on /pricing at all, Cal.com and Ghost give it a footer link. Plausible is
+ * the exception and the model, on its own page: name the commitment honestly,
+ * then make paying the principled option rather than the lazy one.
  */
-function SelfHostBand() {
+function SelfHostSection() {
   return (
-    <div className="mt-6 flex flex-col items-center justify-between gap-4 rounded-lg border border-border bg-surface px-5 py-4 sm:flex-row">
-      <div className="flex items-start gap-3">
-        <Code2 size={18} className="mt-0.5 shrink-0 text-accent" />
-        <div>
-          <p className="text-sm font-bold">Or run it yourself</p>
-          <p className="mt-0.5 text-sm text-muted">
-            rdyrct is open source and deploys to your own Cloudflare account: everything Pro has,
-            minus direct email support.
-          </p>
+    <Section id="self-host">
+      <div className="mb-8 text-center">
+        <span className="mb-4 inline-flex items-center gap-2 rounded-full border border-accent/40 bg-accent/5 px-3 py-1 text-xs text-accent">
+          <Code2 size={13} /> Every line of it, on GitHub
+        </span>
+        <h2 className="text-xl font-bold text-balance">
+          You can run this yourself. Here is what that costs.
+        </h2>
+        <p className="mx-auto mt-2 max-w-xl text-sm text-muted">
+          Not a stripped-down community build. The same Worker we run, deployed to your own
+          Cloudflare account, with every limit removed. What you take on is the work.
+        </p>
+      </div>
+
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+        <div className="rounded-lg border border-accent/40 bg-accent/5 p-5">
+          <p className="font-bold text-accent">We run it</p>
+          <p className="mt-1 text-sm text-muted">rdyrct.com, from {PLAN_PRICES.hobby}/mo</p>
+          <ul className="mt-4 flex flex-col gap-2">
+            {hostedWork.map((item) => (
+              <li key={item} className="flex items-start gap-2 text-sm">
+                <Check size={14} className="mt-1 shrink-0 text-accent-2" />
+                {item}
+              </li>
+            ))}
+          </ul>
+        </div>
+
+        <div className="rounded-lg border border-border bg-surface p-5">
+          <p className="font-bold">You run it</p>
+          <p className="mt-1 text-sm text-muted">Your Cloudflare account, no bill from us</p>
+          <ul className="mt-4 flex flex-col gap-2">
+            {yourWork.map((item) => (
+              <li key={item} className="flex items-start gap-2 text-sm text-muted">
+                <Wrench size={14} className="mt-1 shrink-0 text-muted" />
+                {item}
+              </li>
+            ))}
+          </ul>
         </div>
       </div>
-      <a href={GITHUB_URL} target="_blank" rel="noreferrer" className="w-full shrink-0 sm:w-auto">
-        <Button variant="outline" size="sm" className="w-full">
-          View on GitHub
-        </Button>
-      </a>
-    </div>
+
+      <div className="mt-6 flex flex-col items-center gap-4 text-center">
+        <p className="max-w-xl text-sm text-muted">
+          We would rather you self-hosted than settled for a link shortener that sells your
+          visitors. But the paid plans are what pay for the code you would be running, so if
+          rdyrct.com does the job, letting us run it is the version that keeps it alive.
+        </p>
+        <a href={GITHUB_URL} target="_blank" rel="noreferrer">
+          <Button variant="outline" size="sm">
+            Read the source
+          </Button>
+        </a>
+      </div>
+    </Section>
   );
 }
 
@@ -958,6 +1014,7 @@ export function LandingPage() {
           <FeaturesSection />
           <CloudflareSection />
           <PricingSection />
+          <SelfHostSection />
           <FaqSection />
           <FinalCtaSection ctaTo={ctaTo} ctaLabel={ctaLabel} />
 
