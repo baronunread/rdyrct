@@ -26,11 +26,16 @@ import {
   useReducedMotion,
   type Variants,
 } from "motion/react";
+// MorphIcon animates between two icons, so it takes lucide icon nodes, not
+// the lucide-react components used elsewhere on this page.
+import { Moon, Sun } from "lucide";
+import { MorphIcon } from "morphicons/react";
 import { useState } from "react";
 import { useCurrentUser } from "../lib/hooks";
 import { readAuthHint } from "../lib/auth-hint";
+import { useTheme } from "../lib/theme";
 import { PLAN_LIMITS, PLAN_PRICES } from "@/shared/types";
-import { Button } from "../ui/button";
+import { Button, IconButton } from "../ui/button";
 import { Table, Th, Td } from "../ui/misc";
 import { Footer, GITHUB_URL } from "../ui/footer";
 import { LandingMockup } from "../components/landing-mockup";
@@ -675,6 +680,7 @@ function DeployTerminal() {
 }
 
 function LandingHeader({ authed }: { authed: boolean }) {
+  const [theme, toggleTheme] = useTheme();
   return (
     <header className="sticky top-0 z-20 -mx-6 flex items-center justify-between border-b border-border/50 bg-bg/85 px-6 py-4 backdrop-blur-md">
       <Link to="/" className="text-lg font-bold tracking-widest">
@@ -692,6 +698,9 @@ function LandingHeader({ authed }: { authed: boolean }) {
         <a href="/blog" className="text-muted hover:text-accent">
           Blog
         </a>
+        <IconButton label="Toggle theme" className="p-2" onClick={toggleTheme}>
+          <MorphIcon icon={theme === "dark" ? Sun : Moon} size={15} spring="snappy" />
+        </IconButton>
         {authed ? (
           <Link to="/dashboard">
             <Button variant="primary">Dashboard</Button>

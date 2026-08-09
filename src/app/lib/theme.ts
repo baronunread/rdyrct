@@ -5,7 +5,7 @@ type Theme = "dark" | "light";
 const listeners = new Set<() => void>();
 
 function current(): Theme {
-  return document.documentElement.dataset.theme === "light" ? "light" : "dark";
+  return document.documentElement.dataset.theme === "dark" ? "dark" : "light";
 }
 
 function toggle() {

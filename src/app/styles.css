@@ -2,34 +2,13 @@
 @import "shadow-plugin";
 
 /* ---------------------------------------------------------------- */
-/* Theme tokens: dark pastel / paper pair                            */
+/* Theme tokens: paper / dark pastel pair                            */
+/*                                                                   */
+/* Light is the base, dark is the override, so a page that renders    */
+/* before theme-init.js runs (or without it) lands on light.          */
 /* ---------------------------------------------------------------- */
 
 :root {
-  --bg: #17151f;
-  --surface: #1f1c2b;
-  --surface-2: #262336;
-  --border: #34304a;
-  --text: #eae7f2;
-  --muted: #9d95b3;
-
-  --pink: #f5b8c8;
-  --mint: #b9e6c9;
-  --lavender: #cdb9f5;
-  --butter: #f2e3b3;
-  --sky: #b9d9f0;
-
-  --accent: var(--lavender);
-  --accent-2: var(--mint);
-  /* chart mark color: deeper than the UI accent so it passes the
-     lightness/chroma band on dark surfaces (validated) */
-  --chart: #9d7fe8;
-  --danger: #f5b8c8;
-
-  color-scheme: dark;
-}
-
-[data-theme="light"] {
   --bg: #f7f4ef;
   --surface: #ffffff;
   --surface-2: #efeae2;
@@ -43,20 +22,42 @@
   --butter: #a8842c;
   --sky: #4f7fae;
 
+  --accent: var(--lavender);
+  --accent-2: var(--mint);
   --chart: #7a5fc2;
   --danger: #c2607f;
 
   color-scheme: light;
 }
 
-/* shadow-plugin's default dark-mode ring is a flat white hairline; tint it
-   with our own --border instead so elevated surfaces pick up the app's
-   palette rather than a generic gray edge. Lift the hue toward white first
-   (still opaque), then mix *that* toward transparent — mixing --border
-   straight toward transparent stays too dark to read at UI scale, and
-   mixing it straight toward white (skipping the transparent step) produces
-   a fully opaque line that's too bright over light backdrops. */
 [data-theme="dark"] {
+  --bg: #17151f;
+  --surface: #1f1c2b;
+  --surface-2: #262336;
+  --border: #34304a;
+  --text: #eae7f2;
+  --muted: #9d95b3;
+
+  --pink: #f5b8c8;
+  --mint: #b9e6c9;
+  --lavender: #cdb9f5;
+  --butter: #f2e3b3;
+  --sky: #b9d9f0;
+
+  /* chart mark color: deeper than the UI accent so it passes the
+     lightness/chroma band on dark surfaces (validated) */
+  --chart: #9d7fe8;
+  --danger: #f5b8c8;
+
+  color-scheme: dark;
+
+  /* shadow-plugin's default dark-mode ring is a flat white hairline; tint it
+     with our own --border instead so elevated surfaces pick up the app's
+     palette rather than a generic gray edge. Lift the hue toward white first
+     (still opaque), then mix *that* toward transparent — mixing --border
+     straight toward transparent stays too dark to read at UI scale, and
+     mixing it straight toward white (skipping the transparent step) produces
+     a fully opaque line that's too bright over light backdrops. */
   --smooth-ring-color: color-mix(
     in srgb,
     color-mix(in srgb, var(--border), white 22%) 30%,
