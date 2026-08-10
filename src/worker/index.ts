@@ -14,6 +14,7 @@ import { adminRoutes } from "./routes/admin";
 import { billingRoutes, handlePolarWebhook } from "./routes/billing";
 import { domainRoutes } from "./routes/domains";
 import { capRoutes } from "./routes/cap";
+import { sweepLinkRisk } from "./risk";
 import { resolveSlug, resolveDomain, type KVLink } from "./kv";
 import { RESERVED_SLUGS } from "./util";
 import { enforcePublicAuthRateLimit, enforceSignedApiRateLimit } from "./rate-limit";
@@ -243,5 +244,11 @@ export default {
     // Daily: retire rename aliases past their 48h deadline (see #38). The
     // redirect path already stopped resolving them; this frees their slugs.
     await sweepExpiredAliases(env, drizzle(env.DB, { schema }));
+
+    // Daily: re-score link destinations, unscored first then oldest (#68).
+    // Bounded, because the point is that the table cycles rather than that
+    // any one run finishes it: a destination that turns bad long after it
+    // was created gets caught on some later day.
+    await sweepLinkRisk(env.DB);
   },
 };

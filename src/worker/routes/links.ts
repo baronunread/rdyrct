@@ -25,6 +25,7 @@ import {
   ALIAS_TTL_MS,
 } from "../util";
 import { jsonBodyLimit } from "../body-limit";
+import { scoreAndRecord } from "../risk";
 import type { AddressDTO, LinkDTO, LinkInput, OrgPlan, PlanLimits, TopEntry } from "@/shared/types";
 
 const RECENT_CLICKS_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
@@ -555,6 +556,13 @@ function newLinkRow(
     qrLogoSize: body.qrLogoSize ?? null,
     createdBy,
     createdAt: Date.now(),
+    // Unscored until the waitUntil after this response lands (#68). Null is
+    // not "clean": it is "nobody has looked yet", which is also what puts
+    // this row first in the cron's queue if the lookup fails.
+    riskScore: null,
+    riskReasons: null,
+    riskCheckedAt: null,
+    riskProvider: null,
   };
 }
 
@@ -665,6 +673,9 @@ linkRoutes.post("/", requireOrgRole("member"), async (c) => {
     });
   }
   await enqueueStorage(c.env, [syncLinkMsg(link.slug, hostname)]);
+  // Score the destination after the response (#68), the way clicks are
+  // recorded: it scores, it never blocks, and nobody waits on it.
+  c.executionCtx.waitUntil(scoreAndRecord(c.env.DB, link.id, link.destination));
   return c.json(toDTO(link, 0, hostname, 1), 201);
 });
 
@@ -698,7 +709,25 @@ function mergedLinkUpdate(
     qrBg: body.qrBg ?? existing.qrBg,
     qrEyeColor: body.qrEyeColor ?? existing.qrEyeColor,
     qrLogoSize: body.qrLogoSize ?? existing.qrLogoSize,
+    ...riskAfterDestinationChange(existing, fields.destination),
   };
+}
+
+/**
+ * Clears the risk verdict when a destination changes (#68), in the same write
+ * that changes it.
+ *
+ * Leaving the previous score in place until the re-scan lands would let a
+ * link swapped to a bad destination keep reading clean, which is exactly the
+ * attack the re-score exists to catch. An unchanged destination keeps its
+ * verdict, so editing a title does not send the row back through the queue.
+ */
+function riskAfterDestinationChange(
+  existing: typeof schema.links.$inferSelect,
+  destination: string,
+) {
+  if (destination === existing.destination) return {};
+  return { riskScore: null, riskReasons: null, riskCheckedAt: null, riskProvider: null };
 }
 
 /** A moved link leaves a stale key behind: syncing that old key finds no row
@@ -831,6 +860,16 @@ linkRoutes.patch("/:linkId", requireOrgRole("member"), async (c) => {
   ];
   await db.batch(writes as [(typeof writes)[number], ...(typeof writes)[number][]]);
   await enqueueStorage(c.env, messages);
+
+  // Re-score a changed destination (#68). This is the trigger that matters:
+  // the standard move is to register a clean destination, pass the check,
+  // then swap it, and scoring only at creation buys false confidence.
+  //
+  // mergedLinkUpdate already cleared the old verdict in the same write, so
+  // the link reads as unscored from the moment it changed rather than
+  // carrying the previous destination's clean bill until this finishes.
+  if (updated.destination !== existing.destination)
+    c.executionCtx.waitUntil(scoreAndRecord(c.env.DB, existing.id, updated.destination));
 
   return c.json(await linkToDTO(db, orgId, updated));
 });
