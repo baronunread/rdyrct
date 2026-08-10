@@ -1,3 +1,8 @@
+/** Carries a solved Cap token (#98) on the requests that need one. A header,
+ * not a body field, because better-auth validates each endpoint's body
+ * against its own schema. */
+export const CAP_TOKEN_HEADER = "x-cap-token";
+
 export type OrgRole = "owner" | "admin" | "member";
 export type OrgPlan = "free" | "hobby" | "pro";
 

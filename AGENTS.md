@@ -113,6 +113,13 @@ analyticsDays }`). Slugs on the **shared** domain are always random (every
   and `databaseHooks.session.create.before` (in `better-auth.ts`) refuses new
   ones, while their orgs/links keep working.
   Self-service account deletion is blocked while the user still owns an org.
+- **Bot protection**: Cap proof-of-work (`src/worker/cap.ts`, routes at
+  `/api/cap/:scope/{challenge,redeem}`) guards signup and password reset. The
+  token rides in an `x-cap-token` header and is spent in `hooks.before`. No
+  third party sees the visitor: `capjs-core` runs in this Worker, the widget
+  is bundled from npm, and the WASM solver is a same-origin Vite asset. Unset
+  `CAP_SECRET` disables it. See `docs/rate-limiting.md` for all three layers
+  (WAF rules, Workers limiters, Cap) and the dashboard rules to apply by hand.
 - **KV keys**: `slug:{slug}` (shared host), `slug:{host}:{slug}` (custom domain),
   `domain:{host}`. D1 is authoritative; KV is the redirect hot path. Clicks are
   recorded via `waitUntil` after the redirect is sent, and store only

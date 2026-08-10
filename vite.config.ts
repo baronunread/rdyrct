@@ -95,7 +95,17 @@ export default defineConfig(async () => ({
   ],
   resolve: {
     // mirror the tsconfig "@/*" path for runtime imports (app and worker)
-    alias: { "@": fileURLToPath(new URL("./src", import.meta.url)) },
+    alias: {
+      "@": fileURLToPath(new URL("./src", import.meta.url)),
+      // capjs-core reaches for these two only in its instrumentation mode,
+      // which we do not use. Left alone, the bundler follows the dynamic
+      // imports and ships a 5 MB javascript-obfuscator chunk in the Worker.
+      // See src/worker/cap-unused-dep-stub.ts.
+      esbuild: fileURLToPath(new URL("./src/worker/cap-unused-dep-stub.ts", import.meta.url)),
+      "javascript-obfuscator": fileURLToPath(
+        new URL("./src/worker/cap-unused-dep-stub.ts", import.meta.url),
+      ),
+    },
   },
   // dev-only: let curl -H "Host: linker.example.com" exercise the
   // custom-domain hot path locally

@@ -52,6 +52,9 @@ export interface Env {
   // Any other value (including unset) calls the real API, or fails closed.
   CF_DEV_ENV?: string;
 
+  /* bot protection: Cap proof-of-work (#98). Unset disables the check. */
+  CAP_SECRET?: string; // secret, `openssl rand -hex 32`
+
   /* alerting: dead-lettered storage messages (best-effort, never blocks acking) */
   BETTERSTACK_SOURCE_TOKEN?: string; // secret
   BETTERSTACK_INGEST_URL?: string; // var, e.g. https://in.logs.betterstack.com
