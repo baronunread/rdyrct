@@ -18,13 +18,12 @@ import { CopyButton } from "../ui/copy-button";
 import { BusyContent } from "../ui/spinner";
 import { useToast } from "../ui/toast";
 import { copyToClipboard } from "../lib/clipboard";
-import { api, ApiError } from "../lib/api";
+import { ApiError } from "../lib/api";
 import { useCap } from "../lib/cap";
 import { rememberClaim } from "../lib/anon-claim";
+import { shortenAnonymously, type AnonLink } from "../lib/shorten-anon";
 import { trackCta } from "../lib/track-cta";
 import { QRPreview } from "./qr";
-
-type Shortened = { slug: string; url: string; claimToken: string; expiresAt: number };
 
 /** The server's own message when it sent one: it says what was wrong with
  * the address, which a generic fallback cannot. */
@@ -32,23 +31,12 @@ function shortenErrorMessage(error: unknown): string {
   return error instanceof ApiError ? error.message : "Could not shorten that link";
 }
 
-/** One call, carrying the proof of work solved while the visitor typed (#98). */
-async function shortenAnonymously(
-  destination: string,
-  capHeaders: () => Promise<Record<string, string>>,
-): Promise<Shortened> {
-  return api<Shortened>("/shorten", {
-    method: "POST",
-    body: { destination, capToken: (await capHeaders())["x-cap-token"] ?? "" },
-  });
-}
-
 export function HeroShortener() {
   const toast = useToast();
   const cap = useCap("anon-link");
   const [destination, setDestination] = useState("");
   const [busy, setBusy] = useState(false);
-  const [result, setResult] = useState<Shortened | null>(null);
+  const [result, setResult] = useState<AnonLink | null>(null);
   const [showQr, setShowQr] = useState(false);
 
   const submit = async (event: React.FormEvent) => {

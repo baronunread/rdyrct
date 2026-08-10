@@ -9,6 +9,11 @@ export function Footer() {
       <div className="mx-auto flex max-w-5xl flex-col items-center justify-between gap-3 px-1 sm:flex-row">
         <span>© {new Date().getFullYear()} Andrea Bruno</span>
         <nav className="flex items-center gap-4">
+          {/* A real page people search for, not just a legal link: it is the
+              only entry point to the app that needs no account at all. */}
+          <Link to="/qr-code-generator" className="hover:text-accent">
+            QR generator
+          </Link>
           <Link to="/privacy" className="hover:text-accent">
             Privacy
           </Link>

@@ -64,6 +64,14 @@ export type CtaPlacement =
   // than by the copy above it.
   | "hero_shortener"
   | "hero_shortener_claim"
+  // The custom-domain second screen (Direction C of #96), the first paid
+  // ask on the page.
+  | "second_screen_domain"
+  // The standalone QR generator (Direction D of #96): making a code
+  // trackable, keeping it, and clicking through for branding.
+  | "qr_page_trackable"
+  | "qr_page_claim"
+  | "qr_page_branding"
   | "header"
   | "pricing_free"
   | "pricing_hobby"
