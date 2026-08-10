@@ -1,0 +1,119 @@
+/**
+ * Cap on the client (#98): proof-of-work, solved without a checkbox.
+ *
+ * Cap ships a visible widget, but its element also exposes `solve()`, so we
+ * keep the element out of sight and drive it ourselves: work starts when the
+ * visitor first touches the form and the token is usually ready by the time
+ * they submit. Nobody clicks anything, and nobody waits on a spinner they
+ * did not ask for.
+ *
+ * Everything is served from our own origin. The widget is bundled from npm
+ * rather than pulled from Cap's CDN, and the WASM solver comes through Vite
+ * as a hashed asset, so `script-src 'self'` and `connect-src 'self'` already
+ * cover both. Loading either from a CDN would hand back the third-party
+ * runtime dependency that is the whole reason we chose Cap over Turnstile.
+ *
+ * A failure here never blocks the form. The token goes to the server, the
+ * server decides: an empty one is rejected when CAP_SECRET is set and
+ * ignored when it is not, which is what keeps local dev and CI quiet.
+ */
+import { useCallback, useRef } from "react";
+import wasmUrl from "@cap.js/wasm/browser/cap_wasm_bg.wasm?url";
+import { CAP_TOKEN_HEADER } from "@/shared/types";
+
+export type CapScope = "signup" | "password-reset" | "anon-link";
+
+/** How long to wait for a solve before giving up and submitting without one. */
+const SOLVE_TIMEOUT_MS = 20_000;
+
+type CapElement = HTMLElement & {
+  solve: () => Promise<{ token?: string }>;
+  reset: () => void;
+};
+
+let loading: Promise<void> | null = null;
+
+/** Loads the widget once, on demand, so it stays out of the initial bundle. */
+function loadCap(): Promise<void> {
+  loading ??= (async () => {
+    // Read at module-eval time by the widget, so it has to be set first, or
+    // it fetches the WASM from jsdelivr and trips the CSP.
+    (window as unknown as { CAP_CUSTOM_WASM_URL?: string }).CAP_CUSTOM_WASM_URL = wasmUrl;
+    await import("@cap.js/widget");
+  })();
+  return loading;
+}
+
+/**
+ * Starts solving a challenge for `scope` and resolves with the token.
+ *
+ * Resolves with "" on any failure, including a timeout. That is deliberate:
+ * a visitor whose browser cannot solve the puzzle should still be able to
+ * try, and be turned away by the server with a message, rather than face a
+ * form that silently refuses to submit.
+ */
+function solveCap(scope: CapScope): Promise<string> {
+  return (async () => {
+    try {
+      await loadCap();
+      const el = document.createElement("cap-widget") as CapElement;
+      el.setAttribute("data-cap-api-endpoint", `/api/cap/${scope}/`);
+      // Out of the layout entirely, not `display: none`: the widget skips
+      // its own background work when it believes it is invisible, and we
+      // want it working.
+      el.style.cssText = "position:absolute;width:1px;height:1px;overflow:hidden;opacity:0";
+      el.setAttribute("aria-hidden", "true");
+      // The widget dispatches its own "error" event and, with nothing
+      // listening, it surfaces as an unhandled error: a navigation that
+      // aborts an in-flight solve would otherwise look like a page crash.
+      // We already report failure by resolving with "".
+      el.addEventListener("error", (event) => event.stopPropagation());
+      document.body.appendChild(el);
+      try {
+        const result = await Promise.race([
+          el.solve(),
+          new Promise<null>((resolve) => setTimeout(() => resolve(null), SOLVE_TIMEOUT_MS)),
+        ]);
+        return result?.token ?? "";
+      } finally {
+        el.remove();
+      }
+    } catch {
+      return "";
+    }
+  })();
+}
+
+/** The header a solved token travels in, ready to spread into fetch options. */
+function capHeaders(token: string): Record<string, string> {
+  return token ? { [CAP_TOKEN_HEADER]: token } : {};
+}
+
+/**
+ * A token for one form.
+ *
+ * `prime()` is safe to call on every keystroke and starts the work once;
+ * hang it on the form's first focus so the puzzle is solving while the
+ * visitor types. `headers()` awaits whatever that produced, so a fast
+ * typist waits and everyone else does not.
+ *
+ * A token is single-use, so the primed promise is cleared once spent: a
+ * form submitted twice (a failed signup, then a corrected one) solves
+ * again rather than replaying a token the server has already burned.
+ */
+export function useCap(scope: CapScope) {
+  const pending = useRef<Promise<string> | null>(null);
+
+  const prime = useCallback(() => {
+    pending.current ??= solveCap(scope);
+  }, [scope]);
+
+  const headers = useCallback(async () => {
+    prime();
+    const token = await pending.current!;
+    pending.current = null;
+    return capHeaders(token);
+  }, [prime]);
+
+  return { prime, headers };
+}

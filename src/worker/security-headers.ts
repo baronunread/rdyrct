@@ -31,9 +31,15 @@ const POSTHOG = "https://*.posthog.com";
 // so a deployed Worker cannot ship 'unsafe-inline' through a misread var.
 // The tradeoff is that e2e exercises a marginally looser policy than
 // production; everything except this one directive is identical.
+// 'wasm-unsafe-eval' is for Cap's solver (#98). WebAssembly.compile() counts
+// as script evaluation, so `script-src 'self'` refuses it outright and the
+// widget falls back to a pure-JS solver. This directive exists precisely to
+// allow WASM without allowing eval() or inline script: it buys back the fast
+// path on the phones that need it most, and grants nothing else. The module
+// itself is a same-origin Vite asset, never a CDN.
 const SCRIPT_SRC = import.meta.env.DEV
-  ? `script-src 'self' 'unsafe-inline' ${POSTHOG}`
-  : `script-src 'self' ${POSTHOG}`;
+  ? `script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' ${POSTHOG}`
+  : `script-src 'self' 'wasm-unsafe-eval' ${POSTHOG}`;
 
 const CSP = [
   "default-src 'self'",
@@ -41,6 +47,14 @@ const CSP = [
   "style-src 'self' 'unsafe-inline'",
   `img-src 'self' data: ${POSTHOG}`,
   "font-src 'self'",
+  // Cap (#98) solves its proof-of-work in a Web Worker built from a Blob
+  // URL, and with no worker-src the browser falls through child-src to
+  // default-src 'self', which refuses blob:. Everything else about Cap is
+  // same-origin: the widget is bundled from npm and its WASM ships as a
+  // Vite asset, so nothing here opens a door to a third party. The cost is
+  // that a script which already ran could spawn a worker from a string it
+  // built, which script-src 'self' still gates on getting there first.
+  "worker-src 'self' blob:",
   `connect-src 'self' ${POSTHOG}`,
   "object-src 'none'",
   "base-uri 'self'",
