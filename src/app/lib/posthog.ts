@@ -1,5 +1,5 @@
 import type { default as PosthogClient } from "posthog-js";
-import { isFunnelEvent } from "./funnel";
+import { bufferBeforeConsent, discardBuffer, drainBuffer } from "./consent-buffer";
 
 // Nothing here loads posthog-js or contacts PostHog until the user accepts
 // analytics in the consent banner (see consent-banner.tsx): before that,
@@ -70,32 +70,26 @@ export function resumeAnalyticsIfConsented() {
 }
 
 /**
- * Events that happened before the visitor answered the banner.
- *
  * The banner renders after the page does, so the landing view and any CTA
  * click that beats it would otherwise be lost, and those are the first two
- * steps of the funnel (#64). Held in memory only: nothing is written down and
- * nothing leaves the browser unless the visitor later picks Accept, at which
- * point the queue is sent with its original timestamps so the session reads
- * as one path instead of starting halfway through.
- *
- * Rejecting drops the queue on the floor. The cap is there so a long session
- * that never answers cannot grow without bound.
+ * steps of the funnel (#64). See consent-buffer.ts for the rules; this file
+ * only decides when to ask it and how to replay it.
  */
-const PENDING_LIMIT = 50;
-let pending: { event: string; properties?: Record<string, unknown>; at: string }[] = [];
-
-function queueBeforeConsent(event: string, properties?: Record<string, unknown>) {
-  if (pending.length >= PENDING_LIMIT) return;
-  pending.push({ event, properties, at: new Date().toISOString() });
+function consentUnanswered(): boolean {
+  try {
+    return localStorage.getItem(CONSENT_KEY) === null;
+  } catch {
+    return false;
+  }
 }
 
 function flushPending(posthog: typeof PosthogClient | null) {
   if (!posthog) return;
-  const queued = pending;
-  pending = [];
-  for (const { event, properties, at } of queued) {
-    posthog.capture(event, { ...properties, $capture_before_consent: true, timestamp: at });
+  for (const { event, properties, at } of drainBuffer()) {
+    // `timestamp` belongs in the third argument. Passing it as a property
+    // leaves the SDK stamping the flush time, which would collapse the whole
+    // pre-consent path onto the moment the banner was answered.
+    posthog.capture(event, { ...properties, $capture_before_consent: true }, { timestamp: at });
   }
 }
 
@@ -109,7 +103,7 @@ export function grantAnalyticsConsent() {
 }
 
 export function revokeAnalyticsConsent() {
-  pending = [];
+  discardBuffer();
   try {
     localStorage.setItem(CONSENT_KEY, "rejected");
   } catch {
@@ -126,7 +120,7 @@ const posthog = {
     // Null means no consent yet. Hold funnel steps so the path survives a
     // later Accept; everything else is dropped, as before.
     if (!client) {
-      if (isFunnelEvent(event)) queueBeforeConsent(event, properties);
+      bufferBeforeConsent(event, properties, consentUnanswered());
       return;
     }
     void client.then((p) => p?.capture(event, properties));

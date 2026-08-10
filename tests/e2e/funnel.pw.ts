@@ -82,6 +82,24 @@ test("accepting flushes the steps that happened before the banner was answered",
   expect(await page.evaluate((k) => localStorage.getItem(k), CONSENT_KEY)).toBe("accepted");
 });
 
+// Rejected is not the same as unanswered: browsing on after a refusal must
+// stay silent, not merely unsent-for-now.
+//
+// That the rejected period is never even *queued* is asserted directly in
+// tests/consent-buffer.test.ts. It cannot be asserted here, because a capture
+// batch never leaves the browser while the test intercepts PostHog's config
+// request, so "no request" would look identical either way.
+test("browsing on after a rejection stays silent", async ({ page }) => {
+  const attempts = await openLanding(page);
+
+  await page.getByRole("button", { name: "Reject" }).click();
+  await page.getByRole("link", { name: /see the analytics/i }).click();
+  await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+  await page.waitForTimeout(800);
+
+  expect(attempts).toEqual([]);
+});
+
 // The buffer holds events in memory. It must not survive a reload, or a
 // visitor who reloads and then rejects would have their earlier steps sent.
 test("the pre-consent buffer does not survive a reload", async ({ page }) => {

@@ -28,10 +28,16 @@ export const FUNNEL = {
   verificationSent: "funnel_verification_sent",
   /** 5b. Verification code accepted. */
   verificationCompleted: "funnel_verification_completed",
-  /** 6. First organization created. */
+  /** 6. An organization was created. */
   orgCreated: "funnel_org_created",
-  /** 7. First link created. The activation event: a signed-up user with no
-   *  link is not activated, so this is the end of the headline metric. */
+  /** 7. A link was created. The activation event: a signed-up user with no
+   *  link is not activated, so this is the end of the headline metric.
+   *
+   *  Both of these fire on every creation, not only the first. A funnel step
+   *  counts a person once, at their first occurrence, so gating client-side
+   *  would mean keeping "has this user created one before?" state in the
+   *  browser to arrive at the same number. Only genuinely new links reach
+   *  this: merging into an existing link goes through useAddressMutations. */
   linkCreated: "funnel_link_created",
 } as const;
 
@@ -59,6 +65,24 @@ export type CtaPlacement =
   | "final_cta";
 
 /**
+ * A campaign tag is supposed to name a campaign, but the query string is
+ * attacker- and mistake-controlled, and a link built by hand can easily carry
+ * `utm_campaign=alice@example.com`. Anything outside a conservative shape is
+ * dropped rather than truncated: a length cap does not make an email address
+ * stop being one.
+ */
+const CAMPAIGN_SHAPE = /^[a-zA-Z0-9._\-+ ]{1,64}$/;
+
+function safeCampaignValue(value: string): string | null {
+  const trimmed = value.trim();
+  if (!CAMPAIGN_SHAPE.test(trimmed)) return null;
+  // "+" and "." are legal in campaign names and in the local part of an
+  // address, so shape alone is not enough.
+  if (trimmed.includes("@")) return null;
+  return trimmed;
+}
+
+/**
  * Campaign attribution for the landing view, read from the URL and the
  * referrer.
  *
@@ -73,7 +97,8 @@ export function landingContext(): Record<string, string> {
     const params = new URLSearchParams(window.location.search);
     for (const key of ["utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content"]) {
       const value = params.get(key);
-      if (value) out[key] = value.slice(0, 200);
+      const safe = value && safeCampaignValue(value);
+      if (safe) out[key] = safe;
     }
     if (document.referrer) {
       const host = new URL(document.referrer).hostname;

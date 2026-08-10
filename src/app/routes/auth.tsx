@@ -372,6 +372,10 @@ async function trySignUp(
   if (signUpError) {
     deps.failSubmit(friendlyAuthError(signUpError));
   } else {
+    // Funnel step 4 (#64), at the boundary that actually means "an account
+    // was accepted". Before goVerify, so a failure to send the code cannot
+    // lose the signup that already happened.
+    posthog.capture(FUNNEL.signupSubmitted);
     await deps.goVerify(email);
   }
 }
@@ -470,10 +474,10 @@ function useAuthFlow(mode: "login" | "signup") {
       failSubmit(error.message ?? "Could not send the verification code");
       return;
     }
-    // Funnel steps 4 and 5a (#64): the form was accepted and a code is on
-    // its way. `resend` distinguishes this from the resend path below, which
-    // is a repeat rather than a new person reaching the step.
-    posthog.capture(FUNNEL.signupSubmitted);
+    // Funnel step 5a (#64). This one belongs here because both callers do
+    // genuinely send a code. Step 4 does not: goVerify is also reached from
+    // trySignIn's EMAIL_NOT_VERIFIED branch, so counting a signup here would
+    // count every returning unverified user as a new one.
     posthog.capture(FUNNEL.verificationSent, { resend: false });
     setAuthEmail(email);
     writePending({ email, next });

@@ -46,9 +46,34 @@ describe("landingContext", () => {
     expect(landingContext()).toEqual({});
   });
 
-  test("caps a long parameter rather than shipping an unbounded string", () => {
+  test("drops an over-long parameter rather than truncating it", () => {
+    // Truncation was the old rule and it was the wrong one: the first 200
+    // characters of an email address are still an email address.
     browser({ search: `?utm_campaign=${"x".repeat(500)}` });
-    expect(landingContext().utm_campaign).toHaveLength(200);
+    expect(landingContext().utm_campaign).toBeUndefined();
+  });
+
+  test("drops a campaign value carrying an email address", () => {
+    browser({ search: "?utm_campaign=alice@example.com&utm_source=newsletter" });
+    const ctx = landingContext();
+    expect(ctx.utm_campaign).toBeUndefined();
+    // The clean parameter alongside it still comes through.
+    expect(ctx.utm_source).toBe("newsletter");
+  });
+
+  test("drops values outside a plain campaign-name shape", () => {
+    for (const bad of ["<script>", "a/b", "a?b", "a%20b", "a,b", ""]) {
+      browser({ search: `?utm_campaign=${encodeURIComponent(bad)}` });
+      expect(landingContext().utm_campaign).toBeUndefined();
+    }
+  });
+
+  test("keeps the punctuation real campaign names use", () => {
+    // "+" arrives as a space: that is what URLSearchParams does with a query
+    // string, and spaces are allowed through deliberately because campaign
+    // names have them.
+    browser({ search: "?utm_campaign=spring-sale_2026.v2+eu" });
+    expect(landingContext().utm_campaign).toBe("spring-sale_2026.v2 eu");
   });
 
   test("survives a malformed referrer instead of failing the pageview", () => {
