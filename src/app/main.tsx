@@ -30,6 +30,9 @@ const PrivacyPage = lazy(() =>
   import("./routes/privacy").then((m) => ({ default: m.PrivacyPage })),
 );
 const TermsPage = lazy(() => import("./routes/terms").then((m) => ({ default: m.TermsPage })));
+const QrGeneratorPage = lazy(() =>
+  import("./routes/qr-generator").then((m) => ({ default: m.QrGeneratorPage })),
+);
 const AppShell = lazy(() => import("./routes/shell").then((m) => ({ default: m.AppShell })));
 const RequireAuth = lazy(() => import("./routes/shell").then((m) => ({ default: m.RequireAuth })));
 const RequireAdmin = lazy(() =>
@@ -87,6 +90,7 @@ createRoot(document.getElementById("root")!).render(
                 <Route path="/reset-password" element={<ResetPasswordPage />} />
                 <Route path="/privacy" element={<PrivacyPage />} />
                 <Route path="/terms" element={<TermsPage />} />
+                <Route path="/qr-code-generator" element={<QrGeneratorPage />} />
                 <Route path="/invite/:token" element={<InvitePage />} />
 
                 {/* onboarding is gone: the app renders a create-org empty state

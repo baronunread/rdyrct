@@ -11,6 +11,7 @@ import {
   Check,
   Code2,
   ChevronDown,
+  ArrowRight,
   Target,
   TrendingDown,
   Activity,
@@ -26,22 +27,18 @@ import {
   useReducedMotion,
   type Variants,
 } from "motion/react";
-// MorphIcon animates between two icons, so it takes lucide icon nodes, not
-// the lucide-react components used elsewhere on this page.
-import { Moon, Sun } from "lucide";
-import { MorphIcon } from "morphicons/react";
 import { useEffect, useState } from "react";
 import { useCurrentUser } from "../lib/hooks";
 import { readAuthHint } from "../lib/auth-hint";
-import { useTheme } from "../lib/theme";
 import posthog from "../lib/posthog";
 import { FUNNEL, landingContext } from "../lib/funnel";
 import { trackCta } from "../lib/track-cta";
 import { PLAN_LIMITS, PLAN_PRICES } from "@/shared/types";
-import { Button, IconButton } from "../ui/button";
+import { Button } from "../ui/button";
 import { Table, Th, Td } from "../ui/misc";
 import { Footer, GITHUB_URL } from "../ui/footer";
 import { HeroShortener } from "../components/hero-shortener";
+import { LandingHeader } from "../components/landing-header";
 import { LandingAnalyticsMock } from "../components/landing-analytics";
 import { cn } from "../ui/cn";
 
@@ -730,58 +727,6 @@ function DeployTerminal() {
   );
 }
 
-function LandingHeader({ authed }: { authed: boolean }) {
-  const [theme, toggleTheme] = useTheme();
-  return (
-    // Three columns, not space-between: the two 1fr rails keep the nav on the
-    // page's centre line however wide the brand or the auth buttons get, so
-    // "Sign up" turning into "Dashboard" does not shift the links.
-    <header className="sticky top-0 z-20 -mx-6 grid grid-cols-[1fr_auto_1fr] items-center gap-3 border-b border-border/50 bg-bg/85 px-6 py-4 backdrop-blur-md">
-      <Link to="/" className="justify-self-start text-lg font-bold tracking-widest">
-        rdyrct
-      </Link>
-
-      {/* Where the visitor goes to read. Hidden on phones, where three columns
-          do not fit: those links still live in the footer. */}
-      <nav className="hidden items-center gap-5 text-sm sm:flex">
-        <a href="#pricing" className="text-muted hover:text-accent">
-          Pricing
-        </a>
-        <a href="#faq" className="text-muted hover:text-accent">
-          FAQ
-        </a>
-        {/* /blog is served by the Worker's reverse proxy, not the SPA
-            router, so this is a real navigation, not a <Link>. */}
-        <a href="/blog" className="text-muted hover:text-accent">
-          Blog
-        </a>
-      </nav>
-      <span className="sm:hidden" />
-
-      {/* What the visitor does. */}
-      <div className="flex items-center justify-self-end gap-2.5 text-sm sm:gap-4">
-        <IconButton label="Toggle theme" className="p-2" onClick={toggleTheme}>
-          <MorphIcon icon={theme === "dark" ? Sun : Moon} size={15} spring="snappy" />
-        </IconButton>
-        {authed ? (
-          <Link to="/dashboard" onClick={() => trackCta("header")}>
-            <Button variant="primary">Dashboard</Button>
-          </Link>
-        ) : (
-          <>
-            <Link to="/login" className="text-muted hover:text-accent">
-              Log in
-            </Link>
-            <Link to="/signup" onClick={() => trackCta("header")}>
-              <Button variant="primary">Sign up</Button>
-            </Link>
-          </>
-        )}
-      </div>
-    </header>
-  );
-}
-
 function HeroSection({ ctaTo, ctaLabel }: { ctaTo: string; ctaLabel: string }) {
   return (
     <section className="flex flex-col items-center gap-8 py-16 sm:py-20">
@@ -844,6 +789,53 @@ function HeroSection({ ctaTo, ctaLabel }: { ctaTo: string; ctaLabel: string }) {
         </li>
       </ul>
     </section>
+  );
+}
+
+/**
+ * The second screen (Direction C of #96).
+ *
+ * The hero just handed the visitor a link on our domain with a random slug.
+ * The obvious next thought is "that URL is not mine", so this answers it
+ * immediately instead of three sections later: the same link on their own
+ * domain, with a slug they chose. It is also the clearest thing a paid plan
+ * buys, put where somebody is still deciding whether to care.
+ */
+function CustomDomainSection() {
+  const paidTo = usePaidPlanTo();
+  return (
+    <Section className="py-12">
+      <div className="mx-auto flex max-w-3xl flex-col items-center gap-6 text-center">
+        <h2 className="text-xl font-bold text-balance sm:text-2xl">
+          That link can carry your name instead of ours.
+        </h2>
+        <p className="max-w-xl text-sm text-muted">
+          Connect a domain you own and short links go live under it, with TLS issued automatically.
+          Chosen slugs live there too: on the shared domain every slug is random, so nobody can
+          squat the good ones.
+        </p>
+
+        <div className="flex w-full flex-col items-center gap-3 sm:flex-row sm:justify-center">
+          <div className="w-full max-w-xs rounded-lg bg-surface-2 px-4 py-3 text-left">
+            <p className="text-2xs tracking-wider text-muted uppercase">Shared domain, free</p>
+            <p className="mt-1 truncate font-mono text-sm">rdyrct.com/m22fs5w</p>
+          </div>
+          <ArrowRight size={18} className="shrink-0 rotate-90 text-muted sm:rotate-0" />
+          <div className="w-full max-w-xs rounded-lg bg-surface px-4 py-3 text-left smooth-shadow-ring-sm">
+            <p className="text-2xs tracking-wider text-accent uppercase">Your domain, paid</p>
+            <p className="mt-1 truncate font-mono text-sm font-bold">
+              go.yourbrand.com/spring-sale
+            </p>
+          </div>
+        </div>
+
+        <Link to={paidTo("hobby")} onClick={() => trackCta("second_screen_domain")}>
+          <Button variant="outline" size="sm">
+            Use your own domain <ArrowRight size={14} />
+          </Button>
+        </Link>
+      </div>
+    </Section>
   );
 }
 
@@ -1024,6 +1016,7 @@ export function LandingPage() {
 
           <LandingHeader authed={authed} />
           <HeroSection ctaTo={ctaTo} ctaLabel={ctaLabel} />
+          <CustomDomainSection />
           <HowItWorksSection />
           <AnalyticsPreviewSection />
           <FeaturesSection />

@@ -11,6 +11,11 @@
     <priority>0.8</priority>
   </url>
   <url>
+    <loc>https://rdyrct.com/qr-code-generator</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
     <loc>https://rdyrct.com/signup</loc>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
