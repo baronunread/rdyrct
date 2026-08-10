@@ -25,6 +25,8 @@ export interface Env {
   RL_DOMAIN_SETUP: RateLimit;
   RL_BILLING: RateLimit;
   RL_CLICK_RECORDING: RateLimit;
+  /* the landing page's anonymous shortener (Direction A of #96) */
+  RL_ANON_LINK: RateLimit;
 
   /* auth + email (secrets unless noted) */
   BETTER_AUTH_SECRET: string;

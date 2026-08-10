@@ -91,13 +91,17 @@ export async function scoreAndRecord(
   db: D1Database,
   linkId: string,
   destination: string,
+  /** Which table the row lives in. The anonymous shortener (Direction A of
+   * #96) keeps its links in `anon_links`, with the same four columns and the
+   * same rules, so it shares this function rather than copying it. */
+  table: "links" | "anon_links" = "links",
 ): Promise<void> {
   try {
     const verdict = await scoreDestination(destination);
     if (!verdict) return;
     await db
       .prepare(
-        `update links set risk_score = ?, risk_reasons = ?, risk_checked_at = ?, risk_provider = ?
+        `update ${table} set risk_score = ?, risk_reasons = ?, risk_checked_at = ?, risk_provider = ?
          where id = ?`,
       )
       .bind(verdict.score, JSON.stringify(verdict.reasons), Date.now(), verdict.provider, linkId)
@@ -130,6 +134,11 @@ export async function sweepLinkRisk(db: D1Database, batchSize = 50): Promise<num
     .bind(batchSize)
     .all<{ id: string; destination: string }>();
 
+  // Sequential on purpose: a daily background sweep with all day to finish,
+  // and firing a batch of lookups at a public resolver at once is how you get
+  // rate limited by it. Promise.all would trade a slow job nobody waits on
+  // for a provider that stops answering.
+  // react-doctor-disable-next-line react-doctor/async-await-in-loop
   for (const row of results) await scoreAndRecord(db, row.id, row.destination);
   return results.length;
 }

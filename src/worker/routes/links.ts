@@ -26,6 +26,7 @@ import {
 } from "../util";
 import { jsonBodyLimit } from "../body-limit";
 import { scoreAndRecord } from "../risk";
+import { claimAnonLink } from "./shorten";
 import type { AddressDTO, LinkDTO, LinkInput, OrgPlan, PlanLimits, TopEntry } from "@/shared/types";
 
 const RECENT_CLICKS_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
@@ -520,6 +521,25 @@ linkRoutes.get("/", requireOrgRole("member"), async (c) => {
 // aliases can consume more than one unit of the plan's `links` cap (a
 // rename's automatic 48h temp_alias never does, see countActiveAddresses),
 // so the UI needs this to show usage and gate creation accurately.
+/**
+ * Claims the link this browser made on the landing page before it had an
+ * account (Direction A of #96), moving it into this org for good.
+ *
+ * A missing, spent, or expired token all answer the same way, so nothing
+ * learns which tokens exist by probing. Claiming is best-effort by design:
+ * the app fires it once after the first org exists and never blocks on it,
+ * because a failed claim should cost a 24-hour link, not the signup.
+ */
+linkRoutes.post("/claim", requireOrgRole("member"), async (c) => {
+  const { claimToken } = (await c.req.json().catch(() => ({}))) as { claimToken?: unknown };
+  if (typeof claimToken !== "string" || !claimToken)
+    throw new HTTPException(400, { message: "Nothing to claim" });
+
+  const link = await claimAnonLink(c.env, c.req.param("orgId")!, c.var.user!.id, claimToken);
+  if (!link) throw new HTTPException(404, { message: "That link is no longer available" });
+  return c.json(await linkToDTO(c.var.db, c.req.param("orgId")!, link), 201);
+});
+
 linkRoutes.get("/quota-usage", requireOrgRole("member"), async (c) => {
   const count = await countActiveAddresses(c.var.db, c.req.param("orgId")!);
   return c.json({ count });

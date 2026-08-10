@@ -18,3 +18,9 @@ CF_ZONE_ID=
 # "instant", not "1": the e2e suite asserts a domain reaches active, so the
 # staged DNS/TLS delays local dev shows off are only a timer to race.
 CF_DEV_ENV=instant
+
+# Cap proof-of-work (#98). Set here, not just in .dev.vars, because this is
+# the file the browser suite actually reads: CLOUDFLARE_ENV=playwright makes
+# wrangler prefer it, so a secret only in .dev.vars leaves every e2e signup
+# running the disabled path while looking like it covers the real one.
+CAP_SECRET=playwright-only-cap-secret-32-chars-min

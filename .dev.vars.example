@@ -35,7 +35,9 @@ BETTERSTACK_INGEST_URL=
 BLOG_ORIGIN_URL=http://localhost:3000
 
 # Cap proof-of-work (#98). In production this is `openssl rand -hex 32`; the
-# fixed value here is deliberate, so CI and the browser tests run the real
-# challenge/solve/redeem loop instead of the disabled path. The disabled path
-# is covered by unit tests, which do not need a browser to prove it.
+# fixed value here is deliberate, so the real challenge/solve/redeem loop runs
+# instead of the disabled path. Note .dev.vars.playwright sets its own: that
+# is the file the browser suite reads, and a value only here would leave every
+# e2e signup on the disabled path. The disabled path has its own worker test,
+# which needs no browser to prove it.
 CAP_SECRET=dev-only-cap-secret-not-a-real-one-0000000000000000

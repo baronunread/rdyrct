@@ -311,3 +311,30 @@ export const clicks = sqliteTable(
 // No storage outbox or failure table: KV/R2 follow-up work rides Cloudflare
 // Queues, and the queue's own dead-letter queue holds give-ups (four days) for
 // an operator to re-drive.
+
+/**
+ * Links made on the landing page by someone with no account (Direction A of
+ * #96). Deliberately unrelated to `orgs`, `user` and `links`: at the moment a
+ * row is written, none of those exist for this visitor.
+ *
+ * Claiming one at signup moves it into `links` properly and deletes the row,
+ * so nothing downstream ever sees a half-owned link. Anything unclaimed
+ * expires in 24 hours and the daily sweep removes it.
+ */
+export const anonLinks = sqliteTable(
+  "anon_links",
+  {
+    id: text("id").primaryKey(),
+    slug: text("slug").notNull().unique(),
+    destination: text("destination").notNull(),
+    /** Bearer proof of "I am the browser that made this". Single-use. */
+    claimToken: text("claim_token").notNull().unique(),
+    createdAt: integer("created_at").notNull(),
+    expiresAt: integer("expires_at").notNull(),
+    riskScore: integer("risk_score"),
+    riskReasons: text("risk_reasons"),
+    riskCheckedAt: integer("risk_checked_at"),
+    riskProvider: text("risk_provider"),
+  },
+  (t) => [index("idx_anon_links_expires").on(t.expiresAt)],
+);
