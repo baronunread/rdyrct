@@ -231,6 +231,13 @@ export const links = sqliteTable(
       onDelete: "set null",
     }),
     createdAt: integer("created_at").notNull(),
+    // Destination risk (#68). Null means unscored, never clean: a provider
+    // outage and a clean answer must not look the same. Admin-only (#67),
+    // never in an org-scoped response.
+    riskScore: integer("risk_score"),
+    riskReasons: text("risk_reasons"),
+    riskCheckedAt: integer("risk_checked_at"),
+    riskProvider: text("risk_provider"),
   },
   (t) => [index("idx_links_org").on(t.orgId)],
 );
