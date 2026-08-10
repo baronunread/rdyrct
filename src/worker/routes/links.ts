@@ -445,7 +445,7 @@ function assertLinkQuota(count: number, plan: OrgPlan, limits: PlanLimits): void
 }
 
 function assertQrAllowed(body: LinkInput, limits: PlanLimits): void {
-  if (hasQrOverride(body) && !limits.qr)
+  if (hasQrOverride(body) && !limits.qrCustom)
     throw new HTTPException(402, {
       message: "QR customization is a paid feature: upgrade to use it",
     });

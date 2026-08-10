@@ -25,10 +25,8 @@ test("a downloaded QR PNG is big enough to print, not preview-sized (#88)", asyn
 
   await signUpAndVerify(page, email, password);
   await createOrg(page, "QR Org");
-  // QR is a paid feature (PLAN_LIMITS.free.qr === false), so the dialog shows
-  // no code at all until the plan allows it.
-  await setPlan(page, email);
-  await page.reload();
+  // No setPlan: generating and downloading a QR is free on every plan. Only
+  // its look is paid, which the next test covers.
 
   const destination = page.getByPlaceholder("https://example.com/launch").first();
   await expect(destination).toBeVisible();
@@ -50,4 +48,37 @@ test("a downloaded QR PNG is big enough to print, not preview-sized (#88)", asyn
   const { width, height } = await pngSize(path!);
   expect(width).toBe(1024);
   expect(height).toBe(1024);
+});
+
+/**
+ * The paid line is drawn around the QR's *look*, not the QR. A free plan
+ * gets a working code and an upgrade prompt where the styling controls sit;
+ * a paid plan gets the controls. Both halves are asserted here, because
+ * checking only the free side would pass just as well if the controls had
+ * disappeared for everyone.
+ */
+test("styling a QR is paid, generating one is not", async ({ page }) => {
+  const email = `qr-look-${Date.now()}@gmail.com`;
+
+  await signUpAndVerify(page, email, password);
+  await createOrg(page, "QR Look Org");
+
+  await page.goto("/links");
+  await page.getByRole("button", { name: "New link" }).first().click();
+  const editor = page.getByRole("dialog", { name: "New link" });
+  await expect(editor).toBeVisible();
+
+  // The code itself renders for a free plan: no lock, no empty placeholder.
+  await expect(editor.getByText("QR code", { exact: true })).toBeVisible();
+  await expect(editor.getByText(/Add your logo, colors, and dot shapes/)).toBeVisible();
+  await expect(editor.getByRole("group", { name: "QR customization" })).toBeHidden();
+
+  await page.keyboard.press("Escape");
+  await setPlan(page, email);
+  await page.reload();
+
+  await page.getByRole("button", { name: "New link" }).first().click();
+  const paidEditor = page.getByRole("dialog", { name: "New link" });
+  await expect(paidEditor.getByRole("group", { name: "QR customization" })).toBeVisible();
+  await expect(paidEditor.getByText(/Add your logo, colors, and dot shapes/)).toBeHidden();
 });

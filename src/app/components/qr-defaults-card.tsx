@@ -274,7 +274,7 @@ export function QrDefaultsCard() {
   const orgId = org?.id ?? "";
   const me = useCurrentUser();
   const isAdmin = canManageQrDefaults(me.data?.user.isAdmin, org?.role);
-  const hasQr = org ? PLAN_LIMITS[org.plan].qr : false;
+  const hasQrCustom = org ? PLAN_LIMITS[org.plan].qrCustom : false;
 
   const { values, setField, savingQr, save } = useQrDefaultsForm(orgId, org!);
 
@@ -287,7 +287,7 @@ export function QrDefaultsCard() {
             Applied to every link's QR code unless the link overrides them.
           </p>
         </div>
-        {!hasQr ? (
+        {!hasQrCustom ? (
           <UpgradeQrPrompt />
         ) : (
           <div className="grid gap-6 sm:grid-cols-[1fr_auto]">
