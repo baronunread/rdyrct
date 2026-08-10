@@ -70,9 +70,8 @@ const featureGroups = [
       },
       {
         icon: QrCode,
-        title: "Branded QR codes",
-        body: "One click turns any link into a QR code with your logo, colors, and dot styles baked in. Set org-wide defaults, override per link, and print it anywhere.",
-        plan: "Paid",
+        title: "QR codes, branded on paid plans",
+        body: "One click turns any link into a QR code you can download and print, on every plan. Paid plans bake in your logo, colors, and dot styles: set org-wide defaults and override them per link.",
       },
       {
         icon: Globe,
@@ -146,7 +145,7 @@ const faqs = [
   },
   {
     q: "What's the difference between Hobby and Pro?",
-    a: `Hobby (${PLAN_PRICES.hobby}/mo) unlocks branded QR codes, a custom domain with your own slugs, ${PLAN_LIMITS.hobby.links} links, ${PLAN_LIMITS.hobby.members} team members, and ${PLAN_LIMITS.hobby.analyticsDays}-day analytics for one organization. Pro (${PLAN_PRICES.pro}/mo) raises everything: ${PLAN_LIMITS.pro.orgs} organizations, ${PLAN_LIMITS.pro.links.toLocaleString()} links, ${PLAN_LIMITS.pro.members} team members, ${PLAN_LIMITS.pro.domains} custom domains each, ${PLAN_LIMITS.pro.analyticsDays}-day analytics, and direct email support. Only the organization owner needs a paid plan: one subscription covers every organization they own.`,
+    a: `Hobby (${PLAN_PRICES.hobby}/mo) puts your logo and colors on QR codes (plain ones are free), and adds a custom domain with your own slugs, ${PLAN_LIMITS.hobby.links} links, ${PLAN_LIMITS.hobby.members} team members, and ${PLAN_LIMITS.hobby.analyticsDays}-day analytics for one organization. Pro (${PLAN_PRICES.pro}/mo) raises everything: ${PLAN_LIMITS.pro.orgs} organizations, ${PLAN_LIMITS.pro.links.toLocaleString()} links, ${PLAN_LIMITS.pro.members} team members, ${PLAN_LIMITS.pro.domains} custom domains each, ${PLAN_LIMITS.pro.analyticsDays}-day analytics, and direct email support. Only the organization owner needs a paid plan: one subscription covers every organization they own.`,
   },
   {
     q: "How is rdyrct privacy-friendly?",
@@ -265,6 +264,7 @@ function MobilePlans({ paidTo }: { paidTo: (p: "hobby" | "pro") => string }) {
         `${PLAN_LIMITS.free.links} links`,
         `${PLAN_LIMITS.free.members} team members`,
         `${PLAN_LIMITS.free.analyticsDays}-day click analytics`,
+        "QR codes",
         "Random slugs on the shared domain",
       ],
       cta: (
@@ -283,7 +283,7 @@ function MobilePlans({ paidTo }: { paidTo: (p: "hobby" | "pro") => string }) {
         `${PLAN_LIMITS.hobby.links} links`,
         `${PLAN_LIMITS.hobby.members} team members`,
         `${PLAN_LIMITS.hobby.domains} custom domain with your own slugs`,
-        "QR codes",
+        "QR codes with your logo and colors",
         `${PLAN_LIMITS.hobby.analyticsDays}-day click analytics`,
       ],
       cta: (
@@ -457,6 +457,12 @@ function PricingSection() {
             </tr>
             <tr>
               <Td className="font-bold">QR codes</Td>
+              <YesCell />
+              <YesCell />
+              <YesCell tier="pro" />
+            </tr>
+            <tr>
+              <Td className="font-bold">QR logo, colors, and shapes</Td>
               <NoCell />
               <YesCell />
               <YesCell tier="pro" />

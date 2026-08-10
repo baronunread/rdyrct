@@ -129,7 +129,7 @@ async function applyQrPatch(
   validateQrFields(body, orgId);
   // QR customization is a paid feature, so are the org-level defaults.
   const { limits } = await orgPlan(db, orgId);
-  if (!limits.qr)
+  if (!limits.qrCustom)
     throw new HTTPException(402, {
       message: "QR customization is a paid feature: upgrade to use it",
     });

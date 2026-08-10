@@ -163,22 +163,12 @@ function UtmFields({
 function QrPreviewSidebar({
   form,
   orgQr,
-  qrEnabled,
   previewUrl,
 }: {
   form: LinkInput;
   orgQr: OrgQr;
-  qrEnabled: boolean;
   previewUrl: string;
 }) {
-  if (!qrEnabled) {
-    return (
-      <div className="flex flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-border p-4 text-center sm:w-60">
-        <Lock size={20} className="text-muted" />
-        <p className="text-xs text-muted">QR codes are a paid feature: upgrade in Billing.</p>
-      </div>
-    );
-  }
   const look = resolveQrLook(form, orgQr);
   return (
     <div className="flex flex-col gap-2 sm:w-60">
@@ -307,6 +297,32 @@ function QrLogoField({ form, setForm }: { form: LinkInput; setForm: (f: LinkInpu
         onLoad={(url) => setForm({ ...form, qrLogo: url })}
         onClear={() => setForm({ ...form, qrLogo: "" })}
       />
+    </div>
+  );
+}
+
+/** Stands where the customization controls would be on a paid plan. The QR
+ * itself is already on screen beside it, so this asks for the upgrade the
+ * visitor can see the point of, rather than blocking the feature. */
+function QrCustomizationUpsell({ className }: { className?: string }) {
+  return (
+    <div
+      className={cn(
+        "flex flex-wrap items-center justify-between gap-3 rounded-lg border border-dashed border-border p-3",
+        className,
+      )}
+    >
+      <div className="flex items-start gap-2">
+        <Lock size={14} className="mt-0.5 shrink-0 text-muted" />
+        <p className="text-xs text-muted">
+          Add your logo, colors, and dot shapes to this QR on a paid plan.
+        </p>
+      </div>
+      <RouterLink to="/billing" className="shrink-0">
+        <Button variant="outline" size="sm">
+          See plans
+        </Button>
+      </RouterLink>
     </div>
   );
 }
@@ -505,7 +521,7 @@ export function LinkEditor({
   activeDomains,
   defaultDomainId,
   domainsAllowed,
-  qrEnabled,
+  qrCustomEnabled,
   orgQr,
   shakeKey,
 }: {
@@ -521,7 +537,7 @@ export function LinkEditor({
   /** Whether the org's plan allows a custom domain at all (regardless of
    * whether one is connected yet): governs the shared-domain slug hint. */
   domainsAllowed: boolean;
-  qrEnabled: boolean;
+  qrCustomEnabled: boolean;
   orgQr: OrgQr;
   shakeKey: number;
 }) {
@@ -604,18 +620,15 @@ export function LinkEditor({
             after QR customization (the controls it's actually previewing) than
             wedged above UTM parameters, so it's last in source order there. */}
         <div className="order-last sm:order-none">
-          <QrPreviewSidebar
-            form={form}
-            orgQr={orgQr}
-            qrEnabled={qrEnabled}
-            previewUrl={previewUrl}
-          />
+          <QrPreviewSidebar form={form} orgQr={orgQr} previewUrl={previewUrl} />
         </div>
 
         <UtmFields form={form} setForm={setForm} className="sm:col-span-2" />
 
-        {qrEnabled && (
+        {qrCustomEnabled ? (
           <QrCustomization form={form} setForm={setForm} orgQr={orgQr} className="sm:col-span-2" />
+        ) : (
+          <QrCustomizationUpsell className="sm:col-span-2" />
         )}
       </form>
 

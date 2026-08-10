@@ -6,7 +6,10 @@ export interface PlanLimits {
   links: number;
   members: number; // total members incl. owner
   domains: number;
-  qr: boolean;
+  /** Whether the plan may style a QR: logo, colors, dot and corner shapes,
+   * and the org-wide defaults. Generating a plain QR and downloading it is
+   * free on every plan, so this gates the look, never the code itself. */
+  qrCustom: boolean;
   analyticsDays: number; // how far back click analytics look
 }
 
@@ -16,7 +19,7 @@ export const PLAN_LIMITS: Record<OrgPlan, PlanLimits> = {
     links: 30,
     members: 3 /* owner + 2 */,
     domains: 0,
-    qr: false,
+    qrCustom: false,
     analyticsDays: 7,
   },
   hobby: {
@@ -24,7 +27,7 @@ export const PLAN_LIMITS: Record<OrgPlan, PlanLimits> = {
     links: 500,
     members: 5,
     domains: 1,
-    qr: true,
+    qrCustom: true,
     analyticsDays: 30,
   },
   pro: {
@@ -32,7 +35,7 @@ export const PLAN_LIMITS: Record<OrgPlan, PlanLimits> = {
     links: 3000,
     members: 25,
     domains: 5,
-    qr: true,
+    qrCustom: true,
     analyticsDays: 365,
   },
 };
