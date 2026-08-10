@@ -1,4 +1,5 @@
 import type { default as PosthogClient } from "posthog-js";
+import { bufferBeforeConsent, discardBuffer, drainBuffer } from "./consent-buffer";
 
 // Nothing here loads posthog-js or contacts PostHog until the user accepts
 // analytics in the consent banner (see consent-banner.tsx): before that,
@@ -68,16 +69,41 @@ export function resumeAnalyticsIfConsented() {
   void loadClient();
 }
 
+/**
+ * The banner renders after the page does, so the landing view and any CTA
+ * click that beats it would otherwise be lost, and those are the first two
+ * steps of the funnel (#64). See consent-buffer.ts for the rules; this file
+ * only decides when to ask it and how to replay it.
+ */
+function consentUnanswered(): boolean {
+  try {
+    return localStorage.getItem(CONSENT_KEY) === null;
+  } catch {
+    return false;
+  }
+}
+
+function flushPending(posthog: typeof PosthogClient | null) {
+  if (!posthog) return;
+  for (const { event, properties, at } of drainBuffer()) {
+    // `timestamp` belongs in the third argument. Passing it as a property
+    // leaves the SDK stamping the flush time, which would collapse the whole
+    // pre-consent path onto the moment the banner was answered.
+    posthog.capture(event, { ...properties, $capture_before_consent: true }, { timestamp: at });
+  }
+}
+
 export function grantAnalyticsConsent() {
   try {
     localStorage.setItem(CONSENT_KEY, "accepted");
   } catch {
     /* ignore */
   }
-  void loadClient();
+  void loadClient()?.then(flushPending);
 }
 
 export function revokeAnalyticsConsent() {
+  discardBuffer();
   try {
     localStorage.setItem(CONSENT_KEY, "rejected");
   } catch {
@@ -90,7 +116,14 @@ export function revokeAnalyticsConsent() {
 
 const posthog = {
   capture(event: string, properties?: Record<string, unknown>) {
-    void loadClient()?.then((p) => p?.capture(event, properties));
+    const client = loadClient();
+    // Null means no consent yet. Hold funnel steps so the path survives a
+    // later Accept; everything else is dropped, as before.
+    if (!client) {
+      bufferBeforeConsent(event, properties, consentUnanswered());
+      return;
+    }
+    void client.then((p) => p?.capture(event, properties));
   },
   identify(id: string, properties?: Record<string, unknown>) {
     if (identifiedId === id) return;

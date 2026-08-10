@@ -23,6 +23,7 @@ import { cn } from "../ui/cn";
 import { NotFound } from "./not-found";
 import { PLAN_LIMITS, type User, type UserOrg } from "@/shared/types";
 import posthog from "../lib/posthog";
+import { FUNNEL } from "../lib/funnel";
 
 const ORG_LIMIT_MESSAGE = "Upgrade to Pro to create more organizations";
 
@@ -313,6 +314,7 @@ export function AppShell() {
       });
       await qc.invalidateQueries({ queryKey: ["user"] });
       posthog.capture("organization_created");
+      posthog.capture(FUNNEL.orgCreated, { from: "switcher" });
       setNewOrgOpen(false);
       setNewOrgName("");
       setOrg(created.id);

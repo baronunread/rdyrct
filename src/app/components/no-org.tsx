@@ -3,6 +3,8 @@ import { useForm } from "react-hook-form";
 import { valibotResolver } from "@hookform/resolvers/valibot";
 import { useQueryClient } from "@tanstack/react-query";
 import { api } from "../lib/api";
+import posthog from "../lib/posthog";
+import { FUNNEL } from "../lib/funnel";
 import { useCurrentOrg } from "../lib/current-org";
 import { Button } from "../ui/button";
 import { Field, Input } from "../ui/field";
@@ -32,6 +34,11 @@ export function NoOrgState() {
           method: "POST",
           body: { name: name.trim() },
         });
+        // This path fired nothing before: an org created from the empty
+        // state, which is the route a brand-new user actually takes, was
+        // missing from the numbers entirely.
+        posthog.capture("organization_created");
+        posthog.capture(FUNNEL.orgCreated, { from: "empty_state" });
         setOrg(created.id);
         await qc.refetchQueries({ queryKey: ["user"] });
       } catch (err) {

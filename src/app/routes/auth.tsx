@@ -14,6 +14,7 @@ import { AuthCard, PasswordMeter } from "../components/auth-form";
 import { authClient } from "../lib/auth-client";
 import { friendlyAuthError } from "../lib/auth-errors";
 import posthog from "../lib/posthog";
+import { FUNNEL } from "../lib/funnel";
 import { useShake } from "../lib/use-shake";
 import { useCurrentUser } from "../lib/hooks";
 import { firstFormError } from "../lib/form-errors";
@@ -371,6 +372,10 @@ async function trySignUp(
   if (signUpError) {
     deps.failSubmit(friendlyAuthError(signUpError));
   } else {
+    // Funnel step 4 (#64), at the boundary that actually means "an account
+    // was accepted". Before goVerify, so a failure to send the code cannot
+    // lose the signup that already happened.
+    posthog.capture(FUNNEL.signupSubmitted);
     await deps.goVerify(email);
   }
 }
@@ -469,6 +474,11 @@ function useAuthFlow(mode: "login" | "signup") {
       failSubmit(error.message ?? "Could not send the verification code");
       return;
     }
+    // Funnel step 5a (#64). This one belongs here because both callers do
+    // genuinely send a code. Step 4 does not: goVerify is also reached from
+    // trySignIn's EMAIL_NOT_VERIFIED branch, so counting a signup here would
+    // count every returning unverified user as a new one.
+    posthog.capture(FUNNEL.verificationSent, { resend: false });
     setAuthEmail(email);
     writePending({ email, next });
     setView("verify-otp");
@@ -526,7 +536,12 @@ function useAuthFlow(mode: "login" | "signup") {
       await new Promise((resolve) => setTimeout(resolve, 900));
       clearPending();
       await qc.refetchQueries({ queryKey: ["user"] });
-      if (mode === "signup") posthog.capture("user_signed_up");
+      if (mode === "signup") {
+        posthog.capture("user_signed_up");
+        // Funnel step 5b (#64). Only on signup: a sign-in that happens to
+        // re-verify is not someone crossing this step for the first time.
+        posthog.capture(FUNNEL.verificationCompleted);
+      }
       const isAdmin = qc.getQueryData<CurrentUser | null>(["user"])?.user.isAdmin ?? false;
       setVerifyPhase("leaving");
       await new Promise((resolve) => setTimeout(resolve, 300));
@@ -547,6 +562,7 @@ function useAuthFlow(mode: "login" | "signup") {
       toast(resendError.message ?? "Could not resend the code", "error");
       return;
     }
+    posthog.capture(FUNNEL.verificationSent, { resend: true });
     setResent(true);
   };
 

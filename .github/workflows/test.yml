@@ -25,8 +25,20 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
       # Before verify, not after: verify now ends with the browser smoke
-      # test, which needs this file to start the dev server.
+      # test, which needs these files to start the dev server.
+      #
+      # Both of them. .env carries the VITE_PUBLIC_POSTHOG_* pair that
+      # src/app/lib/posthog.ts reads, and CI used to run without it: the
+      # analytics path was never exercised here, and in dev mode a missing
+      # token makes the loader throw on every capture. A developer with a
+      # .env therefore ran a different suite from CI, which is how a green
+      # local run reached a red pipeline.
+      #
+      # The token is the placeholder from .env.example, so nothing lands in
+      # a real project, and the funnel test blocks the requests anyway.
       - name: Configure browser test environment
-        run: cp .dev.vars.example .dev.vars
+        run: |
+          cp .dev.vars.example .dev.vars
+          cp .env.example .env
       - name: Static checks, unit tests, and browser smoke test
         run: bun run verify
