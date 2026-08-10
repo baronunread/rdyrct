@@ -227,6 +227,19 @@
         "period": 60,
       },
     },
+    // The anonymous shortener on the landing page (Direction A of #96). Its
+    // own namespace, not RL_AUTH_PUBLIC: a flood at the landing form must not
+    // lock anybody out of signing in. Generous enough that a person trying a
+    // few links never notices, tight enough that farming short links from one
+    // address is not worth the Cap proof-of-work each one already costs.
+    {
+      "name": "RL_ANON_LINK",
+      "namespace_id": "14010",
+      "simple": {
+        "limit": 5,
+        "period": 60,
+      },
+    },
     // Keyed by the recipient address rather than the caller, so many callers
     // cannot each stay under RL_EMAIL while all aiming at one inbox (#50).
     // Still the tight one, and it is the limit that matters: it bounds what
@@ -427,6 +440,17 @@
           "namespace_id": "24008",
           "simple": {
             "limit": 600,
+            "period": 60,
+          },
+        },
+        {
+          // Higher than production's 5: the e2e run creates several anonymous
+          // links from one address in one minute, and rate limiting the test
+          // suite proves nothing about the feature.
+          "name": "RL_ANON_LINK",
+          "namespace_id": "24010",
+          "simple": {
+            "limit": 30,
             "period": 60,
           },
         },

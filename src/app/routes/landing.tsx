@@ -35,12 +35,13 @@ import { useCurrentUser } from "../lib/hooks";
 import { readAuthHint } from "../lib/auth-hint";
 import { useTheme } from "../lib/theme";
 import posthog from "../lib/posthog";
-import { FUNNEL, landingContext, type CtaPlacement } from "../lib/funnel";
+import { FUNNEL, landingContext } from "../lib/funnel";
+import { trackCta } from "../lib/track-cta";
 import { PLAN_LIMITS, PLAN_PRICES } from "@/shared/types";
 import { Button, IconButton } from "../ui/button";
 import { Table, Th, Td } from "../ui/misc";
 import { Footer, GITHUB_URL } from "../ui/footer";
-import { LandingMockup } from "../components/landing-mockup";
+import { HeroShortener } from "../components/hero-shortener";
 import { LandingAnalyticsMock } from "../components/landing-analytics";
 import { cn } from "../ui/cn";
 
@@ -164,12 +165,6 @@ const faqs = [
     a: "Yes. rdyrct is open source and deploys to your own Cloudflare account. You get everything Pro has, minus direct email support.",
   },
 ];
-
-/** Every call to action on this page reports through here, so the funnel
- *  sees one event with a placement rather than eight differently-named ones. */
-function trackCta(placement: CtaPlacement) {
-  posthog.capture(FUNNEL.ctaClicked, { placement });
-}
 
 function Section({
   children,
@@ -789,7 +784,7 @@ function LandingHeader({ authed }: { authed: boolean }) {
 
 function HeroSection({ ctaTo, ctaLabel }: { ctaTo: string; ctaLabel: string }) {
   return (
-    <section className="flex flex-col items-center gap-10 py-16 sm:py-20">
+    <section className="flex flex-col items-center gap-8 py-16 sm:py-20">
       <m.div
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
@@ -809,38 +804,45 @@ function HeroSection({ ctaTo, ctaLabel }: { ctaTo: string; ctaLabel: string }) {
             the site sending people to a repository; it now lives in its own
             band under the pricing table. */}
         <div className="flex flex-wrap items-center justify-center gap-3">
+          {/* Secondary now, both of them: the shortener below is the thing
+              this page asks you to do, so a filled button competing with it
+              would be two primary actions in one view. */}
           <Link to={ctaTo} onClick={() => trackCta("hero_primary")}>
-            <Button variant="primary" size="md" className="h-11 px-6 text-base">
+            <Button variant="outline" size="md" className="h-11 px-6 text-base">
               {ctaLabel}
             </Button>
           </Link>
           <a href="#analytics" onClick={() => trackCta("hero_secondary")}>
-            <Button variant="outline" size="md" className="h-11 px-6 text-base">
+            <Button variant="ghost" size="md" className="h-11 px-6 text-base">
               <BarChart3 size={16} /> See the analytics
             </Button>
           </a>
         </div>
-        <ul className="flex flex-wrap items-center justify-center gap-x-5 gap-y-1 text-xs text-muted">
-          <li className="flex items-center gap-1.5">
-            <Check size={13} className="text-accent-2" /> Free plan forever
-          </li>
-          <li className="flex items-center gap-1.5">
-            <Check size={13} className="text-accent-2" /> No credit card required
-          </li>
-          <li className="flex items-center gap-1.5">
-            <Check size={13} className="text-accent-2" /> No IP tracking
-          </li>
-        </ul>
       </m.div>
 
+      {/* Above the reassurance list, not below the buttons: this is what the
+          page is for. Somebody can have a working link before they have read
+          a word about plans. */}
       <m.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.6, ease: "easeOut", delay: 0.15 }}
         className="flex w-full justify-center"
       >
-        <LandingMockup />
+        <HeroShortener />
       </m.div>
+
+      <ul className="flex flex-wrap items-center justify-center gap-x-5 gap-y-1 text-xs text-muted">
+        <li className="flex items-center gap-1.5">
+          <Check size={13} className="text-accent-2" /> Free plan forever
+        </li>
+        <li className="flex items-center gap-1.5">
+          <Check size={13} className="text-accent-2" /> No credit card required
+        </li>
+        <li className="flex items-center gap-1.5">
+          <Check size={13} className="text-accent-2" /> No IP tracking
+        </li>
+      </ul>
     </section>
   );
 }

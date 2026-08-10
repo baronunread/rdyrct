@@ -11,7 +11,8 @@ export type RateLimitGroup =
   | "qr_upload"
   | "domain"
   | "checkout"
-  | "click";
+  | "click"
+  | "anon_link";
 
 const EMAIL_AUTH_PATHS = new Set([
   "/api/auth/sign-up/email",
@@ -177,7 +178,7 @@ export async function enforcePublicAuthRateLimit(c: Context<AppEnv>): Promise<Re
 export function signedApiGroup(
   path: string,
   method: string,
-): Exclude<RateLimitGroup, "auth" | "cap" | "email" | "click"> | null {
+): Exclude<RateLimitGroup, "auth" | "cap" | "email" | "click" | "anon_link"> | null {
   if (/^\/api\/billing\/(?:checkout|portal)$/.test(path)) return "checkout";
   if (method === "POST" && /^\/api\/orgs\/[^/]+\/qr-logo\/?$/.test(path)) return "qr_upload";
   if (/^\/api\/orgs\/[^/]+\/domains(?:\/|$)/.test(path)) return "domain";
