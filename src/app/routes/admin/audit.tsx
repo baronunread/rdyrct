@@ -66,7 +66,7 @@ export function AdminAuditPage() {
       ) : rows.length === 0 ? (
         <p className="py-6 text-center text-sm text-muted">Nothing recorded yet.</p>
       ) : (
-        <Table fixed>
+        <Table fixed minWidth="min-w-[56rem]">
           <thead>
             <tr>
               <SortTh
@@ -74,23 +74,23 @@ export function AdminAuditPage() {
                 sortKey="createdAt"
                 sort={sort}
                 onSort={setSort}
-                className="w-[34%] sm:w-[24%] md:w-[16%]"
+                className="w-[16%]"
               />
               <SortTh
                 label="Who"
                 sortKey="actorEmail"
                 sort={sort}
                 onSort={setSort}
-                className="hidden sm:table-cell sm:w-[30%] md:w-[22%]"
+                className="w-[22%]"
               />
               <SortTh
                 label="Action"
                 sortKey="action"
                 sort={sort}
                 onSort={setSort}
-                className="w-[66%] sm:w-[46%] md:w-[18%]"
+                className="w-[18%]"
               />
-              <Th className="hidden md:table-cell md:w-[44%]">Detail</Th>
+              <Th className="w-[44%]">Detail</Th>
             </tr>
           </thead>
           <tbody>
@@ -98,14 +98,11 @@ export function AdminAuditPage() {
               <tr key={entry.id}>
                 <Td className="whitespace-nowrap text-muted">{shortDate(entry.createdAt)}</Td>
                 {/* The address may be gone: the log outlives the account. */}
-                <Td className="hidden truncate sm:table-cell">
+                <Td className="truncate">
                   {entry.actorEmail ?? <span className="text-muted">deleted account</span>}
                 </Td>
                 <Td className="truncate font-mono text-xs">{entry.action}</Td>
-                <Td
-                  className="hidden truncate text-muted md:table-cell"
-                  title={entry.detail ?? entry.targetId}
-                >
+                <Td className="truncate text-muted" title={entry.detail ?? entry.targetId}>
                   {entry.detail ?? entry.targetId}
                 </Td>
               </tr>
