@@ -23,6 +23,7 @@
  *    Google Web Risk is the upgrade for full-URL scoring, when there is
  *    evidence of that specific abuse to justify the credential.
  */
+import type { Env } from "./env";
 
 /** 0 = nothing known against it, 100 = a provider refuses to resolve it. */
 export type RiskVerdict = {
@@ -124,62 +125,68 @@ export async function scoreAndRecord(
 }
 
 /**
- * Re-scores links, oldest first, with never-scored ones taking priority.
- *
- * Bounded, because the whole point is that the table cycles rather than that
- * any one run finishes it: a destination that turns bad long after creation
- * is caught on some later day, and one run can never blow the daily job's
- * time budget.
- *
- * Sequential rather than parallel on purpose. This is a background sweep
- * with all day to finish, and firing a batch of lookups at a public resolver
- * at once is how you get rate limited by it.
+ * How long a hostname's verdict is trusted before the next click re-checks it.
  */
-export async function sweepLinkRisk(db: D1Database, batchSize = 50): Promise<number> {
-  // Half the batch at most for the never-scored, so they cannot crowd out the
-  // rescans. A destination the resolver keeps timing out on stays unscored,
-  // and unscored sorts first: enough of those and every run spends its whole
-  // budget retrying the same failures, while destinations that were clean a
-  // year ago are never looked at again. That is the sweep quietly giving up
-  // on the job it exists for, with nothing on screen to say so.
-  // Together: two independent reads of our own database, which is not the
-  // resolver the loop below is careful with.
-  const [unscored, scored] = await Promise.all([
-    pickToScore(db, "risk_checked_at is null", batchSize),
-    pickToScore(db, "risk_checked_at is not null", batchSize),
-  ]);
-  // The cap gives way when the other side cannot fill the batch: it exists to
-  // stop the unscored crowding out rescans, not to leave the budget unspent.
-  const room = Math.max(Math.ceil(batchSize / 2), batchSize - scored.length);
-  const take = unscored.slice(0, room);
-  const results = [...take, ...scored.slice(0, batchSize - take.length)];
+const HOST_VERDICT_TTL_SECONDS = 24 * 60 * 60;
 
-  // Sequential on purpose: a daily background sweep with all day to finish,
-  // and firing a batch of lookups at a public resolver at once is how you get
-  // rate limited by it. Promise.all would trade a slow job nobody waits on
-  // for a provider that stops answering.
-  // react-doctor-disable-next-line react-doctor/async-await-in-loop
-  for (const row of results) await scoreAndRecord(db, row.id, row.destination);
-  return results.length;
-}
+/**
+ * Re-checks a destination when somebody clicks it, if the answer is stale.
+ *
+ * This replaced a nightly sweep, which was the wrong axis: a sweep has to get
+ * through the whole table, so it loses the race as soon as the table is big,
+ * and it spends most of its budget on links nobody visits. A link nobody
+ * clicks harms nobody, so it can stay unscored.
+ *
+ * The work is proportional to distinct hosts being clicked, not to how many
+ * links exist. Ten thousand links pointing at one host cost one check a day
+ * between them, because the verdict is cached per hostname rather than per
+ * link: our provider only ever looks at the hostname anyway, so this loses
+ * no accuracy.
+ *
+ * Meant for `waitUntil` after the redirect has already been sent. Nothing
+ * here is on the path of the person clicking, and every failure is
+ * swallowed: a redirect must not depend on a resolver.
+ */
+export async function revalidateOnRedirect(
+  env: Env,
+  hit: { linkId: string; orgId: string; url: string },
+): Promise<void> {
+  // Anonymous links (#96) are checked when they are made and expire within
+  // 24 hours, so there is never a stale one to catch.
+  if (!hit.orgId) return;
 
-/** One side of the sweep's batch: the oldest rows in the given state. */
-async function pickToScore(
-  db: D1Database,
-  state: string,
-  limit: number,
-): Promise<{ id: string; destination: string }[]> {
-  if (limit <= 0) return [];
-  const { results } = await db
-    .prepare(
-      `select id, destination from links
-       where ${state}
-       order by risk_checked_at asc
-       limit ?`,
+  const hostname = hostnameOf(hit.url);
+  if (!hostname) return;
+
+  try {
+    const cacheKey = `risk:host:${hostname}`;
+    // One KV read is the whole cost of a click on a host checked recently,
+    // and KV reads at the edge are what this hot path is already made of.
+    if (await env.LINKS.get(cacheKey)) return;
+
+    const verdict = await scoreDestination(hit.url);
+    if (!verdict) return;
+
+    // Written before the row: if the update fails, the next click should not
+    // immediately repeat a lookup that just succeeded.
+    await env.LINKS.put(cacheKey, String(verdict.score), {
+      expirationTtl: HOST_VERDICT_TTL_SECONDS,
+    });
+    await env.DB.prepare(
+      `update links set risk_score = ?, risk_reasons = ?, risk_checked_at = ?, risk_provider = ?
+       where id = ?`,
     )
-    .bind(limit)
-    .all<{ id: string; destination: string }>();
-  return results;
+      .bind(
+        verdict.score,
+        JSON.stringify(verdict.reasons),
+        Date.now(),
+        verdict.provider,
+        hit.linkId,
+      )
+      .run();
+  } catch (error) {
+    console.warn("risk_revalidate_failed", hit.linkId, error);
+  }
 }
 
 /** The host a destination points at, or null if it is not a URL we can read. */

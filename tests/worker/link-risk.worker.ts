@@ -3,7 +3,7 @@ import { env } from "cloudflare:workers";
 import { createExecutionContext, reset, waitOnExecutionContext } from "cloudflare:test";
 import worker from "../../src/worker";
 import { applyTestMigrations, authEnv, freeOwnerCookie } from "./support";
-import { scoreAndRecord, sweepLinkRisk } from "../../src/worker/risk";
+import { scoreAndRecord } from "../../src/worker/risk";
 
 /**
  * Destination risk scoring end to end (#68).
@@ -20,17 +20,13 @@ const CLEAN = "https://example.com/x";
 const realFetch = globalThis.fetch;
 
 /** A resolver that refuses BLOCKED's host and resolves everything else. */
-function stubResolver(options: { fail?: boolean; failHost?: string } = {}) {
+function stubResolver(options: { fail?: boolean } = {}) {
   const calls: string[] = [];
   globalThis.fetch = (async (input: RequestInfo | URL) => {
     const url = String(input instanceof Request ? input.url : input);
     if (!url.startsWith("https://security.cloudflare-dns.com")) return realFetch(input);
     calls.push(url);
-    // failHost, because the resolver is asked about a host: the query carries
-    // no path, so a test that needs some links to keep failing and others to
-    // succeed has to separate them by hostname.
-    if (options.fail || (options.failHost && url.includes(options.failHost)))
-      throw new Error("resolver unreachable");
+    if (options.fail) throw new Error("resolver unreachable");
     const blocked = url.includes("malware.example");
     return new Response(
       JSON.stringify({ Status: 0, Answer: [{ data: blocked ? "0.0.0.0" : "93.184.216.34" }] }),
@@ -196,63 +192,5 @@ describe("re-scoring on a destination edit", () => {
 
     await patchLink(cookie, linkId, { title: "Renamed" });
     expect(await riskRow(linkId)).toEqual(before);
-  });
-});
-
-describe("the cron sweep", () => {
-  it("picks up unscored links first, then the oldest", async () => {
-    stubResolver({ fail: true });
-    const cookie = await freeOwnerCookie();
-    const a = await createLink(cookie, BLOCKED);
-    const b = await createLink(cookie, CLEAN);
-    expect((await riskRow(a))?.risk_score).toBeNull();
-
-    globalThis.fetch = realFetch;
-    stubResolver();
-    expect(await sweepLinkRisk(env.DB)).toBe(2);
-
-    expect((await riskRow(a))?.risk_score).toBe(100);
-    expect((await riskRow(b))?.risk_score).toBe(0);
-  });
-
-  it("keeps rescanning even when the unscored never come good", async () => {
-    // A destination the resolver keeps failing on stays unscored, and
-    // unscored is picked first. Enough of those and every run spent its whole
-    // budget retrying the same failures, so a link scored a year ago was
-    // never looked at again: the sweep still returned a number and still did
-    // nothing useful.
-    const cookie = await freeOwnerCookie();
-
-    // Four that can never be scored, on their own host so they can keep
-    // failing while the fifth succeeds.
-    stubResolver({ fail: true });
-    for (let i = 0; i < 4; i++)
-      await postLink(cookie, { destination: `https://stuck.example/${i}` });
-
-    globalThis.fetch = realFetch;
-    stubResolver();
-    const old = await createLink(cookie, CLEAN);
-    const scoredAt = (await riskRow(old))?.risk_checked_at as number;
-    expect(scoredAt).not.toBeNull();
-
-    globalThis.fetch = realFetch;
-    stubResolver({ failHost: "stuck.example" });
-    await new Promise((done) => setTimeout(done, 5));
-    await sweepLinkRisk(env.DB, 4);
-
-    // Half the batch went to the never-scored, so the rescan still got its
-    // turn: the timestamp moved.
-    expect((await riskRow(old))?.risk_checked_at).toBeGreaterThan(scoredAt);
-  });
-
-  it("stops at the batch size, so one run cannot blow the daily budget", async () => {
-    stubResolver({ fail: true });
-    const cookie = await freeOwnerCookie();
-    for (let i = 0; i < 4; i++) await postLink(cookie, { destination: `${CLEAN}/${i}` });
-
-    globalThis.fetch = realFetch;
-    const calls = stubResolver();
-    expect(await sweepLinkRisk(env.DB, 2)).toBe(2);
-    expect(calls).toHaveLength(2);
   });
 });
