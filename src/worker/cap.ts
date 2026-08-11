@@ -17,6 +17,7 @@
  */
 import { generateChallenge, validateChallenge } from "capjs-core";
 import type { Env } from "./env";
+import { keyedDigest } from "./rate-limit";
 
 /** Namespaces the challenge so a token minted for signup cannot be spent on
  * password reset. Cap binds this into the signature. */
@@ -84,30 +85,50 @@ export async function verifySolution(
       scope,
       tokenTtlMs: TOKEN_TTL_MS,
       consumeNonce: (signatureHex, ttlMs) => consumeNonce(env, signatureHex, ttlMs),
+      // Signed, not stored. Cap's default token is a random string the server
+      // has to remember, and remembering it here meant a KV write at /redeem
+      // read back by the form submit a second later. KV is eventually
+      // consistent: that read missed often enough that signup failed for
+      // real people, and re-solving lost the same race (#98).
+      signToken: ({ expires }) => signToken(env, scope, expires),
     },
   );
+}
+
+/** Compares two same-length strings without leaking where they differ. */
+function equalsConstantTime(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return diff === 0;
+}
+
+/** `expires.signature`, signed with CAP_SECRET so any colocation can check it
+ * without shared state. */
+async function signToken(env: Env, scope: CapScope, expires: number): Promise<string> {
+  return `${expires}.${await keyedDigest(env.CAP_SECRET!, `cap:${scope}:${expires}`)}`;
 }
 
 /**
  * Checks the token a form submitted, and burns it.
  *
- * Cap's own flow hands the client a redeemed token to submit; we verify that
- * token here against the same secret. The redeemed token is stored in KV at
- * redeem time and deleted here, so it works exactly once no matter how many
- * times the form is replayed.
+ * The signature is the whole check, so a valid token is accepted whatever KV
+ * knows. KV only records that a token was spent, to turn away a replay: a
+ * lookup that misses because the write has not propagated lets one extra
+ * submit through within the ten-minute window, which is the direction this
+ * should fail in.
  */
 export async function spendToken(env: Env, scope: CapScope, token: string): Promise<boolean> {
   if (!capEnabled(env)) return true;
-  if (!token) return false;
-  const key = `cap:token:${scope}:${token}`;
-  const found = await env.LINKS.get(key);
-  if (!found) return false;
-  await env.LINKS.delete(key);
-  return true;
-}
+  const [expires] = token.split(".");
+  const expiresAt = Number(expires);
+  if (!expiresAt || expiresAt < Date.now()) return false;
+  if (!equalsConstantTime(token, await signToken(env, scope, expiresAt))) return false;
 
-/** Records a redeemed token so `spendToken` can find it once. */
-export async function storeToken(env: Env, scope: CapScope, token: string, expires: number) {
-  const ttl = Math.max(60, Math.ceil((expires - Date.now()) / 1000));
-  await env.LINKS.put(`cap:token:${scope}:${token}`, "1", { expirationTtl: ttl });
+  const key = `cap:spent:${scope}:${token}`;
+  if (await env.LINKS.get(key)) return false;
+  await env.LINKS.put(key, "1", {
+    expirationTtl: Math.max(60, Math.ceil((expiresAt - Date.now()) / 1000)),
+  });
+  return true;
 }

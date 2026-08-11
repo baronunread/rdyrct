@@ -8,7 +8,7 @@
  */
 import { Hono } from "hono";
 import type { AppEnv } from "../env";
-import { capEnabled, issueChallenge, storeToken, verifySolution, type CapScope } from "../cap";
+import { capEnabled, issueChallenge, verifySolution, type CapScope } from "../cap";
 
 const SCOPES: readonly CapScope[] = ["signup", "password-reset", "anon-link"];
 
@@ -45,6 +45,5 @@ capRoutes.post("/:scope/redeem", async (c) => {
   // turn, and tells a person nothing they can act on.
   if (!result.success) return c.json({ success: false }, 400);
 
-  await storeToken(c.env, scope, result.token, result.expires);
   return c.json({ success: true, token: result.token, expires: result.expires });
 });
