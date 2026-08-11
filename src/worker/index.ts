@@ -14,7 +14,7 @@ import { adminRoutes } from "./routes/admin";
 import { billingRoutes, handlePolarWebhook } from "./routes/billing";
 import { domainRoutes } from "./routes/domains";
 import { capRoutes } from "./routes/cap";
-import { sweepLinkRisk } from "./risk";
+import { revalidateOnRedirect } from "./risk";
 import { shortenRoutes, sweepExpiredAnonLinks } from "./routes/shorten";
 import { resolveSlug, resolveDomain, type KVLink } from "./kv";
 import { RESERVED_SLUGS } from "./util";
@@ -86,6 +86,10 @@ function redirectWithClick(c: Context<AppEnv>, hit: KVLink): Response {
   // read it. Skipping the write is also the honest version of the pitch:
   // analytics is what signing up buys.
   if (hit.orgId) c.executionCtx.waitUntil(enqueueClick(c, hit));
+  // Re-check the destination if its verdict has gone stale (#68). After the
+  // redirect is sent, so it costs the person clicking nothing, and only for
+  // hosts nobody has checked in the last day.
+  c.executionCtx.waitUntil(revalidateOnRedirect(c.env, hit));
   return c.redirect(hit.url, 302);
 }
 
@@ -258,11 +262,5 @@ export default {
     // Daily: drop anonymous links nobody claimed inside their 24 hours, and
     // the KV keys they were resolving through (Direction A of #96).
     await sweepExpiredAnonLinks(env);
-
-    // Daily: re-score link destinations, unscored first then oldest (#68).
-    // Bounded, because the point is that the table cycles rather than that
-    // any one run finishes it: a destination that turns bad long after it
-    // was created gets caught on some later day.
-    await sweepLinkRisk(env.DB);
   },
 };

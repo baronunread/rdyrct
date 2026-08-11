@@ -3,7 +3,6 @@ import { env } from "cloudflare:workers";
 import { createExecutionContext, reset, waitOnExecutionContext } from "cloudflare:test";
 import worker from "../../src/worker";
 import { applyTestMigrations, authEnv, freeOwnerCookie } from "./support";
-import { sweepLinkRisk } from "../../src/worker/risk";
 
 /**
  * Destination risk scoring end to end (#68).
@@ -172,33 +171,5 @@ describe("re-scoring on a destination edit", () => {
 
     await patchLink(cookie, linkId, { title: "Renamed" });
     expect(await riskRow(linkId)).toEqual(before);
-  });
-});
-
-describe("the cron sweep", () => {
-  it("picks up unscored links first, then the oldest", async () => {
-    stubResolver({ fail: true });
-    const cookie = await freeOwnerCookie();
-    const a = await createLink(cookie, BLOCKED);
-    const b = await createLink(cookie, CLEAN);
-    expect((await riskRow(a))?.risk_score).toBeNull();
-
-    globalThis.fetch = realFetch;
-    stubResolver();
-    expect(await sweepLinkRisk(env.DB)).toBe(2);
-
-    expect((await riskRow(a))?.risk_score).toBe(100);
-    expect((await riskRow(b))?.risk_score).toBe(0);
-  });
-
-  it("stops at the batch size, so one run cannot blow the daily budget", async () => {
-    stubResolver({ fail: true });
-    const cookie = await freeOwnerCookie();
-    for (let i = 0; i < 4; i++) await postLink(cookie, { destination: `${CLEAN}/${i}` });
-
-    globalThis.fetch = realFetch;
-    const calls = stubResolver();
-    expect(await sweepLinkRisk(env.DB, 2)).toBe(2);
-    expect(calls).toHaveLength(2);
   });
 });
