@@ -31,7 +31,7 @@ const admin = (path: string, cookie: string, init: RequestInit = {}) =>
   fetchWorker(
     new Request(`http://localhost/api/admin${path}`, {
       ...init,
-      headers: { cookie, "content-type": "application/json", ...(init.headers ?? {}) },
+      headers: { cookie, "content-type": "application/json", ...init.headers },
     }),
   );
 

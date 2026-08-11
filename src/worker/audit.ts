@@ -12,7 +12,6 @@
  * is visible.
  */
 import { drizzle } from "drizzle-orm/d1";
-import { and, desc, eq } from "drizzle-orm";
 import * as schema from "./db/schema";
 import type { Env } from "./env";
 import { uid } from "./util";
@@ -56,25 +55,4 @@ export async function recordAdminAction(
   } catch (error) {
     console.error("admin_audit_write_failed", entry.action, entry.targetId, error);
   }
-}
-
-/** Newest first, optionally narrowed to one target while investigating it. */
-export async function readAdminActions(
-  env: Env,
-  filter: { targetType?: string; targetId?: string; limit?: number } = {},
-) {
-  const db = drizzle(env.DB, { schema });
-  const where =
-    filter.targetType && filter.targetId
-      ? and(
-          eq(schema.adminActions.targetType, filter.targetType),
-          eq(schema.adminActions.targetId, filter.targetId),
-        )
-      : undefined;
-  return db
-    .select()
-    .from(schema.adminActions)
-    .where(where)
-    .orderBy(desc(schema.adminActions.createdAt))
-    .limit(Math.min(filter.limit ?? 100, 200));
 }
