@@ -93,7 +93,8 @@ enforcement.
 
 | Binding              | Limit   | Keyed by          | Guards                        |
 | -------------------- | ------- | ----------------- | ----------------------------- |
-| `RL_AUTH_PUBLIC`     | 30/min  | IP, path          | `/api/auth/*`, `/api/cap/*`   |
+| `RL_AUTH_PUBLIC`     | 30/min  | IP, path          | `/api/auth/*`                 |
+| `RL_CAP`             | 120/min | IP, path          | `/api/cap/*` (#98)            |
 | `RL_EMAIL`           | 10/min  | IP, path          | Anything that sends mail      |
 | `RL_EMAIL_RECIPIENT` | 4/min   | Recipient address | One inbox, many callers (#50) |
 | `RL_WRITE_FREE`      | 90/min  | User              | Writes on a free plan         |
@@ -105,7 +106,11 @@ enforcement.
 
 These are set for the person having trouble, not for the bot: someone who
 mistypes a password, retries a signup or pastes six links in a row must never
-meet a wall, because a wall reads as the product being broken. Only
+meet a wall, because a wall reads as the product being broken. `RL_CAP` is the
+clearest case: one sign-up spends a challenge and a redeem, its retry spends
+two more, and when that budget runs out the browser cannot solve the puzzle at
+all, so the form says "could not verify you are human" instead of "wait a
+minute". It has its own generous counter for that reason. Only
 `RL_EMAIL_RECIPIENT` stays tight, because it is the one that bounds what an
 inbox can be made to receive however many callers aim at it. The real
 ceilings are the WAF rules above and the CPU Cap charges per attempt.

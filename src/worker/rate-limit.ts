@@ -5,6 +5,7 @@ const RATE_LIMIT_WINDOW_SECONDS = 60;
 
 export type RateLimitGroup =
   | "auth"
+  | "cap"
   | "email"
   | "write"
   | "qr_upload"
@@ -115,13 +116,14 @@ async function recipientKey(request: Request, secret: string): Promise<string | 
   return keyedDigest(secret, normalized);
 }
 
-export function publicAuthGroup(path: string): "auth" | "email" | null {
+export function publicAuthGroup(path: string): "auth" | "cap" | "email" | null {
   if (EMAIL_AUTH_PATHS.has(path)) return "email";
-  // Cap's own endpoints (#98). They sit in front of signup, so they are as
-  // public as the auth routes and belong on the same budget. The key carries
-  // the path, so a challenge and a redeem each get their own count and one
-  // person solving a puzzle twice is nowhere near the limit.
-  if (path.startsWith("/api/cap/")) return "auth";
+  // Cap's own endpoints (#98), on their own budget rather than signup's. They
+  // are spent two at a time (challenge, then redeem) by every person who
+  // fills the form, and when this runs out the widget cannot solve at all:
+  // the browser then sends no token and the form says "could not verify you
+  // are human", which is the worst possible way for a rate limit to show up.
+  if (path.startsWith("/api/cap/")) return "cap";
   if (
     path.startsWith("/api/auth/") &&
     path !== "/api/auth/get-session" &&
@@ -131,11 +133,18 @@ export function publicAuthGroup(path: string): "auth" | "email" | null {
   return null;
 }
 
+/** Which counter each public group spends. */
+const PUBLIC_LIMIT_BINDINGS: Record<"auth" | "cap" | "email", (env: Env) => RateLimit> = {
+  auth: (env) => env.RL_AUTH_PUBLIC,
+  cap: (env) => env.RL_CAP,
+  email: (env) => env.RL_EMAIL,
+};
+
 export async function enforcePublicAuthRateLimit(c: Context<AppEnv>): Promise<Response | null> {
   const group = publicAuthGroup(c.req.path);
   if (!group) return null;
   const client = await publicClientKey(c.req.raw, c.env.BETTER_AUTH_SECRET);
-  const binding = group === "email" ? c.env.RL_EMAIL : c.env.RL_AUTH_PUBLIC;
+  const binding = PUBLIC_LIMIT_BINDINGS[group](c.env);
   const allowed = await rateLimitAllows(binding, `${group}:${c.req.path}:${client}`, {
     group,
     method: c.req.method,
@@ -168,7 +177,7 @@ export async function enforcePublicAuthRateLimit(c: Context<AppEnv>): Promise<Re
 export function signedApiGroup(
   path: string,
   method: string,
-): Exclude<RateLimitGroup, "auth" | "email" | "click"> | null {
+): Exclude<RateLimitGroup, "auth" | "cap" | "email" | "click"> | null {
   if (/^\/api\/billing\/(?:checkout|portal)$/.test(path)) return "checkout";
   if (method === "POST" && /^\/api\/orgs\/[^/]+\/qr-logo\/?$/.test(path)) return "qr_upload";
   if (/^\/api\/orgs\/[^/]+\/domains(?:\/|$)/.test(path)) return "domain";
