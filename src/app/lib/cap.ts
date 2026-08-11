@@ -20,7 +20,6 @@
 import { useCallback, useRef } from "react";
 import wasmUrl from "@cap.js/wasm/browser/cap_wasm_bg.wasm?url";
 import { CAP_FAILED_CODE, CAP_TOKEN_HEADER } from "@/shared/types";
-import { ApiError } from "./api";
 
 export type CapScope = "signup" | "password-reset" | "anon-link";
 
@@ -169,9 +168,4 @@ export function useCap(scope: CapScope) {
 function isCapFailure(result: unknown): boolean {
   const error = (result as { error?: { code?: string } } | null)?.error;
   return error?.code === CAP_FAILED_CODE;
-}
-
-/** The same check for a thrown ApiError, which is how api() reports it. */
-export function isCapFailureError(error: unknown): boolean {
-  return error instanceof ApiError && error.code === CAP_FAILED_CODE;
 }

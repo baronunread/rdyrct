@@ -348,7 +348,7 @@ function buildAuth(env: Env) {
             // would break the first time the wording changed.
             throw new APIError("BAD_REQUEST", {
               code: CAP_FAILED_CODE,
-              message: "Could not verify you are human. Trying again…",
+              message: "Could not verify you are human. Reload the page and try again.",
             });
         }
         if (ctx.path === "/email-otp/send-verification-otp") {

@@ -59,7 +59,7 @@ shortenRoutes.post("/", async (c) => {
     // Coded so the browser can solve again and retry once, rather than
     // showing somebody an error they cannot act on.
     throw new HTTPException(400, {
-      message: "Could not verify you are human. Trying again…",
+      message: "Could not verify you are human. Reload the page and try again.",
       cause: { code: CAP_FAILED_CODE },
     });
 

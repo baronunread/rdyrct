@@ -164,6 +164,17 @@ describe("spending a token at signup", () => {
     expect(results.map((r) => r.email)).not.toContain("second@example.com");
   });
 
+  it("accepts a token KV has never heard of", async () => {
+    // The regression this guards: the redeemed token used to be a random
+    // string written to KV at redeem and read back here. KV is eventually
+    // consistent, so that read missed and real signups were told to prove
+    // they were human again, forever. Emptying KV stands in for a write that
+    // has not propagated; a signed token does not care.
+    const token = await mintToken();
+    for (const key of (await env.LINKS.list()).keys) await env.LINKS.delete(key.name);
+    expect((await signUp("unpropagated@example.com", { "x-cap-token": token })).status).toBe(200);
+  });
+
   it("refuses a missing token", async () => {
     expect((await signUp("notoken@example.com")).status).toBe(400);
   });
