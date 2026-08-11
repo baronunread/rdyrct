@@ -61,6 +61,9 @@ const AdminUsagePage = lazy(() =>
     default: m.AdminUsagePage,
   })),
 );
+const AdminLinksPage = lazy(() =>
+  import("./routes/admin/links").then((m) => ({ default: m.AdminLinksPage })),
+);
 const AdminOrgsPage = lazy(() =>
   import("./routes/admin/orgs").then((m) => ({ default: m.AdminOrgsPage })),
 );
@@ -120,6 +123,14 @@ createRoot(document.getElementById("root")!).render(
                     element={
                       <RequireAdmin>
                         <AdminUsagePage />
+                      </RequireAdmin>
+                    }
+                  />
+                  <Route
+                    path="/admin/links"
+                    element={
+                      <RequireAdmin>
+                        <AdminLinksPage />
                       </RequireAdmin>
                     }
                   />

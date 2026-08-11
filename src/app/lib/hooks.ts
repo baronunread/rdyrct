@@ -20,6 +20,10 @@ import type {
   AdminOrgRow,
   AdminOrgDetail,
   AdminUserRow,
+  AdminLinkRow,
+  AdminLinkSort,
+  AdminAnonLinkRow,
+  AdminActionRow,
 } from "@/shared/types";
 
 export function useCurrentUser() {
@@ -309,6 +313,31 @@ export const useAdminOrgDetail = (orgId: string | null) =>
     queryKey: ["admin", "org", orgId],
     queryFn: () => api(`/admin/orgs/${orgId}`),
     enabled: !!orgId,
+  });
+
+/** The cross-org link list (#67). `q` and `sort` go to the server, because
+ * the table can hold far more links than a browser should filter. */
+export const useAdminLinks = (params: { q: string; sort: AdminLinkSort; suspended: boolean }) =>
+  useQuery<AdminLinkRow[]>({
+    queryKey: ["admin", "links", params],
+    queryFn: () =>
+      api(
+        `/admin/links?q=${encodeURIComponent(params.q)}&sort=${params.sort}${
+          params.suspended ? "&suspended=1" : ""
+        }`,
+      ),
+  });
+
+export const useAdminAnonLinks = () =>
+  useQuery<AdminAnonLinkRow[]>({
+    queryKey: ["admin", "anon-links"],
+    queryFn: () => api("/admin/links/anonymous"),
+  });
+
+export const useAdminAudit = () =>
+  useQuery<AdminActionRow[]>({
+    queryKey: ["admin", "audit"],
+    queryFn: () => api("/admin/links/audit"),
   });
 
 export const useAdminUsers = () =>

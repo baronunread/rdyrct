@@ -110,6 +110,9 @@ function PlatformNav({ visible }: { visible: boolean }) {
         <NavLink to="/admin" end className={navClass}>
           <Globe size={15} /> Usage
         </NavLink>
+        <NavLink to="/admin/links" className={navClass}>
+          Links
+        </NavLink>
         <NavLink to="/admin/orgs" className={navClass}>
           <Building2 size={15} /> Organizations
         </NavLink>

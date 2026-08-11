@@ -45,6 +45,25 @@ function parseReasons(raw: string | null): string[] {
   }
 }
 
+/** The columns a suspension writes, or clears. Shared by the single-link and
+ * whole-org routes so the two can never set them differently. */
+function suspensionPatch(suspend: boolean, actorId: string, reason: string | null) {
+  return {
+    suspendedAt: suspend ? Date.now() : null,
+    suspendedBy: suspend ? actorId : null,
+    suspendReason: suspend ? reason : null,
+  };
+}
+
+/** The reason a moderation action must carry. Suspending without one leaves
+ * a decision nobody can account for later. */
+async function requiredReason(c: Context<AppEnv>, required: boolean): Promise<string> {
+  const body = (await c.req.json().catch(() => ({}))) as { reason?: unknown };
+  const reason = typeof body.reason === "string" ? body.reason.trim().slice(0, 500) : "";
+  if (required && !reason) throw new HTTPException(400, { message: "A reason is required" });
+  return reason;
+}
+
 const clickCount = sql<number>`(
   select count(*) from clicks where clicks.link_id = links.id
 )`;
@@ -148,11 +167,7 @@ async function setSuspended(
 
   await db
     .update(schema.links)
-    .set({
-      suspendedAt: suspend ? Date.now() : null,
-      suspendedBy: suspend ? c.var.user!.id : null,
-      suspendReason: suspend ? reason : null,
-    })
+    .set(suspensionPatch(suspend, c.var.user!.id, reason))
     .where(eq(schema.links.id, linkId));
 
   const addresses = await republish(c.env, db, linkId);
@@ -174,12 +189,9 @@ async function setSuspended(
   return { addresses };
 }
 
-adminLinkRoutes.post("/:linkId/suspend", async (c) => {
-  const body = (await c.req.json().catch(() => ({}))) as { reason?: unknown };
-  const reason = typeof body.reason === "string" ? body.reason.trim().slice(0, 500) : "";
-  if (!reason) throw new HTTPException(400, { message: "A reason is required" });
-  return c.json(await setSuspended(c, c.req.param("linkId")!, true, reason));
-});
+adminLinkRoutes.post("/:linkId/suspend", async (c) =>
+  c.json(await setSuspended(c, c.req.param("linkId")!, true, await requiredReason(c, true))),
+);
 
 adminLinkRoutes.post("/:linkId/unsuspend", async (c) =>
   c.json(await setSuspended(c, c.req.param("linkId")!, false, null)),
@@ -194,39 +206,27 @@ adminLinkRoutes.post("/:linkId/unsuspend", async (c) =>
  */
 adminLinkRoutes.post("/orgs/:orgId/suspend", async (c) => {
   const suspend = c.req.query("suspend") !== "0";
-  const body = (await c.req.json().catch(() => ({}))) as { reason?: unknown };
-  const reason = typeof body.reason === "string" ? body.reason.trim().slice(0, 500) : "";
-  if (suspend && !reason) throw new HTTPException(400, { message: "A reason is required" });
+  const reason = await requiredReason(c, suspend);
 
   const db = c.var.db;
   const orgId = c.req.param("orgId")!;
-  const links = await db
-    .select({ id: schema.links.id })
-    .from(schema.links)
-    .where(
-      and(
-        eq(schema.links.orgId, orgId),
-        suspend ? isNull(schema.links.suspendedAt) : isNotNull(schema.links.suspendedAt),
-      ),
-    );
+  // One expression, used to select and then to update: built twice they can
+  // drift, and a drift here means updating rows the count never mentioned.
+  const affected = and(
+    eq(schema.links.orgId, orgId),
+    suspend ? isNull(schema.links.suspendedAt) : isNotNull(schema.links.suspendedAt),
+  );
+  const links = await db.select({ id: schema.links.id }).from(schema.links).where(affected);
 
   if (links.length > 0) {
     await db
       .update(schema.links)
-      .set({
-        suspendedAt: suspend ? Date.now() : null,
-        suspendedBy: suspend ? c.var.user!.id : null,
-        suspendReason: suspend ? reason : null,
-      })
-      .where(
-        and(
-          eq(schema.links.orgId, orgId),
-          suspend ? isNull(schema.links.suspendedAt) : isNotNull(schema.links.suspendedAt),
-        ),
-      );
-    // One republish per link, after the flag is written, so a message
-    // consumed early cannot read the old value.
-    for (const link of links) await republish(c.env, db, link.id);
+      .set(suspensionPatch(suspend, c.var.user!.id, reason))
+      .where(affected);
+    // After the flag is written, so a message consumed early cannot read the
+    // old value. Together rather than in series: an org can hold thousands of
+    // links, and these are independent queue sends.
+    await Promise.all(links.map((link) => republish(c.env, db, link.id)));
   }
 
   await recordAdminAction(c.env, {
