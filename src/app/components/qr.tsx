@@ -77,6 +77,22 @@ export function QrDownloadButtons({
 // default so the preview is unchanged.
 const MARGIN_RATIO = 8 / 208;
 
+/**
+ * Previews are drawn at this size and scaled down by CSS, never generated at
+ * their display size.
+ *
+ * qr-code-styling gives every module a whole number of pixels, and whatever
+ * does not divide evenly becomes white space around the code. At small
+ * display sizes that remainder is most of the box: a 33-module code in a
+ * 104px preview got 2px a module, so 66px of code sat inside 104px with 19px
+ * of padding a side, over a third of the width. Generated at 1024 and scaled,
+ * the same remainder is under 2% and the code fills its frame.
+ *
+ * It costs nothing: the output is SVG, so the browser scales it losslessly
+ * and the extra "resolution" is a handful of larger path coordinates.
+ */
+const PREVIEW_RENDER_SIZE = 1024;
+
 function makeQR(url: string, size: number, look: QrLook) {
   return new QRCodeStyling({
     width: size,
@@ -134,16 +150,16 @@ export function QRPreview({
   useEffect(() => {
     if (!holder.current) return;
     if (!qr.current) {
-      qr.current = makeQR(url, size, look);
+      qr.current = makeQR(url, PREVIEW_RENDER_SIZE, look);
       qr.current.append(holder.current);
     } else {
       qr.current.update({
-        // Dimensions travel with the rest: `size` is a dependency here, and
-        // update() keeps whatever it is not given, so leaving these out would
-        // strand a resized preview at its first size and quiet zone.
-        width: size,
-        height: size,
-        margin: Math.round(size * MARGIN_RATIO),
+        // Fixed, unlike the container: the drawing is always PREVIEW_RENDER_SIZE
+        // and CSS decides how big it looks, so `size` never reaches the
+        // generator and a resize cannot strand it at a stale scale.
+        width: PREVIEW_RENDER_SIZE,
+        height: PREVIEW_RENDER_SIZE,
+        margin: Math.round(PREVIEW_RENDER_SIZE * MARGIN_RATIO),
         data: url,
         image: look.logo,
         imageOptions: { margin: 4, imageSize: look.logoSize },
@@ -151,13 +167,15 @@ export function QRPreview({
       });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [url, size, look.dot, look.corner, look.ink, look.eye, look.bg, look.logo, look.logoSize]);
+  }, [url, look.dot, look.corner, look.ink, look.eye, look.bg, look.logo, look.logoSize]);
 
   return (
     <div className="flex flex-col items-center gap-3">
       <div
         ref={holder}
-        className="overflow-hidden rounded-lg border border-border [&_svg]:block"
+        // The drawing is PREVIEW_RENDER_SIZE regardless; these make it fill
+        // whatever box `size` asks for.
+        className="overflow-hidden rounded-lg border border-border [&_svg]:block [&_svg]:h-full [&_svg]:w-full"
         style={{
           width: size,
           height: size,
