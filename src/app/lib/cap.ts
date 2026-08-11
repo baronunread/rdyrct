@@ -26,6 +26,14 @@ export type CapScope = "signup" | "password-reset" | "anon-link";
 /** How long to wait for a solve before giving up and submitting without one. */
 const SOLVE_TIMEOUT_MS = 20_000;
 
+/**
+ * How long a solved token is reused before it is thrown away and solved
+ * again. Comfortably under the ten minutes the Worker keeps a redeemed token,
+ * so a form filled slowly still submits with something the server will
+ * accept.
+ */
+const TOKEN_FRESH_MS = 4 * 60 * 1000;
+
 type CapElement = HTMLElement & {
   solve: () => Promise<{ token?: string }>;
   reset: () => void;
@@ -102,15 +110,24 @@ function capHeaders(token: string): Record<string, string> {
  * again rather than replaying a token the server has already burned.
  */
 export function useCap(scope: CapScope) {
-  const pending = useRef<Promise<string> | null>(null);
+  const pending = useRef<{ token: Promise<string>; primedAt: number } | null>(null);
 
   const prime = useCallback(() => {
-    pending.current ??= solveCap(scope);
+    // Discarded once stale, not just once spent. The server keeps a redeemed
+    // token for ten minutes; the browser was holding one forever, so filling
+    // the form and submitting after a distraction failed with "could not
+    // verify you are human" and no way to tell why. Re-solving costs about
+    // 25ms.
+    const held = pending.current;
+    if (held && Date.now() - held.primedAt < TOKEN_FRESH_MS) return;
+    pending.current = { token: solveCap(scope), primedAt: Date.now() };
   }, [scope]);
 
   const headers = useCallback(async () => {
     prime();
-    const token = await pending.current!;
+    const token = await pending.current!.token;
+    // Single-use: a second submit has to solve again rather than replay a
+    // token the server has already burned.
     pending.current = null;
     return capHeaders(token);
   }, [prime]);
