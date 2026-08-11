@@ -21,7 +21,6 @@ import type {
   AdminOrgDetail,
   AdminUserRow,
   AdminLinkRow,
-  AdminLinkSort,
   AdminAnonLinkRow,
   AdminActionRow,
 } from "@/shared/types";
@@ -315,16 +314,18 @@ export const useAdminOrgDetail = (orgId: string | null) =>
     enabled: !!orgId,
   });
 
-/** The cross-org link list (#67). `q` and `sort` go to the server, because
- * the table can hold far more links than a browser should filter. */
-export const useAdminLinks = (params: { q: string; sort: AdminLinkSort; suspended: boolean }) =>
+/** The cross-org link list (#67).
+ *
+ * The search goes to the server, because the table can hold far more links
+ * than a browser should filter. Ordering does not: the response is capped, so
+ * sorting it is a client concern and the column headers can drive it the way
+ * every other table here works. */
+export const useAdminLinks = (params: { q: string; suspended: boolean }) =>
   useQuery<AdminLinkRow[]>({
     queryKey: ["admin", "links", params],
     queryFn: () =>
       api(
-        `/admin/links?q=${encodeURIComponent(params.q)}&sort=${params.sort}${
-          params.suspended ? "&suspended=1" : ""
-        }`,
+        `/admin/links?q=${encodeURIComponent(params.q)}${params.suspended ? "&suspended=1" : ""}`,
       ),
   });
 
