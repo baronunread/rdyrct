@@ -303,10 +303,13 @@ function useClaimAnonLinks(orgId: string | undefined) {
       if (kept === 0) return;
       await qc.invalidateQueries({ queryKey: ["links", orgId] });
       await qc.invalidateQueries({ queryKey: ["stats", orgId] });
+      // The one moment in the app worth sounding pleased about: they made
+      // something before they had an account, and it survived. A sentence
+      // that reads like a receipt wastes it.
       toast(
         kept === 1
-          ? "We kept the link you made before signing up."
-          : `We kept the ${kept} links you made before signing up.`,
+          ? "Welcome. Your link is already here."
+          : `Welcome. All ${kept} links are already here.`,
       );
     })();
   }, [orgId, qc, toast]);
