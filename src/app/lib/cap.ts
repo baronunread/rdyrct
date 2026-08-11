@@ -68,43 +68,96 @@ function loadCap(): Promise<void> {
 }
 
 /**
- * Starts solving a challenge for `scope` and resolves with the token.
+ * The widget for one scope, made once and left in the document.
  *
- * Resolves with "" on any failure, including a timeout. That is deliberate:
- * a visitor whose browser cannot solve the puzzle should still be able to
- * try, and be turned away by the server with a message, rather than face a
- * form that silently refuses to submit.
+ * This is the shape Cap's own `Cap` class uses, and the reason matters: the
+ * element's `disconnectedCallback` aborts its AbortController, and every
+ * `await` inside the widget's `solve()` is followed by
+ * `if (signal?.aborted || !this.#speculative) return;`. So a widget removed
+ * while it is working makes `solve()` resolve **undefined** — no token, no
+ * throw, no error event. The old code created a throwaway element per solve
+ * and removed it in a `finally`, which is exactly how to hit that path, and
+ * an undefined result became an empty token, no `x-cap-token` header, and
+ * "could not verify you are human" in front of somebody trying to sign up.
+ */
+const widgets = new Map<CapScope, CapElement>();
+
+/** One solve at a time per widget. `solve()` opens with
+ * `if (this.#solving) return;`, so a second concurrent call on the same
+ * element resolves undefined too. Callers share the in-flight promise
+ * instead. */
+const solving = new Map<CapScope, Promise<string>>();
+
+async function widgetFor(scope: CapScope): Promise<CapElement> {
+  await loadCap();
+  const existing = widgets.get(scope);
+  if (existing?.isConnected) return existing;
+
+  const el = document.createElement("cap-widget") as CapElement;
+  el.setAttribute("data-cap-api-endpoint", `/api/cap/${scope}/`);
+  el.setAttribute("aria-hidden", "true");
+  el.style.display = "none";
+  // The widget dispatches its own "error" event, and with nothing listening
+  // it surfaces as an unhandled error: an aborted solve would otherwise look
+  // like a page crash. Failure is reported by resolving with "".
+  el.addEventListener("error", (event) => event.stopPropagation());
+  document.documentElement.appendChild(el);
+  widgets.set(scope, el);
+  return el;
+}
+
+/** Throws the widget away, for the cases where its internal state is not
+ * worth trusting: it is rebuilt on the next attempt. */
+function discardWidget(scope: CapScope): void {
+  widgets.get(scope)?.remove();
+  widgets.delete(scope);
+}
+
+/**
+ * Solves one challenge and resolves with the token, or "" if this browser
+ * could not produce one.
+ *
+ * "" is deliberate rather than an exception: a visitor whose browser cannot
+ * run the puzzle should still be able to submit and be answered by the
+ * server, instead of meeting a form that refuses to do anything.
+ *
+ * A solve that comes back without a token is retried once on a fresh widget.
+ * The silent-undefined paths above are all transient (an abort, a solve
+ * already running), so the second attempt is usually the one that works, and
+ * a second failure is a real one worth reporting.
  */
 function solveCap(scope: CapScope): Promise<string> {
-  return (async () => {
+  const inFlight = solving.get(scope);
+  if (inFlight) return inFlight;
+
+  const attempt = (async () => {
     try {
-      await loadCap();
-      const el = document.createElement("cap-widget") as CapElement;
-      el.setAttribute("data-cap-api-endpoint", `/api/cap/${scope}/`);
-      // Out of the layout entirely, not `display: none`: the widget skips
-      // its own background work when it believes it is invisible, and we
-      // want it working.
-      el.style.cssText = "position:absolute;width:1px;height:1px;overflow:hidden;opacity:0";
-      el.setAttribute("aria-hidden", "true");
-      // The widget dispatches its own "error" event and, with nothing
-      // listening, it surfaces as an unhandled error: a navigation that
-      // aborts an in-flight solve would otherwise look like a page crash.
-      // We already report failure by resolving with "".
-      el.addEventListener("error", (event) => event.stopPropagation());
-      document.body.appendChild(el);
-      try {
+      for (let tries = 0; tries < 2; tries++) {
+        const el = await widgetFor(scope);
+        // Single-use tokens: whatever this widget still holds from the last
+        // solve has been spent, and reset() clears it along with the timer
+        // that would have cleared it later.
+        el.reset();
         const result = await Promise.race([
           el.solve(),
           new Promise<null>((resolve) => setTimeout(() => resolve(null), SOLVE_TIMEOUT_MS)),
         ]);
-        return result?.token ?? "";
-      } finally {
-        el.remove();
+        if (result?.token) return result.token;
+        // Either it timed out, or it returned without one. Both leave state
+        // this widget cannot be trusted with, so the retry gets a new one.
+        discardWidget(scope);
       }
-    } catch {
       return "";
+    } catch {
+      discardWidget(scope);
+      return "";
+    } finally {
+      solving.delete(scope);
     }
   })();
+
+  solving.set(scope, attempt);
+  return attempt;
 }
 
 /** The header a solved token travels in, ready to spread into fetch options. */
