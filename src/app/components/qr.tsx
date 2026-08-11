@@ -117,6 +117,7 @@ export function QRPreview({
   url,
   logo,
   size = 208,
+  sizeClass,
   dotStyle,
   color,
   corner,
@@ -141,6 +142,9 @@ export function QRPreview({
   /** logo footprint ratio; empty/undefined = QR_DEFAULT_LOGO_SIZE */
   logoSize?: number;
   downloadName?: string;
+  /** Tailwind sizing for the frame, when the box needs to change with the
+   * viewport. Wins over `size`, which can only ever be one number. */
+  sizeClass?: string;
 }) {
   const holder = useRef<HTMLDivElement>(null);
   const qr = useRef<QRCodeStyling | null>(null);
@@ -173,12 +177,19 @@ export function QRPreview({
     <div className="flex flex-col items-center gap-3">
       <div
         ref={holder}
+        // Labelled, because otherwise a QR is an unnamed blob of SVG to a
+        // screen reader. The code encodes the URL, which is the useful thing
+        // to announce.
+        role="img"
+        aria-label={`QR code for ${url}`}
         // The drawing is PREVIEW_RENDER_SIZE regardless; these make it fill
         // whatever box `size` asks for.
-        className="overflow-hidden rounded-lg border border-border [&_svg]:block [&_svg]:h-full [&_svg]:w-full"
+        className={cn(
+          "overflow-hidden rounded-lg border border-border [&_svg]:block [&_svg]:h-full [&_svg]:w-full",
+          sizeClass,
+        )}
         style={{
-          width: size,
-          height: size,
+          ...(sizeClass ? {} : { width: size, height: size }),
           // A checkerboard shows through where the QR is transparent.
           backgroundColor: "#ffffff",
           backgroundImage: hasTransparency(look.bg)

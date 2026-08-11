@@ -246,3 +246,43 @@ test("each stacked link can still download its own QR", async ({ page }) => {
   expect(await download.path()).toBeTruthy();
   expect(download.suggestedFilename()).toContain(slug);
 });
+
+/**
+ * The narrow layout, which had three separate faults: an unqualified
+ * `flex-1` on the input made it grow along the column axis and shrink to
+ * 20px tall, the row stacked so the QR ended up below its own download
+ * buttons, and the header's equal rails wrapped "Log in" onto two lines.
+ */
+test.describe("on a phone", () => {
+  test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+
+  test("the form and the rows keep their shape", async ({ page }) => {
+    const destination = `https://example.com/mobile-${Date.now()}`;
+    await shorten(page, destination);
+
+    const box = async (locator: import("@playwright/test").Locator) =>
+      (await locator.boundingBox())!;
+
+    // The field is as tall as the button beside it, not squashed.
+    const field = await box(page.getByLabel("Try it without an account"));
+    const submit = await box(page.getByRole("button", { name: "Shorten it" }));
+    expect(field.height).toBe(submit.height);
+
+    // The QR sits beside the link, not underneath its own buttons.
+    const link = await box(page.getByRole("link", { name: "Your short link" }).first());
+    const qr = await box(page.getByRole("img", { name: /^QR code for/ }).first());
+    expect(qr.x).toBeGreaterThan(link.x + link.width - 1);
+
+    // The slug survives: the host gives up the width instead.
+    const slug =
+      destination &&
+      (await page.getByRole("link", { name: "Your short link" }).first().innerText());
+    expect(slug).toBeTruthy();
+
+    // And nothing pushes the page sideways.
+    const overflow = await page.evaluate(
+      () => document.documentElement.scrollWidth - window.innerWidth,
+    );
+    expect(overflow).toBeLessThanOrEqual(0);
+  });
+});

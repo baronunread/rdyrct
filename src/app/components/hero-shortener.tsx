@@ -56,7 +56,7 @@ function MadeLink({ link }: { link: StoredAnonLink }) {
     // under the link rather than under the code: attached to the QR they
     // made that column more than twice the height of this one, and the hole
     // left beside it wanted filler nobody needed.
-    <div className="grid gap-3 border-t border-dashed border-border pt-3 sm:grid-cols-[1fr_auto] sm:items-start">
+    <div className="grid grid-cols-[1fr_auto] items-start gap-3 border-t border-dashed border-border pt-3">
       <div className="flex min-w-0 flex-col gap-1.5">
         <div className="flex min-w-0 items-center gap-2 rounded-lg bg-surface-2 px-3 py-2.5">
           <a
@@ -64,9 +64,16 @@ function MadeLink({ link }: { link: StoredAnonLink }) {
             target="_blank"
             rel="noreferrer"
             aria-label="Your short link"
-            className="min-w-0 flex-1 truncate font-mono text-sm font-bold hover:text-accent"
+            className="flex min-w-0 flex-1 font-mono text-xs hover:text-accent sm:text-sm"
           >
-            {link.url.replace(/^https?:\/\//, "")}
+            {/* The host truncates, never the slug. On a narrow screen, or a
+                long custom domain, the slug is the only part that
+                identifies the link, so it is the last thing to give up
+                width. */}
+            <span className="truncate text-muted">
+              {link.url.replace(/^https?:\/\//, "").slice(0, -link.slug.length)}
+            </span>
+            <span className="shrink-0 font-bold">{link.slug}</span>
           </a>
           <CopyButton
             text={link.url}
@@ -77,9 +84,9 @@ function MadeLink({ link }: { link: StoredAnonLink }) {
         <p className="truncate text-2xs text-muted">from {link.source}</p>
         <QrDownloadButtons url={link.url} name={`qr-${link.slug}`} className="mt-0.5" />
       </div>
-      <div className="justify-self-center sm:justify-self-auto">
-        <QRPreview url={link.url} size={104} />
-      </div>
+      {/* Smaller on a phone so the slug keeps its width: truncating
+          "rdyrct.com/m22fs5w" loses exactly the part that identifies it. */}
+      <QRPreview url={link.url} sizeClass="size-20 sm:size-26" />
     </div>
   );
 }
@@ -191,7 +198,10 @@ export function HeroShortener() {
           placeholder="https://example.com/a-very-long-address"
           value={destination}
           onChange={(e) => setDestination(e.target.value)}
-          className="flex-1"
+          // sm:flex-1, not flex-1: this container is a column on phones, so
+          // an unqualified flex-1 grows along the vertical axis and lets the
+          // field shrink to 20px tall next to a 36px button.
+          className="sm:flex-1"
         />
         <Button variant="primary" type="submit" disabled={!canSubmit} className="sm:w-36">
           <BusyContent busy={busy}>Shorten it</BusyContent>

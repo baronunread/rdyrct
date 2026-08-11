@@ -19,7 +19,10 @@ export function LandingHeader({ authed }: { authed: boolean }) {
     // Three columns, not space-between: the two 1fr rails keep the nav on the
     // page's centre line however wide the brand or the auth buttons get, so
     // "Sign up" turning into "Dashboard" does not shift the links.
-    <header className="sticky top-0 z-20 -mx-6 grid grid-cols-[1fr_auto_1fr] items-center gap-3 border-b border-border/50 bg-bg/85 px-6 py-4 backdrop-blur-md">
+    // Equal rails only from sm up, where the centred nav exists to be
+    // centred. On a phone the nav is hidden and two 1fr rails just split the
+    // width evenly, which is enough to wrap "Log in" onto two lines.
+    <header className="sticky top-0 z-20 -mx-6 grid grid-cols-[auto_1fr_auto] items-center gap-3 border-b border-border/50 bg-bg/85 px-6 py-4 backdrop-blur-md sm:grid-cols-[1fr_auto_1fr]">
       <Link to="/" className="justify-self-start text-lg font-bold tracking-widest">
         rdyrct
       </Link>
@@ -52,7 +55,7 @@ export function LandingHeader({ authed }: { authed: boolean }) {
           </Link>
         ) : (
           <>
-            <Link to="/login" className="text-muted hover:text-accent">
+            <Link to="/login" className="whitespace-nowrap text-muted hover:text-accent">
               Log in
             </Link>
             <Link to="/signup" onClick={() => trackCta("header")}>
