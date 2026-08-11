@@ -347,8 +347,8 @@ interface SubmitDeps {
   qc: QueryClient;
   navigate: NavigateFunction;
   next: string;
-  /** Awaits the Cap token primed when the form was first touched (#98). */
-  capHeaders: () => Promise<Record<string, string>>;
+  /** Runs a Cap-guarded request, re-solving once if the token is refused. */
+  capGuarded: <T>(run: (headers: Record<string, string>) => Promise<T>) => Promise<T>;
 }
 
 async function trySignIn(email: string, password: string, deps: SubmitDeps) {
@@ -370,17 +370,14 @@ async function trySignIn(email: string, password: string, deps: SubmitDeps) {
 async function trySignUp(
   email: string,
   password: string,
-  deps: Pick<SubmitDeps, "goVerify" | "failSubmit" | "capHeaders">,
+  deps: Pick<SubmitDeps, "goVerify" | "failSubmit" | "capGuarded">,
 ) {
-  const { error: signUpError } = await authClient.signUp.email(
-    {
-      email,
-      password,
-      name: email.split("@")[0],
-    },
-    // Cap's proof-of-work token (#98). Solved while the visitor was typing,
-    // spent here, and required by the Worker before an account exists.
-    { headers: await deps.capHeaders() },
+  // Cap's proof-of-work token (#98). Solved while the visitor was typing,
+  // spent here, and required by the Worker before an account exists. Through
+  // the guard, so a token the server has forgotten is solved again rather
+  // than shown to somebody as an error.
+  const { error: signUpError } = await deps.capGuarded((headers) =>
+    authClient.signUp.email({ email, password, name: email.split("@")[0] }, { headers }),
   );
   if (signUpError) {
     deps.failSubmit(friendlyAuthError(signUpError));
@@ -511,7 +508,7 @@ function useAuthFlow(mode: "login" | "signup") {
     authPasswordRef.current = password;
     setBusy(true);
     try {
-      const deps = { goVerify, failSubmit, qc, navigate, next, capHeaders: signupCap.headers };
+      const deps = { goVerify, failSubmit, qc, navigate, next, capGuarded: signupCap.guarded };
       await (mode === "login"
         ? trySignIn(email, password, deps)
         : trySignUp(email, password, deps));
@@ -586,11 +583,10 @@ function useAuthFlow(mode: "login" | "signup") {
   const submitForgot = async (email: string) => {
     setForgotBusy(true);
     try {
-      const { error: resetError } = await authClient.requestPasswordReset(
-        { email, redirectTo: "/reset-password" },
-        // Cheap to abuse and it sends mail, which is why #50 needed a
-        // per-recipient cap. Cap prices the attempt instead (#98).
-        { headers: await resetCap.headers() },
+      // Cheap to abuse and it sends mail, which is why #50 needed a
+      // per-recipient cap. Cap prices the attempt instead (#98).
+      const { error: resetError } = await resetCap.guarded((headers) =>
+        authClient.requestPasswordReset({ email, redirectTo: "/reset-password" }, { headers }),
       );
       if (resetError) {
         toast(resetError.message ?? "Something went wrong", "error");
