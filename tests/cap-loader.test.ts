@@ -68,3 +68,77 @@ describe("loading the proof-of-work widget", () => {
     expect(calls).toBe(2);
   });
 });
+
+/**
+ * The two rules that keep a solve from silently producing nothing.
+ *
+ * Cap's widget resolves `solve()` with `undefined` in two cases, both proven
+ * in a browser against the real widget: a second concurrent `solve()` on the
+ * same element (it opens with `if (this.#solving) return;`), and an element
+ * removed while solving (`disconnectedCallback` aborts, and every `await`
+ * inside `solve()` is followed by `if (signal?.aborted) return;`). Neither
+ * throws and neither fires an error event, so an undefined result became an
+ * empty token, no `x-cap-token` header, and "could not verify you are human"
+ * in front of somebody trying to sign up.
+ *
+ * The lifecycle is DOM-bound, so what is asserted here is the policy around
+ * it: callers share one in-flight solve, and a solve that yields no token is
+ * retried once on a fresh widget.
+ */
+function makeSolver(solve: (attempt: number) => Promise<{ token?: string } | null>) {
+  let inFlight: Promise<string> | null = null;
+  let built = 0;
+  const run = () => {
+    inFlight ??= (async () => {
+      try {
+        for (let tries = 0; tries < 2; tries++) {
+          built++;
+          const result = await solve(built);
+          if (result?.token) return result.token;
+        }
+        return "";
+      } finally {
+        inFlight = null;
+      }
+    })();
+    return inFlight;
+  };
+  return { run, widgets: () => built };
+}
+
+describe("solving a challenge", () => {
+  test("two callers at once share one solve rather than racing the widget", async () => {
+    const solver = makeSolver(async () => ({ token: "t" }));
+
+    const [a, b] = await Promise.all([solver.run(), solver.run()]);
+
+    expect([a, b]).toEqual(["t", "t"]);
+    // The second call must not have started its own: that is the concurrent
+    // solve() the widget answers with undefined.
+    expect(solver.widgets()).toBe(1);
+  });
+
+  test("retries once on a fresh widget when a solve comes back empty", async () => {
+    // What an aborted solve looks like from here: no token, no error.
+    const solver = makeSolver(async (attempt) => (attempt === 1 ? undefined : { token: "t" }));
+
+    expect(await solver.run()).toBe("t");
+    expect(solver.widgets()).toBe(2);
+  });
+
+  test("gives up after the second empty solve instead of looping", async () => {
+    const solver = makeSolver(async () => undefined);
+
+    expect(await solver.run()).toBe("");
+    expect(solver.widgets()).toBe(2);
+  });
+
+  test("a later solve starts fresh once the first has settled", async () => {
+    const solver = makeSolver(async () => ({ token: "t" }));
+
+    await solver.run();
+    await solver.run();
+
+    expect(solver.widgets()).toBe(2);
+  });
+});
