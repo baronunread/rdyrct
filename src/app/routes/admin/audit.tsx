@@ -71,23 +71,23 @@ export function AdminAuditPage() {
                 sortKey="createdAt"
                 sort={sort}
                 onSort={setSort}
-                className="w-[30%] sm:w-[16%]"
+                className="w-[34%] sm:w-[24%] md:w-[16%]"
               />
               <SortTh
                 label="Who"
                 sortKey="actorEmail"
                 sort={sort}
                 onSort={setSort}
-                className="hidden sm:table-cell sm:w-[22%]"
+                className="hidden sm:table-cell sm:w-[30%] md:w-[22%]"
               />
               <SortTh
                 label="Action"
                 sortKey="action"
                 sort={sort}
                 onSort={setSort}
-                className="w-[70%] sm:w-[18%]"
+                className="w-[66%] sm:w-[46%] md:w-[18%]"
               />
-              <Th className="hidden sm:table-cell sm:w-[44%]">Detail</Th>
+              <Th className="hidden md:table-cell md:w-[44%]">Detail</Th>
             </tr>
           </thead>
           <tbody>
@@ -100,7 +100,7 @@ export function AdminAuditPage() {
                 </Td>
                 <Td className="truncate font-mono text-xs">{entry.action}</Td>
                 <Td
-                  className="hidden truncate text-muted sm:table-cell"
+                  className="hidden truncate text-muted md:table-cell"
                   title={entry.detail ?? entry.targetId}
                 >
                   {entry.detail ?? entry.targetId}

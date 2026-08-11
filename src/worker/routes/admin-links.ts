@@ -198,6 +198,46 @@ adminLinkRoutes.post("/:linkId/unsuspend", async (c) =>
 );
 
 /**
+ * Delete a link outright.
+ *
+ * Suspension is the usual answer, because it is reversible and keeps the
+ * evidence. This exists for the cases where the row itself should not
+ * survive, and it is deliberately the second option in the menu rather than
+ * the first: clicks cascade with it and nothing here can put it back.
+ */
+adminLinkRoutes.delete("/:linkId", async (c) => {
+  const db = c.var.db;
+  const linkId = c.req.param("linkId")!;
+  const rows = await db.select().from(schema.links).where(eq(schema.links.id, linkId));
+  const link = rows[0];
+  if (!link) throw new HTTPException(404, { message: "Link not found" });
+
+  // Addresses first: after the row is gone there is nothing to read them
+  // from, and each one is a live KV key until it is swept.
+  const addresses = await addressesOf(db, linkId);
+  await db.delete(schema.links).where(eq(schema.links.id, linkId));
+  if (addresses.length > 0)
+    await enqueueStorage(
+      c.env,
+      addresses.map((a) => syncLinkMsg(a.slug, a.hostname)),
+    );
+
+  await recordAdminAction(c.env, {
+    actorUserId: c.var.user!.id,
+    action: "link.delete",
+    targetType: "link",
+    targetId: linkId,
+    detail: {
+      slug: link.slug,
+      orgId: link.orgId,
+      destination: link.destination,
+      addresses: addresses.length,
+    },
+  });
+  return c.json({ ok: true });
+});
+
+/**
  * Suspend or restore every link in one org, without deleting it.
  *
  * For when the whole account is bad but the evidence should survive and an

@@ -19,6 +19,7 @@ import { uid } from "./util";
 export type AdminAction =
   | "link.suspend"
   | "link.unsuspend"
+  | "link.delete"
   | "org.suspend_links"
   | "org.unsuspend_links"
   | "org.delete"
