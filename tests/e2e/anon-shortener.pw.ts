@@ -22,11 +22,12 @@ async function shorten(page: import("@playwright/test").Page, destination: strin
   await field.fill(destination);
   await page.getByRole("button", { name: "Shorten it" }).click();
 
-  await expect(page.getByText("Your link is live")).toBeVisible({ timeout: 20_000 });
-  // By its own label, not by text: the page header links the word
-  // "rdyrct" too, and that match is the one a loose selector finds first.
-  const shortUrl = await page.getByRole("link", { name: "Your short link" }).getAttribute("href");
-  return shortUrl!.trim();
+  // By its own label, not by text: the page header links the word "rdyrct"
+  // too, and that match is the one a loose selector finds first. The newest
+  // link is first in the stack.
+  const newest = page.getByRole("link", { name: "Your short link" }).first();
+  await expect(newest).toBeVisible({ timeout: 20_000 });
+  return (await newest.getAttribute("href"))!.trim();
 }
 
 test("a visitor with no account gets a working short link", async ({ page }) => {
@@ -87,6 +88,42 @@ test("signing up keeps the link that was made before the account (#65)", async (
   expect(Number(anon[0].n)).toBe(0);
 });
 
+/**
+ * The footer says "keep these 2 links", so signup has to keep both. An
+ * earlier version stored one claim token and overwrote it, which made that
+ * copy a promise about the most recent link only.
+ */
+test("signing up keeps every link made before the account, not just the last", async ({ page }) => {
+  const first = `https://example.com/multi-a-${Date.now()}`;
+  const second = `https://example.com/multi-b-${Date.now()}`;
+
+  const firstSlug = (await shorten(page, first)).split("/").pop()!;
+  const field = page.getByLabel("Try it without an account");
+  await field.fill(second);
+  await page.getByRole("button", { name: "Shorten it" }).click();
+  await expect(page.getByRole("link", { name: "Your short link" })).toHaveCount(2, {
+    timeout: 20_000,
+  });
+  const secondSlug = (await page
+    .getByRole("link", { name: "Your short link" })
+    .first()
+    .getAttribute("href"))!
+    .split("/")
+    .pop()!;
+
+  await signUpAndVerify(page, `multi-${Date.now()}@gmail.com`, password);
+  await createOrg(page, "Multi Org");
+
+  for (const slug of [firstSlug, secondSlug]) {
+    const rows = await queryRows<{ n: number }>(
+      page,
+      "select count(*) as n from links where slug = ?",
+      [slug],
+    );
+    expect(Number(rows[0].n), `link ${slug} should have been claimed`).toBe(1);
+  }
+});
+
 test("a destination that is not a web address is refused, in a toast", async ({ page }) => {
   // "not-a-web-address" has no dot, so it survives the scheme-less
   // normalisation the signed-in quick-create also does and then fails the
@@ -99,7 +136,7 @@ test("a destination that is not a web address is refused, in a toast", async ({ 
   await expect(page.getByText(/does not look like a web address/i)).toBeVisible({
     timeout: 20_000,
   });
-  await expect(page.getByText("Your link is live")).toBeHidden();
+  await expect(page.getByRole("link", { name: "Your short link" })).toHaveCount(0);
 });
 
 test("the shortener refuses a request with no proof of work", async ({ page }) => {
@@ -110,4 +147,40 @@ test("the shortener refuses a request with no proof of work", async ({ page }) =
   });
   expect(response.status()).toBe(400);
   expect(await response.text()).toContain("human");
+});
+
+/**
+ * The form never swaps out, and links accumulate. This is the layout
+ * decision the hero was rebuilt around: a link already on screen must never
+ * change or disappear because somebody made another one.
+ */
+test("shortening again keeps the first link and stacks the new one on top", async ({ page }) => {
+  const first = `https://example.com/first-${Date.now()}`;
+  const second = `https://example.com/second-${Date.now()}`;
+
+  const firstUrl = await shorten(page, first);
+
+  // The form is still a form: filled, live, and in the same place. No
+  // "shorten another" button to press first.
+  const field = page.getByLabel("Try it without an account");
+  await expect(field).toBeVisible();
+  await field.fill(second);
+  await page.getByRole("button", { name: "Shorten it" }).click();
+
+  const links = page.getByRole("link", { name: "Your short link" });
+  await expect(links).toHaveCount(2, { timeout: 20_000 });
+
+  // Newest first, and the earlier one is still there and unchanged.
+  const hrefs = await links.evaluateAll((nodes) => nodes.map((n) => (n as HTMLAnchorElement).href));
+  expect(hrefs[1]).toBe(firstUrl);
+  expect(hrefs[0]).not.toBe(firstUrl);
+
+  // Each row says which address it came from, which is the question that
+  // appears as soon as there is more than one.
+  await expect(page.getByText(`from ${first}`)).toBeVisible();
+  await expect(page.getByText(`from ${second}`)).toBeVisible();
+
+  // One ask for both, counting them, rather than one per row.
+  await expect(page.getByRole("link", { name: "Keep them" })).toHaveCount(1);
+  await expect(page.getByText(/These 2 links work for 24 hours/)).toBeVisible();
 });
