@@ -101,10 +101,13 @@ analyticsDays }`). Slugs on the **shared** domain are always random (every
   plan); chosen slugs exist only on custom domains, so the shared namespace
   can't be squatted. New users get **no default org**: there is no onboarding
   route; org-scoped pages render `NoOrgState`
-  (`src/app/components/no-org.tsx`) until they create one, and `/billing`
+  (`src/app/components/no-org.tsx`) until they have one, and `/billing`
   works org-less, so landing paid CTAs (`/signup?next=/billing?plan=…`) can
   check out before the first org exists (`/onboarding` redirects to
-  `/dashboard`).
+  `/dashboard`). `NoOrgState` asks for a **link**, not an organization name
+  (#65): it creates the org on the way past, named from the email domain
+  (`lib/org-name.ts`) and renameable in Settings. The org stays explicit in
+  the data model; only the question moved.
 - **Auth**: BetterAuth (email+password, `requireEmailVerification` via the
   `emailOTP` plugin, 6-digit code; password reset stays a link). PBKDF2/WebCrypto
   hashing (`src/worker/password.ts`). The account matching the `SUPERADMIN_EMAIL`
