@@ -145,12 +145,25 @@
   // front of all of it.
   "ratelimits": [
     {
-      // Per caller, per path: login, signup and each Cap endpoint count
-      // separately, so this is 30 tries at one door, not 30 across all of them.
+      // Per caller, per path: login and signup count separately, so this is
+      // 30 tries at one door, not 30 across all of them.
       "name": "RL_AUTH_PUBLIC",
       "namespace_id": "14001",
       "simple": {
         "limit": 30,
+        "period": 60,
+      },
+    },
+    // Cap's own endpoints (#98). Separate from RL_AUTH_PUBLIC and much
+    // higher: one sign-up spends a challenge and a redeem, its retry spends
+    // two more, and several people behind one office address are ordinary.
+    // The proof-of-work prices these, not this counter, which is only here so
+    // a script cannot farm challenges to solve offline in bulk.
+    {
+      "name": "RL_CAP",
+      "namespace_id": "14011",
+      "simple": {
+        "limit": 120,
         "period": 60,
       },
     },
@@ -357,6 +370,17 @@
           "namespace_id": "24001",
           "simple": {
             "limit": 40,
+            "period": 60,
+          },
+        },
+        {
+          // Higher again than production's: local dev and the e2e run have no
+          // cf-connecting-ip, so every caller on the machine shares one key
+          // and one budget.
+          "name": "RL_CAP",
+          "namespace_id": "24011",
+          "simple": {
+            "limit": 600,
             "period": 60,
           },
         },

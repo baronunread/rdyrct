@@ -17,6 +17,10 @@ export interface Env {
   /* click ingestion: redirects enqueue instead of writing D1 directly */
   CLICK_QUEUE: Queue<ClickMessage>;
   RL_AUTH_PUBLIC: RateLimit;
+  /* Cap's challenge and redeem endpoints (#98), on their own budget: issuing
+     a challenge is cheap for us and the proof-of-work is what costs the
+     caller, so this must never be the thing a person meets. */
+  RL_CAP: RateLimit;
   RL_EMAIL: RateLimit;
   RL_EMAIL_RECIPIENT: RateLimit;
   RL_WRITE_FREE: RateLimit;

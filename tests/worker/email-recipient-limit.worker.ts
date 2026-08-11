@@ -2,34 +2,16 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createExecutionContext, reset, waitOnExecutionContext } from "cloudflare:test";
 import worker from "../../src/worker";
 import type { Env } from "../../src/worker/env";
-import { applyTestMigrations, authEnv, overrideEnv } from "./support";
+import {
+  applyTestMigrations,
+  authEnv,
+  exhaustedLimit,
+  openLimit,
+  overrideEnv,
+  recordingLimit,
+} from "./support";
 
 const RESET_PATH = "/api/auth/email-otp/request-password-reset";
-
-/**
- * A rate-limit binding that always refuses, so a route's behaviour once a
- * budget is gone can be asserted without spending real tokens against
- * Cloudflare's per-location counters (which the test runner does not reset
- * between cases).
- */
-function exhaustedLimit(): RateLimit {
-  return { limit: async () => ({ success: false }) } as unknown as RateLimit;
-}
-
-/** A binding that always allows, isolating which of the two budgets is
- * under test. */
-function openLimit(): RateLimit {
-  return { limit: async () => ({ success: true }) } as unknown as RateLimit;
-}
-
-function recordingLimit(keys: string[]): RateLimit {
-  return {
-    limit: async ({ key }: { key: string }) => {
-      keys.push(key);
-      return { success: true };
-    },
-  } as unknown as RateLimit;
-}
 
 /**
  * One password-reset request. `callerIp` fills cf-connecting-ip, which is
