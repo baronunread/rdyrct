@@ -38,6 +38,7 @@ import { Button } from "../ui/button";
 import { Table, Th, Td } from "../ui/misc";
 import { Footer, GITHUB_URL } from "../ui/footer";
 import { HeroShortener } from "../components/hero-shortener";
+import { HeroSignedIn } from "../components/hero-signed-in";
 import { LandingHeader } from "../components/landing-header";
 import { LandingAnalyticsMock } from "../components/landing-analytics";
 import { cn } from "../ui/cn";
@@ -727,7 +728,18 @@ function DeployTerminal() {
   );
 }
 
-function HeroSection({ ctaTo, ctaLabel }: { ctaTo: string; ctaLabel: string }) {
+function HeroSection({
+  ctaTo,
+  ctaLabel,
+  authed,
+  name,
+}: {
+  ctaTo: string;
+  ctaLabel: string;
+  authed: boolean;
+  /** Empty until the session resolves; the card handles that itself. */
+  name: string;
+}) {
   return (
     <section className="flex flex-col items-center gap-8 py-16 sm:py-20">
       <m.div
@@ -749,14 +761,18 @@ function HeroSection({ ctaTo, ctaLabel }: { ctaTo: string; ctaLabel: string }) {
             the site sending people to a repository; it now lives in its own
             band under the pricing table. */}
         <div className="flex flex-wrap items-center justify-center gap-3">
-          {/* Secondary now, both of them: the shortener below is the thing
-              this page asks you to do, so a filled button competing with it
-              would be two primary actions in one view. */}
-          <Link to={ctaTo} onClick={() => trackCta("hero_primary")}>
-            <Button variant="outline" size="md" className="h-11 px-6 text-base">
-              {ctaLabel}
-            </Button>
-          </Link>
+          {/* Secondary now, both of them: the card below is the thing this
+              page asks you to do, so a filled button competing with it would
+              be two primary actions in one view. Hidden entirely when signed
+              in, where the card already carries "Open dashboard" and two of
+              them side by side is just a stutter. */}
+          {!authed && (
+            <Link to={ctaTo} onClick={() => trackCta("hero_primary")}>
+              <Button variant="outline" size="md" className="h-11 px-6 text-base">
+                {ctaLabel}
+              </Button>
+            </Link>
+          )}
           <a href="#analytics" onClick={() => trackCta("hero_secondary")}>
             <Button variant="ghost" size="md" className="h-11 px-6 text-base">
               <BarChart3 size={16} /> See the analytics
@@ -774,10 +790,21 @@ function HeroSection({ ctaTo, ctaLabel }: { ctaTo: string; ctaLabel: string }) {
         transition={{ duration: 0.6, ease: "easeOut", delay: 0.15 }}
         className="flex w-full justify-center"
       >
-        <HeroShortener />
+        {/* The anonymous shortener is an argument aimed at a stranger. A
+            signed-in visitor has already been convinced, and offering them a
+            link that expires in 24 hours and can be "kept" by signing up for
+            the account they are in reads as nobody having tried it. */}
+        {authed ? <HeroSignedIn name={name} /> : <HeroShortener />}
       </m.div>
 
-      <ul className="flex flex-wrap items-center justify-center gap-x-5 gap-y-1 text-xs text-muted">
+      {/* Reassurance for somebody deciding. Nothing to reassure once they
+          have an account. */}
+      <ul
+        className={cn(
+          "flex flex-wrap items-center justify-center gap-x-5 gap-y-1 text-xs text-muted",
+          authed && "hidden",
+        )}
+      >
         <li className="flex items-center gap-1.5">
           <Check size={13} className="text-accent-2" /> Free plan forever
         </li>
@@ -801,37 +828,98 @@ function HeroSection({ ctaTo, ctaLabel }: { ctaTo: string; ctaLabel: string }) {
  * domain, with a slug they chose. It is also the clearest thing a paid plan
  * buys, put where somebody is still deciding whether to care.
  */
+/**
+ * One of the two messages, so the argument is made by the picture rather
+ * than asserted by the copy.
+ */
+function TextMessage({
+  from,
+  body,
+  link,
+  verdict,
+  mine,
+}: {
+  from: string;
+  body: string;
+  link: string;
+  verdict: string;
+  mine?: boolean;
+}) {
+  return (
+    <div
+      className={cn(
+        "flex flex-1 flex-col gap-2 rounded-xl p-4 text-left",
+        mine ? "bg-surface smooth-shadow-ring-sm" : "bg-surface-2",
+      )}
+    >
+      <p className="text-2xs text-muted">{from}</p>
+      <p className="text-sm">{body}</p>
+      <p
+        className={cn("font-mono text-sm font-bold break-all", mine ? "text-accent" : "text-muted")}
+      >
+        {link}
+      </p>
+      <p
+        className={cn("text-2xs tracking-wider uppercase", mine ? "text-accent-2" : "text-danger")}
+      >
+        {verdict}
+      </p>
+    </div>
+  );
+}
+
+/**
+ * The second screen (Direction C of #96).
+ *
+ * The hero just handed the visitor a link on our domain with a random slug,
+ * so the next thought is "that URL is not mine". This answers it straight
+ * away rather than three sections later.
+ *
+ * It argues by showing the link where it is actually read, on somebody
+ * else's phone, next to a decision about whether to tap it. An earlier
+ * version put the two URLs side by side and asserted the difference, which
+ * argued about our branding instead of their result.
+ *
+ * SMS on purpose: it is the one place where shortening is forced rather than
+ * chosen, since the message is charged by the character, and it is where
+ * people distrust short links most, because it is where the scams are. An
+ * order-tracking link would be wrong here, since those come out of a
+ * shipping platform on their own and nobody shortens one by hand.
+ */
 function CustomDomainSection() {
   const paidTo = usePaidPlanTo();
   return (
     <Section className="py-12">
       <div className="mx-auto flex max-w-3xl flex-col items-center gap-6 text-center">
         <h2 className="text-xl font-bold text-balance sm:text-2xl">
-          That link can carry your name instead of ours.
+          Your link gets read by someone deciding whether to trust it.
         </h2>
         <p className="max-w-xl text-sm text-muted">
-          Connect a domain you own and short links go live under it, with TLS issued automatically.
-          Chosen slugs live there too: on the shared domain every slug is random, so nobody can
-          squat the good ones.
+          A random slug on a domain nobody recognises is what a scam text looks like. Connect a
+          domain you own and short links go live under it, with TLS issued automatically, and every
+          slug is yours to choose. On the shared domain they are always random, so nobody can squat
+          the good ones.
         </p>
 
-        <div className="flex w-full flex-col items-center gap-3 sm:flex-row sm:justify-center">
-          <div className="w-full max-w-xs rounded-lg bg-surface-2 px-4 py-3 text-left">
-            <p className="text-2xs tracking-wider text-muted uppercase">Shared domain, free</p>
-            <p className="mt-1 truncate font-mono text-sm">rdyrct.com/m22fs5w</p>
-          </div>
-          <ArrowRight size={18} className="shrink-0 rotate-90 text-muted sm:rotate-0" />
-          <div className="w-full max-w-xs rounded-lg bg-surface px-4 py-3 text-left smooth-shadow-ring-sm">
-            <p className="text-2xs tracking-wider text-accent uppercase">Your domain, paid</p>
-            <p className="mt-1 truncate font-mono text-sm font-bold">
-              go.yourbrand.com/spring-sale
-            </p>
-          </div>
+        <div className="flex w-full flex-col gap-3 sm:flex-row">
+          <TextMessage
+            from="Text message, shared domain"
+            body="Acme: your 20% code ends tonight."
+            link="rdyrct.com/m22fs5w"
+            verdict="Deleted as spam"
+          />
+          <TextMessage
+            mine
+            from="The same text, your domain"
+            body="Acme: your 20% code ends tonight."
+            link="go.acme.com/20-off"
+            verdict="Obviously from Acme"
+          />
         </div>
 
         <Link to={paidTo("hobby")} onClick={() => trackCta("second_screen_domain")}>
-          <Button variant="outline" size="sm">
-            Use your own domain <ArrowRight size={14} />
+          <Button variant="primary" size="sm">
+            Put your domain on it <ArrowRight size={14} />
           </Button>
         </Link>
       </div>
@@ -981,15 +1069,26 @@ function FinalCtaSection({ ctaTo, ctaLabel }: { ctaTo: string; ctaLabel: string 
   );
 }
 
-export function LandingPage() {
+/**
+ * Whether to draw this page for a stranger or a customer, and what the top
+ * call to action should say.
+ *
+ * While the /user query is in flight it falls back to the last known auth
+ * state, so a signed-in visitor does not see "Sign up" flash before the
+ * header settles. Snapshotted once: mid-visit flips come from the query.
+ */
+function useAudience() {
   const me = useCurrentUser();
-  // While the /user query is in flight, fall back to the last known auth
-  // state so a signed-in visitor doesn't see "Sign up" flash before the
-  // header settles. Snapshot once: mid-visit flips come from the query.
   const [authHint] = useState(readAuthHint);
   const authed = me.isPending ? authHint : !!me.data;
-  const ctaTo = authed ? "/dashboard" : "/signup";
-  const ctaLabel = authed ? "Open dashboard" : "Get started free";
+  const cta = authed
+    ? { ctaTo: "/dashboard", ctaLabel: "Open dashboard" }
+    : { ctaTo: "/signup", ctaLabel: "Get started free" };
+  return { authed, name: me.data?.user.name ?? "", ...cta };
+}
+
+export function LandingPage() {
+  const { authed, name, ctaTo, ctaLabel } = useAudience();
 
   // Step 1 of the funnel (#64). Once per mount, not per render, and not
   // gated on `me` settling: a landing view is a view whether or not the
@@ -1015,7 +1114,7 @@ export function LandingPage() {
           />
 
           <LandingHeader authed={authed} />
-          <HeroSection ctaTo={ctaTo} ctaLabel={ctaLabel} />
+          <HeroSection ctaTo={ctaTo} ctaLabel={ctaLabel} authed={authed} name={name} />
           <CustomDomainSection />
           <HowItWorksSection />
           <AnalyticsPreviewSection />

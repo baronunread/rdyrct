@@ -133,3 +133,22 @@ test("the footer is the same width on every public page", async ({ page }) => {
   expect(widths["/terms"]).toBe(widths["/"]);
   expect(widths["/"]).toBeGreaterThan(0);
 });
+
+test("the second screen argues with two messages, not two URLs (#96)", async ({ page }) => {
+  await page.goto("/");
+  // The point is made by showing the link where it is read. If this ever
+  // becomes two URLs side by side again, it is back to asserting instead of
+  // showing.
+  await expect(page.getByText(/deciding whether to trust it/i)).toBeVisible();
+  await expect(page.getByText("Deleted as spam")).toBeVisible();
+  await expect(page.getByText("Obviously from Acme")).toBeVisible();
+  await expect(page.getByRole("link", { name: /Put your domain on it/i })).toBeVisible();
+});
+
+test("a signed-out visitor still gets the anonymous shortener, not a dashboard card", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await expect(page.getByLabel("Try it without an account")).toBeVisible();
+  await expect(page.getByText(/Welcome back/)).toHaveCount(0);
+});

@@ -62,3 +62,23 @@ test("a new owner can create an organization and a scheme-less quick link", asyn
   await expect(page).toHaveURL(/\/login$/);
   await expect(page.getByRole("heading", { name: "Sign in" })).toBeVisible();
 });
+
+/**
+ * The hero for somebody who already has an account (#96). Offering them a
+ * link that expires in 24 hours, and then offering to "keep" it by signing
+ * up for the account they are signed into, reads as nobody having tried it.
+ */
+test("a signed-in visitor sees their own numbers, not the anonymous shortener", async ({
+  page,
+}) => {
+  await signUpAndVerify(page, `hero-${Date.now()}@gmail.com`, "test-password-123");
+  await createOrg(page, "Hero Org");
+
+  await page.goto("/");
+  await expect(page.getByText(/Welcome back/)).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByRole("link", { name: /Open dashboard/i }).first()).toBeVisible();
+
+  // The anonymous form is gone, and so is the pitch aimed at strangers.
+  await expect(page.getByLabel("Try it without an account")).toHaveCount(0);
+  await expect(page.getByText("Free plan forever")).toBeHidden();
+});
