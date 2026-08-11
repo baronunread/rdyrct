@@ -21,6 +21,7 @@ import * as schema from "../db/schema";
 import type { AppEnv, DB, Env } from "../env";
 import { enqueueStorage, syncLinkMsg } from "../storage";
 import { recordAdminAction } from "../audit";
+import { scoreDestination } from "../risk";
 import { jsonBodyLimit } from "../body-limit";
 import {
   ADMIN_LINK_SORTS,
@@ -196,6 +197,55 @@ adminLinkRoutes.post("/:linkId/suspend", async (c) =>
 adminLinkRoutes.post("/:linkId/unsuspend", async (c) =>
   c.json(await setSuspended(c, c.req.param("linkId")!, false, null)),
 );
+
+/**
+ * Re-run the destination check on demand (#68).
+ *
+ * Awaited rather than deferred to waitUntil, unlike the checks on create and
+ * edit: an admin who asked for this is looking at the row and wants the
+ * answer, not a promise that something will happen shortly. One DNS lookup
+ * with a three second ceiling.
+ *
+ * Recorded in the audit log because it writes to the row. Reconstructing why
+ * a score changed is exactly what that log is for, and "somebody re-checked
+ * it at 02:14" is part of the answer.
+ */
+adminLinkRoutes.post("/:linkId/rescore", async (c) => {
+  const db = c.var.db;
+  const linkId = c.req.param("linkId")!;
+  const rows = await db.select().from(schema.links).where(eq(schema.links.id, linkId));
+  const link = rows[0];
+  if (!link) throw new HTTPException(404, { message: "Link not found" });
+
+  const verdict = await scoreDestination(link.destination);
+  if (verdict)
+    await db
+      .update(schema.links)
+      .set({
+        riskScore: verdict.score,
+        riskReasons: JSON.stringify(verdict.reasons),
+        riskCheckedAt: Date.now(),
+        riskProvider: verdict.provider,
+      })
+      .where(eq(schema.links.id, linkId));
+
+  await recordAdminAction(c.env, {
+    actorUserId: c.var.user!.id,
+    action: "link.rescore",
+    targetType: "link",
+    targetId: linkId,
+    detail: { slug: link.slug, destination: link.destination, score: verdict?.score ?? null },
+  });
+
+  // A null verdict is "still unscored", never "clean": the provider was
+  // unreachable or answered something we do not recognise, and the row keeps
+  // whatever it had.
+  return c.json({
+    scored: !!verdict,
+    score: verdict?.score ?? null,
+    reasons: verdict?.reasons ?? [],
+  });
+});
 
 /**
  * Delete a link outright.
