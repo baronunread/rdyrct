@@ -13,14 +13,16 @@
 import { useState } from "react";
 import { Link } from "react-router";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Ban, ExternalLink, Trash2, Undo2, X } from "lucide-react";
+import { Ban, Ellipsis, ExternalLink, Trash2, Undo2 } from "lucide-react";
 import { useAdminAnonLinks, useAdminLinks } from "../../lib/hooks";
 import { api } from "../../lib/api";
-import type { AdminLinkRow, Sort } from "@/shared/types";
+import type { AdminAnonLinkRow, AdminLinkRow, Sort } from "@/shared/types";
 import { Badge, PageHeader, Table, Td, Th } from "../../ui/misc";
 import { Button } from "../../ui/button";
 import { Field, Input } from "../../ui/field";
 import { Dialog } from "../../ui/dialog";
+import { ConfirmDialog } from "../../ui/confirm-dialog";
+import { Menu, MenuItem, MenuSeparator } from "../../ui/menu";
 import { AdminTableSkeleton } from "../../components/skeletons";
 import { useToast } from "../../ui/toast";
 import { withErrorToast } from "../../lib/mutation-toast";
@@ -108,10 +110,12 @@ function LinkRow({
   link,
   onSuspend,
   onRestore,
+  onDelete,
 }: {
   link: AdminLinkRow;
   onSuspend: (l: AdminLinkRow) => void;
-  onRestore: { mutate: (id: string) => void; isPending: boolean };
+  onRestore: (l: AdminLinkRow) => void;
+  onDelete: (l: AdminLinkRow) => void;
 }) {
   return (
     <tr className={link.suspendedAt ? "opacity-60" : undefined}>
@@ -133,82 +137,88 @@ function LinkRow({
             after "who owns this". */}
         <Link
           to={`/admin/links?org=${encodeURIComponent(link.orgId)}`}
-          className="hover:text-accent hover:underline"
+          className="block truncate hover:text-accent hover:underline"
         >
           {link.orgName}
         </Link>
       </Td>
-      <Td className="hidden sm:table-cell">
+      <Td className="hidden md:table-cell">
         <RiskBadge score={link.riskScore} reasons={link.riskReasons} />
       </Td>
-      <Td className="hidden tnum sm:table-cell">{link.clicks}</Td>
-      <Td className="hidden whitespace-nowrap text-muted sm:table-cell">
+      <Td className="hidden tnum lg:table-cell">{link.clicks}</Td>
+      <Td className="hidden whitespace-nowrap text-muted lg:table-cell">
         {shortDate(link.createdAt)}
       </Td>
       <Td>
-        <LinkActions link={link} onSuspend={onSuspend} onRestore={onRestore} />
+        <LinkActions link={link} onSuspend={onSuspend} onRestore={onRestore} onDelete={onDelete} />
       </Td>
     </tr>
   );
 }
 
+/**
+ * Suspend, restore, delete. A menu rather than a row of buttons, matching
+ * every other table here, and because a destructive action sitting in the
+ * open next to a date is one mis-click from an outage.
+ */
 function LinkActions({
   link,
   onSuspend,
   onRestore,
+  onDelete,
 }: {
   link: AdminLinkRow;
   onSuspend: (l: AdminLinkRow) => void;
-  onRestore: { mutate: (id: string) => void; isPending: boolean };
+  onRestore: (l: AdminLinkRow) => void;
+  onDelete: (l: AdminLinkRow) => void;
 }) {
   return (
-    <div className="flex justify-end gap-1.5">
-      <a href={link.destination} target="_blank" rel="noreferrer">
-        <Button size="sm" variant="ghost" aria-label="Open destination">
-          <ExternalLink size={13} />
-        </Button>
-      </a>
+    <Menu
+      align="end"
+      label={`Actions for ${link.slug}`}
+      trigger={
+        <div className="flex justify-end">
+          <span className="rounded p-1.5 text-muted transition-transform duration-150 active:scale-[0.96] hover:bg-surface-2 hover:text-text">
+            <Ellipsis size={15} />
+          </span>
+        </div>
+      }
+    >
+      <MenuItem onClick={() => window.open(link.destination, "_blank", "noopener,noreferrer")}>
+        <ExternalLink size={14} /> Open destination
+      </MenuItem>
+      <MenuSeparator />
       {link.suspendedAt ? (
-        <Button
-          size="sm"
-          variant="outline"
-          disabled={onRestore.isPending}
-          onClick={() => onRestore.mutate(link.id)}
-        >
-          <Undo2 size={13} /> Restore
-        </Button>
+        <MenuItem onClick={() => onRestore(link)}>
+          <Undo2 size={14} /> Restore link
+        </MenuItem>
       ) : (
-        <Button size="sm" variant="danger" onClick={() => onSuspend(link)}>
-          <Ban size={13} /> Suspend
-        </Button>
+        <MenuItem className="text-danger" onClick={() => onSuspend(link)}>
+          <Ban size={14} /> Suspend link
+        </MenuItem>
       )}
-    </div>
+      <MenuItem className="text-danger" onClick={() => onDelete(link)}>
+        <Trash2 size={14} /> Delete link
+      </MenuItem>
+    </Menu>
   );
 }
 
 function LinksTable({
   rows,
-  onSuspend,
   sort,
   onSort,
+  onSuspend,
+  onRestore,
+  onDelete,
 }: {
   rows: AdminLinkRow[];
-  onSuspend: (l: AdminLinkRow) => void;
   sort: Sort;
   onSort: (s: Sort) => void;
+  onSuspend: (l: AdminLinkRow) => void;
+  onRestore: (l: AdminLinkRow) => void;
+  onDelete: (l: AdminLinkRow) => void;
 }) {
-  const toast = useToast();
-  const qc = useQueryClient();
-  const unsuspend = useMutation({
-    mutationFn: (id: string) => api(`/admin/links/${id}/unsuspend`, { method: "POST" }),
-    onSuccess: async () => {
-      await qc.invalidateQueries({ queryKey: ["admin", "links"] });
-      await qc.invalidateQueries({ queryKey: ["admin", "audit"] });
-      toast("Link restored.");
-    },
-    onError: withErrorToast(toast),
-  });
-
   if (rows.length === 0)
     return <p className="py-6 text-center text-sm text-muted">No links match that search.</p>;
 
@@ -216,6 +226,9 @@ function LinksTable({
     // Fixed, with widths that add to 100%. In an auto-layout table a long
     // destination sets the column width and pushes everything past the card,
     // and `max-w` on the cell is ignored.
+    //
+    // Columns drop one breakpoint at a time rather than all at once, so the
+    // table narrows smoothly instead of jumping between two layouts.
     <Table fixed>
       <thead>
         <tr>
@@ -224,53 +237,55 @@ function LinksTable({
             sortKey="slug"
             sort={sort}
             onSort={onSort}
-            className="w-[26%] sm:w-[14%]"
+            className="w-[34%] sm:w-[24%] md:w-[18%] lg:w-[14%]"
           />
-          {/* Hidden on a phone: seven columns in 390px squeezes every one of
-              them into uselessness. The destination and the organization are
-              the two an abuse report is read against, so they are the ones
-              that survive the cut. */}
           <SortTh
             label="Destination"
             sortKey="destination"
             sort={sort}
             onSort={onSort}
-            className="w-[34%] sm:w-[23%]"
+            className="w-[50%] sm:w-[38%] md:w-[30%] lg:w-[23%]"
           />
           <SortTh
             label="Organization"
             sortKey="orgName"
             sort={sort}
             onSort={onSort}
-            className="hidden w-[14%] sm:table-cell"
+            className="hidden sm:table-cell sm:w-[22%] md:w-[18%] lg:w-[14%]"
           />
           <SortTh
             label="Risk"
             sortKey="riskScore"
             sort={sort}
             onSort={onSort}
-            className="hidden w-[10%] sm:table-cell"
+            className="hidden md:table-cell md:w-[18%] lg:w-[10%]"
           />
           <SortTh
             label="Clicks"
             sortKey="clicks"
             sort={sort}
             onSort={onSort}
-            className="hidden w-[7%] sm:table-cell"
+            className="hidden lg:table-cell lg:w-[7%]"
           />
           <SortTh
             label="Created"
             sortKey="createdAt"
             sort={sort}
             onSort={onSort}
-            className="hidden w-[12%] sm:table-cell"
+            className="hidden lg:table-cell lg:w-[12%]"
           />
-          <Th className="w-[40%] sm:w-[20%]" />
+          <Th className="w-[16%] sm:w-[16%] md:w-[16%] lg:w-[20%]" />
         </tr>
       </thead>
       <tbody>
         {rows.map((link) => (
-          <LinkRow key={link.id} link={link} onSuspend={onSuspend} onRestore={unsuspend} />
+          <LinkRow
+            key={link.id}
+            link={link}
+            onSuspend={onSuspend}
+            onRestore={onRestore}
+            onDelete={onDelete}
+          />
         ))}
       </tbody>
     </Table>
@@ -284,6 +299,7 @@ function AnonymousLinks() {
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<Sort>({ key: "createdAt", dir: -1 });
   const [page, setPage] = useState(0);
+  const [deleting, setDeleting] = useState<AdminAnonLinkRow | null>(null);
   const toast = useToast();
   const qc = useQueryClient();
   const remove = useMutation({
@@ -291,6 +307,7 @@ function AnonymousLinks() {
     onSuccess: async () => {
       await qc.invalidateQueries({ queryKey: ["admin", "anon-links"] });
       toast("Anonymous link deleted.");
+      setDeleting(null);
     },
     onError: withErrorToast(toast),
   });
@@ -341,30 +358,30 @@ function AnonymousLinks() {
                 sortKey="slug"
                 sort={sort}
                 onSort={setSort}
-                className="w-[30%] sm:w-[18%]"
+                className="w-[34%] sm:w-[24%] md:w-[18%]"
               />
               <SortTh
                 label="Destination"
                 sortKey="destination"
                 sort={sort}
                 onSort={setSort}
-                className="w-[40%] sm:w-[38%]"
+                className="w-[50%] sm:w-[44%] md:w-[38%]"
               />
               <SortTh
                 label="Risk"
                 sortKey="riskScore"
                 sort={sort}
                 onSort={setSort}
-                className="hidden w-[14%] sm:table-cell"
+                className="hidden sm:table-cell sm:w-[16%] md:w-[14%]"
               />
               <SortTh
                 label="Expires"
                 sortKey="expiresAt"
                 sort={sort}
                 onSort={setSort}
-                className="hidden w-[14%] sm:table-cell"
+                className="hidden md:table-cell md:w-[14%]"
               />
-              <Th className="w-[30%] sm:w-[16%]" />
+              <Th className="w-[16%]" />
             </tr>
           </thead>
           <tbody>
@@ -377,17 +394,12 @@ function AnonymousLinks() {
                 <Td className="hidden sm:table-cell">
                   <RiskBadge score={link.riskScore} reasons={link.riskReasons} />
                 </Td>
-                <Td className="hidden whitespace-nowrap text-muted sm:table-cell">
+                <Td className="hidden whitespace-nowrap text-muted md:table-cell">
                   {shortDate(link.expiresAt)}
                 </Td>
                 <Td>
                   <div className="flex justify-end">
-                    <Button
-                      size="sm"
-                      variant="danger"
-                      disabled={remove.isPending}
-                      onClick={() => remove.mutate(link.id)}
-                    >
+                    <Button size="sm" variant="danger" onClick={() => setDeleting(link)}>
                       <Trash2 size={13} /> Delete
                     </Button>
                   </div>
@@ -398,6 +410,21 @@ function AnonymousLinks() {
         </Table>
       )}
       <Pager page={safePage} totalPages={totalPages} onPageChange={setPage} />
+
+      <ConfirmDialog
+        title="Delete this link?"
+        open={!!deleting}
+        onClose={() => setDeleting(null)}
+        onConfirm={() => deleting && remove.mutate(deleting.id)}
+        confirmLabel="Delete link"
+        danger
+        pending={remove.isPending}
+      >
+        <p className="text-sm text-muted">
+          <span className="font-mono font-bold text-text">/{deleting?.slug}</span> stops redirecting
+          at once. It would have expired on its own within 24 hours.
+        </p>
+      </ConfirmDialog>
     </div>
   );
 }
@@ -437,9 +464,37 @@ function OwnedLinks({ onSuspend }: { onSuspend: (l: AdminLinkRow) => void }) {
   const orgFilter = params.get("org") ?? "";
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<Sort>({ key: "createdAt", dir: -1 });
-  const [suspendedOnly, setSuspendedOnly] = useState(false);
   const [page, setPage] = useState(0);
-  const { data, isPending } = useAdminLinks({ q: query, suspended: suspendedOnly });
+  const [restoring, setRestoring] = useState<AdminLinkRow | null>(null);
+  const [deleting, setDeleting] = useState<AdminLinkRow | null>(null);
+  const toast = useToast();
+  const qc = useQueryClient();
+  const { data, isPending } = useAdminLinks({ q: query, suspended: false });
+
+  const refresh = async () => {
+    await qc.invalidateQueries({ queryKey: ["admin", "links"] });
+    await qc.invalidateQueries({ queryKey: ["admin", "audit"] });
+  };
+
+  const restore = useMutation({
+    mutationFn: (id: string) => api(`/admin/links/${id}/unsuspend`, { method: "POST" }),
+    onSuccess: async () => {
+      await refresh();
+      toast("Link restored.");
+      setRestoring(null);
+    },
+    onError: withErrorToast(toast),
+  });
+
+  const remove = useMutation({
+    mutationFn: (id: string) => api(`/admin/links/${id}`, { method: "DELETE" }),
+    onSuccess: async () => {
+      await refresh();
+      toast("Link deleted.");
+      setDeleting(null);
+    },
+    onError: withErrorToast(toast),
+  });
 
   const all = sortRows(
     (data ?? []).filter((link) => !orgFilter || link.orgId === orgFilter),
@@ -466,32 +521,63 @@ function OwnedLinks({ onSuspend }: { onSuspend: (l: AdminLinkRow) => void }) {
           placeholder="Slug or destination, e.g. phishy.example"
           label="Search links"
         />
-        <Button
-          size="sm"
-          variant={suspendedOnly ? "primary" : "outline"}
-          onClick={() => setSuspendedOnly((on) => !on)}
-        >
-          Suspended only
-        </Button>
         {orgFilter && (
           <Button
             size="sm"
-            variant="ghost"
+            variant="outline"
             onClick={() => {
               params.delete("org");
               setParams(params, { replace: true });
             }}
           >
-            <X size={13} /> {all[0]?.orgName ?? "Organization"} only
+            Clear {all[0]?.orgName ?? "organization"} filter
           </Button>
         )}
       </div>
+
       {isPending ? (
         <AdminTableSkeleton />
       ) : (
-        <LinksTable rows={rows} onSuspend={onSuspend} sort={sort} onSort={setSort} />
+        <LinksTable
+          rows={rows}
+          sort={sort}
+          onSort={setSort}
+          onSuspend={onSuspend}
+          onRestore={setRestoring}
+          onDelete={setDeleting}
+        />
       )}
       <Pager page={safePage} totalPages={totalPages} onPageChange={setPage} />
+
+      <ConfirmDialog
+        title="Restore this link?"
+        open={!!restoring}
+        onClose={() => setRestoring(null)}
+        onConfirm={() => restoring && restore.mutate(restoring.id)}
+        confirmLabel="Restore link"
+        pending={restore.isPending}
+      >
+        <p className="text-sm text-muted">
+          <span className="font-mono font-bold text-text">/{restoring?.slug}</span> starts
+          redirecting again immediately.
+        </p>
+      </ConfirmDialog>
+
+      <ConfirmDialog
+        title="Delete this link?"
+        open={!!deleting}
+        onClose={() => setDeleting(null)}
+        onConfirm={() => deleting && remove.mutate(deleting.id)}
+        confirmLabel="Delete link"
+        danger
+        pending={remove.isPending}
+      >
+        <p className="text-sm text-muted">
+          <span className="font-mono font-bold text-text">/{deleting?.slug}</span> and its clicks
+          are removed for good. Suspending stops a link without losing the evidence, and can be
+          undone; this cannot.
+        </p>
+      </ConfirmDialog>
     </div>
   );
 }
