@@ -188,6 +188,10 @@ export async function claimAnonLink(
     riskReasons: anon.riskReasons,
     riskCheckedAt: anon.riskCheckedAt,
     riskProvider: anon.riskProvider,
+    // New links are never born suspended; only an admin sets this (#67).
+    suspendedAt: null,
+    suspendedBy: null,
+    suspendReason: null,
   };
   const address = {
     id: uid(),

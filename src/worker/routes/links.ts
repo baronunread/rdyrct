@@ -583,6 +583,10 @@ function newLinkRow(
     riskReasons: null,
     riskCheckedAt: null,
     riskProvider: null,
+    // New links are never born suspended; only an admin sets this (#67).
+    suspendedAt: null,
+    suspendedBy: null,
+    suspendReason: null,
   };
 }
 
