@@ -52,9 +52,14 @@ test("an anonymous link records no clicks, which is what signing up buys", async
   await page.request.get(`/${slug}`, { maxRedirects: 0 });
   await page.waitForTimeout(1000);
 
-  // No org and no links row means nothing a click could belong to. The
-  // absence is the product boundary, not an oversight.
-  const clicks = await queryRows<{ n: number }>(page, "select count(*) as n from clicks");
+  // Scoped to clicks belonging to no real link, which is the only shape an
+  // anonymous click could take. Counting every row in the table made this
+  // depend on whatever else the suite had done, and it started failing the
+  // day another test created a click of its own.
+  const clicks = await queryRows<{ n: number }>(
+    page,
+    "select count(*) as n from clicks where link_id not in (select id from links)",
+  );
   expect(Number(clicks[0].n)).toBe(0);
 });
 

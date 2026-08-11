@@ -13,7 +13,7 @@
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Ban, ExternalLink, Trash2, Undo2 } from "lucide-react";
-import { useAdminAnonLinks, useAdminAudit, useAdminLinks } from "../../lib/hooks";
+import { useAdminAnonLinks, useAdminLinks } from "../../lib/hooks";
 import { api } from "../../lib/api";
 import { ADMIN_LINK_SORTS, type AdminLinkRow, type AdminLinkSort } from "@/shared/types";
 import { Badge, Card, PageHeader, Table, Td, Th } from "../../ui/misc";
@@ -25,6 +25,7 @@ import { useToast } from "../../ui/toast";
 import { withErrorToast } from "../../lib/mutation-toast";
 import { shortDate } from "../../lib/dates";
 import { SearchInput } from "./search-input";
+import { cn } from "../../ui/cn";
 
 const SORT_LABELS: Record<AdminLinkSort, string> = {
   created: "Newest",
@@ -115,7 +116,7 @@ function LinkRow({
   return (
     <tr className={link.suspendedAt ? "opacity-60" : undefined}>
       <Td>
-        <span className="font-mono text-xs font-bold">
+        <span className="block truncate font-mono text-xs font-bold">
           {link.domain ?? ""}/{link.slug}
         </span>
         {link.suspendedAt && (
@@ -124,15 +125,15 @@ function LinkRow({
           </span>
         )}
       </Td>
-      <Td className="max-w-64 truncate text-muted" title={link.destination}>
+      <Td className="truncate text-muted" title={link.destination}>
         {link.destination}
       </Td>
-      <Td>{link.orgName}</Td>
+      <Td className="truncate">{link.orgName}</Td>
       <Td>
         <RiskBadge score={link.riskScore} reasons={link.riskReasons} />
       </Td>
       <Td className="tnum">{link.clicks}</Td>
-      <Td className="text-muted">{shortDate(link.createdAt)}</Td>
+      <Td className="whitespace-nowrap text-muted">{shortDate(link.createdAt)}</Td>
       <Td>
         <LinkActions link={link} onSuspend={onSuspend} onRestore={onRestore} />
       </Td>
@@ -197,16 +198,19 @@ function LinksTable({
     return <p className="py-6 text-center text-sm text-muted">No links match that search.</p>;
 
   return (
-    <Table>
+    // Fixed, with widths that add to 100%. In an auto-layout table a long
+    // destination sets the column width and pushes everything past the card,
+    // and `max-w` on the cell is ignored.
+    <Table fixed>
       <thead>
         <tr>
-          <Th>Link</Th>
-          <Th>Destination</Th>
-          <Th>Organization</Th>
-          <Th>Risk</Th>
-          <Th>Clicks</Th>
-          <Th>Created</Th>
-          <Th />
+          <Th className="w-[14%]">Link</Th>
+          <Th className="w-[23%]">Destination</Th>
+          <Th className="w-[14%]">Organization</Th>
+          <Th className="w-[10%]">Risk</Th>
+          <Th className="w-[7%]">Clicks</Th>
+          <Th className="w-[12%]">Created</Th>
+          <Th className="w-[20%]" />
         </tr>
       </thead>
       <tbody>
@@ -274,27 +278,27 @@ function AnonymousLinks() {
       loading={isPending}
       empty={rows.length === 0}
     >
-      <Table>
+      <Table fixed>
         <thead>
           <tr>
-            <Th>Slug</Th>
-            <Th>Destination</Th>
-            <Th>Risk</Th>
-            <Th>Expires</Th>
-            <Th />
+            <Th className="w-[18%]">Slug</Th>
+            <Th className="w-[38%]">Destination</Th>
+            <Th className="w-[14%]">Risk</Th>
+            <Th className="w-[14%]">Expires</Th>
+            <Th className="w-[16%]" />
           </tr>
         </thead>
         <tbody>
           {rows.map((link) => (
             <tr key={link.id}>
-              <Td className="font-mono text-xs font-bold">/{link.slug}</Td>
-              <Td className="max-w-64 truncate text-muted" title={link.destination}>
+              <Td className="truncate font-mono text-xs font-bold">/{link.slug}</Td>
+              <Td className="truncate text-muted" title={link.destination}>
                 {link.destination}
               </Td>
               <Td>
                 <RiskBadge score={link.riskScore} reasons={link.riskReasons} />
               </Td>
-              <Td className="text-muted">{shortDate(link.expiresAt)}</Td>
+              <Td className="whitespace-nowrap text-muted">{shortDate(link.expiresAt)}</Td>
               <Td>
                 <div className="flex justify-end">
                   <Button
@@ -315,47 +319,78 @@ function AnonymousLinks() {
   );
 }
 
-/** The audit trail, so a suspension is answerable later. */
-function AuditLog() {
-  const { data, isPending } = useAdminAudit();
-  const rows = data ?? [];
+const VIEWS = [
+  { id: "links", label: "Owned links" },
+  { id: "anonymous", label: "Anonymous" },
+] as const;
+type View = (typeof VIEWS)[number]["id"];
+
+/** Two sections, switched rather than stacked. Stacked, the anonymous list
+ * sat below up to 200 link rows, which is the same as not being there. */
+function ViewSwitch({ view, onChange }: { view: View; onChange: (v: View) => void }) {
+  return (
+    <div className="flex w-fit gap-1 rounded-lg bg-surface-2 p-1">
+      {VIEWS.map(({ id, label }) => (
+        <button
+          key={id}
+          type="button"
+          onClick={() => onChange(id)}
+          className={cn(
+            "cursor-pointer rounded-md px-3 py-1.5 text-xs transition-colors",
+            view === id ? "bg-surface font-bold text-text shadow-sm" : "text-muted hover:text-text",
+          )}
+        >
+          {label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/** The cross-org list with its own controls. Split out so the page itself is
+ * just the switch and the three things it switches between. */
+function OwnedLinks({ onSuspend }: { onSuspend: (l: AdminLinkRow) => void }) {
+  const [query, setQuery] = useState("");
+  const [sort, setSort] = useState<AdminLinkSort>("created");
+  const [suspendedOnly, setSuspendedOnly] = useState(false);
+  const { data, isPending } = useAdminLinks({ q: query, sort, suspended: suspendedOnly });
 
   return (
-    <AdminSection label="Recent admin actions" loading={isPending} empty={rows.length === 0}>
-      <Table>
-        <thead>
-          <tr>
-            <Th>When</Th>
-            <Th>Who</Th>
-            <Th>Action</Th>
-            <Th>Target</Th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((entry) => (
-            <tr key={entry.id}>
-              <Td className="text-muted">{shortDate(entry.createdAt)}</Td>
-              {/* The address may be gone: the log outlives the account. */}
-              <Td>{entry.actorEmail ?? <span className="text-muted">deleted account</span>}</Td>
-              <Td className="font-mono text-xs">{entry.action}</Td>
-              <Td className="max-w-64 truncate text-muted" title={entry.detail ?? entry.targetId}>
-                {entry.detail ?? entry.targetId}
-              </Td>
-            </tr>
+    <Card>
+      <div className="mb-3 flex flex-wrap items-center gap-2">
+        <SearchInput
+          value={query}
+          onChange={setQuery}
+          placeholder="Slug or destination, e.g. phishy.example"
+          label="Search links"
+        />
+        <Select
+          value={sort}
+          onChange={(event) => setSort(event.target.value as AdminLinkSort)}
+          wrapperClass="w-44"
+        >
+          {ADMIN_LINK_SORTS.map((value) => (
+            <option key={value} value={value}>
+              {SORT_LABELS[value]}
+            </option>
           ))}
-        </tbody>
-      </Table>
-    </AdminSection>
+        </Select>
+        <Button
+          size="sm"
+          variant={suspendedOnly ? "primary" : "outline"}
+          onClick={() => setSuspendedOnly((on) => !on)}
+        >
+          Suspended only
+        </Button>
+      </div>
+      {isPending ? <AdminTableSkeleton /> : <LinksTable rows={data ?? []} onSuspend={onSuspend} />}
+    </Card>
   );
 }
 
 export function AdminLinksPage() {
-  const [query, setQuery] = useState("");
-  const [sort, setSort] = useState<AdminLinkSort>("created");
-  const [suspendedOnly, setSuspendedOnly] = useState(false);
+  const [view, setView] = useState<View>("links");
   const [suspending, setSuspending] = useState<AdminLinkRow | null>(null);
-
-  const { data, isPending } = useAdminLinks({ q: query, sort, suspended: suspendedOnly });
 
   return (
     <div className="flex flex-col gap-4">
@@ -364,42 +399,10 @@ export function AdminLinksPage() {
         sub="Every link across every organization. Search by slug or destination."
       />
 
-      <Card>
-        <div className="mb-3 flex flex-wrap items-center gap-2">
-          <SearchInput
-            value={query}
-            onChange={setQuery}
-            placeholder="Slug or destination, e.g. phishy.example"
-            label="Search links"
-          />
-          <Select
-            value={sort}
-            onChange={(event) => setSort(event.target.value as AdminLinkSort)}
-            wrapperClass="w-44"
-          >
-            {ADMIN_LINK_SORTS.map((value) => (
-              <option key={value} value={value}>
-                {SORT_LABELS[value]}
-              </option>
-            ))}
-          </Select>
-          <Button
-            size="sm"
-            variant={suspendedOnly ? "primary" : "outline"}
-            onClick={() => setSuspendedOnly((on) => !on)}
-          >
-            Suspended only
-          </Button>
-        </div>
-        {isPending ? (
-          <AdminTableSkeleton />
-        ) : (
-          <LinksTable rows={data ?? []} onSuspend={setSuspending} />
-        )}
-      </Card>
+      <ViewSwitch view={view} onChange={setView} />
 
-      <AnonymousLinks />
-      <AuditLog />
+      {view === "links" && <OwnedLinks onSuspend={setSuspending} />}
+      {view === "anonymous" && <AnonymousLinks />}
 
       <SuspendDialog link={suspending} onClose={() => setSuspending(null)} />
     </div>
