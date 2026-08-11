@@ -45,6 +45,7 @@ export const RESERVED_SLUGS = new Set([
   "domains",
   "settings",
   "admin",
+  "audit",
 ]);
 
 const UTM_KEYS = [

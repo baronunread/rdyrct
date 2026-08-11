@@ -61,6 +61,12 @@ const AdminUsagePage = lazy(() =>
     default: m.AdminUsagePage,
   })),
 );
+const AdminLayout = lazy(() =>
+  import("./routes/admin/layout").then((m) => ({ default: m.AdminLayout })),
+);
+const AdminAuditPage = lazy(() =>
+  import("./routes/admin/audit").then((m) => ({ default: m.AdminAuditPage })),
+);
 const AdminLinksPage = lazy(() =>
   import("./routes/admin/links").then((m) => ({ default: m.AdminLinksPage })),
 );
@@ -118,38 +124,29 @@ createRoot(document.getElementById("root")!).render(
                   <Route path="/billing" element={<BillingPage />} />
                   <Route path="/domains" element={<DomainsPage />} />
                   <Route path="/settings" element={<SettingsPage />} />
+                  {/* One guard for the whole section, and one place for its
+                      sub-navigation. Four separate RequireAdmin routes was
+                      four chances to forget one, and one of them already had
+                      been (#67). */}
                   <Route
                     path="/admin"
                     element={
                       <RequireAdmin>
-                        <AdminUsagePage />
+                        <AdminLayout />
                       </RequireAdmin>
                     }
-                  />
-                  <Route
-                    path="/admin/links"
-                    element={
-                      <RequireAdmin>
-                        <AdminLinksPage />
-                      </RequireAdmin>
-                    }
-                  />
-                  <Route
-                    path="/admin/orgs"
-                    element={
-                      <RequireAdmin>
-                        <AdminOrgsPage />
-                      </RequireAdmin>
-                    }
-                  />
-                  <Route
-                    path="/admin/users"
-                    element={
-                      <RequireAdmin>
-                        <AdminUsersPage />
-                      </RequireAdmin>
-                    }
-                  />
+                  >
+                    {/* Absolute, not relative. React Router accepts either
+                        for a child whose path starts with its parent's, and
+                        the reserved-slug drift guard reads these strings: a
+                        bare "orgs" reads to it as a top-level route and it
+                        rightly asks why "orgs" is not a reserved slug. */}
+                    <Route index element={<AdminUsagePage />} />
+                    <Route path="/admin/links" element={<AdminLinksPage />} />
+                    <Route path="/admin/orgs" element={<AdminOrgsPage />} />
+                    <Route path="/admin/users" element={<AdminUsersPage />} />
+                    <Route path="/admin/audit" element={<AdminAuditPage />} />
+                  </Route>
                 </Route>
 
                 <Route path="*" element={<NotFound />} />
