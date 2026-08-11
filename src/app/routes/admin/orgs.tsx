@@ -192,7 +192,7 @@ export function AdminOrgsPage() {
         placeholder="Search by org name or owner…"
         label="Search organizations"
       />
-      <Table>
+      <Table minWidth="min-w-[56rem]">
         <thead>
           <tr>
             <SortTh label="Name" sortKey="name" sort={sort} onSort={setSort} />

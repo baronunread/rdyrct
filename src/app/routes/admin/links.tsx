@@ -133,7 +133,7 @@ function LinkRow({
       <Td className="truncate text-muted" title={link.destination}>
         {link.destination}
       </Td>
-      <Td className="hidden truncate sm:table-cell">
+      <Td className="truncate">
         {/* Straight to that organization's links, which is the next question
             after "who owns this". */}
         <Link
@@ -143,13 +143,11 @@ function LinkRow({
           {link.orgName}
         </Link>
       </Td>
-      <Td className="hidden md:table-cell">
+      <Td>
         <RiskBadge score={link.riskScore} reasons={link.riskReasons} />
       </Td>
-      <Td className="hidden tnum lg:table-cell">{link.clicks}</Td>
-      <Td className="hidden whitespace-nowrap text-muted lg:table-cell">
-        {shortDate(link.createdAt)}
-      </Td>
+      <Td className="tnum">{link.clicks}</Td>
+      <Td className="whitespace-nowrap text-muted">{shortDate(link.createdAt)}</Td>
       <Td>
         <LinkActions link={link} onSuspend={onSuspend} onRestore={onRestore} onDelete={onDelete} />
       </Td>
@@ -230,52 +228,40 @@ function LinksTable({
     //
     // Columns drop one breakpoint at a time rather than all at once, so the
     // table narrows smoothly instead of jumping between two layouts.
-    <Table fixed>
+    <Table fixed minWidth="min-w-[64rem]">
       <thead>
         <tr>
-          <SortTh
-            label="Link"
-            sortKey="slug"
-            sort={sort}
-            onSort={onSort}
-            className="w-[34%] sm:w-[24%] md:w-[18%] lg:w-[14%]"
-          />
+          <SortTh label="Link" sortKey="slug" sort={sort} onSort={onSort} className="w-[15%]" />
           <SortTh
             label="Destination"
             sortKey="destination"
             sort={sort}
             onSort={onSort}
-            className="w-[50%] sm:w-[38%] md:w-[30%] lg:w-[23%]"
+            className="w-[27%]"
           />
           <SortTh
             label="Organization"
             sortKey="orgName"
             sort={sort}
             onSort={onSort}
-            className="hidden sm:table-cell sm:w-[22%] md:w-[18%] lg:w-[14%]"
+            className="w-[16%]"
           />
           <SortTh
             label="Risk"
             sortKey="riskScore"
             sort={sort}
             onSort={onSort}
-            className="hidden md:table-cell md:w-[18%] lg:w-[10%]"
+            className="w-[12%]"
           />
-          <SortTh
-            label="Clicks"
-            sortKey="clicks"
-            sort={sort}
-            onSort={onSort}
-            className="hidden lg:table-cell lg:w-[7%]"
-          />
+          <SortTh label="Clicks" sortKey="clicks" sort={sort} onSort={onSort} className="w-[8%]" />
           <SortTh
             label="Created"
             sortKey="createdAt"
             sort={sort}
             onSort={onSort}
-            className="hidden lg:table-cell lg:w-[12%]"
+            className="w-[14%]"
           />
-          <Th className="w-[16%] sm:w-[16%] md:w-[16%] lg:w-[20%]" />
+          <Th className="w-[8%]" />
         </tr>
       </thead>
       <tbody>
@@ -354,7 +340,7 @@ function AnonymousLinks() {
       ) : rows.length === 0 ? (
         <p className="py-6 text-center text-sm text-muted">Nothing here.</p>
       ) : (
-        <Table fixed>
+        <Table fixed minWidth="min-w-[48rem]">
           <thead>
             <tr>
               <SortTh
@@ -362,30 +348,37 @@ function AnonymousLinks() {
                 sortKey="slug"
                 sort={sort}
                 onSort={setSort}
-                className="w-[34%] sm:w-[24%] md:w-[18%]"
+                className="w-[18%]"
               />
               <SortTh
                 label="Destination"
                 sortKey="destination"
                 sort={sort}
                 onSort={setSort}
-                className="w-[50%] sm:w-[44%] md:w-[38%]"
+                className="w-[38%]"
               />
               <SortTh
                 label="Risk"
                 sortKey="riskScore"
                 sort={sort}
                 onSort={setSort}
-                className="hidden sm:table-cell sm:w-[16%] md:w-[14%]"
+                className="w-[14%]"
+              />
+              <SortTh
+                label="Created"
+                sortKey="createdAt"
+                sort={sort}
+                onSort={setSort}
+                className="w-[14%]"
               />
               <SortTh
                 label="Expires"
                 sortKey="expiresAt"
                 sort={sort}
                 onSort={setSort}
-                className="hidden md:table-cell md:w-[14%]"
+                className="w-[14%]"
               />
-              <Th className="w-[16%]" />
+              <Th className="w-[12%]" />
             </tr>
           </thead>
           <tbody>
@@ -395,12 +388,11 @@ function AnonymousLinks() {
                 <Td className="truncate text-muted" title={link.destination}>
                   {link.destination}
                 </Td>
-                <Td className="hidden sm:table-cell">
+                <Td>
                   <RiskBadge score={link.riskScore} reasons={link.riskReasons} />
                 </Td>
-                <Td className="hidden whitespace-nowrap text-muted md:table-cell">
-                  {shortDate(link.expiresAt)}
-                </Td>
+                <Td className="whitespace-nowrap text-muted">{shortDate(link.createdAt)}</Td>
+                <Td className="whitespace-nowrap text-muted">{shortDate(link.expiresAt)}</Td>
                 <Td>
                   <div className="flex justify-end">
                     <Button size="sm" variant="danger" onClick={() => setDeleting(link)}>
