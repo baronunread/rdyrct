@@ -44,14 +44,26 @@ type CapElement = HTMLElement & {
 
 let loading: Promise<void> | null = null;
 
-/** Loads the widget once, on demand, so it stays out of the initial bundle. */
+/**
+ * Loads the widget once, on demand, so it stays out of the initial bundle.
+ *
+ * A failed load is not remembered. The promise used to be cached whatever it
+ * settled to, so one bad fetch (a dev server restarting under an open tab, a
+ * dropped connection, a chunk that 404s after a deploy) poisoned every solve
+ * for the life of that tab: the form then said "could not verify you are
+ * human" forever, and only a reload fixed it. Now the next attempt tries
+ * again.
+ */
 function loadCap(): Promise<void> {
   loading ??= (async () => {
     // Read at module-eval time by the widget, so it has to be set first, or
     // it fetches the WASM from jsdelivr and trips the CSP.
     (window as unknown as { CAP_CUSTOM_WASM_URL?: string }).CAP_CUSTOM_WASM_URL = wasmUrl;
     await import("@cap.js/widget");
-  })();
+  })().catch((error: unknown) => {
+    loading = null;
+    throw error;
+  });
   return loading;
 }
 
@@ -132,8 +144,15 @@ export function useCap(scope: CapScope) {
     // Single-use: a second submit has to solve again rather than replay a
     // token the server has already burned.
     pending.current = null;
+    // An empty token means the puzzle never got solved here: the widget or
+    // its WASM did not load, or it ran out of time. The request still goes
+    // (the server decides, and Cap may be off entirely), but this is the one
+    // place that knows the difference between "we could not run the check"
+    // and "the server refused it", and saying so beats reading the network
+    // tab of somebody else's browser.
+    if (!token) console.warn("cap_solve_failed", scope);
     return capHeaders(token);
-  }, [prime]);
+  }, [prime, scope]);
 
   /**
    * Runs a Cap-guarded request, and if the Worker refuses the token, solves

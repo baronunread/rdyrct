@@ -119,16 +119,32 @@ async function signToken(env: Env, scope: CapScope, expires: number): Promise<st
  * should fail in.
  */
 export async function spendToken(env: Env, scope: CapScope, token: string): Promise<boolean> {
-  if (!capEnabled(env)) return true;
+  const outcome = await checkToken(env, scope, token);
+  // The caller is told nothing beyond "no", because the reason tells a bot
+  // which knob to turn. The log is where somebody holding a support report
+  // finds out which of five different failures they are looking at: without
+  // it, "could not verify you are human" is the same sentence for a missing
+  // token, an expired one, a replayed one, and a wrong secret.
+  if (outcome !== "ok") console.warn("cap_refused", scope, outcome);
+  return outcome === "ok";
+}
+
+type CapOutcome = "ok" | "missing" | "malformed" | "expired" | "bad_signature" | "already_spent";
+
+async function checkToken(env: Env, scope: CapScope, token: string): Promise<CapOutcome> {
+  if (!capEnabled(env)) return "ok";
+  if (!token) return "missing";
+
   const [expires] = token.split(".");
   const expiresAt = Number(expires);
-  if (!expiresAt || expiresAt < Date.now()) return false;
-  if (!equalsConstantTime(token, await signToken(env, scope, expiresAt))) return false;
+  if (!expiresAt) return "malformed";
+  if (expiresAt < Date.now()) return "expired";
+  if (!equalsConstantTime(token, await signToken(env, scope, expiresAt))) return "bad_signature";
 
   const key = `cap:spent:${scope}:${token}`;
-  if (await env.LINKS.get(key)) return false;
+  if (await env.LINKS.get(key)) return "already_spent";
   await env.LINKS.put(key, "1", {
     expirationTtl: Math.max(60, Math.ceil((expiresAt - Date.now()) / 1000)),
   });
-  return true;
+  return "ok";
 }
