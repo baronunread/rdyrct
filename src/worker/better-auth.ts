@@ -13,7 +13,7 @@ import { renderEmail } from "./email-layout";
 import { hashPassword, verifyPassword } from "./password";
 import { uid } from "./util";
 import { spendToken, type CapScope } from "./cap";
-import { CAP_TOKEN_HEADER } from "@/shared/types";
+import { CAP_FAILED_CODE, CAP_TOKEN_HEADER } from "@/shared/types";
 
 /** better-auth paths that must carry a solved Cap token, and the scope the
  * token has to have been minted for. Keyed by `ctx.path`, which is relative
@@ -343,8 +343,12 @@ function buildAuth(env: Env) {
           // mercy of that schema.
           const token = ctx.headers?.get(CAP_TOKEN_HEADER) ?? "";
           if (!(await spendToken(env, capScope, token)))
+            // A code, not just a message: the browser retries this once with
+            // a freshly solved token, and matching on prose to decide that
+            // would break the first time the wording changed.
             throw new APIError("BAD_REQUEST", {
-              message: "Could not verify you are human. Reload the page and try again.",
+              code: CAP_FAILED_CODE,
+              message: "Could not verify you are human. Trying again…",
             });
         }
         if (ctx.path === "/email-otp/send-verification-otp") {

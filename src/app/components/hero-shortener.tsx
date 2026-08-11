@@ -159,7 +159,7 @@ export function HeroShortener() {
     if (!canSubmit) return;
     setBusy(true);
     try {
-      const link = await shortenAnonymously(destination, cap.headers);
+      const link = await shortenAnonymously(destination, cap.guarded);
       // Stored before anything is rendered, and the store decides what the
       // list now is: a visitor who signs up in another tab must still be
       // able to claim it, and the cap is enforced in one place.
