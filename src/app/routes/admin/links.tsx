@@ -13,7 +13,7 @@
 import { useState } from "react";
 import { Link } from "react-router";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Ban, Ellipsis, ExternalLink, Trash2, Undo2 } from "lucide-react";
+import { Ban, Ellipsis, ExternalLink, ShieldQuestionMark, Trash2, Undo2 } from "lucide-react";
 import { useAdminAnonLinks, useAdminLinks } from "../../lib/hooks";
 import { api } from "../../lib/api";
 import type { AdminAnonLinkRow, AdminLinkRow, Sort } from "@/shared/types";
@@ -112,11 +112,15 @@ function LinkRow({
   onSuspend,
   onRestore,
   onDelete,
+  onRescore,
+  rescoring,
 }: {
   link: AdminLinkRow;
   onSuspend: (l: AdminLinkRow) => void;
   onRestore: (l: AdminLinkRow) => void;
   onDelete: (l: AdminLinkRow) => void;
+  onRescore: (l: AdminLinkRow) => void;
+  rescoring: boolean;
 }) {
   return (
     <tr className={link.suspendedAt ? "opacity-60" : undefined}>
@@ -149,7 +153,14 @@ function LinkRow({
       <Td className="tnum">{link.clicks}</Td>
       <Td className="whitespace-nowrap text-muted">{shortDate(link.createdAt)}</Td>
       <Td>
-        <LinkActions link={link} onSuspend={onSuspend} onRestore={onRestore} onDelete={onDelete} />
+        <LinkActions
+          link={link}
+          onSuspend={onSuspend}
+          onRestore={onRestore}
+          onDelete={onDelete}
+          onRescore={onRescore}
+          rescoring={rescoring}
+        />
       </Td>
     </tr>
   );
@@ -165,11 +176,15 @@ function LinkActions({
   onSuspend,
   onRestore,
   onDelete,
+  onRescore,
+  rescoring,
 }: {
   link: AdminLinkRow;
   onSuspend: (l: AdminLinkRow) => void;
   onRestore: (l: AdminLinkRow) => void;
   onDelete: (l: AdminLinkRow) => void;
+  onRescore: (l: AdminLinkRow) => void;
+  rescoring: boolean;
 }) {
   return (
     <Menu
@@ -185,6 +200,9 @@ function LinkActions({
     >
       <MenuItem onClick={() => window.open(link.destination, "_blank", "noopener,noreferrer")}>
         <ExternalLink size={14} /> Open destination
+      </MenuItem>
+      <MenuItem onClick={() => onRescore(link)}>
+        <ShieldQuestionMark size={14} /> {rescoring ? "Checking…" : "Re-check destination"}
       </MenuItem>
       <MenuSeparator />
       {link.suspendedAt ? (
@@ -210,6 +228,8 @@ function LinksTable({
   onSuspend,
   onRestore,
   onDelete,
+  onRescore,
+  rescoringId,
 }: {
   rows: AdminLinkRow[];
   sort: Sort;
@@ -217,6 +237,8 @@ function LinksTable({
   onSuspend: (l: AdminLinkRow) => void;
   onRestore: (l: AdminLinkRow) => void;
   onDelete: (l: AdminLinkRow) => void;
+  onRescore: (l: AdminLinkRow) => void;
+  rescoringId: string | null;
 }) {
   if (rows.length === 0)
     return <p className="py-6 text-center text-sm text-muted">No links match that search.</p>;
@@ -272,6 +294,8 @@ function LinksTable({
             onSuspend={onSuspend}
             onRestore={onRestore}
             onDelete={onDelete}
+            onRescore={onRescore}
+            rescoring={rescoringId === link.id}
           />
         ))}
       </tbody>
@@ -495,6 +519,24 @@ function OwnedLinks({ onSuspend }: { onSuspend: (l: AdminLinkRow) => void }) {
     onError: withErrorToast(toast),
   });
 
+  /** No confirmation: it reads a destination and writes a score, and the
+   * worst it can do is tell you something you did not want to hear. */
+  const rescore = useMutation({
+    mutationFn: (id: string) =>
+      api<{ scored: boolean; score: number | null }>(`/admin/links/${id}/rescore`, {
+        method: "POST",
+      }),
+    onSuccess: async (result) => {
+      await refresh();
+      // "Unscored" is reported as such, never as clean: the provider was
+      // unreachable or said something we do not recognise (#68).
+      if (!result.scored) toast("No answer from the checker. The link is still unscored.", "error");
+      else if (result.score && result.score >= 100) toast("Checked: the destination is blocked.");
+      else toast("Checked: nothing known against the destination.");
+    },
+    onError: withErrorToast(toast),
+  });
+
   const all = sortRows(
     (data ?? []).filter((link) => !orgFilter || link.orgId === orgFilter),
     sort,
@@ -550,6 +592,8 @@ function OwnedLinks({ onSuspend }: { onSuspend: (l: AdminLinkRow) => void }) {
           onSuspend={onSuspend}
           onRestore={setRestoring}
           onDelete={setDeleting}
+          onRescore={(link) => rescore.mutate(link.id)}
+          rescoringId={rescore.isPending ? (rescore.variables ?? null) : null}
         />
       )}
       <Pager page={safePage} totalPages={totalPages} onPageChange={setPage} />
