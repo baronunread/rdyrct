@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { signUpAndVerify } from "./resend";
 import { makePlatformAdmin, queryRows } from "./db";
+import { createQuickLink } from "./orgs";
 
 /**
  * Admin link moderation through the screen an admin actually uses (#67).
@@ -18,11 +19,7 @@ test("an admin can find a link by destination and suspend it", async ({ page }) 
   const destination = `https://phishy-${Date.now()}.example/login`;
   await signUpAndVerify(page, ownerEmail, password);
 
-  const field = page.getByPlaceholder("https://example.com/launch").first();
-  await expect(field).toBeVisible();
-  await field.fill(destination);
-  await page.getByRole("button", { name: "Create link" }).click();
-  await expect(page.getByRole("dialog", { name: "Link created" })).toBeVisible();
+  await createQuickLink(page, destination);
 
   const slug = (
     await queryRows<{ slug: string }>(page, "select slug from links where destination = ?", [
@@ -141,10 +138,7 @@ test("the platform table fits its card instead of running off the side", async (
   const email = `admin-layout-${Date.now()}@gmail.com`;
   await signUpAndVerify(page, email, password);
 
-  const field = page.getByPlaceholder("https://example.com/launch").first();
-  await field.fill(`https://example.com/${"a-very-long-path-segment-".repeat(6)}end`);
-  await page.getByRole("button", { name: "Create link" }).click();
-  await expect(page.getByRole("dialog", { name: "Link created" })).toBeVisible();
+  await createQuickLink(page, `https://example.com/${"a-very-long-path-segment-".repeat(6)}end`);
 
   await makePlatformAdmin(page, email);
   await page.goto("/admin/links");

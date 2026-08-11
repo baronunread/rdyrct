@@ -42,3 +42,14 @@ export async function openNewLinkDialog(page: Page) {
   await page.getByRole("button", { name: "New link" }).first().click();
   return page.getByRole("dialog", { name: "New link" });
 }
+
+/** Fills the dashboard's quick-create field and submits it, waiting for the
+ * confirmation dialog. The first thing a signed-in test does, since an
+ * account starts with an organization and no links. */
+export async function createQuickLink(page: Page, destination: string) {
+  const field = page.getByPlaceholder("https://example.com/launch").first();
+  await expect(field).toBeVisible();
+  await field.fill(destination);
+  await page.getByRole("button", { name: "Create link" }).click();
+  await expect(page.getByRole("dialog", { name: "Link created" })).toBeVisible();
+}

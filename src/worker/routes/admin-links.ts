@@ -69,6 +69,16 @@ const clickCount = sql<number>`(
   select count(*) from clicks where clicks.link_id = links.id
 )`;
 
+/** The link this route is about, or a 404. Every route here starts by
+ * reading the row it names, and an id that matches nothing is the same
+ * answer in all of them. */
+async function requireLink(db: DB, linkId: string) {
+  const rows = await db.select().from(schema.links).where(eq(schema.links.id, linkId));
+  const link = rows[0];
+  if (!link) throw new HTTPException(404, { message: "Link not found" });
+  return link;
+}
+
 /**
  * Every address a link answers to, so suspending or restoring one republishes
  * all of them. A link with three aliases that only republished its primary
@@ -213,9 +223,7 @@ adminLinkRoutes.post("/:linkId/unsuspend", async (c) =>
 adminLinkRoutes.post("/:linkId/rescore", async (c) => {
   const db = c.var.db;
   const linkId = c.req.param("linkId")!;
-  const rows = await db.select().from(schema.links).where(eq(schema.links.id, linkId));
-  const link = rows[0];
-  if (!link) throw new HTTPException(404, { message: "Link not found" });
+  const link = await requireLink(db, linkId);
 
   const verdict = await scoreDestination(link.destination);
   if (verdict)
@@ -258,9 +266,7 @@ adminLinkRoutes.post("/:linkId/rescore", async (c) => {
 adminLinkRoutes.delete("/:linkId", async (c) => {
   const db = c.var.db;
   const linkId = c.req.param("linkId")!;
-  const rows = await db.select().from(schema.links).where(eq(schema.links.id, linkId));
-  const link = rows[0];
-  if (!link) throw new HTTPException(404, { message: "Link not found" });
+  const link = await requireLink(db, linkId);
 
   // Addresses first: after the row is gone there is nothing to read them
   // from, and each one is a live KV key until it is swept.

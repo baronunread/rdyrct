@@ -590,6 +590,89 @@ function newLinkRow(
   };
 }
 
+/**
+ * Adds an address to a link the caller already resolved a same-destination
+ * match against: no new `links` row, a permanent alias on the existing one.
+ *
+ * Its own function because the checks it has to make (same domain, and the
+ * target still pointing where the caller thought) are half the branches in
+ * the create route while having nothing to do with creating a link.
+ */
+async function mergeAddressIntoLink(
+  c: Context<AppEnv>,
+  args: {
+    orgId: string;
+    linkId: string;
+    domainId: string | null;
+    slug: string;
+    hostname: string | null;
+    destination: string;
+    utm: ReturnType<typeof resolveUtm>;
+    activeCount: number;
+    plan: OrgPlan;
+    limits: PlanLimits;
+  },
+) {
+  const db = c.var.db;
+  const target = await findLink(db, args.orgId, args.linkId);
+  // An alias can only live on the same domain as the link it addresses
+  // (see #38): the match list is already domain-filtered, but re-check here
+  // in case the caller sent a stale mergeIntoLinkId.
+  if (target.domainId !== args.domainId)
+    throw new HTTPException(400, {
+      message: "An address can only be added to a link on the same domain",
+    });
+  // The match list the caller acted on can be stale: confirm the target still
+  // points at the destination the caller asked to merge into.
+  if (target.destination !== args.destination || !sameUtm(target, args.utm))
+    throw new HTTPException(409, {
+      message: "That link no longer has this destination. Review the link and try again.",
+      cause: { code: "merge_target_changed" },
+    });
+
+  assertLinkQuota(args.activeCount, args.plan, args.limits);
+  await assertAliasQuota(db, target.id);
+  const address = newAddressRow(
+    target.id,
+    args.orgId,
+    args.domainId,
+    args.slug,
+    "permanent_alias",
+    "same_destination_merge",
+  );
+  return insertAddressAndRespond(
+    c.env,
+    db,
+    args.orgId,
+    target,
+    address,
+    args.hostname,
+    200,
+    args.limits.links,
+  );
+}
+
+/** Whether a link already carries exactly these UTM values. Part of the
+ * match tuple, so a different campaign is a different link. */
+function sameUtm(
+  link: {
+    utmSource: string | null;
+    utmMedium: string | null;
+    utmCampaign: string | null;
+    utmTerm: string | null;
+    utmContent: string | null;
+  },
+  utm: ReturnType<typeof resolveUtm>,
+) {
+  return (
+    link.utmSource === utm.utmSource &&
+    link.utmMedium === utm.utmMedium &&
+    link.utmCampaign === utm.utmCampaign &&
+    link.utmTerm === utm.utmTerm &&
+    link.utmContent === utm.utmContent
+  );
+}
+
 linkRoutes.post("/", requireOrgRole("member"), async (c) => {
   const body = await c.req.json<LinkInput>();
   const orgId = c.req.param("orgId")!;
@@ -621,48 +704,18 @@ linkRoutes.post("/", requireOrgRole("member"), async (c) => {
   // match against (see below): skip matching entirely, insert a permanent
   // alias on that link, and return its DTO — no new `links` row.
   if (body.mergeIntoLinkId) {
-    const target = await findLink(db, orgId, body.mergeIntoLinkId);
-    // An alias can only live on the same domain as the link it addresses
-    // (see #38): the match list is already domain-filtered, but re-check
-    // here in case the caller sent a stale mergeIntoLinkId.
-    if (target.domainId !== domainId)
-      throw new HTTPException(400, {
-        message: "An address can only be added to a link on the same domain",
-      });
-    // The match list the caller acted on can be stale: confirm the target
-    // still points at the destination the caller asked to merge into.
-    if (
-      target.destination !== body.destination ||
-      target.utmSource !== utm.utmSource ||
-      target.utmMedium !== utm.utmMedium ||
-      target.utmCampaign !== utm.utmCampaign ||
-      target.utmTerm !== utm.utmTerm ||
-      target.utmContent !== utm.utmContent
-    )
-      throw new HTTPException(409, {
-        message: "That link no longer has this destination. Review the link and try again.",
-        cause: { code: "merge_target_changed" },
-      });
-    assertLinkQuota(activeCount, plan, limits);
-    await assertAliasQuota(db, target.id);
-    const address = newAddressRow(
-      target.id,
+    const { dto, status } = await mergeAddressIntoLink(c, {
       orgId,
+      linkId: body.mergeIntoLinkId,
       domainId,
       slug,
-      "permanent_alias",
-      "same_destination_merge",
-    );
-    const { dto, status } = await insertAddressAndRespond(
-      c.env,
-      db,
-      orgId,
-      target,
-      address,
       hostname,
-      200,
-      limits.links,
-    );
+      destination: body.destination,
+      utm,
+      activeCount,
+      plan,
+      limits,
+    });
     return c.json(dto, status);
   }
 
