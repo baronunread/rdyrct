@@ -33,14 +33,16 @@ Add them at **Security → WAF → Rate limiting rules** on the `rdyrct.com` zon
 | Expression      | `(http.request.uri.path contains "/api/auth/")` |
 | Characteristics | IP                                              |
 | Period          | 1 minute                                        |
-| Requests        | 20                                              |
+| Requests        | 60                                              |
 | Action          | Block                                           |
 | Duration        | 10 minutes                                      |
 
-Above the Worker's own limit of 10/minute, deliberately. The Worker's
-counters are per-location, so a caller spread across colos can exceed 10
-globally while never tripping one; this catches that without punishing a
-person whose corporate NAT shares an address.
+Above the Worker's own 30/minute, deliberately, and counted across every
+auth path at once. The Worker's counters are per-location and per-path, so a
+caller spread across colos, or across the several paths one sign-up touches,
+can go well past any single one. This catches that without punishing a person
+whose corporate NAT shares an address: one sign-up costs a handful of
+requests, so 60 is a bot and 20 was a family.
 
 ### Rule 2: proof-of-work challenges
 
@@ -91,15 +93,22 @@ enforcement.
 
 | Binding              | Limit   | Keyed by          | Guards                        |
 | -------------------- | ------- | ----------------- | ----------------------------- |
-| `RL_AUTH_PUBLIC`     | 10/min  | IP                | `/api/auth/*`, `/api/cap/*`   |
-| `RL_EMAIL`           | 3/min   | IP                | Anything that sends mail      |
-| `RL_EMAIL_RECIPIENT` | 2/min   | Recipient address | One inbox, many callers (#50) |
-| `RL_WRITE_FREE`      | 30/min  | User              | Writes on a free plan         |
-| `RL_WRITE_PAID`      | 120/min | User              | Writes on a paid plan         |
-| `RL_QR_UPLOAD`       | 5/min   | User              | QR logo uploads to R2         |
-| `RL_DOMAIN_SETUP`    | 12/min  | User              | Custom hostname calls         |
-| `RL_BILLING`         | 3/min   | User              | Polar checkout                |
+| `RL_AUTH_PUBLIC`     | 30/min  | IP, path          | `/api/auth/*`, `/api/cap/*`   |
+| `RL_EMAIL`           | 10/min  | IP, path          | Anything that sends mail      |
+| `RL_EMAIL_RECIPIENT` | 4/min   | Recipient address | One inbox, many callers (#50) |
+| `RL_WRITE_FREE`      | 90/min  | User              | Writes on a free plan         |
+| `RL_WRITE_PAID`      | 300/min | User              | Writes on a paid plan         |
+| `RL_QR_UPLOAD`       | 20/min  | User              | QR logo uploads to R2         |
+| `RL_DOMAIN_SETUP`    | 30/min  | User              | Custom hostname calls         |
+| `RL_BILLING`         | 10/min  | User              | Polar checkout                |
 | `RL_CLICK_RECORDING` | 600/min | Slug              | Click ingestion               |
+
+These are set for the person having trouble, not for the bot: someone who
+mistypes a password, retries a signup or pastes six links in a row must never
+meet a wall, because a wall reads as the product being broken. Only
+`RL_EMAIL_RECIPIENT` stays tight, because it is the one that bounds what an
+inbox can be made to receive however many callers aim at it. The real
+ceilings are the WAF rules above and the CPU Cap charges per attempt.
 
 `period` accepts only 10 or 60, so every one of these caps a rate, not a
 daily total. Closing that gap needs a durable counter; see the follow-up on
