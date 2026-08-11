@@ -31,7 +31,17 @@ async function seedFreeUser(id: string, email: string): Promise<string> {
       "insert into account (id, account_id, provider_id, user_id, password, created_at, updated_at) values (?, ?, 'credential', ?, ?, 0, 0)",
     ).bind(`acct-${id}`, id, id, await hashPassword(TEST_PASSWORD)),
   ]);
-  return signInCookie(email, TEST_PASSWORD);
+  const cookie = await signInCookie(email, TEST_PASSWORD);
+  // Signing in hands every account an organization, which on the free plan is
+  // the entire allowance. These tests are about the cap with room left, so
+  // start them where they started before it existed: at zero owned.
+  await env.DB.batch([
+    env.DB.prepare("delete from org_members where user_id = ?").bind(id),
+    env.DB.prepare(
+      "delete from orgs where not exists (select 1 from org_members where org_id = orgs.id)",
+    ),
+  ]);
+  return cookie;
 }
 
 async function postOrg(cookie: string): Promise<Response> {

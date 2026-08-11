@@ -1,6 +1,5 @@
 import { expect, test } from "@playwright/test";
 import { signUpAndVerify } from "./resend";
-import { createOrg } from "./orgs";
 import { queryRows } from "./db";
 
 /**
@@ -69,7 +68,6 @@ test("signing up keeps the link that was made before the account (#65)", async (
   const slug = shortUrl.split("/").pop()!;
 
   await signUpAndVerify(page, `anon-${Date.now()}@gmail.com`, password);
-  await createOrg(page, "Claimed Org");
 
   // The new account's first dashboard is not empty: the link they made
   // before signing up is already in it, on the same slug.
@@ -117,15 +115,21 @@ test("signing up keeps every link made before the account, not just the last", a
     .pop()!;
 
   await signUpAndVerify(page, `multi-${Date.now()}@gmail.com`, password);
-  await createOrg(page, "Multi Org");
 
   for (const slug of [firstSlug, secondSlug]) {
-    const rows = await queryRows<{ n: number }>(
-      page,
-      "select count(*) as n from links where slug = ?",
-      [slug],
-    );
-    expect(Number(rows[0].n), `link ${slug} should have been claimed`).toBe(1);
+    await expect
+      .poll(
+        async () => {
+          const rows = await queryRows<{ n: number }>(
+            page,
+            "select count(*) as n from links where slug = ?",
+            [slug],
+          );
+          return Number(rows[0].n);
+        },
+        { message: `link ${slug} should have been claimed`, timeout: 15_000 },
+      )
+      .toBe(1);
   }
 });
 
@@ -203,14 +207,22 @@ test("links survive a reload, so leaving the page does not lose them", async ({ 
   await expect(page.getByText(`from ${destination}`)).toBeVisible();
 
   // And it is still claimable: the token came back with it, not just the URL.
+  // Claiming happens as the app loads rather than inside a form submit, so
+  // this polls for the row instead of assuming it landed before the query.
   await signUpAndVerify(page, `reload-${Date.now()}@gmail.com`, password);
-  await createOrg(page, "Reload Org");
-  const rows = await queryRows<{ n: number }>(
-    page,
-    "select count(*) as n from links where slug = ?",
-    [shortUrl.split("/").pop()!],
-  );
-  expect(Number(rows[0].n)).toBe(1);
+  await expect
+    .poll(
+      async () => {
+        const rows = await queryRows<{ n: number }>(
+          page,
+          "select count(*) as n from links where slug = ?",
+          [shortUrl.split("/").pop()!],
+        );
+        return Number(rows[0].n);
+      },
+      { message: "the link made before signing up was never claimed", timeout: 15_000 },
+    )
+    .toBe(1);
 });
 
 test("three links is the ceiling without an account", async ({ page }) => {

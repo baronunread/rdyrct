@@ -26,7 +26,9 @@ test.describe("authentication forms", () => {
     await page.getByRole("button", { name: "Sign in" }).click();
 
     await expect(page).toHaveURL(/\/dashboard$/);
-    await expect(page.getByText("No organization", { exact: true })).toBeVisible();
+    // Signed in and already able to work: the account was given an
+    // organization on its first session, so the switcher names one.
+    await expect(page.getByTitle("Switch organization")).not.toHaveText("No organization");
   });
 
   test("keeps invalid login details in the browser instead of sending an auth request", async ({

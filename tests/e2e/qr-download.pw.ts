@@ -2,7 +2,6 @@ import { readFile } from "node:fs/promises";
 import { expect, test } from "@playwright/test";
 import { signUpAndVerify } from "./resend";
 import { setPlan } from "./db";
-import { createOrg } from "./orgs";
 
 const password = "test-password-123";
 
@@ -24,7 +23,6 @@ test("a downloaded QR PNG is big enough to print, not preview-sized (#88)", asyn
   const email = `qr-${Date.now()}@gmail.com`;
 
   await signUpAndVerify(page, email, password);
-  await createOrg(page, "QR Org");
   // No setPlan: generating and downloading a QR is free on every plan. Only
   // its look is paid, which the next test covers.
 
@@ -61,7 +59,6 @@ test("styling a QR is paid, generating one is not", async ({ page }) => {
   const email = `qr-look-${Date.now()}@gmail.com`;
 
   await signUpAndVerify(page, email, password);
-  await createOrg(page, "QR Look Org");
 
   await page.goto("/links");
   await page.getByRole("button", { name: "New link" }).first().click();

@@ -1,15 +1,5 @@
 import { expect, type Page } from "@playwright/test";
 
-/** Fills and submits the "create organization" form shown to a signed-in
- * user with no org yet. Waits for the switcher to pick it up as current
- * before returning: a caller that navigates immediately after can otherwise
- * abort the still-in-flight create request. */
-export async function createOrg(page: Page, name: string) {
-  await page.getByLabel("Organization name").fill(name);
-  await page.getByRole("button", { name: "Create organization" }).click();
-  await expect(page.getByTitle("Switch organization")).toHaveText(name);
-}
-
 /** Opens the org switcher and creates another org under the same signed-in
  * account, for tests that share one user (see link-addresses.pw.ts) and so
  * have already left the no-org state behind by the time they need this.

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { defaultOrgName } from "../src/app/lib/org-name";
+import { defaultOrgName } from "../src/shared/org-name";
 
 /**
  * Naming somebody's first organization for them (#65).

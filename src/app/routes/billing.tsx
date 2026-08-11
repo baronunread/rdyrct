@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import confetti from "canvas-confetti";
 import { AnimatePresence, LazyMotion, domAnimation, m, useReducedMotion } from "motion/react";
 import { useQueryClient } from "@tanstack/react-query";
+import { useNavigate } from "react-router";
 import {
   useCurrentUser,
   useLinkQuotaUsage,
@@ -441,14 +442,26 @@ function BillingOverlay({ show, message }: { show: boolean; message: string }) {
   );
 }
 
+/**
+ * The moment after checkout.
+ *
+ * Somebody who bought from a landing CTA gets here before they have made
+ * anything: they signed up, paid, and are now looking at an invoice. So when
+ * the account has no links, the overlay carries the next step instead of the
+ * old claim that they "have access to all Pro features", which is not
+ * something they can see until a link exists.
+ */
 function CelebrationOverlay({
   show,
   plan,
   onDismiss,
+  onFirstLink,
 }: {
   show: boolean;
   plan: OrgPlan;
   onDismiss: () => void;
+  /** Set only while the account has no links: the first-run handoff. */
+  onFirstLink?: () => void;
 }) {
   return (
     <AnimatePresence>
@@ -475,9 +488,23 @@ function CelebrationOverlay({
           >
             <span className="text-5xl">🎉</span>
             <p className="text-xl font-bold text-accent">Welcome to {PLAN_LABEL[plan]}!</p>
-            <p className="text-sm text-muted">
-              You now have access to all {PLAN_LABEL[plan]} features.
-            </p>
+            {onFirstLink ? (
+              <Button
+                variant="primary"
+                onClick={(event) => {
+                  // The overlay itself dismisses on click; this must not be
+                  // handled twice, once as "go" and once as "close".
+                  event.stopPropagation();
+                  onFirstLink();
+                }}
+              >
+                Shorten your first link
+              </Button>
+            ) : (
+              <p className="text-sm text-muted">
+                You now have access to all {PLAN_LABEL[plan]} features.
+              </p>
+            )}
           </m.div>
         </m.div>
       )}
@@ -752,6 +779,7 @@ export function BillingPage() {
   const { org } = useCurrentOrg();
   const orgId = org?.id ?? "";
   const { data: linkQuota, isPending: linksPending } = useLinkQuotaUsage(orgId);
+  const navigate = useNavigate();
   const { data: memberData, isPending: membersPending } = useMembers(orgId);
   const { data: domainData, isPending: domainsPending } = useDomains(orgId);
   const ownedOrgs = ownedOrgCount(me.data?.orgs);
@@ -809,6 +837,14 @@ export function BillingPage() {
           show={showCelebration}
           plan={plan}
           onDismiss={() => setShowCelebration(false)}
+          onFirstLink={
+            linkQuota?.count === 0
+              ? () => {
+                  setShowCelebration(false);
+                  navigate("/dashboard");
+                }
+              : undefined
+          }
         />
       </LazyMotion>
     </div>
