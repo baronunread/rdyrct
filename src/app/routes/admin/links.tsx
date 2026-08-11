@@ -346,63 +346,67 @@ function AnonymousLinks() {
 
   return (
     <div className="flex flex-col gap-3">
-      <p className="text-xs text-muted">
-        Made on the landing page without an account. They expire 24 hours after creation and
-        disappear on their own; delete one to stop it sooner.
-      </p>
-      <SearchInput
-        value={query}
-        onChange={(value) => {
-          setQuery(value);
-          setPage(0);
-        }}
-        placeholder="Slug or destination"
-        label="Search anonymous links"
-      />
+      <div className="flex flex-wrap items-center gap-2">
+        <SearchInput
+          value={query}
+          onChange={(value) => {
+            setQuery(value);
+            setPage(0);
+          }}
+          placeholder="Slug or destination"
+          label="Search anonymous links"
+        />
+      </div>
       {isPending ? (
         <AdminTableSkeleton />
       ) : rows.length === 0 ? (
         <p className="py-6 text-center text-sm text-muted">Nothing here.</p>
       ) : (
-        <Table fixed minWidth="min-w-[48rem]">
+        // Same columns as the owned table, in the same order, so moving
+        // between the two tabs does not mean re-reading the header row. An
+        // anonymous link has no organization and records no clicks; those
+        // cells say so rather than being left out.
+        <Table fixed minWidth="min-w-[64rem]">
           <thead>
             <tr>
               <SortTh
-                label="Slug"
+                label="Link"
                 sortKey="slug"
                 sort={sort}
                 onSort={setSort}
-                className="w-[18%]"
+                className="w-[15%]"
               />
               <SortTh
                 label="Destination"
                 sortKey="destination"
                 sort={sort}
                 onSort={setSort}
-                className="w-[38%]"
+                className="w-[25%]"
               />
+              <Th className="w-[12%]">Organization</Th>
               <SortTh
                 label="Risk"
                 sortKey="riskScore"
                 sort={sort}
                 onSort={setSort}
-                className="w-[14%]"
+                className="w-[12%]"
               />
+              <Th className="w-[7%]">Clicks</Th>
               <SortTh
                 label="Created"
                 sortKey="createdAt"
                 sort={sort}
                 onSort={setSort}
-                className="w-[14%]"
+                className="w-[12%]"
               />
               <SortTh
                 label="Expires"
                 sortKey="expiresAt"
                 sort={sort}
                 onSort={setSort}
-                className="w-[14%]"
+                className="w-[12%]"
               />
-              <Th className="w-[12%]" />
+              <Th className="w-[8%]" />
             </tr>
           </thead>
           <tbody>
@@ -412,17 +416,39 @@ function AnonymousLinks() {
                 <Td className="truncate text-muted" title={link.destination}>
                   {link.destination}
                 </Td>
+                {/* Nobody owns it, and no click is recorded against it: both
+                    are the product boundary, not missing data. */}
+                <Td className="text-muted">none</Td>
                 <Td>
                   <RiskBadge score={link.riskScore} reasons={link.riskReasons} />
+                </Td>
+                <Td className="text-muted" title="Anonymous links record no clicks">
+                  &mdash;
                 </Td>
                 <Td className="whitespace-nowrap text-muted">{shortDate(link.createdAt)}</Td>
                 <Td className="whitespace-nowrap text-muted">{shortDate(link.expiresAt)}</Td>
                 <Td>
-                  <div className="flex justify-end">
-                    <Button size="sm" variant="danger" onClick={() => setDeleting(link)}>
-                      <Trash2 size={13} /> Delete
-                    </Button>
-                  </div>
+                  <Menu
+                    align="end"
+                    label={`Actions for ${link.slug}`}
+                    trigger={
+                      <div className="flex justify-end">
+                        <span className="rounded p-1.5 text-muted transition-transform duration-150 active:scale-[0.96] hover:bg-surface-2 hover:text-text">
+                          <Ellipsis size={15} />
+                        </span>
+                      </div>
+                    }
+                  >
+                    <MenuItem
+                      onClick={() => window.open(link.destination, "_blank", "noopener,noreferrer")}
+                    >
+                      <ExternalLink size={14} /> Open destination
+                    </MenuItem>
+                    <MenuSeparator />
+                    <MenuItem className="text-danger" onClick={() => setDeleting(link)}>
+                      <Trash2 size={14} /> Delete link
+                    </MenuItem>
+                  </Menu>
                 </Td>
               </tr>
             ))}
@@ -565,7 +591,7 @@ function OwnedLinks({ onSuspend }: { onSuspend: (l: AdminLinkRow) => void }) {
             setQuery(value);
             setPage(0);
           }}
-          placeholder="Slug or destination, e.g. phishy.example"
+          placeholder="Slug or destination"
           label="Search links"
         />
         {orgFilter && (
