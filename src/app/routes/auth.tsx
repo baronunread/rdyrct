@@ -481,18 +481,23 @@ function useAuthFlow(mode: "login" | "signup") {
       email,
       type: "email-verification",
     });
-    if (error) {
-      // No EMAIL_VERIFIED branch: the server answers an already-verified
-      // address exactly as it answers a fresh one, so an anonymous caller
-      // cannot tell them apart (#53). The account's owner is told by email.
-      failSubmit(error.message ?? "Could not send the verification code");
-      return;
-    }
-    // Funnel step 5a (#64). This one belongs here because both callers do
-    // genuinely send a code. Step 4 does not: goVerify is also reached from
-    // trySignIn's EMAIL_NOT_VERIFIED branch, so counting a signup here would
-    // count every returning unverified user as a new one.
-    posthog.capture(FUNNEL.verificationSent, { resend: false });
+    // No EMAIL_VERIFIED branch: the server answers an already-verified
+    // address exactly as it answers a fresh one, so an anonymous caller
+    // cannot tell them apart (#53). The account's owner is told by email.
+    if (error) failSubmit(error.message ?? "Could not send the verification code");
+    // Funnel step 5a (#64). Only when a code really went out. Step 4 does not
+    // belong here: goVerify is also reached from trySignIn's
+    // EMAIL_NOT_VERIFIED branch, so counting a signup here would count every
+    // returning unverified user as a new one.
+    else posthog.capture(FUNNEL.verificationSent, { resend: false });
+
+    // The code screen either way, error or not. By the time we get here the
+    // account exists, and a failed send is usually the email rate limit
+    // (#50), which clears in a minute. Staying on the signup form told
+    // somebody the opposite: it looks like the signup failed, so they submit
+    // again, which spends another send and puts them back here. The code
+    // screen is the honest place to be stranded, because it has the resend
+    // button that gets them out.
     setAuthEmail(email);
     writePending({ email, next });
     setView("verify-otp");

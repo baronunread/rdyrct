@@ -117,6 +117,11 @@ async function recipientKey(request: Request, secret: string): Promise<string | 
 
 export function publicAuthGroup(path: string): "auth" | "email" | null {
   if (EMAIL_AUTH_PATHS.has(path)) return "email";
+  // Cap's own endpoints (#98). They sit in front of signup, so they are as
+  // public as the auth routes and belong on the same budget. The key carries
+  // the path, so a challenge and a redeem each get their own count and one
+  // person solving a puzzle twice is nowhere near the limit.
+  if (path.startsWith("/api/cap/")) return "auth";
   if (
     path.startsWith("/api/auth/") &&
     path !== "/api/auth/get-session" &&
