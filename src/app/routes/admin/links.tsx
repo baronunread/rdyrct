@@ -30,6 +30,7 @@ import { shortDate } from "../../lib/dates";
 import { SearchInput } from "./search-input";
 import { paginate } from "./util";
 import { Pager } from "../../ui/pagination";
+import { useDebounced } from "../../lib/use-debounced";
 import { SortTh } from "../../ui/sort-th";
 import { sortRows } from "../../lib/sort";
 import { useSearchParams } from "react-router";
@@ -341,7 +342,10 @@ function AnonymousLinks() {
       </p>
       <SearchInput
         value={query}
-        onChange={setQuery}
+        onChange={(value) => {
+          setQuery(value);
+          setPage(0);
+        }}
         placeholder="Slug or destination"
         label="Search anonymous links"
       />
@@ -463,13 +467,16 @@ function OwnedLinks({ onSuspend }: { onSuspend: (l: AdminLinkRow) => void }) {
   const [params, setParams] = useSearchParams();
   const orgFilter = params.get("org") ?? "";
   const [query, setQuery] = useState("");
+  // The term reaches the server, so it waits for a pause in typing. Without
+  // this, "testing" was eight requests.
+  const search = useDebounced(query);
   const [sort, setSort] = useState<Sort>({ key: "createdAt", dir: -1 });
   const [page, setPage] = useState(0);
   const [restoring, setRestoring] = useState<AdminLinkRow | null>(null);
   const [deleting, setDeleting] = useState<AdminLinkRow | null>(null);
   const toast = useToast();
   const qc = useQueryClient();
-  const { data, isPending } = useAdminLinks({ q: query, suspended: false });
+  const { data, isPending } = useAdminLinks({ q: search, suspended: false });
 
   const refresh = async () => {
     await qc.invalidateQueries({ queryKey: ["admin", "links"] });
@@ -517,7 +524,13 @@ function OwnedLinks({ onSuspend }: { onSuspend: (l: AdminLinkRow) => void }) {
       <div className="flex flex-wrap items-center gap-2">
         <SearchInput
           value={query}
-          onChange={setQuery}
+          // Back to the first page with the term: paginate() clamps, so a
+          // narrower result set would otherwise leave you on its last page
+          // wondering where everything went.
+          onChange={(value) => {
+            setQuery(value);
+            setPage(0);
+          }}
           placeholder="Slug or destination, e.g. phishy.example"
           label="Search links"
         />

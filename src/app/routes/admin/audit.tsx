@@ -53,7 +53,10 @@ export function AdminAuditPage() {
 
       <SearchInput
         value={query}
-        onChange={setQuery}
+        onChange={(value) => {
+          setQuery(value);
+          setPage(0);
+        }}
         placeholder="Action, email, or detail"
         label="Search the audit log"
       />
