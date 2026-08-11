@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 import { appUrl } from "./environment";
 import { signUpAndVerify } from "./resend";
 import { setPlan } from "./db";
-import { addCustomDomain } from "./orgs";
+import { addCustomDomain, createQuickLink } from "./orgs";
 
 const password = "test-password-123";
 
@@ -11,12 +11,7 @@ test("a new owner can create an organization and a scheme-less quick link", asyn
 
   await signUpAndVerify(page, email, password);
 
-  const destination = page.getByPlaceholder("https://example.com/launch").first();
-  await expect(destination).toBeVisible();
-  await destination.fill("example.com/playwright");
-  await page.getByRole("button", { name: "Create link" }).click();
-
-  await expect(page.getByRole("dialog", { name: "Link created" })).toBeVisible();
+  await createQuickLink(page, "example.com/playwright");
   await expect(page.getByRole("dialog")).toContainText(`${appUrl}/`);
 
   await setPlan(page, email);

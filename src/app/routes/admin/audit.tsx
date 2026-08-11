@@ -17,6 +17,17 @@ import { paginate } from "./util";
 import { Pager } from "../../ui/pagination";
 import type { Sort } from "@/shared/types";
 
+/** An entry matches if the term appears in what somebody would search by:
+ * the action, who did it, or what it said. An empty term matches everything. */
+function matchesTerm(
+  entry: { action: string; actorEmail: string | null; detail: string | null },
+  term: string,
+): boolean {
+  if (!term) return true;
+  const haystack = [entry.action, entry.actorEmail ?? "", entry.detail ?? ""].join(" ");
+  return haystack.toLowerCase().includes(term);
+}
+
 export function AdminAuditPage() {
   const { data, isPending } = useAdminAudit();
   const [query, setQuery] = useState("");
@@ -27,13 +38,7 @@ export function AdminAuditPage() {
   // are already in hand.
   const term = query.trim().toLowerCase();
   const all = sortRows(
-    (data ?? []).filter(
-      (entry) =>
-        !term ||
-        entry.action.toLowerCase().includes(term) ||
-        (entry.actorEmail ?? "").toLowerCase().includes(term) ||
-        (entry.detail ?? "").toLowerCase().includes(term),
-    ),
+    (data ?? []).filter((entry) => matchesTerm(entry, term)),
     sort,
     {
       createdAt: (e) => e.createdAt,

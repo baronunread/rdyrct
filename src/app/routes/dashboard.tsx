@@ -81,6 +81,8 @@ function submitSameDestination(
   create.mutate({ ...input, ...extra }, { onSuccess: onDone, onError });
 }
 
+type DashboardData = ReturnType<typeof useDashboardData>;
+
 /** The page asks one question until there is a link, then goes back to being
  * a dashboard. */
 const FIRST_RUN_HEADER = {
@@ -101,8 +103,8 @@ function DashboardBody({
   stats: s,
   data,
 }: {
-  stats: NonNullable<ReturnType<typeof useDashboardData>["stats"]>;
-  data: ReturnType<typeof useDashboardData>;
+  stats: NonNullable<DashboardData["stats"]>;
+  data: DashboardData;
 }) {
   const peak = peakActivityCell(s.heatmap);
   return (
@@ -127,8 +129,19 @@ function DashboardBody({
   );
 }
 
+/** Nothing to show until there is an organization and its numbers have
+ * arrived. Separated from the page itself so the page is about the page. */
 export function Dashboard() {
-  const { org, orgId, limits, activeDomains, defaultDomainId, orgQr } = useOrgLimits();
+  const { org, orgId } = useOrgLimits();
+  const data = useDashboardData(orgId);
+  if (!org) return <NoOrgState />;
+  if (data.isLoading) return <DashboardSkeleton />;
+  if (!data.stats) return <p className="text-sm text-danger">Could not load stats.</p>;
+  return <DashboardScreen stats={data.stats} />;
+}
+
+function DashboardScreen({ stats: s }: { stats: NonNullable<DashboardData["stats"]> }) {
+  const { orgId, limits, activeDomains, defaultDomainId, orgQr } = useOrgLimits();
   const data = useDashboardData(orgId);
   const toast = useToast();
   const [created, setCreated] = useState<LinkDTO | null>(null);
@@ -137,17 +150,28 @@ export function Dashboard() {
     matchedLinks: LinkDTO[];
   } | null>(null);
 
-  if (!org) return <NoOrgState />;
-  if (data.isLoading) return <DashboardSkeleton />;
-  if (!data.stats) return <p className="text-sm text-danger">Could not load stats.</p>;
-  const s = data.stats;
-
   // First run. An organization exists from the first session, so what is
   // missing is the link, and the field that makes one is already the first
   // thing on this page. Showing the rest (three zeroes, four empty cards, a
   // flat chart) would teach somebody that the product is empty; hiding it
   // until there is something to count leaves one question on screen.
   const firstRun = s.totalLinks === 0;
+
+  /** Both answers to "this destination already has a link" submit the same
+   * input with one extra field, and land on the same created-link dialog. */
+  const resolveMatch = (extra: { mergeIntoLinkId?: string; forceSeparateLink?: boolean }) => {
+    if (!sameDestination) return;
+    submitSameDestination(
+      data.create,
+      sameDestination.input,
+      extra,
+      (link) => {
+        setSameDestination(null);
+        setCreated(link);
+      },
+      withErrorToast(toast),
+    );
+  };
 
   return (
     <div>
@@ -177,32 +201,8 @@ export function Dashboard() {
         matchedLinks={sameDestination?.matchedLinks ?? null}
         pending={data.create.isPending}
         onClose={() => setSameDestination(null)}
-        onAddToExisting={(matchedLink) => {
-          if (!sameDestination) return;
-          submitSameDestination(
-            data.create,
-            sameDestination.input,
-            { mergeIntoLinkId: matchedLink.id },
-            (link) => {
-              setSameDestination(null);
-              setCreated(link);
-            },
-            withErrorToast(toast),
-          );
-        }}
-        onCreateSeparate={() => {
-          if (!sameDestination) return;
-          submitSameDestination(
-            data.create,
-            sameDestination.input,
-            { forceSeparateLink: true },
-            (link) => {
-              setSameDestination(null);
-              setCreated(link);
-            },
-            withErrorToast(toast),
-          );
-        }}
+        onAddToExisting={(matchedLink) => resolveMatch({ mergeIntoLinkId: matchedLink.id })}
+        onCreateSeparate={() => resolveMatch({ forceSeparateLink: true })}
       />
     </div>
   );

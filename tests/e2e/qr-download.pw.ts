@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import { expect, test } from "@playwright/test";
 import { signUpAndVerify } from "./resend";
 import { rawSql, setPlan } from "./db";
+import { createQuickLink } from "./orgs";
 
 const password = "test-password-123";
 
@@ -26,13 +27,8 @@ test("a downloaded QR PNG is big enough to print, not preview-sized (#88)", asyn
   // No setPlan: generating and downloading a QR is free on every plan. Only
   // its look is paid, which the next test covers.
 
-  const destination = page.getByPlaceholder("https://example.com/launch").first();
-  await expect(destination).toBeVisible();
-  await destination.fill("example.com/qr-download");
-  await page.getByRole("button", { name: "Create link" }).click();
-
+  await createQuickLink(page, "example.com/qr-download");
   const dialog = page.getByRole("dialog", { name: "Link created" });
-  await expect(dialog).toBeVisible();
 
   const download = await Promise.all([
     page.waitForEvent("download"),

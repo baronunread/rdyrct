@@ -784,15 +784,42 @@ function billingOverlayState(
   };
 }
 
-export function BillingPage() {
+/**
+ * The account fields this page reads, with their defaults applied once.
+ *
+ * Every one of them is optional on the user, and defaulting each at the point
+ * of use turned the page into a list of `?? false`.
+ */
+const NO_ACCOUNT_YET = {
+  hasBillingAccount: false,
+  comped: false,
+  polarSubscriptionCancelAtPeriodEnd: false,
+  polarSubscriptionCurrentPeriodEnd: null,
+};
+
+function useBillingAccount() {
   const me = useCurrentUser();
+  // One default for the whole shape, not one per field: every one of these
+  // is required on User, so the only question is whether the user query has
+  // answered yet.
+  const { hasBillingAccount, comped, ...subscription } = me.data?.user ?? NO_ACCOUNT_YET;
+  return {
+    hasBillingAccount,
+    comped,
+    cancelAtPeriodEnd: subscription.polarSubscriptionCancelAtPeriodEnd,
+    periodEnd: subscription.polarSubscriptionCurrentPeriodEnd,
+    ownedOrgs: ownedOrgCount(me.data?.orgs),
+  };
+}
+
+export function BillingPage() {
   const { org } = useCurrentOrg();
   const orgId = org?.id ?? "";
   const { data: linkQuota, isPending: linksPending } = useLinkQuotaUsage(orgId);
   const navigate = useNavigate();
   const { data: memberData, isPending: membersPending } = useMembers(orgId);
   const { data: domainData, isPending: domainsPending } = useDomains(orgId);
-  const ownedOrgs = ownedOrgCount(me.data?.orgs);
+  const account = useBillingAccount();
 
   const {
     plan,
@@ -807,8 +834,6 @@ export function BillingPage() {
     shake,
   } = useCheckoutFlow();
 
-  const cancelAtPeriodEnd = me.data?.user.polarSubscriptionCancelAtPeriodEnd ?? false;
-  const periodEnd = me.data?.user.polarSubscriptionCurrentPeriodEnd ?? null;
   const overlay = billingOverlayState(checkoutPlan, showPortalOverlay, confirming);
 
   return (
@@ -817,13 +842,13 @@ export function BillingPage() {
       <div className="flex flex-col gap-4">
         <PlanActions
           plan={plan}
-          hasBillingAccount={me.data?.user.hasBillingAccount ?? false}
-          comped={me.data?.user.comped ?? false}
+          hasBillingAccount={account.hasBillingAccount}
+          comped={account.comped}
           checkoutPlan={checkoutPlan}
           showPortalOverlay={showPortalOverlay}
           confirmTimedOut={confirmTimedOut}
-          cancelAtPeriodEnd={cancelAtPeriodEnd}
-          periodEnd={periodEnd}
+          cancelAtPeriodEnd={account.cancelAtPeriodEnd}
+          periodEnd={account.periodEnd}
           shake={shake}
           onUpgrade={handleUpgrade}
           onPortal={handlePortal}
@@ -834,7 +859,7 @@ export function BillingPage() {
           linkQuotaCount={linkQuota?.count ?? 0}
           memberData={memberData ?? []}
           domainData={domainData ?? []}
-          ownedOrgs={ownedOrgs}
+          ownedOrgs={account.ownedOrgs}
           linksPending={linksPending}
           membersPending={membersPending}
           domainsPending={domainsPending}
