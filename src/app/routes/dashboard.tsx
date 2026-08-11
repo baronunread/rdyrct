@@ -81,6 +81,52 @@ function submitSameDestination(
   create.mutate({ ...input, ...extra }, { onSuccess: onDone, onError });
 }
 
+/** The page asks one question until there is a link, then goes back to being
+ * a dashboard. */
+const FIRST_RUN_HEADER = {
+  title: "Shorten your first link",
+  sub: "Paste any long URL. Your stats appear here once it starts getting clicks.",
+};
+const DASHBOARD_HEADER = {
+  title: "Dashboard",
+  sub: "See your organization's link activity at a glance",
+};
+
+/**
+ * Everything below the create field: the numbers, and the cards that read
+ * them. Split out because it only renders once there is something to count,
+ * so the page itself is the question plus this.
+ */
+function DashboardBody({
+  stats: s,
+  data,
+}: {
+  stats: NonNullable<ReturnType<typeof useDashboardData>["stats"]>;
+  data: ReturnType<typeof useDashboardData>;
+}) {
+  const peak = peakActivityCell(s.heatmap);
+  return (
+    <>
+      <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <StatCard label="Links" value={s.totalLinks} />
+        <StatCard label="Clicks · 7d" value={s.clicks7d} delta={s.clicks7dDelta} />
+        <StatCard label="Members" value={data.memberCount} />
+      </div>
+
+      <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <RecentClicksCard clicks={data.clicks} />
+        <ActivityCard links={data.recentLinks} creatorName={data.creatorName} />
+      </div>
+
+      <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-3">
+        <TopLinksCard topLinks={s.topLinks} limit={5} />
+        <NeedsAttentionCard decaying={s.decayingLinks.slice(0, 3)} dead={s.deadLinks.slice(0, 3)} />
+        <PeakCard peak={peak} rangeDays={s.rangeDays} />
+      </div>
+    </>
+  );
+}
+
 export function Dashboard() {
   const { org, orgId, limits, activeDomains, defaultDomainId, orgQr } = useOrgLimits();
   const data = useDashboardData(orgId);
@@ -96,13 +142,16 @@ export function Dashboard() {
   if (!data.stats) return <p className="text-sm text-danger">Could not load stats.</p>;
   const s = data.stats;
 
-  const decaying = s.decayingLinks.slice(0, 3);
-  const dead = s.deadLinks.slice(0, 3);
-  const peak = peakActivityCell(s.heatmap);
+  // First run. An organization exists from the first session, so what is
+  // missing is the link, and the field that makes one is already the first
+  // thing on this page. Showing the rest (three zeroes, four empty cards, a
+  // flat chart) would teach somebody that the product is empty; hiding it
+  // until there is something to count leaves one question on screen.
+  const firstRun = s.totalLinks === 0;
 
   return (
     <div>
-      <PageHeader title="Dashboard" sub="See your organization's link activity at a glance" />
+      <PageHeader {...(firstRun ? FIRST_RUN_HEADER : DASHBOARD_HEADER)} />
 
       <QuickCreateCard
         create={data.create}
@@ -115,22 +164,7 @@ export function Dashboard() {
         }
       />
 
-      <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <StatCard label="Links" value={s.totalLinks} />
-        <StatCard label="Clicks · 7d" value={s.clicks7d} delta={s.clicks7dDelta} />
-        <StatCard label="Members" value={data.memberCount} />
-      </div>
-
-      <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <RecentClicksCard clicks={data.clicks} />
-        <ActivityCard links={data.recentLinks} creatorName={data.creatorName} />
-      </div>
-
-      <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <TopLinksCard topLinks={s.topLinks} limit={5} />
-        <NeedsAttentionCard decaying={decaying} dead={dead} />
-        <PeakCard peak={peak} rangeDays={s.rangeDays} />
-      </div>
+      {!firstRun && <DashboardBody stats={s} data={data} />}
 
       <LinkPreviewDialog
         title="Link created"

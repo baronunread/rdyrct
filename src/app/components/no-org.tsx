@@ -1,120 +1,97 @@
 /**
- * What a newly verified account sees before it has an organization (#65).
+ * What somebody sees on an org-scoped page while they belong to no
+ * organization.
  *
- * It used to ask for an organization name, which is the activation cliff:
- * somebody who came to shorten a link, and who has just got through a landing
- * page, a signup form and a six-digit code, was asked to name a company before
- * anything happened.
+ * This is no longer the first-run screen. Every account owns an organization
+ * from its first session (`ensureOrganization` in the Worker), so reaching
+ * this means they deleted the last one they owned, or were removed from the
+ * last one they were in. Whoever gets here knows what an organization is, so
+ * it asks the plain question with a name field and says nothing about how
+ * they arrived: they did it on purpose, and narrating it back is either
+ * obvious or wrong.
  *
- * So it asks for the link instead, and makes the organization on the way past.
- * The name is derived from their email and stated plainly, because a name
- * chosen for you is only acceptable if you can see it and change it.
- *
- * The organization is still explicit in the data model: nothing here creates a
- * default org at signup, and /billing still works without one, so the landing
- * page's paid CTAs are unaffected.
+ * The name is prefilled from their email the same way the automatic one is,
+ * so the fast path is one click.
  */
 import { useCallback } from "react";
 import { useForm } from "react-hook-form";
 import { valibotResolver } from "@hookform/resolvers/valibot";
 import { useQueryClient } from "@tanstack/react-query";
-import { Link } from "react-router";
-import { claimPendingLinks, storedAnonLinks } from "../lib/anon-links";
-import { api } from "../lib/api";
+import { claimPendingLinks } from "../lib/anon-links";
+import { api, ApiError } from "../lib/api";
 import posthog from "../lib/posthog";
 import { FUNNEL } from "../lib/funnel";
 import { useCurrentOrg } from "../lib/current-org";
 import { useCurrentUser } from "../lib/hooks";
-import { defaultOrgName } from "../lib/org-name";
+import { defaultOrgName } from "@/shared/org-name";
 import { Button } from "../ui/button";
 import { Field, Input } from "../ui/field";
 import { BusyContent } from "../ui/spinner";
 import { useToast } from "../ui/toast";
-import { firstLinkSchema } from "../lib/schemas";
-import type { LinkDTO } from "@/shared/types";
+import { orgNameSchema } from "../lib/schemas";
 
-type FirstLinkForm = { destination: string };
+type OrgNameForm = { name: string };
+
+/** The org-limit refusal gets the upgrade line; everything else says what the
+ * server said. */
+function createErrorMessage(err: unknown): string {
+  if (err instanceof ApiError && err.code === "org_limit")
+    return "Upgrade to Pro to create more organizations";
+  return err instanceof Error ? err.message : "Something went wrong";
+}
 
 export function NoOrgState() {
   const { setOrg } = useCurrentOrg();
   const me = useCurrentUser();
   const qc = useQueryClient();
   const toast = useToast();
+  const suggested = defaultOrgName(me.data?.user.email ?? "", me.data?.user.name);
   const {
     register,
     handleSubmit,
     formState: { isSubmitting },
-  } = useForm<FirstLinkForm>({
-    resolver: valibotResolver(firstLinkSchema),
-    defaultValues: { destination: "" },
+  } = useForm<OrgNameForm>({
+    resolver: valibotResolver(orgNameSchema),
+    values: { name: suggested },
   });
 
-  const orgName = defaultOrgName(me.data?.user.email ?? "", me.data?.user.name);
-  // Links made on the landing page before signing up (#96) are claimed by the
-  // same act, so somebody arriving with three of them is told so.
-  const waiting = storedAnonLinks().length;
-
   const submit = useCallback(
-    async ({ destination }: FirstLinkForm) => {
+    async ({ name }: OrgNameForm) => {
       try {
-        const org = await api<{ id: string }>("/orgs", {
-          method: "POST",
-          body: { name: orgName },
-        });
+        const org = await api<{ id: string }>("/orgs", { method: "POST", body: { name } });
         posthog.capture("organization_created");
-        posthog.capture(FUNNEL.orgCreated, { from: "first_link" });
-
-        // The organization exists either way: a rejected destination should
-        // cost the person a retry on the link, not send them back to a screen
-        // they have already cleared.
+        posthog.capture(FUNNEL.orgCreated, { from: "no_org" });
         setOrg(org.id);
+        // Somebody can still arrive here holding links made on the landing
+        // page: they signed up, deleted the organization those went to, and
+        // shortened more before making another.
         await claimPendingLinks(org.id);
-
-        await api<LinkDTO>(`/orgs/${org.id}/links`, {
-          method: "POST",
-          body: { destination },
-        });
-        posthog.capture(FUNNEL.linkCreated, { from: "first_run" });
-
         await qc.refetchQueries({ queryKey: ["user"] });
       } catch (err) {
-        toast(err instanceof Error ? err.message : "Something went wrong", "error");
-        // Whatever failed, the org may already exist, so let the app re-read
-        // rather than stranding somebody on this screen with one made.
-        await qc.refetchQueries({ queryKey: ["user"] });
+        toast(createErrorMessage(err), "error");
       }
     },
-    [orgName, setOrg, qc, toast],
+    [setOrg, qc, toast],
   );
 
   return (
     <div className="grid place-items-center py-20">
       <form
-        onSubmit={handleSubmit(submit, () => toast("Paste a link to shorten", "error"))}
+        onSubmit={handleSubmit(submit)}
         className="flex w-full max-w-md flex-col gap-4 rounded-xl bg-surface p-6 smooth-shadow-ring-sm"
       >
         <div>
-          <h1 className="font-bold">Shorten your first link</h1>
+          <h1 className="font-bold">Create an organization</h1>
           <p className="mt-1 text-sm text-muted">
-            {waiting > 0
-              ? `We will keep the ${waiting === 1 ? "link" : `${waiting} links`} you made before signing up, too.`
-              : "Paste any long URL. Your links, domains and teammates live in an organization, and we will make yours as you go."}
+            Links, domains and teammates live in an organization. Name it whatever you like.
           </p>
         </div>
-        <Field label="Destination">
-          <Input
-            {...register("destination")}
-            placeholder="https://example.com/a-very-long-address"
-            autoFocus
-          />
+        <Field label="Name">
+          <Input {...register("name")} autoFocus />
         </Field>
         <Button type="submit" variant="primary" disabled={isSubmitting}>
-          <BusyContent busy={isSubmitting}>Create my first link</BusyContent>
+          <BusyContent busy={isSubmitting}>Create organization</BusyContent>
         </Button>
-        <p className="text-xs text-muted">
-          Your organization will be called <span className="text-text">{orgName}</span>. Rename it
-          any time in <Link to="/settings">Settings</Link>.
-        </p>
       </form>
     </div>
   );

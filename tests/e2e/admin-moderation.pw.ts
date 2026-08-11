@@ -1,6 +1,5 @@
 import { expect, test } from "@playwright/test";
 import { signUpAndVerify } from "./resend";
-import { createOrg } from "./orgs";
 import { makePlatformAdmin, queryRows } from "./db";
 
 /**
@@ -18,7 +17,6 @@ test("an admin can find a link by destination and suspend it", async ({ page }) 
   const ownerEmail = `owner-${Date.now()}@gmail.com`;
   const destination = `https://phishy-${Date.now()}.example/login`;
   await signUpAndVerify(page, ownerEmail, password);
-  await createOrg(page, "Reported Org");
 
   const field = page.getByPlaceholder("https://example.com/launch").first();
   await expect(field).toBeVisible();
@@ -102,7 +100,6 @@ test("an admin can find a link by destination and suspend it", async ({ page }) 
 
 test("the Links tab is invisible and unreachable for a normal user", async ({ page }) => {
   await signUpAndVerify(page, `plain-${Date.now()}@gmail.com`, password);
-  await createOrg(page, "Plain Org");
 
   // By href, not by label: the app's own "Links" tab is called that too, and
   // a name-based assertion would pass for the wrong reason.
@@ -143,7 +140,6 @@ test("the platform table fits its card instead of running off the side", async (
   // it. Asserted as "the page never scrolls sideways", which is the symptom.
   const email = `admin-layout-${Date.now()}@gmail.com`;
   await signUpAndVerify(page, email, password);
-  await createOrg(page, "Layout Org");
 
   const field = page.getByPlaceholder("https://example.com/launch").first();
   await field.fill(`https://example.com/${"a-very-long-path-segment-".repeat(6)}end`);
