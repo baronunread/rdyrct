@@ -59,11 +59,14 @@ test("an admin can find a link by destination and suspend it", async ({ page }) 
   await expect(page).toHaveURL(/\/admin\/links$/);
   await expect(page.getByRole("heading", { name: "Links" })).toBeVisible();
 
-  await page.getByPlaceholder(/Slug or destination/).fill(destination);
+  await page.getByRole("textbox", { name: "Search links" }).fill(destination);
   const row = page.getByRole("row").filter({ hasText: slug });
   await expect(row).toBeVisible({ timeout: 10_000 });
 
-  await row.getByRole("button", { name: "Suspend" }).click();
+  // Suspend lives in the row's actions menu, next to restore and delete,
+  // rather than as a button of its own on every row.
+  await row.getByRole("button", { name: `Actions for ${slug}` }).click();
+  await page.getByRole("menuitem", { name: "Suspend link" }).click();
   const dialog = page.getByRole("dialog", { name: "Suspend this link" });
   await expect(dialog).toBeVisible();
   // A suspension with no reason is not answerable later, so it is refused.
@@ -117,15 +120,15 @@ test("anonymous links and the audit log are reachable, not buried under the list
   // being there at all.
   const email = `admin-nav-${Date.now()}@gmail.com`;
   await signUpAndVerify(page, email, password);
-  await createOrg(page, "Nav Org");
   await makePlatformAdmin(page, email);
 
   await page.goto("/admin/links");
   await page.getByRole("button", { name: "Anonymous" }).click();
-  await expect(page.getByText("Anonymous links")).toBeVisible();
+  await expect(page.getByRole("textbox", { name: "Search anonymous links" })).toBeVisible();
 
-  // And the big table is out of the way while it is open.
-  await expect(page.getByPlaceholder(/Slug or destination/)).toHaveCount(0);
+  // And the big table is out of the way while it is open. Both searches carry
+  // the same placeholder, so the label is what tells them apart.
+  await expect(page.getByRole("textbox", { name: "Search links" })).toHaveCount(0);
 
   await page
     .getByRole("navigation", { name: "Platform sections" })

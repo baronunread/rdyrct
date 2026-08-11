@@ -12,6 +12,13 @@ export default defineConfig({
   // tests that pass in CI time out locally, and the whole suite runs slower
   // (1.6m at 4 workers, 1.3m at 2). Pinned so both match.
   workers: 2,
+  // Playwright's default is 30s, which was set for tests that click around a
+  // page. Nearly every test here starts by creating a real account: a Cap
+  // proof-of-work solve, an account write, a mail send and a six-digit code
+  // read back out of the emulator. That is most of 30s before the test has
+  // begun, and it is why failures kept landing on the first assertion after
+  // sign-up rather than on anything the test was written to check.
+  timeout: 60_000,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
   reporter: process.env.CI ? [["github"], ["html", { open: "never" }]] : "list",
