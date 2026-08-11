@@ -96,10 +96,11 @@ export function Table({
   minWidth?: string;
 }) {
   return (
-    // overscroll-x-contain: a horizontal scroll that reaches the end of the
-    // table stops there instead of chaining to the page, which on a trackpad
-    // is a back-navigation waiting to happen.
-    <div className="overflow-x-auto overscroll-x-contain rounded-lg bg-surface smooth-shadow-ring-xs">
+    // overscroll-x-none, not -contain. `contain` only stops the scroll
+    // chaining to the page; the container still rubber-bands at each end,
+    // and that bounce drags the table off its own background so the page
+    // shows through beside it. `none` disables the bounce as well.
+    <div className="overflow-x-auto overscroll-x-none rounded-lg bg-surface smooth-shadow-ring-xs">
       <table
         className={cn(
           "w-full text-sm [&_tbody_tr]:transition-colors [&_tbody_tr:hover]:bg-surface-2/40",

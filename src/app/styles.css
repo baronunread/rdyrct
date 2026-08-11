@@ -136,6 +136,11 @@ html {
   /* reserve the scrollbar's width even on pages short enough to not need
      one, so a page that grows past the fold doesn't shift content left */
   scrollbar-gutter: stable;
+  /* No sideways rubber-band. Nothing here scrolls horizontally by design, so
+     a trackpad flick at the end of a wide table would otherwise bounce the
+     whole document and show the area beyond the app beside it. Vertical
+     overscroll is left alone: that one is the platform behaving normally. */
+  overscroll-behavior-x: none;
 }
 
 /* Theme changes cross-fade through a view transition, not a CSS transition.
