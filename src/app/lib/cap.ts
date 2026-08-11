@@ -19,9 +19,13 @@
  */
 import { useCallback, useRef } from "react";
 import wasmUrl from "@cap.js/wasm/browser/cap_wasm_bg.wasm?url";
-import { CAP_TOKEN_HEADER } from "@/shared/types";
+import { CAP_FAILED_CODE, CAP_TOKEN_HEADER } from "@/shared/types";
+import { ApiError } from "./api";
 
 export type CapScope = "signup" | "password-reset" | "anon-link";
+
+/** Runs a Cap-guarded request, re-solving once if the token is refused. */
+export type CapGuard = <T>(run: (headers: Record<string, string>) => Promise<T>) => Promise<T>;
 
 /** How long to wait for a solve before giving up and submitting without one. */
 const SOLVE_TIMEOUT_MS = 20_000;
@@ -132,5 +136,42 @@ export function useCap(scope: CapScope) {
     return capHeaders(token);
   }, [prime]);
 
-  return { prime, headers };
+  /**
+   * Runs a Cap-guarded request, and if the Worker refuses the token, solves
+   * a fresh one and runs it exactly once more.
+   *
+   * A token can be refused for reasons the browser cannot see coming: it
+   * expired, it was already spent, or the server forgot it. None of those
+   * are the visitor's doing and none of them are worth an error message, so
+   * proving ourselves again is the honest response. Once, not in a loop: a
+   * second refusal means something is actually wrong, and that one belongs
+   * on screen.
+   */
+  const guarded = useCallback(
+    async <T>(run: (headers: Record<string, string>) => Promise<T>): Promise<T> => {
+      const first = await run(await headers());
+      if (!isCapFailure(first)) return first;
+      return run(await headers());
+    },
+    [headers],
+  );
+
+  return { prime, headers, guarded };
+}
+
+/**
+ * Whether a result is the Worker turning down a Cap token.
+ *
+ * Covers both shapes this app gets back: better-auth returns `{ error }` on
+ * the object rather than throwing, and api() rejects with an ApiError whose
+ * `.code` comes from the response body.
+ */
+function isCapFailure(result: unknown): boolean {
+  const error = (result as { error?: { code?: string } } | null)?.error;
+  return error?.code === CAP_FAILED_CODE;
+}
+
+/** The same check for a thrown ApiError, which is how api() reports it. */
+export function isCapFailureError(error: unknown): boolean {
+  return error instanceof ApiError && error.code === CAP_FAILED_CODE;
 }
