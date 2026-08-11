@@ -1,4 +1,4 @@
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from "@tanstack/react-query";
 import { api, ApiError } from "./api";
 import { authClient } from "./auth-client";
 import { writeAuthHint } from "./auth-hint";
@@ -327,6 +327,11 @@ export const useAdminLinks = (params: { q: string; suspended: boolean }) =>
       api(
         `/admin/links?q=${encodeURIComponent(params.q)}${params.suspended ? "&suspended=1" : ""}`,
       ),
+    // The search term is part of the key, so without this every pause in
+    // typing replaced the table with a skeleton and put it back. That flashes,
+    // and it also tears out whatever the admin had open: a row's actions menu
+    // is unmounted mid-click when the new page of results lands.
+    placeholderData: keepPreviousData,
   });
 
 export const useAdminAnonLinks = () =>
