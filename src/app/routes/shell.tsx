@@ -9,7 +9,7 @@ import { Sun, Moon, Menu as MenuIcon, X } from "lucide";
 import { MorphIcon } from "morphicons/react";
 import { useCurrentUser, useLogout } from "../lib/hooks";
 import { useCurrentOrg } from "../lib/current-org";
-import { claimPendingLink } from "../lib/anon-claim";
+import { claimPendingLinks } from "../lib/anon-claim";
 import { api, ApiError } from "../lib/api";
 import { useTheme } from "../lib/theme";
 import { useToast } from "../ui/toast";
@@ -320,7 +320,7 @@ export function AppShell() {
       setNewOrgName("");
       // Same claim as the empty state: someone can sign up, skip the
       // first prompt, and create their org from the switcher instead.
-      await claimPendingLink(created.id);
+      await claimPendingLinks(created.id);
       setOrg(created.id);
       navigate("/dashboard");
     } catch (e) {

@@ -29,6 +29,7 @@ import { scoreAndRecord } from "../risk";
 import { spendToken } from "../cap";
 import { isValidHttpUrl, normalizeUrl, randomSlug, uid } from "../util";
 import { publicClientKey, rateLimitAllows } from "../rate-limit";
+import { insertLinkWithinLimit, orgPlan } from "../plan";
 
 /** How long an unclaimed link keeps working. */
 const ANON_LINK_TTL_MS = 24 * 60 * 60 * 1000;
@@ -201,14 +202,15 @@ export async function claimAnonLink(
     createdAt: Date.now(),
   };
 
-  // One batch: the link, its primary address, and the removal of the row it
-  // came from. A claim that half-applied would leave a slug resolving to a
-  // link nobody owns.
-  await db.batch([
-    db.insert(schema.links).values(link),
-    db.insert(schema.linkAddresses).values(address),
-    db.delete(schema.anonLinks).where(eq(schema.anonLinks.id, anon.id)),
-  ]);
+  // Through the same cap-guarded insert every other link goes through, not a
+  // raw one: claiming is still creating a link in somebody's organization,
+  // and an org one under its limit must not be able to take ten.
+  const { limits } = await orgPlan(db, orgId);
+  if (!(await insertLinkWithinLimit(db, env, link, address, limits.links))) return null;
+
+  // Only once the link exists: an anon row deleted alongside a refused
+  // insert would take the slug down with it.
+  await db.delete(schema.anonLinks).where(eq(schema.anonLinks.id, anon.id));
 
   // Republish without the expiry, and now carrying the org, so clicks start
   // being recorded against the link its owner can see.

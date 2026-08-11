@@ -2,7 +2,7 @@ import { useCallback } from "react";
 import { useForm } from "react-hook-form";
 import { valibotResolver } from "@hookform/resolvers/valibot";
 import { useQueryClient } from "@tanstack/react-query";
-import { claimPendingLink } from "../lib/anon-claim";
+import { claimPendingLinks } from "../lib/anon-claim";
 import { api } from "../lib/api";
 import posthog from "../lib/posthog";
 import { FUNNEL } from "../lib/funnel";
@@ -44,7 +44,7 @@ export function NoOrgState() {
         // up, if there is one (Direction A of #96). Best-effort: this is the
         // difference between a first dashboard with something in it and an
         // empty one, never a reason to fail creating the organization.
-        await claimPendingLink(created.id);
+        await claimPendingLinks(created.id);
         setOrg(created.id);
         await qc.refetchQueries({ queryKey: ["user"] });
       } catch (err) {
