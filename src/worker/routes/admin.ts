@@ -17,6 +17,8 @@ import { fillSeries, computeDelta, deleteOrg } from "./orgs";
 import { orgPlan } from "../plan";
 import { effectivePlanSql, subscriptionGrantsAccess } from "../entitlement";
 import { jsonBodyLimit } from "../body-limit";
+import { adminLinkRoutes } from "./admin-links";
+import { recordAdminAction } from "../audit";
 
 // An org's effective plan is its owner's plan (billing is per-user). A single
 // correlated subquery pulls it for list views. Note: `user` is a SQL keyword,
@@ -43,9 +45,16 @@ const ownerEmail = sql<string | null>`(
 
 // Mounted at /api/admin: platform-level views for the instance admin.
 export const adminRoutes = new Hono<AppEnv>();
+
 adminRoutes.use("*", jsonBodyLimit());
 
 adminRoutes.use("*", requireAdmin);
+
+// Mounted after requireAdmin, and that order is the whole security of it:
+// Hono applies middleware registered before a route, so a sub-router mounted
+// above this line is reachable by any signed-in user. It was, briefly, and a
+// test caught it (#67).
+adminRoutes.route("/links", adminLinkRoutes);
 
 const day = sql<string>`date(ts / 1000, 'unixepoch')`;
 const userDay = sql<string>`date(created_at / 1000, 'unixepoch')`;
@@ -590,7 +599,21 @@ adminRoutes.get("/orgs/:orgId", async (c) => {
 });
 
 adminRoutes.delete("/orgs/:orgId", async (c) => {
-  await deleteOrg(c.var.db, c.env, c.req.param("orgId"));
+  const orgId = c.req.param("orgId");
+  // Read the name before the teardown removes it: an audit entry saying
+  // which org was deleted is the entire value of the entry (#67).
+  const rows = await c.var.db
+    .select({ name: schema.orgs.name })
+    .from(schema.orgs)
+    .where(eq(schema.orgs.id, orgId));
+  await deleteOrg(c.var.db, c.env, orgId);
+  await recordAdminAction(c.env, {
+    actorUserId: c.var.user!.id,
+    action: "org.delete",
+    targetType: "org",
+    targetId: orgId,
+    detail: { name: rows[0]?.name ?? null },
+  });
   return c.json({ ok: true });
 });
 
@@ -701,6 +724,14 @@ adminRoutes.patch("/users/:userId", async (c) => {
   // Banning kicks the user out immediately: all their sessions are wiped, and
   // better-auth refuses to create new ones (see better-auth.ts).
   if (patch.banned) await db.delete(schema.session).where(eq(schema.session.userId, targetId));
+  if (patch.banned !== undefined)
+    await recordAdminAction(c.env, {
+      actorUserId: self.id,
+      action: patch.banned ? "user.ban" : "user.unban",
+      targetType: "user",
+      targetId: targetId,
+      detail: { isAdminChanged: patch.isAdmin !== undefined },
+    });
   return c.json({ ok: true });
 });
 
@@ -751,6 +782,13 @@ adminRoutes.post("/users/:userId/comp", async (c) => {
     reason,
     grantedBy: c.var.user!.id,
   });
+  await recordAdminAction(c.env, {
+    actorUserId: c.var.user!.id,
+    action: "user.comp_grant",
+    targetType: "user",
+    targetId: c.req.param("userId")!,
+    detail: { plan, reason },
+  });
   return c.json({ ok: true });
 });
 
@@ -758,6 +796,12 @@ adminRoutes.post("/users/:userId/comp", async (c) => {
  * `plan` re-derives from the columns the webhook owns. */
 adminRoutes.delete("/users/:userId/comp", async (c) => {
   await writeComp(c.var.db, c.req.param("userId"), null);
+  await recordAdminAction(c.env, {
+    actorUserId: c.var.user!.id,
+    action: "user.comp_revoke",
+    targetType: "user",
+    targetId: c.req.param("userId")!,
+  });
   return c.json({ ok: true });
 });
 
@@ -774,8 +818,21 @@ adminRoutes.delete("/users/:userId", async (c) => {
     throw new HTTPException(409, {
       message: "User owns organizations, delete those orgs first",
     });
+  // Read the address first: the entry has to say who was deleted, and after
+  // this statement there is nowhere left to look it up (#67).
+  const target = await db
+    .select({ email: schema.user.email })
+    .from(schema.user)
+    .where(eq(schema.user.id, targetId));
   // sessions/accounts/org memberships cascade; authored links/invites keep
   // created_by NULL (ON DELETE SET NULL)
   await db.delete(schema.user).where(eq(schema.user.id, targetId));
+  await recordAdminAction(c.env, {
+    actorUserId: c.var.user!.id,
+    action: "user.delete",
+    targetType: "user",
+    targetId: targetId,
+    detail: { email: target[0]?.email ?? null },
+  });
   return c.json({ ok: true });
 });

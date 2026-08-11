@@ -117,6 +117,11 @@ async function desiredKvValue(db: DB, key: string): Promise<string | null> {
         and(
           eq(schema.linkAddresses.slug, slug),
           isNull(schema.linkAddresses.retiredAt),
+          // Suspension is enforced here and nowhere else (#67). Every
+          // republish runs through this function, so a suspended link stays
+          // dark through any later edit, rename, or alias change. A check in
+          // the suspend route alone would be undone by the next save.
+          isNull(schema.links.suspendedAt),
           hostname === null
             ? isNull(schema.linkAddresses.domainId)
             : eq(schema.domains.hostname, hostname),
