@@ -230,3 +230,19 @@ test("three links is the ceiling without an account", async ({ page }) => {
   await expect(page.getByRole("link", { name: "Your short link" })).toHaveCount(3);
   await expect(page.getByRole("button", { name: "Shorten it" })).toBeDisabled();
 });
+
+test("each stacked link can still download its own QR", async ({ page }) => {
+  // The download buttons sit under the link rather than under the code, so
+  // this checks the move did not detach them from the QR they belong to.
+  const destination = `https://example.com/qr-dl-${Date.now()}`;
+  const shortUrl = await shorten(page, destination);
+  const slug = shortUrl.split("/").pop()!;
+
+  const download = await Promise.all([
+    page.waitForEvent("download"),
+    page.getByRole("button", { name: /PNG/ }).first().click(),
+  ]).then(([event]) => event);
+
+  expect(await download.path()).toBeTruthy();
+  expect(download.suggestedFilename()).toContain(slug);
+});

@@ -23,8 +23,8 @@ test("generates a QR code with no account and no network call", async ({ page })
   await page.getByLabel("Link or text").fill("https://example.com/printed-poster");
 
   // A canvas or svg appears, and with it the download controls.
-  await expect(page.getByRole("button", { name: "PNG" })).toBeVisible({ timeout: 10_000 });
-  await expect(page.getByRole("button", { name: "SVG" })).toBeVisible();
+  await expect(page.getByRole("button", { name: /PNG/ })).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByRole("button", { name: /SVG/ })).toBeVisible();
 
   expect(posted.filter((url) => !url.includes("/api/cap/"))).toEqual([]);
 });
@@ -35,7 +35,7 @@ test("downloads a printable PNG", async ({ page }) => {
 
   const download = await Promise.all([
     page.waitForEvent("download"),
-    page.getByRole("button", { name: "PNG" }).click(),
+    page.getByRole("button", { name: /PNG/ }).click(),
   ]).then(([event]) => event);
 
   expect(await download.path()).toBeTruthy();

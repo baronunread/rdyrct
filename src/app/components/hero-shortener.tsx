@@ -38,7 +38,7 @@ import {
 } from "../lib/anon-links";
 import { shortenAnonymously } from "../lib/shorten-anon";
 import { trackCta } from "../lib/track-cta";
-import { QRPreview } from "./qr";
+import { QRPreview, QrDownloadButtons } from "./qr";
 
 /** The server's own message when it sent one: it says what was wrong with
  * the address, which a generic fallback cannot. */
@@ -51,10 +51,12 @@ function shortenErrorMessage(error: unknown): string {
 function MadeLink({ link }: { link: StoredAnonLink }) {
   const toast = useToast();
   return (
-    // Centred, not top-aligned: the QR column is the taller of the two, and
-    // aligning to the top leaves the link floating above a block of dead
-    // space on every row.
-    <div className="grid gap-3 border-t border-dashed border-border pt-3 sm:grid-cols-[1fr_auto] sm:items-center">
+    // Top-aligned, and the two columns are built to end at roughly the same
+    // line so there is nothing to align around. The download buttons sit
+    // under the link rather than under the code: attached to the QR they
+    // made that column more than twice the height of this one, and the hole
+    // left beside it wanted filler nobody needed.
+    <div className="grid gap-3 border-t border-dashed border-border pt-3 sm:grid-cols-[1fr_auto] sm:items-start">
       <div className="flex min-w-0 flex-col gap-1.5">
         <div className="flex min-w-0 items-center gap-2 rounded-lg bg-surface-2 px-3 py-2.5">
           <a
@@ -73,12 +75,10 @@ function MadeLink({ link }: { link: StoredAnonLink }) {
           />
         </div>
         <p className="truncate text-2xs text-muted">from {link.source}</p>
+        <QrDownloadButtons url={link.url} name={`qr-${link.slug}`} className="mt-0.5" />
       </div>
-      {/* 112px is not arbitrary: it is about the width of the PNG/SVG pair
-          underneath, so the QR reads as the thing those buttons belong to
-          rather than a thumbnail with oversized controls. */}
       <div className="justify-self-center sm:justify-self-auto">
-        <QRPreview url={link.url} size={112} downloadName={`qr-${link.slug}`} />
+        <QRPreview url={link.url} size={104} />
       </div>
     </div>
   );
