@@ -3,6 +3,7 @@ import QRCodeStyling, { type CornerSquareType, type CornerDotType } from "qr-cod
 import { Button } from "../ui/button";
 import { Download } from "lucide-react";
 import { hasTransparency, resolveLook, type QrLook } from "../lib/qr-look";
+import { cn } from "../ui/cn";
 import posthog from "../lib/posthog";
 
 function looksOptions(look: QrLook) {
@@ -25,6 +26,50 @@ function looksOptions(look: QrLook) {
  * about 17mm wide at print resolution, which is unusable on anything
  * physical. SVG is vector and would scale either way. */
 const DOWNLOAD_SIZE = 1024;
+
+/**
+ * PNG and SVG download controls for a QR.
+ *
+ * Its own component so a caller can put them somewhere other than directly
+ * under the code. The hero's link stack does exactly that: the QR column
+ * with buttons attached is more than twice the height of the link beside it,
+ * which leaves a hole no content wants to fill.
+ *
+ * Exported from a throwaway instance at DOWNLOAD_SIZE, not from whatever is
+ * on screen: qr-code-styling rasterizes to a canvas at its own width and
+ * height, so downloading from a 104px preview yields a 104px file.
+ */
+export function QrDownloadButtons({
+  url,
+  name,
+  look,
+  className,
+}: {
+  url: string;
+  name: string;
+  /** Omitted means the built-in defaults, which is what an unstyled QR uses. */
+  look?: QrLook;
+  className?: string;
+}) {
+  const resolved = look ?? resolveLook({});
+  const download = async (extension: "png" | "svg") => {
+    await makeQR(url, DOWNLOAD_SIZE, resolved).download({ name, extension });
+    posthog.capture("qr_code_downloaded", { format: extension });
+  };
+  return (
+    <div className={cn("flex gap-2", className)}>
+      {/* Named in full for assistive tech: these can sit beside a link
+          rather than under the code, where "PNG" alone says nothing about
+          what is being downloaded. */}
+      <Button size="sm" aria-label="Download QR code as PNG" onClick={() => void download("png")}>
+        <Download size={13} /> PNG
+      </Button>
+      <Button size="sm" aria-label="Download QR code as SVG" onClick={() => void download("svg")}>
+        <Download size={13} /> SVG
+      </Button>
+    </div>
+  );
+}
 
 // qr-code-styling takes margin in pixels, so a fixed value would shrink the
 // quiet zone to nothing relative to a 1024px code. Held as a ratio of the
@@ -108,17 +153,6 @@ export function QRPreview({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [url, size, look.dot, look.corner, look.ink, look.eye, look.bg, look.logo, look.logoSize]);
 
-  const download = async (extension: "png" | "svg") => {
-    // Exported from a throwaway instance at DOWNLOAD_SIZE, not from the one
-    // on screen: qr-code-styling rasterizes to a canvas at its own
-    // width/height, so downloading from the preview inherits the preview's
-    // pixel size. Resizing the visible instance instead would work but makes
-    // it jump mid-download.
-    const full = makeQR(url, DOWNLOAD_SIZE, look);
-    await full.download({ name: downloadName ?? "qr", extension });
-    posthog.capture("qr_code_downloaded", { format: extension });
-  };
-
   return (
     <div className="flex flex-col items-center gap-3">
       <div
@@ -136,14 +170,7 @@ export function QRPreview({
         }}
       />
       {downloadName !== undefined && (
-        <div className="flex gap-2">
-          <Button size="sm" onClick={() => void download("png")}>
-            <Download size={13} /> PNG
-          </Button>
-          <Button size="sm" onClick={() => void download("svg")}>
-            <Download size={13} /> SVG
-          </Button>
-        </div>
+        <QrDownloadButtons url={url} name={downloadName} look={look} />
       )}
     </div>
   );
