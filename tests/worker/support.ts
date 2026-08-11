@@ -368,3 +368,29 @@ export function batchOf<Body>(queueName: string, bodies: Body[], attempts = 1) {
   const ctx = createExecutionContext();
   return { batch, ctx };
 }
+
+/**
+ * Stub rate-limit bindings.
+ *
+ * Cloudflare's per-location counters do not reset between test cases, so a
+ * test that wants "this budget is gone" says so with a binding rather than by
+ * spending a real one.
+ */
+export function exhaustedLimit(): RateLimit {
+  return { limit: async () => ({ success: false }) } as unknown as RateLimit;
+}
+
+/** Always allows, isolating which of several budgets is under test. */
+export function openLimit(): RateLimit {
+  return { limit: async () => ({ success: true }) } as unknown as RateLimit;
+}
+
+/** Allows, and records the key each call was counted against. */
+export function recordingLimit(keys: string[]): RateLimit {
+  return {
+    limit: async ({ key }: { key: string }) => {
+      keys.push(key);
+      return { success: true };
+    },
+  } as unknown as RateLimit;
+}
