@@ -184,3 +184,49 @@ test("shortening again keeps the first link and stacks the new one on top", asyn
   await expect(page.getByRole("link", { name: "Keep them" })).toHaveCount(1);
   await expect(page.getByText(/These 2 links work for 24 hours/)).toBeVisible();
 });
+
+test("links survive a reload, so leaving the page does not lose them", async ({ page }) => {
+  const destination = `https://example.com/reload-${Date.now()}`;
+  const shortUrl = await shorten(page, destination);
+
+  await page.reload();
+
+  // Same link, same place, still with the address it came from.
+  const restored = page.getByRole("link", { name: "Your short link" }).first();
+  await expect(restored).toBeVisible({ timeout: 15_000 });
+  expect(await restored.getAttribute("href")).toBe(shortUrl);
+  await expect(page.getByText(`from ${destination}`)).toBeVisible();
+
+  // And it is still claimable: the token came back with it, not just the URL.
+  await signUpAndVerify(page, `reload-${Date.now()}@gmail.com`, password);
+  await createOrg(page, "Reload Org");
+  const rows = await queryRows<{ n: number }>(
+    page,
+    "select count(*) as n from links where slug = ?",
+    [shortUrl.split("/").pop()!],
+  );
+  expect(Number(rows[0].n)).toBe(1);
+});
+
+test("three links is the ceiling without an account", async ({ page }) => {
+  await page.goto("/");
+  const field = page.getByLabel("Try it without an account");
+  const button = page.getByRole("button", { name: "Shorten it" });
+
+  for (let i = 0; i < 3; i++) {
+    await field.fill(`https://example.com/cap-${Date.now()}-${i}`);
+    await button.click();
+    await expect(page.getByRole("link", { name: "Your short link" })).toHaveCount(i + 1, {
+      timeout: 20_000,
+    });
+  }
+
+  // The button goes dead and says why, rather than failing on submit.
+  await expect(button).toBeDisabled();
+  await expect(page.getByText(/most this browser can make without an account/i)).toBeVisible();
+
+  // The ceiling holds across a reload: it is stored, not just in memory.
+  await page.reload();
+  await expect(page.getByRole("link", { name: "Your short link" })).toHaveCount(3);
+  await expect(page.getByRole("button", { name: "Shorten it" })).toBeDisabled();
+});

@@ -21,7 +21,7 @@ import { useToast } from "../ui/toast";
 import { copyToClipboard } from "../lib/clipboard";
 import { ApiError } from "../lib/api";
 import { useCap } from "../lib/cap";
-import { rememberClaim } from "../lib/anon-claim";
+import { MAX_ANON_LINKS, rememberAnonLink, storedAnonLinks } from "../lib/anon-links";
 import { shortenAnonymously, type AnonLink } from "../lib/shorten-anon";
 import { trackCta } from "../lib/track-cta";
 import { QRPreview } from "../components/qr";
@@ -83,12 +83,30 @@ function TrackedPanel({ tracked }: { tracked: AnonLink }) {
 function UntrackedPanel({
   busy,
   disabled,
+  atCap,
   onTrack,
 }: {
   busy: boolean;
   disabled: boolean;
+  /** The same three-link ceiling the hero has: both go through the one
+   * anonymous shortener, so one browser cannot get six by using both. */
+  atCap: boolean;
   onTrack: () => void;
 }) {
+  if (atCap)
+    return (
+      <div className="flex flex-col gap-2 rounded-lg border border-dashed border-border p-3">
+        <p className="text-xs text-muted">
+          This browser has already made {MAX_ANON_LINKS} links without an account. Sign up to make
+          more, and to keep the ones you have.
+        </p>
+        <Link to="/signup" onClick={() => trackCta("qr_page_claim")} className="self-start">
+          <Button variant="outline" size="sm">
+            Sign up <ArrowRight size={14} />
+          </Button>
+        </Link>
+      </div>
+    );
   return (
     <div className="flex flex-col gap-2 rounded-lg border border-dashed border-border p-3">
       <p className="text-xs text-muted">
@@ -124,7 +142,7 @@ export function QrGeneratorPage() {
     setBusy(true);
     try {
       const result = await shortenAnonymously(value, cap.headers);
-      rememberClaim(result.claimToken);
+      rememberAnonLink(result, value.trim());
       setTracked(result);
       trackCta("qr_page_trackable");
     } catch (error) {
@@ -170,7 +188,12 @@ export function QrGeneratorPage() {
             {tracked ? (
               <TrackedPanel tracked={tracked} />
             ) : (
-              <UntrackedPanel busy={busy} disabled={!value.trim()} onTrack={makeTrackable} />
+              <UntrackedPanel
+                busy={busy}
+                disabled={!value.trim()}
+                atCap={storedAnonLinks().length >= MAX_ANON_LINKS}
+                onTrack={makeTrackable}
+              />
             )}
 
             <p className="flex items-center gap-1.5 text-xs text-muted">

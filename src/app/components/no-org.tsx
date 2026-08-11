@@ -2,7 +2,7 @@ import { useCallback } from "react";
 import { useForm } from "react-hook-form";
 import { valibotResolver } from "@hookform/resolvers/valibot";
 import { useQueryClient } from "@tanstack/react-query";
-import { claimPendingLinks } from "../lib/anon-claim";
+import { claimPendingLinks } from "../lib/anon-links";
 import { api } from "../lib/api";
 import posthog from "../lib/posthog";
 import { FUNNEL } from "../lib/funnel";

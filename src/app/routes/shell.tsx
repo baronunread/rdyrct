@@ -9,7 +9,7 @@ import { Sun, Moon, Menu as MenuIcon, X } from "lucide";
 import { MorphIcon } from "morphicons/react";
 import { useCurrentUser, useLogout } from "../lib/hooks";
 import { useCurrentOrg } from "../lib/current-org";
-import { claimPendingLinks } from "../lib/anon-claim";
+import { claimPendingLinks } from "../lib/anon-links";
 import { api, ApiError } from "../lib/api";
 import { useTheme } from "../lib/theme";
 import { useToast } from "../ui/toast";

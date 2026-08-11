@@ -30,14 +30,15 @@ import { useToast } from "../ui/toast";
 import { copyToClipboard } from "../lib/clipboard";
 import { ApiError } from "../lib/api";
 import { useCap } from "../lib/cap";
-import { rememberClaim } from "../lib/anon-claim";
-import { shortenAnonymously, type AnonLink } from "../lib/shorten-anon";
+import {
+  MAX_ANON_LINKS,
+  rememberAnonLink,
+  storedAnonLinks,
+  type StoredAnonLink,
+} from "../lib/anon-links";
+import { shortenAnonymously } from "../lib/shorten-anon";
 import { trackCta } from "../lib/track-cta";
 import { QRPreview } from "./qr";
-
-/** A link and the address it was made from, which stops being obvious once
- * there are several on screen. */
-type Made = AnonLink & { source: string };
 
 /** The server's own message when it sent one: it says what was wrong with
  * the address, which a generic fallback cannot. */
@@ -47,7 +48,7 @@ function shortenErrorMessage(error: unknown): string {
 
 /** One made link: the URL in the wide column because that is what gets
  * copied, the QR beside it at a size a phone can actually read. */
-function MadeLink({ link }: { link: Made }) {
+function MadeLink({ link }: { link: StoredAnonLink }) {
   const toast = useToast();
   return (
     // Centred, not top-aligned: the QR column is the taller of the two, and
@@ -115,24 +116,47 @@ function KeepThemFooter({ count }: { count: number }) {
   );
 }
 
+/** The stack, or the reassurance that stands in for it before there is one. */
+function MadeLinks({ made }: { made: StoredAnonLink[] }) {
+  if (made.length === 0)
+    return (
+      <p className="text-xs text-muted">
+        No account, no email. Links last 24 hours, and you can keep them later.
+      </p>
+    );
+  return (
+    <>
+      {made.map((link) => (
+        <MadeLink key={link.slug} link={link} />
+      ))}
+      <KeepThemFooter count={made.length} />
+    </>
+  );
+}
+
 export function HeroShortener() {
   const toast = useToast();
   const cap = useCap("anon-link");
   const [destination, setDestination] = useState("");
   const [busy, setBusy] = useState(false);
-  const [made, setMade] = useState<Made[]>([]);
+  // Seeded from storage, so a reload keeps what this browser already made
+  // rather than presenting an empty form to somebody who has three links.
+  const [made, setMade] = useState<StoredAnonLink[]>(storedAnonLinks);
+  const atCap = made.length >= MAX_ANON_LINKS;
+  // One reason the button is dead, so the guard and the disabled state can
+  // never disagree about it.
+  const canSubmit = destination.trim() !== "" && !busy && !atCap;
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (!destination.trim() || busy) return;
+    if (!canSubmit) return;
     setBusy(true);
     try {
       const link = await shortenAnonymously(destination, cap.headers);
-      // Written down before anything is rendered: a visitor who signs up in
-      // another tab must still be able to claim it.
-      rememberClaim(link.claimToken);
-      // Newest first, so the result lands where the eye already is.
-      setMade((previous) => [{ ...link, source: destination.trim() }, ...previous]);
+      // Stored before anything is rendered, and the store decides what the
+      // list now is: a visitor who signs up in another tab must still be
+      // able to claim it, and the cap is enforced in one place.
+      setMade(rememberAnonLink(link, destination.trim()));
       trackCta("hero_shortener");
     } catch (error) {
       toast(shortenErrorMessage(error), "error");
@@ -169,23 +193,20 @@ export function HeroShortener() {
           onChange={(e) => setDestination(e.target.value)}
           className="flex-1"
         />
-        <Button variant="primary" type="submit" disabled={busy} className="sm:w-36">
+        <Button variant="primary" type="submit" disabled={!canSubmit} className="sm:w-36">
           <BusyContent busy={busy}>Shorten it</BusyContent>
         </Button>
       </div>
 
-      {made.length === 0 ? (
+      {/* Says why the button is dead, rather than leaving somebody to work
+          it out. The footer below already carries the way forward. */}
+      {atCap && (
         <p className="text-xs text-muted">
-          No account, no email. Links last 24 hours, and you can keep them later.
+          That is {MAX_ANON_LINKS} links, the most this browser can make without an account.
         </p>
-      ) : (
-        <>
-          {made.map((link) => (
-            <MadeLink key={link.slug} link={link} />
-          ))}
-          <KeepThemFooter count={made.length} />
-        </>
       )}
+
+      <MadeLinks made={made} />
     </form>
   );
 }
