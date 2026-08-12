@@ -60,16 +60,28 @@ test("downloads a printable PNG", async ({ page }) => {
   expect(await (await downloadCode(page, "PNG")).path()).toBeTruthy();
 });
 
-test("turning the code into a trackable link needs no account either", async ({ page }) => {
+test("the upsell offers the account rather than making a link", async ({ page }) => {
+  // The offer used to be a button that quietly posted to the anonymous
+  // shortener, on a page whose claim is that nothing you type leaves the
+  // browser. Now it points at the account, and the page still makes no
+  // request of its own with a code on screen and the offer read.
+  const posted = watchPosts(page);
+
   await page.goto("/qr-code-generator");
   await page.getByLabel("Link or text").fill("https://example.com/trackable");
+  await expect(page.getByRole("button", { name: /SVG/ })).toBeVisible({ timeout: 10_000 });
 
-  await page.getByRole("button", { name: "Give it a short link" }).click();
-  await expect(page.getByText(/counts scans/i)).toBeVisible({ timeout: 25_000 });
+  const upsell = page.getByRole("heading", { name: "This code cannot be tracked" });
+  await expect(upsell).toBeVisible();
+  await expect(page.getByRole("link", { name: "See Hobby and Pro" })).toHaveAttribute(
+    "href",
+    "/#pricing",
+  );
 
-  // The code now encodes the short link, not the original address, which is
-  // the whole point: a scan has to pass through us to be counted.
-  await expect(page.getByRole("button", { name: "Keep this code" })).toBeVisible();
+  expect(appPosts(posted)).toEqual([]);
+
+  await page.getByRole("link", { name: "Start free" }).click();
+  await expect(page).toHaveURL(/\/signup$/);
 });
 
 test("the page is reachable from the footer of the landing page", async ({ page }) => {

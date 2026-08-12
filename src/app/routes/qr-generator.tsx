@@ -12,23 +12,15 @@
  * nothing, because none of it runs on a server: what rdyrct sells is what a
  * printed square cannot do on its own, which is tell you it was scanned.
  *
- * The upsell is honest and specific rather than a wall: turning the code
- * into a short link is what makes it measurable, and that path runs through
- * the same anonymous shortener the hero uses, so it stays free to try.
+ * The page makes no request of its own. The upsell is a plain offer at the
+ * end rather than a button that quietly posts somewhere, which is the only
+ * version of it that agrees with what the page says about itself.
  */
 import { useState } from "react";
 import { Link } from "react-router";
-import { ArrowRight, Check, ChevronDown, ShieldCheck } from "lucide-react";
+import { ArrowRight, ChevronDown, ShieldCheck } from "lucide-react";
 import { Button } from "../ui/button";
 import { Input } from "../ui/field";
-import { CopyButton } from "../ui/copy-button";
-import { BusyContent } from "../ui/spinner";
-import { useToast } from "../ui/toast";
-import { copyToClipboard } from "../lib/clipboard";
-import { ApiError } from "../lib/api";
-import { useCap } from "../lib/cap";
-import { MAX_ANON_LINKS, rememberAnonLink, storedAnonLinks } from "../lib/anon-links";
-import { shortenAnonymously, type AnonLink } from "../lib/shorten-anon";
 import { trackCta } from "../lib/track-cta";
 import { QRPreview } from "../components/qr";
 import { QrColorAndLogoFields, QrShapeFields } from "../components/qr-fields";
@@ -38,12 +30,6 @@ import { FaqJsonLd } from "../components/faq-json-ld";
 import { useAudience } from "../lib/audience";
 import { LandingHeader } from "../components/landing-header";
 import { Footer } from "../ui/footer";
-
-/** The server's own message when it sent one: it names what was wrong with
- * the address, which a generic fallback cannot. */
-function trackErrorMessage(error: unknown): string {
-  return error instanceof ApiError ? error.message : "Could not make that link trackable";
-}
 
 const EMPTY_QR: QrValues = {
   qrStyle: "",
@@ -70,85 +56,15 @@ function CodePanel({ encoded, values }: { encoded: string; values: QrValues }) {
   );
 }
 
-/** Shown once the code points at a short link that counts scans. */
-function TrackedPanel({ tracked }: { tracked: AnonLink }) {
-  const toast = useToast();
-  return (
-    <div className="flex max-w-md flex-col gap-2 rounded-lg bg-surface-2 p-3">
-      <div className="flex items-center gap-2 text-xs text-accent-2">
-        <Check size={14} /> This code now points at a link that counts scans
-      </div>
-      <div className="flex min-w-0 items-center gap-2">
-        <span className="min-w-0 flex-1 truncate font-mono text-sm font-bold">
-          {tracked.url.replace(/^https?:\/\//, "")}
-        </span>
-        <CopyButton
-          text={tracked.url}
-          label={`Copy ${tracked.url}`}
-          onCopy={(text) => copyToClipboard(text, toast)}
-        />
-      </div>
-      <p className="text-xs text-muted">
-        Free for 24 hours. Sign up and it is yours for good, with the scans it collects.
-      </p>
-      <Link to="/signup" onClick={() => trackCta("qr_page_claim")}>
-        <Button variant="primary" size="sm">
-          Keep this code <ArrowRight size={14} />
-        </Button>
-      </Link>
-    </div>
-  );
-}
-
-/** The offer, before anyone has taken it. */
-function UntrackedPanel({
-  busy,
-  disabled,
-  atCap,
-  onTrack,
-}: {
-  busy: boolean;
-  disabled: boolean;
-  /** The same three-link ceiling the hero has: both go through the one
-   * anonymous shortener, so one browser cannot get six by using both. */
-  atCap: boolean;
-  onTrack: () => void;
-}) {
-  if (atCap)
-    return (
-      <p className="text-sm text-muted">
-        This browser has already made {MAX_ANON_LINKS} links without an account.{" "}
-        <Link to="/signup" onClick={() => trackCta("qr_page_claim")} className="text-accent">
-          Sign up
-        </Link>{" "}
-        to make more, and to keep the ones you have.
-      </p>
-    );
-  return (
-    <Button variant="outline" disabled={busy || disabled} onClick={onTrack} className="self-start">
-      <BusyContent busy={busy}>Give it a short link</BusyContent>
-    </Button>
-  );
-}
-
 /**
- * The upsell, kept out of the form.
+ * The upsell, kept out of the form and off the network.
  *
- * It used to sit under the input as a dashed box with its own paragraph and
- * button, in the middle of the controls that draw the code. That made the
- * thing somebody came here to use read like a step in a sales pitch. The form
- * does one job now, and the offer comes after it.
+ * It used to sit under the input as a dashed box with a button that made an
+ * anonymous short link, which put a POST in the middle of a page whose whole
+ * claim is that nothing you type leaves the browser. It is a plain offer now:
+ * the account is what tracks links, so the offer is the account.
  */
-function TrackingSection({
-  tracked,
-  ...offer
-}: {
-  tracked: AnonLink | null;
-  busy: boolean;
-  disabled: boolean;
-  atCap: boolean;
-  onTrack: () => void;
-}) {
+function TrackingSection() {
   return (
     <section className="flex w-full max-w-3xl flex-col gap-3 rounded-2xl border border-dashed border-border p-6 sm:p-8">
       <h2 className="text-lg font-bold">This code cannot be tracked</h2>
@@ -157,7 +73,20 @@ function TrackingSection({
         is when you either boot up an analytics stack and parse UTM parameters yourself, or you can
         just use rdyrct. Start with free and upgrade anytime.
       </p>
-      {tracked ? <TrackedPanel tracked={tracked} /> : <UntrackedPanel {...offer} />}
+      <div className="flex flex-wrap items-center gap-4 pt-1">
+        <Link to="/signup" onClick={() => trackCta("qr_page_signup")}>
+          <Button variant="primary">
+            Start free <ArrowRight size={14} />
+          </Button>
+        </Link>
+        <Link
+          to="/#pricing"
+          onClick={() => trackCta("qr_page_pricing")}
+          className="text-sm text-accent hover:underline"
+        >
+          See Hobby and Pro
+        </Link>
+      </div>
     </section>
   );
 }
@@ -286,34 +215,13 @@ export function QrGeneratorPage() {
   // dashboard they were already entitled to.
   const { authed } = useAudience();
   useSeo("/qr-code-generator");
-  const toast = useToast();
-  const cap = useCap("anon-link");
   const [value, setValue] = useState("");
   const [values, setValues] = useState<QrValues>(EMPTY_QR);
-  const [tracked, setTracked] = useState<AnonLink | null>(null);
-  const [busy, setBusy] = useState(false);
 
   const setField = <K extends keyof QrValues>(key: K, next: QrValues[K]) =>
     setValues((current) => ({ ...current, [key]: next }));
 
-  // Everything after this point encodes one string: either what they typed,
-  // or the short link they turned it into.
-  const encoded = tracked?.url ?? value.trim();
-
-  const makeTrackable = async () => {
-    if (!value.trim() || busy) return;
-    setBusy(true);
-    try {
-      const result = await shortenAnonymously(value, cap.guarded);
-      rememberAnonLink(result, value.trim());
-      setTracked(result);
-      trackCta("qr_page_trackable");
-    } catch (error) {
-      toast(trackErrorMessage(error), "error");
-    } finally {
-      setBusy(false);
-    }
-  };
+  const encoded = value.trim();
 
   return (
     <div className="relative mx-auto min-h-dvh max-w-5xl px-6">
@@ -339,12 +247,7 @@ export function QrGeneratorPage() {
             <Input
               id="qr-value"
               value={value}
-              onChange={(e) => {
-                setValue(e.target.value);
-                // A new value makes the old short link the wrong answer.
-                setTracked(null);
-              }}
-              onInput={cap.prime}
+              onChange={(e) => setValue(e.target.value)}
               placeholder="https://example.com/spring-sale"
               autoComplete="off"
             />
@@ -372,13 +275,7 @@ export function QrGeneratorPage() {
           </p>
         </div>
 
-        <TrackingSection
-          tracked={tracked}
-          busy={busy}
-          disabled={!value.trim()}
-          atCap={storedAnonLinks().length >= MAX_ANON_LINKS}
-          onTrack={makeTrackable}
-        />
+        <TrackingSection />
 
         <QrFaq />
 
