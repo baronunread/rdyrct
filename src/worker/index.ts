@@ -17,6 +17,7 @@ import { capRoutes } from "./routes/cap";
 import { sweepLinkRisk } from "./risk";
 import { resolveSlug, resolveDomain, type KVLink } from "./kv";
 import { RESERVED_SLUGS } from "./util";
+import { withPageMeta } from "./page-meta";
 import { enforcePublicAuthRateLimit, enforceSignedApiRateLimit } from "./rate-limit";
 import { applySecurityHeaders, isBlogPath } from "./security-headers";
 import { drizzle } from "drizzle-orm/d1";
@@ -196,7 +197,15 @@ app.get("/:slug", async (c, next) => {
 
 /* ---------------- SPA fallback ---------------- */
 
-app.all("*", (c) => c.env.ASSETS.fetch(c.req.raw));
+app.all("*", async (c) => {
+  const response = await c.env.ASSETS.fetch(c.req.raw);
+  // The SPA is one document for every route, so the head it ships describes
+  // the landing page. Public pages get their own title, description and
+  // canonical written in before the bytes leave (#96): a crawler or a link
+  // preview reads those, and most of them never run the JavaScript that
+  // would otherwise set them.
+  return withPageMeta(response, new URL(c.req.url));
+});
 
 /* ---------------- Queue consumer: KV/R2 follow-up work + click ingestion ---------------- */
 
