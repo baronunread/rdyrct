@@ -27,9 +27,11 @@ import {
   useReducedMotion,
   type Variants,
 } from "motion/react";
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { useCurrentUser } from "../lib/hooks";
-import { readAuthHint } from "../lib/auth-hint";
+import { useSeo } from "../lib/seo";
+import { FaqJsonLd } from "../components/faq-json-ld";
+import { useAudience } from "../lib/audience";
 import posthog from "../lib/posthog";
 import { FUNNEL, landingContext } from "../lib/funnel";
 import { trackCta } from "../lib/track-cta";
@@ -159,6 +161,14 @@ const faqs = [
     a: "Yes. Paid plans include custom domains with automatic TLS through Cloudflare for SaaS: point your DNS at us and short links go live under your brand.",
   },
   {
+    q: "Is this a free URL shortener?",
+    a: `Yes. The free plan is a working link shortener: ${PLAN_LIMITS.free.links} short links, click tracking, and a free QR code generator, with no card and no trial clock. Paid plans add branded short links on your own domain, custom slugs, and longer analytics history.`,
+  },
+  {
+    q: "Can I make a QR code with my logo?",
+    a: "Yes. The QR code generator is free and needs no account: pick the dot and corner style, set the colors, drop in a logo, and download a PNG or an SVG. Codes made on a paid plan point at a trackable short link, so you can see how many scans a poster, flyer or packaging insert actually produced.",
+  },
+  {
     q: "Can I self-host instead?",
     a: "Yes. rdyrct is open source and deploys to your own Cloudflare account. You get everything Pro has, minus direct email support.",
   },
@@ -190,21 +200,6 @@ function Section({
       {children}
     </m.section>
   );
-}
-
-/** FAQPage structured data, generated from the same `faqs` the page renders. */
-function FaqJsonLd() {
-  const json = JSON.stringify({
-    "@context": "https://schema.org",
-    "@type": "FAQPage",
-    mainEntity: faqs.map(({ q, a }) => ({
-      "@type": "Question",
-      name: q,
-      acceptedAnswer: { "@type": "Answer", text: a },
-    })),
-    // "</script>" inside a value would end the tag early; escape every "<"
-  }).replace(/</g, "\\u003c");
-  return <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: json }} />;
 }
 
 type Tier = "free" | "hobby" | "pro";
@@ -1069,26 +1064,13 @@ function FinalCtaSection({ ctaTo, ctaLabel }: { ctaTo: string; ctaLabel: string 
   );
 }
 
-/**
- * Whether to draw this page for a stranger or a customer, and what the top
- * call to action should say.
- *
- * While the /user query is in flight it falls back to the last known auth
- * state, so a signed-in visitor does not see "Sign up" flash before the
- * header settles. Snapshotted once: mid-visit flips come from the query.
- */
-function useAudience() {
-  const me = useCurrentUser();
-  const [authHint] = useState(readAuthHint);
-  const authed = me.isPending ? authHint : !!me.data;
-  const cta = authed
-    ? { ctaTo: "/dashboard", ctaLabel: "Open dashboard" }
-    : { ctaTo: "/signup", ctaLabel: "Get started free" };
-  return { authed, name: me.data?.user.name ?? "", ...cta };
-}
-
 export function LandingPage() {
   const { authed, name, ctaTo, ctaLabel } = useAudience();
+
+  // The words people type when they are looking for this, in the title and
+  // the description a result actually shows: "url shortener" and "qr code
+  // generator" rather than only the brand and the tagline.
+  useSeo("/");
 
   // Step 1 of the funnel (#64). Once per mount, not per render, and not
   // gated on `me` settling: a landing view is a view whether or not the
@@ -1101,7 +1083,7 @@ export function LandingPage() {
     <MotionConfig reducedMotion="user">
       <LazyMotion features={domAnimation}>
         <div className="relative mx-auto min-h-dvh max-w-5xl px-6">
-          <FaqJsonLd />
+          <FaqJsonLd faqs={faqs} />
           <style>{`@keyframes cursorBlink { 50% { opacity: 0; } }`}</style>
           {/* soft accent glow behind the hero */}
           <div
