@@ -35,6 +35,31 @@ describe("request body size limit (#19)", () => {
     expect(res.status).toBe(413);
   });
 
+  it("lets a QR logo through that is larger than the JSON ceiling", async () => {
+    // The bug this pins: /orgs/:orgId/qr-logo sits under the org router, so
+    // the org router's JSON limit (32 KB) ran first and answered "Request
+    // body too large" for a perfectly ordinary logo. A 512x512 WebP is
+    // routinely bigger than that, which made every logo upload fail.
+    const cookie = await freeOwnerCookie();
+    const ctx = createExecutionContext();
+    const webp = new Uint8Array(64 * 1024);
+    // A real RIFF/WEBP header, so the route gets past its own sniffing and
+    // the only thing under test is the size limit.
+    webp.set(new TextEncoder().encode("RIFF"), 0);
+    webp.set(new TextEncoder().encode("WEBP"), 8);
+    const res = await worker.fetch(
+      new Request("http://localhost/api/orgs/org-1/qr-logo", {
+        method: "POST",
+        headers: { cookie, "content-type": "image/webp" },
+        body: webp,
+      }),
+      authEnv(),
+      ctx,
+    );
+    await waitOnExecutionContext(ctx);
+    expect(res.status).not.toBe(413);
+  });
+
   it("rejects an oversized QR logo upload with 413", async () => {
     const cookie = await freeOwnerCookie();
     const ctx = createExecutionContext();
