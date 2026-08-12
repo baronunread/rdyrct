@@ -18,6 +18,10 @@
      ground it ever sits on, --surface-2. The old #6e6880 measured APCA 64
      there and WCAG 4.43, under AA. Now 75-87 / 6.57-7.87. */
   --muted: #544f61;
+  /* Placeholders, held at 3:1 on --bg (the input's own ground): visible, but
+     clearly not filled in. They used to ride on --muted, which was raised to
+     body-text legibility, so a hint sat at 7.17:1 and read as real text. */
+  --placeholder: #8d8993;
 
   --pink: #c2607f;
   --mint: #35875e;
@@ -46,6 +50,9 @@
      dark mode felt as hard to read as light. Raised to APCA 68-70, still a
      clear step below --text. */
   --muted: #c6c2d3;
+  /* 3.52:1 on --bg. Light-on-dark needs a touch more than the light theme's
+     3.12 to read as present at all at 14px. */
+  --placeholder: #6f6c79;
 
   --pink: #f5b8c8;
   --mint: #b9e6c9;
@@ -81,6 +88,7 @@
   --color-border: var(--border);
   --color-text: var(--text);
   --color-muted: var(--muted);
+  --color-placeholder: var(--placeholder);
   --color-accent: var(--accent);
   --color-accent-2: var(--accent-2);
   --color-pink: var(--pink);
