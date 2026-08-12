@@ -14,7 +14,7 @@ import { withErrorToast } from "../lib/mutation-toast";
 import { hostnameSchema } from "../lib/schemas";
 import { Badge, Card, PageHeader } from "../ui/misc";
 import { BusyContent } from "../ui/spinner";
-import { DomainsSkeleton } from "../components/skeletons";
+import { DomainsPageSkeleton, DomainsSkeleton } from "../components/skeletons";
 import { NoOrgState } from "../components/no-org";
 import { CopyButton } from "../ui/copy-button";
 import { useToast } from "../ui/toast";
@@ -49,7 +49,7 @@ export function DomainsPage() {
   const orgId = org?.id ?? "";
   const me = useCurrentUser();
 
-  if (me.isLoading) return <DomainsSkeleton />;
+  if (me.isLoading) return <DomainsPageSkeleton />;
   if (!org) return <NoOrgState />;
 
   const isAdmin = canManageDomains(!!me.data?.user.isAdmin, org.role);

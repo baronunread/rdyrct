@@ -1,3 +1,5 @@
+import type { ReactElement } from "react";
+import { useLocation } from "react-router";
 import { ChevronsUpDown, LogOut, Menu as MenuIcon } from "lucide-react";
 // MorphIcon animates between two icons, so it takes lucide icon nodes, not
 // the React components lucide-react exports.
@@ -11,16 +13,45 @@ import { Card } from "../ui/misc";
 import { Skeleton, SkeletonStatus, TableSkeleton } from "../ui/skeleton";
 
 /**
- * Page-level loading skeletons. Each mirrors its route's real layout so data
- * pops into place without a jump. The small blocks above stay private; routes
- * import the exported compositions.
+ * Page-level loading skeletons, one per route, used both as the lazy chunk's
+ * Suspense fallback and as the route's own loading state so a page shows one
+ * shape from first paint to content.
+ *
+ * The rule they follow: **draw only what the page is certain to render, in
+ * the order it renders it.** Anything conditional is left out. Content
+ * arriving below what is already on screen moves nothing, while a
+ * placeholder for something that never arrives moves everything above it
+ * when it disappears. Two of these used to guess: the dashboard drew stat
+ * cards and five list cards at an account whose first-run page is a header
+ * and one field, and analytics drew four bar lists where the real page puts
+ * a three-column breakdown.
  */
 
-function HeaderSkeleton() {
+/**
+ * Stands in for PageHeader, which every route opens with, so its height has
+ * to match exactly or the page below it moves on every route.
+ *
+ * Measured against the real thing on a populated account: the block is 52px
+ * tall, an h1 at text-lg (28px line box) over a `mt-1` sub at text-sm (20px),
+ * with `mb-6` under it. The bars are shorter than the text they replace, so
+ * each sits in a box of the line's height rather than setting it.
+ *
+ * `action` mirrors the controls a page hangs on the right: 36px for a button
+ * (Links, Members), 32px for the range picker and export pair (Analytics).
+ * Leaving it out was why a header looked half-finished until the page landed.
+ */
+function HeaderSkeleton({ action }: { action?: { w: string; h?: string } } = {}) {
   return (
-    <div className="mb-6">
-      <Skeleton className="h-5 w-40" />
-      <Skeleton className="mt-2 h-3 w-64 max-w-full" />
+    <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
+      <div>
+        <span className="flex h-7 items-center">
+          <Skeleton className="h-5 w-40" />
+        </span>
+        <span className="mt-1 flex h-5 items-center">
+          <Skeleton className="h-3 w-64 max-w-full" />
+        </span>
+      </div>
+      {action && <Skeleton className={cn("rounded-lg", action.h ?? "h-9", action.w)} />}
     </div>
   );
 }
@@ -35,9 +66,18 @@ function StatCardsSkeleton({
   return (
     <div className={cn("grid grid-cols-1 gap-4", gridClass)}>
       {Array.from({ length: count }, (_, i) => (
+        // 109 tall on a real page: the label line (17), the value (32) and
+        // the delta under it, inside p-4.
         <div key={i} className="rounded-lg bg-surface p-4 smooth-shadow-ring-xs">
-          <Skeleton className="h-2.5 w-16" />
-          <Skeleton className="mt-3 h-6 w-20" />
+          <span className="flex h-[17px] items-center">
+            <Skeleton className="h-2.5 w-16" />
+          </span>
+          <span className="mt-2 flex h-8 items-center">
+            <Skeleton className="h-6 w-20" />
+          </span>
+          <span className="mt-1 flex h-4 items-center">
+            <Skeleton className="h-2.5 w-12" />
+          </span>
         </div>
       ))}
     </div>
@@ -48,24 +88,24 @@ function ChartCardSkeleton() {
   return (
     <Card>
       <Skeleton className="mb-3 h-2.5 w-24" />
-      {/* same height as the real AreaChart, including its paddings */}
-      <Skeleton className="h-[180px] w-full" />
+      {/* the real AreaChart with its paddings: the card measures 241 */}
+      <Skeleton className="h-[187px] w-full" />
     </Card>
   );
 }
 
-const barListRows = [64, 42, 78, 55];
+const barListRows = [64, 42, 78, 55, 71, 38, 60, 47, 83, 51];
 
-function BarListCardSkeleton() {
+function BarListCardSkeleton({ rows = 4 }: { rows?: number }) {
   return (
     <Card>
       <Skeleton className="mb-4 h-2.5 w-20" />
-      <div className="flex flex-col gap-2.5">
-        {barListRows.map((w) => (
+      <div className="flex flex-col gap-3.5">
+        {barListRows.slice(0, rows).map((w) => (
           <div key={w}>
-            <div className="mb-1 flex items-baseline justify-between gap-3">
-              <Skeleton className="h-2.5" style={{ width: `${w}%` }} />
-              <Skeleton className="h-2.5 w-8 shrink-0" />
+            <div className="mb-2 flex items-baseline justify-between gap-3">
+              <Skeleton className="h-3" style={{ width: `${w}%` }} />
+              <Skeleton className="h-3 w-8 shrink-0" />
             </div>
             <Skeleton className="h-1.5 rounded-full" style={{ width: `${w}%` }} />
           </div>
@@ -75,7 +115,15 @@ function BarListCardSkeleton() {
   );
 }
 
-/** /dashboard: header, quick-create card, 3 stat cards, 2 feed cards, 3 list cards. */
+/**
+ * /dashboard, measured against a populated account: header (52), the
+ * create card (68), the three stat cards (109), the clicks-and-activity
+ * pair (245) and the three list cards (231).
+ *
+ * An account on its very first run has only the first two, so it watches the
+ * rest disappear once. Every visit after that, and every visit by everyone
+ * else, lands on the shape already drawn, which is the trade worth making.
+ */
 export function DashboardSkeleton() {
   return (
     <SkeletonStatus>
@@ -90,32 +138,65 @@ export function DashboardSkeleton() {
         <StatCardsSkeleton count={3} />
       </div>
       <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <BarListCardSkeleton />
-        <BarListCardSkeleton />
+        <BarListCardSkeleton rows={5} />
+        <BarListCardSkeleton rows={5} />
       </div>
       <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <BarListCardSkeleton />
-        <BarListCardSkeleton />
-        <BarListCardSkeleton />
+        <BarListCardSkeleton rows={5} />
+        <BarListCardSkeleton rows={5} />
+        <BarListCardSkeleton rows={5} />
       </div>
     </SkeletonStatus>
   );
 }
 
-/** /analytics: header, 3 stat cards, clicks chart, 2×2 ranked lists. */
+/**
+ * /analytics, block for block: the range picker and export pair in the
+ * header, three stat cards (109), the clicks chart (241), the UTM trio
+ * (231), top links (339), the country and referrer breakdown (765), dead
+ * and decaying links (169), and the heatmap (343).
+ *
+ * All of it renders for any organization with clicks, so drawing half the
+ * page (which is what four bar lists in a two-column grid amounted to) left
+ * the second half arriving as a jump.
+ */
 export function AnalyticsSkeleton() {
   return (
     <SkeletonStatus>
-      <HeaderSkeleton />
+      <HeaderSkeleton action={{ w: "w-72", h: "h-8" }} />
       <StatCardsSkeleton count={3} />
       <div className="mt-4">
         <ChartCardSkeleton />
       </div>
+      <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <BarListCardSkeleton rows={5} />
+        <BarListCardSkeleton rows={5} />
+        <BarListCardSkeleton rows={5} />
+      </div>
+      <div className="mt-4">
+        <BarListCardSkeleton rows={7} />
+      </div>
+      {/* countries (a map card, 411) over referrers and devices (339) */}
+      <div className="mt-4 flex flex-col gap-4">
+        <Card>
+          <Skeleton className="h-2.5 w-24" />
+          <Skeleton className="mt-4 h-[407px] w-full" />
+        </Card>
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+          <BarListCardSkeleton rows={7} />
+          <BarListCardSkeleton rows={7} />
+        </div>
+      </div>
       <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <BarListCardSkeleton />
-        <BarListCardSkeleton />
-        <BarListCardSkeleton />
-        <BarListCardSkeleton />
+        <BarListCardSkeleton rows={3} />
+        <BarListCardSkeleton rows={3} />
+      </div>
+      {/* the heatmap, 343 */}
+      <div className="mt-4">
+        <Card>
+          <Skeleton className="h-2.5 w-32" />
+          <Skeleton className="mt-4 h-[290px] w-full" />
+        </Card>
       </div>
     </SkeletonStatus>
   );
@@ -149,7 +230,7 @@ export function AdminTableSkeleton() {
 }
 
 /** Generic content placeholder for route guards (e.g. RequireAdmin). */
-export function PageSkeleton() {
+function PageSkeleton() {
   return (
     <div>
       <HeaderSkeleton />
@@ -296,21 +377,254 @@ export function AppShellSkeleton() {
 
       <main className="flex min-w-0 flex-1 flex-col px-5 py-8 pt-16 md:ml-60 md:px-8 md:pt-8">
         <div className="mx-auto w-full max-w-5xl flex-1">
-          {/* mirrors /dashboard, the default landing after login */}
-          <SkeletonStatus>
-            <HeaderSkeleton />
-            <Card>
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-                <Skeleton className="h-9 min-w-0 flex-1" />
-                <Skeleton className="h-9 sm:w-24" />
-              </div>
-            </Card>
-            <div className="mt-4">
-              <StatCardsSkeleton count={3} />
-            </div>
-          </SkeletonStatus>
+          {/* whichever page was asked for, not always the dashboard */}
+          <RouteSkeleton />
         </div>
       </main>
     </div>
   );
+}
+
+/**
+ * /links, measured: header with the count-and-button pair on the right (52),
+ * the search and domain-filter toolbar (36, `mb-4`), the table, and the
+ * pager under it (24, `mt-4`). The toolbar was missing, so the table used to
+ * arrive 36px lower than the skeleton had promised.
+ */
+function LinksSkeleton() {
+  return (
+    <div>
+      <HeaderSkeleton action={{ w: "w-60" }} />
+      <div className="mb-4 flex flex-wrap items-center gap-2">
+        <Skeleton className="h-9 w-full max-w-xs" />
+        <Skeleton className="h-9 w-32" />
+      </div>
+      <TableSkeleton rows={12} />
+      <div className="mt-4 flex justify-center">
+        <Skeleton className="h-6 w-48" />
+      </div>
+    </div>
+  );
+}
+
+/**
+ * /members: header with the invite button (52), the invite-by-email card
+ * (119), then the table. The card is the part that was missing.
+ */
+function MembersSkeleton() {
+  return (
+    <div>
+      <HeaderSkeleton action={{ w: "w-36" }} />
+      <Card className="mb-4">
+        <Skeleton className="h-2.5 w-28" />
+        {/* the label over the field, then the field and its button: 17 + 58
+            inside the card's padding is the 119 the real one measures */}
+        <div className="mt-4 flex flex-col gap-2">
+          <Skeleton className="h-2.5 w-12" />
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+            <Skeleton className="h-9 min-w-0 flex-1" />
+            <Skeleton className="h-9 sm:w-28" />
+          </div>
+        </div>
+      </Card>
+      <TableSkeleton rows={12} />
+    </div>
+  );
+}
+
+/**
+ * /domains: header, then the two columns the page splits into on a wide
+ * screen (the domains card and the how-it-works panel beside it).
+ */
+export function DomainsPageSkeleton() {
+  return (
+    <div>
+      <HeaderSkeleton />
+      <div className="flex flex-col gap-6 lg:flex-row">
+        <Card className="min-w-0 flex-1">
+          <Skeleton className="h-2.5 w-28" />
+          <Skeleton className="mt-3 h-3 w-64 max-w-full" />
+          <div className="mt-4 flex flex-col gap-3 sm:flex-row">
+            <Skeleton className="h-9 min-w-0 flex-1" />
+            <Skeleton className="h-9 sm:w-28" />
+          </div>
+          <div className="mt-4">
+            <DomainsSkeleton />
+          </div>
+          <Skeleton className="mt-4 h-3 w-48" />
+          <Skeleton className="mt-4 h-9 w-40" />
+        </Card>
+        {/* the how-it-works panel beside it, 197 tall: a label and four steps */}
+        <div className="lg:w-72">
+          <Skeleton className="h-2.5 w-24" />
+          <div className="mt-4 flex flex-col gap-4">
+            {[0, 1, 2, 3].map((i) => (
+              <div key={i} className="flex gap-3">
+                <Skeleton className="h-5 w-5 shrink-0 rounded-full" />
+                <Skeleton className="h-3 min-w-0 flex-1" />
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** /billing: header, the plan card, and the usage card beneath it. */
+function BillingSkeleton() {
+  return (
+    <SkeletonStatus>
+      <HeaderSkeleton />
+      {/* both cards are max-w-2xl on the real page: full-width placeholders
+          were a third too wide, and the swap moved every edge */}
+      <div className="flex flex-col gap-4">
+        <Card className="max-w-2xl">
+          <Skeleton className="h-2.5 w-12" />
+          <Skeleton className="mt-3 h-5 w-40" />
+          <Skeleton className="mt-3 h-3 w-72 max-w-full" />
+          <div className="mt-4 grid grid-cols-2 gap-3">
+            <Skeleton className="h-9" />
+            <Skeleton className="h-9" />
+          </div>
+        </Card>
+        <Card className="max-w-2xl">
+          <Skeleton className="h-2.5 w-28" />
+          <div className="mt-3 flex flex-col gap-1">
+            {[32, 36, 28, 30].map((w) => (
+              <span key={w} className="flex h-5 items-center">
+                <Skeleton className="h-3.5" style={{ width: `${w * 0.25}rem` }} />
+              </span>
+            ))}
+          </div>
+        </Card>
+      </div>
+    </SkeletonStatus>
+  );
+}
+
+/**
+ * /settings: header over the stack of cards (organization name, QR defaults,
+ * then the account and danger-zone blocks).
+ */
+function SettingsSkeleton() {
+  return (
+    <SkeletonStatus>
+      <HeaderSkeleton />
+      {/* the three cards, at the heights they measure: the name form (216),
+          the QR defaults with its preview (656), and the danger zone (270) */}
+      <div className="flex flex-col gap-4">
+        <Card className="max-w-2xl">
+          <Skeleton className="h-2.5 w-32" />
+          <div className="mt-5">
+            <Skeleton className="h-2.5 w-24" />
+            <Skeleton className="mt-2 h-9 w-full max-w-sm" />
+          </div>
+          <Skeleton className="mt-5 h-9 w-32" />
+          <Skeleton className="mt-5 h-3 w-56" />
+        </Card>
+        {/* QR defaults, 656: the label pair beside the 160x185 preview, then
+            the colour, background and logo fields full width under them, then
+            the save button. */}
+        <Card className="max-w-2xl">
+          {/* the card's own label (17) and its note (16) */}
+          <span className="flex h-[17px] items-center">
+            <Skeleton className="h-2.5 w-32" />
+          </span>
+          <span className="mt-1 flex h-4 items-center">
+            <Skeleton className="h-3 w-64 max-w-full" />
+          </span>
+          <div className="mt-5 flex flex-col gap-4 sm:flex-row">
+            <div className="flex min-w-0 flex-1 flex-col gap-3">
+              {[0, 1].map((i) => (
+                <div key={i}>
+                  <Skeleton className="h-2.5 w-20" />
+                  <Skeleton className="mt-2 h-9 w-full" />
+                </div>
+              ))}
+            </div>
+            <Skeleton className="h-[185px] w-full shrink-0 sm:w-40" />
+          </div>
+          <div className="mt-4 flex flex-col gap-4">
+            <div>
+              <Skeleton className="h-2.5 w-16" />
+              <Skeleton className="mt-2 h-9 w-full" />
+            </div>
+            <div>
+              <Skeleton className="h-2.5 w-24" />
+              <Skeleton className="mt-2 h-9 w-full" />
+              <Skeleton className="mt-2 h-4 w-40" />
+              <Skeleton className="mt-2 h-4 w-28" />
+            </div>
+            <div>
+              <Skeleton className="h-2.5 w-10" />
+              <Skeleton className="mt-2 h-9 w-full" />
+              <Skeleton className="mt-2 h-4 w-56" />
+              <Skeleton className="mt-2 h-4 w-44" />
+              <Skeleton className="mt-2 h-4 w-32" />
+            </div>
+          </div>
+          <Skeleton className="mt-5 h-9 w-full" />
+        </Card>
+        <Card className="max-w-2xl">
+          <Skeleton className="h-2.5 w-24" />
+          {[0, 1].map((i) => (
+            <div key={i} className="mt-6">
+              <Skeleton className="h-3 w-full max-w-md" />
+              <Skeleton className="mt-2 h-3 w-3/5" />
+              <Skeleton className="mt-4 h-9 w-40" />
+            </div>
+          ))}
+        </Card>
+      </div>
+    </SkeletonStatus>
+  );
+}
+
+/** /links/:slug: header, the clicks chart, and the addresses table. */
+function LinkDetailSkeleton() {
+  return (
+    <SkeletonStatus>
+      <HeaderSkeleton action={{ w: "w-40" }} />
+      <ChartCardSkeleton />
+      <div className="mt-4">
+        <TableSkeleton rows={3} />
+      </div>
+    </SkeletonStatus>
+  );
+}
+
+/**
+ * The skeleton a path stands behind.
+ *
+ * One map, because three different gates need the same answer: the shell
+ * while the user query resolves, the Suspense boundary while a route's chunk
+ * downloads, and the admin guard. They each used to answer with something
+ * generic, so a cold load of /links opened with a dashboard (a create field
+ * and three stat cards), then a table, then the page.
+ */
+const PAGE_SKELETONS: Record<string, () => ReactElement> = {
+  "/dashboard": DashboardSkeleton,
+  "/analytics": AnalyticsSkeleton,
+  "/links": LinksSkeleton,
+  "/members": MembersSkeleton,
+  "/domains": DomainsPageSkeleton,
+  "/billing": BillingSkeleton,
+  "/settings": SettingsSkeleton,
+  "/admin": AdminUsageSkeleton,
+};
+
+function skeletonFor(pathname: string): () => ReactElement {
+  // The two routes with something after the prefix: an admin tab is a table,
+  // and a single link is its own page.
+  if (pathname.startsWith("/admin/")) return AdminTableSkeleton;
+  if (pathname.startsWith("/links/")) return LinkDetailSkeleton;
+  return PAGE_SKELETONS[pathname] ?? PageSkeleton;
+}
+
+/** The same thing for callers that are inside the router and have no path in
+ * hand, which is all of them. */
+export function RouteSkeleton() {
+  const Page = skeletonFor(useLocation().pathname);
+  return <Page />;
 }
