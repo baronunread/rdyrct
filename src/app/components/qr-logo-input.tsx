@@ -9,15 +9,26 @@ import { uploadQrLogo } from "../lib/api";
 import { useCurrentOrg } from "../lib/current-org";
 import type { UserOrg } from "@/shared/types";
 
-/** A picked file can only upload when the input isn't gated, nothing's
- * already in flight, and the org (needed for the upload URL) is known. */
-function canUploadLogo(
-  file: File | undefined,
-  disabled: boolean | undefined,
-  busy: boolean,
-  org: UserOrg | null,
-): file is File {
-  return !!file && !disabled && !busy && !!org;
+/** Where a prepared logo ends up: an organization's bucket, or nowhere at
+ * all. The free generator has no organization, and a logo that never leaves
+ * the browser is the honest version of a tool that draws the code there too. */
+type LogoSink = { kind: "upload"; orgId: string } | { kind: "local" };
+
+/** Nothing to upload to and not staying local means the picker is not ready:
+ * the org query has not answered yet. */
+function logoSink(org: UserOrg | null, local: boolean | undefined): LogoSink | null {
+  if (local) return { kind: "local" };
+  return org ? { kind: "upload", orgId: org.id } : null;
+}
+
+/** The prepared file as a data URL. */
+function asDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(new Error("Could not read this image"));
+    reader.readAsDataURL(file);
+  });
 }
 
 /**
@@ -121,7 +132,7 @@ function QrLogoButtonContent({ busy, value }: { busy: boolean; value?: string })
     return (
       <>
         <Spinner />
-        <span>Preparing and uploading…</span>
+        <span>Preparing…</span>
       </>
     );
   }
@@ -179,6 +190,7 @@ export function QrLogoInput({
   onLoad,
   onClear,
   disabled,
+  local,
 }: {
   /** current logo URL ("" = none) — shows the loaded state */
   value?: string;
@@ -186,6 +198,8 @@ export function QrLogoInput({
   /** called when the user clicks the remove button inside the dropzone */
   onClear?: () => void;
   disabled?: boolean;
+  /** Keep the image in the browser as a data URL instead of uploading it. */
+  local?: boolean;
 }) {
   const toast = useToast();
   const { org } = useCurrentOrg();
@@ -193,8 +207,22 @@ export function QrLogoInput({
   const [dragging, setDragging] = useState(false);
   const [busy, setBusy] = useState(false);
 
+  const sink = logoSink(org, local);
+
+  /** Ready when there is a file, the picker is not gated, nothing is already
+   * in flight, and there is somewhere for the logo to go. */
+  const accepts = (file: File | undefined): file is File => !!file && !disabled && !busy && !!sink;
+
+  /** The prepared logo, wherever this picker sends it. */
+  const store = async (file: File): Promise<string> => {
+    const prepared = await prepareQrLogo(file);
+    return !sink || sink.kind === "local"
+      ? asDataUrl(prepared)
+      : uploadQrLogo(sink.orgId, prepared);
+  };
+
   const readFile = async (file: File | undefined) => {
-    if (!canUploadLogo(file, disabled, busy, org)) return;
+    if (!accepts(file)) return;
     // Dragged files bypass the input's accept filter, so check the type.
     if (!file.type.startsWith("image/")) {
       toast("Logo must be an image file", "error");
@@ -202,8 +230,7 @@ export function QrLogoInput({
     }
     setBusy(true);
     try {
-      // canUploadLogo already checked org is non-null.
-      onLoad(await uploadQrLogo(org!.id, await prepareQrLogo(file)));
+      onLoad(await store(file));
     } catch (e) {
       toast((e as Error).message, "error");
     } finally {

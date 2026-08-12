@@ -2,7 +2,8 @@ import { useEffect, useRef } from "react";
 import QRCodeStyling, { type CornerSquareType, type CornerDotType } from "qr-code-styling";
 import { Button } from "../ui/button";
 import { Download } from "lucide-react";
-import { hasTransparency, resolveLook, type QrLook } from "../lib/qr-look";
+import { hasTransparency, imageOptionsFor, resolveLook, type QrLook } from "../lib/qr-look";
+import { fillSeams } from "../lib/qr-seams";
 import { cn } from "../ui/cn";
 import posthog from "../lib/posthog";
 
@@ -94,7 +95,7 @@ const MARGIN_RATIO = 8 / 208;
 const PREVIEW_RENDER_SIZE = 1024;
 
 function makeQR(url: string, size: number, look: QrLook) {
-  return new QRCodeStyling({
+  const qr = new QRCodeStyling({
     width: size,
     height: size,
     type: "svg",
@@ -102,9 +103,13 @@ function makeQR(url: string, size: number, look: QrLook) {
     image: look.logo,
     margin: Math.round(size * MARGIN_RATIO),
     qrOptions: { errorCorrectionLevel: "H" },
-    imageOptions: { margin: 4, imageSize: look.logoSize },
+    imageOptions: imageOptionsFor(look),
     ...looksOptions(look),
   });
+  // Runs after every draw, on the same element the preview shows and the SVG
+  // download serializes, so neither can ship the seams.
+  qr.applyExtension(fillSeams);
+  return qr;
 }
 
 /**
@@ -166,7 +171,7 @@ export function QRPreview({
         margin: Math.round(PREVIEW_RENDER_SIZE * MARGIN_RATIO),
         data: url,
         image: look.logo,
-        imageOptions: { margin: 4, imageSize: look.logoSize },
+        imageOptions: imageOptionsFor(look),
         ...looksOptions(look),
       });
     }
