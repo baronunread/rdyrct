@@ -64,7 +64,7 @@ test("turning the code into a trackable link needs no account either", async ({ 
   await page.goto("/qr-code-generator");
   await page.getByLabel("Link or text").fill("https://example.com/trackable");
 
-  await page.getByRole("button", { name: "Count the scans" }).click();
+  await page.getByRole("button", { name: "Give it a short link" }).click();
   await expect(page.getByText(/counts scans/i)).toBeVisible({ timeout: 25_000 });
 
   // The code now encodes the short link, not the original address, which is

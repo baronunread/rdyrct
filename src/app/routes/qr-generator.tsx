@@ -126,7 +126,7 @@ function UntrackedPanel({
     );
   return (
     <Button variant="outline" disabled={busy || disabled} onClick={onTrack} className="self-start">
-      <BusyContent busy={busy}>Count the scans</BusyContent>
+      <BusyContent busy={busy}>Give it a short link</BusyContent>
     </Button>
   );
 }
@@ -151,10 +151,11 @@ function TrackingSection({
 }) {
   return (
     <section className="flex w-full max-w-3xl flex-col gap-3 rounded-2xl border border-dashed border-border p-6 sm:p-8">
-      <h2 className="text-lg font-bold">Want to see who is clicking your links?</h2>
+      <h2 className="text-lg font-bold">Nothing comes back from a printed code</h2>
       <p className="text-sm text-muted">
-        A printed QR code cannot tell you it was scanned. Point this one at a short link and every
-        scan is counted, with country, referrer and device.
+        The address is in the dots, so a scan leaves no trace. A short link in the middle fixes
+        that: you get the count, the country and the device. It costs you one redirect on the way
+        through.
       </p>
       {tracked ? <TrackedPanel tracked={tracked} /> : <UntrackedPanel {...offer} />}
     </section>
