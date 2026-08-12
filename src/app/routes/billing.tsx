@@ -364,13 +364,23 @@ function UsageLine({ label, count, limit }: { label: string; count: number; limi
   );
 }
 
+/**
+ * The three lines the usage card is waiting on.
+ *
+ * Each bar sits in a box the height of the text it replaces (text-sm, a 20px
+ * line) inside the same `gap-1` column as the real lines. Before, three 14px
+ * bars in a `gap-3` column stood in for three 20px lines in a `gap-1` one, so
+ * the card resized under the "Orgs you own" line that renders throughout.
+ */
 function UsageMeterSkeleton() {
   return (
-    <div className="flex flex-col gap-3 py-1">
-      <Skeleton className="h-3.5 w-32" />
-      <Skeleton className="h-3.5 w-36" />
-      <Skeleton className="h-3.5 w-28" />
-    </div>
+    <>
+      {[32, 36, 28].map((w) => (
+        <span key={w} className="flex h-5 items-center">
+          <Skeleton className="h-3.5" style={{ width: `${w * 0.25}rem` }} />
+        </span>
+      ))}
+    </>
   );
 }
 
