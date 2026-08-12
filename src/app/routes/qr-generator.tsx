@@ -151,11 +151,11 @@ function TrackingSection({
 }) {
   return (
     <section className="flex w-full max-w-3xl flex-col gap-3 rounded-2xl border border-dashed border-border p-6 sm:p-8">
-      <h2 className="text-lg font-bold">Nothing comes back from a printed code</h2>
+      <h2 className="text-lg font-bold">This code cannot be tracked</h2>
       <p className="text-sm text-muted">
-        The address is in the dots, so a scan leaves no trace. A short link in the middle fixes
-        that: you get the count, the country and the device. It costs you one redirect on the way
-        through.
+        If you want to track the way your customers interact with your links (scanned or not), this
+        is when you either boot up an analytics stack and parse UTM parameters yourself, or you can
+        just use rdyrct. Start with free and upgrade anytime.
       </p>
       {tracked ? <TrackedPanel tracked={tracked} /> : <UntrackedPanel {...offer} />}
     </section>
