@@ -74,7 +74,7 @@ function CodePanel({ encoded, values }: { encoded: string; values: QrValues }) {
 function TrackedPanel({ tracked }: { tracked: AnonLink }) {
   const toast = useToast();
   return (
-    <div className="flex flex-col gap-2 rounded-lg bg-surface-2 p-3">
+    <div className="flex max-w-md flex-col gap-2 rounded-lg bg-surface-2 p-3">
       <div className="flex items-center gap-2 text-xs text-accent-2">
         <Check size={14} /> This code now points at a link that counts scans
       </div>
@@ -100,7 +100,7 @@ function TrackedPanel({ tracked }: { tracked: AnonLink }) {
   );
 }
 
-/** The offer, before anyone has taken it: what a plain printed code cannot do. */
+/** The offer, before anyone has taken it. */
 function UntrackedPanel({
   busy,
   disabled,
@@ -116,34 +116,48 @@ function UntrackedPanel({
 }) {
   if (atCap)
     return (
-      <div className="flex flex-col gap-2 rounded-lg border border-dashed border-border p-3">
-        <p className="text-xs text-muted">
-          This browser has already made {MAX_ANON_LINKS} links without an account. Sign up to make
-          more, and to keep the ones you have.
-        </p>
-        <Link to="/signup" onClick={() => trackCta("qr_page_claim")} className="self-start">
-          <Button variant="outline" size="sm">
-            Sign up <ArrowRight size={14} />
-          </Button>
-        </Link>
-      </div>
+      <p className="text-sm text-muted">
+        This browser has already made {MAX_ANON_LINKS} links without an account.{" "}
+        <Link to="/signup" onClick={() => trackCta("qr_page_claim")} className="text-accent">
+          Sign up
+        </Link>{" "}
+        to make more, and to keep the ones you have.
+      </p>
     );
   return (
-    <div className="flex flex-col gap-2 rounded-lg border border-dashed border-border p-3">
-      <p className="text-xs text-muted">
+    <Button variant="outline" disabled={busy || disabled} onClick={onTrack} className="self-start">
+      <BusyContent busy={busy}>Count the scans</BusyContent>
+    </Button>
+  );
+}
+
+/**
+ * The upsell, kept out of the form.
+ *
+ * It used to sit under the input as a dashed box with its own paragraph and
+ * button, in the middle of the controls that draw the code. That made the
+ * thing somebody came here to use read like a step in a sales pitch. The form
+ * does one job now, and the offer comes after it.
+ */
+function TrackingSection({
+  tracked,
+  ...offer
+}: {
+  tracked: AnonLink | null;
+  busy: boolean;
+  disabled: boolean;
+  atCap: boolean;
+  onTrack: () => void;
+}) {
+  return (
+    <section className="flex w-full max-w-3xl flex-col gap-3 rounded-2xl border border-dashed border-border p-6 sm:p-8">
+      <h2 className="text-lg font-bold">Want to see who is clicking your links?</h2>
+      <p className="text-sm text-muted">
         A printed QR code cannot tell you it was scanned. Point this one at a short link and every
         scan is counted, with country, referrer and device.
       </p>
-      <Button
-        variant="outline"
-        size="sm"
-        disabled={busy || disabled}
-        onClick={onTrack}
-        className="self-start"
-      >
-        <BusyContent busy={busy}>Count the scans</BusyContent>
-      </Button>
-    </div>
+      {tracked ? <TrackedPanel tracked={tracked} /> : <UntrackedPanel {...offer} />}
+    </section>
   );
 }
 
@@ -334,16 +348,6 @@ export function QrGeneratorPage() {
               autoComplete="off"
             />
 
-            {tracked ? (
-              <TrackedPanel tracked={tracked} />
-            ) : (
-              <UntrackedPanel
-                busy={busy}
-                disabled={!value.trim()}
-                atCap={storedAnonLinks().length >= MAX_ANON_LINKS}
-                onTrack={makeTrackable}
-              />
-            )}
             {/* The same controls the app uses on a link, in the same order
                 the settings card puts them: shapes beside the preview, then
                 the colors and the logo across the full width. */}
@@ -366,6 +370,14 @@ export function QrGeneratorPage() {
             anywhere.
           </p>
         </div>
+
+        <TrackingSection
+          tracked={tracked}
+          busy={busy}
+          disabled={!value.trim()}
+          atCap={storedAnonLinks().length >= MAX_ANON_LINKS}
+          onTrack={makeTrackable}
+        />
 
         <QrFaq />
 
