@@ -303,6 +303,9 @@ function useClaimAnonLinks(orgId: string | undefined) {
       if (kept === 0) return;
       await qc.invalidateQueries({ queryKey: ["links", orgId] });
       await qc.invalidateQueries({ queryKey: ["stats", orgId] });
+      // The claim just added links, and billing's first-link hand-off asks
+      // whether the count is still zero.
+      await qc.invalidateQueries({ queryKey: ["linkQuotaUsage", orgId] });
       // The one moment in the app worth sounding pleased about: they made
       // something before they had an account, and it survived. A sentence
       // that reads like a receipt wastes it.

@@ -477,18 +477,24 @@ function CelebrationOverlay({
     <AnimatePresence>
       {show && (
         <m.div
-          role="button"
-          tabIndex={0}
-          aria-label="Dismiss celebration"
-          className="fixed inset-0 z-50 flex cursor-pointer items-center justify-center"
-          onClick={onDismiss}
-          onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && onDismiss()}
+          className="fixed inset-0 z-50 flex items-center justify-center"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           transition={{ duration: 0.2 }}
         >
-          <div className="fixed inset-0 bg-black/55 backdrop-blur-[2px]" />
+          {/* The backdrop is the dismiss control, beside the card rather
+              than wrapped around it. Wrapped, the card's own button sat
+              inside a role="button" that answered Enter and Space too: a
+              keyboard press on "Shorten your first link" closed the overlay
+              on the way past, and stopping the click did nothing about the
+              key. */}
+          <button
+            type="button"
+            aria-label="Dismiss celebration"
+            className="fixed inset-0 cursor-pointer bg-black/55 backdrop-blur-[2px]"
+            onClick={onDismiss}
+          />
           <m.div
             className="relative z-10 flex flex-col items-center gap-4 rounded-xl border border-accent/30 bg-surface p-10 text-center shadow-2xl"
             initial={{ opacity: 0, scale: 0.95 }}
@@ -499,15 +505,7 @@ function CelebrationOverlay({
             <span className="text-5xl">🎉</span>
             <p className="text-xl font-bold text-accent">Welcome to {PLAN_LABEL[plan]}!</p>
             {onFirstLink ? (
-              <Button
-                variant="primary"
-                onClick={(event) => {
-                  // The overlay itself dismisses on click; this must not be
-                  // handled twice, once as "go" and once as "close".
-                  event.stopPropagation();
-                  onFirstLink();
-                }}
-              >
+              <Button variant="primary" onClick={onFirstLink}>
                 Shorten your first link
               </Button>
             ) : (
@@ -873,7 +871,10 @@ export function BillingPage() {
           plan={plan}
           onDismiss={() => setShowCelebration(false)}
           onFirstLink={
-            linkQuota?.count === 0
+            // No org means no quota query, so the count never arrives: an
+            // account that checked out from a landing CTA before it had an
+            // organization is exactly the one this hand-off is for.
+            !org || linkQuota?.count === 0
               ? () => {
                   setShowCelebration(false);
                   navigate("/dashboard");

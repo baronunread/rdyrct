@@ -23,7 +23,7 @@ import { Field, Input } from "../../ui/field";
 import { Dialog } from "../../ui/dialog";
 import { ConfirmDialog } from "../../ui/confirm-dialog";
 import { Menu, MenuItem, MenuSeparator } from "../../ui/menu";
-import { AdminTableSkeleton } from "../../components/skeletons";
+import { TableSkeleton } from "../../ui/skeleton";
 import { useToast } from "../../ui/toast";
 import { withErrorToast } from "../../lib/mutation-toast";
 import { shortDate } from "../../lib/dates";
@@ -318,7 +318,9 @@ function LinksTable({
   onRescore: (l: AdminLinkRow) => void;
   rescoringId: string | null;
 }) {
-  if (isPending) return <AdminTableSkeleton />;
+  // Rows only: this sits below the real header and the real search box,
+  // and the page-level skeleton would draw a second one of each.
+  if (isPending) return <TableSkeleton rows={6} />;
   if (rows.length === 0)
     return <p className="py-6 text-center text-sm text-muted">No links match that search.</p>;
 
@@ -394,7 +396,9 @@ function AnonymousLinksTable({
   onSort: (s: Sort) => void;
   onDelete: (l: AdminAnonLinkRow) => void;
 }) {
-  if (isPending) return <AdminTableSkeleton />;
+  // Rows only: this sits below the real header and the real search box,
+  // and the page-level skeleton would draw a second one of each.
+  if (isPending) return <TableSkeleton rows={6} />;
   if (rows.length === 0)
     return <p className="py-6 text-center text-sm text-muted">Nothing here.</p>;
   return (
