@@ -175,7 +175,7 @@ SOFTWARE.
 
 ### @cap.js/wasm, @cap.js/widget, capjs-core
 
-```
+```text
 Copyright 2025 Tiago
 
 Licensed under the Apache License, Version 2.0 (the "License");

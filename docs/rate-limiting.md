@@ -91,6 +91,12 @@ Defined in `wrangler.jsonc` under `ratelimits`, applied in
 Cloudflare location, so treat these as abuse controls, never as quota
 enforcement.
 
+These are the production numbers. The dev and test environments in
+`wrangler.jsonc` deliberately run several of them looser (`RL_AUTH_PUBLIC`,
+`RL_CAP`, `RL_EMAIL`, `RL_EMAIL_RECIPIENT`), because the e2e suite signs up
+dozens of times a minute from one address and rate limiting the test run
+proves nothing about the feature.
+
 | Binding              | Limit   | Keyed by          | Guards                        |
 | -------------------- | ------- | ----------------- | ----------------------------- |
 | `RL_AUTH_PUBLIC`     | 30/min  | IP, path          | `/api/auth/*`                 |
@@ -102,7 +108,7 @@ enforcement.
 | `RL_QR_UPLOAD`       | 20/min  | User              | QR logo uploads to R2         |
 | `RL_DOMAIN_SETUP`    | 30/min  | User              | Custom hostname calls         |
 | `RL_BILLING`         | 10/min  | User              | Polar checkout                |
-| `RL_CLICK_RECORDING` | 600/min | Slug              | Click ingestion               |
+| `RL_CLICK_RECORDING` | 600/min | Organization      | Click ingestion               |
 
 These are set for the person having trouble, not for the bot: someone who
 mistypes a password, retries a signup or pastes six links in a row must never
@@ -171,7 +177,8 @@ caught.
 
 **Cap is blocking real people.** Unset `CAP_SECRET`
 (`bunx wrangler secret delete CAP_SECRET`). The check disables itself and
-signup returns to exactly its previous behaviour. No deploy needed.
+both guarded flows, signup and password reset, return to exactly their
+previous behaviour. No deploy needed.
 
 **A Workers limiter is too tight.** Change the `limit` in `wrangler.jsonc`
 and deploy. Keep the `namespace_id`: changing it resets every counter.

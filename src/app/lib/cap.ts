@@ -75,7 +75,7 @@ function loadCap(): Promise<void> {
  * element's `disconnectedCallback` aborts its AbortController, and every
  * `await` inside the widget's `solve()` is followed by
  * `if (signal?.aborted || !this.#speculative) return;`. So a widget removed
- * while it is working makes `solve()` resolve **undefined** — no token, no
+ * while it is working makes `solve()` resolve **undefined**: no token, no
  * throw, no error event. The old code created a throwaway element per solve
  * and removed it in a `finally`, which is exactly how to hit that path, and
  * an undefined result became an empty token, no `x-cap-token` header, and
