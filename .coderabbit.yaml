@@ -1,0 +1,13 @@
+# CodeRabbit review settings.
+#
+# By default it reviews only pull requests aimed at the default branch, so a
+# stack (a chain of small PRs, each based on the one below it) goes entirely
+# unreviewed: every link but the bottom one targets another branch. The skip
+# is quiet, and a PR with no comments reads like a PR with no findings.
+#
+# `.*` matches any base branch. It extends the default rather than replacing
+# it, so `main` stays covered.
+reviews:
+  auto_review:
+    base_branches:
+      - ".*"
