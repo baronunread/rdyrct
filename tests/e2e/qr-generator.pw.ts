@@ -44,11 +44,21 @@ test("generates a QR code with no account and no network call", async ({ page })
   await page.goto("/qr-code-generator");
   await expect(page.getByRole("heading", { name: "Free QR code generator" })).toBeVisible();
 
+  const code = page.getByRole("img", { name: /^QR code for/ });
+  const upsell = page.getByRole("heading", { name: "This code cannot be tracked" });
+
+  // The download row is there before there is anything to download, so it
+  // cannot appear on the first keystroke and shove the page down. It used to
+  // cost 43px of shift.
+  await expect(page.getByRole("button", { name: /PNG/ })).toBeDisabled();
+  const settled = await upsell.boundingBox();
+
   await page.getByLabel("Link or text").fill("https://example.com/printed-poster");
 
-  // A canvas or svg appears, and with it the download controls.
-  await expect(page.getByRole("button", { name: /PNG/ })).toBeVisible({ timeout: 10_000 });
-  await expect(page.getByRole("button", { name: /SVG/ })).toBeVisible();
+  await expect(code.locator("svg")).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByRole("button", { name: /PNG/ })).toBeEnabled();
+  await expect(page.getByRole("button", { name: /SVG/ })).toBeEnabled();
+  expect((await upsell.boundingBox())?.y).toBe(settled?.y);
 
   expect(appPosts(posted)).toEqual([]);
 });
