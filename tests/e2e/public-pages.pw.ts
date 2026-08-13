@@ -116,3 +116,20 @@ test("a dark operating system still opens dark by default", async ({ browser }) 
 
   await context.close();
 });
+
+test("the footer is the same width on every public page", async ({ page }) => {
+  // The legal pages shared one container with their prose, so their footer
+  // came out 720px against the landing page's 976: the rule above the links
+  // visibly changed length when somebody followed a footer link, which is
+  // the one journey that puts the two footers back to back.
+  const widths: Record<string, number> = {};
+  for (const path of ["/", "/privacy", "/terms"]) {
+    await page.goto(path);
+    const box = await page.locator("footer").boundingBox();
+    widths[path] = Math.round(box?.width ?? 0);
+  }
+
+  expect(widths["/privacy"]).toBe(widths["/"]);
+  expect(widths["/terms"]).toBe(widths["/"]);
+  expect(widths["/"]).toBeGreaterThan(0);
+});

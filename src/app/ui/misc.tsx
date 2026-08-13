@@ -151,13 +151,21 @@ export function PageHeader({
 
 export function LegalPageLayout({ children }: { children: ReactNode }) {
   return (
-    <div className="mx-auto max-w-3xl px-6 py-12">
-      <header className="mb-8">
-        <Link to="/" className="text-lg font-bold tracking-widest">
-          rdyrct
-        </Link>
-      </header>
-      <div className="flex flex-col gap-8 text-sm">{children}</div>
+    // Two widths, not one. The page shell matches the landing page and the
+    // QR generator so the footer's rule and links come out the same length
+    // on every public page; the prose keeps its own narrower measure inside
+    // it, which is what the outer max-w-3xl used to be for. Sharing one
+    // width made the footer 720 here against 976 there, and the seam showed
+    // when somebody followed a footer link.
+    <div className="mx-auto max-w-5xl px-6 py-12">
+      <div className="mx-auto max-w-3xl">
+        <header className="mb-8">
+          <Link to="/" className="text-lg font-bold tracking-widest">
+            rdyrct
+          </Link>
+        </header>
+        <div className="flex flex-col gap-8 text-sm">{children}</div>
+      </div>
       <Footer />
     </div>
   );
