@@ -50,6 +50,37 @@ const defaultForm: LinkInput = {
 
 type UtmKey = "utmSource" | "utmMedium" | "utmCampaign" | "utmTerm" | "utmContent";
 
+/** The link's own QR look, as opposed to the organization's defaults. The
+ * server refuses these outright on a plan without qrCustom. */
+const QR_OVERRIDE_FIELDS = [
+  "qrStyle",
+  "qrColor",
+  "qrCorner",
+  "qrEyeColor",
+  "qrBg",
+  "qrLogo",
+  "qrLogoSize",
+] as const;
+
+/**
+ * Clears a link's QR overrides when the plan no longer allows them.
+ *
+ * An organization that downgrades keeps whatever its links already had, and
+ * the editor loads those values whether or not it draws the controls for
+ * them. Submitted, the server answers 402 and the whole save fails: somebody
+ * on Free could not fix a typo in a title, and the message they got talked
+ * about QR codes. Sending the fields back as empty is also what the hidden
+ * controls imply, so the save does what the dialog looks like it will do.
+ */
+function withoutQrOverrides(data: LinkInput): LinkInput {
+  const cleared = { ...data };
+  for (const field of QR_OVERRIDE_FIELDS) {
+    if (field === "qrLogoSize") cleared.qrLogoSize = null;
+    else cleared[field] = "";
+  }
+  return cleared;
+}
+
 const UTM_FIELDS: { key: UtmKey; label: string; placeholder: string }[] = [
   { key: "utmSource", label: "Source", placeholder: "newsletter" },
   { key: "utmMedium", label: "Medium", placeholder: "email" },
@@ -542,6 +573,7 @@ export function LinkEditor({
   shakeKey: number;
 }) {
   const editing = editingLink != null;
+  const save = (data: LinkInput) => onSave(qrCustomEnabled ? data : withoutQrOverrides(data));
   const toast = useToast();
   const shake = useShake();
   const destinationRef = useRef<HTMLInputElement>(null);
@@ -603,10 +635,7 @@ export function LinkEditor({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange} title={editing ? "Edit link" : "New link"} wide>
-      <form
-        onSubmit={handleSubmit(onSave, onInvalid)}
-        className="grid gap-6 sm:grid-cols-[1fr_auto]"
-      >
+      <form onSubmit={handleSubmit(save, onInvalid)} className="grid gap-6 sm:grid-cols-[1fr_auto]">
         <LinkFormFields
           form={form}
           setForm={setForm}
@@ -640,7 +669,7 @@ export function LinkEditor({
           variant="primary"
           type="submit"
           disabled={busy}
-          onClick={handleSubmit(onSave, onInvalid)}
+          onClick={handleSubmit(save, onInvalid)}
           className={shake.className}
           onAnimationEnd={shake.end}
         >
