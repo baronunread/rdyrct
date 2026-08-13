@@ -2,7 +2,6 @@ import { expect, test, type Page } from "@playwright/test";
 import { appUrl } from "./environment";
 import { queryRows } from "./db";
 import { signUpAndVerify } from "./resend";
-import { createOrg } from "./orgs";
 
 const password = "test-password-123";
 
@@ -29,7 +28,6 @@ async function createQuickLink(page: Page): Promise<string> {
 test("a click records the referring host, never the URL it came from (#20)", async ({ page }) => {
   const email = `referrer-${Date.now()}@gmail.com`;
   await signUpAndVerify(page, email, password);
-  await createOrg(page, "Referrer Org");
   const slug = await createQuickLink(page);
 
   // A real referring URL: the path and query are the parts that carry other
