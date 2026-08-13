@@ -45,12 +45,16 @@ export function QrDownloadButtons({
   name,
   look,
   className,
+  disabled,
 }: {
   url: string;
   name: string;
   /** Omitted means the built-in defaults, which is what an unstyled QR uses. */
   look?: QrLook;
   className?: string;
+  /** For callers that keep the row in place while there is nothing to
+   * download yet, rather than letting it appear and shove the page down. */
+  disabled?: boolean;
 }) {
   const resolved = look ?? resolveLook({});
   const download = async (extension: "png" | "svg") => {
@@ -62,10 +66,20 @@ export function QrDownloadButtons({
       {/* Named in full for assistive tech: these can sit beside a link
           rather than under the code, where "PNG" alone says nothing about
           what is being downloaded. */}
-      <Button size="sm" aria-label="Download QR code as PNG" onClick={() => void download("png")}>
+      <Button
+        size="sm"
+        disabled={disabled}
+        aria-label="Download QR code as PNG"
+        onClick={() => void download("png")}
+      >
         <Download size={13} /> PNG
       </Button>
-      <Button size="sm" aria-label="Download QR code as SVG" onClick={() => void download("svg")}>
+      <Button
+        size="sm"
+        disabled={disabled}
+        aria-label="Download QR code as SVG"
+        onClick={() => void download("svg")}
+      >
         <Download size={13} /> SVG
       </Button>
     </div>

@@ -22,9 +22,9 @@ import { ArrowRight, ChevronDown, ShieldCheck } from "lucide-react";
 import { Button } from "../ui/button";
 import { Input } from "../ui/field";
 import { trackCta } from "../lib/track-cta";
-import { QRPreview } from "../components/qr";
+import { QRPreview, QrDownloadButtons } from "../components/qr";
 import { QrColorAndLogoFields, QrShapeFields } from "../components/qr-fields";
-import { qrPreviewProps, type QrValues } from "../lib/qr-look";
+import { qrPreviewProps, resolveLook, type QrValues } from "../lib/qr-look";
 import { useSeo } from "../lib/seo";
 import { FaqJsonLd } from "../components/faq-json-ld";
 import { useAudience } from "../lib/audience";
@@ -41,17 +41,27 @@ const EMPTY_QR: QrValues = {
   qrLogoSize: "",
 };
 
-/** The code itself, or the space it will occupy. */
+/**
+ * The code itself, or the space it will occupy.
+ *
+ * The download row is always here, disabled until there is something to
+ * download. It used to appear with the code and shove everything under it
+ * down the page, and a row of two buttons is not worth a layout shift on the
+ * first keystroke. Disabled, it also answers the question the page raises:
+ * you get a PNG or an SVG.
+ */
 function CodePanel({ encoded, values }: { encoded: string; values: QrValues }) {
+  const look = qrPreviewProps(values);
   return (
     <div className="flex flex-col items-center gap-3">
       {encoded ? (
-        <QRPreview url={encoded} downloadName="qr" {...qrPreviewProps(values)} />
+        <QRPreview url={encoded} {...look} />
       ) : (
         <div className="grid h-52 w-52 place-items-center rounded-lg border border-dashed border-border text-center text-xs text-muted">
           Your code appears here
         </div>
       )}
+      <QrDownloadButtons url={encoded} name="qr" look={resolveLook(look)} disabled={!encoded} />
     </div>
   );
 }
