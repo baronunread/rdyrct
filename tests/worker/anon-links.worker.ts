@@ -61,6 +61,29 @@ describe("claiming", () => {
     expect(await countIn("anon_links", anon.slug)).toBe(0);
   });
 
+  it("scores a link whose anonymous scan never finished", async () => {
+    // Scoring an anonymous link runs after its response, in waitUntil. A
+    // claim landing first used to copy four nulls and then delete the only
+    // row that background task knows how to update, so the link stayed
+    // unscored for good on the table moderation actually reads.
+    await freeOwnerCookie();
+    const anon = await seedAnon();
+    expect(
+      (
+        await env.DB.prepare("select risk_checked_at as c from anon_links where id = ?")
+          .bind(anon.id)
+          .first<{ c: number | null }>()
+      )?.c,
+    ).toBeNull();
+
+    const link = await claimAnonLink(authEnv(), "org-1", "free-1", anon.claimToken);
+
+    const scored = await env.DB.prepare("select risk_checked_at as c from links where id = ?")
+      .bind(link!.id)
+      .first<{ c: number | null }>();
+    expect(scored?.c).not.toBeNull();
+  });
+
   it("refuses a token that was already spent, so one link is claimed once", async () => {
     await freeOwnerCookie();
     const anon = await seedAnon();

@@ -263,6 +263,13 @@ export async function claimAnonLink(
   // Republish without the expiry, and now carrying the org, so clicks start
   // being recorded against the link its owner can see.
   await publishLink(env, { ...link, addressId: address.id, expiresAt: null }, null);
+
+  // The verdict copied above can be empty. Scoring an anonymous link runs
+  // after its response, in waitUntil, and a claim landing first copies four
+  // nulls and then deletes the only row that background task knows how to
+  // update: the link stayed unscored for good, on the one table moderation
+  // reads. Scored here instead, against the row that now exists.
+  if (anon.riskCheckedAt === null) await scoreAndRecord(env.DB, link.id, link.destination);
   return link;
 }
 
