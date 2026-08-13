@@ -236,7 +236,7 @@
       "name": "RL_ANON_LINK",
       "namespace_id": "14010",
       "simple": {
-        "limit": 5,
+        "limit": 15,
         "period": 60,
       },
     },
