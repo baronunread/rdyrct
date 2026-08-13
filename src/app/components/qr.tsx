@@ -6,6 +6,7 @@ import { hasTransparency, imageOptionsFor, resolveLook, type QrLook } from "../l
 import { fillSeams } from "../lib/qr-seams";
 import { cn } from "../ui/cn";
 import posthog from "../lib/posthog";
+import { useToast } from "../ui/toast";
 
 function looksOptions(look: QrLook) {
   return {
@@ -57,9 +58,17 @@ export function QrDownloadButtons({
   disabled?: boolean;
 }) {
   const resolved = look ?? resolveLook({});
+  const toast = useToast();
   const download = async (extension: "png" | "svg") => {
-    await makeQR(url, DOWNLOAD_SIZE, resolved).download({ name, extension });
-    posthog.capture("qr_code_downloaded", { format: extension });
+    try {
+      await makeQR(url, DOWNLOAD_SIZE, resolved).download({ name, extension });
+      posthog.capture("qr_code_downloaded", { format: extension });
+    } catch {
+      // Drawing at 1024px can fail on a browser short of memory, and the
+      // save itself can be refused. Both used to leave the button looking
+      // like it had worked and no file anywhere.
+      toast("Could not make the file. Try again.", "error");
+    }
   };
   return (
     <div className={cn("flex gap-2", className)}>

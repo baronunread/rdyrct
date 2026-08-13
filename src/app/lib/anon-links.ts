@@ -128,15 +128,25 @@ function forgetAnonLinks(): void {
  * around forever.
  */
 export async function claimPendingLinks(orgId: string): Promise<number> {
-  const links = storedAnonLinks();
-  if (links.length === 0) return 0;
-  forgetAnonLinks();
+  try {
+    const links = storedAnonLinks();
+    if (links.length === 0) return 0;
+    forgetAnonLinks();
 
-  // allSettled, not all: one refused claim must not stop the others landing.
-  const results = await Promise.allSettled(
-    links.map(({ claimToken }) =>
-      api(`/orgs/${orgId}/links/claim`, { method: "POST", body: { claimToken } }),
-    ),
-  );
-  return results.filter((r) => r.status === "fulfilled").length;
+    // allSettled, not all: one refused claim must not stop the others landing.
+    const results = await Promise.allSettled(
+      links.map(({ claimToken }) =>
+        api(`/orgs/${orgId}/links/claim`, { method: "POST", body: { claimToken } }),
+      ),
+    );
+    return results.filter((r) => r.status === "fulfilled").length;
+  } catch {
+    // Best-effort here means it cannot throw, not that its callers remember
+    // to catch. Both of them ran this inside the try that creates the
+    // organization, so a browser refusing localStorage (private mode, a
+    // blocked third-party context) reported "could not create your
+    // organization" for one that exists, and skipped the switch and the
+    // redirect that come after.
+    return 0;
+  }
 }

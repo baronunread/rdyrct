@@ -444,7 +444,7 @@
           },
         },
         {
-          // Higher than production's 5: the e2e run creates several anonymous
+          // Higher than production's 15: the e2e run creates several anonymous
           // links from one address in one minute, and rate limiting the test
           // suite proves nothing about the feature.
           "name": "RL_ANON_LINK",

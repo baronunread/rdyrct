@@ -70,7 +70,10 @@ function TopLinks({ links }: { links: { id: string; slug: string; clicks: number
 function Greeting({ name, clicks7d }: { name: string; clicks7d: number }) {
   return (
     <div>
-      <p className="text-sm font-bold">Welcome back, {name}.</p>
+      {/* The name arrives with the /user query, and the card can render
+          before it does: the signed-in hint comes from storage. Without the
+          guard that first paint reads "Welcome back, ." */}
+      <p className="text-sm font-bold">{name ? `Welcome back, ${name}.` : "Welcome back."}</p>
       <p className="mt-0.5 text-xs text-muted">
         {clicks7d > 0
           ? `Your links earned ${clicks7d.toLocaleString()} clicks in the last 7 days.`

@@ -172,7 +172,7 @@ const qrFaqs = [
   },
   {
     q: "What is a dynamic QR code, and do I need one?",
-    a: "A dynamic QR code points at a short link you control, so you can change the destination after it is printed and count the scans. A static code has the destination baked into the dots: it works forever, but it cannot be redirected or measured. Use the button above to turn this one into a trackable link.",
+    a: "A dynamic QR code points at a short link you control, so you can change the destination after it is printed and count the scans. A static code has the destination baked into the dots: it works forever, but it cannot be redirected or measured. To get one, point the code at a short link you own.",
   },
   {
     q: "Do QR codes expire?",
