@@ -95,12 +95,24 @@ export async function scoreAndRecord(
   try {
     const verdict = await scoreDestination(destination);
     if (!verdict) return;
+    // Only if the row still points where the lookup went. A destination edit
+    // clears the verdict and starts its own scan, and the lookup it replaced
+    // can still be in flight: without this, the older answer lands afterwards
+    // and labels the new destination with the old one's verdict. Two edits in
+    // quick succession are the same race with both scans in flight.
     await db
       .prepare(
         `update links set risk_score = ?, risk_reasons = ?, risk_checked_at = ?, risk_provider = ?
-         where id = ?`,
+         where id = ? and destination = ?`,
       )
-      .bind(verdict.score, JSON.stringify(verdict.reasons), Date.now(), verdict.provider, linkId)
+      .bind(
+        verdict.score,
+        JSON.stringify(verdict.reasons),
+        Date.now(),
+        verdict.provider,
+        linkId,
+        destination,
+      )
       .run();
   } catch (error) {
     console.warn("risk_score_failed", linkId, error);
@@ -108,8 +120,7 @@ export async function scoreAndRecord(
 }
 
 /**
- * Re-scores the least recently checked links, oldest first, nulls before
- * anything else.
+ * Re-scores links, oldest first, with never-scored ones taking priority.
  *
  * Bounded, because the whole point is that the table cycles rather than that
  * any one run finishes it: a destination that turns bad long after creation
@@ -121,18 +132,42 @@ export async function scoreAndRecord(
  * at once is how you get rate limited by it.
  */
 export async function sweepLinkRisk(db: D1Database, batchSize = 50): Promise<number> {
-  const { results } = await db
-    .prepare(
-      `select id, destination from links
-       order by risk_checked_at is not null, risk_checked_at asc
-       limit ?`,
-    )
-    .bind(batchSize)
-    .all<{ id: string; destination: string }>();
+  // Half the batch at most for the never-scored, so they cannot crowd out the
+  // rescans. A destination the resolver keeps timing out on stays unscored,
+  // and unscored sorts first: enough of those and every run spends its whole
+  // budget retrying the same failures, while destinations that were clean a
+  // year ago are never looked at again. That is the sweep quietly giving up
+  // on the job it exists for, with nothing on screen to say so.
+  const unscored = await pickToScore(db, "risk_checked_at is null", batchSize);
+  const scored = await pickToScore(db, "risk_checked_at is not null", batchSize);
+  // The cap gives way when the other side cannot fill the batch: it exists to
+  // stop the unscored crowding out rescans, not to leave the budget unspent.
+  const room = Math.max(Math.ceil(batchSize / 2), batchSize - scored.length);
+  const take = unscored.slice(0, room);
+  const results = [...take, ...scored.slice(0, batchSize - take.length)];
 
   // react-doctor-disable-next-line react-doctor/async-await-in-loop
   for (const row of results) await scoreAndRecord(db, row.id, row.destination);
   return results.length;
+}
+
+/** One side of the sweep's batch: the oldest rows in the given state. */
+async function pickToScore(
+  db: D1Database,
+  state: string,
+  limit: number,
+): Promise<{ id: string; destination: string }[]> {
+  if (limit <= 0) return [];
+  const { results } = await db
+    .prepare(
+      `select id, destination from links
+       where ${state}
+       order by risk_checked_at asc
+       limit ?`,
+    )
+    .bind(limit)
+    .all<{ id: string; destination: string }>();
+  return results;
 }
 
 /** The host a destination points at, or null if it is not a URL we can read. */

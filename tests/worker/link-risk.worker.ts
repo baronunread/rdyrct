@@ -3,7 +3,7 @@ import { env } from "cloudflare:workers";
 import { createExecutionContext, reset, waitOnExecutionContext } from "cloudflare:test";
 import worker from "../../src/worker";
 import { applyTestMigrations, authEnv, freeOwnerCookie } from "./support";
-import { sweepLinkRisk } from "../../src/worker/risk";
+import { scoreAndRecord, sweepLinkRisk } from "../../src/worker/risk";
 
 /**
  * Destination risk scoring end to end (#68).
@@ -20,13 +20,17 @@ const CLEAN = "https://example.com/x";
 const realFetch = globalThis.fetch;
 
 /** A resolver that refuses BLOCKED's host and resolves everything else. */
-function stubResolver(options: { fail?: boolean } = {}) {
+function stubResolver(options: { fail?: boolean; failHost?: string } = {}) {
   const calls: string[] = [];
   globalThis.fetch = (async (input: RequestInfo | URL) => {
     const url = String(input instanceof Request ? input.url : input);
     if (!url.startsWith("https://security.cloudflare-dns.com")) return realFetch(input);
     calls.push(url);
-    if (options.fail) throw new Error("resolver unreachable");
+    // failHost, because the resolver is asked about a host: the query carries
+    // no path, so a test that needs some links to keep failing and others to
+    // succeed has to separate them by hostname.
+    if (options.fail || (options.failHost && url.includes(options.failHost)))
+      throw new Error("resolver unreachable");
     const blocked = url.includes("malware.example");
     return new Response(
       JSON.stringify({ Status: 0, Answer: [{ data: blocked ? "0.0.0.0" : "93.184.216.34" }] }),
@@ -164,6 +168,26 @@ describe("re-scoring on a destination edit", () => {
     expect(row?.risk_checked_at).toBeNull();
   });
 
+  it("throws away a verdict for a destination the link no longer has", async () => {
+    // The lookup is slow and the edit is not. A scan of the old destination
+    // can still be in flight when the link is pointed somewhere else, and it
+    // used to land afterwards and label the new destination with the old
+    // one's verdict: swap a blocked link to something clean and the clean one
+    // inherits 100, or the reverse, which is the direction that matters.
+    //
+    // Called directly with a destination the row no longer has, which is
+    // exactly the state a late scan finishes in.
+    stubResolver();
+    const cookie = await freeOwnerCookie();
+    const linkId = await createLink(cookie, CLEAN);
+
+    await scoreAndRecord(env.DB, linkId, BLOCKED);
+
+    const row = await riskRow(linkId);
+    expect(row?.risk_score).toBe(0);
+    expect(row?.risk_provider).not.toBeNull();
+  });
+
   it("leaves the verdict alone when only the title changes", async () => {
     stubResolver();
     const cookie = await freeOwnerCookie();
@@ -189,6 +213,36 @@ describe("the cron sweep", () => {
 
     expect((await riskRow(a))?.risk_score).toBe(100);
     expect((await riskRow(b))?.risk_score).toBe(0);
+  });
+
+  it("keeps rescanning even when the unscored never come good", async () => {
+    // A destination the resolver keeps failing on stays unscored, and
+    // unscored is picked first. Enough of those and every run spent its whole
+    // budget retrying the same failures, so a link scored a year ago was
+    // never looked at again: the sweep still returned a number and still did
+    // nothing useful.
+    const cookie = await freeOwnerCookie();
+
+    // Four that can never be scored, on their own host so they can keep
+    // failing while the fifth succeeds.
+    stubResolver({ fail: true });
+    for (let i = 0; i < 4; i++)
+      await postLink(cookie, { destination: `https://stuck.example/${i}` });
+
+    globalThis.fetch = realFetch;
+    stubResolver();
+    const old = await createLink(cookie, CLEAN);
+    const scoredAt = (await riskRow(old))?.risk_checked_at as number;
+    expect(scoredAt).not.toBeNull();
+
+    globalThis.fetch = realFetch;
+    stubResolver({ failHost: "stuck.example" });
+    await new Promise((done) => setTimeout(done, 5));
+    await sweepLinkRisk(env.DB, 4);
+
+    // Half the batch went to the never-scored, so the rescan still got its
+    // turn: the timestamp moved.
+    expect((await riskRow(old))?.risk_checked_at).toBeGreaterThan(scoredAt);
   });
 
   it("stops at the batch size, so one run cannot blow the daily budget", async () => {
