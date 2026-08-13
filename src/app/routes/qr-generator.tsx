@@ -41,27 +41,18 @@ const EMPTY_QR: QrValues = {
   qrLogoSize: "",
 };
 
-/**
- * The code itself, or the space it will occupy.
- *
- * The download row is always here, disabled until there is something to
- * download. It used to appear with the code and shove everything under it
- * down the page, and a row of two buttons is not worth a layout shift on the
- * first keystroke. Disabled, it also answers the question the page raises:
- * you get a PNG or an SVG.
- */
+/** The code itself, or the space it will occupy. Downloading it belongs to
+ * the card's footer, which is there whether or not a code is. */
 function CodePanel({ encoded, values }: { encoded: string; values: QrValues }) {
-  const look = qrPreviewProps(values);
   return (
-    <div className="flex flex-col items-center gap-3">
+    <div className="flex flex-col items-center">
       {encoded ? (
-        <QRPreview url={encoded} {...look} />
+        <QRPreview url={encoded} {...qrPreviewProps(values)} />
       ) : (
         <div className="grid h-52 w-52 place-items-center rounded-lg border border-dashed border-border text-center text-xs text-muted">
           Your code appears here
         </div>
       )}
-      <QrDownloadButtons url={encoded} name="qr" look={resolveLook(look)} disabled={!encoded} />
     </div>
   );
 }
@@ -278,11 +269,28 @@ export function QrGeneratorPage() {
             className="sm:col-span-2"
           />
 
-          <p className="flex items-center gap-1.5 text-xs text-muted sm:col-span-2">
-            <ShieldCheck size={13} className="text-accent-2" />
-            The code and the logo are handled in your browser. Nothing you type or upload is sent
-            anywhere.
-          </p>
+          {/* The card's footer: what the page promises on the left, what it
+              produces on the right. The downloads live here rather than under
+              the code because that row only exists once there is a code, and
+              growing it on the first keystroke pushed the whole page down. */}
+          <div className="flex flex-col gap-4 sm:col-span-2 sm:flex-row sm:items-center sm:justify-between">
+            <p className="flex items-start gap-1.5 text-xs text-muted">
+              <ShieldCheck size={13} className="mt-0.5 shrink-0 text-accent-2" />
+              The code and the logo are handled in your browser. Nothing you type or upload is sent
+              anywhere.
+            </p>
+            <QrDownloadButtons
+              url={encoded}
+              name="qr"
+              look={resolveLook(qrPreviewProps(values))}
+              disabled={!encoded}
+              // On a phone the two buttons split the card's width and stand a
+              // finger tall, rather than being a pair of 8px-tall chips in
+              // the corner. Back to their own size once the row is beside the
+              // promise it sits with.
+              className="shrink-0 [&>button]:h-11 [&>button]:flex-1 [&>button]:text-sm sm:[&>button]:h-8 sm:[&>button]:flex-none sm:[&>button]:text-xs"
+            />
+          </div>
         </div>
 
         <TrackingSection />

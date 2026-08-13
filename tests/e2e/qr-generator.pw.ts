@@ -47,9 +47,9 @@ test("generates a QR code with no account and no network call", async ({ page })
   const code = page.getByRole("img", { name: /^QR code for/ });
   const upsell = page.getByRole("heading", { name: "This code cannot be tracked" });
 
-  // The download row is there before there is anything to download, so it
-  // cannot appear on the first keystroke and shove the page down. It used to
-  // cost 43px of shift.
+  // The downloads sit in the card's footer, which exists before there is
+  // anything to download, so the row cannot appear on the first keystroke and
+  // shove the page down. It used to cost 43px of shift.
   await expect(page.getByRole("button", { name: /PNG/ })).toBeDisabled();
   const settled = await upsell.boundingBox();
 
