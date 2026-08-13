@@ -114,6 +114,12 @@ test("styling the code is free here, and stays in the browser", async ({ page })
   }
   await expect(page.getByRole("button", { name: "Upload a logo image" })).toBeVisible();
 
+  // The logo-size advice is a tip on the label, not two lines under the
+  // field: worth reading once, not on every visit.
+  await expect(page.getByText(/hides more of the dots/)).toHaveCount(0);
+  await page.getByRole("button", { name: "About logo size" }).hover();
+  await expect(page.getByText(/hides more of the dots/)).toBeVisible();
+
   // Change one and the code redraws rather than erroring.
   await page.getByRole("button", { name: "Dot style" }).click();
   await page.getByRole("menuitem", { name: "dots" }).click();

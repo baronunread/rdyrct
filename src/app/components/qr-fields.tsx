@@ -102,7 +102,7 @@ export function QrColorAndLogoFields({
         />
         <Field
           label="Logo size"
-          hint="How much of the QR code the logo covers. Bigger can hurt scannability"
+          tip="How much of the QR code the logo covers. A bigger logo hides more of the dots, and past a point a scanner cannot fill in what is missing."
         >
           <MenuSelect
             label="Logo size"
