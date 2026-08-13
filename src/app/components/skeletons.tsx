@@ -454,11 +454,14 @@ export function DomainsPageSkeleton() {
           <Skeleton className="mt-4 h-3 w-48" />
           <Skeleton className="mt-4 h-9 w-40" />
         </Card>
-        {/* the how-it-works panel beside it, 197 tall: a label and four steps */}
+        {/* the how-it-works panel beside it: a label and the three steps
+            HowItWorksSteps renders (domains.tsx). A fourth placeholder made
+            the panel taller than the page it stands in for, so it shrank as
+            the content arrived. */}
         <div className="lg:w-72">
           <Skeleton className="h-2.5 w-24" />
           <div className="mt-4 flex flex-col gap-4">
-            {[0, 1, 2, 3].map((i) => (
+            {[0, 1, 2].map((i) => (
               <div key={i} className="flex gap-3">
                 <Skeleton className="h-5 w-5 shrink-0 rounded-full" />
                 <Skeleton className="h-3 min-w-0 flex-1" />
