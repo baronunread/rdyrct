@@ -19,12 +19,12 @@
  */
 import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
-import { eq, lt } from "drizzle-orm";
+import { and, eq, isNull, lt } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import * as schema from "../db/schema";
 import type { AppEnv, Env } from "../env";
 import { jsonBodyLimit } from "../body-limit";
-import { publishLink, unpublishLink } from "../kv";
+import { publishLink, resolveSlug, unpublishLink } from "../kv";
 import { scoreAndRecord } from "../risk";
 import { spendToken } from "../cap";
 import { CAP_FAILED_CODE } from "@/shared/types";
@@ -134,14 +134,58 @@ async function scoreAnonLink(env: Env, id: string, destination: string): Promise
 
 /** A random slug that is not already taken, in either table. */
 async function allocateSlug(env: Env): Promise<string> {
+  const db = drizzle(env.DB, { schema });
   for (let attempt = 0; attempt < 5; attempt++) {
     const slug = randomSlug();
-    // KV is the redirect namespace, so a hit there means taken whichever
-    // table owns it. Eventual consistency makes this a very small race, and
-    // the unique index on anon_links.slug is what actually decides.
-    if (!(await env.LINKS.get(`slug:${slug}`))) return slug;
+    if (!(await slugTaken(env, db, slug))) return slug;
   }
   throw new HTTPException(503, { message: "Could not allocate a link. Try again." });
+}
+
+/**
+ * Whether anything already answers on this slug of the shared domain.
+ *
+ * Both stores, because neither alone is enough. KV is the redirect
+ * namespace, so one read covers every published address whichever table
+ * owns it. But an organization link is written to D1 first and published
+ * after, and a slug taken inside that window is invisible to KV: checking
+ * KV alone let an anonymous link be minted on it and then overwrite the
+ * redirect somebody else's link already owned.
+ *
+ * Still not a lock. Two writers can pass this at the same instant, and only
+ * the unique index on `anon_links.slug` actually decides between two
+ * anonymous inserts. What this closes is the window that was wide enough to
+ * matter, at the cost of one indexed lookup on a path that already does
+ * several.
+ */
+export async function slugTaken(
+  env: Env,
+  db: ReturnType<typeof drizzle>,
+  slug: string,
+): Promise<boolean> {
+  if (await env.LINKS.get(`slug:${slug}`)) return true;
+
+  const [address] = await db
+    .select({ id: schema.linkAddresses.id })
+    .from(schema.linkAddresses)
+    .where(
+      and(
+        eq(schema.linkAddresses.slug, slug),
+        // The shared domain only: the same slug on somebody's custom domain
+        // is a different key and a different link.
+        isNull(schema.linkAddresses.domainId),
+        isNull(schema.linkAddresses.retiredAt),
+      ),
+    )
+    .limit(1);
+  if (address) return true;
+
+  const [anon] = await db
+    .select({ id: schema.anonLinks.id })
+    .from(schema.anonLinks)
+    .where(eq(schema.anonLinks.slug, slug))
+    .limit(1);
+  return !!anon;
 }
 
 /**
@@ -246,6 +290,12 @@ export async function sweepExpiredAnonLinks(env: Env): Promise<number> {
  * order, so a failure between the two leaves a row the next sweep retries
  * rather than a slug that still resolves with nothing behind it. */
 async function forgetAnonLink(env: Env, row: { id: string; slug: string }): Promise<void> {
-  await unpublishLink(env, row.slug, null);
+  // Only if the key still belongs to this anonymous link. A claim landing
+  // between the sweep's select and here republishes the same slug under the
+  // organization link's id, and deleting that would leave somebody's link
+  // in D1 with nothing resolving it: the one state neither side can repair,
+  // because the row that would tell the next sweep to retry is gone too.
+  const published = await resolveSlug(env, row.slug, null);
+  if (!published || published.linkId === row.id) await unpublishLink(env, row.slug, null);
   await drizzle(env.DB, { schema }).delete(schema.anonLinks).where(eq(schema.anonLinks.id, row.id));
 }

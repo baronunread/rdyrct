@@ -2,7 +2,9 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { env } from "cloudflare:workers";
 import { reset } from "cloudflare:test";
 import { applyTestMigrations, authEnv, fetchWorker, freeOwnerCookie } from "./support";
-import { claimAnonLink, sweepExpiredAnonLinks } from "../../src/worker/routes/shorten";
+import { drizzle } from "drizzle-orm/d1";
+import * as schema from "../../src/worker/db/schema";
+import { claimAnonLink, slugTaken, sweepExpiredAnonLinks } from "../../src/worker/routes/shorten";
 
 /**
  * Claiming an anonymous link, and letting go of one (Direction A of #96).
@@ -151,6 +153,86 @@ describe("the plan's link cap", () => {
   });
 });
 
+describe("picking a slug nobody owns", () => {
+  // The check used to read KV alone. An organization link is written to D1
+  // first and published after, so a slug taken inside that window looked
+  // free, and the anonymous link minted on it overwrote a redirect that
+  // already belonged to somebody.
+  const db = () => drizzle(env.DB, { schema });
+
+  // The org and its owner, so a link row can hang off something real.
+  beforeEach(async () => {
+    await freeOwnerCookie();
+  });
+
+  async function seedAddress(
+    slug: string,
+    extra: Partial<{ domainId: string | null; retiredAt: number | null }> = {},
+  ) {
+    await env.DB.prepare(
+      `insert into links (id, org_id, slug, destination, created_at)
+       values (?, 'org-1', ?, 'https://example.com/held', ?)`,
+    )
+      .bind(`link-${slug}`, slug, Date.now())
+      .run();
+    await env.DB.prepare(
+      `insert into link_addresses (id, link_id, org_id, domain_id, slug, kind, created_at, retired_at)
+       values (?, ?, ?, ?, ?, 'primary', ?, ?)`,
+    )
+      .bind(
+        `addr-${slug}`,
+        `link-${slug}`,
+        "org-1",
+        extra.domainId ?? null,
+        slug,
+        Date.now(),
+        extra.retiredAt ?? null,
+      )
+      .run();
+  }
+
+  async function seedDomain(id: string) {
+    await env.DB.prepare(
+      `insert into domains (id, org_id, hostname, status, created_at)
+       values (?, 'org-1', ?, 'active', ?)`,
+    )
+      .bind(id, `${id}.example.com`, Date.now())
+      .run();
+  }
+
+  it("refuses one an organization link holds in D1 but has not published", async () => {
+    await seedAddress("unpublished");
+    expect(await env.LINKS.get("slug:unpublished")).toBeNull();
+
+    expect(await slugTaken(authEnv(), db(), "unpublished")).toBe(true);
+  });
+
+  it("refuses one an anonymous row already holds", async () => {
+    const anon = await seedAnon();
+    expect(await slugTaken(authEnv(), db(), anon.slug)).toBe(true);
+  });
+
+  it("refuses one that is published, whichever table owns it", async () => {
+    await env.LINKS.put("slug:published", JSON.stringify({ linkId: "x" }));
+    expect(await slugTaken(authEnv(), db(), "published")).toBe(true);
+  });
+
+  it("allows one whose address was retired, or belongs to a custom domain", async () => {
+    // A retired address stops answering, and the same slug on somebody's
+    // own domain is a different key and a different link.
+    await seedAddress("retired", { retiredAt: Date.now() });
+    await seedDomain("dom-1");
+    await seedAddress("ondomain", { domainId: "dom-1" });
+
+    expect(await slugTaken(authEnv(), db(), "retired")).toBe(false);
+    expect(await slugTaken(authEnv(), db(), "ondomain")).toBe(false);
+  });
+
+  it("allows one nothing has taken", async () => {
+    expect(await slugTaken(authEnv(), db(), "nobodys")).toBe(false);
+  });
+});
+
 describe("the sweep", () => {
   it("removes expired links and leaves live ones alone", async () => {
     const dead = await seedAnon({ expiresAt: Date.now() - HOUR });
@@ -159,6 +241,58 @@ describe("the sweep", () => {
     expect(await sweepExpiredAnonLinks(authEnv())).toBe(1);
     expect(await countIn("anon_links", dead.slug)).toBe(0);
     expect(await countIn("anon_links", live.slug)).toBe(1);
+  });
+
+  it("leaves the redirect alone when a claim took the slug over first", async () => {
+    // The race the compare-and-delete is for: the sweep selects an expired
+    // row, a claim lands before the sweep reaches it and republishes the
+    // same slug under the organization link's id, and the sweep then
+    // deletes that key. The link would sit in D1 resolving to nothing, and
+    // the anonymous row that tells the next sweep to retry is gone too, so
+    // nothing repairs it.
+    //
+    // Staged rather than raced: the row is left in place and its key
+    // rewritten to another link's id, which is the state a mid-flight claim
+    // produces.
+    const anon = await seedAnon({ expiresAt: Date.now() - HOUR });
+    await env.LINKS.put(
+      `slug:${anon.slug}`,
+      JSON.stringify({
+        linkId: "link-owned-by-the-org",
+        addressId: "addr-1",
+        orgId: "org-1",
+        url: anon.destination,
+        expiresAt: null,
+      }),
+    );
+
+    await sweepExpiredAnonLinks(authEnv());
+
+    // The row goes, because it is spent. The redirect stays, because it is
+    // no longer this row's.
+    expect(await countIn("anon_links", anon.slug)).toBe(0);
+    const still = await env.LINKS.get(`slug:${anon.slug}`);
+    expect(still).not.toBeNull();
+    expect(JSON.parse(still!).linkId).toBe("link-owned-by-the-org");
+  });
+
+  it("still drops the redirect it does own", async () => {
+    const anon = await seedAnon({ expiresAt: Date.now() - HOUR });
+    await env.LINKS.put(
+      `slug:${anon.slug}`,
+      JSON.stringify({
+        linkId: anon.id,
+        addressId: anon.id,
+        orgId: "",
+        url: anon.destination,
+        expiresAt: anon.expiresAt,
+      }),
+    );
+
+    await sweepExpiredAnonLinks(authEnv());
+
+    expect(await env.LINKS.get(`slug:${anon.slug}`)).toBeNull();
+    expect(await countIn("anon_links", anon.slug)).toBe(0);
   });
 
   it("never touches a real link", async () => {
