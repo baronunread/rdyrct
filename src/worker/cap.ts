@@ -15,6 +15,7 @@
  * pulls esbuild and javascript-obfuscator in at runtime to build the probe
  * script. Proof-of-work needs neither.
  */
+import { HTTPException } from "hono/http-exception";
 import { generateChallenge, validateChallenge } from "capjs-core";
 import type { Env } from "./env";
 import { keyedDigest } from "./rate-limit";
@@ -45,7 +46,33 @@ export function capEnabled(env: Env): boolean {
   return !!env.CAP_SECRET;
 }
 
+/**
+ * capjs-core refuses a secret under 16 bytes, and it refuses it by throwing
+ * at the moment a challenge is issued rather than at startup. Unhandled, that
+ * reached the top of the Worker as a 500 with a library stack trace in it.
+ *
+ * Checked here so the failure is ours and legible. It must stay a failure:
+ * treating an unusable secret as "no secret" would fall through to the
+ * disabled path and leave signup looking configured and completely
+ * unprotected, which is the one outcome worse than being down.
+ */
+const MIN_SECRET_BYTES = 16;
+
+export function capSecretUsable(env: Env): boolean {
+  return new TextEncoder().encode(env.CAP_SECRET ?? "").length >= MIN_SECRET_BYTES;
+}
+
+/** Throws when Cap is switched on with a secret it cannot use. */
+export function assertCapUsable(env: Env): void {
+  if (!capEnabled(env) || capSecretUsable(env)) return;
+  console.error("cap_misconfigured", "CAP_SECRET is shorter than 16 bytes");
+  throw new HTTPException(503, {
+    message: "Verification is unavailable. Try again shortly.",
+  });
+}
+
 export async function issueChallenge(env: Env, scope: CapScope) {
+  assertCapUsable(env);
   return generateChallenge(env.CAP_SECRET!, {
     challengeCount: CHALLENGE_COUNT,
     challengeSize: CHALLENGE_SIZE,
@@ -133,6 +160,9 @@ type CapOutcome = "ok" | "missing" | "malformed" | "expired" | "bad_signature" |
 
 async function checkToken(env: Env, scope: CapScope, token: string): Promise<CapOutcome> {
   if (!capEnabled(env)) return "ok";
+  // Set but unusable is not the same as unset: refuse rather than wave the
+  // request through on a check that can never have run.
+  assertCapUsable(env);
   if (!token) return "missing";
 
   const [expires] = token.split(".");
