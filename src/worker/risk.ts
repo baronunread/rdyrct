@@ -130,6 +130,7 @@ export async function sweepLinkRisk(db: D1Database, batchSize = 50): Promise<num
     .bind(batchSize)
     .all<{ id: string; destination: string }>();
 
+  // react-doctor-disable-next-line react-doctor/async-await-in-loop
   for (const row of results) await scoreAndRecord(db, row.id, row.destination);
   return results.length;
 }
