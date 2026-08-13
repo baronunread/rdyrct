@@ -10,7 +10,7 @@ import { Hono } from "hono";
 import type { AppEnv } from "../env";
 import { capEnabled, issueChallenge, verifySolution, type CapScope } from "../cap";
 
-const SCOPES: readonly CapScope[] = ["signup", "password-reset", "anon-link"];
+const SCOPES: readonly CapScope[] = ["signup", "password-reset"];
 
 /** The scope rides in the path, not the body: Cap's widget builds its own
  * request bodies and only lets us choose the endpoint prefix. */
