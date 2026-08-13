@@ -1,4 +1,5 @@
 import { readFile } from "node:fs/promises";
+import { createRequire } from "node:module";
 import { expect, test, type Page } from "@playwright/test";
 import { signUpAndVerify } from "./resend";
 
@@ -24,6 +25,45 @@ function watchPosts(page: Page): string[] {
 /** What the page sent that was not Cap proving the visitor is human. */
 function appPosts(posted: string[]): string[] {
   return posted.filter((url) => !url.includes("/api/cap/"));
+}
+
+/**
+ * Reads a QR code the way a scanner would: rasterize the SVG, then decode the
+ * pixels.
+ *
+ * jsQR rather than the browser's own `BarcodeDetector`, which exists on
+ * Chromium for macOS, Android and ChromeOS and not on Linux, so on CI the
+ * check that matters most here never ran at all. The decoder is injected into
+ * `about:blank`, out from under the app's CSP, and the whole job stays in the
+ * browser: handing a megapixel of raw pixels back to node to decode there
+ * costs more than the test.
+ */
+async function readCode(page: Page, markup: string): Promise<string | null> {
+  await page.goto("about:blank");
+  await page.addScriptTag({ path: createRequire(import.meta.url).resolve("jsqr") });
+
+  return page.evaluate(async (svg) => {
+    const image = new Image();
+    await new Promise((done, fail) => {
+      image.onload = done;
+      image.onerror = fail;
+      image.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+    });
+    const canvas = Object.assign(document.createElement("canvas"), {
+      width: image.width,
+      height: image.height,
+    });
+    const context = canvas.getContext("2d");
+    context?.drawImage(image, 0, 0);
+    const pixels = context?.getImageData(0, 0, canvas.width, canvas.height);
+    if (!pixels) return null;
+    const found = (window as unknown as { jsQR: typeof import("jsqr").default }).jsQR(
+      pixels.data,
+      pixels.width,
+      pixels.height,
+    );
+    return found?.data ?? null;
+  }, markup);
 }
 
 /** Clicks a download button and hands back the file that arrived. */
@@ -207,25 +247,7 @@ test("the merged code still scans", async ({ page }) => {
 
   const svg = await readFile(await (await downloadCode(page, "SVG")).path(), "utf8");
 
-  const decoded = await page.evaluate(async (markup) => {
-    const image = new Image();
-    await new Promise((done, fail) => {
-      image.onload = done;
-      image.onerror = fail;
-      image.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(markup)}`;
-    });
-    const canvas = Object.assign(document.createElement("canvas"), {
-      width: image.width,
-      height: image.height,
-    });
-    canvas.getContext("2d")?.drawImage(image, 0, 0);
-    // Chromium ships BarcodeDetector, so the code is read by the same kind of
-    // decoder a phone camera uses rather than by us re-reading our own dots.
-    const found = await new BarcodeDetector({ formats: ["qr_code"] }).detect(canvas);
-    return found.map((code) => code.rawValue);
-  }, svg);
-
-  expect(decoded).toEqual(["https://example.com/still-scans"]);
+  expect(await readCode(page, svg)).toBe("https://example.com/still-scans");
 });
 
 test("a signed-in visitor gets their dashboard link, not a sign-up button", async ({ page }) => {
