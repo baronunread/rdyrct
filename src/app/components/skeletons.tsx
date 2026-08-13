@@ -40,7 +40,7 @@ import { Skeleton, SkeletonStatus, TableSkeleton } from "../ui/skeleton";
  * (Links, Members), 32px for the range picker and export pair (Analytics).
  * Leaving it out was why a header looked half-finished until the page landed.
  */
-function HeaderSkeleton({ action }: { action?: { w: string; h?: string } } = {}) {
+export function HeaderSkeleton({ action }: { action?: { w: string; h?: string } } = {}) {
   return (
     <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
       <div>

@@ -30,7 +30,7 @@ export function Tooltip({ content, children }: { content: ReactNode; children: R
                 data-instant is Base UI saying this one was not opened by
                 hovering (keyboard focus, or a second tip while one is already
                 up), where an animation is a delay nobody asked for. */}
-            <BaseTooltip.Popup className="max-w-xs origin-[var(--transform-origin)] rounded-md bg-surface-2 px-2.5 py-1.5 text-xs text-text transition-[opacity,transform] duration-125 ease-out smooth-shadow-ring-sm data-[ending-style]:opacity-0 data-[instant]:duration-0 data-[starting-style]:scale-[0.97] data-[starting-style]:opacity-0 motion-reduce:transition-none">
+            <BaseTooltip.Popup className="max-w-xs origin-[var(--transform-origin)] rounded-md bg-surface-2 px-2.5 py-1.5 text-xs text-text transition-[opacity,scale] duration-125 ease-out smooth-shadow-ring-sm data-[ending-style]:opacity-0 data-[instant]:duration-0 data-[starting-style]:scale-[0.97] data-[starting-style]:opacity-0 motion-reduce:transition-none">
               {content}
             </BaseTooltip.Popup>
           </BaseTooltip.Positioner>
