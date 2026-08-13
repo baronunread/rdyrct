@@ -21,7 +21,7 @@ import { useCallback, useRef } from "react";
 import wasmUrl from "@cap.js/wasm/browser/cap_wasm_bg.wasm?url";
 import { CAP_FAILED_CODE, CAP_TOKEN_HEADER } from "@/shared/types";
 
-export type CapScope = "signup" | "password-reset" | "anon-link";
+export type CapScope = "signup" | "password-reset";
 
 /** Runs a Cap-guarded request, re-solving once if the token is refused. */
 export type CapGuard = <T>(run: (headers: Record<string, string>) => Promise<T>) => Promise<T>;

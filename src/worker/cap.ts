@@ -21,7 +21,7 @@ import { keyedDigest } from "./rate-limit";
 
 /** Namespaces the challenge so a token minted for signup cannot be spent on
  * password reset. Cap binds this into the signature. */
-export type CapScope = "signup" | "password-reset" | "anon-link";
+export type CapScope = "signup" | "password-reset";
 
 /** How long a solved token stays spendable. Long enough to finish typing a
  * form, short enough that a harvested one is worthless. */
