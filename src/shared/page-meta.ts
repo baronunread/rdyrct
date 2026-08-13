@@ -36,6 +36,11 @@ export const PUBLIC_PAGE_META: Record<string, PageMeta> = {
     description:
       "Free URL shortener and QR code generator for teams. Branded short links on your own domain, custom QR codes with your logo, and privacy-friendly click analytics with UTM tracking.",
   },
+  "/qr-code-generator": {
+    title: "Free QR code generator with logo - PNG and SVG, no account",
+    description:
+      "Make a custom QR code online for free: your logo in the middle, your colors, rounded dots, and a PNG or SVG download. No sign-up, no watermark, and the code is generated in your browser.",
+  },
   "/signup": {
     title: "Sign up - rdyrct URL shortener and QR codes",
     description:
