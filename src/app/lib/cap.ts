@@ -22,7 +22,7 @@ import wasmUrl from "@cap.js/wasm/browser/cap_wasm_bg.wasm?url";
 import { CAP_TOKEN_HEADER } from "@/shared/types";
 import { retryOnCapFailure } from "./cap-retry";
 
-export type CapScope = "signup" | "password-reset";
+export type CapScope = "signup" | "password-reset" | "anon-link";
 
 /** Runs a Cap-guarded request, re-solving once if the token is refused. */
 export type CapGuard = <T>(run: (headers: Record<string, string>) => Promise<T>) => Promise<T>;

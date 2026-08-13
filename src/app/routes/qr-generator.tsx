@@ -141,7 +141,7 @@ export function QrGeneratorPage() {
     if (!value.trim() || busy) return;
     setBusy(true);
     try {
-      const result = await shortenAnonymously(value, cap.headers);
+      const result = await shortenAnonymously(value, cap.guarded);
       rememberAnonLink(result, value.trim());
       setTracked(result);
       trackCta("qr_page_trackable");

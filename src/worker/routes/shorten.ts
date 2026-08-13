@@ -27,6 +27,7 @@ import { jsonBodyLimit } from "../body-limit";
 import { publishLink, unpublishLink } from "../kv";
 import { scoreAndRecord } from "../risk";
 import { spendToken } from "../cap";
+import { CAP_FAILED_CODE } from "@/shared/types";
 import { isValidHttpUrl, normalizeUrl, randomSlug, uid } from "../util";
 import { publicClientKey, rateLimitAllows } from "../rate-limit";
 import { insertLinkWithinLimit, orgPlan } from "../plan";
@@ -55,8 +56,11 @@ shortenRoutes.post("/", async (c) => {
   if (
     !(await spendToken(c.env, "anon-link", typeof body.capToken === "string" ? body.capToken : ""))
   )
+    // Coded so the browser can solve again and retry once, rather than
+    // showing somebody an error they cannot act on.
     throw new HTTPException(400, {
       message: "Could not verify you are human. Reload the page and try again.",
+      cause: { code: CAP_FAILED_CODE },
     });
 
   if (typeof body.destination !== "string" || !body.destination.trim())
