@@ -66,6 +66,23 @@ describe("the first session", () => {
     expect(await ownedOrgs("u-again")).toHaveLength(1);
   });
 
+  it("gives a Pro account one organization, not one per concurrent sign-in", async () => {
+    // The read that skips this is a fast path, not the guard. Two sessions
+    // created at once both see no organization, and Pro is allowed three, so
+    // both had room and the account arrived with two: the switcher offered a
+    // choice nobody made, over an organization with nothing in it.
+    await seedUser("u-pro", "pro@acme.com");
+    await env.DB.prepare("update user set plan = 'pro' where id = 'u-pro'").run();
+
+    await Promise.all([
+      signInCookie("pro@acme.com", TEST_PASSWORD),
+      signInCookie("pro@acme.com", TEST_PASSWORD),
+      signInCookie("pro@acme.com", TEST_PASSWORD),
+    ]);
+
+    expect(await ownedOrgs("u-pro")).toHaveLength(1);
+  });
+
   it("leaves an account that already owns one alone", async () => {
     await seedUser("u-owner", "owner@acme.com");
     await env.DB.batch([

@@ -13,7 +13,7 @@ import { renderEmail } from "./email-layout";
 import { hashPassword, verifyPassword } from "./password";
 import { uid } from "./util";
 import { spendToken, type CapScope } from "./cap";
-import { createOwnedOrg, userPlan } from "./plan";
+import { createOwnedOrg } from "./plan";
 import { deleteOrg } from "./routes/orgs";
 import { defaultOrgName } from "@/shared/org-name";
 import { CAP_FAILED_CODE, CAP_TOKEN_HEADER } from "@/shared/types";
@@ -59,13 +59,20 @@ async function ensureOrganization(env: Env, db: DB, userId: string): Promise<voi
     const account = rows[0];
     if (!account) return;
 
-    const { limits } = await userPlan(db, userId);
     await createOwnedOrg(db, env, {
       orgId: uid(),
       userId,
       name: defaultOrgName(account.email, account.name ?? undefined),
       ts: Date.now(),
-      ownedOrgLimit: limits.orgs,
+      // One, not the plan's allowance. createOwnedOrg writes the membership
+      // only while the owner is under the limit it is given, in a single
+      // statement, so a limit of one is what makes this "give them an
+      // organization if they have none" rather than "if they have room".
+      // The read above is a fast path, not the guard: two sessions created
+      // at once both see nothing, and on Pro, where the allowance is three,
+      // both would otherwise have room and the account would arrive with two
+      // organizations and no way to tell which is theirs.
+      ownedOrgLimit: 1,
     });
   } catch (error) {
     console.warn("default_org_failed", String(error));

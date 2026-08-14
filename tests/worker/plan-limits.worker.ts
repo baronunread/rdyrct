@@ -73,6 +73,16 @@ async function postLink(cookie: string, orgId: string): Promise<Response> {
   );
 }
 
+async function postAddress(cookie: string, orgId: string, linkId: string): Promise<Response> {
+  return fetchWorker(
+    new Request(`http://localhost/api/orgs/${orgId}/links/${linkId}/addresses`, {
+      method: "POST",
+      headers: { cookie, "content-type": "application/json" },
+      body: JSON.stringify({}),
+    }),
+  );
+}
+
 async function postDomain(cookie: string, orgId: string, hostname: string): Promise<Response> {
   return fetchWorker(
     new Request(`http://localhost/api/orgs/${orgId}/domains`, {
@@ -303,6 +313,46 @@ describe("link creation: links cap under concurrency (#18)", () => {
          and id not in (select link_id from link_addresses where kind = 'primary')`,
     ).first<{ n: number }>();
     expect(orphanedLinks?.n).toBe(0);
+  });
+});
+
+describe("alias creation: the per-link cap under concurrency", () => {
+  it("lets exactly one of two concurrent aliases through the last slot", async () => {
+    // assertAliasQuota reads the count and the insert follows, so two
+    // requests arriving together both found room for the fifth alias and
+    // both took it: a link came away with six, and the sixth counted against
+    // the org's quota for good.
+    const cookie = await seedPaidUser("alias-owner", "aliasowner@example.com", "pro");
+    const db = drizzle(env.DB, { schema });
+    await db.insert(schema.orgs).values({ id: "org-alias", name: "Alias org", createdAt: 0 });
+    await db.insert(schema.orgMembers).values({
+      orgId: "org-alias",
+      userId: "alias-owner",
+      role: "owner",
+      createdAt: 0,
+    });
+
+    const made = await postLink(cookie, "org-alias");
+    const { id: linkId } = (await made.json()) as { id: string };
+
+    // Four aliases plus the primary: one slot left of the five.
+    for (let i = 0; i < 4; i++) {
+      const res = await postAddress(cookie, "org-alias", linkId);
+      expect(res.status).toBe(201);
+    }
+
+    const [a, b] = await Promise.all([
+      postAddress(cookie, "org-alias", linkId),
+      postAddress(cookie, "org-alias", linkId),
+    ]);
+    expect([a.status, b.status].sort()).toEqual([201, 402]);
+
+    const held = await env.DB.prepare(
+      "select count(*) as n from link_addresses where link_id = ? and retired_at is null",
+    )
+      .bind(linkId)
+      .first<{ n: number }>();
+    expect(held?.n).toBe(6); // the primary and five aliases
   });
 });
 

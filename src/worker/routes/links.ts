@@ -141,9 +141,20 @@ async function insertAddressAndRespond(
   status: 200 | 201,
   linkLimit: number,
 ) {
-  // Atomic: the org's links cap is re-checked at write time inside one D1
-  // statement, not from a count fetched earlier (see issue #18).
-  const inserted = await insertAddressWithinLimit(env, address, linkLimit);
+  // Atomic: both caps are re-checked at write time inside one D1 statement,
+  // not from a count fetched earlier (see issue #18). The per-link one is in
+  // there for the same reason as the org's: assertAliasQuota reads before the
+  // insert, so two merges arriving together both found room for the fifth
+  // alias and both took it.
+  //
+  // MAX_ALIASES_PER_LINK counts aliases; the statement counts addresses, and
+  // the primary is one of those.
+  const inserted = await insertAddressWithinLimit(
+    env,
+    address,
+    linkLimit,
+    MAX_ALIASES_PER_LINK + 1,
+  );
   if (!inserted)
     throw new HTTPException(402, {
       message: "Upgrade your plan to create more links",
