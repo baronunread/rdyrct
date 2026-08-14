@@ -150,6 +150,8 @@ async function seedFillerLinks(
     ...rows.map((r) => db.insert(schema.links).values(r.link)),
     ...rows.map((r) => db.insert(schema.linkAddresses).values(r.address)),
   ];
+  // SAFETY: rows is never empty here, so writes has at least the one entry
+  // drizzle batch() insists on in its first slot.
   await db.batch(writes as [(typeof writes)[number], ...(typeof writes)[number][]]);
 }
 
@@ -236,6 +238,8 @@ describe("invite acceptance: member cap and duplicate accept under concurrency (
         acceptedBy: null,
       }),
     ];
+    // SAFETY: statements always holds the org insert, so it is non-empty,
+    // which is all drizzle batch() asks of its argument.
     await db.batch(statements as [(typeof statements)[number], ...(typeof statements)[number][]]);
   }
 

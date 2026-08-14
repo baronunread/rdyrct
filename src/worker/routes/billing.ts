@@ -10,8 +10,10 @@ import { requireUser } from "../guards";
 import { alertBetterStack } from "../alerts";
 import { effectivePlanSql } from "../entitlement";
 import { jsonBodyLimit } from "../body-limit";
+import type { BillingProvider } from "../billing-provider";
 
-const polarFor = (env: Env) =>
+const polarFor = (env: Env): BillingProvider =>
+  env.BILLING ??
   new Polar({
     accessToken: env.POLAR_ACCESS_TOKEN,
     server: env.POLAR_SERVER ?? "sandbox",

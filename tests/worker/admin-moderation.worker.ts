@@ -11,6 +11,7 @@ import {
   fetchWorker,
   freeOwnerCookie,
   jsonBody,
+  testEnv,
 } from "./support";
 
 /**
@@ -50,7 +51,7 @@ const admin = (path: string, cookie: string, init: RequestInit = {}) =>
  */
 async function syncKv(...slugs: string[]) {
   for (const slug of slugs)
-    await applyStorageMessage(env as never, drizzle(env.DB, { schema }), syncLinkMsg(slug, null));
+    await applyStorageMessage(testEnv, drizzle(env.DB, { schema }), syncLinkMsg(slug, null));
 }
 
 /** What the redirect path would find: KV is the only thing that decides. */
@@ -74,11 +75,11 @@ beforeEach(async () => {
   // The destination scorer (#68) runs on create through waitUntil and would
   // otherwise reach the real resolver and write real scores, which the risk
   // sort test then has to fight.
-  globalThis.fetch = (async (input: RequestInfo | URL) => {
+  globalThis.fetch = async (input, init) => {
     const url = String(input instanceof Request ? input.url : input);
     if (url.startsWith("https://security.cloudflare-dns.com")) throw new Error("offline");
-    return realFetch(input);
-  }) as typeof fetch;
+    return realFetch(input, init);
+  };
 });
 
 afterEach(() => {
@@ -93,7 +94,7 @@ async function createLiveLink(cookie: string, destination?: string) {
 }
 
 /** Call a moderation route, then apply the republishes it enqueued. */
-async function moderate(path: string, cookie: string, body?: object, linkIds: string[] = []) {
+async function moderate(path: string, cookie: string, body?: JsonValue, linkIds: string[] = []) {
   const res = await admin(path, cookie, {
     method: "POST",
     body: JSON.stringify(body ?? {}),
@@ -261,11 +262,12 @@ describe("suspending a whole org", () => {
 
     let sends = 0;
     const realSendBatch = env.STORAGE_QUEUE.sendBatch.bind(env.STORAGE_QUEUE);
-    env.STORAGE_QUEUE.sendBatch = (async (batch: unknown[]) => {
+    env.STORAGE_QUEUE.sendBatch = async (batch, options) => {
       sends++;
-      expect(batch.length).toBeLessThanOrEqual(100);
-      return realSendBatch(batch as Parameters<typeof realSendBatch>[0]);
-    }) as typeof env.STORAGE_QUEUE.sendBatch;
+      const messages = [...batch];
+      expect(messages.length).toBeLessThanOrEqual(100);
+      return realSendBatch(messages, options);
+    };
 
     try {
       const res = await admin("/links/orgs/org-1/suspend", await adminCookie(), {

@@ -18,24 +18,25 @@ import {
   seedBillingUser as seedUser,
 } from "./support";
 import type { Env } from "../../src/worker/env";
+import type { JsonValue } from "../../src/shared/types";
+import type { BillingProvider } from "../../src/worker/billing-provider";
 
-// The Polar SDK makes real HTTP calls and expects a large, version-specific
-// response schema back; mocking the SDK class itself (rather than faking its
-// wire format) keeps these tests about our own route logic.
-const { checkoutsCreate, customerSessionsCreate } = vi.hoisted(() => ({
-  checkoutsCreate: vi.fn(async () => ({ url: "https://sandbox.polar.sh/checkout/test" })),
-  customerSessionsCreate: vi.fn(async () => ({
-    customerPortalUrl: "https://sandbox.polar.sh/portal/test",
-  })),
+// The real Polar client makes real HTTP calls and expects a large,
+// version-specific response schema back. The routes take their client off the
+// env (see BillingProvider), so these tests hand them a stand-in the same way
+// they hand over a queue or a rate limiter, and stay about our own route
+// logic.
+const checkoutsCreate = vi.fn(async () => ({ url: "https://sandbox.polar.sh/checkout/test" }));
+const customerSessionsCreate = vi.fn(async () => ({
+  customerPortalUrl: "https://sandbox.polar.sh/portal/test",
 }));
+const billingProvider: BillingProvider = {
+  checkouts: { create: checkoutsCreate },
+  customerSessions: { create: customerSessionsCreate },
+};
 
-vi.mock("@polar-sh/sdk", () => {
-  class Polar {
-    checkouts = { create: checkoutsCreate };
-    customerSessions = { create: customerSessionsCreate };
-  }
-  return { Polar };
-});
+/** billingEnv() with the stand-in checkout/portal client wired in. */
+const polarEnv = (): Env => ({ ...billingEnv(), BILLING: billingProvider });
 
 beforeEach(async () => {
   await applyTestMigrations();
@@ -56,7 +57,7 @@ async function getUser() {
   return rows[0];
 }
 
-async function checkout(cookie: string, body: Record<string, unknown>): Promise<Response> {
+async function checkout(cookie: string, body: JsonValue): Promise<Response> {
   const ctx = createExecutionContext();
   const res = await worker.fetch(
     new Request("http://localhost/api/billing/checkout", {
@@ -64,7 +65,7 @@ async function checkout(cookie: string, body: Record<string, unknown>): Promise<
       headers: { cookie, "content-type": "application/json" },
       body: JSON.stringify(body),
     }),
-    billingEnv(),
+    polarEnv(),
     ctx,
   );
   await waitOnExecutionContext(ctx);
@@ -77,7 +78,7 @@ async function portal(cookie?: string): Promise<Response> {
     new Request("http://localhost/api/billing/portal", {
       headers: cookie ? { cookie } : {},
     }),
-    billingEnv(),
+    polarEnv(),
     ctx,
   );
   await waitOnExecutionContext(ctx);
@@ -121,9 +122,9 @@ function subscriptionActivePayload(): string {
 }
 
 async function postWebhook(
-  event: unknown,
+  event: JsonValue,
   headers?: Record<string, string>,
-  testEnv: Env = billingEnv(),
+  testEnv: Env = polarEnv(),
 ): Promise<Response> {
   const payload = JSON.stringify(event);
   const ctx = createExecutionContext();
@@ -210,7 +211,7 @@ describe("GET /api/user reports whether a billing account exists (#85)", () => {
     const ctx = createExecutionContext();
     const res = await worker.fetch(
       new Request("http://localhost/api/user", { headers: { cookie } }),
-      billingEnv(),
+      polarEnv(),
       ctx,
     );
     await waitOnExecutionContext(ctx);
@@ -277,7 +278,7 @@ describe("GET /api/user reports whether a billing account exists (#85)", () => {
     const ctx = createExecutionContext();
     const res = await worker.fetch(
       new Request("http://localhost/api/user", { headers: { cookie } }),
-      billingEnv(),
+      polarEnv(),
       ctx,
     );
     await waitOnExecutionContext(ctx);

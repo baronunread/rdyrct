@@ -17,15 +17,15 @@ import { hashPassword } from "../../src/worker/password";
 
 type TestEnv = typeof env & { TEST_MIGRATIONS: D1Migration[] };
 
-/**
- * The ambient worker-test binding, under the same name the worker knows it by.
- * Every test reaches for this rather than casting `env` again at each call
- * site.
- */
+// The ambient worker-test binding, under the same name the worker knows it
+// by. Every test reaches for this rather than casting `env` again at each
+// call site.
+
 // SAFETY: wrangler generates the type of `env` from the same wrangler.jsonc
 // that Env is hand-written against, so the two describe one object; the worker
 // under test receives this very binding at runtime.
-export const testEnv = env as Env;
+const ambient = env as Env;
+export const testEnv = ambient;
 
 export function overrideEnv(overrides: Partial<Env>): Env {
   return { ...testEnv, ...overrides };
@@ -164,11 +164,16 @@ export async function seedBillingUser(
     });
 }
 
-export async function applyTestMigrations(): Promise<void> {
+/** The migration bundle vitest.config.ts reads off disk and binds. */
+export function testMigrations(): TestEnv {
   // SAFETY: vitest.config.ts puts the migrations on the test binding under
   // TEST_MIGRATIONS; only the worker-test pool ever runs this file.
-  const migrationEnv = env as TestEnv;
-  await applyD1Migrations(migrationEnv.DB, migrationEnv.TEST_MIGRATIONS);
+  return env as TestEnv;
+}
+
+export async function applyTestMigrations(): Promise<void> {
+  const { DB, TEST_MIGRATIONS } = testMigrations();
+  await applyD1Migrations(DB, TEST_MIGRATIONS);
 }
 
 // The password every seeded test user shares: fine since each test's DB is

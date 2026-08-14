@@ -19,6 +19,7 @@ import {
   rawLinkRow,
   testDb as db,
 } from "./support";
+import type { JsonValue } from "../../src/shared/types";
 
 /** A free-plan owner of "org-1", with an active custom domain "go.example.com". */
 const seed = () => freeOwnerCookie({ id: "domain-1", hostname: "go.example.com" });
@@ -28,7 +29,7 @@ async function apiWithEnv(
   cookie: string,
   method: string,
   path: string,
-  body?: unknown,
+  body?: JsonValue,
 ): Promise<Response> {
   const ctx = createExecutionContext();
   const res = await worker.fetch(
@@ -44,12 +45,11 @@ async function apiWithEnv(
   return res;
 }
 
-const api = (cookie: string, method: string, path: string, body?: unknown) =>
+const api = (cookie: string, method: string, path: string, body?: JsonValue) =>
   apiWithEnv(authEnv(), cookie, method, path, body);
 
-async function createLink(cookie: string, body: Record<string, unknown>): Promise<{ id: string }> {
-  const res = await api(cookie, "POST", "/links", body);
-  return res.json() as Promise<{ id: string }>;
+async function createLink(cookie: string, body: JsonValue): Promise<{ id: string }> {
+  return jsonBody<{ id: string }>(await api(cookie, "POST", "/links", body));
 }
 
 /** A custom-domain link renamed once, so it carries a live temp_alias: the
@@ -428,10 +428,13 @@ describe("plan limits (#38)", () => {
       for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size));
       return out;
     }
-    await db().batch([
+    const writes = [
       ...chunk(rows, 4).map((c) => db().insert(schema.links).values(c)),
       ...chunk(addressRows, 8).map((c) => db().insert(schema.linkAddresses).values(c)),
-    ] as never);
+    ];
+    // SAFETY: rows is never empty here, so writes has at least the one entry
+    // drizzle batch() insists on in its first slot.
+    await db().batch(writes as [(typeof writes)[number], ...(typeof writes)[number][]]);
   }
 
   it("402s a new link at the limit", async () => {

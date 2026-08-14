@@ -2,8 +2,9 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createExecutionContext, reset, waitOnExecutionContext } from "cloudflare:test";
 import worker from "../../src/worker";
 import { applyTestMigrations, authEnv, fetchWorker, freeOwnerCookie } from "./support";
+import type { JsonValue } from "../../src/shared/types";
 
-async function postJson(cookie: string, path: string, body: unknown): Promise<Response> {
+async function postJson(cookie: string, path: string, body: JsonValue): Promise<Response> {
   return fetchWorker(
     new Request(`http://localhost${path}`, {
       method: "POST",

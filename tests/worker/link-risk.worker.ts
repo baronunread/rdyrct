@@ -4,6 +4,7 @@ import { createExecutionContext, reset, waitOnExecutionContext } from "cloudflar
 import worker from "../../src/worker";
 import { applyTestMigrations, authEnv, freeOwnerCookie, jsonBody } from "./support";
 import { revalidateOnRedirect, scoreAndRecord } from "../../src/worker/risk";
+import type { JsonValue } from "../../src/shared/types";
 
 /**
  * Destination risk scoring end to end (#68).
@@ -22,9 +23,9 @@ const realFetch = globalThis.fetch;
 /** A resolver that refuses BLOCKED's host and resolves everything else. */
 function stubResolver(options: { fail?: boolean } = {}) {
   const calls: string[] = [];
-  globalThis.fetch = (async (input: RequestInfo | URL) => {
+  globalThis.fetch = async (input, init) => {
     const url = String(input instanceof Request ? input.url : input);
-    if (!url.startsWith("https://security.cloudflare-dns.com")) return realFetch(input);
+    if (!url.startsWith("https://security.cloudflare-dns.com")) return realFetch(input, init);
     calls.push(url);
     if (options.fail) throw new Error("resolver unreachable");
     const blocked = url.includes("malware.example");
@@ -32,7 +33,7 @@ function stubResolver(options: { fail?: boolean } = {}) {
       JSON.stringify({ Status: 0, Answer: [{ data: blocked ? "0.0.0.0" : "93.184.216.34" }] }),
       { status: 200 },
     );
-  }) as typeof fetch;
+  };
   return calls;
 }
 
@@ -45,7 +46,7 @@ async function call(path: string, init: RequestInit): Promise<Response> {
   return res;
 }
 
-const postLink = (cookie: string, body: Record<string, unknown>) =>
+const postLink = (cookie: string, body: JsonValue) =>
   call("/api/orgs/org-1/links", {
     method: "POST",
     headers: { cookie, "content-type": "application/json" },
@@ -60,7 +61,7 @@ async function createLink(cookie: string, destination: string): Promise<string> 
   return id;
 }
 
-const patchLink = (cookie: string, id: string, body: Record<string, unknown>) =>
+const patchLink = (cookie: string, id: string, body: JsonValue) =>
   call(`/api/orgs/org-1/links/${id}`, {
     method: "PATCH",
     headers: { cookie, "content-type": "application/json" },

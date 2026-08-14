@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { env } from "cloudflare:workers";
 import { reset } from "cloudflare:test";
 import { applyTestMigrations, captureEmails, fetchWorker, jsonBody, overrideEnv } from "./support";
+import type { JsonValue } from "../../src/shared/types";
 
 /** What /api/cap/:scope/challenge answers with. */
 interface Challenge {
@@ -36,7 +37,7 @@ const CAP_ON = () =>
     CAP_SECRET: "cap-test-secret-long-enough-to-be-accepted",
   });
 
-function capPost(path: string, body: unknown, testEnv = CAP_ON()) {
+function capPost(path: string, body: JsonValue, testEnv = CAP_ON()) {
   return fetchWorker(
     new Request(`http://localhost/api/cap/${path}`, {
       method: "POST",

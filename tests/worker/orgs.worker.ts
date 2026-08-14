@@ -8,32 +8,59 @@ import type { Env } from "../../src/worker/env";
 import { deleteOrg } from "../../src/worker/routes/orgs";
 import { adminCookie, applyTestMigrations, authEnv, overrideEnv } from "./support";
 
+// A workflow instance handle that answers the one question deleteOrg asks of
+// it. Every other member throws, so a test that starts depending on Workflows
+// execution semantics says so out loud rather than reading a quiet default.
+function instanceReporting(status: InstanceStatus["status"]): WorkflowInstance {
+  const untested = (): never => {
+    throw new Error("this workflow instance member is not part of any deleteOrg test");
+  };
+  return {
+    id: "fake-instance",
+    status: async () => ({ status }),
+    pause: untested,
+    resume: untested,
+    terminate: untested,
+    restart: untested,
+    sendEvent: untested,
+  };
+}
+
 // A workflow stub that records create() calls without running the real
 // OrgDeleteWorkflow, so these tests assert deleteOrg's own gating logic
 // instead of depending on Workflows execution semantics.
-function fakeOrgDeleteWorkflow(): { workflow: Env["ORG_DELETE"]; creates: string[] } {
+function fakeOrgDeleteWorkflow() {
   const creates: string[] = [];
-  const workflow = {
-    async create(options: { id?: string }) {
-      creates.push(options.id ?? "");
-      return {} as never;
+  const workflow: Env["ORG_DELETE"] = {
+    async create(options) {
+      creates.push(options?.id ?? "");
+      return instanceReporting("running");
     },
-  } as unknown as Env["ORG_DELETE"];
+    async get() {
+      throw new Error("instance not found");
+    },
+    async createBatch() {
+      throw new Error("deleteOrg never creates a batch");
+    },
+  };
   return { workflow, creates };
 }
 
 // A workflow stub whose create() always fails, and whose get() reports a
 // given status (or "not found", matching a truly missing instance).
-function failingCreateWorkflow(existingStatus?: string): Env["ORG_DELETE"] {
+function failingCreateWorkflow(existingStatus?: InstanceStatus["status"]): Env["ORG_DELETE"] {
   return {
     async create() {
       throw new Error("injected workflow start failure");
     },
     async get() {
       if (!existingStatus) throw new Error("instance not found");
-      return { status: async () => ({ status: existingStatus }) };
+      return instanceReporting(existingStatus);
     },
-  } as unknown as Env["ORG_DELETE"];
+    async createBatch() {
+      throw new Error("deleteOrg never creates a batch");
+    },
+  };
 }
 
 async function seedOrg(id = "org-1") {

@@ -49,13 +49,18 @@ function sendVerificationOtp(email: string) {
   );
 }
 
-/** The parts of a response an outsider can compare between two addresses. */
-function shapeOf(body: Record<string, unknown>): unknown {
-  const user = body.user as Record<string, unknown> | null;
+/** The sign-up route's answer, in the only terms this test compares. */
+interface SignUpAnswer {
+  token?: string;
+  user?: object | null;
+}
+
+/** What an outsider can tell apart between the answers for two addresses. */
+function outsiderView(body: SignUpAnswer) {
   return {
     keys: Object.keys(body).sort(),
     token: body.token,
-    userKeys: user ? Object.keys(user).sort() : null,
+    userKeys: body.user ? Object.keys(body.user).sort() : null,
   };
 }
 
@@ -75,9 +80,9 @@ describe("signup does not reveal which addresses have accounts (#53)", () => {
       const fresh = await signUp("nobody@gmail.com");
 
       expect(taken.status).toBe(fresh.status);
-      const takenBody = await jsonBody<Record<string, unknown>>(taken);
-      const freshBody = await jsonBody<Record<string, unknown>>(fresh);
-      expect(shapeOf(takenBody)).toEqual(shapeOf(freshBody));
+      const takenBody = await jsonBody<SignUpAnswer>(taken);
+      const freshBody = await jsonBody<SignUpAnswer>(fresh);
+      expect(outsiderView(takenBody)).toEqual(outsiderView(freshBody));
     } finally {
       restore();
     }
@@ -180,7 +185,7 @@ describe("signup does not reveal which addresses have accounts (#53)", () => {
     // is not necessarily the person who typed the form. Checked on the text
     // part, where a code sits on a line of its own: the HTML part carries
     // hex colours, and "#262336" is six digits.
-    expect((sent[0] as unknown as { text: string }).text).not.toMatch(/^\s*\d{6}\s*$/m);
+    expect(sent[0]!.text).not.toMatch(/^\s*\d{6}\s*$/m);
   });
 
   it("mails nobody when the address is free", async () => {

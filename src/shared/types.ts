@@ -7,6 +7,16 @@ export const CAP_TOKEN_HEADER = "x-cap-token";
  * spent. The browser retries once with a fresh one rather than showing it. */
 export const CAP_FAILED_CODE = "CAP_FAILED";
 
+/** Anything that survives a round trip through JSON: what a request or
+ * response body is, before anyone has checked it means what it should. */
+export type JsonValue =
+  | string
+  | number
+  | boolean
+  | null
+  | JsonValue[]
+  | { [key: string]: JsonValue };
+
 export type OrgRole = "owner" | "admin" | "member";
 export type OrgPlan = "free" | "hobby" | "pro";
 

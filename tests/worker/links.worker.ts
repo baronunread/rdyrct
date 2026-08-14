@@ -2,8 +2,9 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createExecutionContext, reset, waitOnExecutionContext } from "cloudflare:test";
 import worker from "../../src/worker";
 import { applyTestMigrations, authEnv, freeOwnerCookie, jsonBody } from "./support";
+import type { JsonValue } from "../../src/shared/types";
 
-async function postLink(cookie: string, body: Record<string, unknown>): Promise<Response> {
+async function postLink(cookie: string, body: JsonValue): Promise<Response> {
   const ctx = createExecutionContext();
   const res = await worker.fetch(
     new Request("http://localhost/api/orgs/org-1/links", {
@@ -18,11 +19,7 @@ async function postLink(cookie: string, body: Record<string, unknown>): Promise<
   return res;
 }
 
-async function patchLink(
-  cookie: string,
-  linkId: string,
-  body: Record<string, unknown>,
-): Promise<Response> {
+async function patchLink(cookie: string, linkId: string, body: JsonValue): Promise<Response> {
   const ctx = createExecutionContext();
   const res = await worker.fetch(
     new Request(`http://localhost/api/orgs/org-1/links/${linkId}`, {

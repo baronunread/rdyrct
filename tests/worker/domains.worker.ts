@@ -4,6 +4,7 @@ import { createExecutionContext, reset, waitOnExecutionContext } from "cloudflar
 import worker from "../../src/worker";
 import { ensureHostname, probeDelaySeconds, probeDomain } from "../../src/worker/routes/domains";
 import { adminCookie, applyTestMigrations, authEnv, overrideEnv } from "./support";
+import type { JsonValue } from "../../src/shared/types";
 
 // Env with a token present and the dev fake off, so the real get-or-create
 // path runs against a mocked global fetch.
@@ -14,7 +15,7 @@ const realCfEnv = () =>
 // to be in the ambient .dev.vars, so the CF fake is used on its timer.
 const fakeCfEnv = () => overrideEnv({ CF_DEV_ENV: "simulated" });
 
-const cfJson = (body: unknown) =>
+const cfJson = (body: JsonValue) =>
   new Response(JSON.stringify(body), {
     status: 200,
     headers: { "content-type": "application/json" },
@@ -44,13 +45,13 @@ function mockCustomHostnames(handlers: {
   });
 }
 
-async function seedDomain(overrides: Record<string, unknown> = {}) {
-  const row = {
+async function seedDomain(overrides: Partial<typeof schema.domains.$inferInsert> = {}) {
+  const row: typeof schema.domains.$inferInsert = {
     id: "domain-1",
     orgId: "org-1",
     hostname: "go.example.com",
     status: "checking_dns",
-    cfHostnameId: null as string | null,
+    cfHostnameId: null,
     createdAt: Date.now(),
     ...overrides,
   };
