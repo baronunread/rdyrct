@@ -61,12 +61,12 @@ test("walking off a public page does not take its title along", async ({ page })
   await page.getByRole("link", { name: "Terms" }).click();
   await expect(page).toHaveTitle(/Terms of service/);
 
-  // And off a public page entirely: back to what index.html ships, rather
-  // than the privacy title following along. The landing page claims its own
-  // head once there is a hook call on it; until then the default is exactly
-  // what leaving should restore.
+  // And off a public page entirely. Asserted as "not the page we left",
+  // because what the landing page ends up titled depends on whether it
+  // claims a head of its own, while "the privacy title came along" is the
+  // bug in either case.
   await page.goto("/privacy");
   await page.getByRole("link", { name: "rdyrct" }).first().click();
   await expect(page).toHaveURL(/\/$/);
-  await expect(page).toHaveTitle("rdyrct - short links that carry your team's brand");
+  await expect(page).not.toHaveTitle(/Privacy policy/);
 });
