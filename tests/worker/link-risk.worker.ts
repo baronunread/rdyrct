@@ -3,7 +3,7 @@ import { env } from "cloudflare:workers";
 import { createExecutionContext, reset, waitOnExecutionContext } from "cloudflare:test";
 import worker from "../../src/worker";
 import { applyTestMigrations, authEnv, freeOwnerCookie } from "./support";
-import { scoreAndRecord } from "../../src/worker/risk";
+import { revalidateOnRedirect, scoreAndRecord } from "../../src/worker/risk";
 
 /**
  * Destination risk scoring end to end (#68).
@@ -191,6 +191,70 @@ describe("re-scoring on a destination edit", () => {
     const before = await riskRow(linkId);
 
     await patchLink(cookie, linkId, { title: "Renamed" });
+    expect(await riskRow(linkId)).toEqual(before);
+  });
+});
+
+describe("re-checking on a click", () => {
+  // The nightly sweep is gone: a destination is re-checked when somebody
+  // actually visits it, and the answer is cached per hostname so ten
+  // thousand links pointing at one host cost one lookup a day between them.
+  const clickOn = (linkId: string, url: string) =>
+    revalidateOnRedirect(authEnv(), { linkId, orgId: "org-1", url });
+
+  it("records the verdict for the link that was clicked", async () => {
+    stubResolver();
+    const cookie = await freeOwnerCookie();
+    const linkId = await createLink(cookie, BLOCKED);
+    await env.DB.prepare("update links set risk_checked_at = null, risk_score = null where id = ?")
+      .bind(linkId)
+      .run();
+
+    await clickOn(linkId, BLOCKED);
+
+    expect((await riskRow(linkId))?.risk_score).toBe(100);
+  });
+
+  it("records it for every link on the host, not just the one that warmed the cache", async () => {
+    // The cache is keyed by hostname and the write was keyed by link. A host
+    // scored 100 therefore marked whichever link happened to be clicked
+    // while the cache was cold, and left every other link pointing at it
+    // unscored. The admin table sorts by that score, so the rest hid in
+    // plain sight, which is the opposite of what scoring is for.
+    stubResolver();
+    const cookie = await freeOwnerCookie();
+    // Two paths on one host: an identical destination would be merged into
+    // the first link rather than making a second.
+    const firstUrl = "https://malware.example/one";
+    const secondUrl = "https://malware.example/two";
+    const first = await createLink(cookie, firstUrl);
+    const second = await createLink(cookie, secondUrl);
+    for (const id of [first, second])
+      await env.DB.prepare(
+        "update links set risk_checked_at = null, risk_score = null where id = ?",
+      )
+        .bind(id)
+        .run();
+
+    await clickOn(first, firstUrl);
+    expect((await riskRow(first))?.risk_score).toBe(100);
+
+    // Second click, same host: the cache is warm, and this link still has to
+    // come away with the verdict.
+    await clickOn(second, secondUrl);
+    expect((await riskRow(second))?.risk_score).toBe(100);
+  });
+
+  it("leaves a link alone when its destination has moved on", async () => {
+    // KV can hold a redirect that predates an edit, and a click on it must
+    // not label the new destination with the old one's verdict.
+    stubResolver();
+    const cookie = await freeOwnerCookie();
+    const linkId = await createLink(cookie, CLEAN);
+    const before = await riskRow(linkId);
+
+    await clickOn(linkId, BLOCKED);
+
     expect(await riskRow(linkId)).toEqual(before);
   });
 });

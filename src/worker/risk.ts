@@ -24,6 +24,7 @@
  *    evidence of that specific abuse to justify the credential.
  */
 import type { Env } from "./env";
+import { stripUtmParams } from "./util";
 
 /** 0 = nothing known against it, 100 = a provider refuses to resolve it. */
 export type RiskVerdict = {
@@ -162,19 +163,32 @@ export async function revalidateOnRedirect(
     const cacheKey = `risk:host:${hostname}`;
     // One KV read is the whole cost of a click on a host checked recently,
     // and KV reads at the edge are what this hot path is already made of.
-    if (await env.LINKS.get(cacheKey)) return;
-
-    const verdict = await scoreDestination(hit.url);
+    // The whole verdict is cached, not just its score: a click on a host
+    // somebody else's link warmed still has to be able to record it.
+    const cached = await env.LINKS.get<RiskVerdict>(cacheKey, "json");
+    const verdict = cached ?? (await scoreDestination(hit.url));
     if (!verdict) return;
 
     // Written before the row: if the update fails, the next click should not
     // immediately repeat a lookup that just succeeded.
-    await env.LINKS.put(cacheKey, String(verdict.score), {
-      expirationTtl: HOST_VERDICT_TTL_SECONDS,
-    });
+    if (!cached)
+      await env.LINKS.put(cacheKey, JSON.stringify(verdict), {
+        expirationTtl: HOST_VERDICT_TTL_SECONDS,
+      });
+
+    // Every link on the host, not only the one that warmed the cache. The
+    // verdict used to be written to the clicked link alone, so a host scored
+    // 100 marked whichever link happened to be clicked while the cache was
+    // cold and left every other link pointing at it unscored: the admin
+    // table sorts by that score, so the rest hid in plain sight.
+    //
+    // The two conditions are what keep this off the hot path in practice: a
+    // link already carrying this verdict is not written again, and a link
+    // whose destination has moved on is not relabelled by a KV entry that
+    // predates the edit.
     await env.DB.prepare(
       `update links set risk_score = ?, risk_reasons = ?, risk_checked_at = ?, risk_provider = ?
-       where id = ?`,
+       where id = ? and destination = ? and (risk_checked_at is null or risk_checked_at < ?)`,
     )
       .bind(
         verdict.score,
@@ -182,6 +196,8 @@ export async function revalidateOnRedirect(
         Date.now(),
         verdict.provider,
         hit.linkId,
+        stripUtmParams(hit.url),
+        Date.now() - HOST_VERDICT_TTL_SECONDS * 1000,
       )
       .run();
   } catch (error) {

@@ -423,7 +423,7 @@ function AnonymousLinks() {
                   <RiskBadge score={link.riskScore} reasons={link.riskReasons} />
                 </Td>
                 <Td className="text-muted" title="Anonymous links record no clicks">
-                  &mdash;
+                  none
                 </Td>
                 <Td className="whitespace-nowrap text-muted">{shortDate(link.createdAt)}</Td>
                 <Td className="whitespace-nowrap text-muted">{shortDate(link.expiresAt)}</Td>
