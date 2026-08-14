@@ -15,7 +15,7 @@ import { Link } from "react-router";
 import { ArrowRight, Plus } from "lucide-react";
 import { useCurrentOrg } from "../lib/current-org";
 import { useStats } from "../lib/hooks";
-import { Button } from "../ui/button";
+import { buttonClass } from "../ui/button";
 import { Skeleton } from "../ui/skeleton";
 import type { OrgStats } from "@/shared/types";
 
@@ -37,10 +37,11 @@ function NoOrgYet() {
       <p className="text-xs text-muted">
         Links live in an organization. Making one takes a name and nothing else.
       </p>
-      <Link to="/dashboard" className="self-start">
-        <Button variant="primary" size="sm">
-          Create an organization <ArrowRight size={14} />
-        </Button>
+      <Link
+        to="/dashboard"
+        className={buttonClass({ variant: "primary", size: "sm", className: "self-start" })}
+      >
+        Create an organization <ArrowRight size={14} />
       </Link>
     </div>
   );
@@ -106,15 +107,11 @@ function Summary({ name, data }: { name: string; data: OrgStats }) {
       <TopLinks links={data.topLinks.slice(0, 2)} />
 
       <div className="flex flex-wrap gap-2">
-        <Link to="/dashboard">
-          <Button variant="primary" size="sm">
-            Open dashboard <ArrowRight size={14} />
-          </Button>
+        <Link to="/dashboard" className={buttonClass({ variant: "primary", size: "sm" })}>
+          Open dashboard <ArrowRight size={14} />
         </Link>
-        <Link to="/links">
-          <Button variant="outline" size="sm">
-            <Plus size={14} /> New link
-          </Button>
+        <Link to="/links" className={buttonClass({ variant: "outline", size: "sm" })}>
+          <Plus size={14} /> New link
         </Link>
       </div>
     </CardShell>

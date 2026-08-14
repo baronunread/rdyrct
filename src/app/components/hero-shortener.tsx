@@ -22,7 +22,7 @@
  */
 import { useState } from "react";
 import { ArrowRight } from "lucide-react";
-import { Button } from "../ui/button";
+import { Button, buttonClass } from "../ui/button";
 import { Input } from "../ui/field";
 import { CopyButton } from "../ui/copy-button";
 import { BusyContent } from "../ui/spinner";
@@ -114,10 +114,12 @@ function KeepThemFooter({ count }: { count: number }) {
   return (
     <div className="flex flex-wrap items-center gap-2 border-t border-border pt-3">
       <p className="min-w-52 flex-1 text-xs text-muted">{copy.body}</p>
-      <a href="/signup" onClick={() => trackCta("hero_shortener_claim")}>
-        <Button variant="primary" size="sm">
-          {copy.action} <ArrowRight size={14} />
-        </Button>
+      <a
+        href="/signup"
+        onClick={() => trackCta("hero_shortener_claim")}
+        className={buttonClass({ variant: "primary", size: "sm" })}
+      >
+        {copy.action} <ArrowRight size={14} />
       </a>
     </div>
   );

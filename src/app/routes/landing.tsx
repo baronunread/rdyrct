@@ -36,7 +36,7 @@ import posthog from "../lib/posthog";
 import { FUNNEL, landingContext } from "../lib/funnel";
 import { trackCta } from "../lib/track-cta";
 import { PLAN_LIMITS, PLAN_PRICES } from "@/shared/types";
-import { Button } from "../ui/button";
+import { buttonClass } from "../ui/button";
 import { Table, Th, Td } from "../ui/misc";
 import { Footer, GITHUB_URL } from "../ui/footer";
 import { HeroShortener } from "../components/hero-shortener";
@@ -256,10 +256,12 @@ function MobilePlans({ paidTo }: { paidTo: (p: "hobby" | "pro") => string }) {
         "Random slugs on the shared domain",
       ],
       cta: (
-        <Link to="/signup" onClick={() => trackCta("pricing_free")}>
-          <Button variant="outline" size="sm" className="w-full">
-            Sign up free
-          </Button>
+        <Link
+          to="/signup"
+          onClick={() => trackCta("pricing_free")}
+          className={buttonClass({ variant: "outline", size: "sm", className: "w-full" })}
+        >
+          Sign up free
         </Link>
       ),
     },
@@ -275,10 +277,12 @@ function MobilePlans({ paidTo }: { paidTo: (p: "hobby" | "pro") => string }) {
         `${PLAN_LIMITS.hobby.analyticsDays}-day click analytics`,
       ],
       cta: (
-        <Link to={paidTo("hobby")} onClick={() => trackCta("pricing_hobby")}>
-          <Button variant="outline" size="sm" className="w-full">
-            Start Hobby
-          </Button>
+        <Link
+          to={paidTo("hobby")}
+          onClick={() => trackCta("pricing_hobby")}
+          className={buttonClass({ variant: "outline", size: "sm", className: "w-full" })}
+        >
+          Start Hobby
         </Link>
       ),
     },
@@ -296,10 +300,12 @@ function MobilePlans({ paidTo }: { paidTo: (p: "hobby" | "pro") => string }) {
         "Direct email support",
       ],
       cta: (
-        <Link to={paidTo("pro")} onClick={() => trackCta("pricing_pro")}>
-          <Button variant="primary" size="sm" className="w-full">
-            Start Pro
-          </Button>
+        <Link
+          to={paidTo("pro")}
+          onClick={() => trackCta("pricing_pro")}
+          className={buttonClass({ variant: "primary", size: "sm", className: "w-full" })}
+        >
+          Start Pro
         </Link>
       ),
     },
@@ -476,24 +482,30 @@ function PricingSection() {
             <tr>
               <Td />
               <Td>
-                <Link to="/signup" onClick={() => trackCta("pricing_free")}>
-                  <Button variant="outline" size="sm" className="w-full">
-                    Sign up free
-                  </Button>
+                <Link
+                  to="/signup"
+                  onClick={() => trackCta("pricing_free")}
+                  className={buttonClass({ variant: "outline", size: "sm", className: "w-full" })}
+                >
+                  Sign up free
                 </Link>
               </Td>
               <Td>
-                <Link to={paidTo("hobby")} onClick={() => trackCta("pricing_hobby")}>
-                  <Button variant="outline" size="sm" className="w-full">
-                    Start Hobby
-                  </Button>
+                <Link
+                  to={paidTo("hobby")}
+                  onClick={() => trackCta("pricing_hobby")}
+                  className={buttonClass({ variant: "outline", size: "sm", className: "w-full" })}
+                >
+                  Start Hobby
                 </Link>
               </Td>
               <Cell tier="pro">
-                <Link to={paidTo("pro")} onClick={() => trackCta("pricing_pro")}>
-                  <Button variant="primary" size="sm" className="w-full">
-                    Start Pro
-                  </Button>
+                <Link
+                  to={paidTo("pro")}
+                  onClick={() => trackCta("pricing_pro")}
+                  className={buttonClass({ variant: "primary", size: "sm", className: "w-full" })}
+                >
+                  Start Pro
                 </Link>
               </Cell>
             </tr>
@@ -762,16 +774,20 @@ function HeroSection({
               in, where the card already carries "Open dashboard" and two of
               them side by side is just a stutter. */}
           {!authed && (
-            <Link to={ctaTo} onClick={() => trackCta("hero_primary")}>
-              <Button variant="outline" size="md" className="h-11 px-6 text-base">
-                {ctaLabel}
-              </Button>
+            <Link
+              to={ctaTo}
+              onClick={() => trackCta("hero_primary")}
+              className={buttonClass({ variant: "outline", className: "h-11 px-6 text-base" })}
+            >
+              {ctaLabel}
             </Link>
           )}
-          <a href="#analytics" onClick={() => trackCta("hero_secondary")}>
-            <Button variant="ghost" size="md" className="h-11 px-6 text-base">
-              <BarChart3 size={16} /> See the analytics
-            </Button>
+          <a
+            href="#analytics"
+            onClick={() => trackCta("hero_secondary")}
+            className={buttonClass({ variant: "ghost", className: "h-11 px-6 text-base" })}
+          >
+            <BarChart3 size={16} /> See the analytics
           </a>
         </div>
       </m.div>
@@ -912,10 +928,12 @@ function CustomDomainSection() {
           />
         </div>
 
-        <Link to={paidTo("hobby")} onClick={() => trackCta("second_screen_domain")}>
-          <Button variant="primary" size="sm">
-            Put your domain on it <ArrowRight size={14} />
-          </Button>
+        <Link
+          to={paidTo("hobby")}
+          onClick={() => trackCta("second_screen_domain")}
+          className={buttonClass({ variant: "primary", size: "sm" })}
+        >
+          Put your domain on it <ArrowRight size={14} />
         </Link>
       </div>
     </Section>
@@ -1054,10 +1072,12 @@ function FinalCtaSection({ ctaTo, ctaLabel }: { ctaTo: string; ctaLabel: string 
           Create your first short link on the free plan. No credit card, no visitor tracking, no
           servers to run.
         </p>
-        <Link to={ctaTo} onClick={() => trackCta("final_cta")}>
-          <Button variant="primary" size="md" className="h-11 px-6 text-base">
-            {ctaLabel}
-          </Button>
+        <Link
+          to={ctaTo}
+          onClick={() => trackCta("final_cta")}
+          className={buttonClass({ variant: "primary", className: "h-11 px-6 text-base" })}
+        >
+          {ctaLabel}
         </Link>
       </div>
     </Section>

@@ -23,18 +23,42 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   static?: boolean;
 }
 
+/**
+ * A button's look, without a button.
+ *
+ * For the CTAs that navigate: those are links, and a `<button>` inside an
+ * `<a>` is invalid interactive content. The nesting works by accident in a
+ * mouse browser and stops working as soon as anything reads the page
+ * seriously: the anchor and the button both claim focus, so Tab stops twice
+ * on one control, and Enter and Space disagree about which of the two they
+ * belong to. Give the anchor these classes instead and there is one control.
+ */
+export function buttonClass({
+  variant = "outline",
+  size = "md",
+  static: staticProp,
+  className,
+}: {
+  variant?: Variant;
+  size?: Size;
+  static?: boolean;
+  className?: string;
+} = {}): string {
+  return cn(
+    "inline-flex cursor-pointer items-center justify-center rounded-md transition-[background,border-color,color,filter,scale] duration-150 ease-out disabled:pointer-events-none disabled:opacity-50",
+    !staticProp && "active:scale-[0.96]",
+    variants[variant],
+    sizes[size],
+    className,
+  );
+}
+
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
-  ({ variant = "outline", size = "md", static: staticProp, className, type, ...props }, ref) => (
+  ({ variant, size, static: staticProp, className, type, ...props }, ref) => (
     <button
       ref={ref}
       type={type ?? "button"}
-      className={cn(
-        "inline-flex cursor-pointer items-center justify-center rounded-md transition-[background,border-color,color,filter,scale] duration-150 ease-out disabled:pointer-events-none disabled:opacity-50",
-        !staticProp && "active:scale-[0.96]",
-        variants[variant],
-        sizes[size],
-        className,
-      )}
+      className={buttonClass({ variant, size, static: staticProp, className })}
       {...props}
     />
   ),

@@ -19,7 +19,7 @@
 import { useState } from "react";
 import { Link } from "react-router";
 import { ArrowRight, ChevronDown, ShieldCheck } from "lucide-react";
-import { Button } from "../ui/button";
+import { buttonClass } from "../ui/button";
 import { Input } from "../ui/field";
 import { trackCta } from "../lib/track-cta";
 import { QRPreview, QrDownloadButtons } from "../components/qr";
@@ -75,10 +75,12 @@ function TrackingSection() {
         just use rdyrct. Start with free and upgrade anytime.
       </p>
       <div className="flex flex-wrap items-center gap-4 pt-1">
-        <Link to="/signup" onClick={() => trackCta("qr_page_signup")}>
-          <Button variant="primary">
-            Start free <ArrowRight size={14} />
-          </Button>
+        <Link
+          to="/signup"
+          onClick={() => trackCta("qr_page_signup")}
+          className={buttonClass({ variant: "primary" })}
+        >
+          Start free <ArrowRight size={14} />
         </Link>
         <Link
           to="/#pricing"

@@ -11,7 +11,7 @@ import { Moon, Sun } from "lucide";
 import { MorphIcon } from "morphicons/react";
 import { useTheme } from "../lib/theme";
 import { trackCta } from "../lib/track-cta";
-import { Button, IconButton } from "../ui/button";
+import { buttonClass, IconButton } from "../ui/button";
 
 export function LandingHeader({ authed }: { authed: boolean }) {
   const [theme, toggleTheme] = useTheme();
@@ -50,16 +50,24 @@ export function LandingHeader({ authed }: { authed: boolean }) {
           <MorphIcon icon={theme === "dark" ? Sun : Moon} size={15} spring="snappy" />
         </IconButton>
         {authed ? (
-          <Link to="/dashboard" onClick={() => trackCta("header")}>
-            <Button variant="primary">Dashboard</Button>
+          <Link
+            to="/dashboard"
+            onClick={() => trackCta("header")}
+            className={buttonClass({ variant: "primary" })}
+          >
+            Dashboard
           </Link>
         ) : (
           <>
             <Link to="/login" className="whitespace-nowrap text-muted hover:text-accent">
               Log in
             </Link>
-            <Link to="/signup" onClick={() => trackCta("header")}>
-              <Button variant="primary">Sign up</Button>
+            <Link
+              to="/signup"
+              onClick={() => trackCta("header")}
+              className={buttonClass({ variant: "primary" })}
+            >
+              Sign up
             </Link>
           </>
         )}
