@@ -518,7 +518,7 @@ function OwnedLinks({ onSuspend }: { onSuspend: (l: AdminLinkRow) => void }) {
   const [deleting, setDeleting] = useState<AdminLinkRow | null>(null);
   const toast = useToast();
   const qc = useQueryClient();
-  const { data, isPending } = useAdminLinks({ q: search, suspended: false });
+  const { data, isPending } = useAdminLinks({ q: search, suspended: false, org: orgFilter });
 
   const refresh = async () => {
     await qc.invalidateQueries({ queryKey: ["admin", "links"] });
@@ -563,20 +563,18 @@ function OwnedLinks({ onSuspend }: { onSuspend: (l: AdminLinkRow) => void }) {
     onError: withErrorToast(toast),
   });
 
-  const all = sortRows(
-    (data ?? []).filter((link) => !orgFilter || link.orgId === orgFilter),
-    sort,
-    {
-      slug: (l) => l.slug,
-      destination: (l) => l.destination,
-      orgName: (l) => l.orgName,
-      // Unscored sorts below every score rather than as a zero: nobody has
-      // looked at it, which is not the same as clean.
-      riskScore: (l) => l.riskScore ?? -1,
-      clicks: (l) => l.clicks,
-      createdAt: (l) => l.createdAt,
-    },
-  );
+  // No client-side org filter: the query applies it, so the cap counts this
+  // organization's links rather than the instance's.
+  const all = sortRows(data ?? [], sort, {
+    slug: (l) => l.slug,
+    destination: (l) => l.destination,
+    orgName: (l) => l.orgName,
+    // Unscored sorts below every score rather than as a zero: nobody has
+    // looked at it, which is not the same as clean.
+    riskScore: (l) => l.riskScore ?? -1,
+    clicks: (l) => l.clicks,
+    createdAt: (l) => l.createdAt,
+  });
   const { rows, totalPages, safePage } = paginate(all, page);
 
   return (

@@ -147,10 +147,19 @@ adminLinkRoutes.get("/", async (c) => {
     ? (sortParam as AdminLinkSort)
     : "created";
   const onlySuspended = c.req.query("suspended") === "1";
+  const org = (c.req.query("org") ?? "").trim();
 
   const filters = [
     q ? or(like(schema.links.slug, `%${q}%`), like(schema.links.destination, `%${q}%`)) : undefined,
     onlySuspended ? isNotNull(schema.links.suspendedAt) : undefined,
+    // Here rather than in the browser. The page used to narrow the rows this
+    // query had already capped at 200, so "show me this organization's links"
+    // meant "show me whichever of its links happen to be in the newest 200
+    // across every organization on the instance": for a busy instance, or a
+    // big account, usually none of them. An abuse report names an
+    // organization, and answering it with an empty table is worse than
+    // answering it slowly.
+    org ? eq(schema.links.orgId, org) : undefined,
   ].filter(Boolean);
 
   const rows = await db

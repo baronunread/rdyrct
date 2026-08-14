@@ -287,6 +287,24 @@ describe("suspending a whole org", () => {
 });
 
 describe("the cross-org search", () => {
+  it("filters by organization in the query, not in the browser", async () => {
+    // The page used to narrow the rows this endpoint had already capped at
+    // 200. "Show me this organization's links" therefore meant "show me
+    // whichever of its links are in the newest 200 across the whole
+    // instance", which for a busy instance is usually none of them: an abuse
+    // report naming an org was answered with an empty table.
+    const owner = await freeOwnerCookie();
+    await createLink(owner, "https://example.com/mine");
+
+    const cookie = await adminCookie();
+    const mine = (await (await admin("/links?org=org-1", cookie)).json()) as { orgId: string }[];
+    expect(mine.length).toBeGreaterThan(0);
+    expect(mine.every((r) => r.orgId === "org-1")).toBe(true);
+
+    const other = (await (await admin("/links?org=org-nobody", cookie)).json()) as unknown[];
+    expect(other).toEqual([]);
+  });
+
   it("finds a link by destination, which is what an abuse report names", async () => {
     const owner = await freeOwnerCookie();
     await createLink(owner, "https://phishy.example/login");
