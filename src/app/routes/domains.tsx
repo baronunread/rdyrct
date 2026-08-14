@@ -14,7 +14,7 @@ import { withErrorToast } from "../lib/mutation-toast";
 import { hostnameSchema } from "../lib/schemas";
 import { Badge, Card, PageHeader } from "../ui/misc";
 import { BusyContent } from "../ui/spinner";
-import { DomainsSkeleton } from "../components/skeletons";
+import { DomainsPageSkeleton, DomainsSkeleton, HeaderSkeleton } from "../components/skeletons";
 import { NoOrgState } from "../components/no-org";
 import { CopyButton } from "../ui/copy-button";
 import { useToast } from "../ui/toast";
@@ -49,7 +49,18 @@ export function DomainsPage() {
   const orgId = org?.id ?? "";
   const me = useCurrentUser();
 
-  if (me.isLoading) return <DomainsSkeleton />;
+  // The full skeleton only for somebody who is going to get the full page.
+  // A member sees one line saying they have no access, and a free plan sees
+  // an upgrade card, so drawing a form and a domain list for either promises
+  // controls that the page then takes away. Role and plan are both already in
+  // hand: the only thing still loading is whether this is a platform admin,
+  // and that is a handful of people.
+  if (me.isLoading)
+    return org && canManageDomains(false, org.role) && PLAN_LIMITS[org.plan].domains > 0 ? (
+      <DomainsPageSkeleton />
+    ) : (
+      <HeaderSkeleton />
+    );
   if (!org) return <NoOrgState />;
 
   const isAdmin = canManageDomains(!!me.data?.user.isAdmin, org.role);

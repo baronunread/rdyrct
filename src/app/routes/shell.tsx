@@ -17,7 +17,7 @@ import { Dialog } from "../ui/dialog";
 import { Button, IconButton } from "../ui/button";
 import { Field, Input } from "../ui/field";
 
-import { AppShellSkeleton, PageSkeleton } from "../components/skeletons";
+import { AppShellSkeleton, RouteSkeleton } from "../components/skeletons";
 import { appNavItems } from "../components/nav-items";
 import { cn } from "../ui/cn";
 import { NotFound } from "./not-found";
@@ -47,7 +47,7 @@ export function RequireAuth({ children }: { children: ReactNode }) {
  * admin area's existence isn't revealed to regular users. */
 export function RequireAdmin({ children }: { children: ReactNode }) {
   const me = useCurrentUser();
-  if (me.isLoading) return <PageSkeleton />;
+  if (me.isLoading) return <RouteSkeleton />;
   if (!me.data?.user.isAdmin) return <NotFound />;
   return children;
 }
@@ -371,8 +371,9 @@ export function AppShell() {
 
       <main className="flex min-w-0 flex-1 flex-col px-5 py-8 pt-16 md:ml-60 md:px-8 md:pt-8">
         <div className="mx-auto w-full max-w-5xl flex-1">
-          {/* pages are lazy chunks: keep the shell in place while one loads */}
-          <Suspense fallback={<PageSkeleton />}>
+          {/* pages are lazy chunks: keep the shell in place while one loads,
+              behind the shape that chunk is about to render */}
+          <Suspense fallback={<RouteSkeleton />}>
             <Outlet />
           </Suspense>
         </div>

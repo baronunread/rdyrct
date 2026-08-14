@@ -129,12 +129,25 @@ export function AliasThread({ orgId, link }: { orgId: string; link: LinkDTO }) {
 
   if (addresses.isLoading)
     return (
+      // The span has to match how many columns are actually rendered, and
+      // that changes with the viewport: the table hides Title below lg and
+      // Destination below xl, and a hidden cell creates no column at all.
+      // A flat colSpan={6} asked for a column that did not exist, so the
+      // browser made one and squeezed the real ones to fit: the header
+      // visibly jumped while the aliases loaded and snapped back after.
+      //
+      // Three is the count that is always there (Short link, Clicks,
+      // Actions); the three trailing cells appear exactly when their columns
+      // do.
       <tr>
-        <Td colSpan={6} className="bg-surface-2/30">
+        <Td colSpan={3} className="bg-surface-2/30">
           <SkeletonStatus className="flex justify-center py-1">
             <Skeleton className="h-4 w-32" />
           </SkeletonStatus>
         </Td>
+        <Td className="hidden bg-surface-2/30 sm:table-cell" />
+        <Td className="hidden bg-surface-2/30 lg:table-cell" />
+        <Td className="hidden bg-surface-2/30 xl:table-cell" />
       </tr>
     );
 
