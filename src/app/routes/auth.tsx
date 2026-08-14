@@ -16,6 +16,7 @@ import { friendlyAuthError } from "../lib/auth-errors";
 import posthog from "../lib/posthog";
 import { FUNNEL } from "../lib/funnel";
 import { useShake } from "../lib/use-shake";
+import { useCap } from "../lib/cap";
 import { useCurrentUser } from "../lib/hooks";
 import { firstFormError } from "../lib/form-errors";
 import { cn } from "../ui/cn";
@@ -237,6 +238,7 @@ function AuthFormView({
   next,
   onSubmit,
   onForgot,
+  onFirstInput,
 }: {
   mode: "login" | "signup";
   busy: boolean;
@@ -244,6 +246,9 @@ function AuthFormView({
   next: string;
   onSubmit: (email: string, password: string) => void;
   onForgot: (email: string) => void;
+  /** Starts the Cap proof-of-work (#98). Idempotent, so a per-keystroke
+   * handler is fine; it fires once and the work overlaps the typing. */
+  onFirstInput: () => void;
 }) {
   const copy = AUTH_MODE_COPY[mode];
   const toast = useToast();
@@ -265,6 +270,7 @@ function AuthFormView({
     <AuthCard>
       <form
         onSubmit={onFormSubmit}
+        onInput={onFirstInput}
         noValidate
         className="flex flex-col gap-4 rounded-xl bg-surface p-6 smooth-shadow-ring-sm"
       >
@@ -341,6 +347,8 @@ interface SubmitDeps {
   qc: QueryClient;
   navigate: NavigateFunction;
   next: string;
+  /** Runs a Cap-guarded request, re-solving once if the token is refused. */
+  capGuarded: <T>(run: (headers: Record<string, string>) => Promise<T>) => Promise<T>;
 }
 
 async function trySignIn(email: string, password: string, deps: SubmitDeps) {
@@ -362,13 +370,15 @@ async function trySignIn(email: string, password: string, deps: SubmitDeps) {
 async function trySignUp(
   email: string,
   password: string,
-  deps: Pick<SubmitDeps, "goVerify" | "failSubmit">,
+  deps: Pick<SubmitDeps, "goVerify" | "failSubmit" | "capGuarded">,
 ) {
-  const { error: signUpError } = await authClient.signUp.email({
-    email,
-    password,
-    name: email.split("@")[0],
-  });
+  // Cap's proof-of-work token (#98). Solved while the visitor was typing,
+  // spent here, and required by the Worker before an account exists. Through
+  // the guard, so a token the server has forgotten is solved again rather
+  // than shown to somebody as an error.
+  const { error: signUpError } = await deps.capGuarded((headers) =>
+    authClient.signUp.email({ email, password, name: email.split("@")[0] }, { headers }),
+  );
   if (signUpError) {
     deps.failSubmit(friendlyAuthError(signUpError));
   } else {
@@ -427,6 +437,10 @@ function useAuthFlow(mode: "login" | "signup") {
   const [busy, setBusy] = useState(false);
   const [verifyPhase, setVerifyPhase] = useState<"idle" | "success" | "leaving">("idle");
   const shake = useShake();
+  // Two scopes, two tokens: one minted for signup must not be spendable on a
+  // password reset, so Cap binds the scope into the signature.
+  const signupCap = useCap("signup");
+  const resetCap = useCap("password-reset");
 
   const [prevMode, setPrevMode] = useState(mode);
   if (prevMode !== mode) {
@@ -467,18 +481,23 @@ function useAuthFlow(mode: "login" | "signup") {
       email,
       type: "email-verification",
     });
-    if (error) {
-      // No EMAIL_VERIFIED branch: the server answers an already-verified
-      // address exactly as it answers a fresh one, so an anonymous caller
-      // cannot tell them apart (#53). The account's owner is told by email.
-      failSubmit(error.message ?? "Could not send the verification code");
-      return;
-    }
-    // Funnel step 5a (#64). This one belongs here because both callers do
-    // genuinely send a code. Step 4 does not: goVerify is also reached from
-    // trySignIn's EMAIL_NOT_VERIFIED branch, so counting a signup here would
-    // count every returning unverified user as a new one.
-    posthog.capture(FUNNEL.verificationSent, { resend: false });
+    // No EMAIL_VERIFIED branch: the server answers an already-verified
+    // address exactly as it answers a fresh one, so an anonymous caller
+    // cannot tell them apart (#53). The account's owner is told by email.
+    if (error) failSubmit(error.message ?? "Could not send the verification code");
+    // Funnel step 5a (#64). Only when a code really went out. Step 4 does not
+    // belong here: goVerify is also reached from trySignIn's
+    // EMAIL_NOT_VERIFIED branch, so counting a signup here would count every
+    // returning unverified user as a new one.
+    else posthog.capture(FUNNEL.verificationSent, { resend: false });
+
+    // The code screen either way, error or not. By the time we get here the
+    // account exists, and a failed send is usually the email rate limit
+    // (#50), which clears in a minute. Staying on the signup form told
+    // somebody the opposite: it looks like the signup failed, so they submit
+    // again, which spends another send and puts them back here. The code
+    // screen is the honest place to be stranded, because it has the resend
+    // button that gets them out.
     setAuthEmail(email);
     writePending({ email, next });
     setView("verify-otp");
@@ -494,7 +513,7 @@ function useAuthFlow(mode: "login" | "signup") {
     authPasswordRef.current = password;
     setBusy(true);
     try {
-      const deps = { goVerify, failSubmit, qc, navigate, next };
+      const deps = { goVerify, failSubmit, qc, navigate, next, capGuarded: signupCap.guarded };
       await (mode === "login"
         ? trySignIn(email, password, deps)
         : trySignUp(email, password, deps));
@@ -569,10 +588,11 @@ function useAuthFlow(mode: "login" | "signup") {
   const submitForgot = async (email: string) => {
     setForgotBusy(true);
     try {
-      const { error: resetError } = await authClient.requestPasswordReset({
-        email,
-        redirectTo: "/reset-password",
-      });
+      // Cheap to abuse and it sends mail, which is why #50 needed a
+      // per-recipient cap. Cap prices the attempt instead (#98).
+      const { error: resetError } = await resetCap.guarded((headers) =>
+        authClient.requestPasswordReset({ email, redirectTo: "/reset-password" }, { headers }),
+      );
       if (resetError) {
         toast(resetError.message ?? "Something went wrong", "error");
         return;
@@ -600,6 +620,11 @@ function useAuthFlow(mode: "login" | "signup") {
     resendOtp,
     submitForgot,
     backToForm,
+    /** Hung on the forms' first interaction so the proof-of-work runs while
+     * the visitor types, instead of stalling the submit. Signup only: a
+     * password reset is rare enough that a short wait on submit is fine, and
+     * priming it would tax everyone who came to log in. */
+    primeSignupCap: signupCap.prime,
   };
 }
 
@@ -642,6 +667,7 @@ export function AuthPage({ mode }: { mode: "login" | "signup" }) {
       shake={flow.shake}
       next={flow.next}
       onSubmit={flow.submit}
+      onFirstInput={flow.primeSignupCap}
       onForgot={(email) => {
         flow.setAuthEmail(email);
         flow.setView("forgot");

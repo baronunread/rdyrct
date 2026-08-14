@@ -17,6 +17,10 @@ export interface Env {
   /* click ingestion: redirects enqueue instead of writing D1 directly */
   CLICK_QUEUE: Queue<ClickMessage>;
   RL_AUTH_PUBLIC: RateLimit;
+  /* Cap's challenge and redeem endpoints (#98), on their own budget: issuing
+     a challenge is cheap for us and the proof-of-work is what costs the
+     caller, so this must never be the thing a person meets. */
+  RL_CAP: RateLimit;
   RL_EMAIL: RateLimit;
   RL_EMAIL_RECIPIENT: RateLimit;
   RL_WRITE_FREE: RateLimit;
@@ -51,6 +55,9 @@ export interface Env {
   // runs that assert on the end state and should not wait out a staged delay.
   // Any other value (including unset) calls the real API, or fails closed.
   CF_DEV_ENV?: string;
+
+  /* bot protection: Cap proof-of-work (#98). Unset disables the check. */
+  CAP_SECRET?: string; // secret, `openssl rand -hex 32`
 
   /* alerting: dead-lettered storage messages (best-effort, never blocks acking) */
   BETTERSTACK_SOURCE_TOKEN?: string; // secret

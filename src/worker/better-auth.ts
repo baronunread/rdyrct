@@ -12,6 +12,16 @@ import { sendEmail } from "./email";
 import { renderEmail } from "./email-layout";
 import { hashPassword, verifyPassword } from "./password";
 import { uid } from "./util";
+import { spendToken, type CapScope } from "./cap";
+import { CAP_FAILED_CODE, CAP_TOKEN_HEADER } from "@/shared/types";
+
+/** better-auth paths that must carry a solved Cap token, and the scope the
+ * token has to have been minted for. Keyed by `ctx.path`, which is relative
+ * to /api/auth. */
+const CAP_GUARDED_PATHS: Record<string, CapScope> = {
+  "/sign-up/email": "signup",
+  "/request-password-reset": "password-reset",
+};
 
 const DNS_CHECK_TIMEOUT = 3000;
 
@@ -322,6 +332,25 @@ function buildAuth(env: Env) {
       // response instead of running the endpoint. Both guards use that to
       // answer exactly as the real path would while doing nothing (#53).
       before: createAuthMiddleware(async (ctx) => {
+        // Cap (#98) sits in front of the two paths a bot actually wants:
+        // creating accounts, and making us send mail. Not login, where a bot
+        // with correct credentials is not the threat and every real visitor
+        // would pay the tax.
+        const capScope = CAP_GUARDED_PATHS[ctx.path];
+        if (capScope) {
+          // In a header, not the body: better-auth validates each endpoint's
+          // body against its own schema, and an extra key there is at the
+          // mercy of that schema.
+          const token = ctx.headers?.get(CAP_TOKEN_HEADER) ?? "";
+          if (!(await spendToken(env, capScope, token)))
+            // A code, not just a message: the browser retries this once with
+            // a freshly solved token, and matching on prose to decide that
+            // would break the first time the wording changed.
+            throw new APIError("BAD_REQUEST", {
+              code: CAP_FAILED_CODE,
+              message: "Could not verify you are human. Reload the page and try again.",
+            });
+        }
         if (ctx.path === "/email-otp/send-verification-otp") {
           return guardVerificationOTPSend(
             db,

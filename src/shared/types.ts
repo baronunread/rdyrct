@@ -1,3 +1,12 @@
+/** Carries a solved Cap token (#98) on the requests that need one. A header,
+ * not a body field, because better-auth validates each endpoint's body
+ * against its own schema. */
+export const CAP_TOKEN_HEADER = "x-cap-token";
+
+/** What the Worker answers when a Cap token is missing, expired, or already
+ * spent. The browser retries once with a fresh one rather than showing it. */
+export const CAP_FAILED_CODE = "CAP_FAILED";
+
 export type OrgRole = "owner" | "admin" | "member";
 export type OrgPlan = "free" | "hobby" | "pro";
 

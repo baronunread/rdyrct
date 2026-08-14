@@ -13,6 +13,7 @@ import { qrLogoRoutes } from "./routes/qr-logos";
 import { adminRoutes } from "./routes/admin";
 import { billingRoutes, handlePolarWebhook } from "./routes/billing";
 import { domainRoutes } from "./routes/domains";
+import { capRoutes } from "./routes/cap";
 import { resolveSlug, resolveDomain, type KVLink } from "./kv";
 import { RESERVED_SLUGS } from "./util";
 import { enforcePublicAuthRateLimit, enforceSignedApiRateLimit } from "./rate-limit";
@@ -121,6 +122,14 @@ app.on(["GET", "POST"], "/api/auth/*", async (c) => {
   // address exists (#53).
   return withBackground(c.executionCtx, () => getAuth(c.env).handler(c.req.raw));
 });
+
+// Cap (#98): public, and necessarily so, since it guards signup itself.
+// Same public rate limit as the auth routes it protects.
+app.post("/api/cap/*", async (c, next) => {
+  const limited = await enforcePublicAuthRateLimit(c);
+  return limited ?? next();
+});
+app.route("/api/cap", capRoutes);
 
 // Polar webhook: public, signature-verified, no session middleware.
 app.post("/api/webhooks/polar", (c) => handlePolarWebhook(c.req.raw, c.env));

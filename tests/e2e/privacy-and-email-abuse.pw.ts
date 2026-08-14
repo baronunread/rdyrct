@@ -87,7 +87,7 @@ test("one address cannot be mailed without limit by many callers (#50)", async (
   // what refuses, and without a recipient-keyed limit every one of these
   // would be accepted.
   const statuses: number[] = [];
-  for (let attempt = 0; attempt < 6; attempt++) {
+  for (let attempt = 0; attempt < 8; attempt++) {
     const response = await page.request.post(
       `${appUrl}/api/auth/email-otp/request-password-reset`,
       {
@@ -103,9 +103,40 @@ test("one address cannot be mailed without limit by many callers (#50)", async (
     if (response.status() === 429) break;
   }
 
-  // Refused on the fourth, not merely somewhere: RL_EMAIL_RECIPIENT allows 3
+  // Refused on the sixth, not merely somewhere: RL_EMAIL_RECIPIENT allows 5
   // a minute in this environment, so the position of the 429 is what names
   // which budget ran out. Anything later would mean the recipient limit let
-  // a fourth send through.
-  expect(statuses.indexOf(429)).toBe(3);
+  // a sixth send through.
+  expect(statuses.indexOf(429)).toBe(5);
+});
+
+test("a throttled verification email still lands on the code screen (#50)", async ({ page }) => {
+  const email = `throttled-${Date.now()}@gmail.com`;
+
+  // The send refused, the account made anyway. That is what the email rate
+  // limit looks like from the browser, and the app used to answer it by
+  // leaving the person on the signup form: it reads as "signup failed", so
+  // they submit again, spend another send, and get the same nothing.
+  await page.route("**/api/auth/email-otp/send-verification-otp", (route) =>
+    route.fulfill({
+      status: 429,
+      contentType: "application/json",
+      body: JSON.stringify({ message: "Too many requests. Try again shortly." }),
+    }),
+  );
+
+  await page.goto("/signup");
+  await page.getByLabel("Email").fill(email);
+  await page.getByLabel("Password").fill(password);
+  await page.getByRole("button", { name: "Sign up" }).click();
+
+  // The toast shows for 3.25s, and a sign-up under a loaded suite can take
+  // longer than the default 5s to answer at all: this waits for the whole
+  // round trip, not just for the toast's own life.
+  await expect(page.getByText("Too many requests. Try again shortly.")).toBeVisible({
+    timeout: 20_000,
+  });
+  // The code screen, which is where the resend button is, not back at the form.
+  await expect(page.getByRole("heading", { name: "Enter your code" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Resend code" })).toBeVisible();
 });

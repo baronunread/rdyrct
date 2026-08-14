@@ -43,7 +43,19 @@ export function captureClickQueue(): { env: Env; sent: ClickMessage[] } {
 
 // Env with a non-empty auth secret, independent of the ambient .dev.vars, so
 // sign-in's rate-limit key derivation has a key to HMAC with.
-export const authEnv = () => overrideEnv({ BETTER_AUTH_SECRET: "test-secret" });
+/**
+ * The default binding for worker tests: a known BETTER_AUTH_SECRET, and Cap
+ * explicitly off.
+ *
+ * Cap has to be cleared rather than merely unmentioned, because the ambient
+ * binding is built from .dev.vars, which sets CAP_SECRET so the browser tests
+ * exercise the real proof-of-work loop (#98). Inheriting it here would make
+ * every signup in every worker test fail the Cap check first and report 400,
+ * hiding whatever that test was actually about. Tests that want Cap on say so:
+ * see cap.worker.ts.
+ */
+export const authEnv = () =>
+  overrideEnv({ BETTER_AUTH_SECRET: "test-secret", CAP_SECRET: undefined });
 
 /**
  * Drive one request through the real worker and wait for anything it
@@ -355,4 +367,30 @@ export function batchOf<Body>(queueName: string, bodies: Body[], attempts = 1) {
   );
   const ctx = createExecutionContext();
   return { batch, ctx };
+}
+
+/**
+ * Stub rate-limit bindings.
+ *
+ * Cloudflare's per-location counters do not reset between test cases, so a
+ * test that wants "this budget is gone" says so with a binding rather than by
+ * spending a real one.
+ */
+export function exhaustedLimit(): RateLimit {
+  return { limit: async () => ({ success: false }) } as unknown as RateLimit;
+}
+
+/** Always allows, isolating which of several budgets is under test. */
+export function openLimit(): RateLimit {
+  return { limit: async () => ({ success: true }) } as unknown as RateLimit;
+}
+
+/** Allows, and records the key each call was counted against. */
+export function recordingLimit(keys: string[]): RateLimit {
+  return {
+    limit: async ({ key }: { key: string }) => {
+      keys.push(key);
+      return { success: true };
+    },
+  } as unknown as RateLimit;
 }

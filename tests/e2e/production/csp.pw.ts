@@ -26,7 +26,45 @@ test("the built worker serves the production CSP", async ({ page }) => {
   // style-src carries 'unsafe-inline' by design (React inline `style`), so the
   // check that matters is script-src alone, read as its own directive.
   const scriptSrc = csp?.split(";").find((part) => part.trim().startsWith("script-src"));
-  expect(scriptSrc?.trim()).toBe("script-src 'self' https://*.posthog.com");
+  expect(scriptSrc?.trim()).toBe("script-src 'self' 'wasm-unsafe-eval' https://*.posthog.com");
+});
+
+/**
+ * Cap's proof-of-work (#98) is the part of this app most likely to be
+ * strangled by our own policy, and it fails quietly: the widget catches its
+ * own errors, so a blocked Worker or a refused WebAssembly.compile() would
+ * leave signup apparently fine and completely unprotected.
+ *
+ * So this asserts the mechanism, not just the absence of complaints. The
+ * solver runs in a Worker built from a blob: URL (worker-src) and compiles a
+ * same-origin WASM module (script-src 'wasm-unsafe-eval'). Both were blocked
+ * by the policy as it stood before this feature; the measured cost of losing
+ * the WASM path is roughly 5x on solve time.
+ */
+test("Cap solves a challenge under the production CSP", async ({ page }) => {
+  await page.goto("/signup");
+
+  // The widget only loads once the visitor touches the form, which is the
+  // whole point: no cost to anyone who does not sign up.
+  await page.getByRole("textbox").first().fill("csp-probe@example.com");
+  await page.waitForFunction(() => !!customElements.get("cap-widget"), null, { timeout: 15_000 });
+
+  const solved = await page.evaluate(async () => {
+    const el = document.createElement("cap-widget") as HTMLElement & {
+      solve: () => Promise<{ token?: string }>;
+    };
+    el.setAttribute("data-cap-api-endpoint", "/api/cap/signup/");
+    el.style.cssText = "position:absolute;width:1px;height:1px;opacity:0";
+    document.body.appendChild(el);
+    try {
+      return (await el.solve())?.token ?? "";
+    } finally {
+      el.remove();
+    }
+  });
+
+  expect(solved).not.toBe("");
+  expect(await cspViolations(page)).toEqual([]);
 });
 
 test("the landing page renders under the production CSP without violations", async ({ page }) => {

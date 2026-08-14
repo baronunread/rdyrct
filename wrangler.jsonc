@@ -135,20 +135,47 @@
   // Cloudflare Workers Rate Limiting counters. Namespace IDs are unique within
   // this account. Counters are permissive and local to each Cloudflare location,
   // so these are abuse controls, not billing or exact quota enforcement.
+  //
+  // Set for the person who is having trouble, not for the bot. Somebody who
+  // mistypes a password, retries a signup, or pastes six links in a row must
+  // never meet a wall, because they read it as the product being broken and
+  // they are right. The ceilings that matter for abuse are elsewhere: Cap
+  // charges CPU per attempt (#98), RL_EMAIL_RECIPIENT bounds what one inbox
+  // can be made to receive, and the WAF rules in docs/rate-limiting.md sit in
+  // front of all of it.
   "ratelimits": [
     {
+      // Per caller, per path: login and signup count separately, so this is
+      // 30 tries at one door, not 30 across all of them.
       "name": "RL_AUTH_PUBLIC",
       "namespace_id": "14001",
       "simple": {
-        "limit": 10,
+        "limit": 30,
+        "period": 60,
+      },
+    },
+    // Cap's own endpoints (#98). Separate from RL_AUTH_PUBLIC and much
+    // higher: one sign-up spends a challenge and a redeem, its retry spends
+    // two more, and several people behind one office address are ordinary.
+    // The proof-of-work prices these, not this counter, which is only here so
+    // a script cannot farm challenges to solve offline in bulk.
+    {
+      "name": "RL_CAP",
+      "namespace_id": "14011",
+      "simple": {
+        "limit": 120,
         "period": 60,
       },
     },
     {
+      // Per caller, per path. Raised from 3: a signup that goes wrong costs
+      // a send each time somebody retries, and three of those inside a minute
+      // is a person having a bad day, not a bot. Cap already prices each
+      // attempt in CPU (#98), so this does not have to be the tight one.
       "name": "RL_EMAIL",
       "namespace_id": "14002",
       "simple": {
-        "limit": 3,
+        "limit": 10,
         "period": 60,
       },
     },
@@ -156,7 +183,7 @@
       "name": "RL_WRITE_FREE",
       "namespace_id": "14003",
       "simple": {
-        "limit": 30,
+        "limit": 90,
         "period": 60,
       },
     },
@@ -164,7 +191,7 @@
       "name": "RL_WRITE_PAID",
       "namespace_id": "14004",
       "simple": {
-        "limit": 120,
+        "limit": 300,
         "period": 60,
       },
     },
@@ -172,7 +199,7 @@
       "name": "RL_QR_UPLOAD",
       "namespace_id": "14005",
       "simple": {
-        "limit": 5,
+        "limit": 20,
         "period": 60,
       },
     },
@@ -180,7 +207,7 @@
       "name": "RL_DOMAIN_SETUP",
       "namespace_id": "14006",
       "simple": {
-        "limit": 12,
+        "limit": 30,
         "period": 60,
       },
     },
@@ -188,7 +215,7 @@
       "name": "RL_BILLING",
       "namespace_id": "14007",
       "simple": {
-        "limit": 3,
+        "limit": 10,
         "period": 60,
       },
     },
@@ -202,8 +229,9 @@
     },
     // Keyed by the recipient address rather than the caller, so many callers
     // cannot each stay under RL_EMAIL while all aiming at one inbox (#50).
-    // Tighter than RL_EMAIL's 3: one address has no legitimate reason to
-    // want a second code in the same minute, let alone a third.
+    // Still the tight one, and it is the limit that matters: it bounds what
+    // an inbox can be made to receive however many callers aim at it. Four a
+    // minute covers a signup plus a couple of impatient resends.
     //
     // `period` only accepts 10 or 60, so this caps the rate, not the daily
     // total. Closing that needs a durable counter rather than Cloudflare's
@@ -212,7 +240,7 @@
       "name": "RL_EMAIL_RECIPIENT",
       "namespace_id": "14009",
       "simple": {
-        "limit": 2,
+        "limit": 4,
         "period": 60,
       },
     },
@@ -328,7 +356,18 @@
           "name": "RL_AUTH_PUBLIC",
           "namespace_id": "24001",
           "simple": {
-            "limit": 10,
+            "limit": 40,
+            "period": 60,
+          },
+        },
+        {
+          // Higher again than production's: local dev and the e2e run have no
+          // cf-connecting-ip, so every caller on the machine shares one key
+          // and one budget.
+          "name": "RL_CAP",
+          "namespace_id": "24011",
+          "simple": {
+            "limit": 600,
             "period": 60,
           },
         },
@@ -336,10 +375,10 @@
           "name": "RL_EMAIL",
           "namespace_id": "24002",
           "simple": {
-            // Higher than production's (3): the e2e suite's real sign-ups
+            // Higher than production's (10): the e2e suite's real sign-ups
             // and password-reset sends across files share this one budget,
             // and production's abuse-control number is too tight for that.
-            "limit": 20,
+            "limit": 30,
             "period": 60,
           },
         },
@@ -347,7 +386,7 @@
           "name": "RL_WRITE_FREE",
           "namespace_id": "24003",
           "simple": {
-            "limit": 30,
+            "limit": 90,
             "period": 60,
           },
         },
@@ -355,7 +394,7 @@
           "name": "RL_WRITE_PAID",
           "namespace_id": "24004",
           "simple": {
-            "limit": 120,
+            "limit": 300,
             "period": 60,
           },
         },
@@ -363,7 +402,7 @@
           "name": "RL_QR_UPLOAD",
           "namespace_id": "24005",
           "simple": {
-            "limit": 5,
+            "limit": 20,
             "period": 60,
           },
         },
@@ -371,7 +410,7 @@
           "name": "RL_DOMAIN_SETUP",
           "namespace_id": "24006",
           "simple": {
-            "limit": 12,
+            "limit": 30,
             "period": 60,
           },
         },
@@ -379,7 +418,7 @@
           "name": "RL_BILLING",
           "namespace_id": "24007",
           "simple": {
-            "limit": 3,
+            "limit": 10,
             "period": 60,
           },
         },
@@ -395,12 +434,12 @@
           "name": "RL_EMAIL_RECIPIENT",
           "namespace_id": "24009",
           "simple": {
-            // One above production's (2), leaving the two sends a sign-up
+            // One above production's (4), leaving the two sends a sign-up
             // costs (submit, then the resend on the code screen's reload)
             // some headroom. Every test mints its own
             // `something-${Date.now()}@gmail.com`, so no other address is
             // near this; the e2e scenario trips it deliberately.
-            "limit": 3,
+            "limit": 5,
             "period": 60,
           },
         },
