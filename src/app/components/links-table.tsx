@@ -22,7 +22,7 @@ import { copyToClipboard } from "../lib/clipboard";
 import { cn } from "../ui/cn";
 import { AliasThread } from "./alias-thread";
 import { useConfig } from "../lib/hooks";
-import { Pager } from "../ui/pagination";
+import { CursorPager } from "../ui/pagination";
 
 function linkDetailPath(link: LinkDTO): string {
   return link.domain
@@ -189,18 +189,20 @@ export function LinksTable({
   paged,
   sort,
   onSort,
-  totalPages,
-  currentPage,
-  onPageChange,
+  page,
+  hasNext,
+  onNext,
+  onBack,
   ...actions
 }: RowActions & {
   orgId: string;
   paged: LinkDTO[];
   sort: Sort;
   onSort: (s: Sort) => void;
-  totalPages: number;
-  currentPage: number;
-  onPageChange: (fn: (p: number) => number) => void;
+  page: number;
+  hasNext: boolean;
+  onNext: () => void;
+  onBack: () => void;
 }) {
   const config = useConfig();
   const appHost = config.data?.appHost ?? window.location.host;
@@ -269,7 +271,7 @@ export function LinksTable({
           })}
         </tbody>
       </Table>
-      <Pager page={currentPage} totalPages={totalPages} onPageChange={onPageChange} />
+      <CursorPager page={page} hasNext={hasNext} onBack={onBack} onNext={onNext} />
     </LazyMotion>
   );
 }

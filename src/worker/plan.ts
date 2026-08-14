@@ -127,6 +127,7 @@ function guardedAddressInsertStatement(
   env: Env,
   address: typeof schema.linkAddresses.$inferInsert,
   linkLimit: number,
+  addressLimit: number,
 ) {
   const columns = addressColumns(address);
   return env.DB.prepare(
@@ -136,8 +137,12 @@ function guardedAddressInsertStatement(
      where (
        select count(*) from link_addresses
        where org_id = ? and retired_at is null and kind in ('primary', 'permanent_alias')
+     ) < ?
+     and (
+       select count(*) from link_addresses
+       where link_id = ? and retired_at is null
      ) < ?`,
-  ).bind(...columns, address.orgId, linkLimit);
+  ).bind(...columns, address.orgId, linkLimit, address.linkId, addressLimit);
 }
 
 /**
@@ -150,6 +155,11 @@ export async function insertAddressWithinLimit(
   env: Env,
   address: typeof schema.linkAddresses.$inferInsert,
   linkLimit: number,
+  /** Active addresses one link may hold once this row lands, primary
+   * included. Counted in the same statement as the org's cap, because a
+   * read-then-insert lets two concurrent merges both find room and both
+   * take it. */
+  addressLimit: number,
 ): Promise<boolean> {
   if (address.kind === "temp_alias") {
     // Unconditional insert (a temp_alias never counts toward the cap): it
@@ -164,7 +174,7 @@ export async function insertAddressWithinLimit(
       addressColumns(address),
     );
   }
-  const result = await guardedAddressInsertStatement(env, address, linkLimit).run();
+  const result = await guardedAddressInsertStatement(env, address, linkLimit, addressLimit).run();
   return result.meta.changes > 0;
 }
 
@@ -187,7 +197,9 @@ export async function insertLinkWithinLimit(
   const linkInsert = db.insert(schema.links).values(link).toSQL();
   const results = await env.DB.batch([
     toD1Statement(env, linkInsert),
-    guardedAddressInsertStatement(env, address, linkLimit),
+    // A brand-new link has no addresses yet, so the per-link ceiling cannot
+    // bind here: 1 is the smallest value that always lets the primary land.
+    guardedAddressInsertStatement(env, address, linkLimit, 1),
     env.DB.prepare(
       `delete from links where id = ? and not exists (select 1 from link_addresses where link_id = ?)`,
     ).bind(link.id, link.id),

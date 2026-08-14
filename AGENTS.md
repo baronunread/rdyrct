@@ -99,12 +99,15 @@ Shell writes to repo files are sandboxed; edit through the editor tools, not
   `src/shared/types.ts` (`{ orgs, links, members, domains, qr,
 analyticsDays }`). Slugs on the **shared** domain are always random (every
   plan); chosen slugs exist only on custom domains, so the shared namespace
-  can't be squatted. New users get **no default org**: there is no onboarding
-  route; org-scoped pages render `NoOrgState`
-  (`src/app/components/no-org.tsx`) until they create one, and `/billing`
-  works org-less, so landing paid CTAs (`/signup?next=/billing?plan=…`) can
-  check out before the first org exists (`/onboarding` redirects to
-  `/dashboard`).
+  can't be squatted. Every account gets an org at
+  sign-up (#65), named from the email domain (`src/shared/org-name.ts`) and
+  renameable in Settings, so nobody meets a dead app behind a form asking
+  for a company name. The dashboard asks for a **link** until there is one,
+  then goes back to being a dashboard. `NoOrgState`
+  (`src/app/components/no-org.tsx`) is still there for the account that has
+  no org left (it deleted the only one), and `/billing` still works org-less,
+  so landing paid CTAs (`/signup?next=/billing?plan=…`) can check out before
+  the first org exists (`/onboarding` redirects to `/dashboard`).
 - **Auth**: BetterAuth (email+password, `requireEmailVerification` via the
   `emailOTP` plugin, 6-digit code; password reset stays a link). PBKDF2/WebCrypto
   hashing (`src/worker/password.ts`). The account matching the `SUPERADMIN_EMAIL`

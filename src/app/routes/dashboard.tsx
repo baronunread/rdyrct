@@ -35,15 +35,14 @@ function creatorNameFrom(memberNames: Map<string, string>, id: string | null): s
 /** Loads and shapes every data source the dashboard renders from. */
 function useDashboardData(orgId: string) {
   const stats = useStats(orgId);
-  const links = useLinks(orgId);
+  // Five, from the server, rather than every link the org owns sorted in the
+  // browser: this card only ever showed the newest handful.
+  const links = useLinks(orgId, { limit: 5 });
   const members = useMembers(orgId);
   const clicks = useRecentClicks(orgId);
   const { create } = useLinkMutations(orgId);
 
-  const recentLinks = useMemo(
-    () => [...(links.data ?? [])].sort((a, b) => b.createdAt - a.createdAt).slice(0, 5),
-    [links.data],
-  );
+  const recentLinks = links.data?.items ?? [];
   const memberNames = useMemo(
     () => new Map((members.data ?? []).map((m) => [m.userId, m.name])),
     [members.data],
@@ -81,40 +80,34 @@ function submitSameDestination(
   create.mutate({ ...input, ...extra }, { onSuccess: onDone, onError });
 }
 
-export function Dashboard() {
-  const { org, orgId, limits, activeDomains, defaultDomainId, orgQr } = useOrgLimits();
-  const data = useDashboardData(orgId);
-  const toast = useToast();
-  const [created, setCreated] = useState<LinkDTO | null>(null);
-  const [sameDestination, setSameDestination] = useState<{
-    input: LinkInput;
-    matchedLinks: LinkDTO[];
-  } | null>(null);
+type DashboardData = ReturnType<typeof useDashboardData>;
 
-  if (!org) return <NoOrgState />;
-  if (data.isLoading) return <DashboardSkeleton />;
-  if (!data.stats) return <p className="text-sm text-danger">Could not load stats.</p>;
-  const s = data.stats;
+/** The page asks one question until there is a link, then goes back to being
+ * a dashboard. */
+const FIRST_RUN_HEADER = {
+  title: "Shorten your first link",
+  sub: "Paste any long URL. Your stats appear here once it starts getting clicks.",
+};
+const DASHBOARD_HEADER = {
+  title: "Dashboard",
+  sub: "See your organization's link activity at a glance",
+};
 
-  const decaying = s.decayingLinks.slice(0, 3);
-  const dead = s.deadLinks.slice(0, 3);
+/**
+ * Everything below the create field: the numbers, and the cards that read
+ * them. Split out because it only renders once there is something to count,
+ * so the page itself is the question plus this.
+ */
+function DashboardBody({
+  stats: s,
+  data,
+}: {
+  stats: NonNullable<DashboardData["stats"]>;
+  data: DashboardData;
+}) {
   const peak = peakActivityCell(s.heatmap);
-
   return (
-    <div>
-      <PageHeader title="Dashboard" sub="See your organization's link activity at a glance" />
-
-      <QuickCreateCard
-        create={data.create}
-        activeDomains={activeDomains}
-        defaultDomainId={defaultDomainId}
-        atLimit={s.totalLinks >= limits.links}
-        onCreated={setCreated}
-        onSameDestinationMatch={(input, matchedLinks) =>
-          setSameDestination({ input, matchedLinks })
-        }
-      />
-
+    <>
       <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-3">
         <StatCard label="Links" value={s.totalLinks} />
         <StatCard label="Clicks · 7d" value={s.clicks7d} delta={s.clicks7dDelta} />
@@ -128,9 +121,73 @@ export function Dashboard() {
 
       <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-3">
         <TopLinksCard topLinks={s.topLinks} limit={5} />
-        <NeedsAttentionCard decaying={decaying} dead={dead} />
+        <NeedsAttentionCard decaying={s.decayingLinks.slice(0, 3)} dead={s.deadLinks.slice(0, 3)} />
         <PeakCard peak={peak} rangeDays={s.rangeDays} />
       </div>
+    </>
+  );
+}
+
+/** Nothing to show until there is an organization and its numbers have
+ * arrived. Separated from the page itself so the page is about the page. */
+export function Dashboard() {
+  const { org, orgId } = useOrgLimits();
+  const data = useDashboardData(orgId);
+  if (!org) return <NoOrgState />;
+  if (data.isLoading) return <DashboardSkeleton />;
+  if (!data.stats) return <p className="text-sm text-danger">Could not load stats.</p>;
+  return <DashboardScreen stats={data.stats} />;
+}
+
+function DashboardScreen({ stats: s }: { stats: NonNullable<DashboardData["stats"]> }) {
+  const { orgId, limits, activeDomains, defaultDomainId, orgQr } = useOrgLimits();
+  const data = useDashboardData(orgId);
+  const toast = useToast();
+  const [created, setCreated] = useState<LinkDTO | null>(null);
+  const [sameDestination, setSameDestination] = useState<{
+    input: LinkInput;
+    matchedLinks: LinkDTO[];
+  } | null>(null);
+
+  // First run. An organization exists from the first session, so what is
+  // missing is the link, and the field that makes one is already the first
+  // thing on this page. Showing the rest (three zeroes, four empty cards, a
+  // flat chart) would teach somebody that the product is empty; hiding it
+  // until there is something to count leaves one question on screen.
+  const firstRun = s.totalLinks === 0;
+
+  /** Both answers to "this destination already has a link" submit the same
+   * input with one extra field, and land on the same created-link dialog. */
+  const resolveMatch = (extra: { mergeIntoLinkId?: string; forceSeparateLink?: boolean }) => {
+    if (!sameDestination) return;
+    submitSameDestination(
+      data.create,
+      sameDestination.input,
+      extra,
+      (link) => {
+        setSameDestination(null);
+        setCreated(link);
+      },
+      withErrorToast(toast),
+    );
+  };
+
+  return (
+    <div>
+      <PageHeader {...(firstRun ? FIRST_RUN_HEADER : DASHBOARD_HEADER)} />
+
+      <QuickCreateCard
+        create={data.create}
+        activeDomains={activeDomains}
+        defaultDomainId={defaultDomainId}
+        atLimit={s.totalLinks >= limits.links}
+        onCreated={setCreated}
+        onSameDestinationMatch={(input, matchedLinks) =>
+          setSameDestination({ input, matchedLinks })
+        }
+      />
+
+      {!firstRun && <DashboardBody stats={s} data={data} />}
 
       <LinkPreviewDialog
         title="Link created"
@@ -143,32 +200,8 @@ export function Dashboard() {
         matchedLinks={sameDestination?.matchedLinks ?? null}
         pending={data.create.isPending}
         onClose={() => setSameDestination(null)}
-        onAddToExisting={(matchedLink) => {
-          if (!sameDestination) return;
-          submitSameDestination(
-            data.create,
-            sameDestination.input,
-            { mergeIntoLinkId: matchedLink.id },
-            (link) => {
-              setSameDestination(null);
-              setCreated(link);
-            },
-            withErrorToast(toast),
-          );
-        }}
-        onCreateSeparate={() => {
-          if (!sameDestination) return;
-          submitSameDestination(
-            data.create,
-            sameDestination.input,
-            { forceSeparateLink: true },
-            (link) => {
-              setSameDestination(null);
-              setCreated(link);
-            },
-            withErrorToast(toast),
-          );
-        }}
+        onAddToExisting={(matchedLink) => resolveMatch({ mergeIntoLinkId: matchedLink.id })}
+        onCreateSeparate={() => resolveMatch({ forceSeparateLink: true })}
       />
     </div>
   );

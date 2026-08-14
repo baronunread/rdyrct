@@ -23,7 +23,7 @@ import { Field, Input } from "../../ui/field";
 import { Dialog } from "../../ui/dialog";
 import { ConfirmDialog } from "../../ui/confirm-dialog";
 import { Menu, MenuItem, MenuSeparator } from "../../ui/menu";
-import { AdminTableSkeleton } from "../../components/skeletons";
+import { TableSkeleton } from "../../ui/skeleton";
 import { useToast } from "../../ui/toast";
 import { withErrorToast } from "../../lib/mutation-toast";
 import { shortDate } from "../../lib/dates";
@@ -35,6 +35,124 @@ import { SortTh } from "../../ui/sort-th";
 import { sortRows } from "../../lib/sort";
 import { useSearchParams } from "react-router";
 import { cn } from "../../ui/cn";
+import { Spinner } from "../../ui/spinner";
+
+/** The two columns both tables open with. Their widths differ because the
+ * owned table has one fewer column to fit. */
+function SlugAndDestinationHeaders({
+  sort,
+  onSort,
+  destinationWidth,
+}: {
+  sort: Sort;
+  onSort: (s: Sort) => void;
+  destinationWidth: string;
+}) {
+  return (
+    <>
+      <SortTh label="Link" sortKey="slug" sort={sort} onSort={onSort} className="w-[15%]" />
+      <SortTh
+        label="Destination"
+        sortKey="destination"
+        sort={sort}
+        onSort={onSort}
+        className={destinationWidth}
+      />
+    </>
+  );
+}
+
+/** The id a mutation is currently working on, for the row that should show
+ * itself as busy. */
+function pendingId(mutation: { isPending: boolean; variables?: string }): string | null {
+  return mutation.isPending ? (mutation.variables ?? null) : null;
+}
+
+/** What a row can be told to do. One type because the row, its menu, and the
+ * table all pass the same five things down. */
+type RowActions = {
+  onSuspend: (l: AdminLinkRow) => void;
+  onRestore: (l: AdminLinkRow) => void;
+  onDelete: (l: AdminLinkRow) => void;
+  onRescore: (l: AdminLinkRow) => void;
+  rescoring: boolean;
+};
+
+/** The actions menu both tables hang off a row: same trigger, same first
+ * item, different endings. */
+function RowMenu({
+  slug,
+  destination,
+  children,
+}: {
+  slug: string;
+  destination: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <Menu
+      align="end"
+      label={`Actions for ${slug}`}
+      trigger={
+        <div className="flex justify-end">
+          <span className="rounded p-1.5 text-muted transition-transform duration-150 active:scale-[0.96] hover:bg-surface-2 hover:text-text">
+            <Ellipsis size={15} />
+          </span>
+        </div>
+      }
+    >
+      <MenuItem onClick={() => window.open(destination, "_blank", "noopener,noreferrer")}>
+        <ExternalLink size={14} /> Open destination
+      </MenuItem>
+      {children}
+    </Menu>
+  );
+}
+
+/** A search term and the page it resets. Typing narrows the results, so
+ * paginate() would otherwise clamp you to the last page of a smaller set and
+ * leave you wondering where everything went. */
+function useTableSearch() {
+  const [query, setQuery] = useState("");
+  const [page, setPage] = useState(0);
+  const search = (value: string) => {
+    setQuery(value);
+    setPage(0);
+  };
+  return { query, search, page, setPage };
+}
+
+/** The delete confirmation both tables raise. The consequence differs, so it
+ * is the caller's to write. */
+function DeleteLinkDialog({
+  link,
+  pending,
+  onClose,
+  onConfirm,
+  children,
+}: {
+  link: { id: string; slug: string } | null;
+  pending: boolean;
+  onClose: () => void;
+  onConfirm: (id: string) => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <ConfirmDialog
+      title="Delete this link?"
+      open={!!link}
+      onClose={onClose}
+      onConfirm={() => link && onConfirm(link.id)}
+      confirmLabel="Delete link"
+      danger
+      pending={pending}
+    >
+      <p className="text-sm text-muted">
+        <span className="font-mono font-bold text-text">/{link?.slug}</span> {children}
+      </p>
+    </ConfirmDialog>
+  );
+}
 
 /**
  * Null is not zero. An unscored link is one nobody has looked at, and showing
@@ -107,21 +225,7 @@ function SuspendDialog({ link, onClose }: { link: AdminLinkRow | null; onClose: 
 
 /** One row. Its own component because a table row with two conditional
  * actions and a truncating cell is a component, not an expression. */
-function LinkRow({
-  link,
-  onSuspend,
-  onRestore,
-  onDelete,
-  onRescore,
-  rescoring,
-}: {
-  link: AdminLinkRow;
-  onSuspend: (l: AdminLinkRow) => void;
-  onRestore: (l: AdminLinkRow) => void;
-  onDelete: (l: AdminLinkRow) => void;
-  onRescore: (l: AdminLinkRow) => void;
-  rescoring: boolean;
-}) {
+function LinkRow({ link, ...actions }: { link: AdminLinkRow } & RowActions) {
   return (
     <tr className={link.suspendedAt ? "opacity-60" : undefined}>
       <Td>
@@ -153,14 +257,7 @@ function LinkRow({
       <Td className="tnum">{link.clicks}</Td>
       <Td className="whitespace-nowrap text-muted">{shortDate(link.createdAt)}</Td>
       <Td>
-        <LinkActions
-          link={link}
-          onSuspend={onSuspend}
-          onRestore={onRestore}
-          onDelete={onDelete}
-          onRescore={onRescore}
-          rescoring={rescoring}
-        />
+        <LinkActions link={link} {...actions} />
       </Td>
     </tr>
   );
@@ -178,31 +275,11 @@ function LinkActions({
   onDelete,
   onRescore,
   rescoring,
-}: {
-  link: AdminLinkRow;
-  onSuspend: (l: AdminLinkRow) => void;
-  onRestore: (l: AdminLinkRow) => void;
-  onDelete: (l: AdminLinkRow) => void;
-  onRescore: (l: AdminLinkRow) => void;
-  rescoring: boolean;
-}) {
+}: { link: AdminLinkRow } & RowActions) {
   return (
-    <Menu
-      align="end"
-      label={`Actions for ${link.slug}`}
-      trigger={
-        <div className="flex justify-end">
-          <span className="rounded p-1.5 text-muted transition-transform duration-150 active:scale-[0.96] hover:bg-surface-2 hover:text-text">
-            <Ellipsis size={15} />
-          </span>
-        </div>
-      }
-    >
-      <MenuItem onClick={() => window.open(link.destination, "_blank", "noopener,noreferrer")}>
-        <ExternalLink size={14} /> Open destination
-      </MenuItem>
-      <MenuItem onClick={() => onRescore(link)}>
-        <ShieldQuestionMark size={14} /> {rescoring ? "Checking…" : "Re-check destination"}
+    <RowMenu slug={link.slug} destination={link.destination}>
+      <MenuItem disabled={rescoring} onClick={() => onRescore(link)}>
+        {rescoring ? <Spinner /> : <ShieldQuestionMark size={14} />} Re-check destination
       </MenuItem>
       <MenuSeparator />
       {link.suspendedAt ? (
@@ -217,12 +294,13 @@ function LinkActions({
       <MenuItem className="text-danger" onClick={() => onDelete(link)}>
         <Trash2 size={14} /> Delete link
       </MenuItem>
-    </Menu>
+    </RowMenu>
   );
 }
 
 function LinksTable({
   rows,
+  isPending,
   sort,
   onSort,
   onSuspend,
@@ -232,6 +310,7 @@ function LinksTable({
   rescoringId,
 }: {
   rows: AdminLinkRow[];
+  isPending: boolean;
   sort: Sort;
   onSort: (s: Sort) => void;
   onSuspend: (l: AdminLinkRow) => void;
@@ -240,6 +319,9 @@ function LinksTable({
   onRescore: (l: AdminLinkRow) => void;
   rescoringId: string | null;
 }) {
+  // Rows only: this sits below the real header and the real search box,
+  // and the page-level skeleton would draw a second one of each.
+  if (isPending) return <TableSkeleton rows={6} />;
   if (rows.length === 0)
     return <p className="py-6 text-center text-sm text-muted">No links match that search.</p>;
 
@@ -253,14 +335,7 @@ function LinksTable({
     <Table fixed minWidth="min-w-[64rem]">
       <thead>
         <tr>
-          <SortTh label="Link" sortKey="slug" sort={sort} onSort={onSort} className="w-[15%]" />
-          <SortTh
-            label="Destination"
-            sortKey="destination"
-            sort={sort}
-            onSort={onSort}
-            className="w-[27%]"
-          />
+          <SlugAndDestinationHeaders sort={sort} onSort={onSort} destinationWidth="w-[27%]" />
           <SortTh
             label="Organization"
             sortKey="orgName"
@@ -305,11 +380,96 @@ function LinksTable({
 
 /** Links made on the landing page with no account. No org, no owner, and
  * they expire on their own, so deleting is the only action worth having. */
+/** The anonymous list itself. Same columns as the owned table, in the same
+ * order, so moving between the two tabs does not mean re-reading the header
+ * row. An anonymous link has no organization and records no clicks; those
+ * cells say so rather than being left out. */
+function AnonymousLinksTable({
+  rows,
+  isPending,
+  sort,
+  onSort,
+  onDelete,
+}: {
+  rows: AdminAnonLinkRow[];
+  isPending: boolean;
+  sort: Sort;
+  onSort: (s: Sort) => void;
+  onDelete: (l: AdminAnonLinkRow) => void;
+}) {
+  // Rows only: this sits below the real header and the real search box,
+  // and the page-level skeleton would draw a second one of each.
+  if (isPending) return <TableSkeleton rows={6} />;
+  if (rows.length === 0)
+    return <p className="py-6 text-center text-sm text-muted">Nothing here.</p>;
+  return (
+    <Table fixed minWidth="min-w-[64rem]">
+      <thead>
+        <tr>
+          <SlugAndDestinationHeaders sort={sort} onSort={onSort} destinationWidth="w-[25%]" />
+          <Th className="w-[12%]">Organization</Th>
+          <SortTh
+            label="Risk"
+            sortKey="riskScore"
+            sort={sort}
+            onSort={onSort}
+            className="w-[12%]"
+          />
+          <Th className="w-[7%]">Clicks</Th>
+          <SortTh
+            label="Created"
+            sortKey="createdAt"
+            sort={sort}
+            onSort={onSort}
+            className="w-[12%]"
+          />
+          <SortTh
+            label="Expires"
+            sortKey="expiresAt"
+            sort={sort}
+            onSort={onSort}
+            className="w-[12%]"
+          />
+          <Th className="w-[8%]" />
+        </tr>
+      </thead>
+      <tbody>
+        {rows.map((link) => (
+          <tr key={link.id}>
+            <Td className="truncate font-mono text-xs font-bold">/{link.slug}</Td>
+            <Td className="truncate text-muted" title={link.destination}>
+              {link.destination}
+            </Td>
+            {/* Nobody owns it, and no click is recorded against it: both
+                    are the product boundary, not missing data. */}
+            <Td className="text-muted">none</Td>
+            <Td>
+              <RiskBadge score={link.riskScore} reasons={link.riskReasons} />
+            </Td>
+            <Td className="text-muted" title="Anonymous links record no clicks">
+              none
+            </Td>
+            <Td className="whitespace-nowrap text-muted">{shortDate(link.createdAt)}</Td>
+            <Td className="whitespace-nowrap text-muted">{shortDate(link.expiresAt)}</Td>
+            <Td>
+              <RowMenu slug={link.slug} destination={link.destination}>
+                <MenuSeparator />
+                <MenuItem className="text-danger" onClick={() => onDelete(link)}>
+                  <Trash2 size={14} /> Delete link
+                </MenuItem>
+              </RowMenu>
+            </Td>
+          </tr>
+        ))}
+      </tbody>
+    </Table>
+  );
+}
+
 function AnonymousLinks() {
   const { data, isPending } = useAdminAnonLinks();
-  const [query, setQuery] = useState("");
+  const { query, search, page, setPage } = useTableSearch();
   const [sort, setSort] = useState<Sort>({ key: "createdAt", dir: -1 });
-  const [page, setPage] = useState(0);
   const [deleting, setDeleting] = useState<AdminAnonLinkRow | null>(null);
   const toast = useToast();
   const qc = useQueryClient();
@@ -349,128 +509,28 @@ function AnonymousLinks() {
       <div className="flex flex-wrap items-center gap-2">
         <SearchInput
           value={query}
-          onChange={(value) => {
-            setQuery(value);
-            setPage(0);
-          }}
+          onChange={search}
           placeholder="Slug or destination"
           label="Search anonymous links"
         />
       </div>
-      {isPending ? (
-        <AdminTableSkeleton />
-      ) : rows.length === 0 ? (
-        <p className="py-6 text-center text-sm text-muted">Nothing here.</p>
-      ) : (
-        // Same columns as the owned table, in the same order, so moving
-        // between the two tabs does not mean re-reading the header row. An
-        // anonymous link has no organization and records no clicks; those
-        // cells say so rather than being left out.
-        <Table fixed minWidth="min-w-[64rem]">
-          <thead>
-            <tr>
-              <SortTh
-                label="Link"
-                sortKey="slug"
-                sort={sort}
-                onSort={setSort}
-                className="w-[15%]"
-              />
-              <SortTh
-                label="Destination"
-                sortKey="destination"
-                sort={sort}
-                onSort={setSort}
-                className="w-[25%]"
-              />
-              <Th className="w-[12%]">Organization</Th>
-              <SortTh
-                label="Risk"
-                sortKey="riskScore"
-                sort={sort}
-                onSort={setSort}
-                className="w-[12%]"
-              />
-              <Th className="w-[7%]">Clicks</Th>
-              <SortTh
-                label="Created"
-                sortKey="createdAt"
-                sort={sort}
-                onSort={setSort}
-                className="w-[12%]"
-              />
-              <SortTh
-                label="Expires"
-                sortKey="expiresAt"
-                sort={sort}
-                onSort={setSort}
-                className="w-[12%]"
-              />
-              <Th className="w-[8%]" />
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((link) => (
-              <tr key={link.id}>
-                <Td className="truncate font-mono text-xs font-bold">/{link.slug}</Td>
-                <Td className="truncate text-muted" title={link.destination}>
-                  {link.destination}
-                </Td>
-                {/* Nobody owns it, and no click is recorded against it: both
-                    are the product boundary, not missing data. */}
-                <Td className="text-muted">none</Td>
-                <Td>
-                  <RiskBadge score={link.riskScore} reasons={link.riskReasons} />
-                </Td>
-                <Td className="text-muted" title="Anonymous links record no clicks">
-                  none
-                </Td>
-                <Td className="whitespace-nowrap text-muted">{shortDate(link.createdAt)}</Td>
-                <Td className="whitespace-nowrap text-muted">{shortDate(link.expiresAt)}</Td>
-                <Td>
-                  <Menu
-                    align="end"
-                    label={`Actions for ${link.slug}`}
-                    trigger={
-                      <div className="flex justify-end">
-                        <span className="rounded p-1.5 text-muted transition-transform duration-150 active:scale-[0.96] hover:bg-surface-2 hover:text-text">
-                          <Ellipsis size={15} />
-                        </span>
-                      </div>
-                    }
-                  >
-                    <MenuItem
-                      onClick={() => window.open(link.destination, "_blank", "noopener,noreferrer")}
-                    >
-                      <ExternalLink size={14} /> Open destination
-                    </MenuItem>
-                    <MenuSeparator />
-                    <MenuItem className="text-danger" onClick={() => setDeleting(link)}>
-                      <Trash2 size={14} /> Delete link
-                    </MenuItem>
-                  </Menu>
-                </Td>
-              </tr>
-            ))}
-          </tbody>
-        </Table>
-      )}
+      <AnonymousLinksTable
+        rows={rows}
+        isPending={isPending}
+        sort={sort}
+        onSort={setSort}
+        onDelete={setDeleting}
+      />
       <Pager page={safePage} totalPages={totalPages} onPageChange={setPage} />
 
-      <ConfirmDialog
-        title="Delete this link?"
-        open={!!deleting}
-        onClose={() => setDeleting(null)}
-        onConfirm={() => deleting && remove.mutate(deleting.id)}
-        confirmLabel="Delete link"
-        danger
+      <DeleteLinkDialog
+        link={deleting}
         pending={remove.isPending}
+        onClose={() => setDeleting(null)}
+        onConfirm={remove.mutate}
       >
-        <p className="text-sm text-muted">
-          <span className="font-mono font-bold text-text">/{deleting?.slug}</span> stops redirecting
-          at once. It would have expired on its own within 24 hours.
-        </p>
-      </ConfirmDialog>
+        stops redirecting at once. It would have expired on its own within 24 hours.
+      </DeleteLinkDialog>
     </div>
   );
 }
@@ -503,22 +563,16 @@ function ViewSwitch({ view, onChange }: { view: View; onChange: (v: View) => voi
   );
 }
 
-/** The cross-org list with its own controls. Split out so the page itself is
- * just the switch and the two things it switches between. */
-function OwnedLinks({ onSuspend }: { onSuspend: (l: AdminLinkRow) => void }) {
-  const [params, setParams] = useSearchParams();
-  const orgFilter = params.get("org") ?? "";
-  const [query, setQuery] = useState("");
-  // The term reaches the server, so it waits for a pause in typing. Without
-  // this, "testing" was eight requests.
-  const search = useDebounced(query);
-  const [sort, setSort] = useState<Sort>({ key: "createdAt", dir: -1 });
-  const [page, setPage] = useState(0);
-  const [restoring, setRestoring] = useState<AdminLinkRow | null>(null);
-  const [deleting, setDeleting] = useState<AdminLinkRow | null>(null);
+/**
+ * Restore, delete and re-check, with the toasts they answer with.
+ *
+ * Out of the component because three mutations, their success messages and
+ * the cache they all invalidate are one subject, and inline they were most
+ * of what OwnedLinks appeared to be about.
+ */
+function useOwnedLinkActions(onRestored: () => void, onDeleted: () => void) {
   const toast = useToast();
   const qc = useQueryClient();
-  const { data, isPending } = useAdminLinks({ q: search, suspended: false, org: orgFilter });
 
   const refresh = async () => {
     await qc.invalidateQueries({ queryKey: ["admin", "links"] });
@@ -530,7 +584,7 @@ function OwnedLinks({ onSuspend }: { onSuspend: (l: AdminLinkRow) => void }) {
     onSuccess: async () => {
       await refresh();
       toast("Link restored.");
-      setRestoring(null);
+      onRestored();
     },
     onError: withErrorToast(toast),
   });
@@ -540,7 +594,7 @@ function OwnedLinks({ onSuspend }: { onSuspend: (l: AdminLinkRow) => void }) {
     onSuccess: async () => {
       await refresh();
       toast("Link deleted.");
-      setDeleting(null);
+      onDeleted();
     },
     onError: withErrorToast(toast),
   });
@@ -554,103 +608,170 @@ function OwnedLinks({ onSuspend }: { onSuspend: (l: AdminLinkRow) => void }) {
       }),
     onSuccess: async (result) => {
       await refresh();
-      // "Unscored" is reported as such, never as clean: the provider was
-      // unreachable or said something we do not recognise (#68).
-      if (!result.scored) toast("No answer from the checker. The link is still unscored.", "error");
-      else if (result.score && result.score >= 100) toast("Checked: the destination is blocked.");
-      else toast("Checked: nothing known against the destination.");
+      toast(...rescoreResult(result));
     },
     onError: withErrorToast(toast),
   });
 
-  // No client-side org filter: the query applies it, so the cap counts this
-  // organization's links rather than the instance's.
-  const all = sortRows(data ?? [], sort, {
+  return { restore, remove, rescore };
+}
+
+/** What a re-check has to say. "Unscored" is reported as such, never as
+ * clean: the provider was unreachable or said something we do not
+ * recognise (#68). */
+function rescoreResult(result: { scored: boolean; score: number | null }): [string, "error"?] {
+  if (!result.scored) return ["No answer from the checker. The link is still unscored.", "error"];
+  if (result.score && result.score >= 100) return ["Checked: the destination is blocked."];
+  return ["Checked: nothing known against the destination."];
+}
+
+/** Undoes a suspension, which is the whole point of suspending rather than
+ * deleting. */
+function RestoreLinkDialog({
+  link,
+  pending,
+  onClose,
+  onConfirm,
+}: {
+  link: AdminLinkRow | null;
+  pending: boolean;
+  onClose: () => void;
+  onConfirm: (id: string) => void;
+}) {
+  return (
+    <ConfirmDialog
+      title="Restore this link?"
+      open={!!link}
+      onClose={onClose}
+      onConfirm={() => link && onConfirm(link.id)}
+      confirmLabel="Restore link"
+      pending={pending}
+    >
+      <p className="text-sm text-muted">
+        <span className="font-mono font-bold text-text">/{link?.slug}</span> starts redirecting
+        again immediately.
+      </p>
+    </ConfirmDialog>
+  );
+}
+
+/** Shown while the list is scoped to one organization, which is where a
+ * click on an owner's name lands you. */
+function ClearOrgFilterButton({ orgName, onClear }: { orgName?: string; onClear: () => void }) {
+  return (
+    <Button size="sm" variant="outline" onClick={onClear}>
+      Clear {orgName ?? "organization"} filter
+    </Button>
+  );
+}
+
+/** The search box, plus the "you are looking at one organization" escape
+ * hatch that a click on an owner's name puts you behind. */
+function OwnedLinksToolbar({
+  query,
+  onSearch,
+  orgFilter,
+  orgName,
+  onClearOrg,
+}: {
+  query: string;
+  onSearch: (value: string) => void;
+  orgFilter: string;
+  orgName?: string;
+  onClearOrg: () => void;
+}) {
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <SearchInput
+        value={query}
+        onChange={onSearch}
+        placeholder="Slug or destination"
+        label="Search links"
+      />
+      {orgFilter && <ClearOrgFilterButton orgName={orgName} onClear={onClearOrg} />}
+    </div>
+  );
+}
+
+/** The org filter and the column sort, applied in that order. Unscored sorts
+ * below every score rather than as a zero: nobody has looked at it, which is
+ * not the same as clean. */
+function sortOwnedLinks(data: AdminLinkRow[] | undefined, sort: Sort) {
+  // No org filter here: the query applies it, so its 200-row cap counts that
+  // organization's links rather than every organization's.
+  return sortRows(data ?? [], sort, {
     slug: (l) => l.slug,
     destination: (l) => l.destination,
     orgName: (l) => l.orgName,
-    // Unscored sorts below every score rather than as a zero: nobody has
-    // looked at it, which is not the same as clean.
     riskScore: (l) => l.riskScore ?? -1,
     clicks: (l) => l.clicks,
     createdAt: (l) => l.createdAt,
   });
+}
+
+/** The cross-org list with its own controls. Split out so the page itself is
+ * just the switch and the two things it switches between. */
+function OwnedLinks({ onSuspend }: { onSuspend: (l: AdminLinkRow) => void }) {
+  const [params, setParams] = useSearchParams();
+  const orgFilter = params.get("org") ?? "";
+  const { query, search: onSearch, page, setPage } = useTableSearch();
+  // The term reaches the server, so it waits for a pause in typing. Without
+  // this, "testing" was eight requests.
+  const search = useDebounced(query);
+  const [sort, setSort] = useState<Sort>({ key: "createdAt", dir: -1 });
+  const [restoring, setRestoring] = useState<AdminLinkRow | null>(null);
+  const [deleting, setDeleting] = useState<AdminLinkRow | null>(null);
+  const { data, isPending } = useAdminLinks({ q: search, suspended: false, org: orgFilter });
+  const { restore, remove, rescore } = useOwnedLinkActions(
+    () => setRestoring(null),
+    () => setDeleting(null),
+  );
+
+  const all = sortOwnedLinks(data, sort);
   const { rows, totalPages, safePage } = paginate(all, page);
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="flex flex-wrap items-center gap-2">
-        <SearchInput
-          value={query}
-          // Back to the first page with the term: paginate() clamps, so a
-          // narrower result set would otherwise leave you on its last page
-          // wondering where everything went.
-          onChange={(value) => {
-            setQuery(value);
-            setPage(0);
-          }}
-          placeholder="Slug or destination"
-          label="Search links"
-        />
-        {orgFilter && (
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => {
-              params.delete("org");
-              setParams(params, { replace: true });
-            }}
-          >
-            Clear {all[0]?.orgName ?? "organization"} filter
-          </Button>
-        )}
-      </div>
+      <OwnedLinksToolbar
+        query={query}
+        onSearch={onSearch}
+        orgFilter={orgFilter}
+        orgName={all[0]?.orgName}
+        onClearOrg={() => {
+          params.delete("org");
+          setParams(params, { replace: true });
+        }}
+      />
 
-      {isPending ? (
-        <AdminTableSkeleton />
-      ) : (
-        <LinksTable
-          rows={rows}
-          sort={sort}
-          onSort={setSort}
-          onSuspend={onSuspend}
-          onRestore={setRestoring}
-          onDelete={setDeleting}
-          onRescore={(link) => rescore.mutate(link.id)}
-          rescoringId={rescore.isPending ? (rescore.variables ?? null) : null}
-        />
-      )}
+      <LinksTable
+        rows={rows}
+        isPending={isPending}
+        sort={sort}
+        onSort={setSort}
+        onSuspend={onSuspend}
+        onRestore={setRestoring}
+        onDelete={setDeleting}
+        onRescore={(link) => rescore.mutate(link.id)}
+        rescoringId={pendingId(rescore)}
+      />
       <Pager page={safePage} totalPages={totalPages} onPageChange={setPage} />
 
-      <ConfirmDialog
-        title="Restore this link?"
-        open={!!restoring}
-        onClose={() => setRestoring(null)}
-        onConfirm={() => restoring && restore.mutate(restoring.id)}
-        confirmLabel="Restore link"
+      <RestoreLinkDialog
+        link={restoring}
         pending={restore.isPending}
-      >
-        <p className="text-sm text-muted">
-          <span className="font-mono font-bold text-text">/{restoring?.slug}</span> starts
-          redirecting again immediately.
-        </p>
-      </ConfirmDialog>
+        onClose={() => setRestoring(null)}
+        onConfirm={restore.mutate}
+      />
 
-      <ConfirmDialog
-        title="Delete this link?"
-        open={!!deleting}
-        onClose={() => setDeleting(null)}
-        onConfirm={() => deleting && remove.mutate(deleting.id)}
-        confirmLabel="Delete link"
-        danger
+      <DeleteLinkDialog
+        link={deleting}
         pending={remove.isPending}
+        onClose={() => setDeleting(null)}
+        onConfirm={remove.mutate}
       >
-        <p className="text-sm text-muted">
-          <span className="font-mono font-bold text-text">/{deleting?.slug}</span> and its clicks
-          are removed for good. Suspending stops a link without losing the evidence, and can be
-          undone; this cannot.
-        </p>
-      </ConfirmDialog>
+        and its clicks are removed for good. Suspending stops a link without losing the evidence,
+        and can be undone; this cannot.
+      </DeleteLinkDialog>
     </div>
   );
 }

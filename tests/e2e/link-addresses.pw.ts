@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { expect, type Page, test } from "@playwright/test";
 import { signUpAndVerify } from "./resend";
 import { setPlan } from "./db";
-import { addActiveCustomDomain, createAdditionalOrg, createOrg, openNewLinkDialog } from "./orgs";
+import { addActiveCustomDomain, createAdditionalOrg, openNewLinkDialog } from "./orgs";
 
 const password = "test-password-123";
 const authFile = join(mkdtempSync(join(tmpdir(), "rdyrct-e2e-")), "auth.json");
@@ -30,19 +30,24 @@ test.beforeAll(async ({ browser }) => {
   await context.close();
 });
 
-/** Creates a fresh, empty org under the shared signed-in user. The first
- * call lands on the no-org state; later calls go through the org switcher. */
+/** The organization every account is given on its first session. The first
+ * test to ask for a fresh org gets that one, since it is empty and nobody
+ * has touched it; the rest make their own. Reliable module state because
+ * this file runs serially, in one worker. */
+let defaultOrgSpent = false;
+
+/** A fresh, empty org under the shared signed-in user. Pro allows three, and
+ * three is what this file uses: the one that came with the account, plus one
+ * per remaining test. */
 async function freshOrg(page: Page, name: string): Promise<void> {
   await page.goto("/dashboard");
-  // The switcher lives in the shell and renders either way (as "No
-  // organization" pre-first-org), so it's a reliable signal the shell (and
-  // so the no-org heading it's paired with, if applicable) has rendered.
+  // The switcher lives in the shell, so it is a reliable signal that the
+  // shell (and whatever it is paired with) has rendered.
   await expect(page.getByTitle("Switch organization")).toBeVisible();
-  const noOrgHeading = page.getByRole("heading", { name: "Create your organization" });
-  if (await noOrgHeading.isVisible()) {
-    await createOrg(page, name);
-  } else {
+  if (defaultOrgSpent) {
     await createAdditionalOrg(page, name);
+  } else {
+    defaultOrgSpent = true;
   }
   // Switching org invalidates the dashboard's queries, which briefly
   // remounts it into its loading skeleton: settle before touching its form,

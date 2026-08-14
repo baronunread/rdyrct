@@ -1,7 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { signUpAndVerify } from "./resend";
 import { queryRows } from "./db";
-import { createOrg } from "./orgs";
 
 /**
  * Destination scoring, through the app the way a person uses it (#68).
@@ -24,7 +23,6 @@ type RiskRow = { risk_score: number | null; risk_reasons: string | null };
 test("a new link is created immediately and scored afterwards (#68)", async ({ page }) => {
   const email = `risk-${Date.now()}@gmail.com`;
   await signUpAndVerify(page, email, password);
-  await createOrg(page, "Scoring Org");
 
   const destination = page.getByPlaceholder("https://example.com/launch").first();
   await expect(destination).toBeVisible();

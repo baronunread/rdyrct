@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 import { appUrl } from "./environment";
 import { signUpAndVerify } from "./resend";
 import { setPlan } from "./db";
-import { addCustomDomain, createOrg } from "./orgs";
+import { addCustomDomain, createQuickLink } from "./orgs";
 
 const password = "test-password-123";
 
@@ -10,14 +10,8 @@ test("a new owner can create an organization and a scheme-less quick link", asyn
   const email = `playwright-${Date.now()}@gmail.com`;
 
   await signUpAndVerify(page, email, password);
-  await createOrg(page, "Playwright Org");
 
-  const destination = page.getByPlaceholder("https://example.com/launch").first();
-  await expect(destination).toBeVisible();
-  await destination.fill("example.com/playwright");
-  await page.getByRole("button", { name: "Create link" }).click();
-
-  await expect(page.getByRole("dialog", { name: "Link created" })).toBeVisible();
+  await createQuickLink(page, "example.com/playwright");
   await expect(page.getByRole("dialog")).toContainText(`${appUrl}/`);
 
   await setPlan(page, email);
@@ -72,7 +66,6 @@ test("a signed-in visitor sees their own numbers, not the anonymous shortener", 
   page,
 }) => {
   await signUpAndVerify(page, `hero-${Date.now()}@gmail.com`, "test-password-123");
-  await createOrg(page, "Hero Org");
 
   await page.goto("/");
   await expect(page.getByText(/Welcome back/)).toBeVisible({ timeout: 15_000 });

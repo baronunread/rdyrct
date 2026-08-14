@@ -1,4 +1,4 @@
-import { Suspense, useState, type ReactNode } from "react";
+import { Suspense, useEffect, useRef, useState, type ReactNode } from "react";
 import { NavLink, Navigate, Outlet, useNavigate, useLocation } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, LazyMotion, domAnimation, m } from "motion/react";
@@ -9,7 +9,7 @@ import { Sun, Moon, Menu as MenuIcon, X } from "lucide";
 import { MorphIcon } from "morphicons/react";
 import { useCurrentUser, useLogout } from "../lib/hooks";
 import { useCurrentOrg } from "../lib/current-org";
-import { claimPendingLinks } from "../lib/anon-links";
+import { claimPendingLinks, storedAnonLinks } from "../lib/anon-links";
 import { api, ApiError } from "../lib/api";
 import { useTheme } from "../lib/theme";
 import { useToast } from "../ui/toast";
@@ -275,6 +275,49 @@ function NewOrgDialog({
   );
 }
 
+/**
+ * Hands over the links somebody made on the landing page before they had an
+ * account (#96), as soon as there is an organization to hand them to.
+ *
+ * It used to happen inside "create your organization", which meant three
+ * links sat in localStorage waiting on a form. Every account now owns an
+ * organization from its first session, so the claim belongs here: they are
+ * kept the moment the app loads, and the person is told how many landed
+ * rather than left to count rows.
+ *
+ * Once per mount, and silent when there is nothing to claim, which is the
+ * common case.
+ */
+function useClaimAnonLinks(orgId: string | undefined) {
+  const qc = useQueryClient();
+  const toast = useToast();
+  const claimed = useRef(false);
+
+  useEffect(() => {
+    if (!orgId || claimed.current || storedAnonLinks().length === 0) return;
+    claimed.current = true;
+    void (async () => {
+      const kept = await claimPendingLinks(orgId);
+      // Zero means every claim was refused: expired, or already taken. The
+      // links are gone either way and saying so helps nobody.
+      if (kept === 0) return;
+      await qc.invalidateQueries({ queryKey: ["links", orgId] });
+      await qc.invalidateQueries({ queryKey: ["stats", orgId] });
+      // The claim just added links, and billing's first-link hand-off asks
+      // whether the count is still zero.
+      await qc.invalidateQueries({ queryKey: ["linkQuotaUsage", orgId] });
+      // The one moment in the app worth sounding pleased about: they made
+      // something before they had an account, and it survived. A sentence
+      // that reads like a receipt wastes it.
+      toast(
+        kept === 1
+          ? "Welcome. Your link is already here."
+          : `Welcome. All ${kept} links are already here.`,
+      );
+    })();
+  }, [orgId, qc, toast]);
+}
+
 export function AppShell() {
   const me = useCurrentUser();
   const navigate = useNavigate();
@@ -287,6 +330,7 @@ export function AppShell() {
   const [mobileOpen, setMobileOpen] = useState(false);
 
   const { org, orgs, setOrg } = useCurrentOrg();
+  useClaimAnonLinks(org?.id);
 
   if (!me.data) return null;
   // No org is fine: org-scoped pages render NoOrgState, billing is per-user.

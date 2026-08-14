@@ -58,12 +58,12 @@ export function capEnabled(env: Env): boolean {
  */
 const MIN_SECRET_BYTES = 16;
 
-export function capSecretUsable(env: Env): boolean {
+function capSecretUsable(env: Env): boolean {
   return new TextEncoder().encode(env.CAP_SECRET ?? "").length >= MIN_SECRET_BYTES;
 }
 
 /** Throws when Cap is switched on with a secret it cannot use. */
-export function assertCapUsable(env: Env): void {
+function assertCapUsable(env: Env): void {
   if (!capEnabled(env) || capSecretUsable(env)) return;
   console.error("cap_misconfigured", "CAP_SECRET is shorter than 16 bytes");
   throw new HTTPException(503, {

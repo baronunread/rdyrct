@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import confetti from "canvas-confetti";
 import { AnimatePresence, LazyMotion, domAnimation, m, useReducedMotion } from "motion/react";
 import { useQueryClient } from "@tanstack/react-query";
+import { useNavigate } from "react-router";
 import {
   useCurrentUser,
   useLinkQuotaUsage,
@@ -451,31 +452,49 @@ function BillingOverlay({ show, message }: { show: boolean; message: string }) {
   );
 }
 
+/**
+ * The moment after checkout.
+ *
+ * Somebody who bought from a landing CTA gets here before they have made
+ * anything: they signed up, paid, and are now looking at an invoice. So when
+ * the account has no links, the overlay carries the next step instead of the
+ * old claim that they "have access to all Pro features", which is not
+ * something they can see until a link exists.
+ */
 function CelebrationOverlay({
   show,
   plan,
   onDismiss,
+  onFirstLink,
 }: {
   show: boolean;
   plan: OrgPlan;
   onDismiss: () => void;
+  /** Set only while the account has no links: the first-run handoff. */
+  onFirstLink?: () => void;
 }) {
   return (
     <AnimatePresence>
       {show && (
         <m.div
-          role="button"
-          tabIndex={0}
-          aria-label="Dismiss celebration"
-          className="fixed inset-0 z-50 flex cursor-pointer items-center justify-center"
-          onClick={onDismiss}
-          onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && onDismiss()}
+          className="fixed inset-0 z-50 flex items-center justify-center"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           transition={{ duration: 0.2 }}
         >
-          <div className="fixed inset-0 bg-black/55 backdrop-blur-[2px]" />
+          {/* The backdrop is the dismiss control, beside the card rather
+              than wrapped around it. Wrapped, the card's own button sat
+              inside a role="button" that answered Enter and Space too: a
+              keyboard press on "Shorten your first link" closed the overlay
+              on the way past, and stopping the click did nothing about the
+              key. */}
+          <button
+            type="button"
+            aria-label="Dismiss celebration"
+            className="fixed inset-0 cursor-pointer bg-black/55 backdrop-blur-[2px]"
+            onClick={onDismiss}
+          />
           <m.div
             className="relative z-10 flex flex-col items-center gap-4 rounded-xl border border-accent/30 bg-surface p-10 text-center shadow-2xl"
             initial={{ opacity: 0, scale: 0.95 }}
@@ -485,9 +504,15 @@ function CelebrationOverlay({
           >
             <span className="text-5xl">🎉</span>
             <p className="text-xl font-bold text-accent">Welcome to {PLAN_LABEL[plan]}!</p>
-            <p className="text-sm text-muted">
-              You now have access to all {PLAN_LABEL[plan]} features.
-            </p>
+            {onFirstLink ? (
+              <Button variant="primary" onClick={onFirstLink}>
+                Shorten your first link
+              </Button>
+            ) : (
+              <p className="text-sm text-muted">
+                You now have access to all {PLAN_LABEL[plan]} features.
+              </p>
+            )}
           </m.div>
         </m.div>
       )}
@@ -757,14 +782,42 @@ function billingOverlayState(
   };
 }
 
-export function BillingPage() {
+/**
+ * The account fields this page reads, with their defaults applied once.
+ *
+ * Every one of them is optional on the user, and defaulting each at the point
+ * of use turned the page into a list of `?? false`.
+ */
+const NO_ACCOUNT_YET = {
+  hasBillingAccount: false,
+  comped: false,
+  polarSubscriptionCancelAtPeriodEnd: false,
+  polarSubscriptionCurrentPeriodEnd: null,
+};
+
+function useBillingAccount() {
   const me = useCurrentUser();
+  // One default for the whole shape, not one per field: every one of these
+  // is required on User, so the only question is whether the user query has
+  // answered yet.
+  const { hasBillingAccount, comped, ...subscription } = me.data?.user ?? NO_ACCOUNT_YET;
+  return {
+    hasBillingAccount,
+    comped,
+    cancelAtPeriodEnd: subscription.polarSubscriptionCancelAtPeriodEnd,
+    periodEnd: subscription.polarSubscriptionCurrentPeriodEnd,
+    ownedOrgs: ownedOrgCount(me.data?.orgs),
+  };
+}
+
+export function BillingPage() {
   const { org } = useCurrentOrg();
   const orgId = org?.id ?? "";
   const { data: linkQuota, isPending: linksPending } = useLinkQuotaUsage(orgId);
+  const navigate = useNavigate();
   const { data: memberData, isPending: membersPending } = useMembers(orgId);
   const { data: domainData, isPending: domainsPending } = useDomains(orgId);
-  const ownedOrgs = ownedOrgCount(me.data?.orgs);
+  const account = useBillingAccount();
 
   const {
     plan,
@@ -779,8 +832,6 @@ export function BillingPage() {
     shake,
   } = useCheckoutFlow();
 
-  const cancelAtPeriodEnd = me.data?.user.polarSubscriptionCancelAtPeriodEnd ?? false;
-  const periodEnd = me.data?.user.polarSubscriptionCurrentPeriodEnd ?? null;
   const overlay = billingOverlayState(checkoutPlan, showPortalOverlay, confirming);
 
   return (
@@ -789,13 +840,13 @@ export function BillingPage() {
       <div className="flex flex-col gap-4">
         <PlanActions
           plan={plan}
-          hasBillingAccount={me.data?.user.hasBillingAccount ?? false}
-          comped={me.data?.user.comped ?? false}
+          hasBillingAccount={account.hasBillingAccount}
+          comped={account.comped}
           checkoutPlan={checkoutPlan}
           showPortalOverlay={showPortalOverlay}
           confirmTimedOut={confirmTimedOut}
-          cancelAtPeriodEnd={cancelAtPeriodEnd}
-          periodEnd={periodEnd}
+          cancelAtPeriodEnd={account.cancelAtPeriodEnd}
+          periodEnd={account.periodEnd}
           shake={shake}
           onUpgrade={handleUpgrade}
           onPortal={handlePortal}
@@ -806,7 +857,7 @@ export function BillingPage() {
           linkQuotaCount={linkQuota?.count ?? 0}
           memberData={memberData ?? []}
           domainData={domainData ?? []}
-          ownedOrgs={ownedOrgs}
+          ownedOrgs={account.ownedOrgs}
           linksPending={linksPending}
           membersPending={membersPending}
           domainsPending={domainsPending}
@@ -819,6 +870,17 @@ export function BillingPage() {
           show={showCelebration}
           plan={plan}
           onDismiss={() => setShowCelebration(false)}
+          onFirstLink={
+            // No org means no quota query, so the count never arrives: an
+            // account that checked out from a landing CTA before it had an
+            // organization is exactly the one this hand-off is for.
+            !org || linkQuota?.count === 0
+              ? () => {
+                  setShowCelebration(false);
+                  navigate("/dashboard");
+                }
+              : undefined
+          }
         />
       </LazyMotion>
     </div>

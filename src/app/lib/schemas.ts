@@ -1,5 +1,9 @@
 import * as v from "valibot";
 
+/** The first-run form asks for a link, not an organization name (#65). The
+ * server decides what counts as a web address, and accepts scheme-less input
+ * the way the signed-in quick-create does, so this only checks that something
+ * was typed. */
 export const orgNameSchema = v.object({
   name: v.pipe(
     v.string(),

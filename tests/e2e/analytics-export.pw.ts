@@ -1,6 +1,5 @@
 import { expect, test } from "@playwright/test";
 import { signUpAndVerify } from "./resend";
-import { createOrg } from "./orgs";
 
 const password = "test-password-123";
 
@@ -11,7 +10,6 @@ const password = "test-password-123";
  */
 test("an owner can export the analytics view as a CSV (#78)", async ({ page }) => {
   await signUpAndVerify(page, `export-${Date.now()}@gmail.com`, password);
-  await createOrg(page, "Export Org");
 
   // One link, so the org has something to report on.
   const destination = page.getByPlaceholder("https://example.com/launch").first();

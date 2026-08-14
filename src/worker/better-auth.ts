@@ -1,11 +1,11 @@
 import { betterAuth } from "better-auth";
-import { APIError, createAuthMiddleware } from "better-auth/api";
+import { APIError, createAuthMiddleware, getSessionFromCtx } from "better-auth/api";
 import { emailOTP } from "better-auth/plugins/email-otp";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { drizzle } from "drizzle-orm/d1";
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray, ne } from "drizzle-orm";
 import * as schema from "./db/schema";
-import type { Env } from "./env";
+import type { DB, Env } from "./env";
 import { alertBetterStack } from "./alerts";
 import { afterResponse } from "./background";
 import { sendEmail } from "./email";
@@ -13,6 +13,9 @@ import { renderEmail } from "./email-layout";
 import { hashPassword, verifyPassword } from "./password";
 import { uid } from "./util";
 import { spendToken, type CapScope } from "./cap";
+import { createOwnedOrg } from "./plan";
+import { deleteOrg } from "./routes/orgs";
+import { defaultOrgName } from "@/shared/org-name";
 import { CAP_FAILED_CODE, CAP_TOKEN_HEADER } from "@/shared/types";
 
 /** better-auth paths that must carry a solved Cap token, and the scope the
@@ -22,6 +25,109 @@ const CAP_GUARDED_PATHS: Record<string, CapScope> = {
   "/sign-up/email": "signup",
   "/request-password-reset": "password-reset",
 };
+
+/**
+ * Gives an account an organization if it has none.
+ *
+ * Every account owns one from the moment it can sign in, so "no organization"
+ * is a state somebody chose (they deleted their last one) rather than the
+ * state everybody starts in. The empty-state screen used to make the
+ * organization while telling the person it already existed; now it is true
+ * when they read it, and Settings can rename it the same second.
+ *
+ * On session creation rather than user creation: a signup that never gets
+ * past the six-digit code leaves nothing behind, so admin usage counts stay
+ * about real accounts. The cost is one indexed read per sign-in.
+ *
+ * Failure is swallowed on purpose. Nobody should be locked out of an account
+ * because an organization could not be written, and the client still carries
+ * the create-organization form for exactly that case.
+ */
+async function ensureOrganization(env: Env, db: DB, userId: string): Promise<void> {
+  try {
+    const owned = await db
+      .select({ orgId: schema.orgMembers.orgId })
+      .from(schema.orgMembers)
+      .where(and(eq(schema.orgMembers.userId, userId), eq(schema.orgMembers.role, "owner")))
+      .limit(1);
+    if (owned.length > 0) return;
+
+    const rows = await db
+      .select({ email: schema.user.email, name: schema.user.name })
+      .from(schema.user)
+      .where(eq(schema.user.id, userId));
+    const account = rows[0];
+    if (!account) return;
+
+    await createOwnedOrg(db, env, {
+      orgId: uid(),
+      userId,
+      name: defaultOrgName(account.email, account.name ?? undefined),
+      ts: Date.now(),
+      // One, not the plan's allowance. createOwnedOrg writes the membership
+      // only while the owner is under the limit it is given, in a single
+      // statement, so a limit of one is what makes this "give them an
+      // organization if they have none" rather than "if they have room".
+      // The read above is a fast path, not the guard: two sessions created
+      // at once both see nothing, and on Pro, where the allowance is three,
+      // both would otherwise have room and the account would arrive with two
+      // organizations and no way to tell which is theirs.
+      ownedOrgLimit: 1,
+    });
+  } catch (error) {
+    console.warn("default_org_failed", String(error));
+  }
+}
+
+/**
+ * Organizations this account owns, split by whether anyone else is in them.
+ *
+ * Account deletion tears down what only they hold and refuses when other
+ * people are still members: a solo organization is part of the account, but
+ * one with teammates in it is not the deleter's alone to destroy.
+ */
+async function ownedOrgsForDeletion(db: DB, userId: string) {
+  const owned = await db
+    .select({ orgId: schema.orgMembers.orgId })
+    .from(schema.orgMembers)
+    .where(and(eq(schema.orgMembers.userId, userId), eq(schema.orgMembers.role, "owner")));
+  if (owned.length === 0) return { solo: [], shared: [] };
+
+  const ids = owned.map((row) => row.orgId);
+  const others = await db
+    .select({ orgId: schema.orgMembers.orgId })
+    .from(schema.orgMembers)
+    .where(and(inArray(schema.orgMembers.orgId, ids), ne(schema.orgMembers.userId, userId)));
+  const sharedIds = new Set(others.map((row) => row.orgId));
+  return {
+    solo: ids.filter((id) => !sharedIds.has(id)),
+    shared: ids.filter((id) => sharedIds.has(id)),
+  };
+}
+
+/**
+ * Refuses to delete an account that still owns an organization other people
+ * are in: they hand it over or empty it first. Everything they hold by
+ * themselves goes with the account, in `beforeDelete`.
+ *
+ * Here rather than in `beforeDelete` because an APIError thrown from that
+ * callback escapes better-auth's transaction wrapper as an unhandled
+ * rejection, even though the caller still gets its 400.
+ */
+async function guardAccountDeletion(
+  db: DB,
+  ctx: Parameters<Parameters<typeof createAuthMiddleware>[0]>[0],
+) {
+  const session = await getSessionFromCtx(ctx);
+  const userId = session?.user?.id;
+  if (!userId) return;
+  const { shared } = await ownedOrgsForDeletion(db, userId);
+  if (shared.length > 0)
+    throw new APIError("BAD_REQUEST", {
+      message:
+        "Some organizations still have other members. Hand over ownership or remove them first.",
+    });
+}
 
 const DNS_CHECK_TIMEOUT = 3000;
 
@@ -316,14 +422,20 @@ function buildAuth(env: Env) {
       deleteUser: {
         enabled: true,
         beforeDelete: async (user) => {
-          const owned = await db
-            .select({ orgId: schema.orgMembers.orgId })
-            .from(schema.orgMembers)
-            .where(and(eq(schema.orgMembers.userId, user.id), eq(schema.orgMembers.role, "owner")));
-          if (owned.length > 0)
-            throw new APIError(400, {
-              message: "You still own organizations, delete them first in Settings.",
-            });
+          // Every account owns an organization from its first session, so
+          // refusing outright (as this used to) would make every account
+          // undeletable. What is theirs alone goes with the account, through
+          // the same teardown the Settings button uses, so R2 objects and KV
+          // keys are cleaned up rather than orphaned.
+          //
+          // The refusal for organizations with other members happens earlier,
+          // in hooks.before: an APIError thrown from here escapes better-auth's
+          // transaction wrapper as an unhandled rejection, even though the
+          // caller does get its 400.
+          const { solo } = await ownedOrgsForDeletion(db, user.id);
+          // Together: each teardown is an independent workflow keyed by its
+          // own org, and a person deletes at most three.
+          await Promise.all(solo.map((orgId) => deleteOrg(db, env, orgId)));
         },
       },
     },
@@ -351,6 +463,7 @@ function buildAuth(env: Env) {
               message: "Could not verify you are human. Reload the page and try again.",
             });
         }
+        if (ctx.path === "/delete-user") await guardAccountDeletion(db, ctx);
         if (ctx.path === "/email-otp/send-verification-otp") {
           return guardVerificationOTPSend(
             db,
@@ -393,6 +506,9 @@ function buildAuth(env: Env) {
               throw new APIError(403, {
                 message: "This account has been suspended.",
               });
+          },
+          after: async (session) => {
+            await ensureOrganization(env, db, session.userId);
           },
         },
       },

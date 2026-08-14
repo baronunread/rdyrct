@@ -31,7 +31,17 @@ async function seedFreeUser(id: string, email: string): Promise<string> {
       "insert into account (id, account_id, provider_id, user_id, password, created_at, updated_at) values (?, ?, 'credential', ?, ?, 0, 0)",
     ).bind(`acct-${id}`, id, id, await hashPassword(TEST_PASSWORD)),
   ]);
-  return signInCookie(email, TEST_PASSWORD);
+  const cookie = await signInCookie(email, TEST_PASSWORD);
+  // Signing in hands every account an organization, which on the free plan is
+  // the entire allowance. These tests are about the cap with room left, so
+  // start them where they started before it existed: at zero owned.
+  await env.DB.batch([
+    env.DB.prepare("delete from org_members where user_id = ?").bind(id),
+    env.DB.prepare(
+      "delete from orgs where not exists (select 1 from org_members where org_id = orgs.id)",
+    ),
+  ]);
+  return cookie;
 }
 
 async function postOrg(cookie: string): Promise<Response> {
@@ -59,6 +69,16 @@ async function postLink(cookie: string, orgId: string): Promise<Response> {
       method: "POST",
       headers: { cookie, "content-type": "application/json" },
       body: JSON.stringify({ destination: `https://example.com/${Math.random()}` }),
+    }),
+  );
+}
+
+async function postAddress(cookie: string, orgId: string, linkId: string): Promise<Response> {
+  return fetchWorker(
+    new Request(`http://localhost/api/orgs/${orgId}/links/${linkId}/addresses`, {
+      method: "POST",
+      headers: { cookie, "content-type": "application/json" },
+      body: JSON.stringify({}),
     }),
   );
 }
@@ -293,6 +313,46 @@ describe("link creation: links cap under concurrency (#18)", () => {
          and id not in (select link_id from link_addresses where kind = 'primary')`,
     ).first<{ n: number }>();
     expect(orphanedLinks?.n).toBe(0);
+  });
+});
+
+describe("alias creation: the per-link cap under concurrency", () => {
+  it("lets exactly one of two concurrent aliases through the last slot", async () => {
+    // assertAliasQuota reads the count and the insert follows, so two
+    // requests arriving together both found room for the fifth alias and
+    // both took it: a link came away with six, and the sixth counted against
+    // the org's quota for good.
+    const cookie = await seedPaidUser("alias-owner", "aliasowner@example.com", "pro");
+    const db = drizzle(env.DB, { schema });
+    await db.insert(schema.orgs).values({ id: "org-alias", name: "Alias org", createdAt: 0 });
+    await db.insert(schema.orgMembers).values({
+      orgId: "org-alias",
+      userId: "alias-owner",
+      role: "owner",
+      createdAt: 0,
+    });
+
+    const made = await postLink(cookie, "org-alias");
+    const { id: linkId } = (await made.json()) as { id: string };
+
+    // Four aliases plus the primary: one slot left of the five.
+    for (let i = 0; i < 4; i++) {
+      const res = await postAddress(cookie, "org-alias", linkId);
+      expect(res.status).toBe(201);
+    }
+
+    const [a, b] = await Promise.all([
+      postAddress(cookie, "org-alias", linkId),
+      postAddress(cookie, "org-alias", linkId),
+    ]);
+    expect([a.status, b.status].sort()).toEqual([201, 402]);
+
+    const held = await env.DB.prepare(
+      "select count(*) as n from link_addresses where link_id = ? and retired_at is null",
+    )
+      .bind(linkId)
+      .first<{ n: number }>();
+    expect(held?.n).toBe(6); // the primary and five aliases
   });
 });
 

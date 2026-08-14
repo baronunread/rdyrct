@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { signUpAndVerify } from "./resend";
 import { setPlan } from "./db";
-import { addActiveCustomDomain, createOrg, openNewLinkDialog } from "./orgs";
+import { addActiveCustomDomain, openNewLinkDialog } from "./orgs";
 
 const password = "test-password-123";
 
@@ -23,7 +23,6 @@ test("new links start on the org's default domain, with the slug field unlocked 
   await signUpAndVerify(page, email, password);
   // Custom domains are a paid feature.
   await setPlan(page, email, "pro");
-  await createOrg(page, "Default Domain Org");
 
   const hostname = await addActiveCustomDomain(page, `default-${Date.now()}.example.com`);
 

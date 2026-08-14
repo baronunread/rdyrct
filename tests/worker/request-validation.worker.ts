@@ -26,6 +26,31 @@ async function postRawBody(cookie: string, path: string, rawBody: string): Promi
 beforeEach(applyTestMigrations);
 afterEach(reset);
 
+/** A body that gets past the upload route's own sniffing, so the only thing
+ * a test exercises is the size limit. */
+function webpBody(bytes: number): Uint8Array {
+  const webp = new Uint8Array(bytes);
+  webp.set(new TextEncoder().encode("RIFF"), 0);
+  webp.set(new TextEncoder().encode("WEBP"), 8);
+  return webp;
+}
+
+/** Posts a logo as a given content type and hands back the response. */
+async function uploadLogo(cookie: string, contentType: string, body: Uint8Array) {
+  const ctx = createExecutionContext();
+  const res = await worker.fetch(
+    new Request("http://localhost/api/orgs/org-1/qr-logo", {
+      method: "POST",
+      headers: { cookie, "content-type": contentType },
+      body,
+    }),
+    authEnv(),
+    ctx,
+  );
+  await waitOnExecutionContext(ctx);
+  return res;
+}
+
 describe("request body size limit (#19)", () => {
   it("rejects an oversized JSON body with 413 before the handler runs", async () => {
     const cookie = await freeOwnerCookie();
@@ -40,23 +65,7 @@ describe("request body size limit (#19)", () => {
     // the org router's JSON limit (32 KB) ran first and answered "Request
     // body too large" for a perfectly ordinary logo. A 512x512 WebP is
     // routinely bigger than that, which made every logo upload fail.
-    const cookie = await freeOwnerCookie();
-    const ctx = createExecutionContext();
-    const webp = new Uint8Array(64 * 1024);
-    // A real RIFF/WEBP header, so the route gets past its own sniffing and
-    // the only thing under test is the size limit.
-    webp.set(new TextEncoder().encode("RIFF"), 0);
-    webp.set(new TextEncoder().encode("WEBP"), 8);
-    const res = await worker.fetch(
-      new Request("http://localhost/api/orgs/org-1/qr-logo", {
-        method: "POST",
-        headers: { cookie, "content-type": "image/webp" },
-        body: webp,
-      }),
-      authEnv(),
-      ctx,
-    );
-    await waitOnExecutionContext(ctx);
+    const res = await uploadLogo(await freeOwnerCookie(), "image/webp", webpBody(64 * 1024));
     expect(res.status).not.toBe(413);
   });
 
@@ -83,37 +92,14 @@ describe("request body size limit (#19)", () => {
   });
 
   it("still lets an upload through on a mixed-case image type", async () => {
-    const cookie = await freeOwnerCookie();
-    const ctx = createExecutionContext();
-    const webp = new Uint8Array(64 * 1024);
-    webp.set(new TextEncoder().encode("RIFF"), 0);
-    webp.set(new TextEncoder().encode("WEBP"), 8);
-    const res = await worker.fetch(
-      new Request("http://localhost/api/orgs/org-1/qr-logo", {
-        method: "POST",
-        headers: { cookie, "content-type": "IMAGE/WEBP" },
-        body: webp,
-      }),
-      authEnv(),
-      ctx,
-    );
-    await waitOnExecutionContext(ctx);
+    const res = await uploadLogo(await freeOwnerCookie(), "IMAGE/WEBP", webpBody(64 * 1024));
     expect(res.status).not.toBe(413);
   });
 
   it("rejects an oversized QR logo upload with 413", async () => {
-    const cookie = await freeOwnerCookie();
-    const ctx = createExecutionContext();
-    const res = await worker.fetch(
-      new Request("http://localhost/api/orgs/org-1/qr-logo", {
-        method: "POST",
-        headers: { cookie, "content-type": "image/webp" },
-        body: new Uint8Array(300 * 1024),
-      }),
-      authEnv(),
-      ctx,
-    );
-    await waitOnExecutionContext(ctx);
+    // A real WebP body, so a 413 proves the size limit rather than a
+    // sniffing check rejecting a zero-filled buffer.
+    const res = await uploadLogo(await freeOwnerCookie(), "image/webp", webpBody(300 * 1024));
     expect(res.status).toBe(413);
   });
 });
