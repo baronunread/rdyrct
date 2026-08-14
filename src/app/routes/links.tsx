@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { useNavigate } from "react-router";
 import { Plus } from "lucide-react";
 import { useLinks, useLinkMutations, useLinkQuotaUsage } from "../lib/hooks";
@@ -12,7 +12,6 @@ import { EmptyState, PageHeader } from "../ui/misc";
 import { TableSkeleton } from "../ui/skeleton";
 import { useToast } from "../ui/toast";
 import { NoOrgState } from "../components/no-org";
-import { sortRows } from "../lib/sort";
 import { LinkEditor } from "../components/link-editor";
 import { LinksTable } from "../components/links-table";
 import { ConfirmDialog } from "../ui/confirm-dialog";
@@ -20,67 +19,64 @@ import { SameDestinationDialog } from "../components/same-destination-dialog";
 import { CreateAliasDialog } from "../components/create-alias-dialog";
 import { LinkPreviewDialog } from "../components/link-preview-dialog";
 import { withErrorToast } from "../lib/mutation-toast";
+import { useDebounced } from "../lib/use-debounced";
 import posthog from "../lib/posthog";
 
 const PAGE_SIZE = 25;
 
-function useLinkFilter(links: { data?: LinkDTO[] }) {
+/** The table's sort keys, as the API names them. */
+const API_SORT: Record<string, "created" | "slug" | "clicks"> = {
+  createdAt: "created",
+  slug: "slug",
+  clicks: "clicks",
+};
+
+/** The table's controls, and the cursor stack that lets Previous be a step
+ * back rather than a re-walk from the top. */
+function useLinkPage(orgId: string) {
   const [search, setSearch] = useState("");
   const [domainFilter, setDomainFilter] = useState<string>("all");
   const [sort, setSort] = useState<Sort>({ key: "createdAt", dir: -1 });
-  const [page, setPage] = useState(0);
+  // Index 0 is the first page, whose cursor is nothing. Next pushes the
+  // cursor the server handed back; Previous pops.
+  const [cursors, setCursors] = useState<(string | null)[]>([null]);
 
-  const filtered = useMemo(() => {
-    let list = links.data ?? [];
-    if (search.trim()) {
-      const q = search.toLowerCase();
-      list = list.filter(
-        (l) =>
-          l.slug.toLowerCase().includes(q) ||
-          l.destination.toLowerCase().includes(q) ||
-          l.title.toLowerCase().includes(q),
-      );
-    }
-    if (domainFilter !== "all") {
-      list = list.filter((l) =>
-        domainFilter === "shared" ? !l.domain : l.domain === domainFilter,
-      );
-    }
-    return sortRows(list, sort, {
-      clicks: (l) => l.clicks,
-      slug: (l) => l.slug,
-      createdAt: (l) => l.createdAt,
-    });
-  }, [links.data, search, domainFilter, sort]);
+  // The term reaches the server now, so it waits for a pause in typing.
+  const q = useDebounced(search);
+  const page = cursors.length - 1;
 
-  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-  const safePage = Math.min(page, totalPages - 1);
-  const paged = filtered.slice(safePage * PAGE_SIZE, (safePage + 1) * PAGE_SIZE);
+  const links = useLinks(orgId, {
+    q,
+    domain: domainFilter,
+    sort: API_SORT[sort.key] ?? "created",
+    dir: sort.dir === 1 ? "asc" : "desc",
+    limit: PAGE_SIZE,
+    cursor: cursors[page],
+  });
 
-  const onSearchChange = (v: string) => {
-    setSearch(v);
-    setPage(0);
-  };
-  const onDomainFilterChange = (v: string) => {
-    setDomainFilter(v);
-    setPage(0);
-  };
+  // Any change to what is being asked for starts the walk again: a cursor
+  // belongs to one ordering and one filter, and carrying it across means
+  // resuming somebody else's list.
+  const restart =
+    <T,>(set: (v: T) => void) =>
+    (value: T) => {
+      set(value);
+      setCursors([null]);
+    };
 
   return {
     search,
-    setSearch,
+    onSearchChange: restart(setSearch),
     domainFilter,
-    setDomainFilter,
+    onDomainFilterChange: restart(setDomainFilter),
     sort,
-    setSort,
+    setSort: restart<Sort>(setSort),
+    links,
+    rows: links.data?.items ?? [],
     page,
-    setPage,
-    filtered,
-    totalPages,
-    safePage,
-    paged,
-    onSearchChange,
-    onDomainFilterChange,
+    hasNext: !!links.data?.nextCursor,
+    onNext: () => setCursors((c) => [...c, links.data?.nextCursor ?? null]),
+    onBack: () => setCursors((c) => (c.length > 1 ? c.slice(0, -1) : c)),
   };
 }
 
@@ -195,7 +191,6 @@ function useLinkDialogs(atLimit: boolean) {
 
 export function LinksPage() {
   const { org, orgId, limits, activeDomains, defaultDomainId, orgQr, domains } = useOrgLimits();
-  const links = useLinks(orgId);
   const quotaUsage = useLinkQuotaUsage(orgId);
   const { create, update, remove } = useLinkMutations(orgId);
   const toast = useToast();
@@ -214,14 +209,15 @@ export function LinksPage() {
     domainFilter,
     sort,
     setSort,
-    paged,
-    filtered,
-    totalPages,
-    safePage,
+    links,
+    rows,
+    page,
+    hasNext,
+    onNext,
+    onBack,
     onSearchChange,
     onDomainFilterChange,
-    setPage,
-  } = useLinkFilter(links);
+  } = useLinkPage(orgId);
 
   /**
    * Answer the duplicate-destination prompt (#45).
@@ -286,8 +282,12 @@ export function LinksPage() {
       />
 
       <LinksListArea
+        // An empty first page with no search behind it is an organization
+        // with no links; an empty page with a search behind it is a search
+        // that found nothing, and the toolbar has to stay on screen to be
+        // cleared.
         isLoading={links.isLoading}
-        hasLinks={!!links.data?.length}
+        hasLinks={rows.length > 0 || !!search || domainFilter !== "all" || page > 0}
         atLimit={atLimit}
         limitHint={limitHint}
         onCreate={dialogs.openCreate}
@@ -298,12 +298,10 @@ export function LinksPage() {
           domainFilter={domainFilter}
           onDomainFilterChange={onDomainFilterChange}
           domains={domains.data ?? []}
-          filteredCount={filtered.length}
-          totalCount={links.data?.length ?? 0}
         />
         <LinksTable
           orgId={orgId}
-          paged={paged}
+          paged={rows}
           navigate={navigate}
           onQrClick={dialogs.setQrLink}
           onEdit={dialogs.openEdit}
@@ -311,9 +309,10 @@ export function LinksPage() {
           onCreateAlias={dialogs.setAliasLink}
           sort={sort}
           onSort={setSort}
-          totalPages={totalPages}
-          currentPage={safePage}
-          onPageChange={setPage}
+          page={page}
+          hasNext={hasNext}
+          onNext={onNext}
+          onBack={onBack}
         />
       </LinksListArea>
 
@@ -414,16 +413,12 @@ function LinksToolbar({
   domainFilter,
   onDomainFilterChange,
   domains,
-  filteredCount,
-  totalCount,
 }: {
   search: string;
   onSearchChange: (v: string) => void;
   domainFilter: string;
   onDomainFilterChange: (v: string) => void;
   domains: DomainDTO[];
-  filteredCount: number;
-  totalCount: number;
 }) {
   return (
     <div className="mb-4 flex flex-wrap items-center gap-3">
@@ -450,9 +445,6 @@ function LinksToolbar({
           />
         </div>
       )}
-      <span className="ms-auto text-xs text-muted tnum">
-        {filteredCount} / {totalCount}
-      </span>
     </div>
   );
 }

@@ -80,12 +80,47 @@ export function useLogout() {
 
 // Org-scoped queries guard on orgId: a user with no organization yet renders
 // the pages' empty states, and these must not fire at /orgs//… meanwhile.
-export const useLinks = (orgId: string) =>
-  useQuery<LinkDTO[]>({
-    queryKey: ["links", orgId],
-    queryFn: () => api(`/orgs/${orgId}/links`),
+export interface LinkQuery {
+  q?: string;
+  domain?: string;
+  sort?: "created" | "slug" | "clicks";
+  dir?: "asc" | "desc";
+  limit?: number;
+  cursor?: string | null;
+}
+
+export interface LinkPage {
+  items: LinkDTO[];
+  nextCursor: string | null;
+}
+
+/**
+ * One page of links, with the cursor that continues it.
+ *
+ * Searching, filtering and sorting are all the server's job now: the browser
+ * holds a page rather than the table, so anything it did itself would only
+ * ever apply to the rows already on screen.
+ */
+export const useLinks = (orgId: string, query: LinkQuery = {}) =>
+  useQuery<LinkPage>({
+    queryKey: ["links", orgId, query],
+    queryFn: () => api(`/orgs/${orgId}/links?${linkQueryString(query)}`),
     enabled: !!orgId,
+    // Without this every keystroke's pause replaced the table with a
+    // skeleton and put it back, which flashes and tears out an open menu.
+    placeholderData: keepPreviousData,
   });
+
+function linkQueryString(query: LinkQuery): string {
+  const params = new URLSearchParams();
+  if (query.q) params.set("q", query.q);
+  if (query.domain && query.domain !== "all") params.set("domain", query.domain);
+  if (query.sort && query.sort !== "created") params.set("sort", query.sort);
+  if (query.dir === "asc") params.set("dir", "asc");
+  if (query.limit) params.set("limit", String(query.limit));
+  if (query.cursor) params.set("cursor", query.cursor);
+  return params.toString();
+}
 
 /** Links used against the plan's `links` cap: a link plus its kept-forever
  * aliases each count (a rename's automatic 48h temp_alias never does), so

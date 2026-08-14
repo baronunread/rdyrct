@@ -35,15 +35,14 @@ function creatorNameFrom(memberNames: Map<string, string>, id: string | null): s
 /** Loads and shapes every data source the dashboard renders from. */
 function useDashboardData(orgId: string) {
   const stats = useStats(orgId);
-  const links = useLinks(orgId);
+  // Five, from the server, rather than every link the org owns sorted in the
+  // browser: this card only ever showed the newest handful.
+  const links = useLinks(orgId, { limit: 5 });
   const members = useMembers(orgId);
   const clicks = useRecentClicks(orgId);
   const { create } = useLinkMutations(orgId);
 
-  const recentLinks = useMemo(
-    () => [...(links.data ?? [])].sort((a, b) => b.createdAt - a.createdAt).slice(0, 5),
-    [links.data],
-  );
+  const recentLinks = links.data?.items ?? [];
   const memberNames = useMemo(
     () => new Map((members.data ?? []).map((m) => [m.userId, m.name])),
     [members.data],

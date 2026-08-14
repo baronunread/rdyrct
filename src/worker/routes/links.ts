@@ -27,6 +27,7 @@ import {
 import { jsonBodyLimit } from "../body-limit";
 import { scoreAndRecord } from "../risk";
 import { claimAnonLink } from "./shorten";
+import { linkPageQuery, readLinkPageParams, takePage } from "../links-page";
 import type { AddressDTO, LinkDTO, LinkInput, OrgPlan, PlanLimits, TopEntry } from "@/shared/types";
 
 const RECENT_CLICKS_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
@@ -502,7 +503,17 @@ async function resolveRenamedSlug(
   return newSlug;
 }
 
+/**
+ * One page of an organization's links, newest first by default.
+ *
+ * Paged with a cursor rather than a page number, and searched, filtered and
+ * sorted here rather than in the browser: see links-page.ts for why the
+ * browser cannot do either job once it only holds one page.
+ */
 linkRoutes.get("/", requireOrgRole("member"), async (c) => {
+  const params = readLinkPageParams(new URL(c.req.url));
+  const page = linkPageQuery(c.req.param("orgId")!, params);
+
   const rows = await c.var.db
     .select({
       link: schema.links,
@@ -512,9 +523,17 @@ linkRoutes.get("/", requireOrgRole("member"), async (c) => {
     })
     .from(schema.links)
     .leftJoin(schema.domains, eq(schema.links.domainId, schema.domains.id))
-    .where(eq(schema.links.orgId, c.req.param("orgId")!))
-    .orderBy(desc(schema.links.createdAt));
-  return c.json(rows.map((r) => toDTO(r.link, r.clicks, r.domain, r.addressCount)));
+    .where(page.where)
+    .orderBy(page.orderBy)
+    .limit(page.limit);
+
+  const { items, nextCursor } = takePage(
+    rows.map((r) => toDTO(r.link, r.clicks, r.domain, r.addressCount)),
+    params,
+    (link) =>
+      params.sort === "slug" ? link.slug : params.sort === "clicks" ? link.clicks : link.createdAt,
+  );
+  return c.json({ items, nextCursor });
 });
 
 // Distinct from the links list's own count: a link plus its kept-forever
