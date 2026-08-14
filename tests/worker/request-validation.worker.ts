@@ -60,6 +60,47 @@ describe("request body size limit (#19)", () => {
     expect(res.status).not.toBe(413);
   });
 
+  it("holds a mixed-case JSON content type to the JSON ceiling", async () => {
+    // `Application/JSON` is valid, and the check used to ask whether the raw
+    // header contained "json", case-sensitively. It did not, so the request
+    // was treated as a file and got 260 KB instead of 32: a caller could opt
+    // out of the JSON limit by changing the case of their own header. It
+    // asks whether the type is an image now, so anything unrecognized falls
+    // to the tighter ceiling rather than the looser one.
+    const cookie = await freeOwnerCookie();
+    const ctx = createExecutionContext();
+    const res = await worker.fetch(
+      new Request("http://localhost/api/orgs", {
+        method: "POST",
+        headers: { cookie, "content-type": "Application/JSON; charset=UTF-8" },
+        body: JSON.stringify({ name: "a".repeat(64 * 1024) }),
+      }),
+      authEnv(),
+      ctx,
+    );
+    await waitOnExecutionContext(ctx);
+    expect(res.status).toBe(413);
+  });
+
+  it("still lets an upload through on a mixed-case image type", async () => {
+    const cookie = await freeOwnerCookie();
+    const ctx = createExecutionContext();
+    const webp = new Uint8Array(64 * 1024);
+    webp.set(new TextEncoder().encode("RIFF"), 0);
+    webp.set(new TextEncoder().encode("WEBP"), 8);
+    const res = await worker.fetch(
+      new Request("http://localhost/api/orgs/org-1/qr-logo", {
+        method: "POST",
+        headers: { cookie, "content-type": "IMAGE/WEBP" },
+        body: webp,
+      }),
+      authEnv(),
+      ctx,
+    );
+    await waitOnExecutionContext(ctx);
+    expect(res.status).not.toBe(413);
+  });
+
   it("rejects an oversized QR logo upload with 413", async () => {
     const cookie = await freeOwnerCookie();
     const ctx = createExecutionContext();

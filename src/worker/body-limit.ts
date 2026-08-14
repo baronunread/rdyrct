@@ -27,15 +27,25 @@ const binary = bodyLimit({
 });
 
 /**
- * The JSON ceiling for JSON, a file-sized one for everything else.
+ * The file-sized ceiling for an image upload, the JSON one for everything
+ * else.
  *
- * Neither is a substitute for a route's own validation: this only keeps an
- * oversized body from reaching a handler at all.
+ * Written round this way on purpose. Asking "is this JSON?" and giving the
+ * larger limit to everything else means any header we fail to recognize gets
+ * the loose ceiling: `Application/JSON` is valid, and a case-sensitive
+ * `includes("json")` handed it 260 KB instead of 32. Asking "is this an
+ * image?" fails the other way, which is the way to fail.
+ *
+ * The media type is compared the same way the upload route compares it: the
+ * parameters dropped, the rest lowercased, since `image/webp; charset=x` and
+ * `IMAGE/WEBP` are the same type.
+ *
+ * Neither ceiling is a substitute for a route's own validation: this only
+ * keeps an oversized body from reaching a handler at all.
  */
 export function jsonBodyLimit() {
   return (c: Context, next: Next) => {
-    const type = c.req.header("content-type") ?? "";
-    const isJson = type === "" || type.includes("json");
-    return isJson ? json(c, next) : binary(c, next);
+    const type = (c.req.header("content-type") ?? "").split(";")[0].trim().toLowerCase();
+    return type.startsWith("image/") ? binary(c, next) : json(c, next);
   };
 }
