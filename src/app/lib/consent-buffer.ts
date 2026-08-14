@@ -17,10 +17,11 @@
  *  - Capped, so a long session that never answers cannot grow without bound.
  */
 import { isFunnelEvent } from "./funnel";
+import type { EventProperties } from "./posthog";
 
 export type BufferedEvent = {
   event: string;
-  properties?: Record<string, unknown>;
+  properties?: EventProperties;
   /** When it actually happened, not when it was flushed. */
   at: Date;
 };
@@ -35,7 +36,7 @@ let pending: BufferedEvent[] = [];
  */
 export function bufferBeforeConsent(
   event: string,
-  properties: Record<string, unknown> | undefined,
+  properties: EventProperties | undefined,
   unanswered: boolean,
   now: Date = new Date(),
 ): boolean {

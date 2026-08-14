@@ -9,7 +9,12 @@ import worldTopology from "../data/world-110m.json";
 const WIDTH = 960;
 const HEIGHT = 500;
 
-const world = worldTopology as unknown as Topology<{ countries: GeometryCollection }>;
+// tsc infers world-110m.json's literal shape from the file itself, which is
+// far wider than the TopoJSON types and does not narrow to them on its own.
+const worldJson: unknown = worldTopology;
+// SAFETY: the file is a checked-in TopoJSON world map with a "countries"
+// object; feature() below reads exactly that and nothing else.
+const world = worldJson as Topology<{ countries: GeometryCollection }>;
 const countries = feature(world, world.objects.countries).features;
 
 const projection = geoNaturalEarth1().fitSize([WIDTH, HEIGHT], {

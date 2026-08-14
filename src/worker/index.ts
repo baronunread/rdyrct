@@ -207,14 +207,16 @@ function proxyBlog(c: Context<AppEnv>, next: () => Promise<void>) {
   headers.set("host", target.hostname);
   const hasBody = !["GET", "HEAD"].includes(c.req.raw.method);
 
-  return fetch(target, {
+  // `duplex` is what Workers' fetch needs to stream a request body, and its
+  // RequestInit does not declare it, so it goes on after the object is built.
+  const init: RequestInit & { duplex?: "half" } = {
     method: c.req.raw.method,
     headers,
     body: hasBody ? c.req.raw.body : undefined,
-    // a streamed body requires this on Workers' fetch
-    ...(hasBody ? { duplex: "half" } : {}),
     redirect: "manual",
-  });
+  };
+  if (hasBody) init.duplex = "half";
+  return fetch(target, init);
 }
 app.all("/blog", proxyBlog);
 app.all("/blog/*", proxyBlog);

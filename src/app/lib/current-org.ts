@@ -1,6 +1,5 @@
 import { useEffect, useSyncExternalStore } from "react";
 import { useCurrentUser } from "./hooks";
-import type { UserOrg } from "@/shared/types";
 
 // There is no org id in the URL: the current org lives here, backed by
 // localStorage so a reload keeps it. Store and hook share one file because

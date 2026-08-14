@@ -43,12 +43,11 @@ export async function api<T>(
   path: string,
   init?: Omit<RequestInit, "body"> & { body?: unknown },
 ): Promise<T> {
+  const headers: Record<string, string> = {};
+  if (init?.body !== undefined) headers["content-type"] = "application/json";
   const res = await fetch(`/api${path}`, {
     ...init,
-    headers: {
-      ...(init?.body !== undefined ? { "content-type": "application/json" } : {}),
-      ...init?.headers,
-    },
+    headers: { ...headers, ...init?.headers },
     body: init?.body !== undefined ? JSON.stringify(init.body) : undefined,
   });
   await throwIfNotOk(res);

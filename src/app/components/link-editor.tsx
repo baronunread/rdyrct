@@ -219,7 +219,7 @@ function QrPreviewSidebar({
   );
 }
 
-function QrShapeFields({
+function QrPatternFields({
   form,
   setForm,
   fallbacks,
@@ -378,7 +378,7 @@ function QrCustomization({
       <legend className="px-1 text-2xs tracking-wider text-muted uppercase">
         QR customization
       </legend>
-      <QrShapeFields form={form} setForm={setForm} fallbacks={fallbacks} />
+      <QrPatternFields form={form} setForm={setForm} fallbacks={fallbacks} />
       <QrBackgroundFields form={form} setForm={setForm} fallbacks={fallbacks} />
       <QrLogoField form={form} setForm={setForm} />
     </fieldset>

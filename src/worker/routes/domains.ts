@@ -28,7 +28,7 @@ interface CfHostnameResult {
   ssl?: { status: string } | null;
 }
 
-async function cfRequest<T = Record<string, unknown>>(
+async function cfRequest<T = Record<string, JsonValue>>(
   env: Env,
   method: string,
   path: string,
@@ -124,9 +124,12 @@ async function cfGetHostnameStatus(
   }
   assertCfConfigured(env);
   if (!row.cfHostnameId) return null;
-  const data = await cfRequest(env, "GET", `/custom_hostnames/${row.cfHostnameId}`);
-  if (!data) return null;
-  return data.result as unknown as CfHostnameResult;
+  const data = await cfRequest<CfHostnameResult>(
+    env,
+    "GET",
+    `/custom_hostnames/${row.cfHostnameId}`,
+  );
+  return data?.result ?? null;
 }
 
 export async function cfDeleteHostname(env: Env, cfHostnameId: string): Promise<void> {

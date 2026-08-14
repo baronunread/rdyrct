@@ -9,7 +9,7 @@ import { Button } from "../ui/button";
 import { Card } from "../ui/misc";
 import { BusyContent } from "../ui/spinner";
 import { useToast } from "../ui/toast";
-import { QrColorAndLogoFields, QrPreviewSidebar, QrShapeFields } from "./qr-fields";
+import { QrColorAndLogoFields, QrPreviewSidebar, QrPatternFields } from "./qr-fields";
 import { type QrValues } from "../lib/qr-look";
 import { orgQrFrom } from "../lib/org-qr";
 import posthog from "../lib/posthog";
@@ -138,7 +138,7 @@ export function QrDefaultsCard() {
           <UpgradeQrPrompt />
         ) : (
           <div className="grid gap-6 sm:grid-cols-[1fr_auto]">
-            <QrShapeFields values={values} setField={setField} isAdmin={isAdmin} />
+            <QrPatternFields values={values} setField={setField} isAdmin={isAdmin} />
             <div className="order-last sm:order-none">
               <QrPreviewSidebar values={values} url={shortUrl("preview")} />
             </div>

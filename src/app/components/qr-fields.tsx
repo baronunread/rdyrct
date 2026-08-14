@@ -33,7 +33,7 @@ interface QrFieldsProps {
   className?: string;
 }
 
-export function QrShapeFields({ values, setField, isAdmin }: QrFieldsProps) {
+export function QrPatternFields({ values, setField, isAdmin }: QrFieldsProps) {
   return (
     <div className="flex min-w-0 flex-col gap-4">
       <Field label="Dot style">

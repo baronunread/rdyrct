@@ -66,13 +66,20 @@ export function resolveLook({
  * with no logo, zero with one. Switching that step off makes it use the URL
  * we already handed it, which is what a data URI is for.
  */
+/** What qr-code-styling is told about the image it draws in the middle. */
+interface QrImageOptions {
+  margin: number;
+  imageSize: number | undefined;
+  saveAsBlob?: false;
+}
+
 export function imageOptionsFor(look: QrLook) {
   const inlineAlready = !!look.logo && /^(data|blob):/.test(look.logo);
-  return {
-    margin: 4,
-    imageSize: look.logoSize,
-    ...(inlineAlready ? { saveAsBlob: false } : {}),
-  };
+  const options: QrImageOptions = { margin: 4, imageSize: look.logoSize };
+  // Left off entirely otherwise, so the library keeps its own default, which
+  // is what a logo it still has to fetch needs.
+  if (inlineAlready) options.saveAsBlob = false;
+  return options;
 }
 
 /** QRPreview's props, spread from the string values the fields hold. */

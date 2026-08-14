@@ -217,7 +217,9 @@ export function QRPreview({
           sizeClass,
         )}
         style={{
-          ...(sizeClass ? {} : { width: size, height: size }),
+          // A class that sets the box wins; without one, the box is `size`.
+          width: sizeClass ? undefined : size,
+          height: sizeClass ? undefined : size,
           // A checkerboard shows through where the QR is transparent.
           backgroundColor: "#ffffff",
           backgroundImage: hasTransparency(look.bg)

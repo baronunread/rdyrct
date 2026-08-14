@@ -6,6 +6,7 @@ import { Webhook } from "standardwebhooks";
 import { drizzle } from "drizzle-orm/d1";
 import * as schema from "../db/schema";
 import type { AppEnv, Env } from "../env";
+import type { JsonValue } from "../../shared/types";
 import { requireUser } from "../guards";
 import { alertBetterStack } from "../alerts";
 import { effectivePlanSql } from "../entitlement";
@@ -86,7 +87,7 @@ interface PolarEvent {
     customer_id?: string;
     product_id?: string;
     status?: string;
-    metadata?: Record<string, unknown>;
+    metadata?: Record<string, JsonValue>;
     cancel_at_period_end?: boolean;
     current_period_end?: string;
     ends_at?: string | null;
@@ -160,6 +161,19 @@ function subjectOf(event: PolarEvent) {
  * comp outranks it, so `effectivePlanSql` reads the comp column off the row
  * and a revoked subscription cannot strip granted access (#81).
  */
+/**
+ * The Polar customer id, when the payload carries one.
+ *
+ * Written only when it is there, so a snapshot that omits it cannot erase the
+ * id already on the row. `subscription.updated` can land before an older
+ * `subscription.active`, and then notStale drops the active event that would
+ * have carried the id: the row would pay for a plan whose billing portal it
+ * cannot open.
+ */
+function customerIdOf(event: PolarEvent): { polarCustomerId?: string } {
+  return event.data.customer_id ? { polarCustomerId: event.data.customer_id } : {};
+}
+
 function subscriptionFacts(plan: "hobby" | "pro" | null, status: string) {
   return {
     subscriptionPlan: plan,
@@ -263,12 +277,7 @@ async function subscriptionUpdatedMutation(db: Db, env: Env, event: PolarEvent) 
       // status and price while leaving the old id in place would describe a
       // subscription that does not exist.
       polarSubscriptionId: event.data.id,
-      // The customer id comes with it. `subscription.updated` can land before
-      // an older `subscription.active`, and then `notStale` drops the active
-      // event that would have carried the id: the row pays for a plan it
-      // cannot open the billing portal for. Only written when the payload has
-      // one, so a snapshot that omits it cannot erase the id already there.
-      ...(event.data.customer_id ? { polarCustomerId: event.data.customer_id } : {}),
+      ...customerIdOf(event),
       polarSubscriptionCancelAtPeriodEnd: event.data.cancel_at_period_end ?? false,
       polarSubscriptionCurrentPeriodEnd: periodEnd ? new Date(periodEnd) : null,
       polarEventAt: at,

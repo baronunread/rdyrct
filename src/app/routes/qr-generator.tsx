@@ -23,7 +23,7 @@ import { buttonClass } from "../ui/button-class";
 import { Input } from "../ui/field";
 import { trackCta } from "../lib/track-cta";
 import { QRPreview, QrDownloadButtons } from "../components/qr";
-import { QrColorAndLogoFields, QrShapeFields } from "../components/qr-fields";
+import { QrColorAndLogoFields, QrPatternFields } from "../components/qr-fields";
 import { qrPreviewProps, resolveLook, type QrValues } from "../lib/qr-look";
 import { useSeo } from "../lib/seo";
 import { FaqJsonLd } from "../components/faq-json-ld";
@@ -258,7 +258,7 @@ export function QrGeneratorPage() {
             {/* The same controls the app uses on a link, in the same order
                 the settings card puts them: shapes beside the preview, then
                 the colors and the logo across the full width. */}
-            <QrShapeFields values={values} setField={setField} isAdmin />
+            <QrPatternFields values={values} setField={setField} isAdmin />
           </div>
 
           <CodePanel encoded={encoded} values={values} />
