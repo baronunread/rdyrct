@@ -62,7 +62,7 @@ function validateQrLogoBody(type: string, body: ArrayBuffer): string {
 qrLogoRoutes.post("/", requireOrgRole("member"), async (c) => {
   // A logo is QR customization: a paid feature.
   const { limits } = await orgPlan(c.var.db, c.req.param("orgId")!);
-  if (!limits.qr)
+  if (!limits.qrCustom)
     throw new HTTPException(402, {
       message: "QR customization is a paid feature: upgrade to use it",
     });

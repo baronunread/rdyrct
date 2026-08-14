@@ -136,7 +136,6 @@ export function Dashboard() {
         title="Link created"
         link={created}
         onClose={() => setCreated(null)}
-        qrEnabled={limits.qr}
         orgQr={orgQr}
       />
 

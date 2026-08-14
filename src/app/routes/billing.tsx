@@ -71,7 +71,8 @@ const PLAN_FEATURES = [
     `${PLAN_LIMITS.hobby.orgs}`,
     `${PLAN_LIMITS.pro.orgs}`,
   ],
-  ["QR codes", "No", "Yes", "Yes"],
+  ["QR codes", "Yes", "Yes", "Yes"],
+  ["QR logo & colors", "No", "Yes", "Yes"],
   [
     "Analytics",
     `${PLAN_LIMITS.free.analyticsDays}d`,

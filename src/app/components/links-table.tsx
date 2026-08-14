@@ -5,7 +5,6 @@ import {
   Ellipsis,
   ExternalLink,
   Link,
-  Lock,
   Pencil,
   QrCode,
   Trash2,
@@ -34,12 +33,10 @@ function linkDetailPath(link: LinkDTO): string {
 /** What a row can do to its link. The table threads these straight through. */
 interface RowActions {
   navigate: (to: string) => void;
-  limits: { qr: boolean };
   onQrClick: (link: LinkDTO) => void;
   onEdit: (link: LinkDTO) => void;
   onDelete: (link: LinkDTO) => void;
   onCreateAlias: (link: LinkDTO) => void;
-  noQrToast: () => void;
 }
 
 /** The short link itself: expander, domain badge, slug, copy button. */
@@ -98,7 +95,7 @@ function LinkCell({
 }
 
 function RowMenu({ link, actions }: { link: LinkDTO; actions: RowActions }) {
-  const { navigate, limits, onQrClick, onEdit, onDelete, onCreateAlias, noQrToast } = actions;
+  const { navigate, onQrClick, onEdit, onDelete, onCreateAlias } = actions;
   return (
     <Menu
       align="end"
@@ -114,8 +111,8 @@ function RowMenu({ link, actions }: { link: LinkDTO; actions: RowActions }) {
       <MenuItem onClick={() => navigate(linkDetailPath(link))}>
         <ChartColumn size={14} /> View analytics
       </MenuItem>
-      <MenuItem onClick={() => (limits.qr ? onQrClick(link) : noQrToast())}>
-        {limits.qr ? <QrCode size={14} /> : <Lock size={14} />} QR code
+      <MenuItem onClick={() => onQrClick(link)}>
+        <QrCode size={14} /> QR code
       </MenuItem>
       <MenuItem onClick={() => onEdit(link)}>
         <Pencil size={14} /> Edit

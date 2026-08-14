@@ -7,22 +7,12 @@ import { resolveQrLook, type OrgQr } from "../lib/org-qr";
 import { QRPreview } from "./qr";
 import type { LinkDTO } from "@/shared/types";
 
-function LinkPreviewContent({
-  link,
-  qrEnabled,
-  orgQr,
-}: {
-  link: LinkDTO;
-  qrEnabled: boolean;
-  orgQr: OrgQr;
-}) {
+function LinkPreviewContent({ link, orgQr }: { link: LinkDTO; orgQr: OrgQr }) {
   const toast = useToast();
   const url = shortUrl(link.slug, link.domain);
   return (
     <div className="flex flex-col items-center gap-3">
-      {qrEnabled && (
-        <QRPreview url={url} {...resolveQrLook(link, orgQr)} downloadName={`qr-${link.slug}`} />
-      )}
+      <QRPreview url={url} {...resolveQrLook(link, orgQr)} downloadName={`qr-${link.slug}`} />
       <div className="flex min-w-0 max-w-full items-center gap-2">
         <p className="min-w-0 truncate font-mono text-sm font-bold">{url}</p>
         <CopyButton
@@ -35,25 +25,27 @@ function LinkPreviewContent({
   );
 }
 
-/** The short URL (and its QR code, on paid plans) for one link, in a dialog:
- * shared by "link just created" (dashboard quick-create) and "show QR"
- * (links table row action) — same content, different title. */
+/** The short URL and its QR code for one link, in a dialog: shared by "link
+ * just created" (dashboard quick-create) and "show QR" (links table row
+ * action). Same content, different title.
+ *
+ * The QR is here on every plan. Only its look (logo, colors, shapes) is
+ * paid, and `orgQr` already resolves to the built-in defaults for a free
+ * org, which cannot have set any. */
 export function LinkPreviewDialog({
   title,
   link,
-  qrEnabled,
   orgQr,
   onClose,
 }: {
   title: string;
   link: LinkDTO | null;
-  qrEnabled: boolean;
   orgQr: OrgQr;
   onClose: () => void;
 }) {
   return (
     <Dialog open={!!link} onOpenChange={(o) => !o && onClose()} title={title}>
-      {link && <LinkPreviewContent link={link} qrEnabled={qrEnabled} orgQr={orgQr} />}
+      {link && <LinkPreviewContent link={link} orgQr={orgQr} />}
     </Dialog>
   );
 }

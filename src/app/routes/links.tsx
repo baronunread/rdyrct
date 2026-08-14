@@ -223,8 +223,6 @@ export function LinksPage() {
     setPage,
   } = useLinkFilter(links);
 
-  const noQrToast = () => toast("QR codes are a paid feature: upgrade in Billing", "error");
-
   /**
    * Answer the duplicate-destination prompt (#45).
    *
@@ -307,7 +305,6 @@ export function LinksPage() {
           orgId={orgId}
           paged={paged}
           navigate={navigate}
-          limits={limits}
           onQrClick={dialogs.setQrLink}
           onEdit={dialogs.openEdit}
           onDelete={dialogs.setDeleting}
@@ -317,7 +314,6 @@ export function LinksPage() {
           totalPages={totalPages}
           currentPage={safePage}
           onPageChange={setPage}
-          noQrToast={noQrToast}
         />
       </LinksListArea>
 
@@ -506,20 +502,17 @@ function LinkDialogStack({
         activeDomains={activeDomains}
         defaultDomainId={defaultDomainId}
         domainsAllowed={limits.domains > 0}
-        qrEnabled={limits.qr}
+        qrCustomEnabled={limits.qrCustom}
         orgQr={orgQr}
         shakeKey={dialogs.shakeKey}
       />
 
-      {limits.qr && (
-        <LinkPreviewDialog
-          title={dialogs.qrLink ? `QR · /${dialogs.qrLink.slug}` : "QR"}
-          link={dialogs.qrLink}
-          onClose={() => dialogs.setQrLink(null)}
-          qrEnabled
-          orgQr={orgQr}
-        />
-      )}
+      <LinkPreviewDialog
+        title={dialogs.qrLink ? `QR · /${dialogs.qrLink.slug}` : "QR"}
+        link={dialogs.qrLink}
+        onClose={() => dialogs.setQrLink(null)}
+        orgQr={orgQr}
+      />
 
       <CreateAliasDialog
         orgId={orgId}
