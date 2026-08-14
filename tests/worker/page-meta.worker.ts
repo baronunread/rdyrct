@@ -69,7 +69,9 @@ describe("the head a public page ships", () => {
     // index.html says rather than earning an entry in the table.
     const html = await rewrite("/dashboard");
 
-    expect(html).toContain("<title>rdyrct - branded short links for your team");
+    // Closing tag included: without it the assertion is a prefix, and a title
+    // with something appended to it would pass.
+    expect(html).toContain("<title>rdyrct - branded short links for your team</title>");
   });
 
   it("does not touch anything that is not HTML", async () => {
