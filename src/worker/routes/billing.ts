@@ -328,6 +328,9 @@ export async function handlePolarWebhook(req: Request, env: Env): Promise<Respon
   } catch {
     return Response.json({ message: "Invalid signature" }, { status: 403 });
   }
+  // SAFETY: the webhook signature was verified above, so this body is one
+  // Polar sent. Every field PolarEvent declares is optional except the type
+  // and id, which the handlers below branch on before reading anything else.
   const event = JSON.parse(body) as PolarEvent;
   const db = drizzle(env.DB, { schema });
 

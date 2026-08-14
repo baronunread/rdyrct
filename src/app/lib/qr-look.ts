@@ -4,7 +4,9 @@ import {
   QR_DEFAULT_COLOR,
   QR_DEFAULT_CORNER,
   QR_DEFAULT_LOGO_SIZE,
+  QR_DOT_STYLES,
 } from "@/shared/types";
+import { oneOf } from "@/shared/lookup";
 
 /** All of a QR code's appearance, already resolved to concrete values. */
 export interface QrLook {
@@ -46,7 +48,7 @@ export function resolveLook({
 }): QrLook {
   const ink = color || QR_DEFAULT_COLOR;
   return {
-    dot: (dotStyle || "rounded") as DotType,
+    dot: oneOf(QR_DOT_STYLES, dotStyle ?? "", "rounded"),
     corner: corner || QR_DEFAULT_CORNER,
     ink,
     eye: eyeColor || ink,

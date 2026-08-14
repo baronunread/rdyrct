@@ -97,8 +97,11 @@ const UTM_PARAMS: { param: string; key: UtmKey }[] = [
   { param: "utm_content", key: "utmContent" },
 ];
 
-const UTM_PARAM_BY_KEY: Record<UtmKey, string> = Object.fromEntries(
-  UTM_PARAMS.map(({ param, key }) => [key, param]),
+// SAFETY: Object.fromEntries types its result as an open record whatever it
+// is given. UTM_PARAMS lists every UtmKey exactly once, so the object built
+// from it has one entry per key.
+const UTM_PARAM_BY_KEY = Object.fromEntries(
+  UTM_PARAMS.map(({ param, key }) => [key, param] as const),
 ) as Record<UtmKey, string>;
 
 /** UTM params already in the pasted/typed URL, mirroring the server's
@@ -180,6 +183,8 @@ function UtmFields({
         {UTM_FIELDS.map(({ key, label, placeholder }) => (
           <Field key={key} label={label}>
             <Input
+              // SAFETY: UTM_FIELDS names only the five utm* fields, and each
+              // of those is a string on the form.
               value={(form[key] as string) ?? ""}
               onChange={set(key)}
               placeholder={placeholder}

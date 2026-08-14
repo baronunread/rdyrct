@@ -80,10 +80,12 @@ export function CountryMap({ countries: data }: { countries: TopEntry[] }) {
               strokeWidth={0.5}
               onMouseEnter={(e) => {
                 const rect = e.currentTarget.ownerSVGElement?.getBoundingClientRect();
+                // SAFETY: TopoJSON leaves feature properties untyped, and
+                // world-110m.json carries a "name" on each country. String()
+                // and the ?? below cover a feature that does not.
+                const named = f.properties as { name?: string } | null;
                 setHover({
-                  name: alpha2
-                    ? fmtCountry(alpha2)
-                    : String((f.properties as { name?: string } | null)?.name ?? ""),
+                  name: alpha2 ? fmtCountry(alpha2) : String(named?.name ?? ""),
                   clicks: clicks ?? 0,
                   x: rect ? ((e.clientX - rect.left) / rect.width) * 100 : 0,
                   y: rect ? ((e.clientY - rect.top) / rect.height) * 100 : 0,

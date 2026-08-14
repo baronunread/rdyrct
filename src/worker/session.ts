@@ -6,7 +6,7 @@ import type { AppEnv, SessionUser } from "./env";
 import { getAuth } from "./better-auth";
 
 /** The subscription period end as stored: an integer column, or nothing. */
-function periodEndOf(value: unknown): number | null {
+function periodEndOf(value: number | string | null | undefined): number | null {
   const ms = Number(value);
   return Number.isFinite(ms) ? ms : null;
 }

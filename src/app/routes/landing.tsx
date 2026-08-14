@@ -690,7 +690,7 @@ function DeployTerminal() {
     <m.div initial="hidden" whileInView="visible" viewport={{ once: true, margin: "-60px" }}>
       {lines.map((node, i) => (
         <m.div
-          key={node.key as string}
+          key={String(node.key)}
           variants={lineVariant}
           custom={delays[i]}
           className={i === 4 || i === 11 ? "h-2" : "whitespace-pre-wrap leading-[1.9]"}
@@ -703,7 +703,7 @@ function DeployTerminal() {
     <div>
       {lines.map((node, i) => (
         <div
-          key={node.key as string}
+          key={String(node.key)}
           className={i === 4 || i === 11 ? "h-2" : "whitespace-pre-wrap leading-[1.9]"}
         >
           {node}

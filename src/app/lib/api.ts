@@ -51,8 +51,15 @@ export async function api<T>(
     body: init?.body !== undefined ? JSON.stringify(init.body) : undefined,
   });
   await throwIfNotOk(res);
+  // SAFETY: T is what the caller says the route returns, and the hooks in
+  // hooks.ts name the same DTOs the worker's routes build. A route that
+  // stopped matching would surface as an undefined field on screen, which is
+  // what the DTO types in src/shared exist to keep in step.
   return res.json() as Promise<T>;
 }
+
+/** What the QR-logo upload answers with. */
+const uploadedLogoSchema = v.object({ url: v.string() });
 
 /**
  * Upload a QR logo image to R2; returns the serving URL to store on the org
@@ -65,7 +72,8 @@ export async function uploadQrLogo(orgId: string, file: File): Promise<string> {
     body: file,
   });
   await throwIfNotOk(res);
-  return ((await res.json()) as { url: string }).url;
+  const { url } = v.parse(uploadedLogoSchema, await res.json());
+  return url;
 }
 
 export const shortUrl = (slug: string, domain?: string | null) =>

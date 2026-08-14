@@ -258,13 +258,16 @@ export default {
     // wrangler.jsonc); a DLQ's messages only get logged, never retried or
     // repaired. Check "-clicks-dlq" ahead of the generic "-dlq" suffix, since
     // it ends with both.
-    if (batch.queue.endsWith("-clicks-dlq"))
-      return logClickDeadLetterBatch(env, batch as MessageBatch<ClickMessage>);
-    if (batch.queue.endsWith("-clicks"))
-      return consumeClickBatch(env, batch as MessageBatch<ClickMessage>);
-    if (batch.queue.endsWith("-dlq"))
-      return logDeadLetterBatch(env, batch as MessageBatch<StorageMessage>);
-    await consumeStorageBatch(env, batch as MessageBatch<StorageMessage>);
+    // SAFETY: wrangler.jsonc binds each queue name to the consumer for its
+    // own message type, so the suffix that picks the branch is also what
+    // decides which of the two bodies the batch holds.
+    const clicks = batch as MessageBatch<ClickMessage>;
+    // SAFETY: as above, the queue name decides which body the batch holds.
+    const storage = batch as MessageBatch<StorageMessage>;
+    if (batch.queue.endsWith("-clicks-dlq")) return logClickDeadLetterBatch(env, clicks);
+    if (batch.queue.endsWith("-clicks")) return consumeClickBatch(env, clicks);
+    if (batch.queue.endsWith("-dlq")) return logDeadLetterBatch(env, storage);
+    await consumeStorageBatch(env, storage);
   },
   async scheduled(event: ScheduledEvent, env: Env, _ctx: ExecutionContext) {
     // Daily: trim old clicks.

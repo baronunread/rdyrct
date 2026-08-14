@@ -102,6 +102,9 @@ async function widgetFor(scope: CapScope): Promise<CapElement> {
   const existing = widgets.get(scope);
   if (existing?.isConnected) return existing;
 
+  // SAFETY: loadCap() above imported @cap.js/widget, which defines the
+  // "cap-widget" custom element, so createElement returns an upgraded widget
+  // with solve() on it rather than an unknown element.
   const el = document.createElement("cap-widget") as CapElement;
   el.setAttribute("data-cap-api-endpoint", `/api/cap/${scope}/`);
   el.setAttribute("aria-hidden", "true");

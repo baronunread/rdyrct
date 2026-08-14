@@ -1,4 +1,6 @@
 import { useState, useMemo, useCallback } from "react";
+import { INVITABLE_ROLES } from "@/shared/types";
+import { oneOf } from "@/shared/lookup";
 import { useForm } from "react-hook-form";
 import { valibotResolver } from "@hookform/resolvers/valibot";
 import { useCurrentOrg } from "../lib/current-org";
@@ -504,7 +506,7 @@ function InviteByEmailCard({
             <MenuSelect
               label="Role"
               value={selectedRole}
-              onChange={(role) => setValue("role", role as "member" | "admin")}
+              onChange={(role) => setValue("role", oneOf(INVITABLE_ROLES, role, "member"))}
               options={[
                 { value: "member", label: "member" },
                 { value: "admin", label: "admin" },

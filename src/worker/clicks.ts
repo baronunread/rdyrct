@@ -68,6 +68,9 @@ export async function enqueueClick(c: Context<AppEnv>, hit: KVLink): Promise<voi
       addressId: hit.addressId,
       orgId: hit.orgId,
       ts: Date.now(),
+      // SAFETY: Cloudflare sets cf.country to a two-letter code, and its type
+      // is the broad IncomingRequestCfProperties value. Unknown on a local
+      // request, where the ?? below makes it empty.
       country: (c.req.raw.cf?.country as string) ?? "",
       // Hostname only, never the full URL the header carries: see
       // normalizeReferrer in util.ts and issue #20.

@@ -51,6 +51,8 @@ async function cfRequest<T = Record<string, JsonValue>>(
     console.error("cf api error", res.status, text);
     let message = `Cloudflare API error ${res.status}`;
     try {
+      // SAFETY: this is Cloudflare's error envelope, and the catch below is
+      // what handles a response that is not it.
       const parsed = JSON.parse(text) as { errors?: { message?: string }[] };
       message = parsed.errors?.[0]?.message ?? message;
     } catch {
@@ -78,11 +80,11 @@ function assertCfConfigured(env: Env): void {
 async function cfCreateHostname(env: Env, hostname: string): Promise<CfHostname> {
   if (useFakeCf(env)) return { id: `fake_${uid(8)}`, active: false };
   assertCfConfigured(env);
-  const data = await cfRequest(env, "POST", "/custom_hostnames", {
+  const data = await cfRequest<{ id: string }>(env, "POST", "/custom_hostnames", {
     hostname,
     ssl: { method: "http", type: "dv" },
   });
-  return { id: data!.result.id as string, active: false };
+  return { id: data!.result.id, active: false };
 }
 
 /**

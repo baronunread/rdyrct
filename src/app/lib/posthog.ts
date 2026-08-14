@@ -37,7 +37,11 @@ function loadClient(): Promise<typeof PosthogClient | null> | null {
   if (!("window" in globalThis) || !hasAnalyticsConsent()) return null;
   if (!clientPromise) {
     clientPromise = import("posthog-js").then(({ default: posthog }) => {
+      // SAFETY: Vite inlines every VITE_-prefixed variable as a string
+      // literal at build time, or leaves it undefined when it is unset, which
+      // is exactly what the check below is for.
       const token = import.meta.env.VITE_PUBLIC_POSTHOG_PROJECT_TOKEN as string | undefined;
+      // SAFETY: as above.
       const host = import.meta.env.VITE_PUBLIC_POSTHOG_HOST as string | undefined;
       const missingVariable = !token
         ? "VITE_PUBLIC_POSTHOG_PROJECT_TOKEN"

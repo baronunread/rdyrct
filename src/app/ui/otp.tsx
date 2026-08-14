@@ -59,9 +59,9 @@ export function OtpInput({
     const handleKeyDown = (event: KeyboardEvent) => {
       if (!/^[0-9]$/.test(event.key) || event.ctrlKey || event.metaKey || event.altKey) return;
       const root = rootRef.current;
-      if (!root || root.contains(event.target as Node)) return;
-      const target = event.target as HTMLElement | null;
-      if (target?.closest("input, textarea, select, [contenteditable]")) return;
+      const target = event.target instanceof HTMLElement ? event.target : null;
+      if (!root || !target || root.contains(target)) return;
+      if (target.closest("input, textarea, select, [contenteditable]")) return;
       if (valueRef.current.length >= length) return;
       event.preventDefault();
       const next = valueRef.current + event.key;

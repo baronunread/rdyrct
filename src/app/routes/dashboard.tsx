@@ -274,6 +274,8 @@ function QuickCreateCard({
         },
         onError: (e) => {
           if (e instanceof ApiError && e.code === "same_destination_match") {
+            // SAFETY: guarded by the same_destination_match code above, and
+            // the route that sets that code attaches matchedLinks with it.
             const { matchedLinks } = e.data as { matchedLinks: LinkDTO[] };
             onSameDestinationMatch(input, matchedLinks);
             return;

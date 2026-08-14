@@ -145,6 +145,8 @@ async function domainHasMailRecords(domain: string): Promise<boolean> {
       },
     );
     if (!resp.ok) return false;
+    // SAFETY: DNS-over-HTTPS answers this shape per RFC 8484's JSON form,
+    // and every field read below is guarded before it is used.
     const data = (await resp.json()) as {
       Status: number;
       Answer?: { type: number }[];
@@ -160,6 +162,7 @@ async function domainHasMailRecords(domain: string): Promise<boolean> {
       },
     );
     if (!aResp.ok) return false;
+    // SAFETY: the same JSON DNS shape as above, from the same resolver.
     const aData = (await aResp.json()) as {
       Status: number;
       Answer?: unknown[];

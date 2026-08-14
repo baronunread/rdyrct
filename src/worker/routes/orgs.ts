@@ -407,7 +407,7 @@ orgRoutes.post("/:orgId/invites", requireOrgRole("admin"), async (c) => {
     createdBy: c.var.user!.id,
     createdAt: ts,
     expiresAt: ts + INVITE_TTL_MS,
-    acceptedBy: null as string | null,
+    acceptedBy: null,
   }));
 
   await c.var.db.insert(schema.invites).values(created);

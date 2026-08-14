@@ -199,6 +199,8 @@ function buildOnSave({
       },
       onError: (e: Error) => {
         if (e instanceof ApiError && e.code === "same_destination_match") {
+          // SAFETY: guarded by the same_destination_match code above, and the
+          // route that sets that code attaches matchedLinks alongside it.
           const { matchedLinks } = e.data as { matchedLinks: LinkDTO[] };
           onSameDestinationMatch(data, matchedLinks);
           return;

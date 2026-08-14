@@ -30,7 +30,6 @@ import { CopyButton } from "../ui/copy-button";
 import { BusyContent } from "../ui/spinner";
 import { useToast } from "../ui/toast";
 import { copyToClipboard } from "../lib/clipboard";
-import { ApiError } from "../lib/api";
 import { useCap } from "../lib/cap";
 import {
   MAX_ANON_LINKS,

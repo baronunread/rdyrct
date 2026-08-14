@@ -73,7 +73,10 @@ async function apiJson(path: string, init?: RequestInit): Promise<any> {
 let DB_ID = "";
 let KV_ID = "";
 
-async function sql(query: string, params: unknown[] = []): Promise<any[]> {
+async function sql<Row = Record<string, string>>(
+  query: string,
+  params: unknown[] = [],
+): Promise<Row[]> {
   const body = await apiJson(`/d1/database/${DB_ID}/raw`, {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -596,8 +599,8 @@ async function seed() {
     const [lo, hi] = linkRange[org.plan];
     const count = randInt(lo, hi);
     const memberIds = (
-      await sql(`SELECT user_id FROM org_members WHERE org_id = ${q(org.id)}`)
-    ).map((r) => r.user_id as string);
+      await sql<{ user_id: string }>(`SELECT user_id FROM org_members WHERE org_id = ${q(org.id)}`)
+    ).map((r) => r.user_id);
 
     const rows: string[] = [];
     const addressRows: string[] = [];

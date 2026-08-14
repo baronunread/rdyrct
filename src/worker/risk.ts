@@ -63,6 +63,8 @@ export async function scoreDestination(destination: string): Promise<RiskVerdict
       signal: AbortSignal.timeout(LOOKUP_TIMEOUT_MS),
     });
     if (!res.ok) return null;
+    // SAFETY: Cloudflare's security resolver answers RFC 8484 JSON, and
+    // scoreDestination below reads only Status and Answer, both optional here.
     json = (await res.json()) as DnsJson;
   } catch {
     return null;

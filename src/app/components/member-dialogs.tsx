@@ -1,4 +1,6 @@
 import { type UseMutationResult } from "@tanstack/react-query";
+import { INVITABLE_ROLES } from "@/shared/types";
+import { oneOf } from "@/shared/lookup";
 import { Button } from "../ui/button";
 import { ConfirmDialog } from "../ui/confirm-dialog";
 import { Dialog } from "../ui/dialog";
@@ -57,7 +59,10 @@ export function InviteMemberDialog({
           share it any way you like.
         </p>
         <Field label="Role">
-          <Select value={role} onChange={(e) => onRoleChange(e.target.value as "member" | "admin")}>
+          <Select
+            value={role}
+            onChange={(e) => onRoleChange(oneOf(INVITABLE_ROLES, e.target.value, "member"))}
+          >
             <option value="member">member · manage links</option>
             <option value="admin">admin · manage links and team</option>
           </Select>

@@ -1,4 +1,6 @@
 import { useEffect, useRef } from "react";
+import { QR_CORNER_STYLES, QR_DEFAULT_CORNER } from "@/shared/types";
+import { oneOf } from "@/shared/lookup";
 import QRCodeStyling, { type CornerSquareType, type CornerDotType } from "qr-code-styling";
 import { Button } from "../ui/button";
 import { Download } from "lucide-react";
@@ -8,17 +10,16 @@ import { cn } from "../ui/cn";
 import posthog from "../lib/posthog";
 import { useToast } from "../ui/toast";
 
+/** The corner style, which both option bags take: every value in
+ * QR_CORNER_STYLES is in each of their unions. */
+const cornerStyle = (style: string): CornerSquareType & CornerDotType =>
+  oneOf(QR_CORNER_STYLES, style, QR_DEFAULT_CORNER);
+
 function looksOptions(look: QrLook) {
   return {
     dotsOptions: { color: look.ink, type: look.dot },
-    cornersSquareOptions: {
-      color: look.eye,
-      type: look.corner as CornerSquareType,
-    },
-    cornersDotOptions: {
-      color: look.eye,
-      type: look.corner as CornerDotType,
-    },
+    cornersSquareOptions: { color: look.eye, type: cornerStyle(look.corner) },
+    cornersDotOptions: { color: look.eye, type: cornerStyle(look.corner) },
     backgroundOptions: { color: look.bg },
   };
 }

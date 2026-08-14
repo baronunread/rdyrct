@@ -22,7 +22,13 @@ export type JsonValue =
 export const ORG_ROLES = ["owner", "admin", "member"] as const;
 export type OrgRole = (typeof ORG_ROLES)[number];
 
+/** The roles an invite may hand out: never owner, which only a transfer moves. */
+export const INVITABLE_ROLES = ["member", "admin"] as const;
+
 export const ORG_PLANS = ["free", "hobby", "pro"] as const;
+
+/** The plans an admin may comp: the paid ones, since comping free is nothing. */
+export const COMP_PLANS = ["hobby", "pro"] as const;
 export type OrgPlan = (typeof ORG_PLANS)[number];
 
 /**
