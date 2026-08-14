@@ -7,6 +7,7 @@
  * is not, which is the asymmetry the whole scheme rests on.
  */
 import { Hono } from "hono";
+import type { JsonValue } from "../../shared/types";
 import type { AppEnv } from "../env";
 import { capEnabled, issueChallenge, verifySolution, type CapScope } from "../cap";
 
@@ -14,7 +15,7 @@ const SCOPES: readonly CapScope[] = ["signup", "password-reset", "anon-link"];
 
 /** The scope rides in the path, not the body: Cap's widget builds its own
  * request bodies and only lets us choose the endpoint prefix. */
-function readScope(value: unknown): CapScope | null {
+function readScope(value: JsonValue): CapScope | null {
   return SCOPES.find((s) => s === value) ?? null;
 }
 

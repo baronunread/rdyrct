@@ -61,9 +61,9 @@ function loadCap(): Promise<void> {
     // it fetches the WASM from jsdelivr and trips the CSP.
     (window as unknown as { CAP_CUSTOM_WASM_URL?: string }).CAP_CUSTOM_WASM_URL = wasmUrl;
     await import("@cap.js/widget");
-  })().catch((error: unknown) => {
+  })().catch((cause: unknown) => {
     loading = null;
-    throw error;
+    throw cause;
   });
   return loading;
 }

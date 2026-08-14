@@ -34,10 +34,10 @@ type OrgNameForm = { name: string };
 
 /** The org-limit refusal gets the upgrade line; everything else says what the
  * server said. */
-function createErrorMessage(err: unknown): string {
-  if (err instanceof ApiError && err.code === "org_limit")
+function createErrorMessage(cause: unknown): string {
+  if (cause instanceof ApiError && cause.code === "org_limit")
     return "Upgrade to Pro to create more organizations";
-  return err instanceof Error ? err.message : "Something went wrong";
+  return cause instanceof Error ? cause.message : "Something went wrong";
 }
 
 export function NoOrgState() {

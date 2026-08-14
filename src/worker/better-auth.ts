@@ -297,9 +297,9 @@ async function guardSignUp(
   // did not.
   if (existing.emailVerified)
     afterResponse(
-      sendExistingAccountNotice(env, normalized).catch((e: unknown) =>
+      sendExistingAccountNotice(env, normalized).catch((cause: unknown) =>
         alertBetterStack(env, [
-          { event: "existing_account_notice_failed", error: String(e) },
+          { event: "existing_account_notice_failed", error: String(cause) },
           // Deliberately no address: this log would otherwise be a list of
           // registered emails, which is the thing being protected.
         ]),

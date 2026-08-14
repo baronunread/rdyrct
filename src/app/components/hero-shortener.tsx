@@ -43,8 +43,8 @@ import { QRPreview, QrDownloadButtons } from "./qr";
 
 /** The server's own message when it sent one: it says what was wrong with
  * the address, which a generic fallback cannot. */
-function shortenErrorMessage(error: unknown): string {
-  return error instanceof ApiError ? error.message : "Could not shorten that link";
+function shortenErrorMessage(cause: unknown): string {
+  return cause instanceof ApiError ? cause.message : "Could not shorten that link";
 }
 
 /** One made link: the URL in the wide column because that is what gets

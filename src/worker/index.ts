@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import type { JsonValue } from "../shared/types";
 import type { Context } from "hono";
 import { HTTPException } from "hono/http-exception";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
@@ -41,6 +42,28 @@ import {
 
 export { OrgDeleteWorkflow, DomainActivateWorkflow } from "./workflows";
 
+/**
+ * The JSON body every API error answers with: a message, plus whatever the
+ * route attached to the exception it threw.
+ */
+interface ErrorBody {
+  message: string;
+  [field: string]: JsonValue;
+}
+
+/**
+ * The extra fields a route put on an HTTPException, ready to merge into the
+ * error body. A route attaches an object (a machine-readable `code`,
+ * same_destination_match's matched link); anything else carries nothing.
+ */
+function causeFields(cause: unknown): Record<string, JsonValue> {
+  // SAFETY: the only writers are this repo's own routes, which attach a
+  // plain JSON object; the check above is what keeps anything else out.
+  return cause instanceof Object && !Array.isArray(cause)
+    ? (cause as Record<string, JsonValue>)
+    : {};
+}
+
 const app = new Hono<AppEnv>();
 
 app.onError((err, c) => {
@@ -49,13 +72,12 @@ app.onError((err, c) => {
   // more than just a machine-readable `code` (e.g. same_destination_match's
   // matchedLinkId/matchedLink) straight through to the caller.
   const path = new URL(c.req.url).pathname;
-  const respond = (body: unknown, status: ContentfulStatusCode) => {
+  const respond = (body: ErrorBody, status: ContentfulStatusCode) => {
     const res = c.json(body, status);
     return isBlogPath(path) ? res : applySecurityHeaders(res);
   };
   if (err instanceof HTTPException) {
-    const cause = err.cause && typeof err.cause === "object" ? err.cause : {};
-    return respond({ message: err.message, ...cause }, err.status);
+    return respond({ message: err.message, ...causeFields(err.cause) }, err.status);
   }
   console.error(err);
   return respond({ message: "Internal error" }, 500);

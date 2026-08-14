@@ -1,4 +1,5 @@
 import type { default as PosthogClient } from "posthog-js";
+import type { JsonValue } from "@/shared/types";
 import { bufferBeforeConsent, discardBuffer, drainBuffer } from "./consent-buffer";
 
 // Nothing here loads posthog-js or contacts PostHog until the user accepts
@@ -135,8 +136,8 @@ const posthog = {
     identifiedId = null;
     void loadClient()?.then((p) => p?.reset());
   },
-  captureException(error: unknown, properties?: Record<string, unknown>) {
-    void loadClient()?.then((p) => p?.captureException(error, properties));
+  captureException(cause: unknown, properties?: Record<string, JsonValue | undefined>) {
+    void loadClient()?.then((p) => p?.captureException(cause, properties));
   },
 };
 

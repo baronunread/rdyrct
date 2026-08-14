@@ -13,6 +13,7 @@
  */
 
 import { ALIAS_TTL_MS } from "../src/worker/util";
+import type { JsonValue } from "../src/shared/types";
 
 const API = "https://rdyrct.localhost/cdn-cgi/explorer/api";
 const PASSWORD = "seed-password-123";
@@ -93,7 +94,7 @@ async function sqlBatch(statements: string[]): Promise<void> {
   });
 }
 
-async function kvPut(key: string, value: unknown): Promise<void> {
+async function kvPut(key: string, value: JsonValue): Promise<void> {
   await apiJson(`/storage/kv/namespaces/${KV_ID}/values/${encodeURIComponent(key)}`, {
     method: "PUT",
     headers: { "content-type": "application/octet-stream" },

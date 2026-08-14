@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import type { JsonValue } from "../../shared/types";
 import { HTTPException } from "hono/http-exception";
 import { eq, and, gte, desc, sql, isNull } from "drizzle-orm";
 import * as schema from "../db/schema";
@@ -106,7 +107,7 @@ function qrPatchFields(body: OrgQrPatchBody): Partial<typeof schema.orgs.$inferI
 // validation can't store an unbounded name (see issue #19).
 const ORG_NAME_MAX_LENGTH = 100;
 
-function requireOrgName(name: unknown): string {
+function requireOrgName(name: JsonValue): string {
   if (typeof name !== "string") throw new HTTPException(400, { message: "Name must be a string" });
   const trimmed = name.trim();
   if (!trimmed) throw new HTTPException(400, { message: "Name required" });
@@ -332,7 +333,7 @@ async function occupiedSeats(db: AppEnv["Variables"]["db"], orgId: string): Prom
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 orgRoutes.post("/:orgId/invites", requireOrgRole("admin"), async (c) => {
-  let rawBody: unknown;
+  let rawBody: JsonValue;
   try {
     rawBody = await c.req.json();
   } catch {

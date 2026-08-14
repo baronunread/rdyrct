@@ -1,4 +1,5 @@
 import * as v from "valibot";
+import type { JsonValue } from "../shared/types";
 import { HTTPException } from "hono/http-exception";
 
 /**
@@ -11,7 +12,7 @@ import { HTTPException } from "hono/http-exception";
  */
 export function parseBody<const TSchema extends v.GenericSchema>(
   schema: TSchema,
-  body: unknown,
+  body: JsonValue,
 ): v.InferOutput<TSchema> {
   const result = v.safeParse(schema, body);
   if (!result.success) {

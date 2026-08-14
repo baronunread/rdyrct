@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import type { JsonValue } from "../../shared/types";
 import { HTTPException } from "hono/http-exception";
 import { eq, and, isNull, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
@@ -31,7 +32,7 @@ async function cfRequest<T = Record<string, unknown>>(
   env: Env,
   method: string,
   path: string,
-  body?: unknown,
+  body?: JsonValue,
   opts?: { okNotFound?: boolean },
 ): Promise<{ result: T } | null> {
   const res = await fetch(`https://api.cloudflare.com/client/v4/zones/${env.CF_ZONE_ID}${path}`, {
