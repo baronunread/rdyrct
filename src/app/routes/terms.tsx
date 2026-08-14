@@ -1,8 +1,10 @@
 // fallow-ignore-file code-duplication -- legal sections share structural patterns
 import { SUPPORT_EMAIL, GITHUB_URL } from "../ui/footer";
 import { LegalPageLayout } from "../ui/misc";
+import { useSeo } from "../lib/seo";
 
 export function TermsPage() {
+  useSeo("/terms");
   return (
     <LegalPageLayout>
       <div>

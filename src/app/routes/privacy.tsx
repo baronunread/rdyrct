@@ -1,8 +1,10 @@
 // fallow-ignore-file code-duplication -- legal sections share structural patterns
 import { SUPPORT_EMAIL } from "../ui/footer";
 import { LegalPageLayout } from "../ui/misc";
+import { useSeo } from "../lib/seo";
 
 export function PrivacyPage() {
+  useSeo("/privacy");
   return (
     <LegalPageLayout>
       <div>
