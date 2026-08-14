@@ -107,9 +107,7 @@ const CAMPAIGN_PARAMS = [
 
 /** What a landing pageview carries about where the visitor came from. Every
  * field is optional: most visits offer none of them. */
-export type LandingContext = Partial<
-  Record<(typeof CAMPAIGN_PARAMS)[number] | "referrer_host", string>
->;
+type LandingContext = Partial<Record<(typeof CAMPAIGN_PARAMS)[number] | "referrer_host", string>>;
 
 /**
  * Campaign attribution for the landing view, read from the URL and the

@@ -1,0 +1,12 @@
+{
+  "$schema": "https://www.react.doctor/schema.json",
+  "ignore": {
+    "files": [".oxlint/anti-slop/**"],
+    "overrides": [
+      {
+        "files": ["package.json"],
+        "rules": ["deslop/unused-dev-dependency"]
+      }
+    ]
+  }
+}

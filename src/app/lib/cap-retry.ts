@@ -8,7 +8,7 @@ import { CAP_FAILED_CODE } from "@/shared/types";
 
 /** Either shape a refusal arrives in: an ApiError carrying `.code`, or the
  * `{ error }` better-auth resolves with instead of throwing. */
-export type CapRefusal = { code?: string; error?: { code?: string } } | null | undefined;
+type CapRefusal = { code?: string; error?: { code?: string } } | null | undefined;
 
 /**
  * Whether a refusal is the Worker turning down a Cap token.

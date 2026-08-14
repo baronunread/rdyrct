@@ -202,6 +202,9 @@ export function QRPreview({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [url, look.dot, look.corner, look.ink, look.eye, look.bg, look.logo, look.logoSize]);
 
+  // A class that sets the box wins; without one, the box is `size`.
+  const box = sizeClass ? undefined : size;
+
   return (
     <div className="flex flex-col items-center gap-3">
       <div
@@ -218,9 +221,8 @@ export function QRPreview({
           sizeClass,
         )}
         style={{
-          // A class that sets the box wins; without one, the box is `size`.
-          width: sizeClass ? undefined : size,
-          height: sizeClass ? undefined : size,
+          width: box,
+          height: box,
           // A checkerboard shows through where the QR is transparent.
           backgroundColor: "#ffffff",
           backgroundImage: hasTransparency(look.bg)

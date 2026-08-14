@@ -63,6 +63,19 @@ Everything that reports runs in CI, where nobody can pass `--no-verify`:
 Lint and format take no path list: `.` plus the ignores in `.gitignore` and
 `.oxfmtrc.json`. One scope, so the hook and CI cannot check different files.
 
+**anti-slop** is an oxlint plugin, vendored in `.oxlint/anti-slop`, that
+refuses the shapes code takes when the author did not know the type: `as
+unknown as`, `unknown` parameters, `Record<string, unknown>`, `typeof`
+narrowing of a value nobody parsed, and any assertion with no stated
+invariant. Its fifteen rules run at `error` in `.oxlintrc.json`.
+
+What it asks for, when it fires: parse the value where it arrives (valibot,
+via `parseBody` in `src/worker/schemas.ts`), name the type it parses to, or
+write a `SAFETY:` comment on the line above saying which invariant makes the
+assertion sound. `JsonValue`, `lookup`, `oneOf`, `nonEmpty` and `orgPlanOf`
+in `src/shared` exist for the cases that come up repeatedly. The plugin is
+someone else's code, so oxlint, oxfmt, fallow and react-doctor all skip it.
+
 `bun run fallow` is the gate: it scopes to the files this branch changed and
 fails only on findings the branch introduced, counted against
 `fallow-baselines/health.json`. Refresh that baseline with

@@ -1,4 +1,4 @@
 {
   "$schema": "https://raw.githubusercontent.com/oxc-project/oxc/main/npm/oxfmt/configuration_schema.json",
-  "ignorePatterns": [".agents/skills/**", ".claude/skills/**", "tools/oxlint/anti-slop/**"]
+  "ignorePatterns": [".agents/skills/**", ".claude/skills/**", ".oxlint/anti-slop/**"]
 }
