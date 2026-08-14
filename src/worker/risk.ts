@@ -138,8 +138,12 @@ export async function sweepLinkRisk(db: D1Database, batchSize = 50): Promise<num
   // budget retrying the same failures, while destinations that were clean a
   // year ago are never looked at again. That is the sweep quietly giving up
   // on the job it exists for, with nothing on screen to say so.
-  const unscored = await pickToScore(db, "risk_checked_at is null", batchSize);
-  const scored = await pickToScore(db, "risk_checked_at is not null", batchSize);
+  // Together: two independent reads of our own database, which is not the
+  // resolver the loop below is careful with.
+  const [unscored, scored] = await Promise.all([
+    pickToScore(db, "risk_checked_at is null", batchSize),
+    pickToScore(db, "risk_checked_at is not null", batchSize),
+  ]);
   // The cap gives way when the other side cannot fill the batch: it exists to
   // stop the unscored crowding out rescans, not to leave the budget unspent.
   const room = Math.max(Math.ceil(batchSize / 2), batchSize - scored.length);
