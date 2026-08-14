@@ -324,7 +324,7 @@ function UsersTable({
   searchTerm: string;
 }) {
   return (
-    <Table>
+    <Table minWidth="min-w-[64rem]">
       <thead>
         <tr>
           <SortTh label="Name" sortKey="name" sort={sort} onSort={setSort} />

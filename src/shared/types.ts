@@ -406,6 +406,53 @@ export interface AdminOrgDetail {
   series: SeriesPoint[];
 }
 
+/** One link in the cross-org admin list (#67). Never returned to an org. */
+export interface AdminLinkRow {
+  id: string;
+  slug: string;
+  domain: string | null;
+  destination: string;
+  orgId: string;
+  orgName: string;
+  createdBy: string | null;
+  createdAt: number;
+  clicks: number;
+  suspendedAt: number | null;
+  suspendReason: string | null;
+  /** Destination scoring (#68). Null means unscored, never clean. */
+  riskScore: number | null;
+  riskReasons: string[];
+  riskCheckedAt: number | null;
+}
+
+/** An anonymous link made on the landing page (Direction A of #96). It has no
+ * org and no owner, so it cannot share AdminLinkRow's shape. */
+export interface AdminAnonLinkRow {
+  id: string;
+  slug: string;
+  destination: string;
+  createdAt: number;
+  expiresAt: number;
+  riskScore: number | null;
+  riskReasons: string[];
+}
+
+export interface AdminActionRow {
+  id: string;
+  actorUserId: string;
+  actorEmail: string | null;
+  action: string;
+  targetType: string;
+  targetId: string;
+  detail: string | null;
+  createdAt: number;
+}
+
+/** How the admin link list may be ordered. `risk` puts the worst first, which
+ * is the whole reason #68 fills those columns. */
+export const ADMIN_LINK_SORTS = ["created", "clicks", "risk"] as const;
+export type AdminLinkSort = (typeof ADMIN_LINK_SORTS)[number];
+
 export interface AdminUserRow {
   id: string;
   name: string;

@@ -1,6 +1,8 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Ellipsis, Eye, Trash2 } from "lucide-react";
+import { ArrowRight, Ellipsis, Eye, Trash2 } from "lucide-react";
+import { Link } from "react-router";
+import { Button } from "../../ui/button";
 import { useAdminOrgDetail, useAdminOrgs } from "../../lib/hooks";
 import { api } from "../../lib/api";
 import type { AdminOrgRow, OrgPlan, OrgRole, Sort } from "@/shared/types";
@@ -12,7 +14,7 @@ import { AdminTableSkeleton, OrgDetailSkeleton } from "../../components/skeleton
 import { useToast } from "../../ui/toast";
 import { ConfirmDialog } from "../../ui/confirm-dialog";
 import { SearchInput } from "./search-input";
-import { linkLabel, paginate } from "./util";
+import { paginate } from "./util";
 import { SortTh } from "../../ui/sort-th";
 import { sortRows } from "../../lib/sort";
 import { withErrorToast } from "../../lib/mutation-toast";
@@ -63,32 +65,38 @@ function OrgMembersTable({
   );
 }
 
-function OrgLinksTable({
+/**
+ * A count and a way through, instead of the org's links inline.
+ *
+ * The dialog listed every link with its destination, which is the Links tab's
+ * job and did it worse: no search, no sort, no suspend. This says how many
+ * there are and hands the question over.
+ */
+function OrgLinksRecap({
+  orgId,
   links,
+  onNavigate,
 }: {
+  orgId: string;
   links: NonNullable<ReturnType<typeof useAdminOrgDetail>["data"]>["links"];
+  onNavigate: () => void;
 }) {
+  const clicks = links.reduce((total, link) => total + link.clicks, 0);
   return (
-    <div>
-      <p className="mb-2 text-2xs tracking-wider text-muted uppercase">Links</p>
-      <Table>
-        <thead>
-          <tr>
-            <Th>Short link</Th>
-            <Th>Destination</Th>
-            <Th className="text-right">Clicks</Th>
-          </tr>
-        </thead>
-        <tbody>
-          {links.map((l) => (
-            <tr key={l.id}>
-              <Td className="font-bold text-accent">{linkLabel(l)}</Td>
-              <Td className="max-w-64 truncate text-muted">{l.destination}</Td>
-              <Td className="tnum text-right">{l.clicks}</Td>
-            </tr>
-          ))}
-        </tbody>
-      </Table>
+    <div className="flex flex-wrap items-center gap-3 rounded-lg bg-surface-2 px-4 py-3">
+      <div className="flex-1">
+        <p className="text-2xs tracking-wider text-muted uppercase">Links</p>
+        <p className="mt-0.5 text-sm">
+          <span className="font-bold tnum">{links.length}</span>{" "}
+          {links.length === 1 ? "link" : "links"},{" "}
+          <span className="font-bold tnum">{clicks.toLocaleString()}</span> clicks between them
+        </p>
+      </div>
+      <Link to={`/admin/links?org=${encodeURIComponent(orgId)}`} onClick={onNavigate}>
+        <Button size="sm" variant="outline">
+          Open in Links <ArrowRight size={13} />
+        </Button>
+      </Link>
     </div>
   );
 }
@@ -116,7 +124,11 @@ function OrgDetailDialog({ org, onClose }: { org: AdminOrgRow | null; onClose: (
               </Card>
 
               <OrgMembersTable members={detail.data.members} />
-              <OrgLinksTable links={detail.data.links} />
+              <OrgLinksRecap
+                orgId={detail.data.id}
+                links={detail.data.links}
+                onNavigate={onClose}
+              />
             </>
           )}
         </div>
@@ -180,7 +192,7 @@ export function AdminOrgsPage() {
         placeholder="Search by org name or owner…"
         label="Search organizations"
       />
-      <Table>
+      <Table minWidth="min-w-[56rem]">
         <thead>
           <tr>
             <SortTh label="Name" sortKey="name" sort={sort} onSort={setSort} />

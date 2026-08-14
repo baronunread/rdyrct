@@ -51,9 +51,14 @@ export async function signUpAndVerify(page: Page, email: string, password: strin
   await page.getByLabel("Password").fill(password);
   await page.getByRole("button", { name: "Sign up" }).click();
 
-  await expect(page.getByRole("heading", { name: "Enter your code" })).toBeVisible();
+  // Not the default 5s: a sign-up here is a Cap proof-of-work solve, an
+  // account write and a mail send, and with the suite running in parallel
+  // that round trip regularly outlasts five seconds. Every caller of this
+  // helper was failing here for that reason and no other.
+  const codeScreen = page.getByRole("heading", { name: "Enter your code" });
+  await expect(codeScreen).toBeVisible({ timeout: 30_000 });
   await page.reload();
-  await expect(page.getByRole("heading", { name: "Enter your code" })).toBeVisible();
+  await expect(codeScreen).toBeVisible({ timeout: 30_000 });
   const otp = await latestOtp(page, email);
   await page.locator("input").first().focus();
   await page.keyboard.insertText(otp);

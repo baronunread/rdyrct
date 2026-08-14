@@ -2,7 +2,7 @@ import { Suspense, useState, type ReactNode } from "react";
 import { NavLink, Navigate, Outlet, useNavigate, useLocation } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, LazyMotion, domAnimation, m } from "motion/react";
-import { Globe, Building2, UserCog, ChevronsUpDown, Plus, Check, LogOut } from "lucide-react";
+import { Globe, ChevronsUpDown, Plus, Check, LogOut } from "lucide-react";
 // MorphIcon animates between two icons, so it takes lucide icon nodes, not
 // the React components lucide-react exports.
 import { Sun, Moon, Menu as MenuIcon, X } from "lucide";
@@ -101,20 +101,19 @@ function OrgSwitcherMenu({
   );
 }
 
+/**
+ * One entry, not four. The four sections are tabs inside /admin now: as
+ * sidebar items they sat directly under the organization's own nav, where
+ * "Links" appeared twice meaning two different things.
+ */
 function PlatformNav({ visible }: { visible: boolean }) {
   if (!visible) return null;
   return (
     <div className="mt-2 px-3">
-      <p className="px-2.5 pb-1 text-3xs tracking-widest text-muted uppercase">Platform</p>
+      <p className="px-2.5 pb-1 text-3xs tracking-widest text-muted uppercase">Admin</p>
       <nav className="flex flex-col gap-0.5">
-        <NavLink to="/admin" end className={navClass}>
-          <Globe size={15} /> Usage
-        </NavLink>
-        <NavLink to="/admin/orgs" className={navClass}>
-          <Building2 size={15} /> Organizations
-        </NavLink>
-        <NavLink to="/admin/users" className={navClass}>
-          <UserCog size={15} /> Users
+        <NavLink to="/admin" className={navClass}>
+          <Globe size={15} /> Platform
         </NavLink>
       </nav>
     </div>

@@ -83,11 +83,30 @@ export function Card({ className, children }: { className?: string; children: Re
   );
 }
 
-export function Table({ children, fixed }: { children: ReactNode; fixed?: boolean }) {
+export function Table({
+  children,
+  fixed,
+  minWidth,
+}: {
+  children: ReactNode;
+  fixed?: boolean;
+  /** Tailwind min-width for the table itself, e.g. "min-w-[64rem]". Use it
+   * when every column has to stay on screen and the wrapper should scroll
+   * rather than the columns shrinking into uselessness. */
+  minWidth?: string;
+}) {
   return (
-    <div className="overflow-x-auto rounded-lg bg-surface smooth-shadow-ring-xs">
+    // overscroll-x-none, not -contain. `contain` only stops the scroll
+    // chaining to the page; the container still rubber-bands at each end,
+    // and that bounce drags the table off its own background so the page
+    // shows through beside it. `none` disables the bounce as well.
+    <div className="overflow-x-auto overscroll-x-none rounded-lg bg-surface smooth-shadow-ring-xs">
       <table
-        className={`w-full text-sm [&_tbody_tr]:transition-colors [&_tbody_tr:hover]:bg-surface-2/40 ${fixed ? "table-fixed" : ""}`}
+        className={cn(
+          "w-full text-sm [&_tbody_tr]:transition-colors [&_tbody_tr:hover]:bg-surface-2/40",
+          fixed && "table-fixed",
+          minWidth,
+        )}
       >
         {children}
       </table>

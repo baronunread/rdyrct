@@ -238,8 +238,41 @@ export const links = sqliteTable(
     riskReasons: text("risk_reasons"),
     riskCheckedAt: integer("risk_checked_at"),
     riskProvider: text("risk_provider"),
+    // Admin moderation (#67). Null means active. One flag covers every
+    // address the link answers to, and the redirect stops because
+    // desiredKvValue refuses to publish a suspended link's key: put the
+    // check anywhere else and the next edit un-suspends it in silence.
+    suspendedAt: integer("suspended_at"),
+    suspendedBy: text("suspended_by").references(() => user.id, { onDelete: "set null" }),
+    suspendReason: text("suspend_reason"),
   },
   (t) => [index("idx_links_org").on(t.orgId)],
+);
+
+/**
+ * Every privileged mutation an admin makes, appended and never updated (#67).
+ *
+ * No foreign keys: an admin account can be deleted, and the record of what
+ * they did has to outlive them. The same goes for target_id, which often
+ * points at exactly the row this entry exists to remember the deletion of.
+ */
+export const adminActions = sqliteTable(
+  "admin_actions",
+  {
+    id: text("id").primaryKey(),
+    actorUserId: text("actor_user_id").notNull(),
+    /** e.g. "link.suspend", "org.suspend_links", "user.ban". */
+    action: text("action").notNull(),
+    targetType: text("target_type").notNull(),
+    targetId: text("target_id").notNull(),
+    /** Free-form JSON, so an entry still reads once its target is gone. */
+    detail: text("detail"),
+    createdAt: integer("created_at").notNull(),
+  },
+  (t) => [
+    index("idx_admin_actions_created").on(t.createdAt),
+    index("idx_admin_actions_target").on(t.targetType, t.targetId),
+  ],
 );
 
 // Every address a link answers to, including its own primary as a row kept
