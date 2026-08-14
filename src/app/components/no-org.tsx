@@ -14,6 +14,7 @@
  * so the fast path is one click.
  */
 import { useCallback } from "react";
+import { errorMessage } from "@/app/lib/error-message";
 import { useForm } from "react-hook-form";
 import { valibotResolver } from "@hookform/resolvers/valibot";
 import { useQueryClient } from "@tanstack/react-query";
@@ -37,7 +38,7 @@ type OrgNameForm = { name: string };
 function createErrorMessage(cause: unknown): string {
   if (cause instanceof ApiError && cause.code === "org_limit")
     return "Upgrade to Pro to create more organizations";
-  return cause instanceof Error ? cause.message : "Something went wrong";
+  return errorMessage(cause);
 }
 
 export function NoOrgState() {

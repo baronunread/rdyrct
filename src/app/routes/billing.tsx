@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { errorMessage } from "@/app/lib/error-message";
 import confetti from "canvas-confetti";
 import { AnimatePresence, LazyMotion, domAnimation, m, useReducedMotion } from "motion/react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -657,7 +658,7 @@ function useCheckoutFlow() {
     } catch (e) {
       setCheckoutPlan(null);
       shake[target].start();
-      toast((e as Error).message, "error");
+      toast(errorMessage(e), "error");
     }
   };
 
@@ -674,7 +675,7 @@ function useCheckoutFlow() {
     } catch (e) {
       setShowPortalOverlay(false);
       shake.portal.start();
-      toast((e as Error).message, "error");
+      toast(errorMessage(e), "error");
     }
   };
 

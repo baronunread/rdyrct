@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import { errorMessage } from "@/app/lib/error-message";
 import { Check, ImagePlus, X } from "lucide-react";
 import { Button } from "../ui/button";
 import { cn } from "../ui/cn";
@@ -232,7 +233,7 @@ export function QrLogoInput({
     try {
       onLoad(await store(file));
     } catch (e) {
-      toast((e as Error).message, "error");
+      toast(errorMessage(e), "error");
     } finally {
       setBusy(false);
     }

@@ -15,6 +15,7 @@ import {
   type AdminOrgDetail,
   type AdminUserRow,
   type OrgPlan,
+  orgPlanOf,
 } from "@/shared/types";
 import { fillSeries, computeDelta, deleteOrg } from "./orgs";
 import { orgPlan } from "../plan";
@@ -91,7 +92,7 @@ function cumulativeSeries(
 
 function computePlanCounts(planCountRows: { plan: string; n: number }[]) {
   const planCounts = { free: 0, hobby: 0, pro: 0 };
-  for (const r of planCountRows) planCounts[r.plan as OrgPlan] = r.n;
+  for (const r of planCountRows) planCounts[orgPlanOf(r.plan)] = r.n;
   return planCounts;
 }
 
@@ -496,7 +497,7 @@ adminRoutes.get("/usage", async (c) => {
     signups: fillSeries(signupRows, days),
     topOrgs: topOrgRows.map((o) => ({
       ...o,
-      plan: (o as { plan?: OrgPlan }).plan ?? ("free" as OrgPlan),
+      plan: orgPlanOf(o.plan),
     })),
     topLinks: topLinkRows,
     planCounts,

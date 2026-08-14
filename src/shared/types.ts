@@ -1,3 +1,5 @@
+import { oneOf } from "./lookup";
+
 /** Carries a solved Cap token (#98) on the requests that need one. A header,
  * not a body field, because better-auth validates each endpoint's body
  * against its own schema. */
@@ -17,8 +19,22 @@ export type JsonValue =
   | JsonValue[]
   | { [key: string]: JsonValue };
 
-export type OrgRole = "owner" | "admin" | "member";
-export type OrgPlan = "free" | "hobby" | "pro";
+export const ORG_ROLES = ["owner", "admin", "member"] as const;
+export type OrgRole = (typeof ORG_ROLES)[number];
+
+export const ORG_PLANS = ["free", "hobby", "pro"] as const;
+export type OrgPlan = (typeof ORG_PLANS)[number];
+
+/**
+ * The plan on a row, which reaches here as a text column or a JSON field.
+ *
+ * Anything unrecognised is free. A plan nobody sells must never grant more
+ * than the free one does, and that decision belongs here rather than at each
+ * of the places that read one.
+ */
+export function orgPlanOf(value: string | null | undefined): OrgPlan {
+  return oneOf(ORG_PLANS, value ?? "", "free");
+}
 
 export interface PlanLimits {
   orgs: number; // orgs a user may own on this plan

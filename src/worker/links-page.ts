@@ -23,6 +23,7 @@
  * would drop one and repeat the other.
  */
 import { and, eq, gt, lt, or, sql, type SQL } from "drizzle-orm";
+import { oneOf } from "../shared/lookup";
 import * as v from "valibot";
 import * as schema from "./db/schema";
 
@@ -61,7 +62,7 @@ export function readLinkPageParams(url: URL): LinkPageParams {
     limit: Number.isFinite(asked)
       ? Math.min(Math.max(Math.trunc(asked), 1), LINKS_MAX_PAGE_SIZE)
       : LINKS_PAGE_SIZE,
-    sort: (LINK_SORTS as readonly string[]).includes(sort) ? (sort as LinkSort) : "created",
+    sort: oneOf(LINK_SORTS, sort, "created"),
     dir: url.searchParams.get("dir") === "asc" ? 1 : -1,
     cursor: decodeCursor(url.searchParams.get("cursor")),
     q: (url.searchParams.get("q") ?? "").trim(),

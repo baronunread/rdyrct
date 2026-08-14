@@ -21,6 +21,7 @@
  * first dashboard is not empty (#65).
  */
 import { useState } from "react";
+import { errorMessage } from "@/app/lib/error-message";
 import { ArrowRight } from "lucide-react";
 import { Button } from "../ui/button";
 import { buttonClass } from "../ui/button-class";
@@ -44,7 +45,7 @@ import { QRPreview, QrDownloadButtons } from "./qr";
 /** The server's own message when it sent one: it says what was wrong with
  * the address, which a generic fallback cannot. */
 function shortenErrorMessage(cause: unknown): string {
-  return cause instanceof ApiError ? cause.message : "Could not shorten that link";
+  return errorMessage(cause, "Could not shorten that link");
 }
 
 /** One made link: the URL in the wide column because that is what gets

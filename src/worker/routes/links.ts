@@ -1,4 +1,5 @@
 import { Hono, type Context } from "hono";
+import { nonEmpty } from "../../shared/lookup";
 import type { JsonValue } from "../../shared/types";
 import { optionalText } from "../schemas";
 import * as v from "valibot";
@@ -969,7 +970,8 @@ linkRoutes.patch("/:linkId", requireOrgRole("member"), async (c) => {
         ]
       : []),
   ];
-  await db.batch(writes as [(typeof writes)[number], ...(typeof writes)[number][]]);
+  const batch = nonEmpty(writes);
+  if (batch) await db.batch(batch);
   await enqueueStorage(c.env, messages);
 
   // Re-score a changed destination (#68). This is the trigger that matters:
@@ -1193,7 +1195,8 @@ linkRoutes.post("/:linkId/addresses/:addressId/promote", requireOrgRole("member"
       })
       .where(eq(schema.linkAddresses.id, address.id)),
   ];
-  await db.batch(writes as [(typeof writes)[number], ...(typeof writes)[number][]]);
+  const batch = nonEmpty(writes);
+  if (batch) await db.batch(batch);
   await enqueueStorage(c.env, [
     syncLinkMsg(existing.slug, oldHostname),
     syncLinkMsg(address.slug, hostname),

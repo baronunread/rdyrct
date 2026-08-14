@@ -15,6 +15,7 @@
  * function, a later edit cannot quietly bring a suspended link back.
  */
 import { Hono, type Context } from "hono";
+import { oneOf } from "../../shared/lookup";
 import type { JsonValue } from "../../shared/types";
 import { optionalText } from "../schemas";
 import * as v from "valibot";
@@ -190,9 +191,7 @@ function adminLinkOrder(sort: AdminLinkSort) {
 adminLinkRoutes.get("/", async (c) => {
   const db = c.var.db;
   const sortParam = c.req.query("sort") ?? "created";
-  const sort: AdminLinkSort = (ADMIN_LINK_SORTS as readonly string[]).includes(sortParam)
-    ? (sortParam as AdminLinkSort)
-    : "created";
+  const sort = oneOf(ADMIN_LINK_SORTS, sortParam, "created");
   const filters = adminLinkFilters(c);
 
   const rows = await db

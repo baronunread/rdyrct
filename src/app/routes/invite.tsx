@@ -1,4 +1,5 @@
 import { Link, useNavigate, useParams } from "react-router";
+import { errorMessage } from "@/app/lib/error-message";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../lib/api";
 import type { InvitePreview } from "@/shared/types";
@@ -90,7 +91,7 @@ export function InvitePage() {
       setOrg(res.orgId);
       navigate("/dashboard");
     } catch (e) {
-      toast((e as Error).message, "error");
+      toast(errorMessage(e), "error");
     }
   };
 

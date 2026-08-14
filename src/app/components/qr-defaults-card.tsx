@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { errorMessage } from "@/app/lib/error-message";
 import { Link } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCurrentUser } from "../lib/hooks";
@@ -64,7 +65,7 @@ function useQrDefaultsForm(
       posthog.capture("qr_defaults_saved");
       toast("QR defaults saved");
     } catch (e) {
-      toast((e as Error).message, "error");
+      toast(errorMessage(e), "error");
     } finally {
       setSavingQr(false);
     }

@@ -1,4 +1,5 @@
 import { Suspense, useEffect, useRef, useState, type ReactNode } from "react";
+import { errorMessage } from "@/app/lib/error-message";
 import { NavLink, Navigate, Outlet, useNavigate, useLocation } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, LazyMotion, domAnimation, m } from "motion/react";
@@ -32,9 +33,7 @@ const ORG_LIMIT_MESSAGE = "Upgrade to Pro to create more organizations";
  * gets an upgrade nudge, everything else shows the server's own message. */
 function orgCreateErrorMessage(cause: unknown): string {
   if (cause instanceof ApiError && cause.code === "org_limit") return ORG_LIMIT_MESSAGE;
-  // SAFETY: every caller passes what a rejected api() call threw, and api()
-  // rejects with an Error.
-  return (cause as Error).message;
+  return errorMessage(cause);
 }
 
 export function RequireAuth({ children }: { children: ReactNode }) {
