@@ -180,7 +180,9 @@ test("shortening again keeps the first link and stacks the new one on top", asyn
   await expect(links).toHaveCount(2, { timeout: 20_000 });
 
   // Newest first, and the earlier one is still there and unchanged.
-  const hrefs = await links.evaluateAll((nodes) => nodes.map((n) => (n as HTMLAnchorElement).href));
+  const hrefs = await links.evaluateAll<string[], HTMLAnchorElement>((nodes) =>
+    nodes.map((n) => n.href),
+  );
   expect(hrefs[1]).toBe(firstUrl);
   expect(hrefs[0]).not.toBe(firstUrl);
 

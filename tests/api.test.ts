@@ -1,13 +1,13 @@
 import { afterEach, beforeAll, describe, expect, test } from "bun:test";
+import { installBrowserGlobals } from "./browser-globals";
 import { api, ApiError, shortUrl } from "../src/app/lib/api";
+import type { JsonValue } from "../src/shared/types";
 
 // Set only once tests start running, not at module load: other test files'
 // modules (loaded up front, before any test runs) must see a real absence of
 // `window`, not this shim.
 beforeAll(() => {
-  (globalThis as { window?: unknown }).window = {
-    location: { origin: "http://localhost:5173" },
-  };
+  installBrowserGlobals({ window: { location: { origin: "http://localhost:5173" } } });
 });
 
 const realFetch = globalThis.fetch;
@@ -19,18 +19,20 @@ function stubFetch(res: {
   ok: boolean;
   status?: number;
   statusText?: string;
-  json?: () => Promise<unknown>;
+  json?: () => Promise<JsonValue>;
+  /** A body that is not JSON, for the branch where res.json() rejects. */
+  text?: string;
 }) {
   const calls: { url: string; init?: RequestInit }[] = [];
-  globalThis.fetch = (async (url: string, init?: RequestInit) => {
-    calls.push({ url, init });
-    return {
-      ok: res.ok,
-      status: res.status ?? 200,
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url: String(url), init });
+    const init2 = {
+      status: res.status ?? (res.ok ? 200 : 500),
       statusText: res.statusText ?? "OK",
-      json: res.json ?? (async () => ({})),
-    } as Response;
-  }) as typeof fetch;
+    };
+    if (res.text !== undefined) return new Response(res.text, init2);
+    return Response.json(res.json ? await res.json() : {}, init2);
+  };
   return calls;
 }
 
@@ -95,9 +97,7 @@ describe("api", () => {
       ok: false,
       status: 500,
       statusText: "Internal Server Error",
-      json: async () => {
-        throw new Error("not json");
-      },
+      text: "not json",
     });
     const err = await api("/boom").catch((e) => e);
     expect(err).toBeInstanceOf(ApiError);

@@ -2,8 +2,12 @@ import { describe, expect, test } from "bun:test";
 import { resolveDefaultDomainId } from "../src/app/lib/default-domain";
 import type { DomainDTO } from "../src/shared/types";
 
-const domain = (id: string): DomainDTO =>
-  ({ id, hostname: `${id}.example.com`, status: "active" }) as DomainDTO;
+const domain = (id: string): DomainDTO => ({
+  id,
+  hostname: `${id}.example.com`,
+  status: "active",
+  createdAt: 0,
+});
 
 describe("resolveDefaultDomainId (#69)", () => {
   test("uses the stored default when the domain is still serving", () => {

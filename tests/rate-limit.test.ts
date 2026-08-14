@@ -1,6 +1,6 @@
 import { describe, expect, it, mock, spyOn } from "bun:test";
+import { partialEnv } from "./partial-env";
 import { Hono } from "hono";
-import type { AppEnv, Env, SessionUser } from "../src/worker/env";
 import {
   clickAnalyticsAllowed,
   enforcePublicAuthRateLimit,
@@ -64,7 +64,7 @@ describe("Cloudflare rate limiting", () => {
   it("uses the higher write binding for either paid plan", () => {
     const free = limiter(true);
     const paid = limiter(true);
-    const env = { RL_WRITE_FREE: free, RL_WRITE_PAID: paid } as Env;
+    const env = partialEnv({ RL_WRITE_FREE: free, RL_WRITE_PAID: paid });
     expect(writeRateLimitBinding(env, "free")).toBe(free);
     expect(writeRateLimitBinding(env, "hobby")).toBe(paid);
     expect(writeRateLimitBinding(env, "pro")).toBe(paid);
@@ -90,11 +90,11 @@ describe("Cloudflare rate limiting", () => {
       const limited = await enforcePublicAuthRateLimit(c);
       return limited ?? c.json({ ok: true });
     });
-    const env = {
+    const env = partialEnv({
       BETTER_AUTH_SECRET: "test-secret",
       RL_AUTH_PUBLIC: limiter(false),
       RL_EMAIL: limiter(true),
-    } as Env;
+    });
 
     const response = await app.request(
       "/api/auth/sign-in/email",
@@ -119,11 +119,11 @@ describe("Cloudflare rate limiting", () => {
     });
     const auth = limiter(true);
     const email = limiter(false);
-    const env = {
+    const env = partialEnv({
       BETTER_AUTH_SECRET: "test-secret",
       RL_AUTH_PUBLIC: auth,
       RL_EMAIL: email,
-    } as Env;
+    });
 
     const response = await app.request(
       "/api/auth/sign-up/email",
@@ -140,10 +140,10 @@ describe("Cloudflare rate limiting", () => {
     const warn = spyOn(console, "warn").mockImplementation(() => {});
     const free = limiter(false);
     const paid = limiter(true);
-    const env = {
+    const env = partialEnv({
       RL_WRITE_FREE: free,
       RL_WRITE_PAID: paid,
-    } as Env;
+    });
 
     const limited = await signedWriteApp("free").request(
       "/api/orgs/org-1/links",
@@ -178,7 +178,7 @@ describe("Cloudflare rate limiting", () => {
       }),
     ).toBe(true);
 
-    const env = { RL_CLICK_RECORDING: broken } as Env;
+    const env = partialEnv({ RL_CLICK_RECORDING: broken });
     expect(await clickAnalyticsAllowed(env, "org-1")).toBe(false);
     expect(warn).toHaveBeenCalledTimes(2);
     warn.mockRestore();

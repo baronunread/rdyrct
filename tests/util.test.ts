@@ -317,6 +317,8 @@ describe("validateQrFields", () => {
       valid(fields);
       throw new Error("should have thrown");
     } catch (err) {
+      // SAFETY: valid() only ever throws the HTTPException that
+      // validateQrFields raises, which carries the status asserted here.
       expect((err as { status: number }).status).toBe(400);
     }
   };

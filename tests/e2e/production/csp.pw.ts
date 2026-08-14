@@ -2,6 +2,11 @@ import { expect, test } from "@playwright/test";
 import { collectCspViolations, cspViolations, scriptIsBlocked } from "../csp";
 import { visitLegalPages } from "../pages";
 
+/** The Cap widget element, once its custom element has been defined. */
+interface CapWidget extends HTMLElement {
+  solve: () => Promise<{ token?: string }>;
+}
+
 /**
  * These run against `vite preview`, i.e. the built worker and built assets,
  * because that is the only place the production Content-Security-Policy is in
@@ -50,9 +55,10 @@ test("Cap solves a challenge under the production CSP", async ({ page }) => {
   await page.waitForFunction(() => !!customElements.get("cap-widget"), null, { timeout: 15_000 });
 
   const solved = await page.evaluate(async () => {
-    const el = document.createElement("cap-widget") as HTMLElement & {
-      solve: () => Promise<{ token?: string }>;
-    };
+    // SAFETY: the line above waited for customElements to define
+    // "cap-widget", so createElement returns an upgraded widget with solve()
+    // on it rather than an unknown element.
+    const el = document.createElement("cap-widget") as CapWidget;
     el.setAttribute("data-cap-api-endpoint", "/api/cap/signup/");
     el.style.cssText = "position:absolute;width:1px;height:1px;opacity:0";
     document.body.appendChild(el);

@@ -1,9 +1,25 @@
 import { expect, type Page } from "@playwright/test";
 import { explorerUrl } from "./environment";
 import { subscriptionGrantsAccess } from "../../src/worker/entitlement";
+import type { JsonValue } from "../../src/shared/types";
+
+/**
+ * What the dev Explorer answers a /raw post with: one entry per statement,
+ * column-oriented, alongside the write counters D1 reports.
+ */
+interface ExplorerRaw {
+  result: {
+    results: { columns: string[]; rows: JsonValue[][] };
+    meta: { changes: number };
+  }[];
+}
 
 /** Runs raw SQL against the local D1 database via the dev Explorer API. */
-export async function rawSql(page: Page, sql: string, params: unknown[] = []): Promise<unknown> {
+export async function rawSql(
+  page: Page,
+  sql: string,
+  params: JsonValue[] = [],
+): Promise<ExplorerRaw> {
   const databases = await page.request.get(`${explorerUrl}/d1/database`);
   expect(databases.ok()).toBe(true);
   const body = await databases.json();
@@ -26,27 +42,25 @@ export async function rawSql(page: Page, sql: string, params: unknown[] = []): P
  * an error, so the mistake surfaces later as a confusing assertion failure.
  * Callers get objects instead.
  */
-export async function queryRows<T extends Record<string, unknown>>(
+export async function queryRows<T>(
   page: Page,
   sql: string,
-  params: unknown[] = [],
+  params: JsonValue[] = [],
 ): Promise<T[]> {
-  const body = (await rawSql(page, sql, params)) as {
-    result: { results: { columns: string[]; rows: unknown[][] } }[];
-  };
-  const { columns, rows } = body.result[0].results;
+  const { columns, rows } = (await rawSql(page, sql, params)).result[0].results;
+  // SAFETY: the caller names the columns its own SELECT asks for. A column it
+  // did not select reads as undefined and fails whichever assertion wanted it,
+  // here rather than somewhere downstream.
   return rows.map((row) => Object.fromEntries(columns.map((c, i) => [c, row[i]])) as T);
 }
 
 async function expectOneRowChanged(
   page: Page,
   sql: string,
-  params: unknown[],
+  params: JsonValue[],
   what: string,
 ): Promise<void> {
-  const result = (await rawSql(page, sql, params)) as {
-    result: { meta: { changes: number } }[];
-  };
+  const result = await rawSql(page, sql, params);
   // An unmatched email leaves the UPDATE a silent no-op: fail here instead of
   // at some unrelated paid-plan gate downstream.
   expect(result.result[0].meta.changes, what).toBe(1);

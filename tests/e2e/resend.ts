@@ -1,4 +1,5 @@
 import { expect, type Page } from "@playwright/test";
+import type { JsonValue } from "../../src/shared/types";
 
 /** Depth-first search through an arbitrary JSON value (the emulator's
  * /emails response) for the email object that mentions `email`, then pulls
@@ -8,22 +9,22 @@ import { expect, type Page } from "@playwright/test";
  * six digits counts. Scanning the whole serialized object for `\d{6}` used to
  * work, but the shared layout carries hex colours, and `#262336` is six
  * digits with word boundaries on both sides: it would be read as the code. */
-export function otpForEmail(value: unknown, email: string): string {
+export function otpForEmail(value: JsonValue, email: string): string {
   if (Array.isArray(value)) {
     return value.map((item) => otpForEmail(item, email)).find(Boolean) ?? "";
   }
-  if (!value || typeof value !== "object") return "";
+  if (!(value instanceof Object)) return "";
 
-  const record = value as Record<string, unknown>;
-  const serialized = JSON.stringify(record);
-  if (serialized.includes(email) && ("html" in record || "text" in record)) {
-    const text = typeof record.text === "string" ? record.text : "";
-    const onItsOwnLine = text.match(/^\s*(\d{6})\s*$/m)?.[1];
+  const serialized = JSON.stringify(value);
+  if (serialized.includes(email) && ("html" in value || "text" in value)) {
+    // The emulator sends `text` as a string. Anything else stringifies to
+    // something that cannot be a line of six digits, which is the whole test.
+    const onItsOwnLine = String(value.text ?? "").match(/^\s*(\d{6})\s*$/m)?.[1];
     if (onItsOwnLine) return onItsOwnLine;
     return serialized.match(/\b\d{6}\b/)?.[0] ?? "";
   }
   return (
-    Object.values(record)
+    Object.values(value)
       .map((item) => otpForEmail(item, email))
       .find(Boolean) ?? ""
   );
