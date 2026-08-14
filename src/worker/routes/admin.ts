@@ -713,7 +713,7 @@ adminRoutes.patch("/users/:userId", async (c) => {
     throw new HTTPException(400, {
       message: "Plan is derived from a subscription or a comp: use the comp routes",
     });
-  const patch: { isAdmin?: boolean; banned?: boolean } = {
+  const patch = {
     isAdmin: validateIsAdminPatch(body.isAdmin, targetId, self.id),
     banned: await validateBannedPatch(db, body.banned, targetId, self.id),
   };
@@ -763,11 +763,17 @@ async function writeComp(
   if (result.meta.changes === 0) throw new HTTPException(404, { message: "User not found" });
 }
 
+/** What the comp route reads off its request body. */
+interface CompBody {
+  plan?: string;
+  reason?: string;
+}
+
 /** Grant a comp: paid access an admin gives by hand, recorded as such (#81). */
 adminRoutes.post("/users/:userId/comp", async (c) => {
-  const body = await c.req
-    .json<{ plan?: string; reason?: string }>()
-    .catch(() => ({}) as { plan?: string; reason?: string });
+  // SAFETY: an unparseable body stands in for an empty one, and every field
+  // below is optional, so reading it finds the same absence.
+  const body = await c.req.json<CompBody>().catch(() => ({}) as CompBody);
   const plan = body.plan;
   if (plan !== "hobby" && plan !== "pro")
     throw new HTTPException(400, { message: "plan must be hobby or pro" });

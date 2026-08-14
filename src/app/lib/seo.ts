@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { lookup } from "@/shared/lookup";
 import { DEFAULT_PAGE_META, PUBLIC_PAGE_META } from "@/shared/page-meta";
 
 /**
@@ -34,7 +35,7 @@ function pageTags(path: string, title: string, description: string) {
 
 export function useSeo(path: string) {
   useEffect(() => {
-    const meta = PUBLIC_PAGE_META[path] ?? DEFAULT_PAGE_META;
+    const meta = lookup(PUBLIC_PAGE_META, path) ?? DEFAULT_PAGE_META;
     apply(path, meta);
     // Back to what index.html ships, not to what this document arrived
     // carrying. Those are the same thing only for somebody who walked here

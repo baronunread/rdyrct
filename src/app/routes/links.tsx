@@ -1,4 +1,5 @@
 import { useState, type ReactNode } from "react";
+import { lookup } from "@/shared/lookup";
 import { useNavigate } from "react-router";
 import { Plus } from "lucide-react";
 import { useLinks, useLinkMutations, useLinkQuotaUsage } from "../lib/hooks";
@@ -25,11 +26,11 @@ import posthog from "../lib/posthog";
 const PAGE_SIZE = 25;
 
 /** The table's sort keys, as the API names them. */
-const API_SORT: Record<string, "created" | "slug" | "clicks"> = {
+const API_SORT = {
   createdAt: "created",
   slug: "slug",
   clicks: "clicks",
-};
+} satisfies Record<string, "created" | "slug" | "clicks">;
 
 /** The table's controls, and the cursor stack that lets Previous be a step
  * back rather than a re-walk from the top. */
@@ -48,7 +49,7 @@ function useLinkPage(orgId: string) {
   const links = useLinks(orgId, {
     q,
     domain: domainFilter,
-    sort: API_SORT[sort.key] ?? "created",
+    sort: lookup(API_SORT, sort.key) ?? "created",
     dir: sort.dir === 1 ? "asc" : "desc",
     limit: PAGE_SIZE,
     cursor: cursors[page],

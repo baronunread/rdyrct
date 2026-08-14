@@ -106,7 +106,7 @@ const UTM_PARAM_BY_KEY: Record<UtmKey, string> = Object.fromEntries(
  * the form fields. A param that's present but empty still wins (so
  * backspacing its value out clears the field instead of leaving a stale
  * one behind); a param that's absent leaves the field alone. */
-function utmFromDestination(destination: string): Partial<Record<UtmKey, string>> {
+function utmFromDestination(destination: string) {
   let url: URL;
   try {
     url = new URL(destination);

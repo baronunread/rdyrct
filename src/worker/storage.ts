@@ -73,7 +73,7 @@ export async function enqueueStorage(
 
 /* ---------------- consuming messages ---------------- */
 
-function parseSlugKey(key: string): { hostname: string | null; slug: string } {
+function parseSlugKey(key: string) {
   const rest = key.slice("slug:".length);
   const sep = rest.indexOf(":");
   // A slug never holds a colon and a hostname never holds a colon, so the first

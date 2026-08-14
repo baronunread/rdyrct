@@ -32,7 +32,7 @@ export interface PlanLimits {
   analyticsDays: number; // how far back click analytics look
 }
 
-export const PLAN_LIMITS: Record<OrgPlan, PlanLimits> = {
+export const PLAN_LIMITS = {
   free: {
     orgs: 1,
     links: 30,
@@ -57,13 +57,13 @@ export const PLAN_LIMITS: Record<OrgPlan, PlanLimits> = {
     qrCustom: true,
     analyticsDays: 365,
   },
-};
+} satisfies Record<OrgPlan, PlanLimits>;
 
 /** Display prices for the paid plans; the charge itself is set in Polar. */
-export const PLAN_PRICES: Record<Exclude<OrgPlan, "free">, string> = {
+export const PLAN_PRICES = {
   hobby: "$4",
   pro: "$9",
-};
+} satisfies Record<Exclude<OrgPlan, "free">, string>;
 
 /** QR dot styles supported by qr-code-styling; "" means inherit/default. */
 export const QR_DOT_STYLES = [

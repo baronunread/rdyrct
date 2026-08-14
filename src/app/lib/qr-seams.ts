@@ -25,6 +25,8 @@
 const SVG_NS = "http://www.w3.org/2000/svg";
 
 type Point = [number, number];
+import { lookup } from "@/shared/lookup";
+
 /** Turns a vector. Absolute points go through `around` instead. */
 type Turn = (x: number, y: number) => Point;
 /** Where a shape sits: how its vectors turn, and where its points land. */
@@ -35,19 +37,19 @@ interface Place {
 
 /** Every transform in the output is a quarter turn about a shape's own centre,
  * which keeps this to four cases and no trigonometry. */
-const TURNS: Partial<Record<number, Turn>> = {
+const TURNS = {
   0: (x, y) => [x, y],
   90: (x, y) => [-y, x],
   180: (x, y) => [-x, -y],
   270: (x, y) => [y, -x],
-};
+} satisfies Record<number, Turn>;
 
 const ROTATE = /rotate\(\s*(-?[\d.]+)\s*,\s*(-?[\d.]+)\s*,\s*(-?[\d.]+)\s*\)/;
 
 function placement(el: Element): Place | null {
   const found = ROTATE.exec(el.getAttribute("transform") ?? "");
   const [angle, cx, cy] = found ? found.slice(1).map(Number) : [0, 0, 0];
-  const spin = TURNS[((angle % 360) + 360) % 360];
+  const spin = lookup(TURNS, ((angle % 360) + 360) % 360);
   if (!spin) return null;
   return {
     spin,
@@ -89,14 +91,14 @@ function circleSubpath(el: Element, { around }: Place): string {
  * A quarter turn leaves a circular arc's radii and sweep alone and only moves
  * where it ends.
  */
-const COMMANDS: Partial<Record<string, (n: number[], place: Place) => string>> = {
+const COMMANDS = {
   M: (n, { around }) => `M${around(n[0], n[1]).join(" ")}`,
   h: (n, { spin }) => `l${spin(n[0], 0).join(" ")}`,
   v: (n, { spin }) => `l${spin(0, n[0]).join(" ")}`,
   a: (n, { spin }) => `a${n[0]} ${n[1]} 0 ${n[3]} ${n[4]} ${spin(n[5], n[6]).join(" ")}`,
   z: () => "Z",
   Z: () => "Z",
-};
+} satisfies Record<string, (n: number[], place: Place) => string>;
 
 /** One command and its numbers: "M 274 50", "v 28", "a 14 14, 0, 0, 0, -14 -14". */
 const SEGMENT = /[A-Za-z][^A-Za-z]*/g;
@@ -110,19 +112,21 @@ function numbers(segment: string): number[] {
 }
 
 function pathSubpath(el: Element, place: Place): string | null {
-  const written = segments(el).map((segment) => COMMANDS[segment[0]]?.(numbers(segment), place));
+  const written = segments(el).map((segment) =>
+    lookup(COMMANDS, segment[0])?.(numbers(segment), place),
+  );
   return written.includes(undefined) ? null : `${written.join("")}Z`;
 }
 
-const SHAPES: Partial<Record<string, (el: Element, place: Place) => string | null>> = {
+const SUBPATH_BUILDERS = {
   rect: rectSubpath,
   circle: circleSubpath,
   path: pathSubpath,
-};
+} satisfies Record<string, (el: Element, place: Place) => string | null>;
 
 function subpath(el: Element): string | null {
   const place = placement(el);
-  const build = SHAPES[el.tagName];
+  const build = lookup(SUBPATH_BUILDERS, el.tagName);
   return place && build ? build(el, place) : null;
 }
 

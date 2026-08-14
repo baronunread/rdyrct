@@ -24,19 +24,19 @@ import { copyToClipboard } from "../lib/clipboard";
 import { addDomainMessage, recheckMessage } from "../lib/domain-messages";
 import posthog from "../lib/posthog";
 
-const domainStatusColor: Record<DomainDTO["status"], "accent" | "butter" | "mint" | "pink"> = {
+const domainStatusColor = {
   checking_dns: "butter",
   issuing_tls: "accent",
   active: "mint",
   error: "pink",
-};
+} satisfies Record<DomainDTO["status"], "accent" | "butter" | "mint" | "pink">;
 
-const domainStatusLabel: Record<DomainDTO["status"], string> = {
+const domainStatusLabel = {
   checking_dns: "Checking DNS",
   issuing_tls: "Issuing TLS",
   active: "active",
   error: "Failed",
-};
+} satisfies Record<DomainDTO["status"], string>;
 
 const transitional = (status: DomainDTO["status"]) =>
   status === "checking_dns" || status === "issuing_tls";

@@ -85,16 +85,31 @@ export type CtaPlacement =
  * dropped rather than truncated: a length cap does not make an email address
  * stop being one.
  */
-const CAMPAIGN_SHAPE = /^[a-zA-Z0-9._\-+ ]{1,64}$/;
+const SAFE_CAMPAIGN_VALUE = /^[a-zA-Z0-9._\-+ ]{1,64}$/;
 
 function safeCampaignValue(value: string): string | null {
   const trimmed = value.trim();
-  if (!CAMPAIGN_SHAPE.test(trimmed)) return null;
+  if (!SAFE_CAMPAIGN_VALUE.test(trimmed)) return null;
   // "+" and "." are legal in campaign names and in the local part of an
   // address, so shape alone is not enough.
   if (trimmed.includes("@")) return null;
   return trimmed;
 }
+
+/** The campaign parameters a landing URL is read for. */
+const CAMPAIGN_PARAMS = [
+  "utm_source",
+  "utm_medium",
+  "utm_campaign",
+  "utm_term",
+  "utm_content",
+] as const;
+
+/** What a landing pageview carries about where the visitor came from. Every
+ * field is optional: most visits offer none of them. */
+export type LandingContext = Partial<
+  Record<(typeof CAMPAIGN_PARAMS)[number] | "referrer_host", string>
+>;
 
 /**
  * Campaign attribution for the landing view, read from the URL and the
@@ -105,11 +120,11 @@ function safeCampaignValue(value: string): string | null {
  * already the rule for click analytics (#20); the marketing funnel does not
  * get a weaker standard than the product does.
  */
-export function landingContext(): Record<string, string> {
-  const out: Record<string, string> = {};
+export function landingContext() {
+  const out: LandingContext = {};
   try {
     const params = new URLSearchParams(window.location.search);
-    for (const key of ["utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content"]) {
+    for (const key of CAMPAIGN_PARAMS) {
       const value = params.get(key);
       const safe = value && safeCampaignValue(value);
       if (safe) out[key] = safe;

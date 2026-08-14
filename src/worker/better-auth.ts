@@ -1,4 +1,5 @@
 import { betterAuth } from "better-auth";
+import { lookup } from "../shared/lookup";
 import { APIError, createAuthMiddleware, getSessionFromCtx } from "better-auth/api";
 import { emailOTP } from "better-auth/plugins/email-otp";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
@@ -21,10 +22,10 @@ import { CAP_FAILED_CODE, CAP_TOKEN_HEADER } from "@/shared/types";
 /** better-auth paths that must carry a solved Cap token, and the scope the
  * token has to have been minted for. Keyed by `ctx.path`, which is relative
  * to /api/auth. */
-const CAP_GUARDED_PATHS: Record<string, CapScope> = {
+const CAP_GUARDED_PATHS = {
   "/sign-up/email": "signup",
   "/request-password-reset": "password-reset",
-};
+} satisfies Record<string, CapScope>;
 
 /**
  * Gives an account an organization if it has none.
@@ -448,7 +449,7 @@ function buildAuth(env: Env) {
         // creating accounts, and making us send mail. Not login, where a bot
         // with correct credentials is not the threat and every real visitor
         // would pay the tax.
-        const capScope = CAP_GUARDED_PATHS[ctx.path];
+        const capScope = lookup(CAP_GUARDED_PATHS, ctx.path);
         if (capScope) {
           // In a header, not the body: better-auth validates each endpoint's
           // body against its own schema, and an extra key there is at the

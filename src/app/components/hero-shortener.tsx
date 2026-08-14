@@ -95,7 +95,7 @@ function MadeLink({ link }: { link: StoredAnonLink }) {
 /** Written out per case rather than assembled from fragments: a sentence
  * stitched together from four inline conditionals is unreadable in source
  * and easy to break in one of its halves. */
-function keepCopy(count: number): { body: string; action: string } {
+function keepCopy(count: number) {
   if (count === 1)
     return {
       body: "This link works for 24 hours and records nothing. Sign up and it becomes yours permanently, with the clicks it earns.",

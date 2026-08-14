@@ -46,11 +46,11 @@ function billingSnapshot(user?: {
   ]);
 }
 
-const PLAN_LABEL: Record<OrgPlan, string> = {
+const PLAN_LABEL = {
   free: "Free",
   hobby: "Hobby",
   pro: "Pro",
-};
+} satisfies Record<OrgPlan, string>;
 
 const PLAN_FEATURES = [
   ["Links", `${PLAN_LIMITS.free.links}`, `${PLAN_LIMITS.hobby.links}`, `${PLAN_LIMITS.pro.links}`],

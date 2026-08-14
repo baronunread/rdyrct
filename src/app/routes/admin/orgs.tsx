@@ -21,17 +21,17 @@ import { withErrorToast } from "../../lib/mutation-toast";
 import { shortDate } from "../../lib/dates";
 import { Pager } from "../../ui/pagination";
 
-const roleColor: Record<OrgRole, "accent" | "mint" | "muted"> = {
+const roleColor = {
   owner: "accent",
   admin: "mint",
   member: "muted",
-};
+} satisfies Record<OrgRole, "accent" | "mint" | "muted">;
 
-const planBadgeColor: Record<OrgPlan, "accent" | "mint" | "muted"> = {
+const planBadgeColor = {
   pro: "mint",
   hobby: "accent",
   free: "muted",
-};
+} satisfies Record<OrgPlan, "accent" | "mint" | "muted">;
 
 function OrgMembersTable({
   members,

@@ -135,11 +135,11 @@ export function publicAuthGroup(path: string): "auth" | "cap" | "email" | null {
 }
 
 /** Which counter each public group spends. */
-const PUBLIC_LIMIT_BINDINGS: Record<"auth" | "cap" | "email", (env: Env) => RateLimit> = {
+const PUBLIC_LIMIT_BINDINGS = {
   auth: (env) => env.RL_AUTH_PUBLIC,
   cap: (env) => env.RL_CAP,
   email: (env) => env.RL_EMAIL,
-};
+} satisfies Record<"auth" | "cap" | "email", (env: Env) => RateLimit>;
 
 export async function enforcePublicAuthRateLimit(c: Context<AppEnv>): Promise<Response | null> {
   const group = publicAuthGroup(c.req.path);

@@ -26,11 +26,11 @@ import { shortDate } from "../lib/dates";
 import { inviteEmailSchema } from "../lib/schemas";
 import posthog from "../lib/posthog";
 
-const roleColor: Record<OrgRole, "accent" | "mint" | "muted"> = {
+const roleColor = {
   owner: "accent",
   admin: "mint",
   member: "muted",
-};
+} satisfies Record<OrgRole, "accent" | "mint" | "muted">;
 
 const inviteUrl = (token: string) => `${window.location.origin}/invite/${token}`;
 

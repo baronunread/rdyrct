@@ -499,10 +499,15 @@ function fillHours(rows: { hour: string; clicks: number }[]): SeriesPoint[] {
   return [...map.entries()].map(([day, clicks]) => ({ day, clicks }));
 }
 
-export function computeDelta(
-  current: number,
-  previous: number,
-): { current: number; previous: number; pct: number | null } {
+/** A figure against the figure before it, and the change between them.
+ * `pct` is null when there is no earlier figure to compare against. */
+export interface Delta {
+  current: number;
+  previous: number;
+  pct: number | null;
+}
+
+export function computeDelta(current: number, previous: number): Delta {
   return {
     current,
     previous,

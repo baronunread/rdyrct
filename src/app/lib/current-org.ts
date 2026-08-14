@@ -37,11 +37,7 @@ function subscribeToOrg(l: () => void) {
   return () => listeners.delete(l);
 }
 
-export function useCurrentOrg(): {
-  org: UserOrg | null;
-  orgs: UserOrg[];
-  setOrg: (id: string) => void;
-} {
+export function useCurrentOrg() {
   const me = useCurrentUser();
   const orgs = me.data?.orgs ?? [];
   const storedId = useSyncExternalStore(subscribeToOrg, getCurrentOrgId);

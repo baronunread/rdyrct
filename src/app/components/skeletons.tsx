@@ -1,4 +1,5 @@
 import type { ReactElement } from "react";
+import { lookup } from "@/shared/lookup";
 import { useLocation } from "react-router";
 import { ChevronsUpDown, LogOut, Menu as MenuIcon } from "lucide-react";
 // MorphIcon animates between two icons, so it takes lucide icon nodes, not
@@ -606,7 +607,7 @@ function LinkDetailSkeleton() {
  * generic, so a cold load of /links opened with a dashboard (a create field
  * and three stat cards), then a table, then the page.
  */
-const PAGE_SKELETONS: Record<string, () => ReactElement> = {
+const PAGE_SKELETONS = {
   "/dashboard": DashboardSkeleton,
   "/analytics": AnalyticsSkeleton,
   "/links": LinksSkeleton,
@@ -615,14 +616,14 @@ const PAGE_SKELETONS: Record<string, () => ReactElement> = {
   "/billing": BillingSkeleton,
   "/settings": SettingsSkeleton,
   "/admin": AdminUsageSkeleton,
-};
+} satisfies Record<string, () => ReactElement>;
 
 function skeletonFor(pathname: string): () => ReactElement {
   // The two routes with something after the prefix: an admin tab is a table,
   // and a single link is its own page.
   if (pathname.startsWith("/admin/")) return AdminTableSkeleton;
   if (pathname.startsWith("/links/")) return LinkDetailSkeleton;
-  return PAGE_SKELETONS[pathname] ?? PageSkeleton;
+  return lookup(PAGE_SKELETONS, pathname) ?? PageSkeleton;
 }
 
 /** The same thing for callers that are inside the router and have no path in

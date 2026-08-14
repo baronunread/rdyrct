@@ -173,11 +173,17 @@ export function cursorValueOf(
  * Returns the page the caller asked for plus the cursor that continues it,
  * or null when this was the last page.
  */
+/** One page of rows, and the cursor that continues it. */
+export interface Page<T> {
+  items: T[];
+  nextCursor: string | null;
+}
+
 export function takePage<T extends { id: string }>(
   rows: T[],
   params: LinkPageParams,
   valueOf: (row: T) => CursorValue,
-): { items: T[]; nextCursor: string | null } {
+): Page<T> {
   if (rows.length <= params.limit) return { items: rows, nextCursor: null };
   const items = rows.slice(0, params.limit);
   const last = items[items.length - 1]!;

@@ -11,12 +11,12 @@ const RANGES = [
 ] as const;
 
 const DAILY_30 = dailyClicks(30, 95, 0.8, 42);
-const SERIES: Record<(typeof RANGES)[number]["label"], SeriesPoint[]> = {
+const SERIES = {
   "24h": hourlyPoints(),
   "7d": toDailyPoints(DAILY_30.slice(-7)),
   "30d": toDailyPoints(DAILY_30),
   "365d": toDailyPoints(dailyClicks(365, 60, 2.5, 7)),
-};
+} satisfies Record<(typeof RANGES)[number]["label"], SeriesPoint[]>;
 const CLICKS_7D = DAILY_30.slice(-7).reduce((a, b) => a + b, 0);
 const HEATMAP = heatmapData();
 

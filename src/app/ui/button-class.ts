@@ -18,17 +18,17 @@ import { cn } from "./cn";
 export type Variant = "primary" | "outline" | "ghost" | "danger";
 export type Size = "sm" | "md";
 
-const variants: Record<Variant, string> = {
+const variants = {
   primary: "bg-accent text-bg font-bold hover:brightness-110 active:brightness-95",
   outline: "border border-border bg-surface hover:border-accent hover:text-accent",
   ghost: "text-muted hover:text-text hover:bg-surface-2",
   danger: "border border-border text-danger hover:border-danger hover:bg-danger/10",
-};
+} satisfies Record<Variant, string>;
 
-const sizes: Record<Size, string> = {
+const sizes = {
   sm: "h-8 px-2.5 text-xs gap-1.5",
   md: "h-9 px-3.5 text-sm gap-2",
-};
+} satisfies Record<Size, string>;
 
 export function buttonClass({
   variant = "outline",

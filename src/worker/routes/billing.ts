@@ -39,9 +39,16 @@ function planForProduct(env: Env, productId: string | undefined): "hobby" | "pro
   return null;
 }
 
+/** What the checkout route reads off its request body. */
+interface CheckoutBody {
+  plan?: string;
+}
+
 billingRoutes.post("/checkout", requireUser, async (c) => {
   const user = c.var.user!;
-  const body = await c.req.json<{ plan?: string }>().catch(() => ({}) as { plan?: string });
+  // SAFETY: an unparseable body stands in for an empty one, and `plan` is
+  // optional, so reading it finds the same absence.
+  const body = await c.req.json<CheckoutBody>().catch(() => ({}) as CheckoutBody);
   const plan = body.plan ?? "pro";
   if (plan !== "hobby" && plan !== "pro")
     throw new HTTPException(400, { message: "plan must be hobby or pro" });
