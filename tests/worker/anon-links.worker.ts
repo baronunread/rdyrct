@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { env } from "cloudflare:workers";
 import { reset } from "cloudflare:test";
-import { applyTestMigrations, authEnv, fetchWorker, freeOwnerCookie } from "./support";
+import { applyTestMigrations, authEnv, fetchWorker, freeOwnerCookie, jsonBody } from "./support";
 import { drizzle } from "drizzle-orm/d1";
 import * as schema from "../../src/worker/db/schema";
 import { claimAnonLink, slugTaken, sweepExpiredAnonLinks } from "../../src/worker/routes/shorten";
@@ -329,7 +329,7 @@ describe("the sweep", () => {
         body: JSON.stringify({ destination: "https://example.com/real" }),
       }),
     );
-    const { slug } = (await created.json()) as { slug: string };
+    const { slug } = await jsonBody<{ slug: string }>(created);
 
     await seedAnon({ expiresAt: Date.now() - HOUR });
     await sweepExpiredAnonLinks(authEnv());

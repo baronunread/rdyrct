@@ -13,6 +13,7 @@ import {
   authEnv,
   captureStorageQueue as captureQueue,
   freeOwnerCookie,
+  jsonBody,
   overrideEnv,
   rawAddressRow,
   rawLinkRow,
@@ -86,7 +87,7 @@ describe("POST /orgs/:orgId/links: creates a synced primary address", () => {
       slug: "chosen",
     });
     expect(created.status).toBe(201);
-    const { id } = (await created.json()) as { id: string };
+    const { id } = await jsonBody<{ id: string }>(created);
 
     const addresses = await addressesOf(id);
     expect(addresses).toHaveLength(1);
@@ -109,7 +110,7 @@ describe("PATCH /orgs/:orgId/links/:linkId: renaming a custom-domain address", (
       domainId: "domain-1",
       slug: "old-slug",
     });
-    const { id } = (await created.json()) as { id: string };
+    const { id } = await jsonBody<{ id: string }>(created);
     const beforeRename = Date.now();
 
     const renamed = await api(cookie, "PATCH", `/links/${id}`, { slug: "new-slug" });
@@ -133,7 +134,7 @@ describe("PATCH /orgs/:orgId/links/:linkId: renaming a custom-domain address", (
   it("rejects a domain change: a link's aliases are bound to its domain, so it can't move", async () => {
     const cookie = await seed();
     const created = await api(cookie, "POST", "/links", { destination: "https://example.com/a" });
-    const { id } = (await created.json()) as { id: string };
+    const { id } = await jsonBody<{ id: string }>(created);
 
     const moved = await api(cookie, "PATCH", `/links/${id}`, { domainId: "domain-1" });
     expect(moved.status).toBe(400);
@@ -184,7 +185,7 @@ describe("addresses sub-resource", () => {
 
     const res = await api(cookie, "GET", `/links/${linkId}/addresses`);
     expect(res.status).toBe(200);
-    const dtos = (await res.json()) as { kind: string; slug: string }[];
+    const dtos = await jsonBody<{ kind: string; slug: string }[]>(res);
     expect(dtos.map((d) => d.kind).sort()).toEqual(["primary", "temp_alias"]);
   });
 
@@ -247,7 +248,7 @@ describe("addresses sub-resource", () => {
 
     const res = await api(cookie, "POST", `/links/${linkId}/addresses/${aliasId}/promote`);
     expect(res.status).toBe(200);
-    const link = (await res.json()) as { slug: string };
+    const link = await jsonBody<{ slug: string }>(res);
     expect(link.slug).toBe("old-slug"); // the promoted alias's slug
 
     const addresses = await addressesOf(linkId);
@@ -268,7 +269,7 @@ describe("same-destination grouping", () => {
 
     const res = await api(cookie, "POST", "/links", { destination: "https://example.com/pricing" });
     expect(res.status).toBe(409);
-    const body = (await res.json()) as { code: string; matchedLinks: { id: string }[] };
+    const body = await jsonBody<{ code: string; matchedLinks: { id: string }[] }>(res);
     expect(body.code).toBe("same_destination_match");
     expect(body.matchedLinks).toHaveLength(1);
 
@@ -290,7 +291,7 @@ describe("same-destination grouping", () => {
       mergeIntoLinkId: matchedLinkId,
     });
     expect(res.status).toBe(200);
-    const body = (await res.json()) as { id: string };
+    const body = await jsonBody<{ id: string }>(res);
     expect(body.id).toBe(matchedLinkId);
 
     await expectLinkCount(1);
@@ -350,7 +351,7 @@ describe("same-destination grouping", () => {
       mergeIntoLinkId: targetId,
     });
     expect(res.status).toBe(409);
-    const body = (await res.json()) as { code: string };
+    const body = await jsonBody<{ code: string }>(res);
     expect(body.code).toBe("merge_target_changed");
 
     await expectLinkCount(1);

@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createExecutionContext, reset, waitOnExecutionContext } from "cloudflare:test";
 import worker from "../../src/worker";
-import { applyTestMigrations, authEnv, freeOwnerCookie } from "./support";
+import { applyTestMigrations, authEnv, freeOwnerCookie, jsonBody } from "./support";
 
 async function postLink(cookie: string, body: Record<string, unknown>): Promise<Response> {
   const ctx = createExecutionContext();
@@ -68,11 +68,11 @@ describe("PATCH /orgs/:orgId/links/:linkId", () => {
       destination: "https://example.com/original",
       title: "Original title",
     });
-    const { id } = (await created.json()) as { id: string };
+    const { id } = await jsonBody<{ id: string }>(created);
 
     const res = await patchLink(cookie, id, { title: "Updated title" });
     expect(res.status).toBe(200);
-    const updated = (await res.json()) as { title: string; destination: string };
+    const updated = await jsonBody<{ title: string; destination: string }>(res);
     expect(updated.title).toBe("Updated title");
     expect(updated.destination).toBe("https://example.com/original");
   });

@@ -7,9 +7,10 @@ import { Webhook } from "standardwebhooks";
 import worker from "../../src/worker";
 import * as schema from "../../src/worker/db/schema";
 import {
-  applyTestMigrations,
   adminCookie,
+  applyTestMigrations,
   billingEnv,
+  jsonBody,
   overrideEnv,
   POLAR_HOBBY_PRODUCT_ID,
   POLAR_PRO_PRODUCT_ID,
@@ -213,9 +214,7 @@ describe("GET /api/user reports whether a billing account exists (#85)", () => {
       ctx,
     );
     await waitOnExecutionContext(ctx);
-    return (await res.json()) as {
-      user: { plan: string; hasBillingAccount: boolean; comped: boolean };
-    };
+    return jsonBody<{ user: { plan: string; hasBillingAccount: boolean; comped: boolean } }>(res);
   }
 
   it("is false for a paid plan with no Polar customer, whose portal would error", async () => {

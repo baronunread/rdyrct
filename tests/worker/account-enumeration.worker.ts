@@ -2,7 +2,14 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { env } from "cloudflare:workers";
 import { createExecutionContext, reset, waitOnExecutionContext } from "cloudflare:test";
 import worker from "../../src/worker";
-import { applyTestMigrations, authEnv, captureEmails, fetchWorker, TEST_PASSWORD } from "./support";
+import {
+  applyTestMigrations,
+  authEnv,
+  captureEmails,
+  fetchWorker,
+  jsonBody,
+  TEST_PASSWORD,
+} from "./support";
 import { hashPassword } from "../../src/worker/password";
 
 /** Signup's MX lookup must succeed for the enumeration branches to be the
@@ -68,8 +75,8 @@ describe("signup does not reveal which addresses have accounts (#53)", () => {
       const fresh = await signUp("nobody@gmail.com");
 
       expect(taken.status).toBe(fresh.status);
-      const takenBody = (await taken.json()) as Record<string, unknown>;
-      const freshBody = (await fresh.json()) as Record<string, unknown>;
+      const takenBody = await jsonBody<Record<string, unknown>>(taken);
+      const freshBody = await jsonBody<Record<string, unknown>>(fresh);
       expect(shapeOf(takenBody)).toEqual(shapeOf(freshBody));
     } finally {
       restore();

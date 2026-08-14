@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { env } from "cloudflare:workers";
 import { createExecutionContext, reset, waitOnExecutionContext } from "cloudflare:test";
 import worker from "../../src/worker";
-import { applyTestMigrations, authEnv, freeOwnerCookie } from "./support";
+import { applyTestMigrations, authEnv, freeOwnerCookie, jsonBody } from "./support";
 import { revalidateOnRedirect, scoreAndRecord } from "../../src/worker/risk";
 
 /**
@@ -56,7 +56,7 @@ const postLink = (cookie: string, body: Record<string, unknown>) =>
  * this way, and only cares about what scoring did to the row afterwards. */
 async function createLink(cookie: string, destination: string): Promise<string> {
   const res = await postLink(cookie, { destination });
-  const { id } = (await res.json()) as { id: string };
+  const { id } = await jsonBody<{ id: string }>(res);
   return id;
 }
 
@@ -117,7 +117,7 @@ describe("scoring on create", () => {
     const res = await postLink(cookie, { destination: BLOCKED });
     expect(res.status).toBe(201);
 
-    const { id } = (await res.json()) as { id: string };
+    const { id } = await jsonBody<{ id: string }>(res);
     expect((await riskRow(id))?.risk_score).toBeNull();
   });
 

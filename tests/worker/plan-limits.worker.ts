@@ -9,6 +9,7 @@ import { PLAN_LIMITS } from "@/shared/types";
 import {
   applyTestMigrations,
   authEnv,
+  jsonBody,
   rawAddressRow,
   rawLinkRow,
   signInCookie,
@@ -333,7 +334,7 @@ describe("alias creation: the per-link cap under concurrency", () => {
     });
 
     const made = await postLink(cookie, "org-alias");
-    const { id: linkId } = (await made.json()) as { id: string };
+    const { id: linkId } = await jsonBody<{ id: string }>(made);
 
     // Four aliases plus the primary: one slot left of the five.
     for (let i = 0; i < 4; i++) {
