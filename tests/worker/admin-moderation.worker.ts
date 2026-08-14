@@ -238,6 +238,44 @@ describe("suspending a whole org", () => {
     expect(org?.n).toBe(1);
   });
 
+  it("suspends a big org in a fixed number of round trips", async () => {
+    // One address query and one queue send per link is fine for two links
+    // and fatal for three thousand: it asked D1 for 3,002 statements and
+    // made 3,000 sends, past both D1's 1,000-query invocation limit and the
+    // subrequest ceiling. The request died after the suspension flag was
+    // committed, so the links read as suspended and the ones whose messages
+    // never went out kept redirecting.
+    //
+    // Counted rather than sized: running 3,000 links here would test the
+    // fixture, not the route. What matters is that the cost stops growing
+    // with the number of links.
+    const owner = await freeOwnerCookie();
+    const ids: string[] = [];
+    for (let i = 0; i < 12; i++)
+      ids.push((await createLiveLink(owner, `https://example.com/b${i}`)).id);
+
+    let sends = 0;
+    const realSendBatch = env.STORAGE_QUEUE.sendBatch.bind(env.STORAGE_QUEUE);
+    env.STORAGE_QUEUE.sendBatch = (async (batch: unknown[]) => {
+      sends++;
+      expect(batch.length).toBeLessThanOrEqual(100);
+      return realSendBatch(batch as Parameters<typeof realSendBatch>[0]);
+    }) as typeof env.STORAGE_QUEUE.sendBatch;
+
+    try {
+      const res = await admin("/links/orgs/org-1/suspend", await adminCookie(), {
+        method: "POST",
+        body: JSON.stringify({ reason: "account compromised" }),
+      });
+      expect(await res.json()).toEqual({ count: 12 });
+    } finally {
+      env.STORAGE_QUEUE.sendBatch = realSendBatch;
+    }
+
+    // Twelve links, one send. Per link it would have been twelve.
+    expect(sends).toBe(1);
+  });
+
   it("restores them all again", async () => {
     const owner = await freeOwnerCookie();
     const a = await createLiveLink(owner, "https://example.com/a");

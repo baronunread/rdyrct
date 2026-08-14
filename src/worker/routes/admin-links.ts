@@ -85,6 +85,41 @@ async function addressesOf(db: DB, linkId: string) {
     .where(and(eq(schema.linkAddresses.linkId, linkId), isNull(schema.linkAddresses.retiredAt)));
 }
 
+/** Cloudflare caps a queue send at 100 messages. */
+const QUEUE_BATCH = 100;
+
+/**
+ * Republishes every address the org owns, in a fixed number of round trips.
+ *
+ * One query and one send per link does not survive the size of org this is
+ * for. At the Pro cap of 3,000 links it asked D1 for 3,002 statements and
+ * made 3,000 queue sends, past both D1's 1,000-query invocation limit and
+ * the subrequest ceiling: the request died partway, *after* the suspension
+ * flag was committed. An admin got an error, the links were flagged
+ * suspended in D1, and the ones whose messages never went out kept
+ * redirecting, with nothing scheduled to notice. The one control meant for
+ * the worst accounts failed on exactly the biggest ones.
+ *
+ * Every address in one query, then sends of at most a hundred: 3,000 links
+ * become 31 round trips rather than 6,002. Republishing an address whose
+ * link was already in the right state costs nothing, because the consumer
+ * reads the current row and writes what it should be, so this does not need
+ * to know which links the update actually touched.
+ */
+async function republishOrg(env: Env, db: DB, orgId: string): Promise<void> {
+  const addresses = await db
+    .select({ slug: schema.linkAddresses.slug, hostname: schema.domains.hostname })
+    .from(schema.linkAddresses)
+    .innerJoin(schema.links, eq(schema.linkAddresses.linkId, schema.links.id))
+    .leftJoin(schema.domains, eq(schema.linkAddresses.domainId, schema.domains.id))
+    .where(and(eq(schema.links.orgId, orgId), isNull(schema.linkAddresses.retiredAt)));
+
+  const batches: Array<ReturnType<typeof syncLinkMsg>[]> = [];
+  for (let i = 0; i < addresses.length; i += QUEUE_BATCH)
+    batches.push(addresses.slice(i, i + QUEUE_BATCH).map((a) => syncLinkMsg(a.slug, a.hostname)));
+  await Promise.all(batches.map((batch) => enqueueStorage(env, batch)));
+}
+
 async function republish(env: Env, db: DB, linkId: string): Promise<number> {
   const addresses = await addressesOf(db, linkId);
   if (addresses.length > 0)
@@ -314,9 +349,8 @@ adminLinkRoutes.post("/orgs/:orgId/suspend", async (c) => {
       .set(suspensionPatch(suspend, c.var.user!.id, reason))
       .where(affected);
     // After the flag is written, so a message consumed early cannot read the
-    // old value. Together rather than in series: an org can hold thousands of
-    // links, and these are independent queue sends.
-    await Promise.all(links.map((link) => republish(c.env, db, link.id)));
+    // old value.
+    await republishOrg(c.env, db, orgId);
   }
 
   await recordAdminAction(c.env, {
