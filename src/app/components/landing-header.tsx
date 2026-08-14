@@ -11,7 +11,8 @@ import { Moon, Sun } from "lucide";
 import { MorphIcon } from "morphicons/react";
 import { useTheme } from "../lib/theme";
 import { trackCta } from "../lib/track-cta";
-import { buttonClass, IconButton } from "../ui/button";
+import { IconButton } from "../ui/button";
+import { buttonClass } from "../ui/button-class";
 
 export function LandingHeader({ authed }: { authed: boolean }) {
   const [theme, toggleTheme] = useTheme();

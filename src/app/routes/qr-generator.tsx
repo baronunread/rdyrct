@@ -19,7 +19,7 @@
 import { useState } from "react";
 import { Link } from "react-router";
 import { ArrowRight, ChevronDown, ShieldCheck } from "lucide-react";
-import { buttonClass } from "../ui/button";
+import { buttonClass } from "../ui/button-class";
 import { Input } from "../ui/field";
 import { trackCta } from "../lib/track-cta";
 import { QRPreview, QrDownloadButtons } from "../components/qr";

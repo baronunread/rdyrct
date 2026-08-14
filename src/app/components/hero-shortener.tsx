@@ -22,7 +22,8 @@
  */
 import { useState } from "react";
 import { ArrowRight } from "lucide-react";
-import { Button, buttonClass } from "../ui/button";
+import { Button } from "../ui/button";
+import { buttonClass } from "../ui/button-class";
 import { Input } from "../ui/field";
 import { CopyButton } from "../ui/copy-button";
 import { BusyContent } from "../ui/spinner";

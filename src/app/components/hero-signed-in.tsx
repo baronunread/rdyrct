@@ -15,7 +15,7 @@ import { Link } from "react-router";
 import { ArrowRight, Plus } from "lucide-react";
 import { useCurrentOrg } from "../lib/current-org";
 import { useStats } from "../lib/hooks";
-import { buttonClass } from "../ui/button";
+import { buttonClass } from "../ui/button-class";
 import { Skeleton } from "../ui/skeleton";
 import type { OrgStats } from "@/shared/types";
 
