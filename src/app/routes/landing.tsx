@@ -11,6 +11,7 @@ import {
   Check,
   Code2,
   ChevronDown,
+  ArrowRight,
   Target,
   TrendingDown,
   Activity,
@@ -26,21 +27,21 @@ import {
   useReducedMotion,
   type Variants,
 } from "motion/react";
-// MorphIcon animates between two icons, so it takes lucide icon nodes, not
-// the lucide-react components used elsewhere on this page.
-import { Moon, Sun } from "lucide";
-import { MorphIcon } from "morphicons/react";
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { useCurrentUser } from "../lib/hooks";
-import { readAuthHint } from "../lib/auth-hint";
-import { useTheme } from "../lib/theme";
+import { useSeo } from "../lib/seo";
+import { FaqJsonLd } from "../components/faq-json-ld";
+import { useAudience } from "../lib/audience";
 import posthog from "../lib/posthog";
-import { FUNNEL, landingContext, type CtaPlacement } from "../lib/funnel";
+import { FUNNEL, landingContext } from "../lib/funnel";
+import { trackCta } from "../lib/track-cta";
 import { PLAN_LIMITS, PLAN_PRICES } from "@/shared/types";
-import { Button, IconButton } from "../ui/button";
+import { buttonClass } from "../ui/button-class";
 import { Table, Th, Td } from "../ui/misc";
 import { Footer, GITHUB_URL } from "../ui/footer";
-import { LandingMockup } from "../components/landing-mockup";
+import { HeroShortener } from "../components/hero-shortener";
+import { HeroSignedIn } from "../components/hero-signed-in";
+import { LandingHeader } from "../components/landing-header";
 import { LandingAnalyticsMock } from "../components/landing-analytics";
 import { cn } from "../ui/cn";
 
@@ -160,16 +161,18 @@ const faqs = [
     a: "Yes. Paid plans include custom domains with automatic TLS through Cloudflare for SaaS: point your DNS at us and short links go live under your brand.",
   },
   {
+    q: "Is this a free URL shortener?",
+    a: `Yes. The free plan is a working link shortener: ${PLAN_LIMITS.free.links} short links, click tracking, and a free QR code generator, with no card and no trial clock. Paid plans add branded short links on your own domain, custom slugs, and longer analytics history.`,
+  },
+  {
+    q: "Can I make a QR code with my logo?",
+    a: "Yes. The QR code generator is free and needs no account: pick the dot and corner style, set the colors, drop in a logo, and download a PNG or an SVG. Codes made on a paid plan point at a trackable short link, so you can see how many scans a poster, flyer or packaging insert actually produced.",
+  },
+  {
     q: "Can I self-host instead?",
     a: "Yes. rdyrct is open source and deploys to your own Cloudflare account. You get everything Pro has, minus direct email support.",
   },
 ];
-
-/** Every call to action on this page reports through here, so the funnel
- *  sees one event with a placement rather than eight differently-named ones. */
-function trackCta(placement: CtaPlacement) {
-  posthog.capture(FUNNEL.ctaClicked, { placement });
-}
 
 function Section({
   children,
@@ -197,21 +200,6 @@ function Section({
       {children}
     </m.section>
   );
-}
-
-/** FAQPage structured data, generated from the same `faqs` the page renders. */
-function FaqJsonLd() {
-  const json = JSON.stringify({
-    "@context": "https://schema.org",
-    "@type": "FAQPage",
-    mainEntity: faqs.map(({ q, a }) => ({
-      "@type": "Question",
-      name: q,
-      acceptedAnswer: { "@type": "Answer", text: a },
-    })),
-    // "</script>" inside a value would end the tag early; escape every "<"
-  }).replace(/</g, "\\u003c");
-  return <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: json }} />;
 }
 
 type Tier = "free" | "hobby" | "pro";
@@ -268,10 +256,12 @@ function MobilePlans({ paidTo }: { paidTo: (p: "hobby" | "pro") => string }) {
         "Random slugs on the shared domain",
       ],
       cta: (
-        <Link to="/signup" onClick={() => trackCta("pricing_free")}>
-          <Button variant="outline" size="sm" className="w-full">
-            Sign up free
-          </Button>
+        <Link
+          to="/signup"
+          onClick={() => trackCta("pricing_free")}
+          className={buttonClass({ variant: "outline", size: "sm", className: "w-full" })}
+        >
+          Sign up free
         </Link>
       ),
     },
@@ -287,10 +277,12 @@ function MobilePlans({ paidTo }: { paidTo: (p: "hobby" | "pro") => string }) {
         `${PLAN_LIMITS.hobby.analyticsDays}-day click analytics`,
       ],
       cta: (
-        <Link to={paidTo("hobby")} onClick={() => trackCta("pricing_hobby")}>
-          <Button variant="outline" size="sm" className="w-full">
-            Start Hobby
-          </Button>
+        <Link
+          to={paidTo("hobby")}
+          onClick={() => trackCta("pricing_hobby")}
+          className={buttonClass({ variant: "outline", size: "sm", className: "w-full" })}
+        >
+          Start Hobby
         </Link>
       ),
     },
@@ -308,10 +300,12 @@ function MobilePlans({ paidTo }: { paidTo: (p: "hobby" | "pro") => string }) {
         "Direct email support",
       ],
       cta: (
-        <Link to={paidTo("pro")} onClick={() => trackCta("pricing_pro")}>
-          <Button variant="primary" size="sm" className="w-full">
-            Start Pro
-          </Button>
+        <Link
+          to={paidTo("pro")}
+          onClick={() => trackCta("pricing_pro")}
+          className={buttonClass({ variant: "primary", size: "sm", className: "w-full" })}
+        >
+          Start Pro
         </Link>
       ),
     },
@@ -488,24 +482,30 @@ function PricingSection() {
             <tr>
               <Td />
               <Td>
-                <Link to="/signup" onClick={() => trackCta("pricing_free")}>
-                  <Button variant="outline" size="sm" className="w-full">
-                    Sign up free
-                  </Button>
+                <Link
+                  to="/signup"
+                  onClick={() => trackCta("pricing_free")}
+                  className={buttonClass({ variant: "outline", size: "sm", className: "w-full" })}
+                >
+                  Sign up free
                 </Link>
               </Td>
               <Td>
-                <Link to={paidTo("hobby")} onClick={() => trackCta("pricing_hobby")}>
-                  <Button variant="outline" size="sm" className="w-full">
-                    Start Hobby
-                  </Button>
+                <Link
+                  to={paidTo("hobby")}
+                  onClick={() => trackCta("pricing_hobby")}
+                  className={buttonClass({ variant: "outline", size: "sm", className: "w-full" })}
+                >
+                  Start Hobby
                 </Link>
               </Td>
               <Cell tier="pro">
-                <Link to={paidTo("pro")} onClick={() => trackCta("pricing_pro")}>
-                  <Button variant="primary" size="sm" className="w-full">
-                    Start Pro
-                  </Button>
+                <Link
+                  to={paidTo("pro")}
+                  onClick={() => trackCta("pricing_pro")}
+                  className={buttonClass({ variant: "primary", size: "sm", className: "w-full" })}
+                >
+                  Start Pro
                 </Link>
               </Cell>
             </tr>
@@ -735,61 +735,20 @@ function DeployTerminal() {
   );
 }
 
-function LandingHeader({ authed }: { authed: boolean }) {
-  const [theme, toggleTheme] = useTheme();
+function HeroSection({
+  ctaTo,
+  ctaLabel,
+  authed,
+  name,
+}: {
+  ctaTo: string;
+  ctaLabel: string;
+  authed: boolean;
+  /** Empty until the session resolves; the card handles that itself. */
+  name: string;
+}) {
   return (
-    // Three columns, not space-between: the two 1fr rails keep the nav on the
-    // page's centre line however wide the brand or the auth buttons get, so
-    // "Sign up" turning into "Dashboard" does not shift the links.
-    <header className="sticky top-0 z-20 -mx-6 grid grid-cols-[1fr_auto_1fr] items-center gap-3 border-b border-border/50 bg-bg/85 px-6 py-4 backdrop-blur-md">
-      <Link to="/" className="justify-self-start text-lg font-bold tracking-widest">
-        rdyrct
-      </Link>
-
-      {/* Where the visitor goes to read. Hidden on phones, where three columns
-          do not fit: those links still live in the footer. */}
-      <nav className="hidden items-center gap-5 text-sm sm:flex">
-        <a href="#pricing" className="text-muted hover:text-accent">
-          Pricing
-        </a>
-        <a href="#faq" className="text-muted hover:text-accent">
-          FAQ
-        </a>
-        {/* /blog is served by the Worker's reverse proxy, not the SPA
-            router, so this is a real navigation, not a <Link>. */}
-        <a href="/blog" className="text-muted hover:text-accent">
-          Blog
-        </a>
-      </nav>
-      <span className="sm:hidden" />
-
-      {/* What the visitor does. */}
-      <div className="flex items-center justify-self-end gap-2.5 text-sm sm:gap-4">
-        <IconButton label="Toggle theme" className="p-2" onClick={toggleTheme}>
-          <MorphIcon icon={theme === "dark" ? Sun : Moon} size={15} spring="snappy" />
-        </IconButton>
-        {authed ? (
-          <Link to="/dashboard" onClick={() => trackCta("header")}>
-            <Button variant="primary">Dashboard</Button>
-          </Link>
-        ) : (
-          <>
-            <Link to="/login" className="text-muted hover:text-accent">
-              Log in
-            </Link>
-            <Link to="/signup" onClick={() => trackCta("header")}>
-              <Button variant="primary">Sign up</Button>
-            </Link>
-          </>
-        )}
-      </div>
-    </header>
-  );
-}
-
-function HeroSection({ ctaTo, ctaLabel }: { ctaTo: string; ctaLabel: string }) {
-  return (
-    <section className="flex flex-col items-center gap-10 py-16 sm:py-20">
+    <section className="flex flex-col items-center gap-8 py-16 sm:py-20">
       <m.div
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
@@ -809,39 +768,175 @@ function HeroSection({ ctaTo, ctaLabel }: { ctaTo: string; ctaLabel: string }) {
             the site sending people to a repository; it now lives in its own
             band under the pricing table. */}
         <div className="flex flex-wrap items-center justify-center gap-3">
-          <Link to={ctaTo} onClick={() => trackCta("hero_primary")}>
-            <Button variant="primary" size="md" className="h-11 px-6 text-base">
+          {/* Secondary now, both of them: the card below is the thing this
+              page asks you to do, so a filled button competing with it would
+              be two primary actions in one view. Hidden entirely when signed
+              in, where the card already carries "Open dashboard" and two of
+              them side by side is just a stutter. */}
+          {!authed && (
+            <Link
+              to={ctaTo}
+              onClick={() => trackCta("hero_primary")}
+              className={buttonClass({ variant: "outline", className: "h-11 px-6 text-base" })}
+            >
               {ctaLabel}
-            </Button>
-          </Link>
-          <a href="#analytics" onClick={() => trackCta("hero_secondary")}>
-            <Button variant="outline" size="md" className="h-11 px-6 text-base">
-              <BarChart3 size={16} /> See the analytics
-            </Button>
+            </Link>
+          )}
+          <a
+            href="#analytics"
+            onClick={() => trackCta("hero_secondary")}
+            className={buttonClass({ variant: "ghost", className: "h-11 px-6 text-base" })}
+          >
+            <BarChart3 size={16} /> See the analytics
           </a>
         </div>
-        <ul className="flex flex-wrap items-center justify-center gap-x-5 gap-y-1 text-xs text-muted">
-          <li className="flex items-center gap-1.5">
-            <Check size={13} className="text-accent-2" /> Free plan forever
-          </li>
-          <li className="flex items-center gap-1.5">
-            <Check size={13} className="text-accent-2" /> No credit card required
-          </li>
-          <li className="flex items-center gap-1.5">
-            <Check size={13} className="text-accent-2" /> No IP tracking
-          </li>
-        </ul>
       </m.div>
 
+      {/* Above the reassurance list, not below the buttons: this is what the
+          page is for. Somebody can have a working link before they have read
+          a word about plans. */}
       <m.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.6, ease: "easeOut", delay: 0.15 }}
         className="flex w-full justify-center"
       >
-        <LandingMockup />
+        {/* The anonymous shortener is an argument aimed at a stranger. A
+            signed-in visitor has already been convinced, and offering them a
+            link that expires in 24 hours and can be "kept" by signing up for
+            the account they are in reads as nobody having tried it. */}
+        {authed ? <HeroSignedIn name={name} /> : <HeroShortener />}
       </m.div>
+
+      {/* Reassurance for somebody deciding. Nothing to reassure once they
+          have an account. */}
+      <ul
+        className={cn(
+          "flex flex-wrap items-center justify-center gap-x-5 gap-y-1 text-xs text-muted",
+          authed && "hidden",
+        )}
+      >
+        <li className="flex items-center gap-1.5">
+          <Check size={13} className="text-accent-2" /> Free plan forever
+        </li>
+        <li className="flex items-center gap-1.5">
+          <Check size={13} className="text-accent-2" /> No credit card required
+        </li>
+        <li className="flex items-center gap-1.5">
+          <Check size={13} className="text-accent-2" /> No IP tracking
+        </li>
+      </ul>
     </section>
+  );
+}
+
+/**
+ * The second screen (Direction C of #96).
+ *
+ * The hero just handed the visitor a link on our domain with a random slug.
+ * The obvious next thought is "that URL is not mine", so this answers it
+ * immediately instead of three sections later: the same link on their own
+ * domain, with a slug they chose. It is also the clearest thing a paid plan
+ * buys, put where somebody is still deciding whether to care.
+ */
+/**
+ * One of the two messages, so the argument is made by the picture rather
+ * than asserted by the copy.
+ */
+function TextMessage({
+  from,
+  body,
+  link,
+  verdict,
+  mine,
+}: {
+  from: string;
+  body: string;
+  link: string;
+  verdict: string;
+  mine?: boolean;
+}) {
+  return (
+    <div
+      className={cn(
+        "flex flex-1 flex-col gap-2 rounded-xl p-4 text-left",
+        mine ? "bg-surface smooth-shadow-ring-sm" : "bg-surface-2",
+      )}
+    >
+      <p className="text-2xs text-muted">{from}</p>
+      <p className="text-sm">{body}</p>
+      <p
+        className={cn("font-mono text-sm font-bold break-all", mine ? "text-accent" : "text-muted")}
+      >
+        {link}
+      </p>
+      <p
+        className={cn("text-2xs tracking-wider uppercase", mine ? "text-accent-2" : "text-danger")}
+      >
+        {verdict}
+      </p>
+    </div>
+  );
+}
+
+/**
+ * The second screen (Direction C of #96).
+ *
+ * The hero just handed the visitor a link on our domain with a random slug,
+ * so the next thought is "that URL is not mine". This answers it straight
+ * away rather than three sections later.
+ *
+ * It argues by showing the link where it is actually read, on somebody
+ * else's phone, next to a decision about whether to tap it. An earlier
+ * version put the two URLs side by side and asserted the difference, which
+ * argued about our branding instead of their result.
+ *
+ * SMS on purpose: it is the one place where shortening is forced rather than
+ * chosen, since the message is charged by the character, and it is where
+ * people distrust short links most, because it is where the scams are. An
+ * order-tracking link would be wrong here, since those come out of a
+ * shipping platform on their own and nobody shortens one by hand.
+ */
+function CustomDomainSection() {
+  const paidTo = usePaidPlanTo();
+  return (
+    <Section className="py-12">
+      <div className="mx-auto flex max-w-3xl flex-col items-center gap-6 text-center">
+        <h2 className="text-xl font-bold text-balance sm:text-2xl">
+          Your link gets read by someone deciding whether to trust it.
+        </h2>
+        <p className="max-w-xl text-sm text-muted">
+          A random slug on a domain nobody recognises is what a scam text looks like. Connect a
+          domain you own and short links go live under it, with TLS issued automatically, and every
+          slug is yours to choose. On the shared domain they are always random, so nobody can squat
+          the good ones.
+        </p>
+
+        <div className="flex w-full flex-col gap-3 sm:flex-row">
+          <TextMessage
+            from="Text message, shared domain"
+            body="Acme: your 20% code ends tonight."
+            link="rdyrct.com/m22fs5w"
+            verdict="Deleted as spam"
+          />
+          <TextMessage
+            mine
+            from="The same text, your domain"
+            body="Acme: your 20% code ends tonight."
+            link="go.acme.com/20-off"
+            verdict="Obviously from Acme"
+          />
+        </div>
+
+        <Link
+          to={paidTo("hobby")}
+          onClick={() => trackCta("second_screen_domain")}
+          className={buttonClass({ variant: "primary", size: "sm" })}
+        >
+          Put your domain on it <ArrowRight size={14} />
+        </Link>
+      </div>
+    </Section>
   );
 }
 
@@ -977,10 +1072,12 @@ function FinalCtaSection({ ctaTo, ctaLabel }: { ctaTo: string; ctaLabel: string 
           Create your first short link on the free plan. No credit card, no visitor tracking, no
           servers to run.
         </p>
-        <Link to={ctaTo} onClick={() => trackCta("final_cta")}>
-          <Button variant="primary" size="md" className="h-11 px-6 text-base">
-            {ctaLabel}
-          </Button>
+        <Link
+          to={ctaTo}
+          onClick={() => trackCta("final_cta")}
+          className={buttonClass({ variant: "primary", className: "h-11 px-6 text-base" })}
+        >
+          {ctaLabel}
         </Link>
       </div>
     </Section>
@@ -988,14 +1085,12 @@ function FinalCtaSection({ ctaTo, ctaLabel }: { ctaTo: string; ctaLabel: string 
 }
 
 export function LandingPage() {
-  const me = useCurrentUser();
-  // While the /user query is in flight, fall back to the last known auth
-  // state so a signed-in visitor doesn't see "Sign up" flash before the
-  // header settles. Snapshot once: mid-visit flips come from the query.
-  const [authHint] = useState(readAuthHint);
-  const authed = me.isPending ? authHint : !!me.data;
-  const ctaTo = authed ? "/dashboard" : "/signup";
-  const ctaLabel = authed ? "Open dashboard" : "Get started free";
+  const { authed, name, ctaTo, ctaLabel } = useAudience();
+
+  // The words people type when they are looking for this, in the title and
+  // the description a result actually shows: "url shortener" and "qr code
+  // generator" rather than only the brand and the tagline.
+  useSeo("/");
 
   // Step 1 of the funnel (#64). Once per mount, not per render, and not
   // gated on `me` settling: a landing view is a view whether or not the
@@ -1008,7 +1103,7 @@ export function LandingPage() {
     <MotionConfig reducedMotion="user">
       <LazyMotion features={domAnimation}>
         <div className="relative mx-auto min-h-dvh max-w-5xl px-6">
-          <FaqJsonLd />
+          <FaqJsonLd faqs={faqs} />
           <style>{`@keyframes cursorBlink { 50% { opacity: 0; } }`}</style>
           {/* soft accent glow behind the hero */}
           <div
@@ -1021,7 +1116,8 @@ export function LandingPage() {
           />
 
           <LandingHeader authed={authed} />
-          <HeroSection ctaTo={ctaTo} ctaLabel={ctaLabel} />
+          <HeroSection ctaTo={ctaTo} ctaLabel={ctaLabel} authed={authed} name={name} />
+          <CustomDomainSection />
           <HowItWorksSection />
           <AnalyticsPreviewSection />
           <FeaturesSection />

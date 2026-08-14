@@ -58,6 +58,20 @@ export function isFunnelEvent(event: string): boolean {
 export type CtaPlacement =
   | "hero_primary"
   | "hero_secondary"
+  // The hero's anonymous shortener (Direction A of #96): using it, and then
+  // clicking through to keep the link that came out of it. The second is the
+  // one worth watching, because it is intent earned by the product rather
+  // than by the copy above it.
+  | "hero_shortener"
+  | "hero_shortener_claim"
+  // The custom-domain second screen (Direction C of #96), the first paid
+  // ask on the page.
+  | "second_screen_domain"
+  // The standalone QR generator (Direction D of #96). The page asks nothing
+  // of the visitor, so these two are the only intent it can report: taking
+  // the free account, or going to read what the paid ones cost.
+  | "qr_page_signup"
+  | "qr_page_pricing"
   | "header"
   | "pricing_free"
   | "pricing_hobby"

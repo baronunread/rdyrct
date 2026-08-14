@@ -38,7 +38,7 @@ test("a downloaded QR PNG is big enough to print, not preview-sized (#88)", asyn
 
   const download = await Promise.all([
     page.waitForEvent("download"),
-    dialog.getByRole("button", { name: "PNG" }).click(),
+    dialog.getByRole("button", { name: /PNG/ }).click(),
   ]).then(([event]) => event);
 
   const path = await download.path();

@@ -290,7 +290,10 @@ function QrBackgroundFields({
         onChange={(v) => setForm({ ...form, qrBg: v })}
         alpha
       />
-      <Field label="Logo size">
+      <Field
+        label="Logo size"
+        tip="How much of the QR code the logo covers. A bigger logo hides more of the dots, and past a point a scanner cannot fill in what is missing."
+      >
         <MenuSelect
           label="Logo size"
           value={form.qrLogoSize == null ? "" : String(form.qrLogoSize)}

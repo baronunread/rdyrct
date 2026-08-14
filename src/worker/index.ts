@@ -15,6 +15,7 @@ import { billingRoutes, handlePolarWebhook } from "./routes/billing";
 import { domainRoutes } from "./routes/domains";
 import { capRoutes } from "./routes/cap";
 import { sweepLinkRisk } from "./risk";
+import { shortenRoutes, sweepExpiredAnonLinks } from "./routes/shorten";
 import { resolveSlug, resolveDomain, type KVLink } from "./kv";
 import { RESERVED_SLUGS } from "./util";
 import { withPageMeta } from "./page-meta";
@@ -81,7 +82,11 @@ app.use("*", async (c, next) => {
 // (waitUntil): the request enqueues an event and returns rather than
 // touching D1 itself. See clicks.ts.
 function redirectWithClick(c: Context<AppEnv>, hit: KVLink): Response {
-  c.executionCtx.waitUntil(enqueueClick(c, hit));
+  // An anonymous link (Direction A of #96) has no org and no links row, so
+  // there is nothing for a click to belong to and no owner who could ever
+  // read it. Skipping the write is also the honest version of the pitch:
+  // analytics is what signing up buys.
+  if (hit.orgId) c.executionCtx.waitUntil(enqueueClick(c, hit));
   return c.redirect(hit.url, 302);
 }
 
@@ -132,6 +137,11 @@ app.post("/api/cap/*", async (c, next) => {
   return limited ?? next();
 });
 app.route("/api/cap", capRoutes);
+
+// The landing page's anonymous shortener (Direction A of #96): public by
+// definition, and gated by Cap plus its own rate-limit namespace rather than
+// by a session.
+app.route("/api/shorten", shortenRoutes);
 
 // Polar webhook: public, signature-verified, no session middleware.
 app.post("/api/webhooks/polar", (c) => handlePolarWebhook(c.req.raw, c.env));
@@ -253,6 +263,10 @@ export default {
     // Daily: retire rename aliases past their 48h deadline (see #38). The
     // redirect path already stopped resolving them; this frees their slugs.
     await sweepExpiredAliases(env, drizzle(env.DB, { schema }));
+
+    // Daily: drop anonymous links nobody claimed inside their 24 hours, and
+    // the KV keys they were resolving through (Direction A of #96).
+    await sweepExpiredAnonLinks(env);
 
     // Daily: re-score link destinations, unscored first then oldest (#68).
     // Bounded, because the point is that the table cycles rather than that

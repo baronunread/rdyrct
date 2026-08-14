@@ -55,3 +55,47 @@ export function resolveLook({
     logoSize: logoSize || QR_DEFAULT_LOGO_SIZE,
   };
 }
+
+/**
+ * Whether the logo has to be inlined by us rather than by the library.
+ *
+ * qr-code-styling fetches the image with XMLHttpRequest to turn it into a
+ * data URI (its `saveAsBlob` step), which a browser refuses to do for a
+ * `data:` or `blob:` URL. The XHR never completes, the promise it gates the
+ * drawing on never resolves, and the result is an empty square: 439 paths
+ * with no logo, zero with one. Switching that step off makes it use the URL
+ * we already handed it, which is what a data URI is for.
+ */
+export function imageOptionsFor(look: QrLook) {
+  const inlineAlready = !!look.logo && /^(data|blob):/.test(look.logo);
+  return {
+    margin: 4,
+    imageSize: look.logoSize,
+    ...(inlineAlready ? { saveAsBlob: false } : {}),
+  };
+}
+
+/** QRPreview's props, spread from the string values the fields hold. */
+/** Every QR appearance value, as the strings the fields edit. An empty
+ * string means "use the built-in default". */
+export interface QrValues {
+  qrStyle: string;
+  qrColor: string;
+  qrLogo: string;
+  qrCorner: string;
+  qrBg: string;
+  qrEyeColor: string;
+  qrLogoSize: string;
+}
+
+export function qrPreviewProps(values: QrValues) {
+  return {
+    logo: values.qrLogo || undefined,
+    dotStyle: values.qrStyle,
+    color: values.qrColor,
+    corner: values.qrCorner,
+    eyeColor: values.qrEyeColor,
+    bg: values.qrBg,
+    logoSize: values.qrLogoSize === "" ? undefined : Number(values.qrLogoSize),
+  };
+}

@@ -8,6 +8,7 @@ import { useCurrentUser, useConfig, useDomains, useDomainMutations } from "../li
 import { useCurrentOrg } from "../lib/current-org";
 import { PLAN_LIMITS, type DomainDTO, type OrgRole } from "@/shared/types";
 import { Button, IconButton } from "../ui/button";
+import { buttonClass } from "../ui/button-class";
 import { Input } from "../ui/field";
 import { ConfirmDialog } from "../ui/confirm-dialog";
 import { withErrorToast } from "../lib/mutation-toast";
@@ -87,8 +88,8 @@ function UpgradeDomainsCard() {
           paid feature.
         </p>
         <div>
-          <Link to="/billing">
-            <Button variant="primary">Upgrade to add a domain</Button>
+          <Link to="/billing" className={buttonClass({ variant: "primary" })}>
+            Upgrade to add a domain
           </Link>
         </div>
       </div>

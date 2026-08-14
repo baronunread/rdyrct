@@ -1,20 +1,6 @@
 import { forwardRef, type ButtonHTMLAttributes } from "react";
 import { cn } from "./cn";
-
-type Variant = "primary" | "outline" | "ghost" | "danger";
-type Size = "sm" | "md";
-
-const variants: Record<Variant, string> = {
-  primary: "bg-accent text-bg font-bold hover:brightness-110 active:brightness-95",
-  outline: "border border-border bg-surface hover:border-accent hover:text-accent",
-  ghost: "text-muted hover:text-text hover:bg-surface-2",
-  danger: "border border-border text-danger hover:border-danger hover:bg-danger/10",
-};
-
-const sizes: Record<Size, string> = {
-  sm: "h-8 px-2.5 text-xs gap-1.5",
-  md: "h-9 px-3.5 text-sm gap-2",
-};
+import { buttonClass, type Size, type Variant } from "./button-class";
 
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: Variant;
@@ -23,18 +9,14 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   static?: boolean;
 }
 
+/** The button proper. An anchor that should look like one takes
+ * `buttonClass()` instead, so the two share this look without nesting. */
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
-  ({ variant = "outline", size = "md", static: staticProp, className, type, ...props }, ref) => (
+  ({ variant, size, static: staticProp, className, type, ...props }, ref) => (
     <button
       ref={ref}
       type={type ?? "button"}
-      className={cn(
-        "inline-flex cursor-pointer items-center justify-center rounded-md transition-[background,border-color,color,filter,scale] duration-150 ease-out disabled:pointer-events-none disabled:opacity-50",
-        !staticProp && "active:scale-[0.96]",
-        variants[variant],
-        sizes[size],
-        className,
-      )}
+      className={buttonClass({ variant, size, static: staticProp, className })}
       {...props}
     />
   ),

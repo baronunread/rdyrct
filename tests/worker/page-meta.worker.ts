@@ -38,12 +38,12 @@ async function rewrite(path: string): Promise<string> {
 }
 
 describe("the head a public page ships", () => {
-  it("gives a public page its own title, description and canonical", async () => {
-    const html = await rewrite("/privacy");
+  it("gives the QR generator its own title, description and canonical", async () => {
+    const html = await rewrite("/qr-code-generator");
 
-    expect(html).toContain("<title>Privacy policy - rdyrct");
-    expect(html).toMatch(/name="description" content="What rdyrct stores/);
-    expect(html).toContain('href="https://rdyrct.com/privacy"');
+    expect(html).toContain("<title>Free QR code generator with logo - PNG and SVG, no account");
+    expect(html).toMatch(/name="description" content="Make a custom QR code online for free/);
+    expect(html).toContain('href="https://rdyrct.com/qr-code-generator"');
   });
 
   it("leads the landing page with what people search for", async () => {
@@ -56,12 +56,12 @@ describe("the head a public page ships", () => {
   });
 
   it("carries the same words into the share preview tags", async () => {
-    const html = await rewrite("/privacy");
+    const html = await rewrite("/qr-code-generator");
 
     for (const tag of ["og:title", "twitter:title"]) {
-      expect(html).toMatch(new RegExp(`"${tag}" content="Privacy policy`));
+      expect(html).toMatch(new RegExp(`"${tag}" content="Free QR code generator`));
     }
-    expect(html).toContain('"og:url" content="https://rdyrct.com/privacy"');
+    expect(html).toContain('"og:url" content="https://rdyrct.com/qr-code-generator"');
   });
 
   it("leaves the signed-in app on the default head", async () => {

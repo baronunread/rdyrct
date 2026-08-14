@@ -1,40 +1,20 @@
 import { useState } from "react";
 import { Link } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
-import { Info } from "lucide-react";
 import { useCurrentUser } from "../lib/hooks";
 import { useCurrentOrg } from "../lib/current-org";
 import { api, shortUrl } from "../lib/api";
-import {
-  PLAN_LIMITS,
-  QR_CORNER_STYLES,
-  QR_DEFAULT_BG,
-  QR_DEFAULT_COLOR,
-  QR_DOT_STYLES,
-} from "@/shared/types";
+import { PLAN_LIMITS } from "@/shared/types";
 import { Button } from "../ui/button";
-import { cn } from "../ui/cn";
-import { Field } from "../ui/field";
-import { MenuSelect } from "../ui/menu";
 import { Card } from "../ui/misc";
 import { BusyContent } from "../ui/spinner";
 import { useToast } from "../ui/toast";
-import { Tooltip } from "../ui/tooltip";
-import { QRPreview } from "./qr";
-import { QrLogoInput } from "./qr-logo-input";
-import { QrColorField } from "./qr-color-field";
+import { QrColorAndLogoFields, QrPreviewSidebar, QrShapeFields } from "./qr-fields";
+import { type QrValues } from "../lib/qr-look";
 import { orgQrFrom } from "../lib/org-qr";
 import posthog from "../lib/posthog";
 
-interface QrDefaultsValues {
-  qrStyle: string;
-  qrColor: string;
-  qrLogo: string;
-  qrCorner: string;
-  qrBg: string;
-  qrEyeColor: string;
-  qrLogoSize: string;
-}
+type QrDefaultsValues = QrValues;
 
 /** The org's current QR defaults, as the string-only form the settings
  * fields edit (reuses orgQrFrom's already-tested `??` defaulting). */
@@ -91,139 +71,6 @@ function useQrDefaultsForm(
   };
 
   return { values, setField, savingQr, save };
-}
-
-interface QrDefaultsFieldsProps {
-  values: QrDefaultsValues;
-  setField: <K extends keyof QrDefaultsValues>(key: K, value: QrDefaultsValues[K]) => void;
-  isAdmin: boolean;
-  className?: string;
-}
-
-function QrShapeFields({ values, setField, isAdmin }: QrDefaultsFieldsProps) {
-  return (
-    <div className="flex min-w-0 flex-col gap-4">
-      <Field label="Dot style">
-        <MenuSelect
-          label="Dot style"
-          value={values.qrStyle}
-          onChange={(v) => setField("qrStyle", v)}
-          disabled={!isAdmin}
-          options={[
-            { value: "", label: "Rounded (default)" },
-            ...QR_DOT_STYLES.flatMap((s) => (s === "rounded" ? [] : [{ value: s, label: s }])),
-          ]}
-        />
-      </Field>
-      <Field label="Corner style">
-        <MenuSelect
-          label="Corner style"
-          value={values.qrCorner}
-          onChange={(v) => setField("qrCorner", v)}
-          disabled={!isAdmin}
-          options={[
-            { value: "", label: "Extra-rounded (default)" },
-            ...QR_CORNER_STYLES.flatMap((s) =>
-              s === "extra-rounded" ? [] : [{ value: s, label: s }],
-            ),
-          ]}
-        />
-      </Field>
-    </div>
-  );
-}
-
-function QrColorAndLogoFields({ values, setField, isAdmin, className }: QrDefaultsFieldsProps) {
-  return (
-    <div className={cn("flex flex-col gap-4", className)}>
-      <div className="grid grid-cols-2 gap-3">
-        <QrColorField
-          label="Dot color"
-          value={values.qrColor}
-          fallback={QR_DEFAULT_COLOR}
-          onChange={(v) => setField("qrColor", v)}
-          disabled={!isAdmin}
-        />
-        <QrColorField
-          label="Eye color"
-          value={values.qrEyeColor}
-          fallback={values.qrColor || QR_DEFAULT_COLOR}
-          onChange={(v) => setField("qrEyeColor", v)}
-          disabled={!isAdmin}
-        />
-      </div>
-      <div className="grid grid-cols-2 gap-3">
-        <QrColorField
-          label="Background"
-          value={values.qrBg}
-          fallback={QR_DEFAULT_BG}
-          onChange={(v) => setField("qrBg", v)}
-          disabled={!isAdmin}
-          alpha
-        />
-        <Field
-          label="Logo size"
-          hint="How much of the QR code the logo covers. Bigger can hurt scannability"
-        >
-          <MenuSelect
-            label="Logo size"
-            value={values.qrLogoSize}
-            onChange={(v) => setField("qrLogoSize", v)}
-            disabled={!isAdmin}
-            options={[
-              { value: "", label: "Medium (default)" },
-              { value: "0.25", label: "Small" },
-              { value: "0.5", label: "Large" },
-              { value: "0.65", label: "Extra large" },
-            ]}
-          />
-        </Field>
-      </div>
-      <div>
-        <span className="mb-1.5 flex items-center gap-1.5 text-2xs tracking-wider text-muted uppercase">
-          Logo
-          <Tooltip content="Embedded in the center of every QR code by default. Use a small, square image with some breathing room so the code stays easy to scan. A link can upload its own logo to override this.">
-            <button
-              type="button"
-              aria-label="About QR logos"
-              className="cursor-help text-muted normal-case hover:text-text"
-            >
-              <Info size={13} />
-            </button>
-          </Tooltip>
-        </span>
-        <QrLogoInput
-          value={values.qrLogo}
-          disabled={!isAdmin}
-          onLoad={(v) => setField("qrLogo", v)}
-          onClear={isAdmin ? () => setField("qrLogo", "") : undefined}
-        />
-      </div>
-    </div>
-  );
-}
-
-/** Mirrors LinkEditor's QrPreviewSidebar (link-editor.tsx): beside the shape
- * fields on sm+ (via the caller's grid), moved after them (`order-last
- * sm:order-none`) on mobile, where it's more useful after the controls it's
- * previewing than pushed above them. */
-function QrPreviewSidebar({ values }: { values: QrDefaultsValues }) {
-  return (
-    <div className="flex flex-col gap-2 sm:w-40">
-      <p className="text-2xs tracking-wider text-muted uppercase">Preview</p>
-      <QRPreview
-        url={shortUrl("preview")}
-        logo={values.qrLogo || undefined}
-        dotStyle={values.qrStyle}
-        color={values.qrColor}
-        corner={values.qrCorner}
-        eyeColor={values.qrEyeColor}
-        bg={values.qrBg}
-        logoSize={values.qrLogoSize === "" ? undefined : Number(values.qrLogoSize)}
-        size={160}
-      />
-    </div>
-  );
 }
 
 /** Owner/admin (or platform admin) can edit; everyone else can only view. */
@@ -293,7 +140,7 @@ export function QrDefaultsCard() {
           <div className="grid gap-6 sm:grid-cols-[1fr_auto]">
             <QrShapeFields values={values} setField={setField} isAdmin={isAdmin} />
             <div className="order-last sm:order-none">
-              <QrPreviewSidebar values={values} />
+              <QrPreviewSidebar values={values} url={shortUrl("preview")} />
             </div>
             <QrColorAndLogoFields
               values={values}

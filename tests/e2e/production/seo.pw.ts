@@ -12,6 +12,7 @@ import { expect, test } from "@playwright/test";
 
 const PAGES = [
   { path: "/", title: /URL shortener and QR code generator/ },
+  { path: "/qr-code-generator", title: /Free QR code generator with logo/ },
   { path: "/signup", title: /Sign up/ },
   { path: "/privacy", title: /Privacy policy/ },
 ];
@@ -32,14 +33,14 @@ test("each public page points its canonical at itself", async ({ request }) => {
   }
 });
 
-test("a public page describes itself in the share tags, not the landing page", async ({
+test("the QR page describes itself in the share tags, not the landing page", async ({
   request,
 }) => {
-  const html = await (await request.get("/privacy")).text();
+  const html = await (await request.get("/qr-code-generator")).text();
 
-  expect(html).toMatch(/"og:title" content="Privacy policy/);
-  expect(html).toMatch(/"og:description" content="What rdyrct stores/);
-  expect(html).toMatch(/"og:url" content="[^"]*\/privacy"/);
+  expect(html).toMatch(/"og:title" content="Free QR code generator/);
+  expect(html).toMatch(/"og:description" content="Make a custom QR code online for free/);
+  expect(html).toMatch(/"og:url" content="[^"]*\/qr-code-generator"/);
 });
 
 test("the signed-in app keeps the default head", async ({ request }) => {
