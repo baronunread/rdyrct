@@ -47,7 +47,7 @@ test("the signed-in app keeps the default head", async ({ request }) => {
   // Nothing behind the login wants search traffic.
   const html = await (await request.get("/dashboard")).text();
 
-  expect(html).toContain("<title>rdyrct - short links that carry your team's brand");
+  expect(html).toContain("<title>rdyrct - branded short links for your team</title>");
 });
 
 test("walking off a public page does not take its title along", async ({ page }) => {

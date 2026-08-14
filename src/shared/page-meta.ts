@@ -25,9 +25,8 @@ export interface PageMeta {
  * visitor who arrived on the public page itself.
  */
 export const DEFAULT_PAGE_META: PageMeta = {
-  title: "rdyrct - short links that carry your team's brand",
-  description:
-    "Short links that carry your brand. Branded short links, QR codes, and custom domains with privacy-friendly analytics.",
+  title: "rdyrct - branded short links for your team",
+  description: "Branded short links, QR codes, and custom domains with privacy-friendly analytics.",
 };
 
 export const PUBLIC_PAGE_META: Record<string, PageMeta> = {

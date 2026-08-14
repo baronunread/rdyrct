@@ -18,14 +18,14 @@ import { withPageMeta } from "../../src/worker/page-meta";
  */
 
 const SHELL = `<!doctype html><html><head>
-<title>rdyrct - short links that carry your team's brand</title>
-<meta name="description" content="Short links that carry your brand." />
+<title>rdyrct - branded short links for your team</title>
+<meta name="description" content="Branded short links for your team." />
 <link rel="canonical" href="https://rdyrct.com" />
 <meta property="og:title" content="rdyrct" />
-<meta property="og:description" content="Short links that carry your brand." />
+<meta property="og:description" content="Branded short links for your team." />
 <meta property="og:url" content="https://rdyrct.com" />
 <meta name="twitter:title" content="rdyrct" />
-<meta name="twitter:description" content="Short links that carry your brand." />
+<meta name="twitter:description" content="Branded short links for your team." />
 </head><body></body></html>`;
 
 function shell(): Response {
@@ -69,7 +69,9 @@ describe("the head a public page ships", () => {
     // index.html says rather than earning an entry in the table.
     const html = await rewrite("/dashboard");
 
-    expect(html).toContain("<title>rdyrct - short links that carry your team's brand");
+    // Closing tag included: without it the assertion is a prefix, and a title
+    // with something appended to it would pass.
+    expect(html).toContain("<title>rdyrct - branded short links for your team</title>");
   });
 
   it("does not touch anything that is not HTML", async () => {
