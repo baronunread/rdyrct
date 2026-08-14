@@ -35,6 +35,7 @@ import { SortTh } from "../../ui/sort-th";
 import { sortRows } from "../../lib/sort";
 import { useSearchParams } from "react-router";
 import { cn } from "../../ui/cn";
+import { Spinner } from "../../ui/spinner";
 
 /** The two columns both tables open with. Their widths differ because the
  * owned table has one fewer column to fit. */
@@ -277,8 +278,8 @@ function LinkActions({
 }: { link: AdminLinkRow } & RowActions) {
   return (
     <RowMenu slug={link.slug} destination={link.destination}>
-      <MenuItem onClick={() => onRescore(link)}>
-        <ShieldQuestionMark size={14} /> {rescoring ? "Checking…" : "Re-check destination"}
+      <MenuItem disabled={rescoring} onClick={() => onRescore(link)}>
+        {rescoring ? <Spinner /> : <ShieldQuestionMark size={14} />} Re-check destination
       </MenuItem>
       <MenuSeparator />
       {link.suspendedAt ? (

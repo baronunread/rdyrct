@@ -74,8 +74,15 @@ function useLinkPage(orgId: string) {
     links,
     rows: links.data?.items ?? [],
     page,
-    hasNext: !!links.data?.nextCursor,
-    onNext: () => setCursors((c) => [...c, links.data?.nextCursor ?? null]),
+    // While the next page is in flight the query still holds the previous
+    // one (keepPreviousData), so its cursor is the one already on the stack.
+    // Offering Next again would push it twice: same rows, higher page number.
+    hasNext: !links.isPlaceholderData && !!links.data?.nextCursor,
+    onNext: () =>
+      setCursors((c) => {
+        const next = links.data?.nextCursor;
+        return next && next !== c[c.length - 1] ? [...c, next] : c;
+      }),
     onBack: () => setCursors((c) => (c.length > 1 ? c.slice(0, -1) : c)),
   };
 }

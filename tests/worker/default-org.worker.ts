@@ -128,7 +128,10 @@ describe("deleting the account", () => {
     const { results } = await env.DB.prepare("select deleting_at from orgs").all<{
       deleting_at: number | null;
     }>();
-    expect(results.every((row) => row.deleting_at !== null)).toBe(true);
+    // Length first: `every` is true of no rows, so an org deleted outright
+    // rather than flagged would pass this silently.
+    expect(results).toHaveLength(1);
+    expect(results[0]!.deleting_at).not.toBeNull();
   });
 
   it("refuses while an owned organization still has other members", async () => {

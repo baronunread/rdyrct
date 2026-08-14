@@ -97,7 +97,9 @@ describe("request body size limit (#19)", () => {
   });
 
   it("rejects an oversized QR logo upload with 413", async () => {
-    const res = await uploadLogo(await freeOwnerCookie(), "image/webp", new Uint8Array(300 * 1024));
+    // A real WebP body, so a 413 proves the size limit rather than a
+    // sniffing check rejecting a zero-filled buffer.
+    const res = await uploadLogo(await freeOwnerCookie(), "image/webp", webpBody(300 * 1024));
     expect(res.status).toBe(413);
   });
 });
