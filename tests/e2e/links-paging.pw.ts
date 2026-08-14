@@ -19,7 +19,17 @@ test("walks pages with a cursor, and searches past the first one", async ({ page
   // Thirty links through the API rather than thirty trips through the
   // dialog: what is under test is reading them back a page at a time.
   await page.goto("/links");
-  const [{ id: org }] = await queryRows<{ id: string }>(page, "SELECT id FROM orgs LIMIT 1");
+  // This account's organization, not whichever one is first in the table:
+  // the suite runs in parallel, so "LIMIT 1" is another test's org and the
+  // creates come back 403.
+  const [{ id: org }] = await queryRows<{ id: string }>(
+    page,
+    `SELECT o.id FROM orgs o
+       JOIN org_members m ON m.org_id = o.id
+       JOIN user u ON u.id = m.user_id
+      WHERE u.email = ?`,
+    [email],
+  );
   for (let i = 0; i < 30; i++) {
     const made = await page.request.post(`${appUrl}/api/orgs/${org}/links`, {
       data: { destination: `https://example.com/paged-${i}`, title: `Paged ${i}` },
