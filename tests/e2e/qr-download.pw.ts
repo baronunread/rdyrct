@@ -51,15 +51,20 @@ test("a downloaded QR PNG is big enough to print, not preview-sized (#88)", asyn
  * checking only the free side would pass just as well if the controls had
  * disappeared for everyone.
  */
-test("styling a QR is paid, generating one is not", async ({ page }) => {
-  const email = `qr-look-${Date.now()}@gmail.com`;
-
+/** Signs up and lands on /links with the New link dialog open, which is
+ * where both of these tests start. */
+async function newLinkDialog(page: import("@playwright/test").Page, email: string) {
   await signUpAndVerify(page, email, password);
-
   await page.goto("/links");
   await page.getByRole("button", { name: "New link" }).first().click();
   const editor = page.getByRole("dialog", { name: "New link" });
   await expect(editor).toBeVisible();
+  return editor;
+}
+
+test("styling a QR is paid, generating one is not", async ({ page }) => {
+  const email = `qr-look-${Date.now()}@gmail.com`;
+  const editor = await newLinkDialog(page, email);
 
   // The code itself renders for a free plan: no lock, no empty placeholder.
   await expect(editor.getByText("QR code", { exact: true })).toBeVisible();
@@ -87,12 +92,7 @@ test("a downgraded org can still edit a link that has a QR look", async ({ page 
   // is under test is the free plan's save, and driving the paid editor first
   // only adds ways for this to fail for another reason.
   const email = `qr-downgrade-${Date.now()}@gmail.com`;
-
-  await signUpAndVerify(page, email, password);
-
-  await page.goto("/links");
-  await page.getByRole("button", { name: "New link" }).first().click();
-  const editor = page.getByRole("dialog", { name: "New link" });
+  const editor = await newLinkDialog(page, email);
   await editor.getByLabel("Destination").fill("example.com/downgrade");
   await page.getByRole("button", { name: "Create link" }).click();
   await expect(editor).toBeHidden();

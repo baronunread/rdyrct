@@ -89,7 +89,7 @@ export interface LinkQuery {
   cursor?: string | null;
 }
 
-export interface LinkPage {
+interface LinkPage {
   items: LinkDTO[];
   nextCursor: string | null;
 }

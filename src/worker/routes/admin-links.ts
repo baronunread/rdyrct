@@ -149,28 +149,42 @@ async function republish(env: Env, db: DB, linkId: string): Promise<number> {
  * finds it wherever in the URL it sits. It is a moderation tool used by one
  * person, not a hot path.
  */
+/**
+ * What the search narrows to.
+ *
+ * The organization goes in here rather than in the browser: the page used to
+ * narrow the rows this query had already capped at 200, so "show me this
+ * organization's links" meant "show me whichever of its links happen to be
+ * in the newest 200 across every organization on the instance". For a busy
+ * instance, or a big account, that is usually none of them, and answering an
+ * abuse report with an empty table is worse than answering it slowly.
+ */
+function adminLinkFilters(c: Context<AppEnv>) {
+  const q = (c.req.query("q") ?? "").trim();
+  const org = (c.req.query("org") ?? "").trim();
+  return [
+    q ? or(like(schema.links.slug, `%${q}%`), like(schema.links.destination, `%${q}%`)) : undefined,
+    c.req.query("suspended") === "1" ? isNotNull(schema.links.suspendedAt) : undefined,
+    org ? eq(schema.links.orgId, org) : undefined,
+  ].filter(Boolean);
+}
+
+/** Nulls last on risk: unscored is not "safe", and letting it sort above a
+ * score of 100 would put the worst links below links nobody has looked at. */
+function adminLinkOrder(sort: AdminLinkSort) {
+  if (sort === "clicks") return desc(clickCount);
+  if (sort === "risk")
+    return sql`${schema.links.riskScore} is null, ${schema.links.riskScore} desc`;
+  return desc(schema.links.createdAt);
+}
+
 adminLinkRoutes.get("/", async (c) => {
   const db = c.var.db;
-  const q = (c.req.query("q") ?? "").trim();
   const sortParam = c.req.query("sort") ?? "created";
   const sort: AdminLinkSort = (ADMIN_LINK_SORTS as readonly string[]).includes(sortParam)
     ? (sortParam as AdminLinkSort)
     : "created";
-  const onlySuspended = c.req.query("suspended") === "1";
-  const org = (c.req.query("org") ?? "").trim();
-
-  const filters = [
-    q ? or(like(schema.links.slug, `%${q}%`), like(schema.links.destination, `%${q}%`)) : undefined,
-    onlySuspended ? isNotNull(schema.links.suspendedAt) : undefined,
-    // Here rather than in the browser. The page used to narrow the rows this
-    // query had already capped at 200, so "show me this organization's links"
-    // meant "show me whichever of its links happen to be in the newest 200
-    // across every organization on the instance": for a busy instance, or a
-    // big account, usually none of them. An abuse report names an
-    // organization, and answering it with an empty table is worse than
-    // answering it slowly.
-    org ? eq(schema.links.orgId, org) : undefined,
-  ].filter(Boolean);
+  const filters = adminLinkFilters(c);
 
   const rows = await db
     .select({
@@ -193,15 +207,7 @@ adminLinkRoutes.get("/", async (c) => {
     .innerJoin(schema.orgs, eq(schema.links.orgId, schema.orgs.id))
     .leftJoin(schema.domains, eq(schema.links.domainId, schema.domains.id))
     .where(filters.length ? and(...filters) : undefined)
-    // Nulls last on risk: unscored is not "safe", and letting it sort above a
-    // score of 100 would put the worst links below links nobody has looked at.
-    .orderBy(
-      sort === "clicks"
-        ? desc(clickCount)
-        : sort === "risk"
-          ? sql`${schema.links.riskScore} is null, ${schema.links.riskScore} desc`
-          : desc(schema.links.createdAt),
-    )
+    .orderBy(adminLinkOrder(sort))
     .limit(MAX_ROWS);
 
   return c.json(

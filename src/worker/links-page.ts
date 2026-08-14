@@ -25,8 +25,8 @@
 import { and, eq, gt, lt, or, sql, type SQL } from "drizzle-orm";
 import * as schema from "./db/schema";
 
-export const LINK_SORTS = ["created", "slug", "clicks"] as const;
-export type LinkSort = (typeof LINK_SORTS)[number];
+const LINK_SORTS = ["created", "slug", "clicks"] as const;
+type LinkSort = (typeof LINK_SORTS)[number];
 
 export const LINKS_PAGE_SIZE = 25;
 const LINKS_MAX_PAGE_SIZE = 100;
@@ -155,6 +155,16 @@ export function linkPageQuery(orgId: string, params: LinkPageParams) {
     // there is a next page, without a second count query over the table.
     limit: params.limit + 1,
   };
+}
+
+/** The value a row contributes to the cursor under a given sort. Beside the
+ * sort expression it mirrors, so the two cannot drift. */
+export function cursorValueOf(
+  sort: LinkSort,
+): (row: { slug: string; clicks: number; createdAt: number }) => CursorValue {
+  if (sort === "slug") return (row) => row.slug;
+  if (sort === "clicks") return (row) => row.clicks;
+  return (row) => row.createdAt;
 }
 
 /**

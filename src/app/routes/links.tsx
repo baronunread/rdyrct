@@ -80,6 +80,69 @@ function useLinkPage(orgId: string) {
   };
 }
 
+/**
+ * The searchable, paged table, and the empty state that stands in for it.
+ *
+ * Split out so the page itself is the header, the dialogs and this: the
+ * controls and their wiring are one thing, not eleven props read one at a
+ * time in the middle of a route component.
+ */
+function LinksBrowser({
+  list,
+  orgId,
+  domains,
+  navigate,
+  dialogs,
+  atLimit,
+  limitHint,
+}: {
+  list: ReturnType<typeof useLinkPage>;
+  orgId: string;
+  domains: DomainDTO[];
+  navigate: ReturnType<typeof useNavigate>;
+  dialogs: ReturnType<typeof useLinkDialogs>;
+  atLimit: boolean;
+  limitHint?: string;
+}) {
+  return (
+    <LinksListArea
+      isLoading={list.links.isLoading}
+      // An empty first page with nothing typed is an organization with no
+      // links. An empty page with a search behind it is a search that found
+      // nothing, and the toolbar has to stay on screen to be cleared.
+      hasLinks={
+        list.rows.length > 0 || !!list.search || list.domainFilter !== "all" || list.page > 0
+      }
+      atLimit={atLimit}
+      limitHint={limitHint}
+      onCreate={dialogs.openCreate}
+    >
+      <LinksToolbar
+        search={list.search}
+        onSearchChange={list.onSearchChange}
+        domainFilter={list.domainFilter}
+        onDomainFilterChange={list.onDomainFilterChange}
+        domains={domains}
+      />
+      <LinksTable
+        orgId={orgId}
+        paged={list.rows}
+        navigate={navigate}
+        onQrClick={dialogs.setQrLink}
+        onEdit={dialogs.openEdit}
+        onDelete={dialogs.setDeleting}
+        onCreateAlias={dialogs.setAliasLink}
+        sort={list.sort}
+        onSort={list.setSort}
+        page={list.page}
+        hasNext={list.hasNext}
+        onNext={list.onNext}
+        onBack={list.onBack}
+      />
+    </LinksListArea>
+  );
+}
+
 /** What a saved link used, for PostHog. Four questions, each of them "did they
  * fill in any of these fields", which is why they read as one thing here and
  * not as branches in the success handler. */
@@ -204,20 +267,7 @@ export function LinksPage() {
 
   const dialogs = useLinkDialogs(atLimit);
 
-  const {
-    search,
-    domainFilter,
-    sort,
-    setSort,
-    links,
-    rows,
-    page,
-    hasNext,
-    onNext,
-    onBack,
-    onSearchChange,
-    onDomainFilterChange,
-  } = useLinkPage(orgId);
+  const list = useLinkPage(orgId);
 
   /**
    * Answer the duplicate-destination prompt (#45).
@@ -281,40 +331,15 @@ export function LinksPage() {
         }
       />
 
-      <LinksListArea
-        // An empty first page with no search behind it is an organization
-        // with no links; an empty page with a search behind it is a search
-        // that found nothing, and the toolbar has to stay on screen to be
-        // cleared.
-        isLoading={links.isLoading}
-        hasLinks={rows.length > 0 || !!search || domainFilter !== "all" || page > 0}
+      <LinksBrowser
+        list={list}
+        orgId={orgId}
+        domains={domains.data ?? []}
+        navigate={navigate}
+        dialogs={dialogs}
         atLimit={atLimit}
         limitHint={limitHint}
-        onCreate={dialogs.openCreate}
-      >
-        <LinksToolbar
-          search={search}
-          onSearchChange={onSearchChange}
-          domainFilter={domainFilter}
-          onDomainFilterChange={onDomainFilterChange}
-          domains={domains.data ?? []}
-        />
-        <LinksTable
-          orgId={orgId}
-          paged={rows}
-          navigate={navigate}
-          onQrClick={dialogs.setQrLink}
-          onEdit={dialogs.openEdit}
-          onDelete={dialogs.setDeleting}
-          onCreateAlias={dialogs.setAliasLink}
-          sort={sort}
-          onSort={setSort}
-          page={page}
-          hasNext={hasNext}
-          onNext={onNext}
-          onBack={onBack}
-        />
-      </LinksListArea>
+      />
 
       <LinkDialogStack
         dialogs={dialogs}

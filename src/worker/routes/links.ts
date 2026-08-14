@@ -27,7 +27,7 @@ import {
 import { jsonBodyLimit } from "../body-limit";
 import { scoreAndRecord } from "../risk";
 import { claimAnonLink } from "./shorten";
-import { linkPageQuery, readLinkPageParams, takePage } from "../links-page";
+import { cursorValueOf, linkPageQuery, readLinkPageParams, takePage } from "../links-page";
 import type { AddressDTO, LinkDTO, LinkInput, OrgPlan, PlanLimits, TopEntry } from "@/shared/types";
 
 const RECENT_CLICKS_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
@@ -512,7 +512,7 @@ async function resolveRenamedSlug(
  */
 linkRoutes.get("/", requireOrgRole("member"), async (c) => {
   const params = readLinkPageParams(new URL(c.req.url));
-  const page = linkPageQuery(c.req.param("orgId")!, params);
+  const query = linkPageQuery(c.req.param("orgId")!, params);
 
   const rows = await c.var.db
     .select({
@@ -523,17 +523,16 @@ linkRoutes.get("/", requireOrgRole("member"), async (c) => {
     })
     .from(schema.links)
     .leftJoin(schema.domains, eq(schema.links.domainId, schema.domains.id))
-    .where(page.where)
-    .orderBy(page.orderBy)
-    .limit(page.limit);
+    .where(query.where)
+    .orderBy(query.orderBy)
+    .limit(query.limit);
 
-  const { items, nextCursor } = takePage(
+  const page = takePage(
     rows.map((r) => toDTO(r.link, r.clicks, r.domain, r.addressCount)),
     params,
-    (link) =>
-      params.sort === "slug" ? link.slug : params.sort === "clicks" ? link.clicks : link.createdAt,
+    cursorValueOf(params.sort),
   );
-  return c.json({ items, nextCursor });
+  return c.json(page);
 });
 
 // Distinct from the links list's own count: a link plus its kept-forever
