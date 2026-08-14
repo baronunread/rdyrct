@@ -48,3 +48,25 @@ test("the signed-in app keeps the default head", async ({ request }) => {
 
   expect(html).toContain("<title>rdyrct - short links that carry your team's brand");
 });
+
+test("walking off a public page does not take its title along", async ({ page }) => {
+  // The head the Worker wrote is right for the document it served, and wrong
+  // for wherever a client-side navigation goes next. Restoring "what the
+  // document arrived with" looked correct and was exactly backwards for the
+  // visitor who arrived on the public page itself: they carried the privacy
+  // title onto the page they clicked through to.
+  await page.goto("/privacy");
+  await expect(page).toHaveTitle(/Privacy policy/);
+
+  await page.getByRole("link", { name: "Terms" }).click();
+  await expect(page).toHaveTitle(/Terms of service/);
+
+  // And off a public page entirely: back to what index.html ships, rather
+  // than the privacy title following along. The landing page claims its own
+  // head once there is a hook call on it; until then the default is exactly
+  // what leaving should restore.
+  await page.goto("/privacy");
+  await page.getByRole("link", { name: "rdyrct" }).first().click();
+  await expect(page).toHaveURL(/\/$/);
+  await expect(page).toHaveTitle("rdyrct - short links that carry your team's brand");
+});

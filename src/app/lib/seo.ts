@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { PUBLIC_PAGE_META } from "@/shared/page-meta";
+import { DEFAULT_PAGE_META, PUBLIC_PAGE_META } from "@/shared/page-meta";
 
 /**
  * Keeps the head honest after a client-side navigation.
@@ -13,14 +13,9 @@ import { PUBLIC_PAGE_META } from "@/shared/page-meta";
  *
  * Both read the same strings, so the two cannot drift.
  */
-/** Sets one attribute and hands back the undo, so leaving a page restores
- * whatever the document arrived with. */
-function setAttribute(selector: string, attribute: string, value: string): () => void {
-  const element = document.head.querySelector(selector);
-  if (!element) return () => {};
-  const before = element.getAttribute(attribute) ?? "";
-  element.setAttribute(attribute, value);
-  return () => element.setAttribute(attribute, before);
+/** Sets one attribute, if the document has that tag at all. */
+function setAttribute(selector: string, attribute: string, value: string): void {
+  document.head.querySelector(selector)?.setAttribute(attribute, value);
 }
 
 /** Every tag a page owns, with the value it should carry. */
@@ -39,18 +34,20 @@ function pageTags(path: string, title: string, description: string) {
 
 export function useSeo(path: string) {
   useEffect(() => {
-    const meta = PUBLIC_PAGE_META[path];
-    if (!meta) return;
-
-    const previousTitle = document.title;
-    document.title = meta.title;
-    const undo = pageTags(path, meta.title, meta.description).map(([selector, attribute, value]) =>
-      setAttribute(selector, attribute, value),
-    );
-
-    return () => {
-      document.title = previousTitle;
-      for (const restore of undo) restore();
-    };
+    const meta = PUBLIC_PAGE_META[path] ?? DEFAULT_PAGE_META;
+    apply(path, meta);
+    // Back to what index.html ships, not to what this document arrived
+    // carrying. Those are the same thing only for somebody who walked here
+    // from elsewhere in the app: arrive on /privacy directly and the Worker
+    // has already written the privacy head into the document, so restoring
+    // "what we arrived with" left the privacy title sitting on the dashboard
+    // they navigated to.
+    return () => apply("/", DEFAULT_PAGE_META);
   }, [path]);
+}
+
+function apply(path: string, meta: { title: string; description: string }): void {
+  document.title = meta.title;
+  for (const [selector, attribute, value] of pageTags(path, meta.title, meta.description))
+    setAttribute(selector, attribute, value);
 }

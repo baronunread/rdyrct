@@ -17,6 +17,19 @@ export interface PageMeta {
   description: string;
 }
 
+/**
+ * What index.html ships, and therefore what every page that has no entry of
+ * its own should read. Kept here rather than left implicit in the HTML: the
+ * client hook has to put this back when it leaves a public page, and
+ * "restore whatever the document arrived with" is wrong for exactly the
+ * visitor who arrived on the public page itself.
+ */
+export const DEFAULT_PAGE_META: PageMeta = {
+  title: "rdyrct - short links that carry your team's brand",
+  description:
+    "Short links that carry your brand. Branded short links, QR codes, and custom domains with privacy-friendly analytics.",
+};
+
 export const PUBLIC_PAGE_META: Record<string, PageMeta> = {
   "/": {
     title: "rdyrct - URL shortener and QR code generator with click analytics",
