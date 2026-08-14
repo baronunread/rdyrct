@@ -6,6 +6,10 @@
  */
 import { CAP_FAILED_CODE } from "@/shared/types";
 
+/** Either shape a refusal arrives in: an ApiError carrying `.code`, or the
+ * `{ error }` better-auth resolves with instead of throwing. */
+export type CapRefusal = { code?: string; error?: { code?: string } } | null | undefined;
+
 /**
  * Whether a refusal is the Worker turning down a Cap token.
  *
@@ -14,9 +18,12 @@ import { CAP_FAILED_CODE } from "@/shared/types";
  * ApiError carrying `.code`. Reading only the first is what made the retry
  * below dead code for every api() caller.
  */
-export function isCapFailure(result: unknown): boolean {
-  const value = result as { code?: string; error?: { code?: string } } | null;
-  return value?.code === CAP_FAILED_CODE || value?.error?.code === CAP_FAILED_CODE;
+export function isCapFailure<T>(result: T): boolean {
+  // SAFETY: this reads two optional fields off whatever arrived. Both shapes
+  // are this app's own (an ApiError, and the { error } better-auth resolves
+  // with); anything else carries neither field and reads as undefined.
+  const refusal = result as CapRefusal;
+  return refusal?.code === CAP_FAILED_CODE || refusal?.error?.code === CAP_FAILED_CODE;
 }
 
 /**

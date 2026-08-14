@@ -29,7 +29,7 @@ function identifyPendingUser(posthog: typeof PosthogClient | null) {
 }
 
 function loadClient(): Promise<typeof PosthogClient | null> | null {
-  if (typeof window === "undefined" || !hasAnalyticsConsent()) return null;
+  if (!("window" in globalThis) || !hasAnalyticsConsent()) return null;
   if (!clientPromise) {
     clientPromise = import("posthog-js").then(({ default: posthog }) => {
       const token = import.meta.env.VITE_PUBLIC_POSTHOG_PROJECT_TOKEN as string | undefined;

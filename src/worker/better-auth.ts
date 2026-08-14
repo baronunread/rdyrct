@@ -1,4 +1,7 @@
 import { betterAuth } from "better-auth";
+import type { JsonValue } from "../shared/types";
+import { optionalText } from "./schemas";
+import * as v from "valibot";
 import { lookup } from "../shared/lookup";
 import { APIError, createAuthMiddleware, getSessionFromCtx } from "better-auth/api";
 import { emailOTP } from "better-auth/plugins/email-otp";
@@ -183,8 +186,27 @@ type Db = ReturnType<typeof makeDb>;
  * per request (#53). The reply is byte-identical to a real send; what
  * differs is that nothing goes out.
  */
-async function guardVerificationOTPSend(db: Db, body: { email?: unknown; type?: unknown } | null) {
-  if (body?.type !== "email-verification" || typeof body.email !== "string") return;
+/** What the two guarded better-auth endpoints are read for. Each field is
+ * whatever arrived, reduced to the string the guard needs or to "". */
+const otpSendBodySchema = v.object({ email: optionalText, type: optionalText });
+const signUpBodySchema = v.object({ email: optionalText, name: optionalText });
+
+/**
+ * The request body better-auth is about to act on.
+ *
+ * better-auth types its hook context's body as unknown, because each of its
+ * endpoints has a different one. The guards below parse what they read, so
+ * this only has to get it as far as JSON.
+ */
+function bodyOf(ctx: { body?: unknown }): JsonValue {
+  // SAFETY: better-auth parsed this out of a JSON request body, so it is JSON;
+  // the schemas below are what decide it is the right JSON.
+  return (ctx.body ?? {}) as JsonValue;
+}
+
+async function guardVerificationOTPSend(db: Db, rawBody: JsonValue) {
+  const body = v.parse(otpSendBodySchema, rawBody ?? {});
+  if (body.type !== "email-verification" || !body.email) return;
   const [existing] = await db
     .select({ emailVerified: schema.user.emailVerified })
     .from(schema.user)
@@ -260,11 +282,11 @@ async function sendExistingAccountNotice(env: Env, email: string) {
 async function guardSignUp(
   env: Env,
   db: Db,
-  body: { email?: unknown; name?: unknown } | null,
+  rawBody: JsonValue,
 ): Promise<ReturnType<typeof pendingSignUpResponse> | undefined> {
-  const email = body?.email;
-  if (typeof email !== "string") return;
-  const normalized = email.toLowerCase();
+  const body = v.parse(signUpBodySchema, rawBody ?? {});
+  if (!body.email) return;
+  const normalized = body.email.toLowerCase();
 
   // Before the existence check, so both branches answer a dead domain the
   // same way. Reversed, a 422 here would mean "no account on a domain that
@@ -306,7 +328,7 @@ async function guardSignUp(
       ),
     );
 
-  const name = typeof body?.name === "string" ? body.name : normalized.split("@")[0];
+  const name = body.name || normalized.split("@")[0];
   return pendingSignUpResponse(normalized, name);
 }
 
@@ -466,13 +488,10 @@ function buildAuth(env: Env) {
         }
         if (ctx.path === "/delete-user") await guardAccountDeletion(db, ctx);
         if (ctx.path === "/email-otp/send-verification-otp") {
-          return guardVerificationOTPSend(
-            db,
-            ctx.body as { email?: unknown; type?: unknown } | null,
-          );
+          return guardVerificationOTPSend(db, bodyOf(ctx));
         }
         if (ctx.path === "/sign-up/email") {
-          return guardSignUp(env, db, ctx.body as { email?: unknown; name?: unknown } | null);
+          return guardSignUp(env, db, bodyOf(ctx));
         }
       }),
     },

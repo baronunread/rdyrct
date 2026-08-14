@@ -1,3 +1,6 @@
+import * as v from "valibot";
+import type { JsonValue } from "@/shared/types";
+
 export class ApiError extends Error {
   status: number;
   /** machine-readable code from the error body, e.g. "slug_taken" */
@@ -5,7 +8,7 @@ export class ApiError extends Error {
   /** The full parsed error body, for a code that carries extra fields beyond
    * message/code (e.g. "same_destination_match"'s matchedLinkId/matchedLink). */
   data?: unknown;
-  constructor(status: number, message: string, code?: string, data?: unknown) {
+  constructor(status: number, message: string, code?: string, data?: JsonValue) {
     super(message);
     this.status = status;
     this.code = code;
@@ -13,16 +16,23 @@ export class ApiError extends Error {
   }
 }
 
+/** The two fields the app reads off an error body; the rest rides along on
+ * ApiError.data for the caller that knows to look for it. */
+const errorBodySchema = v.object({
+  message: v.optional(v.fallback(v.string(), ""), ""),
+  code: v.optional(v.fallback(v.string(), ""), ""),
+});
+
 async function throwIfNotOk(res: Response): Promise<void> {
   if (res.ok) return;
   let message = res.statusText;
   let code: string | undefined;
-  let data: unknown;
+  let data: JsonValue | undefined;
   try {
-    data = (await res.json()) as { message?: string; code?: string };
-    const body = data as { message?: string; code?: string };
+    data = await res.json();
+    const body = v.parse(errorBodySchema, data ?? {});
     if (body.message) message = body.message;
-    code = body.code;
+    code = body.code || undefined;
   } catch {
     /* non-JSON error body */
   }

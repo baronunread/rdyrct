@@ -23,6 +23,7 @@
  * would drop one and repeat the other.
  */
 import { and, eq, gt, lt, or, sql, type SQL } from "drizzle-orm";
+import * as v from "valibot";
 import * as schema from "./db/schema";
 
 const LINK_SORTS = ["created", "slug", "clicks"] as const;
@@ -75,6 +76,10 @@ export function readLinkPageParams(url: URL): LinkPageParams {
  * rebuilds it is a caller that breaks when the sort gains a column, and one
  * that can ask for a page from the middle of somebody else's ordering.
  */
+/** A cursor as it travels: the sort value it stopped at, and the row id
+ * that breaks ties. */
+const cursorSchema = v.tuple([v.union([v.string(), v.number()]), v.string()]);
+
 export function encodeCursor(value: CursorValue, id: string): string {
   return btoa(JSON.stringify([value, id]));
 }
@@ -82,9 +87,9 @@ export function encodeCursor(value: CursorValue, id: string): string {
 function decodeCursor(raw: string | null): { value: CursorValue; id: string } | null {
   if (!raw) return null;
   try {
-    const [value, id] = JSON.parse(atob(raw)) as [CursorValue, string];
-    if ((typeof value !== "string" && typeof value !== "number") || typeof id !== "string")
-      return null;
+    const parsed = v.safeParse(cursorSchema, JSON.parse(atob(raw)));
+    if (!parsed.success) return null;
+    const [value, id] = parsed.output;
     return { value, id };
   } catch {
     // A cursor we cannot read is a first page, not an error: it is a URL

@@ -1,4 +1,7 @@
 import { Hono } from "hono";
+import type { JsonValue } from "../../shared/types";
+import { optionalFlag } from "../schemas";
+import * as v from "valibot";
 import { HTTPException } from "hono/http-exception";
 import { eq, ne, gte, and, desc, lt, inArray, isNotNull, sql } from "drizzle-orm";
 import * as schema from "../db/schema";
@@ -662,13 +665,12 @@ adminRoutes.get("/users", async (c) => {
 });
 
 function validateIsAdminPatch(
-  value: boolean | undefined,
+  value: boolean | null | undefined,
   targetId: string,
   selfId: string,
 ): boolean | undefined {
   if (value === undefined) return undefined;
-  if (typeof value !== "boolean")
-    throw new HTTPException(400, { message: "isAdmin must be boolean" });
+  if (value === null) throw new HTTPException(400, { message: "isAdmin must be boolean" });
   if (targetId === selfId && !value)
     throw new HTTPException(400, { message: "Cannot demote yourself" });
   return value;
@@ -676,13 +678,12 @@ function validateIsAdminPatch(
 
 async function validateBannedPatch(
   db: DB,
-  value: boolean | undefined,
+  value: boolean | null | undefined,
   targetId: string,
   selfId: string,
 ): Promise<boolean | undefined> {
   if (value === undefined) return undefined;
-  if (typeof value !== "boolean")
-    throw new HTTPException(400, { message: "banned must be boolean" });
+  if (value === null) throw new HTTPException(400, { message: "banned must be boolean" });
   if (targetId === selfId) throw new HTTPException(400, { message: "Cannot ban yourself" });
   if (value) {
     const target = await db
@@ -699,12 +700,17 @@ async function validateBannedPatch(
 // by hand is not here: it is a comp, and it has its own routes below, because
 // a comp written into `plan` was indistinguishable from a paid subscription
 // (#81).
+/** What the user-patch route reads off its request body. A flag sent as
+ * something other than a boolean parses to null, which the validators below
+ * refuse by name rather than by silently ignoring. */
+const userPatchSchema = v.object({
+  isAdmin: optionalFlag,
+  banned: optionalFlag,
+  plan: v.optional(v.unknown()),
+});
+
 adminRoutes.patch("/users/:userId", async (c) => {
-  const body = await c.req.json<{
-    isAdmin?: boolean;
-    banned?: boolean;
-    plan?: string;
-  }>();
+  const body = v.parse(userPatchSchema, await c.req.json<JsonValue>());
   const targetId = c.req.param("userId");
   const self = c.var.user!;
   const db = c.var.db;

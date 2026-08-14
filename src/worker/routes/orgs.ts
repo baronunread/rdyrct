@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import * as v from "valibot";
 import type { JsonValue } from "../../shared/types";
 import { HTTPException } from "hono/http-exception";
 import { eq, and, gte, desc, sql, isNull } from "drizzle-orm";
@@ -108,8 +109,9 @@ function qrPatchFields(body: OrgQrPatchBody): Partial<typeof schema.orgs.$inferI
 const ORG_NAME_MAX_LENGTH = 100;
 
 function requireOrgName(name: JsonValue): string {
-  if (typeof name !== "string") throw new HTTPException(400, { message: "Name must be a string" });
-  const trimmed = name.trim();
+  const parsed = v.safeParse(v.string(), name);
+  if (!parsed.success) throw new HTTPException(400, { message: "Name must be a string" });
+  const trimmed = parsed.output.trim();
   if (!trimmed) throw new HTTPException(400, { message: "Name required" });
   if (trimmed.length > ORG_NAME_MAX_LENGTH)
     throw new HTTPException(400, {

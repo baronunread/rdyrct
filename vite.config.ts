@@ -71,10 +71,11 @@ async function githubStars(): Promise<number> {
       signal: AbortSignal.timeout(4000),
     });
     if (!res.ok) return GITHUB_STARS_FALLBACK;
+    // SAFETY: the field is read back through Number.isFinite below, so a
+    // response without it, or with something else in it, falls back.
     const body = (await res.json()) as { stargazers_count?: number };
-    return typeof body.stargazers_count === "number"
-      ? body.stargazers_count
-      : GITHUB_STARS_FALLBACK;
+    const stars = Number(body.stargazers_count);
+    return Number.isFinite(stars) ? stars : GITHUB_STARS_FALLBACK;
   } catch {
     return GITHUB_STARS_FALLBACK;
   }

@@ -1,4 +1,7 @@
 import type { Context, Next } from "hono";
+import type { JsonValue } from "../shared/types";
+import { optionalText } from "./schemas";
+import * as v from "valibot";
 import type { AppEnv, Env, SessionUser } from "./env";
 
 const RATE_LIMIT_WINDOW_SECONDS = 60;
@@ -103,15 +106,17 @@ export async function publicClientKey(request: Request, secret: string): Promise
  * no `email`) yields null and the recipient limit simply doesn't apply,
  * since there is no recipient to protect.
  */
+/** The one field the recipient budget is keyed on. */
+const recipientBodySchema = v.object({ email: optionalText });
+
 async function recipientKey(request: Request, secret: string): Promise<string | null> {
-  let parsed: unknown;
+  let parsed: JsonValue;
   try {
     parsed = await request.clone().json();
   } catch {
     return null;
   }
-  const email = (parsed as { email?: unknown } | null)?.email;
-  if (typeof email !== "string") return null;
+  const { email } = v.parse(recipientBodySchema, parsed ?? {});
   const normalized = email.trim().toLowerCase();
   if (!normalized) return null;
   return keyedDigest(secret, normalized);
