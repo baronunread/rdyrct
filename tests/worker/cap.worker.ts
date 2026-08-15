@@ -149,6 +149,7 @@ describe("spending a token at signup", () => {
         solutions: await solveAll(challenge.token, challenge.challenge),
       }),
     );
+    if (!redeemed.token) throw new Error("redeem answered without a token");
     return redeemed.token;
   }
 

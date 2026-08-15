@@ -24,6 +24,7 @@ import {
   overrideEnv,
   sampleLink,
   seedLink,
+  stubQueue,
   testEnv,
 } from "./support";
 
@@ -281,14 +282,9 @@ describe("producing messages", () => {
   });
 
   it("propagates a producer-side send failure instead of swallowing it", async () => {
-    const queue: Queue<StorageMessage> = {
-      async send() {
-        throw new Error("injected queue-send failure");
-      },
-      async sendBatch() {
-        throw new Error("injected queue-send failure");
-      },
-    };
+    const queue = stubQueue<StorageMessage>(() => {
+      throw new Error("injected queue-send failure");
+    });
 
     await expect(
       enqueueStorage(overrideEnv({ STORAGE_QUEUE: queue }), [syncLinkMsg("sale", null)]),

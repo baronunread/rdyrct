@@ -3,9 +3,11 @@ import { env } from "cloudflare:workers";
 import { reset } from "cloudflare:test";
 import { drizzle } from "drizzle-orm/d1";
 import * as schema from "../../src/worker/db/schema";
+import type { LinkStats, OrgStats } from "../../src/shared/types";
 import {
   applyTestMigrations,
   fetchWorker,
+  jsonBody,
   freeOwnerCookie,
   sampleAddress,
   sampleLink,
@@ -71,7 +73,7 @@ describe("GET /orgs/:orgId/stats: totalClicks vs totalClicksDelta (#24)", () => 
 
     const res = await getStats(cookie);
     expect(res.status).toBe(200);
-    const body = await res.json();
+    const body = await jsonBody<OrgStats>(res);
 
     expect(body.totalClicks).toBe(3);
     expect(body.totalClicksDelta).toEqual({ current: 3, previous: 2, pct: 50 });
@@ -93,7 +95,7 @@ describe("GET /orgs/:orgId/links/stats/:slug: totalClicks vs totalClicksDelta (#
       }),
     );
     expect(res.status).toBe(200);
-    const body = await res.json();
+    const body = await jsonBody<LinkStats>(res);
 
     expect(body.totalClicks).toBe(2);
     expect(body.totalClicksDelta).toEqual({ current: 2, previous: 1, pct: 100 });

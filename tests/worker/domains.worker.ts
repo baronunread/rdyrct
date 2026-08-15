@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { env } from "cloudflare:workers";
 import { createExecutionContext, reset, waitOnExecutionContext } from "cloudflare:test";
 import worker from "../../src/worker";
+import * as schema from "../../src/worker/db/schema";
 import { ensureHostname, probeDelaySeconds, probeDomain } from "../../src/worker/routes/domains";
 import { adminCookie, applyTestMigrations, authEnv, overrideEnv } from "./support";
 import type { JsonValue } from "../../src/shared/types";

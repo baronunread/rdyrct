@@ -3,6 +3,7 @@ import { env } from "cloudflare:workers";
 import { reset } from "cloudflare:test";
 import { drizzle } from "drizzle-orm/d1";
 import * as schema from "../../src/worker/db/schema";
+import type { JsonValue } from "../../src/shared/types";
 import { applyStorageMessage, syncLinkMsg } from "../../src/worker/storage";
 import {
   adminCookie,

@@ -2,7 +2,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { env } from "cloudflare:workers";
 import { reset } from "cloudflare:test";
 import type { ClickMessage } from "../../src/worker/clicks";
-import { applyTestMigrations, captureClickQueue, fetchWorker, overrideEnv } from "./support";
+import {
+  applyTestMigrations,
+  captureClickQueue,
+  fetchWorker,
+  overrideEnv,
+  stubQueue,
+} from "./support";
 
 afterEach(async () => {
   await reset();
@@ -104,14 +110,9 @@ describe("redirect hot path", () => {
       "slug:summer",
       JSON.stringify({ linkId: "link-1", orgId: "org-1", url: "https://example.com/sale" }),
     );
-    const downQueue: Queue<ClickMessage> = {
-      async send() {
-        throw new Error("injected queue-send failure");
-      },
-      async sendBatch() {
-        throw new Error("injected queue-send failure");
-      },
-    };
+    const downQueue = stubQueue<ClickMessage>(() => {
+      throw new Error("injected queue-send failure");
+    });
     const failingEnv = overrideEnv({ CLICK_QUEUE: downQueue });
     const errors = vi.spyOn(console, "error").mockImplementation(() => {});
 

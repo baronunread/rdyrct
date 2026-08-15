@@ -15,20 +15,36 @@ import type { ClickMessage } from "../../src/worker/clicks";
 import type { StorageMessage } from "../../src/worker/storage";
 import { hashPassword } from "../../src/worker/password";
 
-type TestEnv = typeof env & { TEST_MIGRATIONS: D1Migration[] };
-
-// The ambient worker-test binding, under the same name the worker knows it
-// by. Every test reaches for this rather than casting `env` again at each
-// call site.
-
-// SAFETY: wrangler generates the type of `env` from the same wrangler.jsonc
-// that Env is hand-written against, so the two describe one object; the worker
-// under test receives this very binding at runtime.
-const ambient = env as Env;
-export const testEnv = ambient;
+// The ambient worker-test binding, under the same name the worker knows it by
+// (env.d.ts declares Cloudflare.Env as our own Env, so this needs no cast).
+export const testEnv: Env = env;
 
 export function overrideEnv(overrides: Partial<Env>): Env {
   return { ...testEnv, ...overrides };
+}
+
+// Backlog numbers nothing asserts on: a stub queue has no backlog.
+const noBacklog = { backlogCount: 0, backlogBytes: 0 };
+
+/**
+ * A queue binding that hands every message to `onSend` instead of delivering
+ * it, so a producer's fan-out can be asserted without a live consumer running
+ * in the same test. Throw from `onSend` to make the send itself fail.
+ */
+export function stubQueue<Body>(onSend: (body: Body) => void): Queue<Body> {
+  return {
+    async metrics() {
+      return noBacklog;
+    },
+    async send(message) {
+      onSend(message);
+      return { metadata: { metrics: noBacklog } };
+    },
+    async sendBatch(messages) {
+      for (const m of messages) onSend(m.body);
+      return { metadata: { metrics: noBacklog } };
+    },
+  };
 }
 
 /**
@@ -38,14 +54,7 @@ export function overrideEnv(overrides: Partial<Env>): Env {
  */
 export function captureClickQueue() {
   const sent: ClickMessage[] = [];
-  const CLICK_QUEUE: Queue<ClickMessage> = {
-    async send(message) {
-      sent.push(message);
-    },
-    async sendBatch(messages) {
-      for (const m of messages) sent.push(m.body);
-    },
-  };
+  const CLICK_QUEUE = stubQueue<ClickMessage>((m) => sent.push(m));
   return { env: overrideEnv({ CLICK_QUEUE }), sent };
 }
 
@@ -164,16 +173,8 @@ export async function seedBillingUser(
     });
 }
 
-/** The migration bundle vitest.config.ts reads off disk and binds. */
-export function testMigrations(): TestEnv {
-  // SAFETY: vitest.config.ts puts the migrations on the test binding under
-  // TEST_MIGRATIONS; only the worker-test pool ever runs this file.
-  return env as TestEnv;
-}
-
 export async function applyTestMigrations(): Promise<void> {
-  const { DB, TEST_MIGRATIONS } = testMigrations();
-  await applyD1Migrations(DB, TEST_MIGRATIONS);
+  await applyD1Migrations(env.DB, env.TEST_MIGRATIONS);
 }
 
 // The password every seeded test user shares: fine since each test's DB is
@@ -371,22 +372,14 @@ export async function addressesOf(linkId: string) {
 // the same test.
 export function captureStorageQueue() {
   const sent: StorageMessage[] = [];
-  const queue: Queue<StorageMessage> = {
-    async send(message) {
-      sent.push(message);
-    },
-    async sendBatch(messages) {
-      for (const m of messages) sent.push(m.body);
-    },
-  };
-  return { queue, sent };
+  return { queue: stubQueue<StorageMessage>((m) => sent.push(m)), sent };
 }
 
 // Builds a real MessageBatch via the official cloudflare:test helpers, so ack/
 // retry/dead-letter assertions exercise the same runtime semantics production
 // queue delivery does, rather than hand-rolled spies.
 export function batchOf<Body>(queueName: string, bodies: Body[], attempts = 1) {
-  const batch = createMessageBatch(
+  const batch = createMessageBatch<Body>(
     queueName,
     bodies.map((body, i) => ({ id: `m${i}`, timestamp: new Date(), attempts, body })),
   );

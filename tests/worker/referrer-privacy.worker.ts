@@ -4,13 +4,7 @@ import { createExecutionContext, reset, waitOnExecutionContext } from "cloudflar
 import worker from "../../src/worker";
 import type { ClickMessage } from "../../src/worker/clicks";
 import { normalizeReferrer } from "../../src/worker/util";
-import {
-  applyTestMigrations,
-  captureClickQueue,
-  sampleLink,
-  seedLink,
-  testMigrations,
-} from "./support";
+import { applyTestMigrations, captureClickQueue, sampleLink, seedLink } from "./support";
 
 beforeEach(async () => {
   await reset();
@@ -151,8 +145,7 @@ describe("migration 0016 leaves nothing ingestion would now refuse (#20)", () =>
       ),
     );
 
-    const { TEST_MIGRATIONS } = testMigrations();
-    const migration = TEST_MIGRATIONS.find((m) => m.name.startsWith("0016"));
+    const migration = env.TEST_MIGRATIONS.find((m) => m.name.startsWith("0016"));
     expect(migration, "migration 0016 is missing from the test bundle").toBeTruthy();
     await env.DB.batch(migration!.queries.map((query) => env.DB.prepare(query)));
 
