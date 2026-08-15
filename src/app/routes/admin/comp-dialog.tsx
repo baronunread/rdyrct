@@ -1,4 +1,6 @@
 import { useState } from "react";
+import { COMP_PLANS } from "@/shared/types";
+import { oneOf } from "@/shared/lookup";
 import type { AdminUserRow } from "@/shared/types";
 import { Button } from "../../ui/button";
 import { Dialog } from "../../ui/dialog";
@@ -35,7 +37,10 @@ export function GrantCompDialog({
           underneath and comes back if the comp is revoked.
         </p>
         <Field label="Plan">
-          <Select value={plan} onChange={(e) => setPlan(e.target.value as CompPlan)}>
+          <Select
+            value={plan}
+            onChange={(e) => setPlan(oneOf(COMP_PLANS, e.target.value, "hobby"))}
+          >
             <option value="hobby">hobby</option>
             <option value="pro">pro</option>
           </Select>

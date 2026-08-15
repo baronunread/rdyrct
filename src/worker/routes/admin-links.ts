@@ -15,6 +15,10 @@
  * function, a later edit cannot quietly bring a suspended link back.
  */
 import { Hono, type Context } from "hono";
+import { oneOf } from "../../shared/lookup";
+import type { JsonValue } from "../../shared/types";
+import { optionalText, parseOptionalBody } from "../schemas";
+import * as v from "valibot";
 import { HTTPException } from "hono/http-exception";
 import { and, desc, eq, isNull, isNotNull, like, or, sql } from "drizzle-orm";
 import * as schema from "../db/schema";
@@ -34,13 +38,19 @@ import {
 export const adminLinkRoutes = new Hono<AppEnv>();
 adminLinkRoutes.use("*", jsonBodyLimit());
 
+/** The risk reasons a link row stores, as JSON. Anything else in that column
+ * reads as no reasons rather than as a crash. */
+const reasonsSchema = v.fallback(v.array(v.string()), []);
+
+/** The reason a moderation action carries. */
+const reasonBodySchema = v.object({ reason: optionalText });
+
 const MAX_ROWS = 200;
 
 function parseReasons(raw: string | null): string[] {
   if (!raw) return [];
   try {
-    const parsed: unknown = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed.filter((r): r is string => typeof r === "string") : [];
+    return v.parse(reasonsSchema, JSON.parse(raw));
   } catch {
     return [];
   }
@@ -59,8 +69,8 @@ function suspensionPatch(suspend: boolean, actorId: string, reason: string | nul
 /** The reason a moderation action must carry. Suspending without one leaves
  * a decision nobody can account for later. */
 async function requiredReason(c: Context<AppEnv>, required: boolean): Promise<string> {
-  const body = (await c.req.json().catch(() => ({}))) as { reason?: unknown };
-  const reason = typeof body.reason === "string" ? body.reason.trim().slice(0, 500) : "";
+  const body = parseOptionalBody(reasonBodySchema, await c.req.json<JsonValue>().catch(() => ({})));
+  const reason = body.reason.trim().slice(0, 500);
   if (required && !reason) throw new HTTPException(400, { message: "A reason is required" });
   return reason;
 }
@@ -181,9 +191,7 @@ function adminLinkOrder(sort: AdminLinkSort) {
 adminLinkRoutes.get("/", async (c) => {
   const db = c.var.db;
   const sortParam = c.req.query("sort") ?? "created";
-  const sort: AdminLinkSort = (ADMIN_LINK_SORTS as readonly string[]).includes(sortParam)
-    ? (sortParam as AdminLinkSort)
-    : "created";
+  const sort = oneOf(ADMIN_LINK_SORTS, sortParam, "created");
   const filters = adminLinkFilters(c);
 
   const rows = await db

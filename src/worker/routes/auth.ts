@@ -5,7 +5,8 @@ import * as schema from "../db/schema";
 import type { AppEnv } from "../env";
 import { requireUser } from "../guards";
 import { jsonBodyLimit } from "../body-limit";
-import type { AppConfig, CurrentUser, OrgPlan } from "@/shared/types";
+import type { AppConfig, CurrentUser } from "@/shared/types";
+import { orgPlanOf } from "@/shared/types";
 
 // Signup/login/logout/verification live under /api/auth/* (BetterAuth).
 // This router only exposes the app-level session view, mounted at /api.
@@ -59,7 +60,7 @@ async function currentUserFor(
     id: r.id,
     name: r.name,
     role: r.role,
-    plan: (r.ownerPlan ?? "free") as OrgPlan,
+    plan: orgPlanOf(r.ownerPlan),
     qrLogo: r.qrLogo,
     qrStyle: r.qrStyle,
     qrColor: r.qrColor,

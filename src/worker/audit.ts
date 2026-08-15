@@ -12,6 +12,7 @@
  * is visible.
  */
 import { drizzle } from "drizzle-orm/d1";
+import type { JsonValue } from "../shared/types";
 import * as schema from "./db/schema";
 import type { Env } from "./env";
 import { alertBetterStack } from "./alerts";
@@ -40,7 +41,7 @@ export async function recordAdminAction(
     targetType: "link" | "org" | "user" | "anon_link";
     targetId: string;
     /** Anything needed to read this entry once its target is gone. */
-    detail?: Record<string, unknown>;
+    detail?: Record<string, JsonValue>;
   },
 ): Promise<void> {
   try {

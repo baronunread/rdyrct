@@ -17,6 +17,7 @@
  * be able to shorten a link and sign up; it just cannot keep them across a
  * reload.
  */
+import * as v from "valibot";
 import { api } from "./api";
 import type { AnonLink } from "./shorten-anon";
 
@@ -35,27 +36,30 @@ const KEY = "rdyrct:anon-links:v3";
  */
 export const MAX_ANON_LINKS = 3;
 
-export type StoredAnonLink = {
-  slug: string;
-  url: string;
+const storedAnonLinkSchema = v.object({
+  slug: v.string(),
+  url: v.string(),
   /** The address it was made from: the question that appears once there is
    * more than one on screen. */
-  source: string;
-  claimToken: string;
-  expiresAt: number;
-};
+  source: v.string(),
+  claimToken: v.string(),
+  expiresAt: v.number(),
+});
 
-function isStored(value: unknown): value is StoredAnonLink {
-  const v = value as Partial<StoredAnonLink> | null;
-  return (
-    !!v &&
-    typeof v.slug === "string" &&
-    typeof v.url === "string" &&
-    typeof v.source === "string" &&
-    typeof v.claimToken === "string" &&
-    typeof v.expiresAt === "number"
-  );
-}
+export type StoredAnonLink = v.InferOutput<typeof storedAnonLinkSchema>;
+
+/** Everything under our key that is still a link, in the order stored. A
+ * browser holding junk there contributes nothing rather than shaping what
+ * signup does. */
+const storedListSchema = v.pipe(
+  v.array(v.unknown()),
+  v.transform((entries) =>
+    entries.flatMap((entry) => {
+      const parsed = v.safeParse(storedAnonLinkSchema, entry);
+      return parsed.success ? [parsed.output] : [];
+    }),
+  ),
+);
 
 /**
  * Everything still worth showing, newest first.
@@ -68,12 +72,12 @@ export function storedAnonLinks(): StoredAnonLink[] {
   try {
     const raw = localStorage.getItem(KEY);
     if (!raw) return [];
-    const parsed: unknown = JSON.parse(raw);
     // Anything unexpected is discarded rather than repaired: a browser
     // holding junk under our key must not be able to shape what signup does.
-    if (!Array.isArray(parsed)) return [];
+    const parsed = v.safeParse(storedListSchema, JSON.parse(raw));
+    if (!parsed.success) return [];
     const now = Date.now();
-    return parsed.filter((link): link is StoredAnonLink => isStored(link) && link.expiresAt > now);
+    return parsed.output.filter((link) => link.expiresAt > now);
   } catch {
     return [];
   }

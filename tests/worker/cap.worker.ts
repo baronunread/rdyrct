@@ -1,7 +1,20 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { env } from "cloudflare:workers";
 import { reset } from "cloudflare:test";
-import { applyTestMigrations, captureEmails, fetchWorker, overrideEnv } from "./support";
+import { applyTestMigrations, captureEmails, fetchWorker, jsonBody, overrideEnv } from "./support";
+import type { JsonValue } from "../../src/shared/types";
+
+/** What /api/cap/:scope/challenge answers with. */
+interface Challenge {
+  token: string;
+  challenge: { c: number; s: number; d: number };
+}
+
+/** What /api/cap/:scope/redeem answers with. */
+interface Redeemed {
+  success?: boolean;
+  token?: string;
+}
 
 /**
  * Cap, the proof-of-work gate in front of signup and password reset (#98).
@@ -24,7 +37,7 @@ const CAP_ON = () =>
     CAP_SECRET: "cap-test-secret-long-enough-to-be-accepted",
   });
 
-function capPost(path: string, body: unknown, testEnv = CAP_ON()) {
+function capPost(path: string, body: JsonValue, testEnv = CAP_ON()) {
   return fetchWorker(
     new Request(`http://localhost/api/cap/${path}`, {
       method: "POST",
@@ -99,28 +112,22 @@ beforeEach(async () => {
 
 describe("issuing and redeeming", () => {
   it("mints a challenge, and redeems a correct solution for a token", async () => {
-    const challenge = (await (await capPost("signup/challenge", {})).json()) as {
-      token: string;
-      challenge: { c: number; s: number; d: number };
-    };
+    const challenge = await jsonBody<Challenge>(await capPost("signup/challenge", {}));
     expect(challenge.challenge.c).toBeGreaterThan(0);
 
-    const redeemed = (await (
+    const redeemed = await jsonBody<Redeemed>(
       await capPost("signup/redeem", {
         token: challenge.token,
         solutions: await solveAll(challenge.token, challenge.challenge),
-      })
-    ).json()) as { success: boolean; token?: string };
+      }),
+    );
 
     expect(redeemed.success).toBe(true);
     expect(redeemed.token).toBeTruthy();
   });
 
   it("refuses a wrong solution", async () => {
-    const challenge = (await (await capPost("signup/challenge", {})).json()) as {
-      token: string;
-      challenge: { c: number };
-    };
+    const challenge = await jsonBody<Challenge>(await capPost("signup/challenge", {}));
     const res = await capPost("signup/redeem", {
       token: challenge.token,
       solutions: Array.from({ length: challenge.challenge?.c ?? 12 }, () => 1),
@@ -135,16 +142,14 @@ describe("issuing and redeeming", () => {
 
 describe("spending a token at signup", () => {
   async function mintToken(scope = "signup") {
-    const challenge = (await (await capPost(`${scope}/challenge`, {})).json()) as {
-      token: string;
-      challenge: { c: number; s: number; d: number };
-    };
-    const redeemed = (await (
+    const challenge = await jsonBody<Challenge>(await capPost(`${scope}/challenge`, {}));
+    const redeemed = await jsonBody<Redeemed>(
       await capPost(`${scope}/redeem`, {
         token: challenge.token,
         solutions: await solveAll(challenge.token, challenge.challenge),
-      })
-    ).json()) as { token: string };
+      }),
+    );
+    if (!redeemed.token) throw new Error("redeem answered without a token");
     return redeemed.token;
   }
 

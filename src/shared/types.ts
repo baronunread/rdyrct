@@ -1,3 +1,5 @@
+import { oneOf } from "./lookup";
+
 /** Carries a solved Cap token (#98) on the requests that need one. A header,
  * not a body field, because better-auth validates each endpoint's body
  * against its own schema. */
@@ -7,8 +9,38 @@ export const CAP_TOKEN_HEADER = "x-cap-token";
  * spent. The browser retries once with a fresh one rather than showing it. */
 export const CAP_FAILED_CODE = "CAP_FAILED";
 
-export type OrgRole = "owner" | "admin" | "member";
-export type OrgPlan = "free" | "hobby" | "pro";
+/** Anything that survives a round trip through JSON: what a request or
+ * response body is, before anyone has checked it means what it should. */
+export type JsonValue =
+  | string
+  | number
+  | boolean
+  | null
+  | JsonValue[]
+  | { [key: string]: JsonValue };
+
+const ORG_ROLES = ["owner", "admin", "member"] as const;
+export type OrgRole = (typeof ORG_ROLES)[number];
+
+/** The roles an invite may hand out: never owner, which only a transfer moves. */
+export const INVITABLE_ROLES = ["member", "admin"] as const;
+
+const ORG_PLANS = ["free", "hobby", "pro"] as const;
+
+/** The plans an admin may comp: the paid ones, since comping free is nothing. */
+export const COMP_PLANS = ["hobby", "pro"] as const;
+export type OrgPlan = (typeof ORG_PLANS)[number];
+
+/**
+ * The plan on a row, which reaches here as a text column or a JSON field.
+ *
+ * Anything unrecognised is free. A plan nobody sells must never grant more
+ * than the free one does, and that decision belongs here rather than at each
+ * of the places that read one.
+ */
+export function orgPlanOf(value: string | null | undefined): OrgPlan {
+  return oneOf(ORG_PLANS, value ?? "", "free");
+}
 
 export interface PlanLimits {
   orgs: number; // orgs a user may own on this plan
@@ -22,7 +54,7 @@ export interface PlanLimits {
   analyticsDays: number; // how far back click analytics look
 }
 
-export const PLAN_LIMITS: Record<OrgPlan, PlanLimits> = {
+export const PLAN_LIMITS = {
   free: {
     orgs: 1,
     links: 30,
@@ -47,13 +79,13 @@ export const PLAN_LIMITS: Record<OrgPlan, PlanLimits> = {
     qrCustom: true,
     analyticsDays: 365,
   },
-};
+} satisfies Record<OrgPlan, PlanLimits>;
 
 /** Display prices for the paid plans; the charge itself is set in Polar. */
-export const PLAN_PRICES: Record<Exclude<OrgPlan, "free">, string> = {
+export const PLAN_PRICES = {
   hobby: "$4",
   pro: "$9",
-};
+} satisfies Record<Exclude<OrgPlan, "free">, string>;
 
 /** QR dot styles supported by qr-code-styling; "" means inherit/default. */
 export const QR_DOT_STYLES = [

@@ -9,7 +9,12 @@ import worldTopology from "../data/world-110m.json";
 const WIDTH = 960;
 const HEIGHT = 500;
 
-const world = worldTopology as unknown as Topology<{ countries: GeometryCollection }>;
+// tsc infers world-110m.json's literal shape from the file itself, which is
+// far wider than the TopoJSON types and does not narrow to them on its own.
+const worldJson: unknown = worldTopology;
+// SAFETY: the file is a checked-in TopoJSON world map with a "countries"
+// object; feature() below reads exactly that and nothing else.
+const world = worldJson as Topology<{ countries: GeometryCollection }>;
 const countries = feature(world, world.objects.countries).features;
 
 const projection = geoNaturalEarth1().fitSize([WIDTH, HEIGHT], {
@@ -75,10 +80,12 @@ export function CountryMap({ countries: data }: { countries: TopEntry[] }) {
               strokeWidth={0.5}
               onMouseEnter={(e) => {
                 const rect = e.currentTarget.ownerSVGElement?.getBoundingClientRect();
+                // SAFETY: TopoJSON leaves feature properties untyped, and
+                // world-110m.json carries a "name" on each country. String()
+                // and the ?? below cover a feature that does not.
+                const named = f.properties as { name?: string } | null;
                 setHover({
-                  name: alpha2
-                    ? fmtCountry(alpha2)
-                    : String((f.properties as { name?: string } | null)?.name ?? ""),
+                  name: alpha2 ? fmtCountry(alpha2) : String(named?.name ?? ""),
                   clicks: clicks ?? 0,
                   x: rect ? ((e.clientX - rect.left) / rect.width) * 100 : 0,
                   y: rect ? ((e.clientY - rect.top) / rect.height) * 100 : 0,

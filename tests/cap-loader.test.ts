@@ -17,7 +17,7 @@ import { describe, expect, test } from "bun:test";
 function makeLoader(load: () => Promise<void>) {
   let loading: Promise<void> | null = null;
   return () => {
-    loading ??= load().catch((error: unknown) => {
+    loading ??= load().catch((error: Error) => {
       loading = null;
       throw error;
     });

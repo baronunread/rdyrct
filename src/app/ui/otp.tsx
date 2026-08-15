@@ -11,6 +11,19 @@ function focusSlot(root: HTMLDivElement | null, index: number) {
  * OTPField: numeric validation, paste-to-fill, and arrow-key nav come for
  * free. `onComplete` fires once the last slot is filled.
  */
+/**
+ * Whether a digit typed on the page belongs to this field.
+ *
+ * Not when it landed inside the field already (its own input handles that),
+ * and not when it landed in some other control the visitor is typing into.
+ * A keydown with no element behind it is nobody else's, so it counts.
+ */
+function isStrayDigit(root: HTMLElement, target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return true;
+  if (root.contains(target)) return false;
+  return !target.closest("input, textarea, select, [contenteditable]");
+}
+
 export function OtpInput({
   value,
   onChange,
@@ -59,9 +72,7 @@ export function OtpInput({
     const handleKeyDown = (event: KeyboardEvent) => {
       if (!/^[0-9]$/.test(event.key) || event.ctrlKey || event.metaKey || event.altKey) return;
       const root = rootRef.current;
-      if (!root || root.contains(event.target as Node)) return;
-      const target = event.target as HTMLElement | null;
-      if (target?.closest("input, textarea, select, [contenteditable]")) return;
+      if (!root || !isStrayDigit(root, event.target)) return;
       if (valueRef.current.length >= length) return;
       event.preventDefault();
       const next = valueRef.current + event.key;

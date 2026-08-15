@@ -3,6 +3,14 @@ import { createRequire } from "node:module";
 import { expect, test, type Page } from "@playwright/test";
 import { signUpAndVerify } from "./resend";
 
+declare global {
+  interface Window {
+    /** The jsQR bundle addScriptTag() injects below, so the page can decode
+     * the QR it just drew. */
+    jsQR: typeof import("jsqr").default;
+  }
+}
+
 /**
  * The standalone QR generator (Direction D of #96).
  *
@@ -57,11 +65,7 @@ async function readCode(page: Page, markup: string): Promise<string | null> {
     context?.drawImage(image, 0, 0);
     const pixels = context?.getImageData(0, 0, canvas.width, canvas.height);
     if (!pixels) return null;
-    const found = (window as unknown as { jsQR: typeof import("jsqr").default }).jsQR(
-      pixels.data,
-      pixels.width,
-      pixels.height,
-    );
+    const found = window.jsQR(pixels.data, pixels.width, pixels.height);
     return found?.data ?? null;
   }, markup);
 }

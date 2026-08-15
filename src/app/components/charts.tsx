@@ -24,12 +24,13 @@ import { CountryMap } from "./country-map";
 function thinnedPointScale(domain: readonly string[]): ConfiguredScaleLike<string> {
   function attach(scale: ReturnType<typeof scalePoint<string>>): ConfiguredScaleLike<string> {
     const rawCopy = scale.copy.bind(scale);
-    const s = scale as unknown as ConfiguredScaleLike<string>;
-    s.ticks = (count: number) => {
-      const step = Math.max(1, Math.ceil(domain.length / count));
-      return domain.filter((_, i) => i % step === 0);
-    };
-    s.copy = () => attach(rawCopy());
+    const s = Object.assign(scale, {
+      ticks: (count: number) => {
+        const step = Math.max(1, Math.ceil(domain.length / count));
+        return domain.filter((_, i) => i % step === 0);
+      },
+      copy: () => attach(rawCopy()),
+    });
     return s;
   }
   return attach(scalePoint<string>().domain(domain));

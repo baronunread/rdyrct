@@ -1,3 +1,6 @@
+import * as v from "valibot";
+import type { JsonValue } from "@/shared/types";
+
 export class ApiError extends Error {
   status: number;
   /** machine-readable code from the error body, e.g. "slug_taken" */
@@ -5,7 +8,7 @@ export class ApiError extends Error {
   /** The full parsed error body, for a code that carries extra fields beyond
    * message/code (e.g. "same_destination_match"'s matchedLinkId/matchedLink). */
   data?: unknown;
-  constructor(status: number, message: string, code?: string, data?: unknown) {
+  constructor(status: number, message: string, code?: string, data?: JsonValue) {
     super(message);
     this.status = status;
     this.code = code;
@@ -13,16 +16,23 @@ export class ApiError extends Error {
   }
 }
 
+/** The two fields the app reads off an error body; the rest rides along on
+ * ApiError.data for the caller that knows to look for it. */
+const errorBodySchema = v.object({
+  message: v.optional(v.fallback(v.string(), ""), ""),
+  code: v.optional(v.fallback(v.string(), ""), ""),
+});
+
 async function throwIfNotOk(res: Response): Promise<void> {
   if (res.ok) return;
   let message = res.statusText;
   let code: string | undefined;
-  let data: unknown;
+  let data: JsonValue | undefined;
   try {
-    data = (await res.json()) as { message?: string; code?: string };
-    const body = data as { message?: string; code?: string };
+    data = await res.json();
+    const body = v.parse(errorBodySchema, data ?? {});
     if (body.message) message = body.message;
-    code = body.code;
+    code = body.code || undefined;
   } catch {
     /* non-JSON error body */
   }
@@ -33,17 +43,23 @@ export async function api<T>(
   path: string,
   init?: Omit<RequestInit, "body"> & { body?: unknown },
 ): Promise<T> {
+  const headers: Record<string, string> = {};
+  if (init?.body !== undefined) headers["content-type"] = "application/json";
   const res = await fetch(`/api${path}`, {
     ...init,
-    headers: {
-      ...(init?.body !== undefined ? { "content-type": "application/json" } : {}),
-      ...init?.headers,
-    },
+    headers: { ...headers, ...init?.headers },
     body: init?.body !== undefined ? JSON.stringify(init.body) : undefined,
   });
   await throwIfNotOk(res);
+  // SAFETY: T is what the caller says the route returns, and the hooks in
+  // hooks.ts name the same DTOs the worker's routes build. A route that
+  // stopped matching would surface as an undefined field on screen, which is
+  // what the DTO types in src/shared exist to keep in step.
   return res.json() as Promise<T>;
 }
+
+/** What the QR-logo upload answers with. */
+const uploadedLogoSchema = v.object({ url: v.string() });
 
 /**
  * Upload a QR logo image to R2; returns the serving URL to store on the org
@@ -56,7 +72,8 @@ export async function uploadQrLogo(orgId: string, file: File): Promise<string> {
     body: file,
   });
   await throwIfNotOk(res);
-  return ((await res.json()) as { url: string }).url;
+  const { url } = v.parse(uploadedLogoSchema, await res.json());
+  return url;
 }
 
 export const shortUrl = (slug: string, domain?: string | null) =>

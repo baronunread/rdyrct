@@ -1,4 +1,7 @@
 import type { Context, Next } from "hono";
+import type { JsonValue } from "../shared/types";
+import { optionalText, parseOptionalBody } from "./schemas";
+import * as v from "valibot";
 import type { AppEnv, Env, SessionUser } from "./env";
 
 const RATE_LIMIT_WINDOW_SECONDS = 60;
@@ -103,15 +106,17 @@ export async function publicClientKey(request: Request, secret: string): Promise
  * no `email`) yields null and the recipient limit simply doesn't apply,
  * since there is no recipient to protect.
  */
+/** The one field the recipient budget is keyed on. */
+const recipientBodySchema = v.object({ email: optionalText });
+
 async function recipientKey(request: Request, secret: string): Promise<string | null> {
-  let parsed: unknown;
+  let parsed: JsonValue;
   try {
     parsed = await request.clone().json();
   } catch {
     return null;
   }
-  const email = (parsed as { email?: unknown } | null)?.email;
-  if (typeof email !== "string") return null;
+  const { email } = parseOptionalBody(recipientBodySchema, parsed);
   const normalized = email.trim().toLowerCase();
   if (!normalized) return null;
   return keyedDigest(secret, normalized);
@@ -135,11 +140,11 @@ export function publicAuthGroup(path: string): "auth" | "cap" | "email" | null {
 }
 
 /** Which counter each public group spends. */
-const PUBLIC_LIMIT_BINDINGS: Record<"auth" | "cap" | "email", (env: Env) => RateLimit> = {
+const PUBLIC_LIMIT_BINDINGS = {
   auth: (env) => env.RL_AUTH_PUBLIC,
   cap: (env) => env.RL_CAP,
   email: (env) => env.RL_EMAIL,
-};
+} satisfies Record<"auth" | "cap" | "email", (env: Env) => RateLimit>;
 
 export async function enforcePublicAuthRateLimit(c: Context<AppEnv>): Promise<Response | null> {
   const group = publicAuthGroup(c.req.path);

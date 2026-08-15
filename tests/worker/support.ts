@@ -15,15 +15,36 @@ import type { ClickMessage } from "../../src/worker/clicks";
 import type { StorageMessage } from "../../src/worker/storage";
 import { hashPassword } from "../../src/worker/password";
 
-type TestEnv = typeof env & { TEST_MIGRATIONS: D1Migration[] };
+// The ambient worker-test binding, under the same name the worker knows it by
+// (env.d.ts declares Cloudflare.Env as our own Env, so this needs no cast).
+export const testEnv: Env = env;
 
 export function overrideEnv(overrides: Partial<Env>): Env {
-  return new Proxy(env, {
-    get(target, property, receiver) {
-      if (property in overrides) return overrides[property as keyof Env];
-      return Reflect.get(target, property, receiver);
+  return { ...testEnv, ...overrides };
+}
+
+// Backlog numbers nothing asserts on: a stub queue has no backlog.
+const noBacklog = { backlogCount: 0, backlogBytes: 0 };
+
+/**
+ * A queue binding that hands every message to `onSend` instead of delivering
+ * it, so a producer's fan-out can be asserted without a live consumer running
+ * in the same test. Throw from `onSend` to make the send itself fail.
+ */
+export function stubQueue<Body>(onSend: (body: Body) => void): Queue<Body> {
+  return {
+    async metrics() {
+      return noBacklog;
     },
-  }) as unknown as Env;
+    async send(message) {
+      onSend(message);
+      return { metadata: { metrics: noBacklog } };
+    },
+    async sendBatch(messages) {
+      for (const m of messages) onSend(m.body);
+      return { metadata: { metrics: noBacklog } };
+    },
+  };
 }
 
 /**
@@ -31,13 +52,9 @@ export function overrideEnv(overrides: Partial<Env>): Env {
  * can be asserted without a live queue delivering the message back into the
  * worker under test (consumption is covered by tests/worker/clicks.worker.ts).
  */
-export function captureClickQueue(): { env: Env; sent: ClickMessage[] } {
+export function captureClickQueue() {
   const sent: ClickMessage[] = [];
-  const CLICK_QUEUE = {
-    async send(message: ClickMessage) {
-      sent.push(message);
-    },
-  } as unknown as Queue<ClickMessage>;
+  const CLICK_QUEUE = stubQueue<ClickMessage>((m) => sent.push(m));
   return { env: overrideEnv({ CLICK_QUEUE }), sent };
 }
 
@@ -116,18 +133,16 @@ export interface CapturedEmail {
 export function captureEmails({
   mx,
   hold,
-}: { mx?: "deliverable" | "unroutable"; hold?: Promise<void> } = {}): {
-  sent: CapturedEmail[];
-  started: () => boolean;
-  restore: () => void;
-} {
+}: { mx?: "deliverable" | "unroutable"; hold?: Promise<void> } = {}) {
   const sent: CapturedEmail[] = [];
   let started = false;
   const original = globalThis.fetch;
-  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+  globalThis.fetch = async (input, init) => {
     const url = String(input instanceof Request ? input.url : input);
     if (url.includes("/emails")) {
       started = true;
+      // SAFETY: the only caller of this branch is sendEmail(), which posts a
+      // JSON body of exactly these four fields to Resend.
       sent.push(JSON.parse(String(init?.body ?? "{}")) as CapturedEmail);
       if (hold) await hold;
       return Response.json({ id: "sent" });
@@ -136,8 +151,8 @@ export function captureEmails({
       const Answer = mx === "deliverable" ? [{ data: "10 mx.example." }] : [];
       return Response.json({ Status: 0, Answer });
     }
-    return original(input as RequestInfo, init);
-  }) as typeof fetch;
+    return original(input, init);
+  };
   return { sent, started: () => started, restore: () => (globalThis.fetch = original) };
 }
 
@@ -159,8 +174,7 @@ export async function seedBillingUser(
 }
 
 export async function applyTestMigrations(): Promise<void> {
-  const testEnv = env as TestEnv;
-  await applyD1Migrations(testEnv.DB, testEnv.TEST_MIGRATIONS);
+  await applyD1Migrations(env.DB, env.TEST_MIGRATIONS);
 }
 
 // The password every seeded test user shares: fine since each test's DB is
@@ -247,7 +261,7 @@ export const sampleLink = {
 // columns left out of a batch insert alongside other rows that do specify
 // them. Tests that need a raw `links` row — bypassing the API to seed data
 // directly — spread this in and override just what they're testing.
-const rawLinkDefaults = {
+const rawLinkDefaults: Partial<typeof schema.links.$inferInsert> = {
   title: "",
   utmSource: "",
   utmMedium: "",
@@ -260,8 +274,8 @@ const rawLinkDefaults = {
   qrCorner: "",
   qrBg: "",
   qrEyeColor: "",
-  qrLogoSize: null as number | null,
-  createdBy: null as string | null,
+  qrLogoSize: null,
+  createdBy: null,
 };
 
 export function rawLinkRow(
@@ -275,11 +289,11 @@ export function rawLinkRow(
 }
 
 // Same idea as rawLinkDefaults, for a raw `link_addresses` row.
-const rawAddressDefaults = {
-  domainId: null as string | null,
-  creationReason: "" as const,
-  expiresAt: null as number | null,
-  retiredAt: null as number | null,
+const rawAddressDefaults: Partial<typeof schema.linkAddresses.$inferInsert> = {
+  domainId: null,
+  creationReason: "",
+  expiresAt: null,
+  retiredAt: null,
 };
 
 export function rawAddressRow(
@@ -295,16 +309,16 @@ export function rawAddressRow(
 // The primary address row every link carries alongside it (see #38): a slug
 // only resolves via link_addresses now, so seedLink() must create this row
 // too, not just the links row.
-export const sampleAddress = {
+export const sampleAddress: Omit<typeof schema.linkAddresses.$inferInsert, "createdAt"> = {
   id: "addr-1",
   linkId: "link-1",
   orgId: "org-1",
-  domainId: null as string | null,
+  domainId: null,
   slug: "sale",
-  kind: "primary" as const,
-  creationReason: "" as const,
-  expiresAt: null as number | null,
-  retiredAt: null as number | null,
+  kind: "primary",
+  creationReason: "",
+  expiresAt: null,
+  retiredAt: null,
 };
 
 // Seeds one org ("org-1"), one link ("link-1", slug "sale"), and that link's
@@ -319,6 +333,18 @@ export async function seedLink(destination = "https://example.com") {
     db.insert(schema.linkAddresses).values({ ...sampleAddress, createdAt: 0 }),
   ]);
   return db;
+}
+
+/**
+ * Reads a response body as the shape the route under test is documented to
+ * return. Kept in one place so the tests do not repeat the same cast at every
+ * call site.
+ */
+export async function jsonBody<T>(res: Response): Promise<T> {
+  // SAFETY: the caller names the shape it is about to assert on, and the
+  // assertions are what check it: a route that stops returning that shape
+  // fails the test rather than passing quietly.
+  return (await res.json()) as T;
 }
 
 /** The schema-bound drizzle client every worker test reaches for. */
@@ -344,24 +370,16 @@ export async function addressesOf(linkId: string) {
 // A queue that records what was sent instead of delivering it, so a route's
 // KV-sync fan-out can be asserted without a live queue consumer running inside
 // the same test.
-export function captureStorageQueue(): { queue: Queue<StorageMessage>; sent: StorageMessage[] } {
+export function captureStorageQueue() {
   const sent: StorageMessage[] = [];
-  const queue = {
-    async send(message: StorageMessage) {
-      sent.push(message);
-    },
-    async sendBatch(messages: Iterable<{ body: StorageMessage }>) {
-      for (const m of messages) sent.push(m.body);
-    },
-  } as unknown as Queue<StorageMessage>;
-  return { queue, sent };
+  return { queue: stubQueue<StorageMessage>((m) => sent.push(m)), sent };
 }
 
 // Builds a real MessageBatch via the official cloudflare:test helpers, so ack/
 // retry/dead-letter assertions exercise the same runtime semantics production
 // queue delivery does, rather than hand-rolled spies.
 export function batchOf<Body>(queueName: string, bodies: Body[], attempts = 1) {
-  const batch = createMessageBatch(
+  const batch = createMessageBatch<Body>(
     queueName,
     bodies.map((body, i) => ({ id: `m${i}`, timestamp: new Date(), attempts, body })),
   );
@@ -377,20 +395,20 @@ export function batchOf<Body>(queueName: string, bodies: Body[], attempts = 1) {
  * spending a real one.
  */
 export function exhaustedLimit(): RateLimit {
-  return { limit: async () => ({ success: false }) } as unknown as RateLimit;
+  return { limit: async () => ({ success: false }) };
 }
 
 /** Always allows, isolating which of several budgets is under test. */
 export function openLimit(): RateLimit {
-  return { limit: async () => ({ success: true }) } as unknown as RateLimit;
+  return { limit: async () => ({ success: true }) };
 }
 
 /** Allows, and records the key each call was counted against. */
 export function recordingLimit(keys: string[]): RateLimit {
   return {
-    limit: async ({ key }: { key: string }) => {
-      keys.push(key);
+    limit: async (options) => {
+      keys.push(String(options?.key));
       return { success: true };
     },
-  } as unknown as RateLimit;
+  };
 }

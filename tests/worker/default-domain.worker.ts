@@ -3,7 +3,14 @@ import { env } from "cloudflare:workers";
 import { reset } from "cloudflare:test";
 import { eq } from "drizzle-orm";
 import * as schema from "../../src/worker/db/schema";
-import { applyTestMigrations, authEnv, fetchWorker, freeOwnerCookie, testDb } from "./support";
+import {
+  applyTestMigrations,
+  authEnv,
+  fetchWorker,
+  freeOwnerCookie,
+  jsonBody,
+  testDb,
+} from "./support";
 
 /** An owner of "org-1" with an active custom domain "go.example.com". */
 const seed = () => freeOwnerCookie({ id: "domain-1", hostname: "go.example.com" });
@@ -91,7 +98,7 @@ describe("PATCH /orgs/:orgId { defaultDomainId } (#69)", () => {
       new Request("http://localhost/api/user", { headers: { cookie } }),
       authEnv(),
     );
-    const body = (await res.json()) as { orgs: { id: string; defaultDomainId: string | null }[] };
+    const body = await jsonBody<{ orgs: { id: string; defaultDomainId: string | null }[] }>(res);
     expect(body.orgs.find((o) => o.id === "org-1")?.defaultDomainId).toBe("domain-1");
   });
 });

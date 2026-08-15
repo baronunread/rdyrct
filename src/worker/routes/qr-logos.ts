@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import { lookup } from "../../shared/lookup";
 import { HTTPException } from "hono/http-exception";
 import { bodyLimit } from "hono/body-limit";
 import type { AppEnv } from "../env";
@@ -24,10 +25,10 @@ qrLogoRoutes.use(
   }),
 );
 
-const EXT_BY_TYPE: Record<string, string> = {
+const EXT_BY_TYPE = {
   "image/webp": "webp",
   "image/svg+xml": "svg",
-};
+} satisfies Record<string, string>;
 
 function isWebp(body: ArrayBuffer) {
   const bytes = new Uint8Array(body);
@@ -46,7 +47,7 @@ function isSvg(body: ArrayBuffer) {
 /** Validates an uploaded logo's declared type, size, and that its bytes
  * actually match that type. Returns the file extension to store it under. */
 function validateQrLogoBody(type: string, body: ArrayBuffer): string {
-  const ext = EXT_BY_TYPE[type];
+  const ext = lookup(EXT_BY_TYPE, type);
   if (!ext)
     throw new HTTPException(400, {
       message: "Logo must be a compressed WebP or SVG image",

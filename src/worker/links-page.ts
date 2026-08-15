@@ -23,6 +23,8 @@
  * would drop one and repeat the other.
  */
 import { and, eq, gt, lt, or, sql, type SQL } from "drizzle-orm";
+import { oneOf } from "../shared/lookup";
+import * as v from "valibot";
 import * as schema from "./db/schema";
 
 const LINK_SORTS = ["created", "slug", "clicks"] as const;
@@ -60,7 +62,7 @@ export function readLinkPageParams(url: URL): LinkPageParams {
     limit: Number.isFinite(asked)
       ? Math.min(Math.max(Math.trunc(asked), 1), LINKS_MAX_PAGE_SIZE)
       : LINKS_PAGE_SIZE,
-    sort: (LINK_SORTS as readonly string[]).includes(sort) ? (sort as LinkSort) : "created",
+    sort: oneOf(LINK_SORTS, sort, "created"),
     dir: url.searchParams.get("dir") === "asc" ? 1 : -1,
     cursor: decodeCursor(url.searchParams.get("cursor")),
     q: (url.searchParams.get("q") ?? "").trim(),
@@ -75,6 +77,10 @@ export function readLinkPageParams(url: URL): LinkPageParams {
  * rebuilds it is a caller that breaks when the sort gains a column, and one
  * that can ask for a page from the middle of somebody else's ordering.
  */
+/** A cursor as it travels: the sort value it stopped at, and the row id
+ * that breaks ties. */
+const cursorSchema = v.tuple([v.union([v.string(), v.number()]), v.string()]);
+
 export function encodeCursor(value: CursorValue, id: string): string {
   return btoa(JSON.stringify([value, id]));
 }
@@ -82,9 +88,9 @@ export function encodeCursor(value: CursorValue, id: string): string {
 function decodeCursor(raw: string | null): { value: CursorValue; id: string } | null {
   if (!raw) return null;
   try {
-    const [value, id] = JSON.parse(atob(raw)) as [CursorValue, string];
-    if ((typeof value !== "string" && typeof value !== "number") || typeof id !== "string")
-      return null;
+    const parsed = v.safeParse(cursorSchema, JSON.parse(atob(raw)));
+    if (!parsed.success) return null;
+    const [value, id] = parsed.output;
     return { value, id };
   } catch {
     // A cursor we cannot read is a first page, not an error: it is a URL
@@ -173,11 +179,17 @@ export function cursorValueOf(
  * Returns the page the caller asked for plus the cursor that continues it,
  * or null when this was the last page.
  */
+/** One page of rows, and the cursor that continues it. */
+export interface Page<T> {
+  items: T[];
+  nextCursor: string | null;
+}
+
 export function takePage<T extends { id: string }>(
   rows: T[],
   params: LinkPageParams,
   valueOf: (row: T) => CursorValue,
-): { items: T[]; nextCursor: string | null } {
+): Page<T> {
   if (rows.length <= params.limit) return { items: rows, nextCursor: null };
   const items = rows.slice(0, params.limit);
   const last = items[items.length - 1]!;

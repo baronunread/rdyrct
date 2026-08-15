@@ -1,4 +1,7 @@
 import { Hono } from "hono";
+import type { JsonValue } from "../../shared/types";
+import { optionalFlag, parseOptionalBody } from "../schemas";
+import * as v from "valibot";
 import { HTTPException } from "hono/http-exception";
 import { eq, ne, gte, and, desc, lt, inArray, isNotNull, sql } from "drizzle-orm";
 import * as schema from "../db/schema";
@@ -12,6 +15,7 @@ import {
   type AdminOrgDetail,
   type AdminUserRow,
   type OrgPlan,
+  orgPlanOf,
 } from "@/shared/types";
 import { fillSeries, computeDelta, deleteOrg } from "./orgs";
 import { orgPlan } from "../plan";
@@ -88,7 +92,7 @@ function cumulativeSeries(
 
 function computePlanCounts(planCountRows: { plan: string; n: number }[]) {
   const planCounts = { free: 0, hobby: 0, pro: 0 };
-  for (const r of planCountRows) planCounts[r.plan as OrgPlan] = r.n;
+  for (const r of planCountRows) planCounts[orgPlanOf(r.plan)] = r.n;
   return planCounts;
 }
 
@@ -493,7 +497,7 @@ adminRoutes.get("/usage", async (c) => {
     signups: fillSeries(signupRows, days),
     topOrgs: topOrgRows.map((o) => ({
       ...o,
-      plan: (o as { plan?: OrgPlan }).plan ?? ("free" as OrgPlan),
+      plan: orgPlanOf(o.plan),
     })),
     topLinks: topLinkRows,
     planCounts,
@@ -662,13 +666,12 @@ adminRoutes.get("/users", async (c) => {
 });
 
 function validateIsAdminPatch(
-  value: boolean | undefined,
+  value: boolean | null | undefined,
   targetId: string,
   selfId: string,
 ): boolean | undefined {
   if (value === undefined) return undefined;
-  if (typeof value !== "boolean")
-    throw new HTTPException(400, { message: "isAdmin must be boolean" });
+  if (value === null) throw new HTTPException(400, { message: "isAdmin must be boolean" });
   if (targetId === selfId && !value)
     throw new HTTPException(400, { message: "Cannot demote yourself" });
   return value;
@@ -676,13 +679,12 @@ function validateIsAdminPatch(
 
 async function validateBannedPatch(
   db: DB,
-  value: boolean | undefined,
+  value: boolean | null | undefined,
   targetId: string,
   selfId: string,
 ): Promise<boolean | undefined> {
   if (value === undefined) return undefined;
-  if (typeof value !== "boolean")
-    throw new HTTPException(400, { message: "banned must be boolean" });
+  if (value === null) throw new HTTPException(400, { message: "banned must be boolean" });
   if (targetId === selfId) throw new HTTPException(400, { message: "Cannot ban yourself" });
   if (value) {
     const target = await db
@@ -699,12 +701,17 @@ async function validateBannedPatch(
 // by hand is not here: it is a comp, and it has its own routes below, because
 // a comp written into `plan` was indistinguishable from a paid subscription
 // (#81).
+/** What the user-patch route reads off its request body. A flag sent as
+ * something other than a boolean parses to null, which the validators below
+ * refuse by name rather than by silently ignoring. */
+const userPatchSchema = v.object({
+  isAdmin: optionalFlag,
+  banned: optionalFlag,
+  plan: v.optional(v.unknown()),
+});
+
 adminRoutes.patch("/users/:userId", async (c) => {
-  const body = await c.req.json<{
-    isAdmin?: boolean;
-    banned?: boolean;
-    plan?: string;
-  }>();
+  const body = parseOptionalBody(userPatchSchema, await c.req.json<JsonValue>().catch(() => ({})));
   const targetId = c.req.param("userId");
   const self = c.var.user!;
   const db = c.var.db;
@@ -713,7 +720,7 @@ adminRoutes.patch("/users/:userId", async (c) => {
     throw new HTTPException(400, {
       message: "Plan is derived from a subscription or a comp: use the comp routes",
     });
-  const patch: { isAdmin?: boolean; banned?: boolean } = {
+  const patch = {
     isAdmin: validateIsAdminPatch(body.isAdmin, targetId, self.id),
     banned: await validateBannedPatch(db, body.banned, targetId, self.id),
   };
@@ -763,11 +770,17 @@ async function writeComp(
   if (result.meta.changes === 0) throw new HTTPException(404, { message: "User not found" });
 }
 
+/** What the comp route reads off its request body. */
+interface CompBody {
+  plan?: string;
+  reason?: string;
+}
+
 /** Grant a comp: paid access an admin gives by hand, recorded as such (#81). */
 adminRoutes.post("/users/:userId/comp", async (c) => {
-  const body = await c.req
-    .json<{ plan?: string; reason?: string }>()
-    .catch(() => ({}) as { plan?: string; reason?: string });
+  // SAFETY: an unparseable body stands in for an empty one, and every field
+  // below is optional, so reading it finds the same absence.
+  const body = await c.req.json<CompBody>().catch(() => ({}) as CompBody);
   const plan = body.plan;
   if (plan !== "hobby" && plan !== "pro")
     throw new HTTPException(400, { message: "plan must be hobby or pro" });

@@ -2,6 +2,7 @@ import type { DrizzleD1Database } from "drizzle-orm/d1";
 import type * as schema from "./db/schema";
 import type { StorageMessage } from "./storage";
 import type { ClickMessage } from "./clicks";
+import type { BillingProvider } from "./billing-provider";
 
 export interface Env {
   DB: D1Database;
@@ -46,6 +47,9 @@ export interface Env {
   POLAR_PRO_PRODUCT_ID: string; // var
   POLAR_HOBBY_PRODUCT_ID: string; // var
   POLAR_SERVER?: "sandbox" | "production"; // var, default sandbox
+  /* the checkout/portal client, injected by tests; unset everywhere else,
+     where the routes build a real Polar client from the token above */
+  BILLING?: BillingProvider;
 
   /* custom domains (Cloudflare for SaaS) */
   APP_HOST: string; // var, e.g. "rdyrct.com"; the shared redirect host

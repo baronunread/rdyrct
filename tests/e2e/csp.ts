@@ -37,7 +37,7 @@ export async function collectCspViolations(page: Page): Promise<void> {
 }
 
 export async function cspViolations(page: Page): Promise<CspViolation[]> {
-  return (await page.evaluate(() => window.__cspViolations ?? [])) as CspViolation[];
+  return page.evaluate(() => window.__cspViolations ?? []);
 }
 
 /**

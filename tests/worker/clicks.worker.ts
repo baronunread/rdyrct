@@ -1,7 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { env } from "cloudflare:workers";
 import { getQueueResult, reset } from "cloudflare:test";
-import type { Env } from "../../src/worker/env";
 import {
   consumeClickBatch,
   logClickDeadLetterBatch,
@@ -15,6 +14,7 @@ import {
   sampleAddress,
   sampleLink,
   seedLink,
+  testEnv,
 } from "./support";
 
 function clickMessage(overrides: Partial<ClickMessage> = {}): ClickMessage {
@@ -52,7 +52,7 @@ describe("click queue: consumer", () => {
       clickMessage({ dedupeId: "c" }),
     ]);
 
-    await consumeClickBatch(env as Env, batch);
+    await consumeClickBatch(testEnv, batch);
 
     expect(await clickCount()).toBe(3);
     const result = await getQueueResult(batch, ctx);
@@ -63,7 +63,7 @@ describe("click queue: consumer", () => {
     await seedLink();
     const { batch } = batchOf("rdyrct-clicks", [clickMessage()]);
 
-    await consumeClickBatch(env as Env, batch);
+    await consumeClickBatch(testEnv, batch);
 
     const row = await env.DB.prepare("select address_id from clicks limit 1").first<{
       address_id: string | null;
@@ -80,7 +80,7 @@ describe("click queue: consumer", () => {
     const messages = Array.from({ length: 100 }, (_, i) => clickMessage({ dedupeId: `bulk-${i}` }));
     const { batch, ctx } = batchOf("rdyrct-clicks", messages);
 
-    await consumeClickBatch(env as Env, batch);
+    await consumeClickBatch(testEnv, batch);
 
     expect(await clickCount()).toBe(100);
     const result = await getQueueResult(batch, ctx);
@@ -91,12 +91,12 @@ describe("click queue: consumer", () => {
     await seedLink();
     const message = clickMessage({ dedupeId: "dup-1" });
 
-    await consumeClickBatch(env as Env, batchOf("rdyrct-clicks", [message]).batch);
+    await consumeClickBatch(testEnv, batchOf("rdyrct-clicks", [message]).batch);
     expect(await clickCount()).toBe(1);
 
     // A redelivery of the exact same message (same dedupeId) must not add a
     // second row.
-    await consumeClickBatch(env as Env, batchOf("rdyrct-clicks", [message]).batch);
+    await consumeClickBatch(testEnv, batchOf("rdyrct-clicks", [message]).batch);
     expect(await clickCount()).toBe(1);
   });
 
@@ -109,7 +109,7 @@ describe("click queue: consumer", () => {
       clickMessage({ dedupeId: "bad", linkId: "no-such-link" }),
     ]);
 
-    await consumeClickBatch(env as Env, batch);
+    await consumeClickBatch(testEnv, batch);
     const failed = await getQueueResult(batch, ctx);
     expect(failed.retryBatch.retry).toBe(true);
     expect(await clickCount()).toBe(0);
@@ -117,7 +117,7 @@ describe("click queue: consumer", () => {
     // Once the bad message is gone (dead-lettered after exhausting retries,
     // in production), a redelivery of the surviving message succeeds.
     const retry = batchOf("rdyrct-clicks", [clickMessage({ dedupeId: "ok" })]);
-    await consumeClickBatch(env as Env, retry.batch);
+    await consumeClickBatch(testEnv, retry.batch);
     const succeeded = await getQueueResult(retry.batch, retry.ctx);
     expect(succeeded.ackAll).toBe(true);
     expect(await clickCount()).toBe(1);
@@ -130,11 +130,11 @@ describe("click queue: consumer", () => {
       errors.mock.calls.some(([a]) => String(a).includes("click_batch_dead_letter"));
 
     const early = batchOf("rdyrct-clicks", [clickMessage({ linkId: "no-such-link" })], 1);
-    await consumeClickBatch(env as Env, early.batch);
+    await consumeClickBatch(testEnv, early.batch);
     expect(loggedDeadLetter()).toBe(false);
 
     const last = batchOf("rdyrct-clicks", [clickMessage({ linkId: "no-such-link" })], 6);
-    await consumeClickBatch(env as Env, last.batch);
+    await consumeClickBatch(testEnv, last.batch);
     expect(loggedDeadLetter()).toBe(true);
     errors.mockRestore();
   });
@@ -145,7 +145,7 @@ describe("click queue: dead-letter visibility", () => {
     const errors = vi.spyOn(console, "error").mockImplementation(() => {});
     const { batch, ctx } = batchOf("rdyrct-clicks-dlq", [clickMessage()]);
 
-    await logClickDeadLetterBatch(env as Env, batch);
+    await logClickDeadLetterBatch(testEnv, batch);
 
     const result = await getQueueResult(batch, ctx);
     expect(result.ackAll).toBe(true);
@@ -183,8 +183,10 @@ describe("sweepDedupeIds (#70)", () => {
   }
 
   async function dedupeIdOf(id: number) {
-    const row = await env.DB.prepare("select dedupe_id from clicks where id = ?").bind(id).first();
-    return (row as { dedupe_id: string | null }).dedupe_id;
+    const row = await env.DB.prepare("select dedupe_id from clicks where id = ?")
+      .bind(id)
+      .first<{ dedupe_id: string | null }>();
+    return row?.dedupe_id;
   }
 
   it("clears ids past the redelivery window and keeps the recent ones", async () => {
@@ -192,15 +194,13 @@ describe("sweepDedupeIds (#70)", () => {
     await seedClick(1, 30, "dedupe-old");
     await seedClick(2, 1, "dedupe-recent");
 
-    expect(await sweepDedupeIds(env as Env)).toBe(1);
+    expect(await sweepDedupeIds(testEnv)).toBe(1);
 
     // The old row keeps its click, and loses only the index weight.
     expect(await dedupeIdOf(1)).toBeNull();
     expect(await dedupeIdOf(2)).toBe("dedupe-recent");
-    const [{ n }] = (await env.DB.prepare("select count(*) as n from clicks").all()).results as {
-      n: number;
-    }[];
-    expect(n).toBe(2);
+    const counted = await env.DB.prepare("select count(*) as n from clicks").all<{ n: number }>();
+    expect(counted.results[0]?.n).toBe(2);
   });
 
   it("lets two swept rows sit side by side, since every NULL is distinct", async () => {
@@ -208,7 +208,7 @@ describe("sweepDedupeIds (#70)", () => {
     await seedClick(1, 30, "dedupe-1");
     await seedClick(2, 30, "dedupe-2");
 
-    expect(await sweepDedupeIds(env as Env)).toBe(2);
+    expect(await sweepDedupeIds(testEnv)).toBe(2);
 
     expect(await dedupeIdOf(1)).toBeNull();
     expect(await dedupeIdOf(2)).toBeNull();
@@ -218,8 +218,8 @@ describe("sweepDedupeIds (#70)", () => {
     await seedLink();
     await seedClick(1, 30, "dedupe-old");
 
-    expect(await sweepDedupeIds(env as Env)).toBe(1);
-    expect(await sweepDedupeIds(env as Env)).toBe(0);
+    expect(await sweepDedupeIds(testEnv)).toBe(1);
+    expect(await sweepDedupeIds(testEnv)).toBe(0);
   });
 
   it("still refuses a duplicate dedupe id inside the window", async () => {

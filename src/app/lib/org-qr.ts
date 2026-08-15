@@ -1,4 +1,4 @@
-import { QR_DEFAULT_BG, QR_DEFAULT_COLOR, type QrOverrides, type UserOrg } from "@/shared/types";
+import { QR_DEFAULT_BG, QR_DEFAULT_COLOR, type QrOverrides } from "@/shared/types";
 
 /** A link's or org's QR appearance, already resolved to concrete override
  * values (each field "" means "no override: inherit the built-in default"). */
@@ -13,7 +13,7 @@ export interface OrgQr {
 }
 
 /** Map a UserOrg's QR defaults into the OrgQr shape the editors consume. */
-export function orgQrFrom(org?: UserOrg | null): OrgQr {
+export function orgQrFrom(org?: Partial<QrOverrides> | null): OrgQr {
   return {
     logo: org?.qrLogo ?? "",
     style: org?.qrStyle ?? "",

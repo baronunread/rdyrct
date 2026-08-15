@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { errorMessage } from "@/app/lib/error-message";
 import confetti from "canvas-confetti";
 import { AnimatePresence, LazyMotion, domAnimation, m, useReducedMotion } from "motion/react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -46,11 +47,11 @@ function billingSnapshot(user?: {
   ]);
 }
 
-const PLAN_LABEL: Record<OrgPlan, string> = {
+const PLAN_LABEL = {
   free: "Free",
   hobby: "Hobby",
   pro: "Pro",
-};
+} satisfies Record<OrgPlan, string>;
 
 const PLAN_FEATURES = [
   ["Links", `${PLAN_LIMITS.free.links}`, `${PLAN_LIMITS.hobby.links}`, `${PLAN_LIMITS.pro.links}`],
@@ -657,7 +658,7 @@ function useCheckoutFlow() {
     } catch (e) {
       setCheckoutPlan(null);
       shake[target].start();
-      toast((e as Error).message, "error");
+      toast(errorMessage(e), "error");
     }
   };
 
@@ -674,7 +675,7 @@ function useCheckoutFlow() {
     } catch (e) {
       setShowPortalOverlay(false);
       shake.portal.start();
-      toast((e as Error).message, "error");
+      toast(errorMessage(e), "error");
     }
   };
 

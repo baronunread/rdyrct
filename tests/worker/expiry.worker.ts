@@ -11,6 +11,7 @@ import {
   rawAddressRow,
   rawLinkRow,
   testDb as db,
+  testEnv,
 } from "./support";
 
 async function seedLinkWithAddresses() {
@@ -59,7 +60,7 @@ afterEach(reset);
 describe("desiredKvValue resolves through link_addresses", () => {
   it("publishes a temp_alias key with its expiresAt baked in", async () => {
     await seedLinkWithAddresses();
-    await applyStorageMessage(env as never, db(), syncLinkMsg("old-slug", null));
+    await applyStorageMessage(testEnv, db(), syncLinkMsg("old-slug", null));
 
     const value = await env.LINKS.get<{ linkId: string; addressId: string; expiresAt: number }>(
       "slug:old-slug",
@@ -72,14 +73,14 @@ describe("desiredKvValue resolves through link_addresses", () => {
   it("deletes the key once the row is retired, even though it was still active when first published", async () => {
     await seedLinkWithAddresses();
     const message = syncLinkMsg("old-slug", null);
-    await applyStorageMessage(env as never, db(), message);
+    await applyStorageMessage(testEnv, db(), message);
     expect(await env.LINKS.get("slug:old-slug")).not.toBeNull();
 
     await db()
       .update(schema.linkAddresses)
       .set({ retiredAt: Date.now() })
       .where(eq(schema.linkAddresses.id, "addr-alias"));
-    await applyStorageMessage(env as never, db(), message);
+    await applyStorageMessage(testEnv, db(), message);
 
     expect(await env.LINKS.get("slug:old-slug")).toBeNull();
   });
@@ -88,7 +89,7 @@ describe("desiredKvValue resolves through link_addresses", () => {
 describe("redirect hot path: lazy expiry", () => {
   async function fetchWorker(request: Request) {
     const ctx = createExecutionContext();
-    const response = await worker.fetch(request, env as never, ctx);
+    const response = await worker.fetch(request, testEnv, ctx);
     await waitOnExecutionContext(ctx);
     return response;
   }
@@ -134,11 +135,11 @@ describe("redirect hot path: lazy expiry", () => {
 describe("sweepExpiredAliases", () => {
   it("retires an expired temp_alias and clears its KV key, leaving the primary untouched", async () => {
     await seedLinkWithAddresses();
-    await applyStorageMessage(env as never, db(), syncLinkMsg("old-slug", null));
-    await applyStorageMessage(env as never, db(), syncLinkMsg("new-slug", null));
+    await applyStorageMessage(testEnv, db(), syncLinkMsg("old-slug", null));
+    await applyStorageMessage(testEnv, db(), syncLinkMsg("new-slug", null));
     expect(await env.LINKS.get("slug:old-slug")).not.toBeNull();
 
-    await sweepExpiredAliases(env as never, db());
+    await sweepExpiredAliases(testEnv, db());
 
     const alias = await addressById("addr-alias");
     expect(alias.retiredAt).not.toBeNull();
@@ -148,7 +149,7 @@ describe("sweepExpiredAliases", () => {
 
     // The sweep only retires the D1 row; syncing the queue message is what
     // actually clears KV (mirrors how storage.ts's own tests exercise sync).
-    await applyStorageMessage(env as never, db(), syncLinkMsg("old-slug", null));
+    await applyStorageMessage(testEnv, db(), syncLinkMsg("old-slug", null));
     expect(await env.LINKS.get("slug:old-slug")).toBeNull();
     expect(await env.LINKS.get("slug:new-slug")).not.toBeNull();
   });
@@ -160,7 +161,7 @@ describe("sweepExpiredAliases", () => {
       .set({ expiresAt: Date.now() + 1000 * 60 * 60 })
       .where(eq(schema.linkAddresses.id, "addr-alias"));
 
-    await sweepExpiredAliases(env as never, db());
+    await sweepExpiredAliases(testEnv, db());
 
     const alias = await addressById("addr-alias");
     expect(alias.retiredAt).toBeNull();
@@ -168,10 +169,10 @@ describe("sweepExpiredAliases", () => {
 
   it("is a no-op re-run against an already-retired row", async () => {
     await seedLinkWithAddresses();
-    await sweepExpiredAliases(env as never, db());
+    await sweepExpiredAliases(testEnv, db());
     const first = (await addressById("addr-alias")).retiredAt;
 
-    await sweepExpiredAliases(env as never, db());
+    await sweepExpiredAliases(testEnv, db());
     const second = (await addressById("addr-alias")).retiredAt;
     expect(second).toBe(first);
   });

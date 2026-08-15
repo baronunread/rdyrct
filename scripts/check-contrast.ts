@@ -1,7 +1,7 @@
 // WCAG 2.2 + APCA-W3 contrast for rdyrct's tokens.
-const hex = (h: string) => {
+const hex = (h: string): [number, number, number] => {
   const n = parseInt(h.replace("#", ""), 16);
-  return [(n >> 16) & 255, (n >> 8) & 255, n & 255] as [number, number, number];
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
 };
 
 const srgb = (c: number) => {

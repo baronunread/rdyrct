@@ -17,7 +17,8 @@
  * Only the public routes are listed. Everything behind the login can keep the
  * default: it wants no traffic from a search engine.
  */
-import { PUBLIC_PAGE_META, type PageMeta } from "@/shared/page-meta";
+import { PUBLIC_PAGE_META } from "@/shared/page-meta";
+import { lookup } from "../shared/lookup";
 
 /** The absolute URL a page should call canonical, on whichever host is
  * serving it. */
@@ -54,7 +55,7 @@ class Text {
  * path stays a straight pipe for everything else.
  */
 export function withPageMeta(response: Response, url: URL): Response {
-  const meta: PageMeta | undefined = PUBLIC_PAGE_META[url.pathname];
+  const meta = lookup(PUBLIC_PAGE_META, url.pathname);
   if (!meta) return response;
   if (!response.headers.get("content-type")?.includes("text/html")) return response;
 

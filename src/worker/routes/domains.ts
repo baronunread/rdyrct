@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import type { JsonValue } from "../../shared/types";
 import { HTTPException } from "hono/http-exception";
 import { eq, and, isNull, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
@@ -27,11 +28,11 @@ interface CfHostnameResult {
   ssl?: { status: string } | null;
 }
 
-async function cfRequest<T = Record<string, unknown>>(
+async function cfRequest<T = Record<string, JsonValue>>(
   env: Env,
   method: string,
   path: string,
-  body?: unknown,
+  body?: JsonValue,
   opts?: { okNotFound?: boolean },
 ): Promise<{ result: T } | null> {
   const res = await fetch(`https://api.cloudflare.com/client/v4/zones/${env.CF_ZONE_ID}${path}`, {
@@ -50,6 +51,8 @@ async function cfRequest<T = Record<string, unknown>>(
     console.error("cf api error", res.status, text);
     let message = `Cloudflare API error ${res.status}`;
     try {
+      // SAFETY: this is Cloudflare's error envelope, and the catch below is
+      // what handles a response that is not it.
       const parsed = JSON.parse(text) as { errors?: { message?: string }[] };
       message = parsed.errors?.[0]?.message ?? message;
     } catch {
@@ -77,11 +80,11 @@ function assertCfConfigured(env: Env): void {
 async function cfCreateHostname(env: Env, hostname: string): Promise<CfHostname> {
   if (useFakeCf(env)) return { id: `fake_${uid(8)}`, active: false };
   assertCfConfigured(env);
-  const data = await cfRequest(env, "POST", "/custom_hostnames", {
+  const data = await cfRequest<{ id: string }>(env, "POST", "/custom_hostnames", {
     hostname,
     ssl: { method: "http", type: "dv" },
   });
-  return { id: data!.result.id as string, active: false };
+  return { id: data!.result.id, active: false };
 }
 
 /**
@@ -123,9 +126,12 @@ async function cfGetHostnameStatus(
   }
   assertCfConfigured(env);
   if (!row.cfHostnameId) return null;
-  const data = await cfRequest(env, "GET", `/custom_hostnames/${row.cfHostnameId}`);
-  if (!data) return null;
-  return data.result as unknown as CfHostnameResult;
+  const data = await cfRequest<CfHostnameResult>(
+    env,
+    "GET",
+    `/custom_hostnames/${row.cfHostnameId}`,
+  );
+  return data?.result ?? null;
 }
 
 export async function cfDeleteHostname(env: Env, cfHostnameId: string): Promise<void> {

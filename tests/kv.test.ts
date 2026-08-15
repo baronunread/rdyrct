@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, test } from "bun:test";
+import { partialEnv } from "./partial-env";
 import {
   publishDomain,
   publishLink,
@@ -46,7 +47,7 @@ const LINK = {
 
 beforeEach(() => {
   kv = mockKV();
-  env = { LINKS: kv } as unknown as Env;
+  env = partialEnv({ LINKS: kv });
 });
 
 describe("link publishing", () => {

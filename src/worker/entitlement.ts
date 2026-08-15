@@ -1,4 +1,5 @@
 import { sql } from "drizzle-orm";
+import { lookup } from "../shared/lookup";
 import type { OrgPlan } from "@/shared/types";
 
 /**
@@ -25,7 +26,7 @@ import type { OrgPlan } from "@/shared/types";
  * the end of the period stays `active` with `cancel_at_period_end` until it
  * ends; the status only reads `canceled` once it is actually over.
  */
-export const SUBSCRIPTION_ACCESS: Record<string, boolean> = {
+export const SUBSCRIPTION_ACCESS = {
   active: true,
   trialing: true,
   past_due: true,
@@ -33,11 +34,11 @@ export const SUBSCRIPTION_ACCESS: Record<string, boolean> = {
   unpaid: false,
   incomplete: false,
   incomplete_expired: false,
-};
+} satisfies Record<string, boolean>;
 
 /** Fails closed: a status with no rule grants nothing. */
 export function subscriptionGrantsAccess(status: string | null | undefined): boolean {
-  return status ? (SUBSCRIPTION_ACCESS[status] ?? false) : false;
+  return status ? (lookup(SUBSCRIPTION_ACCESS, status) ?? false) : false;
 }
 
 /** The same decision the SQL below makes, in TypeScript, for tests and for

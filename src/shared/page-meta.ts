@@ -29,7 +29,7 @@ export const DEFAULT_PAGE_META: PageMeta = {
   description: "Branded short links, QR codes, and custom domains with privacy-friendly analytics.",
 };
 
-export const PUBLIC_PAGE_META: Record<string, PageMeta> = {
+export const PUBLIC_PAGE_META = {
   "/": {
     title: "rdyrct - URL shortener and QR code generator with click analytics",
     description:
@@ -58,4 +58,4 @@ export const PUBLIC_PAGE_META: Record<string, PageMeta> = {
     title: "Terms of service - rdyrct",
     description: "The terms covering rdyrct short links, QR codes and analytics.",
   },
-};
+} satisfies Record<string, PageMeta>;

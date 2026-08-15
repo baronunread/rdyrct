@@ -97,8 +97,11 @@ const UTM_PARAMS: { param: string; key: UtmKey }[] = [
   { param: "utm_content", key: "utmContent" },
 ];
 
-const UTM_PARAM_BY_KEY: Record<UtmKey, string> = Object.fromEntries(
-  UTM_PARAMS.map(({ param, key }) => [key, param]),
+// SAFETY: Object.fromEntries types its result as an open record whatever it
+// is given. UTM_PARAMS lists every UtmKey exactly once, so the object built
+// from it has one entry per key.
+const UTM_PARAM_BY_KEY = Object.fromEntries(
+  UTM_PARAMS.map(({ param, key }) => [key, param] as const),
 ) as Record<UtmKey, string>;
 
 /** UTM params already in the pasted/typed URL, mirroring the server's
@@ -106,7 +109,7 @@ const UTM_PARAM_BY_KEY: Record<UtmKey, string> = Object.fromEntries(
  * the form fields. A param that's present but empty still wins (so
  * backspacing its value out clears the field instead of leaving a stale
  * one behind); a param that's absent leaves the field alone. */
-function utmFromDestination(destination: string): Partial<Record<UtmKey, string>> {
+function utmFromDestination(destination: string) {
   let url: URL;
   try {
     url = new URL(destination);
@@ -180,6 +183,8 @@ function UtmFields({
         {UTM_FIELDS.map(({ key, label, placeholder }) => (
           <Field key={key} label={label}>
             <Input
+              // SAFETY: UTM_FIELDS names only the five utm* fields, and each
+              // of those is a string on the form.
               value={(form[key] as string) ?? ""}
               onChange={set(key)}
               placeholder={placeholder}
@@ -219,7 +224,7 @@ function QrPreviewSidebar({
   );
 }
 
-function QrShapeFields({
+function QrPatternFields({
   form,
   setForm,
   fallbacks,
@@ -378,7 +383,7 @@ function QrCustomization({
       <legend className="px-1 text-2xs tracking-wider text-muted uppercase">
         QR customization
       </legend>
-      <QrShapeFields form={form} setForm={setForm} fallbacks={fallbacks} />
+      <QrPatternFields form={form} setForm={setForm} fallbacks={fallbacks} />
       <QrBackgroundFields form={form} setForm={setForm} fallbacks={fallbacks} />
       <QrLogoField form={form} setForm={setForm} />
     </fieldset>

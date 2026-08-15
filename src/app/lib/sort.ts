@@ -10,7 +10,12 @@ function compareSortValues(
   if (va == null && vb == null) return 0;
   if (va == null) return 1;
   if (vb == null) return -1;
-  const cmp = typeof va === "string" ? va.localeCompare(vb as string) : va - (vb as number);
+  // A column holds numbers or text, never a mix. Number.isFinite does not
+  // coerce, so "10" stays text and sorts the way it is shown.
+  const cmp =
+    Number.isFinite(va) && Number.isFinite(vb)
+      ? Number(va) - Number(vb)
+      : String(va).localeCompare(String(vb));
   return cmp * dir;
 }
 

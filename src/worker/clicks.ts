@@ -1,4 +1,5 @@
 import type { Context } from "hono";
+import { nonEmpty } from "../shared/lookup";
 import { drizzle } from "drizzle-orm/d1";
 import * as schema from "./db/schema";
 import type { AppEnv, Env } from "./env";
@@ -67,6 +68,9 @@ export async function enqueueClick(c: Context<AppEnv>, hit: KVLink): Promise<voi
       addressId: hit.addressId,
       orgId: hit.orgId,
       ts: Date.now(),
+      // SAFETY: Cloudflare sets cf.country to a two-letter code, and its type
+      // is the broad IncomingRequestCfProperties value. Unknown on a local
+      // request, where the ?? below makes it empty.
       country: (c.req.raw.cf?.country as string) ?? "",
       // Hostname only, never the full URL the header carries: see
       // normalizeReferrer in util.ts and issue #20.
@@ -120,7 +124,8 @@ export async function consumeClickBatch(
         )
         .onConflictDoNothing({ target: schema.clicks.dedupeId }),
     );
-    await db.batch(inserts as [(typeof inserts)[number], ...(typeof inserts)[number][]]);
+    const writes = nonEmpty(inserts);
+    if (writes) await db.batch(writes);
     batch.ackAll();
   } catch (error) {
     console.error("click batch insert failed", batch.messages.length, error);

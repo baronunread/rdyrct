@@ -7,9 +7,10 @@ import { Webhook } from "standardwebhooks";
 import worker from "../../src/worker";
 import * as schema from "../../src/worker/db/schema";
 import {
-  applyTestMigrations,
   adminCookie,
+  applyTestMigrations,
   billingEnv,
+  jsonBody,
   overrideEnv,
   POLAR_HOBBY_PRODUCT_ID,
   POLAR_PRO_PRODUCT_ID,
@@ -17,24 +18,25 @@ import {
   seedBillingUser as seedUser,
 } from "./support";
 import type { Env } from "../../src/worker/env";
+import type { JsonValue } from "../../src/shared/types";
+import type { BillingProvider } from "../../src/worker/billing-provider";
 
-// The Polar SDK makes real HTTP calls and expects a large, version-specific
-// response schema back; mocking the SDK class itself (rather than faking its
-// wire format) keeps these tests about our own route logic.
-const { checkoutsCreate, customerSessionsCreate } = vi.hoisted(() => ({
-  checkoutsCreate: vi.fn(async () => ({ url: "https://sandbox.polar.sh/checkout/test" })),
-  customerSessionsCreate: vi.fn(async () => ({
-    customerPortalUrl: "https://sandbox.polar.sh/portal/test",
-  })),
+// The real Polar client makes real HTTP calls and expects a large,
+// version-specific response schema back. The routes take their client off the
+// env (see BillingProvider), so these tests hand them a stand-in the same way
+// they hand over a queue or a rate limiter, and stay about our own route
+// logic.
+const checkoutsCreate = vi.fn(async () => ({ url: "https://sandbox.polar.sh/checkout/test" }));
+const customerSessionsCreate = vi.fn(async () => ({
+  customerPortalUrl: "https://sandbox.polar.sh/portal/test",
 }));
+const billingProvider: BillingProvider = {
+  checkouts: { create: checkoutsCreate },
+  customerSessions: { create: customerSessionsCreate },
+};
 
-vi.mock("@polar-sh/sdk", () => {
-  class Polar {
-    checkouts = { create: checkoutsCreate };
-    customerSessions = { create: customerSessionsCreate };
-  }
-  return { Polar };
-});
+/** billingEnv() with the stand-in checkout/portal client wired in. */
+const polarEnv = (): Env => ({ ...billingEnv(), BILLING: billingProvider });
 
 beforeEach(async () => {
   await applyTestMigrations();
@@ -55,7 +57,7 @@ async function getUser() {
   return rows[0];
 }
 
-async function checkout(cookie: string, body: Record<string, unknown>): Promise<Response> {
+async function checkout(cookie: string, body: JsonValue): Promise<Response> {
   const ctx = createExecutionContext();
   const res = await worker.fetch(
     new Request("http://localhost/api/billing/checkout", {
@@ -63,7 +65,7 @@ async function checkout(cookie: string, body: Record<string, unknown>): Promise<
       headers: { cookie, "content-type": "application/json" },
       body: JSON.stringify(body),
     }),
-    billingEnv(),
+    polarEnv(),
     ctx,
   );
   await waitOnExecutionContext(ctx);
@@ -76,7 +78,7 @@ async function portal(cookie?: string): Promise<Response> {
     new Request("http://localhost/api/billing/portal", {
       headers: cookie ? { cookie } : {},
     }),
-    billingEnv(),
+    polarEnv(),
     ctx,
   );
   await waitOnExecutionContext(ctx);
@@ -120,9 +122,9 @@ function subscriptionActivePayload(): string {
 }
 
 async function postWebhook(
-  event: unknown,
+  event: JsonValue,
   headers?: Record<string, string>,
-  testEnv: Env = billingEnv(),
+  testEnv: Env = polarEnv(),
 ): Promise<Response> {
   const payload = JSON.stringify(event);
   const ctx = createExecutionContext();
@@ -209,14 +211,29 @@ describe("GET /api/user reports whether a billing account exists (#85)", () => {
     const ctx = createExecutionContext();
     const res = await worker.fetch(
       new Request("http://localhost/api/user", { headers: { cookie } }),
-      billingEnv(),
+      polarEnv(),
       ctx,
     );
     await waitOnExecutionContext(ctx);
-    return (await res.json()) as {
-      user: { plan: string; hasBillingAccount: boolean; comped: boolean };
-    };
+    return jsonBody<{
+      user: {
+        plan: string;
+        hasBillingAccount: boolean;
+        comped: boolean;
+        polarSubscriptionCurrentPeriodEnd: number | null;
+      };
+    }>(res);
   }
+
+  it("reports no period end at all for a user without a subscription", async () => {
+    // Number(null) is 0, not NaN, so a helper that only guarded against NaN
+    // handed every free account a subscription ending on 1 January 1970. The
+    // billing page reads that date straight out, and the cancel notice shows
+    // it to whoever is looking.
+    const cookie = await adminCookie();
+
+    expect((await currentUser(cookie)).user.polarSubscriptionCurrentPeriodEnd).toBeNull();
+  });
 
   it("is false for a paid plan with no Polar customer, whose portal would error", async () => {
     const cookie = await adminCookie();
@@ -278,7 +295,7 @@ describe("GET /api/user reports whether a billing account exists (#85)", () => {
     const ctx = createExecutionContext();
     const res = await worker.fetch(
       new Request("http://localhost/api/user", { headers: { cookie } }),
-      billingEnv(),
+      polarEnv(),
       ctx,
     );
     await waitOnExecutionContext(ctx);

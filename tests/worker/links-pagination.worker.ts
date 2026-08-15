@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { env } from "cloudflare:workers";
 import { reset } from "cloudflare:test";
-import { applyTestMigrations, fetchWorker, freeOwnerCookie } from "./support";
+import { applyTestMigrations, fetchWorker, freeOwnerCookie, jsonBody } from "./support";
 
 /**
  * Paging an organization's links against a real database (#19).
@@ -21,7 +21,7 @@ async function list(cookie: string, query = ""): Promise<Page> {
     new Request(`http://localhost/api/orgs/org-1/links?${query}`, { headers: { cookie } }),
   );
   expect(res.status).toBe(200);
-  return (await res.json()) as Page;
+  return await jsonBody<Page>(res);
 }
 
 /** Rows straight into D1: what is under test is reading them back, and the

@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
+import type { JsonValue } from "../src/shared/types";
 import { RISK_PROVIDER_DNS, scoreDestination } from "../src/worker/risk";
 
 /**
@@ -17,9 +18,8 @@ afterEach(() => {
 });
 
 /** Answers every lookup with one canned DNS-over-HTTPS body. */
-function resolverReturns(body: unknown, ok = true) {
-  globalThis.fetch = (async () =>
-    new Response(JSON.stringify(body), { status: ok ? 200 : 502 })) as typeof fetch;
+function resolverReturns(body: JsonValue, ok = true) {
+  globalThis.fetch = async () => new Response(JSON.stringify(body), { status: ok ? 200 : 502 });
 }
 
 describe("reading the resolver", () => {
@@ -52,9 +52,9 @@ describe("reading the resolver", () => {
 
 describe("staying unscored rather than guessing", () => {
   test("leaves a failed lookup unscored", async () => {
-    globalThis.fetch = (async () => {
+    globalThis.fetch = async () => {
       throw new Error("network down");
-    }) as typeof fetch;
+    };
     expect(await scoreDestination("https://example.com")).toBeNull();
   });
 

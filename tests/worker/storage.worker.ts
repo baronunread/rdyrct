@@ -24,32 +24,43 @@ import {
   overrideEnv,
   sampleLink,
   seedLink,
+  stubQueue,
+  testEnv,
 } from "./support";
 
-function failingKv(): KVNamespace {
-  return new Proxy(env.LINKS, {
-    get(target, property, receiver) {
-      if (property === "put" || property === "delete") {
-        return async () => {
-          throw new Error("injected KV failure");
-        };
-      }
-      const value = Reflect.get(target, property, receiver);
-      return typeof value === "function" ? value.bind(target) : value;
+/**
+ * The real object with a few members swapped out.
+ *
+ * Everything not named keeps working, so a test can prove one operation
+ * misbehaved rather than that the whole binding was replaced. Methods are
+ * re-bound to the target because a native Cloudflare binding rejects any other
+ * receiver.
+ */
+function overriding<T extends object>(target: T, overrides: Partial<T>): T {
+  return new Proxy(target, {
+    get(actual, property) {
+      // SAFETY: a `get` trap only ever runs for a key looked up on `actual`,
+      // so the trap's key is a key of T.
+      const key = property as keyof T;
+      if (key in overrides) return overrides[key];
+      const value = actual[key];
+      return value instanceof Function ? value.bind(actual) : value;
     },
   });
 }
 
+const kvDown = async (): Promise<never> => {
+  throw new Error("injected KV failure");
+};
+
+function failingKv(): KVNamespace {
+  return overriding(env.LINKS, { put: kvDown, delete: kvDown });
+}
+
 function failingR2(): R2Bucket {
-  return new Proxy(env.QR_LOGOS, {
-    get(target, property, receiver) {
-      if (property === "delete") {
-        return async () => {
-          throw new Error("injected R2 failure");
-        };
-      }
-      const value = Reflect.get(target, property, receiver);
-      return typeof value === "function" ? value.bind(target) : value;
+  return overriding(env.QR_LOGOS, {
+    delete: async () => {
+      throw new Error("injected R2 failure");
     },
   });
 }
@@ -64,8 +75,8 @@ describe("storage queue: kv_sync", () => {
     const db = await seedLink();
     const message = syncLinkMsg(sampleLink.slug, null);
 
-    await applyStorageMessage(env as Env, db, message);
-    await applyStorageMessage(env as Env, db, message);
+    await applyStorageMessage(testEnv, db, message);
+    await applyStorageMessage(testEnv, db, message);
 
     expect(await env.LINKS.get("slug:sale", "json")).toMatchObject({
       linkId: "link-1",
@@ -77,14 +88,14 @@ describe("storage queue: kv_sync", () => {
     const db = await seedLink();
     const message = syncLinkMsg(sampleLink.slug, null);
     // Publish once so KV holds a value.
-    await applyStorageMessage(env as Env, db, message);
+    await applyStorageMessage(testEnv, db, message);
     expect(await env.LINKS.get("slug:sale")).not.toBeNull();
 
     // Now delete the row and replay the SAME message. Because the consumer
     // reads current D1 truth, a stale "publish-era" message still lands on a
     // delete: no older message can revive a removed link.
     await db.delete(schema.links).where(eq(schema.links.id, "link-1"));
-    await applyStorageMessage(env as Env, db, message);
+    await applyStorageMessage(testEnv, db, message);
 
     expect(await env.LINKS.get("slug:sale")).toBeNull();
   });
@@ -92,15 +103,15 @@ describe("storage queue: kv_sync", () => {
   it("reflects the latest destination no matter which sync runs last", async () => {
     const db = await seedLink("https://old.example.com");
     const message = syncLinkMsg(sampleLink.slug, null);
-    await applyStorageMessage(env as Env, db, message);
+    await applyStorageMessage(testEnv, db, message);
 
     await db
       .update(schema.links)
       .set({ destination: "https://new.example.com" })
       .where(eq(schema.links.id, "link-1"));
     // Two identical messages, run after the update: both converge on the new value.
-    await applyStorageMessage(env as Env, db, message);
-    await applyStorageMessage(env as Env, db, message);
+    await applyStorageMessage(testEnv, db, message);
+    await applyStorageMessage(testEnv, db, message);
 
     expect(await env.LINKS.get("slug:sale", "json")).toMatchObject({
       url: "https://new.example.com/",
@@ -120,7 +131,7 @@ describe("storage queue: consumer retry", () => {
     expect(await env.LINKS.get("slug:sale")).toBeNull();
 
     const retry = batchOf("rdyrct-storage", [syncLinkMsg(sampleLink.slug, null)]);
-    await consumeStorageBatch(env as Env, retry.batch);
+    await consumeStorageBatch(testEnv, retry.batch);
     const succeeded = await getQueueResult(retry.batch, retry.ctx);
     expect(succeeded.explicitAcks).toHaveLength(1);
     expect(await env.LINKS.get("slug:sale")).not.toBeNull();
@@ -138,7 +149,7 @@ describe("storage queue: consumer retry", () => {
     expect(await env.QR_LOGOS.head("org-1/logo.webp")).not.toBeNull();
 
     const up = batchOf("rdyrct-storage", [message]);
-    await consumeStorageBatch(env as Env, up.batch);
+    await consumeStorageBatch(testEnv, up.batch);
     const succeeded = await getQueueResult(up.batch, up.ctx);
     expect(succeeded.explicitAcks).toHaveLength(1);
     expect(await env.QR_LOGOS.head("org-1/logo.webp")).toBeNull();
@@ -174,7 +185,7 @@ describe("storage queue: dead-letter visibility", () => {
       deleteQrLogoMsg("/api/orgs/org-1/qr-logo/logo.webp")!,
     ]);
 
-    await logDeadLetterBatch(env as Env, batch);
+    await logDeadLetterBatch(testEnv, batch);
 
     const result = await getQueueResult(batch, ctx);
     expect(result.explicitAcks).toHaveLength(2);
@@ -252,8 +263,8 @@ describe("org teardown steps under secondary-store outage", () => {
     expect(await env.QR_LOGOS.head("org-1/logo.webp")).not.toBeNull();
 
     // Once the stores recover the steps complete and are idempotent.
-    await deleteKvKeys(env as Env, gathered.kvKeys);
-    await deleteR2Prefix(env as Env, "org-1/");
+    await deleteKvKeys(testEnv, gathered.kvKeys);
+    await deleteR2Prefix(testEnv, "org-1/");
     expect(await env.LINKS.get("slug:sale")).toBeNull();
     expect(await env.QR_LOGOS.head("org-1/logo.webp")).toBeNull();
   });
@@ -271,14 +282,9 @@ describe("producing messages", () => {
   });
 
   it("propagates a producer-side send failure instead of swallowing it", async () => {
-    const queue = {
-      async send() {
-        throw new Error("injected queue-send failure");
-      },
-      async sendBatch() {
-        throw new Error("injected queue-send failure");
-      },
-    } as unknown as Queue<StorageMessage>;
+    const queue = stubQueue<StorageMessage>(() => {
+      throw new Error("injected queue-send failure");
+    });
 
     await expect(
       enqueueStorage(overrideEnv({ STORAGE_QUEUE: queue }), [syncLinkMsg("sale", null)]),
@@ -301,17 +307,14 @@ describe("sweepOrphanQrLogos (#49)", () => {
   function agedEnv(): Env {
     const real = env.QR_LOGOS;
     const uploaded = new Date(Date.now() - 1.5 * DAY_MS);
-    const QR_LOGOS = {
-      ...real,
+    const QR_LOGOS = overriding(real, {
       list: async (options?: R2ListOptions) => {
         const page = await real.list(options);
-        return {
-          ...page,
-          objects: page.objects.map((object) => ({ ...object, uploaded })),
-        };
+        return overriding(page, {
+          objects: page.objects.map((object) => overriding(object, { uploaded })),
+        });
       },
-      delete: (keys: string | string[]) => real.delete(keys),
-    } as unknown as R2Bucket;
+    });
     return overrideEnv({ QR_LOGOS });
   }
 
@@ -349,7 +352,7 @@ describe("sweepOrphanQrLogos (#49)", () => {
     await putLogo("org-1/just-uploaded.webp");
 
     // The real env, so `uploaded` is now: inside the grace period.
-    expect(await sweepOrphanQrLogos(env as Env)).toBe(0);
+    expect(await sweepOrphanQrLogos(testEnv)).toBe(0);
     expect(await keysInBucket()).toEqual(["org-1/just-uploaded.webp"]);
   });
 

@@ -5,6 +5,7 @@ import { Badge, Card, PageHeader, Table, Th, Td } from "../../ui/misc";
 import { AdminUsageSkeleton } from "../../components/skeletons";
 import { linkLabel } from "./util";
 import type { AdminUsage, OrgPlan } from "@/shared/types";
+import { orgPlanOf } from "@/shared/types";
 import { shortDate } from "../../lib/dates";
 
 const planColor = (p: OrgPlan) => (p === "pro" ? "accent" : p === "hobby" ? "mint" : "muted");
@@ -106,7 +107,7 @@ function TopListsRow({ s }: { s: AdminUsage }) {
             if (!o) return id;
             return (
               <span className="flex items-center gap-2">
-                {o.name} <Badge color={planColor(o.plan as OrgPlan)}>{o.plan}</Badge>
+                {o.name} <Badge color={planColor(orgPlanOf(o.plan))}>{o.plan}</Badge>
               </span>
             );
           }}

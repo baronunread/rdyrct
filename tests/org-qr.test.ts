@@ -26,7 +26,7 @@ describe("orgQrFrom", () => {
         qrBg: "#222222",
         qrEyeColor: "#333333",
         qrLogoSize: 0.5,
-      } as never),
+      }),
     ).toEqual({
       logo: "logo.png",
       style: "dots",
@@ -80,7 +80,11 @@ describe("resolveQrLook", () => {
   });
 
   test("coerces a string logoSize override to a number", () => {
-    expect(resolveQrLook({ qrLogoSize: "0.65" as never }, emptyOrgQr).logoSize).toBe(0.65);
+    // SAFETY: the column is REAL in D1 and the API has handed back its value
+    // as a string, which is why resolveQrLook coerces at all. The assertion is
+    // that it still coerces.
+    const stringSize = { qrLogoSize: "0.65" as never };
+    expect(resolveQrLook(stringSize, emptyOrgQr).logoSize).toBe(0.65);
   });
 });
 

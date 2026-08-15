@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import type { JsonValue } from "../shared/types";
 import type { Context } from "hono";
 import { HTTPException } from "hono/http-exception";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
@@ -41,6 +42,28 @@ import {
 
 export { OrgDeleteWorkflow, DomainActivateWorkflow } from "./workflows";
 
+/**
+ * The JSON body every API error answers with: a message, plus whatever the
+ * route attached to the exception it threw.
+ */
+interface ErrorBody {
+  message: string;
+  [field: string]: JsonValue;
+}
+
+/**
+ * The extra fields a route put on an HTTPException, ready to merge into the
+ * error body. A route attaches an object (a machine-readable `code`,
+ * same_destination_match's matched link); anything else carries nothing.
+ */
+function causeFields(cause: unknown): Record<string, JsonValue> {
+  // SAFETY: the only writers are this repo's own routes, which attach a
+  // plain JSON object; the check above is what keeps anything else out.
+  return cause instanceof Object && !Array.isArray(cause)
+    ? (cause as Record<string, JsonValue>)
+    : {};
+}
+
 const app = new Hono<AppEnv>();
 
 app.onError((err, c) => {
@@ -49,13 +72,12 @@ app.onError((err, c) => {
   // more than just a machine-readable `code` (e.g. same_destination_match's
   // matchedLinkId/matchedLink) straight through to the caller.
   const path = new URL(c.req.url).pathname;
-  const respond = (body: unknown, status: ContentfulStatusCode) => {
+  const respond = (body: ErrorBody, status: ContentfulStatusCode) => {
     const res = c.json(body, status);
     return isBlogPath(path) ? res : applySecurityHeaders(res);
   };
   if (err instanceof HTTPException) {
-    const cause = err.cause && typeof err.cause === "object" ? err.cause : {};
-    return respond({ message: err.message, ...cause }, err.status);
+    return respond({ message: err.message, ...causeFields(err.cause) }, err.status);
   }
   console.error(err);
   return respond({ message: "Internal error" }, 500);
@@ -185,14 +207,16 @@ function proxyBlog(c: Context<AppEnv>, next: () => Promise<void>) {
   headers.set("host", target.hostname);
   const hasBody = !["GET", "HEAD"].includes(c.req.raw.method);
 
-  return fetch(target, {
+  // `duplex` is what Workers' fetch needs to stream a request body, and its
+  // RequestInit does not declare it, so it goes on after the object is built.
+  const init: RequestInit & { duplex?: "half" } = {
     method: c.req.raw.method,
     headers,
     body: hasBody ? c.req.raw.body : undefined,
-    // a streamed body requires this on Workers' fetch
-    ...(hasBody ? { duplex: "half" } : {}),
     redirect: "manual",
-  });
+  };
+  if (hasBody) init.duplex = "half";
+  return fetch(target, init);
 }
 app.all("/blog", proxyBlog);
 app.all("/blog/*", proxyBlog);
@@ -234,13 +258,16 @@ export default {
     // wrangler.jsonc); a DLQ's messages only get logged, never retried or
     // repaired. Check "-clicks-dlq" ahead of the generic "-dlq" suffix, since
     // it ends with both.
-    if (batch.queue.endsWith("-clicks-dlq"))
-      return logClickDeadLetterBatch(env, batch as MessageBatch<ClickMessage>);
-    if (batch.queue.endsWith("-clicks"))
-      return consumeClickBatch(env, batch as MessageBatch<ClickMessage>);
-    if (batch.queue.endsWith("-dlq"))
-      return logDeadLetterBatch(env, batch as MessageBatch<StorageMessage>);
-    await consumeStorageBatch(env, batch as MessageBatch<StorageMessage>);
+    // SAFETY: wrangler.jsonc binds each queue name to the consumer for its
+    // own message type, so the suffix that picks the branch is also what
+    // decides which of the two bodies the batch holds.
+    const clicks = batch as MessageBatch<ClickMessage>;
+    // SAFETY: as above, the queue name decides which body the batch holds.
+    const storage = batch as MessageBatch<StorageMessage>;
+    if (batch.queue.endsWith("-clicks-dlq")) return logClickDeadLetterBatch(env, clicks);
+    if (batch.queue.endsWith("-clicks")) return consumeClickBatch(env, clicks);
+    if (batch.queue.endsWith("-dlq")) return logDeadLetterBatch(env, storage);
+    await consumeStorageBatch(env, storage);
   },
   async scheduled(event: ScheduledEvent, env: Env, _ctx: ExecutionContext) {
     // Daily: trim old clicks.

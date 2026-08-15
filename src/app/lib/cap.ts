@@ -55,15 +55,23 @@ let loading: Promise<void> | null = null;
  * human" forever, and only a reload fixed it. Now the next attempt tries
  * again.
  */
+declare global {
+  interface Window {
+    /** Where @cap.js/widget fetches its WASM solver from. Read once, at the
+     * widget's module-eval time, so it has to be set before that import. */
+    CAP_CUSTOM_WASM_URL?: string;
+  }
+}
+
 function loadCap(): Promise<void> {
   loading ??= (async () => {
     // Read at module-eval time by the widget, so it has to be set first, or
     // it fetches the WASM from jsdelivr and trips the CSP.
-    (window as unknown as { CAP_CUSTOM_WASM_URL?: string }).CAP_CUSTOM_WASM_URL = wasmUrl;
+    window.CAP_CUSTOM_WASM_URL = wasmUrl;
     await import("@cap.js/widget");
-  })().catch((error: unknown) => {
+  })().catch((cause: unknown) => {
     loading = null;
-    throw error;
+    throw cause;
   });
   return loading;
 }
@@ -94,6 +102,9 @@ async function widgetFor(scope: CapScope): Promise<CapElement> {
   const existing = widgets.get(scope);
   if (existing?.isConnected) return existing;
 
+  // SAFETY: loadCap() above imported @cap.js/widget, which defines the
+  // "cap-widget" custom element, so createElement returns an upgraded widget
+  // with solve() on it rather than an unknown element.
   const el = document.createElement("cap-widget") as CapElement;
   el.setAttribute("data-cap-api-endpoint", `/api/cap/${scope}/`);
   el.setAttribute("aria-hidden", "true");

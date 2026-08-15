@@ -1,4 +1,5 @@
 import type { Env } from "./env";
+import type { JsonValue } from "../shared/types";
 
 /**
  * Best-effort alert to Better Stack over its HTTP log source. Never throws: a
@@ -8,7 +9,7 @@ import type { Env } from "./env";
  */
 export async function alertBetterStack(
   env: Env,
-  events: Array<Record<string, unknown>>,
+  events: Array<Record<string, JsonValue>>,
 ): Promise<void> {
   if (!env.BETTERSTACK_SOURCE_TOKEN || !env.BETTERSTACK_INGEST_URL) return;
   try {

@@ -24,15 +24,15 @@ import { GrantCompDialog, type CompPlan } from "./comp-dialog";
 
 type UserAction = "delete" | "ban" | "unban" | "makeAdmin" | "removeAdmin";
 
-const userActionMeta: Record<
-  UserAction,
-  {
-    title: string;
-    confirmLabel: string;
-    danger: boolean;
-    body: (u: AdminUserRow) => ReactNode;
-  }
-> = {
+/** What the confirmation dialog for one user action says. */
+interface UserActionMeta {
+  title: string;
+  confirmLabel: string;
+  danger: boolean;
+  body: (u: AdminUserRow) => ReactNode;
+}
+
+const userActionMeta = {
   delete: {
     title: "Delete user",
     confirmLabel: "Delete user",
@@ -91,13 +91,13 @@ const userActionMeta: Record<
       </>
     ),
   },
-};
+} satisfies Record<UserAction, UserActionMeta>;
 
-const planBadgeColor: Record<OrgPlan, "mint" | "accent" | "muted"> = {
+const planBadgeColor = {
   pro: "mint",
   hobby: "accent",
   free: "muted",
-};
+} satisfies Record<OrgPlan, "mint" | "accent" | "muted">;
 
 /** Where a user's paid access comes from, which is not the same question as
  * what it unlocks (#81). A comp outranks a subscription, so it is named
@@ -459,7 +459,7 @@ function useAdminUserActions() {
   const runAction = () => {
     if (!confirm) return;
     const { kind, user } = confirm;
-    const actions: Record<UserAction, () => void> = {
+    const actions = {
       delete: () => remove.mutate(user.id),
       ban: () =>
         patchUser.mutate(
@@ -481,7 +481,7 @@ function useAdminUserActions() {
           { userId: user.id, body: { isAdmin: false } },
           { onSuccess: () => toast("Platform admin removed") },
         ),
-    };
+    } satisfies Record<UserAction, () => void>;
     actions[kind]();
   };
 

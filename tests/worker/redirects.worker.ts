@@ -1,32 +1,21 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { env } from "cloudflare:workers";
-import {
-  applyD1Migrations,
-  createExecutionContext,
-  reset,
-  waitOnExecutionContext,
-} from "cloudflare:test";
-import worker from "../../src/worker";
-import type { Env } from "../../src/worker/env";
+import { reset } from "cloudflare:test";
 import type { ClickMessage } from "../../src/worker/clicks";
-import { captureClickQueue, overrideEnv } from "./support";
-
-type TestEnv = typeof env & { TEST_MIGRATIONS: D1Migration[] };
-
-async function fetchWorker(request: Request, testEnv: Env = env as Env): Promise<Response> {
-  const ctx = createExecutionContext();
-  const response = await worker.fetch(request, testEnv, ctx);
-  await waitOnExecutionContext(ctx);
-  return response;
-}
+import {
+  applyTestMigrations,
+  captureClickQueue,
+  fetchWorker,
+  overrideEnv,
+  stubQueue,
+} from "./support";
 
 afterEach(async () => {
   await reset();
 });
 
 beforeEach(async () => {
-  const testEnv = env as TestEnv;
-  await applyD1Migrations(testEnv.DB, testEnv.TEST_MIGRATIONS);
+  await applyTestMigrations();
   await env.DB.batch([
     env.DB.prepare("insert into orgs (id, name, created_at) values (?, ?, ?)").bind(
       "org-1",
@@ -121,13 +110,10 @@ describe("redirect hot path", () => {
       "slug:summer",
       JSON.stringify({ linkId: "link-1", orgId: "org-1", url: "https://example.com/sale" }),
     );
-    const failingEnv = overrideEnv({
-      CLICK_QUEUE: {
-        async send() {
-          throw new Error("injected queue-send failure");
-        },
-      } as unknown as Queue<ClickMessage>,
+    const downQueue = stubQueue<ClickMessage>(() => {
+      throw new Error("injected queue-send failure");
     });
+    const failingEnv = overrideEnv({ CLICK_QUEUE: downQueue });
     const errors = vi.spyOn(console, "error").mockImplementation(() => {});
 
     const response = await fetchWorker(

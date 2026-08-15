@@ -9,6 +9,7 @@ import {
   overrideEnv,
   recordingLimit,
 } from "./support";
+import type { JsonValue } from "../../src/shared/types";
 
 /**
  * Cap's endpoints spend their own budget, not signup's (#98).
@@ -24,7 +25,7 @@ import {
  * real ones: Cloudflare's per-location counters do not reset between cases.
  */
 
-async function post(testEnv: Env, path: string, body: unknown = {}): Promise<Response> {
+async function post(testEnv: Env, path: string, body: JsonValue = {}): Promise<Response> {
   const ctx = createExecutionContext();
   const res = await worker.fetch(
     new Request(`http://localhost${path}`, {

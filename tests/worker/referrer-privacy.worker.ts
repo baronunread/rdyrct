@@ -145,8 +145,7 @@ describe("migration 0016 leaves nothing ingestion would now refuse (#20)", () =>
       ),
     );
 
-    const { TEST_MIGRATIONS } = env as unknown as { TEST_MIGRATIONS: D1Migration[] };
-    const migration = TEST_MIGRATIONS.find((m) => m.name.startsWith("0016"));
+    const migration = env.TEST_MIGRATIONS.find((m) => m.name.startsWith("0016"));
     expect(migration, "migration 0016 is missing from the test bundle").toBeTruthy();
     await env.DB.batch(migration!.queries.map((query) => env.DB.prepare(query)));
 

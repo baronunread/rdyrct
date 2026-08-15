@@ -3,8 +3,17 @@ import { env } from "cloudflare:workers";
 import { reset } from "cloudflare:test";
 import { drizzle } from "drizzle-orm/d1";
 import * as schema from "../../src/worker/db/schema";
+import type { JsonValue } from "../../src/shared/types";
 import { applyStorageMessage, syncLinkMsg } from "../../src/worker/storage";
-import { adminCookie, applyTestMigrations, authEnv, fetchWorker, freeOwnerCookie } from "./support";
+import {
+  adminCookie,
+  applyTestMigrations,
+  authEnv,
+  fetchWorker,
+  freeOwnerCookie,
+  jsonBody,
+  testEnv,
+} from "./support";
 
 /**
  * Admin link moderation (#67).
@@ -24,7 +33,7 @@ async function createLink(cookie: string, destination = "https://example.com/one
       body: JSON.stringify({ destination }),
     }),
   );
-  return (await res.json()) as { id: string; slug: string };
+  return await jsonBody<{ id: string; slug: string }>(res);
 }
 
 const admin = (path: string, cookie: string, init: RequestInit = {}) =>
@@ -43,7 +52,7 @@ const admin = (path: string, cookie: string, init: RequestInit = {}) =>
  */
 async function syncKv(...slugs: string[]) {
   for (const slug of slugs)
-    await applyStorageMessage(env as never, drizzle(env.DB, { schema }), syncLinkMsg(slug, null));
+    await applyStorageMessage(testEnv, drizzle(env.DB, { schema }), syncLinkMsg(slug, null));
 }
 
 /** What the redirect path would find: KV is the only thing that decides. */
@@ -67,11 +76,11 @@ beforeEach(async () => {
   // The destination scorer (#68) runs on create through waitUntil and would
   // otherwise reach the real resolver and write real scores, which the risk
   // sort test then has to fight.
-  globalThis.fetch = (async (input: RequestInfo | URL) => {
+  globalThis.fetch = async (input, init) => {
     const url = String(input instanceof Request ? input.url : input);
     if (url.startsWith("https://security.cloudflare-dns.com")) throw new Error("offline");
-    return realFetch(input);
-  }) as typeof fetch;
+    return realFetch(input, init);
+  };
 });
 
 afterEach(() => {
@@ -86,7 +95,7 @@ async function createLiveLink(cookie: string, destination?: string) {
 }
 
 /** Call a moderation route, then apply the republishes it enqueued. */
-async function moderate(path: string, cookie: string, body?: object, linkIds: string[] = []) {
+async function moderate(path: string, cookie: string, body?: JsonValue, linkIds: string[] = []) {
   const res = await admin(path, cookie, {
     method: "POST",
     body: JSON.stringify(body ?? {}),
@@ -111,11 +120,9 @@ describe("suspending one link", () => {
     expect(res.status).toBe(200);
     expect(await kvFor(link.slug)).toBeNull();
 
-    const audit = (await (await admin("/links/audit", cookie)).json()) as {
-      action: string;
-      targetId: string;
-      detail: string | null;
-    }[];
+    const audit = await jsonBody<{ action: string; targetId: string; detail: string | null }[]>(
+      await admin("/links/audit", cookie),
+    );
     const entry = audit.find((a) => a.action === "link.suspend");
     expect(entry?.targetId).toBe(link.id);
     expect(entry?.detail).toContain("phishing report #412");
@@ -256,11 +263,12 @@ describe("suspending a whole org", () => {
 
     let sends = 0;
     const realSendBatch = env.STORAGE_QUEUE.sendBatch.bind(env.STORAGE_QUEUE);
-    env.STORAGE_QUEUE.sendBatch = (async (batch: unknown[]) => {
+    env.STORAGE_QUEUE.sendBatch = async (batch, options) => {
       sends++;
-      expect(batch.length).toBeLessThanOrEqual(100);
-      return realSendBatch(batch as Parameters<typeof realSendBatch>[0]);
-    }) as typeof env.STORAGE_QUEUE.sendBatch;
+      const messages = [...batch];
+      expect(messages.length).toBeLessThanOrEqual(100);
+      return realSendBatch(messages, options);
+    };
 
     try {
       const res = await admin("/links/orgs/org-1/suspend", await adminCookie(), {
@@ -297,11 +305,11 @@ describe("the cross-org search", () => {
     await createLink(owner, "https://example.com/mine");
 
     const cookie = await adminCookie();
-    const mine = (await (await admin("/links?org=org-1", cookie)).json()) as { orgId: string }[];
+    const mine = await jsonBody<{ orgId: string }[]>(await admin("/links?org=org-1", cookie));
     expect(mine.length).toBeGreaterThan(0);
     expect(mine.every((r) => r.orgId === "org-1")).toBe(true);
 
-    const other = (await (await admin("/links?org=org-nobody", cookie)).json()) as unknown[];
+    const other = await jsonBody<unknown[]>(await admin("/links?org=org-nobody", cookie));
     expect(other).toEqual([]);
   });
 
@@ -310,10 +318,9 @@ describe("the cross-org search", () => {
     await createLink(owner, "https://phishy.example/login");
     await createLink(owner, "https://legit.example/docs");
 
-    const rows = (await (await admin("/links?q=phishy.example", await adminCookie())).json()) as {
-      destination: string;
-      orgName: string;
-    }[];
+    const rows = await jsonBody<{ destination: string; orgName: string }[]>(
+      await admin("/links?q=phishy.example", await adminCookie()),
+    );
     expect(rows).toHaveLength(1);
     expect(rows[0].destination).toContain("phishy.example");
     expect(rows[0].orgName).toBe("Test");
@@ -332,9 +339,9 @@ describe("the cross-org search", () => {
       .bind(clean.id, bad.id)
       .run();
 
-    const rows = (await (await admin("/links?sort=risk", await adminCookie())).json()) as {
-      riskScore: number | null;
-    }[];
+    const rows = await jsonBody<{ riskScore: number | null }[]>(
+      await admin("/links?sort=risk", await adminCookie()),
+    );
     expect(rows.map((r) => r.riskScore)).toEqual([100, 0, null]);
   });
 
@@ -345,7 +352,7 @@ describe("the cross-org search", () => {
     const cookie = await adminCookie();
     await moderate(`/links/${link.id}/suspend`, cookie, { reason: "spam" }, [link.id]);
 
-    const rows = (await (await admin("/links?suspended=1", cookie)).json()) as { id: string }[];
+    const rows = await jsonBody<{ id: string }[]>(await admin("/links?suspended=1", cookie));
     expect(rows.map((r) => r.id)).toEqual([link.id]);
   });
 });

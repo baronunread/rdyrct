@@ -32,7 +32,7 @@ test("an owner can export the analytics view as a CSV (#78)", async ({ page }) =
 
   const stream = await download.createReadStream();
   const chunks: Buffer[] = [];
-  for await (const chunk of stream) chunks.push(chunk as Buffer);
+  for await (const chunk of stream) chunks.push(Buffer.from(chunk));
   const text = Buffer.concat(chunks).toString("utf8");
 
   // The BOM is what makes Excel read this as UTF-8 rather than mangling every

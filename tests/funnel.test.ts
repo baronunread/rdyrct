@@ -1,17 +1,17 @@
 import { afterEach, describe, expect, test } from "bun:test";
+import { installBrowserGlobals, removeBrowserGlobals } from "./browser-globals";
 import { FUNNEL, isFunnelEvent, landingContext } from "../src/app/lib/funnel";
 
 /** Minimal stand-ins for the two globals landingContext() reads. */
 function browser({ search = "", referrer = "", host = "rdyrct.com" } = {}) {
-  (globalThis as { window?: unknown }).window = {
-    location: { search, hostname: host },
-  };
-  (globalThis as { document?: unknown }).document = { referrer };
+  installBrowserGlobals({
+    window: { location: { search, hostname: host } },
+    document: { referrer },
+  });
 }
 
 afterEach(() => {
-  delete (globalThis as { window?: unknown }).window;
-  delete (globalThis as { document?: unknown }).document;
+  removeBrowserGlobals("window", "document");
 });
 
 describe("isFunnelEvent", () => {

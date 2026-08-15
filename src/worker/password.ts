@@ -21,11 +21,7 @@ async function pbkdf2(
     false,
     ["deriveBits"],
   );
-  return crypto.subtle.deriveBits(
-    { name: "PBKDF2", hash: "SHA-256", salt: salt as BufferSource, iterations },
-    key,
-    256,
-  );
+  return crypto.subtle.deriveBits({ name: "PBKDF2", hash: "SHA-256", salt, iterations }, key, 256);
 }
 
 export async function hashPassword(password: string): Promise<string> {

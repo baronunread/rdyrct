@@ -1,4 +1,8 @@
 import { Hono, type Context } from "hono";
+import { nonEmpty } from "../../shared/lookup";
+import type { JsonValue } from "../../shared/types";
+import { optionalText, parseOptionalBody } from "../schemas";
+import * as v from "valibot";
 import { HTTPException } from "hono/http-exception";
 import { eq, and, desc, isNull, sql } from "drizzle-orm";
 import * as schema from "../db/schema";
@@ -559,10 +563,15 @@ linkRoutes.get("/", requireOrgRole("member"), async (c) => {
  * the app fires it once after the first org exists and never blocks on it,
  * because a failed claim should cost a 24-hour link, not the signup.
  */
+/** What the claim route reads off its request body. */
+const claimBodySchema = v.object({ claimToken: optionalText });
+
 linkRoutes.post("/claim", requireOrgRole("member"), async (c) => {
-  const { claimToken } = (await c.req.json().catch(() => ({}))) as { claimToken?: unknown };
-  if (typeof claimToken !== "string" || !claimToken)
-    throw new HTTPException(400, { message: "Nothing to claim" });
+  const { claimToken } = parseOptionalBody(
+    claimBodySchema,
+    await c.req.json<JsonValue>().catch(() => ({})),
+  );
+  if (!claimToken) throw new HTTPException(400, { message: "Nothing to claim" });
 
   const link = await claimAnonLink(c.env, c.req.param("orgId")!, c.var.user!.id, claimToken);
   if (!link) throw new HTTPException(404, { message: "That link is no longer available" });
@@ -964,7 +973,8 @@ linkRoutes.patch("/:linkId", requireOrgRole("member"), async (c) => {
         ]
       : []),
   ];
-  await db.batch(writes as [(typeof writes)[number], ...(typeof writes)[number][]]);
+  const batch = nonEmpty(writes);
+  if (batch) await db.batch(batch);
   await enqueueStorage(c.env, messages);
 
   // Re-score a changed destination (#68). This is the trigger that matters:
@@ -1188,7 +1198,8 @@ linkRoutes.post("/:linkId/addresses/:addressId/promote", requireOrgRole("member"
       })
       .where(eq(schema.linkAddresses.id, address.id)),
   ];
-  await db.batch(writes as [(typeof writes)[number], ...(typeof writes)[number][]]);
+  const batch = nonEmpty(writes);
+  if (batch) await db.batch(batch);
   await enqueueStorage(c.env, [
     syncLinkMsg(existing.slug, oldHostname),
     syncLinkMsg(address.slug, hostname),

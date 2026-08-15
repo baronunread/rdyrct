@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { env } from "cloudflare:workers";
 import { createExecutionContext, reset, waitOnExecutionContext } from "cloudflare:test";
 import { drizzle } from "drizzle-orm/d1";
@@ -15,16 +15,7 @@ import {
   POLAR_WEBHOOK_SECRET,
   seedBillingUser as seedUser,
 } from "./support";
-
-// The Polar SDK is never reached by these tests (no checkout, no portal), but
-// importing the worker pulls it in, and its constructor wants a real token.
-vi.mock("@polar-sh/sdk", () => {
-  class Polar {
-    checkouts = { create: vi.fn() };
-    customerSessions = { create: vi.fn() };
-  }
-  return { Polar };
-});
+import type { JsonValue } from "../../src/shared/types";
 
 beforeEach(async () => {
   await applyTestMigrations();
@@ -43,7 +34,7 @@ async function getUser(id = "user-1") {
 
 let nextMsgId = 0;
 
-async function postWebhook(event: unknown): Promise<Response> {
+async function postWebhook(event: JsonValue): Promise<Response> {
   const payload = JSON.stringify(event);
   const msgId = `msg-${++nextMsgId}`;
   const timestamp = new Date();
@@ -81,7 +72,7 @@ async function adminFetch(cookie: string, path: string, init: RequestInit = {}):
   return res;
 }
 
-const grantComp = (cookie: string, body: unknown, userId = "user-1") =>
+const grantComp = (cookie: string, body: JsonValue, userId = "user-1") =>
   adminFetch(cookie, `/api/admin/users/${userId}/comp`, {
     method: "POST",
     body: JSON.stringify(body),
@@ -208,7 +199,7 @@ describe("comps (#81)", () => {
 });
 
 describe("subscription statuses (#84)", () => {
-  const updated = (over: Record<string, unknown>) => ({
+  const updated = (over: JsonValue & object) => ({
     type: "subscription.updated",
     data: {
       id: "sub_1",

@@ -48,8 +48,14 @@ export function safeUrl(value: string): string {
   }
 }
 
+/**
+ * What may be interpolated into an email template: markup already known to be
+ * safe, or a plain value, which gets escaped.
+ */
+type Interpolated = SafeHtml | string | number | boolean | null | undefined | Interpolated[];
+
 /** Renders one interpolated value: safe markup as-is, everything else escaped. */
-function render(value: unknown): string {
+function render(value: Interpolated): string {
   if (value instanceof SafeHtml) return value.html;
   if (value === null || value === undefined) return "";
   if (Array.isArray(value)) return value.map(render).join("");
@@ -62,7 +68,7 @@ function render(value: unknown): string {
  * The literal parts are trusted (they are in this repo); the interpolations
  * are not, and are escaped unless they are SafeHtml.
  */
-export function emailHtml(strings: TemplateStringsArray, ...values: unknown[]): SafeHtml {
+export function emailHtml(strings: TemplateStringsArray, ...values: Interpolated[]): SafeHtml {
   let out = strings[0] ?? "";
   for (let i = 0; i < values.length; i++) out += render(values[i]) + (strings[i + 1] ?? "");
   return new SafeHtml(out);

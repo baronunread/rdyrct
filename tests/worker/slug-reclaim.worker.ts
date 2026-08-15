@@ -10,6 +10,7 @@ import {
   TEST_PASSWORD,
 } from "./support";
 import { hashPassword } from "../../src/worker/password";
+import type { JsonValue } from "../../src/shared/types";
 
 /**
  * A slug freed by deleting a link cannot be repointed by somebody else (#76).
@@ -35,7 +36,13 @@ beforeEach(async () => {
 });
 afterEach(reset);
 
-async function apiAs(cookie: string, orgId: string, method: string, path: string, body?: unknown) {
+async function apiAs(
+  cookie: string,
+  orgId: string,
+  method: string,
+  path: string,
+  body?: JsonValue,
+) {
   const ctx = createExecutionContext();
   const res = await worker.fetch(
     new Request(`http://localhost/api/orgs/${orgId}${path}`, {

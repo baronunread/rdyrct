@@ -10,6 +10,7 @@ import {
   overrideEnv,
   recordingLimit,
 } from "./support";
+import type { JsonValue } from "../../src/shared/types";
 
 const RESET_PATH = "/api/auth/email-otp/request-password-reset";
 
@@ -21,7 +22,7 @@ const RESET_PATH = "/api/auth/email-otp/request-password-reset";
  */
 async function requestReset(
   testEnv: Env,
-  email: unknown,
+  email: JsonValue,
   callerIp = "203.0.113.1",
 ): Promise<Response> {
   const ctx = createExecutionContext();
@@ -98,12 +99,13 @@ describe("recipient-keyed email rate limit (#50)", () => {
     // because the budget that ran out belongs to the address.
     const spent = new Set<string>();
     const recipientBudgetOfOne: RateLimit = {
-      limit: async ({ key }: { key: string }) => {
+      limit: async (options) => {
+        const key = String(options?.key);
         const success = !spent.has(key);
         spent.add(key);
         return { success };
       },
-    } as unknown as RateLimit;
+    };
     const testEnv = overrideEnv({
       RL_EMAIL: openLimit(),
       RL_EMAIL_RECIPIENT: recipientBudgetOfOne,

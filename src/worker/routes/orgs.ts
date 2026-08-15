@@ -1,4 +1,6 @@
 import { Hono } from "hono";
+import * as v from "valibot";
+import type { JsonValue } from "../../shared/types";
 import { HTTPException } from "hono/http-exception";
 import { eq, and, gte, desc, sql, isNull } from "drizzle-orm";
 import * as schema from "../db/schema";
@@ -106,9 +108,10 @@ function qrPatchFields(body: OrgQrPatchBody): Partial<typeof schema.orgs.$inferI
 // validation can't store an unbounded name (see issue #19).
 const ORG_NAME_MAX_LENGTH = 100;
 
-function requireOrgName(name: unknown): string {
-  if (typeof name !== "string") throw new HTTPException(400, { message: "Name must be a string" });
-  const trimmed = name.trim();
+function requireOrgName(name: JsonValue): string {
+  const parsed = v.safeParse(v.string(), name);
+  if (!parsed.success) throw new HTTPException(400, { message: "Name must be a string" });
+  const trimmed = parsed.output.trim();
   if (!trimmed) throw new HTTPException(400, { message: "Name required" });
   if (trimmed.length > ORG_NAME_MAX_LENGTH)
     throw new HTTPException(400, {
@@ -332,7 +335,7 @@ async function occupiedSeats(db: AppEnv["Variables"]["db"], orgId: string): Prom
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 orgRoutes.post("/:orgId/invites", requireOrgRole("admin"), async (c) => {
-  let rawBody: unknown;
+  let rawBody: JsonValue;
   try {
     rawBody = await c.req.json();
   } catch {
@@ -404,7 +407,7 @@ orgRoutes.post("/:orgId/invites", requireOrgRole("admin"), async (c) => {
     createdBy: c.var.user!.id,
     createdAt: ts,
     expiresAt: ts + INVITE_TTL_MS,
-    acceptedBy: null as string | null,
+    acceptedBy: null,
   }));
 
   await c.var.db.insert(schema.invites).values(created);
@@ -499,10 +502,15 @@ function fillHours(rows: { hour: string; clicks: number }[]): SeriesPoint[] {
   return [...map.entries()].map(([day, clicks]) => ({ day, clicks }));
 }
 
-export function computeDelta(
-  current: number,
-  previous: number,
-): { current: number; previous: number; pct: number | null } {
+/** A figure against the figure before it, and the change between them.
+ * `pct` is null when there is no earlier figure to compare against. */
+export interface Delta {
+  current: number;
+  previous: number;
+  pct: number | null;
+}
+
+export function computeDelta(current: number, previous: number): Delta {
   return {
     current,
     previous,

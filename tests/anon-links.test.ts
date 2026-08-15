@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { installBrowserGlobals, removeBrowserGlobals } from "./browser-globals";
 import {
   MAX_ANON_LINKS,
   rememberAnonLink,
@@ -20,11 +21,13 @@ const HOUR = 60 * 60 * 1000;
 /** The two methods this module touches, and nothing else. */
 function fakeStorage() {
   const map = new Map<string, string>();
-  (globalThis as { localStorage?: unknown }).localStorage = {
-    getItem: (k: string) => map.get(k) ?? null,
-    setItem: (k: string, v: string) => void map.set(k, v),
-    removeItem: (k: string) => void map.delete(k),
-  };
+  installBrowserGlobals({
+    localStorage: {
+      getItem: (k) => map.get(k) ?? null,
+      setItem: (k, v) => void map.set(k, v),
+      removeItem: (k) => void map.delete(k),
+    },
+  });
   return map;
 }
 
@@ -42,7 +45,7 @@ beforeEach(() => {
   store = fakeStorage();
 });
 afterEach(() => {
-  delete (globalThis as { localStorage?: unknown }).localStorage;
+  removeBrowserGlobals("localStorage");
 });
 
 describe("keeping links across a reload", () => {
@@ -126,15 +129,17 @@ describe("junk under our key", () => {
   });
 
   test("survives storage that throws, so the form still works", () => {
-    (globalThis as { localStorage?: unknown }).localStorage = {
-      getItem: () => {
-        throw new Error("blocked");
+    installBrowserGlobals({
+      localStorage: {
+        getItem: () => {
+          throw new Error("blocked");
+        },
+        setItem: () => {
+          throw new Error("blocked");
+        },
+        removeItem: () => {},
       },
-      setItem: () => {
-        throw new Error("blocked");
-      },
-      removeItem: () => {},
-    };
+    });
     expect(storedAnonLinks()).toEqual([]);
     expect(() => rememberAnonLink(link("aaa111"), "https://example.com")).not.toThrow();
   });

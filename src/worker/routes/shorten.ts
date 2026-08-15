@@ -18,6 +18,9 @@
  *    be squatted or farmed.
  */
 import { Hono } from "hono";
+import type { JsonValue } from "../../shared/types";
+import { optionalText, parseOptionalBody } from "../schemas";
+import * as v from "valibot";
 import { HTTPException } from "hono/http-exception";
 import { and, eq, isNull, lt } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
@@ -35,6 +38,12 @@ import { insertLinkWithinLimit, orgPlan } from "../plan";
 /** How long an unclaimed link keeps working. */
 const ANON_LINK_TTL_MS = 24 * 60 * 60 * 1000;
 
+/** What the anonymous shortener reads off its request body. */
+const shortenBodySchema = v.object({
+  destination: optionalText,
+  capToken: optionalText,
+});
+
 export const shortenRoutes = new Hono<AppEnv>();
 shortenRoutes.use("*", jsonBodyLimit());
 
@@ -48,14 +57,12 @@ shortenRoutes.post("/", async (c) => {
       message: "Too many links from here. Try again shortly, or sign up.",
     });
 
-  const body = (await c.req.json().catch(() => ({}))) as {
-    destination?: unknown;
-    capToken?: unknown;
-  };
+  const body = parseOptionalBody(
+    shortenBodySchema,
+    await c.req.json<JsonValue>().catch(() => ({})),
+  );
 
-  if (
-    !(await spendToken(c.env, "anon-link", typeof body.capToken === "string" ? body.capToken : ""))
-  )
+  if (!(await spendToken(c.env, "anon-link", body.capToken)))
     // Coded so the browser can solve again and retry once, rather than
     // showing somebody an error they cannot act on.
     throw new HTTPException(400, {
@@ -63,7 +70,7 @@ shortenRoutes.post("/", async (c) => {
       cause: { code: CAP_FAILED_CODE },
     });
 
-  if (typeof body.destination !== "string" || !body.destination.trim())
+  if (!body.destination.trim())
     throw new HTTPException(400, { message: "Paste a link to shorten" });
 
   const destination = normalizeUrl(body.destination.trim());

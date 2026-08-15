@@ -32,11 +32,12 @@ Durable Objects, and Workflows. Fetch that URL for the OpenAPI schema, then use
 it to list, query, and manage local resources (e.g. inspect D1 rows or KV keys
 without wrangler CLI calls).
 
-**Two TypeScript projects; run BOTH after changes:**
+**Three TypeScript projects; run ALL THREE after changes:**
 
 ```sh
 bun run check                          # app + shared (tsconfig.json → src/app, src/shared)
 bunx tsc -p tsconfig.worker.json --noEmit   # worker (src/worker)
+bunx tsc -p tests/worker/tsconfig.json --noEmit  # worker tests (tests/worker)
 bun run test                           # unit tests (bun test, tests/)
 bun run test:worker                    # worker tests (vitest-pool-workers, tests/worker/)
 bun run e2e:smoke                      # browser tests (playwright, tests/e2e/); needs .dev.vars
@@ -53,6 +54,13 @@ bugs through that broke the app for every visitor. Green means the app runs
 in a browser, or it means nothing. Add a `tests/e2e/*.pw.ts` scenario
 alongside the feature, in the same commit.
 
+**The worker tests typecheck.** vitest does not, so `verify` runs tsc over
+`tests/worker` as its own project. `tests/worker/env.d.ts` declares
+`Cloudflare.Env` (what `env` from `cloudflare:workers` resolves to) as our
+hand-written `Env`, which is why no generated `worker-configuration.d.ts` is
+committed. `tests/` and `tests/e2e/` are still unchecked: they mix DOM and
+Workers globals in one directory, so they need untangling first.
+
 **Checks run in one place each.** The pre-commit hook only formats staged
 files, because that is the one job that repairs instead of complaining.
 Everything that reports runs in CI, where nobody can pass `--no-verify`:
@@ -62,6 +70,19 @@ Everything that reports runs in CI, where nobody can pass `--no-verify`:
 
 Lint and format take no path list: `.` plus the ignores in `.gitignore` and
 `.oxfmtrc.json`. One scope, so the hook and CI cannot check different files.
+
+**anti-slop** is an oxlint plugin, vendored in `.oxlint/anti-slop`, that
+refuses the shapes code takes when the author did not know the type: `as
+unknown as`, `unknown` parameters, `Record<string, unknown>`, `typeof`
+narrowing of a value nobody parsed, and any assertion with no stated
+invariant. Its fifteen rules run at `error` in `.oxlintrc.json`.
+
+What it asks for, when it fires: parse the value where it arrives (valibot,
+via `parseBody` in `src/worker/schemas.ts`), name the type it parses to, or
+write a `SAFETY:` comment on the line above saying which invariant makes the
+assertion sound. `JsonValue`, `lookup`, `oneOf`, `nonEmpty` and `orgPlanOf`
+in `src/shared` exist for the cases that come up repeatedly. The plugin is
+someone else's code, so oxlint, oxfmt, fallow and react-doctor all skip it.
 
 `bun run fallow` is the gate: it scopes to the files this branch changed and
 fails only on findings the branch introduced, counted against

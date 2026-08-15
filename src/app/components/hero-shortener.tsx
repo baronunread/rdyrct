@@ -21,6 +21,7 @@
  * first dashboard is not empty (#65).
  */
 import { useState } from "react";
+import { errorMessage } from "@/app/lib/error-message";
 import { ArrowRight } from "lucide-react";
 import { Button } from "../ui/button";
 import { buttonClass } from "../ui/button-class";
@@ -29,7 +30,6 @@ import { CopyButton } from "../ui/copy-button";
 import { BusyContent } from "../ui/spinner";
 import { useToast } from "../ui/toast";
 import { copyToClipboard } from "../lib/clipboard";
-import { ApiError } from "../lib/api";
 import { useCap } from "../lib/cap";
 import {
   MAX_ANON_LINKS,
@@ -43,8 +43,8 @@ import { QRPreview, QrDownloadButtons } from "./qr";
 
 /** The server's own message when it sent one: it says what was wrong with
  * the address, which a generic fallback cannot. */
-function shortenErrorMessage(error: unknown): string {
-  return error instanceof ApiError ? error.message : "Could not shorten that link";
+function shortenErrorMessage(cause: unknown): string {
+  return errorMessage(cause, "Could not shorten that link");
 }
 
 /** One made link: the URL in the wide column because that is what gets
@@ -95,7 +95,7 @@ function MadeLink({ link }: { link: StoredAnonLink }) {
 /** Written out per case rather than assembled from fragments: a sentence
  * stitched together from four inline conditionals is unreadable in source
  * and easy to break in one of its halves. */
-function keepCopy(count: number): { body: string; action: string } {
+function keepCopy(count: number) {
   if (count === 1)
     return {
       body: "This link works for 24 hours and records nothing. Sign up and it becomes yours permanently, with the clicks it earns.",

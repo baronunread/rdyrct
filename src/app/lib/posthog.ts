@@ -1,4 +1,5 @@
 import type { default as PosthogClient } from "posthog-js";
+import type { JsonValue } from "@/shared/types";
 import { bufferBeforeConsent, discardBuffer, drainBuffer } from "./consent-buffer";
 
 // Nothing here loads posthog-js or contacts PostHog until the user accepts
@@ -16,7 +17,12 @@ function hasAnalyticsConsent(): boolean {
 }
 
 let clientPromise: Promise<typeof PosthogClient | null> | null = null;
-let pendingIdentity: { id: string; properties?: Record<string, unknown> } | null = null;
+/** What rides along with an event: values that survive JSON, since that is
+ * what leaves the browser. `undefined` is allowed so a caller can pass a
+ * field it has not got without building the object twice. */
+export type EventProperties = Record<string, JsonValue | undefined>;
+
+let pendingIdentity: { id: string; properties?: EventProperties } | null = null;
 let identifiedId: string | null = null;
 
 function identifyPendingUser(posthog: typeof PosthogClient | null) {
@@ -28,10 +34,14 @@ function identifyPendingUser(posthog: typeof PosthogClient | null) {
 }
 
 function loadClient(): Promise<typeof PosthogClient | null> | null {
-  if (typeof window === "undefined" || !hasAnalyticsConsent()) return null;
+  if (!("window" in globalThis) || !hasAnalyticsConsent()) return null;
   if (!clientPromise) {
     clientPromise = import("posthog-js").then(({ default: posthog }) => {
+      // SAFETY: Vite inlines every VITE_-prefixed variable as a string
+      // literal at build time, or leaves it undefined when it is unset, which
+      // is exactly what the check below is for.
       const token = import.meta.env.VITE_PUBLIC_POSTHOG_PROJECT_TOKEN as string | undefined;
+      // SAFETY: as above.
       const host = import.meta.env.VITE_PUBLIC_POSTHOG_HOST as string | undefined;
       const missingVariable = !token
         ? "VITE_PUBLIC_POSTHOG_PROJECT_TOKEN"
@@ -115,7 +125,7 @@ export function revokeAnalyticsConsent() {
 }
 
 const posthog = {
-  capture(event: string, properties?: Record<string, unknown>) {
+  capture(event: string, properties?: EventProperties) {
     const client = loadClient();
     // Null means no consent yet. Hold funnel steps so the path survives a
     // later Accept; everything else is dropped, as before.
@@ -125,7 +135,7 @@ const posthog = {
     }
     void client.then((p) => p?.capture(event, properties));
   },
-  identify(id: string, properties?: Record<string, unknown>) {
+  identify(id: string, properties?: EventProperties) {
     if (identifiedId === id) return;
     pendingIdentity = { id, properties };
     void loadClient()?.then(identifyPendingUser);
@@ -135,8 +145,8 @@ const posthog = {
     identifiedId = null;
     void loadClient()?.then((p) => p?.reset());
   },
-  captureException(error: unknown, properties?: Record<string, unknown>) {
-    void loadClient()?.then((p) => p?.captureException(error, properties));
+  captureException(cause: unknown, properties?: EventProperties) {
+    void loadClient()?.then((p) => p?.captureException(cause, properties));
   },
 };
 

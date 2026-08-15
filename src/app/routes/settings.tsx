@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { errorMessage } from "@/app/lib/error-message";
 import { useForm } from "react-hook-form";
 import { valibotResolver } from "@hookform/resolvers/valibot";
 import { useQueryClient } from "@tanstack/react-query";
@@ -59,7 +60,7 @@ function useOrgRenameForm(org: UserOrg | null) {
         posthog.capture("organization_renamed");
         toast("Organization renamed");
       } catch (e) {
-        toast((e as Error).message, "error");
+        toast(errorMessage(e), "error");
       }
     },
     (errors) => toast(errors.name?.message ?? "Enter an organization name", "error"),
@@ -92,7 +93,7 @@ function useDeleteOrgFlow(orgId: string, clearNameField: () => void) {
       // useCurrentOrg falls back to the next org (or NoOrgState everywhere).
       await qc.refetchQueries({ queryKey: ["user"] });
     } catch (e) {
-      toast((e as Error).message, "error");
+      toast(errorMessage(e), "error");
     } finally {
       setPending(false);
     }
@@ -118,7 +119,7 @@ function useDeleteAccountFlow() {
       posthog.capture("account_deleted");
       window.location.assign("/");
     } catch (e) {
-      toast((e as Error).message, "error");
+      toast(errorMessage(e), "error");
     } finally {
       setPending(false);
     }

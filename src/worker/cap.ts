@@ -103,23 +103,19 @@ async function consumeNonce(env: Env, signatureHex: string, ttlMs: number): Prom
 export async function verifySolution(
   env: Env,
   scope: CapScope,
-  body: { token: string; solutions: unknown },
+  body: { token: string; solutions: number[] },
 ) {
-  return validateChallenge(
-    env.CAP_SECRET!,
-    { token: body.token, solutions: body.solutions as number[] },
-    {
-      scope,
-      tokenTtlMs: TOKEN_TTL_MS,
-      consumeNonce: (signatureHex, ttlMs) => consumeNonce(env, signatureHex, ttlMs),
-      // Signed, not stored. Cap's default token is a random string the server
-      // has to remember, and remembering it here meant a KV write at /redeem
-      // read back by the form submit a second later. KV is eventually
-      // consistent: that read missed often enough that signup failed for
-      // real people, and re-solving lost the same race (#98).
-      signToken: ({ expires }) => signToken(env, scope, expires),
-    },
-  );
+  return validateChallenge(env.CAP_SECRET!, body, {
+    scope,
+    tokenTtlMs: TOKEN_TTL_MS,
+    consumeNonce: (signatureHex, ttlMs) => consumeNonce(env, signatureHex, ttlMs),
+    // Signed, not stored. Cap's default token is a random string the server
+    // has to remember, and remembering it here meant a KV write at /redeem
+    // read back by the form submit a second later. KV is eventually
+    // consistent: that read missed often enough that signup failed for
+    // real people, and re-solving lost the same race (#98).
+    signToken: ({ expires }) => signToken(env, scope, expires),
+  });
 }
 
 /** Compares two same-length strings without leaking where they differ. */

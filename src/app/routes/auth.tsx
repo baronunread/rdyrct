@@ -321,6 +321,10 @@ interface Pending {
 function readPending(): Pending | null {
   try {
     const raw = sessionStorage.getItem(PENDING_KEY);
+    // SAFETY: this key is written by writePending() a few lines below and
+    // nowhere else. A value that is not JSON leaves through the catch; one
+    // that is JSON but not a Pending shows an empty address on the code form,
+    // which the next submit corrects.
     return raw ? (JSON.parse(raw) as Pending) : null;
   } catch {
     return null;
@@ -457,11 +461,11 @@ function useAuthFlow(mode: "login" | "signup") {
 
   const [resent, setResent] = useState(false);
 
-  const rawNext =
-    readPending()?.next ??
-    params.get("next") ??
-    (location.state as { from?: string } | null)?.from ??
-    "/dashboard";
+  // SAFETY: react-router types navigation state as unknown, and the only
+  // writer of this one is RequireAuth, which puts the path it bounced from
+  // there. The line below re-checks that whatever arrived is a local path.
+  const bouncedFrom = (location.state as { from?: string } | null)?.from;
+  const rawNext = readPending()?.next ?? params.get("next") ?? bouncedFrom ?? "/dashboard";
   const next = rawNext.startsWith("/") && !rawNext.startsWith("//") ? rawNext : "/dashboard";
 
   const { data: user } = useCurrentUser();

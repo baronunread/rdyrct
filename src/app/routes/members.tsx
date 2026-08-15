@@ -1,4 +1,6 @@
 import { useState, useMemo, useCallback } from "react";
+import { INVITABLE_ROLES } from "@/shared/types";
+import { oneOf } from "@/shared/lookup";
 import { useForm } from "react-hook-form";
 import { valibotResolver } from "@hookform/resolvers/valibot";
 import { useCurrentOrg } from "../lib/current-org";
@@ -26,11 +28,11 @@ import { shortDate } from "../lib/dates";
 import { inviteEmailSchema } from "../lib/schemas";
 import posthog from "../lib/posthog";
 
-const roleColor: Record<OrgRole, "accent" | "mint" | "muted"> = {
+const roleColor = {
   owner: "accent",
   admin: "mint",
   member: "muted",
-};
+} satisfies Record<OrgRole, "accent" | "mint" | "muted">;
 
 const inviteUrl = (token: string) => `${window.location.origin}/invite/${token}`;
 
@@ -504,7 +506,7 @@ function InviteByEmailCard({
             <MenuSelect
               label="Role"
               value={selectedRole}
-              onChange={(role) => setValue("role", role as "member" | "admin")}
+              onChange={(role) => setValue("role", oneOf(INVITABLE_ROLES, role, "member"))}
               options={[
                 { value: "member", label: "member" },
                 { value: "admin", label: "admin" },
