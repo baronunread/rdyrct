@@ -1,6 +1,6 @@
 import type { Context, Next } from "hono";
 import type { JsonValue } from "../shared/types";
-import { optionalText } from "./schemas";
+import { optionalText, parseOptionalBody } from "./schemas";
 import * as v from "valibot";
 import type { AppEnv, Env, SessionUser } from "./env";
 
@@ -116,7 +116,7 @@ async function recipientKey(request: Request, secret: string): Promise<string | 
   } catch {
     return null;
   }
-  const { email } = v.parse(recipientBodySchema, parsed ?? {});
+  const { email } = parseOptionalBody(recipientBodySchema, parsed);
   const normalized = email.trim().toLowerCase();
   if (!normalized) return null;
   return keyedDigest(secret, normalized);

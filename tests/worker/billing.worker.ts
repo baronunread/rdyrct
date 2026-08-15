@@ -215,8 +215,25 @@ describe("GET /api/user reports whether a billing account exists (#85)", () => {
       ctx,
     );
     await waitOnExecutionContext(ctx);
-    return jsonBody<{ user: { plan: string; hasBillingAccount: boolean; comped: boolean } }>(res);
+    return jsonBody<{
+      user: {
+        plan: string;
+        hasBillingAccount: boolean;
+        comped: boolean;
+        polarSubscriptionCurrentPeriodEnd: number | null;
+      };
+    }>(res);
   }
+
+  it("reports no period end at all for a user without a subscription", async () => {
+    // Number(null) is 0, not NaN, so a helper that only guarded against NaN
+    // handed every free account a subscription ending on 1 January 1970. The
+    // billing page reads that date straight out, and the cancel notice shows
+    // it to whoever is looking.
+    const cookie = await adminCookie();
+
+    expect((await currentUser(cookie)).user.polarSubscriptionCurrentPeriodEnd).toBeNull();
+  });
 
   it("is false for a paid plan with no Polar customer, whose portal would error", async () => {
     const cookie = await adminCookie();

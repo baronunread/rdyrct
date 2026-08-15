@@ -23,6 +23,26 @@ export function parseBody<const TSchema extends v.GenericSchema>(
 }
 
 /**
+ * Parses a body whose fields are every one of them optional.
+ *
+ * `v.object` refuses anything that is not an object, so a body of `"foo"` or
+ * `42` (valid JSON, just not the shape asked for) makes `v.parse` throw a
+ * ValiError, which reaches the error handler as a 500. Such a caller named
+ * none of the fields, which is what an empty body means: parse that instead,
+ * and let the route answer with its own "you did not say X" branch.
+ *
+ * Only for all-optional schemas: one with a required field would throw on the
+ * empty body too. Those want `parseBody` and its 400.
+ */
+export function parseOptionalBody<const TSchema extends v.GenericSchema>(
+  schema: TSchema,
+  body: JsonValue,
+): v.InferOutput<TSchema> {
+  const result = v.safeParse(schema, body);
+  return result.success ? result.output : v.parse(schema, {});
+}
+
+/**
  * A text field the caller may leave out, send empty, or send as something
  * that is not text at all.
  *

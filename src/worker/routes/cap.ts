@@ -7,7 +7,7 @@
  * is not, which is the asymmetry the whole scheme rests on.
  */
 import { Hono } from "hono";
-import { optionalText } from "../schemas";
+import { optionalText, parseOptionalBody } from "../schemas";
 import * as v from "valibot";
 import type { JsonValue } from "../../shared/types";
 import type { AppEnv } from "../env";
@@ -40,7 +40,7 @@ capRoutes.post("/:scope/challenge", async (c) => {
 capRoutes.post("/:scope/redeem", async (c) => {
   if (!capEnabled(c.env)) return c.json({ disabled: true });
   const scope = readScope(c.req.param("scope"));
-  const body = v.parse(redeemBodySchema, await c.req.json<JsonValue>().catch(() => ({})));
+  const body = parseOptionalBody(redeemBodySchema, await c.req.json<JsonValue>().catch(() => ({})));
   if (!scope || !body.token || !body.solutions)
     return c.json({ success: false, message: "Malformed solution" }, 400);
 

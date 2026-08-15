@@ -1,6 +1,6 @@
 import { betterAuth } from "better-auth";
 import type { JsonValue } from "../shared/types";
-import { optionalText } from "./schemas";
+import { optionalText, parseOptionalBody } from "./schemas";
 import * as v from "valibot";
 import { lookup } from "../shared/lookup";
 import { APIError, createAuthMiddleware, getSessionFromCtx } from "better-auth/api";
@@ -208,7 +208,7 @@ function bodyOf(ctx: { body?: unknown }): JsonValue {
 }
 
 async function guardVerificationOTPSend(db: Db, rawBody: JsonValue) {
-  const body = v.parse(otpSendBodySchema, rawBody ?? {});
+  const body = parseOptionalBody(otpSendBodySchema, rawBody);
   if (body.type !== "email-verification" || !body.email) return;
   const [existing] = await db
     .select({ emailVerified: schema.user.emailVerified })
@@ -287,7 +287,7 @@ async function guardSignUp(
   db: Db,
   rawBody: JsonValue,
 ): Promise<ReturnType<typeof pendingSignUpResponse> | undefined> {
-  const body = v.parse(signUpBodySchema, rawBody ?? {});
+  const body = parseOptionalBody(signUpBodySchema, rawBody);
   if (!body.email) return;
   const normalized = body.email.toLowerCase();
 

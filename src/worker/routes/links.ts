@@ -1,7 +1,7 @@
 import { Hono, type Context } from "hono";
 import { nonEmpty } from "../../shared/lookup";
 import type { JsonValue } from "../../shared/types";
-import { optionalText } from "../schemas";
+import { optionalText, parseOptionalBody } from "../schemas";
 import * as v from "valibot";
 import { HTTPException } from "hono/http-exception";
 import { eq, and, desc, isNull, sql } from "drizzle-orm";
@@ -567,7 +567,10 @@ linkRoutes.get("/", requireOrgRole("member"), async (c) => {
 const claimBodySchema = v.object({ claimToken: optionalText });
 
 linkRoutes.post("/claim", requireOrgRole("member"), async (c) => {
-  const { claimToken } = v.parse(claimBodySchema, await c.req.json<JsonValue>().catch(() => ({})));
+  const { claimToken } = parseOptionalBody(
+    claimBodySchema,
+    await c.req.json<JsonValue>().catch(() => ({})),
+  );
   if (!claimToken) throw new HTTPException(400, { message: "Nothing to claim" });
 
   const link = await claimAnonLink(c.env, c.req.param("orgId")!, c.var.user!.id, claimToken);

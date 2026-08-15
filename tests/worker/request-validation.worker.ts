@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createExecutionContext, reset, waitOnExecutionContext } from "cloudflare:test";
 import worker from "../../src/worker";
-import { applyTestMigrations, authEnv, fetchWorker, freeOwnerCookie } from "./support";
+import { applyTestMigrations, authEnv, fetchWorker, freeOwnerCookie, jsonBody } from "./support";
 import type { JsonValue } from "../../src/shared/types";
 
 async function postJson(cookie: string, path: string, body: JsonValue): Promise<Response> {
@@ -157,6 +157,29 @@ describe("invite creation request validation (#19)", () => {
   it("rejects malformed JSON with 400 instead of silently creating a bearer invite", async () => {
     const cookie = await freeOwnerCookie();
     const res = await postRawBody(cookie, "/api/orgs/org-1/invites", "{not valid json");
+    expect(res.status).toBe(400);
+  });
+});
+
+describe("a JSON body that is not an object (#122)", () => {
+  // `"foo"` and `42` are valid JSON, so the `.catch()` around `req.json()`
+  // never fires, and the schemas are objects, so parsing threw a ValiError
+  // that reached the error handler as a 500. A caller who sends a scalar
+  // named none of the fields, which is what an empty body means: the route's
+  // own answer is the right one.
+  it.each([
+    ['"foo"', "a string"],
+    ["42", "a number"],
+    ["true", "a boolean"],
+  ])("answers %s (%s) with the route's own 400, not a 500", async (rawBody) => {
+    const res = await postRawBody("", "/api/shorten", rawBody);
+    expect(res.status).toBe(400);
+    const { message } = await jsonBody<{ message: string }>(res);
+    expect(message).toBe("Paste a link to shorten");
+  });
+
+  it("answers an array the same way, since it names no fields either", async () => {
+    const res = await postRawBody("", "/api/shorten", "[]");
     expect(res.status).toBe(400);
   });
 });

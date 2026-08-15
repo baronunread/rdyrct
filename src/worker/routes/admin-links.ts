@@ -17,7 +17,7 @@
 import { Hono, type Context } from "hono";
 import { oneOf } from "../../shared/lookup";
 import type { JsonValue } from "../../shared/types";
-import { optionalText } from "../schemas";
+import { optionalText, parseOptionalBody } from "../schemas";
 import * as v from "valibot";
 import { HTTPException } from "hono/http-exception";
 import { and, desc, eq, isNull, isNotNull, like, or, sql } from "drizzle-orm";
@@ -69,7 +69,7 @@ function suspensionPatch(suspend: boolean, actorId: string, reason: string | nul
 /** The reason a moderation action must carry. Suspending without one leaves
  * a decision nobody can account for later. */
 async function requiredReason(c: Context<AppEnv>, required: boolean): Promise<string> {
-  const body = v.parse(reasonBodySchema, await c.req.json<JsonValue>().catch(() => ({})));
+  const body = parseOptionalBody(reasonBodySchema, await c.req.json<JsonValue>().catch(() => ({})));
   const reason = body.reason.trim().slice(0, 500);
   if (required && !reason) throw new HTTPException(400, { message: "A reason is required" });
   return reason;

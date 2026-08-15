@@ -19,7 +19,7 @@
  */
 import { Hono } from "hono";
 import type { JsonValue } from "../../shared/types";
-import { optionalText } from "../schemas";
+import { optionalText, parseOptionalBody } from "../schemas";
 import * as v from "valibot";
 import { HTTPException } from "hono/http-exception";
 import { and, eq, isNull, lt } from "drizzle-orm";
@@ -57,7 +57,10 @@ shortenRoutes.post("/", async (c) => {
       message: "Too many links from here. Try again shortly, or sign up.",
     });
 
-  const body = v.parse(shortenBodySchema, await c.req.json<JsonValue>().catch(() => ({})));
+  const body = parseOptionalBody(
+    shortenBodySchema,
+    await c.req.json<JsonValue>().catch(() => ({})),
+  );
 
   if (!(await spendToken(c.env, "anon-link", body.capToken)))
     // Coded so the browser can solve again and retry once, rather than

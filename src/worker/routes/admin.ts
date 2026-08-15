@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import type { JsonValue } from "../../shared/types";
-import { optionalFlag } from "../schemas";
+import { optionalFlag, parseOptionalBody } from "../schemas";
 import * as v from "valibot";
 import { HTTPException } from "hono/http-exception";
 import { eq, ne, gte, and, desc, lt, inArray, isNotNull, sql } from "drizzle-orm";
@@ -711,7 +711,7 @@ const userPatchSchema = v.object({
 });
 
 adminRoutes.patch("/users/:userId", async (c) => {
-  const body = v.parse(userPatchSchema, await c.req.json<JsonValue>());
+  const body = parseOptionalBody(userPatchSchema, await c.req.json<JsonValue>().catch(() => ({})));
   const targetId = c.req.param("userId");
   const self = c.var.user!;
   const db = c.var.db;
