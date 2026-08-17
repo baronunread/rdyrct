@@ -150,4 +150,25 @@ describe("redirect hot path", () => {
     expect(root.headers.get("location")).toBe("https://example.com/home");
     expect(missing.headers.get("location")).toBe("https://example.com/home");
   });
+
+  it("answers 404 on the shared host for a slug nobody registered", async () => {
+    // Under a 200 this is a soft 404: the SPA shell canonicals at the landing
+    // page, so every mistyped or retired short link asked a crawler to index
+    // it as a duplicate of the home page. Google had five pages "discovered,
+    // not indexed" and an unbounded supply of these competing for the crawl.
+    const res = await fetchWorker(new Request("http://localhost/no-such-slug"));
+
+    expect(res.status).toBe(404);
+    // Still the SPA: the browser gets the app, which renders its NotFound page.
+    expect(await res.text()).toContain('<div id="root">');
+  });
+
+  it("leaves the app's own root keywords on 200", async () => {
+    // The 404 above is decided one line below the RESERVED_SLUGS check, so the
+    // way to get it wrong is to start 404ing the pages the SPA serves.
+    for (const path of ["/", "/privacy", "/qr-code-generator", "/dashboard"]) {
+      const res = await fetchWorker(new Request(`http://localhost${path}`));
+      expect(res.status, `status of ${path}`).toBe(200);
+    }
+  });
 });

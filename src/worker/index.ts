@@ -243,6 +243,31 @@ function proxyBlog(c: Context<AppEnv>, next: () => Promise<void>) {
 app.all("/blog", proxyBlog);
 app.all("/blog/*", proxyBlog);
 
+/* ---------------- SPA fallback ---------------- */
+
+// The SPA is one document for every route, so the head it ships describes the
+// landing page. Public pages get their own title, description and canonical
+// written in before the bytes leave (#96): a crawler or a link preview reads
+// those, and most of them never run the JavaScript that would otherwise set
+// them.
+//
+// `status` overrides what the ASSETS binding returns, which for an unmatched
+// path is the SPA shell under a 200 (not_found_handling is
+// single-page-application). The SPA renders the same NotFound route either
+// way; the status is what a crawler reads.
+//
+// Only the shell can carry it. The bundle serves files at the root too
+// (/favicon.svg, /theme-init.js, /og.png, /acme.svg), and those are
+// single-segment paths that reach here by the same door as a dead slug: they
+// arrive as themselves, not as HTML, and 404ing them took the theme bootstrap
+// down with them.
+async function serveSpa(c: Context<AppEnv>, status?: 404): Promise<Response> {
+  const response = withPageMeta(await c.env.ASSETS.fetch(c.req.raw), new URL(c.req.url));
+  const isShell = response.headers.get("content-type")?.includes("text/html");
+  if (!status || !isShell) return response;
+  return new Response(response.body, { status, headers: response.headers });
+}
+
 /* ---------------- shared-domain slug redirect ---------------- */
 
 app.get("/:slug", async (c, next) => {
@@ -251,21 +276,15 @@ app.get("/:slug", async (c, next) => {
   // slugs; they can't be created as slugs either, this is belt-and-suspenders.
   if (RESERVED_SLUGS.has(slug.toLowerCase())) return next();
   const hit = await resolveSlug(c.env, slug, null);
-  if (!hit || !isLive(hit)) return next(); // fall through to the SPA (404 page)
-  return redirectWithClick(c, hit);
+  if (hit && isLive(hit)) return redirectWithClick(c, hit);
+  // A slug nobody registered, or one that has expired, is not a page. This
+  // used to fall through to the SPA under a 200, so every mistyped or retired
+  // short link was a soft 404 that canonicalled to the landing page, and a
+  // crawler had no way to tell them apart from real ones.
+  return serveSpa(c, 404);
 });
 
-/* ---------------- SPA fallback ---------------- */
-
-app.all("*", async (c) => {
-  const response = await c.env.ASSETS.fetch(c.req.raw);
-  // The SPA is one document for every route, so the head it ships describes
-  // the landing page. Public pages get their own title, description and
-  // canonical written in before the bytes leave (#96): a crawler or a link
-  // preview reads those, and most of them never run the JavaScript that
-  // would otherwise set them.
-  return withPageMeta(response, new URL(c.req.url));
-});
+app.all("*", (c) => serveSpa(c));
 
 /* ---------------- Queue consumer: KV/R2 follow-up work + click ingestion ---------------- */
 

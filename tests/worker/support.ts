@@ -15,9 +15,35 @@ import type { ClickMessage } from "../../src/worker/clicks";
 import type { StorageMessage } from "../../src/worker/storage";
 import { hashPassword } from "../../src/worker/password";
 
+/**
+ * What the ASSETS binding hands back for anything it is asked for: the SPA's
+ * one document, under a 200, which is what `not_found_handling:
+ * single-page-application` does in production.
+ */
+const SPA_SHELL = `<!doctype html><html><head><title>rdyrct - branded short links for your team</title></head><body><div id="root"></div></body></html>`;
+
+// The worker reaches this binding through exactly one call, serveSpa's
+// `c.env.ASSETS.fetch` in src/worker/index.ts. `connect` is here because
+// Fetcher declares it, and it throws rather than returning something: nothing
+// opens a socket to the asset bundle, so a caller that got here is lost.
+const stubAssets: Fetcher = {
+  fetch: async () =>
+    new Response(SPA_SHELL, { headers: { "content-type": "text/html; charset=utf-8" } }),
+  connect: () => {
+    throw new Error("ASSETS.connect: the asset bundle serves requests, not sockets");
+  },
+};
+
 // The ambient worker-test binding, under the same name the worker knows it by
-// (env.d.ts declares Cloudflare.Env as our own Env, so this needs no cast).
-export const testEnv: Env = env;
+// (env.d.ts declares Cloudflare.Env as our own Env, so this needs no cast),
+// with the one binding that environment cannot supply stubbed in.
+//
+// vitest-pool-workers builds no asset bundle, so ASSETS is genuinely absent
+// and every request reaching the SPA fallback threw on `undefined.fetch` and
+// came back a 500. Tests wrote around it (expiry.worker.ts asserted "not a
+// 302" because it could not assert the status it meant), which is how a
+// stubbed 500 got mistaken for the fallback working.
+export const testEnv: Env = { ...env, ASSETS: stubAssets };
 
 export function overrideEnv(overrides: Partial<Env>): Env {
   return { ...testEnv, ...overrides };
