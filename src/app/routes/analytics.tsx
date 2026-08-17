@@ -1,12 +1,13 @@
 import { useState } from "react";
 import { useStats } from "../lib/hooks";
 import { useCurrentOrg } from "../lib/current-org";
+import { clicksByWeekday } from "../lib/click-buckets";
 import { PLAN_LIMITS, type HeatmapRow, type SeriesPoint } from "@/shared/types";
 import {
   AreaChart,
   BarList,
   StatCard,
-  Heatmap,
+  ClicksByHour,
   LinkListCard,
   ClickBreakdown,
   TopLinksCard,
@@ -116,14 +117,20 @@ function ClicksChart({
 }
 
 /** Only shown for daily buckets with data: hourly ranges are too short for
- * a day-of-week/hour heatmap to be meaningful. */
-function ActivityHeatmap({ heatmap, bucket }: { heatmap: HeatmapRow[]; bucket: "day" | "hour" }) {
+ * a day-of-week/hour breakdown to be meaningful. */
+function ActivityBreakdown({ heatmap, bucket }: { heatmap: HeatmapRow[]; bucket: "day" | "hour" }) {
   if (!heatmap.length || bucket === "hour") return null;
   return (
-    <Card className="mt-4">
-      <p className="mb-3 text-2xs tracking-wider text-muted uppercase">Activity heatmap</p>
-      <Heatmap data={heatmap} />
-    </Card>
+    <div className="mt-4 grid gap-4 md:grid-cols-3">
+      <Card className="md:col-span-2">
+        <p className="mb-3 text-2xs tracking-wider text-muted uppercase">By hour</p>
+        <ClicksByHour data={heatmap} />
+      </Card>
+      <Card>
+        <p className="mb-3 text-2xs tracking-wider text-muted uppercase">By weekday</p>
+        <BarList items={clicksByWeekday(heatmap)} />
+      </Card>
+    </div>
   );
 }
 
@@ -194,7 +201,7 @@ export function Analytics() {
         />
       </div>
 
-      <ActivityHeatmap heatmap={s.heatmap} bucket={s.bucket} />
+      <ActivityBreakdown heatmap={s.heatmap} bucket={s.bucket} />
     </div>
   );
 }
