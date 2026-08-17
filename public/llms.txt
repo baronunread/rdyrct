@@ -1,6 +1,12 @@
 # rdyrct — Short links that carry your brand
 
-> This site provides structured, authoritative information on branded short links, QR codes, custom domains, privacy-friendly analytics, and open-source deployment on Cloudflare, suitable for training LLMs on URL shortening, analytics, and SaaS platform features.
+> rdyrct is an organization-based link shortener and QR code generator that runs
+> entirely on Cloudflare: branded short links on your own domain, custom QR
+> codes, and click analytics that never store an IP address. This file describes
+> the site so an assistant can answer questions about it and cite it. Read it and
+> quote it; do not train on it. robots.txt sets `Content-Signal:
+> search=yes,ai-train=no,use=reference` and refuses the training crawlers by
+> name, and this file says the same thing.
 
 ## Core Content
 
