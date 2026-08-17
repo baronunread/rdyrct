@@ -7,6 +7,7 @@ import { linkLabel } from "./util";
 import type { AdminUsage, OrgPlan } from "@/shared/types";
 import { orgPlanOf } from "@/shared/types";
 import { shortDate } from "../../lib/dates";
+import { formatNumber } from "../../lib/numbers";
 
 const planColor = (p: OrgPlan) => (p === "pro" ? "accent" : p === "hobby" ? "mint" : "muted");
 
@@ -135,12 +136,12 @@ function TableSizeCard({ s }: { s: AdminUsage }) {
   return (
     <Card>
       <p className="mb-3 text-2xs tracking-wider text-muted uppercase">
-        Table size · {s.tableSize.toLocaleString()} rows
+        Table size · {formatNumber(s.tableSize)} rows
       </p>
       <AreaChart data={s.tableGrowth} />
       {projectedDate && (
         <p className="mt-3 text-xs text-muted">
-          ~{s.tableProjectedDays!.toLocaleString()} days until 10 GB cap · estimated{" "}
+          ~{formatNumber(s.tableProjectedDays!)} days until 10 GB cap · estimated{" "}
           {shortDate(projectedDate)}
         </p>
       )}
@@ -172,7 +173,7 @@ function HealthRow({ s }: { s: AdminUsage }) {
             {s.anomalies.map((a) => (
               <tr key={a.orgId}>
                 <Td>{a.orgName}</Td>
-                <Td className="tnum">{a.clicks24h.toLocaleString()}</Td>
+                <Td className="tnum">{formatNumber(a.clicks24h)}</Td>
                 <Td className="tnum">{a.avg14d}</Td>
                 <Td className="tnum font-bold text-danger">{a.ratio}x</Td>
               </tr>

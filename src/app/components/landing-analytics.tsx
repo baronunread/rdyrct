@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import type { SeriesPoint } from "@/shared/types";
 import { AreaChart, BarList, ClicksByHour } from "./charts";
 import { clicksByWeekday } from "../lib/click-buckets";
+import { formatNumber } from "../lib/numbers";
 import { dailyClicks, toDailyPoints, hourlyPoints, heatmapData } from "../lib/landing-mock-data";
 
 const RANGES = [
@@ -57,7 +58,7 @@ function StatTile({ label, value, delta }: { label: string; value: number; delta
   return (
     <div className="rounded-lg border border-border bg-bg/40 p-3">
       <p className="truncate text-2xs tracking-wider text-muted uppercase">{label}</p>
-      <p className="tnum mt-1 text-xl font-bold">{value.toLocaleString()}</p>
+      <p className="tnum mt-1 text-xl font-bold">{formatNumber(value)}</p>
       {delta != null && delta !== 0 && <DeltaBadge delta={delta} />}
     </div>
   );

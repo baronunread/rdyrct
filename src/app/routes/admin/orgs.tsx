@@ -19,6 +19,7 @@ import { SortTh } from "../../ui/sort-th";
 import { sortRows } from "../../lib/sort";
 import { withErrorToast } from "../../lib/mutation-toast";
 import { shortDate } from "../../lib/dates";
+import { formatNumber } from "../../lib/numbers";
 import { Pager } from "../../ui/pagination";
 
 const roleColor = {
@@ -89,7 +90,7 @@ function OrgLinksRecap({
         <p className="mt-0.5 text-sm">
           <span className="font-bold tnum">{links.length}</span>{" "}
           {links.length === 1 ? "link" : "links"},{" "}
-          <span className="font-bold tnum">{clicks.toLocaleString()}</span> clicks between them
+          <span className="font-bold tnum">{formatNumber(clicks)}</span> clicks between them
         </p>
       </div>
       <Link to={`/admin/links?org=${encodeURIComponent(orgId)}`} onClick={onNavigate}>

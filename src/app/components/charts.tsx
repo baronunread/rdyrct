@@ -12,6 +12,7 @@ import { RendererChart } from "@tanstack/react-charts/tooltip";
 import { followSpring, pointerTooltip } from "./chart-tooltip";
 import { clicksByHour, HOURS } from "../lib/click-buckets";
 import type { SeriesPoint, DeltaValue, HeatmapRow, TopEntry } from "@/shared/types";
+import { formatNumber } from "../lib/numbers";
 import { Card, SlugLink } from "../ui/misc";
 import { CountryMap } from "./country-map";
 
@@ -228,7 +229,7 @@ export function StatCard({
       <p className="truncate text-2xs tracking-wider text-muted uppercase">{label}</p>
       <p className="tnum mt-1 text-2xl font-bold">
         {prefix}
-        {value.toLocaleString()}
+        {formatNumber(value)}
         {suffix}
       </p>
       {delta && delta.pct !== null && <DeltaBadge pct={delta.pct} />}

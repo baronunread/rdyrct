@@ -43,6 +43,7 @@ import { HeroShortener } from "../components/hero-shortener";
 import { HeroSignedIn } from "../components/hero-signed-in";
 import { LandingHeader } from "../components/landing-header";
 import { LandingAnalyticsMock } from "../components/landing-analytics";
+import { formatNumber } from "../lib/numbers";
 import { cn } from "../ui/cn";
 
 const steps = [
@@ -146,7 +147,7 @@ const faqs = [
   },
   {
     q: "What's the difference between Hobby and Pro?",
-    a: `Hobby (${PLAN_PRICES.hobby}/mo) puts your logo and colors on QR codes (plain ones are free), and adds a custom domain with your own slugs, ${PLAN_LIMITS.hobby.links} links, ${PLAN_LIMITS.hobby.members} team members, and ${PLAN_LIMITS.hobby.analyticsDays}-day analytics for one organization. Pro (${PLAN_PRICES.pro}/mo) raises everything: ${PLAN_LIMITS.pro.orgs} organizations, ${PLAN_LIMITS.pro.links.toLocaleString()} links, ${PLAN_LIMITS.pro.members} team members, ${PLAN_LIMITS.pro.domains} custom domains each, ${PLAN_LIMITS.pro.analyticsDays}-day analytics, and direct email support. Only the organization owner needs a paid plan: one subscription covers every organization they own.`,
+    a: `Hobby (${PLAN_PRICES.hobby}/mo) puts your logo and colors on QR codes (plain ones are free), and adds a custom domain with your own slugs, ${PLAN_LIMITS.hobby.links} links, ${PLAN_LIMITS.hobby.members} team members, and ${PLAN_LIMITS.hobby.analyticsDays}-day analytics for one organization. Pro (${PLAN_PRICES.pro}/mo) raises everything: ${PLAN_LIMITS.pro.orgs} organizations, ${formatNumber(PLAN_LIMITS.pro.links)} links, ${PLAN_LIMITS.pro.members} team members, ${PLAN_LIMITS.pro.domains} custom domains each, ${PLAN_LIMITS.pro.analyticsDays}-day analytics, and direct email support. Only the organization owner needs a paid plan: one subscription covers every organization they own.`,
   },
   {
     q: "How is rdyrct privacy-friendly?",
@@ -293,7 +294,7 @@ function MobilePlans({ paidTo }: { paidTo: (p: "hobby" | "pro") => string }) {
       highlight: true,
       features: [
         `${PLAN_LIMITS.pro.orgs} organizations (only the owner pays)`,
-        `${PLAN_LIMITS.pro.links.toLocaleString()} links`,
+        `${formatNumber(PLAN_LIMITS.pro.links)} links`,
         `${PLAN_LIMITS.pro.members} team members`,
         `${PLAN_LIMITS.pro.domains} custom domains each`,
         `${PLAN_LIMITS.pro.analyticsDays}-day click analytics`,
@@ -435,7 +436,7 @@ function PricingSection() {
               <Td className="font-bold">Links</Td>
               <Td>{PLAN_LIMITS.free.links}</Td>
               <Td>{PLAN_LIMITS.hobby.links}</Td>
-              <Cell tier="pro">{PLAN_LIMITS.pro.links.toLocaleString()}</Cell>
+              <Cell tier="pro">{formatNumber(PLAN_LIMITS.pro.links)}</Cell>
             </tr>
             <tr>
               <Td className="font-bold">Custom slugs</Td>
@@ -571,7 +572,7 @@ function SelfHostSection() {
             <GithubMark size={38} />
             <span className="flex flex-col leading-tight">
               <span className="text-base font-bold">GitHub</span>
-              <span className="tnum text-sm text-muted">{STARS.toLocaleString()} stars</span>
+              <span className="tnum text-sm text-muted">{formatNumber(STARS)} stars</span>
             </span>
           </a>
         </div>
