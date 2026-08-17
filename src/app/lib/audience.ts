@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useCurrentUser } from "./hooks";
-import { readAuthHint } from "./auth-hint";
+import { readAuthHint } from "./user-cache";
 
 /**
  * Whether to draw this page for a stranger or a customer, and what the top

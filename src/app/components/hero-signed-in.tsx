@@ -14,9 +14,10 @@
 import { Link } from "react-router";
 import { ArrowRight, Plus } from "lucide-react";
 import { useCurrentOrg } from "../lib/current-org";
-import { useStats } from "../lib/hooks";
+import { useCurrentUser, useStats } from "../lib/hooks";
+import { formatNumber } from "../lib/numbers";
 import { buttonClass } from "../ui/button-class";
-import { Skeleton } from "../ui/skeleton";
+import { Skeleton, SkeletonStatus } from "../ui/skeleton";
 import type { OrgStats } from "@/shared/types";
 
 function Stat({ value, label }: { value: string; label: string }) {
@@ -59,7 +60,7 @@ function TopLinks({ links }: { links: { id: string; slug: string; clicks: number
           className="flex items-center gap-2 rounded-lg bg-surface-2 px-3 py-2 text-xs"
         >
           <span className="min-w-0 flex-1 truncate font-mono font-bold">/{link.slug}</span>
-          <span className="shrink-0 text-muted tnum">{link.clicks.toLocaleString()} clicks</span>
+          <span className="shrink-0 text-muted tnum">{formatNumber(link.clicks)} clicks</span>
         </div>
       ))}
     </div>
@@ -77,7 +78,7 @@ function Greeting({ name, clicks7d }: { name: string; clicks7d: number }) {
       <p className="text-sm font-bold">{name ? `Welcome back, ${name}.` : "Welcome back."}</p>
       <p className="mt-0.5 text-xs text-muted">
         {clicks7d > 0
-          ? `Your links earned ${clicks7d.toLocaleString()} clicks in the last 7 days.`
+          ? `Your links earned ${formatNumber(clicks7d)} clicks in the last 7 days.`
           : "No clicks in the last 7 days. Share a link and they will show up here."}
       </p>
     </div>
@@ -99,9 +100,9 @@ function Summary({ name, data }: { name: string; data: OrgStats }) {
       <Greeting name={name} clicks7d={data.clicks7d} />
 
       <div className="grid grid-cols-3 gap-2">
-        <Stat value={data.clicks7d.toLocaleString()} label="Clicks 7d" />
-        <Stat value={data.totalLinks.toLocaleString()} label="Links" />
-        <Stat value={data.totalClicks.toLocaleString()} label="All time" />
+        <Stat value={formatNumber(data.clicks7d)} label="Clicks 7d" />
+        <Stat value={formatNumber(data.totalLinks)} label="Links" />
+        <Stat value={formatNumber(data.totalClicks)} label="All time" />
       </div>
 
       <TopLinks links={data.topLinks.slice(0, 2)} />
@@ -118,24 +119,62 @@ function Summary({ name, data }: { name: string; data: OrgStats }) {
   );
 }
 
+/**
+ * The same card with its numbers still on the way.
+ *
+ * Block for block what `Summary` renders: two lines of greeting, three stat
+ * tiles, two top links, two buttons. The tiles and rows are already
+ * surface-2, so each one is a single pulsing block rather than a box with
+ * bars inside it. Nothing moves when the data lands, which is the whole job.
+ */
+function SummarySkeleton() {
+  return (
+    // The status wrapper is the flex item the hero centres, so it carries the
+    // card's width: without it CardShell's w-full measures its own contents.
+    <SkeletonStatus label="Loading your links…" className="w-full max-w-xl">
+      <CardShell>
+        <div>
+          <Skeleton className="h-4 w-44" />
+          <Skeleton className="mt-1.5 h-3 w-64 max-w-full" />
+        </div>
+
+        <div className="grid grid-cols-3 gap-2">
+          <Skeleton className="h-16" />
+          <Skeleton className="h-16" />
+          <Skeleton className="h-16" />
+        </div>
+
+        <div className="flex flex-col gap-1.5">
+          <Skeleton className="h-8" />
+          <Skeleton className="h-8" />
+        </div>
+
+        <div className="flex flex-wrap gap-2">
+          <Skeleton className="h-8 w-40" />
+          <Skeleton className="h-8 w-28" />
+        </div>
+      </CardShell>
+    </SkeletonStatus>
+  );
+}
+
 /** Split from the component above so the stats query only exists once there
  * is an organization to query. Keeping it in one component meant passing
  * `org?.id ?? ""` and disabling the query on an empty string, which is a
  * workaround for hooks not being conditional rather than a real state. */
 function OrgSummary({ name, orgId }: { name: string; orgId: string }) {
   const { data, isPending } = useStats(orgId);
-  if (isPending || !data)
-    return (
-      <CardShell>
-        <Skeleton className="h-16 w-full" />
-        <Skeleton className="h-9 w-full" />
-      </CardShell>
-    );
+  if (isPending || !data) return <SummarySkeleton />;
   return <Summary name={name} data={data} />;
 }
 
 export function HeroSignedIn({ name }: { name: string }) {
+  const me = useCurrentUser();
   const { org } = useCurrentOrg();
+  // The card renders before /user answers, because the signed-in hint comes
+  // from storage. Until it does, "you have no organization yet" is a guess,
+  // and the wrong one for everybody who has one.
+  if (me.isPending) return <SummarySkeleton />;
   if (!org) return <NoOrgYet />;
   return <OrgSummary name={name} orgId={org.id} />;
 }

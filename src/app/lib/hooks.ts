@@ -1,7 +1,8 @@
+import { useState } from "react";
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from "@tanstack/react-query";
 import { api, ApiError } from "./api";
 import { authClient } from "./auth-client";
-import { writeAuthHint } from "./auth-hint";
+import { readCachedUser, writeCachedUser } from "./user-cache";
 import posthog from "./posthog";
 import { FUNNEL } from "./funnel";
 import type {
@@ -31,7 +32,7 @@ export function useCurrentUser() {
     queryFn: async () => {
       try {
         const user = await api<CurrentUser>("/user");
-        writeAuthHint(true);
+        writeCachedUser(user);
         posthog.identify(user.user.id, {
           email: user.user.email,
           name: user.user.name,
@@ -41,7 +42,7 @@ export function useCurrentUser() {
         return user;
       } catch (e) {
         if (e instanceof ApiError && e.status === 401) {
-          writeAuthHint(false);
+          writeCachedUser(null);
           return null;
         }
         throw e;
@@ -50,6 +51,24 @@ export function useCurrentUser() {
     staleTime: 60_000,
     retry: false,
   });
+}
+
+/**
+ * Who the shell draws itself as: the checked answer when it is here, the last
+ * one otherwise, so a reload paints the sidebar instead of a skeleton.
+ *
+ * Chrome only. Everything the app decides or submits keeps reading
+ * `useCurrentUser` and keeps waiting for the round trip, because the cache is
+ * one page load out of date by definition: somebody who changes their org's
+ * default domain and reloads must not be handed a form that still preselects
+ * the old one.
+ *
+ * Snapshotted once per mount: mid-visit changes come from the query.
+ */
+export function useShellUser(): CurrentUser | null {
+  const me = useCurrentUser();
+  const [cached] = useState(readCachedUser);
+  return me.data ?? cached ?? null;
 }
 
 // Deployment config (e.g. appHost for DNS instructions) — static per deploy.
@@ -69,7 +88,7 @@ export function useLogout() {
     },
     onSuccess: () => {
       posthog.reset();
-      writeAuthHint(false);
+      writeCachedUser(null);
       qc.setQueryData(["user"], null);
       qc.removeQueries({
         predicate: (query) => query.queryKey[0] !== "config" && query.queryKey[0] !== "user",

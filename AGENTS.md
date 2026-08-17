@@ -112,6 +112,16 @@ Shell writes to repo files are sandboxed; edit through the editor tools, not
   in URLs**: the current org is a localStorage-backed store, `useCurrentOrg`
   (`src/app/lib/current-org.ts`). Those keywords are reserved from custom slugs
   via `RESERVED_SLUGS` in `src/worker/util.ts` (the Worker also guards `/:slug`).
+  The last `/user` answer is cached in localStorage too
+  (`src/app/lib/user-cache.ts`), so a reload paints the sidebar, org switcher
+  and user footer at once and only the page under them waits. **The cache is
+  chrome, never an answer.** Only `useShellUser`/`useShellOrgs` read it, and
+  only `RequireAuth` and `AppShell` call those. Everything the app decides or
+  submits (`useCurrentUser`, `useCurrentOrg`, `useOrgLimits`, `RequireAdmin`)
+  waits for the round trip, because the cache is one page load out of date by
+  definition: seed it into the query instead and somebody who changes their
+  org's default domain and reloads gets a link editor still preselecting the
+  old one. Sign-out clears it.
 - **Billing is per-user, not per-org.** `user.plan` (`free`|`hobby`|`pro`) +
   Polar customer/subscription ids live on the user; each Polar product maps to
   a plan via `POLAR_*_PRODUCT_ID`. An org's effective limits are **its

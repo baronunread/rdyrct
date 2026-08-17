@@ -8,8 +8,8 @@ import { Globe, ChevronsUpDown, Plus, Check, LogOut } from "lucide-react";
 // the React components lucide-react exports.
 import { Sun, Moon, Menu as MenuIcon, X } from "lucide";
 import { MorphIcon } from "morphicons/react";
-import { useCurrentUser, useLogout } from "../lib/hooks";
-import { useCurrentOrg } from "../lib/current-org";
+import { useCurrentUser, useLogout, useShellUser } from "../lib/hooks";
+import { useShellOrgs } from "../lib/current-org";
 import { claimPendingLinks, storedAnonLinks } from "../lib/anon-links";
 import { api, ApiError } from "../lib/api";
 import { useTheme } from "../lib/theme";
@@ -38,10 +38,14 @@ function orgCreateErrorMessage(cause: unknown): string {
 
 export function RequireAuth({ children }: { children: ReactNode }) {
   const me = useCurrentUser();
+  const shell = useShellUser();
   const location = useLocation();
-  if (me.isLoading) return <AppShellSkeleton />;
-  if (!me.data)
+  // Only the query says somebody is signed out, and only once it has spoken.
+  if (!me.isLoading && !me.data)
     return <Navigate to="/login" state={{ from: location.pathname + location.search }} replace />;
+  // The cache carries the shell through the wait. A browser that has none is
+  // on its first visit, and still gets the skeleton.
+  if (!shell) return <AppShellSkeleton />;
   return children;
 }
 
@@ -320,7 +324,7 @@ function useClaimAnonLinks(orgId: string | undefined) {
 }
 
 export function AppShell() {
-  const me = useCurrentUser();
+  const shell = useShellUser();
   const navigate = useNavigate();
   const qc = useQueryClient();
   const logout = useLogout();
@@ -330,12 +334,12 @@ export function AppShell() {
   const [newOrgName, setNewOrgName] = useState("");
   const [mobileOpen, setMobileOpen] = useState(false);
 
-  const { org, orgs, setOrg } = useCurrentOrg();
+  const { org, orgs, setOrg } = useShellOrgs();
   useClaimAnonLinks(org?.id);
 
-  if (!me.data) return null;
+  if (!shell) return null;
   // No org is fine: org-scoped pages render NoOrgState, billing is per-user.
-  const { user } = me.data;
+  const { user } = shell;
 
   // Multi-org is a Pro perk: the owned-org cap comes from the caller's plan.
   const ownedCount = orgs.filter((o) => o.role === "owner").length;

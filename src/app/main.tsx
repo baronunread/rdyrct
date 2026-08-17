@@ -1,6 +1,6 @@
 import { StrictMode, Suspense, lazy } from "react";
 import { createRoot } from "react-dom/client";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router";
+import { BrowserRouter, Routes, Route, Navigate, Outlet } from "react-router";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import "@fontsource/jetbrains-mono/latin-400.css";
 import "@fontsource/jetbrains-mono/latin-700.css";
@@ -9,6 +9,8 @@ import { ToastProvider } from "./ui/toast";
 import { ErrorBoundary } from "./components/error-boundary";
 import { ConsentBanner } from "./ui/consent-banner";
 import { AppShellSkeleton } from "./components/skeletons";
+import { LandingHeader } from "./components/landing-header";
+import { readAuthHint } from "./lib/user-cache";
 import { resumeAnalyticsIfConsented } from "./lib/posthog";
 
 resumeAnalyticsIfConsented();
@@ -78,6 +80,33 @@ const AdminUsersPage = lazy(() =>
 );
 const NotFound = lazy(() => import("./routes/not-found").then((m) => ({ default: m.NotFound })));
 
+/**
+ * The two public pages that carry the landing header, and the header itself
+ * while their chunk downloads.
+ *
+ * It rides in the entry chunk (a few hundred bytes) rather than waiting for
+ * the page's, so somebody arriving at the homepage sees the site's header on
+ * the first frame and the page fills in under it, instead of watching an
+ * empty screen with a cookie banner on it. Same wrapper as both pages use, so
+ * nothing moves when the real one takes over.
+ *
+ * The card pages (login, signup, invite) are deliberately not in here: they
+ * have no header, and showing one would be a flash of the wrong thing.
+ */
+function PublicPages() {
+  return (
+    <Suspense
+      fallback={
+        <div className="relative mx-auto min-h-dvh max-w-5xl px-6">
+          <LandingHeader authed={readAuthHint()} />
+        </div>
+      }
+    >
+      <Outlet />
+    </Suspense>
+  );
+}
+
 const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: 1, refetchOnWindowFocus: false } },
 });
@@ -88,18 +117,22 @@ createRoot(document.getElementById("root")!).render(
       <ToastProvider>
         <ErrorBoundary>
           <BrowserRouter>
-            {/* public pages get a blank fallback; the app shell branch below has
-              its own skeleton fallbacks */}
+            {/* The card pages get a blank fallback; the two header pages and
+              the app shell branch below bring their own. The consent banner
+              sits inside the boundary so it waits for the page it belongs to:
+              on its own over an empty screen it read as the whole site. */}
             <Suspense fallback={null}>
               <Routes>
                 {/* public */}
-                <Route path="/" element={<LandingPage />} />
+                <Route element={<PublicPages />}>
+                  <Route path="/" element={<LandingPage />} />
+                  <Route path="/qr-code-generator" element={<QrGeneratorPage />} />
+                </Route>
                 <Route path="/login" element={<AuthPage mode="login" />} />
                 <Route path="/signup" element={<AuthPage mode="signup" />} />
                 <Route path="/reset-password" element={<ResetPasswordPage />} />
                 <Route path="/privacy" element={<PrivacyPage />} />
                 <Route path="/terms" element={<TermsPage />} />
-                <Route path="/qr-code-generator" element={<QrGeneratorPage />} />
                 <Route path="/invite/:token" element={<InvitePage />} />
 
                 {/* onboarding is gone: the app renders a create-org empty state
@@ -151,8 +184,8 @@ createRoot(document.getElementById("root")!).render(
 
                 <Route path="*" element={<NotFound />} />
               </Routes>
+              <ConsentBanner />
             </Suspense>
-            <ConsentBanner />
           </BrowserRouter>
         </ErrorBoundary>
       </ToastProvider>

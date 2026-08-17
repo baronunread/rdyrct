@@ -1,5 +1,6 @@
 import { useEffect, useSyncExternalStore } from "react";
-import { useCurrentUser } from "./hooks";
+import { useCurrentUser, useShellUser } from "./hooks";
+import type { UserOrg } from "@/shared/types";
 
 // There is no org id in the URL: the current org lives here, backed by
 // localStorage so a reload keeps it. Store and hook share one file because
@@ -36,9 +37,15 @@ function subscribeToOrg(l: () => void) {
   return () => listeners.delete(l);
 }
 
-export function useCurrentOrg() {
-  const me = useCurrentUser();
-  const orgs = me.data?.orgs ?? [];
+/**
+ * Which of these is the current one, and remember it.
+ *
+ * Two callers pass two different lists: the sidebar's switcher passes the
+ * cached one so a reload keeps drawing it, and everything else passes the
+ * checked one. Org identity is the same either way; org settings are not,
+ * which is why only the switcher may read the cached list.
+ */
+function usePickOrg(orgs: UserOrg[]) {
   const storedId = useSyncExternalStore(subscribeToOrg, getCurrentOrgId);
   const org = orgs.find((o) => o.id === storedId) ?? orgs[0] ?? null;
 
@@ -48,4 +55,15 @@ export function useCurrentOrg() {
   }, [orgId, storedId]);
 
   return { org, orgs, setOrg: setCurrentOrgId };
+}
+
+/** The current org as the app knows it: waits for the checked answer. */
+export function useCurrentOrg() {
+  const me = useCurrentUser();
+  return usePickOrg(me.data?.orgs ?? []);
+}
+
+/** The current org as the sidebar draws it, cache included. Chrome only. */
+export function useShellOrgs() {
+  return usePickOrg(useShellUser()?.orgs ?? []);
 }

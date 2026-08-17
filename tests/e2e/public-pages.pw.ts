@@ -81,6 +81,37 @@ test("header centres the reading links and keeps the auth actions right", async 
   expect(overflows).toBe(false);
 });
 
+// The homepage is a lazy chunk, so there is a moment before it arrives. What
+// fills that moment used to be the cookie banner alone on an empty screen,
+// which read as the whole site. The header comes from the entry chunk now and
+// is on screen for all of it. Held here on the route module the dev server
+// serves the page from; the assertions run while it is still in flight.
+test("the header is on screen before the homepage chunk arrives", async ({ page }) => {
+  let release = () => {};
+  const held = new Promise<void>((resolve) => (release = resolve));
+  await page.route(
+    (url) => url.pathname.includes("routes/landing"),
+    async (route) => {
+      await held;
+      await route.continue();
+    },
+  );
+
+  await page.goto("/", { waitUntil: "commit" });
+
+  const header = page.locator("header");
+  await expect(header.getByRole("link", { name: "Pricing" })).toBeVisible();
+  await expect(header.getByRole("link", { name: "Sign up" })).toBeVisible();
+  // The page itself is still on its way, so this is the fallback, not the
+  // real header arriving early.
+  await expect(page.getByRole("heading", { level: 1 })).toBeHidden();
+
+  release();
+  await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+  // One header, and it never moved: the fallback uses the page's own wrapper.
+  await expect(header).toHaveCount(1);
+});
+
 test("legal pages retain their baseline headings", async ({ page }) => {
   await visitLegalPages(page);
 });
