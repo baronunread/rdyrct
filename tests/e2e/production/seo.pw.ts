@@ -77,9 +77,21 @@ test("a file the bundle serves at the root still answers 200", async ({ request 
   // rest, so every page rendered a flash of the wrong theme, and the browser
   // suite is the only place that could see it — the worker tests stub ASSETS,
   // so everything there is the SPA shell and this looks fine.
-  for (const path of ["/favicon.svg", "/theme-init.js", "/og.png", "/llms.txt"]) {
+  //
+  // The content type is half the assertion, not decoration: serveSpa decides
+  // whether a path may carry a 404 by asking whether what came back is HTML,
+  // so a bundle that answered /favicon.svg with the SPA shell would satisfy a
+  // status-only check while serving the wrong bytes.
+  const assets = [
+    ["/favicon.svg", "image/svg+xml"],
+    ["/theme-init.js", "javascript"],
+    ["/og.png", "image/png"],
+    ["/llms.txt", "text/plain"],
+  ];
+  for (const [path, type] of assets) {
     const res = await request.get(path, { failOnStatusCode: false });
     expect(res.status(), `status of ${path}`).toBe(200);
+    expect(res.headers()["content-type"], `content type of ${path}`).toContain(type);
   }
 });
 
