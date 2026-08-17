@@ -71,6 +71,31 @@ test("a slug that resolves to nothing answers 404", async ({ request }) => {
   expect(await res.text()).toContain('<div id="root">');
 });
 
+test("the second visit to a dead slug still renders the page", async ({ request }) => {
+  // Regression: the 404 used to go out carrying the shell's ETag and
+  // `must-revalidate`, so the browser cached it, revalidated on the next
+  // visit, and got a 304 with no body — a blank white page where the
+  // NotFound screen belongs, on every mistyped short link, from the second
+  // visit onwards.
+  const first = await request.get("/no-such-slug-7d2e1", { failOnStatusCode: false });
+  expect(first.status()).toBe(404);
+  expect((await first.body()).length, "the 404 should carry the page").toBeGreaterThan(0);
+
+  // Nothing to revalidate against, and nothing stored to revalidate.
+  expect(first.headers()["cache-control"]).toBe("no-store");
+  expect(first.headers()["etag"]).toBeUndefined();
+
+  // And if a client asks conditionally anyway (an entry cached before this
+  // shipped), it still gets a body rather than an empty 304-turned-404.
+  const second = await request.get("/no-such-slug-7d2e1", {
+    headers: { "If-None-Match": '"whatever-it-had-before"' },
+    failOnStatusCode: false,
+  });
+  expect((await second.body()).length, "a conditional request must not empty it").toBeGreaterThan(
+    0,
+  );
+});
+
 test("a file the bundle serves at the root still answers 200", async ({ request }) => {
   // These reach the slug handler by the same door as a dead link: one segment,
   // not a reserved keyword. 404ing them took /theme-init.js down with the

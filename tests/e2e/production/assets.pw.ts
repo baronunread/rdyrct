@@ -63,8 +63,17 @@ test("a chunk that no longer exists 404s instead of being cached as a page", asy
   expect(res.headers()["content-type"] ?? "").not.toContain("text/html");
 });
 
-test("the _headers file is configuration, not content", async ({ request }) => {
-  const res = await request.get("/_headers", { failOnStatusCode: false });
+test("every file under /assets/ is content-hashed", async ({ request }) => {
+  // The year-long cache is only safe because these names change with their
+  // contents. Nothing enforces that but Vite's default: an `assetFileNames`
+  // override, or one fixed-name file copied into the directory, and that file
+  // is pinned in browsers for a year with no way to correct it. So assert the
+  // invariant rather than the habit.
+  const html = await (await request.get("/")).text();
+  const names = [...html.matchAll(/\/assets\/([A-Za-z0-9_.-]+)/g)].map((m) => m[1]);
+  expect(names.length, "the landing page should reference some assets").toBeGreaterThan(0);
 
-  expect(res.status()).not.toBe(200);
+  for (const name of new Set(names)) {
+    expect(name, `${name} carries no content hash`).toMatch(/-[A-Za-z0-9_-]{8}\.[a-z0-9]+$/);
+  }
 });
