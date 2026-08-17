@@ -243,6 +243,77 @@ function proxyBlog(c: Context<AppEnv>, next: () => Promise<void>) {
 app.all("/blog", proxyBlog);
 app.all("/blog/*", proxyBlog);
 
+/* ---------------- SPA fallback ---------------- */
+
+// The SPA is one document for every route, so the head it ships describes the
+// landing page. Public pages get their own title, description and canonical
+// written in before the bytes leave (#96): a crawler or a link preview reads
+// those, and most of them never run the JavaScript that would otherwise set
+// them.
+//
+// `status` overrides what the ASSETS binding returns, which for an unmatched
+// path is the SPA shell under a 200 (not_found_handling is
+// single-page-application). The SPA renders the same NotFound route either
+// way; the status is what a crawler reads.
+//
+// Only the shell can carry it. The bundle serves files at the root too
+// (/favicon.svg, /theme-init.js, /og.png, /acme.svg), and those are
+// single-segment paths that reach here by the same door as a dead slug: they
+// arrive as themselves, not as HTML, and 404ing them took the theme bootstrap
+// down with them.
+
+/** Vite writes a content hash into every name under /assets/, so the URL is
+ * the version and can never mean anything else. */
+const IMMUTABLE = "public, max-age=31536000, immutable";
+
+/**
+ * A 404 nothing will cache.
+ *
+ * The shell arrives carrying the asset server's ETag and `must-revalidate`.
+ * Copied onto a 404 those were poison: the browser stored it, sent
+ * `If-None-Match` on the next visit, and got back a 304 with no body, so the
+ * second visit to any dead short link rendered a blank page instead of the
+ * NotFound screen.
+ */
+function uncacheable404(body: BodyInit | null, from?: Headers): Response {
+  const headers = new Headers(from);
+  headers.delete("etag");
+  headers.set("cache-control", "no-store");
+  return new Response(body, { status: 404, headers });
+}
+
+async function serveSpa(c: Context<AppEnv>, status?: 404): Promise<Response> {
+  const url = new URL(c.req.url);
+  const response = withPageMeta(await c.env.ASSETS.fetch(c.req.raw), url);
+
+  // Only a fresh 200 says anything about what a path holds. A conditional
+  // request comes back 304 with a null body, and rewriting one of those into
+  // a 404 ships an empty document.
+  if (response.status !== 200) return response;
+
+  const isShell = response.headers.get("content-type")?.includes("text/html");
+
+  if (url.pathname.startsWith("/assets/")) {
+    // The shell here is a chunk that no longer exists, which is what a
+    // browser holding a stale index.html asks for after a deploy. Answering a
+    // script request with a page helps nobody, and caching that page at a
+    // script's URL for a year would be worse: hashes are content-addressed
+    // and can recur (revert a commit and the old name comes back), so it
+    // breaks one visitor and nobody else.
+    if (isShell) return uncacheable404(null);
+    // Set here rather than in a `_headers` file. With run_worker_first every
+    // one of these passes through this function, and Cloudflare documents
+    // _headers as not applying to what a Worker returns — true or not, this
+    // needs no ruling.
+    const headers = new Headers(response.headers);
+    headers.set("cache-control", IMMUTABLE);
+    return new Response(response.body, { status: 200, headers });
+  }
+
+  if (!status || !isShell) return response;
+  return uncacheable404(response.body, response.headers);
+}
+
 /* ---------------- shared-domain slug redirect ---------------- */
 
 app.get("/:slug", async (c, next) => {
@@ -251,21 +322,15 @@ app.get("/:slug", async (c, next) => {
   // slugs; they can't be created as slugs either, this is belt-and-suspenders.
   if (RESERVED_SLUGS.has(slug.toLowerCase())) return next();
   const hit = await resolveSlug(c.env, slug, null);
-  if (!hit || !isLive(hit)) return next(); // fall through to the SPA (404 page)
-  return redirectWithClick(c, hit);
+  if (hit && isLive(hit)) return redirectWithClick(c, hit);
+  // A slug nobody registered, or one that has expired, is not a page. This
+  // used to fall through to the SPA under a 200, so every mistyped or retired
+  // short link was a soft 404 that canonicalled to the landing page, and a
+  // crawler had no way to tell them apart from real ones.
+  return serveSpa(c, 404);
 });
 
-/* ---------------- SPA fallback ---------------- */
-
-app.all("*", async (c) => {
-  const response = await c.env.ASSETS.fetch(c.req.raw);
-  // The SPA is one document for every route, so the head it ships describes
-  // the landing page. Public pages get their own title, description and
-  // canonical written in before the bytes leave (#96): a crawler or a link
-  // preview reads those, and most of them never run the JavaScript that
-  // would otherwise set them.
-  return withPageMeta(response, new URL(c.req.url));
-});
+app.all("*", (c) => serveSpa(c));
 
 /* ---------------- Queue consumer: KV/R2 follow-up work + click ingestion ---------------- */
 

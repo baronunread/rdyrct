@@ -15,16 +15,10 @@
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
   </url>
-  <url>
-    <loc>https://rdyrct.com/signup</loc>
-    <changefreq>monthly</changefreq>
-    <priority>0.6</priority>
-  </url>
-  <url>
-    <loc>https://rdyrct.com/login</loc>
-    <changefreq>monthly</changefreq>
-    <priority>0.3</priority>
-  </url>
+  <!-- No /login or /signup. A form has nothing to rank for, and Search Console
+       agreed: both sat in "discovered, currently not indexed", never crawled,
+       while the pages that do have something to say waited behind them. They
+       stay crawlable and linked from the landing page; they just stop asking. -->
   <url>
     <loc>https://rdyrct.com/privacy</loc>
     <changefreq>yearly</changefreq>

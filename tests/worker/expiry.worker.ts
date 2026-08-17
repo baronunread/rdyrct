@@ -107,11 +107,9 @@ describe("redirect hot path: lazy expiry", () => {
     );
 
     const res = await fetchWorker(new Request("http://localhost/old-slug", { redirect: "manual" }));
-    // Falls through to the SPA fallback (not a 302 redirect): same as an
-    // unknown slug. Can't assert a real 200 here: this test env has no
-    // ASSETS binding, so that route 500s instead of serving the SPA — this
-    // is only checking it isn't still resolving the stale, expired alias.
-    expect(res.status).not.toBe(302);
+    // Serves the SPA under a 404, same as an unknown slug: an address past its
+    // deadline is not a page, and it is certainly not still a redirect.
+    expect(res.status).toBe(404);
   });
 
   it("still resolves a live (not-yet-expired) alias", async () => {
