@@ -7,6 +7,25 @@
   "assets": {
     "binding": "ASSETS",
     "not_found_handling": "single-page-application",
+    // Worker first for everything, and it stays that way. The custom-domain
+    // redirect, /:slug, the blog proxy, the per-page head (page-meta.ts) and
+    // the security-header baseline all have to see a request before an asset
+    // could answer it, and a slug is any single-segment path, so no pattern
+    // separates "a short link" from "a page" ahead of the KV lookup.
+    //
+    // `["/*", "!/assets/*"]` was measured and rejected. It reads like free
+    // money (those filenames carry a content hash, so they need nothing from
+    // the Worker) but not_found_handling still fires inside the exception: a
+    // chunk that no longer exists comes back as the SPA shell under a 200,
+    // and public/_headers marks everything there immutable for a year. That
+    // pins an HTML document to a URL nothing can correct, on a path the
+    // Worker no longer sees and so cannot fix. It also loses the
+    // redirect-only guarantee on custom domains, which serve short links and
+    // nothing else.
+    //
+    // The invocations it would have saved are the small half of the win
+    // anyway: public/_headers stops the repeat requests happening at all, and
+    // it applies to what the Worker serves through the binding just the same.
     "run_worker_first": true,
   },
   // Create the real resources with:

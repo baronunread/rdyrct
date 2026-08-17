@@ -262,8 +262,22 @@ app.all("/blog/*", proxyBlog);
 // arrive as themselves, not as HTML, and 404ing them took the theme bootstrap
 // down with them.
 async function serveSpa(c: Context<AppEnv>, status?: 404): Promise<Response> {
-  const response = withPageMeta(await c.env.ASSETS.fetch(c.req.raw), new URL(c.req.url));
+  const url = new URL(c.req.url);
+  const response = withPageMeta(await c.env.ASSETS.fetch(c.req.raw), url);
   const isShell = response.headers.get("content-type")?.includes("text/html");
+
+  // A path under /assets/ that comes back as the shell is a chunk that no
+  // longer exists, which is what a browser holding a stale index.html asks
+  // for after a deploy. Answering a script request with a page is useless to
+  // it either way, but public/_headers marks everything under /assets/
+  // immutable for a year, so serving that page under a 200 would pin an HTML
+  // document to the URL for a year, in a cache nothing can reach. Hashes are
+  // content-addressed and can recur (revert a commit and the old name comes
+  // back), so that is a real way to break one visitor and no one else.
+  if (isShell && url.pathname.startsWith("/assets/")) {
+    return new Response(null, { status: 404, headers: { "cache-control": "no-store" } });
+  }
+
   if (!status || !isShell) return response;
   return new Response(response.body, { status, headers: response.headers });
 }

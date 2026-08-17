@@ -163,6 +163,18 @@ describe("redirect hot path", () => {
     expect(await res.text()).toContain('<div id="root">');
   });
 
+  it("404s a bundle chunk that no longer exists, uncached", async () => {
+    // The stubbed ASSETS binding answers everything with the SPA shell, which
+    // is exactly what the real one does for a path it cannot match. Under
+    // /assets/ that means a chunk from a build that is gone, and
+    // public/_headers marks that directory immutable for a year: serving the
+    // shell under a 200 would cache a page at a script's URL for a year.
+    const res = await fetchWorker(new Request("http://localhost/assets/gone-a1b2c3.js"));
+
+    expect(res.status).toBe(404);
+    expect(res.headers.get("cache-control")).toBe("no-store");
+  });
+
   it("leaves the app's own root keywords on 200", async () => {
     // The 404 above is decided one line below the RESERVED_SLUGS check, so the
     // way to get it wrong is to start 404ing the pages the SPA serves.

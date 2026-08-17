@@ -1,0 +1,20 @@
+# Headers Cloudflare attaches to static assets, including the ones the Worker
+# serves through the ASSETS binding. That is what makes this worth having:
+# the caching below applies without giving up the Worker in front of it (see
+# the run_worker_first note in wrangler.jsonc).
+#
+# Vite writes a content hash into every filename under /assets/, so those URLs
+# cannot change meaning: a new build is a new name. They were going out as
+# `max-age=0, must-revalidate`, so a browser asked again for every chunk on
+# every page load, and each of those was a request for a file that could not
+# have changed.
+#
+# X-Content-Type-Options is the only part of the security baseline repeated
+# here. The rest of it (CSP, Referrer-Policy, Permissions-Policy) governs
+# documents rather than subresources, and still arrives from
+# applySecurityHeaders in src/worker/security-headers.ts; a second copy of the
+# CSP is a second copy to keep in step.
+
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
+  X-Content-Type-Options: nosniff
