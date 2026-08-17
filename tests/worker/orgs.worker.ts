@@ -23,6 +23,7 @@ function instanceReporting(status: InstanceStatus["status"]): WorkflowInstance {
     terminate: untested,
     restart: untested,
     sendEvent: untested,
+    delete: untested,
   };
 }
 
@@ -42,6 +43,9 @@ function fakeOrgDeleteWorkflow() {
     async createBatch() {
       throw new Error("deleteOrg never creates a batch");
     },
+    async deleteBatch() {
+      throw new Error("deleteOrg never deletes a batch");
+    },
   };
   return { workflow, creates };
 }
@@ -59,6 +63,9 @@ function failingCreateWorkflow(existingStatus?: InstanceStatus["status"]): Env["
     },
     async createBatch() {
       throw new Error("deleteOrg never creates a batch");
+    },
+    async deleteBatch() {
+      throw new Error("deleteOrg never deletes a batch");
     },
   };
 }

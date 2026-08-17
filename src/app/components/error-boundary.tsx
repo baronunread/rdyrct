@@ -40,14 +40,11 @@ function FullPageError() {
     <div className="grid min-h-screen place-items-center bg-bg px-6 text-center">
       <div className="flex max-w-md flex-col items-center gap-4">
         <h1 className="text-lg font-bold">Something broke on this page.</h1>
-        <p className="text-sm text-muted">
-          Reload to try again. If it keeps happening, turning off your browser's page translation
-          for this site can help.
-        </p>
+        <p className="text-sm text-muted">Reload to try again.</p>
         <button
           type="button"
           onClick={() => window.location.reload()}
-          className="inline-flex h-9 cursor-pointer items-center justify-center rounded-md bg-accent px-3.5 text-sm font-bold text-bg transition-[filter] duration-150 hover:brightness-110 active:brightness-95"
+          className="inline-flex h-9 cursor-pointer items-center justify-center rounded-md bg-accent px-3.5 text-sm font-bold text-bg transition duration-150 hover:brightness-110 active:brightness-95"
         >
           Reload
         </button>

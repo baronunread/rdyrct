@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import type { JsonValue } from "../shared/types";
 import type { Context } from "hono";
 import { HTTPException } from "hono/http-exception";
+import { methodNotAllowed } from "hono/method-not-allowed";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import type { AppEnv, Env } from "./env";
 import { withSession } from "./session";
@@ -146,6 +147,21 @@ app.use("*", async (c, next) => {
 
 /* ---------------- API ---------------- */
 
+// A request to a path this app serves under a different method used to fall
+// through to the SPA and come back as HTML, so a caller who sent the wrong
+// verb read a page instead of an answer. This turns those into 405 with an
+// Allow header. It only rewrites a 404, so it never touches a route that
+// answered; the custom-domain middleware above returns before this runs, and
+// the SPA's app.all("*") is registered for every method, so the middleware
+// skips it when collecting what a path allows.
+app.use(
+  methodNotAllowed<AppEnv>({
+    app,
+    onMethodNotAllowed: (c, methods) =>
+      c.json({ message: "Method not allowed" }, 405, { Allow: methods.join(", ") }),
+  }),
+);
+
 // BetterAuth owns /api/auth/* (signup, login, logout, verify, reset).
 app.on(["GET", "POST"], "/api/auth/*", async (c) => {
   const limited = await enforcePublicAuthRateLimit(c);
@@ -184,6 +200,12 @@ api.route("/orgs/:orgId/domains", domainRoutes);
 api.route("/invites", inviteRoutes);
 api.route("/admin", adminRoutes);
 app.route("/api", api);
+
+// Everything below serves the SPA to whatever it doesn't recognise, which for
+// an API path means an HTML page under a 200. A caller who mistyped a route
+// gets an answer it can read instead, and the 405 middleware above has a 404
+// to convert when the path exists under another method.
+app.all("/api/*", (c) => c.json({ message: "Not found" }, 404));
 
 /* ---------------- blog: reverse-proxied Next.js app on Vercel ---------------- */
 

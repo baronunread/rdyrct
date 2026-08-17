@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import type { SeriesPoint } from "@/shared/types";
-import { AreaChart, BarList, Heatmap } from "./charts";
+import { AreaChart, BarList, ClicksByHour } from "./charts";
+import { clicksByWeekday } from "../lib/click-buckets";
 import { dailyClicks, toDailyPoints, hourlyPoints, heatmapData } from "../lib/landing-mock-data";
 
 const RANGES = [
@@ -92,7 +93,7 @@ function RangeTabs({
 
 /**
  * Analytics-page mockup for the landing page, built from the app's real chart
- * components (AreaChart + BarList + Heatmap) over demo data: theme-aware and
+ * components (AreaChart + BarList + ClicksByHour) over demo data: theme-aware and
  * CSP-safe like everything else on the page. The range presets really switch
  * the series (hourly buckets for 24h, like the product), and the area chart's
  * hover crosshair works, so visitors can poke at it.
@@ -158,9 +159,15 @@ export function LandingAnalyticsMock() {
         </div>
 
         {active.bucket !== "hour" && (
-          <div className="rounded-lg border border-border bg-bg/40 p-4">
-            <p className="mb-3 text-2xs tracking-wider text-muted uppercase">Activity heatmap</p>
-            <Heatmap data={HEATMAP} />
+          <div className="grid gap-4 md:grid-cols-3">
+            <div className="rounded-lg border border-border bg-bg/40 p-4 md:col-span-2">
+              <p className="mb-3 text-2xs tracking-wider text-muted uppercase">By hour</p>
+              <ClicksByHour data={HEATMAP} />
+            </div>
+            <div className="rounded-lg border border-border bg-bg/40 p-4">
+              <p className="mb-3 text-2xs tracking-wider text-muted uppercase">By weekday</p>
+              <BarList items={clicksByWeekday(HEATMAP)} />
+            </div>
           </div>
         )}
       </div>
