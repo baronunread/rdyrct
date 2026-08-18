@@ -41,18 +41,35 @@ bunx tsc -p tests/worker/tsconfig.json --noEmit  # worker tests (tests/worker)
 bun run test                           # unit tests (bun test, tests/)
 bun run test:worker                    # worker tests (vitest-pool-workers, tests/worker/)
 bun run e2e:smoke                      # browser tests (playwright, tests/e2e/); needs .dev.vars
-bun run verify                         # all of the above, in order: the gate
+bun run verify                         # static checks + unit + worker tests, no e2e: the local gate
+bun run verify:e2e                     # verify + the full e2e:smoke suite: what CI runs
 bun run doctor                         # react-doctor audit (React health score; --verbose for details)
 bun run fallow                         # fallow gate: what this branch adds over main
 ```
 
-**`bun run verify` ends with the browser tests, and every new feature ships
-with an e2e scenario.** Both are rules, not suggestions. The worker test
-environment has no built asset bundle, so it never touches the real `ASSETS`
-binding: checks that stop at `test` and `test:worker` have already let two
-bugs through that broke the app for every visitor. Green means the app runs
-in a browser, or it means nothing. Add a `tests/e2e/*.pw.ts` scenario
-alongside the feature, in the same commit.
+**Every new feature ships with an e2e scenario.** Not a suggestion. The
+worker test environment has no built asset bundle, so it never touches the
+real `ASSETS` binding: checks that stop at `test` and `test:worker` have
+already let two bugs through that broke the app for every visitor. Green on
+`verify` alone means the static checks and non-browser tests pass, not that
+the app runs in a browser — only `verify:e2e` (or CI) proves that. Add a
+`tests/e2e/*.pw.ts` scenario alongside the feature, in the same commit, even
+though writing it does not require running the full suite locally.
+
+**Run tests scoped to the blast radius while iterating, not the full
+suite.** `bun run verify:e2e` is the gate CI runs, unscoped, before a PR
+merges — that stays mandatory, and the full `e2e:smoke` run only happens
+there, never as a local default. Re-running every unit test, worker test and
+e2e spec after every edit is not extra safety, it's noise that hides which
+check actually matters: a change to QR-logo storage doesn't need the billing
+or short-link-creation specs to pass again, it needs the ones that touch R2,
+the qr-logo routes, and whatever renders the logo. Find the blast radius
+first (`codegraph_explore`'s blast-radius summary, or `git diff` against
+callers) and run only the matching files: `bun test tests/<file>.test.ts`,
+`bunx vitest run tests/worker/<file>.worker.ts`,
+`bunx playwright test tests/e2e/<file>.pw.ts`. Run `bun run verify` (still no
+e2e) once, at the end, before calling the work done — CI is what decides
+whether the full browser suite passes.
 
 **The worker tests typecheck.** vitest does not, so `verify` runs tsc over
 `tests/worker` as its own project. `tests/worker/env.d.ts` declares
@@ -64,7 +81,7 @@ Workers globals in one directory, so they need untangling first.
 **Checks run in one place each.** The pre-commit hook only formats staged
 files, because that is the one job that repairs instead of complaining.
 Everything that reports runs in CI, where nobody can pass `--no-verify`:
-`.github/workflows/test.yml` runs `bun run verify`, and
+`.github/workflows/test.yml` runs `bun run verify:e2e`, and
 `.github/workflows/react-doctor.yml` blocks on any new react-doctor finding
 (changed files, against the merge base) for PRs and main.
 

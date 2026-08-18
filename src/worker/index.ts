@@ -257,14 +257,14 @@ app.all("/blog/*", proxyBlog);
 // way; the status is what a crawler reads.
 //
 // Only the shell can carry it. The bundle serves files at the root too
-// (/favicon.svg, /theme-init.js, /og.png, /acme.svg), and those are
-// single-segment paths that reach here by the same door as a dead slug: they
-// arrive as themselves, not as HTML, and 404ing them took the theme bootstrap
-// down with them.
-
-/** Vite writes a content hash into every name under /assets/, so the URL is
- * the version and can never mean anything else. */
-const IMMUTABLE = "public, max-age=31536000, immutable";
+// (/favicon.svg, /theme-init.js, /og.png), and those are single-segment
+// paths that reach here by the same door as a dead slug: they arrive as
+// themselves, not as HTML, and 404ing them took the theme bootstrap down
+// with them.
+//
+// /assets/* never reaches this function at all: it's excluded from
+// run_worker_first (wrangler.jsonc), so Cloudflare serves it directly and
+// public/_headers carries its cache-control and security headers instead.
 
 /**
  * A 404 nothing will cache.
@@ -292,24 +292,6 @@ async function serveSpa(c: Context<AppEnv>, status?: 404): Promise<Response> {
   if (response.status !== 200) return response;
 
   const isShell = response.headers.get("content-type")?.includes("text/html");
-
-  if (url.pathname.startsWith("/assets/")) {
-    // The shell here is a chunk that no longer exists, which is what a
-    // browser holding a stale index.html asks for after a deploy. Answering a
-    // script request with a page helps nobody, and caching that page at a
-    // script's URL for a year would be worse: hashes are content-addressed
-    // and can recur (revert a commit and the old name comes back), so it
-    // breaks one visitor and nobody else.
-    if (isShell) return uncacheable404(null);
-    // Set here rather than in a `_headers` file. With run_worker_first every
-    // one of these passes through this function, and Cloudflare documents
-    // _headers as not applying to what a Worker returns — true or not, this
-    // needs no ruling.
-    const headers = new Headers(response.headers);
-    headers.set("cache-control", IMMUTABLE);
-    return new Response(response.body, { status: 200, headers });
-  }
-
   if (!status || !isShell) return response;
   return uncacheable404(response.body, response.headers);
 }

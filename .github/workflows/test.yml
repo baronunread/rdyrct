@@ -41,4 +41,4 @@ jobs:
           cp .dev.vars.example .dev.vars
           cp .env.example .env
       - name: Static checks, unit tests, and browser smoke test
-        run: bun run verify
+        run: bun run verify:e2e

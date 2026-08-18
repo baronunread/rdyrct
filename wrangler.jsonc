@@ -7,25 +7,31 @@
   "assets": {
     "binding": "ASSETS",
     "not_found_handling": "single-page-application",
-    // Worker first for everything, and it stays that way. The custom-domain
-    // redirect, /:slug, the blog proxy, the per-page head (page-meta.ts) and
-    // the security-header baseline all have to see a request before an asset
-    // could answer it, and a slug is any single-segment path, so no pattern
-    // separates "a short link" from "a page" ahead of the KV lookup.
+    // Worker first for everything except the hashed bundle under /assets/.
+    // The custom-domain redirect, /:slug, the blog proxy, the per-page head
+    // (page-meta.ts) and the security-header baseline all have to see a
+    // request before an asset could answer it, and a slug is any
+    // single-segment path, so no pattern separates "a short link" from "a
+    // page" ahead of the KV lookup — that's why the exception stops at
+    // /assets/* rather than covering every static file.
     //
-    // `["/*", "!/assets/*"]` was measured and rejected. It reads like free
-    // money (those filenames carry a content hash, so they need nothing from
-    // the Worker) but not_found_handling still fires inside the exception: a
-    // chunk that no longer exists comes back as the SPA shell under a 200,
-    // on a path the Worker no longer sees and so cannot correct. It also
-    // loses the redirect-only guarantee on custom domains, which serve short
-    // links and nothing else.
+    // Two known gaps from the exception, both accepted: a request to
+    // /assets/* on a custom domain no longer gets the redirect-only 404 (no
+    // session cookie ever reaches a custom domain, so this is cosmetic, not
+    // a data leak), and a chunk deleted by a later deploy comes back as the
+    // SPA shell under a 200 instead of the 404 serveSpa used to produce,
+    // same as any SPA's normal stale-chunk behavior.
     //
-    // The invocations it would have saved are the small half of the win
-    // anyway. The large half is the year-long cache serveSpa puts on
-    // /assets/* (src/worker/index.ts), which stops the repeat requests
-    // happening at all, and which needs the Worker in front to be safe.
-    "run_worker_first": true,
+    // Cache-Control and the security-header baseline for /assets/* now live
+    // in public/_headers instead of serveSpa (src/worker/index.ts): Cloudflare
+    // documents _headers as applying to what it serves directly, and with
+    // the Worker no longer in front of these requests, that's exactly what's
+    // happening. _headers can't tell a real chunk from a deleted one either,
+    // so the SPA-shell response above gets cached too — measured against the
+    // real built Worker, not just reasoned about, which is why public/_headers
+    // caps it at a day with must-revalidate instead of the year a content
+    // hash would otherwise justify.
+    "run_worker_first": ["/*", "!/assets/*"],
   },
   // Create the real resources with:
   //   wrangler kv namespace create LINKS

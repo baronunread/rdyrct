@@ -1,0 +1,17 @@
+# /assets/* is excluded from run_worker_first (wrangler.jsonc), so Cloudflare
+# serves it directly and the Worker's applySecurityHeaders (security-headers.ts)
+# never runs on it. These replicate that baseline for the one path prefix that
+# skips the Worker; every other response still gets it from the Worker itself.
+#
+# max-age is a day, not the year a content hash could justify: this file
+# can't tell a real chunk from a deleted one, so not_found_handling's SPA
+# shell for a deleted chunk gets cached here too. A day bounds how long that
+# wrong response can survive; must-revalidate stops a cache from serving it
+# stale past that, so it self-heals with no manual purge needed. A year
+# would have pinned it until someone noticed.
+/assets/*
+  Cache-Control: public, max-age=86400, immutable, must-revalidate
+  Content-Security-Policy: default-src 'self'; script-src 'self' 'wasm-unsafe-eval' https://*.posthog.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://*.posthog.com; font-src 'self'; worker-src 'self' blob:; connect-src 'self' https://*.posthog.com; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=(), usb=()

@@ -43,6 +43,7 @@ import { Footer, GITHUB_URL } from "../ui/footer";
 import { HeroShortener } from "../components/hero-shortener";
 import { HeroSignedIn } from "../components/hero-signed-in";
 import { LandingHeader } from "../components/landing-header";
+import cloudflareLogo from "../assets/cloudflare.svg";
 import { LandingAnalyticsMock } from "../components/landing-analytics";
 import { formatNumber } from "../lib/numbers";
 import { cn } from "../ui/cn";
@@ -1036,7 +1037,7 @@ function CloudflareSection() {
   return (
     <Section>
       <div className="mb-8 text-center">
-        <img src="/cloudflare.svg" alt="Cloudflare" className="mx-auto mb-5 h-10 w-auto" />
+        <img src={cloudflareLogo} alt="Cloudflare" className="mx-auto mb-5 h-10 w-auto" />
         <h2 className="text-xl font-bold">Runs entirely on Cloudflare</h2>
         <p className="mx-auto mt-2 max-w-xl text-sm text-muted">
           No servers to patch, no databases to babysit: rdyrct is built from Cloudflare's own
