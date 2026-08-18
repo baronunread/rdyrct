@@ -9,7 +9,7 @@ search=yes,ai-train=no,use=reference` and refuses the training crawlers by
 
 See the full comparison at [rdyrct.com/pricing](https://rdyrct.com/pricing).
 
-## Free — $0/month
+## Free: $0/month
 
 - 30 links
 - 3 team members
@@ -20,7 +20,7 @@ See the full comparison at [rdyrct.com/pricing](https://rdyrct.com/pricing).
 
 [Sign up free](https://rdyrct.com/signup)
 
-## Hobby — $4/month
+## Hobby: $4/month
 
 - 500 links
 - 5 team members
@@ -31,7 +31,7 @@ See the full comparison at [rdyrct.com/pricing](https://rdyrct.com/pricing).
 
 [Start Hobby](https://rdyrct.com/signup?next=%2Fbilling%3Fplan%3Dhobby)
 
-## Pro — $9/month
+## Pro: $9/month
 
 - 3000 links
 - 25 team members
