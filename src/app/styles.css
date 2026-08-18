@@ -163,6 +163,24 @@ html {
   }
 }
 
+/* Marketing-to-marketing navigation (the viewTransition Links in
+   landing-header.tsx and friends) rides the same root crossfade above, so a
+   click between "/", "/pricing" and "/qr-code-generator" softens instead of
+   hard-cutting. The header carries its own transition group so it stays out
+   of that crossfade: old and new headers are pixel-identical for the same
+   auth state, and isolating the group is what keeps it from visibly
+   flickering along with the content, which is what makes the navigation
+   read as one page rather than a swap. It never needs to animate, on or off
+   reduced motion. */
+::view-transition-old(marketing-header),
+::view-transition-new(marketing-header) {
+  animation: none;
+}
+
+header[data-marketing-header] {
+  view-transition-name: marketing-header;
+}
+
 body {
   min-height: 100dvh;
 }

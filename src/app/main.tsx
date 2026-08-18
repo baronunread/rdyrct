@@ -1,6 +1,6 @@
-import { StrictMode, Suspense, lazy } from "react";
+import { StrictMode, Suspense, lazy, useEffect } from "react";
 import { createRoot } from "react-dom/client";
-import { BrowserRouter, Routes, Route, Navigate, Outlet } from "react-router";
+import { BrowserRouter, Routes, Route, Navigate, Outlet, useLocation } from "react-router";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import "@fontsource/jetbrains-mono/latin-400.css";
 import "@fontsource/jetbrains-mono/latin-700.css";
@@ -34,6 +34,9 @@ const PrivacyPage = lazy(() =>
 const TermsPage = lazy(() => import("./routes/terms").then((m) => ({ default: m.TermsPage })));
 const QrGeneratorPage = lazy(() =>
   import("./routes/qr-generator").then((m) => ({ default: m.QrGeneratorPage })),
+);
+const PricingPage = lazy(() =>
+  import("./routes/pricing").then((m) => ({ default: m.PricingPage })),
 );
 const AppShell = lazy(() => import("./routes/shell").then((m) => ({ default: m.AppShell })));
 const RequireAuth = lazy(() => import("./routes/shell").then((m) => ({ default: m.RequireAuth })));
@@ -81,19 +84,34 @@ const AdminUsersPage = lazy(() =>
 const NotFound = lazy(() => import("./routes/not-found").then((m) => ({ default: m.NotFound })));
 
 /**
- * The two public pages that carry the landing header, and the header itself
+ * The marketing pages that carry the landing header, and the header itself
  * while their chunk downloads.
  *
  * It rides in the entry chunk (a few hundred bytes) rather than waiting for
- * the page's, so somebody arriving at the homepage sees the site's header on
- * the first frame and the page fills in under it, instead of watching an
- * empty screen with a cookie banner on it. Same wrapper as both pages use, so
- * nothing moves when the real one takes over.
+ * the page's, so somebody arriving here sees the site's header on the first
+ * frame and the page fills in under it, instead of watching an empty screen
+ * with a cookie banner on it. Same wrapper as every page in the group uses,
+ * so nothing moves when the real one takes over.
  *
  * The card pages (login, signup, invite) are deliberately not in here: they
  * have no header, and showing one would be a flash of the wrong thing.
+ *
+ * A navigation between these pages runs as a view transition (see the
+ * viewTransition Links in landing-header.tsx, footer.tsx and elsewhere),
+ * which softens the swap but does nothing about scroll position: a fresh
+ * document load always starts at the top, a client-side route change keeps
+ * wherever the old page had scrolled to, so leaving mid-FAQ on "/" and
+ * clicking Pricing landed mid-table on "/pricing" instead of at its top. A
+ * hash still gets to choose its own landing spot (see useScrollToHash,
+ * called by the page that owns the target section, since it needs that
+ * section to exist first); this only resets the rest.
  */
 function PublicPages() {
+  const { pathname, hash } = useLocation();
+  useEffect(() => {
+    if (!hash) window.scrollTo(0, 0);
+  }, [pathname, hash]);
+
   return (
     <Suspense
       fallback={
@@ -127,12 +145,13 @@ createRoot(document.getElementById("root")!).render(
                 <Route element={<PublicPages />}>
                   <Route path="/" element={<LandingPage />} />
                   <Route path="/qr-code-generator" element={<QrGeneratorPage />} />
+                  <Route path="/pricing" element={<PricingPage />} />
+                  <Route path="/privacy" element={<PrivacyPage />} />
+                  <Route path="/terms" element={<TermsPage />} />
                 </Route>
                 <Route path="/login" element={<AuthPage mode="login" />} />
                 <Route path="/signup" element={<AuthPage mode="signup" />} />
                 <Route path="/reset-password" element={<ResetPasswordPage />} />
-                <Route path="/privacy" element={<PrivacyPage />} />
-                <Route path="/terms" element={<TermsPage />} />
                 <Route path="/invite/:token" element={<InvitePage />} />
 
                 {/* onboarding is gone: the app renders a create-org empty state

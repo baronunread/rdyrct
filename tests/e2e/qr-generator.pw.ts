@@ -136,7 +136,7 @@ test("the upsell offers the account rather than making a link", async ({ page })
   await expect(upsell).toBeVisible();
   await expect(page.getByRole("link", { name: "See Hobby and Pro" })).toHaveAttribute(
     "href",
-    "/#pricing",
+    "/pricing",
   );
 
   expect(appPosts(posted)).toEqual([]);

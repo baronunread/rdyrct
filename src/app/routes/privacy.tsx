@@ -1,12 +1,16 @@
 // fallow-ignore-file code-duplication -- legal sections share structural patterns
 import { SUPPORT_EMAIL } from "../ui/footer";
-import { LegalPageLayout } from "../ui/misc";
+import { LegalPageLayout } from "../components/legal-page-layout";
 import { useSeo } from "../lib/seo";
+import { useScrollToHash } from "../lib/scroll-to-hash";
+import { useAudience } from "../lib/audience";
 
 export function PrivacyPage() {
+  const { authed } = useAudience();
   useSeo("/privacy");
+  useScrollToHash();
   return (
-    <LegalPageLayout>
+    <LegalPageLayout authed={authed}>
       <div>
         <h1 className="mb-2 text-xl font-bold">Privacy Policy</h1>
         <p className="text-muted">

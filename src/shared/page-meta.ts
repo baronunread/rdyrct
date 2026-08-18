@@ -40,6 +40,11 @@ export const PUBLIC_PAGE_META = {
     description:
       "Make a custom QR code online for free: your logo in the middle, your colors, rounded dots, and a PNG or SVG download. No sign-up, no watermark, and the code is generated in your browser.",
   },
+  "/pricing": {
+    title: "Pricing - rdyrct URL shortener and QR codes",
+    description:
+      "Free, Hobby and Pro plans for rdyrct: short links, custom domains, branded QR codes and click analytics. Start free, or self-host on your own Cloudflare account.",
+  },
   "/signup": {
     title: "Sign up - rdyrct URL shortener and QR codes",
     description:

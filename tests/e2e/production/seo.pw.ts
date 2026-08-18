@@ -13,6 +13,7 @@ import { expect, test } from "@playwright/test";
 const PAGES = [
   { path: "/", title: /URL shortener and QR code generator/ },
   { path: "/qr-code-generator", title: /Free QR code generator with logo/ },
+  { path: "/pricing", title: /Pricing - rdyrct/ },
   { path: "/signup", title: /Sign up/ },
   { path: "/privacy", title: /Privacy policy/ },
 ];
@@ -123,10 +124,25 @@ test("a file the bundle serves at the root still answers 200", async ({ request 
 test("a reserved keyword still answers 200", async ({ request }) => {
   // The 404 above is decided one line below the RESERVED_SLUGS check, so the
   // way to get it wrong is to 404 the app's own routes.
-  for (const path of ["/", "/privacy", "/qr-code-generator", "/dashboard"]) {
+  for (const path of ["/", "/privacy", "/qr-code-generator", "/pricing", "/dashboard"]) {
     const res = await request.get(path, { failOnStatusCode: false });
     expect(res.status(), `status of ${path}`).toBe(200);
   }
+});
+
+test("pricing.md serves as plain text for agents, not the app shell", async ({ request }) => {
+  // Reaches the Worker through the same door as any dead slug: one segment,
+  // not a reserved keyword the /:slug guard already skips (see llms.txt's
+  // entry above). The point of the test is that it comes back as itself
+  // rather than the SPA shell serveSpa falls back to.
+  const res = await request.get("/pricing.md");
+
+  expect(res.status()).toBe(200);
+  expect(res.headers()["content-type"]).not.toContain("html");
+
+  const body = await res.text();
+  expect(body).toContain("# rdyrct pricing");
+  expect(body).toContain("Hobby — $4/month");
 });
 
 test("walking off a public page does not take its title along", async ({ page }) => {

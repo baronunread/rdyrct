@@ -30,6 +30,7 @@ import {
 import { useEffect } from "react";
 import { useCurrentUser } from "../lib/hooks";
 import { useSeo } from "../lib/seo";
+import { useScrollToHash } from "../lib/scroll-to-hash";
 import { FaqJsonLd } from "../components/faq-json-ld";
 import { useAudience } from "../lib/audience";
 import posthog from "../lib/posthog";
@@ -140,7 +141,9 @@ const featureGroups = [
   },
 ];
 
-const faqs = [
+/** The first two answer what /pricing exists to answer; the standalone
+ *  pricing page reuses them instead of forking its own list. */
+export const faqs = [
   {
     q: "Is the free plan really free?",
     a: `Yes: ${PLAN_LIMITS.free.links} links, ${PLAN_LIMITS.free.members} teammates, and ${PLAN_LIMITS.free.analyticsDays} days of click analytics, forever. No credit card required. Shared-domain links get random slugs; picking your own slug needs a custom domain (paid plans).`,
@@ -363,8 +366,16 @@ function MobilePlans({ paidTo }: { paidTo: (p: "hobby" | "pro") => string }) {
   );
 }
 
-/** Four-tier comparison table (self-hosted / Free / Hobby / Pro). */
-function PricingSection() {
+/**
+ * Four-tier comparison table (self-hosted / Free / Hobby / Pro). Exported
+ * for the standalone /pricing page, which reuses it rather than forking a
+ * second table that could drift from this one.
+ *
+ * No heading of its own: the page that renders this owns the page-level
+ * "Simple pricing" h1 and subtitle immediately above it (see PricingPage),
+ * and this used to repeat both, word for word, right under them.
+ */
+export function PricingSection() {
   const paidTo = usePaidPlanTo();
   return (
     <Section
@@ -372,14 +383,6 @@ function PricingSection() {
       className="scroll-mt-16 py-16"
       onEnter={() => posthog.capture(FUNNEL.pricingViewed)}
     >
-      <div className="mb-8 text-center">
-        <h2 className="text-xl font-bold">Simple pricing</h2>
-        <p className="mx-auto mt-2 max-w-xl text-sm text-muted">
-          Start free. Upgrade when your links outgrow the plan, or self-host and never pay us a
-          cent.
-        </p>
-      </div>
-
       <MobilePlans paidTo={paidTo} />
 
       <div className="hidden sm:block">
@@ -1085,6 +1088,98 @@ function FinalCtaSection({ ctaTo, ctaLabel }: { ctaTo: string; ctaLabel: string 
   );
 }
 
+/**
+ * Three price points and a link to the full comparison, in place of the full
+ * table this section used to carry.
+ *
+ * The homepage's job is "worth a click"; a full four-column table with a
+ * self-host row and a feature-by-feature breakdown is the down-funnel page's
+ * job, and having both meant the same table twice, word for word, competing
+ * with itself for "rdyrct pricing" in search. Stripe, Linear and Vercel all
+ * draw this line the same place: a light teaser on the homepage, the detail
+ * on its own page.
+ */
+function PricingTeaser() {
+  const paidTo = usePaidPlanTo();
+  const tiers = [
+    {
+      name: "Free",
+      price: "$0",
+      pitch: `${PLAN_LIMITS.free.links} links, ${PLAN_LIMITS.free.analyticsDays}-day analytics, and QR codes`,
+      to: "/signup",
+      cta: "Sign up free",
+      variant: "outline" as const,
+      onClick: () => trackCta("pricing_free"),
+    },
+    {
+      name: "Hobby",
+      price: `${PLAN_PRICES.hobby}/mo`,
+      pitch: `${PLAN_LIMITS.hobby.links} links, a custom domain with your own slugs, QR codes with your logo and colors, ${PLAN_LIMITS.hobby.members} team members, and ${PLAN_LIMITS.hobby.analyticsDays}-day analytics`,
+      to: paidTo("hobby"),
+      cta: "Start Hobby",
+      variant: "outline" as const,
+      onClick: () => trackCta("pricing_hobby"),
+    },
+    {
+      name: "Pro",
+      price: `${PLAN_PRICES.pro}/mo`,
+      pitch: `Everything in Hobby, plus ${PLAN_LIMITS.pro.orgs} organizations, ${formatNumber(PLAN_LIMITS.pro.links)} links, ${PLAN_LIMITS.pro.domains} custom domains, ${PLAN_LIMITS.pro.members} team members, and ${PLAN_LIMITS.pro.analyticsDays}-day analytics`,
+      to: paidTo("pro"),
+      cta: "Start Pro",
+      variant: "primary" as const,
+      onClick: () => trackCta("pricing_pro"),
+      highlight: true,
+    },
+  ];
+
+  return (
+    <Section
+      id="pricing"
+      className="scroll-mt-16 py-16"
+      onEnter={() => posthog.capture(FUNNEL.pricingViewed)}
+    >
+      <div className="mb-8 text-center">
+        <h2 className="text-xl font-bold">Simple pricing</h2>
+        <p className="mx-auto mt-2 max-w-xl text-sm text-muted">
+          Start free. Upgrade when your links outgrow the plan, or self-host and never pay us a
+          cent.
+        </p>
+      </div>
+
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        {tiers.map(({ name, price, pitch, to, cta, variant, onClick, highlight }) => (
+          <div
+            key={name}
+            className={cn(
+              "flex flex-col gap-4 rounded-lg border p-5",
+              highlight ? "border-accent/40 bg-accent/5" : "border-border bg-surface",
+            )}
+          >
+            <div>
+              <p className={highlight ? "font-bold text-accent" : "font-bold"}>{name}</p>
+              <p className="tnum mt-1 text-2xl font-bold">{price}</p>
+              <p className="mt-1 text-sm text-muted">{pitch}</p>
+            </div>
+            <Link
+              to={to}
+              onClick={onClick}
+              className={buttonClass({ variant, size: "sm", className: "mt-auto w-full" })}
+            >
+              {cta}
+            </Link>
+          </div>
+        ))}
+      </div>
+
+      <p className="mt-6 text-center text-sm">
+        <Link to="/pricing" viewTransition className="text-accent hover:underline">
+          See the full comparison and self-hosting →
+        </Link>
+      </p>
+    </Section>
+  );
+}
+
 export function LandingPage() {
   const { authed, name, ctaTo, ctaLabel } = useAudience();
 
@@ -1099,6 +1194,8 @@ export function LandingPage() {
   useEffect(() => {
     posthog.capture(FUNNEL.landingViewed, landingContext());
   }, []);
+
+  useScrollToHash();
 
   return (
     <MotionConfig reducedMotion="user">
@@ -1123,7 +1220,7 @@ export function LandingPage() {
           <AnalyticsPreviewSection />
           <FeaturesSection />
           <CloudflareSection />
-          <PricingSection />
+          <PricingTeaser />
           <SelfHostSection />
           <FaqSection />
           <FinalCtaSection ctaTo={ctaTo} ctaLabel={ctaLabel} />

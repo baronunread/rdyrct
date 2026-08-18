@@ -37,17 +37,23 @@ test("the hero's second CTA stays on the site and self-hosting sits under pricin
   await expect(pill).not.toContainText(/NaN|undefined/);
 });
 
-// Self-hosted was the pricing table's first column, so the first thing a buyer
-// read was a free unlimited version of what we were about to charge for.
-test("the pricing table compares only the three paid-for plans", async ({ page }) => {
+// The homepage used to carry the full four-column table, word for word the
+// same one on /pricing: two copies of the same content competing for the
+// same search result. It now teases three prices and sends the down-funnel
+// visitor to /pricing for the table (and self-hosting, and the feature
+// breakdown), same split Stripe, Linear and Vercel all draw.
+test("the homepage teases three prices and points at the full comparison", async ({ page }) => {
   await page.goto("/");
 
-  const headers = page.locator("#pricing thead th");
-  await expect(headers).toHaveCount(4); // blank corner, then Free, Hobby, Pro
-  await expect(headers.nth(1)).toContainText("Free");
-  await expect(headers.nth(2)).toContainText("Hobby");
-  await expect(headers.nth(3)).toContainText("Pro");
-  await expect(page.locator("#pricing thead")).not.toContainText(/self-hosted/i);
+  const teaser = page.locator("#pricing");
+  await expect(teaser).not.toContainText(/self-hosted/i);
+  await expect(teaser.getByText("Free", { exact: true })).toBeVisible();
+  await expect(teaser.getByText("Hobby", { exact: true })).toBeVisible();
+  await expect(teaser.getByText("Pro", { exact: true })).toBeVisible();
+  await expect(teaser.locator("table")).toHaveCount(0);
+
+  await teaser.getByRole("link", { name: /full comparison/i }).click();
+  await expect(page).toHaveURL(/\/pricing$/);
 });
 
 // Reading links sit on the page's centre line; doing links (theme, auth) stay
@@ -110,6 +116,24 @@ test("the header is on screen before the homepage chunk arrives", async ({ page 
   await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
   // One header, and it never moved: the fallback uses the page's own wrapper.
   await expect(header).toHaveCount(1);
+});
+
+// The pricing table used to live only on "/", reachable by an anchor. The
+// standalone page carries the real thing, deep-linkable from a search
+// result. No self-host section here: that stays a homepage trust signal
+// (see the test above), not something a buying page argues against itself
+// with.
+test("the standalone pricing page has the full table and no self-host pitch", async ({ page }) => {
+  await page.goto("/pricing");
+
+  await expect(page.getByRole("heading", { level: 1, name: /simple pricing/i })).toBeVisible();
+  const headers = page.locator("#pricing thead th");
+  await expect(headers).toHaveCount(4);
+  await expect(headers.nth(2)).toContainText("Hobby");
+  await expect(page.locator("#self-host")).toHaveCount(0);
+
+  await page.getByRole("link", { name: "Sign up" }).first().click();
+  await expect(page).toHaveURL(/\/signup/);
 });
 
 test("legal pages retain their baseline headings", async ({ page }) => {

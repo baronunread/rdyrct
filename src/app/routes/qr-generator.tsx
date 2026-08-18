@@ -26,6 +26,7 @@ import { QRPreview, QrDownloadButtons } from "../components/qr";
 import { QrColorAndLogoFields, QrPatternFields } from "../components/qr-fields";
 import { qrPreviewProps, resolveLook, type QrValues } from "../lib/qr-look";
 import { useSeo } from "../lib/seo";
+import { useScrollToHash } from "../lib/scroll-to-hash";
 import { FaqJsonLd } from "../components/faq-json-ld";
 import { useAudience } from "../lib/audience";
 import { LandingHeader } from "../components/landing-header";
@@ -83,7 +84,8 @@ function TrackingSection() {
           Start free <ArrowRight size={14} />
         </Link>
         <Link
-          to="/#pricing"
+          to="/pricing"
+          viewTransition
           onClick={() => trackCta("qr_page_pricing")}
           className="text-sm text-accent hover:underline"
         >
@@ -218,6 +220,7 @@ export function QrGeneratorPage() {
   // dashboard they were already entitled to.
   const { authed } = useAudience();
   useSeo("/qr-code-generator");
+  useScrollToHash();
   const [value, setValue] = useState("");
   const [values, setValues] = useState<QrValues>(EMPTY_QR);
 

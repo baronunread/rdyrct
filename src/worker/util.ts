@@ -26,6 +26,7 @@ export const RESERVED_SLUGS = new Set([
   "robots.txt",
   "sitemap.xml",
   "llms.txt",
+  "pricing.md",
   // public
   "login",
   "signup",
@@ -36,6 +37,7 @@ export const RESERVED_SLUGS = new Set([
   "terms",
   "blog",
   "qr-code-generator",
+  "pricing",
   // authenticated app tabs
   "dashboard",
   "analytics",
