@@ -141,9 +141,7 @@ const featureGroups = [
   },
 ];
 
-/** The first two answer what /pricing exists to answer; the standalone
- *  pricing page reuses them instead of forking its own list. */
-export const faqs = [
+const faqs = [
   {
     q: "Is the free plan really free?",
     a: `Yes: ${PLAN_LIMITS.free.links} links, ${PLAN_LIMITS.free.members} teammates, and ${PLAN_LIMITS.free.analyticsDays} days of click analytics, forever. No credit card required. Shared-domain links get random slugs; picking your own slug needs a custom domain (paid plans).`,
@@ -1173,7 +1171,7 @@ function PricingTeaser() {
 
       <p className="mt-6 text-center text-sm">
         <Link to="/pricing" viewTransition className="text-accent hover:underline">
-          See the full comparison and self-hosting →
+          See the full comparison →
         </Link>
       </p>
     </Section>
