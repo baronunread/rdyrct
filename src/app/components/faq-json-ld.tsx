@@ -1,3 +1,5 @@
+import type { ReactNode } from "react";
+
 /**
  * FAQPage structured data, from the same questions the page renders.
  *
@@ -8,7 +10,13 @@
  */
 export interface Faq {
   q: string;
+  /** Plain-text answer: what a search result shows, and what renders when
+   *  `aNode` is absent. */
   a: string;
+  /** Rendered answer, for the rare one that needs an inline link `a` alone
+   *  can't carry. Schema still reads `a`, since a link's destination means
+   *  nothing to a search snippet. */
+  aNode?: ReactNode;
 }
 
 export function FaqJsonLd({ faqs }: { faqs: readonly Faq[] }) {

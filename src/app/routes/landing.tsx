@@ -168,7 +168,19 @@ const faqs = [
   },
   {
     q: "Can I make a QR code with my logo?",
-    a: "Yes. The QR code generator is free and needs no account: pick the dot and corner style, set the colors, drop in a logo, and download a PNG or an SVG. Codes made on a paid plan point at a trackable short link, so you can see how many scans a poster, flyer or packaging insert actually produced.",
+    a: "Yes, on a paid plan: point the QR at a short link you own, and see how many scans a poster, flyer or packaging insert actually produced. If you just want a QR code that works and looks good, no tracking needed, our QR code generator is free and needs no account: pick the dot and corner style, set the colors, drop in a logo, and download a PNG or an SVG.",
+    aNode: (
+      <>
+        Yes, on a paid plan: point the QR at a short link you own, and see how many scans a poster,
+        flyer or packaging insert actually produced. If you just want a QR code that works and looks
+        good, no tracking needed, our{" "}
+        <Link to="/qr-code-generator" viewTransition className="text-accent hover:underline">
+          QR code generator
+        </Link>{" "}
+        is free and needs no account: pick the dot and corner style, set the colors, drop in a logo,
+        and download a PNG or an SVG.
+      </>
+    ),
   },
   {
     q: "Can I self-host instead?",
@@ -1043,7 +1055,7 @@ function FaqSection() {
         <h2 className="text-xl font-bold">Frequently asked questions</h2>
       </div>
       <div className="mx-auto flex max-w-3xl flex-col gap-3">
-        {faqs.map(({ q, a }) => (
+        {faqs.map(({ q, a, aNode }) => (
           <details
             key={q}
             className="group rounded-lg border border-border bg-surface px-4 open:border-accent/40"
@@ -1055,7 +1067,7 @@ function FaqSection() {
                 className="shrink-0 text-muted transition-transform group-open:rotate-180"
               />
             </summary>
-            <p className="pb-4 text-sm text-muted">{a}</p>
+            <p className="pb-4 text-sm text-muted">{aNode ?? a}</p>
           </details>
         ))}
       </div>
