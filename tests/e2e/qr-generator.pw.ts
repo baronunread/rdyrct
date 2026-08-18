@@ -46,7 +46,14 @@ function appPosts(posted: string[]): string[] {
  * browser: handing a megapixel of raw pixels back to node to decode there
  * costs more than the test.
  */
-async function readCode(page: Page, markup: string): Promise<string | null> {
+/** What a scanner got out of the code: the text, and the version, which is
+ * the grid size (4 × version + 17 modules a side). */
+interface ScannedCode {
+  data: string;
+  version: number;
+}
+
+async function readCode(page: Page, markup: string): Promise<ScannedCode | null> {
   await page.goto("about:blank");
   await page.addScriptTag({ path: createRequire(import.meta.url).resolve("jsqr") });
 
@@ -66,7 +73,7 @@ async function readCode(page: Page, markup: string): Promise<string | null> {
     const pixels = context?.getImageData(0, 0, canvas.width, canvas.height);
     if (!pixels) return null;
     const found = window.jsQR(pixels.data, pixels.width, pixels.height);
-    return found?.data ?? null;
+    return found ? { data: found.data, version: found.version } : null;
   }, markup);
 }
 
@@ -251,7 +258,33 @@ test("the merged code still scans", async ({ page }) => {
 
   const svg = await readFile(await (await downloadCode(page, "SVG")).path(), "utf8");
 
-  expect(await readCode(page, svg)).toBe("https://example.com/still-scans");
+  expect((await readCode(page, svg))?.data).toBe("https://example.com/still-scans");
+});
+
+/**
+ * Error correction is "H" only when a logo covers the middle of the code.
+ *
+ * The generator draws no logo, so nothing is missing and the 30% redundancy
+ * "H" carries buys nothing. It is not free: at "H" this URL needs a version 4
+ * grid, 33 modules a side, against version 3 and 29 modules at "M". Same
+ * printed square, wider modules, which is the whole of scanning from a
+ * distance.
+ *
+ * Asserted through a decoder rather than by reading our own option back,
+ * because the version is what a scanner actually sees, and it is the thing
+ * that regresses if the level is ever pinned to "H" again.
+ */
+test("a code with no logo is not padded with error correction it cannot use", async ({ page }) => {
+  await page.goto("/qr-code-generator");
+  await page.getByLabel("Link or text").fill("https://example.com/printed-poster");
+
+  const svg = await readFile(await (await downloadCode(page, "SVG")).path(), "utf8");
+  const scanned = await readCode(page, svg);
+
+  expect(scanned?.data).toBe("https://example.com/printed-poster");
+  // Version 4 is what "H" produced for this URL. Anything above 3 means the
+  // level went back up, or the payload grew.
+  expect(scanned?.version).toBe(3);
 });
 
 test("a signed-in visitor gets their dashboard link, not a sign-up button", async ({ page }) => {

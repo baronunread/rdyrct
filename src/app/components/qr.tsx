@@ -4,7 +4,7 @@ import { oneOf } from "@/shared/lookup";
 import QRCodeStyling, { type CornerSquareType, type CornerDotType } from "qr-code-styling";
 import { Button } from "../ui/button";
 import { Download } from "lucide-react";
-import { hasTransparency, imageOptionsFor, resolveLook, type QrLook } from "../lib/qr-look";
+import { eccFor, hasTransparency, imageOptionsFor, resolveLook, type QrLook } from "../lib/qr-look";
 import { fillSeams } from "../lib/qr-seams";
 import { cn } from "../ui/cn";
 import posthog from "../lib/posthog";
@@ -126,7 +126,7 @@ function makeQR(url: string, size: number, look: QrLook) {
     data: url,
     image: look.logo,
     margin: Math.round(size * MARGIN_RATIO),
-    qrOptions: { errorCorrectionLevel: "H" },
+    qrOptions: { errorCorrectionLevel: eccFor(look) },
     imageOptions: imageOptionsFor(look),
     ...looksOptions(look),
   });

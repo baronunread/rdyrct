@@ -75,6 +75,18 @@ interface QrImageOptions {
   saveAsBlob?: false;
 }
 
+/**
+ * The error correction level a look needs, rather than "H" for everything.
+ *
+ * "H" keeps a code readable with 30% of it missing, which is what a logo
+ * punched through the middle asks for. A code with no logo has nothing to
+ * recover from, and the redundancy is not free: the same short link is 33
+ * modules a side at "H" and 25 at "M", so every module is a third wider at
+ * the same printed size, which is what scanning from a distance comes down
+ * to. "M" still recovers 15%, enough for print wear and a phone camera.
+ */
+export const eccFor = (look: QrLook) => (look.logo ? "H" : "M");
+
 export function imageOptionsFor(look: QrLook) {
   const inlineAlready = !!look.logo && /^(data|blob):/.test(look.logo);
   const options: QrImageOptions = { margin: 4, imageSize: look.logoSize };
