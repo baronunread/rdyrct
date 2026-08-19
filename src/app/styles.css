@@ -133,6 +133,20 @@ html {
   background: var(--bg);
   color: var(--text);
   font-family: var(--font-mono);
+  /* JetBrains Mono ships programming ligatures on by default (calt), which
+     can combine "//" into a single glyph — Windows' DirectWrite and macOS's
+     CoreText apply calt differently for the same self-hosted webfont, so
+     the same URL can visually show one slash on one platform and what
+     looks like a missing slash on the other, even though the typed value
+     is correct — a Windows-only "the / disappears" report turned out to be
+     exactly this, not data loss. A form this URL/slug heavy can't afford
+     any character rendering ambiguously, so ligatures are off everywhere,
+     not just in inputs. */
+  font-variant-ligatures: none;
+  /* font-variant-ligatures: none covers liga/clig, but programming
+     ligatures are typically routed through the separate calt (contextual
+     alternates) OpenType feature, which needs its own explicit override. */
+  font-feature-settings: "calt" 0;
   /* reserve the scrollbar's width even on pages short enough to not need
      one, so a page that grows past the fold doesn't shift content left */
   scrollbar-gutter: stable;
