@@ -142,7 +142,7 @@ test("pricing.md serves as plain text for agents, not the app shell", async ({ r
 
   const body = await res.text();
   expect(body).toContain("# rdyrct pricing");
-  expect(body).toContain("Hobby — $4/month");
+  expect(body).toContain("Hobby: $4/month");
 });
 
 test("walking off a public page does not take its title along", async ({ page }) => {
