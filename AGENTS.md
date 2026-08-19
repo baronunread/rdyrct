@@ -81,7 +81,9 @@ Workers globals in one directory, so they need untangling first.
 **Checks run in one place each.** The pre-commit hook only formats staged
 files, because that is the one job that repairs instead of complaining.
 Everything that reports runs in CI, where nobody can pass `--no-verify`:
-`.github/workflows/test.yml` runs `bun run verify:e2e`, and
+`.github/workflows/test.yml` runs the same checks as `bun run verify:e2e`,
+split across parallel jobs (static checks, unit/worker tests, and a 3-way
+sharded e2e run) to cut wall-clock time, and
 `.github/workflows/react-doctor.yml` blocks on any new react-doctor finding
 (changed files, against the merge base) for PRs and main.
 
