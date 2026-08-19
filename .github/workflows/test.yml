@@ -51,6 +51,13 @@ jobs:
           key: node_modules-${{ runner.os }}-${{ hashFiles('bun.lock') }}
       - name: Install dependencies
         run: bun install --frozen-lockfile
+      # Worker tests read secrets (BETTER_AUTH_SECRET, CAP_SECRET, ...) out of
+      # the ambient miniflare env, which wrangler builds from .dev.vars. Without
+      # it those bindings are empty, so auth/rate-limit code 500s instead of
+      # behaving: same reason the old single-job workflow copied this before
+      # running verify.
+      - name: Configure worker test environment
+        run: cp .dev.vars.example .dev.vars
       - name: Unit and worker tests
         run: |
           bun run test
