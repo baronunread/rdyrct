@@ -154,6 +154,13 @@ html {
 ::view-transition-new(root) {
   animation-duration: 0.18s;
   animation-timing-function: ease;
+  /* The UA default is `plus-lighter`, which additively blends the old and
+     new snapshots instead of cross-fading them — fine for a small tweak,
+     but dark and light are far enough apart in the palette that the
+     mid-transition frame briefly reads as a wrong, washed-out third color.
+     `normal` blends by opacity alone, which is what "cross-fade" actually
+     means here. */
+  mix-blend-mode: normal;
 }
 
 @media (prefers-reduced-motion: reduce) {
