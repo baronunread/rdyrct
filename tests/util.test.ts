@@ -79,12 +79,15 @@ describe("SLUG_RE / RESERVED_SLUGS", () => {
   });
 
   // A top-level path is owned in two places: the React router (src/app/main.tsx)
-  // and the Worker (src/worker/index.ts, which owns /api and the /blog proxy on
-  // top of the SPA's routes). A slug that shadows either sits a stranger's
-  // redirect on one of our own pages, and both slug guards (the /:slug redirect
-  // and slug creation) only check RESERVED_SLUGS. So derive the owned segments
-  // from both routers and assert every one is reserved: a new route added
-  // without a matching entry fails here instead of becoming a claimable slug.
+  // and the Worker (src/worker/index.ts, which owns /api on top of the SPA's
+  // routes). `blog` is reserved too, but not derivable from either router:
+  // /blog is a separate Worker (rdyrct-blog) with its own Workers Route, so
+  // this file never sees it. A slug that shadows an owned segment sits a
+  // stranger's redirect on one of our own pages, and both slug guards (the
+  // /:slug redirect and slug creation) only check RESERVED_SLUGS. So derive
+  // the owned segments from both routers and assert every one is reserved: a
+  // new route added without a matching entry fails here instead of becoming
+  // a claimable slug.
   test("every top-level route is reserved (drift guard)", () => {
     const reactRoutes = topSegments(readSource("src/app/main.tsx"), /path="([^"]+)"/g);
     const workerRoutes = topSegments(
@@ -93,10 +96,9 @@ describe("SLUG_RE / RESERVED_SLUGS", () => {
     );
 
     // Guard against a regex that silently matches nothing after a refactor,
-    // which would make the assertion below vacuously pass. `blog` is only in
-    // the Worker; `dashboard` is only in the React router.
+    // which would make the assertion below vacuously pass. `dashboard` is
+    // only in the React router; `api` is only in the Worker.
     expect(reactRoutes).toContain("dashboard");
-    expect(workerRoutes).toContain("blog");
     expect(workerRoutes).toContain("api");
 
     const owned = [...new Set([...reactRoutes, ...workerRoutes])];

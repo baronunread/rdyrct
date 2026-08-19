@@ -52,13 +52,14 @@ test("the signed-in app keeps the default head", async ({ request }) => {
 });
 
 test("robots.txt declares both sitemaps", async ({ request }) => {
-  // The blog is a separate Next app reverse-proxied at /blog with its own
-  // sitemap. Naming only the app's own left 20 of 22 posts in no sitemap
-  // anywhere, discoverable only by crawling the blog's pagination.
+  // The blog is a separate Worker (rdyrct-blog) with its own sitemap, built
+  // by @astrojs/sitemap as sitemap-index.xml. Naming only the app's own
+  // sitemap left posts undiscoverable outside crawling the blog's
+  // pagination directly.
   const robots = await (await request.get("/robots.txt")).text();
 
   expect(robots).toContain("Sitemap: https://rdyrct.com/sitemap.xml");
-  expect(robots).toContain("Sitemap: https://rdyrct.com/blog/sitemap.xml");
+  expect(robots).toContain("Sitemap: https://rdyrct.com/blog/sitemap-index.xml");
 });
 
 test("a slug that resolves to nothing answers 404", async ({ request }) => {

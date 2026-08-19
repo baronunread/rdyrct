@@ -2,9 +2,8 @@
  * A consistent header baseline for every response this Worker sends
  * (API, redirects, errors, the SPA and its static assets): one missed
  * response path shouldn't leave weaker browser protections than the rest
- * (see issue #21). Not applied to the reverse-proxied blog (see index.ts) —
- * that's a separate Next.js app on Vercel with its own script/style needs,
- * and overriding its CSP here could break its hydration.
+ * (see issue #21). The blog is a separate Worker (rdyrct-blog) with its own
+ * Workers Route on rdyrct.com/blog*, so it never reaches this file at all.
  *
  * `'unsafe-inline'` on style-src only: the app uses React inline `style`
  * props throughout, and CSP has no practical hash/nonce story for those.
@@ -82,8 +81,4 @@ export function applySecurityHeaders(res: Response): Response {
     "camera=(), microphone=(), geolocation=(), payment=(), usb=()",
   );
   return out;
-}
-
-export function isBlogPath(pathname: string): boolean {
-  return pathname === "/blog" || pathname.startsWith("/blog/");
 }

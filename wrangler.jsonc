@@ -68,9 +68,6 @@
     // Better Stack source's ingesting host (Data ingestion tab), e.g.
     // "https://in.logs.betterstack.com". Alerts no-op until this is set.
     "BETTERSTACK_INGEST_URL": "https://s2624707.eu-central-1a.betterstackdata.com",
-    // rdyrct-blog (Next.js on Vercel), reverse-proxied at /blog. Unset skips
-    // the proxy, so /blog falls through to the slug redirect / SPA 404.
-    "BLOG_ORIGIN_URL": "https://rdyrct-blog.vercel.app",
   },
   "d1_databases": [
     {
@@ -306,11 +303,9 @@
         // so the staged DNS/TLS delays local dev shows off would only be a
         // timer for the test to race.
         "CF_DEV_ENV": "instant",
-        // env vars aren't inherited from the top-level "vars": both left
-        // unset (alerts/blog proxy no-op) so e2e never calls out to Better
-        // Stack or the real blog origin.
+        // env vars aren't inherited from the top-level "vars": left unset
+        // (alerts no-op) so e2e never calls out to Better Stack.
         "BETTERSTACK_INGEST_URL": "",
-        "BLOG_ORIGIN_URL": "",
       },
       "kv_namespaces": [
         {

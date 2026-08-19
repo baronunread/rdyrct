@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { env } from "cloudflare:workers";
 import { reset } from "cloudflare:test";
 import { applySecurityHeaders } from "../../src/worker/security-headers";
-import { applyTestMigrations, fetchWorker, overrideEnv } from "./support";
+import { applyTestMigrations, fetchWorker } from "./support";
 
 const HEADER_NAMES = [
   "content-security-policy",
@@ -75,16 +75,5 @@ describe("security headers (#21)", () => {
     expect(res.status).toBe(302);
     expect(res.headers.get("location")).toBe("https://example.com/");
     expectSecurityHeaders(res);
-  });
-
-  it("never overrides headers on the reverse-proxied blog", async () => {
-    vi.spyOn(globalThis, "fetch").mockResolvedValue(
-      new Response("<html></html>", { headers: { "content-type": "text/html" } }),
-    );
-    const testEnv = overrideEnv({ BLOG_ORIGIN_URL: "https://rdyrct-blog.vercel.app" });
-
-    const res = await fetchWorker(new Request("http://localhost/blog/hello-world"), testEnv);
-
-    expect(res.headers.get("content-security-policy")).toBeNull();
   });
 });

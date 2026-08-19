@@ -22,7 +22,7 @@ import { resolveSlug, resolveDomain, type KVLink } from "./kv";
 import { RESERVED_SLUGS } from "./util";
 import { withPageMeta } from "./page-meta";
 import { enforcePublicAuthRateLimit, enforceSignedApiRateLimit } from "./rate-limit";
-import { applySecurityHeaders, isBlogPath } from "./security-headers";
+import { applySecurityHeaders } from "./security-headers";
 import { drizzle } from "drizzle-orm/d1";
 import * as schema from "./db/schema";
 import {
@@ -72,11 +72,8 @@ app.onError((err, c) => {
   // the rest of the body onto ApiError.data, so a route's `cause` can carry
   // more than just a machine-readable `code` (e.g. same_destination_match's
   // matchedLinkId/matchedLink) straight through to the caller.
-  const path = new URL(c.req.url).pathname;
-  const respond = (body: ErrorBody, status: ContentfulStatusCode) => {
-    const res = c.json(body, status);
-    return isBlogPath(path) ? res : applySecurityHeaders(res);
-  };
+  const respond = (body: ErrorBody, status: ContentfulStatusCode) =>
+    applySecurityHeaders(c.json(body, status));
   if (err instanceof HTTPException) {
     return respond({ message: err.message, ...causeFields(err.cause) }, err.status);
   }
@@ -86,8 +83,8 @@ app.onError((err, c) => {
 
 // Applies the security header baseline to every non-error response this
 // Worker sends (see security-headers.ts): registered first, so it wraps
-// every handler below (custom-domain redirects, the API, the blog proxy,
-// shared-domain slug redirects, the SPA asset fallback).
+// every handler below (custom-domain redirects, the API, shared-domain slug
+// redirects, the SPA asset fallback).
 //
 // Assigning c.res, not mutating it: applySecurityHeaders returns a copy
 // because some responses (ASSETS, Response.redirect) refuse header writes.
@@ -96,7 +93,7 @@ app.onError((err, c) => {
 // while it isn't.
 app.use("*", async (c, next) => {
   await next();
-  if (!isBlogPath(new URL(c.req.url).pathname)) c.res = applySecurityHeaders(c.res);
+  c.res = applySecurityHeaders(c.res);
 });
 
 /* ---------------- redirect hot path ---------------- */
@@ -206,42 +203,6 @@ app.route("/api", api);
 // gets an answer it can read instead, and the 405 middleware above has a 404
 // to convert when the path exists under another method.
 app.all("/api/*", (c) => c.json({ message: "Not found" }, 404));
-
-/* ---------------- blog: reverse-proxied Next.js app on Vercel ---------------- */
-
-// The blog (rdyrct-blog, a separate Next.js repo) deploys to Vercel on its
-// own; this keeps DNS and every other route on Cloudflare while the
-// generated backlinks still resolve at rdyrct.com/blog. Next's `basePath`
-// there mirrors this prefix, so the whole path tree (pages, /_next assets
-// under /blog, sitemap) forwards unchanged.
-function proxyBlog(c: Context<AppEnv>, next: () => Promise<void>) {
-  if (!c.env.BLOG_ORIGIN_URL) return next();
-  const url = new URL(c.req.url);
-  const target = new URL(c.env.BLOG_ORIGIN_URL);
-  target.pathname = url.pathname;
-  target.search = url.search;
-
-  // The blog needs no authenticated context: strip anything credential-bearing
-  // before it leaves Cloudflare for a lower-trust, independently-deployed origin.
-  const headers = new Headers(c.req.raw.headers);
-  headers.delete("cookie");
-  headers.delete("authorization");
-  headers.set("host", target.hostname);
-  const hasBody = !["GET", "HEAD"].includes(c.req.raw.method);
-
-  // `duplex` is what Workers' fetch needs to stream a request body, and its
-  // RequestInit does not declare it, so it goes on after the object is built.
-  const init: RequestInit & { duplex?: "half" } = {
-    method: c.req.raw.method,
-    headers,
-    body: hasBody ? c.req.raw.body : undefined,
-    redirect: "manual",
-  };
-  if (hasBody) init.duplex = "half";
-  return fetch(target, init);
-}
-app.all("/blog", proxyBlog);
-app.all("/blog/*", proxyBlog);
 
 /* ---------------- SPA fallback ---------------- */
 
