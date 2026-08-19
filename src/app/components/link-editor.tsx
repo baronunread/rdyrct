@@ -586,7 +586,7 @@ export function LinkEditor({
   const shake = useShake();
   const destinationRef = useRef<HTMLInputElement>(null);
 
-  const { handleSubmit, watch, reset } = useForm<LinkInput>({
+  const { handleSubmit, watch, reset, setValue } = useForm<LinkInput>({
     resolver: valibotResolver(linkInputSchema),
     defaultValues: defaultForm,
   });
@@ -620,7 +620,22 @@ export function LinkEditor({
   }, [shakeKey]);
 
   const form = watch();
-  const setForm = (next: LinkInput) => reset(next);
+  // Every call site passes the full next LinkInput (spreading the current
+  // `form` and overriding one or a few keys), which made reset(next) look
+  // like the obvious fit — but reset() re-registers and revalidates every
+  // field in the form, not just the one that changed. On a destination
+  // field it's cheap enough per keystroke to be invisible; it's still the
+  // wrong tool, so a fast typist hitting it 5+ times a second (typing
+  // "https://" is exactly that, back-to-back identical characters) can
+  // outrun it and land a keystroke against a stale re-render. setValue
+  // updates just the fields that actually changed.
+  const setForm = (next: LinkInput) => {
+    // SAFETY: `next` is typed LinkInput, a fully-defined object type, so
+    // Object.keys(next) can only return its own declared keys.
+    (Object.keys(next) as (keyof LinkInput)[]).forEach((key) => {
+      if (next[key] !== form[key]) setValue(key, next[key], { shouldDirty: true });
+    });
+  };
   const onInvalid: SubmitErrorHandler<LinkInput> = (errors) => {
     toast(firstFormError(errors, "Check the link details"), "error");
     shake.start();
