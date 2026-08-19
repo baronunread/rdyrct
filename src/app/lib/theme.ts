@@ -17,13 +17,15 @@ function apply(next: Theme) {
 function toggle() {
   const next: Theme = current() === "light" ? "dark" : "light";
 
-  // The cross-fade is the browser's, not ours: it snapshots the page before
-  // and after and fades the two on the compositor, so the work does not grow
-  // with the number of elements on the page (see the note in styles.css).
-  // Where the API is missing, the palette just swaps. A swap is the honest
-  // fallback: it is what the fade is hiding, and it is 4ms.
-  if (document.startViewTransition) document.startViewTransition(() => apply(next));
-  else apply(next);
+  // No view transition here: dark and light are near-opposite flat colors,
+  // so any crossfade between them (soft or instant-cut) reads as a wrong
+  // gray midpoint, and the header's backdrop-filter makes its own
+  // view-transition snapshot come out wrong regardless of blend mode. The
+  // transition API buys nothing a plain swap doesn't already have here, so
+  // this always takes the fallback path — styles.css's crossfade exists for
+  // marketing-to-marketing navigation (the viewTransition Links in
+  // landing-header.tsx), not this.
+  apply(next);
 }
 
 export function useTheme(): [Theme, () => void] {

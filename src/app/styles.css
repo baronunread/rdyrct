@@ -136,30 +136,22 @@ html {
   /* reserve the scrollbar's width even on pages short enough to not need
      one, so a page that grows past the fold doesn't shift content left */
   scrollbar-gutter: stable;
-  /* No sideways rubber-band. Nothing here scrolls horizontally by design, so
-     a trackpad flick at the end of a wide table would otherwise bounce the
-     whole document and show the area beyond the app beside it. Vertical
-     overscroll is left alone: that one is the platform behaving normally. */
-  overscroll-behavior-x: none;
 }
 
-/* Theme changes cross-fade through a view transition, not a CSS transition.
-   The old `html *` rule started an animation on every node in the document:
-   measured at ~46ms of main-thread work per toggle on the landing page,
-   against 4ms for the bare palette swap. A view transition fades two
-   snapshots on the compositor instead, so the cost no longer scales with
-   how many elements the page has. lib/theme.ts drives it, and falls back to
-   an instant swap where the API is missing. */
+/* Marketing-to-marketing navigation (the viewTransition Links in
+   landing-header.tsx and friends) cross-fades through a view transition, not
+   a CSS transition: a view transition fades two snapshots on the
+   compositor, so the cost doesn't scale with how many elements the page
+   has, unlike a `html *` transition rule would. A dark<->light toggle
+   (lib/theme.ts) does NOT use this — see the comment there for why a plain
+   swap turned out to be the correct behavior, not a fallback for it. */
 ::view-transition-old(root),
 ::view-transition-new(root) {
   animation-duration: 0.18s;
   animation-timing-function: ease;
   /* The UA default is `plus-lighter`, which additively blends the old and
-     new snapshots instead of cross-fading them — fine for a small tweak,
-     but dark and light are far enough apart in the palette that the
-     mid-transition frame briefly reads as a wrong, washed-out third color.
-     `normal` blends by opacity alone, which is what "cross-fade" actually
-     means here. */
+     new snapshots instead of cross-fading them. `normal` blends by opacity
+     alone, which is what "cross-fade" actually means here. */
   mix-blend-mode: normal;
 }
 
@@ -170,11 +162,8 @@ html {
   }
 }
 
-/* Marketing-to-marketing navigation (the viewTransition Links in
-   landing-header.tsx and friends) rides the same root crossfade above, so a
-   click between "/", "/pricing" and "/qr-code-generator" softens instead of
-   hard-cutting. The header carries its own transition group so it stays out
-   of that crossfade: old and new headers are pixel-identical for the same
+/* The header carries its own transition group so it stays out of the root
+   crossfade above: old and new headers are pixel-identical for the same
    auth state, and isolating the group is what keeps it from visibly
    flickering along with the content, which is what makes the navigation
    read as one page rather than a swap. It never needs to animate, on or off
@@ -182,6 +171,7 @@ html {
 ::view-transition-old(marketing-header),
 ::view-transition-new(marketing-header) {
   animation: none;
+  mix-blend-mode: normal;
 }
 
 header[data-marketing-header] {
