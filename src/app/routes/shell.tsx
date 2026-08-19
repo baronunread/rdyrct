@@ -37,11 +37,11 @@ function orgCreateErrorMessage(cause: unknown): string {
 }
 
 export function RequireAuth({ children }: { children: ReactNode }) {
-  const me = useCurrentUser();
+  const currentUser = useCurrentUser();
   const shell = useShellUser();
   const location = useLocation();
   // Only the query says somebody is signed out, and only once it has spoken.
-  if (!me.isLoading && !me.data)
+  if (!currentUser.isLoading && !currentUser.data)
     return <Navigate to="/login" state={{ from: location.pathname + location.search }} replace />;
   // The cache carries the shell through the wait. A browser that has none is
   // on its first visit, and still gets the skeleton.
@@ -52,9 +52,9 @@ export function RequireAuth({ children }: { children: ReactNode }) {
 /** Platform admin surface: 404s (not a redirect) for non-admins, so the
  * admin area's existence isn't revealed to regular users. */
 export function RequireAdmin({ children }: { children: ReactNode }) {
-  const me = useCurrentUser();
-  if (me.isLoading) return <RouteSkeleton />;
-  if (!me.data?.user.isAdmin) return <NotFound />;
+  const currentUser = useCurrentUser();
+  if (currentUser.isLoading) return <RouteSkeleton />;
+  if (!currentUser.data?.user.isAdmin) return <NotFound />;
   return children;
 }
 

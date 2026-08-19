@@ -249,9 +249,9 @@ function NoCell({ tier }: { tier?: Tier }) {
  * `next`, so the intent survives OTP verification.
  */
 function usePaidPlanTo() {
-  const me = useCurrentUser();
+  const currentUser = useCurrentUser();
   return (plan: "hobby" | "pro") =>
-    me.data
+    currentUser.data
       ? `/billing?plan=${plan}`
       : `/signup?next=${encodeURIComponent(`/billing?plan=${plan}`)}`;
 }
@@ -1200,8 +1200,8 @@ export function LandingPage() {
   useSeo("/");
 
   // Step 1 of the funnel (#64). Once per mount, not per render, and not
-  // gated on `me` settling: a landing view is a view whether or not the
-  // session query has come back.
+  // gated on the user query settling: a landing view is a view whether or
+  // not the session query has come back.
   useEffect(() => {
     posthog.capture(FUNNEL.landingViewed, landingContext());
   }, []);

@@ -66,9 +66,9 @@ export function useCurrentUser() {
  * Snapshotted once per mount: mid-visit changes come from the query.
  */
 export function useShellUser(): CurrentUser | null {
-  const me = useCurrentUser();
+  const currentUser = useCurrentUser();
   const [cached] = useState(readCachedUser);
-  return me.data ?? cached ?? null;
+  return currentUser.data ?? cached ?? null;
 }
 
 // Deployment config (e.g. appHost for DNS instructions) — static per deploy.

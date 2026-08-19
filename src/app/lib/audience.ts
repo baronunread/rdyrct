@@ -11,11 +11,11 @@ import { readAuthHint } from "./user-cache";
  * header settles. Snapshotted once: mid-visit flips come from the query.
  */
 export function useAudience() {
-  const me = useCurrentUser();
+  const currentUser = useCurrentUser();
   const [authHint] = useState(readAuthHint);
-  const authed = me.isPending ? authHint : !!me.data;
+  const authed = currentUser.isPending ? authHint : !!currentUser.data;
   const cta = authed
     ? { ctaTo: "/dashboard", ctaLabel: "Open dashboard" }
     : { ctaTo: "/signup", ctaLabel: "Get started free" };
-  return { authed, name: me.data?.user.name ?? "", ...cta };
+  return { authed, name: currentUser.data?.user.name ?? "", ...cta };
 }

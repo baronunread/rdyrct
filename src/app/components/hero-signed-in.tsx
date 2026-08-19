@@ -169,12 +169,12 @@ function OrgSummary({ name, orgId }: { name: string; orgId: string }) {
 }
 
 export function HeroSignedIn({ name }: { name: string }) {
-  const me = useCurrentUser();
+  const currentUser = useCurrentUser();
   const { org } = useCurrentOrg();
   // The card renders before /user answers, because the signed-in hint comes
   // from storage. Until it does, "you have no organization yet" is a guess,
   // and the wrong one for everybody who has one.
-  if (me.isPending) return <SummarySkeleton />;
+  if (currentUser.isPending) return <SummarySkeleton />;
   if (!org) return <NoOrgYet />;
   return <OrgSummary name={name} orgId={org.id} />;
 }

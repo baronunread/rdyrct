@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useStats } from "../lib/hooks";
+import { useStats, useCurrentUser } from "../lib/hooks";
 import { useCurrentOrg } from "../lib/current-org";
 import { clicksByWeekday } from "../lib/click-buckets";
 import { PLAN_LIMITS, type HeatmapRow, type SeriesPoint } from "@/shared/types";
@@ -136,9 +136,11 @@ function ActivityBreakdown({ heatmap, bucket }: { heatmap: HeatmapRow[]; bucket:
 
 export function Analytics() {
   const { org } = useCurrentOrg();
+  const currentUser = useCurrentUser();
   const [range, setRange] = useState<{ days?: number; bucket?: "day" | "hour" }>({});
   const stats = useStats(org?.id ?? "", range.days, range.bucket);
 
+  if (currentUser.isLoading) return <AnalyticsSkeleton />;
   if (!org) return <NoOrgState />;
   if (stats.isLoading) return <AnalyticsSkeleton />;
   if (!stats.data) return <p className="text-sm text-danger">Could not load stats.</p>;

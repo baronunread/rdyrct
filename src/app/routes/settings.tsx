@@ -301,8 +301,8 @@ function OrgSettingsCards({
 export function SettingsPage() {
   const { org } = useCurrentOrg();
   const orgId = org?.id ?? "";
-  const me = useCurrentUser();
-  const isOwner = isOrgOwner(!!me.data?.user.isAdmin, org?.role);
+  const currentUser = useCurrentUser();
+  const isOwner = isOrgOwner(!!currentUser.data?.user.isAdmin, org?.role);
 
   const { register, rename, currentName, isSubmitting, clearName } = useOrgRenameForm(org);
   const deleteOrgFlow = useDeleteOrgFlow(orgId, clearName);

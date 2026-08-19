@@ -120,8 +120,8 @@ function SaveQrDefaultsAction({
 export function QrDefaultsCard() {
   const { org } = useCurrentOrg();
   const orgId = org?.id ?? "";
-  const me = useCurrentUser();
-  const isAdmin = canManageQrDefaults(me.data?.user.isAdmin, org?.role);
+  const currentUser = useCurrentUser();
+  const isAdmin = canManageQrDefaults(currentUser.data?.user.isAdmin, org?.role);
   const hasQrCustom = org ? PLAN_LIMITS[org.plan].qrCustom : false;
 
   const { values, setField, savingQr, save } = useQrDefaultsForm(orgId, org!);

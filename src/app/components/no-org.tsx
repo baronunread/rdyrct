@@ -43,10 +43,10 @@ function createErrorMessage(cause: unknown): string {
 
 export function NoOrgState() {
   const { setOrg } = useCurrentOrg();
-  const me = useCurrentUser();
+  const currentUser = useCurrentUser();
   const qc = useQueryClient();
   const toast = useToast();
-  const suggested = defaultOrgName(me.data?.user.email ?? "", me.data?.user.name);
+  const suggested = defaultOrgName(currentUser.data?.user.email ?? "", currentUser.data?.user.name);
   const {
     register,
     handleSubmit,

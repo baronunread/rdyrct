@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { Link, useParams, useSearchParams } from "react-router";
 import { ArrowLeft, ExternalLink } from "lucide-react";
-import { useLinkStats } from "../lib/hooks";
+import { useLinkStats, useCurrentUser } from "../lib/hooks";
 import { shortDate } from "../lib/dates";
 import { useCurrentOrg } from "../lib/current-org";
 import { useConfig } from "../lib/hooks";
@@ -98,9 +98,11 @@ export function LinkDetailPage() {
   const [searchParams] = useSearchParams();
   const domain = searchParams.get("domain");
   const { org } = useCurrentOrg();
+  const currentUser = useCurrentUser();
   const { data: config } = useConfig();
   const stats = useLinkStats(org?.id ?? "", slug ?? null, domain);
 
+  if (currentUser.isLoading) return <p className="py-8 text-center text-sm text-muted">Loading…</p>;
   if (!org) return <NoOrgState />;
   if (stats.isLoading) return <p className="py-8 text-center text-sm text-muted">Loading…</p>;
   if (!stats.data)

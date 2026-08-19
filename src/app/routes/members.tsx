@@ -342,8 +342,8 @@ function canManageOrg(role: OrgRole): boolean {
 export function MembersPage() {
   const { org } = useCurrentOrg();
   const orgId = org?.id ?? "";
-  const me = useCurrentUser();
-  const myRole = resolveMyRole(me.data?.user.isAdmin, org?.role);
+  const currentUser = useCurrentUser();
+  const myRole = resolveMyRole(currentUser.data?.user.isAdmin, org?.role);
   const canManage = canManageOrg(myRole);
 
   const {
@@ -369,6 +369,7 @@ export function MembersPage() {
 
   const memberLimit = memberLimitFor(org);
 
+  if (currentUser.isLoading) return <TableSkeleton rows={4} />;
   if (!org) return <NoOrgState />;
 
   return (
@@ -395,7 +396,7 @@ export function MembersPage() {
         canManage={canManage}
         sort={sort}
         setSort={setSort}
-        meId={me.data?.user.id}
+        meId={currentUser.data?.user.id}
         onSetRole={(userId, role) => setRole.mutate({ userId, role })}
         onRemove={(userId, name) => setRemoving({ userId, name })}
       />

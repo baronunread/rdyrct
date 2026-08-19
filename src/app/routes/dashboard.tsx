@@ -128,15 +128,42 @@ function DashboardBody({
   );
 }
 
+export type DashboardView = "userLoading" | "noOrg" | "statsLoading" | "statsError" | "ready";
+
+/** Which of the dashboard's five states applies, in the order they resolve:
+ * who's signed in, then their org, then that org's numbers. Pulled out of
+ * the component so the branching is a plain function fallow can score (and
+ * test) on its own, away from JSX. */
+export function dashboardView(
+  userLoading: boolean,
+  hasOrg: boolean,
+  statsLoading: boolean,
+  hasStats: boolean,
+): DashboardView {
+  if (userLoading) return "userLoading";
+  if (!hasOrg) return "noOrg";
+  if (statsLoading) return "statsLoading";
+  if (!hasStats) return "statsError";
+  return "ready";
+}
+
 /** Nothing to show until there is an organization and its numbers have
  * arrived. Separated from the page itself so the page is about the page. */
 export function Dashboard() {
-  const { org, orgId } = useOrgLimits();
+  const { org, orgId, currentUser } = useOrgLimits();
   const data = useDashboardData(orgId);
-  if (!org) return <NoOrgState />;
-  if (data.isLoading) return <DashboardSkeleton />;
-  if (!data.stats) return <p className="text-sm text-danger">Could not load stats.</p>;
-  return <DashboardScreen stats={data.stats} />;
+  switch (dashboardView(currentUser.isLoading, !!org, data.isLoading, !!data.stats)) {
+    case "userLoading":
+    case "statsLoading":
+      return <DashboardSkeleton />;
+    case "noOrg":
+      return <NoOrgState />;
+    case "statsError":
+      return <p className="text-sm text-danger">Could not load stats.</p>;
+    case "ready":
+      // SAFETY: dashboardView only returns "ready" once hasStats (!!data.stats) is true.
+      return <DashboardScreen stats={data.stats!} />;
+  }
 }
 
 function DashboardScreen({ stats: s }: { stats: NonNullable<DashboardData["stats"]> }) {

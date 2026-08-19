@@ -48,7 +48,7 @@ function canManageDomains(isPlatformAdmin: boolean, role: OrgRole): boolean {
 export function DomainsPage() {
   const { org } = useCurrentOrg();
   const orgId = org?.id ?? "";
-  const me = useCurrentUser();
+  const currentUser = useCurrentUser();
 
   // The full skeleton only for somebody who is going to get the full page.
   // A member sees one line saying they have no access, and a free plan sees
@@ -56,7 +56,7 @@ export function DomainsPage() {
   // controls that the page then takes away. Role and plan are both already in
   // hand: the only thing still loading is whether this is a platform admin,
   // and that is a handful of people.
-  if (me.isLoading)
+  if (currentUser.isLoading)
     return org && canManageDomains(false, org.role) && PLAN_LIMITS[org.plan].domains > 0 ? (
       <DomainsPageSkeleton />
     ) : (
@@ -64,7 +64,7 @@ export function DomainsPage() {
     );
   if (!org) return <NoOrgState />;
 
-  const isAdmin = canManageDomains(!!me.data?.user.isAdmin, org.role);
+  const isAdmin = canManageDomains(!!currentUser.data?.user.isAdmin, org.role);
 
   return (
     <div>

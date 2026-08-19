@@ -499,7 +499,7 @@ function useAdminUserActions() {
 
 export function AdminUsersPage() {
   const users = useAdminUsers();
-  const me = useCurrentUser();
+  const currentUser = useCurrentUser();
   const {
     confirm,
     setConfirm,
@@ -545,7 +545,7 @@ export function AdminUsersPage() {
       />
       <UsersTable
         rows={rows}
-        meId={me.data?.user.id}
+        meId={currentUser.data?.user.id}
         sort={sort}
         setSort={setSort}
         onGrantComp={(u) => setCompFor(u)}

@@ -59,8 +59,8 @@ function usePickOrg(orgs: UserOrg[]) {
 
 /** The current org as the app knows it: waits for the checked answer. */
 export function useCurrentOrg() {
-  const me = useCurrentUser();
-  return usePickOrg(me.data?.orgs ?? []);
+  const currentUser = useCurrentUser();
+  return usePickOrg(currentUser.data?.orgs ?? []);
 }
 
 /** The current org as the sidebar draws it, cache included. Chrome only. */

@@ -624,7 +624,7 @@ function useAutoUpgradeFromUrl(
 }
 
 function useCheckoutFlow() {
-  const me = useCurrentUser();
+  const currentUser = useCurrentUser();
   const checkout = useCheckout();
   const portal = usePortal();
   const toast = useToast();
@@ -670,7 +670,7 @@ function useCheckoutFlow() {
       // Remembered across the trip to Polar, so the return can tell whether
       // the webhook has landed yet. sessionStorage because the browser back
       // button is the only way back and nothing survives that in memory.
-      sessionStorage.setItem(PORTAL_SNAPSHOT_KEY, billingSnapshot(me.data?.user));
+      sessionStorage.setItem(PORTAL_SNAPSHOT_KEY, billingSnapshot(currentUser.data?.user));
       setTimeout(() => window.location.assign(data.url), 800);
     } catch (e) {
       setShowPortalOverlay(false);
@@ -706,8 +706,8 @@ function useCheckoutFlow() {
     // it costs nothing and keeps the dependency honest.
   }, [qc, setShowCelebration]);
 
-  const plan = me.data?.user.plan ?? "free";
-  const snapshot = billingSnapshot(me.data?.user);
+  const plan = currentUser.data?.user.plan ?? "free";
+  const snapshot = billingSnapshot(currentUser.data?.user);
 
   /**
    * The portal return. Silent, with no overlay: unlike the checkout return,
@@ -748,7 +748,7 @@ function useCheckoutFlow() {
     },
   });
 
-  useAutoUpgradeFromUrl(me.data?.user, (target) => void handleUpgrade(target));
+  useAutoUpgradeFromUrl(currentUser.data?.user, (target) => void handleUpgrade(target));
 
   return {
     plan,
@@ -797,17 +797,17 @@ const NO_ACCOUNT_YET = {
 };
 
 function useBillingAccount() {
-  const me = useCurrentUser();
+  const currentUser = useCurrentUser();
   // One default for the whole shape, not one per field: every one of these
   // is required on User, so the only question is whether the user query has
   // answered yet.
-  const { hasBillingAccount, comped, ...subscription } = me.data?.user ?? NO_ACCOUNT_YET;
+  const { hasBillingAccount, comped, ...subscription } = currentUser.data?.user ?? NO_ACCOUNT_YET;
   return {
     hasBillingAccount,
     comped,
     cancelAtPeriodEnd: subscription.polarSubscriptionCancelAtPeriodEnd,
     periodEnd: subscription.polarSubscriptionCurrentPeriodEnd,
-    ownedOrgs: ownedOrgCount(me.data?.orgs),
+    ownedOrgs: ownedOrgCount(currentUser.data?.orgs),
   };
 }
 

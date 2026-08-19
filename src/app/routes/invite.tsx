@@ -69,7 +69,7 @@ function InviteDetails({
 
 export function InvitePage() {
   const { token } = useParams<{ token: string }>();
-  const me = useCurrentUser();
+  const currentUser = useCurrentUser();
   const navigate = useNavigate();
   const qc = useQueryClient();
   const toast = useToast();
@@ -101,14 +101,14 @@ export function InvitePage() {
     <div className="grid min-h-dvh place-items-center px-4">
       <div className="w-full max-w-sm rounded-xl bg-surface p-6 text-center smooth-shadow-ring-sm">
         <p className="mb-4 text-xl font-bold tracking-widest">rdyrct</p>
-        {preview.isLoading || me.isLoading ? (
+        {preview.isLoading || currentUser.isLoading ? (
           <InviteSkeleton />
         ) : preview.isError ? (
           <p className="text-sm text-muted">This invite is invalid or has expired.</p>
         ) : (
           <InviteDetails
             preview={preview.data!}
-            signedIn={!!me.data}
+            signedIn={!!currentUser.data}
             accept={accept}
             onSignIn={() => navigate(`/login?next=${encodeURIComponent(here)}`)}
             here={here}

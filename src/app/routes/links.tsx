@@ -263,7 +263,8 @@ function useLinkDialogs(atLimit: boolean) {
 }
 
 export function LinksPage() {
-  const { org, orgId, limits, activeDomains, defaultDomainId, orgQr, domains } = useOrgLimits();
+  const { org, orgId, limits, activeDomains, defaultDomainId, orgQr, domains, currentUser } =
+    useOrgLimits();
   const quotaUsage = useLinkQuotaUsage(orgId);
   const { create, update, remove } = useLinkMutations(orgId);
   const toast = useToast();
@@ -306,6 +307,7 @@ export function LinksPage() {
     );
   };
 
+  if (currentUser.isLoading) return <TableSkeleton rows={5} />;
   if (!org) return <NoOrgState />;
 
   const onSave = buildOnSave({

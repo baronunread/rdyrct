@@ -14,9 +14,9 @@ export function canListOrgDomains(isPlatformAdmin: boolean, role: OrgRole | unde
 export function useOrgLimits() {
   const { org } = useCurrentOrg();
   const orgId = org?.id ?? "";
-  const me = useCurrentUser();
+  const currentUser = useCurrentUser();
   const limits = PLAN_LIMITS[org?.plan ?? "free"];
-  const canListDomains = canListOrgDomains(!!me.data?.user.isAdmin, org?.role);
+  const canListDomains = canListOrgDomains(!!currentUser.data?.user.isAdmin, org?.role);
   const domains = useDomains(orgId, canListDomains);
   const activeDomains = useMemo(
     () => (domains.data ?? []).filter((d) => d.status === "active"),
@@ -29,7 +29,7 @@ export function useOrgLimits() {
   return {
     org,
     orgId,
-    me,
+    currentUser,
     limits,
     canListDomains,
     domains,
