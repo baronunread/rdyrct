@@ -97,7 +97,7 @@ export function QrColorField({
                 prefixed
                 color={color}
                 onChange={onChange}
-                className="mt-2 h-8 w-full rounded-md border border-border bg-bg px-2 text-center text-xs text-text uppercase focus:border-accent focus:outline-none"
+                className="mt-2 h-8 w-full rounded-md border border-border bg-bg px-2 text-center text-xs text-text uppercase focus-visible:border-accent focus-visible:outline-none"
               />
             </Popover.Popup>
           </Popover.Positioner>
