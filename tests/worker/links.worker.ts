@@ -74,3 +74,33 @@ describe("PATCH /orgs/:orgId/links/:linkId", () => {
     expect(updated.destination).toBe("https://example.com/original");
   });
 });
+
+describe("link quota usage returned by mutations (#100)", () => {
+  beforeEach(applyTestMigrations);
+  afterEach(reset);
+
+  it("create and delete each answer with the org's fresh count", async () => {
+    const cookie = await freeOwnerCookie();
+
+    const created = await postLink(cookie, { destination: "https://example.com/a" });
+    const link = await jsonBody<{ id: string; quotaUsage: number }>(created);
+    expect(link.quotaUsage).toBe(1);
+
+    const patched = await patchLink(cookie, link.id, { title: "Renamed" });
+    const updated = await jsonBody<{ quotaUsage: number }>(patched);
+    expect(updated.quotaUsage).toBe(1);
+
+    const ctx = createExecutionContext();
+    const deleted = await worker.fetch(
+      new Request(`http://localhost/api/orgs/org-1/links/${link.id}`, {
+        method: "DELETE",
+        headers: { cookie },
+      }),
+      authEnv(),
+      ctx,
+    );
+    await waitOnExecutionContext(ctx);
+    const removed = await jsonBody<{ quotaUsage: number }>(deleted);
+    expect(removed.quotaUsage).toBe(0);
+  });
+});

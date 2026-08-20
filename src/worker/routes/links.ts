@@ -165,7 +165,11 @@ async function insertAddressAndRespond(
       cause: { code: "link_limit" },
     });
   await enqueueStorage(env, [syncLinkMsg(address.slug, hostname)]);
-  return { dto: await linkToDTO(db, orgId, link), status } as const;
+  const [dto, quotaUsage] = await Promise.all([
+    linkToDTO(db, orgId, link),
+    countActiveAddresses(db, orgId),
+  ]);
+  return { dto: { ...dto, quotaUsage }, status } as const;
 }
 
 /** Count active addresses for a single link, for call sites that don't
@@ -791,7 +795,8 @@ linkRoutes.post("/", requireOrgRole("member"), async (c) => {
   // Score the destination after the response (#68), the way clicks are
   // recorded: it scores, it never blocks, and nobody waits on it.
   c.executionCtx.waitUntil(scoreAndRecord(c.env.DB, link.id, link.destination));
-  return c.json(toDTO(link, 0, hostname, 1), 201);
+  const quotaUsage = await countActiveAddresses(db, orgId);
+  return c.json({ ...toDTO(link, 0, hostname, 1), quotaUsage }, 201);
 });
 
 /** Merges a PATCH body over the existing row: an unset field (undefined)
@@ -987,11 +992,15 @@ linkRoutes.patch("/:linkId", requireOrgRole("member"), async (c) => {
   if (updated.destination !== existing.destination)
     c.executionCtx.waitUntil(scoreAndRecord(c.env.DB, existing.id, updated.destination));
 
-  return c.json(await linkToDTO(db, orgId, updated));
+  const [dto, quotaUsage] = await Promise.all([
+    linkToDTO(db, orgId, updated),
+    countActiveAddresses(db, orgId),
+  ]);
+  return c.json({ ...dto, quotaUsage });
 });
 
 linkRoutes.delete("/:linkId", requireOrgRole("member"), async (c) => {
-  const { db, link } = await linkFromRequest(c);
+  const { db, orgId, link } = await linkFromRequest(c);
   // Gathered before the delete: every active address (primary + aliases) has
   // its own KV key, and the cascade only removes the D1 rows, not those keys.
   const addresses = await activeAddressesOf(db, link.id);
@@ -1001,7 +1010,8 @@ linkRoutes.delete("/:linkId", requireOrgRole("member"), async (c) => {
     ...addresses.map((a) => syncLinkMsg(a.slug, a.hostname)),
     deleteQrLogoMsg(link.qrLogo),
   ]);
-  return c.json({ ok: true });
+  const quotaUsage = await countActiveAddresses(db, orgId);
+  return c.json({ ok: true, quotaUsage });
 });
 
 /* ---------------- addresses (aliases + primary) ---------------- */
@@ -1106,7 +1116,8 @@ linkRoutes.post(
     // this as expired.
     const hostname = await domainHostname(db, orgId, address.domainId);
     await enqueueStorage(c.env, [syncLinkMsg(address.slug, hostname)]);
-    return c.json({ ok: true });
+    const quotaUsage = await countActiveAddresses(db, orgId);
+    return c.json({ ok: true, quotaUsage });
   },
 );
 
@@ -1132,12 +1143,19 @@ linkRoutes.post("/:linkId/addresses/:addressId/remove", requireOrgRole("member")
   // Re-publish now instead of waiting for the sweep: a removed address
   // should stop resolving immediately, not up to a day later.
   await enqueueStorage(c.env, [syncLinkMsg(address.slug, hostname)]);
-  return c.json({ ok: true });
+  const quotaUsage = await countActiveAddresses(db, orgId);
+  return c.json({ ok: true, quotaUsage });
 });
 
 linkRoutes.post("/:linkId/addresses/:addressId/promote", requireOrgRole("member"), async (c) => {
   const { db, orgId, link: existing, address } = await findLinkAndAddress(c);
-  if (address.kind === "primary") return c.json(await linkToDTO(db, orgId, existing));
+  if (address.kind === "primary") {
+    const [dto, quotaUsage] = await Promise.all([
+      linkToDTO(db, orgId, existing),
+      countActiveAddresses(db, orgId),
+    ]);
+    return c.json({ ...dto, quotaUsage });
+  }
   if (address.retiredAt !== null)
     throw new HTTPException(409, { message: "This address is no longer active" });
 
@@ -1205,5 +1223,9 @@ linkRoutes.post("/:linkId/addresses/:addressId/promote", requireOrgRole("member"
     syncLinkMsg(address.slug, hostname),
   ]);
 
-  return c.json(await linkToDTO(db, orgId, updated));
+  const [dto, quotaUsage] = await Promise.all([
+    linkToDTO(db, orgId, updated),
+    countActiveAddresses(db, orgId),
+  ]);
+  return c.json({ ...dto, quotaUsage });
 });

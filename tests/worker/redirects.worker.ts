@@ -163,6 +163,18 @@ describe("redirect hot path", () => {
     expect(await res.text()).toContain('<div id="root">');
   });
 
+  it("redirects a trailing-slash slug to the slash-free path", async () => {
+    await env.LINKS.put(
+      "slug:summer",
+      JSON.stringify({ linkId: "link-1", orgId: "org-1", url: "https://example.com/sale" }),
+    );
+
+    const res = await fetchWorker(new Request("http://localhost/summer/", { redirect: "manual" }));
+
+    expect(res.status).toBe(301);
+    expect(res.headers.get("location")).toBe("http://localhost/summer");
+  });
+
   it("leaves the app's own root keywords on 200", async () => {
     // The 404 above is decided one line below the RESERVED_SLUGS check, so the
     // way to get it wrong is to start 404ing the pages the SPA serves.

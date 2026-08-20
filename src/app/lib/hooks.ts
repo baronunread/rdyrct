@@ -24,6 +24,7 @@ import type {
   AdminLinkRow,
   AdminAnonLinkRow,
   AdminActionRow,
+  WithQuotaUsage,
 } from "@/shared/types";
 
 export function useCurrentUser() {
@@ -153,18 +154,21 @@ export const useLinkQuotaUsage = (orgId: string) =>
 
 export function useLinkMutations(orgId: string) {
   const qc = useQueryClient();
-  const invalidate = () => {
+  const invalidate = (quotaUsage: number) => {
     qc.invalidateQueries({ queryKey: ["links", orgId] });
     qc.invalidateQueries({ queryKey: ["stats", orgId] });
-    qc.invalidateQueries({ queryKey: ["linkQuotaUsage", orgId] });
+    // The write already knows its own effect on the count, so seed the cache
+    // with it instead of a follow-up GET /links/quota-usage (#100).
+    qc.setQueryData(["linkQuotaUsage", orgId], { count: quotaUsage });
     // A rename can leave the old slug behind as a temp alias: refetch any
     // addresses list already open for this org's links, not just on remount.
     qc.invalidateQueries({ queryKey: ["addresses", orgId] });
   };
   const create = useMutation({
-    mutationFn: (body: LinkInput) => api<LinkDTO>(`/orgs/${orgId}/links`, { method: "POST", body }),
+    mutationFn: (body: LinkInput) =>
+      api<WithQuotaUsage<LinkDTO>>(`/orgs/${orgId}/links`, { method: "POST", body }),
     onSuccess: (link) => {
-      invalidate();
+      invalidate(link.quotaUsage);
       // Funnel step 7, the activation event (#64). On the hook rather than
       // the call sites, so the dashboard's quick-create and the links page
       // both count and neither can be forgotten.
@@ -173,12 +177,13 @@ export function useLinkMutations(orgId: string) {
   });
   const update = useMutation({
     mutationFn: ({ id, ...body }: LinkInput & { id: string }) =>
-      api<LinkDTO>(`/orgs/${orgId}/links/${id}`, { method: "PATCH", body }),
-    onSuccess: invalidate,
+      api<WithQuotaUsage<LinkDTO>>(`/orgs/${orgId}/links/${id}`, { method: "PATCH", body }),
+    onSuccess: (link) => invalidate(link.quotaUsage),
   });
   const remove = useMutation({
-    mutationFn: (id: string) => api(`/orgs/${orgId}/links/${id}`, { method: "DELETE" }),
-    onSuccess: invalidate,
+    mutationFn: (id: string) =>
+      api<WithQuotaUsage<{ ok: true }>>(`/orgs/${orgId}/links/${id}`, { method: "DELETE" }),
+    onSuccess: (res) => invalidate(res.quotaUsage),
   });
   return { create, update, remove };
 }
@@ -218,36 +223,45 @@ export const useAddresses = (orgId: string, linkId: string | null) =>
 
 export function useAddressMutations(orgId: string, linkId: string) {
   const qc = useQueryClient();
-  const invalidate = () => {
+  const invalidate = (quotaUsage: number) => {
     qc.invalidateQueries({ queryKey: ["addresses", orgId, linkId] });
     qc.invalidateQueries({ queryKey: ["links", orgId] });
     qc.invalidateQueries({ queryKey: ["linkStats", orgId] });
-    qc.invalidateQueries({ queryKey: ["linkQuotaUsage", orgId] });
+    qc.setQueryData(["linkQuotaUsage", orgId], { count: quotaUsage });
   };
   const keepForever = useMutation({
     mutationFn: (addressId: string) =>
-      api(`/orgs/${orgId}/links/${linkId}/addresses/${addressId}/keep-forever`, { method: "POST" }),
-    onSuccess: invalidate,
+      api<WithQuotaUsage<{ ok: true }>>(
+        `/orgs/${orgId}/links/${linkId}/addresses/${addressId}/keep-forever`,
+        { method: "POST" },
+      ),
+    onSuccess: (res) => invalidate(res.quotaUsage),
   });
   const remove = useMutation({
     mutationFn: (addressId: string) =>
-      api(`/orgs/${orgId}/links/${linkId}/addresses/${addressId}/remove`, {
-        method: "POST",
-        body: { confirm: true },
-      }),
-    onSuccess: invalidate,
+      api<WithQuotaUsage<{ ok: true }>>(
+        `/orgs/${orgId}/links/${linkId}/addresses/${addressId}/remove`,
+        { method: "POST", body: { confirm: true } },
+      ),
+    onSuccess: (res) => invalidate(res.quotaUsage),
   });
   const promote = useMutation({
     mutationFn: (addressId: string) =>
-      api<LinkDTO>(`/orgs/${orgId}/links/${linkId}/addresses/${addressId}/promote`, {
-        method: "POST",
-      }),
-    onSuccess: invalidate,
+      api<WithQuotaUsage<LinkDTO>>(
+        `/orgs/${orgId}/links/${linkId}/addresses/${addressId}/promote`,
+        {
+          method: "POST",
+        },
+      ),
+    onSuccess: (link) => invalidate(link.quotaUsage),
   });
   const create = useMutation({
     mutationFn: (body: { slug?: string }) =>
-      api<LinkDTO>(`/orgs/${orgId}/links/${linkId}/addresses`, { method: "POST", body }),
-    onSuccess: invalidate,
+      api<WithQuotaUsage<LinkDTO>>(`/orgs/${orgId}/links/${linkId}/addresses`, {
+        method: "POST",
+        body,
+      }),
+    onSuccess: (link) => invalidate(link.quotaUsage),
   });
   return { keepForever, remove, promote, create };
 }

@@ -203,6 +203,11 @@ export interface AppConfig {
   appHost: string;
 }
 
+/** A link/address mutation's response, plus the org's fresh link-quota usage
+ * (see #100): the write that changed it already knows the new count, so the
+ * client can skip the follow-up GET /links/quota-usage. */
+export type WithQuotaUsage<T> = T & { quotaUsage: number };
+
 export interface LinkDTO extends QrOverrides {
   id: string;
   domainId: string | null;

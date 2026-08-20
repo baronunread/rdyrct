@@ -4,6 +4,7 @@ import type { JsonValue } from "../shared/types";
 import type { Context } from "hono";
 import { HTTPException } from "hono/http-exception";
 import { methodNotAllowed } from "hono/method-not-allowed";
+import { trimTrailingSlash } from "hono/trailing-slash";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import type { AppEnv, Env } from "./env";
 import { withSession } from "./session";
@@ -142,6 +143,13 @@ app.use("*", async (c, next) => {
   if (domain.rootRedirect) return c.redirect(domain.rootRedirect, 302);
   return c.text("Not found", 404);
 });
+
+// A trailing slash on a GET (`/abc/`) fell through every route below,
+// including custom-domain and shared-domain slug matching, straight to the
+// SPA shell under a 200. This normalizes it to the slash-free path with a
+// redirect, after the custom-domain middleware so a redirected request comes
+// back through it and still resolves as that domain's own slug.
+app.use("*", trimTrailingSlash({ alwaysRedirect: true }));
 
 /* ---------------- API ---------------- */
 
