@@ -9,7 +9,7 @@ import { cn } from "./cn";
 import { Tooltip } from "./tooltip";
 
 const inputClass =
-  "h-9 w-full rounded-md border border-border bg-bg px-3 text-sm text-text transition-colors placeholder:text-placeholder focus:border-accent focus:outline-none disabled:opacity-50";
+  "h-9 w-full rounded-md border border-border bg-bg px-3 text-sm text-text transition-colors placeholder:text-placeholder focus-visible:border-accent focus-visible:outline-none disabled:opacity-50";
 
 export const Input = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputElement>>(
   ({ className, ...props }, ref) => (

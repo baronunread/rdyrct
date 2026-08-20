@@ -39,6 +39,20 @@ beforeEach(async () => {
   ]);
 });
 
+/** The custom domain (go.example.com -> org-1) plus its one KV-published
+ * slug ("pricing" -> link-2), shared by every test that exercises
+ * custom-domain resolution. */
+async function putCustomDomainAndSlug(): Promise<void> {
+  await env.LINKS.put(
+    "domain:go.example.com",
+    JSON.stringify({ domainId: "domain-1", orgId: "org-1", rootRedirect: "https://example.com" }),
+  );
+  await env.LINKS.put(
+    "slug:go.example.com:pricing",
+    JSON.stringify({ linkId: "link-2", orgId: "org-1", url: "https://example.com/pricing" }),
+  );
+}
+
 describe("redirect hot path", () => {
   it("redirects a shared-host slug and enqueues a click after responding", async () => {
     await env.LINKS.put(
@@ -63,14 +77,7 @@ describe("redirect hot path", () => {
   });
 
   it("keeps custom-domain links separate from shared-host links", async () => {
-    await env.LINKS.put(
-      "domain:go.example.com",
-      JSON.stringify({ domainId: "domain-1", orgId: "org-1", rootRedirect: "https://example.com" }),
-    );
-    await env.LINKS.put(
-      "slug:go.example.com:pricing",
-      JSON.stringify({ linkId: "link-2", orgId: "org-1", url: "https://example.com/pricing" }),
-    );
+    await putCustomDomainAndSlug();
 
     const response = await fetchWorker(
       new Request("http://localhost/pricing", {
@@ -161,6 +168,57 @@ describe("redirect hot path", () => {
     expect(res.status).toBe(404);
     // Still the SPA: the browser gets the app, which renders its NotFound page.
     expect(await res.text()).toContain('<div id="root">');
+  });
+
+  it("redirects a trailing-slash slug to the slash-free path, which then redirects and records a click", async () => {
+    await env.LINKS.put(
+      "slug:summer",
+      JSON.stringify({ linkId: "link-1", orgId: "org-1", url: "https://example.com/sale" }),
+    );
+    const { env: testEnv, sent } = captureClickQueue();
+
+    const trimmed = await fetchWorker(
+      new Request("http://localhost/summer/", { redirect: "manual" }),
+      testEnv,
+    );
+    expect(trimmed.status).toBe(301);
+    const location = trimmed.headers.get("location");
+    expect(location).toBe("http://localhost/summer");
+
+    const followed = await fetchWorker(new Request(location!, { redirect: "manual" }), testEnv);
+    expect(followed.status).toBe(302);
+    expect(followed.headers.get("location")).toBe("https://example.com/sale");
+    expect(sent).toHaveLength(1);
+    expect(sent[0]).toMatchObject({ linkId: "link-1", orgId: "org-1" });
+  });
+
+  it("resolves a trailing-slash slug on a custom domain without a detour through the SPA's redirect", async () => {
+    await putCustomDomainAndSlug();
+
+    // The custom-domain middleware is a dead end for its own host (it never
+    // calls next()), so it has to strip the trailing slash itself: it can't
+    // rely on the shared-domain trimTrailingSlash middleware registered
+    // after it.
+    const res = await fetchWorker(
+      new Request("http://localhost/pricing/", {
+        headers: { host: "go.example.com" },
+        redirect: "manual",
+      }),
+    );
+    expect(res.status).toBe(302);
+    expect(res.headers.get("location")).toBe("https://example.com/pricing");
+  });
+
+  it("still 404s a trailing-slash slug nobody registered, once trimmed", async () => {
+    const trimmed = await fetchWorker(
+      new Request("http://localhost/no-such-slug-xyz/", { redirect: "manual" }),
+    );
+    expect(trimmed.status).toBe(301);
+
+    const followed = await fetchWorker(
+      new Request(trimmed.headers.get("location")!, { redirect: "manual" }),
+    );
+    expect(followed.status).toBe(404);
   });
 
   it("leaves the app's own root keywords on 200", async () => {

@@ -32,7 +32,15 @@ import { jsonBodyLimit } from "../body-limit";
 import { scoreAndRecord } from "../risk";
 import { claimAnonLink } from "./shorten";
 import { cursorValueOf, linkPageQuery, readLinkPageParams, takePage } from "../links-page";
-import type { AddressDTO, LinkDTO, LinkInput, OrgPlan, PlanLimits, TopEntry } from "@/shared/types";
+import type {
+  AddressDTO,
+  LinkDTO,
+  LinkInput,
+  OrgPlan,
+  PlanLimits,
+  QuotaUsage,
+  TopEntry,
+} from "@/shared/types";
 
 const RECENT_CLICKS_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 // Active aliases (temp + permanent) a single link may hold at once: keeps the
@@ -165,7 +173,8 @@ async function insertAddressAndRespond(
       cause: { code: "link_limit" },
     });
   await enqueueStorage(env, [syncLinkMsg(address.slug, hostname)]);
-  return { dto: await linkToDTO(db, orgId, link), status } as const;
+  const [dto, quota] = await Promise.all([linkToDTO(db, orgId, link), quotaUsageFields(db, orgId)]);
+  return { dto: { ...dto, ...quota }, status } as const;
 }
 
 /** Count active addresses for a single link, for call sites that don't
@@ -252,6 +261,19 @@ async function linkFromRequest(c: Context<AppEnv>) {
   const db = c.var.db;
   const orgId = c.req.param("orgId")!;
   return { db, orgId, link: await findLink(db, orgId, c.req.param("linkId")!) };
+}
+
+/** The org's fresh link-quota count, timestamped at the read (see
+ * QuotaUsage): every mutation response spreads this in instead of the client
+ * making a follow-up GET /links/quota-usage (#100). */
+async function quotaUsageFields(db: DB, orgId: string): Promise<QuotaUsage> {
+  return { quotaUsage: await countActiveAddresses(db, orgId), quotaUsageAt: Date.now() };
+}
+
+/** The `{ ok: true }` response shape once a mutation only changed which
+ * addresses are active, with the org's fresh quota count attached (#100). */
+async function okWithQuota(db: DB, orgId: string) {
+  return { ok: true as const, ...(await quotaUsageFields(db, orgId)) };
 }
 
 async function findLinkAndAddress(c: Context<AppEnv>) {
@@ -579,8 +601,8 @@ linkRoutes.post("/claim", requireOrgRole("member"), async (c) => {
 });
 
 linkRoutes.get("/quota-usage", requireOrgRole("member"), async (c) => {
-  const count = await countActiveAddresses(c.var.db, c.req.param("orgId")!);
-  return c.json({ count });
+  const { quotaUsage, quotaUsageAt } = await quotaUsageFields(c.var.db, c.req.param("orgId")!);
+  return c.json({ count: quotaUsage, at: quotaUsageAt });
 });
 
 /** Builds a new link row: unset appearance/UTM fields fall back to their
@@ -791,7 +813,7 @@ linkRoutes.post("/", requireOrgRole("member"), async (c) => {
   // Score the destination after the response (#68), the way clicks are
   // recorded: it scores, it never blocks, and nobody waits on it.
   c.executionCtx.waitUntil(scoreAndRecord(c.env.DB, link.id, link.destination));
-  return c.json(toDTO(link, 0, hostname, 1), 201);
+  return c.json({ ...toDTO(link, 0, hostname, 1), ...(await quotaUsageFields(db, orgId)) }, 201);
 });
 
 /** Merges a PATCH body over the existing row: an unset field (undefined)
@@ -987,11 +1009,15 @@ linkRoutes.patch("/:linkId", requireOrgRole("member"), async (c) => {
   if (updated.destination !== existing.destination)
     c.executionCtx.waitUntil(scoreAndRecord(c.env.DB, existing.id, updated.destination));
 
-  return c.json(await linkToDTO(db, orgId, updated));
+  const [dto, quota] = await Promise.all([
+    linkToDTO(db, orgId, updated),
+    quotaUsageFields(db, orgId),
+  ]);
+  return c.json({ ...dto, ...quota });
 });
 
 linkRoutes.delete("/:linkId", requireOrgRole("member"), async (c) => {
-  const { db, link } = await linkFromRequest(c);
+  const { db, orgId, link } = await linkFromRequest(c);
   // Gathered before the delete: every active address (primary + aliases) has
   // its own KV key, and the cascade only removes the D1 rows, not those keys.
   const addresses = await activeAddressesOf(db, link.id);
@@ -1001,7 +1027,7 @@ linkRoutes.delete("/:linkId", requireOrgRole("member"), async (c) => {
     ...addresses.map((a) => syncLinkMsg(a.slug, a.hostname)),
     deleteQrLogoMsg(link.qrLogo),
   ]);
-  return c.json({ ok: true });
+  return c.json(await okWithQuota(db, orgId));
 });
 
 /* ---------------- addresses (aliases + primary) ---------------- */
@@ -1106,7 +1132,7 @@ linkRoutes.post(
     // this as expired.
     const hostname = await domainHostname(db, orgId, address.domainId);
     await enqueueStorage(c.env, [syncLinkMsg(address.slug, hostname)]);
-    return c.json({ ok: true });
+    return c.json(await okWithQuota(db, orgId));
   },
 );
 
@@ -1132,12 +1158,18 @@ linkRoutes.post("/:linkId/addresses/:addressId/remove", requireOrgRole("member")
   // Re-publish now instead of waiting for the sweep: a removed address
   // should stop resolving immediately, not up to a day later.
   await enqueueStorage(c.env, [syncLinkMsg(address.slug, hostname)]);
-  return c.json({ ok: true });
+  return c.json(await okWithQuota(db, orgId));
 });
 
 linkRoutes.post("/:linkId/addresses/:addressId/promote", requireOrgRole("member"), async (c) => {
   const { db, orgId, link: existing, address } = await findLinkAndAddress(c);
-  if (address.kind === "primary") return c.json(await linkToDTO(db, orgId, existing));
+  if (address.kind === "primary") {
+    const [dto, quota] = await Promise.all([
+      linkToDTO(db, orgId, existing),
+      quotaUsageFields(db, orgId),
+    ]);
+    return c.json({ ...dto, ...quota });
+  }
   if (address.retiredAt !== null)
     throw new HTTPException(409, { message: "This address is no longer active" });
 
@@ -1205,5 +1237,9 @@ linkRoutes.post("/:linkId/addresses/:addressId/promote", requireOrgRole("member"
     syncLinkMsg(address.slug, hostname),
   ]);
 
-  return c.json(await linkToDTO(db, orgId, updated));
+  const [dto, quota] = await Promise.all([
+    linkToDTO(db, orgId, updated),
+    quotaUsageFields(db, orgId),
+  ]);
+  return c.json({ ...dto, ...quota });
 });

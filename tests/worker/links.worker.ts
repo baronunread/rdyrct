@@ -74,3 +74,39 @@ describe("PATCH /orgs/:orgId/links/:linkId", () => {
     expect(updated.destination).toBe("https://example.com/original");
   });
 });
+
+describe("link quota usage returned by mutations (#100)", () => {
+  beforeEach(applyTestMigrations);
+  afterEach(reset);
+
+  it("create and delete each answer with the org's fresh count", async () => {
+    const cookie = await freeOwnerCookie();
+
+    const created = await postLink(cookie, { destination: "https://example.com/a" });
+    const link = await jsonBody<{ id: string; quotaUsage: number; quotaUsageAt: number }>(created);
+    expect(link.quotaUsage).toBe(1);
+    expect(link.quotaUsageAt).toBeGreaterThan(0);
+
+    const patched = await patchLink(cookie, link.id, { title: "Renamed" });
+    const updated = await jsonBody<{ quotaUsage: number; quotaUsageAt: number }>(patched);
+    expect(updated.quotaUsage).toBe(1);
+    // Each read is a fresh Date.now(), so a later mutation's response never
+    // carries an earlier timestamp: the client uses this to drop a stale,
+    // out-of-order response instead of clobbering a fresher one.
+    expect(updated.quotaUsageAt).toBeGreaterThanOrEqual(link.quotaUsageAt);
+
+    const ctx = createExecutionContext();
+    const deleted = await worker.fetch(
+      new Request(`http://localhost/api/orgs/org-1/links/${link.id}`, {
+        method: "DELETE",
+        headers: { cookie },
+      }),
+      authEnv(),
+      ctx,
+    );
+    await waitOnExecutionContext(ctx);
+    const removed = await jsonBody<{ quotaUsage: number; quotaUsageAt: number }>(deleted);
+    expect(removed.quotaUsage).toBe(0);
+    expect(removed.quotaUsageAt).toBeGreaterThanOrEqual(updated.quotaUsageAt);
+  });
+});
