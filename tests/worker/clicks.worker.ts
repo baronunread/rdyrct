@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import * as Sentry from "@sentry/cloudflare";
 import { env } from "cloudflare:workers";
 import { getQueueResult, reset } from "cloudflare:test";
 import {
@@ -10,7 +11,6 @@ import {
 import {
   applyTestMigrations,
   batchOf,
-  overrideEnv,
   sampleAddress,
   sampleLink,
   seedLink,
@@ -141,32 +141,19 @@ describe("click queue: consumer", () => {
 });
 
 describe("click queue: dead-letter visibility", () => {
-  it("logs and acks every message once it reaches the dead-letter queue", async () => {
-    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+  it("acks and captures a Sentry alert for every message once it reaches the dead-letter queue", async () => {
+    const captureSpy = vi.spyOn(Sentry, "captureMessage").mockReturnValue("");
     const { batch, ctx } = batchOf("rdyrct-clicks-dlq", [clickMessage()]);
 
-    await logClickDeadLetterBatch(testEnv, batch);
+    await logClickDeadLetterBatch(batch);
 
     const result = await getQueueResult(batch, ctx);
     expect(result.ackAll).toBe(true);
-    const logged = errors.mock.calls.map(([a]) => String(a));
-    expect(logged.some((line) => line.includes("click_dropped"))).toBe(true);
-    errors.mockRestore();
-  });
-
-  it("does not alert when Better Stack is unconfigured", async () => {
-    const fetchSpy = vi.spyOn(globalThis, "fetch");
-    const { batch, ctx } = batchOf("rdyrct-clicks-dlq", [clickMessage()]);
-    const unconfigured = overrideEnv({
-      BETTERSTACK_SOURCE_TOKEN: undefined,
-      BETTERSTACK_INGEST_URL: undefined,
+    expect(captureSpy).toHaveBeenCalledWith("click_dropped", {
+      level: "error",
+      extra: { linkId: sampleLink.id, orgId: sampleLink.orgId },
     });
-
-    await logClickDeadLetterBatch(unconfigured, batch);
-    await getQueueResult(batch, ctx);
-
-    expect(fetchSpy).not.toHaveBeenCalled();
-    fetchSpy.mockRestore();
+    captureSpy.mockRestore();
   });
 });
 

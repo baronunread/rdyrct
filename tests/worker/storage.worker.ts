@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import * as Sentry from "@sentry/cloudflare";
 import { env } from "cloudflare:workers";
 import { getQueueResult, reset } from "cloudflare:test";
 import { eq } from "drizzle-orm";
@@ -178,62 +179,23 @@ describe("storage queue: dead-letter visibility", () => {
     errors.mockRestore();
   });
 
-  it("logs and acks every message once it reaches the dead-letter queue", async () => {
-    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+  it("acks every message and captures a Sentry alert once it reaches the dead-letter queue", async () => {
+    const captureSpy = vi.spyOn(Sentry, "captureMessage").mockReturnValue("");
     const { batch, ctx } = batchOf("rdyrct-storage-dlq", [
       syncLinkMsg("sale", null),
       deleteQrLogoMsg("/api/orgs/org-1/qr-logo/logo.webp")!,
     ]);
 
-    await logDeadLetterBatch(testEnv, batch);
+    await logDeadLetterBatch(batch);
 
     const result = await getQueueResult(batch, ctx);
     expect(result.explicitAcks).toHaveLength(2);
     expect(result.retryMessages).toEqual([]);
-    const logged = errors.mock.calls.map((call) => call.map(String).join(" "));
-    expect(logged.some((line) => line.includes("storage_message_gave_up"))).toBe(true);
-    expect(logged.some((line) => line.includes("slug:sale"))).toBe(true);
-    errors.mockRestore();
-  });
-
-  it("alerts Better Stack with the same events once it reaches the dead-letter queue", async () => {
-    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(null));
-    const { batch, ctx } = batchOf("rdyrct-storage-dlq", [syncLinkMsg("sale", null)]);
-    const alerting = overrideEnv({
-      BETTERSTACK_SOURCE_TOKEN: "tok_test",
-      BETTERSTACK_INGEST_URL: "https://in.logs.betterstack.example",
+    expect(captureSpy).toHaveBeenCalledWith("storage_message_gave_up", {
+      level: "error",
+      extra: { op: "kv_sync", target: "slug:sale" },
     });
-
-    await logDeadLetterBatch(alerting, batch);
-    await getQueueResult(batch, ctx);
-
-    expect(fetchSpy).toHaveBeenCalledWith(
-      "https://in.logs.betterstack.example",
-      expect.objectContaining({
-        method: "POST",
-        headers: expect.objectContaining({ authorization: "Bearer tok_test" }),
-      }),
-    );
-    const body = JSON.parse(String(fetchSpy.mock.calls[0]?.[1]?.body));
-    expect(body).toEqual([
-      { event: "storage_message_gave_up", op: "kv_sync", target: "slug:sale" },
-    ]);
-    fetchSpy.mockRestore();
-  });
-
-  it("does not alert when Better Stack is unconfigured", async () => {
-    const fetchSpy = vi.spyOn(globalThis, "fetch");
-    const { batch, ctx } = batchOf("rdyrct-storage-dlq", [syncLinkMsg("sale", null)]);
-    const unconfigured = overrideEnv({
-      BETTERSTACK_SOURCE_TOKEN: undefined,
-      BETTERSTACK_INGEST_URL: undefined,
-    });
-
-    await logDeadLetterBatch(unconfigured, batch);
-    await getQueueResult(batch, ctx);
-
-    expect(fetchSpy).not.toHaveBeenCalled();
-    fetchSpy.mockRestore();
+    captureSpy.mockRestore();
   });
 });
 

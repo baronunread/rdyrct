@@ -25,10 +25,9 @@ CF_API_TOKEN=
 CF_ZONE_ID=
 CF_DEV_ENV=simulated
 
-# Better Stack: alerts on dead-lettered storage messages. Leave blank to no-op
-# locally (no alerts fire from dev/test).
-BETTERSTACK_SOURCE_TOKEN=
-BETTERSTACK_INGEST_URL=
+# Sentry: error capture (worker errors + dead-lettered storage/click alerts).
+# Leave blank to no-op locally (nothing sent from dev/test).
+SENTRY_DSN=
 
 # rdyrct-blog: run its dev server (bun run dev in that repo) and /blog here
 # proxies to it. Leave blank to skip the proxy.

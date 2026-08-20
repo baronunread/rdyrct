@@ -1,9 +1,10 @@
+import * as Sentry from "@sentry/cloudflare";
 import { eq, isNull, and, lt, ne, inArray } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import * as schema from "./db/schema";
 import type { DB, Env } from "./env";
 import { buildDestination, qrLogoKeyFromUrl } from "./util";
-import { alertBetterStack } from "./alerts";
+import { captureAlert } from "./sentry";
 
 /**
  * Storage recovery. D1 is the source of truth. KV serves redirects and R2
@@ -281,7 +282,9 @@ export async function consumeStorageBatch(
         await applyStorageMessage(env, db, message.body);
         message.ack();
       } catch (error) {
-        console.error("storage message failed", targetOf(message.body), error);
+        Sentry.captureException(error, {
+          extra: { op: message.body.op, target: targetOf(message.body) },
+        });
         if (message.attempts >= STORAGE_MAX_DELIVERIES) {
           console.error("storage_message_dead_letter", message.body.op, targetOf(message.body));
         }
@@ -297,17 +300,13 @@ export async function consumeStorageBatch(
  * to see: a message reaching this point means Cloudflare Queues gave up on it
  * after every retry, which is worth knowing even though nothing re-drives it.
  */
-export async function logDeadLetterBatch(
-  env: Env,
-  batch: MessageBatch<StorageMessage>,
-): Promise<void> {
+export async function logDeadLetterBatch(batch: MessageBatch<StorageMessage>): Promise<void> {
   const events = batch.messages.map((message) => ({
     event: "storage_message_gave_up",
     op: message.body.op,
     target: targetOf(message.body),
   }));
-  for (const event of events) console.error(event.event, event.op, event.target);
-  await alertBetterStack(env, events);
+  captureAlert(events);
   for (const message of batch.messages) message.ack();
 }
 

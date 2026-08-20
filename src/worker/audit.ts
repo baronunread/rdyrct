@@ -15,7 +15,7 @@ import { drizzle } from "drizzle-orm/d1";
 import type { JsonValue } from "../shared/types";
 import * as schema from "./db/schema";
 import type { Env } from "./env";
-import { alertBetterStack } from "./alerts";
+import { captureAlert } from "./sentry";
 import { uid } from "./util";
 
 export type AdminAction =
@@ -65,8 +65,7 @@ export async function recordAdminAction(
     // discovered months later by whoever is answering for the decision, so
     // the failure is alerted rather than left in a log nobody reads, and it
     // carries enough to write the entry back by hand.
-    console.error("admin_audit_write_failed", entry.action, entry.targetId, error);
-    await alertBetterStack(env, [
+    captureAlert([
       {
         level: "error",
         event: "admin_audit_write_failed",

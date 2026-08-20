@@ -1,3 +1,4 @@
+import * as Sentry from "@sentry/cloudflare";
 import type { Context, Next } from "hono";
 import type { JsonValue } from "../shared/types";
 import { optionalText, parseOptionalBody } from "./schemas";
@@ -50,6 +51,7 @@ export async function rateLimitAllows(
     return success;
   } catch (error) {
     rateLimitLog("rate_limit_error", options.group, { ...options, error });
+    Sentry.captureException(error, { extra: { group: options.group, method: options.method } });
     return !options.failClosed;
   }
 }

@@ -1,3 +1,4 @@
+import * as Sentry from "@sentry/cloudflare";
 import type { Context } from "hono";
 import { nonEmpty } from "../shared/lookup";
 import { drizzle } from "drizzle-orm/d1";
@@ -6,7 +7,7 @@ import type { AppEnv, Env } from "./env";
 import type { KVLink } from "./kv";
 import { deviceFromUA, normalizeReferrer } from "./util";
 import { clickAnalyticsAllowed } from "./rate-limit";
-import { alertBetterStack } from "./alerts";
+import { captureAlert } from "./sentry";
 
 /**
  * Click ingestion. The redirect hot path never inserts into D1 itself: it
@@ -128,7 +129,7 @@ export async function consumeClickBatch(
     if (writes) await db.batch(writes);
     batch.ackAll();
   } catch (error) {
-    console.error("click batch insert failed", batch.messages.length, error);
+    Sentry.captureException(error, { extra: { batchSize: batch.messages.length } });
     if (batch.messages.some((m) => m.attempts >= CLICK_MAX_DELIVERIES)) {
       console.error("click_batch_dead_letter", batch.messages.length);
     }
@@ -184,16 +185,12 @@ export async function sweepDedupeIds(env: Env): Promise<number> {
  * ack. Nothing repairs a dropped click; see the top of this file for why
  * that is the accepted behavior.
  */
-export async function logClickDeadLetterBatch(
-  env: Env,
-  batch: MessageBatch<ClickMessage>,
-): Promise<void> {
+export async function logClickDeadLetterBatch(batch: MessageBatch<ClickMessage>): Promise<void> {
   const events = batch.messages.map((m) => ({
     event: "click_dropped",
     linkId: m.body.linkId,
     orgId: m.body.orgId,
   }));
-  for (const event of events) console.error(event.event, event.linkId, event.orgId);
-  await alertBetterStack(env, events);
+  captureAlert(events);
   batch.ackAll();
 }

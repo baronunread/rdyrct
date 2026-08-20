@@ -53,8 +53,7 @@
     },
   ],
   // Secrets (wrangler secret put …): BETTER_AUTH_SECRET, SUPERADMIN_EMAIL,
-  // RESEND_API_KEY, POLAR_ACCESS_TOKEN, POLAR_WEBHOOK_SECRET, CF_API_TOKEN,
-  // BETTERSTACK_SOURCE_TOKEN.
+  // RESEND_API_KEY, POLAR_ACCESS_TOKEN, POLAR_WEBHOOK_SECRET, CF_API_TOKEN.
   // Local dev reads everything from .dev.vars (see .dev.vars.example).
   "vars": {
     "APP_URL": "https://rdyrct.com",
@@ -65,9 +64,10 @@
     "POLAR_PRO_PRODUCT_ID": "5837e285-85c3-4d38-8557-a7b2bdc3b98d",
     "POLAR_HOBBY_PRODUCT_ID": "60a69be5-ff21-4523-82ab-b6c466772724",
     "CF_ZONE_ID": "21285955570c1215ae9efd13692c950a",
-    // Better Stack source's ingesting host (Data ingestion tab), e.g.
-    // "https://in.logs.betterstack.com". Alerts no-op until this is set.
-    "BETTERSTACK_INGEST_URL": "https://s2624707.eu-central-1a.betterstackdata.com",
+    // Project settings → Client Keys (DSN) at sentry.io. Not sensitive (it's
+    // meant to ship in client bundles), so it lives here rather than as a
+    // secret. Capture no-ops until this is set.
+    "SENTRY_DSN": "https://ef93929e3a752b79646761bf47b56792@o4511118622916608.ingest.de.sentry.io/4511945059926097",
   },
   "d1_databases": [
     {
@@ -304,8 +304,8 @@
         // timer for the test to race.
         "CF_DEV_ENV": "instant",
         // env vars aren't inherited from the top-level "vars": left unset
-        // (alerts no-op) so e2e never calls out to Better Stack.
-        "BETTERSTACK_INGEST_URL": "",
+        // (capture no-ops) so e2e never calls out to Sentry.
+        "SENTRY_DSN": "",
       },
       "kv_namespaces": [
         {

@@ -37,7 +37,7 @@ flowchart TB
     resend[Resend<br/>transactional email]
     cfSaas[Cloudflare for SaaS<br/>custom hostnames]
     blogOrigin[Vercel<br/>blog origin]
-    betterStack[Better Stack<br/>alerts]
+    sentry[Sentry<br/>error capture]
     riskProvider[Destination risk provider]
   end
 
@@ -69,7 +69,8 @@ flowchart TB
   storageQueue --> queueConsumer
   queueConsumer -->|sync redirect keys| kv
   queueConsumer -->|delete unused objects| r2
-  queueConsumer -. dead-letter alert .-> betterStack
+  queueConsumer -. dead-letter alert .-> sentry
+  router -. error capture .-> sentry
 
   api --> domainWorkflow --> cfSaas
   domainWorkflow --> d1
@@ -194,7 +195,7 @@ sequenceDiagram
 
 If the queue send fails after the D1 commit, the request returns an error even
 though D1 has changed. If all consumer retries fail, the dead-letter consumer
-alerts Better Stack and acknowledges the message. No process then repairs or
+alerts Sentry and acknowledges the message. No process then repairs or
 replays that change. This is the largest correctness gap in the current design.
 
 ### Long-running operations
@@ -216,12 +217,12 @@ links.
 
 ### Do now
 
-| Priority | Improvement                                         | Why it matters                                                                                                                                                                                                                                           | Recommended shape                                                                                                                                                                                                                                                                                                          |
-| -------- | --------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| P0       | Choose and document the redirect revocation promise | KV is the right read store, but an edit, delete, or suspension can remain stale at some locations. This matters most for abuse response, not normal edits.                                                                                               | Decide whether a delay of 60 seconds or more is acceptable. If it is, state it in operator and product guidance and add an emergency host or slug block at the WAF or Worker layer. If instant global revocation is required, test a strongly consistent gate for suspended links before changing the whole redirect path. |
-| P1       | Define service indicators before tuning             | `observability.enabled` and Better Stack alerts give logs, but the repository does not define targets for redirect latency, stale redirects, queue lag, click loss, D1 cost, or Workflow failures. Without them, an optimization cannot prove its value. | Track redirect latency and error rate, KV misses, storage and click queue lag, DLQ count, D1 query latency and rows read, scheduled-job results, Workflow failures, and external provider errors. Set an alert and owner for each correctness-critical signal.                                                             |
-| P1       | Isolate scheduled maintenance failures              | The five daily jobs run in sequence. One thrown error stops the jobs after it until the next day. Some jobs loop until no rows remain, so one run can also become long as data grows.                                                                    | Give each job its own guarded execution and alert, or move the long jobs into Workflows. Record counts, duration, and the last successful completion for each job.                                                                                                                                                         |
-| P1       | Restore the recovery runbook                        | Storage and click DLQs alert, but there is no checked-in procedure for inspection, replay, or verification. `docs/storage-recovery.md` held one and was deleted in 9f43602 as outdated, while #15 closed pointing at it.                                 | Rewrite it: identify the failed key, compare it with D1, reapply the idempotent storage operation, confirm KV or R2, close the alert. Keep click loss separate because it is an accepted analytics tradeoff.                                                                                                               |
+| Priority | Improvement                                         | Why it matters                                                                                                                                                                                                                                     | Recommended shape                                                                                                                                                                                                                                                                                                          |
+| -------- | --------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| P0       | Choose and document the redirect revocation promise | KV is the right read store, but an edit, delete, or suspension can remain stale at some locations. This matters most for abuse response, not normal edits.                                                                                         | Decide whether a delay of 60 seconds or more is acceptable. If it is, state it in operator and product guidance and add an emergency host or slug block at the WAF or Worker layer. If instant global revocation is required, test a strongly consistent gate for suspended links before changing the whole redirect path. |
+| P1       | Define service indicators before tuning             | `observability.enabled` and Sentry alerts give logs, but the repository does not define targets for redirect latency, stale redirects, queue lag, click loss, D1 cost, or Workflow failures. Without them, an optimization cannot prove its value. | Track redirect latency and error rate, KV misses, storage and click queue lag, DLQ count, D1 query latency and rows read, scheduled-job results, Workflow failures, and external provider errors. Set an alert and owner for each correctness-critical signal.                                                             |
+| P1       | Isolate scheduled maintenance failures              | The five daily jobs run in sequence. One thrown error stops the jobs after it until the next day. Some jobs loop until no rows remain, so one run can also become long as data grows.                                                              | Give each job its own guarded execution and alert, or move the long jobs into Workflows. Record counts, duration, and the last successful completion for each job.                                                                                                                                                         |
+| P1       | Restore the recovery runbook                        | Storage and click DLQs alert, but there is no checked-in procedure for inspection, replay, or verification. `docs/storage-recovery.md` held one and was deleted in 9f43602 as outdated, while #15 closed pointing at it.                           | Rewrite it: identify the failed key, compare it with D1, reapply the idempotent storage operation, confirm KV or R2, close the alert. Keep click loss separate because it is an accepted analytics tradeoff.                                                                                                               |
 
 Tracked as #101 (revocation), #31 (indicators, per-job reporting, runbook).
 

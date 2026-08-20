@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import * as Sentry from "@sentry/cloudflare";
 import { env } from "cloudflare:workers";
 import { createExecutionContext, reset, waitOnExecutionContext } from "cloudflare:test";
 import { drizzle } from "drizzle-orm/d1";
@@ -619,14 +620,12 @@ describe("POST /api/webhooks/polar", () => {
   });
 
   it("alerts when an event names a user we hold no row for (#17)", async () => {
-    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(null));
+    const captureSpy = vi.spyOn(Sentry, "captureMessage").mockReturnValue("");
     const alerting = overrideEnv({
       BETTER_AUTH_SECRET: "test-secret",
       POLAR_WEBHOOK_SECRET,
       POLAR_HOBBY_PRODUCT_ID,
       POLAR_PRO_PRODUCT_ID,
-      BETTERSTACK_SOURCE_TOKEN: "tok_test",
-      BETTERSTACK_INGEST_URL: "https://in.logs.betterstack.example",
     });
 
     // No seeded user: the checkout metadata points at nobody, so the plan
@@ -646,16 +645,15 @@ describe("POST /api/webhooks/polar", () => {
     );
 
     expect(res.status).toBe(200);
-    const body = JSON.parse(String(fetchSpy.mock.calls[0]?.[1]?.body));
-    expect(body).toEqual([
-      {
-        event: "polar_webhook_no_matching_user",
+    expect(captureSpy).toHaveBeenCalledWith("polar_webhook_no_matching_user", {
+      level: "error",
+      extra: {
         type: "subscription.active",
         subscriptionId: "sub_ghost",
         userId: "user-does-not-exist",
       },
-    ]);
-    fetchSpy.mockRestore();
+    });
+    captureSpy.mockRestore();
   });
 
   it("does not alert when a real user's event is merely stale (#17)", async () => {
@@ -665,8 +663,6 @@ describe("POST /api/webhooks/polar", () => {
       POLAR_WEBHOOK_SECRET,
       POLAR_HOBBY_PRODUCT_ID,
       POLAR_PRO_PRODUCT_ID,
-      BETTERSTACK_SOURCE_TOKEN: "tok_test",
-      BETTERSTACK_INGEST_URL: "https://in.logs.betterstack.example",
     });
     await postWebhook(
       {
@@ -682,7 +678,7 @@ describe("POST /api/webhooks/polar", () => {
       alerting,
     );
 
-    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(null));
+    const captureSpy = vi.spyOn(Sentry, "captureMessage").mockReturnValue("");
     await postWebhook(
       {
         type: "subscription.revoked",
@@ -697,8 +693,8 @@ describe("POST /api/webhooks/polar", () => {
     );
 
     // The row exists and the guard did its job: nothing to report.
-    expect(fetchSpy).not.toHaveBeenCalled();
-    fetchSpy.mockRestore();
+    expect(captureSpy).not.toHaveBeenCalled();
+    captureSpy.mockRestore();
   });
 
   it("falls back to created_at when modified_at is null (#17)", async () => {
