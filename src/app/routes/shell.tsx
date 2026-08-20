@@ -1,6 +1,6 @@
 import { Suspense, useEffect, useRef, useState, type ReactNode } from "react";
 import { errorMessage } from "@/app/lib/error-message";
-import { Link, Navigate, Outlet, useNavigate, useLocation } from "@tanstack/react-router";
+import { Link, Outlet, useNavigate } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, LazyMotion, domAnimation, m } from "motion/react";
 import { Globe, ChevronsUpDown, Plus, Check, LogOut } from "lucide-react";
@@ -38,14 +38,22 @@ function orgCreateErrorMessage(cause: unknown): string {
 export function RequireAuth({ children }: { children: ReactNode }) {
   const currentUser = useCurrentUser();
   const shell = useShellUser();
-  const location = useLocation();
+  const navigate = useNavigate();
   // Only the query says somebody is signed out, and only once it has spoken.
-  if (!currentUser.isLoading && !currentUser.data) {
-    // href fully drives navigation (it wins over `to`, see buildLocation);
-    // `to` is only here to satisfy the router's typed-route requirement.
-    const dest = `/login?next=${encodeURIComponent(location.pathname + location.searchStr)}`;
-    return <Navigate to={dest} href={dest} replace />;
-  }
+  const signedOut = !currentUser.isLoading && !currentUser.data;
+  // An effect, not the declarative <Navigate>: <Navigate> re-invokes
+  // navigate() on every render whose props object isn't the exact same
+  // reference as last time (see its source), which JSX makes impossible to
+  // guarantee, and reading useLocation() here to build the bounce-back
+  // path fed the loop, since navigate() is what changes the location
+  // useLocation() then reports. This effect only re-runs when `signedOut`
+  // itself flips, and reads the current path imperatively instead.
+  useEffect(() => {
+    if (!signedOut) return;
+    const from = window.location.pathname + window.location.search;
+    void navigate({ href: `/login?next=${encodeURIComponent(from)}`, replace: true });
+  }, [signedOut, navigate]);
+  if (signedOut) return null;
   // The cache carries the shell through the wait. A browser that has none is
   // on its first visit, and still gets the skeleton.
   if (!shell) return <AppShellSkeleton />;
@@ -381,7 +389,6 @@ export function AppShell() {
   const onNewOrg = () => (canCreateOrg ? setNewOrgOpen(true) : toast(ORG_LIMIT_MESSAGE, "error"));
   const onSignOut = () =>
     logout.mutate(undefined, {
-      onSuccess: () => navigate({ to: "/login" }),
       onError: (error) => toast(error.message, "error"),
     });
 

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { dashboardView } from "../src/app/routes/dashboard";
+import { dashboardView } from "../src/app/routes/dashboard-view";
 
 describe("dashboardView", () => {
   test("waits for the user query before deciding there's no org", () => {

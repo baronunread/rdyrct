@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
+import { dashboardView } from "./dashboard-view";
 import { valibotResolver } from "@hookform/resolvers/valibot";
 import { HrefLink } from "../lib/router-search";
 import { useStats, useLinks, useMembers, useLinkMutations, useRecentClicks } from "../lib/hooks";
@@ -126,25 +127,6 @@ function DashboardBody({
       </div>
     </>
   );
-}
-
-export type DashboardView = "userLoading" | "noOrg" | "statsLoading" | "statsError" | "ready";
-
-/** Which of the dashboard's five states applies, in the order they resolve:
- * who's signed in, then their org, then that org's numbers. Pulled out of
- * the component so the branching is a plain function fallow can score (and
- * test) on its own, away from JSX. */
-export function dashboardView(
-  userLoading: boolean,
-  hasOrg: boolean,
-  statsLoading: boolean,
-  hasStats: boolean,
-): DashboardView {
-  if (userLoading) return "userLoading";
-  if (!hasOrg) return "noOrg";
-  if (statsLoading) return "statsLoading";
-  if (!hasStats) return "statsError";
-  return "ready";
 }
 
 /** Nothing to show until there is an organization and its numbers have
