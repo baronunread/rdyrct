@@ -10,7 +10,7 @@ import { drizzle } from "drizzle-orm/d1";
 import { and, eq, inArray, ne } from "drizzle-orm";
 import * as schema from "./db/schema";
 import type { DB, Env } from "./env";
-import { alertBetterStack } from "./alerts";
+import { captureAlert } from "./sentry";
 import { afterResponse } from "./background";
 import { sendEmail } from "./email";
 import { renderEmail } from "./email-layout";
@@ -323,7 +323,7 @@ async function guardSignUp(
   if (existing.emailVerified)
     afterResponse(
       sendExistingAccountNotice(env, normalized).catch((cause: unknown) =>
-        alertBetterStack(env, [
+        captureAlert([
           { event: "existing_account_notice_failed", error: String(cause) },
           // Deliberately no address: this log would otherwise be a list of
           // registered emails, which is the thing being protected.

@@ -1,3 +1,4 @@
+import * as Sentry from "@sentry/cloudflare";
 import { Hono } from "hono";
 import type { JsonValue } from "../shared/types";
 import type { Context } from "hono";
@@ -77,7 +78,7 @@ app.onError((err, c) => {
   if (err instanceof HTTPException) {
     return respond({ message: err.message, ...causeFields(err.cause) }, err.status);
   }
-  console.error(err);
+  Sentry.captureException(err);
   return respond({ message: "Internal error" }, 500);
 });
 
@@ -277,56 +278,82 @@ app.all("*", (c) => serveSpa(c));
 
 /* ---------------- Queue consumer: KV/R2 follow-up work + click ingestion ---------------- */
 
-export default {
-  fetch: app.fetch,
-  async queue(
-    batch: MessageBatch<StorageMessage | ClickMessage>,
-    env: Env,
-    _ctx: ExecutionContext,
-  ) {
-    // Every queue's dead-letter consumer routes to this same handler (see
-    // wrangler.jsonc); a DLQ's messages only get logged, never retried or
-    // repaired. Check "-clicks-dlq" ahead of the generic "-dlq" suffix, since
-    // it ends with both.
-    // SAFETY: wrangler.jsonc binds each queue name to the consumer for its
-    // own message type, so the suffix that picks the branch is also what
-    // decides which of the two bodies the batch holds.
-    const clicks = batch as MessageBatch<ClickMessage>;
-    // SAFETY: as above, the queue name decides which body the batch holds.
-    const storage = batch as MessageBatch<StorageMessage>;
-    if (batch.queue.endsWith("-clicks-dlq")) return logClickDeadLetterBatch(env, clicks);
-    if (batch.queue.endsWith("-clicks")) return consumeClickBatch(env, clicks);
-    if (batch.queue.endsWith("-dlq")) return logDeadLetterBatch(env, storage);
-    await consumeStorageBatch(env, storage);
-  },
-  async scheduled(event: ScheduledEvent, env: Env, _ctx: ExecutionContext) {
-    // Daily: trim old clicks.
-    const cutoff = Date.now() - 400 * 24 * 60 * 60 * 1000;
-    // Bounded batches: one unbounded DELETE can hit D1 statement limits once
-    // the table is large.
-    const stmt = env.DB.prepare(
-      `delete from clicks where id in (select id from clicks where ts < ? limit 1000)`,
-    );
-    let changes = 0;
-    do {
-      changes = (await stmt.bind(cutoff).run()).meta.changes;
-    } while (changes > 0);
-
-    // Daily: drop dedupe ids the queue can no longer redeliver, so a unique
-    // index over 400 days of history stops carrying a guarantee that only
-    // has to hold for minutes (#70).
-    await sweepDedupeIds(env);
-
-    // Daily: delete QR logos no row points at, which an abandoned upload
-    // leaves behind with no owner and no delete path (#49).
-    await sweepOrphanQrLogos(env);
-
-    // Daily: retire rename aliases past their 48h deadline (see #38). The
-    // redirect path already stopped resolving them; this frees their slugs.
-    await sweepExpiredAliases(env, drizzle(env.DB, { schema }));
-
-    // Daily: drop anonymous links nobody claimed inside their 24 hours, and
-    // the KV keys they were resolving through (Direction A of #96).
-    await sweepExpiredAnonLinks(env);
-  },
+// Typed explicitly rather than exported straight off withSentry(): its
+// generic return type collapses fetch/queue/scheduled to optional when TS
+// can't confirm the handler literal satisfies its constraint, which then
+// makes every test file's `worker.fetch(...)` a possibly-undefined call.
+type WorkerHandler = {
+  fetch: typeof app.fetch;
+  queue: ExportedHandlerQueueHandler<Env, StorageMessage | ClickMessage>;
+  scheduled: ExportedHandlerScheduledHandler<Env>;
 };
+
+const wrapped = Sentry.withSentry<Env, StorageMessage | ClickMessage>(
+  (env: Env) => ({ dsn: env.SENTRY_DSN }),
+  {
+    fetch: app.fetch,
+    async queue(
+      batch: MessageBatch<StorageMessage | ClickMessage>,
+      env: Env,
+      _ctx: ExecutionContext,
+    ) {
+      // Every queue's dead-letter consumer routes to this same handler (see
+      // wrangler.jsonc); a DLQ's messages only get logged, never retried or
+      // repaired. Check "-clicks-dlq" ahead of the generic "-dlq" suffix, since
+      // it ends with both.
+      // SAFETY: wrangler.jsonc binds each queue name to the consumer for its
+      // own message type, so the suffix that picks the branch is also what
+      // decides which of the two bodies the batch holds.
+      const clicks = batch as MessageBatch<ClickMessage>;
+      // SAFETY: as above, the queue name decides which body the batch holds.
+      const storage = batch as MessageBatch<StorageMessage>;
+      if (batch.queue.endsWith("-clicks-dlq")) return logClickDeadLetterBatch(clicks);
+      if (batch.queue.endsWith("-clicks")) return consumeClickBatch(env, clicks);
+      if (batch.queue.endsWith("-dlq")) return logDeadLetterBatch(storage);
+      await consumeStorageBatch(env, storage);
+    },
+    async scheduled(_controller: ScheduledController, env: Env, _ctx: ExecutionContext) {
+      // Daily: trim old clicks.
+      const cutoff = Date.now() - 400 * 24 * 60 * 60 * 1000;
+      // Bounded batches: one unbounded DELETE can hit D1 statement limits once
+      // the table is large.
+      const stmt = env.DB.prepare(
+        `delete from clicks where id in (select id from clicks where ts < ? limit 1000)`,
+      );
+      let changes = 0;
+      do {
+        changes = (await stmt.bind(cutoff).run()).meta.changes;
+      } while (changes > 0);
+
+      // Daily: drop dedupe ids the queue can no longer redeliver, so a unique
+      // index over 400 days of history stops carrying a guarantee that only
+      // has to hold for minutes (#70).
+      await sweepDedupeIds(env);
+
+      // Daily: delete QR logos no row points at, which an abandoned upload
+      // leaves behind with no owner and no delete path (#49).
+      await sweepOrphanQrLogos(env);
+
+      // Daily: retire rename aliases past their 48h deadline (see #38). The
+      // redirect path already stopped resolving them; this frees their slugs.
+      await sweepExpiredAliases(env, drizzle(env.DB, { schema }));
+
+      // Daily: drop anonymous links nobody claimed inside their 24 hours, and
+      // the KV keys they were resolving through (Direction A of #96).
+      await sweepExpiredAnonLinks(env);
+    },
+  },
+);
+
+// SAFETY: withSentry's return type marks fetch/queue/scheduled optional (a
+// handler need not implement all three) and types fetch's request against
+// Cloudflare's stricter IncomingRequestCfProperties, but the object above
+// always provides all three, and it's the same app.fetch either way: Sentry
+// wraps it without narrowing what request shape it accepts.
+const handler: WorkerHandler = {
+  fetch: wrapped.fetch! as typeof app.fetch,
+  queue: wrapped.queue!,
+  scheduled: wrapped.scheduled!,
+};
+
+export default handler;

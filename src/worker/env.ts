@@ -65,9 +65,8 @@ export interface Env {
   /* bot protection: Cap proof-of-work (#98). Unset disables the check. */
   CAP_SECRET?: string; // secret, `openssl rand -hex 32`
 
-  /* alerting: dead-lettered storage messages (best-effort, never blocks acking) */
-  BETTERSTACK_SOURCE_TOKEN?: string; // secret
-  BETTERSTACK_INGEST_URL?: string; // var, e.g. https://in.logs.betterstack.com
+  /* error tracking: unset disables capture (see sentry.ts, index.ts) */
+  SENTRY_DSN?: string; // var, from sentry.io project settings
 }
 
 export type DB = DrizzleD1Database<typeof schema>;

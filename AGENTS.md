@@ -240,7 +240,7 @@ and vars live in `wrangler.jsonc`; local dev reads everything from `.dev.vars`
 `BETTER_AUTH_SECRET`, `SUPERADMIN_EMAIL`, `RESEND_API_KEY`, `MAIL_FROM`,
 `APP_URL`, `APP_HOST`, `POLAR_ACCESS_TOKEN`/`POLAR_WEBHOOK_SECRET`/
 `POLAR_PRO_PRODUCT_ID`/`POLAR_HOBBY_PRODUCT_ID`, `CF_API_TOKEN`/`CF_ZONE_ID`,
-`BETTERSTACK_SOURCE_TOKEN`/`BETTERSTACK_INGEST_URL`.
+`SENTRY_DSN`.
 
 ## Layout
 
@@ -250,7 +250,7 @@ scripts/               Local dev utilities (e.g. seed-local.ts)
 src/worker/            Hono API, BetterAuth, KV publishing, redirect hot path
   routes/              auth (user), orgs, links, qr-logos, domains, billing, admin
   better-auth.ts plan.ts util.ts guards.ts org-role.ts rate-limit.ts session.ts
-  email.ts password.ts kv.ts storage.ts alerts.ts clicks.ts workflows.ts
+  email.ts password.ts kv.ts storage.ts sentry.ts clicks.ts workflows.ts
 src/shared/types.ts    DTOs + PLAN_LIMITS (shared worker ↔ app)
 src/app/               React SPA
   routes/  ui/  components/  lib/

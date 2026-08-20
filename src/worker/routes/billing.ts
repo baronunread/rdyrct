@@ -8,7 +8,7 @@ import * as schema from "../db/schema";
 import type { AppEnv, Env } from "../env";
 import type { JsonValue } from "../../shared/types";
 import { requireUser } from "../guards";
-import { alertBetterStack } from "../alerts";
+import { captureAlert } from "../sentry";
 import { effectivePlanSql } from "../entitlement";
 import { jsonBodyLimit } from "../body-limit";
 import type { BillingProvider } from "../billing-provider";
@@ -187,7 +187,7 @@ function subscriptionFacts(plan: "hobby" | "pro" | null, status: string) {
 async function planForProductOrAlert(env: Env, event: PolarEvent, userId: string | null) {
   const plan = planForProduct(env, event.data.product_id);
   if (!plan) {
-    await alertBetterStack(env, [
+    captureAlert([
       {
         event: "polar_webhook_unknown_product",
         subscriptionId: event.data.id,
@@ -343,7 +343,7 @@ export async function handlePolarWebhook(req: Request, env: Env): Promise<Respon
   const mutation = await mutationFor(db, env, event);
   if (mutation) {
     const result = await mutation;
-    if (result.meta.changes === 0) await alertIfNoSuchSubject(db, env, event);
+    if (result.meta.changes === 0) await alertIfNoSuchSubject(db, event);
   }
   return Response.json({ received: true });
 }
@@ -358,10 +358,10 @@ export async function handlePolarWebhook(req: Request, env: Env): Promise<Respon
  *
  * The extra read only happens on the zero-row path, which is the rare one.
  */
-async function alertIfNoSuchSubject(db: Db, env: Env, event: PolarEvent): Promise<void> {
+async function alertIfNoSuchSubject(db: Db, event: PolarEvent): Promise<void> {
   const rows = await db.select({ id: schema.user.id }).from(schema.user).where(subjectOf(event));
   if (rows.length > 0) return;
-  await alertBetterStack(env, [
+  captureAlert([
     {
       event: "polar_webhook_no_matching_user",
       type: event.type,

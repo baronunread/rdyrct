@@ -165,7 +165,7 @@ Object per nonce, which costs more than the replay is worth.
 
 Rate-limit rejections log as `rate_limited <group> <method>` and errors as
 `rate_limit_error`. Watch them in the Cloudflare dashboard under Workers →
-rdyrct → Logs, or in Better Stack if `BETTERSTACK_INGEST_URL` is set.
+rdyrct → Logs, or in Sentry if `SENTRY_DSN` is set.
 
 WAF rule activity appears under Security → Events, filtered by the rule name.
 

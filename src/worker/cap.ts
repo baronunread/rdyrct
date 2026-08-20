@@ -40,8 +40,8 @@ const CHALLENGE_COUNT = 12;
 const CHALLENGE_SIZE = 24;
 const CHALLENGE_DIFFICULTY = 3;
 
-/** Off unless CAP_SECRET is set, matching BETTERSTACK_INGEST_URL and friends:
- * local dev, CI and e2e stay quiet rather than breaking signup. */
+/** Off unless CAP_SECRET is set, matching SENTRY_DSN and friends: local dev,
+ * CI and e2e stay quiet rather than breaking signup. */
 export function capEnabled(env: Env): boolean {
   return !!env.CAP_SECRET;
 }

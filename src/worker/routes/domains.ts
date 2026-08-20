@@ -1,3 +1,4 @@
+import * as Sentry from "@sentry/cloudflare";
 import { Hono } from "hono";
 import type { JsonValue } from "../../shared/types";
 import { HTTPException } from "hono/http-exception";
@@ -48,7 +49,7 @@ async function cfRequest<T = Record<string, JsonValue>>(
   if (res.status === 404 && opts?.okNotFound) return null;
   if (!res.ok) {
     const text = await res.text().catch(() => "");
-    console.error("cf api error", res.status, text);
+    Sentry.captureMessage("cf_api_error", { level: "error", extra: { status: res.status, text } });
     let message = `Cloudflare API error ${res.status}`;
     try {
       // SAFETY: this is Cloudflare's error envelope, and the catch below is
@@ -369,7 +370,7 @@ domainRoutes.post("/", async (c) => {
   } catch (err) {
     // Could not start activation: roll the row back so the domain does not sit
     // stuck in checking_dns with no workflow driving it.
-    console.error("domain activation start failed", err);
+    Sentry.captureException(err);
     await db.delete(schema.domains).where(eq(schema.domains.id, id));
     throw new HTTPException(502, {
       message: "Could not start domain setup, please try again",
