@@ -203,10 +203,20 @@ export interface AppConfig {
   appHost: string;
 }
 
-/** A link/address mutation's response, plus the org's fresh link-quota usage
- * (see #100): the write that changed it already knows the new count, so the
- * client can skip the follow-up GET /links/quota-usage. */
-export type WithQuotaUsage<T> = T & { quotaUsage: number };
+/** The org's fresh link-quota count, plus when it was read. The timestamp
+ * lets the client drop an out-of-order mutation response instead of
+ * overwriting a newer cached count with a stale one: two mutations racing
+ * can have their HTTP responses arrive in the opposite order from the D1
+ * writes that produced them. */
+export interface QuotaUsage {
+  quotaUsage: number;
+  quotaUsageAt: number;
+}
+
+/** A link/address mutation's response, plus its fresh QuotaUsage (see #100):
+ * the write that changed the count already knows it, so the client can skip
+ * the follow-up GET /links/quota-usage. */
+export type WithQuotaUsage<T> = T & QuotaUsage;
 
 export interface LinkDTO extends QrOverrides {
   id: string;

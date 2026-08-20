@@ -134,7 +134,11 @@ app.use("*", async (c, next) => {
   if (!domain) return next();
 
   const path = new URL(c.req.url).pathname;
-  const slug = path.slice(1);
+  // This middleware is a dead end for a host it owns: it never calls next(),
+  // so trimTrailingSlash below never gets a turn at a custom domain's own
+  // path. A trailing slash has to be stripped right here or "/abc/" reads as
+  // a miss and falls all the way through to the domain's root redirect.
+  const slug = path.slice(1).replace(/\/+$/, "");
   if (slug && !slug.includes("/")) {
     const hit = await resolveSlug(c.env, slug, host);
     if (hit && isLive(hit)) return redirectWithClick(c, hit);
@@ -144,11 +148,10 @@ app.use("*", async (c, next) => {
   return c.text("Not found", 404);
 });
 
-// A trailing slash on a GET (`/abc/`) fell through every route below,
-// including custom-domain and shared-domain slug matching, straight to the
-// SPA shell under a 200. This normalizes it to the slash-free path with a
-// redirect, after the custom-domain middleware so a redirected request comes
-// back through it and still resolves as that domain's own slug.
+// A trailing slash on a GET (`/abc/`) fell through the shared-domain slug
+// route below (hono's `/:slug` param match is exact, no trailing segment)
+// straight to the SPA shell under a 200. Custom domains handle their own
+// trailing slash above; this covers everything on the shared host.
 app.use("*", trimTrailingSlash({ alwaysRedirect: true }));
 
 /* ---------------- API ---------------- */

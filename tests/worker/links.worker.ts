@@ -83,12 +83,17 @@ describe("link quota usage returned by mutations (#100)", () => {
     const cookie = await freeOwnerCookie();
 
     const created = await postLink(cookie, { destination: "https://example.com/a" });
-    const link = await jsonBody<{ id: string; quotaUsage: number }>(created);
+    const link = await jsonBody<{ id: string; quotaUsage: number; quotaUsageAt: number }>(created);
     expect(link.quotaUsage).toBe(1);
+    expect(link.quotaUsageAt).toBeGreaterThan(0);
 
     const patched = await patchLink(cookie, link.id, { title: "Renamed" });
-    const updated = await jsonBody<{ quotaUsage: number }>(patched);
+    const updated = await jsonBody<{ quotaUsage: number; quotaUsageAt: number }>(patched);
     expect(updated.quotaUsage).toBe(1);
+    // Each read is a fresh Date.now(), so a later mutation's response never
+    // carries an earlier timestamp: the client uses this to drop a stale,
+    // out-of-order response instead of clobbering a fresher one.
+    expect(updated.quotaUsageAt).toBeGreaterThanOrEqual(link.quotaUsageAt);
 
     const ctx = createExecutionContext();
     const deleted = await worker.fetch(
@@ -100,7 +105,8 @@ describe("link quota usage returned by mutations (#100)", () => {
       ctx,
     );
     await waitOnExecutionContext(ctx);
-    const removed = await jsonBody<{ quotaUsage: number }>(deleted);
+    const removed = await jsonBody<{ quotaUsage: number; quotaUsageAt: number }>(deleted);
     expect(removed.quotaUsage).toBe(0);
+    expect(removed.quotaUsageAt).toBeGreaterThanOrEqual(updated.quotaUsageAt);
   });
 });

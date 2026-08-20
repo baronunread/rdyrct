@@ -24,6 +24,7 @@ import type {
   AdminLinkRow,
   AdminAnonLinkRow,
   AdminActionRow,
+  QuotaUsage,
   WithQuotaUsage,
 } from "@/shared/types";
 
@@ -142,24 +143,40 @@ function linkQueryString(query: LinkQuery): string {
   return params.toString();
 }
 
+interface CachedQuotaUsage {
+  count: number;
+  at: number;
+}
+
 /** Links used against the plan's `links` cap: a link plus its kept-forever
  * aliases each count (a rename's automatic 48h temp_alias never does), so
  * this can run ahead of `useLinks(...).data.length`. */
 export const useLinkQuotaUsage = (orgId: string) =>
-  useQuery<{ count: number }>({
+  useQuery<CachedQuotaUsage>({
     queryKey: ["linkQuotaUsage", orgId],
     queryFn: () => api(`/orgs/${orgId}/links/quota-usage`),
     enabled: !!orgId,
   });
 
+/** Seeds the quota cache from a mutation response instead of a follow-up GET
+ * /links/quota-usage (#100), guarded by when the count was read: two
+ * mutations racing can have their responses arrive in the opposite order
+ * from the writes that produced them, so a response older than what's
+ * already cached is dropped instead of clobbering a fresher count. */
+function applyQuotaUsage(qc: ReturnType<typeof useQueryClient>, orgId: string, quota: QuotaUsage) {
+  qc.setQueryData<CachedQuotaUsage>(["linkQuotaUsage", orgId], (prev) =>
+    prev && prev.at > quota.quotaUsageAt
+      ? prev
+      : { count: quota.quotaUsage, at: quota.quotaUsageAt },
+  );
+}
+
 export function useLinkMutations(orgId: string) {
   const qc = useQueryClient();
-  const invalidate = (quotaUsage: number) => {
+  const invalidate = (quota: QuotaUsage) => {
     qc.invalidateQueries({ queryKey: ["links", orgId] });
     qc.invalidateQueries({ queryKey: ["stats", orgId] });
-    // The write already knows its own effect on the count, so seed the cache
-    // with it instead of a follow-up GET /links/quota-usage (#100).
-    qc.setQueryData(["linkQuotaUsage", orgId], { count: quotaUsage });
+    applyQuotaUsage(qc, orgId, quota);
     // A rename can leave the old slug behind as a temp alias: refetch any
     // addresses list already open for this org's links, not just on remount.
     qc.invalidateQueries({ queryKey: ["addresses", orgId] });
@@ -168,7 +185,7 @@ export function useLinkMutations(orgId: string) {
     mutationFn: (body: LinkInput) =>
       api<WithQuotaUsage<LinkDTO>>(`/orgs/${orgId}/links`, { method: "POST", body }),
     onSuccess: (link) => {
-      invalidate(link.quotaUsage);
+      invalidate(link);
       // Funnel step 7, the activation event (#64). On the hook rather than
       // the call sites, so the dashboard's quick-create and the links page
       // both count and neither can be forgotten.
@@ -178,12 +195,12 @@ export function useLinkMutations(orgId: string) {
   const update = useMutation({
     mutationFn: ({ id, ...body }: LinkInput & { id: string }) =>
       api<WithQuotaUsage<LinkDTO>>(`/orgs/${orgId}/links/${id}`, { method: "PATCH", body }),
-    onSuccess: (link) => invalidate(link.quotaUsage),
+    onSuccess: invalidate,
   });
   const remove = useMutation({
     mutationFn: (id: string) =>
       api<WithQuotaUsage<{ ok: true }>>(`/orgs/${orgId}/links/${id}`, { method: "DELETE" }),
-    onSuccess: (res) => invalidate(res.quotaUsage),
+    onSuccess: invalidate,
   });
   return { create, update, remove };
 }
@@ -223,11 +240,11 @@ export const useAddresses = (orgId: string, linkId: string | null) =>
 
 export function useAddressMutations(orgId: string, linkId: string) {
   const qc = useQueryClient();
-  const invalidate = (quotaUsage: number) => {
+  const invalidate = (quota: QuotaUsage) => {
     qc.invalidateQueries({ queryKey: ["addresses", orgId, linkId] });
     qc.invalidateQueries({ queryKey: ["links", orgId] });
     qc.invalidateQueries({ queryKey: ["linkStats", orgId] });
-    qc.setQueryData(["linkQuotaUsage", orgId], { count: quotaUsage });
+    applyQuotaUsage(qc, orgId, quota);
   };
   const keepForever = useMutation({
     mutationFn: (addressId: string) =>
@@ -235,7 +252,7 @@ export function useAddressMutations(orgId: string, linkId: string) {
         `/orgs/${orgId}/links/${linkId}/addresses/${addressId}/keep-forever`,
         { method: "POST" },
       ),
-    onSuccess: (res) => invalidate(res.quotaUsage),
+    onSuccess: invalidate,
   });
   const remove = useMutation({
     mutationFn: (addressId: string) =>
@@ -243,7 +260,7 @@ export function useAddressMutations(orgId: string, linkId: string) {
         `/orgs/${orgId}/links/${linkId}/addresses/${addressId}/remove`,
         { method: "POST", body: { confirm: true } },
       ),
-    onSuccess: (res) => invalidate(res.quotaUsage),
+    onSuccess: invalidate,
   });
   const promote = useMutation({
     mutationFn: (addressId: string) =>
@@ -253,7 +270,7 @@ export function useAddressMutations(orgId: string, linkId: string) {
           method: "POST",
         },
       ),
-    onSuccess: (link) => invalidate(link.quotaUsage),
+    onSuccess: invalidate,
   });
   const create = useMutation({
     mutationFn: (body: { slug?: string }) =>
@@ -261,7 +278,7 @@ export function useAddressMutations(orgId: string, linkId: string) {
         method: "POST",
         body,
       }),
-    onSuccess: (link) => invalidate(link.quotaUsage),
+    onSuccess: invalidate,
   });
   return { keepForever, remove, promote, create };
 }
