@@ -16,9 +16,13 @@ jobs:
   static:
     runs-on: ubuntu-latest
     steps:
+      # fetch-depth: 0 gives fallow the full git history it needs to diff
+      # against origin/main (see the fallow step below); a shallow checkout
+      # has no origin/main ref to compare against.
       - uses: actions/checkout@v5
         with:
           persist-credentials: false
+          fetch-depth: 0
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.3.4
@@ -35,6 +39,11 @@ jobs:
           bun run check
           bunx tsc -p tsconfig.worker.json --noEmit
           bunx tsc -p tests/worker/tsconfig.json --noEmit
+      # Scoped to what this branch changed, gated against
+      # fallow-baselines/health.json: fails only on findings the branch
+      # introduced, not inherited debt. See AGENTS.md.
+      - name: Fallow audit
+        run: bun run fallow
 
   unit:
     runs-on: ubuntu-latest
