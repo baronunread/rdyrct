@@ -389,6 +389,10 @@ export function AppShell() {
   const onNewOrg = () => (canCreateOrg ? setNewOrgOpen(true) : toast(ORG_LIMIT_MESSAGE, "error"));
   const onSignOut = () =>
     logout.mutate(undefined, {
+      // Explicit, not left to RequireAuth's own redirect: that one appends
+      // ?next=<wherever you were>, right for landing on a stale link, wrong
+      // for a deliberate sign-out.
+      onSuccess: () => navigate({ to: "/login" }),
       onError: (error) => toast(error.message, "error"),
     });
 
