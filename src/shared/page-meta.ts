@@ -25,15 +25,16 @@ export interface PageMeta {
  * visitor who arrived on the public page itself.
  */
 export const DEFAULT_PAGE_META: PageMeta = {
-  title: "rdyrct - branded short links for your team",
-  description: "Branded short links, QR codes, and custom domains with privacy-friendly analytics.",
+  title: "rdyrct - URL shortener and QR code generator",
+  description:
+    "Free URL shortener and QR code generator for teams: branded short links, custom QR codes, and privacy-friendly click analytics.",
 };
 
 export const PUBLIC_PAGE_META = {
   "/": {
-    title: "rdyrct - URL shortener and QR code generator with click analytics",
+    title: "rdyrct - URL shortener and QR code generator",
     description:
-      "Free URL shortener and QR code generator for teams. Branded short links on your own domain, custom QR codes with your logo, and privacy-friendly click analytics with UTM tracking.",
+      "Free URL shortener and QR code generator for teams: branded short links, custom QR codes, and privacy-friendly click analytics.",
   },
   "/qr-code-generator": {
     title: "Free QR code generator with logo - PNG and SVG, no account",

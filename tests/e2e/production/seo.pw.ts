@@ -48,7 +48,7 @@ test("the signed-in app keeps the default head", async ({ request }) => {
   // Nothing behind the login wants search traffic.
   const html = await (await request.get("/dashboard")).text();
 
-  expect(html).toContain("<title>rdyrct - branded short links for your team</title>");
+  expect(html).toContain("<title>rdyrct - URL shortener and QR code generator</title>");
 });
 
 test("robots.txt declares both sitemaps", async ({ request }) => {

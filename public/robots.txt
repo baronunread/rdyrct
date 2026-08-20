@@ -1,3 +1,8 @@
+# search=yes: crawl and index normally. ai-train=no: do not use this site to
+# train a model. use=reference: an AI system may read and cite it, the way
+# llms.txt already asks.
+Content-Signal: search=yes,ai-train=no,use=reference
+
 User-agent: *
 Allow: /
 Disallow: /api/
@@ -12,6 +17,21 @@ Disallow: /admin
 Disallow: /onboarding
 Disallow: /reset-password
 Disallow: /invite/
+
+# Crawlers that train models on what they fetch, refused by name: Content-Signal
+# is a new, not-yet-universal convention, so the well-known bots that scrape for
+# training data get an explicit Disallow too.
+User-agent: GPTBot
+Disallow: /
+
+User-agent: CCBot
+Disallow: /
+
+User-agent: Google-Extended
+Disallow: /
+
+User-agent: Bytespider
+Disallow: /
 
 Sitemap: https://rdyrct.com/sitemap.xml
 Sitemap: https://rdyrct.com/blog/sitemap-index.xml

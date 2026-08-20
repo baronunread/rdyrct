@@ -80,5 +80,10 @@ export function applySecurityHeaders(res: Response): Response {
     "Permissions-Policy",
     "camera=(), microphone=(), geolocation=(), payment=(), usb=()",
   );
+  // frame-ancestors 'none' in the CSP above already blocks framing in every
+  // browser that reads CSP; X-Frame-Options is the same rule for the ones
+  // that only ever learned the older header.
+  out.headers.set("X-Frame-Options", "DENY");
+  out.headers.set("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
   return out;
 }
