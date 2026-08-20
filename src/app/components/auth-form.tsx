@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { Link } from "react-router";
+import { Link } from "@tanstack/react-router";
 import { cn } from "../ui/cn";
 import { Tooltip } from "../ui/tooltip";
 import { passwordScore, passwordTips } from "../lib/password-strength";

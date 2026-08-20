@@ -1,5 +1,5 @@
 import type { ReactNode, ThHTMLAttributes, TdHTMLAttributes } from "react";
-import { Link } from "react-router";
+import { HrefLink } from "../lib/router-search";
 import { cn } from "./cn";
 import { Tooltip } from "./tooltip";
 
@@ -64,13 +64,13 @@ export function SlugLink({
 }) {
   const text = title ? `/${slug} · ${title}` : `/${slug}`;
   return (
-    <Link
-      to={to}
+    <HrefLink
+      href={to}
       title={text}
       className={cn("min-w-0 max-w-full truncate text-accent hover:underline", className)}
     >
       {text}
-    </Link>
+    </HrefLink>
   );
 }
 

@@ -3,7 +3,7 @@ import { errorMessage } from "@/app/lib/error-message";
 import confetti from "canvas-confetti";
 import { AnimatePresence, LazyMotion, domAnimation, m, useReducedMotion } from "motion/react";
 import { useQueryClient } from "@tanstack/react-query";
-import { useNavigate } from "react-router";
+import { useNavigate } from "@tanstack/react-router";
 import {
   useCurrentUser,
   useLinkQuotaUsage,
@@ -878,7 +878,7 @@ export function BillingPage() {
             !org || linkQuota?.count === 0
               ? () => {
                   setShowCelebration(false);
-                  navigate("/dashboard");
+                  navigate({ to: "/dashboard" });
                 }
               : undefined
           }

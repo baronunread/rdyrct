@@ -11,7 +11,7 @@
  * old bookmark, or came back from the blog. They have one question, which is
  * what happened while they were away, so the slot answers that instead.
  */
-import { Link } from "react-router";
+import { Link } from "@tanstack/react-router";
 import { ArrowRight, Plus } from "lucide-react";
 import { useCurrentOrg } from "../lib/current-org";
 import { useCurrentUser, useStats } from "../lib/hooks";

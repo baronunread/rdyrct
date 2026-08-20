@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link } from "react-router";
+import { Link } from "@tanstack/react-router";
 import { Button } from "./button";
 import { CONSENT_KEY, grantAnalyticsConsent, revokeAnalyticsConsent } from "../lib/posthog";
 

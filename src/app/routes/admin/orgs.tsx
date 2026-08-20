@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { ArrowRight, Ellipsis, Eye, Trash2 } from "lucide-react";
-import { Link } from "react-router";
+import { HrefLink } from "../../lib/router-search";
 import { Button } from "../../ui/button";
 import { useAdminOrgDetail, useAdminOrgs } from "../../lib/hooks";
 import { api } from "../../lib/api";
@@ -93,11 +93,11 @@ function OrgLinksRecap({
           <span className="font-bold tnum">{formatNumber(clicks)}</span> clicks between them
         </p>
       </div>
-      <Link to={`/admin/links?org=${encodeURIComponent(orgId)}`} onClick={onNavigate}>
+      <HrefLink href={`/admin/links?org=${encodeURIComponent(orgId)}`} onClick={onNavigate}>
         <Button size="sm" variant="outline">
           Open in Links <ArrowRight size={13} />
         </Button>
-      </Link>
+      </HrefLink>
     </div>
   );
 }

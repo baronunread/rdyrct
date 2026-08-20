@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { useLocation } from "react-router";
+import { useLocation } from "@tanstack/react-router";
 
 /**
  * A client-side navigation to a hash (the header's FAQ link, clicked from a
@@ -12,6 +12,6 @@ export function useScrollToHash() {
   const { hash } = useLocation();
   useEffect(() => {
     if (!hash) return;
-    document.getElementById(hash.slice(1))?.scrollIntoView({ behavior: "smooth" });
+    document.getElementById(hash)?.scrollIntoView({ behavior: "smooth" });
   }, [hash]);
 }

@@ -1,13 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { useForm, Controller } from "react-hook-form";
 import { valibotResolver } from "@hookform/resolvers/valibot";
-import {
-  Link,
-  useLocation,
-  useNavigate,
-  useSearchParams,
-  type NavigateFunction,
-} from "react-router";
+import { Link, useNavigate } from "@tanstack/react-router";
+import { useSearchParams, HrefLink } from "../lib/router-search";
 import { useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { Check } from "lucide-react";
 import { AuthCard, PasswordMeter } from "../components/auth-form";
@@ -306,7 +301,9 @@ function AuthFormView({
         </Button>
         <p className="text-center text-xs text-muted">
           {copy.footerPrompt}{" "}
-          <Link to={`${copy.footerTo}?next=${encodeURIComponent(next)}`}>{copy.footerLabel}</Link>
+          <HrefLink href={`${copy.footerTo}?next=${encodeURIComponent(next)}`}>
+            {copy.footerLabel}
+          </HrefLink>
         </p>
       </form>
     </AuthCard>
@@ -349,7 +346,7 @@ interface SubmitDeps {
   goVerify: (email: string) => Promise<void>;
   failSubmit: (message: string) => void;
   qc: QueryClient;
-  navigate: NavigateFunction;
+  navigate: ReturnType<typeof useNavigate>;
   next: string;
   /** Runs a Cap-guarded request, re-solving once if the token is refused. */
   capGuarded: <T>(run: (headers: Record<string, string>) => Promise<T>) => Promise<T>;
@@ -361,7 +358,7 @@ async function trySignIn(email: string, password: string, deps: SubmitDeps) {
     await deps.qc.refetchQueries({ queryKey: ["user"] });
     const isAdmin = deps.qc.getQueryData<CurrentUser | null>(["user"])?.user.isAdmin ?? false;
     posthog.capture("user_signed_in");
-    deps.navigate(sanitizeNext(deps.next, isAdmin), { replace: true });
+    deps.navigate({ href: sanitizeNext(deps.next, isAdmin), replace: true });
     return;
   }
   if (signInError.code === "EMAIL_NOT_VERIFIED") {
@@ -398,7 +395,7 @@ interface VerifyDeps {
   authEmail: string;
   authPassword: string;
   next: string;
-  navigate: NavigateFunction;
+  navigate: ReturnType<typeof useNavigate>;
   toast: ReturnType<typeof useToast>;
 }
 
@@ -412,7 +409,7 @@ async function establishSessionAfterVerify(deps: VerifyDeps): Promise<boolean> {
   if (!deps.authPassword) {
     clearPending();
     deps.toast("Email verified. Sign in to continue.");
-    deps.navigate(`/login?next=${encodeURIComponent(deps.next)}`, { replace: true });
+    deps.navigate({ href: `/login?next=${encodeURIComponent(deps.next)}`, replace: true });
     return false;
   }
   const { error: signInError } = await authClient.signIn.email({
@@ -430,7 +427,6 @@ async function establishSessionAfterVerify(deps: VerifyDeps): Promise<boolean> {
  * flows, and the post-auth redirect. Everything AuthPage's views need. */
 function useAuthFlow(mode: "login" | "signup") {
   const navigate = useNavigate();
-  const location = useLocation();
   const [params] = useSearchParams();
   const qc = useQueryClient();
   const toast = useToast();
@@ -461,11 +457,9 @@ function useAuthFlow(mode: "login" | "signup") {
 
   const [resent, setResent] = useState(false);
 
-  // SAFETY: react-router types navigation state as unknown, and the only
-  // writer of this one is RequireAuth, which puts the path it bounced from
-  // there. The line below re-checks that whatever arrived is a local path.
-  const bouncedFrom = (location.state as { from?: string } | null)?.from;
-  const rawNext = readPending()?.next ?? params.get("next") ?? bouncedFrom ?? "/dashboard";
+  // RequireAuth bounces a signed-out visitor to /login?next=<path>, so the
+  // query string is the only source for where to send them back.
+  const rawNext = readPending()?.next ?? params.get("next") ?? "/dashboard";
   const next = rawNext.startsWith("/") && !rawNext.startsWith("//") ? rawNext : "/dashboard";
 
   const { data: user } = useCurrentUser();
@@ -477,7 +471,7 @@ function useAuthFlow(mode: "login" | "signup") {
     // refetch resolves, skipping the transition entirely.
     if (!user || verifyPhase !== "idle") return;
     clearPending();
-    navigate(sanitizeNext(next, user.user.isAdmin), { replace: true });
+    navigate({ href: sanitizeNext(next, user.user.isAdmin), replace: true });
   }, [user, navigate, next, verifyPhase]);
 
   const goVerify = async (email: string) => {
@@ -568,7 +562,7 @@ function useAuthFlow(mode: "login" | "signup") {
       const isAdmin = qc.getQueryData<CurrentUser | null>(["user"])?.user.isAdmin ?? false;
       setVerifyPhase("leaving");
       await new Promise((resolve) => setTimeout(resolve, 300));
-      navigate(sanitizeNext(next, isAdmin), { replace: true });
+      navigate({ href: sanitizeNext(next, isAdmin), replace: true });
       return true;
     } finally {
       setBusy(false);

@@ -1,6 +1,7 @@
 // fallow-ignore-file code-duplication -- pricing table rows share structural pattern
 import type { ReactNode } from "react";
-import { Link } from "react-router";
+import { Link } from "@tanstack/react-router";
+import { HrefLink } from "../lib/router-search";
 import {
   Link2,
   QrCode,
@@ -292,13 +293,13 @@ function MobilePlans({ paidTo }: { paidTo: (p: "hobby" | "pro") => string }) {
         `${PLAN_LIMITS.hobby.analyticsDays}-day click analytics`,
       ],
       cta: (
-        <Link
-          to={paidTo("hobby")}
+        <HrefLink
+          href={paidTo("hobby")}
           onClick={() => trackCta("pricing_hobby")}
           className={buttonClass({ variant: "outline", size: "sm", className: "w-full" })}
         >
           Start Hobby
-        </Link>
+        </HrefLink>
       ),
     },
     {
@@ -315,13 +316,13 @@ function MobilePlans({ paidTo }: { paidTo: (p: "hobby" | "pro") => string }) {
         "Direct email support",
       ],
       cta: (
-        <Link
-          to={paidTo("pro")}
+        <HrefLink
+          href={paidTo("pro")}
           onClick={() => trackCta("pricing_pro")}
           className={buttonClass({ variant: "primary", size: "sm", className: "w-full" })}
         >
           Start Pro
-        </Link>
+        </HrefLink>
       ),
     },
   ];
@@ -506,22 +507,22 @@ export function PricingSection() {
                 </Link>
               </Td>
               <Td>
-                <Link
-                  to={paidTo("hobby")}
+                <HrefLink
+                  href={paidTo("hobby")}
                   onClick={() => trackCta("pricing_hobby")}
                   className={buttonClass({ variant: "outline", size: "sm", className: "w-full" })}
                 >
                   Start Hobby
-                </Link>
+                </HrefLink>
               </Td>
               <Cell tier="pro">
-                <Link
-                  to={paidTo("pro")}
+                <HrefLink
+                  href={paidTo("pro")}
                   onClick={() => trackCta("pricing_pro")}
                   className={buttonClass({ variant: "primary", size: "sm", className: "w-full" })}
                 >
                   Start Pro
-                </Link>
+                </HrefLink>
               </Cell>
             </tr>
           </tbody>
@@ -789,13 +790,13 @@ function HeroSection({
               in, where the card already carries "Open dashboard" and two of
               them side by side is just a stutter. */}
           {!authed && (
-            <Link
-              to={ctaTo}
+            <HrefLink
+              href={ctaTo}
               onClick={() => trackCta("hero_primary")}
               className={buttonClass({ variant: "outline", className: "h-11 px-6 text-base" })}
             >
               {ctaLabel}
-            </Link>
+            </HrefLink>
           )}
           <a
             href="#analytics"
@@ -943,13 +944,13 @@ function CustomDomainSection() {
           />
         </div>
 
-        <Link
-          to={paidTo("hobby")}
+        <HrefLink
+          href={paidTo("hobby")}
           onClick={() => trackCta("second_screen_domain")}
           className={buttonClass({ variant: "primary", size: "sm" })}
         >
           Put your domain on it <ArrowRight size={14} />
-        </Link>
+        </HrefLink>
       </div>
     </Section>
   );
@@ -1087,13 +1088,13 @@ function FinalCtaSection({ ctaTo, ctaLabel }: { ctaTo: string; ctaLabel: string 
           Create your first short link on the free plan. No credit card, no visitor tracking, no
           servers to run.
         </p>
-        <Link
-          to={ctaTo}
+        <HrefLink
+          href={ctaTo}
           onClick={() => trackCta("final_cta")}
           className={buttonClass({ variant: "primary", className: "h-11 px-6 text-base" })}
         >
           {ctaLabel}
-        </Link>
+        </HrefLink>
       </div>
     </Section>
   );
@@ -1171,13 +1172,13 @@ function PricingTeaser() {
               <p className="tnum mt-1 text-2xl font-bold">{price}</p>
               <p className="mt-1 text-sm text-muted">{pitch}</p>
             </div>
-            <Link
-              to={to}
+            <HrefLink
+              href={to}
               onClick={onClick}
               className={buttonClass({ variant, size: "sm", className: "mt-auto w-full" })}
             >
               {cta}
-            </Link>
+            </HrefLink>
           </div>
         ))}
       </div>

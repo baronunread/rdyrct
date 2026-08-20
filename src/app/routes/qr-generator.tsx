@@ -17,7 +17,7 @@
  * version of it that agrees with what the page says about itself.
  */
 import { useState } from "react";
-import { Link } from "react-router";
+import { Link } from "@tanstack/react-router";
 import { ArrowRight, ChevronDown, ShieldCheck } from "lucide-react";
 import { buttonClass } from "../ui/button-class";
 import { Input } from "../ui/field";

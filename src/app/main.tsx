@@ -1,6 +1,14 @@
 import { StrictMode, Suspense, lazy, useEffect } from "react";
 import { createRoot } from "react-dom/client";
-import { BrowserRouter, Routes, Route, Navigate, Outlet, useLocation } from "react-router";
+import {
+  createRootRoute,
+  createRoute,
+  createRouter,
+  redirect,
+  RouterProvider,
+  Outlet,
+  useLocation,
+} from "@tanstack/react-router";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import "@fontsource/jetbrains-mono/latin-400.css";
 import "@fontsource/jetbrains-mono/latin-700.css";
@@ -125,6 +133,217 @@ function PublicPages() {
   );
 }
 
+const rootRoute = createRootRoute({
+  component: () => (
+    // The card pages get a blank fallback; the two header pages and the app
+    // shell branch below bring their own. The consent banner sits inside the
+    // boundary so it waits for the page it belongs to: on its own over an
+    // empty screen it read as the whole site.
+    <Suspense fallback={null}>
+      <Outlet />
+      <ConsentBanner />
+    </Suspense>
+  ),
+  notFoundComponent: NotFound,
+});
+
+// Pathless layout: adds the marketing header/scroll-reset wrapper without an
+// extra URL segment.
+const publicLayoutRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  id: "public-layout",
+  component: PublicPages,
+});
+
+const landingRoute = createRoute({
+  getParentRoute: () => publicLayoutRoute,
+  path: "/",
+  component: LandingPage,
+});
+const qrGeneratorRoute = createRoute({
+  getParentRoute: () => publicLayoutRoute,
+  path: "/qr-code-generator",
+  component: QrGeneratorPage,
+});
+const pricingRoute = createRoute({
+  getParentRoute: () => publicLayoutRoute,
+  path: "/pricing",
+  component: PricingPage,
+});
+const privacyRoute = createRoute({
+  getParentRoute: () => publicLayoutRoute,
+  path: "/privacy",
+  component: PrivacyPage,
+});
+const termsRoute = createRoute({
+  getParentRoute: () => publicLayoutRoute,
+  path: "/terms",
+  component: TermsPage,
+});
+
+const loginRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/login",
+  component: () => <AuthPage mode="login" />,
+});
+const signupRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/signup",
+  component: () => <AuthPage mode="signup" />,
+});
+const resetPasswordRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/reset-password",
+  component: ResetPasswordPage,
+});
+const inviteRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/invite/$token",
+  component: InvitePage,
+});
+
+// onboarding is gone: the app renders a create-org empty state instead;
+// keep stale links working
+const onboardingRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/onboarding",
+  beforeLoad: () => {
+    throw redirect({ to: "/dashboard" });
+  },
+});
+
+// authenticated app: root keywords, no /app prefix, no org id
+const appShellRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  id: "app-shell",
+  component: () => (
+    <Suspense fallback={<AppShellSkeleton />}>
+      <RequireAuth>
+        <AppShell />
+      </RequireAuth>
+    </Suspense>
+  ),
+});
+
+const dashboardRoute = createRoute({
+  getParentRoute: () => appShellRoute,
+  path: "/dashboard",
+  component: Dashboard,
+});
+const analyticsRoute = createRoute({
+  getParentRoute: () => appShellRoute,
+  path: "/analytics",
+  component: Analytics,
+});
+const linksRoute = createRoute({
+  getParentRoute: () => appShellRoute,
+  path: "/links",
+  component: LinksPage,
+});
+const linkDetailRoute = createRoute({
+  getParentRoute: () => appShellRoute,
+  path: "/links/$slug",
+  component: LinkDetailPage,
+});
+const membersRoute = createRoute({
+  getParentRoute: () => appShellRoute,
+  path: "/members",
+  component: MembersPage,
+});
+const billingRoute = createRoute({
+  getParentRoute: () => appShellRoute,
+  path: "/billing",
+  component: BillingPage,
+});
+const domainsRoute = createRoute({
+  getParentRoute: () => appShellRoute,
+  path: "/domains",
+  component: DomainsPage,
+});
+const settingsRoute = createRoute({
+  getParentRoute: () => appShellRoute,
+  path: "/settings",
+  component: SettingsPage,
+});
+
+// One guard for the whole section, and one place for its sub-navigation.
+// Four separate RequireAdmin routes was four chances to forget one, and one
+// of them already had been (#67).
+const adminRoute = createRoute({
+  getParentRoute: () => appShellRoute,
+  path: "/admin",
+  component: () => (
+    <RequireAdmin>
+      <AdminLayout />
+    </RequireAdmin>
+  ),
+});
+const adminUsageRoute = createRoute({
+  getParentRoute: () => adminRoute,
+  path: "/",
+  component: AdminUsagePage,
+});
+const adminLinksRoute = createRoute({
+  getParentRoute: () => adminRoute,
+  path: "links",
+  component: AdminLinksPage,
+});
+const adminOrgsRoute = createRoute({
+  getParentRoute: () => adminRoute,
+  path: "orgs",
+  component: AdminOrgsPage,
+});
+const adminUsersRoute = createRoute({
+  getParentRoute: () => adminRoute,
+  path: "users",
+  component: AdminUsersPage,
+});
+const adminAuditRoute = createRoute({
+  getParentRoute: () => adminRoute,
+  path: "audit",
+  component: AdminAuditPage,
+});
+
+const routeTree = rootRoute.addChildren([
+  publicLayoutRoute.addChildren([
+    landingRoute,
+    qrGeneratorRoute,
+    pricingRoute,
+    privacyRoute,
+    termsRoute,
+  ]),
+  loginRoute,
+  signupRoute,
+  resetPasswordRoute,
+  inviteRoute,
+  onboardingRoute,
+  appShellRoute.addChildren([
+    dashboardRoute,
+    analyticsRoute,
+    linksRoute,
+    linkDetailRoute,
+    membersRoute,
+    billingRoute,
+    domainsRoute,
+    settingsRoute,
+    adminRoute.addChildren([
+      adminUsageRoute,
+      adminLinksRoute,
+      adminOrgsRoute,
+      adminUsersRoute,
+      adminAuditRoute,
+    ]),
+  ]),
+]);
+
+const router = createRouter({ routeTree, defaultPreload: false });
+
+declare module "@tanstack/react-router" {
+  interface Register {
+    router: typeof router;
+  }
+}
+
 const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: 1, refetchOnWindowFocus: false } },
 });
@@ -134,78 +353,7 @@ createRoot(document.getElementById("root")!).render(
     <QueryClientProvider client={queryClient}>
       <ToastProvider>
         <ErrorBoundary>
-          <BrowserRouter>
-            {/* The card pages get a blank fallback; the two header pages and
-              the app shell branch below bring their own. The consent banner
-              sits inside the boundary so it waits for the page it belongs to:
-              on its own over an empty screen it read as the whole site. */}
-            <Suspense fallback={null}>
-              <Routes>
-                {/* public */}
-                <Route element={<PublicPages />}>
-                  <Route path="/" element={<LandingPage />} />
-                  <Route path="/qr-code-generator" element={<QrGeneratorPage />} />
-                  <Route path="/pricing" element={<PricingPage />} />
-                  <Route path="/privacy" element={<PrivacyPage />} />
-                  <Route path="/terms" element={<TermsPage />} />
-                </Route>
-                <Route path="/login" element={<AuthPage mode="login" />} />
-                <Route path="/signup" element={<AuthPage mode="signup" />} />
-                <Route path="/reset-password" element={<ResetPasswordPage />} />
-                <Route path="/invite/:token" element={<InvitePage />} />
-
-                {/* onboarding is gone: the app renders a create-org empty state
-                  instead; keep stale links working */}
-                <Route path="/onboarding" element={<Navigate to="/dashboard" replace />} />
-
-                {/* authenticated app: root keywords, no /app prefix, no org id */}
-                <Route
-                  element={
-                    <Suspense fallback={<AppShellSkeleton />}>
-                      <RequireAuth>
-                        <AppShell />
-                      </RequireAuth>
-                    </Suspense>
-                  }
-                >
-                  <Route path="/dashboard" element={<Dashboard />} />
-                  <Route path="/analytics" element={<Analytics />} />
-                  <Route path="/links" element={<LinksPage />} />
-                  <Route path="/links/:slug" element={<LinkDetailPage />} />
-                  <Route path="/members" element={<MembersPage />} />
-                  <Route path="/billing" element={<BillingPage />} />
-                  <Route path="/domains" element={<DomainsPage />} />
-                  <Route path="/settings" element={<SettingsPage />} />
-                  {/* One guard for the whole section, and one place for its
-                      sub-navigation. Four separate RequireAdmin routes was
-                      four chances to forget one, and one of them already had
-                      been (#67). */}
-                  <Route
-                    path="/admin"
-                    element={
-                      <RequireAdmin>
-                        <AdminLayout />
-                      </RequireAdmin>
-                    }
-                  >
-                    {/* Absolute, not relative. React Router accepts either
-                        for a child whose path starts with its parent's, and
-                        the reserved-slug drift guard reads these strings: a
-                        bare "orgs" reads to it as a top-level route and it
-                        rightly asks why "orgs" is not a reserved slug. */}
-                    <Route index element={<AdminUsagePage />} />
-                    <Route path="/admin/links" element={<AdminLinksPage />} />
-                    <Route path="/admin/orgs" element={<AdminOrgsPage />} />
-                    <Route path="/admin/users" element={<AdminUsersPage />} />
-                    <Route path="/admin/audit" element={<AdminAuditPage />} />
-                  </Route>
-                </Route>
-
-                <Route path="*" element={<NotFound />} />
-              </Routes>
-              <ConsentBanner />
-            </Suspense>
-          </BrowserRouter>
+          <RouterProvider router={router} />
         </ErrorBoundary>
       </ToastProvider>
     </QueryClientProvider>

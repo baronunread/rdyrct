@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
-import { Link, useParams, useSearchParams } from "react-router";
+import { Link, useParams } from "@tanstack/react-router";
+import { useSearchParams } from "../lib/router-search";
 import { ArrowLeft, ExternalLink } from "lucide-react";
 import { useLinkStats, useCurrentUser } from "../lib/hooks";
 import { shortDate } from "../lib/dates";
@@ -94,7 +95,7 @@ function LinkInfoCard({
 }
 
 export function LinkDetailPage() {
-  const { slug } = useParams<{ slug: string }>();
+  const { slug } = useParams({ strict: false });
   const [searchParams] = useSearchParams();
   const domain = searchParams.get("domain");
   const { org } = useCurrentOrg();

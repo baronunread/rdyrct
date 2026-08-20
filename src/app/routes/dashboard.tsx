@@ -1,7 +1,8 @@
 import { useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
+import { dashboardView } from "./dashboard-view";
 import { valibotResolver } from "@hookform/resolvers/valibot";
-import { Link } from "react-router";
+import { HrefLink } from "../lib/router-search";
 import { useStats, useLinks, useMembers, useLinkMutations, useRecentClicks } from "../lib/hooks";
 import { useOrgLimits } from "../lib/org-limits";
 import { ApiError } from "../lib/api";
@@ -126,25 +127,6 @@ function DashboardBody({
       </div>
     </>
   );
-}
-
-export type DashboardView = "userLoading" | "noOrg" | "statsLoading" | "statsError" | "ready";
-
-/** Which of the dashboard's five states applies, in the order they resolve:
- * who's signed in, then their org, then that org's numbers. Pulled out of
- * the component so the branching is a plain function fallow can score (and
- * test) on its own, away from JSX. */
-export function dashboardView(
-  userLoading: boolean,
-  hasOrg: boolean,
-  statsLoading: boolean,
-  hasStats: boolean,
-): DashboardView {
-  if (userLoading) return "userLoading";
-  if (!hasOrg) return "noOrg";
-  if (statsLoading) return "statsLoading";
-  if (!hasStats) return "statsError";
-  return "ready";
 }
 
 /** Nothing to show until there is an organization and its numbers have
@@ -354,9 +336,9 @@ function RecentClicksCard({ clicks }: { clicks: RecentClick[] }) {
           {clicks.map((click) => (
             <li key={click.id} className="flex items-center justify-between gap-3 text-xs">
               <span className="min-w-0 truncate">
-                <Link to={linkPath(click)} className="text-accent hover:underline">
+                <HrefLink href={linkPath(click)} className="text-accent hover:underline">
                   /{click.slug}
-                </Link>
+                </HrefLink>
                 <span className="text-muted"> · {click.referrer || "direct"}</span>
               </span>
               <span className="tnum shrink-0 text-muted">
@@ -389,9 +371,9 @@ function ActivityCard({
               <span className="min-w-0 truncate">
                 <span className="font-bold">{creatorName(l.createdBy)}</span>
                 {" created "}
-                <Link to={linkPath(l)} className="text-accent hover:underline">
+                <HrefLink href={linkPath(l)} className="text-accent hover:underline">
                   /{l.slug}
-                </Link>
+                </HrefLink>
               </span>
               <span className="shrink-0 text-muted">{relativeDate(l.createdAt)}</span>
             </li>

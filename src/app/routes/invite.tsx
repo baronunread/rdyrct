@@ -1,4 +1,5 @@
-import { Link, useNavigate, useParams } from "react-router";
+import { useNavigate, useParams } from "@tanstack/react-router";
+import { HrefLink } from "../lib/router-search";
 import { errorMessage } from "@/app/lib/error-message";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../lib/api";
@@ -34,7 +35,8 @@ function InviteAuthActions({
         Sign in to accept
       </Button>
       <p className="text-xs text-muted">
-        New here? <Link to={`/signup?next=${encodeURIComponent(here)}`}>Create an account</Link>
+        New here?{" "}
+        <HrefLink href={`/signup?next=${encodeURIComponent(here)}`}>Create an account</HrefLink>
       </p>
     </>
   );
@@ -68,7 +70,7 @@ function InviteDetails({
 }
 
 export function InvitePage() {
-  const { token } = useParams<{ token: string }>();
+  const { token } = useParams({ strict: false });
   const currentUser = useCurrentUser();
   const navigate = useNavigate();
   const qc = useQueryClient();
@@ -89,7 +91,7 @@ export function InvitePage() {
       await qc.invalidateQueries({ queryKey: ["user"] });
       posthog.capture("organization_invite_accepted");
       setOrg(res.orgId);
-      navigate("/dashboard");
+      navigate({ to: "/dashboard" });
     } catch (e) {
       toast(errorMessage(e), "error");
     }
@@ -110,7 +112,7 @@ export function InvitePage() {
             preview={preview.data!}
             signedIn={!!currentUser.data}
             accept={accept}
-            onSignIn={() => navigate(`/login?next=${encodeURIComponent(here)}`)}
+            onSignIn={() => navigate({ href: `/login?next=${encodeURIComponent(here)}` })}
             here={here}
           />
         )}

@@ -89,7 +89,10 @@ describe("SLUG_RE / RESERVED_SLUGS", () => {
   // new route added without a matching entry fails here instead of becoming
   // a claimable slug.
   test("every top-level route is reserved (drift guard)", () => {
-    const reactRoutes = topSegments(readSource("src/app/main.tsx"), /path="([^"]+)"/g);
+    // Only absolute paths (leading "/"): TanStack Router's code-based routes
+    // also carry relative child paths ("links", "orgs", ...) for routes
+    // nested under an already-reserved parent, and those aren't top-level.
+    const reactRoutes = topSegments(readSource("src/app/main.tsx"), /path:\s*"(\/[^"]*)"/g);
     const workerRoutes = topSegments(
       readSource("src/worker/index.ts"),
       /\bapp\.(?:all|get|post|put|patch|delete|on|route|use)\(\s*(?:\[[^\]]*\]\s*,\s*)?"([^"]+)"/g,
