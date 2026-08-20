@@ -1,4 +1,4 @@
-import { StrictMode, Suspense, lazy, useEffect } from "react";
+import { StrictMode, Suspense, lazy, useLayoutEffect } from "react";
 import { createRoot } from "react-dom/client";
 import {
   createRootRoute,
@@ -105,19 +105,34 @@ const NotFound = lazy(() => import("./routes/not-found").then((m) => ({ default:
  * have no header, and showing one would be a flash of the wrong thing.
  *
  * A navigation between these pages runs as a view transition (see the
- * viewTransition Links in landing-header.tsx, footer.tsx and elsewhere),
- * which softens the swap but does nothing about scroll position: a fresh
- * document load always starts at the top, a client-side route change keeps
- * wherever the old page had scrolled to, so leaving mid-FAQ on "/" and
- * clicking Pricing landed mid-table on "/pricing" instead of at its top. A
- * hash still gets to choose its own landing spot (see useScrollToHash,
- * called by the page that owns the target section, since it needs that
- * section to exist first); this only resets the rest.
+ * viewTransition Links in landing-header.tsx, footer.tsx and elsewhere): a
+ * fresh document load always starts at the top, but a client-side route
+ * change keeps wherever the old page had scrolled to, so leaving mid-FAQ on
+ * "/" and clicking Pricing landed mid-table on "/pricing" instead of at its
+ * top. A hash still gets to choose its own landing spot (see
+ * useScrollToHash, called by the page that owns the target section, since
+ * it needs that section to exist first); this only resets the rest.
+ *
+ * useLayoutEffect, not useEffect: the router settles its view transition's
+ * "after" snapshot from its own useLayoutEffect (Transitioner.tsx), and the
+ * browser captures that snapshot as soon as this commit's layout effects are
+ * done, before a later paint. A passive effect runs after that capture, so
+ * the reset would show up as a second, separate jump once the crossfade had
+ * already finished; a layout effect lands inside the same commit the
+ * transition is watching, so the scroll and the content change as one move.
+ *
+ * `behavior: "instant"`, not the two-argument form: styles.css turns on
+ * `scroll-behavior: smooth` site-wide, which `window.scrollTo(x, y)` inherits
+ * (it's shorthand for `behavior: "auto"`, and "auto" means "whatever the
+ * CSSOM says"). An inherited smooth scroll still had distance left to cover
+ * once the transition's snapshot was already taken, so the crossfade landed
+ * on the new page and then visibly crept the rest of the way to the top.
+ * "instant" is the one value smooth scroll-behavior can't override.
  */
 function PublicPages() {
   const { pathname, hash } = useLocation();
-  useEffect(() => {
-    if (!hash) window.scrollTo(0, 0);
+  useLayoutEffect(() => {
+    if (!hash) window.scrollTo({ top: 0, left: 0, behavior: "instant" });
   }, [pathname, hash]);
 
   return (
