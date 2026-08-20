@@ -11,7 +11,6 @@
  * two places to search is one place too many at 2am.
  */
 import { useState } from "react";
-import { Link } from "react-router";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Ban, Ellipsis, ExternalLink, ShieldQuestionMark, Trash2, Undo2 } from "lucide-react";
 import { useAdminAnonLinks, useAdminLinks } from "../../lib/hooks";
@@ -33,7 +32,7 @@ import { Pager } from "../../ui/pagination";
 import { useDebounced } from "../../lib/use-debounced";
 import { SortTh } from "../../ui/sort-th";
 import { sortRows } from "../../lib/sort";
-import { useSearchParams } from "react-router";
+import { useSearchParams, HrefLink } from "../../lib/router-search";
 import { cn } from "../../ui/cn";
 import { Spinner } from "../../ui/spinner";
 
@@ -244,12 +243,12 @@ function LinkRow({ link, ...actions }: { link: AdminLinkRow } & RowActions) {
       <Td className="truncate">
         {/* Straight to that organization's links, which is the next question
             after "who owns this". */}
-        <Link
-          to={`/admin/links?org=${encodeURIComponent(link.orgId)}`}
+        <HrefLink
+          href={`/admin/links?org=${encodeURIComponent(link.orgId)}`}
           className="block truncate hover:text-accent hover:underline"
         >
           {link.orgName}
-        </Link>
+        </HrefLink>
       </Td>
       <Td>
         <RiskBadge score={link.riskScore} reasons={link.riskReasons} />

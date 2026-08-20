@@ -1,4 +1,4 @@
-import type { NavigateFunction } from "react-router";
+import type { useNavigate } from "@tanstack/react-router";
 import { authClient } from "./auth-client";
 import { friendlyAuthError } from "./auth-errors";
 
@@ -23,7 +23,7 @@ export async function submitResetPassword({
   confirm: string;
   token: string;
   toast: (message: string) => void;
-  navigate: NavigateFunction;
+  navigate: ReturnType<typeof useNavigate>;
   failSubmit: (message: string) => void;
   setBusy: (busy: boolean) => void;
 }) {
@@ -40,7 +40,7 @@ export async function submitResetPassword({
       return;
     }
     toast("Password updated, sign in with your new password");
-    navigate("/login", { replace: true });
+    navigate({ to: "/login", replace: true });
   } finally {
     setBusy(false);
   }

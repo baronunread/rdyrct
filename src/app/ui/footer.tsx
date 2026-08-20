@@ -1,4 +1,4 @@
-import { Link } from "react-router";
+import { Link } from "@tanstack/react-router";
 
 export const GITHUB_URL = "https://github.com/baronunread/rdyrct";
 export const SUPPORT_EMAIL = "support@mail.rdyrct.com";

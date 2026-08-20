@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { errorMessage } from "@/app/lib/error-message";
-import { Link } from "react-router";
+import { Link } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCurrentUser } from "../lib/hooks";
 import { useCurrentOrg } from "../lib/current-org";

@@ -1,6 +1,6 @@
 import { Suspense, useEffect, useRef, useState, type ReactNode } from "react";
 import { errorMessage } from "@/app/lib/error-message";
-import { NavLink, Navigate, Outlet, useNavigate, useLocation } from "react-router";
+import { Link, Navigate, Outlet, useNavigate, useLocation } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, LazyMotion, domAnimation, m } from "motion/react";
 import { Globe, ChevronsUpDown, Plus, Check, LogOut } from "lucide-react";
@@ -21,7 +21,6 @@ import { Field, Input } from "../ui/field";
 
 import { AppShellSkeleton, RouteSkeleton } from "../components/skeletons";
 import { appNavItems } from "../components/nav-items";
-import { cn } from "../ui/cn";
 import { NotFound } from "./not-found";
 import { PLAN_LIMITS, type User, type UserOrg } from "@/shared/types";
 import posthog from "../lib/posthog";
@@ -41,8 +40,12 @@ export function RequireAuth({ children }: { children: ReactNode }) {
   const shell = useShellUser();
   const location = useLocation();
   // Only the query says somebody is signed out, and only once it has spoken.
-  if (!currentUser.isLoading && !currentUser.data)
-    return <Navigate to="/login" state={{ from: location.pathname + location.search }} replace />;
+  if (!currentUser.isLoading && !currentUser.data) {
+    // href fully drives navigation (it wins over `to`, see buildLocation);
+    // `to` is only here to satisfy the router's typed-route requirement.
+    const dest = `/login?next=${encodeURIComponent(location.pathname + location.searchStr)}`;
+    return <Navigate to={dest} href={dest} replace />;
+  }
   // The cache carries the shell through the wait. A browser that has none is
   // on its first visit, and still gets the skeleton.
   if (!shell) return <AppShellSkeleton />;
@@ -58,12 +61,11 @@ export function RequireAdmin({ children }: { children: ReactNode }) {
   return children;
 }
 
-function navClass({ isActive }: { isActive: boolean }) {
-  return cn(
-    "flex items-center gap-2.5 rounded-md px-2.5 py-2 text-sm transition-colors",
-    isActive ? "bg-surface-2 text-accent" : "text-muted hover:bg-surface-2/60 hover:text-text",
-  );
-}
+const navLinkProps = {
+  className: "flex items-center gap-2.5 rounded-md px-2.5 py-2 text-sm transition-colors",
+  activeProps: { className: "bg-surface-2 text-accent" },
+  inactiveProps: { className: "text-muted hover:bg-surface-2/60 hover:text-text" },
+};
 
 function OrgSwitcherMenu({
   org,
@@ -117,9 +119,9 @@ function PlatformNav({ visible }: { visible: boolean }) {
     <div className="mt-2 px-3">
       <p className="px-2.5 pb-1 text-3xs tracking-widest text-muted uppercase">Admin</p>
       <nav className="flex flex-col gap-0.5">
-        <NavLink to="/admin" className={navClass}>
+        <Link to="/admin" {...navLinkProps}>
           <Globe size={15} /> Platform
-        </NavLink>
+        </Link>
       </nav>
     </div>
   );
@@ -170,9 +172,9 @@ function AppSidebar({
           when no org exists yet, and billing is per-user */}
       <nav className="flex flex-col gap-0.5 px-3 py-2">
         {appNavItems.map(({ to, icon: Icon, label }) => (
-          <NavLink key={to} to={to} className={navClass}>
+          <Link key={to} to={to} {...navLinkProps}>
             <Icon size={15} /> {label}
-          </NavLink>
+          </Link>
         ))}
       </nav>
 
@@ -350,7 +352,7 @@ export function AppShell() {
     // A link detail page's slug may not exist under the new org; every other
     // route (including platform admin) has nothing org-specific in its URL,
     // so switching org there should leave the user right where they are.
-    if (window.location.pathname.startsWith("/links/")) navigate("/dashboard");
+    if (window.location.pathname.startsWith("/links/")) navigate({ to: "/dashboard" });
   };
 
   const createOrg = async () => {
@@ -370,7 +372,7 @@ export function AppShell() {
       // first prompt, and create their org from the switcher instead.
       await claimPendingLinks(created.id);
       setOrg(created.id);
-      navigate("/dashboard");
+      navigate({ to: "/dashboard" });
     } catch (e) {
       toast(orgCreateErrorMessage(e), "error");
     }
@@ -379,7 +381,7 @@ export function AppShell() {
   const onNewOrg = () => (canCreateOrg ? setNewOrgOpen(true) : toast(ORG_LIMIT_MESSAGE, "error"));
   const onSignOut = () =>
     logout.mutate(undefined, {
-      onSuccess: () => navigate("/login"),
+      onSuccess: () => navigate({ to: "/login" }),
       onError: (error) => toast(error.message, "error"),
     });
 

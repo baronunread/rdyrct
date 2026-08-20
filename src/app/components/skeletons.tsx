@@ -1,6 +1,6 @@
 import type { ReactElement } from "react";
 import { lookup } from "@/shared/lookup";
-import { useLocation } from "react-router";
+import { useLocation } from "@tanstack/react-router";
 import { ChevronsUpDown, LogOut, Menu as MenuIcon } from "lucide-react";
 // MorphIcon animates between two icons, so it takes lucide icon nodes, not
 // the React components lucide-react exports.

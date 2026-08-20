@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from "react";
 import { lookup } from "@/shared/lookup";
-import { useNavigate } from "react-router";
+import { useNavigate } from "@tanstack/react-router";
 import { Plus } from "lucide-react";
 import { useLinks, useLinkMutations, useLinkQuotaUsage } from "../lib/hooks";
 import { useOrgLimits } from "../lib/org-limits";
@@ -107,7 +107,7 @@ function LinksBrowser({
   list: ReturnType<typeof useLinkPage>;
   orgId: string;
   domains: DomainDTO[];
-  navigate: ReturnType<typeof useNavigate>;
+  navigate: (to: string) => void;
   dialogs: ReturnType<typeof useLinkDialogs>;
   atLimit: boolean;
   limitHint?: string;
@@ -268,7 +268,8 @@ export function LinksPage() {
   const quotaUsage = useLinkQuotaUsage(orgId);
   const { create, update, remove } = useLinkMutations(orgId);
   const toast = useToast();
-  const navigate = useNavigate();
+  const routerNavigate = useNavigate();
+  const navigate = (to: string) => void routerNavigate({ href: to });
 
   // Links used against the plan cap, not the number of rows in the table: a
   // link plus its kept-forever aliases each count. See useLinkQuotaUsage.

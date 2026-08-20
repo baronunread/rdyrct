@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from "react";
-import { useNavigate, useSearchParams } from "react-router";
+import { useNavigate } from "@tanstack/react-router";
+import { useSearchParams } from "../lib/router-search";
 import { AuthCard, PasswordMeter } from "../components/auth-form";
 import { useShake } from "../lib/use-shake";
 import { submitResetPassword } from "../lib/reset-password";

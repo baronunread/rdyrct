@@ -13,7 +13,7 @@
  * which is what makes the navigation read as one page continuing rather
  * than a new one loading.
  */
-import { Link } from "react-router";
+import { Link } from "@tanstack/react-router";
 import { Moon, Sun } from "lucide";
 import { MorphIcon } from "morphicons/react";
 import { useTheme } from "../lib/theme";
@@ -50,7 +50,7 @@ export function LandingHeader({ authed }: { authed: boolean }) {
             transition. LandingPage scrolls to the section itself once it's
             there, since a client-side route change doesn't do that on its
             own the way a fresh document load would. */}
-        <Link to="/#faq" viewTransition className="text-muted hover:text-accent">
+        <Link to="/" hash="faq" viewTransition className="text-muted hover:text-accent">
           FAQ
         </Link>
         {/* /blog is served by the Worker's reverse proxy, not the SPA

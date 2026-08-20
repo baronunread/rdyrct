@@ -1,7 +1,7 @@
 import { useState, type FormEvent, type ReactNode, useCallback } from "react";
 import { useForm, type UseFormRegister } from "react-hook-form";
 import { valibotResolver } from "@hookform/resolvers/valibot";
-import { Link } from "react-router";
+import { Link } from "@tanstack/react-router";
 import { AnimatePresence, LazyMotion, MotionConfig, domAnimation, m } from "motion/react";
 import { Trash2, RefreshCw, Star } from "lucide-react";
 import { useCurrentUser, useConfig, useDomains, useDomainMutations } from "../lib/hooks";

@@ -8,9 +8,8 @@
  * as tabs, where their labels are unambiguous because everything around them
  * is platform-wide.
  */
-import { NavLink, Outlet } from "react-router";
+import { Link, Outlet } from "@tanstack/react-router";
 import { Building2, Globe, Link2, ScrollText, UserCog } from "lucide-react";
-import { cn } from "../../ui/cn";
 
 const TABS = [
   { to: "/admin", end: true, icon: Globe, label: "Usage" },
@@ -18,7 +17,7 @@ const TABS = [
   { to: "/admin/orgs", end: false, icon: Building2, label: "Organizations" },
   { to: "/admin/users", end: false, icon: UserCog, label: "Users" },
   { to: "/admin/audit", end: false, icon: ScrollText, label: "Audit log" },
-];
+] as const;
 
 export function AdminLayout() {
   return (
@@ -28,21 +27,16 @@ export function AdminLayout() {
         className="-mx-1 flex gap-1 overflow-x-auto border-b border-border px-1 pb-px"
       >
         {TABS.map(({ to, end, icon: Icon, label }) => (
-          <NavLink
+          <Link
             key={to}
             to={to}
-            end={end}
-            className={({ isActive }) =>
-              cn(
-                "flex items-center gap-1.5 border-b-2 px-3 py-2 text-sm whitespace-nowrap transition-colors",
-                isActive
-                  ? "border-accent text-text"
-                  : "border-transparent text-muted hover:text-text",
-              )
-            }
+            activeOptions={{ exact: end }}
+            className="flex items-center gap-1.5 border-b-2 px-3 py-2 text-sm whitespace-nowrap transition-colors"
+            activeProps={{ className: "border-accent text-text" }}
+            inactiveProps={{ className: "border-transparent text-muted hover:text-text" }}
           >
             <Icon size={15} /> {label}
-          </NavLink>
+          </Link>
         ))}
       </nav>
       <Outlet />
