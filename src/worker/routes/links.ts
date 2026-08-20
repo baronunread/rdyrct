@@ -258,6 +258,12 @@ async function linkFromRequest(c: Context<AppEnv>) {
   return { db, orgId, link: await findLink(db, orgId, c.req.param("linkId")!) };
 }
 
+/** The `{ ok: true }` response shape once a mutation only changed which
+ * addresses are active, with the org's fresh quota count attached (#100). */
+async function okWithQuota(db: DB, orgId: string) {
+  return { ok: true as const, quotaUsage: await countActiveAddresses(db, orgId) };
+}
+
 async function findLinkAndAddress(c: Context<AppEnv>) {
   const db = c.var.db;
   const orgId = c.req.param("orgId")!;
@@ -1010,8 +1016,7 @@ linkRoutes.delete("/:linkId", requireOrgRole("member"), async (c) => {
     ...addresses.map((a) => syncLinkMsg(a.slug, a.hostname)),
     deleteQrLogoMsg(link.qrLogo),
   ]);
-  const quotaUsage = await countActiveAddresses(db, orgId);
-  return c.json({ ok: true, quotaUsage });
+  return c.json(await okWithQuota(db, orgId));
 });
 
 /* ---------------- addresses (aliases + primary) ---------------- */
@@ -1116,8 +1121,7 @@ linkRoutes.post(
     // this as expired.
     const hostname = await domainHostname(db, orgId, address.domainId);
     await enqueueStorage(c.env, [syncLinkMsg(address.slug, hostname)]);
-    const quotaUsage = await countActiveAddresses(db, orgId);
-    return c.json({ ok: true, quotaUsage });
+    return c.json(await okWithQuota(db, orgId));
   },
 );
 
@@ -1143,8 +1147,7 @@ linkRoutes.post("/:linkId/addresses/:addressId/remove", requireOrgRole("member")
   // Re-publish now instead of waiting for the sweep: a removed address
   // should stop resolving immediately, not up to a day later.
   await enqueueStorage(c.env, [syncLinkMsg(address.slug, hostname)]);
-  const quotaUsage = await countActiveAddresses(db, orgId);
-  return c.json({ ok: true, quotaUsage });
+  return c.json(await okWithQuota(db, orgId));
 });
 
 linkRoutes.post("/:linkId/addresses/:addressId/promote", requireOrgRole("member"), async (c) => {
