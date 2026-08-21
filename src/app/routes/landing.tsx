@@ -553,9 +553,6 @@ function GithubMark({ size = 17 }: { size?: number }) {
   );
 }
 
-/** Build-time constant, so the number is right at deploy and never fetched. */
-const STARS = __GITHUB_STARS__;
-
 function SelfHostSection() {
   return (
     <Section id="self-host" className="py-16">
@@ -575,10 +572,15 @@ function SelfHostSection() {
             going to email you about it.
           </p>
 
-          {/* One soft pill: the mark, then the name over the count. The mark
-              is 38px inside a 58px pill, so pl-2.5 would put its centre exactly
-              on the 29px corner radius and read as if it were falling out of
-              the curve. Nudged right so it sits inside the arc. */}
+          {/* One soft pill: the mark, then the name over the invitation. This
+              used to end on a star count, which is the wrong number to make
+              the largest fact in the section that exists to answer "will this
+              still be here next year": a low count reads as a weekend project
+              to the exact reader the band is for, and it only ages one way,
+              slowly. The mark is 38px inside a 58px pill, so pl-2.5 would put
+              its centre exactly on the 29px corner radius and read as if it
+              were falling out of the curve. Nudged right so it sits inside
+              the arc. */}
           <a
             href={GITHUB_URL}
             target="_blank"
@@ -588,7 +590,7 @@ function SelfHostSection() {
             <GithubMark size={38} />
             <span className="flex flex-col leading-tight">
               <span className="text-base font-bold">GitHub</span>
-              <span className="tnum text-sm text-muted">{formatNumber(STARS)} stars</span>
+              <span className="text-sm text-muted">Read the source</span>
             </span>
           </a>
         </div>
@@ -983,6 +985,7 @@ function HowItWorksSection() {
 }
 
 function AnalyticsPreviewSection() {
+  const { authed } = useAudience();
   return (
     // The hero's second CTA lands here, so it needs an id and room under the
     // sticky header.
@@ -991,13 +994,27 @@ function AnalyticsPreviewSection() {
         <h2 className="text-xl font-bold text-balance">See every click, respect every visitor</h2>
         <p className="mx-auto mt-2 max-w-xl text-sm text-muted">
           Country, device, referrer, and campaign breakdowns for every link, from the last 24 hours
-          to the last year. Never an IP address, never cross-site tracking. This is the actual
-          analytics page.
+          to the last year. Never an IP address, never cross-site tracking. The real analytics page,
+          on sample data.
         </p>
       </div>
       <div className="flex justify-center">
         <LandingAnalyticsMock />
       </div>
+
+      {/* The only ask between the hero and the pricing table. On a phone this
+          section and the feature grid run to about 4,200px back to back, and
+          without this there is nothing to click for roughly 6,200px. This is
+          also the best moment to ask: they have just been shown the payoff. */}
+      <p className="mt-8 text-center text-sm">
+        <HrefLink
+          href={authed ? "/analytics" : "/signup"}
+          onClick={() => trackCta("analytics_preview")}
+          className="text-accent hover:underline"
+        >
+          See this on your own links →
+        </HrefLink>
+      </p>
     </Section>
   );
 }
@@ -1007,8 +1024,16 @@ function FeaturesSection() {
     <Section>
       <div className="mb-8 text-center">
         <h2 className="text-xl font-bold">Everything your team needs on a link</h2>
+        {/* Every card below is a marketer's feature, because that is what is
+            built. Claiming "and developers" over them, with no API anywhere in
+            the product, is a cheque the page cannot cash, so the claim points
+            at the roadmap instead of standing on its own. */}
         <p className="mx-auto mt-2 max-w-xl text-sm text-muted">
-          Built for marketing teams and developers.
+          Built for the people who run the campaigns. Developers,{" "}
+          <MarketingLink to="/roadmap" className="text-accent hover:underline">
+            the API is on the roadmap
+          </MarketingLink>
+          .
         </p>
       </div>
       <div className="space-y-10">
@@ -1122,7 +1147,11 @@ function PricingTeaser() {
     {
       name: "Free",
       price: "$0",
-      pitch: `${PLAN_LIMITS.free.links} links, ${PLAN_LIMITS.free.analyticsDays}-day analytics, and QR codes`,
+      // Says the generous part and the catch in one line. The free teammates
+      // are the strongest free thing here and were missing; the random slugs
+      // are the fact most likely to feel like a bait if somebody only meets
+      // it after signing up, and it was buried in a collapsed FAQ.
+      pitch: `${PLAN_LIMITS.free.links} links, ${PLAN_LIMITS.free.members} teammates, QR codes, and ${PLAN_LIMITS.free.analyticsDays}-day click analytics. Slugs on our domain are always random.`,
       to: "/signup",
       cta: "Sign up free",
       variant: "outline" as const,
@@ -1131,7 +1160,7 @@ function PricingTeaser() {
     {
       name: "Hobby",
       price: `${PLAN_PRICES.hobby}/mo`,
-      pitch: `${PLAN_LIMITS.hobby.links} links, a custom domain with your own slugs, QR codes with your logo and colors, ${PLAN_LIMITS.hobby.members} team members, and ${PLAN_LIMITS.hobby.analyticsDays}-day analytics`,
+      pitch: `${PLAN_LIMITS.hobby.links} links, a custom domain with your own slugs, QR codes with your logo and colors, ${PLAN_LIMITS.hobby.members} team members, and ${PLAN_LIMITS.hobby.analyticsDays}-day analytics.`,
       to: paidTo("hobby"),
       cta: "Start Hobby",
       variant: "outline" as const,
@@ -1140,7 +1169,7 @@ function PricingTeaser() {
     {
       name: "Pro",
       price: `${PLAN_PRICES.pro}/mo`,
-      pitch: `Everything in Hobby, plus ${PLAN_LIMITS.pro.orgs} organizations, ${formatNumber(PLAN_LIMITS.pro.links)} links, ${PLAN_LIMITS.pro.domains} custom domains, ${PLAN_LIMITS.pro.members} team members, and ${PLAN_LIMITS.pro.analyticsDays}-day analytics`,
+      pitch: `Everything in Hobby, plus ${PLAN_LIMITS.pro.orgs} organizations, ${formatNumber(PLAN_LIMITS.pro.links)} links, ${PLAN_LIMITS.pro.domains} custom domains, ${PLAN_LIMITS.pro.members} team members, and ${PLAN_LIMITS.pro.analyticsDays}-day analytics.`,
       to: paidTo("pro"),
       cta: "Start Pro",
       variant: "primary" as const,
@@ -1173,7 +1202,17 @@ function PricingTeaser() {
             )}
           >
             <div>
-              <p className={highlight ? "font-bold text-accent" : "font-bold"}>{name}</p>
+              {/* Same pill as the full table and the mobile plan cards. The
+                  homepage is where the steering is worth most, and it was the
+                  one of the three missing it. */}
+              <p className={highlight ? "font-bold text-accent" : "font-bold"}>
+                {name}
+                {highlight && (
+                  <span className="ml-2 rounded-full border border-accent/40 px-2 py-0.5 text-2xs text-accent">
+                    Most popular
+                  </span>
+                )}
+              </p>
               <p className="tnum mt-1 text-2xl font-bold">{price}</p>
               <p className="mt-1 text-sm text-muted">{pitch}</p>
             </div>

@@ -28,13 +28,14 @@ test("the hero's second CTA stays on the site and self-hosting sits under pricin
   await expect(page.locator("#analytics")).toBeInViewport();
 
   // Self-hosting keeps its own section after pricing, never a column inside it.
-  // The star count is baked in at build time, so it has to render as a real
-  // number: a failed build-time fetch falls back rather than emitting NaN.
+  // The pill used to end on a star count, which is the wrong number to make
+  // the largest fact in the section that answers "will this still be here next
+  // year": a low count reads as a weekend project to the exact reader the band
+  // is for. No number belongs in it now.
   const selfHost = page.locator("#self-host");
   const pill = selfHost.getByRole("link", { name: /github/i });
   await expect(pill).toHaveAttribute("href", /github\.com/);
-  await expect(pill).toContainText(/\d/);
-  await expect(pill).not.toContainText(/NaN|undefined/);
+  await expect(pill).not.toContainText(/\d|star/i);
 });
 
 // The homepage used to carry the full four-column table, word for word the
@@ -49,8 +50,16 @@ test("the homepage teases three prices and points at the full comparison", async
   await expect(teaser).not.toContainText(/self-hosted/i);
   await expect(teaser.getByText("Free", { exact: true })).toBeVisible();
   await expect(teaser.getByText("Hobby", { exact: true })).toBeVisible();
-  await expect(teaser.getByText("Pro", { exact: true })).toBeVisible();
+  await expect(teaser.getByText("Most popular")).toBeVisible();
   await expect(teaser.locator("table")).toHaveCount(0);
+
+  // The free plan has to say the generous part and the catch in the same
+  // breath: three teammates is the strongest free thing here, and random
+  // slugs is the fact somebody feels lied to about if they only meet it
+  // after signing up.
+  const free = teaser.getByText("Free", { exact: true }).locator("xpath=ancestor::div[1]");
+  await expect(free).toContainText(/teammates/i);
+  await expect(free).toContainText(/always random/i);
 
   await teaser.getByRole("link", { name: /full comparison/i }).click();
   await expect(page).toHaveURL(/\/pricing$/);
@@ -145,7 +154,7 @@ test("the standalone pricing page has the full table and no self-host pitch", as
 test("the hero puts the copy and the working shortener side by side", async ({ page }) => {
   await page.goto("/");
   const heading = page.getByRole("heading", { level: 1 });
-  const card = page.getByLabel("Try it without an account");
+  const card = page.getByLabel("Shorten a link, no account needed");
   await expect(heading).toBeVisible();
   await expect(card).toBeVisible();
 
@@ -407,6 +416,67 @@ test("a signed-out visitor still gets the anonymous shortener, not a dashboard c
   page,
 }) => {
   await page.goto("/");
-  await expect(page.getByLabel("Try it without an account")).toBeVisible();
+  await expect(page.getByLabel("Shorten a link, no account needed")).toBeVisible();
   await expect(page.getByText(/Welcome back/)).toHaveCount(0);
+});
+
+// The page claims it serves developers, and every feature card on it is a
+// marketer's feature: there is no API in the product yet. The roadmap page is
+// what makes the claim honest, so it has to exist, it has to point at real
+// open issues, and both the feature grid and the footer have to lead there.
+test("the developer claim is backed by a roadmap of real issues", async ({ page }) => {
+  await page.goto("/roadmap");
+  await expect(
+    page.getByRole("heading", { level: 1, name: /what we are building/i }),
+  ).toBeVisible();
+
+  // Every planned card links to the issue that promises it. None of it is
+  // built, so the issue is the only evidence the page has.
+  const issues = page.locator('a[href*="/issues/"]');
+  await expect(issues).not.toHaveCount(0);
+  for (const href of await issues.evaluateAll((links) =>
+    links.map((l) => l.getAttribute("href")),
+  )) {
+    expect(href).toMatch(/^https:\/\/github\.com\/baronunread\/rdyrct\/issues\/(new|\d+)$/);
+  }
+
+  // A roadmap made only of things that do not exist reads as a product that
+  // does not exist, so the shipped half has to be there too.
+  await expect(page.getByRole("heading", { name: /already working/i })).toBeVisible();
+});
+
+test("the roadmap is reachable from the footer and from the feature grid", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("link", { name: /the API is on the roadmap/i }).click();
+  await expect(page).toHaveURL(/\/roadmap$/);
+
+  await page.goto("/pricing");
+  await page.locator("footer").getByRole("link", { name: "Roadmap" }).click();
+  await expect(page).toHaveURL(/\/roadmap$/);
+});
+
+// Between the hero and the pricing cards the page runs about 6,200px on a
+// phone with nothing to click. The analytics preview ends on the one ask in
+// that stretch, placed where somebody has just been shown the payoff.
+test("the analytics preview ends on an ask", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 780 });
+  await page.goto("/");
+
+  const ask = page.locator("#analytics").getByRole("link", { name: /on your own links/i });
+  await ask.scrollIntoViewIfNeeded();
+  await expect(ask).toBeVisible();
+  await ask.click();
+  await expect(page).toHaveURL(/\/signup/);
+});
+
+// Signup used to render the same card whether you arrived cold or clicked
+// "Keep this link" with a link waiting. The subtitle is what carries the
+// context across the door, and the default has to name the emailed code:
+// that is the step people abandon.
+test("signup says what happens next", async ({ page }) => {
+  await page.goto("/signup");
+  await expect(page.getByText(/6-digit code/i)).toBeVisible();
+
+  await page.goto("/signup?next=%2Fbilling%3Fplan%3Dpro");
+  await expect(page.getByText(/then check out/i)).toBeVisible();
 });

@@ -46,6 +46,11 @@ export const PUBLIC_PAGE_META = {
     description:
       "Free, Hobby and Pro plans for rdyrct: short links, custom domains, branded QR codes and click analytics. Start free, or self-host on your own Cloudflare account.",
   },
+  "/roadmap": {
+    title: "Roadmap - rdyrct URL shortener",
+    description:
+      "What rdyrct is building next: a public REST API, API keys, an OpenAPI document, and an MCP server for agents. Every item is an open issue you can read and comment on.",
+  },
   "/signup": {
     title: "Sign up - rdyrct URL shortener and QR codes",
     description:

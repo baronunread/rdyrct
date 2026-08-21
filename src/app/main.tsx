@@ -52,6 +52,7 @@ const QrGeneratorPage = lazyRouteComponent(
   "QrGeneratorPage",
 );
 const PricingPage = lazyRouteComponent(() => import("./routes/pricing"), "PricingPage");
+const RoadmapPage = lazyRouteComponent(() => import("./routes/roadmap"), "RoadmapPage");
 const AppShell = lazy(() => import("./routes/shell").then((m) => ({ default: m.AppShell })));
 const RequireAuth = lazy(() => import("./routes/shell").then((m) => ({ default: m.RequireAuth })));
 const RequireAdmin = lazy(() =>
@@ -186,6 +187,12 @@ const pricingRoute = createRoute({
   getParentRoute: () => publicLayoutRoute,
   path: "/pricing",
   component: PricingPage,
+  ...marketingPending,
+});
+const roadmapRoute = createRoute({
+  getParentRoute: () => publicLayoutRoute,
+  path: "/roadmap",
+  component: RoadmapPage,
   ...marketingPending,
 });
 const privacyRoute = createRoute({
@@ -329,6 +336,7 @@ const routeTree = rootRoute.addChildren([
     landingRoute,
     qrGeneratorRoute,
     pricingRoute,
+    roadmapRoute,
     privacyRoute,
     termsRoute,
   ]),

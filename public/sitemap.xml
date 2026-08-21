@@ -20,6 +20,13 @@
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
   </url>
+  <!-- Changes whenever an issue on it closes, which is more often than
+       pricing does. -->
+  <url>
+    <loc>https://rdyrct.com/roadmap</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.5</priority>
+  </url>
   <!-- No /login or /signup. A form has nothing to rank for, and Search Console
        agreed: both sat in "discovered, currently not indexed", never crawled,
        while the pages that do have something to say waited behind them. They

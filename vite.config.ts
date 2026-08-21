@@ -59,36 +59,7 @@ function preloadFonts(): Plugin {
   };
 }
 
-/**
- * Last known star count, baked in at build time.
- *
- * The strict CSP blocks the browser from calling api.github.com, and adding
- * it to connect-src to display one integer is not a trade worth making. So
- * the number is resolved here and inlined. If GitHub is unreachable or rate
- * limits us, the build keeps the committed fallback rather than failing:
- * a stale star count is worth less than a red CI run.
- */
-const GITHUB_STARS_FALLBACK = 34;
-
-async function githubStars(): Promise<number> {
-  try {
-    const res = await fetch("https://api.github.com/repos/baronunread/rdyrct", {
-      headers: { accept: "application/vnd.github+json", "user-agent": "rdyrct-build" },
-      signal: AbortSignal.timeout(4000),
-    });
-    if (!res.ok) return GITHUB_STARS_FALLBACK;
-    // SAFETY: the field is read back through Number.isFinite below, so a
-    // response without it, or with something else in it, falls back.
-    const body = (await res.json()) as { stargazers_count?: number };
-    const stars = Number(body.stargazers_count);
-    return Number.isFinite(stars) ? stars : GITHUB_STARS_FALLBACK;
-  } catch {
-    return GITHUB_STARS_FALLBACK;
-  }
-}
-
 export default defineConfig(async () => ({
-  define: { __GITHUB_STARS__: JSON.stringify(await githubStars()) },
   plugins: [
     react(),
     tailwindcss(),
