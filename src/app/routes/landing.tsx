@@ -806,7 +806,7 @@ function HeroSection({
           <a
             href="#analytics"
             onClick={() => trackCta("hero_secondary")}
-            className={buttonClass({ variant: "ghost", className: "h-11 px-6 text-base" })}
+            className={buttonClass({ variant: "outline", className: "h-11 px-6 text-base" })}
           >
             <BarChart3 size={16} /> See the analytics
           </a>
