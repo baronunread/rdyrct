@@ -504,3 +504,33 @@ test("the dev server never hands out a long cache for a source module", async ({
     expect(res.headers()["cache-control"] ?? "", path).not.toContain("max-age=3600");
   }
 });
+
+// Every single-segment path reaches the /:slug handler, misses, and lands in
+// serveSpa asking for a 404. Only the shell may actually become one: the rest
+// are real files. /@react-refresh is the one that hurts, because it is the
+// React Refresh runtime the dev server injects into index.html, and a 404
+// there means React never mounts and every page renders the hidden crawler
+// block instead. The production suite could not see it: that path only exists
+// while Vite is serving.
+test("the single-segment files the dev server owns are not 404s", async ({ request }) => {
+  for (const path of ["/@react-refresh", "/favicon.svg", "/og.png", "/llms.txt"]) {
+    expect((await request.get(path)).status(), path).toBe(200);
+  }
+});
+
+// The check the two above exist for. index.html ships a hidden block of real
+// copy for crawlers, so a page whose JavaScript never ran still answers with
+// an h1 and looks alive to anything reading the HTML. That is exactly what
+// made a totally dead app hard to spot: assert the router mounted, by asking
+// for something only the app renders.
+test("the app actually mounts, rather than leaving the crawler block on screen", async ({
+  page,
+}) => {
+  await page.goto("/roadmap");
+
+  await expect(
+    page.getByRole("heading", { level: 1, name: /what we are building/i }),
+  ).toBeVisible();
+  // The crawler block is clipped to 1px and has no header; the app has one.
+  await expect(page.locator("header").getByRole("link", { name: "Sign up" })).toBeVisible();
+});

@@ -76,22 +76,14 @@
       }
     </script>
     <!--
-      Theme before paint. Inline, not a file: fetched it was one more round
-      trip in front of the first paint, and an SEO scan was right that a
-      blocking script in the head is what delays it. Deferring is not an
-      option here: the whole job is to run before anything paints.
+      Theme before paint, so inline and blocking: a file costs a round trip
+      and defer would defeat the point. A stored choice wins, otherwise the
+      OS, otherwise light.
 
-      script-src has no 'unsafe-inline'. This runs because its sha256 is
-      named in the policy, in src/worker/security-headers.ts. Edit a byte of
-      it, including whitespace a formatter moves, and the hash stops matching
-      and the browser refuses it: a flash of the wrong theme, in production
-      only. tests/theme-init.test.ts recomputes the hash and fails when they
-      have drifted, so that never ships quietly.
-
-      A stored choice always wins. With nothing stored we follow the
-      operating system, and fall back to light: the marketing page is most
-      people's first screen, and dark-first turns away more of them than it
-      wins.
+      script-src has no 'unsafe-inline'; this runs by its sha256, named in
+      src/worker/security-headers.ts. Edit a byte, whitespace included, and
+      the browser refuses it in production only. tests/theme-init.test.ts
+      recomputes the hash and fails when the two have drifted.
     -->
     <script>
       (function () {
@@ -105,27 +97,14 @@
   <body>
     <div id="root">
       <!--
-        Real, static content for anything that reads the HTML rdyrct sends
-        rather than running the app: search crawlers, link previews, and AI
-        answer engines. The React app replaces this div on mount, so a
-        visitor never sees it; sighted or not, it is exactly what the app
-        itself says (see src/app/routes/landing.tsx and public/llms.txt),
-        so it stays true after the swap. Visually hidden with the same
-        clip-rect technique screen readers already get, not display:none,
-        so it is read, not skipped.
+        What anything reading the HTML gets instead of running the app:
+        crawlers, link previews, answer engines. React replaces this div on
+        mount, so it must stay true of the app that replaces it (see
+        src/app/routes/landing.tsx and public/llms.txt). Clipped rather than
+        display:none, so screen readers still reach it.
       -->
       <div
-        style="
-          position: absolute;
-          width: 1px;
-          height: 1px;
-          margin: -1px;
-          padding: 0;
-          overflow: hidden;
-          clip: rect(0, 0, 0, 0);
-          white-space: nowrap;
-          border: 0;
-        "
+        style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%)"
       >
         <h1>Know which channel earned the click.</h1>
         <p>

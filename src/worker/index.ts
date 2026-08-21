@@ -256,37 +256,36 @@ function uncacheable404(body: BodyInit | null, from?: Headers): Response {
 }
 
 /**
- * Everything under /assets/ is content-hashed and cached by public/_headers.
- * The static files at the root are not hashed, and Cloudflare's asset server
- * gives an unhashed file `max-age=0, must-revalidate`: correct by default,
- * and wrong for these. og.png, the favicon and the theme bootstrap change
- * once in a release and were costing a conditional request each, on every
- * visit, for a 304.
- *
- * An hour, revalidating after: short enough that a deploy which changes the
- * theme bootstrap or the OG card is picked up the same session, long enough
- * that a normal visit stops paying for four round trips that answer "still
- * the same". The HTML shell is excluded on purpose: page-meta.ts rewrites its
- * head per path, so it has to stay uncached.
+ * For the unhashed static files at the root (og.png, the favicon, the text
+ * files). /assets/ is content-hashed and cached by public/_headers; these
+ * take Cloudflare's `max-age=0, must-revalidate` instead, so every visit
+ * paid a conditional request per file to be told nothing had changed. An
+ * hour is short enough that a deploy lands the same session.
  */
 const STATIC_CACHE = "public, max-age=3600, must-revalidate";
 
+/**
+ * Order matters here, and both branches have taken the app down once.
+ *
+ * `status` asks for a 404, and only the shell may become one. /:slug routes
+ * every single-segment path through here, so the rest are real files:
+ * /favicon.svg, /og.png, and in dev /@react-refresh, which is how React
+ * mounts. Check the shell before the status, never after.
+ *
+ * STATIC_CACHE is production-only. In dev this same fallback serves every
+ * source module, and caching those leaves the browser running the code you
+ * just edited.
+ */
 async function serveSpa(c: Context<AppEnv>, status?: 404): Promise<Response> {
   const url = new URL(c.req.url);
   const response = withPageMeta(await c.env.ASSETS.fetch(c.req.raw), url);
 
-  // Only a fresh 200 says anything about what a path holds. A conditional
-  // request comes back 304 with a null body, and rewriting one of those into
-  // a 404 ships an empty document.
+  // A conditional request comes back 304 with a null body, and rewriting one
+  // of those into a 404 ships an empty document.
   if (response.status !== 200) return response;
 
-  const isShell = response.headers.get("content-type")?.includes("text/html");
-  // Never in dev. This same fallback is what the Vite dev server answers
-  // /@vite/client and every .tsx and .css through, and none of those are
-  // static: an hour-long cache on them means the browser keeps running the
-  // code you just edited, HMR included. A build-time constant, so production
-  // cannot lose the cache through a misread variable.
-  if (!isShell && !import.meta.env.DEV) {
+  if (!response.headers.get("content-type")?.includes("text/html")) {
+    if (import.meta.env.DEV) return response;
     // ASSETS hands back immutable headers, so this has to be a copy.
     const cached = new Response(response.body, response);
     cached.headers.set("cache-control", STATIC_CACHE);
