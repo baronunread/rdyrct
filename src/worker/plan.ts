@@ -59,10 +59,17 @@ export async function createOwnedOrg(
 }
 
 /**
- * Accepts an invite: writes the membership row only if the caller isn't
- * already a member and the org is still under its member cap, both re-checked
- * inside this one statement. Closes the race where two concurrent accepts
- * (or one accept retried twice) both pass separate pre-checks.
+ * Accepts an invite: writes the membership row only if the token is still
+ * live, the caller isn't already a member, and the org is under its member
+ * cap. All three are re-checked inside the insert itself, and the invite is
+ * spent in the same transaction, so the token is what admits exactly one
+ * person rather than a row two requests can both read first (#154).
+ *
+ * The delete matches on the membership this call just wrote (org, user and
+ * the exact `created_at` it was given), never on the token alone. That is
+ * what keeps the two cases the insert refuses from spending the invite: an
+ * org that filled up leaves the token usable once a seat frees, and a member
+ * who opens somebody else's link does not burn it on their way to a 409.
  */
 export async function acceptInviteAtomically(
   env: Env,
@@ -72,25 +79,35 @@ export async function acceptInviteAtomically(
     role: "admin" | "member";
     ts: number;
     memberLimit: number;
+    token: string;
   },
 ): Promise<boolean> {
-  return runGuarded(
-    env,
-    `insert into org_members (org_id, user_id, role, created_at)
-     select ?, ?, ?, ?
-     where not exists (select 1 from org_members where org_id = ? and user_id = ?)
-       and (select count(*) from org_members where org_id = ?) < ?`,
-    [
+  const results = await env.DB.batch([
+    env.DB.prepare(
+      `insert into org_members (org_id, user_id, role, created_at)
+       select ?, ?, ?, ?
+       where exists (select 1 from invites where token = ?)
+         and not exists (select 1 from org_members where org_id = ? and user_id = ?)
+         and (select count(*) from org_members where org_id = ?) < ?`,
+    ).bind(
       args.orgId,
       args.userId,
       args.role,
       args.ts,
+      args.token,
       args.orgId,
       args.userId,
       args.orgId,
       args.memberLimit,
-    ],
-  );
+    ),
+    env.DB.prepare(
+      `delete from invites where token = ? and exists (
+         select 1 from org_members
+         where org_id = ? and user_id = ? and created_at = ?
+       )`,
+    ).bind(args.token, args.orgId, args.userId, args.ts),
+  ]);
+  return results[0].meta.changes > 0;
 }
 
 /** Builds (without executing) the conditional link_addresses insert used by

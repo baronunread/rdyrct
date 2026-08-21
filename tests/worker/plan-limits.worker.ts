@@ -189,7 +189,7 @@ describe("invite acceptance: member cap and duplicate accept under concurrency (
   // seat under the free plan's real member cap (PLAN_LIMITS.free.members),
   // so this test tracks the actual limit instead of a number that can drift
   // out of sync with it.
-  async function seedOrgWithOneSlotLeft() {
+  async function seedOrgWithOneSlotLeft(tokens: string[] = ["bearer-invite"]) {
     const db = drizzle(env.DB, { schema });
     const extraMembers = PLAN_LIMITS.free.members - 2; // -1 for the owner, -1 for the open seat
     const statements = [
@@ -228,29 +228,34 @@ describe("invite acceptance: member cap and duplicate accept under concurrency (
           createdAt: 0,
         }),
       ]).flat(),
-      db.insert(schema.invites).values({
-        token: "bearer-invite",
-        orgId: "org-race",
-        role: "member",
-        email: null,
-        createdBy: "owner-1",
-        createdAt: 0,
-        expiresAt: Date.now() + 7 * 24 * 60 * 60 * 1000,
-      }),
+      ...tokens.map((token) =>
+        db.insert(schema.invites).values({
+          token,
+          orgId: "org-race",
+          role: "member",
+          email: null,
+          createdBy: "owner-1",
+          createdAt: 0,
+          expiresAt: Date.now() + 7 * 24 * 60 * 60 * 1000,
+        }),
+      ),
     ];
     // SAFETY: statements always holds the org insert, so it is non-empty,
     // which is all drizzle batch() asks of its argument.
     await db.batch(statements as [(typeof statements)[number], ...(typeof statements)[number][]]);
   }
 
+  // Two tokens, so the seat is the only thing they are racing for: with one
+  // token the loser is refused by the token (see the single-use test below)
+  // and this would stop covering the cap at all.
   it("lets exactly one of two racing users through the last seat", async () => {
-    await seedOrgWithOneSlotLeft();
+    await seedOrgWithOneSlotLeft(["invite-a", "invite-b"]);
     const cookieA = await seedFreeUser("racer-a", "racera@example.com");
     const cookieB = await seedFreeUser("racer-b", "racerb@example.com");
 
     const [a, b] = await Promise.all([
-      acceptInvite(cookieA, "bearer-invite"),
-      acceptInvite(cookieB, "bearer-invite"),
+      acceptInvite(cookieA, "invite-a"),
+      acceptInvite(cookieB, "invite-b"),
     ]);
     const statuses = [a.status, b.status].sort();
 
@@ -260,6 +265,54 @@ describe("invite acceptance: member cap and duplicate accept under concurrency (
       "select count(*) as n from org_members where org_id = 'org-race'",
     ).first<{ n: number }>();
     expect(members?.n).toBe(PLAN_LIMITS.free.members);
+  });
+
+  // #154: the link is advertised as single-use, so the token has to be what
+  // admits exactly one person. Two users racing one token used to both get in
+  // whenever the org had two seats free, because each read the row before
+  // either spent it.
+  it("lets exactly one of two racing users through a single-use token", async () => {
+    await seedOrgWithOneSlotLeft(["bearer-invite"]);
+    // Room for both, so the seat cannot be what refuses the loser.
+    await env.DB.prepare("delete from org_members where user_id like 'member-%'").run();
+    const cookieA = await seedFreeUser("racer-d", "racerd@example.com");
+    const cookieB = await seedFreeUser("racer-e", "racere@example.com");
+
+    const [a, b] = await Promise.all([
+      acceptInvite(cookieA, "bearer-invite"),
+      acceptInvite(cookieB, "bearer-invite"),
+    ]);
+    expect([a.status, b.status].sort()).toEqual([200, 404]);
+
+    const joined = await env.DB.prepare(
+      "select count(*) as n from org_members where org_id = 'org-race' and user_id in ('racer-d', 'racer-e')",
+    ).first<{ n: number }>();
+    expect(joined?.n).toBe(1);
+
+    const left = await env.DB.prepare(
+      "select count(*) as n from invites where token = 'bearer-invite'",
+    ).first<{ n: number }>();
+    expect(left?.n).toBe(0);
+  });
+
+  // The org filling up must not spend the token: a seat may free later, and
+  // an admin should not have to re-issue a link nobody managed to use.
+  it("leaves the invite usable when the accept is refused by the member cap", async () => {
+    await seedOrgWithOneSlotLeft(["bearer-invite"]);
+    await env.DB.prepare(
+      "insert into user (id, name, email, email_verified, is_admin, plan, created_at, updated_at) values ('filler', 'Filler', 'filler@example.com', 1, 0, 'free', 0, 0)",
+    ).run();
+    await env.DB.prepare(
+      "insert into org_members (org_id, user_id, role, created_at) values ('org-race', 'filler', 'member', 0)",
+    ).run();
+
+    const cookie = await seedFreeUser("racer-f", "racerf@example.com");
+    expect((await acceptInvite(cookie, "bearer-invite")).status).toBe(402);
+
+    const left = await env.DB.prepare(
+      "select count(*) as n from invites where token = 'bearer-invite'",
+    ).first<{ n: number }>();
+    expect(left?.n).toBe(1);
   });
 
   it("gives the same user's two concurrent accepts one valid outcome", async () => {

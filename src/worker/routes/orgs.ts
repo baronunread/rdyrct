@@ -1023,6 +1023,36 @@ inviteRoutes.get("/:token", async (c) => {
   } satisfies InvitePreview);
 });
 
+/**
+ * Always throws: says why the guarded insert wrote nothing.
+ *
+ * The statement refuses for three reasons and reports none of them, so each
+ * is read back here, in the order that answers the caller honestly. The token
+ * comes last because it is the rarest and the only one that needs a second
+ * read of a row we already had.
+ */
+async function explainRefusedInvite(
+  db: DB,
+  invite: typeof schema.invites.$inferSelect,
+  userId: string,
+): Promise<never> {
+  const [existing, live] = await Promise.all([
+    db
+      .select({ role: schema.orgMembers.role })
+      .from(schema.orgMembers)
+      .where(and(eq(schema.orgMembers.orgId, invite.orgId), eq(schema.orgMembers.userId, userId))),
+    db
+      .select({ token: schema.invites.token })
+      .from(schema.invites)
+      .where(eq(schema.invites.token, invite.token)),
+  ]);
+  if (existing.length) throw new HTTPException(409, { message: "Already a member of this org" });
+  // Somebody else spent the link between the lookup above and the insert. It
+  // has to read as an unknown token, not as a full org: the org may have room.
+  if (!live.length) throw new HTTPException(404, { message: "Invite not found or expired" });
+  throw new HTTPException(402, { message: "This organization is full on its current plan" });
+}
+
 inviteRoutes.post("/:token/accept", requireUser, async (c) => {
   const db = c.var.db;
   const invite = await lookupInvite(db, c.req.param("token"));
@@ -1036,10 +1066,10 @@ inviteRoutes.post("/:token/accept", requireUser, async (c) => {
     });
 
   // The cap may have been reached (or the plan downgraded) since the invite
-  // was created; recheck against actual members at accept time. Both that
-  // recheck and the "already a member" check happen inside one atomic
-  // statement (see issue #18), so two concurrent accepts (or a retried one)
-  // can't both pass separate pre-checks.
+  // was created; recheck against actual members at accept time. That recheck,
+  // the "already a member" check and the token itself are all read inside one
+  // atomic statement (see #18 and #154), which spends the invite in the same
+  // transaction: two concurrent accepts of one link cannot both pass.
   const { limits } = await orgPlan(db, invite.orgId);
   const accepted = await acceptInviteAtomically(c.env, {
     orgId: invite.orgId,
@@ -1047,26 +1077,8 @@ inviteRoutes.post("/:token/accept", requireUser, async (c) => {
     role: invite.role,
     ts: Date.now(),
     memberLimit: limits.members,
+    token: invite.token,
   });
-  if (!accepted) {
-    const existing = await db
-      .select({ role: schema.orgMembers.role })
-      .from(schema.orgMembers)
-      .where(
-        and(
-          eq(schema.orgMembers.orgId, invite.orgId),
-          eq(schema.orgMembers.userId, c.var.user!.id),
-        ),
-      );
-    if (existing.length) throw new HTTPException(409, { message: "Already a member of this org" });
-    throw new HTTPException(402, {
-      message: "This organization is full on its current plan",
-    });
-  }
-  // Spent, so gone (#103). Nothing reads invite history, and the row holds an
-  // email address belonging to someone who may never have signed up. A second
-  // accept of the same token now gets the same 404 as an unknown one, so
-  // nothing learns which tokens existed.
-  await db.delete(schema.invites).where(eq(schema.invites.token, invite.token));
+  if (!accepted) await explainRefusedInvite(db, invite, c.var.user!.id);
   return c.json({ orgId: invite.orgId });
 });
