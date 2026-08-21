@@ -41,7 +41,7 @@ function OrgMembersTable({
 }) {
   return (
     <div>
-      <p className="mb-2 text-2xs tracking-wider text-muted uppercase">Members</p>
+      <p className="mb-2 text-xs font-medium text-muted">Members</p>
       <Table>
         <thead>
           <tr>
@@ -86,7 +86,7 @@ function OrgLinksRecap({
   return (
     <div className="flex flex-wrap items-center gap-3 rounded-lg bg-surface-2 px-4 py-3">
       <div className="flex-1">
-        <p className="text-2xs tracking-wider text-muted uppercase">Links</p>
+        <p className="text-xs font-medium text-muted">Links</p>
         <p className="mt-0.5 text-sm">
           <span className="font-bold tnum">{links.length}</span>{" "}
           {links.length === 1 ? "link" : "links"},{" "}
@@ -118,9 +118,7 @@ function OrgDetailDialog({ org, onClose }: { org: AdminOrgRow | null; onClose: (
           ) : (
             <>
               <Card>
-                <p className="mb-3 text-2xs tracking-wider text-muted uppercase">
-                  Clicks per day · 30d
-                </p>
+                <p className="mb-3 text-xs font-medium text-muted">Clicks per day · 30d</p>
                 <AreaChart data={detail.data.series} />
               </Card>
 

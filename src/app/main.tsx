@@ -10,6 +10,13 @@ import {
   lazyRouteComponent,
 } from "@tanstack/react-router";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+// Figtree carries everything anybody reads; JetBrains Mono is kept for
+// identifiers, the strings a person copies or types. See the rdyrct-design
+// skill for which is which.
+import "@fontsource/figtree/latin-400.css";
+import "@fontsource/figtree/latin-500.css";
+import "@fontsource/figtree/latin-600.css";
+import "@fontsource/figtree/latin-700.css";
 import "@fontsource/jetbrains-mono/latin-400.css";
 import "@fontsource/jetbrains-mono/latin-700.css";
 import "./styles.css";

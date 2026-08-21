@@ -57,7 +57,7 @@ function DeltaBadge({ delta }: { delta: number }) {
 function StatTile({ label, value, delta }: { label: string; value: number; delta?: number }) {
   return (
     <div className="rounded-lg border border-border bg-bg/40 p-3">
-      <p className="truncate text-2xs tracking-wider text-muted uppercase">{label}</p>
+      <p className="truncate text-xs font-medium text-muted">{label}</p>
       <p className="tnum mt-1 text-xl font-bold">{formatNumber(value)}</p>
       {delta != null && delta !== 0 && <DeltaBadge delta={delta} />}
     </div>
@@ -134,7 +134,7 @@ export function LandingAnalyticsMock() {
         </div>
 
         <div className="rounded-lg border border-border bg-bg/40 p-4">
-          <p className="mb-3 text-2xs tracking-wider text-muted uppercase">
+          <p className="mb-3 text-xs font-medium text-muted">
             {active.bucket === "hour" ? "Clicks per hour" : "Clicks per day"}
           </p>
           <AreaChart
@@ -146,15 +146,15 @@ export function LandingAnalyticsMock() {
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
           <div className="rounded-lg border border-border bg-bg/40 p-4">
-            <p className="mb-3 text-2xs tracking-wider text-muted uppercase">Campaigns</p>
+            <p className="mb-3 text-xs font-medium text-muted">Campaigns</p>
             <BarList items={CAMPAIGNS} />
           </div>
           <div className="rounded-lg border border-border bg-bg/40 p-4">
-            <p className="mb-3 text-2xs tracking-wider text-muted uppercase">Countries</p>
+            <p className="mb-3 text-xs font-medium text-muted">Countries</p>
             <BarList items={COUNTRIES} />
           </div>
           <div className="rounded-lg border border-border bg-bg/40 p-4">
-            <p className="mb-3 text-2xs tracking-wider text-muted uppercase">Devices</p>
+            <p className="mb-3 text-xs font-medium text-muted">Devices</p>
             <BarList items={DEVICES} />
           </div>
         </div>
@@ -162,11 +162,11 @@ export function LandingAnalyticsMock() {
         {active.bucket !== "hour" && (
           <div className="grid gap-4 md:grid-cols-3">
             <div className="rounded-lg border border-border bg-bg/40 p-4 md:col-span-2">
-              <p className="mb-3 text-2xs tracking-wider text-muted uppercase">By hour</p>
+              <p className="mb-3 text-xs font-medium text-muted">By hour</p>
               <ClicksByHour data={HEATMAP} />
             </div>
             <div className="rounded-lg border border-border bg-bg/40 p-4">
-              <p className="mb-3 text-2xs tracking-wider text-muted uppercase">By weekday</p>
+              <p className="mb-3 text-xs font-medium text-muted">By weekday</p>
               <BarList items={clicksByWeekday(HEATMAP)} />
             </div>
           </div>

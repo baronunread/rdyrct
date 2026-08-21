@@ -130,7 +130,7 @@ export function QrDefaultsCard() {
     <Card className="max-w-2xl">
       <div className="flex flex-col gap-4">
         <div>
-          <p className="text-2xs tracking-wider text-muted uppercase">QR code defaults</p>
+          <p className="text-xs font-medium text-muted">QR code defaults</p>
           <p className="mt-1 text-xs text-muted">
             Applied to every link's QR code unless the link overrides them.
           </p>

@@ -394,7 +394,7 @@ function LinksListArea({
     return (
       <EmptyState
         title="No links yet"
-        hint="Create your first short link. UTM parameters and a QR logo are optional."
+        hint="Shorten your first address and it appears here, with its clicks, referrers and QR code."
         action={
           <Button variant="primary" onClick={onCreate} disabled={atLimit} title={limitHint}>
             <Plus size={15} /> New link

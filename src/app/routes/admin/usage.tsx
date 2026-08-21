@@ -14,7 +14,7 @@ const planColor = (p: OrgPlan) => (p === "pro" ? "accent" : p === "hobby" ? "min
 function AdminTableCard({ title, children }: { title: string; children: ReactNode }) {
   return (
     <Card className="lg:col-span-2">
-      <p className="mb-3 text-2xs tracking-wider text-muted uppercase">{title}</p>
+      <p className="mb-3 text-xs font-medium text-muted">{title}</p>
       <Table>{children}</Table>
     </Card>
   );
@@ -53,7 +53,7 @@ function BusinessRow({ s }: { s: AdminUsage }) {
   return (
     <div className="mt-4 grid gap-4 lg:grid-cols-3">
       <Card>
-        <p className="mb-3 text-2xs tracking-wider text-muted uppercase">Plan mix</p>
+        <p className="mb-3 text-xs font-medium text-muted">Plan mix</p>
         <BarList
           items={[
             { key: "Free", clicks: s.planCounts.free },
@@ -70,11 +70,11 @@ function BusinessRow({ s }: { s: AdminUsage }) {
         </p>
       </Card>
       <Card>
-        <p className="mb-3 text-2xs tracking-wider text-muted uppercase">Signups per day · 30d</p>
+        <p className="mb-3 text-xs font-medium text-muted">Signups per day · 30d</p>
         <AreaChart data={s.signups} />
       </Card>
       <Card>
-        <p className="mb-3 text-2xs tracking-wider text-muted uppercase">Cumulative users · 90d</p>
+        <p className="mb-3 text-xs font-medium text-muted">Cumulative users · 90d</p>
         <AreaChart data={s.cumulativeUsers} />
       </Card>
     </div>
@@ -85,11 +85,11 @@ function GrowthRow({ s }: { s: AdminUsage }) {
   return (
     <div className="mt-4 grid gap-4 lg:grid-cols-2">
       <Card>
-        <p className="mb-3 text-2xs tracking-wider text-muted uppercase">Clicks per day · 30d</p>
+        <p className="mb-3 text-xs font-medium text-muted">Clicks per day · 30d</p>
         <AreaChart data={s.series} />
       </Card>
       <Card>
-        <p className="mb-3 text-2xs tracking-wider text-muted uppercase">Cumulative orgs · 90d</p>
+        <p className="mb-3 text-xs font-medium text-muted">Cumulative orgs · 90d</p>
         <AreaChart data={s.cumulativeOrgs} />
       </Card>
     </div>
@@ -100,7 +100,7 @@ function TopListsRow({ s }: { s: AdminUsage }) {
   return (
     <div className="mt-4 grid gap-4 lg:grid-cols-2">
       <Card>
-        <p className="mb-3 text-2xs tracking-wider text-muted uppercase">Top organizations · 30d</p>
+        <p className="mb-3 text-xs font-medium text-muted">Top organizations · 30d</p>
         <BarList
           items={s.topOrgs.map((o) => ({ key: o.id, clicks: o.clicks }))}
           formatKey={(id) => {
@@ -115,7 +115,7 @@ function TopListsRow({ s }: { s: AdminUsage }) {
         />
       </Card>
       <Card>
-        <p className="mb-3 text-2xs tracking-wider text-muted uppercase">Top links · 30d</p>
+        <p className="mb-3 text-xs font-medium text-muted">Top links · 30d</p>
         <BarList
           items={s.topLinks.map((l) => ({ key: l.id, clicks: l.clicks }))}
           formatKey={(id) => {
@@ -135,7 +135,7 @@ function TableSizeCard({ s }: { s: AdminUsage }) {
       : null;
   return (
     <Card>
-      <p className="mb-3 text-2xs tracking-wider text-muted uppercase">
+      <p className="mb-3 text-xs font-medium text-muted">
         Table size · {formatNumber(s.tableSize)} rows
       </p>
       <AreaChart data={s.tableGrowth} />
@@ -153,9 +153,7 @@ function HealthRow({ s }: { s: AdminUsage }) {
   return (
     <div className="mt-4 grid gap-4 lg:grid-cols-2">
       <Card>
-        <p className="mb-3 text-2xs tracking-wider text-muted uppercase">
-          Bot clicks per day · 30d
-        </p>
+        <p className="mb-3 text-xs font-medium text-muted">Bot clicks per day · 30d</p>
         <AreaChart data={s.botSeries} />
       </Card>
       <TableSizeCard s={s} />

@@ -5,10 +5,20 @@ import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import { cloudflare } from "@cloudflare/vite-plugin";
 
+/**
+ * The faces above the fold, as `[package, file]`.
+ *
+ * Figtree 400 and 600 carry the header and the first heading; JetBrains Mono
+ * 400 carries the slugs beside them. Mono 700 and the other Figtree weights
+ * load normally: they appear below the fold or on interaction, and preloading
+ * a weight that isn't painted immediately just competes for the same
+ * connection as the ones that are.
+ */
 const PRELOAD_FONTS = [
-  "jetbrains-mono-latin-400-normal.woff2",
-  "jetbrains-mono-latin-700-normal.woff2",
-];
+  ["figtree", "figtree-latin-400-normal.woff2"],
+  ["figtree", "figtree-latin-600-normal.woff2"],
+  ["jetbrains-mono", "jetbrains-mono-latin-400-normal.woff2"],
+] as const;
 
 /**
  * Preloads the two above-the-fold JetBrains Mono weights (latin subset) as a
@@ -32,18 +42,16 @@ function preloadFonts(): Plugin {
     },
     buildStart() {
       if (isServe) return;
-      for (const file of PRELOAD_FONTS) {
-        const filePath = fileURLToPath(
-          import.meta.resolve(`@fontsource/jetbrains-mono/files/${file}`),
-        );
+      for (const [pkg, file] of PRELOAD_FONTS) {
+        const filePath = fileURLToPath(import.meta.resolve(`@fontsource/${pkg}/files/${file}`));
         const refId = this.emitFile({ type: "asset", name: file, source: readFileSync(filePath) });
         fileNames.set(file, this.getFileName(refId));
       }
     },
     transformIndexHtml() {
       const hrefs = isServe
-        ? PRELOAD_FONTS.map((file) => `/node_modules/@fontsource/jetbrains-mono/files/${file}`)
-        : PRELOAD_FONTS.map((file) => `/${fileNames.get(file)}`);
+        ? PRELOAD_FONTS.map(([pkg, file]) => `/node_modules/@fontsource/${pkg}/files/${file}`)
+        : PRELOAD_FONTS.map(([, file]) => `/${fileNames.get(file)}`);
       return hrefs.map((href) => ({
         tag: "link",
         injectTo: "head-prepend" as const,

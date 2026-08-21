@@ -189,7 +189,7 @@ export function HeroShortener() {
       noValidate
       className="flex w-full max-w-xl flex-col gap-3 rounded-xl bg-surface p-5 smooth-shadow-ring-sm"
     >
-      <label htmlFor="hero-destination" className="text-2xs tracking-wider text-muted uppercase">
+      <label htmlFor="hero-destination" className="text-xs font-medium text-muted">
         Try it without an account
       </label>
       <div className="flex flex-col gap-2 sm:flex-row">

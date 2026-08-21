@@ -66,10 +66,10 @@ function LinkInfoCard({
 }) {
   return (
     <Card>
-      <p className="mb-3 text-2xs tracking-wider text-muted uppercase">Info</p>
+      <p className="mb-3 text-xs font-medium text-muted">Info</p>
       <div className="flex flex-col gap-2 text-sm">
         <div className="min-w-0">
-          <p className="text-3xs tracking-wider text-muted uppercase">Destination</p>
+          <p className="text-xs text-muted">Destination</p>
           <a
             href={destination}
             target="_blank"
@@ -80,12 +80,12 @@ function LinkInfoCard({
           </a>
         </div>
         <div>
-          <p className="text-3xs tracking-wider text-muted uppercase">Created</p>
+          <p className="text-xs text-muted">Created</p>
           <p className="tnum text-text">{shortDate(createdAt)}</p>
         </div>
         {lastClick && (
           <div>
-            <p className="text-3xs tracking-wider text-muted uppercase">Last click</p>
+            <p className="text-xs text-muted">Last click</p>
             <p className="tnum text-text">{shortDate(lastClick)}</p>
           </div>
         )}
@@ -129,7 +129,7 @@ export function LinkDetailPage() {
 
       <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-3">
         <Card className="lg:col-span-2">
-          <p className="mb-3 text-2xs tracking-wider text-muted uppercase">Clicks per day</p>
+          <p className="mb-3 text-xs font-medium text-muted">Clicks per day</p>
           <AreaChart data={s.series} />
         </Card>
 

@@ -250,7 +250,7 @@ export function QrGeneratorPage() {
 
         <div className="grid w-full max-w-3xl gap-6 rounded-2xl border border-border bg-surface p-6 sm:grid-cols-[1fr_auto] sm:p-8">
           <div className="flex flex-col gap-3">
-            <label htmlFor="qr-value" className="text-2xs tracking-wider text-muted uppercase">
+            <label htmlFor="qr-value" className="text-xs font-medium text-muted">
               Link or text
             </label>
             <Input

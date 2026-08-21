@@ -343,7 +343,7 @@ function MobilePlans({ paidTo }: { paidTo: (p: "hobby" | "pro") => string }) {
               <p className={highlight ? "font-bold text-accent" : "font-bold"}>
                 {name}
                 {highlight && (
-                  <span className="ml-2 rounded-full border border-accent/40 px-2 py-0.5 text-3xs tracking-wide text-accent uppercase">
+                  <span className="ml-2 rounded-full border border-accent/40 px-2 py-0.5 text-2xs text-accent">
                     Most popular
                   </span>
                 )}
@@ -418,7 +418,7 @@ export function PricingSection() {
               <Th className="border-x border-x-accent/25 bg-accent/10">
                 <span className="inline-flex items-center gap-2 text-accent">
                   Pro
-                  <span className="rounded-full border border-accent/40 px-2 py-0.5 text-3xs tracking-wide text-accent uppercase">
+                  <span className="rounded-full border border-accent/40 px-2 py-0.5 text-2xs text-accent">
                     Most popular
                   </span>
                 </span>
@@ -765,14 +765,23 @@ function HeroSection({
   name: string;
 }) {
   return (
-    <section className="flex flex-col items-center gap-8 py-16 sm:py-20">
+    // Two columns from md up, one below it. Most products put a screenshot in
+    // the right half because you cannot use them without an account; the
+    // anonymous shortener works without one, so the real thing goes where
+    // everybody else puts a picture of the thing.
+    //
+    // It also repairs something. Stacked, the card sat under the buttons and
+    // both of them had to be demoted to secondary so as not to read as two
+    // primary actions in one column. Side by side they are no longer in the
+    // same column, so the primary CTA is primary again.
+    <section className="grid items-center gap-10 py-14 md:grid-cols-2 md:gap-12 md:py-20">
       <m.div
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5, ease: "easeOut" }}
-        className="flex flex-col items-center gap-6 text-center"
+        className="flex flex-col items-center gap-6 text-center md:items-start md:text-left"
       >
-        <h1 className="max-w-3xl text-3xl font-bold tracking-tight text-balance sm:text-5xl">
+        <h1 className="text-3xl font-bold tracking-tight text-balance sm:text-4xl lg:text-5xl">
           Know which channel earned the click.
         </h1>
         <p className="max-w-xl text-sm text-muted sm:text-base">
@@ -784,17 +793,12 @@ function HeroSection({
             GitHub" used to sit here, spending the highest-intent moment on
             the site sending people to a repository; it now lives in its own
             band under the pricing table. */}
-        <div className="flex flex-wrap items-center justify-center gap-3">
-          {/* Secondary now, both of them: the card below is the thing this
-              page asks you to do, so a filled button competing with it would
-              be two primary actions in one view. Hidden entirely when signed
-              in, where the card already carries "Open dashboard" and two of
-              them side by side is just a stutter. */}
+        <div className="flex flex-wrap items-center justify-center gap-3 md:justify-start">
           {!authed && (
             <HrefLink
               href={ctaTo}
               onClick={() => trackCta("hero_primary")}
-              className={buttonClass({ variant: "outline", className: "h-11 px-6 text-base" })}
+              className={buttonClass({ variant: "primary", className: "h-11 px-6 text-base" })}
             >
               {ctaLabel}
             </HrefLink>
@@ -807,16 +811,35 @@ function HeroSection({
             <BarChart3 size={16} /> See the analytics
           </a>
         </div>
+
+        {/* Reassurance for somebody deciding. Nothing to reassure once they
+            have an account. */}
+        <ul
+          className={cn(
+            "flex flex-wrap items-center justify-center gap-x-5 gap-y-1 text-xs text-muted md:justify-start",
+            authed && "hidden",
+          )}
+        >
+          <li className="flex items-center gap-1.5">
+            <Check size={13} className="text-accent-2" /> Free plan forever
+          </li>
+          <li className="flex items-center gap-1.5">
+            <Check size={13} className="text-accent-2" /> No credit card required
+          </li>
+          <li className="flex items-center gap-1.5">
+            <Check size={13} className="text-accent-2" /> No IP tracking
+          </li>
+        </ul>
       </m.div>
 
-      {/* Above the reassurance list, not below the buttons: this is what the
-          page is for. Somebody can have a working link before they have read
-          a word about plans. */}
+      {/* The right half on a wide screen, and directly under the copy on a
+          phone, where it has to stay near the fold: it is the one thing on
+          this page that turns a stranger into an account. */}
       <m.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.6, ease: "easeOut", delay: 0.15 }}
-        className="flex w-full justify-center"
+        className="flex w-full justify-center md:justify-end"
       >
         {/* The anonymous shortener is an argument aimed at a stranger. A
             signed-in visitor has already been convinced, and offering them a
@@ -824,25 +847,6 @@ function HeroSection({
             the account they are in reads as nobody having tried it. */}
         {authed ? <HeroSignedIn name={name} /> : <HeroShortener />}
       </m.div>
-
-      {/* Reassurance for somebody deciding. Nothing to reassure once they
-          have an account. */}
-      <ul
-        className={cn(
-          "flex flex-wrap items-center justify-center gap-x-5 gap-y-1 text-xs text-muted",
-          authed && "hidden",
-        )}
-      >
-        <li className="flex items-center gap-1.5">
-          <Check size={13} className="text-accent-2" /> Free plan forever
-        </li>
-        <li className="flex items-center gap-1.5">
-          <Check size={13} className="text-accent-2" /> No credit card required
-        </li>
-        <li className="flex items-center gap-1.5">
-          <Check size={13} className="text-accent-2" /> No IP tracking
-        </li>
-      </ul>
     </section>
   );
 }
@@ -887,11 +891,7 @@ function TextMessage({
       >
         {link}
       </p>
-      <p
-        className={cn("text-2xs tracking-wider uppercase", mine ? "text-accent-2" : "text-danger")}
-      >
-        {verdict}
-      </p>
+      <p className={cn("text-xs", mine ? "text-accent-2" : "text-danger")}>{verdict}</p>
     </div>
   );
 }
@@ -1010,7 +1010,7 @@ function FeaturesSection() {
       <div className="space-y-10">
         {featureGroups.map(({ title, items }) => (
           <div key={title}>
-            <h3 className="mb-4 text-xs font-bold tracking-wide text-muted uppercase">{title}</h3>
+            <h3 className="mb-4 text-xs font-semibold text-muted">{title}</h3>
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
               {items.map(({ icon: Icon, title, body, plan }) => (
                 <div
@@ -1020,9 +1020,7 @@ function FeaturesSection() {
                   <div className="mb-2 flex items-center gap-2">
                     <Icon size={16} className="text-accent" />
                     <p className="font-bold">{title}</p>
-                    {plan && (
-                      <span className="text-2xs tracking-wide text-muted uppercase">{plan}</span>
-                    )}
+                    {plan && <span className="text-xs text-muted">{plan}</span>}
                   </div>
                   <p className="text-sm text-muted">{body}</p>
                 </div>

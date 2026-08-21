@@ -162,12 +162,17 @@ export function AreaChart({
 export function BarList({
   items,
   formatKey = (k) => k,
+  empty = "Nothing recorded in this period yet.",
 }: {
   items: { key: string; clicks: number }[];
   formatKey?: (key: string) => string | ReactNode;
+  /** What will appear here, said in the caller's own words. "No data" tells
+   *  somebody nothing; naming the thing that fills the list explains the
+   *  feature and points at the next step in the same sentence. */
+  empty?: string;
 }) {
   const max = Math.max(1, ...items.map((i) => i.clicks));
-  if (!items.length) return <p className="py-4 text-sm text-muted">No data yet</p>;
+  if (!items.length) return <p className="py-4 text-sm text-muted">{empty}</p>;
   return (
     <ul className="flex flex-col gap-2.5">
       {items.map((item) => (
@@ -188,8 +193,8 @@ export function BarList({
   );
 }
 
-/** A card of top links by clicks, rendered as a BarList (which already
- * shows its own "No data yet" for an empty list). */
+/** A card of top links by clicks, rendered as a BarList (which carries its
+ * own empty line for an empty list). */
 export function TopLinksCard({
   topLinks,
   limit,
@@ -200,7 +205,7 @@ export function TopLinksCard({
   const rows = limit ? topLinks.slice(0, limit) : topLinks;
   return (
     <Card>
-      <p className="mb-3 text-2xs tracking-wider text-muted uppercase">Top links</p>
+      <p className="mb-3 text-xs font-medium text-muted">Top links</p>
       <BarList
         items={rows.map((l) => ({
           key: `/${l.slug}${l.title ? ` · ${l.title}` : ""}`,
@@ -226,7 +231,7 @@ export function StatCard({
 }) {
   return (
     <div className="rounded-lg bg-surface p-4 smooth-shadow-ring-xs">
-      <p className="truncate text-2xs tracking-wider text-muted uppercase">{label}</p>
+      <p className="truncate text-xs font-medium text-muted">{label}</p>
       <p className="tnum mt-1 text-2xl font-bold">
         {prefix}
         {formatNumber(value)}
@@ -325,9 +330,11 @@ export function LinkListCard({
 }) {
   return (
     <div className="rounded-lg bg-surface p-4 smooth-shadow-ring-xs">
-      <p className="mb-2 text-2xs tracking-wider text-muted uppercase">{title}</p>
+      <p className="mb-2 text-xs font-medium text-muted">{title}</p>
       {links.length === 0 ? (
-        <p className="py-2 text-sm text-muted">No data yet</p>
+        <p className="py-2 text-sm text-muted">
+          Your busiest links appear here once they start collecting clicks.
+        </p>
       ) : (
         <ul className="flex flex-col gap-2">
           {links.map((l) => (
@@ -371,7 +378,7 @@ export function ClickBreakdown({
   return (
     <div className="flex flex-col gap-4">
       <Card>
-        <p className="mb-3 text-2xs tracking-wider text-muted uppercase">Countries</p>
+        <p className="mb-3 text-xs font-medium text-muted">Countries</p>
         {/* The map holds a 960:500 frame whatever width it gets, while the
             list grows a row per country, so side by side the map's column
             runs out of map long before the list runs out of rows. It only
@@ -381,17 +388,26 @@ export function ClickBreakdown({
           <div className="self-center lg:col-span-2">
             <CountryMap countries={countries} />
           </div>
-          <BarList items={countries.map((c) => ({ ...c, key: fmtCountry(c.key) }))} />
+          <BarList
+            items={countries.map((c) => ({ ...c, key: fmtCountry(c.key) }))}
+            empty="The country each click came from appears here. Never the address it came from."
+          />
         </div>
       </Card>
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <Card>
-          <p className="mb-3 text-2xs tracking-wider text-muted uppercase">Referrers</p>
-          <BarList items={referrers} />
+          <p className="mb-3 text-xs font-medium text-muted">Referrers</p>
+          <BarList
+            items={referrers}
+            empty="Where people were when they followed a link appears here."
+          />
         </Card>
         <Card>
-          <p className="mb-3 text-2xs tracking-wider text-muted uppercase">Devices</p>
-          <BarList items={devices} />
+          <p className="mb-3 text-xs font-medium text-muted">Devices</p>
+          <BarList
+            items={devices}
+            empty="Phone, desktop or tablet, counted here once clicks arrive."
+          />
         </Card>
       </div>
     </div>

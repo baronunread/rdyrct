@@ -104,13 +104,13 @@ function OrgSwitcherMenu({
             {o.id === org?.id && <Check size={13} className="text-accent" />}
           </span>
           <span className="truncate">{o.name}</span>
-          <span className="ml-auto text-3xs text-muted uppercase">{o.role}</span>
+          <span className="ml-auto text-xs text-muted">{o.role}</span>
         </MenuItem>
       ))}
       <MenuSeparator />
       <MenuItem onClick={onNewOrg}>
         <Plus size={14} className="text-muted" /> New organization
-        {!canCreateOrg && <span className="ml-auto text-3xs text-accent uppercase">Pro</span>}
+        {!canCreateOrg && <span className="ml-auto text-xs text-accent">Pro</span>}
       </MenuItem>
     </Menu>
   );
@@ -125,7 +125,7 @@ function PlatformNav({ visible }: { visible: boolean }) {
   if (!visible) return null;
   return (
     <div className="mt-2 px-3">
-      <p className="px-2.5 pb-1 text-3xs tracking-widest text-muted uppercase">Admin</p>
+      <p className="px-2.5 pb-1 text-xs font-medium text-muted">Admin</p>
       <nav className="flex flex-col gap-0.5">
         <Link to="/admin" {...navLinkProps}>
           <Globe size={15} /> Platform

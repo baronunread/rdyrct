@@ -99,7 +99,7 @@
   --color-chart: var(--chart);
   --color-danger: var(--danger);
   /* stylelint-disable value-keyword-case -- Preserve canonical font-family casing. */
-  --font-sans: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --font-sans: Figtree, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   /* stylelint-enable value-keyword-case */
   --text-2xs: 11px;
@@ -132,8 +132,13 @@
 html {
   background: var(--bg);
   color: var(--text);
-  font-family: var(--font-mono);
-  /* JetBrains Mono ships programming ligatures on by default (calt), which
+  /* Figtree carries everything anybody reads. Monospace is reserved for
+     identifiers, the strings a person copies or types, and is asked for
+     explicitly by the components that hold them (Slug, key fields, code).
+     See the rdyrct-design skill. */
+  font-family: var(--font-sans);
+  /* Inherited by the mono descendants too, which is the point: JetBrains
+     Mono ships programming ligatures on by default (calt), which
      can combine "//" into a single glyph — Windows' DirectWrite and macOS's
      CoreText apply calt differently for the same self-hosted webfont, so
      the same URL can visually show one slash on one platform and what

@@ -24,7 +24,7 @@ function Stat({ value, label }: { value: string; label: string }) {
   return (
     <div className="rounded-lg bg-surface-2 px-3 py-2.5">
       <p className="text-lg font-bold tnum">{value}</p>
-      <p className="text-2xs tracking-wider text-muted uppercase">{label}</p>
+      <p className="text-xs font-medium text-muted">{label}</p>
     </div>
   );
 }

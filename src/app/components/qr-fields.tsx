@@ -119,7 +119,7 @@ export function QrColorAndLogoFields({
         </Field>
       </div>
       <div>
-        <span className="mb-1.5 flex items-center gap-1.5 text-2xs tracking-wider text-muted uppercase">
+        <span className="mb-1.5 flex items-center gap-1.5 text-xs font-medium text-muted">
           Logo
           <Tooltip content="Embedded in the center of every QR code by default. Use a small, square image with some breathing room so the code stays easy to scan. A link can upload its own logo to override this.">
             <button
@@ -150,7 +150,7 @@ export function QrColorAndLogoFields({
 export function QrPreviewSidebar({ values, url }: { values: QrValues; url: string }) {
   return (
     <div className="flex flex-col gap-2 sm:w-40">
-      <p className="text-2xs tracking-wider text-muted uppercase">Preview</p>
+      <p className="text-xs font-medium text-muted">Preview</p>
       <QRPreview url={url} {...qrPreviewProps(values)} size={160} />
     </div>
   );

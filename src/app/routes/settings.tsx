@@ -184,7 +184,7 @@ function DangerZoneCard({
   return (
     <Card className="max-w-2xl">
       <div className="flex flex-col gap-3">
-        <p className="text-2xs tracking-wider text-danger uppercase">Danger zone</p>
+        <p className="text-xs font-medium text-danger">Danger zone</p>
         {org && isOwner && (
           <>
             <p className="text-sm text-muted">

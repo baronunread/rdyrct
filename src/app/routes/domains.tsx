@@ -82,7 +82,7 @@ function UpgradeDomainsCard() {
   return (
     <Card className="max-w-2xl">
       <div className="flex flex-col gap-3">
-        <p className="text-2xs tracking-wider text-muted uppercase">Custom domains</p>
+        <p className="text-xs font-medium text-muted">Custom domains</p>
         <p className="text-sm text-muted">
           Use your own domain for short links instead of the shared default. Custom domains are a
           paid feature.
@@ -114,9 +114,7 @@ function AddDomainForm({
       onSubmit={onSubmit}
     >
       <div>
-        <span className="mb-1.5 block text-xs tracking-wider text-muted uppercase">
-          Add a domain
-        </span>
+        <span className="mb-1.5 block text-xs text-muted">Add a domain</span>
         <div className="flex items-center gap-2">
           <div className="min-w-0 flex-1">
             <Input
@@ -141,7 +139,7 @@ function AddDomainForm({
 function HowItWorksSteps({ appHost }: { appHost: string }) {
   return (
     <aside className="w-full shrink-0 lg:w-72">
-      <p className="text-2xs tracking-wider text-muted uppercase">How it works</p>
+      <p className="text-xs font-medium text-muted">How it works</p>
       <ol className="mt-3 flex flex-col gap-3">
         <Step n={1}>
           At your DNS provider, create a CNAME record pointing a hostname you own (e.g.{" "}
@@ -270,7 +268,7 @@ function DomainsCard({ orgId, plan }: { orgId: string; plan: "free" | "hobby" | 
       <div className="flex flex-col gap-6 lg:flex-row lg:items-start">
         <Card className="w-full max-w-2xl">
           <div className="flex flex-col gap-4">
-            <p className="text-2xs tracking-wider text-muted uppercase">Custom domains</p>
+            <p className="text-xs font-medium text-muted">Custom domains</p>
 
             {domains.isLoading ? (
               <DomainsSkeleton />
@@ -522,9 +520,7 @@ function RootRedirectEditor({
 }) {
   return (
     <div className="mt-3">
-      <span className="mb-1.5 block text-xs tracking-wider text-muted uppercase">
-        Root redirect
-      </span>
+      <span className="mb-1.5 block text-xs text-muted">Root redirect</span>
       <div className="flex items-center gap-2">
         <div className="min-w-0 flex-1">
           <Input

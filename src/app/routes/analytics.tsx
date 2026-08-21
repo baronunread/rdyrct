@@ -83,8 +83,11 @@ function UtmBreakdownSection({
     <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
       {groups.map((g) => (
         <Card key={g.label}>
-          <p className="mb-3 text-2xs tracking-wider text-muted uppercase">{g.label}</p>
-          <BarList items={g.items} />
+          <p className="mb-3 text-xs font-medium text-muted">{g.label}</p>
+          <BarList
+            items={g.items}
+            empty={`Links tagged with a ${g.label.toLowerCase()} report it here.`}
+          />
         </Card>
       ))}
     </div>
@@ -105,7 +108,7 @@ function ClicksChart({
   const isHourly = bucket === "hour";
   return (
     <Card className="mt-4">
-      <p className="mb-3 text-2xs tracking-wider text-muted uppercase">
+      <p className="mb-3 text-xs font-medium text-muted">
         {isHourly ? "Clicks per hour" : "Clicks per day"}
       </p>
       <AreaChart
@@ -123,12 +126,12 @@ function ActivityBreakdown({ heatmap, bucket }: { heatmap: HeatmapRow[]; bucket:
   return (
     <div className="mt-4 grid gap-4 md:grid-cols-3">
       <Card className="md:col-span-2">
-        <p className="mb-3 text-2xs tracking-wider text-muted uppercase">By hour</p>
+        <p className="mb-3 text-xs font-medium text-muted">By hour</p>
         <ClicksByHour data={heatmap} />
       </Card>
       <Card>
-        <p className="mb-3 text-2xs tracking-wider text-muted uppercase">By weekday</p>
-        <BarList items={clicksByWeekday(heatmap)} />
+        <p className="mb-3 text-xs font-medium text-muted">By weekday</p>
+        <BarList items={clicksByWeekday(heatmap)} empty="Which days are busiest appears here." />
       </Card>
     </div>
   );

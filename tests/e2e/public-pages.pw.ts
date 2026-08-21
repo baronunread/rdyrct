@@ -136,6 +136,36 @@ test("the standalone pricing page has the full table and no self-host pitch", as
   await expect(page).toHaveURL(/\/signup/);
 });
 
+// The hero is two columns from md up: copy left, the working shortener right.
+// Most products put a screenshot there because you cannot use them logged
+// out; ours works with no account, so the real thing goes in that half. The
+// split is also what lets the primary CTA be primary: stacked, it sat above
+// the card and had to be demoted so the page did not show two primary
+// actions in one column.
+test("the hero puts the copy and the working shortener side by side", async ({ page }) => {
+  await page.goto("/");
+  const heading = page.getByRole("heading", { level: 1 });
+  const card = page.getByLabel("Try it without an account");
+  await expect(heading).toBeVisible();
+  await expect(card).toBeVisible();
+
+  const h = (await heading.boundingBox())!;
+  const c = (await card.boundingBox())!;
+  // Side by side, not stacked: the card starts after the heading ends.
+  expect(c.x).toBeGreaterThan(h.x + h.width - 1);
+  // And on the same band, not below it.
+  expect(c.y).toBeLessThan(h.y + h.height + 200);
+
+  // The filled button is back, and there is only one of it in the hero.
+  const hero = page.locator("section").first();
+  await expect(hero.getByRole("link", { name: /get started free/i })).toBeVisible();
+
+  // On a phone it stacks, and the card has to stay near the fold: it is the
+  // one thing on this page that turns a stranger into an account.
+  await page.setViewportSize({ width: 390, height: 780 });
+  await expect(card).toBeInViewport();
+});
+
 // Marketing navigation swaps the content where you stand and then rides the
 // new page up to its top, which is the order resend.com uses. Two things used
 // to go wrong and both are asserted here.

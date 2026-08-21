@@ -237,7 +237,7 @@ function LinkRow({ link, ...actions }: { link: AdminLinkRow } & RowActions) {
           </span>
         )}
       </Td>
-      <Td className="truncate text-muted" title={link.destination}>
+      <Td className="truncate font-mono text-xs text-muted" title={link.destination}>
         {link.destination}
       </Td>
       <Td className="truncate">
@@ -436,7 +436,7 @@ function AnonymousLinksTable({
         {rows.map((link) => (
           <tr key={link.id}>
             <Td className="truncate font-mono text-xs font-bold">/{link.slug}</Td>
-            <Td className="truncate text-muted" title={link.destination}>
+            <Td className="truncate font-mono text-xs text-muted" title={link.destination}>
               {link.destination}
             </Td>
             {/* Nobody owns it, and no click is recorded against it: both

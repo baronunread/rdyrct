@@ -12,7 +12,7 @@ import {
 import { AnimatePresence, LazyMotion, domAnimation } from "motion/react";
 import { shortUrl } from "../lib/api";
 import { type LinkDTO, type Sort } from "@/shared/types";
-import { Badge, Slug, Table, Th, Td } from "../ui/misc";
+import { Slug, Table, Th, Td } from "../ui/misc";
 import { Menu, MenuItem, MenuSeparator } from "../ui/menu";
 import { SortTh } from "../ui/sort-th";
 import { shortDate } from "../lib/dates";
@@ -78,9 +78,13 @@ function LinkCell({
         onClick={() => navigate(linkDetailPath(link))}
         className="group flex min-w-0 max-w-full cursor-pointer flex-col items-start gap-0.5 text-start"
       >
-        <Badge className="min-w-0 max-w-full">
-          <span className="truncate">{link.domain || appHost}</span>
-        </Badge>
+        {/* The domain is half the address, so it reads as the address: mono,
+            quiet, directly above the slug it belongs to. It used to sit in a
+            Badge, which is for state (active, pending, blocked) rather than
+            for an identifier. */}
+        <span className="min-w-0 max-w-full truncate font-mono text-2xs text-muted">
+          {link.domain || appHost}
+        </span>
         <Slug slug={link.slug} className="font-bold text-accent group-hover:underline" />
       </button>
       <span className="shrink-0">
@@ -165,7 +169,10 @@ function LinkRow({
             rel="noreferrer"
             className="flex items-center gap-1 text-muted hover:text-accent"
           >
-            <span className="truncate">{link.destination}</span>
+            {/* A destination is a URL somebody pastes and checks character by
+                character, so it keeps the mono face the title beside it does
+                not. */}
+            <span className="truncate font-mono text-xs">{link.destination}</span>
             <ExternalLink size={12} className="shrink-0" />
           </a>
         </Td>
