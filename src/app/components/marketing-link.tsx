@@ -29,6 +29,18 @@ import { Link, useNavigate, useRouter, type LinkProps } from "@tanstack/react-ro
 import { armScrollUp } from "../lib/marketing-scroll";
 import { isPlainLeftClick } from "../lib/plain-click";
 
+/**
+ * Which click is still the live one.
+ *
+ * Because the commit waits for `preloadRoute`, two links clicked in quick
+ * succession race: the first load can settle after the second has already
+ * navigated, and would then send the visitor to the page they gave up on.
+ * The counter is module-level on purpose, since the two clicks are usually
+ * on two different links, and each one only finishes what it started if
+ * nothing has been clicked since.
+ */
+let latestClick = 0;
+
 export function MarketingLink({
   children,
   className,
@@ -48,7 +60,7 @@ export function MarketingLink({
         onClick?.(event);
         if (to.hash || !isPlainLeftClick(event)) return;
         event.preventDefault();
-        armScrollUp();
+        const click = ++latestClick;
         // Load first, commit second. `preload="intent"` above has usually
         // done this already on hover or focus, in which case this resolves
         // on the spot; doing it again here is what makes it certain rather
@@ -56,7 +68,14 @@ export function MarketingLink({
         void router
           .preloadRoute({ ...to })
           .catch(() => {})
-          .finally(() => void navigate({ ...to, resetScroll: false, viewTransition: true }));
+          .finally(() => {
+            if (click !== latestClick) return;
+            // Arm here, not on the click: a click that loses the race never
+            // arrives anywhere, and would otherwise leave the next page it
+            // wasn't meant for riding to the top.
+            armScrollUp();
+            void navigate({ ...to, resetScroll: false, viewTransition: true });
+          });
       }}
     >
       {children}

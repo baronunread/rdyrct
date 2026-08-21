@@ -223,6 +223,34 @@ test("the logo rides back to the top from a section link on the same page", asyn
   expect(travelled(ys, start)).toBeGreaterThan(5);
 });
 
+// Two links clicked before the first one commits. The commit waits for the
+// route to load, so the first load can settle after the second has already
+// navigated: without a guard its `.finally()` sent the visitor to the page
+// they gave up on. Holding the pricing chunk is what makes the race certain
+// rather than a matter of timing.
+test("a second marketing link wins over one still loading", async ({ page }) => {
+  await page.goto("/");
+  let release = () => {};
+  const held = new Promise<void>((resolve) => (release = resolve));
+  await page.route(
+    (url) => url.pathname.includes("routes/pricing"),
+    async (route) => {
+      await held;
+      await route.continue();
+    },
+  );
+
+  await page.locator("header nav").getByRole("link", { name: "Pricing" }).click();
+  await page.locator("footer").getByRole("link", { name: "QR generator" }).click();
+  await expect(page).toHaveURL(/\/qr-code-generator$/);
+
+  // The abandoned load finishing must not steal the page back.
+  release();
+  await page.waitForTimeout(500);
+  await expect(page).toHaveURL(/\/qr-code-generator$/);
+  await expect(page.getByRole("heading", { level: 1 })).toContainText(/QR code/i);
+});
+
 test("legal pages retain their baseline headings", async ({ page }) => {
   await visitLegalPages(page);
 });
