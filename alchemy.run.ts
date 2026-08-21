@@ -26,21 +26,27 @@ const stageUrl = process.env.STAGE_URL ?? "https://example.invalid";
 /**
  * The counters from wrangler.jsonc, at the e2e limits rather than the
  * production ones: a browser suite runs from one address, so every test shares
- * one budget. `namespaceId` is per-script binding config and each stage gets
- * its own script, so the production numbers need no per-stage bookkeeping.
+ * one budget.
+ *
+ * The ids are their own block (34xxx), not production's 14xxx, for the same
+ * reason env.playwright uses 24xxx: wrangler.jsonc says namespace ids are
+ * unique within the account, and neither Cloudflare's docs nor Alchemy's
+ * source says whether a counter is scoped to the script or to the account. A
+ * distinct block costs nothing and settles the question by not asking it. One
+ * more reason a stage cannot reach production.
  */
 const rateLimits = {
-  RL_AUTH_PUBLIC: [14001, 40],
-  RL_CAP: [14011, 600],
-  RL_EMAIL: [14002, 30],
-  RL_WRITE_FREE: [14003, 90],
-  RL_WRITE_PAID: [14004, 300],
-  RL_QR_UPLOAD: [14005, 20],
-  RL_DOMAIN_SETUP: [14006, 30],
-  RL_BILLING: [14007, 10],
-  RL_CLICK_RECORDING: [14008, 600],
-  RL_EMAIL_RECIPIENT: [14009, 5],
-  RL_ANON_LINK: [14010, 30],
+  RL_AUTH_PUBLIC: [34001, 40],
+  RL_CAP: [34011, 600],
+  RL_EMAIL: [34002, 30],
+  RL_WRITE_FREE: [34003, 90],
+  RL_WRITE_PAID: [34004, 300],
+  RL_QR_UPLOAD: [34005, 20],
+  RL_DOMAIN_SETUP: [34006, 30],
+  RL_BILLING: [34007, 10],
+  RL_CLICK_RECORDING: [34008, 600],
+  RL_EMAIL_RECIPIENT: [34009, 5],
+  RL_ANON_LINK: [34010, 30],
 } as const;
 
 const limits = Object.fromEntries(
