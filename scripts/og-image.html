@@ -4,7 +4,7 @@
   stale silently: it still carried a headline the landing page had dropped.
 
   To regenerate, with `bun run dev` already running. It has to be served by
-  the dev server, because the JetBrains Mono stylesheets below resolve through
+  the dev server, because the font stylesheets below resolve through
   /node_modules, so copy it into public/ for the shot and delete it after:
   anything left in public/ ships as a route on the live site.
 
@@ -24,6 +24,7 @@
   <head>
     <meta charset="utf-8" />
     <title>rdyrct og</title>
+    <link rel="stylesheet" href="/node_modules/@fontsource-variable/figtree/wght.css" />
     <link rel="stylesheet" href="/node_modules/@fontsource/jetbrains-mono/latin-400.css" />
     <link rel="stylesheet" href="/node_modules/@fontsource/jetbrains-mono/latin-700.css" />
     <style>
@@ -52,7 +53,9 @@
 
         background: var(--bg);
         color: var(--text);
-        font-family: "JetBrains Mono", ui-monospace, monospace;
+        /* Same split the product uses: Figtree for anything read, JetBrains
+           Mono for identifiers. See the rdyrct-design skill. */
+        font-family: "Figtree Variable", ui-sans-serif, system-ui, sans-serif;
         /* An inset rule, so the card keeps a defined edge on a white feed
            instead of dissolving into it. */
         border: 1px solid var(--border);
@@ -82,7 +85,9 @@
         gap: 24px;
       }
 
+      /* The wordmark is an identifier, so it keeps the mono face. */
       .wordmark {
+        font-family: "JetBrains Mono", ui-monospace, monospace;
         font-size: 52px;
         font-weight: 700;
         letter-spacing: 0.14em;
@@ -102,7 +107,9 @@
         color: var(--accent);
       }
 
+      /* A short link is the thing somebody types: mono. */
       .chip {
+        font-family: "JetBrains Mono", ui-monospace, monospace;
         margin-top: 34px;
         align-self: flex-start;
         display: inline-flex;
