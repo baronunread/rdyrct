@@ -862,39 +862,81 @@ function HeroSection({
  * domain, with a slug they chose. It is also the clearest thing a paid plan
  * buys, put where somebody is still deciding whether to care.
  */
+/** The two mails land one after the other, then each says its verdict a beat
+ *  later, so the reader gets to look at the link before being told what to
+ *  make of it. MotionConfig reducedMotion="user" wraps the page, so this
+ *  becomes a plain appearance for anyone who asked for less movement. */
+const inboxVariants: Variants = {
+  hidden: {},
+  visible: { transition: { delayChildren: 0.15, staggerChildren: 0.55 } },
+};
+
+const mailVariants: Variants = {
+  hidden: { opacity: 0, y: 12 },
+  visible: { opacity: 1, y: 0, transition: { duration: 0.45, ease: "easeOut" } },
+};
+
+const verdictVariants: Variants = {
+  hidden: { opacity: 0 },
+  visible: { opacity: 1, transition: { delay: 0.5, duration: 0.35 } },
+};
+
 /**
- * One of the two messages, so the argument is made by the picture rather
- * than asserted by the copy.
+ * One mail in the inbox, so the argument is made by the picture rather than
+ * asserted by the copy.
+ *
+ * The verdict is about the link matching the sender, not about the link
+ * looking dodgy on its own. In an inbox the display name is the first thing
+ * read and the easiest thing to fake, so the link underneath is what settles
+ * it. That is the real reason a domain you own matters here.
  */
-function TextMessage({
+function InboxMail({
   from,
-  body,
+  subject,
   link,
   verdict,
   mine,
 }: {
   from: string;
-  body: string;
+  subject: string;
   link: string;
   verdict: string;
   mine?: boolean;
 }) {
   return (
-    <div
+    <m.div
+      variants={mailVariants}
       className={cn(
-        "flex flex-1 flex-col gap-2 rounded-xl p-4 text-left",
+        "flex gap-3 rounded-xl p-4 text-left",
         mine ? "bg-surface smooth-shadow-ring-sm" : "bg-surface-2",
       )}
     >
-      <p className="text-2xs text-muted">{from}</p>
-      <p className="text-sm">{body}</p>
-      <p
-        className={cn("font-mono text-sm font-bold break-all", mine ? "text-accent" : "text-muted")}
+      <span
+        className={cn(
+          "mt-0.5 grid size-8 shrink-0 place-items-center rounded-full text-xs font-bold",
+          mine ? "bg-accent/15 text-accent" : "bg-border text-muted",
+        )}
+        aria-hidden="true"
       >
-        {link}
-      </p>
-      <p className={cn("text-xs", mine ? "text-accent-2" : "text-danger")}>{verdict}</p>
-    </div>
+        A
+      </span>
+      <div className="flex min-w-0 flex-1 flex-col gap-1">
+        <div className="flex items-baseline justify-between gap-2">
+          <p className="truncate text-sm font-bold">{from}</p>
+          <span className="shrink-0 text-2xs text-muted">now</span>
+        </div>
+        <p className="truncate text-sm text-muted">{subject}</p>
+        <p className={cn("truncate font-mono text-xs", mine ? "text-accent" : "text-muted")}>
+          {link}
+        </p>
+        <m.p
+          variants={verdictVariants}
+          className={cn("mt-0.5 text-xs", mine ? "text-accent-2" : "text-muted")}
+        >
+          {verdict}
+        </m.p>
+      </div>
+    </m.div>
   );
 }
 
@@ -924,15 +966,56 @@ function CustomDomainSection() {
     // evidence was fighting what the section says.
     <Section className="py-12">
       <div className="grid items-center gap-8 md:grid-cols-2 md:gap-12">
-        <div className="flex flex-col items-center gap-5 text-center md:items-start md:text-left">
+        {/* Evidence left, argument right. On a phone the heading still comes
+            first: the inbox is the proof of a claim, and proof before the
+            claim is just two emails nobody asked about. */}
+        <m.div
+          initial="hidden"
+          whileInView="visible"
+          viewport={{ once: true, margin: "-60px" }}
+          variants={inboxVariants}
+          className="order-2 flex w-full flex-col gap-3 rounded-2xl bg-surface-2/40 p-3 md:order-1"
+        >
+          <p className="px-1 text-2xs font-medium text-muted">Inbox</p>
+          <InboxMail
+            from="Acme Store"
+            subject="Your 20% code ends tonight"
+            link="rdyrct.com/m22fs5w"
+            verdict="Doesn't match the sender"
+          />
+          <InboxMail
+            mine
+            from="Acme Store"
+            subject="Your 20% code ends tonight"
+            link="go.acme.com/20-off"
+            verdict="Matches the sender"
+          />
+        </m.div>
+
+        <div className="order-1 flex flex-col items-center gap-5 text-center md:order-2 md:items-start md:text-left">
+          {/* Gain framing, not fear. This used to open on "a random slug is
+              what a scam text looks like", which sells by making somebody
+              picture being mistaken for a scammer. Every competitor sells the
+              same feature the other way round, on recognition and clicks:
+              Dub "boost click-through rates by 30%", Bitly "replace bit.ly
+              with your brand and 2.3x your click-throughs", Rebrandly
+              "branded links build trust and get 39% more clicks". None of
+              them says spam, and Bitly is selling against a generic
+              shortener domain, which is the hardest case for staying
+              positive.
+
+              No number here, because we do not have one of our own and
+              quoting a competitor's marketing as evidence for our product
+              would be the same dishonesty in a nicer suit. The messages to
+              the right are the evidence instead. */}
           <h2 className="text-xl font-bold text-balance sm:text-2xl">
-            Your link gets read by someone deciding whether to trust it.
+            People click links they recognize.
           </h2>
           <p className="max-w-xl text-sm text-muted">
-            A random slug on a domain nobody recognises is what a scam text looks like. Connect a
-            domain you own and short links go live under it, with TLS issued automatically, and
-            every slug is yours to choose. On the shared domain they are always random, so nobody
-            can squat the good ones.
+            Connect a domain you own and every short link goes out under it, with TLS issued
+            automatically and every slug yours to choose. The name in the link is the name in the
+            message, so there is nothing to work out before clicking. On the shared domain slugs
+            stay random, so nobody can take the good ones.
           </p>
           <HrefLink
             href={paidTo("hobby")}
@@ -941,22 +1024,6 @@ function CustomDomainSection() {
           >
             Put your domain on it <ArrowRight size={14} />
           </HrefLink>
-        </div>
-
-        <div className="flex w-full flex-col gap-3">
-          <TextMessage
-            from="Text message, shared domain"
-            body="Acme: your 20% code ends tonight."
-            link="rdyrct.com/m22fs5w"
-            verdict="Deleted as spam"
-          />
-          <TextMessage
-            mine
-            from="The same text, your domain"
-            body="Acme: your 20% code ends tonight."
-            link="go.acme.com/20-off"
-            verdict="Obviously from Acme"
-          />
         </div>
       </div>
     </Section>
