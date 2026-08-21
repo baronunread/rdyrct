@@ -64,4 +64,20 @@ export async function signUpAndVerify(page: Page, email: string, password: strin
   await page.locator("input").first().focus();
   await page.keyboard.insertText(otp);
   await expect(page).toHaveURL(/\/dashboard$/);
+
+  // The URL changes first and the page arrives after it. A fresh account has
+  // nothing cached, so the dashboard under the chrome still owes /user, the
+  // org and the stats before it renders anything to act on. The create field
+  // is the signal because it is the one thing the loaded dashboard always
+  // draws: the heading is not, it reads "Shorten your first link" for a new
+  // account and "Dashboard" for one that claimed an anonymous link on the way
+  // in (anon-shortener.pw.ts).
+  //
+  // Waiting here rather than in each caller is the point: the next assertion
+  // in a test carries Playwright's default 5s, which is not a budget for
+  // three round trips on a loaded runner. Callers were failing on their own
+  // first line for the same reason sign-up above needed 30s.
+  await expect(page.getByPlaceholder("https://example.com/launch").first()).toBeVisible({
+    timeout: 30_000,
+  });
 }

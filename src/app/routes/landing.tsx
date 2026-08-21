@@ -1117,14 +1117,14 @@ function FeaturesSection() {
     <Section>
       <div className="mb-8 text-center">
         <h2 className="text-xl font-bold">Everything your team needs on a link</h2>
-        {/* Every card below is a marketer's feature, because that is what is
-            built. Claiming "and developers" over them, with no API anywhere in
-            the product, is a cheque the page cannot cash, so the claim points
-            at the roadmap instead of standing on its own. */}
+        {/* Every card below is worked from the dashboard, because that is what
+            is built. Saying so is the honest version of the old "built for the
+            people who run the campaigns", which named an audience instead of
+            saying what they get, and left developers to guess. */}
         <p className="mx-auto mt-2 max-w-xl text-sm text-muted">
-          Built for the people who run the campaigns. Developers,{" "}
+          All of it works from the dashboard.{" "}
           <MarketingLink to="/roadmap" className="text-accent hover:underline">
-            the API is on the roadmap
+            The API is on the roadmap
           </MarketingLink>
           .
         </p>
