@@ -25,10 +25,11 @@ import {
   MotionConfig,
   domAnimation,
   m,
+  useInView,
   useReducedMotion,
   type Variants,
 } from "motion/react";
-import { lazy, Suspense, useEffect } from "react";
+import { lazy, Suspense, useEffect, useRef } from "react";
 import { useSeo } from "../lib/seo";
 import { useMarketingScroll } from "../lib/marketing-scroll";
 import { FaqJsonLd } from "../components/faq-json-ld";
@@ -46,12 +47,13 @@ import { HeroSignedIn } from "../components/hero-signed-in";
 import { LandingHeader } from "../components/landing-header";
 import cloudflareLogo from "../assets/cloudflare.svg";
 /**
- * The mock pulls in the whole charts bundle (Plot, the renderer, the scales),
- * which is 118 KB the landing page was parsing before first paint to draw one
- * decorative chart most of a screen below the fold. Lazy, so the entry chunk
- * carries the page and the charts arrive alongside it instead of in front of
- * it. AnalyticsPreviewSection reserves the space, so nothing moves when it
- * lands.
+ * The mock pulls in the whole charts bundle (Plot, the renderer, the scales):
+ * 117 KB to draw one decorative chart most of a screen below the fold, and
+ * the largest single thing the landing page can fetch.
+ *
+ * Lazy keeps it out of the entry chunk, so it is never parsed before first
+ * paint. AnalyticsPreviewSection decides *when* it is fetched at all, which
+ * is the half that saves the bytes rather than just reordering them.
  */
 const LandingAnalyticsMock = lazy(() =>
   import("../components/landing-analytics").then((m) => ({ default: m.LandingAnalyticsMock })),
@@ -1092,8 +1094,24 @@ function HowItWorksSection() {
   );
 }
 
+/** The mock's own outer shell, empty. Same footprint, so the swap changes what
+ *  is inside the card and never where anything below it sits. */
+function AnalyticsMockPlaceholder() {
+  return (
+    <div className="h-[1140px] w-full max-w-4xl rounded-2xl bg-surface sm:h-[720px] smooth-shadow-ring-2xl" />
+  );
+}
+
 function AnalyticsPreviewSection() {
   const { authed } = useAudience();
+  // Most visitors never scroll this far, so the charts bundle is not fetched
+  // until they are heading for it: 600px of margin, most of a phone screen of
+  // warning, so the mock is usually there before the section is.
+  //
+  // Lazy alone (which is what this was) only moved the bytes off the critical
+  // path. They still went out to everybody who opened the homepage.
+  const nearby = useRef<HTMLDivElement>(null);
+  const approaching = useInView(nearby, { once: true, margin: "600px" });
   return (
     // The hero's second CTA lands here, so it needs an id and room under the
     // sticky header.
@@ -1106,17 +1124,14 @@ function AnalyticsPreviewSection() {
           on sample data.
         </p>
       </div>
-      {/* The reserved box is the mock's own outer shell, so the swap changes
-          what is inside the card and never its footprint: no layout shift,
-          and something card-shaped to look at while the chunk lands. */}
-      <div className="flex justify-center">
-        <Suspense
-          fallback={
-            <div className="h-[1140px] w-full max-w-4xl rounded-2xl bg-surface sm:h-[720px] smooth-shadow-ring-2xl" />
-          }
-        >
-          <LandingAnalyticsMock />
-        </Suspense>
+      <div ref={nearby} className="flex justify-center">
+        {approaching ? (
+          <Suspense fallback={<AnalyticsMockPlaceholder />}>
+            <LandingAnalyticsMock />
+          </Suspense>
+        ) : (
+          <AnalyticsMockPlaceholder />
+        )}
       </div>
 
       {/* The only ask between the hero and the pricing table. On a phone this

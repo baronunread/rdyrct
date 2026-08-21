@@ -483,3 +483,26 @@ test("a first visit does not ask who it is", async ({ page }) => {
 
   expect(userCalls, "a browser that was never signed in has nothing to ask").toEqual([]);
 });
+
+// The charts bundle is 117 KB, the largest single thing the homepage can
+// fetch, and it exists to draw one decorative mock most of a screen down.
+// Lazy alone was not enough: the chunk still went out to everybody who opened
+// the page, it just stopped blocking the paint. It must not be requested until
+// the visitor is heading for it.
+test("the charts bundle waits until the visitor scrolls toward it", async ({ page }) => {
+  const charts: string[] = [];
+  page.on("request", (r) => {
+    if (/\/assets\/charts-|\/components\/charts/.test(r.url())) charts.push(r.url());
+  });
+
+  await page.goto("/");
+  await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+  await page.waitForLoadState("networkidle");
+  expect(charts, "nothing above the fold needs the charts bundle").toEqual([]);
+
+  // Now go to it. The section renders its placeholder either way, so wait for
+  // the chart the bundle is actually for.
+  await page.locator("#analytics").scrollIntoViewIfNeeded();
+  await expect(page.locator("#analytics").getByLabel("Clicks per day")).toBeVisible();
+  expect(charts.length, "and it arrives once they do").toBeGreaterThan(0);
+});
