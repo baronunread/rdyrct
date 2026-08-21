@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { visitLegalPages } from "./pages";
+import { boxOf, visitLegalPages } from "./pages";
 
 test("landing page keeps the main sign-up path", async ({ page }) => {
   await page.goto("/");
@@ -75,14 +75,14 @@ test("header centres the reading links and keeps the auth actions right", async 
   const nav = header.locator("nav");
   await expect(nav.getByRole("link", { name: "Pricing" })).toBeVisible();
 
-  const navBox = (await nav.boundingBox())!;
-  const headBox = (await header.boundingBox())!;
+  const navBox = await boxOf(nav);
+  const headBox = await boxOf(header);
   const navCentre = navBox.x + navBox.width / 2;
   const headCentre = headBox.x + headBox.width / 2;
   expect(Math.abs(navCentre - headCentre)).toBeLessThan(2);
 
   // Auth actions sit to the right of the centred nav, not among it.
-  const signUp = (await header.getByRole("link", { name: "Sign up" }).boundingBox())!;
+  const signUp = await boxOf(header.getByRole("link", { name: "Sign up" }));
   expect(signUp.x).toBeGreaterThan(navBox.x + navBox.width);
 
   // On a phone the three columns do not fit, so the reading links drop out
@@ -158,8 +158,8 @@ test("the hero puts the copy and the working shortener side by side", async ({ p
   await expect(heading).toBeVisible();
   await expect(card).toBeVisible();
 
-  const h = (await heading.boundingBox())!;
-  const c = (await card.boundingBox())!;
+  const h = await boxOf(heading);
+  const c = await boxOf(card);
   // Side by side, not stacked: the card starts after the heading ends.
   expect(c.x).toBeGreaterThan(h.x + h.width - 1);
   // And on the same band, not below it.
@@ -173,8 +173,8 @@ test("the hero puts the copy and the working shortener side by side", async ({ p
   // one thing on this page that turns a stranger into an account. Assert the
   // stack itself, not just that the card is somewhere on screen.
   await page.setViewportSize({ width: 390, height: 780 });
-  const hNarrow = (await heading.boundingBox())!;
-  const cNarrow = (await card.boundingBox())!;
+  const hNarrow = await boxOf(heading);
+  const cNarrow = await boxOf(card);
   expect(cNarrow.y).toBeGreaterThan(hNarrow.y + hNarrow.height - 1);
   expect(cNarrow.x).toBeLessThan(hNarrow.x + hNarrow.width);
   await expect(card).toBeInViewport();
@@ -290,8 +290,7 @@ test("the footer is the same width on every public page", async ({ page }) => {
   const widths: Record<string, number> = {};
   for (const path of ["/", "/privacy", "/terms"]) {
     await page.goto(path);
-    const box = await page.locator("footer").boundingBox();
-    widths[path] = Math.round(box?.width ?? 0);
+    widths[path] = Math.round((await boxOf(page.locator("footer"))).width);
   }
 
   expect(widths["/privacy"]).toBe(widths["/"]);
@@ -523,11 +522,11 @@ test("the analytics placeholder reserves exactly what the mock takes", async ({ 
 
     const slot = page.locator("#analytics").locator("div.flex.justify-center").first();
     await expect(slot).toBeVisible();
-    const reserved = (await slot.boundingBox())!.height;
+    const reserved = (await boxOf(slot)).height;
 
     await page.locator("#analytics").scrollIntoViewIfNeeded();
     await expect(page.locator("#analytics").getByLabel("Clicks per day")).toBeVisible();
-    const actual = (await slot.boundingBox())!.height;
+    const actual = (await boxOf(slot)).height;
 
     expect(Math.abs(actual - reserved), `reserved height at ${width}px`).toBeLessThan(8);
   }

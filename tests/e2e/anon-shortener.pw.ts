@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { signUpAndVerify } from "./resend";
 import { queryRows } from "./db";
+import { boxOf } from "./pages";
 
 /**
  * The anonymous shortener in the hero, and the claim that follows it
@@ -279,8 +280,7 @@ test.describe("on a phone", () => {
     const destination = `https://example.com/mobile-${Date.now()}`;
     await shorten(page, destination);
 
-    const box = async (locator: import("@playwright/test").Locator) =>
-      (await locator.boundingBox())!;
+    const box = async (locator: import("@playwright/test").Locator) => await boxOf(locator);
 
     // The field is as tall as the button beside it, not squashed.
     const field = await box(page.getByLabel("Shorten a link, no account needed"));
