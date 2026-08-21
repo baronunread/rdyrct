@@ -21,9 +21,13 @@ test("accepting an invite deletes it, token and all", async ({ page, browser }) 
   await page.getByRole("button", { name: "Create invite link" }).click();
   await expect(page.getByText("Pending invites")).toBeVisible();
 
+  // Scoped to this owner, not "the newest invite": the suite runs in parallel
+  // shards against one database, so the global newest row belongs to whichever
+  // test wrote last.
   const [invite] = await queryRows<{ token: string }>(
     page,
-    "select token from invites order by created_at desc limit 1",
+    "select token from invites where created_by = (select id from user where email = ?)",
+    [owner],
   );
   expect(invite?.token).toBeTruthy();
 

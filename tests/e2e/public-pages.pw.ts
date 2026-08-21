@@ -540,7 +540,9 @@ test("public pages point at their machine-readable description", async ({ reques
   for (const path of ["/", "/pricing", "/qr-code-generator", "/privacy", "/terms"]) {
     const res = await request.get(path);
     expect(res.status(), path).toBe(200);
-    expect(res.headers()["link"] ?? "", path).toContain('</llms.txt>; rel="describedby"');
+    expect(res.headers()["link"] ?? "", path).toContain(
+      '</llms.txt>; rel="describedby"; type="text/plain"',
+    );
   }
 
   const dashboard = await request.get("/dashboard");
