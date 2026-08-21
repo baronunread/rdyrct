@@ -1094,11 +1094,23 @@ function HowItWorksSection() {
   );
 }
 
-/** The mock's own outer shell, empty. Same footprint, so the swap changes what
- *  is inside the card and never where anything below it sits. */
+/**
+ * The mock's own outer shell, empty, at the mock's own height. Same footprint,
+ * so the swap changes what is inside the card and never where anything below
+ * it sits.
+ *
+ * The three heights are measured, not estimated, and they are three because
+ * the mock relayouts twice: the bar-list row goes from stacked to three
+ * columns at `sm`, and the heatmap and weekday cards go side by side at `md`.
+ * A first pass here guessed two heights and was short by 383px to 703px at
+ * every width. It measured as CLS 0 anyway, because the swap happens 600px
+ * before the section is on screen, which is exactly the kind of wrong that
+ * survives its own test. tests/e2e/public-pages.pw.ts pins all three against
+ * the real thing.
+ */
 function AnalyticsMockPlaceholder() {
   return (
-    <div className="h-[1140px] w-full max-w-4xl rounded-2xl bg-surface sm:h-[720px] smooth-shadow-ring-2xl" />
+    <div className="h-[1795px] w-full max-w-4xl rounded-2xl bg-surface sm:h-[1423px] md:h-[1103px] smooth-shadow-ring-2xl" />
   );
 }
 

@@ -506,3 +506,29 @@ test("the charts bundle waits until the visitor scrolls toward it", async ({ pag
   await expect(page.locator("#analytics").getByLabel("Clicks per day")).toBeVisible();
   expect(charts.length, "and it arrives once they do").toBeGreaterThan(0);
 });
+
+// The placeholder exists to hold the mock's exact footprint, so nothing below
+// it moves when the real thing lands. Its heights are hand-written numbers
+// against a component that relayouts twice (bar lists at sm, heatmap at md),
+// which is a pairing that goes stale silently: the swap happens 600px before
+// the section is on screen, so a wrong height still measures as CLS 0 while
+// shifting the page for anyone who scrolls fast. The first version of these
+// heights was short by up to 703px and looked fine.
+//
+// One width per layout the mock has.
+test("the analytics placeholder reserves exactly what the mock takes", async ({ page }) => {
+  for (const width of [390, 700, 1280]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto("/");
+
+    const slot = page.locator("#analytics").locator("div.flex.justify-center").first();
+    await expect(slot).toBeVisible();
+    const reserved = (await slot.boundingBox())!.height;
+
+    await page.locator("#analytics").scrollIntoViewIfNeeded();
+    await expect(page.locator("#analytics").getByLabel("Clicks per day")).toBeVisible();
+    const actual = (await slot.boundingBox())!.height;
+
+    expect(Math.abs(actual - reserved), `reserved height at ${width}px`).toBeLessThan(8);
+  }
+});
