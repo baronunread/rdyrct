@@ -41,12 +41,16 @@ export function MarketingPage({
         <div className="relative mx-auto min-h-dvh max-w-5xl px-6">
           <LandingHeader authed={authed} />
 
-          <div className="pt-14 pb-2 text-center sm:pt-20">
-            <h1 className="text-3xl font-bold tracking-tight text-balance sm:text-4xl">{title}</h1>
-            <p className="mx-auto mt-3 max-w-xl text-sm text-muted sm:text-base">{intro}</p>
-          </div>
+          <main>
+            <div className="pt-14 pb-2 text-center sm:pt-20">
+              <h1 className="text-3xl font-bold tracking-tight text-balance sm:text-4xl">
+                {title}
+              </h1>
+              <p className="mx-auto mt-3 max-w-xl text-sm text-muted sm:text-base">{intro}</p>
+            </div>
 
-          {children}
+            {children}
+          </main>
 
           <Footer />
         </div>

@@ -236,7 +236,7 @@ export function QrGeneratorPage() {
     <div className="relative mx-auto min-h-dvh max-w-5xl px-6">
       <LandingHeader authed={authed} />
 
-      <section className="flex flex-col items-center gap-8 py-14 sm:py-20">
+      <main className="flex flex-col items-center gap-8 py-14 sm:py-20">
         <div className="flex max-w-2xl flex-col items-center gap-4 text-center">
           <h1 className="text-3xl font-bold tracking-tight text-balance sm:text-4xl">
             Free QR code generator
@@ -306,7 +306,7 @@ export function QrGeneratorPage() {
         <QrFaq />
 
         <OpenSourceNote />
-      </section>
+      </main>
 
       <Footer />
     </div>

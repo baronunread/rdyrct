@@ -27,9 +27,9 @@ export function LegalPageLayout({ children, authed }: { children: ReactNode; aut
   return (
     <div className="relative mx-auto min-h-dvh max-w-5xl px-6">
       <LandingHeader authed={authed} />
-      <div className="mx-auto max-w-3xl py-12">
+      <main className="mx-auto max-w-3xl py-12">
         <div className="flex flex-col gap-8 text-sm">{children}</div>
-      </div>
+      </main>
       <Footer />
     </div>
   );

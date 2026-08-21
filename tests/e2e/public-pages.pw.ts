@@ -438,3 +438,48 @@ test("the app actually mounts, rather than leaving the crawler block on screen",
   // The crawler block is clipped to 1px and has no header; the app has one.
   await expect(page.locator("header").getByRole("link", { name: "Sign up" })).toBeVisible();
 });
+
+// Every page owes a screen-reader user one main landmark: it is what "skip to
+// content" skips to, and without it the only way past the header and its nav
+// is to walk them link by link, on every page, every visit. The app shell has
+// had one all along; the public pages, which are the ones strangers land on,
+// had none.
+//
+// Exactly one, not at least one: two mains is the same as none, since neither
+// is then "the content".
+test("every public page has one main landmark", async ({ page }) => {
+  for (const path of ["/", "/qr-code-generator", "/pricing", "/roadmap", "/privacy", "/terms"]) {
+    await page.goto(path);
+    // The header renders before the page chunk, so wait for the page itself.
+    await expect(page.getByRole("heading", { level: 1 }).first()).toBeVisible();
+    await expect(page.getByRole("main"), `main landmark on ${path}`).toHaveCount(1);
+  }
+});
+
+// A stranger has no session, so asking /user who they are could only ever come
+// back 401, and the browser logs every one of those as a page error. First
+// visit to the homepage, which is the visit that matters most, opened the
+// console on an error. The header still has to come out right, which is the
+// second half of this test: skipping the request must not make a signed-out
+// visitor look signed in.
+test("a first visit does not ask who it is", async ({ page }) => {
+  const userCalls: string[] = [];
+  page.on("request", (r) => {
+    if (new URL(r.url()).pathname === "/api/user") userCalls.push(r.url());
+  });
+
+  await page.goto("/");
+  await expect(page.locator("header").getByRole("link", { name: "Sign up" })).toBeVisible();
+  // The header paints before the rest of the page has even mounted, so
+  // asserting here caught nothing: the first version of this test passed
+  // against a build that still made the call. Every section has to have
+  // mounted, including the ones that ask this to decide where a CTA points,
+  // and the lazy analytics mock has to have landed.
+  await page
+    .getByRole("link", { name: /start pro/i })
+    .first()
+    .scrollIntoViewIfNeeded();
+  await page.waitForLoadState("networkidle");
+
+  expect(userCalls, "a browser that was never signed in has nothing to ask").toEqual([]);
+});
