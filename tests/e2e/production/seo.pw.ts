@@ -132,7 +132,7 @@ test("the second visit to a dead slug still renders the page", async ({ request 
   );
 });
 
-test("a static file the bundle serves still answers 200", async ({ request }) => {
+test("a file the bundle serves at the root still answers 200", async ({ request }) => {
   // These are one segment and not a reserved keyword, so a slug is all they
   // look like. run_worker_first excludes them by name now, but the exclusion
   // list is hand-written: drop a name and the file falls back through the slug
@@ -146,7 +146,7 @@ test("a static file the bundle serves still answers 200", async ({ request }) =>
   // so a bundle that answered /og.png with the SPA shell would satisfy a
   // status-only check while serving the wrong bytes.
   const assets = [
-    ["/assets/favicon.svg", "image/svg+xml"],
+    ["/favicon.svg", "image/svg+xml"],
     ["/og.png", "image/png"],
     ["/llms.txt", "text/plain"],
   ];

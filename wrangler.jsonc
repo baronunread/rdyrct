@@ -40,6 +40,7 @@
     "run_worker_first": [
       "/*",
       "!/assets/*",
+      "!/favicon.svg",
       "!/og.png",
       "!/robots.txt",
       "!/sitemap.xml",

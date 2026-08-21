@@ -33,12 +33,19 @@ test("the sidebar survives a reload before /user answers", async ({ page }) => {
   // The chrome is cached; the page under it is not. A form offered from the
   // cache would carry settings one page load out of date, which is how a
   // link ends up on the domain the org stopped defaulting to.
-  await expect(page.getByRole("button", { name: "New link" })).toBeHidden();
+  //
+  // .first() because a brand-new org has no links, so the page offers the
+  // button twice once the list lands: the page header and the empty state.
+  // Whether the second one exists yet is a race with that query, and this
+  // test is not about either. Without it the assertion below passed or threw
+  // a strict-mode violation depending on how fast /links answered.
+  const newLink = page.getByRole("button", { name: "New link" }).first();
+  await expect(newLink).toBeHidden();
 
   // Let the check land: the cache is a first frame, not a replacement for it.
   release();
   await expect(page.getByText(email)).toBeVisible();
-  await expect(page.getByRole("button", { name: "New link" })).toBeVisible();
+  await expect(newLink).toBeVisible();
 });
 
 /** Signing out drops the cache: the next visitor to this browser is a

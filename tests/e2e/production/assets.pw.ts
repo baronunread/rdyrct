@@ -91,7 +91,7 @@ test("every file under /assets/ is content-hashed", async ({ request }) => {
 // conditional request per file to be told nothing had changed. They are
 // excluded from run_worker_first now, and public/_headers names each one.
 test("the unhashed static files at the root are cached for an hour", async ({ request }) => {
-  for (const path of ["/og.png", "/llms.txt", "/robots.txt"]) {
+  for (const path of ["/og.png", "/favicon.svg", "/llms.txt", "/robots.txt"]) {
     const res = await request.get(path);
     expect(res.status(), path).toBe(200);
     expect(res.headers()["cache-control"], path).toBe("public, max-age=3600, must-revalidate");

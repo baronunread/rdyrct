@@ -519,7 +519,7 @@ test("the dev server never hands out a long cache for a source module", async ({
 // block instead. The production suite could not see it: that path only exists
 // while Vite is serving.
 test("the single-segment files the dev server owns are not 404s", async ({ request }) => {
-  for (const path of ["/@react-refresh", "/og.png", "/llms.txt"]) {
+  for (const path of ["/@react-refresh", "/favicon.svg", "/og.png", "/llms.txt"]) {
     expect((await request.get(path)).status(), path).toBe(200);
   }
 });
