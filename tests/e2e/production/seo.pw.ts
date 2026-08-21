@@ -75,7 +75,22 @@ test("robots.txt declares both sitemaps", async ({ request }) => {
 test("robots.txt keeps the private routes out of the index", async ({ request }) => {
   const robots = await (await request.get("/robots.txt")).text();
 
-  for (const path of ["/api/", "/dashboard", "/admin", "/billing", "/settings"]) {
+  // Every one of them, not a sample: a regression that drops a single line
+  // is exactly what this is here to catch.
+  for (const path of [
+    "/api/",
+    "/dashboard",
+    "/analytics",
+    "/links",
+    "/members",
+    "/billing",
+    "/domains",
+    "/settings",
+    "/admin",
+    "/onboarding",
+    "/reset-password",
+    "/invite/",
+  ]) {
     expect(robots).toContain(`Disallow: ${path}`);
   }
 });
