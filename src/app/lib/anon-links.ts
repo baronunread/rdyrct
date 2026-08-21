@@ -31,10 +31,11 @@ const KEY = "rdyrct:anon-links:v3";
  *
  * A product limit, not a security one: abuse is already handled by the Cap
  * proof-of-work and RL_ANON_LINK, both of which a browser cannot talk its
- * way past. This is the point where trying it becomes signing up. It frees
- * up as links expire, and claiming at signup clears it entirely.
+ * way past. One link is enough to show that shortening works, and the second
+ * one is where trying it becomes signing up. It frees up as the link expires,
+ * and claiming at signup clears it entirely.
  */
-export const MAX_ANON_LINKS = 3;
+export const MAX_ANON_LINKS = 1;
 
 const storedAnonLinkSchema = v.object({
   slug: v.string(),
@@ -77,7 +78,10 @@ export function storedAnonLinks(): StoredAnonLink[] {
     const parsed = v.safeParse(storedListSchema, JSON.parse(raw));
     if (!parsed.success) return [];
     const now = Date.now();
-    return parsed.output.filter((link) => link.expiresAt > now);
+    // Sliced on the way out as well as on the way in: a browser that made
+    // three links before the cap became one still holds all three, and the
+    // hero must not show more than it now lets anyone make.
+    return parsed.output.filter((link) => link.expiresAt > now).slice(0, MAX_ANON_LINKS);
   } catch {
     return [];
   }

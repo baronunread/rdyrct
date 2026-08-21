@@ -12,11 +12,12 @@ import {
  *
  * Worth testing directly because every one of its failure modes is silent:
  * an expired link renders as a URL that 404s, a lost claim token turns
- * "keep these 3 links" into a lie, and junk under our key would otherwise
- * decide what requests signup makes.
+ * "keep this link" into a lie, and junk under our key would otherwise decide
+ * what requests signup makes.
  */
 
 const HOUR = 60 * 60 * 1000;
+const KEY = "rdyrct:anon-links:v3";
 
 /** The two methods this module touches, and nothing else. */
 function fakeStorage() {
@@ -62,10 +63,10 @@ describe("keeping links across a reload", () => {
     ]);
   });
 
-  test("keeps the newest first, matching the order the hero shows", () => {
+  test("keeps the newest, which is the one the hero shows", () => {
     rememberAnonLink(link("first0"), "https://example.com/1");
     rememberAnonLink(link("second"), "https://example.com/2");
-    expect(storedAnonLinks().map((l) => l.slug)).toEqual(["second", "first0"]);
+    expect(storedAnonLinks().map((l) => l.slug)).toEqual(["second"]);
   });
 
   test("does not store the same link twice if it is remembered again", () => {
@@ -82,8 +83,30 @@ describe("the cap", () => {
     }
     const kept = storedAnonLinks();
     expect(kept).toHaveLength(MAX_ANON_LINKS);
-    // The most recent survive; the first two are gone.
-    expect(kept.map((l) => l.slug)).toEqual(["slug4", "slug3", "slug2"]);
+    // The most recent survive, newest first; the oldest two are gone.
+    const newest = Array.from(
+      { length: MAX_ANON_LINKS },
+      (_, i) => `slug${MAX_ANON_LINKS + 1 - i}`,
+    );
+    expect(kept.map((l) => l.slug)).toEqual(newest);
+  });
+
+  test("shows only the cap, even if this browser stored more before", () => {
+    // The cap used to be three. A browser that filled it must not keep
+    // rendering three links the form no longer lets anyone make.
+    store.set(
+      KEY,
+      JSON.stringify(
+        ["old000", "old111", "old222"].map((slug) => ({
+          slug,
+          url: `https://rdyrct.com/${slug}`,
+          source: "https://example.com",
+          claimToken: `tok-${slug}`,
+          expiresAt: Date.now() + HOUR,
+        })),
+      ),
+    );
+    expect(storedAnonLinks()).toHaveLength(MAX_ANON_LINKS);
   });
 });
 
@@ -105,8 +128,6 @@ describe("expiry", () => {
 });
 
 describe("junk under our key", () => {
-  const KEY = "rdyrct:anon-links:v3";
-
   test("discards anything that is not an array", () => {
     for (const junk of ['{"slug":"x"}', '"a string"', "42", "not json at all"]) {
       store.set(KEY, junk);
