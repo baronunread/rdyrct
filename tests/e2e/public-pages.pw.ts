@@ -161,8 +161,13 @@ test("the hero puts the copy and the working shortener side by side", async ({ p
   await expect(hero.getByRole("link", { name: /get started free/i })).toBeVisible();
 
   // On a phone it stacks, and the card has to stay near the fold: it is the
-  // one thing on this page that turns a stranger into an account.
+  // one thing on this page that turns a stranger into an account. Assert the
+  // stack itself, not just that the card is somewhere on screen.
   await page.setViewportSize({ width: 390, height: 780 });
+  const hNarrow = (await heading.boundingBox())!;
+  const cNarrow = (await card.boundingBox())!;
+  expect(cNarrow.y).toBeGreaterThan(hNarrow.y + hNarrow.height - 1);
+  expect(cNarrow.x).toBeLessThan(hNarrow.x + hNarrow.width);
   await expect(card).toBeInViewport();
 });
 

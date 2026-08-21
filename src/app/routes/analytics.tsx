@@ -84,10 +84,11 @@ function UtmBreakdownSection({
       {groups.map((g) => (
         <Card key={g.label}>
           <p className="mb-3 text-xs font-medium text-muted">{g.label}</p>
-          <BarList
-            items={g.items}
-            empty={`Links tagged with a ${g.label.toLowerCase()} report it here.`}
-          />
+          {/* No empty line: the filter above drops a group with no items,
+              and the whole section goes when every group is empty. A card
+              titled "Campaigns" saying "nothing yet" to an org that does not
+              use UTM tags is noise, not help. */}
+          <BarList items={g.items} />
         </Card>
       ))}
     </div>
@@ -131,7 +132,10 @@ function ActivityBreakdown({ heatmap, bucket }: { heatmap: HeatmapRow[]; bucket:
       </Card>
       <Card>
         <p className="mb-3 text-xs font-medium text-muted">By weekday</p>
-        <BarList items={clicksByWeekday(heatmap)} empty="Which days are busiest appears here." />
+        {/* clicksByWeekday always returns all seven days, and the section
+            above returns null without a heatmap, so this list is never
+            empty. */}
+        <BarList items={clicksByWeekday(heatmap)} />
       </Card>
     </div>
   );
