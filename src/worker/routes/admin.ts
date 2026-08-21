@@ -14,6 +14,7 @@ import {
   type AdminOrgRow,
   type AdminOrgDetail,
   type AdminUserRow,
+  type AdminActionRow,
   type OrgPlan,
   orgPlanOf,
 } from "@/shared/types";
@@ -59,6 +60,47 @@ adminRoutes.use("*", requireAdmin);
 // above this line is reachable by any signed-in user. It was, briefly, and a
 // test caught it (#67).
 adminRoutes.route("/links", adminLinkRoutes);
+
+const AUDIT_MAX_ROWS = 200;
+
+/**
+ * The audit log, newest first, optionally narrowed to one target.
+ *
+ * Here rather than under /links, where it started: admin_actions covers users
+ * and orgs too, and a path that says otherwise is a lie about what it serves
+ * (#104).
+ */
+adminRoutes.get("/audit", async (c) => {
+  const db = c.var.db;
+  const targetType = c.req.query("targetType");
+  const targetId = c.req.query("targetId");
+  const rows = await db
+    .select({
+      id: schema.adminActions.id,
+      actorUserId: schema.adminActions.actorUserId,
+      actorEmail: schema.user.email,
+      action: schema.adminActions.action,
+      targetType: schema.adminActions.targetType,
+      targetId: schema.adminActions.targetId,
+      detail: schema.adminActions.detail,
+      createdAt: schema.adminActions.createdAt,
+    })
+    .from(schema.adminActions)
+    // Left join: the actor may have been deleted since, and the entry has to
+    // outlive them. That is why the table holds no foreign key.
+    .leftJoin(schema.user, eq(schema.user.id, schema.adminActions.actorUserId))
+    .where(
+      targetType && targetId
+        ? and(
+            eq(schema.adminActions.targetType, targetType),
+            eq(schema.adminActions.targetId, targetId),
+          )
+        : undefined,
+    )
+    .orderBy(desc(schema.adminActions.createdAt))
+    .limit(AUDIT_MAX_ROWS);
+  return c.json(rows satisfies AdminActionRow[]);
+});
 
 const day = sql<string>`date(ts / 1000, 'unixepoch')`;
 const userDay = sql<string>`date(created_at / 1000, 'unixepoch')`;

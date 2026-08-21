@@ -179,9 +179,6 @@ export const invites = sqliteTable(
     }),
     createdAt: integer("created_at").notNull(),
     expiresAt: integer("expires_at").notNull(),
-    acceptedBy: text("accepted_by").references(() => user.id, {
-      onDelete: "set null",
-    }),
   },
   (t) => [index("idx_invites_org").on(t.orgId)],
 );

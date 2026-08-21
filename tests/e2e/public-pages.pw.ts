@@ -531,3 +531,18 @@ test("the analytics placeholder reserves exactly what the mock takes", async ({ 
     expect(Math.abs(actual - reserved), `reserved height at ${width}px`).toBeLessThan(8);
   }
 });
+
+// #137: a public page points at what describes it (RFC 8288), so an agent
+// that fetches one learns where the machine-readable copy lives instead of
+// guessing at well-known paths. Only the pages we describe carry it: the app
+// behind the login wants no such traffic.
+test("public pages point at their machine-readable description", async ({ request }) => {
+  for (const path of ["/", "/pricing", "/qr-code-generator", "/privacy", "/terms"]) {
+    const res = await request.get(path);
+    expect(res.status(), path).toBe(200);
+    expect(res.headers()["link"] ?? "", path).toContain('</llms.txt>; rel="describedby"');
+  }
+
+  const dashboard = await request.get("/dashboard");
+  expect(dashboard.headers()["link"] ?? "").toBe("");
+});

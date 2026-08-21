@@ -375,6 +375,11 @@ const wrapped = Sentry.withSentry<Env, StorageMessage | ClickMessage>(
       // redirect path already stopped resolving them; this frees their slugs.
       await sweepExpiredAliases(env, drizzle(env.DB, { schema }));
 
+      // Daily: drop invites nobody opened before they expired (#103). An
+      // accepted one is already deleted at accept time; this clears the rest,
+      // so no token and no invited address outlives the week it was good for.
+      await env.DB.prepare(`delete from invites where expires_at < ?`).bind(Date.now()).run();
+
       // Daily: drop anonymous links nobody claimed inside their 24 hours, and
       // the KV keys they were resolving through (Direction A of #96).
       await sweepExpiredAnonLinks(env);

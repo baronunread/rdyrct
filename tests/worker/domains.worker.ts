@@ -256,8 +256,7 @@ describe("domain reads do not mutate", () => {
     expect((await statusOf("domain-1"))?.status).toBe("checking_dns");
 
     const refresh = await call(
-      new Request("http://localhost/api/orgs/org-1/domains/domain-1/refresh", {
-        method: "POST",
+      new Request("http://localhost/api/orgs/org-1/domains/domain-1", {
         headers: { cookie },
       }),
     );

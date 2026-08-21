@@ -1,7 +1,7 @@
 import { Hono, type Context } from "hono";
 import { nonEmpty } from "../../shared/lookup";
 import type { JsonValue } from "../../shared/types";
-import { optionalText, parseOptionalBody } from "../schemas";
+import { optionalText, parseBody, parseOptionalBody } from "../schemas";
 import * as v from "valibot";
 import { HTTPException } from "hono/http-exception";
 import { eq, and, desc, isNull, sql } from "drizzle-orm";
@@ -1088,58 +1088,65 @@ linkRoutes.post("/:linkId/addresses", requireOrgRole("member"), async (c) => {
   return c.json(dto, status);
 });
 
-linkRoutes.post(
-  "/:linkId/addresses/:addressId/keep-forever",
-  requireOrgRole("member"),
-  async (c) => {
-    const { db, orgId, address } = await findLinkAndAddress(c);
-    if (address.kind !== "temp_alias")
-      throw new HTTPException(400, { message: "Only a temporary alias can be kept forever" });
+/**
+ * One address, three things a caller can do to it, and only two verbs needed
+ * (#104): `PATCH { kind }` keeps a temporary alias forever or promotes one to
+ * primary, and `DELETE` retires it.
+ */
+const addressPatchSchema = v.object({ kind: v.picklist(["permanent", "primary"]) });
 
-    const { limits } = await orgPlan(db, orgId);
+linkRoutes.patch("/:linkId/addresses/:addressId", requireOrgRole("member"), async (c) => {
+  const body = parseBody(addressPatchSchema, await c.req.json<JsonValue>().catch(() => ({})));
+  return body.kind === "primary" ? promoteAddress(c) : keepAddressForever(c);
+});
 
-    // Atomic: the org's links cap is re-checked at write time inside one D1
-    // statement (see issue #18). Also guarded on retired_at IS NULL: if the
-    // daily sweep already retired this alias (it missed the window between
-    // expiring and this request), the update affects zero rows rather than
-    // reviving a dead one.
-    const kept = await keepAddressForeverWithinLimit(c.env, {
-      addressId: address.id,
-      orgId,
-      linkLimit: limits.links,
-    });
-    if (!kept) {
-      const [current] = await db
-        .select({ kind: schema.linkAddresses.kind, retiredAt: schema.linkAddresses.retiredAt })
-        .from(schema.linkAddresses)
-        .where(eq(schema.linkAddresses.id, address.id));
-      if (!current || current.retiredAt !== null)
-        throw new HTTPException(409, { message: "This address already expired" });
-      // Still an active temp_alias: the guard failed on the cap, not a race.
-      // If it's no longer temp_alias, a concurrent keep-forever already
-      // promoted it — the caller's intent is already satisfied, so fall
-      // through to the re-publish + success response below instead of a
-      // false upgrade prompt.
-      if (current.kind === "temp_alias")
-        throw new HTTPException(402, {
-          message: "Upgrade your plan to keep more links",
-          cause: { code: "link_limit" },
-        });
-    }
+async function keepAddressForever(c: Context<AppEnv>) {
+  const { db, orgId, address } = await findLinkAndAddress(c);
+  if (address.kind !== "temp_alias")
+    throw new HTTPException(400, { message: "Only a temporary alias can be kept forever" });
 
-    // Re-publish is required, not optional: the cached expiresAt in KV must
-    // clear too, or the redirect path's lazy-expiry check would still treat
-    // this as expired.
-    const hostname = await domainHostname(db, orgId, address.domainId);
-    await enqueueStorage(c.env, [syncLinkMsg(address.slug, hostname)]);
-    return c.json(await okWithQuota(db, orgId));
-  },
-);
+  const { limits } = await orgPlan(db, orgId);
 
-linkRoutes.post("/:linkId/addresses/:addressId/remove", requireOrgRole("member"), async (c) => {
-  const body = await c.req.json<{ confirm?: boolean }>().catch(() => ({ confirm: false }));
-  if (!body.confirm) throw new HTTPException(400, { message: "Confirm removal to continue" });
+  // Atomic: the org's links cap is re-checked at write time inside one D1
+  // statement (see issue #18). Also guarded on retired_at IS NULL: if the
+  // daily sweep already retired this alias (it missed the window between
+  // expiring and this request), the update affects zero rows rather than
+  // reviving a dead one.
+  const kept = await keepAddressForeverWithinLimit(c.env, {
+    addressId: address.id,
+    orgId,
+    linkLimit: limits.links,
+  });
+  if (!kept) {
+    const [current] = await db
+      .select({ kind: schema.linkAddresses.kind, retiredAt: schema.linkAddresses.retiredAt })
+      .from(schema.linkAddresses)
+      .where(eq(schema.linkAddresses.id, address.id));
+    if (!current || current.retiredAt !== null)
+      throw new HTTPException(409, { message: "This address already expired" });
+    // Still an active temp_alias: the guard failed on the cap, not a race.
+    // If it's no longer temp_alias, a concurrent keep-forever already
+    // promoted it — the caller's intent is already satisfied, so fall
+    // through to the re-publish + success response below instead of a
+    // false upgrade prompt.
+    if (current.kind === "temp_alias")
+      throw new HTTPException(402, {
+        message: "Upgrade your plan to keep more links",
+        cause: { code: "link_limit" },
+      });
+  }
 
+  // Re-publish is required, not optional: the cached expiresAt in KV must
+  // clear too, or the redirect path's lazy-expiry check would still treat
+  // this as expired.
+  const hostname = await domainHostname(db, orgId, address.domainId);
+  await enqueueStorage(c.env, [syncLinkMsg(address.slug, hostname)]);
+  return c.json(await okWithQuota(db, orgId));
+}
+
+// No `confirm` flag: it never told the server anything it could act on, and
+// asking before an irreversible click is the UI's job (#104).
+linkRoutes.delete("/:linkId/addresses/:addressId", requireOrgRole("member"), async (c) => {
   const { db, orgId, address } = await findLinkAndAddress(c);
   if (address.kind === "primary")
     throw new HTTPException(400, {
@@ -1161,7 +1168,7 @@ linkRoutes.post("/:linkId/addresses/:addressId/remove", requireOrgRole("member")
   return c.json(await okWithQuota(db, orgId));
 });
 
-linkRoutes.post("/:linkId/addresses/:addressId/promote", requireOrgRole("member"), async (c) => {
+async function promoteAddress(c: Context<AppEnv>) {
   const { db, orgId, link: existing, address } = await findLinkAndAddress(c);
   if (address.kind === "primary") {
     const [dto, quota] = await Promise.all([
@@ -1242,4 +1249,4 @@ linkRoutes.post("/:linkId/addresses/:addressId/promote", requireOrgRole("member"
     quotaUsageFields(db, orgId),
   ]);
   return c.json({ ...dto, ...quota });
-});
+}

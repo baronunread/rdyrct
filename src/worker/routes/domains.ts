@@ -379,9 +379,10 @@ domainRoutes.post("/", async (c) => {
   return c.json(toDTO(row), 201);
 });
 
-// Manual re-check. A pure read now: the background workflow owns activation, so
-// this only reflects the latest D1 status the workflow wrote.
-domainRoutes.post("/:id/refresh", async (c) => {
+// Manual re-check. A pure read: the background workflow owns activation, so
+// this only reflects the latest D1 status the workflow wrote, which is why it
+// is a GET (#104).
+domainRoutes.get("/:id", async (c) => {
   const row = await getDomain(c, c.req.param("orgId")!, c.req.param("id"));
   return c.json(toDTO(row));
 });

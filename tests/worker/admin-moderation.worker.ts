@@ -95,13 +95,24 @@ async function createLiveLink(cookie: string, destination?: string) {
 }
 
 /** Call a moderation route, then apply the republishes it enqueued. */
-async function moderate(path: string, cookie: string, body?: JsonValue, linkIds: string[] = []) {
+async function moderate(
+  path: string,
+  cookie: string,
+  body?: JsonValue,
+  linkIds: string[] = [],
+  method: "POST" | "PATCH" = "POST",
+) {
   const res = await admin(path, cookie, {
-    method: "POST",
+    method,
     body: JSON.stringify(body ?? {}),
   });
   for (const id of linkIds) await syncKv(...(await slugsOf(id)));
   return res;
+}
+
+/** Suspend or restore one link, and apply the republishes it enqueued. */
+async function setSuspended(linkId: string, cookie: string, suspended: boolean, reason = "") {
+  return moderate(`/links/${linkId}`, cookie, { suspended, reason }, [linkId], "PATCH");
 }
 
 describe("suspending one link", () => {
@@ -111,17 +122,12 @@ describe("suspending one link", () => {
     expect(await kvFor(link.slug)).toBeTruthy();
 
     const cookie = await adminCookie();
-    const res = await moderate(
-      `/links/${link.id}/suspend`,
-      cookie,
-      { reason: "phishing report #412" },
-      [link.id],
-    );
+    const res = await setSuspended(link.id, cookie, true, "phishing report #412");
     expect(res.status).toBe(200);
     expect(await kvFor(link.slug)).toBeNull();
 
     const audit = await jsonBody<{ action: string; targetId: string; detail: string | null }[]>(
-      await admin("/links/audit", cookie),
+      await admin("/audit", cookie),
     );
     const entry = audit.find((a) => a.action === "link.suspend");
     expect(entry?.targetId).toBe(link.id);
@@ -137,10 +143,7 @@ describe("suspending one link", () => {
       .bind(link.id)
       .run();
 
-    await admin(`/links/${link.id}/suspend`, await adminCookie(), {
-      method: "POST",
-      body: JSON.stringify({ reason: "spam" }),
-    });
+    await setSuspended(link.id, await adminCookie(), true, "spam");
 
     const rows = await env.DB.prepare(
       "select (select count(*) from links where id = ?) as links, (select count(*) from clicks where link_id = ?) as clicks",
@@ -155,19 +158,19 @@ describe("suspending one link", () => {
     const link = await createLiveLink(owner);
     const cookie = await adminCookie();
 
-    await moderate(`/links/${link.id}/suspend`, cookie, { reason: "spam" }, [link.id]);
+    await setSuspended(link.id, cookie, true, "spam");
     expect(await kvFor(link.slug)).toBeNull();
 
-    await moderate(`/links/${link.id}/unsuspend`, cookie, {}, [link.id]);
+    await setSuspended(link.id, cookie, false);
     expect(await kvFor(link.slug)).toBeTruthy();
   });
 
   it("refuses a suspension with no reason", async () => {
     const owner = await freeOwnerCookie();
     const link = await createLink(owner);
-    const res = await admin(`/links/${link.id}/suspend`, await adminCookie(), {
-      method: "POST",
-      body: JSON.stringify({}),
+    const res = await admin(`/links/${link.id}`, await adminCookie(), {
+      method: "PATCH",
+      body: JSON.stringify({ suspended: true }),
     });
     expect(res.status).toBe(400);
   });
@@ -179,9 +182,7 @@ describe("suspension survives what would undo it", () => {
     // the key, and a suspension enforced anywhere else would be lifted by it.
     const owner = await freeOwnerCookie();
     const link = await createLiveLink(owner);
-    await moderate(`/links/${link.id}/suspend`, await adminCookie(), { reason: "malware" }, [
-      link.id,
-    ]);
+    await setSuspended(link.id, await adminCookie(), true, "malware");
 
     const res = await fetchWorker(
       new Request(`http://localhost/api/orgs/org-1/links/${link.id}`, {
@@ -215,9 +216,7 @@ describe("suspension survives what would undo it", () => {
     expect(aliases.results.length).toBe(2);
 
     await syncKv(...aliases.results.map((r) => r.slug));
-    await moderate(`/links/${link.id}/suspend`, await adminCookie(), { reason: "malware" }, [
-      link.id,
-    ]);
+    await setSuspended(link.id, await adminCookie(), true, "malware");
 
     for (const row of aliases.results) expect(await kvFor(row.slug)).toBeNull();
   });
@@ -350,7 +349,7 @@ describe("the cross-org search", () => {
     const link = await createLink(owner);
     await createLink(owner, "https://example.com/other");
     const cookie = await adminCookie();
-    await moderate(`/links/${link.id}/suspend`, cookie, { reason: "spam" }, [link.id]);
+    await setSuspended(link.id, cookie, true, "spam");
 
     const rows = await jsonBody<{ id: string }[]>(await admin("/links?suspended=1", cookie));
     expect(rows.map((r) => r.id)).toEqual([link.id]);
@@ -364,8 +363,11 @@ describe("who may reach any of this", () => {
     for (const [path, init] of [
       ["/links", {}],
       ["/links/anonymous", {}],
-      ["/links/audit", {}],
-      [`/links/${link.id}/suspend`, { method: "POST", body: JSON.stringify({ reason: "x" }) }],
+      ["/audit", {}],
+      [
+        `/links/${link.id}`,
+        { method: "PATCH", body: JSON.stringify({ suspended: true, reason: "x" }) },
+      ],
     ] as const) {
       const res = await admin(path, owner, init);
       expect(res.status, `${path} should 404 for a non-admin`).toBe(404);

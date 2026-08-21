@@ -101,10 +101,11 @@ async function postKeepForever(
   addressId: string,
 ): Promise<Response> {
   return fetchWorker(
-    new Request(
-      `http://localhost/api/orgs/${orgId}/links/${linkId}/addresses/${addressId}/keep-forever`,
-      { method: "POST", headers: { cookie } },
-    ),
+    new Request(`http://localhost/api/orgs/${orgId}/links/${linkId}/addresses/${addressId}`, {
+      method: "PATCH",
+      headers: { cookie, "content-type": "application/json" },
+      body: JSON.stringify({ kind: "permanent" }),
+    }),
   );
 }
 
@@ -235,7 +236,6 @@ describe("invite acceptance: member cap and duplicate accept under concurrency (
         createdBy: "owner-1",
         createdAt: 0,
         expiresAt: Date.now() + 7 * 24 * 60 * 60 * 1000,
-        acceptedBy: null,
       }),
     ];
     // SAFETY: statements always holds the org insert, so it is non-empty,

@@ -17,7 +17,7 @@
 import { Hono, type Context } from "hono";
 import { oneOf } from "../../shared/lookup";
 import type { JsonValue } from "../../shared/types";
-import { optionalText, parseOptionalBody } from "../schemas";
+import { optionalFlag, optionalText, parseOptionalBody } from "../schemas";
 import * as v from "valibot";
 import { HTTPException } from "hono/http-exception";
 import { and, desc, eq, isNull, isNotNull, like, or, sql } from "drizzle-orm";
@@ -29,7 +29,6 @@ import { scoreDestination } from "../risk";
 import { jsonBodyLimit } from "../body-limit";
 import {
   ADMIN_LINK_SORTS,
-  type AdminActionRow,
   type AdminAnonLinkRow,
   type AdminLinkRow,
   type AdminLinkSort,
@@ -44,6 +43,9 @@ const reasonsSchema = v.fallback(v.array(v.string()), []);
 
 /** The reason a moderation action carries. */
 const reasonBodySchema = v.object({ reason: optionalText });
+
+/** The same, plus which way the state change goes. */
+const suspensionBodySchema = v.object({ reason: optionalText, suspended: optionalFlag });
 
 const MAX_ROWS = 200;
 
@@ -68,11 +70,15 @@ function suspensionPatch(suspend: boolean, actorId: string, reason: string | nul
 
 /** The reason a moderation action must carry. Suspending without one leaves
  * a decision nobody can account for later. */
-async function requiredReason(c: Context<AppEnv>, required: boolean): Promise<string> {
-  const body = parseOptionalBody(reasonBodySchema, await c.req.json<JsonValue>().catch(() => ({})));
-  const reason = body.reason.trim().slice(0, 500);
+function checkReason(raw: string, required: boolean): string {
+  const reason = raw.trim().slice(0, 500);
   if (required && !reason) throw new HTTPException(400, { message: "A reason is required" });
   return reason;
+}
+
+async function requiredReason(c: Context<AppEnv>, required: boolean): Promise<string> {
+  const body = parseOptionalBody(reasonBodySchema, await c.req.json<JsonValue>().catch(() => ({})));
+  return checkReason(body.reason, required);
 }
 
 const clickCount = sql<number>`(
@@ -258,13 +264,22 @@ async function setSuspended(
   return { addresses };
 }
 
-adminLinkRoutes.post("/:linkId/suspend", async (c) =>
-  c.json(await setSuspended(c, c.req.param("linkId")!, true, await requiredReason(c, true))),
-);
-
-adminLinkRoutes.post("/:linkId/unsuspend", async (c) =>
-  c.json(await setSuspended(c, c.req.param("linkId")!, false, null)),
-);
+/**
+ * Suspend or restore one link.
+ *
+ * One state change, so one endpoint (#104): `{ suspended }` says which way,
+ * and a reason is required to suspend but meaningless to undo.
+ */
+adminLinkRoutes.patch("/:linkId", async (c) => {
+  const body = parseOptionalBody(
+    suspensionBodySchema,
+    await c.req.json<JsonValue>().catch(() => ({})),
+  );
+  if (body.suspended == null)
+    throw new HTTPException(400, { message: "suspended must be true or false" });
+  const reason = body.suspended ? checkReason(body.reason, true) : null;
+  return c.json(await setSuspended(c, c.req.param("linkId")!, body.suspended, reason));
+});
 
 /**
  * Re-run the destination check on demand (#68).
@@ -445,37 +460,4 @@ adminLinkRoutes.delete("/anonymous/:id", async (c) => {
     detail: { slug: anon.slug, destination: anon.destination },
   });
   return c.json({ ok: true });
-});
-
-/** The audit log, newest first, optionally narrowed to one target. */
-adminLinkRoutes.get("/audit", async (c) => {
-  const db = c.var.db;
-  const targetType = c.req.query("targetType");
-  const targetId = c.req.query("targetId");
-  const rows = await db
-    .select({
-      id: schema.adminActions.id,
-      actorUserId: schema.adminActions.actorUserId,
-      actorEmail: schema.user.email,
-      action: schema.adminActions.action,
-      targetType: schema.adminActions.targetType,
-      targetId: schema.adminActions.targetId,
-      detail: schema.adminActions.detail,
-      createdAt: schema.adminActions.createdAt,
-    })
-    .from(schema.adminActions)
-    // Left join: the actor may have been deleted since, and the entry has to
-    // outlive them. That is why the table holds no foreign key.
-    .leftJoin(schema.user, eq(schema.user.id, schema.adminActions.actorUserId))
-    .where(
-      targetType && targetId
-        ? and(
-            eq(schema.adminActions.targetType, targetType),
-            eq(schema.adminActions.targetId, targetId),
-          )
-        : undefined,
-    )
-    .orderBy(desc(schema.adminActions.createdAt))
-    .limit(MAX_ROWS);
-  return c.json(rows satisfies AdminActionRow[]);
 });

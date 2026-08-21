@@ -170,9 +170,9 @@ function SuspendDialog({ link, onClose }: { link: AdminLinkRow | null; onClose: 
 
   const suspend = useMutation({
     mutationFn: (input: { id: string; reason: string }) =>
-      api(`/admin/links/${input.id}/suspend`, {
-        method: "POST",
-        body: { reason: input.reason },
+      api(`/admin/links/${input.id}`, {
+        method: "PATCH",
+        body: { suspended: true, reason: input.reason },
       }),
     onSuccess: async () => {
       await qc.invalidateQueries({ queryKey: ["admin", "links"] });
@@ -579,7 +579,8 @@ function useOwnedLinkActions(onRestored: () => void, onDeleted: () => void) {
   };
 
   const restore = useMutation({
-    mutationFn: (id: string) => api(`/admin/links/${id}/unsuspend`, { method: "POST" }),
+    mutationFn: (id: string) =>
+      api(`/admin/links/${id}`, { method: "PATCH", body: { suspended: false } }),
     onSuccess: async () => {
       await refresh();
       toast("Link restored.");

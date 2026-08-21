@@ -301,16 +301,15 @@ orgRoutes.get("/:orgId/invites", requireOrgRole("admin"), async (c) => {
       email: schema.invites.email,
       createdAt: schema.invites.createdAt,
       expiresAt: schema.invites.expiresAt,
-      acceptedBy: schema.invites.acceptedBy,
     })
     .from(schema.invites)
     .where(eq(schema.invites.orgId, c.req.param("orgId")))
     .orderBy(desc(schema.invites.createdAt));
   const ts = Date.now();
-  return c.json(rows.filter((r) => !r.acceptedBy && r.expiresAt > ts) satisfies InviteDTO[]);
+  return c.json(rows.filter((r) => r.expiresAt > ts) satisfies InviteDTO[]);
 });
 
-/** Members + open (unaccepted, unexpired) invites, for the plan member cap. */
+/** Members + open (unexpired) invites, for the plan member cap. */
 async function occupiedSeats(db: AppEnv["Variables"]["db"], orgId: string): Promise<number> {
   const ts = Date.now();
   const [members, pending] = await Promise.all([
@@ -321,13 +320,7 @@ async function occupiedSeats(db: AppEnv["Variables"]["db"], orgId: string): Prom
     db
       .select({ n: sql<number>`count(*)` })
       .from(schema.invites)
-      .where(
-        and(
-          eq(schema.invites.orgId, orgId),
-          sql`${schema.invites.acceptedBy} is null`,
-          gte(schema.invites.expiresAt, ts),
-        ),
-      ),
+      .where(and(eq(schema.invites.orgId, orgId), gte(schema.invites.expiresAt, ts))),
   ]);
   return (members[0]?.n ?? 0) + (pending[0]?.n ?? 0);
 }
@@ -374,7 +367,6 @@ orgRoutes.post("/:orgId/invites", requireOrgRole("admin"), async (c) => {
       createdBy: c.var.user!.id,
       createdAt: ts,
       expiresAt: ts + INVITE_TTL_MS,
-      acceptedBy: null,
     } as const;
     await c.var.db.insert(schema.invites).values(invite);
     return c.json(
@@ -407,7 +399,6 @@ orgRoutes.post("/:orgId/invites", requireOrgRole("admin"), async (c) => {
     createdBy: c.var.user!.id,
     createdAt: ts,
     expiresAt: ts + INVITE_TTL_MS,
-    acceptedBy: null,
   }));
 
   await c.var.db.insert(schema.invites).values(created);
@@ -588,7 +579,7 @@ async function assertMember(
 async function lookupInvite(db: DB, token: string) {
   const rows = await db.select().from(schema.invites).where(eq(schema.invites.token, token));
   const invite = rows[0];
-  if (!invite || invite.acceptedBy || invite.expiresAt < Date.now())
+  if (!invite || invite.expiresAt < Date.now())
     throw new HTTPException(404, { message: "Invite not found or expired" });
   return invite;
 }
@@ -992,14 +983,13 @@ inviteRoutes.get("/:token", async (c) => {
     .select({
       role: schema.invites.role,
       expiresAt: schema.invites.expiresAt,
-      acceptedBy: schema.invites.acceptedBy,
       orgName: schema.orgs.name,
     })
     .from(schema.invites)
     .innerJoin(schema.orgs, eq(schema.invites.orgId, schema.orgs.id))
     .where(eq(schema.invites.token, c.req.param("token")));
   const invite = rows[0];
-  if (!invite || invite.acceptedBy || invite.expiresAt < Date.now())
+  if (!invite || invite.expiresAt < Date.now())
     throw new HTTPException(404, { message: "Invite not found or expired" });
   return c.json({
     orgName: invite.orgName,
@@ -1047,9 +1037,10 @@ inviteRoutes.post("/:token/accept", requireUser, async (c) => {
       message: "This organization is full on its current plan",
     });
   }
-  await db
-    .update(schema.invites)
-    .set({ acceptedBy: c.var.user!.id })
-    .where(eq(schema.invites.token, invite.token));
+  // Spent, so gone (#103). Nothing reads invite history, and the row holds an
+  // email address belonging to someone who may never have signed up. A second
+  // accept of the same token now gets the same 404 as an unknown one, so
+  // nothing learns which tokens existed.
+  await db.delete(schema.invites).where(eq(schema.invites.token, invite.token));
   return c.json({ orgId: invite.orgId });
 });
