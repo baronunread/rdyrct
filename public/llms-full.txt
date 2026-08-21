@@ -91,6 +91,7 @@ storage along with the link.
 - [Homepage](https://rdyrct.com/)
 - [Pricing](https://rdyrct.com/pricing) ([plain text](https://rdyrct.com/pricing.md))
 - [QR code generator](https://rdyrct.com/qr-code-generator)
+- [Roadmap](https://rdyrct.com/roadmap)
 - [Privacy policy](https://rdyrct.com/privacy)
 - [Terms of service](https://rdyrct.com/terms)
 - [Sign up](https://rdyrct.com/signup)

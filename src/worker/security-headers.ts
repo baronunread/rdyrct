@@ -8,7 +8,8 @@
  * `'unsafe-inline'` on style-src only: the app uses React inline `style`
  * props throughout, and CSP has no practical hash/nonce story for those.
  * Inline *script* has no such allowance — the one script this app used to
- * inline (the pre-paint theme bootstrap) now lives at /theme-init.js instead.
+ * inline (the pre-paint theme bootstrap) is allowed by its own hash instead,
+ * see THEME_INIT_HASH below.
  *
  * PostHog appears in script-src, connect-src and img-src. All three are
  * needed: posthog-js does not bundle its optional features, it builds
@@ -19,6 +20,29 @@
  * loads PostHog. Covered now by tests/e2e/production/csp.pw.ts.
  */
 const POSTHOG = "https://*.posthog.com";
+
+/**
+ * The theme bootstrap in index.html, allowed by its own sha256 rather than
+ * by opening script-src to every inline script on the page.
+ *
+ * It has to be inline: it runs before the first paint, so a file would put a
+ * round trip in front of every page load, and defer or async would defeat
+ * the point. A hash beats a nonce here because the document is a static
+ * file, not a per-request render, so there is nothing to vary.
+ *
+ * The string covers the exact bytes between the tags, whitespace included. A
+ * formatter reindenting that block is enough to break it, and the failure is
+ * silent and production-only: the browser refuses the script and the page
+ * paints in the wrong theme first. tests/theme-init.test.ts recomputes it
+ * from index.html and fails when the two have drifted.
+ *
+ * Written by hand rather than computed by a build plugin. Plugins for this
+ * exist (vite-plugin-csp-guard and friends), but they want to own the policy
+ * and emit it as a meta tag or a headers file, and this app's CSP is set by
+ * the Worker on every response, API and redirects included. Adopting one to
+ * avoid retyping 44 characters would move the whole policy to fit the tool.
+ */
+const THEME_INIT_HASH = "'sha256-TNM/fq1Z4NFEZtsFlN0od8OC66zTGO+lKXWuYpFqhdg='";
 
 // `@vitejs/plugin-react` injects an inline module preamble (the React Refresh
 // runtime) into index.html when Vite serves the app in dev. `script-src
@@ -38,7 +62,7 @@ const POSTHOG = "https://*.posthog.com";
 // itself is a same-origin Vite asset, never a CDN.
 const SCRIPT_SRC = import.meta.env.DEV
   ? `script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' ${POSTHOG}`
-  : `script-src 'self' 'wasm-unsafe-eval' ${POSTHOG}`;
+  : `script-src 'self' ${THEME_INIT_HASH} 'wasm-unsafe-eval' ${POSTHOG}`;
 
 const CSP = [
   "default-src 'self'",

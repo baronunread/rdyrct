@@ -273,7 +273,7 @@ function UserRow({
         {!user.emailVerified && <Badge color="muted">unverified</Badge>}{" "}
         {user.disposable && <Badge color="accent">disposable</Badge>}
       </Td>
-      <Td className="text-muted">{user.email}</Td>
+      <Td className="font-mono text-xs text-muted">{user.email}</Td>
       <Td className="tnum text-right">{user.orgCount}</Td>
       <Td>
         <Badge color={planBadgeColor[user.plan]}>{user.plan}</Badge>

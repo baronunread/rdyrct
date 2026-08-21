@@ -39,10 +39,16 @@ export function Badge({
  * `align-items: flex-start` sizes to content otherwise) cover both layouts
  * `truncate` shows up in around the app. The full slug still shows on hover
  * via a tooltip. */
+/**
+ * A slug is an identifier: somebody reads it off a screen and types it, or
+ * copies it into a poster. So it asks for the mono face by name rather than
+ * inheriting one. Everything around it reads in the sans, which is what makes
+ * a slug findable in a dense row instead of dissolving into its own label.
+ */
 export function Slug({ slug, className }: { slug: string; className?: string }) {
   return (
     <Tooltip content={`/${slug}`}>
-      <span className={cn("min-w-0 max-w-full truncate", className)}>/{slug}</span>
+      <span className={cn("min-w-0 max-w-full truncate font-mono", className)}>/{slug}</span>
     </Tooltip>
   );
 }
@@ -69,7 +75,10 @@ export function SlugLink({
       title={text}
       className={cn("min-w-0 max-w-full truncate text-accent hover:underline", className)}
     >
-      {text}
+      {/* Only the identifier wears the mono face, never the sentence it sits
+          in: the title beside it is prose and reads as prose. */}
+      <span className="font-mono">/{slug}</span>
+      {title && <span> · {title}</span>}
     </HrefLink>
   );
 }
@@ -117,7 +126,7 @@ export function Th({ className, ...props }: ThHTMLAttributes<HTMLTableCellElemen
   return (
     <th
       className={cn(
-        "border-b border-border px-4 py-2.5 text-left text-2xs font-normal tracking-wider text-muted uppercase",
+        "border-b border-border px-4 py-2.5 text-left text-xs font-medium text-muted",
         className,
       )}
       {...props}

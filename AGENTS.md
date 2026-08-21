@@ -115,6 +115,14 @@ reading exercise. Track what it turns up in issues rather than blocking CI.
 react-doctor skill lives in `.agents/skills/react-doctor` and `.claude/skills/react-doctor`.
 fallow skill lives in `.claude/skills/fallow`.
 
+**rdyrct-design** (`.claude/skills/rdyrct-design`, symlinked from
+`.agents/skills`) is this project's own design system: the two type rules,
+the colour tokens, the component inventory, layout, motion, copy and the
+anti-patterns. Read it before writing any interface, on any surface,
+including the admin screens. It exists because this repo is edited by agents
+constantly and each one otherwise re-derives the same conventions out of
+`src/app/ui/` by guessing. Same reason this file exists.
+
 Shell writes to repo files are sandboxed; edit through the editor tools, not
 `sed`/`perl` (or run bash with the sandbox disabled for scripted edits).
 
@@ -212,6 +220,10 @@ analyticsDays }`). Slugs on the **shared** domain are always random (every
   Resend SDK can't repoint its base URL, which would break the emulator flow.
 
 ## Writing copy
+
+Copy is design material, so the rules below and the ones in the
+**rdyrct-design** skill are one set: that skill covers what a control says,
+what an error says, and what an empty state says.
 
 All user-facing copy (and this file) follows Orwell's six rules from
 "Politics and the English Language":

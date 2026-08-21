@@ -9,7 +9,7 @@ function ResetSwatchButton({ visible, onReset }: { visible: boolean; onReset: ()
     <button
       type="button"
       onClick={onReset}
-      className="shrink-0 cursor-pointer text-3xs tracking-wider text-muted uppercase hover:text-text"
+      className="shrink-0 cursor-pointer text-xs text-muted hover:text-text"
     >
       Reset
     </button>
@@ -76,7 +76,7 @@ export function QrColorField({
   return (
     <div className="min-w-0">
       <div className="mb-1.5 flex items-center justify-between gap-1">
-        <span className="truncate text-2xs tracking-wider text-muted uppercase">{label}</span>
+        <span className="truncate text-xs font-medium text-muted">{label}</span>
         <ResetSwatchButton visible={!!value && !disabled} onReset={() => onChange("")} />
       </div>
       <Popover.Root>
@@ -86,18 +86,26 @@ export function QrColorField({
           className="flex h-9 w-full items-center gap-2 rounded-md border border-border bg-bg px-2 text-sm transition-colors enabled:cursor-pointer enabled:hover:border-accent disabled:opacity-50"
         >
           <ColorSwatch color={color} className="h-6 w-6" />
-          <span className="truncate text-muted uppercase">{color}</span>
+          {/* A hex is an identifier: it gets copied between the two fields and
+              pasted out of a brand guide, so it wears the mono face and keeps
+              its conventional uppercase. */}
+          <span className="truncate font-mono text-muted uppercase">{color}</span>
         </Popover.Trigger>
         <Popover.Portal>
           <Popover.Positioner sideOffset={6} align="start" className="z-50">
-            <Popover.Popup className="rounded-lg bg-surface p-3 smooth-shadow-ring-xl transition-[opacity,scale] duration-100 data-[starting-style]:scale-95 data-[starting-style]:opacity-0">
+            <Popover.Popup
+              // The arbitrary transition names which properties animate, not a
+              // value off the scale: the same idiom Button uses.
+              // fallow-ignore-next-line css-token-drift
+              className="rounded-lg bg-surface p-3 smooth-shadow-ring-xl transition-[opacity,scale] duration-100 data-[starting-style]:scale-95 data-[starting-style]:opacity-0"
+            >
               <Picker color={color} onChange={onChange} />
               <HexColorInput
                 alpha={alpha}
                 prefixed
                 color={color}
                 onChange={onChange}
-                className="mt-2 h-8 w-full rounded-md border border-border bg-bg px-2 text-center text-xs text-text uppercase focus-visible:border-accent focus-visible:outline-none"
+                className="mt-2 h-8 w-full rounded-md border border-border bg-bg px-2 text-center font-mono text-xs text-text uppercase focus-visible:border-accent focus-visible:outline-none"
               />
             </Popover.Popup>
           </Popover.Positioner>

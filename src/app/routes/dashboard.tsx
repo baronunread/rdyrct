@@ -328,7 +328,7 @@ function QuickCreateCard({
 function RecentClicksCard({ clicks }: { clicks: RecentClick[] }) {
   return (
     <Card>
-      <p className="mb-3 text-2xs tracking-wider text-muted uppercase">Recent clicks</p>
+      <p className="mb-3 text-xs font-medium text-muted">Recent clicks</p>
       {!clicks.length ? (
         <p className="py-2 text-sm text-muted">No clicks yet</p>
       ) : (
@@ -361,7 +361,7 @@ function ActivityCard({
 }) {
   return (
     <Card>
-      <p className="mb-3 text-2xs tracking-wider text-muted uppercase">Member activity</p>
+      <p className="mb-3 text-xs font-medium text-muted">Member activity</p>
       {!links.length ? (
         <p className="py-2 text-sm text-muted">No activity yet</p>
       ) : (
@@ -398,7 +398,7 @@ function NeedsAttentionCard({
 
   return (
     <Card>
-      <p className="mb-3 text-2xs tracking-wider text-muted uppercase">Needs attention</p>
+      <p className="mb-3 text-xs font-medium text-muted">Needs attention</p>
       {!groups.length ? (
         <p className="py-2 text-sm text-muted">No decaying or dead links</p>
       ) : (
@@ -444,7 +444,7 @@ function PeakCard({
 }) {
   return (
     <Card>
-      <p className="mb-3 text-2xs tracking-wider text-muted uppercase">Peak activity</p>
+      <p className="mb-3 text-xs font-medium text-muted">Peak activity</p>
       {!peak ? (
         <p className="py-2 text-sm text-muted">No clicks yet</p>
       ) : (

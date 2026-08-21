@@ -107,7 +107,10 @@ export function AdminAuditPage() {
                   {entry.actorEmail ?? <span className="text-muted">deleted account</span>}
                 </Td>
                 <Td className="truncate font-mono text-xs">{entry.action}</Td>
-                <Td className="truncate text-muted" title={entry.detail ?? entry.targetId}>
+                <Td
+                  className="truncate font-mono text-xs text-muted"
+                  title={entry.detail ?? entry.targetId}
+                >
                   {entry.detail ?? entry.targetId}
                 </Td>
               </tr>

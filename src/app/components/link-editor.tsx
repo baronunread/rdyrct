@@ -178,7 +178,7 @@ function UtmFields({
   };
   return (
     <fieldset className={cn("rounded-lg border border-border p-3", className)}>
-      <legend className="px-1 text-2xs tracking-wider text-muted uppercase">UTM parameters</legend>
+      <legend className="px-1 text-xs font-medium text-muted">UTM parameters</legend>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         {UTM_FIELDS.map(({ key, label, placeholder }) => (
           <Field key={key} label={label}>
@@ -208,7 +208,7 @@ function QrPreviewSidebar({
   const look = resolveQrLook(form, orgQr);
   return (
     <div className="flex flex-col gap-2 sm:w-60">
-      <p className="text-2xs tracking-wider text-muted uppercase">QR code</p>
+      <p className="text-xs font-medium text-muted">QR code</p>
       <QRPreview
         url={previewUrl}
         logo={look.logo}
@@ -319,7 +319,7 @@ function QrBackgroundFields({
 function QrLogoField({ form, setForm }: { form: LinkInput; setForm: (f: LinkInput) => void }) {
   return (
     <div>
-      <span className="mb-1.5 flex items-center gap-1.5 text-2xs tracking-wider text-muted uppercase">
+      <span className="mb-1.5 flex items-center gap-1.5 text-xs font-medium text-muted">
         Logo
         <Tooltip content="Embedded in the center of the QR code. Use a small, square image with some breathing room so the code stays easy to scan. Leave empty to use your organization's default logo from Settings.">
           <button
@@ -380,9 +380,7 @@ function QrCustomization({
   const fallbacks = qrFallbacks(form, orgQr);
   return (
     <fieldset className={cn("flex flex-col gap-4 rounded-lg border border-border p-3", className)}>
-      <legend className="px-1 text-2xs tracking-wider text-muted uppercase">
-        QR customization
-      </legend>
+      <legend className="px-1 text-xs font-medium text-muted">QR customization</legend>
       <QrPatternFields form={form} setForm={setForm} fallbacks={fallbacks} />
       <QrBackgroundFields form={form} setForm={setForm} fallbacks={fallbacks} />
       <QrLogoField form={form} setForm={setForm} />

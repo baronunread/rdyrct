@@ -16,7 +16,7 @@ const password = "test-password-123";
 /** Paste a URL into the hero form and wait for the short link to come back. */
 async function shorten(page: import("@playwright/test").Page, destination: string) {
   await page.goto("/");
-  const field = page.getByLabel("Try it without an account");
+  const field = page.getByLabel("Shorten a link, no account needed");
   await expect(field).toBeVisible();
   await field.fill(destination);
   await page.getByRole("button", { name: "Shorten it" }).click();
@@ -101,7 +101,7 @@ test("signing up keeps every link made before the account, not just the last", a
   const second = `https://example.com/multi-b-${Date.now()}`;
 
   const firstSlug = (await shorten(page, first)).split("/").pop()!;
-  const field = page.getByLabel("Try it without an account");
+  const field = page.getByLabel("Shorten a link, no account needed");
   await field.fill(second);
   await page.getByRole("button", { name: "Shorten it" }).click();
   await expect(page.getByRole("link", { name: "Your short link" })).toHaveCount(2, {
@@ -138,7 +138,7 @@ test("a destination that is not a web address is refused, in a toast", async ({ 
   // normalisation the signed-in quick-create also does and then fails the
   // hostname check, which is the boundary worth showing here.
   await page.goto("/");
-  const field = page.getByLabel("Try it without an account");
+  const field = page.getByLabel("Shorten a link, no account needed");
   await field.fill("not-a-web-address");
   await page.getByRole("button", { name: "Shorten it" }).click();
 
@@ -171,7 +171,7 @@ test("shortening again keeps the first link and stacks the new one on top", asyn
 
   // The form is still a form: filled, live, and in the same place. No
   // "shorten another" button to press first.
-  const field = page.getByLabel("Try it without an account");
+  const field = page.getByLabel("Shorten a link, no account needed");
   await expect(field).toBeVisible();
   await field.fill(second);
   await page.getByRole("button", { name: "Shorten it" }).click();
@@ -229,7 +229,7 @@ test("links survive a reload, so leaving the page does not lose them", async ({ 
 
 test("three links is the ceiling without an account", async ({ page }) => {
   await page.goto("/");
-  const field = page.getByLabel("Try it without an account");
+  const field = page.getByLabel("Shorten a link, no account needed");
   const button = page.getByRole("button", { name: "Shorten it" });
 
   for (let i = 0; i < 3; i++) {
@@ -283,7 +283,7 @@ test.describe("on a phone", () => {
       (await locator.boundingBox())!;
 
     // The field is as tall as the button beside it, not squashed.
-    const field = await box(page.getByLabel("Try it without an account"));
+    const field = await box(page.getByLabel("Shorten a link, no account needed"));
     const submit = await box(page.getByRole("button", { name: "Shorten it" }));
     expect(field.height).toBe(submit.height);
 

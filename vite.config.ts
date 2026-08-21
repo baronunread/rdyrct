@@ -5,14 +5,22 @@ import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import { cloudflare } from "@cloudflare/vite-plugin";
 
+/**
+ * The faces above the fold, as `[package, file]`.
+ *
+ * Figtree is the variable cut, so one file covers every weight the page
+ * paints. JetBrains Mono 400 carries the slugs. Mono 700 loads normally: it
+ * appears below the fold, and preloading a weight that isn't painted
+ * immediately just competes for the same connection as the ones that are.
+ */
 const PRELOAD_FONTS = [
-  "jetbrains-mono-latin-400-normal.woff2",
-  "jetbrains-mono-latin-700-normal.woff2",
-];
+  ["@fontsource-variable/figtree", "figtree-latin-wght-normal.woff2"],
+  ["@fontsource/jetbrains-mono", "jetbrains-mono-latin-400-normal.woff2"],
+] as const;
 
 /**
- * Preloads the two above-the-fold JetBrains Mono weights (latin subset) as a
- * real <link> in index.html. index.html is static, so it can't run the `?url`
+ * Preloads the above-the-fold faces (latin subset) as a real <link> in
+ * index.html. index.html is static, so it can't run the `?url`
  * import Fontsource's own docs recommend, and rendering the <link> from React
  * doesn't help either: this app is client-rendered, so the tag would only
  * land in <head> once the same JS that triggers the real paint has already
@@ -26,24 +34,22 @@ function preloadFonts(): Plugin {
   const fileNames = new Map<string, string>();
 
   return {
-    name: "preload-jetbrains-mono",
+    name: "preload-fonts",
     config(_config, { command }) {
       isServe = command === "serve";
     },
     buildStart() {
       if (isServe) return;
-      for (const file of PRELOAD_FONTS) {
-        const filePath = fileURLToPath(
-          import.meta.resolve(`@fontsource/jetbrains-mono/files/${file}`),
-        );
+      for (const [pkg, file] of PRELOAD_FONTS) {
+        const filePath = fileURLToPath(import.meta.resolve(`${pkg}/files/${file}`));
         const refId = this.emitFile({ type: "asset", name: file, source: readFileSync(filePath) });
         fileNames.set(file, this.getFileName(refId));
       }
     },
     transformIndexHtml() {
       const hrefs = isServe
-        ? PRELOAD_FONTS.map((file) => `/node_modules/@fontsource/jetbrains-mono/files/${file}`)
-        : PRELOAD_FONTS.map((file) => `/${fileNames.get(file)}`);
+        ? PRELOAD_FONTS.map(([pkg, file]) => `/node_modules/${pkg}/files/${file}`)
+        : PRELOAD_FONTS.map(([, file]) => `/${fileNames.get(file)}`);
       return hrefs.map((href) => ({
         tag: "link",
         injectTo: "head-prepend" as const,
@@ -53,36 +59,7 @@ function preloadFonts(): Plugin {
   };
 }
 
-/**
- * Last known star count, baked in at build time.
- *
- * The strict CSP blocks the browser from calling api.github.com, and adding
- * it to connect-src to display one integer is not a trade worth making. So
- * the number is resolved here and inlined. If GitHub is unreachable or rate
- * limits us, the build keeps the committed fallback rather than failing:
- * a stale star count is worth less than a red CI run.
- */
-const GITHUB_STARS_FALLBACK = 34;
-
-async function githubStars(): Promise<number> {
-  try {
-    const res = await fetch("https://api.github.com/repos/baronunread/rdyrct", {
-      headers: { accept: "application/vnd.github+json", "user-agent": "rdyrct-build" },
-      signal: AbortSignal.timeout(4000),
-    });
-    if (!res.ok) return GITHUB_STARS_FALLBACK;
-    // SAFETY: the field is read back through Number.isFinite below, so a
-    // response without it, or with something else in it, falls back.
-    const body = (await res.json()) as { stargazers_count?: number };
-    const stars = Number(body.stargazers_count);
-    return Number.isFinite(stars) ? stars : GITHUB_STARS_FALLBACK;
-  } catch {
-    return GITHUB_STARS_FALLBACK;
-  }
-}
-
 export default defineConfig(async () => ({
-  define: { __GITHUB_STARS__: JSON.stringify(await githubStars()) },
   plugins: [
     react(),
     tailwindcss(),

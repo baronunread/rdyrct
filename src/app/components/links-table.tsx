@@ -12,7 +12,7 @@ import {
 import { AnimatePresence, LazyMotion, domAnimation } from "motion/react";
 import { shortUrl } from "../lib/api";
 import { type LinkDTO, type Sort } from "@/shared/types";
-import { Badge, Slug, Table, Th, Td } from "../ui/misc";
+import { Slug, Table, Th, Td } from "../ui/misc";
 import { Menu, MenuItem, MenuSeparator } from "../ui/menu";
 import { SortTh } from "../ui/sort-th";
 import { shortDate } from "../lib/dates";
@@ -78,9 +78,13 @@ function LinkCell({
         onClick={() => navigate(linkDetailPath(link))}
         className="group flex min-w-0 max-w-full cursor-pointer flex-col items-start gap-0.5 text-start"
       >
-        <Badge className="min-w-0 max-w-full">
-          <span className="truncate">{link.domain || appHost}</span>
-        </Badge>
+        {/* The domain is half the address, so it reads as the address: mono,
+            quiet, directly above the slug it belongs to. It used to sit in a
+            Badge, which is for state (active, pending, blocked) rather than
+            for an identifier. */}
+        <span className="min-w-0 max-w-full truncate font-mono text-2xs text-muted">
+          {link.domain || appHost}
+        </span>
         <Slug slug={link.slug} className="font-bold text-accent group-hover:underline" />
       </button>
       <span className="shrink-0">
@@ -165,7 +169,10 @@ function LinkRow({
             rel="noreferrer"
             className="flex items-center gap-1 text-muted hover:text-accent"
           >
-            <span className="truncate">{link.destination}</span>
+            {/* A destination is a URL somebody pastes and checks character by
+                character, so it keeps the mono face the title beside it does
+                not. */}
+            <span className="truncate font-mono text-xs">{link.destination}</span>
             <ExternalLink size={12} className="shrink-0" />
           </a>
         </Td>
@@ -224,7 +231,7 @@ export function LinksTable({
             lg    30 + 16% + 16rem  (+ title)
             xl    26 + 16 + 22% + 16rem  (+ destination)
           Percentages share the row with 16rem of fixed columns, so they cannot
-          add up to 100. */}
+          add up to 100, which is also why no width token fits them. */}
       <Table fixed>
         <thead>
           <tr>
@@ -233,9 +240,12 @@ export function LinksTable({
               sortKey="slug"
               sort={sort}
               onSort={onSort}
+              // fallow-ignore-next-line css-token-drift
               className="w-1/2 sm:w-2/5 lg:w-[30%] xl:w-[26%]"
             />
+            {/* fallow-ignore-next-line css-token-drift */}
             <Th className="hidden lg:table-cell lg:w-[16%]">Title</Th>
+            {/* fallow-ignore-next-line css-token-drift */}
             <Th className="hidden xl:table-cell xl:w-[22%]">Destination</Th>
             <SortTh
               label="Clicks"

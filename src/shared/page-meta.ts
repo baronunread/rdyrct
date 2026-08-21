@@ -25,16 +25,16 @@ export interface PageMeta {
  * visitor who arrived on the public page itself.
  */
 export const DEFAULT_PAGE_META: PageMeta = {
-  title: "rdyrct - URL shortener and QR code generator",
+  title: "Free URL shortener and QR code generator - rdyrct",
   description:
-    "Free URL shortener and QR code generator for teams: branded short links, custom QR codes, and privacy-friendly click analytics.",
+    "Free URL shortener and QR code generator for teams: branded short links on your own domain, custom QR codes, and privacy-friendly click analytics.",
 };
 
 export const PUBLIC_PAGE_META = {
   "/": {
-    title: "rdyrct - URL shortener and QR code generator",
+    title: "Free URL shortener and QR code generator - rdyrct",
     description:
-      "Free URL shortener and QR code generator for teams: branded short links, custom QR codes, and privacy-friendly click analytics.",
+      "Free URL shortener and QR code generator for teams: branded short links on your own domain, custom QR codes, and privacy-friendly click analytics.",
   },
   "/qr-code-generator": {
     title: "Free QR code generator with logo - PNG and SVG, no account",
@@ -45,6 +45,11 @@ export const PUBLIC_PAGE_META = {
     title: "Pricing - rdyrct URL shortener and QR codes",
     description:
       "Free, Hobby and Pro plans for rdyrct: short links, custom domains, branded QR codes and click analytics. Start free, or self-host on your own Cloudflare account.",
+  },
+  "/roadmap": {
+    title: "Roadmap - rdyrct URL shortener",
+    description:
+      "What rdyrct is building next: a public REST API, API keys, an OpenAPI document, and an MCP server for agents. Every item is an open issue you can read and comment on.",
   },
   "/signup": {
     title: "Sign up - rdyrct URL shortener and QR codes",

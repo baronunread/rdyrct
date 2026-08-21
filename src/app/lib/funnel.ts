@@ -67,6 +67,10 @@ export type CtaPlacement =
   // The custom-domain second screen (Direction C of #96), the first paid
   // ask on the page.
   | "second_screen_domain"
+  // The one ask in the long middle of the page, at the end of the analytics
+  // preview. Worth its own placement: it fires right after somebody has been
+  // shown the payoff, so it measures whether the mock actually sells.
+  | "analytics_preview"
   // The standalone QR generator (Direction D of #96). The page asks nothing
   // of the visitor, so these two are the only intent it can report: taking
   // the free account, or going to read what the paid ones cost.

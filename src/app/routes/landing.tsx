@@ -343,7 +343,7 @@ function MobilePlans({ paidTo }: { paidTo: (p: "hobby" | "pro") => string }) {
               <p className={highlight ? "font-bold text-accent" : "font-bold"}>
                 {name}
                 {highlight && (
-                  <span className="ml-2 rounded-full border border-accent/40 px-2 py-0.5 text-3xs tracking-wide text-accent uppercase">
+                  <span className="ml-2 rounded-full border border-accent/40 px-2 py-0.5 text-2xs text-accent">
                     Most popular
                   </span>
                 )}
@@ -418,7 +418,7 @@ export function PricingSection() {
               <Th className="border-x border-x-accent/25 bg-accent/10">
                 <span className="inline-flex items-center gap-2 text-accent">
                   Pro
-                  <span className="rounded-full border border-accent/40 px-2 py-0.5 text-3xs tracking-wide text-accent uppercase">
+                  <span className="rounded-full border border-accent/40 px-2 py-0.5 text-2xs text-accent">
                     Most popular
                   </span>
                 </span>
@@ -553,9 +553,6 @@ function GithubMark({ size = 17 }: { size?: number }) {
   );
 }
 
-/** Build-time constant, so the number is right at deploy and never fetched. */
-const STARS = __GITHUB_STARS__;
-
 function SelfHostSection() {
   return (
     <Section id="self-host" className="py-16">
@@ -575,10 +572,15 @@ function SelfHostSection() {
             going to email you about it.
           </p>
 
-          {/* One soft pill: the mark, then the name over the count. The mark
-              is 38px inside a 58px pill, so pl-2.5 would put its centre exactly
-              on the 29px corner radius and read as if it were falling out of
-              the curve. Nudged right so it sits inside the arc. */}
+          {/* One soft pill: the mark, then the name over the invitation. This
+              used to end on a star count, which is the wrong number to make
+              the largest fact in the section that exists to answer "will this
+              still be here next year": a low count reads as a weekend project
+              to the exact reader the band is for, and it only ages one way,
+              slowly. The mark is 38px inside a 58px pill, so pl-2.5 would put
+              its centre exactly on the 29px corner radius and read as if it
+              were falling out of the curve. Nudged right so it sits inside
+              the arc. */}
           <a
             href={GITHUB_URL}
             target="_blank"
@@ -588,7 +590,7 @@ function SelfHostSection() {
             <GithubMark size={38} />
             <span className="flex flex-col leading-tight">
               <span className="text-base font-bold">GitHub</span>
-              <span className="tnum text-sm text-muted">{formatNumber(STARS)} stars</span>
+              <span className="text-sm text-muted">Read the source</span>
             </span>
           </a>
         </div>
@@ -653,6 +655,28 @@ const lineVariant: Variants = {
 };
 
 /**
+ * The window buttons of the terminal below. Their three colours are the ones
+ * macOS actually uses and 9px is the size it actually draws them: a picture of
+ * something real, so the values are fixed rather than ours to theme. Same for
+ * the green tick in `OK`, which is the same green as the third button.
+ */
+// fallow-ignore-next-line css-token-drift
+const DOT = "h-[9px] w-[9px] rounded-full";
+// fallow-ignore-next-line css-token-drift
+const OK = "text-[#27c93f]";
+
+function TrafficLights({ hidden = false }: { hidden?: boolean }) {
+  return (
+    <div className={`flex items-center gap-1.5 ${hidden ? "invisible" : ""}`}>
+      {/* fallow-ignore-next-line css-token-drift */}
+      {["bg-[#ff5f56]", "bg-[#ffbd2e]", "bg-[#27c93f]"].map((color) => (
+        <span key={color} className={`${DOT} ${color}`} />
+      ))}
+    </div>
+  );
+}
+
+/**
  * A fake "bun run deploy" terminal that, when scrolled into view, walks
  * through building, uploading, and deploying the Worker, then explains each
  * Cloudflare primitive that was deployed.
@@ -661,9 +685,12 @@ function DeployTerminal() {
   const reduce = useReducedMotion();
   const animated = !reduce;
 
+  // A block caret is the size of the character it stands in for, which is the
+  // mono face at this size and no token on the spacing scale.
   const cursor = animated ? (
     <span
       aria-hidden
+      // fallow-ignore-next-line css-token-drift
       className="inline-block h-[13px] w-[5px] translate-y-px bg-accent align-middle ml-0.5"
       style={{ animation: "cursorBlink 1s step-end infinite" }}
     />
@@ -674,15 +701,15 @@ function DeployTerminal() {
       <span className="text-accent">$</span> bun run deploy{cursor}
     </span>,
     /* 1 */ <span key="build">
-      <span className="text-[#27c93f]">✓</span> src/worker/index.ts → dist/worker.js{" "}
+      <span className={OK}>✓</span> src/worker/index.ts → dist/worker.js{" "}
       <span className="text-muted">(2.4s)</span>
     </span>,
     /* 2 */ <span key="upload">
-      <span className="text-[#27c93f]">✓</span> Optimizing bundle...{" "}
+      <span className={OK}>✓</span> Optimizing bundle...{" "}
       <span className="text-muted">124 kB gzipped</span>
     </span>,
     /* 3 */ <span key="deploy">
-      <span className="text-[#27c93f]">✓</span> Deploying to Cloudflare global network
+      <span className={OK}>✓</span> Deploying to Cloudflare global network
     </span>,
     /* 4 */ <span key="b1" />,
     /* 5 */ <span key="header">
@@ -703,6 +730,12 @@ function DeployTerminal() {
     </span>,
   ];
 
+  // Terminal line spacing, looser than prose and tighter than leading-loose.
+  // Indexes 4 and 11 are the blank lines between blocks.
+  // fallow-ignore-next-line css-token-drift
+  const lineClass = "whitespace-pre-wrap leading-[1.9]";
+  const spacingOf = (i: number) => (i === 4 || i === 11 ? "h-2" : lineClass);
+
   const content = animated ? (
     <m.div initial="hidden" whileInView="visible" viewport={{ once: true, margin: "-60px" }}>
       {lines.map((node, i) => (
@@ -710,7 +743,7 @@ function DeployTerminal() {
           key={String(node.key)}
           variants={lineVariant}
           custom={delays[i]}
-          className={i === 4 || i === 11 ? "h-2" : "whitespace-pre-wrap leading-[1.9]"}
+          className={spacingOf(i)}
         >
           {node}
         </m.div>
@@ -719,10 +752,7 @@ function DeployTerminal() {
   ) : (
     <div>
       {lines.map((node, i) => (
-        <div
-          key={String(node.key)}
-          className={i === 4 || i === 11 ? "h-2" : "whitespace-pre-wrap leading-[1.9]"}
-        >
+        <div key={String(node.key)} className={spacingOf(i)}>
           {node}
         </div>
       ))}
@@ -733,21 +763,15 @@ function DeployTerminal() {
     // translate="no": the animated terminal mounts/unmounts text nodes on a
     // loop, and a page translator rewriting them would break React's
     // placement anchors and blank the page. Keep the translator out.
-    <div translate="no" className="overflow-hidden rounded-[10px] bg-surface smooth-shadow-ring-lg">
+    <div translate="no" className="overflow-hidden rounded-xl bg-surface smooth-shadow-ring-lg">
       <div className="flex items-center border-b border-border bg-surface-2 px-4 py-2.5">
-        <div className="flex items-center gap-1.5">
-          <span className="h-[9px] w-[9px] rounded-full bg-[#ff5f56]" />
-          <span className="h-[9px] w-[9px] rounded-full bg-[#ffbd2e]" />
-          <span className="h-[9px] w-[9px] rounded-full bg-[#27c93f]" />
-        </div>
-        <span className="flex-1 text-center font-mono text-[0.7rem] text-muted">rdyrct deploy</span>
-        <div className="invisible flex items-center gap-1.5">
-          <span className="h-[9px] w-[9px] rounded-full bg-[#ff5f56]" />
-          <span className="h-[9px] w-[9px] rounded-full bg-[#ffbd2e]" />
-          <span className="h-[9px] w-[9px] rounded-full bg-[#27c93f]" />
-        </div>
+        <TrafficLights />
+        <span className="flex-1 text-center font-mono text-xs text-muted">rdyrct deploy</span>
+        {/* The second set is a spacer: without it the title centres on the
+            space the first set leaves, not on the window. */}
+        <TrafficLights hidden />
       </div>
-      <div className="px-4 py-3 font-mono text-[0.78rem]">{content}</div>
+      <div className="px-4 py-3 font-mono text-xs">{content}</div>
     </div>
   );
 }
@@ -765,36 +789,39 @@ function HeroSection({
   name: string;
 }) {
   return (
-    <section className="flex flex-col items-center gap-8 py-16 sm:py-20">
+    // Two columns from md up, one below it. Most products put a screenshot in
+    // the right half because you cannot use them without an account; the
+    // anonymous shortener works without one, so the real thing goes where
+    // everybody else puts a picture of the thing.
+    //
+    // It also repairs something. Stacked, the card sat under the buttons and
+    // both of them had to be demoted to secondary so as not to read as two
+    // primary actions in one column. Side by side they are no longer in the
+    // same column, so the primary CTA is primary again.
+    <section className="grid items-center gap-10 py-14 md:grid-cols-2 md:gap-12 md:py-20">
       <m.div
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5, ease: "easeOut" }}
-        className="flex flex-col items-center gap-6 text-center"
+        className="flex flex-col items-center gap-6 text-center md:items-start md:text-left"
       >
-        <h1 className="max-w-3xl text-3xl font-bold tracking-tight text-balance sm:text-5xl">
-          Know which channel earned the click.
+        <h1 className="text-3xl font-bold tracking-tight text-balance sm:text-4xl lg:text-5xl">
+          Short links and QR codes that show which channel earned the click.
         </h1>
         <p className="max-w-xl text-sm text-muted sm:text-base">
-          Every short link and QR code your team shares reports back: country, referrer, device, and
-          campaign, measured against the period before. On your own domain, and without a single IP
-          address in the database.
+          Each one reports back: country, referrer, device, and campaign, measured against the
+          period before. On your own domain, and without a single IP address in the database.
         </p>
         {/* The second CTA points down the page, not off it. "Self-host from
             GitHub" used to sit here, spending the highest-intent moment on
             the site sending people to a repository; it now lives in its own
             band under the pricing table. */}
-        <div className="flex flex-wrap items-center justify-center gap-3">
-          {/* Secondary now, both of them: the card below is the thing this
-              page asks you to do, so a filled button competing with it would
-              be two primary actions in one view. Hidden entirely when signed
-              in, where the card already carries "Open dashboard" and two of
-              them side by side is just a stutter. */}
+        <div className="flex flex-wrap items-center justify-center gap-3 md:justify-start">
           {!authed && (
             <HrefLink
               href={ctaTo}
               onClick={() => trackCta("hero_primary")}
-              className={buttonClass({ variant: "outline", className: "h-11 px-6 text-base" })}
+              className={buttonClass({ variant: "primary", className: "h-11 px-6 text-base" })}
             >
               {ctaLabel}
             </HrefLink>
@@ -802,21 +829,40 @@ function HeroSection({
           <a
             href="#analytics"
             onClick={() => trackCta("hero_secondary")}
-            className={buttonClass({ variant: "ghost", className: "h-11 px-6 text-base" })}
+            className={buttonClass({ variant: "outline", className: "h-11 px-6 text-base" })}
           >
             <BarChart3 size={16} /> See the analytics
           </a>
         </div>
+
+        {/* Reassurance for somebody deciding. Nothing to reassure once they
+            have an account. */}
+        <ul
+          className={cn(
+            "flex flex-wrap items-center justify-center gap-x-5 gap-y-1 text-xs text-muted md:justify-start",
+            authed && "hidden",
+          )}
+        >
+          <li className="flex items-center gap-1.5">
+            <Check size={13} className="text-accent-2" /> Free plan forever
+          </li>
+          <li className="flex items-center gap-1.5">
+            <Check size={13} className="text-accent-2" /> No credit card required
+          </li>
+          <li className="flex items-center gap-1.5">
+            <Check size={13} className="text-accent-2" /> No IP tracking
+          </li>
+        </ul>
       </m.div>
 
-      {/* Above the reassurance list, not below the buttons: this is what the
-          page is for. Somebody can have a working link before they have read
-          a word about plans. */}
+      {/* The right half on a wide screen, and directly under the copy on a
+          phone, where it has to stay near the fold: it is the one thing on
+          this page that turns a stranger into an account. */}
       <m.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.6, ease: "easeOut", delay: 0.15 }}
-        className="flex w-full justify-center"
+        className="flex w-full justify-center md:justify-end"
       >
         {/* The anonymous shortener is an argument aimed at a stranger. A
             signed-in visitor has already been convinced, and offering them a
@@ -824,25 +870,6 @@ function HeroSection({
             the account they are in reads as nobody having tried it. */}
         {authed ? <HeroSignedIn name={name} /> : <HeroShortener />}
       </m.div>
-
-      {/* Reassurance for somebody deciding. Nothing to reassure once they
-          have an account. */}
-      <ul
-        className={cn(
-          "flex flex-wrap items-center justify-center gap-x-5 gap-y-1 text-xs text-muted",
-          authed && "hidden",
-        )}
-      >
-        <li className="flex items-center gap-1.5">
-          <Check size={13} className="text-accent-2" /> Free plan forever
-        </li>
-        <li className="flex items-center gap-1.5">
-          <Check size={13} className="text-accent-2" /> No credit card required
-        </li>
-        <li className="flex items-center gap-1.5">
-          <Check size={13} className="text-accent-2" /> No IP tracking
-        </li>
-      </ul>
     </section>
   );
 }
@@ -856,43 +883,86 @@ function HeroSection({
  * domain, with a slug they chose. It is also the clearest thing a paid plan
  * buys, put where somebody is still deciding whether to care.
  */
+/** The two mails land one after the other, then each says its verdict a beat
+ *  later, so the reader gets to look at the link before being told what to
+ *  make of it. MotionConfig reducedMotion="user" wraps the page, so this
+ *  becomes a plain appearance for anyone who asked for less movement. */
+const inboxVariants: Variants = {
+  hidden: {},
+  visible: { transition: { delayChildren: 0.15, staggerChildren: 0.55 } },
+};
+
+const mailVariants: Variants = {
+  hidden: { opacity: 0, y: 12 },
+  visible: { opacity: 1, y: 0, transition: { duration: 0.45, ease: "easeOut" } },
+};
+
+const verdictVariants: Variants = {
+  hidden: { opacity: 0 },
+  visible: { opacity: 1, transition: { delay: 0.5, duration: 0.35 } },
+};
+
 /**
- * One of the two messages, so the argument is made by the picture rather
- * than asserted by the copy.
+ * One mail in the inbox, so the argument is made by the picture rather than
+ * asserted by the copy.
+ *
+ * The verdict is about the link matching the sender, not about the link
+ * looking dodgy on its own. In an inbox the display name is the first thing
+ * read and the easiest thing to fake, so the link underneath is what settles
+ * it. That is the real reason a domain you own matters here.
  */
-function TextMessage({
+function InboxMail({
   from,
-  body,
+  subject,
   link,
   verdict,
   mine,
 }: {
   from: string;
-  body: string;
+  subject: string;
   link: string;
   verdict: string;
   mine?: boolean;
 }) {
+  // The two looks side by side, rather than the same question asked four
+  // times down the markup.
+  const tone = mine
+    ? {
+        row: "bg-surface smooth-shadow-ring-sm",
+        badge: "bg-accent/15 text-accent",
+        link: "text-accent",
+        verdict: "text-accent-2",
+      }
+    : {
+        row: "bg-surface-2",
+        badge: "bg-border text-muted",
+        link: "text-muted",
+        verdict: "text-muted",
+      };
+
   return (
-    <div
-      className={cn(
-        "flex flex-1 flex-col gap-2 rounded-xl p-4 text-left",
-        mine ? "bg-surface smooth-shadow-ring-sm" : "bg-surface-2",
-      )}
-    >
-      <p className="text-2xs text-muted">{from}</p>
-      <p className="text-sm">{body}</p>
-      <p
-        className={cn("font-mono text-sm font-bold break-all", mine ? "text-accent" : "text-muted")}
+    <m.div variants={mailVariants} className={cn("flex gap-3 rounded-xl p-4 text-left", tone.row)}>
+      <span
+        className={cn(
+          "mt-0.5 grid size-8 shrink-0 place-items-center rounded-full text-xs font-bold",
+          tone.badge,
+        )}
+        aria-hidden="true"
       >
-        {link}
-      </p>
-      <p
-        className={cn("text-2xs tracking-wider uppercase", mine ? "text-accent-2" : "text-danger")}
-      >
-        {verdict}
-      </p>
-    </div>
+        A
+      </span>
+      <div className="flex min-w-0 flex-1 flex-col gap-1">
+        <div className="flex items-baseline justify-between gap-2">
+          <p className="truncate text-sm font-bold">{from}</p>
+          <span className="shrink-0 text-2xs text-muted">now</span>
+        </div>
+        <p className="truncate text-sm text-muted">{subject}</p>
+        <p className={cn("truncate font-mono text-xs", tone.link)}>{link}</p>
+        <m.p variants={verdictVariants} className={cn("mt-0.5 text-xs", tone.verdict)}>
+          {verdict}
+        </m.p>
+      </div>
+    </m.div>
   );
 }
 
@@ -917,41 +987,70 @@ function TextMessage({
 function CustomDomainSection() {
   const paidTo = usePaidPlanTo();
   return (
+    // Side by side, because the section already is: it compares two messages
+    // that differ only in the domain. Stacking the argument above its own
+    // evidence was fighting what the section says.
     <Section className="py-12">
-      <div className="mx-auto flex max-w-3xl flex-col items-center gap-6 text-center">
-        <h2 className="text-xl font-bold text-balance sm:text-2xl">
-          Your link gets read by someone deciding whether to trust it.
-        </h2>
-        <p className="max-w-xl text-sm text-muted">
-          A random slug on a domain nobody recognises is what a scam text looks like. Connect a
-          domain you own and short links go live under it, with TLS issued automatically, and every
-          slug is yours to choose. On the shared domain they are always random, so nobody can squat
-          the good ones.
-        </p>
-
-        <div className="flex w-full flex-col gap-3 sm:flex-row">
-          <TextMessage
-            from="Text message, shared domain"
-            body="Acme: your 20% code ends tonight."
-            link="rdyrct.com/m22fs5w"
-            verdict="Deleted as spam"
-          />
-          <TextMessage
-            mine
-            from="The same text, your domain"
-            body="Acme: your 20% code ends tonight."
-            link="go.acme.com/20-off"
-            verdict="Obviously from Acme"
-          />
-        </div>
-
-        <HrefLink
-          href={paidTo("hobby")}
-          onClick={() => trackCta("second_screen_domain")}
-          className={buttonClass({ variant: "primary", size: "sm" })}
+      <div className="grid items-center gap-8 md:grid-cols-2 md:gap-12">
+        {/* Evidence left, argument right. On a phone the heading still comes
+            first: the inbox is the proof of a claim, and proof before the
+            claim is just two emails nobody asked about. */}
+        <m.div
+          initial="hidden"
+          whileInView="visible"
+          viewport={{ once: true, margin: "-60px" }}
+          variants={inboxVariants}
+          className="order-2 flex w-full flex-col gap-3 rounded-2xl bg-surface-2/40 p-3 md:order-1"
         >
-          Put your domain on it <ArrowRight size={14} />
-        </HrefLink>
+          <p className="px-1 text-2xs font-medium text-muted">Inbox</p>
+          <InboxMail
+            from="Acme Store"
+            subject="Your 20% code ends tonight"
+            link="rdyrct.com/m22fs5w"
+            verdict="Doesn't match the sender"
+          />
+          <InboxMail
+            mine
+            from="Acme Store"
+            subject="Your 20% code ends tonight"
+            link="go.acme.com/20-off"
+            verdict="Matches the sender"
+          />
+        </m.div>
+
+        <div className="order-1 flex flex-col items-center gap-5 text-center md:order-2 md:items-start md:text-left">
+          {/* Gain framing, not fear. This used to open on "a random slug is
+              what a scam text looks like", which sells by making somebody
+              picture being mistaken for a scammer. Every competitor sells the
+              same feature the other way round, on recognition and clicks:
+              Dub "boost click-through rates by 30%", Bitly "replace bit.ly
+              with your brand and 2.3x your click-throughs", Rebrandly
+              "branded links build trust and get 39% more clicks". None of
+              them says spam, and Bitly is selling against a generic
+              shortener domain, which is the hardest case for staying
+              positive.
+
+              No number here, because we do not have one of our own and
+              quoting a competitor's marketing as evidence for our product
+              would be the same dishonesty in a nicer suit. The messages to
+              the right are the evidence instead. */}
+          <h2 className="text-xl font-bold text-balance sm:text-2xl">
+            People click links they recognize.
+          </h2>
+          <p className="max-w-xl text-sm text-muted">
+            Connect a domain you own and every short link goes out under it, with TLS issued
+            automatically and every slug yours to choose. The name in the link is the name in the
+            message, so there is nothing to work out before clicking. On the shared domain slugs
+            stay random, so nobody can take the good ones.
+          </p>
+          <HrefLink
+            href={paidTo("hobby")}
+            onClick={() => trackCta("second_screen_domain")}
+            className={buttonClass({ variant: "primary", size: "sm" })}
+          >
+            Connect your domain <ArrowRight size={14} />
+          </HrefLink>
+        </div>
       </div>
     </Section>
   );
@@ -979,6 +1078,7 @@ function HowItWorksSection() {
 }
 
 function AnalyticsPreviewSection() {
+  const { authed } = useAudience();
   return (
     // The hero's second CTA lands here, so it needs an id and room under the
     // sticky header.
@@ -987,13 +1087,27 @@ function AnalyticsPreviewSection() {
         <h2 className="text-xl font-bold text-balance">See every click, respect every visitor</h2>
         <p className="mx-auto mt-2 max-w-xl text-sm text-muted">
           Country, device, referrer, and campaign breakdowns for every link, from the last 24 hours
-          to the last year. Never an IP address, never cross-site tracking. This is the actual
-          analytics page.
+          to the last year. Never an IP address, never cross-site tracking. The real analytics page,
+          on sample data.
         </p>
       </div>
       <div className="flex justify-center">
         <LandingAnalyticsMock />
       </div>
+
+      {/* The only ask between the hero and the pricing table. On a phone this
+          section and the feature grid run to about 4,200px back to back, and
+          without this there is nothing to click for roughly 6,200px. This is
+          also the best moment to ask: they have just been shown the payoff. */}
+      <p className="mt-8 text-center text-sm">
+        <HrefLink
+          href={authed ? "/analytics" : "/signup"}
+          onClick={() => trackCta("analytics_preview")}
+          className="text-accent hover:underline"
+        >
+          See this on your own links →
+        </HrefLink>
+      </p>
     </Section>
   );
 }
@@ -1003,14 +1117,22 @@ function FeaturesSection() {
     <Section>
       <div className="mb-8 text-center">
         <h2 className="text-xl font-bold">Everything your team needs on a link</h2>
+        {/* Every card below is worked from the dashboard, because that is what
+            is built. Saying so is the honest version of the old "built for the
+            people who run the campaigns", which named an audience instead of
+            saying what they get, and left developers to guess. */}
         <p className="mx-auto mt-2 max-w-xl text-sm text-muted">
-          Built for marketing teams and developers.
+          All of it works from the dashboard.{" "}
+          <MarketingLink to="/roadmap" className="text-accent hover:underline">
+            The API is on the roadmap
+          </MarketingLink>
+          .
         </p>
       </div>
       <div className="space-y-10">
         {featureGroups.map(({ title, items }) => (
           <div key={title}>
-            <h3 className="mb-4 text-xs font-bold tracking-wide text-muted uppercase">{title}</h3>
+            <h3 className="mb-4 text-xs font-semibold text-muted">{title}</h3>
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
               {items.map(({ icon: Icon, title, body, plan }) => (
                 <div
@@ -1020,9 +1142,7 @@ function FeaturesSection() {
                   <div className="mb-2 flex items-center gap-2">
                     <Icon size={16} className="text-accent" />
                     <p className="font-bold">{title}</p>
-                    {plan && (
-                      <span className="text-2xs tracking-wide text-muted uppercase">{plan}</span>
-                    )}
+                    {plan && <span className="text-xs text-muted">{plan}</span>}
                   </div>
                   <p className="text-sm text-muted">{body}</p>
                 </div>
@@ -1053,9 +1173,11 @@ function CloudflareSection() {
 
 function FaqSection() {
   return (
+    // Left, not centred. Reading is one column, and centring a list of
+    // questions starts every line in a different place.
     <Section id="faq" className="scroll-mt-16 py-16">
-      <div className="mb-8 text-center">
-        <h2 className="text-xl font-bold">Frequently asked questions</h2>
+      <div className="mx-auto max-w-3xl">
+        <h2 className="mb-6 text-xl font-bold">Frequently asked questions</h2>
       </div>
       <div className="mx-auto flex max-w-3xl flex-col gap-3">
         {faqs.map(({ q, a, aNode }) => (
@@ -1118,7 +1240,11 @@ function PricingTeaser() {
     {
       name: "Free",
       price: "$0",
-      pitch: `${PLAN_LIMITS.free.links} links, ${PLAN_LIMITS.free.analyticsDays}-day analytics, and QR codes`,
+      // Says the generous part and the catch in one line. The free teammates
+      // are the strongest free thing here and were missing; the random slugs
+      // are the fact most likely to feel like a bait if somebody only meets
+      // it after signing up, and it was buried in a collapsed FAQ.
+      pitch: `${PLAN_LIMITS.free.links} links, ${PLAN_LIMITS.free.members} teammates, QR codes, and ${PLAN_LIMITS.free.analyticsDays}-day click analytics. Slugs on our domain are always random.`,
       to: "/signup",
       cta: "Sign up free",
       variant: "outline" as const,
@@ -1127,7 +1253,7 @@ function PricingTeaser() {
     {
       name: "Hobby",
       price: `${PLAN_PRICES.hobby}/mo`,
-      pitch: `${PLAN_LIMITS.hobby.links} links, a custom domain with your own slugs, QR codes with your logo and colors, ${PLAN_LIMITS.hobby.members} team members, and ${PLAN_LIMITS.hobby.analyticsDays}-day analytics`,
+      pitch: `${PLAN_LIMITS.hobby.links} links, a custom domain with your own slugs, QR codes with your logo and colors, ${PLAN_LIMITS.hobby.members} team members, and ${PLAN_LIMITS.hobby.analyticsDays}-day analytics.`,
       to: paidTo("hobby"),
       cta: "Start Hobby",
       variant: "outline" as const,
@@ -1136,7 +1262,7 @@ function PricingTeaser() {
     {
       name: "Pro",
       price: `${PLAN_PRICES.pro}/mo`,
-      pitch: `Everything in Hobby, plus ${PLAN_LIMITS.pro.orgs} organizations, ${formatNumber(PLAN_LIMITS.pro.links)} links, ${PLAN_LIMITS.pro.domains} custom domains, ${PLAN_LIMITS.pro.members} team members, and ${PLAN_LIMITS.pro.analyticsDays}-day analytics`,
+      pitch: `Everything in Hobby, plus ${PLAN_LIMITS.pro.orgs} organizations, ${formatNumber(PLAN_LIMITS.pro.links)} links, ${PLAN_LIMITS.pro.domains} custom domains, ${PLAN_LIMITS.pro.members} team members, and ${PLAN_LIMITS.pro.analyticsDays}-day analytics.`,
       to: paidTo("pro"),
       cta: "Start Pro",
       variant: "primary" as const,
@@ -1154,8 +1280,7 @@ function PricingTeaser() {
       <div className="mb-8 text-center">
         <h2 className="text-xl font-bold">Simple pricing</h2>
         <p className="mx-auto mt-2 max-w-xl text-sm text-muted">
-          Start free. Upgrade when your links outgrow the plan, or self-host and never pay us a
-          cent.
+          Start free. Upgrade when you outgrow the plan, or self-host and never pay us a cent.
         </p>
       </div>
 
@@ -1169,7 +1294,17 @@ function PricingTeaser() {
             )}
           >
             <div>
-              <p className={highlight ? "font-bold text-accent" : "font-bold"}>{name}</p>
+              {/* Same pill as the full table and the mobile plan cards. The
+                  homepage is where the steering is worth most, and it was the
+                  one of the three missing it. */}
+              <p className={highlight ? "font-bold text-accent" : "font-bold"}>
+                {name}
+                {highlight && (
+                  <span className="ml-2 rounded-full border border-accent/40 px-2 py-0.5 text-2xs text-accent">
+                    Most popular
+                  </span>
+                )}
+              </p>
               <p className="tnum mt-1 text-2xl font-bold">{price}</p>
               <p className="mt-1 text-sm text-muted">{pitch}</p>
             </div>
@@ -1222,7 +1357,7 @@ export function LandingPage() {
           {/* soft accent glow behind the hero */}
           <div
             aria-hidden="true"
-            className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-[480px]"
+            className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-120"
             style={{
               background:
                 "radial-gradient(55% 60% at 50% 0%, color-mix(in srgb, var(--accent) 9%, transparent), transparent)",

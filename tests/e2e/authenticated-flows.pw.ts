@@ -72,6 +72,6 @@ test("a signed-in visitor sees their own numbers, not the anonymous shortener", 
   await expect(page.getByRole("link", { name: /Open dashboard/i }).first()).toBeVisible();
 
   // The anonymous form is gone, and so is the pitch aimed at strangers.
-  await expect(page.getByLabel("Try it without an account")).toHaveCount(0);
+  await expect(page.getByLabel("Shorten a link, no account needed")).toHaveCount(0);
   await expect(page.getByText("Free plan forever")).toBeHidden();
 });

@@ -28,13 +28,14 @@ test("the hero's second CTA stays on the site and self-hosting sits under pricin
   await expect(page.locator("#analytics")).toBeInViewport();
 
   // Self-hosting keeps its own section after pricing, never a column inside it.
-  // The star count is baked in at build time, so it has to render as a real
-  // number: a failed build-time fetch falls back rather than emitting NaN.
+  // The pill used to end on a star count, which is the wrong number to make
+  // the largest fact in the section that answers "will this still be here next
+  // year": a low count reads as a weekend project to the exact reader the band
+  // is for. No number belongs in it now.
   const selfHost = page.locator("#self-host");
   const pill = selfHost.getByRole("link", { name: /github/i });
   await expect(pill).toHaveAttribute("href", /github\.com/);
-  await expect(pill).toContainText(/\d/);
-  await expect(pill).not.toContainText(/NaN|undefined/);
+  await expect(pill).not.toContainText(/\d|star/i);
 });
 
 // The homepage used to carry the full four-column table, word for word the
@@ -49,8 +50,16 @@ test("the homepage teases three prices and points at the full comparison", async
   await expect(teaser).not.toContainText(/self-hosted/i);
   await expect(teaser.getByText("Free", { exact: true })).toBeVisible();
   await expect(teaser.getByText("Hobby", { exact: true })).toBeVisible();
-  await expect(teaser.getByText("Pro", { exact: true })).toBeVisible();
+  await expect(teaser.getByText("Most popular")).toBeVisible();
   await expect(teaser.locator("table")).toHaveCount(0);
+
+  // The free plan has to say the generous part and the catch in the same
+  // breath: three teammates is the strongest free thing here, and random
+  // slugs is the fact somebody feels lied to about if they only meet it
+  // after signing up.
+  const free = teaser.getByText("Free", { exact: true }).locator("xpath=ancestor::div[1]");
+  await expect(free).toContainText(/teammates/i);
+  await expect(free).toContainText(/always random/i);
 
   await teaser.getByRole("link", { name: /full comparison/i }).click();
   await expect(page).toHaveURL(/\/pricing$/);
@@ -136,6 +145,41 @@ test("the standalone pricing page has the full table and no self-host pitch", as
   await expect(page).toHaveURL(/\/signup/);
 });
 
+// The hero is two columns from md up: copy left, the working shortener right.
+// Most products put a screenshot there because you cannot use them logged
+// out; ours works with no account, so the real thing goes in that half. The
+// split is also what lets the primary CTA be primary: stacked, it sat above
+// the card and had to be demoted so the page did not show two primary
+// actions in one column.
+test("the hero puts the copy and the working shortener side by side", async ({ page }) => {
+  await page.goto("/");
+  const heading = page.getByRole("heading", { level: 1 });
+  const card = page.getByLabel("Shorten a link, no account needed");
+  await expect(heading).toBeVisible();
+  await expect(card).toBeVisible();
+
+  const h = (await heading.boundingBox())!;
+  const c = (await card.boundingBox())!;
+  // Side by side, not stacked: the card starts after the heading ends.
+  expect(c.x).toBeGreaterThan(h.x + h.width - 1);
+  // And on the same band, not below it.
+  expect(c.y).toBeLessThan(h.y + h.height + 200);
+
+  // The filled button is back, and there is only one of it in the hero.
+  const hero = page.locator("section").first();
+  await expect(hero.getByRole("link", { name: /get started free/i })).toBeVisible();
+
+  // On a phone it stacks, and the card has to stay near the fold: it is the
+  // one thing on this page that turns a stranger into an account. Assert the
+  // stack itself, not just that the card is somewhere on screen.
+  await page.setViewportSize({ width: 390, height: 780 });
+  const hNarrow = (await heading.boundingBox())!;
+  const cNarrow = (await card.boundingBox())!;
+  expect(cNarrow.y).toBeGreaterThan(hNarrow.y + hNarrow.height - 1);
+  expect(cNarrow.x).toBeLessThan(hNarrow.x + hNarrow.width);
+  await expect(card).toBeInViewport();
+});
+
 // Marketing navigation swaps the content where you stand and then rides the
 // new page up to its top, which is the order resend.com uses. Two things used
 // to go wrong and both are asserted here.
@@ -159,7 +203,7 @@ async function trackScroll(page: import("@playwright/test").Page) {
       samples.push({
         path: location.pathname,
         y: Math.round(window.scrollY),
-        hero: /Know which channel/.test(document.querySelector("h1")?.textContent ?? ""),
+        hero: /earned the click/.test(document.querySelector("h1")?.textContent ?? ""),
       });
       requestAnimationFrame(tick);
     };
@@ -310,7 +354,7 @@ test("legal pages retain their baseline headings", async ({ page }) => {
 
 // A first-time visitor on a light operating system must land on light. The
 // toggle then has to flip the page and survive a reload, which is the part
-// that breaks if theme-init.js and lib/theme.ts disagree on the default.
+// that breaks if the inline bootstrap and lib/theme.ts disagree on the default.
 test("landing page opens light and the toggle switches and sticks", async ({ browser }) => {
   const context = await browser.newContext({ colorScheme: "light" });
   const page = await context.newPage();
@@ -362,16 +406,137 @@ test("the second screen argues with two messages, not two URLs (#96)", async ({ 
   // The point is made by showing the link where it is read. If this ever
   // becomes two URLs side by side again, it is back to asserting instead of
   // showing.
-  await expect(page.getByText(/deciding whether to trust it/i)).toBeVisible();
-  await expect(page.getByText("Deleted as spam")).toBeVisible();
-  await expect(page.getByText("Obviously from Acme")).toBeVisible();
-  await expect(page.getByRole("link", { name: /Put your domain on it/i })).toBeVisible();
+  await expect(page.getByText(/click links they recognize/i)).toBeVisible();
+  await expect(page.getByText("Doesn't match the sender")).toBeVisible();
+  await expect(page.getByText("Matches the sender")).toBeVisible();
+  await expect(page.getByRole("link", { name: /Connect your domain/i })).toBeVisible();
+
+  // Sold on recognition, the way every competitor sells it, not by making
+  // somebody picture being taken for a scammer. Bitly sells against a
+  // generic shortener domain and still never says the word.
+  const section = page.locator("section").filter({ hasText: /click links they recognize/i });
+  await expect(section).not.toContainText(/scam|spam|fraud/i);
 });
 
 test("a signed-out visitor still gets the anonymous shortener, not a dashboard card", async ({
   page,
 }) => {
   await page.goto("/");
-  await expect(page.getByLabel("Try it without an account")).toBeVisible();
+  await expect(page.getByLabel("Shorten a link, no account needed")).toBeVisible();
   await expect(page.getByText(/Welcome back/)).toHaveCount(0);
+});
+
+// The page claims it serves developers, and every feature card on it is a
+// marketer's feature: there is no API in the product yet. The roadmap page is
+// what makes the claim honest, so it has to exist, it has to point at real
+// open issues, and both the feature grid and the footer have to lead there.
+test("the developer claim is backed by a roadmap of real issues", async ({ page }) => {
+  await page.goto("/roadmap");
+  await expect(
+    page.getByRole("heading", { level: 1, name: /what we are building/i }),
+  ).toBeVisible();
+
+  // Every planned card links to the issue that promises it. None of it is
+  // built, so the issue is the only evidence the page has.
+  const issues = page.locator('a[href*="/issues/"]');
+  await expect(issues).not.toHaveCount(0);
+  for (const href of await issues.evaluateAll((links) =>
+    links.map((l) => l.getAttribute("href")),
+  )) {
+    expect(href).toMatch(/^https:\/\/github\.com\/baronunread\/rdyrct\/issues\/(new|\d+)$/);
+  }
+
+  // A roadmap made only of things that do not exist reads as a product that
+  // does not exist, so the shipped half has to be there too.
+  await expect(page.getByRole("heading", { name: /already working/i })).toBeVisible();
+});
+
+test("the roadmap is reachable from the footer and from the feature grid", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("link", { name: /the API is on the roadmap/i }).click();
+  await expect(page).toHaveURL(/\/roadmap$/);
+
+  await page.goto("/pricing");
+  await page.locator("footer").getByRole("link", { name: "Roadmap" }).click();
+  await expect(page).toHaveURL(/\/roadmap$/);
+});
+
+// Between the hero and the pricing cards the page runs about 6,200px on a
+// phone with nothing to click. The analytics preview ends on the one ask in
+// that stretch, placed where somebody has just been shown the payoff.
+test("the analytics preview ends on an ask", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 780 });
+  await page.goto("/");
+
+  const ask = page.locator("#analytics").getByRole("link", { name: /on your own links/i });
+  await ask.scrollIntoViewIfNeeded();
+  await expect(ask).toBeVisible();
+  await ask.click();
+  await expect(page).toHaveURL(/\/signup/);
+});
+
+// Signup used to render the same card whether you arrived cold or clicked
+// "Keep this link" with a link waiting. The subtitle is what carries the
+// context across the door, and the default has to name the emailed code:
+// that is the step people abandon.
+test("signup says what happens next", async ({ page }) => {
+  await page.goto("/signup");
+  await expect(page.getByText(/6-digit code/i)).toBeVisible();
+
+  await page.goto("/signup?next=%2Fbilling%3Fplan%3Dpro");
+  await expect(page.getByText(/then check out/i)).toBeVisible();
+});
+
+// The cookie policy is a section of the privacy page, not a page of its own:
+// two documents saying the same thing drift. It still needs its own address,
+// because that is what people (and the scanners that audit for one) look for.
+test("the footer has a cookie policy that lands on the cookie section", async ({ page }) => {
+  await page.goto("/");
+  await page.locator("footer").getByRole("link", { name: "Cookies" }).click();
+
+  await expect(page).toHaveURL(/\/privacy#cookies$/);
+  await expect(page.locator("#cookies")).toBeInViewport();
+});
+
+// serveSpa gives the unhashed static files an hour-long cache. This same
+// fallback is what the Vite dev server answers /@vite/client and every source
+// module through, and caching those means the browser keeps running the code
+// you just edited: the app looks broken and a reload does not fix it. Guarded
+// by import.meta.env.DEV, which only this project can see.
+test("the dev server never hands out a long cache for a source module", async ({ request }) => {
+  for (const path of ["/@vite/client", "/src/app/main.tsx"]) {
+    const res = await request.get(path);
+    expect(res.status(), path).toBe(200);
+    expect(res.headers()["cache-control"] ?? "", path).not.toContain("max-age=3600");
+  }
+});
+
+// Every single-segment path reaches the /:slug handler, misses, and lands in
+// serveSpa asking for a 404. Only the shell may actually become one: the rest
+// are real files. /@react-refresh is the one that hurts, because it is the
+// React Refresh runtime the dev server injects into index.html, and a 404
+// there means React never mounts and every page renders the hidden crawler
+// block instead. The production suite could not see it: that path only exists
+// while Vite is serving.
+test("the single-segment files the dev server owns are not 404s", async ({ request }) => {
+  for (const path of ["/@react-refresh", "/favicon.svg", "/og.png", "/llms.txt"]) {
+    expect((await request.get(path)).status(), path).toBe(200);
+  }
+});
+
+// The check the two above exist for. index.html ships a hidden block of real
+// copy for crawlers, so a page whose JavaScript never ran still answers with
+// an h1 and looks alive to anything reading the HTML. That is exactly what
+// made a totally dead app hard to spot: assert the router mounted, by asking
+// for something only the app renders.
+test("the app actually mounts, rather than leaving the crawler block on screen", async ({
+  page,
+}) => {
+  await page.goto("/roadmap");
+
+  await expect(
+    page.getByRole("heading", { level: 1, name: /what we are building/i }),
+  ).toBeVisible();
+  // The crawler block is clipped to 1px and has no header; the app has one.
+  await expect(page.locator("header").getByRole("link", { name: "Sign up" })).toBeVisible();
 });

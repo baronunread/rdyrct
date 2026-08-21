@@ -98,11 +98,11 @@ function MadeLink({ link }: { link: StoredAnonLink }) {
 function keepCopy(count: number) {
   if (count === 1)
     return {
-      body: "This link works for 24 hours and records nothing. Sign up and it becomes yours permanently, with the clicks it earns.",
+      body: "This link works for 24 hours. Sign up and it becomes yours permanently, and starts counting every click: country, referrer, device, campaign.",
       action: "Keep this link",
     };
   return {
-    body: `These ${count} links work for 24 hours and record nothing. Sign up and they become yours permanently, with the clicks they earn.`,
+    body: `These ${count} links work for 24 hours. Sign up and they become yours permanently, and start counting every click: country, referrer, device, campaign.`,
     action: "Keep them",
   };
 }
@@ -131,7 +131,7 @@ function MadeLinks({ made }: { made: StoredAnonLink[] }) {
   if (made.length === 0)
     return (
       <p className="text-xs text-muted">
-        No account, no email. Links last 24 hours, and you can keep them later.
+        No account, no email. Links last 24 hours. Sign up to keep them and start counting clicks.
       </p>
     );
   return (
@@ -189,8 +189,8 @@ export function HeroShortener() {
       noValidate
       className="flex w-full max-w-xl flex-col gap-3 rounded-xl bg-surface p-5 smooth-shadow-ring-sm"
     >
-      <label htmlFor="hero-destination" className="text-2xs tracking-wider text-muted uppercase">
-        Try it without an account
+      <label htmlFor="hero-destination" className="text-xs font-medium text-muted">
+        Shorten a link, no account needed
       </label>
       <div className="flex flex-col gap-2 sm:flex-row">
         <Input

@@ -229,15 +229,15 @@ app.all("/api/*", (c) => c.json({ message: "Not found" }, 404));
 // single-page-application). The SPA renders the same NotFound route either
 // way; the status is what a crawler reads.
 //
-// Only the shell can carry it. The bundle serves files at the root too
-// (/favicon.svg, /theme-init.js, /og.png), and those are single-segment
-// paths that reach here by the same door as a dead slug: they arrive as
-// themselves, not as HTML, and 404ing them took the theme bootstrap down
-// with them.
+// Only the shell can carry it. Single-segment paths reach here by the same
+// door as a dead slug, and some of them are real files (/@react-refresh in
+// dev, where React mounts through it): they arrive as themselves, not as
+// HTML, and 404ing them took the theme bootstrap down with them.
 //
-// /assets/* never reaches this function at all: it's excluded from
-// run_worker_first (wrangler.jsonc), so Cloudflare serves it directly and
-// public/_headers carries its cache-control and security headers instead.
+// The known static files never get this far: /assets/* and the root files
+// listed beside it are excluded from run_worker_first (wrangler.jsonc), so
+// Cloudflare serves them directly and public/_headers carries their
+// cache-control and security headers instead.
 
 /**
  * A 404 nothing will cache.
@@ -255,17 +255,43 @@ function uncacheable404(body: BodyInit | null, from?: Headers): Response {
   return new Response(body, { status: 404, headers });
 }
 
+/**
+ * For any unhashed static file that still reaches serveSpa. The known ones
+ * are excluded from run_worker_first and cached by public/_headers instead;
+ * this hour covers whatever root file somebody adds tomorrow without
+ * updating that list. It is short enough that a deploy lands the same
+ * session.
+ */
+const STATIC_CACHE = "public, max-age=3600, must-revalidate";
+
+/**
+ * Order matters here, and both branches have taken the app down once.
+ *
+ * `status` asks for a 404, and only the shell may become one. /:slug routes
+ * every single-segment path through here, so the rest are real files — in
+ * dev /@react-refresh, which is how React mounts. Check the shell before
+ * the status, never after.
+ *
+ * STATIC_CACHE is production-only. In dev this same fallback serves every
+ * source module, and caching those leaves the browser running the code you
+ * just edited.
+ */
 async function serveSpa(c: Context<AppEnv>, status?: 404): Promise<Response> {
   const url = new URL(c.req.url);
   const response = withPageMeta(await c.env.ASSETS.fetch(c.req.raw), url);
 
-  // Only a fresh 200 says anything about what a path holds. A conditional
-  // request comes back 304 with a null body, and rewriting one of those into
-  // a 404 ships an empty document.
+  // A conditional request comes back 304 with a null body, and rewriting one
+  // of those into a 404 ships an empty document.
   if (response.status !== 200) return response;
 
-  const isShell = response.headers.get("content-type")?.includes("text/html");
-  if (!status || !isShell) return response;
+  if (!response.headers.get("content-type")?.includes("text/html")) {
+    if (import.meta.env.DEV) return response;
+    // ASSETS hands back immutable headers, so this has to be a copy.
+    const cached = new Response(response.body, response);
+    cached.headers.set("cache-control", STATIC_CACHE);
+    return cached;
+  }
+  if (!status) return response;
   return uncacheable404(response.body, response.headers);
 }
 

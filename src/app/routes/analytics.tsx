@@ -83,7 +83,11 @@ function UtmBreakdownSection({
     <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
       {groups.map((g) => (
         <Card key={g.label}>
-          <p className="mb-3 text-2xs tracking-wider text-muted uppercase">{g.label}</p>
+          <p className="mb-3 text-xs font-medium text-muted">{g.label}</p>
+          {/* No empty line: the filter above drops a group with no items,
+              and the whole section goes when every group is empty. A card
+              titled "Campaigns" saying "nothing yet" to an org that does not
+              use UTM tags is noise, not help. */}
           <BarList items={g.items} />
         </Card>
       ))}
@@ -105,7 +109,7 @@ function ClicksChart({
   const isHourly = bucket === "hour";
   return (
     <Card className="mt-4">
-      <p className="mb-3 text-2xs tracking-wider text-muted uppercase">
+      <p className="mb-3 text-xs font-medium text-muted">
         {isHourly ? "Clicks per hour" : "Clicks per day"}
       </p>
       <AreaChart
@@ -123,11 +127,14 @@ function ActivityBreakdown({ heatmap, bucket }: { heatmap: HeatmapRow[]; bucket:
   return (
     <div className="mt-4 grid gap-4 md:grid-cols-3">
       <Card className="md:col-span-2">
-        <p className="mb-3 text-2xs tracking-wider text-muted uppercase">By hour</p>
+        <p className="mb-3 text-xs font-medium text-muted">By hour</p>
         <ClicksByHour data={heatmap} />
       </Card>
       <Card>
-        <p className="mb-3 text-2xs tracking-wider text-muted uppercase">By weekday</p>
+        <p className="mb-3 text-xs font-medium text-muted">By weekday</p>
+        {/* clicksByWeekday always returns all seven days, and the section
+            above returns null without a heatmap, so this list is never
+            empty. */}
         <BarList items={clicksByWeekday(heatmap)} />
       </Card>
     </div>

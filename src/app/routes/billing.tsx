@@ -321,7 +321,7 @@ function PlanActions({
     <Card className="max-w-2xl">
       <div className="flex flex-col gap-4">
         <div className="flex items-center justify-between">
-          <p className="text-2xs tracking-wider text-muted uppercase">Plan</p>
+          <p className="text-xs font-medium text-muted">Plan</p>
           <Badge color={plan === "free" ? "muted" : "mint"}>{PLAN_LABEL[plan]}</Badge>
         </div>
         <p className="text-sm text-muted">
@@ -414,7 +414,7 @@ function UsageMeter({
   return (
     <Card className="max-w-2xl">
       <div className="flex flex-col gap-1">
-        <p className="mb-2 text-2xs tracking-wider text-muted uppercase">Usage: {org.name}</p>
+        <p className="mb-2 text-xs font-medium text-muted">Usage: {org.name}</p>
         {loading ? (
           <UsageMeterSkeleton />
         ) : (

@@ -70,11 +70,11 @@ function CodePanel({ encoded, values }: { encoded: string; values: QrValues }) {
 function TrackingSection() {
   return (
     <section className="flex w-full max-w-3xl flex-col gap-3 rounded-2xl border border-dashed border-border p-6 sm:p-8">
-      <h2 className="text-lg font-bold">This code cannot be tracked</h2>
+      <h2 className="text-lg font-bold">Want to know if anyone scans it?</h2>
       <p className="text-sm text-muted">
-        If you want to track the way your customers interact with your links (scanned or not), this
-        is when you either boot up an analytics stack and parse UTM parameters yourself, or you can
-        just use rdyrct. Start with free and upgrade anytime.
+        A static code has its destination baked into the dots, so nothing reports back. Point it at
+        a short link instead and rdyrct counts every scan by country, device, and time, without
+        storing an IP address. Start free and upgrade anytime.
       </p>
       <div className="flex flex-wrap items-center gap-4 pt-1">
         <Link
@@ -250,7 +250,7 @@ export function QrGeneratorPage() {
 
         <div className="grid w-full max-w-3xl gap-6 rounded-2xl border border-border bg-surface p-6 sm:grid-cols-[1fr_auto] sm:p-8">
           <div className="flex flex-col gap-3">
-            <label htmlFor="qr-value" className="text-2xs tracking-wider text-muted uppercase">
+            <label htmlFor="qr-value" className="text-xs font-medium text-muted">
               Link or text
             </label>
             <Input

@@ -13,6 +13,7 @@ import { FUNNEL } from "../lib/funnel";
 import { useShake } from "../lib/use-shake";
 import { useCap } from "../lib/cap";
 import { useCurrentUser } from "../lib/hooks";
+import { storedAnonLinks } from "../lib/anon-links";
 import { firstFormError } from "../lib/form-errors";
 import { cn } from "../ui/cn";
 import { Button } from "../ui/button";
@@ -207,6 +208,26 @@ const AUTH_MODE_COPY = {
   },
 };
 
+/**
+ * One line under "Create an account", saying what happens next.
+ *
+ * The card used to render identically whether somebody arrived cold, clicked
+ * "Start Pro", or clicked "Keep this link" with a link waiting to be claimed:
+ * every reassurance the landing page built was dropped at the door. It also
+ * never mentioned the emailed code, which is the step people abandon.
+ *
+ * Nothing under "Sign in". Somebody who already has an account does not need
+ * to be sold the plan.
+ */
+function SignupSubtitle({ next }: { next: string }) {
+  const body = storedAnonLinks().length
+    ? "Your link is waiting. Sign up and it becomes permanent, with the clicks it earns."
+    : next.startsWith("/billing")
+      ? "Create your account, then check out. No card needed to create the account."
+      : "Free plan, no credit card. We'll email you a 6-digit code to confirm your address.";
+  return <p className="-mt-2 text-xs text-muted">{body}</p>;
+}
+
 function PasswordHint({
   mode,
   password,
@@ -270,6 +291,7 @@ function AuthFormView({
         className="flex flex-col gap-4 rounded-xl bg-surface p-6 smooth-shadow-ring-sm"
       >
         <h1 className="font-bold">{copy.title}</h1>
+        {mode === "signup" && <SignupSubtitle next={next} />}
         <Field label="Email">
           <Input type="email" {...register("email")} required autoComplete="email" />
         </Field>

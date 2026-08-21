@@ -289,7 +289,7 @@ function PendingInvitesCard({
 }) {
   return (
     <Card className="mt-4">
-      <p className="mb-3 text-2xs tracking-wider text-muted uppercase">Pending invites</p>
+      <p className="mb-3 text-xs font-medium text-muted">Pending invites</p>
       <ul className="flex flex-col gap-2">
         {invites.map((inv) => (
           <li key={inv.token} className="flex items-center justify-between gap-3 text-sm">
@@ -473,7 +473,7 @@ function InviteByEmailCard({
   return (
     <Card className="mb-4">
       <div className="mb-3 flex items-center gap-1.5">
-        <p className="text-2xs tracking-wider text-muted uppercase">Invite by email</p>
+        <p className="text-xs font-medium text-muted">Invite by email</p>
         <Tooltip
           content={
             <>

@@ -10,6 +10,17 @@ import {
   lazyRouteComponent,
 } from "@tanstack/react-router";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+// Figtree carries everything anybody reads; JetBrains Mono is kept for
+// identifiers, the strings a person copies or types. See the rdyrct-design
+// skill for which is which.
+//
+// The variable cut, not four static weights: one 20KB file covers 300 to 900
+// against 48KB for the four, and it is one module in the entry graph instead
+// of four. That last part is why it changed: on a cold dev server in CI the
+// extra transforms pushed the landing page's first paint past a 5s
+// expectation. `wght.css` carries latin and latin-ext behind unicode-range,
+// so only the subset a page needs is fetched.
+import "@fontsource-variable/figtree/wght.css";
 import "@fontsource/jetbrains-mono/latin-400.css";
 import "@fontsource/jetbrains-mono/latin-700.css";
 import "./styles.css";
@@ -41,6 +52,7 @@ const QrGeneratorPage = lazyRouteComponent(
   "QrGeneratorPage",
 );
 const PricingPage = lazyRouteComponent(() => import("./routes/pricing"), "PricingPage");
+const RoadmapPage = lazyRouteComponent(() => import("./routes/roadmap"), "RoadmapPage");
 const AppShell = lazy(() => import("./routes/shell").then((m) => ({ default: m.AppShell })));
 const RequireAuth = lazy(() => import("./routes/shell").then((m) => ({ default: m.RequireAuth })));
 const RequireAdmin = lazy(() =>
@@ -175,6 +187,12 @@ const pricingRoute = createRoute({
   getParentRoute: () => publicLayoutRoute,
   path: "/pricing",
   component: PricingPage,
+  ...marketingPending,
+});
+const roadmapRoute = createRoute({
+  getParentRoute: () => publicLayoutRoute,
+  path: "/roadmap",
+  component: RoadmapPage,
   ...marketingPending,
 });
 const privacyRoute = createRoute({
@@ -318,6 +336,7 @@ const routeTree = rootRoute.addChildren([
     landingRoute,
     qrGeneratorRoute,
     pricingRoute,
+    roadmapRoute,
     privacyRoute,
     termsRoute,
   ]),

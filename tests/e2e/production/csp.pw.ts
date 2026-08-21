@@ -29,9 +29,30 @@ test("the built worker serves the production CSP", async ({ page }) => {
 
   expect(csp).toBeTruthy();
   // style-src carries 'unsafe-inline' by design (React inline `style`), so the
-  // check that matters is script-src alone, read as its own directive.
+  // check that matters is script-src alone, read as its own directive. The
+  // sha256 is the theme bootstrap inlined in index.html; script-src still has
+  // no 'unsafe-inline', which is the whole point of naming it by hash.
   const scriptSrc = csp?.split(";").find((part) => part.trim().startsWith("script-src"));
-  expect(scriptSrc?.trim()).toBe("script-src 'self' 'wasm-unsafe-eval' https://*.posthog.com");
+  expect(scriptSrc?.trim()).toBe(
+    "script-src 'self' 'sha256-TNM/fq1Z4NFEZtsFlN0od8OC66zTGO+lKXWuYpFqhdg=' 'wasm-unsafe-eval' https://*.posthog.com",
+  );
+});
+
+// The hash above only means anything if the browser actually ran the script
+// it names. A refused one is silent: the page just paints in the wrong theme,
+// and every other test here still passes. So read the theme the document
+// ended up in, on a browser whose OS says dark, from the real built worker
+// under the real policy.
+test("the inlined theme bootstrap survives the production CSP", async ({ browser }) => {
+  const context = await browser.newContext({ colorScheme: "dark" });
+  const page = await context.newPage();
+  await collectCspViolations(page);
+
+  await page.goto("/");
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+  expect(await cspViolations(page)).toEqual([]);
+
+  await context.close();
 });
 
 /**

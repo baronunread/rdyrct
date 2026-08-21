@@ -58,7 +58,7 @@ export function Field({
 }) {
   return (
     <label className={cn("block min-w-0", className)}>
-      <span className="mb-1.5 flex items-center gap-1.5 text-xs tracking-wider text-muted uppercase">
+      <span className="mb-1.5 flex items-center gap-1.5 text-xs text-muted">
         {label}
         {tip && (
           <Tooltip content={tip}>

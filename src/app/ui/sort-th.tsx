@@ -23,7 +23,7 @@ export function SortTh({
         type="button"
         onClick={() => onSort({ key: sortKey, dir: active && sort.dir === 1 ? -1 : 1 })}
         className={cn(
-          "inline-flex cursor-pointer items-center gap-1 tracking-wider uppercase transition-[color,scale] duration-150 active:scale-[0.96]",
+          "inline-flex cursor-pointer items-center gap-1 transition-[color,scale] duration-150 active:scale-[0.96]",
           active ? "text-text" : "hover:text-text",
         )}
       >

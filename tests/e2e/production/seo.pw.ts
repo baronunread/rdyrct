@@ -14,6 +14,7 @@ const PAGES = [
   { path: "/", title: /URL shortener and QR code generator/ },
   { path: "/qr-code-generator", title: /Free QR code generator with logo/ },
   { path: "/pricing", title: /Pricing - rdyrct/ },
+  { path: "/roadmap", title: /Roadmap - rdyrct/ },
   { path: "/signup", title: /Sign up/ },
   { path: "/privacy", title: /Privacy policy/ },
 ];
@@ -48,7 +49,7 @@ test("the signed-in app keeps the default head", async ({ request }) => {
   // Nothing behind the login wants search traffic.
   const html = await (await request.get("/dashboard")).text();
 
-  expect(html).toContain("<title>rdyrct - URL shortener and QR code generator</title>");
+  expect(html).toContain("<title>Free URL shortener and QR code generator - rdyrct</title>");
 });
 
 test("robots.txt declares both sitemaps", async ({ request }) => {
@@ -132,19 +133,20 @@ test("the second visit to a dead slug still renders the page", async ({ request 
 });
 
 test("a file the bundle serves at the root still answers 200", async ({ request }) => {
-  // These reach the slug handler by the same door as a dead link: one segment,
-  // not a reserved keyword. 404ing them took /theme-init.js down with the
-  // rest, so every page rendered a flash of the wrong theme, and the browser
-  // suite is the only place that could see it — the worker tests stub ASSETS,
-  // so everything there is the SPA shell and this looks fine.
+  // These are one segment and not a reserved keyword, so a slug is all they
+  // look like. run_worker_first excludes them by name now, but the exclusion
+  // list is hand-written: drop a name and the file falls back through the slug
+  // handler, which is how the favicon once went down and every page rendered a
+  // flash of the wrong theme. The browser suite is the only place that can see
+  // it — the worker tests stub ASSETS, so everything there is the SPA shell and
+  // this looks fine.
   //
   // The content type is half the assertion, not decoration: serveSpa decides
   // whether a path may carry a 404 by asking whether what came back is HTML,
-  // so a bundle that answered /favicon.svg with the SPA shell would satisfy a
+  // so a bundle that answered /og.png with the SPA shell would satisfy a
   // status-only check while serving the wrong bytes.
   const assets = [
     ["/favicon.svg", "image/svg+xml"],
-    ["/theme-init.js", "javascript"],
     ["/og.png", "image/png"],
     ["/llms.txt", "text/plain"],
   ];
@@ -199,4 +201,30 @@ test("walking off a public page does not take its title along", async ({ page })
   await page.getByRole("link", { name: "rdyrct" }).first().click();
   await expect(page).toHaveURL(/\/$/);
   await expect(page).not.toHaveTitle(/Privacy policy/);
+});
+
+// X falls back to og:image for most cards but not reliably once twitter:card
+// is set explicitly, and never for the alt text. A missing preview image is
+// a measurable hit to click-through on every link shared from the page.
+test("the share tags carry an image for both card formats", async ({ request }) => {
+  const html = await (await request.get("/")).text();
+
+  for (const tag of ["og:image", "twitter:image"]) {
+    const attr = tag.startsWith("og:") ? "property" : "name";
+    const found = new RegExp(`${attr}="${tag}" content="([^"]*)"`).exec(html)?.[1] ?? "";
+    expect(found, tag).toMatch(/^https:\/\/rdyrct\.com\/og\.png$/);
+  }
+});
+
+// A crawler that does not run JavaScript sees only the static block in
+// index.html, and that block was 289 words: not enough for a search engine to
+// match the page against a range of queries, and not enough for an answer
+// engine to cite. Everything in it has to stay true of the app that replaces
+// it, so this guards the length, not the wording.
+test("the no-JavaScript HTML says enough to be worth indexing", async ({ request }) => {
+  const html = await (await request.get("/")).text();
+  const body = html.slice(html.indexOf("<body"));
+  const text = body.replace(/<script[\s\S]*?<\/script>/g, "").replace(/<[^>]+>/g, " ");
+
+  expect(text.split(/\s+/).filter(Boolean).length).toBeGreaterThan(600);
 });

@@ -17,8 +17,17 @@ export function Footer() {
           <MarketingLink to="/pricing" className="hover:text-accent">
             Pricing
           </MarketingLink>
+          {/* Down here rather than in the header: somebody looking for the
+              roadmap is looking for it on purpose, and the header's three
+              slots belong to the pages that sell. */}
+          <MarketingLink to="/roadmap" className="hover:text-accent">
+            Roadmap
+          </MarketingLink>
           <MarketingLink to="/privacy" className="hover:text-accent">
             Privacy
+          </MarketingLink>
+          <MarketingLink to="/privacy" hash="cookies" className="hover:text-accent">
+            Cookies
           </MarketingLink>
           <MarketingLink to="/terms" className="hover:text-accent">
             Terms
