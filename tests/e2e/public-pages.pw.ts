@@ -491,3 +491,16 @@ test("the footer has a cookie policy that lands on the cookie section", async ({
   await expect(page).toHaveURL(/\/privacy#cookies$/);
   await expect(page.locator("#cookies")).toBeInViewport();
 });
+
+// serveSpa gives the unhashed static files an hour-long cache. This same
+// fallback is what the Vite dev server answers /@vite/client and every source
+// module through, and caching those means the browser keeps running the code
+// you just edited: the app looks broken and a reload does not fix it. Guarded
+// by import.meta.env.DEV, which only this project can see.
+test("the dev server never hands out a long cache for a source module", async ({ request }) => {
+  for (const path of ["/@vite/client", "/src/app/main.tsx"]) {
+    const res = await request.get(path);
+    expect(res.status(), path).toBe(200);
+    expect(res.headers()["cache-control"] ?? "", path).not.toContain("max-age=3600");
+  }
+});

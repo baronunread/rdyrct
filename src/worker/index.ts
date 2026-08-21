@@ -281,7 +281,12 @@ async function serveSpa(c: Context<AppEnv>, status?: 404): Promise<Response> {
   if (response.status !== 200) return response;
 
   const isShell = response.headers.get("content-type")?.includes("text/html");
-  if (!isShell) {
+  // Never in dev. This same fallback is what the Vite dev server answers
+  // /@vite/client and every .tsx and .css through, and none of those are
+  // static: an hour-long cache on them means the browser keeps running the
+  // code you just edited, HMR included. A build-time constant, so production
+  // cannot lose the cache through a misread variable.
+  if (!isShell && !import.meta.env.DEV) {
     // ASSETS hands back immutable headers, so this has to be a copy.
     const cached = new Response(response.body, response);
     cached.headers.set("cache-control", STATIC_CACHE);
