@@ -26,6 +26,9 @@ export function Footer() {
           <MarketingLink to="/privacy" className="hover:text-accent">
             Privacy
           </MarketingLink>
+          <MarketingLink to="/privacy" hash="cookies" className="hover:text-accent">
+            Cookies
+          </MarketingLink>
           <MarketingLink to="/terms" className="hover:text-accent">
             Terms
           </MarketingLink>

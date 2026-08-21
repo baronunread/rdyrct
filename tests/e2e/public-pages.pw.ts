@@ -480,3 +480,14 @@ test("signup says what happens next", async ({ page }) => {
   await page.goto("/signup?next=%2Fbilling%3Fplan%3Dpro");
   await expect(page.getByText(/then check out/i)).toBeVisible();
 });
+
+// The cookie policy is a section of the privacy page, not a page of its own:
+// two documents saying the same thing drift. It still needs its own address,
+// because that is what people (and the scanners that audit for one) look for.
+test("the footer has a cookie policy that lands on the cookie section", async ({ page }) => {
+  await page.goto("/");
+  await page.locator("footer").getByRole("link", { name: "Cookies" }).click();
+
+  await expect(page).toHaveURL(/\/privacy#cookies$/);
+  await expect(page.locator("#cookies")).toBeInViewport();
+});

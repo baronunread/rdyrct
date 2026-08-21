@@ -23,6 +23,12 @@
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="rdyrct" />
     <meta name="twitter:card" content="summary_large_image" />
+    <!-- X reads og:image for most cards, but not reliably when twitter:card is
+         set explicitly, and it never falls back for the alt text. Same file as
+         og:image: one card, one 1200x630 image, no second thing to regenerate
+         when scripts/og-image.html changes. -->
+    <meta name="twitter:image" content="https://rdyrct.com/og.png" />
+    <meta name="twitter:image:alt" content="rdyrct - short links that carry your brand" />
     <meta name="twitter:title" content="rdyrct - URL shortener and QR code generator" />
     <meta
       name="twitter:description"
@@ -123,6 +129,42 @@
           tracking the people who click.
         </p>
 
+        <h2>Campaign tracking with UTM tags</h2>
+        <p>
+          Tag a link with the built-in UTM builder, or paste a URL that already carries UTM
+          parameters and rdyrct reads them back out rather than making you retype them. Campaigns,
+          sources, and mediums are then ranked by clicks, so the question "which channel earned
+          this" has an answer instead of an argument. The analytics page compares any period with
+          the one before it, shows an activity heatmap of your busiest hours, and flags links that
+          have gone quiet: no clicks in 30 days, or a drop of more than half week over week.
+        </p>
+
+        <h2>Built for teams</h2>
+        <p>
+          An organization holds the links, the domains, and the people. Owner, admin, and member
+          roles decide who can edit links, connect a domain, and invite others; invites go out by
+          email, are single-use, and expire after 7 days. Only the organization's owner needs a paid
+          plan, and one subscription covers every organization that owner runs, so a team does not
+          pay per seat to read its own numbers.
+        </p>
+
+        <h2>Links that do not break</h2>
+        <p>
+          Rename a slug and the old one keeps redirecting for 48 hours, so a link already printed on
+          a flyer or sent to a list does not die the moment somebody tidies up. Extra aliases can
+          point at the same link on purpose. Shorten a URL you have already shortened and rdyrct
+          offers to add it as an alias on the existing link instead of quietly creating a second
+          one, which keeps that link's statistics in one place.
+        </p>
+
+        <h2>Try it without an account</h2>
+        <p>
+          The homepage shortener works with no sign-up and no email: paste a URL, get a short link
+          and a QR code back. Those links last 24 hours, and signing up turns them permanent and
+          starts counting their clicks. The QR code generator is a page of its own and asks for
+          nothing at all, because the code is built in your browser rather than on a server.
+        </p>
+
         <h2>Plans</h2>
         <p>
           Free: 1 organization, 30 links, 7-day analytics. Hobby ($4/mo): 500 links, a custom
@@ -140,13 +182,33 @@
         <p>
           Yes. rdyrct is open source and runs entirely on Cloudflare Workers, D1, and KV; see
           <a href="https://github.com/baronunread/rdyrct">the GitHub repository</a> for deploy
-          instructions.
+          instructions. There is no enterprise edition held back: deploy it to your own Cloudflare
+          account and you are the platform admin, which means you set your own limits.
+        </p>
+        <h3>Why are slugs random on the free plan?</h3>
+        <p>
+          Short links on the shared rdyrct.com domain always get a random slug, on every plan. One
+          shared namespace means chosen names would be a land grab, so nobody gets to squat one.
+          Picking your own slug comes with a custom domain, where the namespace is yours.
+        </p>
+        <h3>Is the free plan a trial?</h3>
+        <p>
+          No. It is 30 links, 3 teammates, QR codes, and 7 days of click analytics, with no card and
+          no clock running. Paid plans add branded links on your own domain, chosen slugs, QR codes
+          carrying your logo, and a longer analytics history.
+        </p>
+        <h3>Does rdyrct have an API?</h3>
+        <p>
+          Not yet. A public REST API, organization-scoped API keys, an OpenAPI document, and an MCP
+          server for AI agents are the work being done next; each one is an open issue you can read
+          on <a href="/roadmap">the roadmap</a>.
         </p>
 
         <nav aria-label="Footer">
           <a href="/pricing">Pricing</a>
           <a href="/qr-code-generator">QR code generator</a>
-          <a href="/privacy">Privacy policy</a>
+          <a href="/roadmap">Roadmap</a>
+          <a href="/privacy">Privacy policy and cookie policy</a>
           <a href="/terms">Terms of service</a>
           <a href="/signup">Sign up</a>
         </nav>

@@ -201,3 +201,29 @@ test("walking off a public page does not take its title along", async ({ page })
   await expect(page).toHaveURL(/\/$/);
   await expect(page).not.toHaveTitle(/Privacy policy/);
 });
+
+// X falls back to og:image for most cards but not reliably once twitter:card
+// is set explicitly, and never for the alt text. A missing preview image is
+// a measurable hit to click-through on every link shared from the page.
+test("the share tags carry an image for both card formats", async ({ request }) => {
+  const html = await (await request.get("/")).text();
+
+  for (const tag of ["og:image", "twitter:image"]) {
+    const attr = tag.startsWith("og:") ? "property" : "name";
+    const found = new RegExp(`${attr}="${tag}" content="([^"]*)"`).exec(html)?.[1] ?? "";
+    expect(found, tag).toMatch(/^https:\/\/rdyrct\.com\/og\.png$/);
+  }
+});
+
+// A crawler that does not run JavaScript sees only the static block in
+// index.html, and that block was 289 words: not enough for a search engine to
+// match the page against a range of queries, and not enough for an answer
+// engine to cite. Everything in it has to stay true of the app that replaces
+// it, so this guards the length, not the wording.
+test("the no-JavaScript HTML says enough to be worth indexing", async ({ request }) => {
+  const html = await (await request.get("/")).text();
+  const body = html.slice(html.indexOf("<body"));
+  const text = body.replace(/<script[\s\S]*?<\/script>/g, "").replace(/<[^>]+>/g, " ");
+
+  expect(text.split(/\s+/).filter(Boolean).length).toBeGreaterThan(600);
+});

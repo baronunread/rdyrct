@@ -255,6 +255,22 @@ function uncacheable404(body: BodyInit | null, from?: Headers): Response {
   return new Response(body, { status: 404, headers });
 }
 
+/**
+ * Everything under /assets/ is content-hashed and cached by public/_headers.
+ * The static files at the root are not hashed, and Cloudflare's asset server
+ * gives an unhashed file `max-age=0, must-revalidate`: correct by default,
+ * and wrong for these. og.png, the favicon and the theme bootstrap change
+ * once in a release and were costing a conditional request each, on every
+ * visit, for a 304.
+ *
+ * An hour, revalidating after: short enough that a deploy which changes the
+ * theme bootstrap or the OG card is picked up the same session, long enough
+ * that a normal visit stops paying for four round trips that answer "still
+ * the same". The HTML shell is excluded on purpose: page-meta.ts rewrites its
+ * head per path, so it has to stay uncached.
+ */
+const STATIC_CACHE = "public, max-age=3600, must-revalidate";
+
 async function serveSpa(c: Context<AppEnv>, status?: 404): Promise<Response> {
   const url = new URL(c.req.url);
   const response = withPageMeta(await c.env.ASSETS.fetch(c.req.raw), url);
@@ -265,7 +281,13 @@ async function serveSpa(c: Context<AppEnv>, status?: 404): Promise<Response> {
   if (response.status !== 200) return response;
 
   const isShell = response.headers.get("content-type")?.includes("text/html");
-  if (!status || !isShell) return response;
+  if (!isShell) {
+    // ASSETS hands back immutable headers, so this has to be a copy.
+    const cached = new Response(response.body, response);
+    cached.headers.set("cache-control", STATIC_CACHE);
+    return cached;
+  }
+  if (!status) return response;
   return uncacheable404(response.body, response.headers);
 }
 

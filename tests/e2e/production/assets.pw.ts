@@ -83,3 +83,25 @@ test("every file under /assets/ is content-hashed", async ({ request }) => {
     expect(name, `${name} carries no content hash`).toMatch(/-[A-Za-z0-9_-]{8}\.[a-z0-9]+$/);
   }
 });
+
+// The unhashed static files at the root go through the Worker, so _headers
+// never touches them and Cloudflare's asset server gives them the same
+// `max-age=0, must-revalidate` it gives anything it cannot prove is
+// immutable. Correct as a default, wrong for these: every visit paid a
+// conditional request per file to be told nothing had changed.
+test("the unhashed static files at the root are cached for an hour", async ({ request }) => {
+  for (const path of ["/og.png", "/favicon.svg", "/theme-init.js", "/robots.txt"]) {
+    const res = await request.get(path);
+    expect(res.status(), path).toBe(200);
+    expect(res.headers()["cache-control"], path).toBe("public, max-age=3600, must-revalidate");
+  }
+});
+
+// The shell is the one thing here that must not be cached: page-meta.ts
+// rewrites its head per path, so a cached copy would describe the wrong page.
+test("the HTML shell stays uncached", async ({ request }) => {
+  const res = await request.get("/pricing");
+
+  expect(res.headers()["content-type"]).toContain("text/html");
+  expect(res.headers()["cache-control"]).not.toContain("max-age=3600");
+});

@@ -62,7 +62,12 @@ export function PrivacyPage() {
         </p>
       </section>
 
-      <section>
+      {/* Addressable on its own. People (and the scanners that check for a
+          site's cookie policy) look for a page about cookies, not a heading
+          two thirds of the way down a privacy policy. This is that page's
+          address; splitting it into a real second page would mean two
+          documents saying the same thing and drifting apart. */}
+      <section id="cookies" className="scroll-mt-16">
         <h2 className="mb-2 font-bold">Cookies</h2>
         <p className="text-muted">
           rdyrct sets a strictly-necessary session cookie to keep you signed in. If you accept
