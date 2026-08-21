@@ -106,7 +106,11 @@ describe("the cap", () => {
         })),
       ),
     );
-    expect(storedAnonLinks()).toHaveLength(MAX_ANON_LINKS);
+    // The front of the stored list is the newest, so that is what survives:
+    // keeping the oldest would show a link hours closer to expiring.
+    expect(storedAnonLinks().map((l) => l.slug)).toEqual(
+      ["old000", "old111", "old222"].slice(0, MAX_ANON_LINKS),
+    );
   });
 });
 
