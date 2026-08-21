@@ -6,17 +6,11 @@
  * link, get a real short URL back, and only then decide whether an account is
  * worth it.
  *
- * The form never swaps out. Results open underneath it and stack, newest
- * first, so the link you just made is always directly under the button you
- * pressed and a link already on screen never changes again. There is no
- * "shorten another" control: the input stays filled, the button stays live,
- * and typing a new address is the whole gesture.
+ * The form never swaps out. One link opens underneath it, directly under the
+ * button that was pressed, and that is the ceiling without an account: the
+ * second link is the point where trying it becomes signing up.
  *
- * How tall this can get is bounded by the rate limit rather than by taste:
- * RL_ANON_LINK allows five links a minute from one address, so the realistic
- * worst case is a handful of rows.
- *
- * The links last 24 hours. Signing up keeps them: each claim token goes to
+ * The link lasts 24 hours. Signing up keeps it: the claim token goes to
  * localStorage and the app spends it once the new account has an org, so the
  * first dashboard is not empty (#65).
  */
@@ -57,7 +51,10 @@ function MadeLink({ link }: { link: StoredAnonLink }) {
     // under the link rather than under the code: attached to the QR they
     // made that column more than twice the height of this one, and the hole
     // left beside it wanted filler nobody needed.
-    <div className="grid grid-cols-[1fr_auto] items-start gap-3 border-t border-dashed border-border pt-3">
+    // The link arrives rather than appearing: it is the answer to the button
+    // that was just pressed, a few hundred milliseconds after it, and a card
+    // that pops into the layout reads as a jump rather than as a result.
+    <div className="anon-link-in grid grid-cols-[1fr_auto] items-start gap-3 border-t border-dashed border-border pt-3">
       <div className="flex min-w-0 flex-col gap-1.5">
         <div className="flex min-w-0 items-center gap-2 rounded-lg bg-surface-2 px-3 py-2.5">
           <a
@@ -92,54 +89,42 @@ function MadeLink({ link }: { link: StoredAnonLink }) {
   );
 }
 
-/** Written out per case rather than assembled from fragments: a sentence
- * stitched together from four inline conditionals is unreadable in source
- * and easy to break in one of its halves. */
-function keepCopy(count: number) {
-  if (count === 1)
-    return {
-      body: "This link works for 24 hours. Sign up and it becomes yours permanently, and starts counting every click: country, referrer, device, campaign.",
-      action: "Keep this link",
-    };
-  return {
-    body: `These ${count} links work for 24 hours. Sign up and they become yours permanently, and start counting every click: country, referrer, device, campaign.`,
-    action: "Keep them",
-  };
-}
-
-/** One ask for all of them: repeating it per row would turn a useful card
- * into a nag, and "keep these 3 links" is a better ask than three separate
- * "keep this link". */
-function KeepThemFooter({ count }: { count: number }) {
-  const copy = keepCopy(count);
+/** The ask, once, under the link it is about. */
+function KeepItFooter() {
   return (
-    <div className="flex flex-wrap items-center gap-2 border-t border-border pt-3">
-      <p className="min-w-52 flex-1 text-xs text-muted">{copy.body}</p>
+    // A beat behind the link itself, so the eye lands on the short URL first
+    // and the ask arrives after it.
+    <div className="anon-link-in flex flex-wrap items-center gap-2 border-t border-border pt-3 [animation-delay:70ms]">
+      <p className="min-w-52 flex-1 text-xs text-muted">
+        This link works for 24 hours. Sign up and it becomes yours permanently, and starts counting
+        every click: country, referrer, device, campaign.
+      </p>
       <a
         href="/signup"
         onClick={() => trackCta("hero_shortener_claim")}
         className={buttonClass({ variant: "primary", size: "sm" })}
       >
-        {copy.action} <ArrowRight size={14} />
+        Keep this link <ArrowRight size={14} />
       </a>
     </div>
   );
 }
 
-/** The stack, or the reassurance that stands in for it before there is one. */
+/** The link, or the reassurance that stands in for it before there is one. */
 function MadeLinks({ made }: { made: StoredAnonLink[] }) {
-  if (made.length === 0)
+  const link = made[0];
+  if (!link)
     return (
       <p className="text-xs text-muted">
-        No account, no email. Links last 24 hours. Sign up to keep them and start counting clicks.
+        No account, no email. The link lasts 24 hours. Sign up to keep it and start counting clicks.
       </p>
     );
   return (
     <>
-      {made.map((link) => (
-        <MadeLink key={link.slug} link={link} />
-      ))}
-      <KeepThemFooter count={made.length} />
+      {/* Keyed by slug so a new link is a new element: the animation runs on
+          mount, and a re-render for anything else does not replay it. */}
+      <MadeLink key={link.slug} link={link} />
+      <KeepItFooter />
     </>
   );
 }
@@ -150,7 +135,7 @@ export function HeroShortener() {
   const [destination, setDestination] = useState("");
   const [busy, setBusy] = useState(false);
   // Seeded from storage, so a reload keeps what this browser already made
-  // rather than presenting an empty form to somebody who has three links.
+  // rather than presenting an empty form to somebody who has a link.
   const [made, setMade] = useState<StoredAnonLink[]>(storedAnonLinks);
   const atCap = made.length >= MAX_ANON_LINKS;
   // One reason the button is dead, so the guard and the disabled state can
@@ -215,7 +200,7 @@ export function HeroShortener() {
           it out. The footer below already carries the way forward. */}
       {atCap && (
         <p className="text-xs text-muted">
-          That is {MAX_ANON_LINKS} links, the most this browser can make without an account.
+          That is one link, the most this browser can make without an account.
         </p>
       )}
 

@@ -92,48 +92,6 @@ test("signing up keeps the link that was made before the account (#65)", async (
   expect(Number(anon[0].n)).toBe(0);
 });
 
-/**
- * The footer says "keep these 2 links", so signup has to keep both. An
- * earlier version stored one claim token and overwrote it, which made that
- * copy a promise about the most recent link only.
- */
-test("signing up keeps every link made before the account, not just the last", async ({ page }) => {
-  const first = `https://example.com/multi-a-${Date.now()}`;
-  const second = `https://example.com/multi-b-${Date.now()}`;
-
-  const firstSlug = (await shorten(page, first)).split("/").pop()!;
-  const field = page.getByLabel("Shorten a link, no account needed");
-  await field.fill(second);
-  await page.getByRole("button", { name: "Shorten it" }).click();
-  await expect(page.getByRole("link", { name: "Your short link" })).toHaveCount(2, {
-    timeout: 20_000,
-  });
-  const secondSlug = (await page
-    .getByRole("link", { name: "Your short link" })
-    .first()
-    .getAttribute("href"))!
-    .split("/")
-    .pop()!;
-
-  await signUpAndVerify(page, `multi-${Date.now()}@gmail.com`, password);
-
-  for (const slug of [firstSlug, secondSlug]) {
-    await expect
-      .poll(
-        async () => {
-          const rows = await queryRows<{ n: number }>(
-            page,
-            "select count(*) as n from links where slug = ?",
-            [slug],
-          );
-          return Number(rows[0].n);
-        },
-        { message: `link ${slug} should have been claimed`, timeout: 15_000 },
-      )
-      .toBe(1);
-  }
-});
-
 test("a destination that is not a web address is refused, in a toast", async ({ page }) => {
   // "not-a-web-address" has no dot, so it survives the scheme-less
   // normalisation the signed-in quick-create also does and then fails the
@@ -159,42 +117,20 @@ test("the shortener refuses a request with no proof of work", async ({ page }) =
   expect(await response.text()).toContain("human");
 });
 
-/**
- * The form never swaps out, and links accumulate. This is the layout
- * decision the hero was rebuilt around: a link already on screen must never
- * change or disappear because somebody made another one.
- */
-test("shortening again keeps the first link and stacks the new one on top", async ({ page }) => {
-  const first = `https://example.com/first-${Date.now()}`;
-  const second = `https://example.com/second-${Date.now()}`;
-
-  const firstUrl = await shorten(page, first);
-
-  // The form is still a form: filled, live, and in the same place. No
-  // "shorten another" button to press first.
+/** The result is an answer to a button somebody pressed, so it arrives
+ * instead of appearing. Asserted as the animation the card carries, which is
+ * the part a stylesheet edit can drop by accident. */
+test("the link animates in rather than appearing at once", async ({ page }) => {
+  await page.goto("/");
   const field = page.getByLabel("Shorten a link, no account needed");
-  await expect(field).toBeVisible();
-  await field.fill(second);
+  await field.fill(`https://example.com/animated-${Date.now()}`);
   await page.getByRole("button", { name: "Shorten it" }).click();
 
-  const links = page.getByRole("link", { name: "Your short link" });
-  await expect(links).toHaveCount(2, { timeout: 20_000 });
+  const link = page.getByRole("link", { name: "Your short link" });
+  await expect(link).toBeVisible({ timeout: 20_000 });
 
-  // Newest first, and the earlier one is still there and unchanged.
-  const hrefs = await links.evaluateAll<string[], HTMLAnchorElement>((nodes) =>
-    nodes.map((n) => n.href),
-  );
-  expect(hrefs[1]).toBe(firstUrl);
-  expect(hrefs[0]).not.toBe(firstUrl);
-
-  // Each row says which address it came from, which is the question that
-  // appears as soon as there is more than one.
-  await expect(page.getByText(`from ${first}`)).toBeVisible();
-  await expect(page.getByText(`from ${second}`)).toBeVisible();
-
-  // One ask for both, counting them, rather than one per row.
-  await expect(page.getByRole("link", { name: "Keep them" })).toHaveCount(1);
-  await expect(page.getByText(/These 2 links work for 24 hours/)).toBeVisible();
+  const card = page.locator(".anon-link-in").first();
+  await expect(card).toHaveCSS("animation-name", "anon-link-in");
 });
 
 test("links survive a reload, so leaving the page does not lose them", async ({ page }) => {
@@ -228,30 +164,26 @@ test("links survive a reload, so leaving the page does not lose them", async ({ 
     .toBe(1);
 });
 
-test("three links is the ceiling without an account", async ({ page }) => {
-  await page.goto("/");
-  const field = page.getByLabel("Shorten a link, no account needed");
-  const button = page.getByRole("button", { name: "Shorten it" });
-
-  for (let i = 0; i < 3; i++) {
-    await field.fill(`https://example.com/cap-${Date.now()}-${i}`);
-    await button.click();
-    await expect(page.getByRole("link", { name: "Your short link" })).toHaveCount(i + 1, {
-      timeout: 20_000,
-    });
-  }
+test("one link is the ceiling without an account", async ({ page }) => {
+  const destination = `https://example.com/cap-${Date.now()}`;
+  await shorten(page, destination);
 
   // The button goes dead and says why, rather than failing on submit.
+  const button = page.getByRole("button", { name: "Shorten it" });
   await expect(button).toBeDisabled();
   await expect(page.getByText(/most this browser can make without an account/i)).toBeVisible();
 
+  // One ask, under the one link.
+  await expect(page.getByRole("link", { name: "Keep this link" })).toHaveCount(1);
+  await expect(page.getByText(`from ${destination}`)).toBeVisible();
+
   // The ceiling holds across a reload: it is stored, not just in memory.
   await page.reload();
-  await expect(page.getByRole("link", { name: "Your short link" })).toHaveCount(3);
+  await expect(page.getByRole("link", { name: "Your short link" })).toHaveCount(1);
   await expect(page.getByRole("button", { name: "Shorten it" })).toBeDisabled();
 });
 
-test("each stacked link can still download its own QR", async ({ page }) => {
+test("the link can still download its own QR", async ({ page }) => {
   // The download buttons sit under the link rather than under the code, so
   // this checks the move did not detach them from the QR they belong to.
   const destination = `https://example.com/qr-dl-${Date.now()}`;

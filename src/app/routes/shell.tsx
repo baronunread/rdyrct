@@ -324,11 +324,7 @@ function useClaimAnonLinks(orgId: string | undefined) {
       // The one moment in the app worth sounding pleased about: they made
       // something before they had an account, and it survived. A sentence
       // that reads like a receipt wastes it.
-      toast(
-        kept === 1
-          ? "Welcome. Your link is already here."
-          : `Welcome. All ${kept} links are already here.`,
-      );
+      toast("Welcome. Your link is already here.");
     })();
   }, [orgId, qc, toast]);
 }

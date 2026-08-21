@@ -408,6 +408,26 @@ body {
   }
 }
 
+/* The hero's anonymous link, arriving. It answers a button somebody pressed
+   a moment earlier, so it rises into place instead of replacing empty space
+   in one frame. Short and once: nothing here loops or waits on scroll. */
+.anon-link-in {
+  animation: anon-link-in 220ms ease-out both;
+}
+
+@keyframes anon-link-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .anon-link-in {
+    animation: none;
+  }
+}
+
 /* skeleton blocks hold a static shade instead of pulsing */
 @media (prefers-reduced-motion: reduce) {
   .animate-pulse {
