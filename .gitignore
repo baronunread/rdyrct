@@ -1,6 +1,7 @@
 node_modules/
 dist/
 .wrangler/
+.alchemy/
 .dev.vars
 prod.secrets.env
 .env
