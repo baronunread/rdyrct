@@ -655,6 +655,28 @@ const lineVariant: Variants = {
 };
 
 /**
+ * The window buttons of the terminal below. Their three colours are the ones
+ * macOS actually uses and 9px is the size it actually draws them: a picture of
+ * something real, so the values are fixed rather than ours to theme. Same for
+ * the green tick in `OK`, which is the same green as the third button.
+ */
+// fallow-ignore-next-line css-token-drift
+const DOT = "h-[9px] w-[9px] rounded-full";
+// fallow-ignore-next-line css-token-drift
+const OK = "text-[#27c93f]";
+
+function TrafficLights({ hidden = false }: { hidden?: boolean }) {
+  return (
+    <div className={`flex items-center gap-1.5 ${hidden ? "invisible" : ""}`}>
+      {/* fallow-ignore-next-line css-token-drift */}
+      {["bg-[#ff5f56]", "bg-[#ffbd2e]", "bg-[#27c93f]"].map((color) => (
+        <span key={color} className={`${DOT} ${color}`} />
+      ))}
+    </div>
+  );
+}
+
+/**
  * A fake "bun run deploy" terminal that, when scrolled into view, walks
  * through building, uploading, and deploying the Worker, then explains each
  * Cloudflare primitive that was deployed.
@@ -663,9 +685,12 @@ function DeployTerminal() {
   const reduce = useReducedMotion();
   const animated = !reduce;
 
+  // A block caret is the size of the character it stands in for, which is the
+  // mono face at this size and no token on the spacing scale.
   const cursor = animated ? (
     <span
       aria-hidden
+      // fallow-ignore-next-line css-token-drift
       className="inline-block h-[13px] w-[5px] translate-y-px bg-accent align-middle ml-0.5"
       style={{ animation: "cursorBlink 1s step-end infinite" }}
     />
@@ -676,15 +701,15 @@ function DeployTerminal() {
       <span className="text-accent">$</span> bun run deploy{cursor}
     </span>,
     /* 1 */ <span key="build">
-      <span className="text-[#27c93f]">✓</span> src/worker/index.ts → dist/worker.js{" "}
+      <span className={OK}>✓</span> src/worker/index.ts → dist/worker.js{" "}
       <span className="text-muted">(2.4s)</span>
     </span>,
     /* 2 */ <span key="upload">
-      <span className="text-[#27c93f]">✓</span> Optimizing bundle...{" "}
+      <span className={OK}>✓</span> Optimizing bundle...{" "}
       <span className="text-muted">124 kB gzipped</span>
     </span>,
     /* 3 */ <span key="deploy">
-      <span className="text-[#27c93f]">✓</span> Deploying to Cloudflare global network
+      <span className={OK}>✓</span> Deploying to Cloudflare global network
     </span>,
     /* 4 */ <span key="b1" />,
     /* 5 */ <span key="header">
@@ -705,6 +730,12 @@ function DeployTerminal() {
     </span>,
   ];
 
+  // Terminal line spacing, looser than prose and tighter than leading-loose.
+  // Indexes 4 and 11 are the blank lines between blocks.
+  // fallow-ignore-next-line css-token-drift
+  const lineClass = "whitespace-pre-wrap leading-[1.9]";
+  const spacingOf = (i: number) => (i === 4 || i === 11 ? "h-2" : lineClass);
+
   const content = animated ? (
     <m.div initial="hidden" whileInView="visible" viewport={{ once: true, margin: "-60px" }}>
       {lines.map((node, i) => (
@@ -712,7 +743,7 @@ function DeployTerminal() {
           key={String(node.key)}
           variants={lineVariant}
           custom={delays[i]}
-          className={i === 4 || i === 11 ? "h-2" : "whitespace-pre-wrap leading-[1.9]"}
+          className={spacingOf(i)}
         >
           {node}
         </m.div>
@@ -721,10 +752,7 @@ function DeployTerminal() {
   ) : (
     <div>
       {lines.map((node, i) => (
-        <div
-          key={String(node.key)}
-          className={i === 4 || i === 11 ? "h-2" : "whitespace-pre-wrap leading-[1.9]"}
-        >
+        <div key={String(node.key)} className={spacingOf(i)}>
           {node}
         </div>
       ))}
@@ -735,21 +763,15 @@ function DeployTerminal() {
     // translate="no": the animated terminal mounts/unmounts text nodes on a
     // loop, and a page translator rewriting them would break React's
     // placement anchors and blank the page. Keep the translator out.
-    <div translate="no" className="overflow-hidden rounded-[10px] bg-surface smooth-shadow-ring-lg">
+    <div translate="no" className="overflow-hidden rounded-xl bg-surface smooth-shadow-ring-lg">
       <div className="flex items-center border-b border-border bg-surface-2 px-4 py-2.5">
-        <div className="flex items-center gap-1.5">
-          <span className="h-[9px] w-[9px] rounded-full bg-[#ff5f56]" />
-          <span className="h-[9px] w-[9px] rounded-full bg-[#ffbd2e]" />
-          <span className="h-[9px] w-[9px] rounded-full bg-[#27c93f]" />
-        </div>
-        <span className="flex-1 text-center font-mono text-[0.7rem] text-muted">rdyrct deploy</span>
-        <div className="invisible flex items-center gap-1.5">
-          <span className="h-[9px] w-[9px] rounded-full bg-[#ff5f56]" />
-          <span className="h-[9px] w-[9px] rounded-full bg-[#ffbd2e]" />
-          <span className="h-[9px] w-[9px] rounded-full bg-[#27c93f]" />
-        </div>
+        <TrafficLights />
+        <span className="flex-1 text-center font-mono text-xs text-muted">rdyrct deploy</span>
+        {/* The second set is a spacer: without it the title centres on the
+            space the first set leaves, not on the window. */}
+        <TrafficLights hidden />
       </div>
-      <div className="px-4 py-3 font-mono text-[0.78rem]">{content}</div>
+      <div className="px-4 py-3 font-mono text-xs">{content}</div>
     </div>
   );
 }
@@ -902,18 +924,28 @@ function InboxMail({
   verdict: string;
   mine?: boolean;
 }) {
+  // The two looks side by side, rather than the same question asked four
+  // times down the markup.
+  const tone = mine
+    ? {
+        row: "bg-surface smooth-shadow-ring-sm",
+        badge: "bg-accent/15 text-accent",
+        link: "text-accent",
+        verdict: "text-accent-2",
+      }
+    : {
+        row: "bg-surface-2",
+        badge: "bg-border text-muted",
+        link: "text-muted",
+        verdict: "text-muted",
+      };
+
   return (
-    <m.div
-      variants={mailVariants}
-      className={cn(
-        "flex gap-3 rounded-xl p-4 text-left",
-        mine ? "bg-surface smooth-shadow-ring-sm" : "bg-surface-2",
-      )}
-    >
+    <m.div variants={mailVariants} className={cn("flex gap-3 rounded-xl p-4 text-left", tone.row)}>
       <span
         className={cn(
           "mt-0.5 grid size-8 shrink-0 place-items-center rounded-full text-xs font-bold",
-          mine ? "bg-accent/15 text-accent" : "bg-border text-muted",
+          tone.badge,
         )}
         aria-hidden="true"
       >
@@ -925,13 +957,8 @@ function InboxMail({
           <span className="shrink-0 text-2xs text-muted">now</span>
         </div>
         <p className="truncate text-sm text-muted">{subject}</p>
-        <p className={cn("truncate font-mono text-xs", mine ? "text-accent" : "text-muted")}>
-          {link}
-        </p>
-        <m.p
-          variants={verdictVariants}
-          className={cn("mt-0.5 text-xs", mine ? "text-accent-2" : "text-muted")}
-        >
+        <p className={cn("truncate font-mono text-xs", tone.link)}>{link}</p>
+        <m.p variants={verdictVariants} className={cn("mt-0.5 text-xs", tone.verdict)}>
           {verdict}
         </m.p>
       </div>
@@ -1330,7 +1357,7 @@ export function LandingPage() {
           {/* soft accent glow behind the hero */}
           <div
             aria-hidden="true"
-            className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-[480px]"
+            className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-120"
             style={{
               background:
                 "radial-gradient(55% 60% at 50% 0%, color-mix(in srgb, var(--accent) 9%, transparent), transparent)",

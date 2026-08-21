@@ -93,7 +93,12 @@ export function QrColorField({
         </Popover.Trigger>
         <Popover.Portal>
           <Popover.Positioner sideOffset={6} align="start" className="z-50">
-            <Popover.Popup className="rounded-lg bg-surface p-3 smooth-shadow-ring-xl transition-[opacity,scale] duration-100 data-[starting-style]:scale-95 data-[starting-style]:opacity-0">
+            <Popover.Popup
+              // The arbitrary transition names which properties animate, not a
+              // value off the scale: the same idiom Button uses.
+              // fallow-ignore-next-line css-token-drift
+              className="rounded-lg bg-surface p-3 smooth-shadow-ring-xl transition-[opacity,scale] duration-100 data-[starting-style]:scale-95 data-[starting-style]:opacity-0"
+            >
               <Picker color={color} onChange={onChange} />
               <HexColorInput
                 alpha={alpha}

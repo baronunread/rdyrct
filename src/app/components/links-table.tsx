@@ -231,7 +231,7 @@ export function LinksTable({
             lg    30 + 16% + 16rem  (+ title)
             xl    26 + 16 + 22% + 16rem  (+ destination)
           Percentages share the row with 16rem of fixed columns, so they cannot
-          add up to 100. */}
+          add up to 100, which is also why no width token fits them. */}
       <Table fixed>
         <thead>
           <tr>
@@ -240,9 +240,12 @@ export function LinksTable({
               sortKey="slug"
               sort={sort}
               onSort={onSort}
+              // fallow-ignore-next-line css-token-drift
               className="w-1/2 sm:w-2/5 lg:w-[30%] xl:w-[26%]"
             />
+            {/* fallow-ignore-next-line css-token-drift */}
             <Th className="hidden lg:table-cell lg:w-[16%]">Title</Th>
+            {/* fallow-ignore-next-line css-token-drift */}
             <Th className="hidden xl:table-cell xl:w-[22%]">Destination</Th>
             <SortTh
               label="Clicks"

@@ -393,6 +393,10 @@ body {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  /* !important is the point here, not laziness: a reduced-motion request has
+     to beat the animation rules above it whatever their specificity, and a
+     visitor who asked for less motion gets no exceptions. */
+  /* fallow-ignore-next-line css-selector-complexity */
   .busy-label,
   .busy-label[data-busy],
   .busy-spinner,
