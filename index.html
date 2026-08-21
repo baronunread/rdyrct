@@ -3,17 +3,17 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>rdyrct - branded short links for your team</title>
+    <title>rdyrct - URL shortener and QR code generator</title>
     <meta
       name="description"
-      content="Branded short links, QR codes, and custom domains with privacy-friendly analytics."
+      content="Free URL shortener and QR code generator for teams: branded short links, custom QR codes, and privacy-friendly click analytics."
     />
     <link rel="canonical" href="https://rdyrct.com" />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
-    <meta property="og:title" content="rdyrct - branded short links for your team" />
+    <meta property="og:title" content="rdyrct - URL shortener and QR code generator" />
     <meta
       property="og:description"
-      content="Branded short links, QR codes, and custom domains with privacy-friendly analytics powered by Cloudflare."
+      content="Free URL shortener and QR code generator for teams: branded short links, custom QR codes, and privacy-friendly click analytics."
     />
     <meta property="og:image" content="https://rdyrct.com/og.png" />
     <meta property="og:image:type" content="image/png" />
@@ -23,18 +23,18 @@
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="rdyrct" />
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="rdyrct - branded short links for your team" />
+    <meta name="twitter:title" content="rdyrct - URL shortener and QR code generator" />
     <meta
       name="twitter:description"
-      content="Branded short links, QR codes, and custom domains with privacy-friendly analytics."
+      content="Free URL shortener and QR code generator for teams: branded short links, custom QR codes, and privacy-friendly click analytics."
     />
-    <meta name="twitter:image" content="https://rdyrct.com/og.png" />
     <script type="application/ld+json">
       {
         "@context": "https://schema.org",
         "@graph": [
           {
             "@type": "Organization",
+            "@id": "https://rdyrct.com/#organization",
             "name": "rdyrct",
             "url": "https://rdyrct.com",
             "logo": "https://rdyrct.com/og.png",
@@ -42,23 +42,26 @@
           },
           {
             "@type": "WebSite",
+            "@id": "https://rdyrct.com/#website",
             "name": "rdyrct",
             "url": "https://rdyrct.com",
-            "description": "Branded short links, QR codes, and custom domains with privacy-friendly analytics."
+            "description": "Free URL shortener and QR code generator for teams: branded short links, custom QR codes, and privacy-friendly click analytics.",
+            "publisher": { "@id": "https://rdyrct.com/#organization" }
           },
           {
             "@type": "WebPage",
-            "name": "rdyrct - branded short links for your team",
+            "@id": "https://rdyrct.com/#webpage",
+            "name": "rdyrct - URL shortener and QR code generator",
             "url": "https://rdyrct.com",
-            "description": "Branded short links, QR codes, and custom domains with privacy-friendly analytics.",
+            "description": "Free URL shortener and QR code generator for teams: branded short links, custom QR codes, and privacy-friendly click analytics.",
             "inLanguage": "en",
-            "isPartOf": { "@type": "WebSite", "name": "rdyrct", "url": "https://rdyrct.com" }
+            "isPartOf": { "@id": "https://rdyrct.com/#website" }
           },
           {
             "@type": "SoftwareApplication",
             "name": "rdyrct",
             "url": "https://rdyrct.com",
-            "description": "Branded short links, QR codes, and custom domains with privacy-friendly analytics.",
+            "description": "Free URL shortener and QR code generator for teams: branded short links, custom QR codes, and privacy-friendly click analytics.",
             "applicationCategory": "BusinessApplication",
             "operatingSystem": "Any web browser",
             "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" }
@@ -70,7 +73,17 @@
   </head>
   <body>
     <div id="root">
-      <h1
+      <!--
+        Real, static content for anything that reads the HTML rdyrct sends
+        rather than running the app: search crawlers, link previews, and AI
+        answer engines. The React app replaces this div on mount, so a
+        visitor never sees it; sighted or not, it is exactly what the app
+        itself says (see src/app/routes/landing.tsx and public/llms.txt),
+        so it stays true after the swap. Visually hidden with the same
+        clip-rect technique screen readers already get, not display:none,
+        so it is read, not skipped.
+      -->
+      <div
         style="
           position: absolute;
           width: 1px;
@@ -83,8 +96,61 @@
           border: 0;
         "
       >
-        Know which channel earned the click.
-      </h1>
+        <h1>Know which channel earned the click.</h1>
+        <p>
+          rdyrct is an organization-based URL shortener and QR code generator that runs entirely on
+          Cloudflare. Create branded short links on your own domain, generate custom QR codes, and
+          see click analytics without giving up your team's privacy.
+        </p>
+
+        <h2>Branded short links</h2>
+        <p>
+          Point a custom domain at rdyrct and every short link carries your brand instead of a
+          generic host. Choose your own slugs on a custom domain; on the shared rdyrct.com domain,
+          slugs are always random so nobody can squat a name that isn't theirs.
+        </p>
+
+        <h2>QR codes with your logo</h2>
+        <p>
+          Generate a QR code for any link, styled with your own colors, dot shapes, and a logo in
+          the middle. Download it as a PNG or SVG.
+        </p>
+
+        <h2>Privacy-friendly click analytics</h2>
+        <p>
+          Every click records country, referrer, device, and time, and nothing else. rdyrct never
+          stores an IP address or a precise location, so you get the analytics that matter without
+          tracking the people who click.
+        </p>
+
+        <h2>Plans</h2>
+        <p>
+          Free: 1 organization, 30 links, 7-day analytics. Hobby ($4/mo): 500 links, a custom
+          domain, QR codes with your logo, 5 team members, 30-day analytics. Pro ($9/mo): 3
+          organizations, 3,000 links, 5 custom domains, 25 team members, 365-day analytics. rdyrct
+          is also open source and can be self-hosted on your own Cloudflare account for free.
+        </p>
+
+        <h2>Frequently asked questions</h2>
+        <h3>Does rdyrct track IP addresses?</h3>
+        <p>No. Click analytics store only country, referrer, device, and timestamp.</p>
+        <h3>Can I use my own domain?</h3>
+        <p>Yes, on the Hobby and Pro plans. Custom domains let you choose your own slugs.</p>
+        <h3>Can I self-host rdyrct?</h3>
+        <p>
+          Yes. rdyrct is open source and runs entirely on Cloudflare Workers, D1, and KV; see
+          <a href="https://github.com/baronunread/rdyrct">the GitHub repository</a> for deploy
+          instructions.
+        </p>
+
+        <nav aria-label="Footer">
+          <a href="/pricing">Pricing</a>
+          <a href="/qr-code-generator">QR code generator</a>
+          <a href="/privacy">Privacy policy</a>
+          <a href="/terms">Terms of service</a>
+          <a href="/signup">Sign up</a>
+        </nav>
+      </div>
     </div>
     <script type="module" src="/src/app/main.tsx"></script>
   </body>

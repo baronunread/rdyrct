@@ -1,4 +1,4 @@
-import { Link } from "@tanstack/react-router";
+import { MarketingLink } from "../components/marketing-link";
 
 export const GITHUB_URL = "https://github.com/baronunread/rdyrct";
 export const SUPPORT_EMAIL = "support@mail.rdyrct.com";
@@ -11,22 +11,18 @@ export function Footer() {
         <nav className="grid w-full grid-cols-2 gap-x-6 gap-y-3 sm:flex sm:w-auto sm:items-center sm:gap-4">
           {/* A real page people search for, not just a legal link: it is the
               only entry point to the app that needs no account at all. */}
-          <Link
-            to="/qr-code-generator"
-            viewTransition
-            className="whitespace-nowrap hover:text-accent"
-          >
+          <MarketingLink to="/qr-code-generator" className="whitespace-nowrap hover:text-accent">
             QR generator
-          </Link>
-          <Link to="/pricing" viewTransition className="hover:text-accent">
+          </MarketingLink>
+          <MarketingLink to="/pricing" className="hover:text-accent">
             Pricing
-          </Link>
-          <Link to="/privacy" viewTransition className="hover:text-accent">
+          </MarketingLink>
+          <MarketingLink to="/privacy" className="hover:text-accent">
             Privacy
-          </Link>
-          <Link to="/terms" viewTransition className="hover:text-accent">
+          </MarketingLink>
+          <MarketingLink to="/terms" className="hover:text-accent">
             Terms
-          </Link>
+          </MarketingLink>
           <a href={`mailto:${SUPPORT_EMAIL}`} className="hover:text-accent">
             Support
           </a>

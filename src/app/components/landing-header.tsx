@@ -16,6 +16,7 @@
 import { Link } from "@tanstack/react-router";
 import { Moon, Sun } from "lucide";
 import { MorphIcon } from "morphicons/react";
+import { MarketingLink } from "./marketing-link";
 import { useTheme } from "../lib/theme";
 import { trackCta } from "../lib/track-cta";
 import { IconButton } from "../ui/button";
@@ -34,16 +35,16 @@ export function LandingHeader({ authed }: { authed: boolean }) {
       data-marketing-header
       className="sticky top-0 z-20 -mx-6 grid grid-cols-[auto_1fr_auto] items-center gap-3 border-b border-border/50 bg-bg/85 px-6 py-4 backdrop-blur-md sm:grid-cols-[1fr_auto_1fr]"
     >
-      <Link to="/" viewTransition className="justify-self-start text-lg font-bold tracking-widest">
+      <MarketingLink to="/" className="justify-self-start text-lg font-bold tracking-widest">
         rdyrct
-      </Link>
+      </MarketingLink>
 
       {/* Where the visitor goes to read. Hidden on phones, where three columns
           do not fit: those links still live in the footer. */}
       <nav className="hidden items-center gap-5 text-sm sm:flex">
-        <Link to="/pricing" viewTransition className="text-muted hover:text-accent">
+        <MarketingLink to="/pricing" className="text-muted hover:text-accent">
           Pricing
-        </Link>
+        </MarketingLink>
         {/* A real Link, not a bare anchor: "/#faq" changes the path from
             anywhere but "/", and a plain <a> to a different path is a full
             page load, not a navigation, undoing the whole point of the view

@@ -1,0 +1,11 @@
+# ai.txt — permissions for AI crawlers and assistants on rdyrct.com
+# See also /robots.txt (Content-Signal + named training-crawler rules) and
+# /llms.txt and /llms-full.txt (what this site is, for an assistant to cite).
+
+User-agent: *
+Allow: /
+Train: no
+Retrieval: yes
+Attribution: required
+
+Contact: https://github.com/baronunread/rdyrct/issues

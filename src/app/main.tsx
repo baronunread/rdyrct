@@ -1,4 +1,4 @@
-import { StrictMode, Suspense, lazy, useEffect } from "react";
+import { StrictMode, Suspense, lazy } from "react";
 import { createRoot } from "react-dom/client";
 import {
   createRootRoute,
@@ -7,7 +7,7 @@ import {
   redirect,
   RouterProvider,
   Outlet,
-  useLocation,
+  lazyRouteComponent,
 } from "@tanstack/react-router";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import "@fontsource/jetbrains-mono/latin-400.css";
@@ -26,9 +26,7 @@ resumeAnalyticsIfConsented();
 // Every route loads lazily so the entry chunk stays small: visitors on the
 // marketing landing never download the app, and the app never downloads the
 // admin pages unless the user is the platform admin.
-const LandingPage = lazy(() =>
-  import("./routes/landing").then((m) => ({ default: m.LandingPage })),
-);
+const LandingPage = lazyRouteComponent(() => import("./routes/landing"), "LandingPage");
 const AuthPage = lazy(() => import("./routes/auth").then((m) => ({ default: m.AuthPage })));
 const ResetPasswordPage = lazy(() =>
   import("./routes/reset-password").then((m) => ({
@@ -36,16 +34,13 @@ const ResetPasswordPage = lazy(() =>
   })),
 );
 const InvitePage = lazy(() => import("./routes/invite").then((m) => ({ default: m.InvitePage })));
-const PrivacyPage = lazy(() =>
-  import("./routes/privacy").then((m) => ({ default: m.PrivacyPage })),
+const PrivacyPage = lazyRouteComponent(() => import("./routes/privacy"), "PrivacyPage");
+const TermsPage = lazyRouteComponent(() => import("./routes/terms"), "TermsPage");
+const QrGeneratorPage = lazyRouteComponent(
+  () => import("./routes/qr-generator"),
+  "QrGeneratorPage",
 );
-const TermsPage = lazy(() => import("./routes/terms").then((m) => ({ default: m.TermsPage })));
-const QrGeneratorPage = lazy(() =>
-  import("./routes/qr-generator").then((m) => ({ default: m.QrGeneratorPage })),
-);
-const PricingPage = lazy(() =>
-  import("./routes/pricing").then((m) => ({ default: m.PricingPage })),
-);
+const PricingPage = lazyRouteComponent(() => import("./routes/pricing"), "PricingPage");
 const AppShell = lazy(() => import("./routes/shell").then((m) => ({ default: m.AppShell })));
 const RequireAuth = lazy(() => import("./routes/shell").then((m) => ({ default: m.RequireAuth })));
 const RequireAdmin = lazy(() =>
@@ -104,34 +99,43 @@ const NotFound = lazy(() => import("./routes/not-found").then((m) => ({ default:
  * The card pages (login, signup, invite) are deliberately not in here: they
  * have no header, and showing one would be a flash of the wrong thing.
  *
- * A navigation between these pages runs as a view transition (see the
- * viewTransition Links in landing-header.tsx, footer.tsx and elsewhere),
- * which softens the swap but does nothing about scroll position: a fresh
- * document load always starts at the top, a client-side route change keeps
- * wherever the old page had scrolled to, so leaving mid-FAQ on "/" and
- * clicking Pricing landed mid-table on "/pricing" instead of at its top. A
- * hash still gets to choose its own landing spot (see useScrollToHash,
- * called by the page that owns the target section, since it needs that
- * section to exist first); this only resets the rest.
+ * Nothing here touches the scroll. This component re-renders the moment the
+ * router's store changes, which is a long way before the page it points at
+ * exists: the next page is a lazy chunk, so for the length of that download
+ * React is still showing the OLD page while `useLocation()` here already
+ * reads the new path. A scroll reset from this component therefore moved the
+ * page the visitor was leaving. Arriving at the top is handled at both ends
+ * of the navigation instead, by code that runs when the new page is really
+ * on screen: see components/marketing-link.tsx and lib/marketing-scroll.ts.
  */
 function PublicPages() {
-  const { pathname, hash } = useLocation();
-  useEffect(() => {
-    if (!hash) window.scrollTo(0, 0);
-  }, [pathname, hash]);
+  return <Outlet />;
+}
 
+/**
+ * What stands in while a marketing page's chunk is on its way.
+ *
+ * The router loads that chunk itself now (lazyRouteComponent below), so
+ * there is no Suspense boundary left to fall back to. On a navigation the
+ * router keeps the page you are on rather than showing this, which is the
+ * point; this is for the cold load, where the alternative is an empty screen
+ * with a cookie banner on it. Same wrapper the real pages use, so nothing
+ * moves when one takes over.
+ *
+ * `pendingMs: 0` so a cold load paints it on the first frame instead of after
+ * the router's one-second grace. That is safe only because a marketing
+ * navigation never reaches a pending state: MarketingLink loads the route
+ * before it commits, so the page you are on stays until the next one is ready.
+ */
+function PublicPagePending() {
   return (
-    <Suspense
-      fallback={
-        <div className="relative mx-auto min-h-dvh max-w-5xl px-6">
-          <LandingHeader authed={readAuthHint()} />
-        </div>
-      }
-    >
-      <Outlet />
-    </Suspense>
+    <div className="relative mx-auto min-h-dvh max-w-5xl px-6">
+      <LandingHeader authed={readAuthHint()} />
+    </div>
   );
 }
+
+const marketingPending = { pendingComponent: PublicPagePending, pendingMs: 0 };
 
 const rootRoute = createRootRoute({
   component: () => (
@@ -159,26 +163,31 @@ const landingRoute = createRoute({
   getParentRoute: () => publicLayoutRoute,
   path: "/",
   component: LandingPage,
+  ...marketingPending,
 });
 const qrGeneratorRoute = createRoute({
   getParentRoute: () => publicLayoutRoute,
   path: "/qr-code-generator",
   component: QrGeneratorPage,
+  ...marketingPending,
 });
 const pricingRoute = createRoute({
   getParentRoute: () => publicLayoutRoute,
   path: "/pricing",
   component: PricingPage,
+  ...marketingPending,
 });
 const privacyRoute = createRoute({
   getParentRoute: () => publicLayoutRoute,
   path: "/privacy",
   component: PrivacyPage,
+  ...marketingPending,
 });
 const termsRoute = createRoute({
   getParentRoute: () => publicLayoutRoute,
   path: "/terms",
   component: TermsPage,
+  ...marketingPending,
 });
 
 const loginRoute = createRoute({

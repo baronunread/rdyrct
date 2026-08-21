@@ -26,10 +26,11 @@ import { QRPreview, QrDownloadButtons } from "../components/qr";
 import { QrColorAndLogoFields, QrPatternFields } from "../components/qr-fields";
 import { qrPreviewProps, resolveLook, type QrValues } from "../lib/qr-look";
 import { useSeo } from "../lib/seo";
-import { useScrollToHash } from "../lib/scroll-to-hash";
+import { useMarketingScroll } from "../lib/marketing-scroll";
 import { FaqJsonLd } from "../components/faq-json-ld";
 import { useAudience } from "../lib/audience";
 import { LandingHeader } from "../components/landing-header";
+import { MarketingLink } from "../components/marketing-link";
 import { Footer } from "../ui/footer";
 
 const EMPTY_QR: QrValues = {
@@ -83,14 +84,13 @@ function TrackingSection() {
         >
           Start free <ArrowRight size={14} />
         </Link>
-        <Link
+        <MarketingLink
           to="/pricing"
-          viewTransition
           onClick={() => trackCta("qr_page_pricing")}
           className="text-sm text-accent hover:underline"
         >
           See Hobby and Pro
-        </Link>
+        </MarketingLink>
       </div>
     </section>
   );
@@ -214,13 +214,16 @@ function QrFaq() {
   );
 }
 
+// main.tsx names this export as a string, for lazyRouteComponent, which
+// static analysis can't follow.
+// fallow-ignore-next-line unused-export
 export function QrGeneratorPage() {
   // The header has to know: hardcoding "signed out" showed somebody with a
   // session the Log in and Sign up buttons, which then dropped them on the
   // dashboard they were already entitled to.
   const { authed } = useAudience();
   useSeo("/qr-code-generator");
-  useScrollToHash();
+  useMarketingScroll();
   const [value, setValue] = useState("");
   const [values, setValues] = useState<QrValues>(EMPTY_QR);
 

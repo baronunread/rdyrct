@@ -136,6 +136,174 @@ test("the standalone pricing page has the full table and no self-host pitch", as
   await expect(page).toHaveURL(/\/signup/);
 });
 
+// Marketing navigation swaps the content where you stand and then rides the
+// new page up to its top, which is the order resend.com uses. Two things used
+// to go wrong and both are asserted here.
+//
+// The flash: the scroll reset landed on the page being LEFT, because the next
+// page was a React.lazy chunk and Suspense hid the outgoing tree with
+// `display: none` while it downloaded. The document collapsed to one viewport
+// and the browser clamped the scroll to the top, so clicking Pricing from the
+// FAQ snapped the landing page back to its hero and held it there. The routes
+// are `lazyRouteComponent`s now, loaded by the router before it commits, so
+// there is no fallback and no collapse.
+//
+// The dead link: the rdyrct logo goes from "/#faq" to "/", the same route, so
+// nothing remounts and an arrival-keyed effect never fires. It has to ride up
+// anyway.
+async function trackScroll(page: import("@playwright/test").Page) {
+  await page.evaluate(() => {
+    const samples: { path: string; y: number; hero: boolean }[] = [];
+    Object.assign(window, { __scrollSamples: samples });
+    const tick = () => {
+      samples.push({
+        path: location.pathname,
+        y: Math.round(window.scrollY),
+        hero: /Know which channel/.test(document.querySelector("h1")?.textContent ?? ""),
+      });
+      requestAnimationFrame(tick);
+    };
+    tick();
+  });
+}
+
+async function scrollSamples(page: import("@playwright/test").Page) {
+  return page.evaluate(() => {
+    // SAFETY: trackScroll put __scrollSamples on window in this same page, and
+    // a client-side route change doesn't replace it.
+    const { __scrollSamples } = window as typeof window & {
+      __scrollSamples: { path: string; y: number; hero: boolean }[];
+    };
+    return __scrollSamples;
+  });
+}
+
+/** How many distinct positions the page passed through: a jump has none. */
+function travelled(ys: number[], from: number) {
+  return new Set(ys.filter((y) => y > 0 && y < from)).size;
+}
+
+/** Partway down the landing page, tracking every frame from here on. */
+async function atTheFaq(page: import("@playwright/test").Page) {
+  await page.goto("/");
+  await page.locator("header nav").getByRole("link", { name: "FAQ" }).click();
+  await expect(page.locator("#faq")).toBeInViewport();
+  const start = await page.evaluate(() => window.scrollY);
+  expect(start).toBeGreaterThan(0);
+  await trackScroll(page);
+  return start;
+}
+
+test("a marketing link swaps the page, then rides it to the top", async ({ page }) => {
+  await atTheFaq(page);
+  await page.locator("header nav").getByRole("link", { name: "Pricing" }).click();
+  await expect(page).toHaveURL(/\/pricing$/);
+  await expect(page.getByRole("heading", { level: 1, name: /simple pricing/i })).toBeVisible();
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(0);
+
+  const samples = await scrollSamples(page);
+  // The landing page was never parked at its own top: that is the flash.
+  expect(samples.filter((s) => s.hero && s.y === 0)).toHaveLength(0);
+  // The new page got to the top by scrolling, not by jumping.
+  const onPricing = samples.filter((s) => s.path === "/pricing" && !s.hero);
+  expect(
+    travelled(
+      onPricing.map((s) => s.y),
+      onPricing[0]!.y + 1,
+    ),
+  ).toBeGreaterThan(5);
+});
+
+test("the logo rides back to the top from a section link on the same page", async ({ page }) => {
+  const start = await atTheFaq(page);
+  await page.getByRole("link", { name: "rdyrct" }).click();
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(0);
+
+  const ys = (await scrollSamples(page)).map((s) => s.y);
+  expect(travelled(ys, start)).toBeGreaterThan(5);
+});
+
+/**
+ * Click Pricing with its chunk held open, so the navigation is still in
+ * flight. Returns the release, plus the wait for the load actually landing:
+ * asserting on a timeout instead lets a slow runner pass a regression.
+ */
+async function pricingClickInFlight(page: import("@playwright/test").Page) {
+  let release = () => {};
+  const held = new Promise<void>((resolve) => (release = resolve));
+  await page.route(
+    (url) => url.pathname.includes("routes/pricing"),
+    async (route) => {
+      await held;
+      await route.continue();
+    },
+  );
+
+  await page.locator("header nav").getByRole("link", { name: "Pricing" }).click();
+  // The hold is what makes this a race at all: if the route ever stops
+  // matching, the test would pass while exercising nothing.
+  await expect(page).not.toHaveURL(/\/pricing$/);
+
+  return async () => {
+    release();
+    await page.waitForResponse((response) => response.url().includes("routes/pricing"));
+  };
+}
+
+// Two links clicked before the first one commits. The commit waits for the
+// route to load, so the first load can settle after the second has already
+// navigated: without a guard its `.finally()` sent the visitor to the page
+// they gave up on. Holding the pricing chunk is what makes the race certain
+// rather than a matter of timing.
+test("a second marketing link wins over one still loading", async ({ page }) => {
+  await page.goto("/");
+  const settleTheAbandonedLoad = await pricingClickInFlight(page);
+  await page.locator("footer").getByRole("link", { name: "QR generator" }).click();
+  await expect(page).toHaveURL(/\/qr-code-generator$/);
+
+  // The abandoned load finishing must not steal the page back.
+  await settleTheAbandonedLoad();
+  await expect(page).toHaveURL(/\/qr-code-generator$/);
+  await expect(page.getByRole("heading", { level: 1 })).toContainText(/QR code/i);
+});
+
+// Same race, but the thing that interrupts is not another marketing link.
+// The click counter cannot see those, so the commit checks the location has
+// not moved: clicking Pricing on a cold chunk and then Sign up used to drop
+// the visitor back on /pricing with a half-filled form behind them.
+test("a stale marketing load cannot pull you off the page you moved to", async ({ page }) => {
+  await page.goto("/");
+  const settleTheAbandonedLoad = await pricingClickInFlight(page);
+  await page.getByRole("link", { name: "Sign up" }).first().click();
+  await expect(page).toHaveURL(/\/signup/);
+
+  await settleTheAbandonedLoad();
+  await expect(page).toHaveURL(/\/signup/);
+});
+
+// A link to the exact place you already are: no route change, so nothing
+// remounts and no location dep moves. It still has to ride up, and it must
+// not leave the scroll armed for whatever page comes next.
+test("the logo rides up when you are already on the page it points at", async ({ page }) => {
+  await page.goto("/");
+  // The page has to be there before it can be scrolled: the shell on its own
+  // is one viewport tall.
+  await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+  await page.evaluate(() => window.scrollTo({ top: 2000, behavior: "instant" }));
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(0);
+  const start = await page.evaluate(() => window.scrollY);
+
+  await trackScroll(page);
+  await page.getByRole("link", { name: "rdyrct" }).click();
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(0);
+  expect(
+    travelled(
+      (await scrollSamples(page)).map((s) => s.y),
+      start,
+    ),
+  ).toBeGreaterThan(5);
+});
+
 test("legal pages retain their baseline headings", async ({ page }) => {
   await visitLegalPages(page);
 });

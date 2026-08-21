@@ -31,8 +31,9 @@ import {
 import { useEffect } from "react";
 import { useCurrentUser } from "../lib/hooks";
 import { useSeo } from "../lib/seo";
-import { useScrollToHash } from "../lib/scroll-to-hash";
+import { useMarketingScroll } from "../lib/marketing-scroll";
 import { FaqJsonLd } from "../components/faq-json-ld";
+import { MarketingLink } from "../components/marketing-link";
 import { useAudience } from "../lib/audience";
 import posthog from "../lib/posthog";
 import { FUNNEL, landingContext } from "../lib/funnel";
@@ -176,9 +177,9 @@ const faqs = [
         Yes, on a paid plan: point the QR at a short link you own, and see how many scans a poster,
         flyer or packaging insert actually produced. If you just want a QR code that works and looks
         good, no tracking needed, our{" "}
-        <Link to="/qr-code-generator" viewTransition className="text-accent hover:underline">
+        <MarketingLink to="/qr-code-generator" className="text-accent hover:underline">
           QR code generator
-        </Link>{" "}
+        </MarketingLink>{" "}
         is free and needs no account: pick the dot and corner style, set the colors, drop in a logo,
         and download a PNG or an SVG.
       </>
@@ -1184,14 +1185,17 @@ function PricingTeaser() {
       </div>
 
       <p className="mt-6 text-center text-sm">
-        <Link to="/pricing" viewTransition className="text-accent hover:underline">
+        <MarketingLink to="/pricing" className="text-accent hover:underline">
           See the full comparison →
-        </Link>
+        </MarketingLink>
       </p>
     </Section>
   );
 }
 
+// main.tsx names this export as a string, for lazyRouteComponent, which
+// static analysis can't follow.
+// fallow-ignore-next-line unused-export
 export function LandingPage() {
   const { authed, name, ctaTo, ctaLabel } = useAudience();
 
@@ -1207,7 +1211,7 @@ export function LandingPage() {
     posthog.capture(FUNNEL.landingViewed, landingContext());
   }, []);
 
-  useScrollToHash();
+  useMarketingScroll();
 
   return (
     <MotionConfig reducedMotion="user">
