@@ -917,19 +917,31 @@ function TextMessage({
 function CustomDomainSection() {
   const paidTo = usePaidPlanTo();
   return (
+    // Side by side, because the section already is: it compares two messages
+    // that differ only in the domain. Stacking the argument above its own
+    // evidence was fighting what the section says.
     <Section className="py-12">
-      <div className="mx-auto flex max-w-3xl flex-col items-center gap-6 text-center">
-        <h2 className="text-xl font-bold text-balance sm:text-2xl">
-          Your link gets read by someone deciding whether to trust it.
-        </h2>
-        <p className="max-w-xl text-sm text-muted">
-          A random slug on a domain nobody recognises is what a scam text looks like. Connect a
-          domain you own and short links go live under it, with TLS issued automatically, and every
-          slug is yours to choose. On the shared domain they are always random, so nobody can squat
-          the good ones.
-        </p>
+      <div className="grid items-center gap-8 md:grid-cols-2 md:gap-12">
+        <div className="flex flex-col items-center gap-5 text-center md:items-start md:text-left">
+          <h2 className="text-xl font-bold text-balance sm:text-2xl">
+            Your link gets read by someone deciding whether to trust it.
+          </h2>
+          <p className="max-w-xl text-sm text-muted">
+            A random slug on a domain nobody recognises is what a scam text looks like. Connect a
+            domain you own and short links go live under it, with TLS issued automatically, and
+            every slug is yours to choose. On the shared domain they are always random, so nobody
+            can squat the good ones.
+          </p>
+          <HrefLink
+            href={paidTo("hobby")}
+            onClick={() => trackCta("second_screen_domain")}
+            className={buttonClass({ variant: "primary", size: "sm" })}
+          >
+            Put your domain on it <ArrowRight size={14} />
+          </HrefLink>
+        </div>
 
-        <div className="flex w-full flex-col gap-3 sm:flex-row">
+        <div className="flex w-full flex-col gap-3">
           <TextMessage
             from="Text message, shared domain"
             body="Acme: your 20% code ends tonight."
@@ -944,14 +956,6 @@ function CustomDomainSection() {
             verdict="Obviously from Acme"
           />
         </div>
-
-        <HrefLink
-          href={paidTo("hobby")}
-          onClick={() => trackCta("second_screen_domain")}
-          className={buttonClass({ variant: "primary", size: "sm" })}
-        >
-          Put your domain on it <ArrowRight size={14} />
-        </HrefLink>
       </div>
     </Section>
   );
@@ -1051,9 +1055,11 @@ function CloudflareSection() {
 
 function FaqSection() {
   return (
+    // Left, not centred. Reading is one column, and centring a list of
+    // questions starts every line in a different place.
     <Section id="faq" className="scroll-mt-16 py-16">
-      <div className="mb-8 text-center">
-        <h2 className="text-xl font-bold">Frequently asked questions</h2>
+      <div className="mx-auto max-w-3xl">
+        <h2 className="mb-6 text-xl font-bold">Frequently asked questions</h2>
       </div>
       <div className="mx-auto flex max-w-3xl flex-col gap-3">
         {faqs.map(({ q, a, aNode }) => (
