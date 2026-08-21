@@ -62,7 +62,7 @@ function easeInOutQuart(t: number) {
  * The visitor can take it back: a wheel, a touch or a key cancels the ride
  * and leaves the page wherever they stopped it.
  */
-function rideToTop() {
+export function rideToTop() {
   const from = window.scrollY;
   if (from === 0) return;
   if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
@@ -122,6 +122,10 @@ export function useMarketingScroll() {
   // remounts and the effect above never runs again. Nothing to swap here,
   // just the ride back up. Guarded on the path being ours so the page being
   // left doesn't take this branch when the pathname changes under it.
+  //
+  // A link to the exact location you are already at doesn't reach this
+  // either, since neither dep changes. MarketingLink handles that one by
+  // riding directly, without arming anything.
   useEffect(() => {
     if (pathname !== ownPath.current) return;
     rideIfArmed();

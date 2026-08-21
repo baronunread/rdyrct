@@ -223,13 +223,12 @@ test("the logo rides back to the top from a section link on the same page", asyn
   expect(travelled(ys, start)).toBeGreaterThan(5);
 });
 
-// Two links clicked before the first one commits. The commit waits for the
-// route to load, so the first load can settle after the second has already
-// navigated: without a guard its `.finally()` sent the visitor to the page
-// they gave up on. Holding the pricing chunk is what makes the race certain
-// rather than a matter of timing.
-test("a second marketing link wins over one still loading", async ({ page }) => {
-  await page.goto("/");
+/**
+ * Click Pricing with its chunk held open, so the navigation is still in
+ * flight. Returns the release, plus the wait for the load actually landing:
+ * asserting on a timeout instead lets a slow runner pass a regression.
+ */
+async function pricingClickInFlight(page: import("@playwright/test").Page) {
   let release = () => {};
   const held = new Promise<void>((resolve) => (release = resolve));
   await page.route(
@@ -241,14 +240,68 @@ test("a second marketing link wins over one still loading", async ({ page }) => 
   );
 
   await page.locator("header nav").getByRole("link", { name: "Pricing" }).click();
+  // The hold is what makes this a race at all: if the route ever stops
+  // matching, the test would pass while exercising nothing.
+  await expect(page).not.toHaveURL(/\/pricing$/);
+
+  return async () => {
+    release();
+    await page.waitForResponse((response) => response.url().includes("routes/pricing"));
+  };
+}
+
+// Two links clicked before the first one commits. The commit waits for the
+// route to load, so the first load can settle after the second has already
+// navigated: without a guard its `.finally()` sent the visitor to the page
+// they gave up on. Holding the pricing chunk is what makes the race certain
+// rather than a matter of timing.
+test("a second marketing link wins over one still loading", async ({ page }) => {
+  await page.goto("/");
+  const settleTheAbandonedLoad = await pricingClickInFlight(page);
   await page.locator("footer").getByRole("link", { name: "QR generator" }).click();
   await expect(page).toHaveURL(/\/qr-code-generator$/);
 
   // The abandoned load finishing must not steal the page back.
-  release();
-  await page.waitForTimeout(500);
+  await settleTheAbandonedLoad();
   await expect(page).toHaveURL(/\/qr-code-generator$/);
   await expect(page.getByRole("heading", { level: 1 })).toContainText(/QR code/i);
+});
+
+// Same race, but the thing that interrupts is not another marketing link.
+// The click counter cannot see those, so the commit checks the location has
+// not moved: clicking Pricing on a cold chunk and then Sign up used to drop
+// the visitor back on /pricing with a half-filled form behind them.
+test("a stale marketing load cannot pull you off the page you moved to", async ({ page }) => {
+  await page.goto("/");
+  const settleTheAbandonedLoad = await pricingClickInFlight(page);
+  await page.getByRole("link", { name: "Sign up" }).first().click();
+  await expect(page).toHaveURL(/\/signup/);
+
+  await settleTheAbandonedLoad();
+  await expect(page).toHaveURL(/\/signup/);
+});
+
+// A link to the exact place you already are: no route change, so nothing
+// remounts and no location dep moves. It still has to ride up, and it must
+// not leave the scroll armed for whatever page comes next.
+test("the logo rides up when you are already on the page it points at", async ({ page }) => {
+  await page.goto("/");
+  // The page has to be there before it can be scrolled: the shell on its own
+  // is one viewport tall.
+  await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+  await page.evaluate(() => window.scrollTo({ top: 2000, behavior: "instant" }));
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(0);
+  const start = await page.evaluate(() => window.scrollY);
+
+  await trackScroll(page);
+  await page.getByRole("link", { name: "rdyrct" }).click();
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(0);
+  expect(
+    travelled(
+      (await scrollSamples(page)).map((s) => s.y),
+      start,
+    ),
+  ).toBeGreaterThan(5);
 });
 
 test("legal pages retain their baseline headings", async ({ page }) => {
