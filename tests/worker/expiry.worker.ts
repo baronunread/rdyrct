@@ -5,6 +5,7 @@ import { eq } from "drizzle-orm";
 import worker from "../../src/worker";
 import * as schema from "../../src/worker/db/schema";
 import { applyStorageMessage, sweepExpiredAliases, syncLinkMsg } from "../../src/worker/storage";
+import { sweepExpiredInvites } from "../../src/worker/routes/orgs";
 import {
   addressById,
   applyTestMigrations,
@@ -173,5 +174,55 @@ describe("sweepExpiredAliases", () => {
     await sweepExpiredAliases(testEnv, db());
     const second = (await addressById("addr-alias")).retiredAt;
     expect(second).toBe(first);
+  });
+});
+
+describe("sweepExpiredInvites", () => {
+  const INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+
+  async function seedInvites() {
+    await db().batch([
+      db().insert(schema.orgs).values({ id: "org-1", name: "Test", createdAt: 0 }),
+      db()
+        .insert(schema.invites)
+        .values({
+          token: "stale-token",
+          orgId: "org-1",
+          role: "member",
+          email: "invited@example.com",
+          createdAt: 0,
+          expiresAt: Date.now() - 1000,
+        }),
+      db()
+        .insert(schema.invites)
+        .values({
+          token: "live-token",
+          orgId: "org-1",
+          role: "member",
+          email: null,
+          createdAt: 0,
+          expiresAt: Date.now() + INVITE_TTL_MS,
+        }),
+    ]);
+  }
+
+  async function tokens(): Promise<string[]> {
+    const rows = await db().select({ token: schema.invites.token }).from(schema.invites);
+    return rows.map((r) => r.token).sort();
+  }
+
+  it("deletes an expired invite and leaves an open one alone", async () => {
+    await seedInvites();
+
+    expect(await sweepExpiredInvites(testEnv)).toBe(1);
+    expect(await tokens()).toEqual(["live-token"]);
+  });
+
+  it("is a no-op re-run once the expired ones are gone", async () => {
+    await seedInvites();
+    await sweepExpiredInvites(testEnv);
+
+    expect(await sweepExpiredInvites(testEnv)).toBe(0);
+    expect(await tokens()).toEqual(["live-token"]);
   });
 });

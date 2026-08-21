@@ -77,6 +77,7 @@ async function portal(cookie?: string): Promise<Response> {
   const ctx = createExecutionContext();
   const res = await worker.fetch(
     new Request("http://localhost/api/billing/portal", {
+      method: "POST",
       headers: cookie ? { cookie } : {},
     }),
     polarEnv(),
@@ -180,7 +181,7 @@ describe("POST /api/billing/checkout", () => {
   });
 });
 
-describe("GET /api/billing/portal", () => {
+describe("POST /api/billing/portal", () => {
   it("requires sign-in", async () => {
     expect((await portal()).status).toBe(401);
   });

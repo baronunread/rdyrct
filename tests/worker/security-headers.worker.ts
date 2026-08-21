@@ -45,7 +45,9 @@ describe("security headers (#21)", () => {
   });
 
   it("applies to an HTTPException error response", async () => {
-    const res = await fetchWorker(new Request("http://localhost/api/billing/portal"));
+    const res = await fetchWorker(
+      new Request("http://localhost/api/billing/portal", { method: "POST" }),
+    );
     expect(res.status).toBe(401); // requireUser, no session cookie
     expectSecurityHeaders(res);
   });

@@ -192,7 +192,9 @@ describe("addresses sub-resource", () => {
   it("keep-forever flips the alias to permanent and clears its expiry", async () => {
     const { cookie, linkId, aliasId } = await renamedLink();
 
-    const res = await api(cookie, "POST", `/links/${linkId}/addresses/${aliasId}/keep-forever`);
+    const res = await api(cookie, "PATCH", `/links/${linkId}/addresses/${aliasId}`, {
+      kind: "permanent",
+    });
     expect(res.status).toBe(200);
 
     const row = await addressById(aliasId);
@@ -209,25 +211,17 @@ describe("addresses sub-resource", () => {
       .set({ retiredAt: Date.now() })
       .where(eq(schema.linkAddresses.id, aliasId));
 
-    const res = await api(cookie, "POST", `/links/${linkId}/addresses/${aliasId}/keep-forever`);
+    const res = await api(cookie, "PATCH", `/links/${linkId}/addresses/${aliasId}`, {
+      kind: "permanent",
+    });
     expect(res.status).toBe(409);
   });
 
-  it("remove requires confirmation, then retires the address", async () => {
+  it("delete retires the address", async () => {
     const { cookie, linkId, aliasId } = await renamedLink();
 
-    const unconfirmed = await api(
-      cookie,
-      "POST",
-      `/links/${linkId}/addresses/${aliasId}/remove`,
-      {},
-    );
-    expect(unconfirmed.status).toBe(400);
-
-    const confirmed = await api(cookie, "POST", `/links/${linkId}/addresses/${aliasId}/remove`, {
-      confirm: true,
-    });
-    expect(confirmed.status).toBe(200);
+    const removed = await api(cookie, "DELETE", `/links/${linkId}/addresses/${aliasId}`);
+    expect(removed.status).toBe(200);
 
     const row = await addressById(aliasId);
     expect(row.retiredAt).not.toBeNull();
@@ -237,16 +231,16 @@ describe("addresses sub-resource", () => {
     const { cookie, linkId } = await renamedLink();
     const [primary] = (await addressesOf(linkId)).filter((a) => a.kind === "primary");
 
-    const res = await api(cookie, "POST", `/links/${linkId}/addresses/${primary.id}/remove`, {
-      confirm: true,
-    });
+    const res = await api(cookie, "DELETE", `/links/${linkId}/addresses/${primary.id}`);
     expect(res.status).toBe(400);
   });
 
   it("promote swaps the alias and primary slug/domain in place, on the same link", async () => {
     const { cookie, linkId, aliasId } = await renamedLink();
 
-    const res = await api(cookie, "POST", `/links/${linkId}/addresses/${aliasId}/promote`);
+    const res = await api(cookie, "PATCH", `/links/${linkId}/addresses/${aliasId}`, {
+      kind: "primary",
+    });
     expect(res.status).toBe(200);
     const link = await jsonBody<{ slug: string }>(res);
     expect(link.slug).toBe("old-slug"); // the promoted alias's slug
@@ -462,14 +456,14 @@ describe("plan limits (#38)", () => {
     expect(addresses.some((a) => a.kind === "temp_alias")).toBe(true);
   });
 
-  // Both actions leave the org holding one more counted address than it did:
-  // keep-forever makes the temp alias permanent, promote makes the old primary
-  // permanent. At the cap, neither has room.
-  it.each(["keep-forever", "promote"])("402s %s on a temp alias at the limit", async (action) => {
+  // Both kinds leave the org holding one more counted address than it did:
+  // "permanent" makes the temp alias permanent, "primary" makes the old
+  // primary permanent. At the cap, neither has room.
+  it.each(["permanent", "primary"])("402s kind=%s on a temp alias at the limit", async (kind) => {
     const { cookie, linkId, aliasId } = await renamedLink();
     await fillOrgToLimit();
 
-    const res = await api(cookie, "POST", `/links/${linkId}/addresses/${aliasId}/${action}`);
+    const res = await api(cookie, "PATCH", `/links/${linkId}/addresses/${aliasId}`, { kind });
     expect(res.status).toBe(402);
   });
 });

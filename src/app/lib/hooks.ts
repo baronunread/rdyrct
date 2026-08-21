@@ -256,30 +256,26 @@ export function useAddressMutations(orgId: string, linkId: string) {
     qc.invalidateQueries({ queryKey: ["linkStats", orgId] });
     applyQuotaUsage(qc, orgId, quota);
   };
+  const address = (addressId: string) => `/orgs/${orgId}/links/${linkId}/addresses/${addressId}`;
   const keepForever = useMutation({
     mutationFn: (addressId: string) =>
-      api<WithQuotaUsage<{ ok: true }>>(
-        `/orgs/${orgId}/links/${linkId}/addresses/${addressId}/keep-forever`,
-        { method: "POST" },
-      ),
+      api<WithQuotaUsage<{ ok: true }>>(address(addressId), {
+        method: "PATCH",
+        body: { kind: "permanent" },
+      }),
     onSuccess: invalidate,
   });
   const remove = useMutation({
     mutationFn: (addressId: string) =>
-      api<WithQuotaUsage<{ ok: true }>>(
-        `/orgs/${orgId}/links/${linkId}/addresses/${addressId}/remove`,
-        { method: "POST", body: { confirm: true } },
-      ),
+      api<WithQuotaUsage<{ ok: true }>>(address(addressId), { method: "DELETE" }),
     onSuccess: invalidate,
   });
   const promote = useMutation({
     mutationFn: (addressId: string) =>
-      api<WithQuotaUsage<LinkDTO>>(
-        `/orgs/${orgId}/links/${linkId}/addresses/${addressId}/promote`,
-        {
-          method: "POST",
-        },
-      ),
+      api<WithQuotaUsage<LinkDTO>>(address(addressId), {
+        method: "PATCH",
+        body: { kind: "primary" },
+      }),
     onSuccess: invalidate,
   });
   const create = useMutation({
@@ -339,11 +335,11 @@ export function useDomainMutations(orgId: string) {
       }),
     onSuccess: invalidate,
   });
+  // A read, triggered by a button: re-checking a domain only re-reads what the
+  // activation workflow last wrote (#104). It lives here rather than in a
+  // query because nothing polls it, somebody asks for it.
   const refresh = useMutation({
-    mutationFn: (id: string) =>
-      api<DomainDTO>(`/orgs/${orgId}/domains/${id}/refresh`, {
-        method: "POST",
-      }),
+    mutationFn: (id: string) => api<DomainDTO>(`/orgs/${orgId}/domains/${id}`),
     onSuccess: invalidate,
   });
   const setRootRedirect = useMutation({
@@ -386,7 +382,7 @@ export function useCheckout() {
 export function usePortal() {
   // react-doctor-disable-next-line react-doctor/query-mutation-missing-invalidation
   return useMutation({
-    mutationFn: () => api<{ url: string }>(`/billing/portal`),
+    mutationFn: () => api<{ url: string }>(`/billing/portal`, { method: "POST" }),
   });
 }
 
@@ -439,7 +435,7 @@ export const useAdminAnonLinks = () =>
 export const useAdminAudit = () =>
   useQuery<AdminActionRow[]>({
     queryKey: ["admin", "audit"],
-    queryFn: () => api("/admin/links/audit"),
+    queryFn: () => api("/admin/audit"),
   });
 
 export const useAdminUsers = () =>

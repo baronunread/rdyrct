@@ -11,7 +11,7 @@ import { withSession } from "./session";
 import { getAuth } from "./better-auth";
 import { withBackground } from "./background";
 import { userRoutes } from "./routes/auth";
-import { orgRoutes, inviteRoutes } from "./routes/orgs";
+import { orgRoutes, inviteRoutes, sweepExpiredInvites } from "./routes/orgs";
 import { linkRoutes } from "./routes/links";
 import { qrLogoRoutes } from "./routes/qr-logos";
 import { adminRoutes } from "./routes/admin";
@@ -374,6 +374,11 @@ const wrapped = Sentry.withSentry<Env, StorageMessage | ClickMessage>(
       // Daily: retire rename aliases past their 48h deadline (see #38). The
       // redirect path already stopped resolving them; this frees their slugs.
       await sweepExpiredAliases(env, drizzle(env.DB, { schema }));
+
+      // Daily: drop invites nobody opened before they expired (#103). An
+      // accepted one is already deleted at accept time; this clears the rest,
+      // so no token and no invited address outlives the week it was good for.
+      await sweepExpiredInvites(env);
 
       // Daily: drop anonymous links nobody claimed inside their 24 hours, and
       // the KV keys they were resolving through (Direction A of #96).

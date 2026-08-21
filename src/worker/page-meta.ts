@@ -48,6 +48,17 @@ class Text {
 }
 
 /**
+ * What machine-readable description this page has, pointed at from the
+ * response itself (RFC 8288) rather than left for an agent to guess at.
+ *
+ * `describedby` and `/llms.txt` only: that file exists and says what the site
+ * is. `api-catalog` and `service-desc` belong here too, and go in when the
+ * documents they name exist (#133, #136). A Link header that points at a 404
+ * is worse than no header.
+ */
+const LINK_HEADER = '</llms.txt>; rel="describedby"; type="text/plain"';
+
+/**
  * Rewrites the head of an HTML response for `path`, or returns it untouched
  * when the path is not a page we describe.
  *
@@ -60,6 +71,8 @@ export function withPageMeta(response: Response, url: URL): Response {
   if (!response.headers.get("content-type")?.includes("text/html")) return response;
 
   const canonical = canonicalFor(url, url.pathname);
+  const described = new Response(response.body, response);
+  described.headers.set("Link", LINK_HEADER);
   return new HTMLRewriter()
     .on("title", new Text(meta.title))
     .on('meta[name="description"]', new MetaContent(meta.description))
@@ -69,5 +82,5 @@ export function withPageMeta(response: Response, url: URL): Response {
     .on('meta[name="twitter:title"]', new MetaContent(meta.title))
     .on('meta[name="twitter:description"]', new MetaContent(meta.description))
     .on('link[rel="canonical"]', new Href(canonical))
-    .transform(response);
+    .transform(described);
 }

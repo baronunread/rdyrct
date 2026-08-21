@@ -64,7 +64,9 @@ billingRoutes.post("/checkout", requireUser, async (c) => {
   return c.json({ url: checkout.url });
 });
 
-billingRoutes.get("/portal", requireUser, async (c) => {
+// POST, not GET: this creates a Polar customer session. A GET that changes
+// something on a third party is one prefetch away from doing it unasked.
+billingRoutes.post("/portal", requireUser, async (c) => {
   const rows = await c.var.db
     .select({ customerId: schema.user.polarCustomerId })
     .from(schema.user)
