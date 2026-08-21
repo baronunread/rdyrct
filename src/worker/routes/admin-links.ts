@@ -276,7 +276,7 @@ adminLinkRoutes.patch("/:linkId", async (c) => {
     await c.req.json<JsonValue>().catch(() => ({})),
   );
   if (body.suspended == null)
-    throw new HTTPException(400, { message: "suspended must be true or false" });
+    throw new HTTPException(400, { message: "Say whether to suspend or restore this link" });
   const reason = body.suspended ? checkReason(body.reason, true) : null;
   return c.json(await setSuspended(c, c.req.param("linkId")!, body.suspended, reason));
 });

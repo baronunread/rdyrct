@@ -452,6 +452,32 @@ orgRoutes.delete("/:orgId/invites/:token", requireOrgRole("admin"), async (c) =>
   return c.json({ ok: true });
 });
 
+/** How many expired invites one sweep statement retires at a time. */
+const INVITE_SWEEP_CHUNK = 500;
+
+/**
+ * Drops invites nobody opened before they expired (#103).
+ *
+ * An accepted invite is already deleted at accept time, so this is the other
+ * half: no token and no invited address outlives the week it was good for.
+ * Bounded batches for the same reason the click trim uses them, even though
+ * an org's open invites are capped by its member limit.
+ */
+export async function sweepExpiredInvites(env: Env): Promise<number> {
+  const stmt = env.DB.prepare(
+    `delete from invites where token in (
+       select token from invites where expires_at < ? limit ?
+     )`,
+  );
+  let deleted = 0;
+  let changes = 0;
+  do {
+    changes = (await stmt.bind(Date.now(), INVITE_SWEEP_CHUNK).run()).meta.changes;
+    deleted += changes;
+  } while (changes > 0);
+  return deleted;
+}
+
 /* ---------------- stats helpers ---------------- */
 
 function emptySeries(days: number): Map<string, number> {

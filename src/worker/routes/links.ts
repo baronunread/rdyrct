@@ -253,9 +253,6 @@ async function findAddress(db: DB, orgId: string, linkId: string, addressId: str
   return address;
 }
 
-/** Resolves the `:linkId`/`:addressId` params every address-mutation route
- * (keep-forever, remove, promote) starts from: the link and address, 404ing
- * if either doesn't belong to this org. */
 /** The three lines every :linkId route opens with. */
 async function linkFromRequest(c: Context<AppEnv>) {
   const db = c.var.db;
