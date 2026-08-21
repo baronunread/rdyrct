@@ -28,9 +28,19 @@ import type {
   WithQuotaUsage,
 } from "@/shared/types";
 
-export function useCurrentUser() {
+/**
+ * `enabled: false` is for the marketing pages, which ask this only to choose
+ * between "Sign up" and "Open dashboard". A signed-out visitor has no session
+ * to find, and the 401 that came back was logged by the browser as a page
+ * error on every first visit to the landing page. Skipping the round trip for
+ * a browser that has never been signed in (see useAudience) costs that visitor
+ * nothing and saves them a request. Every caller that decides or submits
+ * anything leaves it enabled and waits for the real answer.
+ */
+export function useCurrentUser(enabled = true) {
   return useQuery<CurrentUser | null>({
     queryKey: ["user"],
+    enabled,
     queryFn: async () => {
       try {
         const user = await api<CurrentUser>("/user");

@@ -28,8 +28,7 @@ import {
   useReducedMotion,
   type Variants,
 } from "motion/react";
-import { useEffect } from "react";
-import { useCurrentUser } from "../lib/hooks";
+import { lazy, Suspense, useEffect } from "react";
 import { useSeo } from "../lib/seo";
 import { useMarketingScroll } from "../lib/marketing-scroll";
 import { FaqJsonLd } from "../components/faq-json-ld";
@@ -46,7 +45,17 @@ import { HeroShortener } from "../components/hero-shortener";
 import { HeroSignedIn } from "../components/hero-signed-in";
 import { LandingHeader } from "../components/landing-header";
 import cloudflareLogo from "../assets/cloudflare.svg";
-import { LandingAnalyticsMock } from "../components/landing-analytics";
+/**
+ * The mock pulls in the whole charts bundle (Plot, the renderer, the scales),
+ * which is 118 KB the landing page was parsing before first paint to draw one
+ * decorative chart most of a screen below the fold. Lazy, so the entry chunk
+ * carries the page and the charts arrive alongside it instead of in front of
+ * it. AnalyticsPreviewSection reserves the space, so nothing moves when it
+ * lands.
+ */
+const LandingAnalyticsMock = lazy(() =>
+  import("../components/landing-analytics").then((m) => ({ default: m.LandingAnalyticsMock })),
+);
 import { formatNumber } from "../lib/numbers";
 import { cn } from "../ui/cn";
 
@@ -251,9 +260,15 @@ function NoCell({ tier }: { tier?: Tier }) {
  * `next`, so the intent survives OTP verification.
  */
 function usePaidPlanTo() {
-  const currentUser = useCurrentUser();
+  // Through useAudience rather than useCurrentUser directly: this asks the
+  // same question the header does ("is this a stranger?"), and asking it
+  // twice meant asking the server twice, once through the gate that skips the
+  // round trip for a browser that has never been signed in and once around
+  // it. It also reads better while the query is in flight, where `authed`
+  // falls back to what this browser was last time instead of "no".
+  const { authed } = useAudience();
   return (plan: "hobby" | "pro") =>
-    currentUser.data
+    authed
       ? `/billing?plan=${plan}`
       : `/signup?next=${encodeURIComponent(`/billing?plan=${plan}`)}`;
 }
@@ -1091,8 +1106,17 @@ function AnalyticsPreviewSection() {
           on sample data.
         </p>
       </div>
+      {/* The reserved box is the mock's own outer shell, so the swap changes
+          what is inside the card and never its footprint: no layout shift,
+          and something card-shaped to look at while the chunk lands. */}
       <div className="flex justify-center">
-        <LandingAnalyticsMock />
+        <Suspense
+          fallback={
+            <div className="h-[1140px] w-full max-w-4xl rounded-2xl bg-surface sm:h-[720px] smooth-shadow-ring-2xl" />
+          }
+        >
+          <LandingAnalyticsMock />
+        </Suspense>
       </div>
 
       {/* The only ask between the hero and the pricing table. On a phone this
@@ -1365,16 +1389,18 @@ export function LandingPage() {
           />
 
           <LandingHeader authed={authed} />
-          <HeroSection ctaTo={ctaTo} ctaLabel={ctaLabel} authed={authed} name={name} />
-          <CustomDomainSection />
-          <HowItWorksSection />
-          <AnalyticsPreviewSection />
-          <FeaturesSection />
-          <CloudflareSection />
-          <PricingTeaser />
-          <SelfHostSection />
-          <FaqSection />
-          <FinalCtaSection ctaTo={ctaTo} ctaLabel={ctaLabel} />
+          <main>
+            <HeroSection ctaTo={ctaTo} ctaLabel={ctaLabel} authed={authed} name={name} />
+            <CustomDomainSection />
+            <HowItWorksSection />
+            <AnalyticsPreviewSection />
+            <FeaturesSection />
+            <CloudflareSection />
+            <PricingTeaser />
+            <SelfHostSection />
+            <FaqSection />
+            <FinalCtaSection ctaTo={ctaTo} ctaLabel={ctaLabel} />
+          </main>
 
           <Footer />
         </div>
