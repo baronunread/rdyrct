@@ -96,7 +96,7 @@ test("generates a QR code with no account and no network call", async ({ page })
   await expect(page.getByRole("heading", { name: "Free QR code generator" })).toBeVisible();
 
   const code = page.getByRole("img", { name: /^QR code for/ });
-  const upsell = page.getByRole("heading", { name: "This code cannot be tracked" });
+  const upsell = page.getByRole("heading", { name: "Want to know if anyone scans it?" });
 
   // The downloads sit in the card's footer, which exists before there is
   // anything to download, so the row cannot appear on the first keystroke and
@@ -132,7 +132,7 @@ test("the upsell offers the account rather than making a link", async ({ page })
   await page.getByLabel("Link or text").fill("https://example.com/trackable");
   await expect(page.getByRole("button", { name: /SVG/ })).toBeVisible({ timeout: 10_000 });
 
-  const upsell = page.getByRole("heading", { name: "This code cannot be tracked" });
+  const upsell = page.getByRole("heading", { name: "Want to know if anyone scans it?" });
   await expect(upsell).toBeVisible();
   await expect(page.getByRole("link", { name: "See Hobby and Pro" })).toHaveAttribute(
     "href",

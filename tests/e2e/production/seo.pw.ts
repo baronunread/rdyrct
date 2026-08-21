@@ -49,7 +49,7 @@ test("the signed-in app keeps the default head", async ({ request }) => {
   // Nothing behind the login wants search traffic.
   const html = await (await request.get("/dashboard")).text();
 
-  expect(html).toContain("<title>rdyrct - URL shortener and QR code generator</title>");
+  expect(html).toContain("<title>Free URL shortener and QR code generator - rdyrct</title>");
 });
 
 test("robots.txt declares both sitemaps", async ({ request }) => {
@@ -132,19 +132,21 @@ test("the second visit to a dead slug still renders the page", async ({ request 
   );
 });
 
-test("a file the bundle serves at the root still answers 200", async ({ request }) => {
-  // These reach the slug handler by the same door as a dead link: one segment,
-  // not a reserved keyword. 404ing them took /favicon.svg down with the
-  // rest, so every page rendered a flash of the wrong theme, and the browser
-  // suite is the only place that could see it — the worker tests stub ASSETS,
-  // so everything there is the SPA shell and this looks fine.
+test("a static file the bundle serves still answers 200", async ({ request }) => {
+  // These are one segment and not a reserved keyword, so a slug is all they
+  // look like. run_worker_first excludes them by name now, but the exclusion
+  // list is hand-written: drop a name and the file falls back through the slug
+  // handler, which is how the favicon once went down and every page rendered a
+  // flash of the wrong theme. The browser suite is the only place that can see
+  // it — the worker tests stub ASSETS, so everything there is the SPA shell and
+  // this looks fine.
   //
   // The content type is half the assertion, not decoration: serveSpa decides
   // whether a path may carry a 404 by asking whether what came back is HTML,
-  // so a bundle that answered /favicon.svg with the SPA shell would satisfy a
+  // so a bundle that answered /og.png with the SPA shell would satisfy a
   // status-only check while serving the wrong bytes.
   const assets = [
-    ["/favicon.svg", "image/svg+xml"],
+    ["/assets/favicon.svg", "image/svg+xml"],
     ["/og.png", "image/png"],
     ["/llms.txt", "text/plain"],
   ];

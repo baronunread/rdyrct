@@ -229,15 +229,15 @@ app.all("/api/*", (c) => c.json({ message: "Not found" }, 404));
 // single-page-application). The SPA renders the same NotFound route either
 // way; the status is what a crawler reads.
 //
-// Only the shell can carry it. The bundle serves files at the root too
-// (/favicon.svg, /og.png, /llms.txt), and those are single-segment
-// paths that reach here by the same door as a dead slug: they arrive as
-// themselves, not as HTML, and 404ing them took the theme bootstrap down
-// with them.
+// Only the shell can carry it. Single-segment paths reach here by the same
+// door as a dead slug, and some of them are real files (/@react-refresh in
+// dev, where React mounts through it): they arrive as themselves, not as
+// HTML, and 404ing them took the theme bootstrap down with them.
 //
-// /assets/* never reaches this function at all: it's excluded from
-// run_worker_first (wrangler.jsonc), so Cloudflare serves it directly and
-// public/_headers carries its cache-control and security headers instead.
+// The known static files never get this far: /assets/* and the root files
+// listed beside it are excluded from run_worker_first (wrangler.jsonc), so
+// Cloudflare serves them directly and public/_headers carries their
+// cache-control and security headers instead.
 
 /**
  * A 404 nothing will cache.
@@ -256,11 +256,11 @@ function uncacheable404(body: BodyInit | null, from?: Headers): Response {
 }
 
 /**
- * For the unhashed static files at the root (og.png, the favicon, the text
- * files). /assets/ is content-hashed and cached by public/_headers; these
- * take Cloudflare's `max-age=0, must-revalidate` instead, so every visit
- * paid a conditional request per file to be told nothing had changed. An
- * hour is short enough that a deploy lands the same session.
+ * For any unhashed static file that still reaches serveSpa. The known ones
+ * are excluded from run_worker_first and cached by public/_headers instead;
+ * this hour covers whatever root file somebody adds tomorrow without
+ * updating that list. It is short enough that a deploy lands the same
+ * session.
  */
 const STATIC_CACHE = "public, max-age=3600, must-revalidate";
 
@@ -268,9 +268,9 @@ const STATIC_CACHE = "public, max-age=3600, must-revalidate";
  * Order matters here, and both branches have taken the app down once.
  *
  * `status` asks for a 404, and only the shell may become one. /:slug routes
- * every single-segment path through here, so the rest are real files:
- * /favicon.svg, /og.png, and in dev /@react-refresh, which is how React
- * mounts. Check the shell before the status, never after.
+ * every single-segment path through here, so the rest are real files — in
+ * dev /@react-refresh, which is how React mounts. Check the shell before
+ * the status, never after.
  *
  * STATIC_CACHE is production-only. In dev this same fallback serves every
  * source module, and caching those leaves the browser running the code you

@@ -23,7 +23,7 @@ export function PricingPage() {
     <MarketingPage
       path="/pricing"
       title="Simple pricing, start free"
-      intro="Upgrade when your links outgrow the plan. No credit card required to start."
+      intro="Upgrade when you outgrow the free plan. No credit card required to start."
     >
       <PricingSection />
     </MarketingPage>

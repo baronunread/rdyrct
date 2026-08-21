@@ -203,7 +203,7 @@ async function trackScroll(page: import("@playwright/test").Page) {
       samples.push({
         path: location.pathname,
         y: Math.round(window.scrollY),
-        hero: /Know which channel/.test(document.querySelector("h1")?.textContent ?? ""),
+        hero: /earned the click/.test(document.querySelector("h1")?.textContent ?? ""),
       });
       requestAnimationFrame(tick);
     };
@@ -409,7 +409,7 @@ test("the second screen argues with two messages, not two URLs (#96)", async ({ 
   await expect(page.getByText(/click links they recognize/i)).toBeVisible();
   await expect(page.getByText("Doesn't match the sender")).toBeVisible();
   await expect(page.getByText("Matches the sender")).toBeVisible();
-  await expect(page.getByRole("link", { name: /Put your domain on it/i })).toBeVisible();
+  await expect(page.getByRole("link", { name: /Connect your domain/i })).toBeVisible();
 
   // Sold on recognition, the way every competitor sells it, not by making
   // somebody picture being taken for a scammer. Bitly sells against a
@@ -519,7 +519,7 @@ test("the dev server never hands out a long cache for a source module", async ({
 // block instead. The production suite could not see it: that path only exists
 // while Vite is serving.
 test("the single-segment files the dev server owns are not 404s", async ({ request }) => {
-  for (const path of ["/@react-refresh", "/favicon.svg", "/og.png", "/llms.txt"]) {
+  for (const path of ["/@react-refresh", "/og.png", "/llms.txt"]) {
     expect((await request.get(path)).status(), path).toBe(200);
   }
 });

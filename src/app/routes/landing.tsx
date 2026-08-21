@@ -784,12 +784,11 @@ function HeroSection({
         className="flex flex-col items-center gap-6 text-center md:items-start md:text-left"
       >
         <h1 className="text-3xl font-bold tracking-tight text-balance sm:text-4xl lg:text-5xl">
-          Know which channel earned the click.
+          Short links and QR codes that show which channel earned the click.
         </h1>
         <p className="max-w-xl text-sm text-muted sm:text-base">
-          Every short link and QR code your team shares reports back: country, referrer, device, and
-          campaign, measured against the period before. On your own domain, and without a single IP
-          address in the database.
+          Each one reports back: country, referrer, device, and campaign, measured against the
+          period before. On your own domain, and without a single IP address in the database.
         </p>
         {/* The second CTA points down the page, not off it. "Self-host from
             GitHub" used to sit here, spending the highest-intent moment on
@@ -1022,7 +1021,7 @@ function CustomDomainSection() {
             onClick={() => trackCta("second_screen_domain")}
             className={buttonClass({ variant: "primary", size: "sm" })}
           >
-            Put your domain on it <ArrowRight size={14} />
+            Connect your domain <ArrowRight size={14} />
           </HrefLink>
         </div>
       </div>
@@ -1254,8 +1253,7 @@ function PricingTeaser() {
       <div className="mb-8 text-center">
         <h2 className="text-xl font-bold">Simple pricing</h2>
         <p className="mx-auto mt-2 max-w-xl text-sm text-muted">
-          Start free. Upgrade when your links outgrow the plan, or self-host and never pay us a
-          cent.
+          Start free. Upgrade when you outgrow the plan, or self-host and never pay us a cent.
         </p>
       </div>
 

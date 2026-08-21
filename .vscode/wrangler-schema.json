@@ -1,0 +1,7 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$comment": "Wrangler's own schema, plus the two VS Code-only keywords that let its JSON language service accept comments and trailing commas. VS Code has no setting for this; the schema is the only place to say it.",
+  "allowComments": true,
+  "allowTrailingCommas": true,
+  "allOf": [{ "$ref": "../node_modules/wrangler/config-schema.json" }]
+}

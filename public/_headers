@@ -1,22 +1,90 @@
-# /assets/* is excluded from run_worker_first (wrangler.jsonc), so Cloudflare
-# serves it directly and the Worker's applySecurityHeaders (security-headers.ts)
-# never runs on it. These replicate that baseline for the one path prefix that
-# skips the Worker; every other response still gets it from the Worker itself.
+# Cloudflare serves everything matched by the run_worker_first exclusions
+# (wrangler.jsonc) directly, so the Worker's applySecurityHeaders
+# (security-headers.ts) never runs on those responses and this file carries
+# their policy instead. Two groups:
 #
-# max-age is a day, not the year a content hash could justify: this file
-# can't tell a real chunk from a deleted one, so not_found_handling's SPA
-# shell for a deleted chunk gets cached here too. A day bounds how long that
-# wrong response can survive; must-revalidate stops a cache from serving it
-# stale past that, so it self-heals with no manual purge needed. A year
-# would have pinned it until someone noticed.
+# /assets/* is content-hashed, so it can be immutable — but max-age is a day,
+# not the year a hash could justify: this file can't tell a real chunk from a
+# deleted one, so not_found_handling's SPA shell for a deleted chunk gets
+# cached here too. A day bounds how long that wrong response can survive;
+# must-revalidate stops a cache from serving it stale past that, so it
+# self-heals with no manual purge needed.
+#
+# The root files are unhashed names (og.png regenerates, llms.txt gets
+# edited), so they keep the hour the Worker used to give them via STATIC_CACHE:
+# short enough that a deploy lands the same session.
 #
 # No sha256 for index.html's inline theme script here, unlike the Worker's
-# copy of this policy. Nothing under /assets/ is ever a document: the SPA
-# shell served for a deleted chunk is fetched as a script, so the browser
+# copy of this policy. Nothing served by these rules is ever a document: the
+# SPA shell served for a deleted chunk is fetched as a script, so the browser
 # parses no HTML and runs nothing inline. Adding the hash would mean keeping
 # it in step in two files to change nothing.
+
 /assets/*
   Cache-Control: public, max-age=86400, immutable, must-revalidate
+  Content-Security-Policy: default-src 'self'; script-src 'self' 'wasm-unsafe-eval' https://*.posthog.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://*.posthog.com; font-src 'self'; worker-src 'self' blob:; connect-src 'self' https://*.posthog.com; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=(), usb=()
+  X-Frame-Options: DENY
+  Strict-Transport-Security: max-age=31536000; includeSubDomains
+
+/og.png
+  Cache-Control: public, max-age=3600, must-revalidate
+  Content-Security-Policy: default-src 'self'; script-src 'self' 'wasm-unsafe-eval' https://*.posthog.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://*.posthog.com; font-src 'self'; worker-src 'self' blob:; connect-src 'self' https://*.posthog.com; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=(), usb=()
+  X-Frame-Options: DENY
+  Strict-Transport-Security: max-age=31536000; includeSubDomains
+
+/robots.txt
+  Cache-Control: public, max-age=3600, must-revalidate
+  Content-Security-Policy: default-src 'self'; script-src 'self' 'wasm-unsafe-eval' https://*.posthog.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://*.posthog.com; font-src 'self'; worker-src 'self' blob:; connect-src 'self' https://*.posthog.com; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=(), usb=()
+  X-Frame-Options: DENY
+  Strict-Transport-Security: max-age=31536000; includeSubDomains
+
+/sitemap.xml
+  Cache-Control: public, max-age=3600, must-revalidate
+  Content-Security-Policy: default-src 'self'; script-src 'self' 'wasm-unsafe-eval' https://*.posthog.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://*.posthog.com; font-src 'self'; worker-src 'self' blob:; connect-src 'self' https://*.posthog.com; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=(), usb=()
+  X-Frame-Options: DENY
+  Strict-Transport-Security: max-age=31536000; includeSubDomains
+
+/llms.txt
+  Cache-Control: public, max-age=3600, must-revalidate
+  Content-Security-Policy: default-src 'self'; script-src 'self' 'wasm-unsafe-eval' https://*.posthog.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://*.posthog.com; font-src 'self'; worker-src 'self' blob:; connect-src 'self' https://*.posthog.com; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=(), usb=()
+  X-Frame-Options: DENY
+  Strict-Transport-Security: max-age=31536000; includeSubDomains
+
+/llms-full.txt
+  Cache-Control: public, max-age=3600, must-revalidate
+  Content-Security-Policy: default-src 'self'; script-src 'self' 'wasm-unsafe-eval' https://*.posthog.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://*.posthog.com; font-src 'self'; worker-src 'self' blob:; connect-src 'self' https://*.posthog.com; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=(), usb=()
+  X-Frame-Options: DENY
+  Strict-Transport-Security: max-age=31536000; includeSubDomains
+
+/ai.txt
+  Cache-Control: public, max-age=3600, must-revalidate
+  Content-Security-Policy: default-src 'self'; script-src 'self' 'wasm-unsafe-eval' https://*.posthog.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://*.posthog.com; font-src 'self'; worker-src 'self' blob:; connect-src 'self' https://*.posthog.com; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=(), usb=()
+  X-Frame-Options: DENY
+  Strict-Transport-Security: max-age=31536000; includeSubDomains
+
+/pricing.md
+  Cache-Control: public, max-age=3600, must-revalidate
   Content-Security-Policy: default-src 'self'; script-src 'self' 'wasm-unsafe-eval' https://*.posthog.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://*.posthog.com; font-src 'self'; worker-src 'self' blob:; connect-src 'self' https://*.posthog.com; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'
   X-Content-Type-Options: nosniff
   Referrer-Policy: strict-origin-when-cross-origin

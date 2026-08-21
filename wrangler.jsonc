@@ -1,5 +1,5 @@
 {
-  "$schema": "node_modules/wrangler/config-schema.json",
+  "$schema": ".vscode/wrangler-schema.json",
   "name": "rdyrct",
   "main": "src/worker/index.ts",
   "compatibility_date": "2026-01-01",
@@ -22,16 +22,32 @@
     // SPA shell under a 200 instead of the 404 serveSpa used to produce,
     // same as any SPA's normal stale-chunk behavior.
     //
-    // Cache-Control and the security-header baseline for /assets/* now live
-    // in public/_headers instead of serveSpa (src/worker/index.ts): Cloudflare
-    // documents _headers as applying to what it serves directly, and with
-    // the Worker no longer in front of these requests, that's exactly what's
-    // happening. _headers can't tell a real chunk from a deleted one either,
-    // so the SPA-shell response above gets cached too — measured against the
-    // real built Worker, not just reasoned about, which is why public/_headers
-    // caps it at a day with must-revalidate instead of the year a content
-    // hash would otherwise justify.
-    "run_worker_first": ["/*", "!/assets/*"],
+    // Cache-Control and the security-header baseline for what Cloudflare serves
+    // directly now live in public/_headers instead of serveSpa
+    // (src/worker/index.ts): Cloudflare documents _headers as applying to what
+    // it serves directly, and with the Worker no longer in front of these
+    // requests, that's exactly what's happening. _headers can't tell a real
+    // chunk from a deleted one either, so the SPA-shell response above gets
+    // cached too — measured against the real built Worker, not just reasoned
+    // about, which is why public/_headers caps it at a day with must-revalidate
+    // instead of the year a content hash would otherwise justify.
+    //
+    // Every exclusion after !/assets/* is a known root file. Listing it spares
+    // an isolate wake (and the slug lookup behind it) on every crawler hit and
+    // share preview; the price is one rule here and one in public/_headers.
+    // An excluded path can never be a slug, which for these names is fine:
+    // slugs on the shared domain are random, none of them looks like this.
+    "run_worker_first": [
+      "/*",
+      "!/assets/*",
+      "!/og.png",
+      "!/robots.txt",
+      "!/sitemap.xml",
+      "!/llms.txt",
+      "!/llms-full.txt",
+      "!/ai.txt",
+      "!/pricing.md",
+    ],
   },
   // Create the real resources with:
   //   wrangler kv namespace create LINKS

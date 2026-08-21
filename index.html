@@ -3,17 +3,17 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>rdyrct - URL shortener and QR code generator</title>
+    <title>Free URL shortener and QR code generator - rdyrct</title>
     <meta
       name="description"
-      content="Free URL shortener and QR code generator for teams: branded short links, custom QR codes, and privacy-friendly click analytics."
+      content="Free URL shortener and QR code generator for teams: branded short links on your own domain, custom QR codes, and privacy-friendly click analytics."
     />
     <link rel="canonical" href="https://rdyrct.com" />
-    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
-    <meta property="og:title" content="rdyrct - URL shortener and QR code generator" />
+    <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml" />
+    <meta property="og:title" content="Free URL shortener and QR code generator - rdyrct" />
     <meta
       property="og:description"
-      content="Free URL shortener and QR code generator for teams: branded short links, custom QR codes, and privacy-friendly click analytics."
+      content="Free URL shortener and QR code generator for teams: branded short links on your own domain, custom QR codes, and privacy-friendly click analytics."
     />
     <meta property="og:image" content="https://rdyrct.com/og.png" />
     <meta property="og:image:type" content="image/png" />
@@ -29,11 +29,13 @@
          when scripts/og-image.html changes. -->
     <meta name="twitter:image" content="https://rdyrct.com/og.png" />
     <meta name="twitter:image:alt" content="rdyrct - short links that carry your brand" />
-    <meta name="twitter:title" content="rdyrct - URL shortener and QR code generator" />
+    <meta name="twitter:title" content="Free URL shortener and QR code generator - rdyrct" />
     <meta
       name="twitter:description"
-      content="Free URL shortener and QR code generator for teams: branded short links, custom QR codes, and privacy-friendly click analytics."
+      content="Free URL shortener and QR code generator for teams: branded short links on your own domain, custom QR codes, and privacy-friendly click analytics."
     />
+    <!-- The SoftwareApplication offer below mirrors PLAN_PRICES in
+         src/shared/types.ts; Polar sets what is actually charged. -->
     <script type="application/ld+json">
       {
         "@context": "https://schema.org",
@@ -51,15 +53,15 @@
             "@id": "https://rdyrct.com/#website",
             "name": "rdyrct",
             "url": "https://rdyrct.com",
-            "description": "Free URL shortener and QR code generator for teams: branded short links, custom QR codes, and privacy-friendly click analytics.",
+            "description": "Free URL shortener and QR code generator for teams: branded short links on your own domain, custom QR codes, and privacy-friendly click analytics.",
             "publisher": { "@id": "https://rdyrct.com/#organization" }
           },
           {
             "@type": "WebPage",
             "@id": "https://rdyrct.com/#webpage",
-            "name": "rdyrct - URL shortener and QR code generator",
+            "name": "Free URL shortener and QR code generator - rdyrct",
             "url": "https://rdyrct.com",
-            "description": "Free URL shortener and QR code generator for teams: branded short links, custom QR codes, and privacy-friendly click analytics.",
+            "description": "Free URL shortener and QR code generator for teams: branded short links on your own domain, custom QR codes, and privacy-friendly click analytics.",
             "inLanguage": "en",
             "isPartOf": { "@id": "https://rdyrct.com/#website" }
           },
@@ -67,10 +69,16 @@
             "@type": "SoftwareApplication",
             "name": "rdyrct",
             "url": "https://rdyrct.com",
-            "description": "Free URL shortener and QR code generator for teams: branded short links, custom QR codes, and privacy-friendly click analytics.",
+            "description": "Free URL shortener and QR code generator for teams: branded short links on your own domain, custom QR codes, and privacy-friendly click analytics.",
             "applicationCategory": "BusinessApplication",
             "operatingSystem": "Any web browser",
-            "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" }
+            "offers": {
+              "@type": "AggregateOffer",
+              "lowPrice": "0",
+              "highPrice": "9",
+              "priceCurrency": "USD",
+              "offerCount": "3"
+            }
           }
         ]
       }
@@ -106,7 +114,7 @@
       <div
         style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%)"
       >
-        <h1>Know which channel earned the click.</h1>
+        <h1>Short links and QR codes that show which channel earned the click.</h1>
         <p>
           rdyrct is an organization-based URL shortener and QR code generator that runs entirely on
           Cloudflare. Create branded short links on your own domain, generate custom QR codes, and
