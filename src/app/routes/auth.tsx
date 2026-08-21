@@ -445,6 +445,82 @@ async function establishSessionAfterVerify(deps: VerifyDeps): Promise<boolean> {
   return true;
 }
 
+/** The stretch after the code is accepted and a session exists: a beat on the
+ * green checkmark so acceptance registers, then the card fades before the
+ * page changes. Out here because none of it is state, it is a sequence, and
+ * it was the bulk of what made runVerify hard to read. */
+async function finishVerifiedSignIn(deps: {
+  mode: "login" | "signup";
+  next: string;
+  qc: ReturnType<typeof useQueryClient>;
+  navigate: ReturnType<typeof useNavigate>;
+  setVerifyPhase: (phase: "idle" | "success" | "leaving") => void;
+}) {
+  deps.setVerifyPhase("success");
+  await new Promise((resolve) => setTimeout(resolve, 900));
+  clearPending();
+  await deps.qc.refetchQueries({ queryKey: ["user"] });
+  if (deps.mode === "signup") {
+    posthog.capture("user_signed_up");
+    // Funnel step 5b (#64). Only on signup: a sign-in that happens to
+    // re-verify is not someone crossing this step for the first time.
+    posthog.capture(FUNNEL.verificationCompleted);
+  }
+  const isAdmin = deps.qc.getQueryData<CurrentUser | null>(["user"])?.user.isAdmin ?? false;
+  deps.setVerifyPhase("leaving");
+  await new Promise((resolve) => setTimeout(resolve, 300));
+  deps.navigate({ href: sanitizeNext(deps.next, isAdmin), replace: true });
+}
+
+/** The password-reset flow, which shares nothing with the rest of the page
+ * but the view it switches to and the toast it complains through. */
+function useForgotPassword(setView: (view: View) => void, toast: ReturnType<typeof useToast>) {
+  const resetCap = useCap("password-reset");
+  const [forgotBusy, setForgotBusy] = useState(false);
+
+  const submitForgot = async (email: string) => {
+    setForgotBusy(true);
+    try {
+      // Cheap to abuse and it sends mail, which is why #50 needed a
+      // per-recipient cap. Cap prices the attempt instead (#98).
+      const { error: resetError } = await resetCap.guarded((headers) =>
+        authClient.requestPasswordReset({ email, redirectTo: "/reset-password" }, { headers }),
+      );
+      if (resetError) {
+        toast(resetError.message ?? "Something went wrong", "error");
+        return;
+      }
+      posthog.capture("password_reset_requested");
+      setView("forgot-sent");
+    } finally {
+      setForgotBusy(false);
+    }
+  };
+
+  return { forgotBusy, submitForgot };
+}
+
+/** Landing on /login or /signup while already signed in. Only a fallback:
+ * during the OTP success/leaving sequence runVerify owns the redirect, and
+ * this would race ahead of it the moment the `user` query refetch resolves,
+ * skipping the transition entirely. */
+function useRedirectWhenSignedIn(deps: {
+  verifyPhase: "idle" | "success" | "leaving";
+  next: string;
+}) {
+  const { data: user } = useCurrentUser();
+  // Taken here rather than passed in: useNavigate returns the same thing
+  // wherever it is called, and an effect calling a navigate it was handed
+  // reads as a child pushing data back up to its parent.
+  const navigate = useNavigate();
+  const { verifyPhase, next } = deps;
+  useEffect(() => {
+    if (!user || verifyPhase !== "idle") return;
+    clearPending();
+    navigate({ href: sanitizeNext(next, user.user.isAdmin), replace: true });
+  }, [user, navigate, next, verifyPhase]);
+}
+
 /** Login/signup state machine: view transitions, the OTP/password-reset
  * flows, and the post-auth redirect. Everything AuthPage's views need. */
 function useAuthFlow(mode: "login" | "signup") {
@@ -460,9 +536,9 @@ function useAuthFlow(mode: "login" | "signup") {
   const [verifyPhase, setVerifyPhase] = useState<"idle" | "success" | "leaving">("idle");
   const shake = useShake();
   // Two scopes, two tokens: one minted for signup must not be spendable on a
-  // password reset, so Cap binds the scope into the signature.
+  // password reset, so Cap binds the scope into the signature. The reset one
+  // lives in useForgotPassword, which is the only thing that spends it.
   const signupCap = useCap("signup");
-  const resetCap = useCap("password-reset");
 
   const [prevMode, setPrevMode] = useState(mode);
   if (prevMode !== mode) {
@@ -475,8 +551,6 @@ function useAuthFlow(mode: "login" | "signup") {
     shake.start();
   };
 
-  const [forgotBusy, setForgotBusy] = useState(false);
-
   const [resent, setResent] = useState(false);
 
   // RequireAuth bounces a signed-out visitor to /login?next=<path>, so the
@@ -484,17 +558,8 @@ function useAuthFlow(mode: "login" | "signup") {
   const rawNext = readPending()?.next ?? params.get("next") ?? "/dashboard";
   const next = rawNext.startsWith("/") && !rawNext.startsWith("//") ? rawNext : "/dashboard";
 
-  const { data: user } = useCurrentUser();
-  useEffect(() => {
-    // Only a fallback for landing on /login or /signup while already
-    // signed in. During the OTP success/leaving sequence, runVerify's own
-    // navigate (after its checkmark + fade delay) owns the redirect —
-    // this would otherwise race ahead of it the moment the `user` query
-    // refetch resolves, skipping the transition entirely.
-    if (!user || verifyPhase !== "idle") return;
-    clearPending();
-    navigate({ href: sanitizeNext(next, user.user.isAdmin), replace: true });
-  }, [user, navigate, next, verifyPhase]);
+  const { forgotBusy, submitForgot } = useForgotPassword(setView, toast);
+  useRedirectWhenSignedIn({ verifyPhase, next });
 
   const goVerify = async (email: string) => {
     const { error } = await authClient.emailOtp.sendVerificationOtp({
@@ -568,23 +633,7 @@ function useAuthFlow(mode: "login" | "signup") {
         toast,
       });
       if (!established) return false;
-      // Show a green checkmark on the button for a beat so the code getting
-      // accepted actually registers, then fade the whole card out before
-      // leaving instead of cutting straight to the dashboard.
-      setVerifyPhase("success");
-      await new Promise((resolve) => setTimeout(resolve, 900));
-      clearPending();
-      await qc.refetchQueries({ queryKey: ["user"] });
-      if (mode === "signup") {
-        posthog.capture("user_signed_up");
-        // Funnel step 5b (#64). Only on signup: a sign-in that happens to
-        // re-verify is not someone crossing this step for the first time.
-        posthog.capture(FUNNEL.verificationCompleted);
-      }
-      const isAdmin = qc.getQueryData<CurrentUser | null>(["user"])?.user.isAdmin ?? false;
-      setVerifyPhase("leaving");
-      await new Promise((resolve) => setTimeout(resolve, 300));
-      navigate({ href: sanitizeNext(next, isAdmin), replace: true });
+      await finishVerifiedSignIn({ mode, next, qc, navigate, setVerifyPhase });
       return true;
     } finally {
       setBusy(false);
@@ -603,25 +652,6 @@ function useAuthFlow(mode: "login" | "signup") {
     }
     posthog.capture(FUNNEL.verificationSent, { resend: true });
     setResent(true);
-  };
-
-  const submitForgot = async (email: string) => {
-    setForgotBusy(true);
-    try {
-      // Cheap to abuse and it sends mail, which is why #50 needed a
-      // per-recipient cap. Cap prices the attempt instead (#98).
-      const { error: resetError } = await resetCap.guarded((headers) =>
-        authClient.requestPasswordReset({ email, redirectTo: "/reset-password" }, { headers }),
-      );
-      if (resetError) {
-        toast(resetError.message ?? "Something went wrong", "error");
-        return;
-      }
-      posthog.capture("password_reset_requested");
-      setView("forgot-sent");
-    } finally {
-      setForgotBusy(false);
-    }
   };
 
   return {
