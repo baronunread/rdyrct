@@ -62,6 +62,39 @@ test("robots.txt declares both sitemaps", async ({ request }) => {
   expect(robots).toContain("Sitemap: https://rdyrct.com/blog/sitemap-index.xml");
 });
 
+// What the live site serves is two sources merged: Cloudflare puts a managed
+// block above whatever the origin returns, carrying the content signals and
+// the AI training crawlers it refuses by name. This suite runs against a local
+// preview of the built worker, so it sees the origin half only. That half is
+// the part this repo owns and the part a bad edit here would break: the paths
+// that want no search traffic.
+//
+// The managed half is a switch in the Cloudflare dashboard with nothing in git
+// behind it. Checking it needs a request to the real hostname, which no suite
+// here makes.
+test("robots.txt keeps the private routes out of the index", async ({ request }) => {
+  const robots = await (await request.get("/robots.txt")).text();
+
+  // Every one of them, not a sample: a regression that drops a single line
+  // is exactly what this is here to catch.
+  for (const path of [
+    "/api/",
+    "/dashboard",
+    "/analytics",
+    "/links",
+    "/members",
+    "/billing",
+    "/domains",
+    "/settings",
+    "/admin",
+    "/onboarding",
+    "/reset-password",
+    "/invite/",
+  ]) {
+    expect(robots).toContain(`Disallow: ${path}`);
+  }
+});
+
 test("a slug that resolves to nothing answers 404", async ({ request }) => {
   // Served under a 200 this is a soft 404: the shell's canonical points at the
   // landing page, so every mistyped or expired short link asked to be indexed
