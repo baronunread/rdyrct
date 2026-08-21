@@ -75,7 +75,33 @@
         ]
       }
     </script>
-    <script src="/theme-init.js"></script>
+    <!--
+      Theme before paint. Inline, not a file: fetched it was one more round
+      trip in front of the first paint, and an SEO scan was right that a
+      blocking script in the head is what delays it. Deferring is not an
+      option here: the whole job is to run before anything paints.
+
+      script-src has no 'unsafe-inline'. This runs because its sha256 is
+      named in the policy, in src/worker/security-headers.ts and again in
+      public/_headers. Edit a byte of it, including whitespace a formatter
+      moves, and the hash stops matching and the browser refuses it: a flash
+      of the wrong theme, in production only. tests/theme-init.test.ts
+      recomputes the hash from this element and fails when either copy has
+      drifted, so that never ships quietly.
+
+      A stored choice always wins. With nothing stored we follow the
+      operating system, and fall back to light: the marketing page is most
+      people's first screen, and dark-first turns away more of them than it
+      wins.
+    -->
+    <script>
+      (function () {
+        const stored = localStorage.getItem("theme");
+        const os = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+        document.documentElement.dataset.theme =
+          stored === "light" || stored === "dark" ? stored : os;
+      })();
+    </script>
   </head>
   <body>
     <div id="root">

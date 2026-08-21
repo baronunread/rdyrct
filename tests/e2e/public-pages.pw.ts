@@ -354,7 +354,7 @@ test("legal pages retain their baseline headings", async ({ page }) => {
 
 // A first-time visitor on a light operating system must land on light. The
 // toggle then has to flip the page and survive a reload, which is the part
-// that breaks if theme-init.js and lib/theme.ts disagree on the default.
+// that breaks if the inline bootstrap and lib/theme.ts disagree on the default.
 test("landing page opens light and the toggle switches and sticks", async ({ browser }) => {
   const context = await browser.newContext({ colorScheme: "light" });
   const page = await context.newPage();

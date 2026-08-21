@@ -90,7 +90,7 @@ test("every file under /assets/ is content-hashed", async ({ request }) => {
 // immutable. Correct as a default, wrong for these: every visit paid a
 // conditional request per file to be told nothing had changed.
 test("the unhashed static files at the root are cached for an hour", async ({ request }) => {
-  for (const path of ["/og.png", "/favicon.svg", "/theme-init.js", "/robots.txt"]) {
+  for (const path of ["/og.png", "/favicon.svg", "/llms.txt", "/robots.txt"]) {
     const res = await request.get(path);
     expect(res.status(), path).toBe(200);
     expect(res.headers()["cache-control"], path).toBe("public, max-age=3600, must-revalidate");

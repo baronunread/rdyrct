@@ -5,7 +5,7 @@
 /* Theme tokens: paper / dark pastel pair                            */
 /*                                                                   */
 /* Light is the base, dark is the override, so a page that renders    */
-/* before theme-init.js runs (or without it) lands on light.          */
+/* before the inline theme bootstrap runs (or without it) is light.   */
 /* ---------------------------------------------------------------- */
 
 :root {

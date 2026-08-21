@@ -134,7 +134,7 @@ test("the second visit to a dead slug still renders the page", async ({ request 
 
 test("a file the bundle serves at the root still answers 200", async ({ request }) => {
   // These reach the slug handler by the same door as a dead link: one segment,
-  // not a reserved keyword. 404ing them took /theme-init.js down with the
+  // not a reserved keyword. 404ing them took /favicon.svg down with the
   // rest, so every page rendered a flash of the wrong theme, and the browser
   // suite is the only place that could see it — the worker tests stub ASSETS,
   // so everything there is the SPA shell and this looks fine.
@@ -145,7 +145,6 @@ test("a file the bundle serves at the root still answers 200", async ({ request 
   // status-only check while serving the wrong bytes.
   const assets = [
     ["/favicon.svg", "image/svg+xml"],
-    ["/theme-init.js", "javascript"],
     ["/og.png", "image/png"],
     ["/llms.txt", "text/plain"],
   ];

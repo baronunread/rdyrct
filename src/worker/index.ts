@@ -230,7 +230,7 @@ app.all("/api/*", (c) => c.json({ message: "Not found" }, 404));
 // way; the status is what a crawler reads.
 //
 // Only the shell can carry it. The bundle serves files at the root too
-// (/favicon.svg, /theme-init.js, /og.png), and those are single-segment
+// (/favicon.svg, /og.png, /llms.txt), and those are single-segment
 // paths that reach here by the same door as a dead slug: they arrive as
 // themselves, not as HTML, and 404ing them took the theme bootstrap down
 // with them.
