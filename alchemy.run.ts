@@ -70,7 +70,20 @@ export default Alchemy.Stack(
     const clicksDlq = yield* Cloudflare.Queues.Queue("clicks-dlq");
 
     const worker = yield* Cloudflare.Worker("api", {
-      main: "src/worker/index.ts",
+      // The Vite build's output, not the TypeScript entry: Alchemy bundles
+      // `main` with rolldown, and its `build` option exposes only rolldown's
+      // output options, so there is no way to hand it the two resolve aliases
+      // this repo needs. Without them the bundle fails on `@/shared/types` and
+      // drags in the 5 MB javascript-obfuscator chunk that
+      // cap-unused-dep-stub.ts exists to keep out (see vite.config.ts).
+      //
+      // `bundle: false` uploads dist/rdyrct/index.js and its sibling chunks
+      // byte-for-byte instead, which is also the build the production Worker
+      // runs, so a stage and production execute the same output. The default
+      // module rules cover the `assets/*.js` chunks and skip the wrangler.json
+      // and .dev.vars that Vite writes next to them.
+      main: "dist/rdyrct/index.js",
+      bundle: false,
       compatibility: { date: "2026-01-01", flags: ["nodejs_compat"] },
       crons: ["0 6 * * *"],
       workersDev: true,
