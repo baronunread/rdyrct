@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { expect, test, type Page } from "@playwright/test";
 import { signUpAndVerify } from "./resend";
+import { boxOf } from "./pages";
 
 declare global {
   interface Window {
@@ -102,14 +103,14 @@ test("generates a QR code with no account and no network call", async ({ page })
   // anything to download, so the row cannot appear on the first keystroke and
   // shove the page down. It used to cost 43px of shift.
   await expect(page.getByRole("button", { name: /PNG/ })).toBeDisabled();
-  const settled = await upsell.boundingBox();
+  const settled = await boxOf(upsell);
 
   await page.getByLabel("Link or text").fill("https://example.com/printed-poster");
 
   await expect(code.locator("svg")).toBeVisible({ timeout: 10_000 });
   await expect(page.getByRole("button", { name: /PNG/ })).toBeEnabled();
   await expect(page.getByRole("button", { name: /SVG/ })).toBeEnabled();
-  expect((await upsell.boundingBox())?.y).toBe(settled?.y);
+  expect((await boxOf(upsell)).y).toBe(settled.y);
 
   expect(appPosts(posted)).toEqual([]);
 });
