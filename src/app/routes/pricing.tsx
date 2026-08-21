@@ -12,42 +12,20 @@
  * homepage trust signal and a GitHub link in the footer below, same as Dub
  * and Cal.com.
  */
-import { LazyMotion, MotionConfig, domAnimation } from "motion/react";
-import { useSeo } from "../lib/seo";
-import { useMarketingScroll } from "../lib/marketing-scroll";
-import { useAudience } from "../lib/audience";
-import { LandingHeader } from "../components/landing-header";
-import { Footer } from "../ui/footer";
+import { MarketingPage } from "../components/marketing-page";
 import { PricingSection } from "./landing";
 
 // main.tsx names this export as a string, for lazyRouteComponent, which
 // static analysis can't follow.
 // fallow-ignore-next-line unused-export
 export function PricingPage() {
-  const { authed } = useAudience();
-  useSeo("/pricing");
-  useMarketingScroll();
-
   return (
-    <MotionConfig reducedMotion="user">
-      <LazyMotion features={domAnimation}>
-        <div className="relative mx-auto min-h-dvh max-w-5xl px-6">
-          <LandingHeader authed={authed} />
-
-          <div className="pt-14 pb-2 text-center sm:pt-20">
-            <h1 className="text-3xl font-bold tracking-tight text-balance sm:text-4xl">
-              Simple pricing, start free
-            </h1>
-            <p className="mx-auto mt-3 max-w-xl text-sm text-muted sm:text-base">
-              Upgrade when your links outgrow the plan. No credit card required to start.
-            </p>
-          </div>
-
-          <PricingSection />
-
-          <Footer />
-        </div>
-      </LazyMotion>
-    </MotionConfig>
+    <MarketingPage
+      path="/pricing"
+      title="Simple pricing, start free"
+      intro="Upgrade when your links outgrow the plan. No credit card required to start."
+    >
+      <PricingSection />
+    </MarketingPage>
   );
 }
