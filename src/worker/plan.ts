@@ -66,10 +66,20 @@ export async function createOwnedOrg(
  * person rather than a row two requests can both read first (#154).
  *
  * The delete matches on the membership this call just wrote (org, user and
- * the exact `created_at` it was given), never on the token alone. That is
- * what keeps the two cases the insert refuses from spending the invite: an
- * org that filled up leaves the token usable once a seat frees, and a member
- * who opens somebody else's link does not burn it on their way to a 409.
+ * the exact `created_at` it was given) rather than on the token alone. That
+ * is what keeps the two cases the insert refuses from spending the invite:
+ * an org that filled up leaves the token usable once a seat frees, and a
+ * member who opens somebody else's link does not burn it on their way to a
+ * 409.
+ *
+ * `created_at` stands in for "the row this call inserted" because
+ * `(org_id, user_id)` is the primary key, so there is only ever one row to
+ * confuse it with: the caller's own earlier membership, and only if they
+ * joined in the very millisecond this request is using. Reaching that means
+ * one user accepting two different tokens for one org inside the same
+ * millisecond, which spends the second token as well as the first. The cost
+ * is an unused invite the admin re-issues, so it is left alone rather than
+ * traded for a marker column on every membership row.
  */
 export async function acceptInviteAtomically(
   env: Env,

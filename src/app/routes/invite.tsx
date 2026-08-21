@@ -2,7 +2,7 @@ import { useNavigate, useParams } from "@tanstack/react-router";
 import { HrefLink } from "../lib/router-search";
 import { errorMessage } from "@/app/lib/error-message";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { api } from "../lib/api";
+import { api, ApiError } from "../lib/api";
 import type { InvitePreview } from "@/shared/types";
 import { useCurrentUser } from "../lib/hooks";
 import { useCurrentOrg } from "../lib/current-org";
@@ -94,6 +94,11 @@ export function InvitePage() {
       navigate({ to: "/dashboard" });
     } catch (e) {
       toast(errorMessage(e), "error");
+      // A 404 here means the link is spent or revoked, and the card is still
+      // offering to accept it. Re-asking flips it to the dead-invite screen,
+      // so a second click cannot just repeat the toast.
+      if (e instanceof ApiError && e.status === 404)
+        await qc.invalidateQueries({ queryKey: ["invite", token] });
     }
   };
 

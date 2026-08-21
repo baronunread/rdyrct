@@ -88,13 +88,20 @@ test("a single-use invite link admits one person, not everybody who has it", asy
 }) => {
   const { token } = await ownerWithInviteLink(page, "single");
 
+  // Both open the live link before either accepts, so the second one is
+  // holding a card that has already gone stale by the time they click.
   const first = await guestAccount(browser, "first");
+  const second = await guestAccount(browser, "second");
   await first.page.goto(`/invite/${token}`);
+  await second.page.goto(`/invite/${token}`);
+  await expect(second.page.getByRole("button", { name: "Accept invite" })).toBeVisible();
+
   await first.page.getByRole("button", { name: "Accept invite" }).click();
   await expect(first.page).toHaveURL(/\/dashboard$/);
 
-  const second = await guestAccount(browser, "second");
-  await second.page.goto(`/invite/${token}`);
+  await second.page.getByRole("button", { name: "Accept invite" }).click();
+  await expect(second.page.getByText("Invite not found or expired")).toBeVisible();
+  // And the card stops offering a button that cannot work.
   await expect(second.page.getByText("This invite is invalid or has expired.")).toBeVisible();
 
   await first.context.close();
