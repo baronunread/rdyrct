@@ -9,9 +9,15 @@
 # wrong response can survive; must-revalidate stops a cache from serving it
 # stale past that, so it self-heals with no manual purge needed. A year
 # would have pinned it until someone noticed.
+#
+# No sha256 for index.html's inline theme script here, unlike the Worker's
+# copy of this policy. Nothing under /assets/ is ever a document: the SPA
+# shell served for a deleted chunk is fetched as a script, so the browser
+# parses no HTML and runs nothing inline. Adding the hash would mean keeping
+# it in step in two files to change nothing.
 /assets/*
   Cache-Control: public, max-age=86400, immutable, must-revalidate
-  Content-Security-Policy: default-src 'self'; script-src 'self' 'sha256-TNM/fq1Z4NFEZtsFlN0od8OC66zTGO+lKXWuYpFqhdg=' 'wasm-unsafe-eval' https://*.posthog.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://*.posthog.com; font-src 'self'; worker-src 'self' blob:; connect-src 'self' https://*.posthog.com; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'
+  Content-Security-Policy: default-src 'self'; script-src 'self' 'wasm-unsafe-eval' https://*.posthog.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://*.posthog.com; font-src 'self'; worker-src 'self' blob:; connect-src 'self' https://*.posthog.com; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'
   X-Content-Type-Options: nosniff
   Referrer-Policy: strict-origin-when-cross-origin
   Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=(), usb=()

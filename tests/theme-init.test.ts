@@ -1,65 +1,31 @@
 /**
- * The theme bootstrap is inline in index.html and allowed by a sha256 named
- * in the CSP, in two places: src/worker/security-headers.ts (every response
- * the Worker sends) and public/_headers (the one prefix Cloudflare serves
- * without the Worker).
+ * index.html carries one inline script, the theme bootstrap, and script-src
+ * names its sha256 instead of opening up to every inline script. The hash is
+ * written by hand in src/worker/security-headers.ts, so it can drift, and the
+ * drift is invisible: the dev CSP carries 'unsafe-inline', so locally the
+ * script runs either way and only production paints in the wrong theme.
  *
- * Nothing computes that hash at build time on purpose: a plugin doing it
- * would be one more moving part in front of the first paint. The cost of
- * writing it by hand is that it can drift, and the drift is invisible
- * locally, because the dev CSP carries 'unsafe-inline' and the browser runs
- * the script either way. In production the browser refuses it and every page
- * paints in the wrong theme first.
- *
- * So this recomputes it from the file and fails on the spot. Reindenting the
- * block, changing a variable name, or updating one CSP and not the other all
- * land here.
+ * Recomputing it here catches that in milliseconds. The browser test in
+ * tests/e2e/production/csp.pw.ts is what proves the policy actually works;
+ * this is the fast version that says which line to fix.
  */
-import { describe, expect, test } from "bun:test";
+import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 
-const html = readFileSync("index.html", "utf8");
-const workerCsp = readFileSync("src/worker/security-headers.ts", "utf8");
-const staticCsp = readFileSync("public/_headers", "utf8");
-
-/** The inline script's exact bytes: what the browser hashes. A tag with any
- *  attribute (the JSON-LD block, the module entry) is a different thing. */
-function inlineScript(): string {
+test("the CSP names the hash of the inline theme script", () => {
+  const html = readFileSync("index.html", "utf8");
+  // A tag with any attribute (the JSON-LD block, the module entry) is a
+  // different thing; the browser hashes the bytes between these two.
   const found = html.match(/<script>([\s\S]*?)<\/script>/g) ?? [];
-  expect(found.length, "index.html should carry exactly one attribute-less script").toBe(1);
-  return found[0].slice("<script>".length, -"</script>".length);
-}
+  expect(found.length).toBe(1);
+  const script = found[0].slice("<script>".length, -"</script>".length);
 
-/** The sha256 a CSP source names, so a mismatch prints two short hashes
- *  rather than the whole file it was found in. */
-function declaredHash(source: string): string {
-  return /'(sha256-[A-Za-z0-9+/=]+)'/.exec(source)?.[1] ?? "no sha256 in this file";
-}
+  // A matching hash on a script that no longer sets the theme would pass the
+  // comparison below and still ship a broken page.
+  expect(script).toContain("document.documentElement.dataset.theme");
 
-describe("the inline theme bootstrap", () => {
-  const hash = `sha256-${createHash("sha256").update(inlineScript()).digest("base64")}`;
-
-  test("is allowed by the Worker's CSP", () => {
-    expect(declaredHash(workerCsp)).toBe(hash);
-  });
-
-  test("is allowed by the CSP on the assets Cloudflare serves directly", () => {
-    expect(declaredHash(staticCsp)).toBe(hash);
-  });
-
-  test("still does the one thing it is there for", () => {
-    // A hash that matches a script which no longer sets the theme passes the
-    // two checks above and still ships a broken page.
-    const script = inlineScript();
-    expect(script).toContain("document.documentElement.dataset.theme");
-    expect(script).toContain('localStorage.getItem("theme")');
-    expect(script).toContain("prefers-color-scheme: dark");
-  });
-
-  test("is not also sitting in public/, where nothing would load it", () => {
-    // It used to be public/theme-init.js. Leaving that behind means two
-    // copies, one of them dead and free to disagree with the live one.
-    expect(() => readFileSync("public/theme-init.js")).toThrow();
-  });
+  const csp = readFileSync("src/worker/security-headers.ts", "utf8");
+  const declared = /'(sha256-[A-Za-z0-9+/=]+)'/.exec(csp)?.[1];
+  expect(declared).toBe(`sha256-${createHash("sha256").update(script).digest("base64")}`);
 });

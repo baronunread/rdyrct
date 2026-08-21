@@ -34,7 +34,13 @@ const POSTHOG = "https://*.posthog.com";
  * formatter reindenting that block is enough to break it, and the failure is
  * silent and production-only: the browser refuses the script and the page
  * paints in the wrong theme first. tests/theme-init.test.ts recomputes it
- * from index.html and fails when this or public/_headers has drifted.
+ * from index.html and fails when the two have drifted.
+ *
+ * Written by hand rather than computed by a build plugin. Plugins for this
+ * exist (vite-plugin-csp-guard and friends), but they want to own the policy
+ * and emit it as a meta tag or a headers file, and this app's CSP is set by
+ * the Worker on every response, API and redirects included. Adopting one to
+ * avoid retyping 44 characters would move the whole policy to fit the tool.
  */
 const THEME_INIT_HASH = "'sha256-TNM/fq1Z4NFEZtsFlN0od8OC66zTGO+lKXWuYpFqhdg='";
 
