@@ -14,16 +14,19 @@
  */
 import { LazyMotion, MotionConfig, domAnimation } from "motion/react";
 import { useSeo } from "../lib/seo";
-import { useScrollToHash } from "../lib/scroll-to-hash";
+import { useMarketingScroll } from "../lib/marketing-scroll";
 import { useAudience } from "../lib/audience";
 import { LandingHeader } from "../components/landing-header";
 import { Footer } from "../ui/footer";
 import { PricingSection } from "./landing";
 
+// main.tsx names this export as a string, for lazyRouteComponent, which
+// static analysis can't follow.
+// fallow-ignore-next-line unused-export
 export function PricingPage() {
   const { authed } = useAudience();
   useSeo("/pricing");
-  useScrollToHash();
+  useMarketingScroll();
 
   return (
     <MotionConfig reducedMotion="user">

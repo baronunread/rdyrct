@@ -2,13 +2,16 @@
 import { SUPPORT_EMAIL } from "../ui/footer";
 import { LegalPageLayout } from "../components/legal-page-layout";
 import { useSeo } from "../lib/seo";
-import { useScrollToHash } from "../lib/scroll-to-hash";
+import { useMarketingScroll } from "../lib/marketing-scroll";
 import { useAudience } from "../lib/audience";
 
+// main.tsx names this export as a string, for lazyRouteComponent, which
+// static analysis can't follow.
+// fallow-ignore-next-line unused-export
 export function PrivacyPage() {
   const { authed } = useAudience();
   useSeo("/privacy");
-  useScrollToHash();
+  useMarketingScroll();
   return (
     <LegalPageLayout authed={authed}>
       <div>
