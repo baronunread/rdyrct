@@ -38,6 +38,7 @@ import type {
   LinkInput,
   OrgPlan,
   PlanLimits,
+  QrOverrides,
   QuotaUsage,
   TopEntry,
 } from "@/shared/types";
@@ -198,17 +199,29 @@ async function assertAliasQuota(db: DB, linkId: string): Promise<void> {
     });
 }
 
-/** True when the body carries any QR appearance override (a paid feature). */
-function hasQrOverride(body: LinkInput): boolean {
-  return !!(
-    body.qrLogo ||
-    body.qrStyle ||
-    body.qrColor ||
-    body.qrCorner ||
-    body.qrBg ||
-    body.qrEyeColor ||
-    body.qrLogoSize != null
-  );
+const QR_FIELDS = ["qrLogo", "qrStyle", "qrColor", "qrCorner", "qrBg", "qrEyeColor"] as const;
+
+/**
+ * True when the body would *set* a QR appearance field to something other
+ * than what is already stored (#162).
+ *
+ * Not "carries QR fields": the editor loads a link's styling and sends it
+ * back with every save, so a plain title edit on a downgraded org's link
+ * arrives carrying the same logo and colours it has always had. Refusing
+ * that used to leave the client only one way out, which was to wipe the
+ * fields — so fixing a typo destroyed styling somebody paid for.
+ *
+ * Clearing is always allowed. Giving up a paid look needs no plan, and an
+ * owner who wants their downgraded link plain should not have to upgrade to
+ * say so.
+ */
+function changesQr(body: LinkInput, existing: Partial<QrOverrides> | null): boolean {
+  for (const field of QR_FIELDS) {
+    const next = body[field];
+    if (!next) continue;
+    if (next !== (existing?.[field] ?? "")) return true;
+  }
+  return body.qrLogoSize != null && body.qrLogoSize !== (existing?.qrLogoSize ?? null);
 }
 
 /** Fetch a link inside an org or 404. */
@@ -464,10 +477,17 @@ async function domainHostname(
 ): Promise<string | null> {
   if (!domainId) return null;
   const rows = await db
-    .select({ hostname: schema.domains.hostname })
+    .select({ hostname: schema.domains.hostname, lockedAt: schema.domains.lockedAt })
     .from(schema.domains)
     .where(and(eq(schema.domains.id, domainId), eq(schema.domains.orgId, orgId)));
   if (!rows[0]) throw new HTTPException(400, { message: "Unknown domain for this org" });
+  // A locked domain stops serving when the org's grace period ends (#159), so
+  // it takes no new links: one that landed here would die on a known date.
+  if (rows[0].lockedAt !== null)
+    throw new HTTPException(402, {
+      message: "That domain is locked: upgrade to use it again",
+      cause: { code: "domain_locked" },
+    });
   return rows[0].hostname;
 }
 
@@ -481,10 +501,15 @@ function assertLinkQuota(count: number, plan: OrgPlan, limits: PlanLimits): void
     });
 }
 
-function assertQrAllowed(body: LinkInput, limits: PlanLimits): void {
-  if (hasQrOverride(body) && !limits.qrCustom)
+function assertQrAllowed(
+  body: LinkInput,
+  limits: PlanLimits,
+  existing: Partial<QrOverrides> | null,
+): void {
+  if (changesQr(body, existing) && !limits.qrCustom)
     throw new HTTPException(402, {
-      message: "QR customization is a paid feature: upgrade to use it",
+      message: "Changing the QR code's look is a paid feature: upgrade to use it",
+      cause: { code: "qr_locked" },
     });
 }
 
@@ -740,7 +765,7 @@ linkRoutes.post("/", requireOrgRole("member"), async (c) => {
     orgPlan(db, orgId),
     countActiveAddresses(db, orgId),
   ]);
-  assertQrAllowed(body, limits);
+  assertQrAllowed(body, limits, null);
 
   const domainId = body.domainId ?? null;
   // Slugs on the shared domain are always random (every plan): chosen slugs
@@ -906,8 +931,10 @@ linkRoutes.patch("/:linkId", requireOrgRole("member"), async (c) => {
   validateInput(body, orgId, true);
   const db = c.var.db;
   const { limits } = await orgPlan(db, orgId);
-  assertQrAllowed(body, limits);
   const existing = await findLink(db, orgId, c.req.param("linkId")!);
+  // After the row is read: what the plan gates is a *change* to the styling,
+  // not the styling arriving back unchanged with an edit to some other field.
+  assertQrAllowed(body, limits, existing);
 
   const domainId = body.domainId !== undefined ? body.domainId : existing.domainId;
   // A link's domain is fixed after creation (see `#38`): its aliases are

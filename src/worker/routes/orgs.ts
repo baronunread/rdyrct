@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import * as v from "valibot";
 import type { JsonValue } from "../../shared/types";
 import { HTTPException } from "hono/http-exception";
-import { eq, and, gte, desc, sql, isNull } from "drizzle-orm";
+import { eq, and, gte, desc, ne, sql, isNull } from "drizzle-orm";
 import * as schema from "../db/schema";
 import type { AppEnv, DB, Env } from "../env";
 import { requireUser } from "../guards";
@@ -15,6 +15,7 @@ import { uid, referrerHost, validateQrFields } from "../util";
 import { jsonBodyLimit } from "../body-limit";
 import { parseBody, inviteBodySchema } from "../schemas";
 import type {
+  UserOrg,
   MemberDTO,
   InviteDTO,
   OrgStats,
@@ -23,6 +24,7 @@ import type {
   InvitePreview,
   RecentClick,
 } from "@/shared/types";
+import { INVITABLE_ROLES } from "@/shared/types";
 
 export const orgRoutes = new Hono<AppEnv>();
 orgRoutes.use("*", jsonBodyLimit());
@@ -64,10 +66,54 @@ orgRoutes.post("/", requireUser, async (c) => {
       qrBg: "",
       qrEyeColor: "",
       qrLogoSize: null,
-    },
+      defaultDomainId: null,
+      locked: false,
+      over: {},
+      graceEndsAt: null,
+    } satisfies UserOrg,
     201,
   );
 });
+
+/**
+ * Keeps this org active, and locks whichever other one has to give way (#160).
+ *
+ * The owner is over their `orgs` cap and picks which one keeps working. The
+ * pick is reversible: calling this on the other org swaps them back. Runs on
+ * a locked org, which is the whole point, so it opts out of the lock guard.
+ */
+orgRoutes.post(
+  "/:orgId/keep-active",
+  requireOrgRole("owner", { allowWhileLocked: true }),
+  async (c) => {
+    const db = c.var.db;
+    const orgId = c.req.param("orgId");
+    const userId = c.var.user!.id;
+    const { limits } = await userPlan(db, userId);
+    const now = Date.now();
+
+    await db.update(schema.orgs).set({ lockedAt: null }).where(eq(schema.orgs.id, orgId));
+    // Now one too many are active, so the newest of the *others* gives way.
+    // Newest first, and never this one, which is what makes the pick stick
+    // where reconciliation's by-age default would have overruled it.
+    const active = await db
+      .select({ id: schema.orgs.id })
+      .from(schema.orgMembers)
+      .innerJoin(schema.orgs, eq(schema.orgMembers.orgId, schema.orgs.id))
+      .where(
+        and(
+          eq(schema.orgMembers.userId, userId),
+          eq(schema.orgMembers.role, "owner"),
+          isNull(schema.orgs.lockedAt),
+        ),
+      )
+      .orderBy(desc(schema.orgs.createdAt), desc(schema.orgs.id));
+    const surplus = active.length - limits.orgs;
+    for (const org of active.filter((o) => o.id !== orgId).slice(0, Math.max(0, surplus)))
+      await db.update(schema.orgs).set({ lockedAt: now }).where(eq(schema.orgs.id, org.id));
+    return c.json({ ok: true });
+  },
+);
 
 type OrgQrPatchBody = {
   qrLogo?: string;
@@ -160,10 +206,17 @@ async function resolveDefaultDomain(
 ): Promise<string | null> {
   if (domainId === null) return null;
   const rows = await db
-    .select({ status: schema.domains.status })
+    .select({ status: schema.domains.status, lockedAt: schema.domains.lockedAt })
     .from(schema.domains)
     .where(and(eq(schema.domains.id, domainId), eq(schema.domains.orgId, orgId)));
   if (!rows.length) throw new HTTPException(404, { message: "Unknown domain" });
+  // A locked domain stops serving when the grace period ends, so pointing new
+  // links at it would build a backlog of links that die on a known date (#159).
+  if (rows[0].lockedAt !== null)
+    throw new HTTPException(402, {
+      message: "That domain is locked: upgrade to use it again",
+      cause: { code: "domain_locked" },
+    });
   if (rows[0].status !== "active")
     throw new HTTPException(400, {
       message: "That domain is not serving yet, so it cannot be the default",
@@ -243,10 +296,16 @@ export async function deleteOrg(db: DB, env: Env, orgId: string): Promise<void> 
   }
 }
 
-orgRoutes.delete("/:orgId", requireOrgRole("owner", { allowWhileDeleting: true }), async (c) => {
-  await deleteOrg(c.var.db, c.env, c.req.param("orgId"));
-  return c.json({ ok: true });
-});
+// A locked org can still be deleted: deleting it is one of the two ways out
+// of the lock, and refusing would trap the owner.
+orgRoutes.delete(
+  "/:orgId",
+  requireOrgRole("owner", { allowWhileDeleting: true, allowWhileLocked: true }),
+  async (c) => {
+    await deleteOrg(c.var.db, c.env, c.req.param("orgId"));
+    return c.json({ ok: true });
+  },
+);
 
 /* ---------------- members ---------------- */
 
@@ -265,18 +324,52 @@ orgRoutes.get("/:orgId/members", requireOrgRole("viewer"), async (c) => {
   return c.json(rows satisfies MemberDTO[]);
 });
 
+/**
+ * How many of an org's members may write: everyone who is not a viewer.
+ *
+ * The member cap counts people in the org, viewers included, so a downgraded
+ * org stays over it however many are demoted. What the cap does bound is who
+ * may change anything, which is what the owner re-picks after a downgrade
+ * (#161).
+ */
+async function writingMembers(db: DB, orgId: string): Promise<number> {
+  const rows = await db
+    .select({ n: sql<number>`count(*)` })
+    .from(schema.orgMembers)
+    .where(and(eq(schema.orgMembers.orgId, orgId), ne(schema.orgMembers.role, "viewer")));
+  return rows[0]?.n ?? 0;
+}
+
 orgRoutes.patch("/:orgId/members/:userId", requireOrgRole("admin"), async (c) => {
-  const body = await c.req.json<{ role?: "admin" | "member" }>();
-  if (body.role !== "admin" && body.role !== "member")
-    throw new HTTPException(400, { message: "Role must be admin or member" });
+  const body = await c.req.json<{ role?: string }>();
+  const role = INVITABLE_ROLES.find((r) => r === body.role);
+  if (!role) throw new HTTPException(400, { message: "Role must be admin, member or viewer" });
   const { orgId, targetId } = await resolveMember(
     c.var.db,
     c.req.param("orgId"),
     c.req.param("userId"),
   );
+  const [current] = await c.var.db
+    .select({ role: schema.orgMembers.role })
+    .from(schema.orgMembers)
+    .where(memberWhere(orgId, targetId));
+  // Handing write access to somebody in an org that is already over its
+  // member cap has to take it from somebody else first, or the cap means
+  // nothing after a downgrade. Demoting is always allowed, which is what
+  // makes the swap possible.
+  if (role !== "viewer" && current?.role === "viewer") {
+    const { limits } = await orgPlan(c.var.db, orgId);
+    if ((await writingMembers(c.var.db, orgId)) >= limits.members)
+      throw new HTTPException(402, {
+        message: `This plan allows ${limits.members} members who can make changes: set someone else to viewer first`,
+        cause: { code: "member_limit" },
+      });
+  }
   await c.var.db
     .update(schema.orgMembers)
-    .set({ role: body.role })
+    // The role an admin sets by hand is the current one, so a later upgrade
+    // has nothing of its own to restore over it (#161).
+    .set({ role, previousRole: null })
     .where(memberWhere(orgId, targetId));
   return c.json({ ok: true });
 });

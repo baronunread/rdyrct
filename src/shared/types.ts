@@ -86,6 +86,36 @@ export const PLAN_LIMITS = {
   },
 } satisfies Record<OrgPlan, PlanLimits>;
 
+/**
+ * How long a downgraded org's custom domains keep serving (#159).
+ *
+ * Stopping a custom domain breaks every link on it, including QR codes
+ * already printed on physical things. Thirty days and two emails is what
+ * turns that into something the owner was warned about twice.
+ */
+export const GRACE_PERIOD_MS = 30 * 24 * 60 * 60 * 1000;
+
+/** How long before the grace ends the second email goes out: day 23 of 30. */
+export const GRACE_WARNING_MS = 7 * 24 * 60 * 60 * 1000;
+
+/**
+ * The live count of each resource an org holds more of than its plan allows.
+ * A key is absent when that resource is inside its cap, so `{}` means fine.
+ */
+export interface OverLimits {
+  links?: number;
+  members?: number;
+  domains?: number;
+}
+
+/** Which resources an over-limit banner can name, in the order it names them. */
+export const OVER_LIMIT_KEYS = ["links", "members", "domains"] as const;
+
+/** Whether an org is over any of its caps. */
+export function isOverLimit(over: OverLimits): boolean {
+  return OVER_LIMIT_KEYS.some((key) => over[key] !== undefined);
+}
+
 /** Display prices for the paid plans; the charge itself is set in Polar. */
 export const PLAN_PRICES = {
   hobby: "$4",
@@ -168,6 +198,15 @@ export interface UserOrg extends QrOverrides {
    * domains rather than trusting it (`resolveDefaultDomainId`).
    */
   defaultDomainId: string | null;
+  /**
+   * This org is beyond its owner's `orgs` cap, so it is read-only until they
+   * upgrade or pick it as the one to keep (#160). Its links keep redirecting.
+   */
+  locked: boolean;
+  /** What this org holds more of than its plan allows (#158). `{}` means fine. */
+  over: OverLimits;
+  /** Epoch ms the 30-day grace ends, or null when nothing is over (#159). */
+  graceEndsAt: number | null;
 }
 
 export interface CurrentUser {
@@ -200,6 +239,12 @@ export interface DomainDTO {
   statusReason: string;
   rootRedirect: string;
   createdAt: number;
+  /**
+   * Epoch ms this domain went beyond the org's plan (#159), or null while it
+   * is fine. A locked domain keeps serving until the org's `graceEndsAt`,
+   * cannot be the org's default, and takes no new links.
+   */
+  lockedAt: number | null;
 }
 
 /** Public deployment config the SPA needs (no secrets). */

@@ -272,6 +272,7 @@ function toDTO(row: typeof schema.domains.$inferSelect): DomainDTO {
     statusReason: row.statusReason,
     rootRedirect: row.rootRedirect,
     createdAt: row.createdAt,
+    lockedAt: row.lockedAt,
   };
 }
 
@@ -352,6 +353,7 @@ domainRoutes.post("/", async (c) => {
     statusReason: "",
     rootRedirect: "",
     cfHostnameId: null,
+    lockedAt: null,
     createdAt: Date.now(),
   };
   // Atomic: the org's domains cap is re-checked at write time inside one D1

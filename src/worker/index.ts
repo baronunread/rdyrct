@@ -19,8 +19,9 @@ import { billingRoutes, handlePolarWebhook } from "./routes/billing";
 import { domainRoutes } from "./routes/domains";
 import { capRoutes } from "./routes/cap";
 import { revalidateOnRedirect } from "./risk";
+import { sweepGraceWarnings } from "./reconcile";
 import { shortenRoutes, sweepExpiredAnonLinks } from "./routes/shorten";
-import { resolveSlug, resolveDomain, type KVLink } from "./kv";
+import { resolveSlug, resolveDomain, domainServing, type KVLink } from "./kv";
 import { RESERVED_SLUGS } from "./util";
 import { withPageMeta } from "./page-meta";
 import { enforcePublicAuthRateLimit, enforceSignedApiRateLimit } from "./rate-limit";
@@ -132,6 +133,11 @@ app.use("*", async (c, next) => {
   if (!host || host === c.env.APP_HOST.toLowerCase()) return next();
   const domain = await resolveDomain(c.env, host);
   if (!domain) return next();
+  // A locked domain past its 30 days stops resolving, with no D1 read: the
+  // deadline is in the value (#159). A 404 rather than a page explaining the
+  // downgrade, because most of what reaches a dead short link is a machine,
+  // and an honest 404 is the answer a machine can act on.
+  if (!domainServing(domain)) return c.text("Not found", 404);
 
   const path = new URL(c.req.url).pathname;
   // This middleware is a dead end for a host it owns: it never calls next(),
@@ -383,6 +389,10 @@ const wrapped = Sentry.withSentry<Env, StorageMessage | ClickMessage>(
       // Daily: drop anonymous links nobody claimed inside their 24 hours, and
       // the KV keys they were resolving through (Direction A of #96).
       await sweepExpiredAnonLinks(env);
+
+      // Daily: the day-23 email for every org whose 30 days are nearly up
+      // (#158). Day 0 goes out from the reconciliation pass itself.
+      await sweepGraceWarnings(env, drizzle(env.DB, { schema }));
     },
   },
 );

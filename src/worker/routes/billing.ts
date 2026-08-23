@@ -5,11 +5,12 @@ import { Polar } from "@polar-sh/sdk";
 import { Webhook } from "standardwebhooks";
 import { drizzle } from "drizzle-orm/d1";
 import * as schema from "../db/schema";
-import type { AppEnv, Env } from "../env";
+import type { AppEnv, DB, Env } from "../env";
 import type { JsonValue } from "../../shared/types";
 import { requireUser } from "../guards";
 import { captureAlert } from "../sentry";
 import { effectivePlanSql } from "../entitlement";
+import { reconcileUser } from "../reconcile";
 import { jsonBodyLimit } from "../body-limit";
 import type { BillingProvider } from "../billing-provider";
 
@@ -105,7 +106,9 @@ interface PolarEvent {
   };
 }
 
-type Db = ReturnType<typeof drizzle>;
+// The schema-bound client `handlePolarWebhook` builds; the mutations below
+// and the reconciliation pass share it.
+type Db = DB;
 
 /**
  * When the state an event describes was set at Polar. Events without either
@@ -346,8 +349,35 @@ export async function handlePolarWebhook(req: Request, env: Env): Promise<Respon
   if (mutation) {
     const result = await mutation;
     if (result.meta.changes === 0) await alertIfNoSuchSubject(db, event);
+    else if (PLAN_EVENTS.has(event.type)) await reconcileSubject(db, env, event);
   }
   return Response.json({ received: true });
+}
+
+/**
+ * The events that can move `plan`, and so the ones that owe the user's orgs
+ * a reconciliation pass (#158). `subscription.canceled` and
+ * `subscription.uncanceled` only flip the period-end flags, so they cannot
+ * put an org over its caps.
+ */
+const PLAN_EVENTS = new Set([
+  "subscription.active",
+  "subscription.revoked",
+  "subscription.updated",
+]);
+
+/**
+ * Runs the pass for whoever the event addressed, once the write landed.
+ *
+ * The subject is re-read rather than taken from the event, because
+ * `subjectOf` resolves through the subscription id for events that carry no
+ * metadata. `reconcileUser` swallows its own failures: a webhook that 500s
+ * earns a retry, and ten of those disable the endpoint.
+ */
+async function reconcileSubject(db: Db, env: Env, event: PolarEvent): Promise<void> {
+  const rows = await db.select({ id: schema.user.id }).from(schema.user).where(subjectOf(event));
+  const userId = rows[0]?.id;
+  if (userId) await reconcileUser(env, db, userId);
 }
 
 /**

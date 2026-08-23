@@ -21,6 +21,7 @@ import {
 import { fillSeries, computeDelta, deleteOrg } from "./orgs";
 import { orgPlan } from "../plan";
 import { effectivePlanSql, subscriptionGrantsAccess } from "../entitlement";
+import { reconcileUser } from "../reconcile";
 import { jsonBodyLimit } from "../body-limit";
 import { adminLinkRoutes } from "./admin-links";
 import { recordAdminAction } from "../audit";
@@ -812,6 +813,13 @@ async function writeComp(
   if (result.meta.changes === 0) throw new HTTPException(404, { message: "User not found" });
 }
 
+/** Grant and revoke both change `plan`, so both owe the owner's orgs a pass
+ * (#158). Manual too: an admin fixing a stuck org runs this route. */
+adminRoutes.post("/users/:userId/reconcile", async (c) => {
+  await reconcileUser(c.env, c.var.db, c.req.param("userId"));
+  return c.json({ ok: true });
+});
+
 /** What the comp route reads off its request body. */
 interface CompBody {
   plan?: string;
@@ -837,6 +845,7 @@ adminRoutes.post("/users/:userId/comp", async (c) => {
     reason,
     grantedBy: c.var.user!.id,
   });
+  await reconcileUser(c.env, c.var.db, c.req.param("userId"));
   await recordAdminAction(c.env, {
     actorUserId: c.var.user!.id,
     action: "user.comp_grant",
@@ -851,6 +860,7 @@ adminRoutes.post("/users/:userId/comp", async (c) => {
  * `plan` re-derives from the columns the webhook owns. */
 adminRoutes.delete("/users/:userId/comp", async (c) => {
   await writeComp(c.var.db, c.req.param("userId"), null);
+  await reconcileUser(c.env, c.var.db, c.req.param("userId"));
   await recordAdminAction(c.env, {
     actorUserId: c.var.user!.id,
     action: "user.comp_revoke",

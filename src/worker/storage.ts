@@ -5,6 +5,7 @@ import * as schema from "./db/schema";
 import type { DB, Env } from "./env";
 import { buildDestination, qrLogoKeyFromUrl } from "./util";
 import { captureAlert } from "./sentry";
+import type { KVDomain } from "./kv";
 
 /**
  * Storage recovery. D1 is the source of truth. KV serves redirects and R2
@@ -142,18 +143,29 @@ async function desiredKvValue(db: DB, key: string): Promise<string | null> {
 
   if (key.startsWith("domain:")) {
     const hostname = key.slice("domain:".length);
+    // The org's grace period rides along, because a locked domain's verdict
+    // is "serves until X" and the redirect path may not read D1 to find X
+    // (#159). Left join: an org that has never been reconciled has no row,
+    // and its domains serve.
     const rows = await db
-      .select()
+      .select({
+        domain: schema.domains,
+        graceEndsAt: schema.orgEntitlements.graceEndsAt,
+      })
       .from(schema.domains)
+      .leftJoin(schema.orgEntitlements, eq(schema.orgEntitlements.orgId, schema.domains.orgId))
       .where(eq(schema.domains.hostname, hostname))
       .limit(1);
-    const domain = rows[0];
+    const domain = rows[0]?.domain;
     if (!domain || domain.status !== "active") return null;
     return JSON.stringify({
       domainId: domain.id,
       orgId: domain.orgId,
       rootRedirect: domain.rootRedirect,
-    });
+      // A locked domain with no grace on file has already run out: the
+      // absence of a deadline must not read as "serves forever".
+      servesUntil: domain.lockedAt === null ? null : (rows[0]?.graceEndsAt ?? domain.lockedAt),
+    } satisfies KVDomain);
   }
 
   // Unknown prefix: never enqueued, so leave it alone.

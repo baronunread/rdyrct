@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, test } from "bun:test";
 import { partialEnv } from "./partial-env";
 import {
+  domainServing,
   publishDomain,
   publishLink,
   resolveDomain,
@@ -98,7 +99,27 @@ describe("domain publishing", () => {
       domainId: "dom1",
       orgId: "org1",
       rootRedirect: "https://brand.com",
+      servesUntil: null,
     });
+  });
+
+  test("a locked domain carries the date it stops serving", async () => {
+    const servesUntil = Date.now() + 1000;
+    await publishDomain(env, {
+      id: "dom1",
+      orgId: "org1",
+      hostname: "go.brand.com",
+      rootRedirect: "https://brand.com",
+      servesUntil,
+    });
+    const value = await resolveDomain(env, "go.brand.com");
+    expect(value?.servesUntil).toBe(servesUntil);
+    expect(domainServing(value!, servesUntil - 1)).toBe(true);
+    expect(domainServing(value!, servesUntil + 1)).toBe(false);
+  });
+
+  test("a value written before servesUntil existed keeps serving", () => {
+    expect(domainServing({ domainId: "d", orgId: "o", rootRedirect: "" })).toBe(true);
   });
 
   test("unpublish removes the domain", async () => {

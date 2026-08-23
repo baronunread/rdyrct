@@ -7,6 +7,7 @@ import { requireUser } from "../guards";
 import { jsonBodyLimit } from "../body-limit";
 import type { AppConfig, CurrentUser } from "@/shared/types";
 import { orgPlanOf } from "@/shared/types";
+import { parseOver } from "../reconcile";
 
 // Signup/login/logout/verification live under /api/auth/* (BetterAuth).
 // This router only exposes the app-level session view, mounted at /api.
@@ -38,9 +39,14 @@ async function currentUserFor(
         qrEyeColor: schema.orgs.qrEyeColor,
         qrLogoSize: schema.orgs.qrLogoSize,
         defaultDomainId: schema.orgs.defaultDomainId,
+        lockedAt: schema.orgs.lockedAt,
+        overJson: schema.orgEntitlements.overJson,
+        graceEndsAt: schema.orgEntitlements.graceEndsAt,
       })
       .from(schema.orgMembers)
       .innerJoin(schema.orgs, eq(schema.orgMembers.orgId, schema.orgs.id))
+      // Left join: an org nothing has reconciled yet has no row, and is fine.
+      .leftJoin(schema.orgEntitlements, eq(schema.orgEntitlements.orgId, schema.orgs.id))
       .leftJoin(
         ownerMember,
         and(eq(ownerMember.orgId, schema.orgs.id), eq(ownerMember.role, "owner")),
@@ -69,6 +75,9 @@ async function currentUserFor(
     qrEyeColor: r.qrEyeColor,
     qrLogoSize: r.qrLogoSize,
     defaultDomainId: r.defaultDomainId,
+    locked: r.lockedAt != null,
+    over: parseOver(r.overJson ?? "{}"),
+    graceEndsAt: r.graceEndsAt,
   }));
   return {
     user: {
