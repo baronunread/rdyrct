@@ -28,9 +28,29 @@ Read the issue, then read the code it names. Two things to establish:
 Say so plainly if either answer is no, then do the right thing and explain
 why in the PR body. Do not silently ship something different.
 
-## 2. Branch
+## 2. Branch, and take several issues at once
 
 Off `main`, always. `main` is protected and direct pushes bypass review.
+
+**Prefer a batch of related issues to one branch per issue.** One branch, one
+PR, one review, one CI run. #153 closed #103, #104 and #137 together and read
+better for it: the reviewer saw the whole shape of the change instead of three
+diffs that each looked arbitrary.
+
+Group by what a reviewer would want to read in one sitting:
+
+- The same area of the code, so the context is loaded once.
+- A chain where each issue depends on the last, so splitting them would mean
+  merging something unusable on its own.
+- A pile of small ones, none of which justifies its own review.
+
+Split when the batch stops being reviewable: unrelated areas, a diff nobody
+can hold in their head, or one risky change that should be revertable on its
+own. A migration or anything touching auth or billing is worth isolating, so
+a revert does not take four unrelated fixes with it.
+
+Name the branch for the theme, not the issue numbers, and list every issue the
+PR closes in the body.
 
 ## 3. Implement
 
@@ -58,12 +78,26 @@ Do this for anything with a branch worth having: a security check, a cap, a
 race guard. It is the difference between "the suite is green" and "this test
 would catch a regression".
 
-## 4. Open the PR
+## 4. Open the PR, once, when it is finished
+
+**Opening the PR is what asks for the review, so only open when you want to be
+reviewed.** Every issue in the batch done, every test written, `bun run
+verify` and `bun run fallow` green locally. Work on the branch as long as you
+need; push nothing to a PR until the branch is the thing you would merge.
+
+A PR opened early gets reviewed against a half-finished diff. That review is
+worse than useless: it reports things you were about to fix, it costs a real
+review (they are rate limited, and running out is how a PR ends up looking
+reviewed when it was not, see step 6), and the findings you then have to sort
+through are noise you created.
+
+No draft PRs as a workaround either. A draft still burns the review and still
+produces comments to triage.
 
 The body carries the reasoning, not just the change. What was wrong, why this
 fix, what was deliberately not done, and what a reviewer should know at
 release (a route rename means anyone on the old bundle gets errors until they
-reload).
+reload). List every issue it closes.
 
 ## 5. Wait for CI
 
