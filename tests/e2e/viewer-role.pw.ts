@@ -1,9 +1,6 @@
 import { expect, test } from "@playwright/test";
-import { signUpAndVerify } from "./resend";
 import { queryRows } from "./db";
-import { createQuickLink } from "./orgs";
-
-const password = "test-password-123";
+import { createQuickLink, guestAccount, ownerWithInviteLink } from "./orgs";
 
 /**
  * A viewer sees the org and can change none of it (#157).
@@ -17,32 +14,21 @@ test("a viewer reads the links and the numbers, and is offered no way to change 
   page,
   browser,
 }) => {
-  const owner = `vowner-${Date.now()}@gmail.com`;
-  await signUpAndVerify(page, owner, password);
-  await createQuickLink(page, "example.com/viewer-sees-this");
+  const { owner, token } = await ownerWithInviteLink(page, "vowner", async (owned) => {
+    await createQuickLink(owned, "example.com/viewer-sees-this");
+  });
 
-  await page.goto("/members");
-  await page.getByRole("button", { name: "Invite link" }).click();
-  await page.getByRole("button", { name: "Create invite link" }).click();
-  await expect(page.getByText("Pending invites")).toBeVisible();
-
-  // The invite is created as a member by default; make it a viewer directly,
-  // since the point under test is the role, not the picker.
+  // Created as a member by default; make it a viewer directly, since the
+  // point under test is the role, not the picker.
   await queryRows(
     page,
     "update invites set role = 'viewer' where created_by = (select id from user where email = ?)",
     [owner],
   );
-  const [invite] = await queryRows<{ token: string }>(
-    page,
-    "select token from invites where created_by = (select id from user where email = ?)",
-    [owner],
-  );
 
-  const guest = await browser.newContext();
-  const viewer = await guest.newPage();
-  await signUpAndVerify(viewer, `analyst-${Date.now()}@gmail.com`, password);
-  await viewer.goto(`/invite/${invite.token}`);
+  const guest = await guestAccount(browser, "analyst");
+  const viewer = guest.page;
+  await viewer.goto(`/invite/${token}`);
   await viewer.getByRole("button", { name: "Accept invite" }).click();
   await expect(viewer).toHaveURL(/\/dashboard$/);
 
@@ -63,5 +49,5 @@ test("a viewer reads the links and the numbers, and is offered no way to change 
   await viewer.goto("/analytics");
   await expect(viewer.getByRole("heading", { name: /Analytics/i })).toBeVisible();
 
-  await guest.close();
+  await guest.context.close();
 });

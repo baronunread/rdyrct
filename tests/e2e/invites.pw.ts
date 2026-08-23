@@ -1,43 +1,6 @@
-import { expect, test, type Browser, type Page } from "@playwright/test";
-import { signUpAndVerify } from "./resend";
+import { expect, test } from "@playwright/test";
 import { queryRows } from "./db";
-
-const password = "test-password-123";
-
-/**
- * Signs up an owner, creates a link invite from Members, and returns the
- * owner's address with the token behind it.
- *
- * The token is read back scoped to this owner, not as "the newest invite":
- * the suite runs in parallel shards against one database, so the globally
- * newest row belongs to whichever test wrote last.
- */
-async function ownerWithInviteLink(page: Page, prefix: string) {
-  const owner = `${prefix}-${Date.now()}@gmail.com`;
-  await signUpAndVerify(page, owner, password);
-
-  await page.goto("/members");
-  await page.getByRole("button", { name: "Invite link" }).click();
-  await page.getByRole("button", { name: "Create invite link" }).click();
-  await expect(page.getByText("Pending invites")).toBeVisible();
-
-  const [invite] = await queryRows<{ token: string }>(
-    page,
-    "select token from invites where created_by = (select id from user where email = ?)",
-    [owner],
-  );
-  expect(invite?.token).toBeTruthy();
-  return { owner, token: invite.token };
-}
-
-/** A separate signed-up account in its own browser context, for the half of
- * an invite flow the owner cannot play. */
-async function guestAccount(browser: Browser, prefix: string) {
-  const context = await browser.newContext();
-  const page = await context.newPage();
-  await signUpAndVerify(page, `${prefix}-${Date.now()}@gmail.com`, password);
-  return { context, page };
-}
+import { guestAccount, ownerWithInviteLink } from "./orgs";
 
 /**
  * An accepted invite leaves no row behind (#103).

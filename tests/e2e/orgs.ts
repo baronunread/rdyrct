@@ -1,4 +1,8 @@
-import { expect, type Page } from "@playwright/test";
+import { queryRows } from "./db";
+import { expect, type Browser, type Page } from "@playwright/test";
+import { signUpAndVerify } from "./resend";
+
+const E2E_PASSWORD = "test-password-123";
 
 /** Opens the org switcher and creates another org under the same signed-in
  * account, for tests that share one user (see link-addresses.pw.ts) and so
@@ -52,4 +56,47 @@ export async function createQuickLink(page: Page, destination: string) {
   await field.fill(destination);
   await page.getByRole("button", { name: "Create link" }).click();
   await expect(page.getByRole("dialog", { name: "Link created" })).toBeVisible();
+}
+
+/**
+ * Signs up an owner, creates a link invite from Members, and returns the
+ * owner's address with the token behind it.
+ *
+ * The token is read back scoped to this owner, not as "the newest invite":
+ * the suite runs in parallel shards against one database, so the globally
+ * newest row belongs to whichever test wrote last.
+ */
+export async function ownerWithInviteLink(
+  page: Page,
+  prefix: string,
+  /** Runs on the fresh dashboard, before the page leaves for Members: a
+   * caller that needs the org to hold something has one chance to put it
+   * there while the quick-create field is on screen. */
+  seed?: (page: Page) => Promise<void>,
+) {
+  const owner = `${prefix}-${Date.now()}@gmail.com`;
+  await signUpAndVerify(page, owner, E2E_PASSWORD);
+  await seed?.(page);
+
+  await page.goto("/members");
+  await page.getByRole("button", { name: "Invite link" }).click();
+  await page.getByRole("button", { name: "Create invite link" }).click();
+  await expect(page.getByText("Pending invites")).toBeVisible();
+
+  const [invite] = await queryRows<{ token: string }>(
+    page,
+    "select token from invites where created_by = (select id from user where email = ?)",
+    [owner],
+  );
+  expect(invite?.token).toBeTruthy();
+  return { owner, token: invite.token };
+}
+
+/** A separate signed-up account in its own browser context, for the half of
+ * an invite flow the owner cannot play. */
+export async function guestAccount(browser: Browser, prefix: string) {
+  const context = await browser.newContext();
+  const page = await context.newPage();
+  await signUpAndVerify(page, `${prefix}-${Date.now()}@gmail.com`, E2E_PASSWORD);
+  return { context, page };
 }

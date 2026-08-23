@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { canListOrgDomains } from "../src/app/lib/org-limits";
+import { canListOrgDomains, canWriteOrg } from "../src/app/lib/org-limits";
 
 describe("canListOrgDomains", () => {
   test("platform admins can always list domains", () => {
@@ -15,5 +15,21 @@ describe("canListOrgDomains", () => {
   test("members and org-less users cannot", () => {
     expect(canListOrgDomains(false, "member")).toBe(false);
     expect(canListOrgDomains(false, undefined)).toBe(false);
+  });
+});
+
+describe("canWriteOrg", () => {
+  test("owner, admin and member may write", () => {
+    expect(canWriteOrg("owner")).toBe(true);
+    expect(canWriteOrg("admin")).toBe(true);
+    expect(canWriteOrg("member")).toBe(true);
+  });
+
+  test("a viewer may not", () => {
+    expect(canWriteOrg("viewer")).toBe(false);
+  });
+
+  test("no role yet is not a moment to offer a write", () => {
+    expect(canWriteOrg(undefined)).toBe(false);
   });
 });
