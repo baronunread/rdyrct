@@ -6,5 +6,14 @@ pre-commit:
     # (lint, react-doctor) runs in CI, where nobody can pass --no-verify.
     - name: format
       glob: "*.{cjs,cts,css,html,js,json,jsonc,jsx,md,mjs,mts,ts,tsx}"
+      # Same paths oxfmt ignores (.oxfmtrc.json). Without them a commit that
+      # touches only a skill file hands oxfmt a list it must ignore entirely,
+      # and it exits 2 on "no target files": the one job that repairs instead
+      # of complaining would block a commit it has nothing to do with. Keep
+      # the two lists in step.
+      exclude:
+        - ".agents/skills/**"
+        - ".claude/skills/**"
+        - ".oxlint/anti-slop/**"
       run: bunx oxfmt --write {staged_files}
       stage_fixed: true

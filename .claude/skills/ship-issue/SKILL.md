@@ -99,6 +99,49 @@ fix, what was deliberately not done, and what a reviewer should know at
 release (a route rename means anyone on the old bundle gets errors until they
 reload). List every issue it closes.
 
+### Anything with a face gets screenshots
+
+If the change touches an interface, post the screenshots as a PR comment. Not
+because a PR should be pretty: a screenshot is the only part of a review that
+checks what a person will actually see, and prose describing a screen is the
+easiest thing in a PR body to write convincingly and wrongly.
+
+They pay for themselves while you take them. Driving #165's states turned up
+an invite form still offered in an org the server would refuse an invite
+from, which every test had passed straight over because no test asks "would a
+person be offered this".
+
+Capture them by driving the real app, never by mocking a state:
+
+- A throwaway `tests/e2e/zz-shots.pw.ts` that reuses the helpers in
+  `tests/e2e/orgs.ts` to build each state, then `page.screenshot()`. Delete it
+  once the images are out; it is a capture script, not a check.
+- Dismiss the consent banner first (it covers the bottom-right of every page),
+  and rename the seeded org and users, or every shot carries
+  `shots-1787481680744's links` where a name should be.
+- `test.use({ viewport: { width: 1280, height: 900 } })`. Take the shot on the
+  screen that shows the change, not the prettiest one.
+
+**Host them in R2, never in the repo and never in a side branch.** Both put
+binaries in git history for a comment, and pushing an orphan branch to serve
+images is using GitHub as a CDN it did not offer to be:
+
+```sh
+bunx wrangler r2 object put "brnr/github/rdyrct/pr-<n>/<name>.png" \
+  --file <name>.png --content-type image/png --remote
+```
+
+They serve from `https://cdn.brnr.dev/github/rdyrct/pr-<n>/<name>.png`. Check
+one with `curl -o /dev/null -w '%{http_code}'` before writing the comment,
+then check GitHub proxied them after: it rewrites external images through
+camo, so `gh api repos/<owner>/<repo>/issues/comments/<id> -H "Accept:
+application/vnd.github.html+json"` should show six `<img>` tags and each camo
+URL should return `image/png`. A broken image reads as a broken feature.
+
+Caption each one with what it proves, not what it is. "Still listed, still
+redirecting, counting down to the day it stops" is a review; "Domains page"
+is a filename.
+
 ## 5. Wait for CI
 
 Seven checks: `static`, `unit`, `react-doctor`, `React Doctor`, `e2e (1..3)`.
