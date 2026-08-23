@@ -126,6 +126,9 @@ lands nowhere. For those, write a throwaway `tests/e2e/zz-shots.pw.ts` that
 reuses the helpers in `tests/e2e/orgs.ts` to build each state, then
 `page.screenshot()`. Delete it once the images are out; it is a capture
 script, not a check.
+
+Either way, four things that cost a retake each:
+
 - Dismiss the consent banner first (it covers the bottom-right of every page),
   and rename the seeded org and users, or every shot carries
   `shots-1787481680744's links` where a name should be.
@@ -150,8 +153,8 @@ They serve from `https://cdn.brnr.dev/github/rdyrct/pr-<n>/<name>.png`. Check
 one with `curl -o /dev/null -w '%{http_code}'` before writing the comment,
 then check GitHub proxied them after: it rewrites external images through
 camo, so `gh api repos/<owner>/<repo>/issues/comments/<id> -H "Accept:
-application/vnd.github.html+json"` should show six `<img>` tags and each camo
-URL should return `image/png`. A broken image reads as a broken feature.
+application/vnd.github.html+json"` should show one `<img>` per image and each
+camo URL should return `image/png`. A broken image reads as a broken feature.
 
 Caption each one with what it proves, not what it is. "Still listed, still
 redirecting, counting down to the day it stops" is a review; "Domains page"
