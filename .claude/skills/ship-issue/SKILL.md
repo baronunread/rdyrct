@@ -61,6 +61,15 @@ PR closes in the body.
   once, at the end. The full e2e suite is CI's job, not a local default.
 - `bun run fallow` before the PR. It catches duplication you would otherwise
   ship.
+- **A new migration needs `bun run db:migrate:local`.** Nothing applies it for
+  you: not `bun run dev`, not the worker tests, which apply migrations into
+  their own database. #165's table was missing from the dev D1 for a whole
+  session, and the thing that finally asked for it was the seeder.
+- **Fix what you trip over, in its own commit.** This branch turned up a
+  pre-commit hook that failed any commit touching only a skill file, and a
+  test helper that swallowed the one error message that would have explained
+  a failure. Both cost twenty minutes and neither had anything to do with the
+  issue. Leaving them costs the next person the same twenty minutes.
 
 ### Mutation-test any new guard
 
@@ -183,6 +192,12 @@ reports pass when its review never ran: it posts a rate-limit warning instead
 and the PR looks reviewed. When that happens, comment `@coderabbitai review`
 once the limit resets and wait for the real thing.
 
+It bites twice. The limit is per-account and shared with every other PR, so
+the run that reviewed your first push says nothing about the commits you
+pushed to answer it. After fixing a review, check that the next one covered
+the fixes: `gh pr view <n> --json comments` and look at which commit the
+latest CodeRabbit comment names.
+
 Every comment ends in one of three states, with a reply on the thread saying
 which:
 
@@ -205,17 +220,37 @@ Spawn a fresh agent with no context from your session, and give it the PR
 number, the issues it closes, and any deliberate scope decisions it should
 not re-litigate. Ask for a verdict plus findings with `file:line`.
 
-This is the step that catches what you cannot catch on your own diff. It has
-found a sweep with no test (making an acceptance criterion unverified), a
-stale doc comment, and an error string that read as field-name jargon in a
-toast. Tell it to verify claims by running things rather than reasoning about
-them, and to leave the working tree exactly as it found it.
+This is the step that catches what you cannot catch on your own diff, and it
+is worth the wait even when everything says the PR is done. On #165 all seven
+checks were green and all twelve CodeRabbit threads were fixed and resolved;
+the cold review then returned "do not ship" and ten more findings, two of
+which broke the feature outright. One of those was the only event that
+mattered, `subscription.revoked`, silently never running the pass the whole
+branch existed for.
+
+It has also found a sweep with no test (making an acceptance criterion
+unverified), a stale doc comment, and an error string that read as field-name
+jargon in a toast.
+
+Tell it to verify claims by running things rather than reasoning about them,
+and to leave the working tree exactly as it found it. Name the deliberate
+decisions it should not re-litigate, or it spends its budget re-deriving
+choices already argued in the PR body, and say what to hunt for instead:
+where the feature's own rule is broken, which acceptance criteria nothing
+covers, and any path where something is deleted or silently lost.
 
 ## 8. Merge
 
 Squash, delete the branch, sync `main`. Only when CI is green **and** both
 reviews are genuinely clean. Confirm the checks ran against the head commit,
 not an earlier push.
+
+Before that, walk the issues the PR closes and check each one has its
+evidence: a test that would fail without it, and a screenshot if it has a
+face. Asked whether #165 had a screenshot for every new feature, the honest
+answer was no: three surfaces, including the entire first issue in the batch,
+were described in the PR body and shown nowhere. "The PR has screenshots" is
+not the same claim as "each issue has one".
 
 Then take the next issue.
 
