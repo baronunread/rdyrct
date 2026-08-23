@@ -111,34 +111,46 @@ an invite form still offered in an org the server would refuse an invite
 from, which every test had passed straight over because no test asks "would a
 person be offered this".
 
-Capture them by driving the real app, never by mocking a state.
+**Shoot the seed data, not data you invented for the shot.** `bun run
+db:seed:local` builds 60 orgs with real names, 90 days of clicks and a few
+orgs already mid-downgrade. A capture script that makes up its own rows gives
+you four links called "Spring campaign 31" and every chart reading zero,
+which shows nothing about how the screen looks in a populated account. It
+also means the screenshots exercise the seeder: doing this for #165 turned up
+a wipe that missed a table, a seeded state that never occurred, and a
+migration that had never been applied to the dev database at all. If the
+feature has a state the seeder cannot produce, add it there rather than
+faking it in the capture.
 
-`bunx agent-browser` is the tool for looking at a page you can already reach,
-and it is what AGENTS.md means by visual verification: `open`, `snapshot`,
-`screenshot`, `eval`, against the running dev server. Use it for a single
-screen, a spot check, a "does this actually render" question.
+That decides the tool, too. A seeded user is already verified and shares one
+password, so `bunx agent-browser` can just sign in:
 
-It is the wrong tool for a state that takes a sign-up to reach. Driving the
-signup, the emailed 6-digit code, an invite accepted in a second browser and a
-plan change through a CLI is a long chain of `click`/`type` where refs go
-stale on every re-render and typing into a react-hook-form field silently
-lands nowhere. For those, write a throwaway `tests/e2e/zz-shots.pw.ts` that
-reuses the helpers in `tests/e2e/orgs.ts` to build each state, then
-`page.screenshot()`. Delete it once the images are out; it is a capture
-script, not a check.
+```sh
+bunx agent-browser set viewport 1280 900
+bunx agent-browser open https://rdyrct.localhost/login
+bunx agent-browser eval "localStorage.setItem('rdyrct:consent:v2','granted')"
+bunx agent-browser fill 'input[type="email"]' someone@seed.test
+bunx agent-browser fill 'input[type="password"]' seed-password-123
+bunx agent-browser click 'button[type="submit"]'
+bunx agent-browser open https://rdyrct.localhost/members
+bunx agent-browser screenshot shots/members.png
+```
 
-Either way, four things that cost a retake each:
+Use CSS selectors, not the `@ref` handles from `snapshot`: refs go stale on
+every re-render, and a stale one fails silently. Reach for a throwaway
+`tests/e2e/zz-shots.pw.ts` (reusing the helpers in `tests/e2e/orgs.ts`) only
+for a state the seeder cannot reach, since driving a signup and its emailed
+code through the CLI is where agent-browser stops paying off. Delete it once
+the images are out; it is a capture script, not a check.
 
-- Dismiss the consent banner first (it covers the bottom-right of every page),
-  and rename the seeded org and users, or every shot carries
-  `shots-1787481680744's links` where a name should be.
-- `test.use({ viewport: { width: 1280, height: 900 } })`. Take the shot on the
-  screen that shows the change, not the prettiest one.
-- Menus and dialogs fade in. Wait, and pass `animations: "disabled"`, or the
-  shot catches them half transparent.
-- Seeding rows straight into D1 beats clicking 34 links into existence, but
-  `rawSql` binds through the dev Explorer, which caps a statement at 100
-  parameters. Chunk the inserts.
+Either way, three things that cost a retake each:
+
+- The consent banner covers the bottom-right of every page. Clear it through
+  `localStorage`, not by clicking, which is one less thing to go stale.
+- 1280x900, and take the shot on the screen that shows the change, not the
+  prettiest one.
+- Menus and dialogs fade in. Wait for them, and in Playwright pass
+  `animations: "disabled"`, or the shot catches them half transparent.
 
 **Host them in R2, never in the repo and never in a side branch.** Both put
 binaries in git history for a comment, and pushing an orphan branch to serve
