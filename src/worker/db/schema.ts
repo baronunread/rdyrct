@@ -156,7 +156,7 @@ export const orgMembers = sqliteTable(
     userId: text("user_id")
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
-    role: text("role", { enum: ["owner", "admin", "member"] }).notNull(),
+    role: text("role", { enum: ["owner", "admin", "member", "viewer"] }).notNull(),
     createdAt: integer("created_at").notNull(),
   },
   (t) => [primaryKey({ columns: [t.orgId, t.userId] }), index("idx_org_members_user").on(t.userId)],
@@ -169,7 +169,7 @@ export const invites = sqliteTable(
     orgId: text("org_id")
       .notNull()
       .references(() => orgs.id, { onDelete: "cascade" }),
-    role: text("role", { enum: ["admin", "member"] }).notNull(),
+    role: text("role", { enum: ["admin", "member", "viewer"] }).notNull(),
     // Set when the invite was emailed to a specific address: only that
     // account may accept. Null for copy-only link invites (bearer links).
     email: text("email"),

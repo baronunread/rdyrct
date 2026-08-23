@@ -35,6 +35,9 @@ interface RowActions {
   navigate: (to: string) => void;
   onQrClick: (link: LinkDTO) => void;
   onEdit: (link: LinkDTO) => void;
+  /** False for a viewer, who may read every one of these rows and change
+   * none of them (#157). The analytics and QR entries stay: both are reads. */
+  canWrite: boolean;
   onDelete: (link: LinkDTO) => void;
   onCreateAlias: (link: LinkDTO) => void;
 }
@@ -99,7 +102,7 @@ function LinkCell({
 }
 
 function RowMenu({ link, actions }: { link: LinkDTO; actions: RowActions }) {
-  const { navigate, onQrClick, onEdit, onDelete, onCreateAlias } = actions;
+  const { navigate, onQrClick, onEdit, onDelete, onCreateAlias, canWrite } = actions;
   return (
     <Menu
       align="end"
@@ -118,16 +121,20 @@ function RowMenu({ link, actions }: { link: LinkDTO; actions: RowActions }) {
       <MenuItem onClick={() => onQrClick(link)}>
         <QrCode size={14} /> QR code
       </MenuItem>
-      <MenuItem onClick={() => onEdit(link)}>
-        <Pencil size={14} /> Edit
-      </MenuItem>
-      <MenuItem onClick={() => onCreateAlias(link)}>
-        <Link size={14} /> Create alias
-      </MenuItem>
-      <MenuSeparator />
-      <MenuItem className="text-danger" onClick={() => onDelete(link)}>
-        <Trash2 size={14} /> Delete
-      </MenuItem>
+      {canWrite && (
+        <>
+          <MenuItem onClick={() => onEdit(link)}>
+            <Pencil size={14} /> Edit
+          </MenuItem>
+          <MenuItem onClick={() => onCreateAlias(link)}>
+            <Link size={14} /> Create alias
+          </MenuItem>
+          <MenuSeparator />
+          <MenuItem className="text-danger" onClick={() => onDelete(link)}>
+            <Trash2 size={14} /> Delete
+          </MenuItem>
+        </>
+      )}
     </Menu>
   );
 }

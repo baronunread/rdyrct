@@ -5,7 +5,10 @@ import * as schema from "./db/schema";
 import type { AppEnv, DB, SessionUser } from "./env";
 import type { OrgRole } from "@/shared/types";
 
-const ROLE_RANK = { member: 0, admin: 1, owner: 2 } satisfies Record<OrgRole, number>;
+/** Least to most powerful. `requireOrgRole(min)` compares against this, so a
+ * route's minimum is the whole of its authorization: a GET every member may
+ * read asks for "viewer", a write asks for "member". */
+const ROLE_RANK = { viewer: 0, member: 1, admin: 2, owner: 3 } satisfies Record<OrgRole, number>;
 
 /**
  * Resolves the caller's role in the :orgId route param. Platform admins pass

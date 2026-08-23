@@ -19,11 +19,16 @@ export type JsonValue =
   | JsonValue[]
   | { [key: string]: JsonValue };
 
-export const ORG_ROLES = ["owner", "admin", "member"] as const;
+/** Ordered least to most powerful, which is also the order a role picker
+ * should offer them. `viewer` reads everything an org holds and writes
+ * nothing: an analyst who should see the numbers without touching the links,
+ * and what an over-cap member is demoted to on downgrade (#29). */
+export const ORG_ROLES = ["owner", "admin", "member", "viewer"] as const;
 export type OrgRole = (typeof ORG_ROLES)[number];
 
 /** The roles an invite may hand out: never owner, which only a transfer moves. */
-export const INVITABLE_ROLES = ["member", "admin"] as const;
+export const INVITABLE_ROLES = ["viewer", "member", "admin"] as const;
+export type InvitableRole = (typeof INVITABLE_ROLES)[number];
 
 export const ORG_PLANS = ["free", "hobby", "pro"] as const;
 

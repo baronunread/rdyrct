@@ -1,4 +1,5 @@
 import * as v from "valibot";
+import { INVITABLE_ROLES } from "@/shared/types";
 
 /** The first-run form asks for a link, not an organization name (#65). The
  * server decides what counts as a web address, and accepts scheme-less input
@@ -37,7 +38,7 @@ export const hostnameSchema = v.object({
 
 export const inviteEmailSchema = v.object({
   email: v.pipe(v.string(), v.email("Enter a valid email address")),
-  role: v.picklist(["member", "admin"]),
+  role: v.picklist(INVITABLE_ROLES),
 });
 
 export const loginSchema = v.object({

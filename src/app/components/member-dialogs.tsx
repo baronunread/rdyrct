@@ -1,5 +1,5 @@
 import { type UseMutationResult } from "@tanstack/react-query";
-import { INVITABLE_ROLES } from "@/shared/types";
+import { INVITABLE_ROLES, type InvitableRole } from "@/shared/types";
 import { oneOf } from "@/shared/lookup";
 import { Button } from "../ui/button";
 import { ConfirmDialog } from "../ui/confirm-dialog";
@@ -46,8 +46,8 @@ export function InviteMemberDialog({
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  role: "member" | "admin";
-  onRoleChange: (role: "member" | "admin") => void;
+  role: InvitableRole;
+  onRoleChange: (role: InvitableRole) => void;
   onCreate: () => void;
   isCreating: boolean;
 }) {
@@ -63,6 +63,7 @@ export function InviteMemberDialog({
             value={role}
             onChange={(e) => onRoleChange(oneOf(INVITABLE_ROLES, e.target.value, "member"))}
           >
+            <option value="viewer">viewer · read only</option>
             <option value="member">member · manage links</option>
             <option value="admin">admin · manage links and team</option>
           </Select>

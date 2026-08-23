@@ -250,7 +250,7 @@ orgRoutes.delete("/:orgId", requireOrgRole("owner", { allowWhileDeleting: true }
 
 /* ---------------- members ---------------- */
 
-orgRoutes.get("/:orgId/members", requireOrgRole("member"), async (c) => {
+orgRoutes.get("/:orgId/members", requireOrgRole("viewer"), async (c) => {
   const rows = await c.var.db
     .select({
       userId: schema.orgMembers.userId,
@@ -610,7 +610,7 @@ async function lookupInvite(db: DB, token: string) {
   return invite;
 }
 
-orgRoutes.get("/:orgId/stats", requireOrgRole("member"), async (c) => {
+orgRoutes.get("/:orgId/stats", requireOrgRole("viewer"), async (c) => {
   const db = c.var.db;
   const orgId = c.req.param("orgId");
   const { limits } = await orgPlan(db, orgId);
@@ -833,7 +833,7 @@ orgRoutes.get("/:orgId/stats", requireOrgRole("member"), async (c) => {
 
 /* ---------------- recent clicks feed (dashboard) ---------------- */
 
-orgRoutes.get("/:orgId/clicks", requireOrgRole("member"), async (c) => {
+orgRoutes.get("/:orgId/clicks", requireOrgRole("viewer"), async (c) => {
   const raw = parseInt(c.req.query("limit") ?? "", 10);
   const limit = Math.min(Math.max(Number.isFinite(raw) ? raw : 8, 1), 50);
   const rows = await c.var.db
@@ -862,7 +862,7 @@ orgRoutes.get("/:orgId/clicks", requireOrgRole("member"), async (c) => {
 
 /* ---------------- per-link stats ---------------- */
 
-orgRoutes.get("/:orgId/links/stats/:slug", requireOrgRole("member"), async (c) => {
+orgRoutes.get("/:orgId/links/stats/:slug", requireOrgRole("viewer"), async (c) => {
   const db = c.var.db;
   const orgId = c.req.param("orgId");
   const slug = c.req.param("slug");

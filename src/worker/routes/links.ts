@@ -544,7 +544,7 @@ async function resolveRenamedSlug(
  * sorted here rather than in the browser: see links-page.ts for why the
  * browser cannot do either job once it only holds one page.
  */
-linkRoutes.get("/", requireOrgRole("member"), async (c) => {
+linkRoutes.get("/", requireOrgRole("viewer"), async (c) => {
   const params = readLinkPageParams(new URL(c.req.url));
   const query = linkPageQuery(c.req.param("orgId")!, params);
 
@@ -597,7 +597,7 @@ linkRoutes.post("/claim", requireOrgRole("member"), async (c) => {
   return c.json(await linkToDTO(c.var.db, c.req.param("orgId")!, link), 201);
 });
 
-linkRoutes.get("/quota-usage", requireOrgRole("member"), async (c) => {
+linkRoutes.get("/quota-usage", requireOrgRole("viewer"), async (c) => {
   const { quotaUsage, quotaUsageAt } = await quotaUsageFields(c.var.db, c.req.param("orgId")!);
   return c.json({ count: quotaUsage, at: quotaUsageAt });
 });
@@ -1029,7 +1029,7 @@ linkRoutes.delete("/:linkId", requireOrgRole("member"), async (c) => {
 
 /* ---------------- addresses (aliases + primary) ---------------- */
 
-linkRoutes.get("/:linkId/addresses", requireOrgRole("member"), async (c) => {
+linkRoutes.get("/:linkId/addresses", requireOrgRole("viewer"), async (c) => {
   const { db, link } = await linkFromRequest(c);
   const rows = await db
     .select({ address: schema.linkAddresses, hostname: schema.domains.hostname })

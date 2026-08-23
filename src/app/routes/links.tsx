@@ -103,6 +103,7 @@ function LinksBrowser({
   dialogs,
   atLimit,
   limitHint,
+  canWrite,
 }: {
   list: ReturnType<typeof useLinkPage>;
   orgId: string;
@@ -111,6 +112,7 @@ function LinksBrowser({
   dialogs: ReturnType<typeof useLinkDialogs>;
   atLimit: boolean;
   limitHint?: string;
+  canWrite: boolean;
 }) {
   return (
     <LinksListArea
@@ -123,7 +125,7 @@ function LinksBrowser({
       }
       atLimit={atLimit}
       limitHint={limitHint}
-      onCreate={dialogs.openCreate}
+      onCreate={canWrite ? dialogs.openCreate : undefined}
     >
       <LinksToolbar
         search={list.search}
@@ -137,6 +139,7 @@ function LinksBrowser({
         paged={list.rows}
         navigate={navigate}
         onQrClick={dialogs.setQrLink}
+        canWrite={canWrite}
         onEdit={dialogs.openEdit}
         onDelete={dialogs.setDeleting}
         onCreateAlias={dialogs.setAliasLink}
@@ -263,8 +266,17 @@ function useLinkDialogs(atLimit: boolean) {
 }
 
 export function LinksPage() {
-  const { org, orgId, limits, activeDomains, defaultDomainId, orgQr, domains, currentUser } =
-    useOrgLimits();
+  const {
+    org,
+    orgId,
+    limits,
+    canWrite,
+    activeDomains,
+    defaultDomainId,
+    orgQr,
+    domains,
+    currentUser,
+  } = useOrgLimits();
   const quotaUsage = useLinkQuotaUsage(orgId);
   const { create, update, remove } = useLinkMutations(orgId);
   const toast = useToast();
@@ -332,14 +344,16 @@ export function LinksPage() {
             <span className="text-xs tnum text-muted">
               {linkCount} / {limits.links} links
             </span>
-            <Button
-              variant="primary"
-              onClick={dialogs.openCreate}
-              disabled={atLimit}
-              title={limitHint}
-            >
-              <Plus size={15} /> New link
-            </Button>
+            {canWrite && (
+              <Button
+                variant="primary"
+                onClick={dialogs.openCreate}
+                disabled={atLimit}
+                title={limitHint}
+              >
+                <Plus size={15} /> New link
+              </Button>
+            )}
           </div>
         }
       />
@@ -352,6 +366,7 @@ export function LinksPage() {
         dialogs={dialogs}
         atLimit={atLimit}
         limitHint={limitHint}
+        canWrite={canWrite}
       />
 
       <LinkDialogStack
@@ -386,7 +401,9 @@ function LinksListArea({
   hasLinks: boolean;
   atLimit: boolean;
   limitHint: string | undefined;
-  onCreate: () => void;
+  /** Undefined for a viewer, who has no way to make the empty state stop
+   * being empty. The screen then explains rather than offering (#157). */
+  onCreate?: () => void;
   children: ReactNode;
 }) {
   if (isLoading) return <TableSkeleton rows={5} />;
@@ -394,11 +411,17 @@ function LinksListArea({
     return (
       <EmptyState
         title="No links yet"
-        hint="Shorten your first address and it appears here, with its clicks, referrers and QR code."
+        hint={
+          onCreate
+            ? "Shorten your first address and it appears here, with its clicks, referrers and QR code."
+            : "Links this organization creates appear here, with their clicks, referrers and QR codes."
+        }
         action={
-          <Button variant="primary" onClick={onCreate} disabled={atLimit} title={limitHint}>
-            <Plus size={15} /> New link
-          </Button>
+          onCreate ? (
+            <Button variant="primary" onClick={onCreate} disabled={atLimit} title={limitHint}>
+              <Plus size={15} /> New link
+            </Button>
+          ) : undefined
         }
       />
     );

@@ -1,5 +1,5 @@
 import { useState, useMemo, useCallback } from "react";
-import { INVITABLE_ROLES } from "@/shared/types";
+import { type InvitableRole, INVITABLE_ROLES } from "@/shared/types";
 import { oneOf } from "@/shared/lookup";
 import { useForm } from "react-hook-form";
 import { valibotResolver } from "@hookform/resolvers/valibot";
@@ -32,7 +32,16 @@ const roleColor = {
   owner: "accent",
   admin: "mint",
   member: "muted",
+  viewer: "muted",
 } satisfies Record<OrgRole, "accent" | "mint" | "muted">;
+
+/** What each role can do, said once, where the role is chosen. Without it
+ * "viewer" and "member" look like the same word twice. */
+const ROLE_OPTIONS = [
+  { value: "viewer", label: "viewer · read only" },
+  { value: "member", label: "member · manage links" },
+  { value: "admin", label: "admin · manage the org" },
+];
 
 const inviteUrl = (token: string) => `${window.location.origin}/invite/${token}`;
 
@@ -42,7 +51,7 @@ function useMemberManagement(orgId: string, canManage: boolean) {
   const members = useMembers(orgId);
   const invites = useInvites(orgId, canManage);
   const [inviteOpen, setInviteOpen] = useState(false);
-  const [inviteRole, setInviteRole] = useState<"member" | "admin">("member");
+  const [inviteRole, setInviteRole] = useState<InvitableRole>("member");
   const [removing, setRemoving] = useState<{ userId: string; name: string } | null>(null);
   const [sort, setSort] = useState<Sort>({ key: "createdAt", dir: 1 });
 
@@ -81,7 +90,7 @@ function useMemberManagement(orgId: string, canManage: boolean) {
   });
 
   const sendEmailInvite = useMutation({
-    mutationFn: (params: { email: string; role: "member" | "admin" }) =>
+    mutationFn: (params: { email: string; role: InvitableRole }) =>
       api<{ invites: InviteDTO[] }>(`/orgs/${orgId}/invites`, {
         method: "POST",
         body: { role: params.role, emails: [params.email] },
@@ -164,10 +173,7 @@ function MemberRoleCell({
         label={`Role for ${member.name}`}
         value={member.role}
         onChange={onSetRole}
-        options={[
-          { value: "member", label: "member" },
-          { value: "admin", label: "admin" },
-        ]}
+        options={ROLE_OPTIONS}
       />
     );
   }
@@ -439,7 +445,7 @@ function InviteByEmailCard({
   memberLimit: number;
   sendEmailInvite: {
     mutate: (
-      params: { email: string; role: "member" | "admin" },
+      params: { email: string; role: InvitableRole },
       opts?: { onSuccess?: () => void },
     ) => void;
     isPending: boolean;
@@ -448,7 +454,7 @@ function InviteByEmailCard({
   const toast = useToast();
   const { register, handleSubmit, watch, setValue, reset } = useForm<{
     email: string;
-    role: "member" | "admin";
+    role: InvitableRole;
   }>({
     resolver: valibotResolver(inviteEmailSchema),
     defaultValues: { email: "", role: "member" },
@@ -456,7 +462,7 @@ function InviteByEmailCard({
   const selectedRole = watch("role");
 
   const submit = useCallback(
-    ({ email, role }: { email: string; role: "member" | "admin" }) => {
+    ({ email, role }: { email: string; role: InvitableRole }) => {
       sendEmailInvite.mutate(
         { email, role },
         {
@@ -508,10 +514,7 @@ function InviteByEmailCard({
               label="Role"
               value={selectedRole}
               onChange={(role) => setValue("role", oneOf(INVITABLE_ROLES, role, "member"))}
-              options={[
-                { value: "member", label: "member" },
-                { value: "admin", label: "admin" },
-              ]}
+              options={ROLE_OPTIONS}
             />
           </Field>
         </div>

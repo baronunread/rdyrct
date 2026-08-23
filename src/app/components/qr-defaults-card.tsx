@@ -5,7 +5,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useCurrentUser } from "../lib/hooks";
 import { useCurrentOrg } from "../lib/current-org";
 import { api, shortUrl } from "../lib/api";
-import { PLAN_LIMITS } from "@/shared/types";
+import { type OrgRole, PLAN_LIMITS } from "@/shared/types";
 import { Button } from "../ui/button";
 import { Card } from "../ui/misc";
 import { BusyContent } from "../ui/spinner";
@@ -75,10 +75,7 @@ function useQrDefaultsForm(
 }
 
 /** Owner/admin (or platform admin) can edit; everyone else can only view. */
-function canManageQrDefaults(
-  isPlatformAdmin: boolean | undefined,
-  role: "owner" | "admin" | "member" | undefined,
-) {
+function canManageQrDefaults(isPlatformAdmin: boolean | undefined, role: OrgRole | undefined) {
   return !!isPlatformAdmin || role === "owner" || role === "admin";
 }
 

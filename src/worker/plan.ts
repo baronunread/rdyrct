@@ -1,7 +1,7 @@
 import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import * as schema from "./db/schema";
 import type { DB, Env } from "./env";
-import { PLAN_LIMITS, type OrgPlan, type PlanLimits } from "@/shared/types";
+import { INVITABLE_ROLES, PLAN_LIMITS, type OrgPlan, type PlanLimits } from "@/shared/types";
 
 /**
  * Runs one raw D1 statement and reports whether it wrote a row. Meant for a
@@ -86,7 +86,7 @@ export async function acceptInviteAtomically(
   args: {
     orgId: string;
     userId: string;
-    role: "admin" | "member";
+    role: (typeof INVITABLE_ROLES)[number];
     ts: number;
     memberLimit: number;
     token: string;
