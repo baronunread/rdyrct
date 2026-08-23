@@ -283,6 +283,14 @@ describe("QR styling on a downgraded plan (#162)", () => {
     expect((await save(cookie, { qrStyle: "", qrColor: "" })).status).toBe(200);
   });
 
+  it("clears the logo size when asked, rather than keeping the old one", async () => {
+    const cookie = await seedStyledLink(await seedOwner("pro"));
+    await env.DB.prepare("update links set qr_logo_size = 0.4 where id = 'link-1'").run();
+    expect((await save(cookie, { qrLogoSize: null })).status).toBe(200);
+    const [row] = await testDb().select().from(schema.links).where(eq(schema.links.id, "link-1"));
+    expect(row.qrLogoSize).toBeNull();
+  });
+
   it("treats the org's own QR defaults the same way", async () => {
     const cookie = await seedOwner();
     await env.DB.prepare("update orgs set qr_style = 'dots' where id = 'org-1'").run();

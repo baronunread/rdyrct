@@ -843,7 +843,11 @@ function mergedLinkUpdate(
     qrCorner: body.qrCorner ?? existing.qrCorner,
     qrBg: body.qrBg ?? existing.qrBg,
     qrEyeColor: body.qrEyeColor ?? existing.qrEyeColor,
-    qrLogoSize: body.qrLogoSize ?? existing.qrLogoSize,
+    // `undefined`, not nullish: `null` is how the client clears the logo
+    // size, and `??` swallowed it, so a reset silently kept the old value.
+    // The five fields above take "" for the same job, which is why only this
+    // one needed spelling out.
+    qrLogoSize: body.qrLogoSize !== undefined ? body.qrLogoSize : existing.qrLogoSize,
     ...riskAfterDestinationChange(existing, fields.destination),
   };
 }
