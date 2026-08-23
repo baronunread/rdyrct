@@ -147,6 +147,18 @@ function addressColumns(address: typeof schema.linkAddresses.$inferInsert) {
   ];
 }
 
+/**
+ * "This org is not being torn down", as a clause rather than as a read.
+ *
+ * `requireOrgRole` already refuses a write to an org that is deleting, but it
+ * reads that flag before the handler runs. A create that passed the guard a
+ * moment before `deleteOrg` set the flag still commits afterwards, and the
+ * teardown's gather step has already taken its snapshot, so the address
+ * survives as a public KV redirect for an org that is supposed to be gone
+ * (#52). Inside the insert it is the same statement, so there is no window.
+ */
+const NOT_DELETING = "and not exists (select 1 from orgs where id = ? and deleting_at is not null)";
+
 function guardedAddressInsertStatement(
   env: Env,
   address: typeof schema.linkAddresses.$inferInsert,
@@ -165,8 +177,9 @@ function guardedAddressInsertStatement(
      and (
        select count(*) from link_addresses
        where link_id = ? and retired_at is null
-     ) < ?`,
-  ).bind(...columns, address.orgId, linkLimit, address.linkId, addressLimit);
+     ) < ?
+     ${NOT_DELETING}`,
+  ).bind(...columns, address.orgId, linkLimit, address.linkId, addressLimit, address.orgId);
 }
 
 /**
@@ -186,16 +199,16 @@ export async function insertAddressWithinLimit(
   addressLimit: number,
 ): Promise<boolean> {
   if (address.kind === "temp_alias") {
-    // Unconditional insert (a temp_alias never counts toward the cap): it
-    // either writes the row or throws, so `changes` is always > 0. Returning
-    // the guard's own result (rather than a hardcoded true) keeps this
-    // honest if the statement ever gains a WHERE clause.
+    // A temp_alias never counts toward the cap, so the only thing that can
+    // refuse it is the org being torn down. Returning the guard's own result
+    // rather than a hardcoded true is what makes that refusal visible.
     return runGuarded(
       env,
       `insert into link_addresses
          (id, link_id, org_id, domain_id, slug, kind, creation_reason, expires_at, retired_at, created_at)
-       values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      addressColumns(address),
+       select ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+       where 1 = 1 ${NOT_DELETING}`,
+      [...addressColumns(address), address.orgId],
     );
   }
   const result = await guardedAddressInsertStatement(env, address, linkLimit, addressLimit).run();

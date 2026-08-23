@@ -169,14 +169,32 @@ async function insertAddressAndRespond(
     linkLimit,
     MAX_ALIASES_PER_LINK + 1,
   );
-  if (!inserted)
-    throw new HTTPException(402, {
-      message: "Upgrade your plan to create more links",
-      cause: { code: "link_limit" },
-    });
+  if (!inserted) await refuseAddressInsert(db, orgId);
   await enqueueStorage(env, [syncLinkMsg(address.slug, hostname)]);
   const [dto, quota] = await Promise.all([linkToDTO(db, orgId, link), quotaUsageFields(db, orgId)]);
   return { dto: { ...dto, ...quota }, status } as const;
+}
+
+/**
+ * Why the guarded address insert refused, said accurately.
+ *
+ * The insert re-checks the plan cap and the org's teardown flag in one
+ * statement, so a refusal has two possible causes and only one of them is
+ * about money. Telling somebody whose org is being deleted to upgrade their
+ * plan sells them a fix for a problem they do not have (#52). Costs one read,
+ * on a path that has already failed.
+ */
+async function refuseAddressInsert(db: DB, orgId: string): Promise<never> {
+  const rows = await db
+    .select({ deletingAt: schema.orgs.deletingAt })
+    .from(schema.orgs)
+    .where(eq(schema.orgs.id, orgId));
+  if (rows[0]?.deletingAt != null)
+    throw new HTTPException(409, { message: "Organization is being deleted" });
+  throw new HTTPException(402, {
+    message: "Upgrade your plan to create more links",
+    cause: { code: "link_limit" },
+  });
 }
 
 /** Count active addresses for a single link, for call sites that don't
@@ -801,12 +819,7 @@ linkRoutes.post("/", requireOrgRole("member"), async (c) => {
   // persists without its primary address, and the rollback can't itself fail
   // as a separate call.
   const inserted = await insertLinkWithinLimit(db, c.env, link, address, limits.links);
-  if (!inserted) {
-    throw new HTTPException(402, {
-      message: "Upgrade your plan to create more links",
-      cause: { code: "link_limit" },
-    });
-  }
+  if (!inserted) await refuseAddressInsert(db, orgId);
   await enqueueStorage(c.env, [syncLinkMsg(link.slug, hostname)]);
   // Score the destination after the response (#68), the way clicks are
   // recorded: it scores, it never blocks, and nobody waits on it.
