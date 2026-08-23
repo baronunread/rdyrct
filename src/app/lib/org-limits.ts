@@ -20,7 +20,11 @@ export function canListOrgDomains(isPlatformAdmin: boolean, role: OrgRole | unde
  * feature. Undefined role means the org has not loaded, which is also not a
  * moment to offer a write.
  */
-export function canWriteOrg(role: OrgRole | undefined): boolean {
+export function canWriteOrg(role: OrgRole | undefined, locked = false): boolean {
+  // A locked org is read-only for everyone in it, its owner included (#160).
+  // Same answer as a viewer's, so every control already hidden for a viewer
+  // is hidden here too, and nothing new has to be threaded through.
+  if (locked) return false;
   return role === "owner" || role === "admin" || role === "member";
 }
 
@@ -38,7 +42,7 @@ export function useOrgLimits() {
   const orgQr = orgQrFrom(org);
   // Every page that can offer a write already calls this hook, so the answer
   // lives here rather than being re-derived from the role at each control.
-  const canWrite = canWriteOrg(org?.role);
+  const canWrite = canWriteOrg(org?.role, org?.locked);
   // Resolved here rather than at each call site, so nothing preselects a
   // domain that stopped serving (#69).
   const defaultDomainId = resolveDefaultDomainId(org?.defaultDomainId, activeDomains);

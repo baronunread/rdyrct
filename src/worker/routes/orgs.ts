@@ -317,11 +317,17 @@ orgRoutes.get("/:orgId/members", requireOrgRole("viewer"), async (c) => {
       email: schema.user.email,
       role: schema.orgMembers.role,
       createdAt: schema.orgMembers.createdAt,
+      previousRole: schema.orgMembers.previousRole,
     })
     .from(schema.orgMembers)
     .innerJoin(schema.user, eq(schema.orgMembers.userId, schema.user.id))
     .where(eq(schema.orgMembers.orgId, c.req.param("orgId")));
-  return c.json(rows satisfies MemberDTO[]);
+  return c.json(
+    rows.map(({ previousRole, ...row }) => ({
+      ...row,
+      demoted: previousRole !== null,
+    })) satisfies MemberDTO[],
+  );
 });
 
 /**

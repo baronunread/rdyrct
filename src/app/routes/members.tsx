@@ -8,7 +8,14 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { UserPlus, Trash2, Info } from "lucide-react";
 import { useCurrentUser, useMembers, useInvites } from "../lib/hooks";
 import { api } from "../lib/api";
-import { PLAN_LIMITS, type InviteDTO, type OrgRole, type Sort, type UserOrg } from "@/shared/types";
+import {
+  PLAN_LIMITS,
+  type InviteDTO,
+  type MemberDTO,
+  type OrgRole,
+  type Sort,
+  type UserOrg,
+} from "@/shared/types";
 import { Button, IconButton } from "../ui/button";
 import { CopyButton } from "../ui/copy-button";
 import { Field, Input } from "../ui/field";
@@ -152,7 +159,7 @@ function MemberRoleCell({
   canManage,
   onSetRole,
 }: {
-  member: { name: string; role: OrgRole };
+  member: { name: string; role: OrgRole; demoted: boolean };
   canManage: boolean;
   onSetRole: (role: string) => void;
 }) {
@@ -178,6 +185,17 @@ function MemberRoleCell({
     );
   }
   return <Badge color={roleColor[member.role]}>{member.role}</Badge>;
+}
+
+/** Why somebody who used to be able to edit no longer can (#161). Without
+ * it they report the missing buttons as a bug, and they are right to. */
+function DemotedNote({ member }: { member: { demoted: boolean } }) {
+  if (!member.demoted) return null;
+  return (
+    <p className="mt-0.5 max-w-prose text-xs text-muted">
+      Set to viewer when the plan changed. Upgrading gives back the role they had.
+    </p>
+  );
 }
 
 function MemberRemoveCell({
@@ -206,7 +224,7 @@ function MemberRow({
   onSetRole,
   onRemove,
 }: {
-  member: { userId: string; name: string; email: string; role: OrgRole; createdAt: number };
+  member: MemberDTO;
   canManage: boolean;
   isSelf: boolean;
   onSetRole: (role: string) => void;
@@ -218,6 +236,7 @@ function MemberRow({
       <Td className="truncate text-muted">{member.email}</Td>
       <Td>
         <MemberRoleCell member={member} canManage={canManage} onSetRole={onSetRole} />
+        <DemotedNote member={member} />
       </Td>
       <Td className="text-xs text-muted">{shortDate(member.createdAt)}</Td>
       {canManage && (
@@ -240,7 +259,7 @@ function MemberTable({
   onRemove,
 }: {
   isLoading: boolean;
-  sorted: { userId: string; name: string; email: string; role: OrgRole; createdAt: number }[];
+  sorted: MemberDTO[];
   canManage: boolean;
   sort: Sort;
   setSort: (s: Sort) => void;

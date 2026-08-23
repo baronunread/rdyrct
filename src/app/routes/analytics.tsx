@@ -16,6 +16,8 @@ import { AnalyticsSkeleton } from "../components/skeletons";
 import { NoOrgState } from "../components/no-org";
 import { ExportCsvButton } from "../components/export-csv-button";
 import { Card, PageHeader } from "../ui/misc";
+import { Tooltip } from "../ui/tooltip";
+import { HrefLink } from "../lib/router-search";
 
 const RANGE_PRESETS: {
   label: string;
@@ -36,11 +38,15 @@ function rangeButtonClass(active: boolean): string {
 
 function RangePicker({
   presets,
+  hiddenRanges,
   activeDays,
   activeBucket,
   onChoose,
 }: {
   presets: typeof RANGE_PRESETS;
+  /** The windows this plan cannot reach, named so the picker can say the
+      history is hidden rather than missing (#163). */
+  hiddenRanges: string[];
   activeDays: number;
   activeBucket: "day" | "hour";
   onChoose: (days: number, bucket?: "day" | "hour") => void;
@@ -59,6 +65,15 @@ function RangePicker({
           {p.label}
         </button>
       ))}
+      {hiddenRanges.length > 0 && (
+        <Tooltip
+          content={`Clicks are kept for 400 days. ${hiddenRanges.join(" and ")} come back the moment you upgrade, nothing was deleted.`}
+        >
+          <HrefLink href="/billing" className={rangeButtonClass(false)}>
+            Upgrade for {hiddenRanges[hiddenRanges.length - 1]}
+          </HrefLink>
+        </Tooltip>
+      )}
     </div>
   );
 }
@@ -154,6 +169,7 @@ export function Analytics() {
   const s = stats.data;
   const maxDays = PLAN_LIMITS[org.plan].analyticsDays;
   const presets = RANGE_PRESETS.filter((p) => p.days <= maxDays);
+  const hiddenRanges = RANGE_PRESETS.filter((p) => p.days > maxDays).map((p) => p.label);
   const activeDays = range.days ?? s.rangeDays;
   const activeBucket = range.bucket ?? s.bucket;
   const chooseRange = (days: number, bucket?: "day" | "hour") => {
@@ -173,6 +189,7 @@ export function Analytics() {
           <div className="flex items-center gap-2">
             <RangePicker
               presets={presets}
+              hiddenRanges={hiddenRanges}
               activeDays={activeDays}
               activeBucket={activeBucket}
               onChoose={chooseRange}

@@ -606,6 +606,9 @@ adminRoutes.get("/orgs/:orgId", async (c) => {
         email: schema.user.email,
         role: schema.orgMembers.role,
         createdAt: schema.orgMembers.createdAt,
+        // A downgrade demoted this member to viewer (#161), rather than
+        // anybody choosing it. Worth seeing from admin too.
+        demoted: sql<boolean>`${schema.orgMembers.previousRole} is not null`,
       })
       .from(schema.orgMembers)
       .innerJoin(schema.user, eq(schema.orgMembers.userId, schema.user.id))

@@ -102,6 +102,30 @@ async function domains() {
   return testDb().select().from(schema.domains).orderBy(schema.domains.createdAt);
 }
 
+/** Seeds an account, drops it to a lower plan, and runs the pass: the
+ * opening three lines of nearly every case below. */
+async function downgrade(
+  seedArgs: Parameters<typeof seed>[0],
+  to: string,
+  now = NOW,
+): Promise<ReturnType<typeof quietEnv>> {
+  await seed(seedArgs);
+  await setPlan(to);
+  const quiet = quietEnv();
+  await reconcileUser(quiet.env, testDb(), "owner-1", now);
+  return quiet;
+}
+
+/** Runs `body` with outbound mail captured, and always restores fetch. */
+async function withMail(body: (mail: ReturnType<typeof captureEmails>) => Promise<void>) {
+  const mail = captureEmails();
+  try {
+    await body(mail);
+  } finally {
+    mail.restore();
+  }
+}
+
 async function orgLocks() {
   return testDb().select().from(schema.orgs).orderBy(schema.orgs.createdAt);
 }
@@ -140,10 +164,7 @@ describe("entitlement reconciliation", () => {
 
   it("demotes over-cap members to viewer, longest-standing first, owner exempt", async () => {
     // Pro allows 25; free allows 3 (owner + 2).
-    await seed({ plan: "pro", members: 4 });
-    await setPlan("free");
-    const { env: e } = quietEnv();
-    await reconcileUser(e, testDb(), "owner-1", NOW);
+    await downgrade({ plan: "pro", members: 4 }, "free");
 
     const rows = await members();
     expect(rows.map((r) => [r.userId, r.role])).toEqual([
@@ -159,18 +180,12 @@ describe("entitlement reconciliation", () => {
   });
 
   it("locks the extra orgs on pro-to-free, keeping the oldest", async () => {
-    await seed({ plan: "pro", orgs: 3 });
-    await setPlan("free");
-    const { env: e } = quietEnv();
-    await reconcileUser(e, testDb(), "owner-1", NOW);
+    await downgrade({ plan: "pro", orgs: 3 }, "free");
     expect((await orgLocks()).map((o) => o.lockedAt)).toEqual([null, NOW, NOW]);
   });
 
   it("changes nothing when run twice for the same plan", async () => {
-    await seed({ plan: "pro", orgs: 3, members: 4, domains: 3 });
-    await setPlan("free");
-    const { env: e } = quietEnv();
-    await reconcileUser(e, testDb(), "owner-1", NOW);
+    const { env: e } = await downgrade({ plan: "pro", orgs: 3, members: 4, domains: 3 }, "free");
     const first = await entitlement();
 
     // A day later, same plan: the grace period must not move.
@@ -190,10 +205,7 @@ describe("entitlement reconciliation", () => {
   });
 
   it("restores everything on upgrade, with no manual step", async () => {
-    await seed({ plan: "pro", orgs: 3, members: 4, domains: 3 });
-    await setPlan("free");
-    const { env: e } = quietEnv();
-    await reconcileUser(e, testDb(), "owner-1", NOW);
+    const { env: e } = await downgrade({ plan: "pro", orgs: 3, members: 4, domains: 3 }, "free");
 
     await setPlan("pro");
     await reconcileUser(e, testDb(), "owner-1", NOW + 1000);
@@ -209,10 +221,7 @@ describe("entitlement reconciliation", () => {
   });
 
   it("restarts the grace period when the plan drops again", async () => {
-    await seed({ plan: "pro", domains: 3 });
-    await setPlan("hobby");
-    const { env: e } = quietEnv();
-    await reconcileUser(e, testDb(), "owner-1", NOW);
+    const { env: e } = await downgrade({ plan: "pro", domains: 3 }, "hobby");
     expect((await entitlement()).graceEndsAt).toBe(NOW + GRACE_PERIOD_MS);
 
     const later = NOW + 40 * 86_400_000;
@@ -223,12 +232,8 @@ describe("entitlement reconciliation", () => {
   });
 
   it("emails the owner once per grace period, then warns at day 23", async () => {
-    await seed({ plan: "hobby", domains: 2 });
-    await setPlan("free");
-    const mail = captureEmails();
-    try {
-      const { env: e } = quietEnv();
-      await reconcileUser(e, testDb(), "owner-1", NOW);
+    await withMail(async (mail) => {
+      const { env: e } = await downgrade({ plan: "hobby", domains: 2 }, "free");
       expect(mail.sent.map((m) => m.to)).toEqual(["owner@example.com"]);
       expect(mail.sent[0].subject).toContain("over its plan");
 
@@ -243,21 +248,13 @@ describe("entitlement reconciliation", () => {
       expect(mail.sent[1].subject).toContain("loses its custom domains soon");
       // And only once.
       expect(await sweepGraceWarnings(e, testDb(), day23 + 1000)).toBe(0);
-    } finally {
-      mail.restore();
-    }
+    });
   });
 
   it("leaves a grace with more than a week left alone", async () => {
-    await seed({ plan: "hobby", domains: 2 });
-    await setPlan("free");
-    const mail = captureEmails();
-    try {
-      const { env: e } = quietEnv();
-      await reconcileUser(e, testDb(), "owner-1", NOW);
+    await withMail(async () => {
+      const { env: e } = await downgrade({ plan: "hobby", domains: 2 }, "free");
       expect(await sweepGraceWarnings(e, testDb(), NOW + 86_400_000)).toBe(0);
-    } finally {
-      mail.restore();
-    }
+    });
   });
 });

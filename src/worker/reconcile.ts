@@ -1,3 +1,4 @@
+import * as v from "valibot";
 import { and, asc, eq, isNotNull, isNull, lte, sql } from "drizzle-orm";
 import * as schema from "./db/schema";
 import type { DB, Env } from "./env";
@@ -15,6 +16,7 @@ import {
   type OrgPlan,
   type OverLimits,
   type PlanLimits,
+  type JsonValue,
 } from "@/shared/types";
 
 /**
@@ -33,18 +35,30 @@ import {
  * one sees. Running it twice for the same plan changes nothing.
  */
 
-/** The over-limit map as stored, parsed back with anything unrecognised dropped. */
+/** The shape `over_json` holds. Parsed rather than asserted, because the
+ * column is text and a row written by an older version of this file (or by
+ * hand) must read back as "nothing over" rather than as fiction. */
+const overSchema = v.object({
+  links: v.optional(v.number()),
+  members: v.optional(v.number()),
+  domains: v.optional(v.number()),
+});
+
+/** The over-limit map as stored, with anything unrecognised dropped. */
 export function parseOver(json: string): OverLimits {
-  // SAFETY: written by writeEntitlement below, which stringifies an
-  // OverLimits. A row hand-edited into something else reads back as a
-  // partial object of numbers, and each field is checked before use.
-  const raw = JSON.parse(json || "{}") as Record<string, unknown>;
-  const over: OverLimits = {};
-  for (const key of ["links", "members", "domains"] as const) {
-    const value = raw[key];
-    if (typeof value === "number" && Number.isFinite(value)) over[key] = value;
+  const parsed = v.safeParse(overSchema, jsonOrNull(json));
+  return parsed.success ? parsed.output : {};
+}
+
+function jsonOrNull(json: string): JsonValue {
+  try {
+    // SAFETY: JSON.parse's return is typed `any`; JsonValue is what a parsed
+    // JSON document can be, and overSchema is what checks it means what this
+    // file needs.
+    return JSON.parse(json || "{}") as JsonValue;
+  } catch {
+    return null;
   }
-  return over;
 }
 
 /** The orgs a user owns, oldest first, which is the order every default here
@@ -82,18 +96,18 @@ async function reconcileOrgLocks(
   now: number,
 ): Promise<void> {
   const active = orgs.filter((o) => o.lockedAt === null);
-  if (active.length > limit) {
-    for (const org of active.slice(limit)) {
-      await setOrgLock(db, org.id, now);
-      org.lockedAt = now;
-    }
-    return;
-  }
-  const locked = orgs.filter((o) => o.lockedAt !== null);
-  for (const org of locked.slice(0, limit - active.length)) {
-    await setOrgLock(db, org.id, null);
-    org.lockedAt = null;
-  }
+  const [moving, lockedAt] =
+    active.length > limit
+      ? [active.slice(limit), now]
+      : [orgs.filter((o) => o.lockedAt !== null).slice(0, limit - active.length), null];
+  // Independent single-row updates, so they go out together rather than one
+  // round trip at a time.
+  await Promise.all(
+    moving.map(async (org) => {
+      await setOrgLock(db, org.id, lockedAt);
+      org.lockedAt = lockedAt;
+    }),
+  );
 }
 
 /**
@@ -119,14 +133,19 @@ async function reconcileDomainLocks(
     .where(eq(schema.domains.orgId, orgId))
     .orderBy(asc(schema.domains.createdAt), asc(schema.domains.id));
 
-  const changed: string[] = [];
-  for (const [index, row] of rows.entries()) {
+  const moving = rows.flatMap((row, index) => {
     const lockedAt = index < limit ? null : (row.lockedAt ?? now);
-    if (lockedAt === row.lockedAt) continue;
-    await db.update(schema.domains).set({ lockedAt }).where(eq(schema.domains.id, row.id));
-    changed.push(row.hostname);
-  }
-  return { count: rows.length, changed };
+    return lockedAt === row.lockedAt ? [] : [{ ...row, lockedAt }];
+  });
+  await Promise.all(
+    moving.map((row) =>
+      db
+        .update(schema.domains)
+        .set({ lockedAt: row.lockedAt })
+        .where(eq(schema.domains.id, row.id)),
+    ),
+  );
+  return { count: rows.length, changed: moving.map((row) => row.hostname) };
 }
 
 /**
@@ -159,27 +178,32 @@ async function reconcileMemberRoles(
     ...rest.slice(0, Math.max(0, limit - (owner ? 1 : 0))).map((r) => r.userId),
   ]);
 
-  const demoted: string[] = [];
-  for (const row of rows) {
-    if (keep.has(row.userId)) {
-      // Back inside the cap: whatever they were before the demotion, they are
-      // again. A role an admin set by hand since has no previousRole, so this
-      // never writes over a deliberate change.
-      if (row.previousRole === null) continue;
-      await db
+  // Back inside the cap: whatever they were before the demotion, they are
+  // again. A role an admin set by hand since has no previousRole, so a
+  // restore never writes over a deliberate change.
+  const restored = rows.flatMap((row) =>
+    keep.has(row.userId) && row.previousRole !== null
+      ? [{ userId: row.userId, role: row.previousRole }]
+      : [],
+  );
+  const demoted = rows.filter((row) => !keep.has(row.userId) && row.role !== "viewer");
+  const where = (userId: string) =>
+    and(eq(schema.orgMembers.orgId, orgId), eq(schema.orgMembers.userId, userId));
+  await Promise.all([
+    ...restored.map((row) =>
+      db
         .update(schema.orgMembers)
-        .set({ role: row.previousRole, previousRole: null })
-        .where(and(eq(schema.orgMembers.orgId, orgId), eq(schema.orgMembers.userId, row.userId)));
-      continue;
-    }
-    if (row.role === "viewer") continue;
-    await db
-      .update(schema.orgMembers)
-      .set({ role: "viewer", previousRole: row.role })
-      .where(and(eq(schema.orgMembers.orgId, orgId), eq(schema.orgMembers.userId, row.userId)));
-    demoted.push(row.userId);
-  }
-  return { count: rows.length, demoted };
+        .set({ role: row.role, previousRole: null })
+        .where(where(row.userId)),
+    ),
+    ...demoted.map((row) =>
+      db
+        .update(schema.orgMembers)
+        .set({ role: "viewer", previousRole: row.role })
+        .where(where(row.userId)),
+    ),
+  ]);
+  return { count: rows.length, demoted: demoted.map((row) => row.userId) };
 }
 
 async function readEntitlement(db: DB, orgId: string) {
@@ -191,7 +215,7 @@ async function readEntitlement(db: DB, orgId: string) {
 }
 
 /** One org's state after a pass, as the app reads it. */
-export interface OrgEntitlement {
+interface OrgEntitlement {
   over: OverLimits;
   graceEndsAt: number | null;
   /** When the day-0 email for this grace period went out; null while unsent. */
@@ -201,7 +225,7 @@ export interface OrgEntitlement {
 /**
  * Reconciles one org against its owner's plan. Returns the state it wrote.
  */
-export async function reconcileOrg(
+async function reconcileOrg(
   env: Env,
   db: DB,
   org: { id: string; name: string },
@@ -215,24 +239,20 @@ export async function reconcileOrg(
   // that is already counting down.
   const planChanged = orgPlanOf(previous?.plan) !== plan || previous === null;
 
-  const links = await countActiveAddresses(db, org.id);
-  const domains = await reconcileDomainLocks(db, org.id, limits.domains, now);
-  const members = await reconcileMemberRoles(db, org.id, limits.members);
+  // Three independent resources: neither read nor write of one depends on
+  // another, so they go out together.
+  const [links, domains, members] = await Promise.all([
+    countActiveAddresses(db, org.id),
+    reconcileDomainLocks(db, org.id, limits.domains, now),
+    reconcileMemberRoles(db, org.id, limits.members),
+  ]);
 
   const over: OverLimits = {};
   if (links > limits.links) over.links = links;
   if (members.count > limits.members) over.members = members.count;
   if (domains.count > limits.domains) over.domains = domains.count;
 
-  const stillOver = isOverLimit(over);
-  const graceEndsAt = !stillOver
-    ? null
-    : planChanged || previous?.graceEndsAt == null
-      ? now + GRACE_PERIOD_MS
-      : previous.graceEndsAt;
-  // The two emails belong to one grace period, so a new one starts unsent.
-  const keepNotices = !planChanged && graceEndsAt !== null;
-  const notifiedAt = keepNotices ? (previous?.notifiedAt ?? null) : null;
+  const { graceEndsAt, notifiedAt, warnedAt } = graceFor(over, previous, planChanged, now);
 
   await writeEntitlement(db, {
     orgId: org.id,
@@ -241,7 +261,7 @@ export async function reconcileOrg(
     graceEndsAt,
     reconciledAt: now,
     notifiedAt,
-    warnedAt: keepNotices ? (previous?.warnedAt ?? null) : null,
+    warnedAt,
   });
 
   // After the row is written, so the KV value the sync reads carries this
@@ -252,6 +272,35 @@ export async function reconcileOrg(
   );
 
   return { over, graceEndsAt, notifiedAt };
+}
+
+/**
+ * When this org's grace period ends, and which of its two emails have gone
+ * out for it.
+ *
+ * The clock only restarts on a plan change, which is what makes a repeat run
+ * a no-op: a second pass on the same plan finds the same stored deadline and
+ * writes it back. A new grace period starts unsent, because its two emails
+ * describe the new deadline, not the one they were sent about.
+ */
+function graceFor(
+  over: OverLimits,
+  previous: {
+    graceEndsAt: number | null;
+    notifiedAt: number | null;
+    warnedAt: number | null;
+  } | null,
+  planChanged: boolean,
+  now: number,
+) {
+  if (!isOverLimit(over)) return { graceEndsAt: null, notifiedAt: null, warnedAt: null };
+  if (planChanged || previous?.graceEndsAt == null)
+    return { graceEndsAt: now + GRACE_PERIOD_MS, notifiedAt: null, warnedAt: null };
+  return {
+    graceEndsAt: previous.graceEndsAt,
+    notifiedAt: previous.notifiedAt,
+    warnedAt: previous.warnedAt,
+  };
 }
 
 async function writeEntitlement(
@@ -288,10 +337,14 @@ export async function reconcileUser(
 
     const orgs = await ownedOrgs(db, userId);
     await reconcileOrgLocks(db, orgs, limits.orgs, now);
-    for (const org of orgs) {
-      const state = await reconcileOrg(env, db, org, plan, limits, now);
-      await notifyDowngrade(env, db, org, plan, state, now);
-    }
+    // Each org is reconciled against the same plan and touches only its own
+    // rows, so they run together.
+    await Promise.all(
+      orgs.map(async (org) => {
+        const state = await reconcileOrg(env, db, org, plan, limits, now);
+        await notifyDowngrade(env, db, org, plan, state, now);
+      }),
+    );
   } catch (error) {
     captureAlert([{ event: "reconcile_failed", userId }]);
     console.error("reconcile_failed", userId, error);
@@ -403,28 +456,29 @@ export async function sweepGraceWarnings(env: Env, db: DB, now = Date.now()): Pr
       ),
     );
 
-  let sent = 0;
-  for (const row of rows) {
-    const state = {
-      over: parseOver(row.overJson),
-      graceEndsAt: row.graceEndsAt,
-      notifiedAt: null,
-    };
-    const org = { id: row.orgId, name: row.name };
-    const delivered = await sendDowngradeEmail(
-      env,
-      db,
-      org,
-      orgPlanOf(row.plan),
-      state,
-      "warning",
-    ).catch(() => false);
-    if (!delivered) continue;
-    await db
-      .update(schema.orgEntitlements)
-      .set({ warnedAt: now })
-      .where(eq(schema.orgEntitlements.orgId, row.orgId));
-    sent++;
-  }
-  return sent;
+  const results = await Promise.all(
+    rows.map(async (row) => {
+      const state = {
+        over: parseOver(row.overJson),
+        graceEndsAt: row.graceEndsAt,
+        notifiedAt: null,
+      };
+      const org = { id: row.orgId, name: row.name };
+      const delivered = await sendDowngradeEmail(
+        env,
+        db,
+        org,
+        orgPlanOf(row.plan),
+        state,
+        "warning",
+      ).catch(() => false);
+      if (!delivered) return false;
+      await db
+        .update(schema.orgEntitlements)
+        .set({ warnedAt: now })
+        .where(eq(schema.orgEntitlements.orgId, row.orgId));
+      return true;
+    }),
+  );
+  return results.filter(Boolean).length;
 }

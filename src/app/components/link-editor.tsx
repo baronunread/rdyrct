@@ -13,6 +13,7 @@ import { Lock, Info } from "lucide-react";
 import { shortUrl } from "../lib/api";
 import { QR_CORNER_STYLES, QR_DOT_STYLES, type DomainDTO, type LinkInput } from "@/shared/types";
 import { Button } from "../ui/button";
+import { buttonClass } from "../ui/button-class";
 import { cn } from "../ui/cn";
 import { Dialog } from "../ui/dialog";
 import { Field, Input } from "../ui/field";
@@ -62,23 +63,13 @@ const QR_OVERRIDE_FIELDS = [
   "qrLogoSize",
 ] as const;
 
-/**
- * Clears a link's QR overrides when the plan no longer allows them.
- *
- * An organization that downgrades keeps whatever its links already had, and
- * the editor loads those values whether or not it draws the controls for
- * them. Submitted, the server answers 402 and the whole save fails: somebody
- * on Free could not fix a typo in a title, and the message they got talked
- * about QR codes. Sending the fields back as empty is also what the hidden
- * controls imply, so the save does what the dialog looks like it will do.
- */
-function withoutQrOverrides(data: LinkInput): LinkInput {
-  const cleared = { ...data };
-  for (const field of QR_OVERRIDE_FIELDS) {
-    if (field === "qrLogoSize") cleared.qrLogoSize = null;
-    else cleared[field] = "";
-  }
-  return cleared;
+/** Whether this link already carries a QR look of its own, so the editor can
+ * say it is kept and locked rather than showing an upsell for a feature the
+ * link is visibly using (#162). */
+function hasQrOverrides(data: LinkInput): boolean {
+  return QR_OVERRIDE_FIELDS.some((field) =>
+    field === "qrLogoSize" ? data.qrLogoSize != null : !!data[field],
+  );
 }
 
 const UTM_FIELDS: { key: UtmKey; label: string; placeholder: string }[] = [
@@ -343,7 +334,15 @@ function QrLogoField({ form, setForm }: { form: LinkInput; setForm: (f: LinkInpu
 /** Stands where the customization controls would be on a paid plan. The QR
  * itself is already on screen beside it, so this asks for the upgrade the
  * visitor can see the point of, rather than blocking the feature. */
-function QrCustomizationUpsell({ className }: { className?: string }) {
+/**
+ * What sits where the QR controls would be on a plan without `qrCustom`.
+ *
+ * Two different sentences, because they are two different situations. A link
+ * with no styling is being offered a feature. A link that already has some,
+ * on an org that downgraded, is keeping it: saying "add your logo on a paid
+ * plan" to somebody whose logo is right there in the preview reads as a bug.
+ */
+function QrCustomizationUpsell({ locked, className }: { locked?: boolean; className?: string }) {
   return (
     <div
       className={cn(
@@ -353,14 +352,14 @@ function QrCustomizationUpsell({ className }: { className?: string }) {
     >
       <div className="flex items-start gap-2">
         <Lock size={14} className="mt-0.5 shrink-0 text-muted" />
-        <p className="text-xs text-muted">
-          Add your logo, colors, and dot shapes to this QR on a paid plan.
+        <p className="max-w-prose text-xs text-muted">
+          {locked
+            ? "This QR keeps the look it already has, and still downloads that way. Changing it needs a paid plan."
+            : "Add your logo, colors, and dot shapes to this QR on a paid plan."}
         </p>
       </div>
-      <RouterLink to="/billing" className="shrink-0">
-        <Button variant="outline" size="sm">
-          See plans
-        </Button>
+      <RouterLink to="/billing" className={buttonClass({ variant: "outline", size: "sm" })}>
+        See plans
       </RouterLink>
     </div>
   );
@@ -579,7 +578,10 @@ export function LinkEditor({
   shakeKey: number;
 }) {
   const editing = editingLink != null;
-  const save = (data: LinkInput) => onSave(qrCustomEnabled ? data : withoutQrOverrides(data));
+  // Sends what it loaded. Clearing the QR fields on a plan without qrCustom
+  // was how a title edit silently destroyed a link's logo and colours (#162);
+  // the server now only refuses a save that *changes* them.
+  const save = (data: LinkInput) => onSave(data);
   const toast = useToast();
   const shake = useShake();
   const destinationRef = useRef<HTMLInputElement>(null);
@@ -678,7 +680,7 @@ export function LinkEditor({
         {qrCustomEnabled ? (
           <QrCustomization form={form} setForm={setForm} orgQr={orgQr} className="sm:col-span-2" />
         ) : (
-          <QrCustomizationUpsell className="sm:col-span-2" />
+          <QrCustomizationUpsell locked={hasQrOverrides(form)} className="sm:col-span-2" />
         )}
       </form>
 

@@ -220,6 +220,12 @@ export interface MemberDTO {
   email: string;
   role: OrgRole;
   createdAt: number;
+  /**
+   * This member is a viewer because a downgrade demoted them, not because
+   * anyone chose it (#161). The members page says so, and an upgrade puts
+   * their old role back.
+   */
+  demoted: boolean;
 }
 
 export interface InviteDTO {

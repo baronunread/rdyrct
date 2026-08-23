@@ -6,7 +6,7 @@ import { AnimatePresence, LazyMotion, MotionConfig, domAnimation, m } from "moti
 import { Trash2, RefreshCw, Star } from "lucide-react";
 import { useCurrentUser, useConfig, useDomains, useDomainMutations } from "../lib/hooks";
 import { useCurrentOrg } from "../lib/current-org";
-import { PLAN_LIMITS, type DomainDTO, type OrgRole } from "@/shared/types";
+import { PLAN_LIMITS, type DomainDTO, type OrgRole, type UserOrg } from "@/shared/types";
 import { Button, IconButton } from "../ui/button";
 import { buttonClass } from "../ui/button-class";
 import { Input } from "../ui/field";
@@ -17,6 +17,8 @@ import { Badge, Card, PageHeader } from "../ui/misc";
 import { BusyContent } from "../ui/spinner";
 import { DomainsPageSkeleton, DomainsSkeleton, HeaderSkeleton } from "../components/skeletons";
 import { NoOrgState } from "../components/no-org";
+import { LockedPanel } from "../components/over-limit";
+import { graceLabel } from "../lib/grace";
 import { CopyButton } from "../ui/copy-button";
 import { useToast } from "../ui/toast";
 import { cn } from "../ui/cn";
@@ -182,21 +184,28 @@ function DeleteDomainDialog({
   );
 }
 
-function DomainsCard({ orgId, plan }: { orgId: string; plan: "free" | "hobby" | "pro" }) {
-  const domains = useDomains(orgId);
-  const { add, refresh, setRootRedirect, remove, setDefault } = useDomainMutations(orgId);
-  const { org } = useCurrentOrg();
-  const config = useConfig();
-  const appHost = config.data?.appHost ?? window.location.host;
-  const toast = useToast();
-  const limits = PLAN_LIMITS[plan];
-  const [deleting, setDeleting] = useState<DomainDTO | null>(null);
-  const [redirectDraft, setRedirectDraft] = useState<Record<string, string>>({});
-  const { register, handleSubmit, reset } = useForm<{ hostname: string }>({
-    resolver: valibotResolver(hostnameSchema),
-    defaultValues: { hostname: "" },
-  });
-
+/**
+ * Every write the domains card can make, with its toast and its analytics
+ * event. Split out of DomainsCard so that component is about what the page
+ * shows and this is about what its buttons do.
+ */
+function useDomainActions({
+  mutations: { add, refresh, setRootRedirect, remove, setDefault },
+  org,
+  toast,
+  reset,
+  deleting,
+  setDeleting,
+  redirectDraft,
+}: {
+  mutations: ReturnType<typeof useDomainMutations>;
+  org: UserOrg | null;
+  toast: ReturnType<typeof useToast>;
+  reset: () => void;
+  deleting: DomainDTO | null;
+  setDeleting: (d: DomainDTO | null) => void;
+  redirectDraft: Record<string, string>;
+}) {
   const copy = (text: string) => copyToClipboard(text, toast);
 
   const addDomain = useCallback(
@@ -261,7 +270,41 @@ function DomainsCard({ orgId, plan }: { orgId: string; plan: "free" | "hobby" | 
     });
   };
 
-  if (limits.domains === 0) return <UpgradeDomainsCard />;
+  return { copy, addDomain, recheck, saveRedirect, toggleDefault, confirmDelete };
+}
+
+function DomainsCard({ orgId, plan }: { orgId: string; plan: "free" | "hobby" | "pro" }) {
+  const domains = useDomains(orgId);
+  const { add, refresh, setRootRedirect, remove, setDefault } = useDomainMutations(orgId);
+  const { org } = useCurrentOrg();
+  const config = useConfig();
+  const appHost = config.data?.appHost ?? window.location.host;
+  const toast = useToast();
+  const limits = PLAN_LIMITS[plan];
+  const [deleting, setDeleting] = useState<DomainDTO | null>(null);
+  const [redirectDraft, setRedirectDraft] = useState<Record<string, string>>({});
+  const { register, handleSubmit, reset } = useForm<{ hostname: string }>({
+    resolver: valibotResolver(hostnameSchema),
+    defaultValues: { hostname: "" },
+  });
+
+  const { copy, addDomain, recheck, saveRedirect, toggleDefault, confirmDelete } = useDomainActions(
+    {
+      mutations: { add, refresh, setRootRedirect, remove, setDefault },
+      org,
+      toast,
+      reset,
+      deleting,
+      setDeleting,
+      redirectDraft,
+    },
+  );
+
+  // A plan with no domains still lists the ones the org already has (#159).
+  // Hiding them was the bug: an owner who downgrades and finds an upgrade
+  // pitch where their domains used to be concludes we deleted them.
+  const hasDomains = !!domains.data?.length;
+  if (limits.domains === 0 && !hasDomains) return <UpgradeDomainsCard />;
 
   return (
     <>
@@ -274,31 +317,28 @@ function DomainsCard({ orgId, plan }: { orgId: string; plan: "free" | "hobby" | 
               <DomainsSkeleton />
             ) : (
               <div className="flex flex-col gap-4">
-                <MotionConfig reducedMotion="user">
-                  <LazyMotion features={domAnimation}>
-                    {domains.data?.map((d) => (
-                      <DomainRow
-                        key={d.id}
-                        domain={d}
-                        appHost={appHost}
-                        refreshing={refresh.isPending}
-                        savingRedirect={setRootRedirect.isPending}
-                        isDefault={org?.defaultDomainId === d.id}
-                        savingDefault={setDefault.isPending}
-                        onToggleDefault={() => toggleDefault(d)}
-                        redirectDraft={redirectDraft[d.id] ?? d.rootRedirect}
-                        onRecheck={() => recheck(d)}
-                        onDelete={() => setDeleting(d)}
-                        onRedirectDraft={(v) => setRedirectDraft({ ...redirectDraft, [d.id]: v })}
-                        onSaveRedirect={() => saveRedirect(d)}
-                        onCopy={copy}
-                      />
-                    ))}
-                  </LazyMotion>
-                </MotionConfig>
+                <DomainList
+                  domains={domains.data}
+                  org={org}
+                  appHost={appHost}
+                  pending={{
+                    refreshing: refresh.isPending,
+                    savingRedirect: setRootRedirect.isPending,
+                    savingDefault: setDefault.isPending,
+                  }}
+                  redirectDraft={redirectDraft}
+                  onToggleDefault={toggleDefault}
+                  onRecheck={recheck}
+                  onDelete={setDeleting}
+                  onRedirectDraft={(id, v) => setRedirectDraft({ ...redirectDraft, [id]: v })}
+                  onSaveRedirect={saveRedirect}
+                  onCopy={copy}
+                />
 
-                <AddDomainForm
-                  hasDomains={!!domains.data?.length}
+                <DomainsFooter
+                  canAdd={limits.domains > 0}
+                  hasDomains={hasDomains}
+                  graceEndsAt={org?.graceEndsAt ?? null}
                   register={register}
                   onSubmit={handleSubmit(addDomain, (errors) =>
                     toast(errors.hostname?.message ?? "Enter a valid hostname", "error"),
@@ -403,6 +443,102 @@ function DefaultDomainButton({
   );
 }
 
+/**
+ * What sits under the list: the form on a plan that may add a domain, and
+ * the explanation on one that may not (#159).
+ *
+ * Exactly one of the two, always. A plan with no domains that still holds
+ * some needs the second, which is what makes the read-only list make sense
+ * rather than look like a bug.
+ */
+function DomainsFooter({
+  canAdd,
+  hasDomains,
+  graceEndsAt,
+  register,
+  onSubmit,
+  pending,
+}: {
+  canAdd: boolean;
+  hasDomains: boolean;
+  graceEndsAt: number | null;
+  register: UseFormRegister<{ hostname: string }>;
+  onSubmit: (e: FormEvent) => void;
+  pending: boolean;
+}) {
+  if (!canAdd)
+    return (
+      <LockedPanel
+        title="Your custom domains are locked"
+        reason="Custom domains need Hobby or Pro. Nothing was deleted: the DNS record, the certificate and every link on these domains are still here."
+        until={graceEndsAt}
+        cta="Upgrade to keep them"
+      />
+    );
+  return (
+    <AddDomainForm
+      hasDomains={hasDomains}
+      register={register}
+      onSubmit={onSubmit}
+      pending={pending}
+    />
+  );
+}
+
+/** Every connected domain, in one animated list. Split out of DomainsCard so
+ * that component is about the page's state and this one is about its rows. */
+function DomainList({
+  domains,
+  org,
+  appHost,
+  pending,
+  redirectDraft,
+  onToggleDefault,
+  onRecheck,
+  onDelete,
+  onRedirectDraft,
+  onSaveRedirect,
+  onCopy,
+}: {
+  domains: DomainDTO[] | undefined;
+  org: UserOrg | null;
+  appHost: string;
+  pending: { refreshing: boolean; savingRedirect: boolean; savingDefault: boolean };
+  redirectDraft: Record<string, string>;
+  onToggleDefault: (d: DomainDTO) => void;
+  onRecheck: (d: DomainDTO) => void;
+  onDelete: (d: DomainDTO) => void;
+  onRedirectDraft: (id: string, value: string) => void;
+  onSaveRedirect: (d: DomainDTO) => void;
+  onCopy: (text: string) => void;
+}) {
+  return (
+    <MotionConfig reducedMotion="user">
+      <LazyMotion features={domAnimation}>
+        {(domains ?? []).map((d) => (
+          <DomainRow
+            key={d.id}
+            domain={d}
+            appHost={appHost}
+            refreshing={pending.refreshing}
+            savingRedirect={pending.savingRedirect}
+            isDefault={org?.defaultDomainId === d.id}
+            savingDefault={pending.savingDefault}
+            onToggleDefault={() => onToggleDefault(d)}
+            redirectDraft={redirectDraft[d.id] ?? d.rootRedirect}
+            onRecheck={() => onRecheck(d)}
+            onDelete={() => onDelete(d)}
+            onRedirectDraft={(v) => onRedirectDraft(d.id, v)}
+            onSaveRedirect={() => onSaveRedirect(d)}
+            onCopy={onCopy}
+            graceEndsAt={org?.graceEndsAt ?? null}
+          />
+        ))}
+      </LazyMotion>
+    </MotionConfig>
+  );
+}
+
 function DomainRow({
   domain: d,
   appHost,
@@ -417,6 +553,7 @@ function DomainRow({
   onRedirectDraft,
   onSaveRedirect,
   onCopy,
+  graceEndsAt,
 }: {
   domain: DomainDTO;
   appHost: string;
@@ -431,35 +568,52 @@ function DomainRow({
   onRedirectDraft: (v: string) => void;
   onSaveRedirect: () => void;
   onCopy: (text: string) => void;
+  /** When the org's grace period ends, for a locked domain's countdown. */
+  graceEndsAt: number | null;
 }) {
+  const locked = d.lockedAt !== null;
   return (
     <div className="rounded-lg border border-border p-3">
       <div className="flex items-center justify-between gap-2">
         <span className="font-bold">{d.hostname}</span>
         <div className="relative flex items-center gap-1">
-          {isDefault && <Badge color="mint">default</Badge>}
-          <DomainStatusBadge domain={d} refreshing={refreshing} onRecheck={onRecheck} />
-          <DefaultDomainButton
-            domain={d}
-            isDefault={isDefault}
-            pending={savingDefault}
-            onToggle={onToggleDefault}
-          />
+          {isDefault && !locked && <Badge color="mint">default</Badge>}
+          {locked ? (
+            <Badge color="butter">locked</Badge>
+          ) : (
+            <>
+              <DomainStatusBadge domain={d} refreshing={refreshing} onRecheck={onRecheck} />
+              <DefaultDomainButton
+                domain={d}
+                isDefault={isDefault}
+                pending={savingDefault}
+                onToggle={onToggleDefault}
+              />
+            </>
+          )}
           <IconButton label={`Delete ${d.hostname}`} danger onClick={onDelete}>
             <Trash2 size={14} />
           </IconButton>
         </div>
       </div>
 
-      <DomainStatusDetail
-        domain={d}
-        appHost={appHost}
-        redirectDraft={redirectDraft}
-        savingRedirect={savingRedirect}
-        onRedirectDraft={onRedirectDraft}
-        onSaveRedirect={onSaveRedirect}
-        onCopy={onCopy}
-      />
+      {locked ? (
+        <p className="tnum mt-2 text-xs text-muted">
+          {graceEndsAt !== null
+            ? `Still redirecting until ${new Date(graceEndsAt).toLocaleDateString()} (${graceLabel(graceEndsAt)}), then it stops.`
+            : "This domain has stopped redirecting."}
+        </p>
+      ) : (
+        <DomainStatusDetail
+          domain={d}
+          appHost={appHost}
+          redirectDraft={redirectDraft}
+          savingRedirect={savingRedirect}
+          onRedirectDraft={onRedirectDraft}
+          onSaveRedirect={onSaveRedirect}
+          onCopy={onCopy}
+        />
+      )}
     </div>
   );
 }

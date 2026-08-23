@@ -12,7 +12,7 @@ import {
   TEST_PASSWORD,
   testDb,
 } from "./support";
-import type { CurrentUser, DomainDTO } from "../../src/shared/types";
+import type { CurrentUser, DomainDTO, LinkInput } from "../../src/shared/types";
 
 /**
  * What a lock does once reconciliation has written it: the redirect path's
@@ -243,7 +243,7 @@ describe("QR styling on a downgraded plan (#162)", () => {
     return cookie;
   }
 
-  const save = (cookie: string, body: Record<string, unknown>) =>
+  const save = (cookie: string, body: Partial<LinkInput>) =>
     fetchWorker(
       new Request("http://localhost/api/orgs/org-1/links/link-1", {
         method: "PATCH",

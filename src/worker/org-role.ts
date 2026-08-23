@@ -35,26 +35,37 @@ export function requireOrgRole(
     const role = await orgRole(c.var.db, user, orgId);
     if (!role || ROLE_RANK[role] < ROLE_RANK[min])
       throw new HTTPException(403, { message: "Insufficient role" });
-    if (c.req.method === "GET") return next();
-    const state = await orgState(c.var.db, orgId);
-    // Reads stay allowed while an org tears down; only block writes, so a
-    // link or domain created in that window is never missed by the teardown
-    // workflow's gather step. See deleteOrg in routes/orgs.ts. The delete
-    // route itself opts out: deleteOrg already makes a repeat DELETE a
-    // no-op, and blocking it here would surface that as a 409 instead.
-    if (!opts?.allowWhileDeleting && state.deletingAt != null)
-      throw new HTTPException(409, { message: "Organization is being deleted" });
-    // A locked org is read-only for everyone in it, its owner included
-    // (#160): it is beyond the owner's plan, so it keeps serving its links
-    // and accepts no changes. Here rather than in each route, for the same
-    // reason the teardown check is: no route has to remember.
-    if (!opts?.allowWhileLocked && state.lockedAt != null)
-      throw new HTTPException(403, {
-        message: "This organization is locked: upgrade to Pro to use it again",
-        cause: { code: "org_locked" },
-      });
+    if (c.req.method !== "GET") await assertOrgWritable(c.var.db, orgId, opts);
     await next();
   });
+}
+
+/**
+ * The two states that stop an org accepting writes while leaving its reads
+ * open. Both are checked here rather than in each route, for the same
+ * reason: no route has to remember.
+ *
+ * Teardown: a link or domain created in that window would be missed by the
+ * workflow's gather step. The delete route itself opts out, because
+ * deleteOrg already makes a repeat DELETE a no-op and blocking it here would
+ * surface that as a 409 instead.
+ *
+ * Locked: the org is beyond its owner's plan (#160), so it keeps serving its
+ * links and accepts no changes, its owner included.
+ */
+async function assertOrgWritable(
+  db: DB,
+  orgId: string,
+  opts?: { allowWhileDeleting?: boolean; allowWhileLocked?: boolean },
+): Promise<void> {
+  const state = await orgState(db, orgId);
+  if (!opts?.allowWhileDeleting && state.deletingAt != null)
+    throw new HTTPException(409, { message: "Organization is being deleted" });
+  if (!opts?.allowWhileLocked && state.lockedAt != null)
+    throw new HTTPException(403, {
+      message: "This organization is locked: upgrade to Pro to use it again",
+      cause: { code: "org_locked" },
+    });
 }
 
 async function orgState(

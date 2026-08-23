@@ -226,6 +226,19 @@ function buildOnSave({
  * made LinksPage the most complex function in the app; here they are one
  * named thing the page reads off.
  */
+/**
+ * What the links counter says when it is worth saying something (#163).
+ *
+ * "Over" and "at" used to read the same, so an org holding 500 links on a
+ * 30-link plan was told to "upgrade for more" as though it were one short.
+ */
+function linkLimitHint(count: number, limit: number): string | undefined {
+  if (count > limit)
+    return `This plan allows ${limit} links. The extras still work, and you can delete some or upgrade.`;
+  if (count === limit) return "Link limit reached: upgrade for more links";
+  return undefined;
+}
+
 function useLinkDialogs(atLimit: boolean) {
   const [editorOpen, setEditorOpen] = useState(false);
   const [editing, setEditing] = useState<LinkDTO | null>(null);
@@ -287,7 +300,8 @@ export function LinksPage() {
   // link plus its kept-forever aliases each count. See useLinkQuotaUsage.
   const linkCount = quotaUsage.data?.count ?? 0;
   const atLimit = linkCount >= limits.links;
-  const limitHint = atLimit ? "Link limit reached: upgrade for more links" : undefined;
+  const overLimit = linkCount > limits.links;
+  const limitHint = linkLimitHint(linkCount, limits.links);
 
   const dialogs = useLinkDialogs(atLimit);
 
@@ -341,8 +355,9 @@ export function LinksPage() {
         sub="Short links, UTM tagging and QR codes"
         action={
           <div className="flex items-center gap-3">
-            <span className="text-xs tnum text-muted">
+            <span className="tnum text-xs text-muted" title={limitHint}>
               {linkCount} / {limits.links} links
+              {overLimit && " (over the limit)"}
             </span>
             {canWrite && (
               <Button

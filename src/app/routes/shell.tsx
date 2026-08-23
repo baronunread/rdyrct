@@ -21,6 +21,7 @@ import { Field, Input } from "../ui/field";
 
 import { AppShellSkeleton, RouteSkeleton } from "../components/skeletons";
 import { appNavItems } from "../components/nav-items";
+import { OverLimitBanner } from "../components/over-limit";
 import { NotFound } from "./not-found";
 import { PLAN_LIMITS, type User, type UserOrg } from "@/shared/types";
 import posthog from "../lib/posthog";
@@ -104,7 +105,9 @@ function OrgSwitcherMenu({
             {o.id === org?.id && <Check size={13} className="text-accent" />}
           </span>
           <span className="truncate">{o.name}</span>
-          <span className="ml-auto text-xs text-muted">{o.role}</span>
+          {/* A locked org stays in the list and says so (#160). Hiding it is
+              how somebody concludes their data is gone. */}
+          <span className="ml-auto text-xs text-muted">{o.locked ? "locked" : o.role}</span>
         </MenuItem>
       ))}
       <MenuSeparator />
@@ -432,6 +435,9 @@ export function AppShell() {
 
       <main className="flex min-w-0 flex-1 flex-col px-5 py-8 pt-16 md:ml-60 md:px-8 md:pt-8">
         <div className="mx-auto w-full max-w-5xl flex-1">
+          {/* Above the route, not inside each one: the state belongs to the
+              org, so it says the same thing on every page (#163). */}
+          <OverLimitBanner />
           {/* pages are lazy chunks: keep the shell in place while one loads,
               behind the shape that chunk is about to render */}
           <Suspense fallback={<RouteSkeleton />}>
