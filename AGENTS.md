@@ -123,6 +123,12 @@ including the admin screens. It exists because this repo is edited by agents
 constantly and each one otherwise re-derives the same conventions out of
 `src/app/ui/` by guessing. Same reason this file exists.
 
+**ship-issue** (`.claude/skills/ship-issue`, symlinked from `.agents/skills`)
+is how work gets landed: evaluate the issue before branching, mutation-test
+any new guard, read the review body rather than trusting the green check, get
+a cold review, then merge. This file says what the checks are; that one says
+when to run them and what to do with what they say.
+
 Shell writes to repo files are sandboxed; edit through the editor tools, not
 `sed`/`perl` (or run bash with the sandbox disabled for scripted edits).
 
