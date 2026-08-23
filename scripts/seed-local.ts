@@ -896,6 +896,17 @@ async function seedDowngrades(orgs: SeedOrg[], now: number, day: number): Promis
     statements.push(`UPDATE user SET plan = 'free' WHERE id = ${q(org.ownerId)}`);
     statements.push(
       `UPDATE domains SET locked_at = ${now} WHERE org_id = ${q(org.id)}`,
+      // QR defaults set while the org was paying. They keep applying on free
+      // and only go read-only (#162), which is the whole point of that rule
+      // and a state nothing else here produced: the settings screen had no
+      // seeded org that could show it.
+      //
+      // Not 'rounded'/'extra-rounded': the built-in defaults are the empty
+      // string in this form, and the pickers leave them out of their options
+      // rather than listing each twice. Writing the names the app never
+      // writes gave the read-only pickers a value with no option to match,
+      // so they rendered blank under a preview that was visibly styled.
+      `UPDATE orgs SET qr_style = 'dots', qr_corner = 'dot', qr_color = '#7c5cff', qr_eye_color = '#2f1f5e' WHERE id = ${q(org.id)}`,
       `INSERT INTO org_entitlements (org_id, plan, over_json, grace_ends_at, reconciled_at, notified_at)
        VALUES (${q(org.id)}, 'free', ${q(JSON.stringify(over))}, ${graceEndsAt}, ${now}, ${now})`,
     );
