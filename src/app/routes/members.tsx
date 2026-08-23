@@ -47,9 +47,9 @@ const roleColor = {
 /** What each role can do, said once, where the role is chosen. Without it
  * "viewer" and "member" look like the same word twice. */
 const ROLE_OPTIONS = [
-  { value: "viewer", label: "viewer · read only" },
-  { value: "member", label: "member · manage links" },
-  { value: "admin", label: "admin · manage the org" },
+  { value: "viewer", label: "viewer" },
+  { value: "member", label: "member" },
+  { value: "admin", label: "admin" },
 ];
 
 const inviteUrl = (token: string) => `${window.location.origin}/invite/${token}`;
@@ -189,14 +189,20 @@ function MemberRoleCell({
   return <Badge color={roleColor[member.role]}>{member.role}</Badge>;
 }
 
-/** Why somebody who used to be able to edit no longer can (#161). Without
- * it they report the missing buttons as a bug, and they are right to. */
-function DemotedNote({ member }: { member: { demoted: boolean } }) {
-  if (!member.demoted) return null;
+/**
+ * Why somebody who used to be able to edit no longer can (#161).
+ *
+ * A marker beside the role rather than a sentence under it: the reason is
+ * the same on every demoted row, and repeating three lines of it down a
+ * 23-person table buries the table it is annotating. The sentence is one
+ * hover away, where somebody who does not recognise the word will look.
+ */
+function DemotedMarker({ demoted }: { demoted: boolean }) {
+  if (!demoted) return null;
   return (
-    <p className="mt-0.5 max-w-prose text-xs text-muted">
-      Set to viewer when the plan changed. Upgrading gives back the role they had.
-    </p>
+    <Tooltip content="Set to viewer when the plan changed. Upgrading gives back the role they had.">
+      <span className="cursor-help text-xs text-muted">demoted</span>
+    </Tooltip>
   );
 }
 
@@ -237,8 +243,10 @@ function MemberRow({
       <Td className="truncate">{member.name}</Td>
       <Td className="truncate text-muted">{member.email}</Td>
       <Td>
-        <MemberRoleCell member={member} canManage={canManage} onSetRole={onSetRole} />
-        <DemotedNote member={member} />
+        <div className="flex items-center gap-2">
+          <MemberRoleCell member={member} canManage={canManage} onSetRole={onSetRole} />
+          <DemotedMarker demoted={member.demoted} />
+        </div>
       </Td>
       <Td className="text-xs text-muted">{shortDate(member.createdAt)}</Td>
       {canManage && (

@@ -212,11 +212,13 @@ test("losing seats demotes the newest members to viewer, and says so", async ({
   expect(rows[3].previous_role).toBe("member");
 
   // The demoted member is told why, rather than left to report the missing
-  // buttons as a bug.
+  // buttons as a bug. The row carries the marker; the sentence is on hover,
+  // so that the reason does not repeat down every row of a long table.
   await page.goto("/members");
-  await expect(page.getByText(/Set to viewer when the plan changed/)).toBeVisible({
-    timeout: 15_000,
-  });
+  const marker = page.getByText("demoted", { exact: true }).first();
+  await expect(marker).toBeVisible({ timeout: 15_000 });
+  await marker.hover();
+  await expect(page.getByText(/Set to viewer when the plan changed/)).toBeVisible();
 
   // And they really cannot write any more.
   const demoted = guests[2].page;
