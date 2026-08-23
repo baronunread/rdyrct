@@ -72,14 +72,16 @@ export async function createOwnedOrg(
  * member who opens somebody else's link does not burn it on their way to a
  * 409.
  *
- * `created_at` stands in for "the row this call inserted" because
- * `(org_id, user_id)` is the primary key, so there is only ever one row to
- * confuse it with: the caller's own earlier membership, and only if they
- * joined in the very millisecond this request is using. Reaching that means
- * one user accepting two different tokens for one org inside the same
- * millisecond, which spends the second token as well as the first. The cost
- * is an unused invite the admin re-issues, so it is left alone rather than
- * traded for a marker column on every membership row.
+ * The delete asks `changes() = 1`, which is SQLite for "the statement before
+ * me wrote a row". That is the exact question, so the token is spent when
+ * this call created the membership and never otherwise.
+ *
+ * It used to ask whether a membership existed with this request's exact
+ * `created_at`, which is nearly the same question and not quite: a second
+ * concurrent accept, correctly refused by the insert, still matched the row
+ * the first accept had written in the same millisecond and spent its token
+ * too (#156). `tests/worker/invite-accept.worker.ts` pins both the SQLite
+ * behaviour and the race.
  */
 export async function acceptInviteAtomically(
   env: Env,
@@ -110,12 +112,7 @@ export async function acceptInviteAtomically(
       args.orgId,
       args.memberLimit,
     ),
-    env.DB.prepare(
-      `delete from invites where token = ? and exists (
-         select 1 from org_members
-         where org_id = ? and user_id = ? and created_at = ?
-       )`,
-    ).bind(args.token, args.orgId, args.userId, args.ts),
+    env.DB.prepare("delete from invites where token = ? and changes() = 1").bind(args.token),
   ]);
   return results[0].meta.changes > 0;
 }
