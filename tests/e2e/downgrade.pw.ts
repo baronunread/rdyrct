@@ -214,6 +214,9 @@ test("losing seats demotes the newest members to viewer, and says so", async ({
   // The demoted member is told why, rather than left to report the missing
   // buttons as a bug. The row carries the marker; the sentence is on hover,
   // so that the reason does not repeat down every row of a long table.
+  // The consent banner sits bottom-right, over the very rows this reads, and
+  // swallows the hover. Answer it the way a returning visitor already has.
+  await page.addInitScript(() => localStorage.setItem("rdyrct:consent:v2", "granted"));
   await page.goto("/members");
   const marker = page.getByText("demoted", { exact: true }).first();
   await expect(marker).toBeVisible({ timeout: 15_000 });
