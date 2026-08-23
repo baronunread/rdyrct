@@ -195,7 +195,7 @@ async function applyQrPatch(
   const existing = rows[0] ?? null;
   if (!limits.qrCustom && changesQr(body, existing))
     throw new HTTPException(402, {
-      message: "Changing the QR code's look is a paid feature: upgrade to use it",
+      message: "Changing how QR codes look needs a paid plan",
       cause: { code: "qr_locked" },
     });
   Object.assign(set, qrPatchFields(body));

@@ -18,6 +18,7 @@ import { BusyContent } from "../ui/spinner";
 import { DomainsPageSkeleton, DomainsSkeleton, HeaderSkeleton } from "../components/skeletons";
 import { NoOrgState } from "../components/no-org";
 import { LockedPanel } from "../components/over-limit";
+import { domainsBlockedBy } from "../lib/org-limits";
 import { graceLabel, graceRunning } from "../lib/grace";
 import { CopyButton } from "../ui/copy-button";
 import { useToast } from "../ui/toast";
@@ -339,7 +340,7 @@ function DomainsCard({ orgId, plan }: { orgId: string; plan: "free" | "hobby" | 
                 />
 
                 <DomainsFooter
-                  canAdd={limits.domains > 0 && canWrite}
+                  blockedBy={domainsBlockedBy(limits.domains, !canWrite)}
                   hasDomains={hasDomains}
                   graceEndsAt={org?.graceEndsAt ?? null}
                   register={register}
@@ -455,25 +456,34 @@ function DefaultDomainButton({
  * rather than look like a bug.
  */
 function DomainsFooter({
-  canAdd,
+  blockedBy,
   hasDomains,
   graceEndsAt,
   register,
   onSubmit,
   pending,
 }: {
-  canAdd: boolean;
+  blockedBy: ReturnType<typeof domainsBlockedBy>;
   hasDomains: boolean;
   graceEndsAt: number | null;
   register: UseFormRegister<{ hostname: string }>;
   onSubmit: (e: FormEvent) => void;
   pending: boolean;
 }) {
-  if (!canAdd)
+  // The banner at the top of the page already tells a locked org why it is
+  // locked, so this only says why the form is gone.
+  if (blockedBy === "lock")
+    return (
+      <LockedPanel
+        title="This organization is locked"
+        reason="You cannot add a domain until it is active again. The domains it already has keep redirecting."
+      />
+    );
+  if (blockedBy === "plan")
     return (
       <LockedPanel
         title="Your custom domains are locked"
-        reason="Custom domains need Hobby or Pro. Nothing was deleted: the DNS record, the certificate and every link on these domains are still here."
+        reason="Custom domains need a paid plan. Nothing was deleted: the DNS record, the certificate and every link on these domains are still here."
         until={graceEndsAt}
         cta="Upgrade to keep them"
       />

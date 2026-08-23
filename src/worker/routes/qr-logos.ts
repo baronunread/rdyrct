@@ -65,7 +65,7 @@ qrLogoRoutes.post("/", requireOrgRole("member"), async (c) => {
   const { limits } = await orgPlan(c.var.db, c.req.param("orgId")!);
   if (!limits.qrCustom)
     throw new HTTPException(402, {
-      message: "QR customization is a paid feature: upgrade to use it",
+      message: "Changing how QR codes look needs a paid plan",
     });
 
   const type = c.req.header("content-type")?.split(";")[0].trim().toLowerCase() ?? "";

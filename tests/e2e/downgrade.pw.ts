@@ -169,8 +169,8 @@ test("losing seats demotes the newest members to viewer, and says so", async ({
   test.slow();
   const email = await adminAccount(page, "downgrade-members");
 
-  // Pro allows 25 members; free allows 3, so one invited teammate on top of
-  // the owner is still inside the cap and a second is not.
+  // Pro allows 25 members; free allows 3 counting the owner, so two invited
+  // teammates are still inside the cap and a third is not.
   await setComp(page, email, "grant");
   const guests = [];
   for (const prefix of ["seat-a", "seat-b", "seat-c"]) {

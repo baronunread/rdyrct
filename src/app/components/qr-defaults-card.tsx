@@ -11,7 +11,7 @@ import { Card } from "../ui/misc";
 import { BusyContent } from "../ui/spinner";
 import { useToast } from "../ui/toast";
 import { QrColorAndLogoFields, QrPreviewSidebar, QrPatternFields } from "./qr-fields";
-import { type QrValues } from "../lib/qr-look";
+import { hasAnyQrValue, type QrValues } from "../lib/qr-look";
 import { orgQrFrom } from "../lib/org-qr";
 import { canAdminOrg } from "../lib/org-limits";
 import posthog from "../lib/posthog";
@@ -88,8 +88,8 @@ function UpgradeQrPrompt({ locked }: { locked: boolean }) {
   return (
     <p className="max-w-prose text-sm text-muted">
       {locked
-        ? "These defaults still apply to every QR this organization generates. Changing them is a paid feature. "
-        : "QR customization is a paid feature. "}
+        ? "These defaults still apply to every QR code this organization makes. Changing them needs a paid plan. "
+        : "Changing how QR codes look needs a paid plan. "}
       <Link to="/billing" className="text-accent hover:underline">
         Upgrade
       </Link>{" "}
@@ -120,17 +120,6 @@ function SaveQrDefaultsAction({
     </div>
   );
 }
-
-/** The org-level QR fields, for asking whether any of them is set. */
-const QR_DEFAULT_FIELDS = [
-  "qrLogo",
-  "qrStyle",
-  "qrColor",
-  "qrCorner",
-  "qrBg",
-  "qrEyeColor",
-  "qrLogoSize",
-] as const;
 
 /** The editor grid, or the same grid read-only on a plan that kept its
  * defaults but may no longer change them (#162). */
@@ -179,9 +168,7 @@ export function QrDefaultsCard() {
   // Defaults the org already set, which keep applying on a plan that no
   // longer allows new ones: shown, read-only, rather than replaced by an
   // upsell for the feature they are visibly using (#162).
-  const hasQrDefaults = QR_DEFAULT_FIELDS.some((field) =>
-    field === "qrLogoSize" ? values.qrLogoSize != null : !!values[field],
-  );
+  const hasQrDefaults = hasAnyQrValue(values);
   const canEdit = isAdmin && hasQrCustom;
 
   return (

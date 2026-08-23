@@ -47,6 +47,20 @@ export function canWriteOrg(role: OrgRole | undefined, locked = false): boolean 
   return role === "owner" || role === "admin" || role === "member";
 }
 
+/**
+ * Why the domains page cannot offer its add form, which is not one question
+ * but two (#159, #160).
+ *
+ * A locked org is not short of a plan: it is on a plan that covers fewer
+ * organizations than its owner has. Answering it with "custom domains need a
+ * paid plan" is wrong to a Hobby owner reading it, and points at an upgrade
+ * that would not unlock anything.
+ */
+export function domainsBlockedBy(planDomains: number, locked: boolean): "lock" | "plan" | null {
+  if (locked) return "lock";
+  return planDomains > 0 ? null : "plan";
+}
+
 export function useOrgLimits() {
   const { org } = useCurrentOrg();
   const orgId = org?.id ?? "";

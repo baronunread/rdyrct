@@ -109,6 +109,18 @@ export interface QrValues {
   qrLogoSize: string;
 }
 
+/**
+ * Has anything been set at all?
+ *
+ * Every field is a string and "" means unset, so one test answers for all of
+ * them, `qrLogoSize` included. Comparing that one against null instead, as
+ * the org settings card used to, is always true: an org that had set nothing
+ * was told its defaults were locked.
+ */
+export function hasAnyQrValue(values: QrValues): boolean {
+  return Object.values(values).some((v) => v !== "");
+}
+
 export function qrPreviewProps(values: QrValues) {
   return {
     logo: values.qrLogo || undefined,

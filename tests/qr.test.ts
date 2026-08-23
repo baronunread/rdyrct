@@ -5,7 +5,7 @@ import {
   QR_DEFAULT_CORNER,
   QR_DEFAULT_LOGO_SIZE,
 } from "../src/shared/types";
-import { resolveLook } from "../src/app/lib/qr-look";
+import { hasAnyQrValue, resolveLook, type QrValues } from "../src/app/lib/qr-look";
 
 describe("resolveLook", () => {
   test("falls back to every default when nothing is set", () => {
@@ -51,5 +51,36 @@ describe("resolveLook", () => {
 
   test("treats an empty logo string as no logo", () => {
     expect(resolveLook({ logo: "" }).logo).toBeUndefined();
+  });
+});
+
+describe("hasAnyQrValue", () => {
+  const empty: QrValues = {
+    qrStyle: "",
+    qrColor: "",
+    qrLogo: "",
+    qrCorner: "",
+    qrBg: "",
+    qrEyeColor: "",
+    qrLogoSize: "",
+  };
+
+  test("nothing set is nothing set", () => {
+    // An org with no defaults used to answer true here, because the old test
+    // compared qrLogoSize against null and it is "" when unset. That org was
+    // then shown a read-only grid and told its defaults were locked.
+    expect(hasAnyQrValue(empty)).toBe(false);
+  });
+
+  test("an unset logo size does not count as a default", () => {
+    expect(hasAnyQrValue({ ...empty, qrLogoSize: "" })).toBe(false);
+  });
+
+  test("a set logo size does", () => {
+    expect(hasAnyQrValue({ ...empty, qrLogoSize: "30" })).toBe(true);
+  });
+
+  test("any one field is enough", () => {
+    expect(hasAnyQrValue({ ...empty, qrColor: "#ff0000" })).toBe(true);
   });
 });

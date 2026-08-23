@@ -484,7 +484,7 @@ function assertQrAllowed(
 ): void {
   if (changesQr(body, existing) && !limits.qrCustom)
     throw new HTTPException(402, {
-      message: "Changing the QR code's look is a paid feature: upgrade to use it",
+      message: "Changing how QR codes look needs a paid plan",
       cause: { code: "qr_locked" },
     });
 }

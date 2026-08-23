@@ -475,7 +475,7 @@ async function sendDowngradeEmail(
       `${org.name} is on the ${plan} plan and holds ${overSentence(state.over, limits)}.`,
       "Nothing was deleted. Your links, members and numbers are all still there.",
       ...graceSentence(state.graceEndsAt, state.over.domains !== undefined),
-      "Upgrade to put everything back, or leave it: over-limit resources stay read-only until you do.",
+      "Upgrade to put it all back. If you leave it, you keep what you have and cannot add more.",
     ],
     cta: { label: "See your plan", url: `${env.APP_URL}/billing` },
   });
