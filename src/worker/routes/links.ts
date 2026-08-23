@@ -930,8 +930,11 @@ linkRoutes.patch("/:linkId", requireOrgRole("member"), async (c) => {
   const orgId = c.req.param("orgId")!;
   validateInput(body, orgId, true);
   const db = c.var.db;
-  const { limits } = await orgPlan(db, orgId);
-  const existing = await findLink(db, orgId, c.req.param("linkId")!);
+  // The plan and the row are independent reads, so they go out together.
+  const [{ limits }, existing] = await Promise.all([
+    orgPlan(db, orgId),
+    findLink(db, orgId, c.req.param("linkId")!),
+  ]);
   // After the row is read: what the plan gates is a *change* to the styling,
   // not the styling arriving back unchanged with an edit to some other field.
   assertQrAllowed(body, limits, existing);

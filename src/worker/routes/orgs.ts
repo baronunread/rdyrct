@@ -109,8 +109,14 @@ orgRoutes.post(
       )
       .orderBy(desc(schema.orgs.createdAt), desc(schema.orgs.id));
     const surplus = active.length - limits.orgs;
-    for (const org of active.filter((o) => o.id !== orgId).slice(0, Math.max(0, surplus)))
-      await db.update(schema.orgs).set({ lockedAt: now }).where(eq(schema.orgs.id, org.id));
+    const giveWay = active.filter((o) => o.id !== orgId).slice(0, Math.max(0, surplus));
+    // Independent single-row updates, so they go out together rather than one
+    // round trip at a time.
+    await Promise.all(
+      giveWay.map((org) =>
+        db.update(schema.orgs).set({ lockedAt: now }).where(eq(schema.orgs.id, org.id)),
+      ),
+    );
     return c.json({ ok: true });
   },
 );
