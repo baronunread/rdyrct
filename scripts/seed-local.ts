@@ -13,7 +13,7 @@
  */
 
 import { ALIAS_TTL_MS } from "../src/worker/util";
-import type { JsonValue } from "../src/shared/types";
+import { PLAN_LIMITS, type JsonValue, type OverLimits } from "../src/shared/types";
 
 const API = "https://rdyrct.localhost/cdn-cgi/explorer/api";
 const PASSWORD = "seed-password-123";
@@ -394,6 +394,7 @@ async function wipe(): Promise<number> {
     "DELETE FROM links WHERE domain_id IN (SELECT id FROM domains WHERE id LIKE 'seed-%')",
     "DELETE FROM domains WHERE id LIKE 'seed-%'",
     "DELETE FROM invites WHERE org_id LIKE 'seed-%'",
+    "DELETE FROM org_entitlements WHERE org_id LIKE 'seed-%'",
     "DELETE FROM org_members WHERE org_id LIKE 'seed-%'",
     "DELETE FROM orgs WHERE id LIKE 'seed-%'",
     "DELETE FROM session WHERE user_id LIKE 'seed-%'",
@@ -411,6 +412,15 @@ interface SeedUser {
   email: string;
   plan: "free" | "hobby" | "pro";
   createdAt: number;
+}
+
+interface SeedOrg {
+  id: string;
+  name: string;
+  plan: SeedUser["plan"];
+  ownerId: string;
+  createdAt: number;
+  domain: { id: string; hostname: string } | null;
 }
 
 async function seed() {
@@ -497,14 +507,6 @@ async function seed() {
   const memberCap = { free: 3, hobby: 5, pro: 25 } as const;
   const linkRange = { free: [6, 28], hobby: [30, 110], pro: [60, 220] } as const;
 
-  interface SeedOrg {
-    id: string;
-    name: string;
-    plan: SeedUser["plan"];
-    ownerId: string;
-    createdAt: number;
-    domain: { id: string; hostname: string } | null;
-  }
   const orgs: SeedOrg[] = [];
   const orgStatements: string[] = [];
   const orgCountries = new Map<string, (readonly [string, number])[]>();
@@ -824,6 +826,8 @@ async function seed() {
     console.log(`  clicks inserted: ${clicksInserted}/${clickValues.length}`);
   }
 
+  await seedDowngrades(orgs, now, day);
+
   /* summary */
   console.log("\nSeeded:");
   console.log(`  users:  ${users.length} (password for all: ${PASSWORD})`);
@@ -835,6 +839,97 @@ async function seed() {
     console.log(
       `  ${org.name.padEnd(16)} ${org.plan.padEnd(6)} ${owners[orgs.indexOf(org)].email}`,
     );
+}
+
+/**
+ * Puts a few orgs mid-downgrade (#29), so local dev and any screenshot taken
+ * from it show the state a plan change leaves behind.
+ *
+ * The marks are written directly, the same ones `reconcileUser` writes: this
+ * is a seeder, so it fabricates an end state rather than driving the pass
+ * that produces one. Keep it in step with `src/worker/reconcile.ts` if the
+ * rules there change.
+ *
+ * Deliberately a handful, not a sweep: the point is to have one of each state
+ * to look at, while the rest of the seeded data stays ordinary.
+ */
+async function seedDowngrades(orgs: SeedOrg[], now: number, day: number): Promise<void> {
+  // Paid orgs with a custom domain and the most people in them. Picking blind
+  // left every downgraded org with two members, so the demotion state, one of
+  // the four this is here to show, never appeared in a seeded database.
+  const withDomains = orgs.filter((o) => o.plan !== "free" && o.domain !== null);
+  if (!withDomains.length) return;
+  const memberCounts = new Map(
+    (
+      await sql<{ org_id: string; n: string }>(
+        "SELECT org_id, count(*) AS n FROM org_members WHERE org_id LIKE 'seed-%' GROUP BY org_id",
+      )
+    ).map((r) => [r.org_id, Number(r.n)]),
+  );
+  const candidates = withDomains
+    .sort((a, b) => (memberCounts.get(b.id) ?? 0) - (memberCounts.get(a.id) ?? 0))
+    .slice(0, 3);
+
+  const statements: string[] = [];
+  // The real caps, so this stays true if a plan changes.
+  const free = PLAN_LIMITS.free;
+
+  for (const [index, org] of candidates.entries()) {
+    // Staggered, so the countdown reads differently on each: one just
+    // downgraded, one with a week left, one already past its grace.
+    const graceEndsAt = now + [27 * day, 6 * day, -2 * day][index];
+
+    const [links, members] = await Promise.all([
+      sql<{ n: string }>(
+        `SELECT count(*) AS n FROM link_addresses WHERE org_id = ${q(org.id)} AND retired_at IS NULL AND kind IN ('primary','permanent_alias')`,
+      ),
+      sql<{ user_id: string; role: string }>(
+        `SELECT user_id, role FROM org_members WHERE org_id = ${q(org.id)} ORDER BY created_at, user_id`,
+      ),
+    ]);
+    const linkCount = Number(links[0]?.n ?? 0);
+
+    const over: OverLimits = { domains: 1 };
+    if (linkCount > free.links) over.links = linkCount;
+    if (members.length > free.members) over.members = members.length;
+
+    statements.push(`UPDATE user SET plan = 'free' WHERE id = ${q(org.ownerId)}`);
+    statements.push(
+      `UPDATE domains SET locked_at = ${now} WHERE org_id = ${q(org.id)}`,
+      `INSERT INTO org_entitlements (org_id, plan, over_json, grace_ends_at, reconciled_at, notified_at)
+       VALUES (${q(org.id)}, 'free', ${q(JSON.stringify(over))}, ${graceEndsAt}, ${now}, ${now})`,
+    );
+
+    // Longest-standing keep their role, owner exempt; the rest become viewers
+    // with what they were recorded, exactly as the pass does it.
+    const keep = new Set(members.slice(0, free.members).map((m) => m.user_id));
+    for (const member of members) {
+      if (keep.has(member.user_id) || member.role === "owner" || member.role === "viewer") continue;
+      statements.push(
+        `UPDATE org_members SET role = 'viewer', previous_role = ${q(member.role)}
+         WHERE org_id = ${q(org.id)} AND user_id = ${q(member.user_id)}`,
+      );
+    }
+
+    // The redirect path reads the deadline off KV and never touches D1, so a
+    // seeded lock that skipped this would keep serving forever.
+    await kvPut(`domain:${org.domain!.hostname}`, {
+      domainId: org.domain!.id,
+      orgId: org.id,
+      rootRedirect: "",
+      servesUntil: graceEndsAt,
+    });
+  }
+
+  // One owner over the owned-org cap, so the locked-org state exists too.
+  const extraOrgId = uid();
+  statements.push(
+    `INSERT INTO orgs (id, name, created_at, locked_at) VALUES (${q(extraOrgId)}, ${q(`${candidates[0].name} Labs`)}, ${now - 30 * day}, ${now})`,
+    `INSERT INTO org_members (org_id, user_id, role, created_at) VALUES (${q(extraOrgId)}, ${q(candidates[0].ownerId)}, 'owner', ${now - 30 * day})`,
+  );
+
+  await sqlBatch(statements);
+  console.log(`  downgraded: ${candidates.length} orgs, 1 locked org`);
 }
 
 /* ---------------- main ---------------- */
