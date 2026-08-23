@@ -23,6 +23,8 @@ import { MenuSelect } from "../ui/menu";
 import { Tooltip } from "../ui/tooltip";
 import { RemoveMemberDialog, InviteMemberDialog } from "../components/member-dialogs";
 import { Table, Th, Td, Badge, Card, PageHeader } from "../ui/misc";
+import { HrefLink } from "../lib/router-search";
+import { buttonClass } from "../ui/button-class";
 import { TableSkeleton } from "../ui/skeleton";
 import { BusyContent } from "../ui/spinner";
 import { useToast } from "../ui/toast";
@@ -394,6 +396,11 @@ export function MembersPage() {
   } = useMemberManagement(orgId, canManage);
 
   const memberLimit = memberLimitFor(org);
+  // An org at or over its cap cannot take another member: the server refuses
+  // the invite with a 402, so offering the form is offering an error (#161).
+  // Counted from the same figure the server uses, members plus open invites.
+  const seatsTaken = (members.data?.length ?? 0) + (invites.data?.length ?? 0);
+  const seatsLeft = Math.max(0, memberLimit - seatsTaken);
 
   if (currentUser.isLoading) return <TableSkeleton rows={4} />;
   if (!org) return <NoOrgState />;
@@ -405,16 +412,34 @@ export function MembersPage() {
         sub="People with access to this organization"
         action={
           canManage && (
-            <Button variant="primary" onClick={() => setInviteOpen(true)}>
-              <UserPlus size={15} /> Invite link
-            </Button>
+            <div className="flex items-center gap-3">
+              <span className="tnum text-xs text-muted">
+                {seatsTaken} / {memberLimit} members
+                {seatsTaken > memberLimit && " (over the limit)"}
+              </span>
+              <Button
+                variant="primary"
+                onClick={() => setInviteOpen(true)}
+                disabled={seatsLeft === 0}
+                title={seatsLeft === 0 ? fullSeatsHint(org, memberLimit) : undefined}
+              >
+                <UserPlus size={15} /> Invite link
+              </Button>
+            </div>
           )
         }
       />
 
-      {canManage && (
-        <InviteByEmailCard org={org} memberLimit={memberLimit} sendEmailInvite={sendEmailInvite} />
-      )}
+      {canManage &&
+        (seatsLeft === 0 ? (
+          <SeatsFullNotice org={org} memberLimit={memberLimit} over={seatsTaken > memberLimit} />
+        ) : (
+          <InviteByEmailCard
+            org={org}
+            memberLimit={memberLimit}
+            sendEmailInvite={sendEmailInvite}
+          />
+        ))}
 
       <MemberTable
         isLoading={members.isLoading}
@@ -454,6 +479,39 @@ export function MembersPage() {
       />
     </div>
   );
+}
+
+/** What the invite form is replaced by once every seat is taken. Says which
+ * of the two situations it is, because "full" and "over" need different
+ * things done about them. */
+function SeatsFullNotice({
+  org,
+  memberLimit,
+  over,
+}: {
+  org: UserOrg;
+  memberLimit: number;
+  over: boolean;
+}) {
+  return (
+    <Card className="mb-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <p className="max-w-prose text-sm text-muted">
+          {over
+            ? `This organization has more members than the ${org.plan} plan allows (${memberLimit}). Nobody was removed, and nobody new can be invited until you upgrade.`
+            : `Every seat on the ${org.plan} plan is taken (${memberLimit}, counting open invites). Remove someone, or upgrade to invite more.`}
+        </p>
+        <HrefLink href="/billing" className={buttonClass({ variant: "outline", size: "sm" })}>
+          See plans
+        </HrefLink>
+      </div>
+    </Card>
+  );
+}
+
+/** The tooltip on a disabled invite control. */
+function fullSeatsHint(org: UserOrg, memberLimit: number): string {
+  return `The ${org.plan} plan allows ${memberLimit} members, counting open invites`;
 }
 
 function InviteByEmailCard({
