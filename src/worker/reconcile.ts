@@ -1,5 +1,5 @@
 import * as v from "valibot";
-import { and, asc, eq, isNotNull, isNull, lte, sql } from "drizzle-orm";
+import { and, asc, eq, isNotNull, isNull, lte, or, sql } from "drizzle-orm";
 import * as schema from "./db/schema";
 import type { DB, Env } from "./env";
 import { countActiveAddresses } from "./plan";
@@ -91,10 +91,10 @@ async function setOrgLock(db: DB, orgId: string, lockedAt: number | null): Promi
  */
 async function reconcileOrgLocks(
   db: DB,
-  orgs: { id: string; lockedAt: number | null }[],
+  orgs: { id: string; name: string; lockedAt: number | null }[],
   limit: number,
   now: number,
-): Promise<void> {
+): Promise<{ id: string; name: string }[]> {
   const active = orgs.filter((o) => o.lockedAt === null);
   const [moving, lockedAt] =
     active.length > limit
@@ -108,30 +108,42 @@ async function reconcileOrgLocks(
       org.lockedAt = lockedAt;
     }),
   );
+  // Only the ones newly locked. An unlock is good news nobody needs an email
+  // about, and a repeat pass moves nothing, so it sends nothing.
+  return lockedAt === null ? [] : moving.map((org) => ({ id: org.id, name: org.name }));
 }
 
 /**
  * Locks the domains beyond the org's cap, oldest kept (#159).
  *
- * Returns the hostnames whose verdict changed, so only those get a KV
- * republish: the value carries the deadline, so a domain whose lock did not
- * move needs no write.
+ * Returns the hostnames whose lock moved, and every hostname that is locked
+ * now. The caller needs both: the KV value carries the *deadline* as well as
+ * the lock, so a domain whose lock did not move still needs a republish when
+ * the org's grace period restarts under it.
  */
 async function reconcileDomainLocks(
   db: DB,
   orgId: string,
   limit: number,
   now: number,
-): Promise<{ count: number; changed: string[] }> {
+): Promise<{ count: number; changed: string[]; locked: string[] }> {
   const rows = await db
     .select({
       id: schema.domains.id,
       hostname: schema.domains.hostname,
       lockedAt: schema.domains.lockedAt,
+      status: schema.domains.status,
     })
     .from(schema.domains)
     .where(eq(schema.domains.orgId, orgId))
-    .orderBy(asc(schema.domains.createdAt), asc(schema.domains.id));
+    // Serving domains first, then oldest. "Oldest keeps working" only holds
+    // if the oldest actually works: an org whose first domain never finished
+    // DNS would otherwise keep that one and lock the one carrying its links.
+    .orderBy(
+      sql`case when ${schema.domains.status} = 'active' then 0 else 1 end`,
+      asc(schema.domains.createdAt),
+      asc(schema.domains.id),
+    );
 
   const moving = rows.flatMap((row, index) => {
     const lockedAt = index < limit ? null : (row.lockedAt ?? now);
@@ -145,7 +157,11 @@ async function reconcileDomainLocks(
         .where(eq(schema.domains.id, row.id)),
     ),
   );
-  return { count: rows.length, changed: moving.map((row) => row.hostname) };
+  return {
+    count: rows.length,
+    changed: moving.map((row) => row.hostname),
+    locked: rows.flatMap((row, index) => (index < limit ? [] : [row.hostname])),
+  };
 }
 
 /**
@@ -264,11 +280,22 @@ async function reconcileOrg(
     warnedAt,
   });
 
+  // Every locked domain when the deadline moved, only the ones whose lock
+  // moved otherwise. `servesUntil` in KV is built from the org's
+  // `graceEndsAt` (see desiredKvValue), so a restarted grace that republished
+  // nothing left already-locked hosts carrying the *old* deadline: pro to
+  // hobby, thirty days, then hobby to free, and two domains 404 through a
+  // grace period D1 says is still running.
+  //
   // After the row is written, so the KV value the sync reads carries this
   // pass's deadline rather than the one it replaced.
+  const republish =
+    graceEndsAt === (previous?.graceEndsAt ?? null)
+      ? domains.changed
+      : [...new Set([...domains.changed, ...domains.locked])];
   await enqueueStorage(
     env,
-    domains.changed.map((hostname) => syncDomainMsg(hostname)),
+    republish.map((hostname) => syncDomainMsg(hostname)),
   );
 
   return { over, graceEndsAt, notifiedAt };
@@ -336,7 +363,7 @@ export async function reconcileUser(
     const limits = PLAN_LIMITS[plan];
 
     const orgs = await ownedOrgs(db, userId);
-    await reconcileOrgLocks(db, orgs, limits.orgs, now);
+    const newlyLocked = await reconcileOrgLocks(db, orgs, limits.orgs, now);
     // Each org is reconciled against the same plan and touches only its own
     // rows, so they run together.
     await Promise.all(
@@ -345,10 +372,50 @@ export async function reconcileUser(
         await notifyDowngrade(env, db, org, plan, state, now);
       }),
     );
+    // Being over the *owned-org* cap is a fact about the user, not about any
+    // one org, so it has no `over` entry and no per-org email would ever
+    // mention it (#160). Without this an owner whose only breach is the org
+    // cap heard nothing at all: two of their orgs went read-only and the
+    // first they knew of it was opening the app.
+    await notifyOrgsLocked(env, db, userId, plan, newlyLocked);
   } catch (error) {
     captureAlert([{ event: "reconcile_failed", userId }]);
     console.error("reconcile_failed", userId, error);
   }
+}
+
+/** Tells an owner which orgs went read-only, and that they may pick a
+ * different one. Best-effort: a failed send must not turn a reconciliation
+ * whose D1 writes all landed into a `reconcile_failed` alert. */
+async function notifyOrgsLocked(
+  env: Env,
+  db: DB,
+  userId: string,
+  plan: OrgPlan,
+  locked: { id: string; name: string }[],
+): Promise<void> {
+  if (!locked.length) return;
+  const rows = await db
+    .select({ email: schema.user.email })
+    .from(schema.user)
+    .where(eq(schema.user.id, userId));
+  const to = rows[0]?.email;
+  if (!to) return;
+  const limit = PLAN_LIMITS[plan].orgs;
+  const names = locked.map((org) => org.name).join(", ");
+  const heading =
+    locked.length === 1 ? `${names} is read-only` : `Some organizations are read-only`;
+  const body = renderEmail({
+    preheader: `Your plan covers ${limit === 1 ? "one organization" : `${limit} organizations`}.`,
+    heading,
+    paragraphs: [
+      `Your plan covers ${limit === 1 ? "one organization" : `${limit} organizations`}, and you own more, so ${names} ${locked.length === 1 ? "is" : "are"} now read-only.`,
+      "Nothing was deleted, and every link in them keeps redirecting.",
+      "Upgrade to unlock all of them, or open one and choose to keep it active instead.",
+    ],
+    cta: { label: "See your plan", url: `${env.APP_URL}/billing` },
+  });
+  await sendEmail(env, to, heading, body).catch(() => {});
 }
 
 /* ---------------- the two emails ---------------- */
@@ -394,8 +461,13 @@ async function sendDowngradeEmail(
   const to = await ownerEmail(db, org.id);
   if (!to) return false;
   const limits = PLAN_LIMITS[plan];
+  // Named for what is actually over. "loses its custom domains soon" went to
+  // every org with a grace period, including ones whose only breach was links
+  // or members and which lose nothing at all when the deadline passes.
   const heading =
-    kind === "now" ? `${org.name} is over its plan` : `${org.name} loses its custom domains soon`;
+    kind === "warning" && state.over.domains !== undefined
+      ? `${org.name} loses its custom domains soon`
+      : `${org.name} is over its plan`;
   const body = renderEmail({
     preheader: overSentence(state.over, limits),
     heading,
@@ -422,7 +494,11 @@ async function notifyDowngrade(
   now: number,
 ): Promise<void> {
   if (!isOverLimit(state.over) || state.notifiedAt !== null) return;
-  if (!(await sendDowngradeEmail(env, db, org, plan, state, "now"))) return;
+  // Best-effort, and unmarked on failure: the daily sweep retries it, and a
+  // dead Resend must not make a pass whose D1 writes all landed report
+  // `reconcile_failed`.
+  const sent = await sendDowngradeEmail(env, db, org, plan, state, "now").catch(() => false);
+  if (!sent) return;
   await db
     .update(schema.orgEntitlements)
     .set({ notifiedAt: now })
@@ -430,12 +506,25 @@ async function notifyDowngrade(
 }
 
 /**
- * The day-23 email, from the daily cron: every org whose grace has a week
- * left and has not been warned yet.
+ * The grace-period emails the daily cron owns: the day-23 warning, and any
+ * day-0 notice whose send failed at reconciliation time.
  *
- * A send failure leaves `warnedAt` null, so tomorrow's run tries again, and
- * the window is a week wide rather than a single day for the same reason.
+ * Reconciliation only runs on a plan change, so without the second of those a
+ * transient Resend outage meant the owner heard nothing for 23 days. A send
+ * failure leaves the marker null, so tomorrow's run tries again, and the
+ * warning window is a week wide rather than a single day for the same reason.
  */
+/**
+ * One pass emails at most this many orgs, in chunks this wide.
+ *
+ * A Workers invocation has a cap on concurrent subrequests, so a downgrade
+ * wave that started every send at once would fail the whole sweep. The
+ * warning window is a week wide, so a backlog drains over the following days
+ * instead of in one invocation.
+ */
+const EMAIL_BATCH = 50;
+const EMAIL_CONCURRENCY = 5;
+
 export async function sweepGraceWarnings(env: Env, db: DB, now = Date.now()): Promise<number> {
   const rows = await db
     .select({
@@ -444,41 +533,74 @@ export async function sweepGraceWarnings(env: Env, db: DB, now = Date.now()): Pr
       plan: schema.orgEntitlements.plan,
       overJson: schema.orgEntitlements.overJson,
       graceEndsAt: schema.orgEntitlements.graceEndsAt,
+      notifiedAt: schema.orgEntitlements.notifiedAt,
+      warnedAt: schema.orgEntitlements.warnedAt,
     })
     .from(schema.orgEntitlements)
     .innerJoin(schema.orgs, eq(schema.orgEntitlements.orgId, schema.orgs.id))
     .where(
       and(
-        isNull(schema.orgEntitlements.warnedAt),
         isNotNull(schema.orgEntitlements.graceEndsAt),
-        lte(schema.orgEntitlements.graceEndsAt, now + GRACE_WARNING_MS),
         sql`${schema.orgEntitlements.graceEndsAt} > ${now}`,
+        or(
+          // A day-0 send that failed at reconciliation time. Reconciliation
+          // only runs on a plan change, so nothing else would retry it.
+          isNull(schema.orgEntitlements.notifiedAt),
+          and(
+            isNull(schema.orgEntitlements.warnedAt),
+            lte(schema.orgEntitlements.graceEndsAt, now + GRACE_WARNING_MS),
+          ),
+        ),
       ),
-    );
+    )
+    .limit(EMAIL_BATCH);
 
-  const results = await Promise.all(
-    rows.map(async (row) => {
-      const state = {
-        over: parseOver(row.overJson),
-        graceEndsAt: row.graceEndsAt,
-        notifiedAt: null,
-      };
-      const org = { id: row.orgId, name: row.name };
-      const delivered = await sendDowngradeEmail(
-        env,
-        db,
-        org,
-        orgPlanOf(row.plan),
-        state,
-        "warning",
-      ).catch(() => false);
-      if (!delivered) return false;
-      await db
-        .update(schema.orgEntitlements)
-        .set({ warnedAt: now })
-        .where(eq(schema.orgEntitlements.orgId, row.orgId));
-      return true;
-    }),
-  );
-  return results.filter(Boolean).length;
+  let sent = 0;
+  for (let i = 0; i < rows.length; i += EMAIL_CONCURRENCY) {
+    const results = await Promise.all(
+      rows.slice(i, i + EMAIL_CONCURRENCY).map((row) => sweepOne(env, db, row, now)),
+    );
+    sent += results.filter(Boolean).length;
+  }
+  return sent;
+}
+
+/**
+ * Sends one org's outstanding email and marks it.
+ *
+ * Every failure is caught here, the marker included: a row whose update threw
+ * would otherwise take the rest of its chunk down with it, and rows already
+ * emailed in this pass would lose their marker and be emailed again tomorrow.
+ */
+async function sweepOne(
+  env: Env,
+  db: DB,
+  row: {
+    orgId: string;
+    name: string;
+    plan: string;
+    overJson: string;
+    graceEndsAt: number | null;
+    notifiedAt: number | null;
+  },
+  now: number,
+): Promise<boolean> {
+  const kind = row.notifiedAt === null ? "now" : "warning";
+  try {
+    const state = {
+      over: parseOver(row.overJson),
+      graceEndsAt: row.graceEndsAt,
+      notifiedAt: row.notifiedAt,
+    };
+    const org = { id: row.orgId, name: row.name };
+    if (!(await sendDowngradeEmail(env, db, org, orgPlanOf(row.plan), state, kind))) return false;
+    await db
+      .update(schema.orgEntitlements)
+      .set(kind === "now" ? { notifiedAt: now } : { warnedAt: now })
+      .where(eq(schema.orgEntitlements.orgId, row.orgId));
+    return true;
+  } catch {
+    // Left unmarked on purpose, so tomorrow's run tries again.
+    return false;
+  }
 }

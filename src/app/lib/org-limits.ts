@@ -20,6 +20,25 @@ export function canListOrgDomains(isPlatformAdmin: boolean, role: OrgRole | unde
  * feature. Undefined role means the org has not loaded, which is also not a
  * moment to offer a write.
  */
+/**
+ * Whether this role may administer the org: domains, members, invites and the
+ * org-wide QR defaults, none of which a plain member may touch.
+ *
+ * Locked-aware for the same reason `canWriteOrg` is (#160): a locked org
+ * accepts no writes from anyone, its owner included, so a control that would
+ * submit has to be hidden rather than left to 403. Platform admins act as
+ * owner everywhere, and the lock still applies to them, because the server
+ * refuses their write too.
+ */
+export function canAdminOrg(
+  isPlatformAdmin: boolean | undefined,
+  role: OrgRole | undefined,
+  locked = false,
+): boolean {
+  if (locked) return false;
+  return !!isPlatformAdmin || role === "owner" || role === "admin";
+}
+
 export function canWriteOrg(role: OrgRole | undefined, locked = false): boolean {
   // A locked org is read-only for everyone in it, its owner included (#160).
   // Same answer as a viewer's, so every control already hidden for a viewer
@@ -35,8 +54,11 @@ export function useOrgLimits() {
   const limits = PLAN_LIMITS[org?.plan ?? "free"];
   const canListDomains = canListOrgDomains(!!currentUser.data?.user.isAdmin, org?.role);
   const domains = useDomains(orgId, canListDomains);
+  // `lockedAt` as well as `status`: a downgrade leaves a domain `active` and
+  // locked, and a locked one takes no new links (#159). Without this the
+  // editor kept preselecting it and every default-path create came back 402.
   const activeDomains = useMemo(
-    () => (domains.data ?? []).filter((d) => d.status === "active"),
+    () => (domains.data ?? []).filter((d) => d.status === "active" && d.lockedAt === null),
     [domains.data],
   );
   const orgQr = orgQrFrom(org);

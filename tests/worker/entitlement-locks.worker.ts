@@ -144,7 +144,8 @@ describe("a locked org (#160)", () => {
       new Request("http://localhost/api/user", { headers: { cookie } }),
     );
     const body = await jsonBody<CurrentUser>(res);
-    expect(body.orgs.map((o) => [o.id, o.locked])).toEqual([
+    // Sorted: currentUserFor has no ORDER BY, so row order is incidental.
+    expect(body.orgs.map((o) => [o.id, o.locked]).sort()).toEqual([
       ["org-1", false],
       ["org-2", true],
     ]);
@@ -280,6 +281,25 @@ describe("QR styling on a downgraded plan (#162)", () => {
   it("lets a downgraded org clear its styling without upgrading", async () => {
     const cookie = await seedStyledLink(await seedOwner());
     expect((await save(cookie, { qrStyle: "", qrColor: "" })).status).toBe(200);
+  });
+
+  it("treats the org's own QR defaults the same way", async () => {
+    const cookie = await seedOwner();
+    await env.DB.prepare("update orgs set qr_style = 'dots' where id = 'org-1'").run();
+    const patch = (body: Record<string, string>) =>
+      fetchWorker(
+        new Request("http://localhost/api/orgs/org-1", {
+          method: "PATCH",
+          headers: { cookie, "content-type": "application/json" },
+          body: JSON.stringify(body),
+        }),
+      );
+    // Renaming the org while its stored defaults ride along unchanged.
+    expect((await patch({ name: "Renamed", qrStyle: "dots" })).status).toBe(200);
+    // An actual change is still refused, on the same plan.
+    expect((await patch({ qrStyle: "square" })).status).toBe(402);
+    const [row] = await testDb().select().from(schema.orgs).where(eq(schema.orgs.id, "org-1"));
+    expect([row.name, row.qrStyle]).toEqual(["Renamed", "dots"]);
   });
 });
 

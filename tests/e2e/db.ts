@@ -139,3 +139,26 @@ export async function compUser(
     `no user with email ${email}`,
   );
 }
+
+/**
+ * Reads one KV value through the dev Explorer.
+ *
+ * The redirect hot path answers from KV alone, so this is how a browser test
+ * checks the verdict the Worker will act on: the value is what a real
+ * reconciliation pass wrote, through the real storage queue, not a fixture.
+ */
+export async function kvValue(page: Page, key: string): Promise<JsonValue | null> {
+  const namespaces = await page.request.get(`${explorerUrl}/storage/kv/namespaces`);
+  expect(namespaces.ok()).toBe(true);
+  const listed = await namespaces.json();
+  const id = listed.result.find((n: { title: string }) => n.title.includes("LINKS"))?.id;
+  expect(id).toBeTruthy();
+  const value = await page.request.get(
+    `${explorerUrl}/storage/kv/namespaces/${id}/values/${encodeURIComponent(key)}`,
+  );
+  if (value.status() === 404) return null;
+  expect(value.ok()).toBe(true);
+  // SAFETY: every value this repo writes to LINKS is JSON it produced; the
+  // caller names the shape it asserts on.
+  return JSON.parse(await value.text()) as JsonValue;
+}

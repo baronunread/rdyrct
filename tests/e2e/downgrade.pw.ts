@@ -1,7 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
-import { makePlatformAdmin, queryRows } from "./db";
+import { kvValue, makePlatformAdmin, queryRows } from "./db";
 import { signUpAndVerify } from "./resend";
-import { addActiveCustomDomain, createAdditionalOrg, createQuickLink } from "./orgs";
+import { addActiveCustomDomain, createAdditionalOrg, createQuickLink, guestAccount } from "./orgs";
 
 /**
  * What a downgrade looks like from the account it happens to (#158 to #163).
@@ -103,6 +103,29 @@ test("losing a paid plan locks the custom domain, keeps it redirecting, and says
 
   await setComp(page, email, "grant");
   const hostname = await addActiveCustomDomain(page);
+  // A root redirect, so "is it still serving" has an answer that is not the
+  // same 404 an unconfigured host gives.
+  const [row] = await queryRows<{ id: string; org_id: string }>(
+    page,
+    "select id, org_id from domains where hostname = ?",
+    [hostname],
+  );
+  const patched = await page.request.patch(`/api/orgs/${row.org_id}/domains/${row.id}`, {
+    data: { rootRedirect: "https://example.com/home" },
+  });
+  expect(patched.ok()).toBe(true);
+
+  // The redirect path answers from KV alone. Before the downgrade the value
+  // carries no deadline, so "still serving" below means something.
+  const verdict = async () => {
+    const value = await kvValue(page, `domain:${hostname}`);
+    // SAFETY: this key is written only by publishDomain/desiredKvValue, both
+    // of which stringify a KVDomain, so `servesUntil` is the number or null
+    // they put there. A missing key reads back as null, which is the same
+    // answer as "no deadline".
+    return (value as { servesUntil?: number | null } | null)?.servesUntil ?? null;
+  };
+  expect(await verdict()).toBeNull();
 
   await setComp(page, email, "revoke");
   await page.goto("/domains");
@@ -122,7 +145,83 @@ test("losing a paid plan locks the custom domain, keeps it redirecting, and says
   );
   expect(domain.locked_at).not.toBeNull();
 
+  // And it is really still redirecting, which is the whole promise. A
+  // regression that failed to republish the grace-period KV value would stop
+  // the host dead while every assertion above still passed.
+  // The whole pipeline: reconciliation wrote the lock, the storage queue
+  // republished the key, and the value the Worker will read carries a
+  // deadline that is still ahead. A regression that skipped the republish
+  // leaves this null forever (serves forever) or already past (404s now).
+  // Polled, because the republish rides the storage queue and is consumed
+  // after the request that triggered it has already answered.
+  await expect.poll(verdict, { timeout: 20_000 }).not.toBeNull();
+  expect(await verdict()).toBeGreaterThan(Date.now());
+
   // And the banner names what is over, with a route out.
   await expect(page.getByText(/1 custom domain, and this plan has none/)).toBeVisible();
   await expect(page.getByRole("link", { name: "Upgrade to keep them" })).toBeVisible();
+});
+
+test("losing seats demotes the newest members to viewer, and says so", async ({
+  page,
+  browser,
+}) => {
+  test.slow();
+  const email = await adminAccount(page, "downgrade-members");
+
+  // Pro allows 25 members; free allows 3, so one invited teammate on top of
+  // the owner is still inside the cap and a second is not.
+  await setComp(page, email, "grant");
+  const guests = [];
+  for (const prefix of ["seat-a", "seat-b", "seat-c"]) {
+    await page.goto("/members");
+    await page.getByRole("button", { name: "Invite link" }).click();
+    await page.getByRole("button", { name: "Create invite link" }).click();
+    const [invite] = await queryRows<{ token: string }>(
+      page,
+      `select token from invites
+       where created_by = (select id from user where email = ?)
+       order by created_at desc limit 1`,
+      [email],
+    );
+    const guest = await guestAccount(browser, prefix);
+    await guest.page.goto(`/invite/${invite.token}`);
+    await guest.page.getByRole("button", { name: "Accept invite" }).click();
+    await expect(guest.page).toHaveURL(/\/dashboard$/);
+    guests.push(guest);
+  }
+
+  await setComp(page, email, "revoke");
+
+  // Owner plus the two longest-standing keep their role; the newest is a
+  // viewer. Nobody is removed: four rows, still.
+  const rows = await queryRows<{ email: string; role: string; previous_role: string | null }>(
+    page,
+    `select u.email, m.role, m.previous_role from org_members m
+     join user u on u.id = m.user_id
+     where m.org_id = (
+       select m2.org_id from org_members m2
+       join user u2 on u2.id = m2.user_id
+       where u2.email = ? and m2.role = 'owner'
+     )
+     order by m.created_at`,
+    [email],
+  );
+  expect(rows).toHaveLength(4);
+  expect(rows.map((r) => r.role)).toEqual(["owner", "member", "member", "viewer"]);
+  expect(rows[3].previous_role).toBe("member");
+
+  // The demoted member is told why, rather than left to report the missing
+  // buttons as a bug.
+  await page.goto("/members");
+  await expect(page.getByText(/Set to viewer when the plan changed/)).toBeVisible({
+    timeout: 15_000,
+  });
+
+  // And they really cannot write any more.
+  const demoted = guests[2].page;
+  await demoted.goto("/links");
+  await expect(demoted.getByRole("button", { name: "New link" }).first()).toBeHidden();
+
+  for (const guest of guests) await guest.context.close();
 });

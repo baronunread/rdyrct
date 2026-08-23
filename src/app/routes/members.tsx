@@ -369,7 +369,8 @@ export function MembersPage() {
   const orgId = org?.id ?? "";
   const currentUser = useCurrentUser();
   const myRole = resolveMyRole(currentUser.data?.user.isAdmin, org?.role);
-  const canManage = canManageOrg(myRole);
+  // A locked org accepts no writes from anyone, its owner included (#160).
+  const canManage = canManageOrg(myRole) && !org?.locked;
 
   const {
     members,

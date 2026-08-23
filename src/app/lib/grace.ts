@@ -17,3 +17,9 @@ export function graceLabel(until: number, now = Date.now()): string {
   if (days === 0) return "the grace period has ended";
   return `${days} ${days === 1 ? "day" : "days"} left`;
 }
+
+/** Whether the deadline is still ahead. The copy around a countdown reads as
+ * a promise ("keeps working until X"), so it must not render once X is past. */
+export function graceRunning(until: number | null | undefined, now = Date.now()): boolean {
+  return until != null && until > now;
+}

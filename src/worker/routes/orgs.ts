@@ -2,16 +2,23 @@ import { Hono } from "hono";
 import * as v from "valibot";
 import type { JsonValue } from "../../shared/types";
 import { HTTPException } from "hono/http-exception";
-import { eq, and, gte, desc, ne, sql, isNull } from "drizzle-orm";
+import { eq, and, gte, desc, sql, isNull } from "drizzle-orm";
 import * as schema from "../db/schema";
 import type { AppEnv, DB, Env } from "../env";
 import { requireUser } from "../guards";
 import { requireOrgRole, orgRole } from "../org-role";
-import { orgPlan, userPlan, createOwnedOrg, acceptInviteAtomically } from "../plan";
+import {
+  orgPlan,
+  userPlan,
+  createOwnedOrg,
+  acceptInviteAtomically,
+  keepOrgActive,
+  setMemberRoleWithinLimit,
+} from "../plan";
 import { sendEmail } from "../email";
 import { renderEmail } from "../email-layout";
 import { deleteQrLogoMsg, enqueueStorage } from "../storage";
-import { uid, referrerHost, validateQrFields } from "../util";
+import { uid, referrerHost, validateQrFields, changesQr } from "../util";
 import { jsonBodyLimit } from "../body-limit";
 import { parseBody, inviteBodySchema } from "../schemas";
 import type {
@@ -75,6 +82,16 @@ orgRoutes.post("/", requireUser, async (c) => {
   );
 });
 
+/** Who owns this org. Every owned-org decision belongs to them, whoever is
+ * making the request. */
+async function orgOwnerId(db: DB, orgId: string): Promise<string | null> {
+  const rows = await db
+    .select({ userId: schema.orgMembers.userId })
+    .from(schema.orgMembers)
+    .where(and(eq(schema.orgMembers.orgId, orgId), eq(schema.orgMembers.role, "owner")));
+  return rows[0]?.userId ?? null;
+}
+
 /**
  * Keeps this org active, and locks whichever other one has to give way (#160).
  *
@@ -86,37 +103,21 @@ orgRoutes.post(
   "/:orgId/keep-active",
   requireOrgRole("owner", { allowWhileLocked: true }),
   async (c) => {
-    const db = c.var.db;
-    const orgId = c.req.param("orgId");
-    const userId = c.var.user!.id;
-    const { limits } = await userPlan(db, userId);
-    const now = Date.now();
-
-    await db.update(schema.orgs).set({ lockedAt: null }).where(eq(schema.orgs.id, orgId));
-    // Now one too many are active, so the newest of the *others* gives way.
-    // Newest first, and never this one, which is what makes the pick stick
-    // where reconciliation's by-age default would have overruled it.
-    const active = await db
-      .select({ id: schema.orgs.id })
-      .from(schema.orgMembers)
-      .innerJoin(schema.orgs, eq(schema.orgMembers.orgId, schema.orgs.id))
-      .where(
-        and(
-          eq(schema.orgMembers.userId, userId),
-          eq(schema.orgMembers.role, "owner"),
-          isNull(schema.orgs.lockedAt),
-        ),
-      )
-      .orderBy(desc(schema.orgs.createdAt), desc(schema.orgs.id));
-    const surplus = active.length - limits.orgs;
-    const giveWay = active.filter((o) => o.id !== orgId).slice(0, Math.max(0, surplus));
-    // Independent single-row updates, so they go out together rather than one
-    // round trip at a time.
-    await Promise.all(
-      giveWay.map((org) =>
-        db.update(schema.orgs).set({ lockedAt: now }).where(eq(schema.orgs.id, org.id)),
-      ),
-    );
+    // The org's owner, not the caller: a platform admin passes
+    // requireOrgRole("owner") everywhere (see orgRole), and using their id
+    // here would unlock a customer's org against the admin's own plan and
+    // then lock one of the admin's orgs to pay for it.
+    const userId = await orgOwnerId(c.var.db, c.req.param("orgId"));
+    if (!userId) throw new HTTPException(404, { message: "Organization not found" });
+    const { limits } = await userPlan(c.var.db, userId);
+    // One transaction: two requests picking two different locked orgs could
+    // otherwise leave the owner with every org locked. See keepOrgActive.
+    await keepOrgActive(c.env, {
+      orgId: c.req.param("orgId"),
+      userId,
+      ownedOrgLimit: limits.orgs,
+      ts: Date.now(),
+    });
     return c.json({ ok: true });
   },
 );
@@ -182,19 +183,24 @@ async function applyQrPatch(
   set: Partial<typeof schema.orgs.$inferInsert>,
 ): Promise<string> {
   validateQrFields(body, orgId);
-  // QR customization is a paid feature, so are the org-level defaults.
-  const { limits } = await orgPlan(db, orgId);
-  if (!limits.qrCustom)
+  // The same rule the link editor's save follows (#162): what the plan gates
+  // is a *change* to the styling, not the styling arriving back unchanged
+  // alongside an edit to some other field. Org-level and link-level QR behave
+  // the same on a downgrade, which they did not before: one 402'd on any QR
+  // field being present while the other quietly wiped them.
+  const [{ limits }, rows] = await Promise.all([
+    orgPlan(db, orgId),
+    db.select().from(schema.orgs).where(eq(schema.orgs.id, orgId)),
+  ]);
+  const existing = rows[0] ?? null;
+  if (!limits.qrCustom && changesQr(body, existing))
     throw new HTTPException(402, {
-      message: "QR customization is a paid feature: upgrade to use it",
+      message: "Changing the QR code's look is a paid feature: upgrade to use it",
+      cause: { code: "qr_locked" },
     });
   Object.assign(set, qrPatchFields(body));
   if (body.qrLogo === undefined) return "";
-  const rows = await db
-    .select({ qrLogo: schema.orgs.qrLogo })
-    .from(schema.orgs)
-    .where(eq(schema.orgs.id, orgId));
-  return rows[0]?.qrLogo ?? "";
+  return existing?.qrLogo ?? "";
 }
 
 /**
@@ -336,22 +342,6 @@ orgRoutes.get("/:orgId/members", requireOrgRole("viewer"), async (c) => {
   );
 });
 
-/**
- * How many of an org's members may write: everyone who is not a viewer.
- *
- * The member cap counts people in the org, viewers included, so a downgraded
- * org stays over it however many are demoted. What the cap does bound is who
- * may change anything, which is what the owner re-picks after a downgrade
- * (#161).
- */
-async function writingMembers(db: DB, orgId: string): Promise<number> {
-  const rows = await db
-    .select({ n: sql<number>`count(*)` })
-    .from(schema.orgMembers)
-    .where(and(eq(schema.orgMembers.orgId, orgId), ne(schema.orgMembers.role, "viewer")));
-  return rows[0]?.n ?? 0;
-}
-
 orgRoutes.patch("/:orgId/members/:userId", requireOrgRole("admin"), async (c) => {
   const body = await c.req.json<{ role?: string }>();
   const role = INVITABLE_ROLES.find((r) => r === body.role);
@@ -361,28 +351,21 @@ orgRoutes.patch("/:orgId/members/:userId", requireOrgRole("admin"), async (c) =>
     c.req.param("orgId"),
     c.req.param("userId"),
   );
-  const [current] = await c.var.db
-    .select({ role: schema.orgMembers.role })
-    .from(schema.orgMembers)
-    .where(memberWhere(orgId, targetId));
-  // Handing write access to somebody in an org that is already over its
-  // member cap has to take it from somebody else first, or the cap means
-  // nothing after a downgrade. Demoting is always allowed, which is what
-  // makes the swap possible.
-  if (role !== "viewer" && current?.role === "viewer") {
-    const { limits } = await orgPlan(c.var.db, orgId);
-    if ((await writingMembers(c.var.db, orgId)) >= limits.members)
-      throw new HTTPException(402, {
-        message: `This plan allows ${limits.members} members who can make changes: set someone else to viewer first`,
-        cause: { code: "member_limit" },
-      });
-  }
-  await c.var.db
-    .update(schema.orgMembers)
-    // The role an admin sets by hand is the current one, so a later upgrade
-    // has nothing of its own to restore over it (#161).
-    .set({ role, previousRole: null })
-    .where(memberWhere(orgId, targetId));
+  // Guarded inside the statement, not from a count read first: two admins
+  // promoting two different viewers at once would both find room. Demoting is
+  // always allowed, which is what makes the swap possible.
+  const { limits } = await orgPlan(c.var.db, orgId);
+  const written = await setMemberRoleWithinLimit(c.env, {
+    orgId,
+    userId: targetId,
+    role,
+    memberLimit: limits.members,
+  });
+  if (!written)
+    throw new HTTPException(402, {
+      message: `This plan allows ${limits.members} members who can make changes: set someone else to viewer first`,
+      cause: { code: "member_limit" },
+    });
   return c.json({ ok: true });
 });
 

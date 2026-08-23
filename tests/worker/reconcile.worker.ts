@@ -75,8 +75,14 @@ async function setPlan(plan: string) {
   await env.DB.prepare("update user set plan = ? where id = 'owner-1'").bind(plan).run();
 }
 
-/** An env whose storage queue records instead of delivering, and whose mail
- * goes nowhere: both fire on every downgrade. */
+/**
+ * An env whose storage queue records instead of delivering.
+ *
+ * Outbound mail is deliberately *not* stubbed here. `reconcileUser` catches
+ * every failure, so a send that fails is swallowed and logged, which is what
+ * lets the cases below assert D1 and KV without caring about Resend. The
+ * cases that are about the emails wrap themselves in `withMail`.
+ */
 function quietEnv() {
   const { queue, sent } = captureStorageQueue();
   return { env: overrideEnv({ STORAGE_QUEUE: queue }), storage: sent };
@@ -221,14 +227,23 @@ describe("entitlement reconciliation", () => {
   });
 
   it("restarts the grace period when the plan drops again", async () => {
-    const { env: e } = await downgrade({ plan: "pro", domains: 3 }, "hobby");
+    const { env: e, storage } = await downgrade({ plan: "pro", domains: 3 }, "hobby");
     expect((await entitlement()).graceEndsAt).toBe(NOW + GRACE_PERIOD_MS);
 
     const later = NOW + 40 * 86_400_000;
+    storage.length = 0;
     await setPlan("free");
     await reconcileUser(e, testDb(), "owner-1", later);
     // The domain that only just went over must not inherit an expired clock.
     expect((await entitlement()).graceEndsAt).toBe(later + GRACE_PERIOD_MS);
+    // And every locked domain is republished, not just the one whose lock
+    // moved: the KV value carries the deadline, so the two already locked
+    // would otherwise keep the old one and 404 through the new grace period.
+    expect(storage.map((m) => ("key" in m ? m.key : "")).sort()).toEqual([
+      "domain:d0.example.com",
+      "domain:d1.example.com",
+      "domain:d2.example.com",
+    ]);
   });
 
   it("emails the owner once per grace period, then warns at day 23", async () => {

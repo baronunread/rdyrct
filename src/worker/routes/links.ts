@@ -26,6 +26,7 @@ import {
   resolveUtm,
   stripUtmParams,
   validateQrFields,
+  changesQr,
   ALIAS_TTL_MS,
 } from "../util";
 import { jsonBodyLimit } from "../body-limit";
@@ -197,31 +198,6 @@ async function assertAliasQuota(db: DB, linkId: string): Promise<void> {
       message: `This link already has ${MAX_ALIASES_PER_LINK} aliases, the most allowed. Remove one before adding another.`,
       cause: { code: "alias_limit_reached" },
     });
-}
-
-const QR_FIELDS = ["qrLogo", "qrStyle", "qrColor", "qrCorner", "qrBg", "qrEyeColor"] as const;
-
-/**
- * True when the body would *set* a QR appearance field to something other
- * than what is already stored (#162).
- *
- * Not "carries QR fields": the editor loads a link's styling and sends it
- * back with every save, so a plain title edit on a downgraded org's link
- * arrives carrying the same logo and colours it has always had. Refusing
- * that used to leave the client only one way out, which was to wipe the
- * fields — so fixing a typo destroyed styling somebody paid for.
- *
- * Clearing is always allowed. Giving up a paid look needs no plan, and an
- * owner who wants their downgraded link plain should not have to upgrade to
- * say so.
- */
-function changesQr(body: LinkInput, existing: Partial<QrOverrides> | null): boolean {
-  for (const field of QR_FIELDS) {
-    const next = body[field];
-    if (!next) continue;
-    if (next !== (existing?.[field] ?? "")) return true;
-  }
-  return body.qrLogoSize != null && body.qrLogoSize !== (existing?.qrLogoSize ?? null);
 }
 
 /** Fetch a link inside an org or 404. */

@@ -10,10 +10,10 @@ import type { DomainDTO } from "@/shared/types";
  * one of those the honest answer is the shared domain: a link is better
  * created at a working address than not created at all.
  *
- * `activeDomains` already carries all three rules, since it is the org's
- * domains filtered to `status === "active"` and only fetched for a plan and
- * role that may have them (`useOrgLimits`). So membership in that list is the
- * whole check.
+ * `activeDomains` already carries all of those, since it is the org's domains
+ * filtered to `status === "active"` and unlocked, and only fetched for a plan
+ * and role that may have them (`useOrgLimits`). So membership in that list is
+ * the whole check.
  */
 export function resolveDefaultDomainId(
   defaultDomainId: string | null | undefined,

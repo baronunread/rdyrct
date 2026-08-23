@@ -18,7 +18,7 @@ import { BusyContent } from "../ui/spinner";
 import { DomainsPageSkeleton, DomainsSkeleton, HeaderSkeleton } from "../components/skeletons";
 import { NoOrgState } from "../components/no-org";
 import { LockedPanel } from "../components/over-limit";
-import { graceLabel } from "../lib/grace";
+import { graceLabel, graceRunning } from "../lib/grace";
 import { CopyButton } from "../ui/copy-button";
 import { useToast } from "../ui/toast";
 import { cn } from "../ui/cn";
@@ -304,6 +304,8 @@ function DomainsCard({ orgId, plan }: { orgId: string; plan: "free" | "hobby" | 
   // Hiding them was the bug: an owner who downgrades and finds an upgrade
   // pitch where their domains used to be concludes we deleted them.
   const hasDomains = !!domains.data?.length;
+  // A locked org accepts no writes from anyone, its owner included (#160).
+  const canWrite = !org?.locked;
   if (limits.domains === 0 && !hasDomains) return <UpgradeDomainsCard />;
 
   return (
@@ -333,10 +335,11 @@ function DomainsCard({ orgId, plan }: { orgId: string; plan: "free" | "hobby" | 
                   onRedirectDraft={(id, v) => setRedirectDraft({ ...redirectDraft, [id]: v })}
                   onSaveRedirect={saveRedirect}
                   onCopy={copy}
+                  canWrite={canWrite}
                 />
 
                 <DomainsFooter
-                  canAdd={limits.domains > 0}
+                  canAdd={limits.domains > 0 && canWrite}
                   hasDomains={hasDomains}
                   graceEndsAt={org?.graceEndsAt ?? null}
                   register={register}
@@ -499,6 +502,7 @@ function DomainList({
   onRedirectDraft,
   onSaveRedirect,
   onCopy,
+  canWrite,
 }: {
   domains: DomainDTO[] | undefined;
   org: UserOrg | null;
@@ -511,6 +515,9 @@ function DomainList({
   onRedirectDraft: (id: string, value: string) => void;
   onSaveRedirect: (d: DomainDTO) => void;
   onCopy: (text: string) => void;
+  /** False in a locked org, which accepts no writes from anyone (#160). The
+   * list still renders: hiding it is how somebody concludes it was deleted. */
+  canWrite: boolean;
 }) {
   return (
     <MotionConfig reducedMotion="user">
@@ -532,10 +539,64 @@ function DomainList({
             onSaveRedirect={() => onSaveRedirect(d)}
             onCopy={onCopy}
             graceEndsAt={org?.graceEndsAt ?? null}
+            canWrite={canWrite}
           />
         ))}
       </LazyMotion>
     </MotionConfig>
+  );
+}
+
+/** The badges and controls at the right of a domain's row. Split out of
+ * DomainRow so that one is about the row's shape and this is about what state
+ * the domain is in and who may change it. */
+function DomainRowActions({
+  domain: d,
+  locked,
+  isDefault,
+  refreshing,
+  savingDefault,
+  canWrite,
+  onRecheck,
+  onToggleDefault,
+  onDelete,
+}: {
+  domain: DomainDTO;
+  locked: boolean;
+  isDefault: boolean;
+  refreshing: boolean;
+  savingDefault: boolean;
+  canWrite: boolean;
+  onRecheck: () => void;
+  onToggleDefault: () => void;
+  onDelete: () => void;
+}) {
+  return (
+    <div className="relative flex items-center gap-1">
+      {isDefault && !locked && <Badge color="mint">default</Badge>}
+      {locked ? (
+        <Badge color="butter">locked</Badge>
+      ) : (
+        <>
+          {/* The status and its re-check are reads, so they stay in a locked
+              org. Only the two controls that write are hidden. */}
+          <DomainStatusBadge domain={d} refreshing={refreshing} onRecheck={onRecheck} />
+          {canWrite && (
+            <DefaultDomainButton
+              domain={d}
+              isDefault={isDefault}
+              pending={savingDefault}
+              onToggle={onToggleDefault}
+            />
+          )}
+        </>
+      )}
+      {canWrite && (
+        <IconButton label={`Delete ${d.hostname}`} danger onClick={onDelete}>
+          <Trash2 size={14} />
+        </IconButton>
+      )}
+    </div>
   );
 }
 
@@ -554,6 +615,7 @@ function DomainRow({
   onSaveRedirect,
   onCopy,
   graceEndsAt,
+  canWrite,
 }: {
   domain: DomainDTO;
   appHost: string;
@@ -570,38 +632,31 @@ function DomainRow({
   onCopy: (text: string) => void;
   /** When the org's grace period ends, for a locked domain's countdown. */
   graceEndsAt: number | null;
+  canWrite: boolean;
 }) {
   const locked = d.lockedAt !== null;
   return (
     <div className="rounded-lg border border-border p-3">
       <div className="flex items-center justify-between gap-2">
         <span className="font-bold">{d.hostname}</span>
-        <div className="relative flex items-center gap-1">
-          {isDefault && !locked && <Badge color="mint">default</Badge>}
-          {locked ? (
-            <Badge color="butter">locked</Badge>
-          ) : (
-            <>
-              <DomainStatusBadge domain={d} refreshing={refreshing} onRecheck={onRecheck} />
-              <DefaultDomainButton
-                domain={d}
-                isDefault={isDefault}
-                pending={savingDefault}
-                onToggle={onToggleDefault}
-              />
-            </>
-          )}
-          <IconButton label={`Delete ${d.hostname}`} danger onClick={onDelete}>
-            <Trash2 size={14} />
-          </IconButton>
-        </div>
+        <DomainRowActions
+          domain={d}
+          locked={locked}
+          isDefault={isDefault}
+          refreshing={refreshing}
+          savingDefault={savingDefault}
+          canWrite={canWrite}
+          onRecheck={onRecheck}
+          onToggleDefault={onToggleDefault}
+          onDelete={onDelete}
+        />
       </div>
 
       {locked ? (
         <p className="tnum mt-2 text-xs text-muted">
-          {graceEndsAt !== null
-            ? `Still redirecting until ${new Date(graceEndsAt).toLocaleDateString()} (${graceLabel(graceEndsAt)}), then it stops.`
-            : "This domain has stopped redirecting."}
+          {graceRunning(graceEndsAt)
+            ? `Still redirecting until ${new Date(graceEndsAt!).toLocaleDateString()} (${graceLabel(graceEndsAt!)}), then it stops.`
+            : "This domain has stopped redirecting. Upgrading brings it straight back, with no DNS to redo."}
         </p>
       ) : (
         <DomainStatusDetail

@@ -27,7 +27,7 @@ import { BusyContent } from "../ui/spinner";
 import { useToast } from "../ui/toast";
 import { buttonClass } from "../ui/button-class";
 import { useCurrentOrg } from "../lib/current-org";
-import { graceLabel } from "../lib/grace";
+import { graceLabel, graceRunning } from "../lib/grace";
 import {
   OVER_LIMIT_KEYS,
   PLAN_LIMITS,
@@ -86,10 +86,7 @@ export function OverLimitBanner() {
     <Notice>
       <p className="text-sm">
         <strong className="font-semibold">{org.name}</strong> has {joinPhrases(org.over, org.plan)}.
-        Nothing was deleted.{" "}
-        {org.graceEndsAt !== null && org.over.domains !== undefined
-          ? `Your custom domains keep redirecting for now (${graceLabel(org.graceEndsAt)}).`
-          : "What is over the limit is read-only until you upgrade."}
+        Nothing was deleted. {overLimitAdvice(org)}
       </p>
       <BillingLink />
     </Notice>
@@ -122,22 +119,43 @@ function LockedOrgNotice({ org }: { org: UserOrg }) {
       <p className="max-w-prose text-sm">
         <strong className="font-semibold">{org.name}</strong> is locked, because your plan covers{" "}
         {onlyOne ? "one organization" : `${PLAN_LIMITS[org.plan].orgs} organizations`} and you own
-        more. Nothing was deleted and its links keep working. Upgrade to unlock every organization,
-        or use this one instead of the one that is active now.
+        more. Nothing was deleted and its links keep working.
+        {org.role === "owner"
+          ? " Upgrade to unlock every organization, or use this one instead of the one that is active now."
+          : " Its owner can upgrade, or make this the organization they keep active."}
       </p>
       <div className="flex items-center gap-2">
-        <Button
-          variant="outline"
-          size="sm"
-          disabled={keepActive.isPending}
-          onClick={() => keepActive.mutate()}
-        >
-          <BusyContent busy={keepActive.isPending}>Use this one</BusyContent>
-        </Button>
+        {/* The route is owner-only, so anybody else gets a button whose one
+            outcome is a 403 toast. Everyone still sees the explanation. */}
+        {org.role === "owner" && (
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={keepActive.isPending}
+            onClick={() => keepActive.mutate()}
+          >
+            <BusyContent busy={keepActive.isPending}>Use this one</BusyContent>
+          </Button>
+        )}
         <BillingLink label="Upgrade to Pro" />
       </div>
     </Notice>
   );
+}
+
+/**
+ * What to do about it, which differs by what is over.
+ *
+ * Over-cap links and members are not read-only: every link stays editable and
+ * deletable, and only *new* ones are blocked. Only the domains have a
+ * deadline, and only while it is still ahead.
+ */
+function overLimitAdvice(org: UserOrg): string {
+  if (org.over.domains !== undefined)
+    return graceRunning(org.graceEndsAt)
+      ? `Your custom domains keep redirecting until ${new Date(org.graceEndsAt!).toLocaleDateString()} (${graceLabel(org.graceEndsAt!)}), then they stop.`
+      : "Your custom domains have stopped redirecting. Upgrading brings them straight back.";
+  return "Everything you have keeps working. You can delete what you no longer need, or upgrade to keep it all.";
 }
 
 function joinPhrases(over: OverLimits, plan: OrgPlan): string {
@@ -182,8 +200,10 @@ export function LockedPanel({
       <p className="max-w-prose text-sm text-muted">{reason}</p>
       {until != null && (
         <p className="tnum max-w-prose text-sm text-muted">
-          It keeps working until {new Date(until).toLocaleDateString()} ({graceLabel(until)}), then
-          it stops. Nothing is deleted, and upgrading brings it back with no setup to redo.
+          {graceRunning(until)
+            ? `It keeps working until ${new Date(until).toLocaleDateString()} (${graceLabel(until)}), then it stops.`
+            : "It has stopped working."}{" "}
+          Nothing is deleted, and upgrading brings it back with no setup to redo.
         </p>
       )}
       <div>
