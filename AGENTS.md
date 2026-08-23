@@ -172,6 +172,26 @@ analyticsDays }`). Slugs on the **shared** domain are always random (every
   no org left (it deleted the only one), and `/billing` still works org-less,
   so landing paid CTAs (`/signup?next=/billing?plan=…`) can check out before
   the first org exists (`/onboarding` redirects to `/dashboard`).
+- **A downgrade never deletes** (#29). Every plan change runs
+  `reconcileUser()` (`src/worker/reconcile.ts`): from the Polar webhook, from
+  an admin comp grant or revoke, and by hand from
+  `POST /api/admin/users/:id/reconcile`. It records what is over cap in
+  `org_entitlements` and marks the resources beyond it, and the marks are
+  what everything else reads: `orgs.locked_at` makes an org read-only in
+  `requireOrgRole` (its links keep redirecting), `domains.locked_at` plus
+  the org's `grace_ends_at` become `servesUntil` in the domain's KV value so
+  the redirect path enforces the 30 days with no D1 read, and
+  `org_members.previous_role` is what an upgrade reads to put demoted members
+  back. Idempotent: every decision is recomputed from live rows, and the
+  grace period only restarts when the plan the last pass compared against is
+  not the plan this one sees. The owner picks which org stays active
+  (`POST /orgs/:orgId/keep-active`) and who keeps write access (the member
+  role PATCH); reconciliation defaults to longest-standing so an owner who
+  ignores both still has a working account. Two emails, day 0 from the pass
+  and day 23 from the daily cron (`sweepGraceWarnings`). The UI says all of
+  it through one `OverLimitBanner` and one `LockedPanel`
+  (`src/app/components/over-limit.tsx`): use those rather than inventing a
+  fourth way to say "this is over your plan".
 - **Auth**: BetterAuth (email+password, `requireEmailVerification` via the
   `emailOTP` plugin, 6-digit code; password reset stays a link). PBKDF2/WebCrypto
   hashing (`src/worker/password.ts`). The account matching the `SUPERADMIN_EMAIL`
@@ -267,7 +287,7 @@ migrations/            D1 schema (numbered SQL migrations, applied in order)
 scripts/               Local dev utilities (e.g. seed-local.ts)
 src/worker/            Hono API, BetterAuth, KV publishing, redirect hot path
   routes/              auth (user), orgs, links, qr-logos, domains, billing, admin
-  better-auth.ts plan.ts util.ts guards.ts org-role.ts rate-limit.ts session.ts
+  better-auth.ts plan.ts reconcile.ts util.ts guards.ts org-role.ts rate-limit.ts session.ts
   email.ts password.ts kv.ts storage.ts sentry.ts clicks.ts workflows.ts
 src/shared/types.ts    DTOs + PLAN_LIMITS (shared worker ↔ app)
 src/app/               React SPA
