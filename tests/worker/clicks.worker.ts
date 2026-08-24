@@ -123,6 +123,71 @@ describe("click queue: consumer", () => {
     expect(await clickCount()).toBe(1);
   });
 
+  it("stores every good click in a batch when one link was deleted, on the last delivery", async () => {
+    await seedLink();
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    // Nine ordinary clicks and one for a link that is gone, on the delivery
+    // that would otherwise dead-letter all ten (#102).
+    const good = Array.from({ length: 9 }, (_, i) => clickMessage({ dedupeId: `ok-${i}` }));
+    const { batch, ctx } = batchOf(
+      "rdyrct-clicks",
+      [...good, clickMessage({ dedupeId: "bad", linkId: "no-such-link" })],
+      6,
+    );
+
+    await consumeClickBatch(testEnv, batch);
+
+    const result = await getQueueResult(batch, ctx);
+    expect(result.ackAll).toBe(true);
+    expect(await clickCount()).toBe(9);
+    expect(errors.mock.calls.some(([a]) => String(a).includes("click_dropped_unwritable"))).toBe(
+      true,
+    );
+    errors.mockRestore();
+  });
+
+  it("does not double-count a salvaged click that already landed", async () => {
+    await seedLink();
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    const shared = clickMessage({ dedupeId: "shared" });
+    await consumeClickBatch(testEnv, batchOf("rdyrct-clicks", [shared]).batch);
+    expect(await clickCount()).toBe(1);
+
+    // The same message rides a later batch that has to be salvaged. Dedupe
+    // has to survive the split, or a bad neighbour turns into a double count.
+    const { batch } = batchOf(
+      "rdyrct-clicks",
+      [shared, clickMessage({ dedupeId: "bad", linkId: "no-such-link" })],
+      6,
+    );
+    await consumeClickBatch(testEnv, batch);
+
+    expect(await clickCount()).toBe(1);
+    errors.mockRestore();
+  });
+
+  it("retries the whole batch on the last delivery when nothing writes at all", async () => {
+    await seedLink();
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    // Every row unwritable is a failing database, not a deleted link. Acking
+    // it would report a hundred clicks as stored that D1 never saw.
+    const { batch, ctx } = batchOf(
+      "rdyrct-clicks",
+      [
+        clickMessage({ dedupeId: "a", linkId: "no-such-link" }),
+        clickMessage({ dedupeId: "b", linkId: "no-such-link" }),
+      ],
+      6,
+    );
+
+    await consumeClickBatch(testEnv, batch);
+
+    const result = await getQueueResult(batch, ctx);
+    expect(result.retryBatch.retry).toBe(true);
+    expect(await clickCount()).toBe(0);
+    errors.mockRestore();
+  });
+
   it("logs click_batch_dead_letter only once a message reaches its last delivery", async () => {
     await seedLink();
     const errors = vi.spyOn(console, "error").mockImplementation(() => {});

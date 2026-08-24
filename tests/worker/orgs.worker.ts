@@ -97,6 +97,26 @@ afterEach(async () => {
 
 beforeEach(applyTestMigrations);
 
+/** Runs a delete whose workflow start fails, and reports what the flag was
+ * left as. Every "start failed" case differs only in what get() then says. */
+async function failedStart(
+  db: Awaited<ReturnType<typeof seedOrg>>,
+  status?: InstanceStatus["status"],
+) {
+  await expect(
+    deleteOrg(db, overrideEnv({ ORG_DELETE: failingStartWorkflow(status) }), "org-1"),
+  ).rejects.toThrow("injected workflow start failure");
+  return deletingAtOf("org-1");
+}
+
+/** Deletes with a working workflow and reports which ids teardown started
+ * for. Every "it starts" case differs only in the state it starts from. */
+async function startedIds(db: Awaited<ReturnType<typeof seedOrg>>): Promise<string[]> {
+  const { workflow, started } = fakeOrgDeleteWorkflow();
+  await deleteOrg(db, overrideEnv({ ORG_DELETE: workflow }), "org-1");
+  return started;
+}
+
 describe("deleteOrg: marking an org deleting", () => {
   it("sets deleting_at before starting the teardown workflow", async () => {
     const db = await seedOrg();
@@ -125,14 +145,11 @@ describe("deleteOrg: marking an org deleting", () => {
   it("restarts teardown for an org already flagged with no instance driving it", async () => {
     const db = await seedOrg();
     // The state a failed start can leave behind: flagged, nothing running.
-    await env.DB.prepare("update orgs set deleting_at = ? where id = 'org-1'").bind(1).run();
-    const { workflow, started } = fakeOrgDeleteWorkflow();
-
-    await deleteOrg(db, overrideEnv({ ORG_DELETE: workflow }), "org-1");
-
     // Without this the org is stuck: read-only forever, and its DELETE
     // answers 200 while doing nothing.
-    expect(started).toEqual(["org-1"]);
+    await env.DB.prepare("update orgs set deleting_at = ? where id = 'org-1'").bind(1).run();
+
+    expect(await startedIds(db)).toEqual(["org-1"]);
   });
 
   it("leaves deleting_at set when the start fails and the instance cannot be read", async () => {
@@ -142,39 +159,23 @@ describe("deleteOrg: marking an org deleting", () => {
     // this is the ambiguous case. Clearing the flag on it would reopen writes
     // under a teardown that may well be running, and those writes outlive the
     // org as public redirects. The next DELETE restarts teardown.
-    await expect(
-      deleteOrg(db, overrideEnv({ ORG_DELETE: failingStartWorkflow() }), "org-1"),
-    ).rejects.toThrow("injected workflow start failure");
-    expect(await deletingAtOf("org-1")).not.toBeNull();
-
-    const { workflow, started } = fakeOrgDeleteWorkflow();
-    await deleteOrg(db, overrideEnv({ ORG_DELETE: workflow }), "org-1");
-    expect(started).toEqual(["org-1"]);
+    expect(await failedStart(db)).not.toBeNull();
+    expect(await startedIds(db)).toEqual(["org-1"]);
   });
 
   it("leaves deleting_at set when the start fails but an instance is already running", async () => {
-    const db = await seedOrg();
-
     // The start can fail on the client side (a timeout, say) while the
     // instance still started server-side: get() finding it "running" is the
     // signal that teardown is genuinely underway, so the write guard must
     // not lift.
-    await expect(
-      deleteOrg(db, overrideEnv({ ORG_DELETE: failingStartWorkflow("running") }), "org-1"),
-    ).rejects.toThrow("injected workflow start failure");
-    expect(await deletingAtOf("org-1")).not.toBeNull();
+    expect(await failedStart(await seedOrg(), "running")).not.toBeNull();
   });
 
   it("clears deleting_at when the start fails and the found instance is already terminal", async () => {
-    const db = await seedOrg();
-
     // The one case that is proof rather than a guess: the instance was read,
     // and it is finished. Nothing is running, so the org goes back to normal
     // and the delete can be retried.
-    await expect(
-      deleteOrg(db, overrideEnv({ ORG_DELETE: failingStartWorkflow("errored") }), "org-1"),
-    ).rejects.toThrow("injected workflow start failure");
-    expect(await deletingAtOf("org-1")).toBeNull();
+    expect(await failedStart(await seedOrg(), "errored")).toBeNull();
   });
 });
 
