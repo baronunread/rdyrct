@@ -12,6 +12,7 @@ import {
   PLAN_LIMITS,
   type InviteDTO,
   type MemberDTO,
+  type CurrentUser,
   type OrgRole,
   type Sort,
   type UserOrg,
@@ -354,118 +355,207 @@ function canManageOrg(role: OrgRole): boolean {
   return role === "owner" || role === "admin";
 }
 
-export function MembersPage() {
-  const { org } = useCurrentOrg();
-  const orgId = org?.id ?? "";
-  const currentUser = useCurrentUser();
-  const myRole = resolveMyRole(currentUser.data?.user.isAdmin, org?.role);
-  // A locked org accepts no writes from anyone, its owner included (#160).
-  const canManage = canManageOrg(myRole) && !org?.locked;
+type MemberManagement = ReturnType<typeof useMemberManagement>;
+type SeatSummary = { limit: number; taken: number; left: number };
 
-  const {
-    members,
-    invites,
-    inviteOpen,
-    setInviteOpen,
-    inviteRole,
-    setInviteRole,
-    removing,
-    setRemoving,
-    sort,
-    setSort,
-    sorted,
-    setRole,
-    removeMember,
-    createInvite,
-    sendEmailInvite,
-    revokeInvite,
-    inviteUrl,
-    copyInvite,
-  } = useMemberManagement(orgId, canManage);
+function rowCount(rows: readonly object[] | undefined): number {
+  return rows ? rows.length : 0;
+}
 
-  const memberLimit = memberLimitFor(org);
+function seatSummary(org: UserOrg, management: MemberManagement): SeatSummary {
+  const limit = memberLimitFor(org);
   // An org at or over its cap cannot take another member: the server refuses
   // the invite with a 402, so offering the form is offering an error (#161).
   // Counted from the same figure the server uses, members plus open invites.
-  const seatsTaken = (members.data?.length ?? 0) + (invites.data?.length ?? 0);
-  const seatsLeft = Math.max(0, memberLimit - seatsTaken);
+  const taken = rowCount(management.members.data) + rowCount(management.invites.data);
+  return { limit, taken, left: Math.max(0, limit - taken) };
+}
+
+function MembersHeader({
+  org,
+  canManage,
+  seats,
+  onInvite,
+}: {
+  org: UserOrg;
+  canManage: boolean;
+  seats: SeatSummary;
+  onInvite: () => void;
+}) {
+  const action = canManage ? (
+    <div className="flex items-center gap-3">
+      <span className="tnum text-xs text-muted">
+        {seats.taken} / {seats.limit} members
+        {seats.taken > seats.limit && " (over the limit)"}
+      </span>
+      <Button
+        variant="primary"
+        onClick={onInvite}
+        disabled={seats.left === 0}
+        title={seats.left === 0 ? fullSeatsHint(org, seats.limit) : undefined}
+      >
+        <UserPlus size={15} /> Invite link
+      </Button>
+    </div>
+  ) : undefined;
+  return (
+    <PageHeader title="Members" sub="People with access to this organization" action={action} />
+  );
+}
+
+function MemberInviteSection({
+  org,
+  seats,
+  management,
+}: {
+  org: UserOrg;
+  seats: SeatSummary;
+  management: MemberManagement;
+}) {
+  if (seats.left === 0) {
+    return <SeatsFullNotice org={org} memberLimit={seats.limit} over={seats.taken > seats.limit} />;
+  }
+  return (
+    <InviteByEmailCard
+      org={org}
+      memberLimit={seats.limit}
+      sendEmailInvite={management.sendEmailInvite}
+    />
+  );
+}
+
+function ManagedInviteSection({
+  org,
+  canManage,
+  seats,
+  management,
+}: {
+  org: UserOrg;
+  canManage: boolean;
+  seats: SeatSummary;
+  management: MemberManagement;
+}) {
+  if (!canManage) return null;
+  return <MemberInviteSection org={org} seats={seats} management={management} />;
+}
+
+function PendingInvitesSection({
+  canManage,
+  management,
+}: {
+  canManage: boolean;
+  management: MemberManagement;
+}) {
+  const invites = management.invites.data;
+  if (!canManage || !hasPendingInvites(invites)) return null;
+  return (
+    <PendingInvitesCard
+      invites={invites ?? []}
+      inviteUrl={management.inviteUrl}
+      copyInvite={management.copyInvite}
+      revokeInvite={management.revokeInvite}
+    />
+  );
+}
+
+function MemberOverlays({ management }: { management: MemberManagement }) {
+  return (
+    <>
+      {management.removing && (
+        <RemoveMemberDialog
+          member={management.removing}
+          onClose={() => management.setRemoving(null)}
+          remove={management.removeMember}
+        />
+      )}
+      <InviteMemberDialog
+        open={management.inviteOpen}
+        onOpenChange={management.setInviteOpen}
+        role={management.inviteRole}
+        onRoleChange={management.setInviteRole}
+        onCreate={() => management.createInvite.mutate()}
+        isCreating={management.createInvite.isPending}
+      />
+    </>
+  );
+}
+
+function MembersView({
+  org,
+  userId,
+  canManage,
+  seats,
+  management,
+}: {
+  org: UserOrg;
+  userId: string | undefined;
+  canManage: boolean;
+  seats: SeatSummary;
+  management: MemberManagement;
+}) {
+  return (
+    <div>
+      <MembersHeader
+        org={org}
+        canManage={canManage}
+        seats={seats}
+        onInvite={() => management.setInviteOpen(true)}
+      />
+
+      <ManagedInviteSection org={org} canManage={canManage} seats={seats} management={management} />
+
+      <MemberTable
+        isLoading={management.members.isLoading}
+        sorted={management.sorted}
+        canManage={canManage}
+        sort={management.sort}
+        setSort={management.setSort}
+        meId={userId}
+        onSetRole={(memberId, role) => management.setRole.mutate({ userId: memberId, role })}
+        onRemove={(memberId, name) => management.setRemoving({ userId: memberId, name })}
+      />
+
+      <PendingInvitesSection canManage={canManage} management={management} />
+
+      <MemberOverlays management={management} />
+    </div>
+  );
+}
+
+function memberCanManage(
+  org: UserOrg | null,
+  currentUser: CurrentUser | null | undefined,
+): boolean {
+  if (!org) return false;
+  const myRole = resolveMyRole(currentUser?.user.isAdmin, org.role);
+  return canManageOrg(myRole) && !org.locked;
+}
+
+function memberOrgId(org: UserOrg | null): string {
+  return org ? org.id : "";
+}
+
+function currentMemberId(currentUser: CurrentUser | null | undefined): string | undefined {
+  return currentUser?.user.id;
+}
+
+export function MembersPage() {
+  const { org } = useCurrentOrg();
+  const currentUser = useCurrentUser();
+  // A locked org accepts no writes from anyone, its owner included (#160).
+  const canManage = memberCanManage(org, currentUser.data);
+  const management = useMemberManagement(memberOrgId(org), canManage);
 
   if (currentUser.isLoading) return <TableSkeleton rows={4} />;
   if (!org) return <NoOrgState />;
-
   return (
-    <div>
-      <PageHeader
-        title="Members"
-        sub="People with access to this organization"
-        action={
-          canManage && (
-            <div className="flex items-center gap-3">
-              <span className="tnum text-xs text-muted">
-                {seatsTaken} / {memberLimit} members
-                {seatsTaken > memberLimit && " (over the limit)"}
-              </span>
-              <Button
-                variant="primary"
-                onClick={() => setInviteOpen(true)}
-                disabled={seatsLeft === 0}
-                title={seatsLeft === 0 ? fullSeatsHint(org, memberLimit) : undefined}
-              >
-                <UserPlus size={15} /> Invite link
-              </Button>
-            </div>
-          )
-        }
-      />
-
-      {canManage &&
-        (seatsLeft === 0 ? (
-          <SeatsFullNotice org={org} memberLimit={memberLimit} over={seatsTaken > memberLimit} />
-        ) : (
-          <InviteByEmailCard
-            org={org}
-            memberLimit={memberLimit}
-            sendEmailInvite={sendEmailInvite}
-          />
-        ))}
-
-      <MemberTable
-        isLoading={members.isLoading}
-        sorted={sorted}
-        canManage={canManage}
-        sort={sort}
-        setSort={setSort}
-        meId={currentUser.data?.user.id}
-        onSetRole={(userId, role) => setRole.mutate({ userId, role })}
-        onRemove={(userId, name) => setRemoving({ userId, name })}
-      />
-
-      {canManage && hasPendingInvites(invites.data) && (
-        <PendingInvitesCard
-          invites={invites.data!}
-          inviteUrl={inviteUrl}
-          copyInvite={copyInvite}
-          revokeInvite={revokeInvite}
-        />
-      )}
-
-      {removing && (
-        <RemoveMemberDialog
-          member={removing}
-          onClose={() => setRemoving(null)}
-          remove={removeMember}
-        />
-      )}
-
-      <InviteMemberDialog
-        open={inviteOpen}
-        onOpenChange={setInviteOpen}
-        role={inviteRole}
-        onRoleChange={setInviteRole}
-        onCreate={() => createInvite.mutate()}
-        isCreating={createInvite.isPending}
-      />
-    </div>
+    <MembersView
+      org={org}
+      userId={currentMemberId(currentUser.data)}
+      canManage={canManage}
+      seats={seatSummary(org, management)}
+      management={management}
+    />
   );
 }
 

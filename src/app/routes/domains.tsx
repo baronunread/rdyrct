@@ -274,7 +274,7 @@ function useDomainActions({
   return { copy, addDomain, recheck, saveRedirect, toggleDefault, confirmDelete };
 }
 
-function DomainsCard({ orgId, plan }: { orgId: string; plan: "free" | "hobby" | "pro" }) {
+function useDomainsCardModel(orgId: string, plan: "free" | "hobby" | "pro") {
   const domains = useDomains(orgId);
   const { add, refresh, setRootRedirect, remove, setDefault } = useDomainMutations(orgId);
   const { org } = useCurrentOrg();
@@ -307,7 +307,38 @@ function DomainsCard({ orgId, plan }: { orgId: string; plan: "free" | "hobby" | 
   const hasDomains = !!domains.data?.length;
   // A locked org accepts no writes from anyone, its owner included (#160).
   const canWrite = !org?.locked;
-  if (limits.domains === 0 && !hasDomains) return <UpgradeDomainsCard />;
+  const submit = handleSubmit(addDomain, (errors) =>
+    toast(errors.hostname?.message ?? "Enter a valid hostname", "error"),
+  );
+
+  return {
+    domains,
+    org,
+    appHost,
+    limits,
+    deleting,
+    setDeleting,
+    redirectDraft,
+    setRedirectDraft,
+    register,
+    submit,
+    actions: { copy, recheck, saveRedirect, toggleDefault, confirmDelete },
+    pending: {
+      adding: add.isPending,
+      refreshing: refresh.isPending,
+      savingRedirect: setRootRedirect.isPending,
+      savingDefault: setDefault.isPending,
+      removing: remove.isPending,
+    },
+    hasDomains,
+    canWrite,
+  };
+}
+
+type DomainsCardModel = ReturnType<typeof useDomainsCardModel>;
+
+function DomainsCardContent({ model }: { model: DomainsCardModel }) {
+  const { domains, org, appHost, limits, redirectDraft, actions, pending } = model;
 
   return (
     <>
@@ -325,29 +356,29 @@ function DomainsCard({ orgId, plan }: { orgId: string; plan: "free" | "hobby" | 
                   org={org}
                   appHost={appHost}
                   pending={{
-                    refreshing: refresh.isPending,
-                    savingRedirect: setRootRedirect.isPending,
-                    savingDefault: setDefault.isPending,
+                    refreshing: pending.refreshing,
+                    savingRedirect: pending.savingRedirect,
+                    savingDefault: pending.savingDefault,
                   }}
                   redirectDraft={redirectDraft}
-                  onToggleDefault={toggleDefault}
-                  onRecheck={recheck}
-                  onDelete={setDeleting}
-                  onRedirectDraft={(id, v) => setRedirectDraft({ ...redirectDraft, [id]: v })}
-                  onSaveRedirect={saveRedirect}
-                  onCopy={copy}
-                  canWrite={canWrite}
+                  onToggleDefault={actions.toggleDefault}
+                  onRecheck={actions.recheck}
+                  onDelete={model.setDeleting}
+                  onRedirectDraft={(id, value) =>
+                    model.setRedirectDraft({ ...redirectDraft, [id]: value })
+                  }
+                  onSaveRedirect={actions.saveRedirect}
+                  onCopy={actions.copy}
+                  canWrite={model.canWrite}
                 />
 
                 <DomainsFooter
-                  blockedBy={domainsBlockedBy(limits.domains, !canWrite)}
-                  hasDomains={hasDomains}
+                  blockedBy={domainsBlockedBy(limits.domains, !model.canWrite)}
+                  hasDomains={model.hasDomains}
                   graceEndsAt={org?.graceEndsAt ?? null}
-                  register={register}
-                  onSubmit={handleSubmit(addDomain, (errors) =>
-                    toast(errors.hostname?.message ?? "Enter a valid hostname", "error"),
-                  )}
-                  pending={add.isPending}
+                  register={model.register}
+                  onSubmit={model.submit}
+                  pending={pending.adding}
                 />
               </div>
             )}
@@ -358,13 +389,19 @@ function DomainsCard({ orgId, plan }: { orgId: string; plan: "free" | "hobby" | 
       </div>
 
       <DeleteDomainDialog
-        deleting={deleting}
-        onClose={() => setDeleting(null)}
-        onConfirm={confirmDelete}
-        pending={remove.isPending}
+        deleting={model.deleting}
+        onClose={() => model.setDeleting(null)}
+        onConfirm={actions.confirmDelete}
+        pending={pending.removing}
       />
     </>
   );
+}
+
+function DomainsCard({ orgId, plan }: { orgId: string; plan: "free" | "hobby" | "pro" }) {
+  const model = useDomainsCardModel(orgId, plan);
+  if (model.limits.domains === 0 && !model.hasDomains) return <UpgradeDomainsCard />;
+  return <DomainsCardContent model={model} />;
 }
 
 /** Slide-in/out variants for the status badge swap: skip the motion (and
