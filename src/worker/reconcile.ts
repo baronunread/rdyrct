@@ -280,19 +280,18 @@ async function reconcileOrg(
     warnedAt,
   });
 
-  // Every locked domain when the deadline moved, only the ones whose lock
-  // moved otherwise. `servesUntil` in KV is built from the org's
-  // `graceEndsAt` (see desiredKvValue), so a restarted grace that republished
-  // nothing left already-locked hosts carrying the *old* deadline: pro to
-  // hobby, thirty days, then hobby to free, and two domains 404 through a
-  // grace period D1 says is still running.
+  // Republish every locked domain on every pass. `servesUntil` in KV is built
+  // from the org's `graceEndsAt` (see desiredKvValue), so a restarted grace
+  // that republished nothing left already-locked hosts carrying the *old*
+  // deadline: pro to hobby, thirty days, then hobby to free, and two domains
+  // 404 through a grace period D1 says is still running. More importantly,
+  // the D1 writes above commit before queue submission. If that submission
+  // fails, the next reconciliation has no lock change to discover, so it must
+  // still enqueue the locked hosts and repair the stale KV values.
   //
   // After the row is written, so the KV value the sync reads carries this
   // pass's deadline rather than the one it replaced.
-  const republish =
-    graceEndsAt === (previous?.graceEndsAt ?? null)
-      ? domains.changed
-      : [...new Set([...domains.changed, ...domains.locked])];
+  const republish = [...new Set([...domains.changed, ...domains.locked])];
   await enqueueStorage(
     env,
     republish.map((hostname) => syncDomainMsg(hostname)),

@@ -4,12 +4,14 @@ import { reset } from "cloudflare:test";
 import { eq } from "drizzle-orm";
 import * as schema from "../../src/worker/db/schema";
 import { reconcileUser, sweepGraceWarnings } from "../../src/worker/reconcile";
+import type { StorageMessage } from "../../src/worker/storage";
 import { GRACE_PERIOD_MS } from "../../src/shared/types";
 import {
   applyTestMigrations,
   captureEmails,
   captureStorageQueue,
   overrideEnv,
+  stubQueue,
   testDb,
 } from "./support";
 
@@ -166,6 +168,31 @@ describe("entitlement reconciliation", () => {
     expect(row.graceEndsAt).toBe(NOW + GRACE_PERIOD_MS);
     // Only the domains whose verdict moved get a KV republish.
     expect(storage.map((m) => ("key" in m ? m.key : ""))).toContain("domain:d0.example.com");
+  });
+
+  it("requeues locked domains after a storage queue failure", async () => {
+    await seed({ plan: "free", domains: 2 });
+    const failing = overrideEnv({
+      STORAGE_QUEUE: stubQueue<StorageMessage>(() => {
+        throw new Error("injected storage queue failure");
+      }),
+    });
+
+    // D1 commits before queue submission, exactly as it does for a transient
+    // binding failure in production. The first pass therefore leaves both
+    // domains locked while no KV sync was accepted.
+    await reconcileUser(failing, testDb(), "owner-1", NOW);
+    expect((await domains()).map((domain) => domain.lockedAt)).toEqual([NOW, NOW]);
+
+    const { env: retry, storage } = quietEnv();
+    await reconcileUser(retry, testDb(), "owner-1", NOW + 1_000);
+
+    // Nothing in D1 changes on the replay, but it still republishes all
+    // locked hosts so their KV `servesUntil` values recover.
+    expect(storage.map((message) => ("key" in message ? message.key : "")).sort()).toEqual([
+      "domain:d0.example.com",
+      "domain:d1.example.com",
+    ]);
   });
 
   it("demotes over-cap members to viewer, longest-standing first, owner exempt", async () => {
