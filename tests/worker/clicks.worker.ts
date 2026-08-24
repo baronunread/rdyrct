@@ -198,8 +198,9 @@ describe("click queue: consumer", () => {
   it("retries the whole batch on the last delivery when nothing writes at all", async () => {
     await seedLink();
     const errors = vi.spyOn(console, "error").mockImplementation(() => {});
-    // Every row unwritable is a failing database, not a deleted link. Acking
-    // it would report a hundred clicks as stored that D1 never saw.
+    // Every row failing is a failing database, not a deleted link. Acking it
+    // would report a hundred clicks as stored that D1 never saw, and counting
+    // them as dropped would report a blip as permanent loss.
     const { batch, ctx } = batchOf(
       "rdyrct-clicks",
       [
@@ -214,6 +215,9 @@ describe("click queue: consumer", () => {
     const result = await getQueueResult(batch, ctx);
     expect(result.retryBatch.retry).toBe(true);
     expect(await clickCount()).toBe(0);
+    expect(errors.mock.calls.some(([a]) => String(a).includes("click_dropped_unwritable"))).toBe(
+      false,
+    );
     errors.mockRestore();
   });
 

@@ -348,15 +348,18 @@ export async function sweepStalledOrgDeletions(
 /** True if this org's teardown was actually restarted. Never throws: one
  * unreadable instance must not stop the sweep reaching the rest. */
 async function restartIfStalled(env: Env, orgId: string): Promise<boolean> {
+  // The lookup and the restart are separate try blocks on purpose. Wrapping
+  // both meant a restart that failed on an instance which plainly exists was
+  // read as "no instance", and the fallback then created for an id already in
+  // use: createBatch skipped it and the sweep still reported a restart that
+  // never happened.
+  let instance;
+  let status;
   try {
-    const instance = await env.ORG_DELETE.get(orgId);
-    const { status } = await instance.status();
-    if (!TERMINAL_WORKFLOW_STATUSES.has(status)) return false;
-    await instance.restart();
-    captureAlert([{ event: "org_delete_restarted", orgId, status }]);
-    return true;
+    instance = await env.ORG_DELETE.get(orgId);
+    ({ status } = await instance.status());
   } catch {
-    // No instance to read, so nothing is in use and a plain create works.
+    // Nothing to read, so nothing is in use and a plain create works.
     try {
       await env.ORG_DELETE.createBatch([{ id: orgId, params: { orgId } }]);
       captureAlert([{ event: "org_delete_restarted", orgId, status: "missing" }]);
@@ -365,6 +368,16 @@ async function restartIfStalled(env: Env, orgId: string): Promise<boolean> {
       return false;
     }
   }
+  if (!TERMINAL_WORKFLOW_STATUSES.has(status)) return false;
+  try {
+    await instance.restart();
+  } catch {
+    // It exists and is terminal, so creating is not an option. The next sweep
+    // tries again.
+    return false;
+  }
+  captureAlert([{ event: "org_delete_restarted", orgId, status }]);
+  return true;
 }
 
 export async function deleteOrgs(db: DB, env: Env, orgIds: string[]): Promise<void> {

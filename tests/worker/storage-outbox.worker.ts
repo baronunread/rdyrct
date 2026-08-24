@@ -14,7 +14,7 @@
  */
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { env } from "cloudflare:workers";
-import { reset } from "cloudflare:test";
+import { getQueueResult, reset } from "cloudflare:test";
 import {
   drainStorageOutbox,
   enqueueStorage,
@@ -57,6 +57,24 @@ const queueOutbox = (id: string, target: string, op = "kv_sync") =>
   )
     .bind(id, op, target)
     .run();
+
+/** A KV binding whose every call fails, standing in for KV being unavailable
+ * when the drain runs. Not a partial stub: see the note at its call site. */
+function unavailableKv(): typeof env.LINKS {
+  const fail = async (): Promise<never> => {
+    throw new Error("kv unavailable");
+  };
+  // SAFETY: the drain only ever reaches get/put/delete on this binding, and
+  // all three are present; a test that starts using another member gets a
+  // TypeError naming it rather than a silent pass.
+  return {
+    get: fail,
+    put: fail,
+    delete: fail,
+    list: fail,
+    getWithMetadata: fail,
+  } as typeof env.LINKS;
+}
 
 describe("the idempotency contract", () => {
   it("carries the key to look up, never the value to write", async () => {
@@ -144,6 +162,21 @@ describe("a message that exhausted every delivery", () => {
   });
 });
 
+describe("a dead-letter batch whose outbox row cannot be written", () => {
+  it("retries instead of acknowledging, because the row is the only record left", async () => {
+    // Dropping the table is the cheapest way to make the write fail the way a
+    // transient D1 error would.
+    await env.DB.exec("drop table storage_outbox");
+    const { batch, ctx } = batchOf("rdyrct-storage-dlq", [syncLinkMsg("gone", null)]);
+
+    await logDeadLetterBatch(testEnv, batch);
+
+    const result = await getQueueResult(batch, ctx);
+    expect(result.retryBatch.retry).toBe(true);
+    expect(result.explicitAcks).toEqual([]);
+  });
+});
+
 describe("the daily drain", () => {
   it("clears what it applied and keeps what it could not", async () => {
     await seedLink();
@@ -168,16 +201,12 @@ describe("the daily drain", () => {
     ).run();
     // A KV binding that refuses, standing in for the storage layer still
     // being unavailable when the drain runs.
-    // SAFETY: spread of the real binding with one method replaced, so every
-    // member KVNamespace declares is still present and correctly typed.
-    const broken = overrideEnv({
-      LINKS: {
-        ...env.LINKS,
-        get: async () => {
-          throw new Error("kv unavailable");
-        },
-      } as typeof env.LINKS,
-    });
+    // Every call throws, deliberately. A selective stub is not available: a
+    // KV binding keeps its methods on the prototype, so spreading it drops
+    // them all, and delegating through Object.create hands the native method
+    // the wrong `this`. Since this test only asks what happens when the apply
+    // fails, "KV is down" is the honest stand-in.
+    const broken = overrideEnv({ LINKS: unavailableKv() });
 
     expect(await drainStorageOutbox(broken)).toBe(0);
     const rows = await outboxRows();

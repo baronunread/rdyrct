@@ -108,19 +108,23 @@ export async function enqueueStorage(
 /**
  * Remembers storage work so the daily drain can apply it (#118).
  *
- * Never throws. Every caller is already on a failure path, and a repair that
- * fails is not a reason to turn a succeeded mutation into a second error.
+ * Never throws, but it does report. A caller on the request path is already
+ * failing and has nothing better to do with a second error; the dead-letter
+ * consumer is not, and must not acknowledge a message whose only remaining
+ * record failed to persist.
  *
  * One pending row per target, because applying desired state twice is a
  * no-op: a repeat failure for the same key replaces the first rather than
- * queueing a duplicate drain.
+ * queueing a duplicate drain. That replacement takes a fresh `id`, which is
+ * what the drain's delete matches on, so a request arriving mid-drain is
+ * never removed unapplied.
  */
 async function recordOutbox(
   env: Env,
   messages: StorageMessage[],
   reason: "send_failed" | "gave_up",
   detail = "",
-): Promise<void> {
+): Promise<boolean> {
   const now = Date.now();
   try {
     // `created_at` is deliberately not updated on conflict: the drain reads
@@ -133,14 +137,18 @@ async function recordOutbox(
           `insert into storage_outbox (id, op, target, reason, created_at, attempts, last_error)
            values (?, ?, ?, ?, ?, 0, ?)
            on conflict (op, target) do update set
+             id = excluded.id,
              reason = excluded.reason,
+             attempts = 0,
              last_error = excluded.last_error`,
         ).bind(uid(), message.op, targetOf(message), reason, now, detail),
       ),
     );
+    return true;
   } catch (writeError) {
     captureAlert([{ event: "storage_outbox_write_failed", reason, count: messages.length }]);
     console.error("storage_outbox_write_failed", reason, writeError);
+    return false;
   }
 }
 
@@ -160,26 +168,24 @@ const OUTBOX_DRAIN_LIMIT = 200;
  */
 export async function drainStorageOutbox(env: Env): Promise<number> {
   const db = drizzle(env.DB, { schema });
+  // Fewest attempts first, then oldest. Ordering by age alone let 200 rows
+  // that always fail hold the whole limit forever, so a recovery recorded
+  // afterwards never drained and KV stayed stale indefinitely. A row that
+  // keeps failing sinks behind every fresher one instead, and is still
+  // retried once the queue ahead of it is clear.
   const rows = await db
     .select()
     .from(schema.storageOutbox)
-    .orderBy(schema.storageOutbox.createdAt)
+    .orderBy(schema.storageOutbox.attempts, schema.storageOutbox.createdAt)
     .limit(OUTBOX_DRAIN_LIMIT);
   let cleared = 0;
   for (const row of rows) {
     try {
       await applyStorageMessage(env, db, outboxMessage(row));
-      // Matched on the row this pass actually read, not just its id: a fresh
-      // failure for the same key upserts in place, and deleting by id alone
-      // would drop that new request unapplied.
-      await db
-        .delete(schema.storageOutbox)
-        .where(
-          and(
-            eq(schema.storageOutbox.id, row.id),
-            eq(schema.storageOutbox.lastError, row.lastError),
-          ),
-        );
+      // `id` is the revision: every re-record takes a fresh one, so a failure
+      // that arrived while this row was being applied does not match here and
+      // survives to be drained on its own terms.
+      await db.delete(schema.storageOutbox).where(eq(schema.storageOutbox.id, row.id));
       cleared++;
     } catch (error) {
       // Left in place, with its attempt count, so a permanently broken row can
@@ -457,7 +463,7 @@ export async function logDeadLetterBatch(
   env: Env,
   batch: MessageBatch<StorageMessage>,
 ): Promise<void> {
-  await recordOutbox(
+  const recorded = await recordOutbox(
     env,
     batch.messages.map((message) => message.body),
     "gave_up",
@@ -469,6 +475,13 @@ export async function logDeadLetterBatch(
       target: targetOf(message.body),
     })),
   );
+  // The outbox row is the only record left of this work, so acknowledging a
+  // message whose row did not persist discards it for good. A transient D1
+  // failure earns a redelivery instead.
+  if (!recorded) {
+    batch.retryAll();
+    return;
+  }
   for (const message of batch.messages) message.ack();
 }
 

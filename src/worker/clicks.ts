@@ -168,6 +168,18 @@ function clickRow(message: Message<ClickMessage>) {
 }
 
 /**
+ * Is this insert failure a link that no longer exists?
+ *
+ * The two causes want opposite answers: a deleted link will never accept this
+ * click however often it comes back, while a database that was briefly
+ * unavailable will. Treating both as "drop it" retried nothing and reported a
+ * transient blip as a permanent loss.
+ */
+function isDeletedLink(error: Error): boolean {
+  return error.message.includes("FOREIGN KEY constraint failed");
+}
+
+/**
  * The last delivery, one row at a time, so one unwritable click cannot take
  * the batch down with it.
  *
@@ -195,13 +207,17 @@ async function salvageClickBatch(
           target: schema.clicks.dedupeId,
         });
         return null;
-      } catch {
-        return message;
+      } catch (error) {
+        // Narrowed here, where it arrives: only an Error carries a message
+        // worth classifying, and anything else is treated as transient.
+        return { message, unwritable: error instanceof Error && isDeletedLink(error) };
       }
     }),
   );
-  const failed = new Set(outcomes.filter((m): m is Message<ClickMessage> => m !== null));
-  const stored = batch.messages.length - failed.size;
+  const failures = new Map(
+    outcomes.flatMap((o) => (o === null ? [] : [[o.message, o.unwritable] as const])),
+  );
+  const stored = batch.messages.length - failures.size;
   if (stored === 0) {
     // Nothing wrote at all, so this is the database rather than one deleted
     // link. Retrying keeps that path exactly as it was, dead-letter log
@@ -217,14 +233,23 @@ async function salvageClickBatch(
   // whole function exists to prevent.
   const dropped: Message<ClickMessage>[] = [];
   for (const message of batch.messages) {
-    if (!failed.has(message)) {
+    const unwritable = failures.get(message);
+    if (unwritable === undefined) {
       message.ack();
+    } else if (unwritable) {
+      // The link is gone, so this click has nowhere to go however many times
+      // it comes back. Acking now saves the redeliveries that would reach the
+      // same answer.
+      message.ack();
+      dropped.push(message);
     } else if (message.attempts >= CLICK_MAX_DELIVERIES) {
-      // Out of deliveries: a click whose link is gone has nowhere to go, and
-      // retrying it costs a redelivery to reach the same answer.
+      // Something else went wrong and there are no deliveries left. It is
+      // lost either way; acking keeps it out of the dead-letter queue, where
+      // it would only be logged again.
       message.ack();
       dropped.push(message);
     } else {
+      // Something else went wrong and there is still time to try again.
       message.retry();
     }
   }
