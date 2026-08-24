@@ -173,11 +173,13 @@ function OrgNameCard({
 function DangerZoneCard({
   org,
   isOwner,
+  accountDeleteDisabled,
   onDeleteOrg,
   onDeleteAccount,
 }: {
   org: UserOrg | null;
   isOwner: boolean;
+  accountDeleteDisabled: boolean;
   onDeleteOrg: () => void;
   onDeleteAccount: () => void;
 }) {
@@ -204,7 +206,7 @@ function DangerZoneCard({
           only belong to are left alone.
         </p>
         <div>
-          <Button variant="danger" onClick={onDeleteAccount}>
+          <Button variant="danger" onClick={onDeleteAccount} disabled={accountDeleteDisabled}>
             Delete account
           </Button>
         </div>
@@ -341,6 +343,10 @@ export function SettingsPage() {
   const deleteOrgFlow = useDeleteOrgFlow(orgId, clearName);
   const deleteAccountFlow = useDeleteAccountFlow();
   const ownedOrgs = (currentUser.data?.orgs ?? []).filter((o) => o.role === "owner");
+  // The shell may paint Settings from its cache before this fresh /user
+  // answer arrives. The cache is chrome, never permission to submit a
+  // destructive action, and an empty fallback would hide the org names.
+  const accountDeleteDisabled = currentUser.isLoading || !currentUser.data;
 
   return (
     <div>
@@ -360,6 +366,7 @@ export function SettingsPage() {
         <DangerZoneCard
           org={org}
           isOwner={isOwner}
+          accountDeleteDisabled={accountDeleteDisabled}
           onDeleteOrg={() => deleteOrgFlow.setOpen(true)}
           onDeleteAccount={() => deleteAccountFlow.setOpen(true)}
         />
@@ -375,6 +382,7 @@ export function SettingsPage() {
         confirmLabel="Delete account"
         danger
         pending={deleteAccountFlow.pending}
+        confirmDisabled={accountDeleteDisabled}
       >
         <DeleteAccountWarning orgs={ownedOrgs} />
       </ConfirmDialog>

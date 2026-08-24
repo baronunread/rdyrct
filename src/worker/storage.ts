@@ -158,9 +158,9 @@ const OUTBOX_DRAIN_LIMIT = 200;
 
 /** How much later each failed attempt makes a row sort, so a repeatedly
  * failing key yields to fresher work without ever being excluded outright.
- * An hour: long enough to matter within one daily pass, short enough that a
- * row which has failed a few times still comes back within a day. */
-const OUTBOX_RETRY_BACKOFF = 60 * 60 * 1000;
+ * The drain runs daily, so the unit is a day too: an hour made 200 old rows
+ * monopolise roughly 24 daily passes before one newer repair was selected. */
+const OUTBOX_RETRY_BACKOFF = 24 * 60 * 60 * 1000;
 
 /**
  * Applies the storage work the queue never did, oldest first (#118).

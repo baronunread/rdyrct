@@ -1,12 +1,10 @@
 /**
  * Deleting an account that owns organizations (#119).
  *
- * The guard in `hooks.before` refuses when an owned org still has other
- * members, and `beforeDelete` then recomputes and tears down the solo ones.
- * Two reads, one request apart, so an invite accepted in between turns a solo
- * org into a shared one after the refusal has already passed. The owner's
- * membership goes with the account by cascade, and the org is left with
- * members and no owner, which nothing in the product can express or repair.
+ * The account and its owned-org flags change in one D1 batch, before any
+ * teardown starts. That keeps a later account-delete failure from leaving a
+ * live account whose organizations are already being destroyed, and keeps a
+ * membership race from leaving an ownerless org.
  */
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { env } from "cloudflare:workers";
@@ -14,7 +12,7 @@ import { reset } from "cloudflare:test";
 import { drizzle } from "drizzle-orm/d1";
 import * as schema from "../../src/worker/db/schema";
 import { deleteOrgs } from "../../src/worker/routes/orgs";
-import { releaseOwnedOrgs } from "../../src/worker/better-auth";
+import { deleteAccountAndOwnedOrgs } from "../../src/worker/better-auth";
 import { applyTestMigrations, overrideEnv } from "./support";
 
 const ORG = "org-handover";
@@ -75,10 +73,22 @@ function fakeTeardown(fail = false) {
   return { binding, started };
 }
 
-describe("releaseOwnedOrgs", () => {
-  /** Runs the deletion's org teardown for the leaving account. */
-  const release = (binding: typeof env.ORG_DELETE) =>
-    releaseOwnedOrgs(drizzle(env.DB, { schema }), overrideEnv({ ORG_DELETE: binding }), LEAVING);
+describe("deleteAccountAndOwnedOrgs", () => {
+  /** Deletes the leaving account against a teardown binding the test controls. */
+  const removeAccount = (binding: typeof env.ORG_DELETE) =>
+    deleteAccountAndOwnedOrgs(overrideEnv({ ORG_DELETE: binding }), LEAVING);
+
+  const userExists = async (): Promise<boolean> => {
+    const row = await env.DB.prepare("select count(*) as n from user where id = ?")
+      .bind(LEAVING)
+      .first<{ n: number }>();
+    return row!.n === 1;
+  };
+
+  const deletingAt = (orgId: string): Promise<{ deleting_at: number | null } | null> =>
+    env.DB.prepare("select deleting_at from orgs where id = ?")
+      .bind(orgId)
+      .first<{ deleting_at: number | null }>();
 
   it("takes every organization the account owns, teammates or not", async () => {
     // The org has no plan of its own: orgPlan reads its owner's. Leaving a
@@ -93,35 +103,59 @@ describe("releaseOwnedOrgs", () => {
     ]);
     const { binding, started } = fakeTeardown();
 
-    await release(binding);
+    await removeAccount(binding);
 
     expect(started.sort()).toEqual([ORG, "solo"]);
+    expect(await userExists()).toBe(false);
+    expect((await deletingAt(ORG))!.deleting_at).not.toBeNull();
+    expect((await deletingAt("solo"))!.deleting_at).not.toBeNull();
   });
 
   it("leaves an org this account only belongs to", async () => {
     // Membership is not ownership: someone else's org survives.
+    await seedUser("user-other-owner");
     await env.DB.batch([
       env.DB.prepare("insert into orgs (id, name, created_at) values ('theirs', 'Theirs', 0)"),
+      env.DB.prepare(
+        "insert into org_members (org_id, user_id, role, created_at) values ('theirs', 'user-other-owner', 'owner', 0)",
+      ),
       env.DB.prepare(
         "insert into org_members (org_id, user_id, role, created_at) values ('theirs', ?, 'member', 0)",
       ).bind(LEAVING),
     ]);
     const { binding, started } = fakeTeardown();
 
-    await release(binding);
+    await removeAccount(binding);
 
     expect(started).toEqual([ORG]);
+    expect((await deletingAt("theirs"))!.deleting_at).toBeNull();
   });
 
-  it("takes an org that gained a member while the deletion was in flight", async () => {
-    // The race #119 was filed for. Nothing is skipped now, so it has no
-    // ownerless state left to produce.
-    await addMember("user-joined-late", 400);
+  it("rolls the org flags back when deleting the account fails", async () => {
+    // The old hook started teardown first. A later user-delete failure then
+    // left the account alive while its org disappeared. This trigger holds
+    // that failure still and proves both D1 writes share one transaction.
+    await env.DB.prepare(
+      `create trigger refuse_account_delete before delete on user
+       when old.id = '${LEAVING}' begin select raise(abort, 'injected delete failure'); end`,
+    ).run();
     const { binding, started } = fakeTeardown();
 
-    await release(binding);
+    await expect(removeAccount(binding)).rejects.toThrow("injected delete failure");
 
-    expect(started).toEqual([ORG]);
+    expect(started).toEqual([]);
+    expect(await userExists()).toBe(true);
+    expect((await deletingAt(ORG))!.deleting_at).toBeNull();
+  });
+
+  it("keeps the durable flag when the workflow start fails", async () => {
+    const { binding, started } = fakeTeardown(true);
+
+    await removeAccount(binding);
+
+    expect(started).toEqual([]);
+    expect(await userExists()).toBe(false);
+    expect((await deletingAt(ORG))!.deleting_at).not.toBeNull();
   });
 });
 

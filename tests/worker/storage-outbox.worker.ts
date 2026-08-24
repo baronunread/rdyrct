@@ -217,9 +217,11 @@ describe("the daily drain", () => {
   });
 
   it("drains a fresh row even when the limit is full of rows that keep failing", async () => {
+    const DAY = 24 * 60 * 60 * 1000;
     // The limit is 200. With 200 stuck rows older than this one, ordering by
     // age alone selected exactly those every pass and the recovery recorded
-    // afterwards never drained at all.
+    // afterwards never drained at all. The timestamps use the daily cron's
+    // real scale: an hourly attempt weight still keeps the old rows ahead.
     await seedLink();
     const stuck = Array.from({ length: 200 }, (_, i) =>
       env.DB.prepare(
@@ -229,7 +231,9 @@ describe("the daily drain", () => {
     // Chunked: D1 caps how much one batch may carry.
     for (let i = 0; i < stuck.length; i += 50) await env.DB.batch(stuck.slice(i, i + 50));
     await queueOutbox("fresh", `slug:${sampleLink.slug}`);
-    await env.DB.prepare("update storage_outbox set created_at = 9999 where id = 'fresh'").run();
+    await env.DB.prepare("update storage_outbox set created_at = ? where id = 'fresh'")
+      .bind(4 * DAY)
+      .run();
 
     await drainStorageOutbox(testEnv);
 
@@ -240,12 +244,13 @@ describe("the daily drain", () => {
   });
 
   it("drains a retry row even under a steady stream of new work", async () => {
+    const DAY = 24 * 60 * 60 * 1000;
     // The mirror of the test above, and the reason the ordering is a backoff
     // rather than a priority: ranking by attempts alone means 200 fresh rows
     // a day keep a row that failed once out of every pass, for good, even
     // after whatever broke it recovers.
     await seedLink();
-    // Failed yesterday, so its one attempt has long since been backed off.
+    // Failed yesterday, so its one attempt has yielded for one daily pass.
     await env.DB.prepare(
       "insert into storage_outbox (id, op, target, reason, created_at, attempts) values ('retry', 'kv_sync', ?, 'gave_up', 0, 1)",
     )
@@ -254,7 +259,7 @@ describe("the daily drain", () => {
     const fresh = Array.from({ length: 200 }, (_, i) =>
       env.DB.prepare(
         "insert into storage_outbox (id, op, target, reason, created_at, attempts) values (?, 'kv_sync', ?, 'gave_up', ?, 0)",
-      ).bind(`fresh-${i}`, `slug:fresh-${i}`, 10_000_000 + i),
+      ).bind(`fresh-${i}`, `slug:fresh-${i}`, 2 * DAY + i),
     );
     for (let i = 0; i < fresh.length; i += 50) await env.DB.batch(fresh.slice(i, i + 50));
 

@@ -338,10 +338,24 @@ export async function sweepStalledOrgDeletions(
         lt(schema.orgs.deletingAt, now - STALLED_DELETION_AFTER),
       ),
     )
+    .orderBy(schema.orgs.deletingAt, schema.orgs.id)
     .limit(STALLED_DELETION_LIMIT);
   if (stalled.length === 0) return 0;
 
   const restarted = await Promise.all(stalled.map((org) => restartIfStalled(env, org.id)));
+  // `deleting_at` is also the durable last-check cursor. Without moving the
+  // selected rows forward, 50 old workflows that are still active (or cannot
+  // be read) occupy every daily pass and a later missing instance is never
+  // reached. The flag stays non-null, so writes remain closed throughout.
+  await db
+    .update(schema.orgs)
+    .set({ deletingAt: now })
+    .where(
+      inArray(
+        schema.orgs.id,
+        stalled.map((org) => org.id),
+      ),
+    );
   return restarted.filter(Boolean).length;
 }
 

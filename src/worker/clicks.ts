@@ -244,7 +244,7 @@ async function salvageClickBatch(
   // about the rest: acking the batch would drop a click that failed once and
   // still has five deliveries to go, which is a bigger loss than the one this
   // whole function exists to prevent.
-  const dropped: Message<ClickMessage>[] = [];
+  const unwritableDropped: Message<ClickMessage>[] = [];
   for (const message of batch.messages) {
     const unwritable = failures.get(message);
     if (unwritable === undefined) {
@@ -254,30 +254,30 @@ async function salvageClickBatch(
       // it comes back. Acking now saves the redeliveries that would reach the
       // same answer.
       message.ack();
-      dropped.push(message);
+      unwritableDropped.push(message);
     } else if (message.attempts >= CLICK_MAX_DELIVERIES) {
       // Something else went wrong and there are no deliveries left. It is
       // lost either way; acking keeps it out of the dead-letter queue, where
-      // it would only be logged again.
+      // it would only be logged again. It is not counted as unwritable: a
+      // transient database failure is a different kind of loss.
       message.ack();
-      dropped.push(message);
     } else {
       // Something else went wrong and there is still time to try again.
       message.retry();
     }
   }
-  if (dropped.length > 0) {
+  if (unwritableDropped.length > 0) {
     // Counted, so the accepted loss has a size rather than being a sentence
     // in a comment.
     captureAlert([
       {
         event: "click_dropped_unwritable",
-        count: dropped.length,
+        count: unwritableDropped.length,
         batchSize: batch.messages.length,
-        orgIds: [...new Set(dropped.map((m) => m.body.orgId))],
+        orgIds: [...new Set(unwritableDropped.map((m) => m.body.orgId))],
       },
     ]);
-    console.error("click_dropped_unwritable", dropped.length, batch.messages.length);
+    console.error("click_dropped_unwritable", unwritableDropped.length, batch.messages.length);
   }
 }
 

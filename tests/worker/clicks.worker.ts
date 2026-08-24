@@ -198,6 +198,29 @@ describe("click queue: consumer", () => {
     errors.mockRestore();
   });
 
+  it("does not count an exhausted transient failure as an unwritable click", async () => {
+    await seedLink();
+    await env.DB.prepare(
+      `create trigger fail_one_click before insert on clicks
+       when new.dedupe_id = 'transient'
+       begin select raise(abort, 'D1_ERROR: busy'); end`,
+    ).run();
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    const { batch, ctx } = batchOf(
+      "rdyrct-clicks",
+      [clickMessage({ dedupeId: "stored" }), clickMessage({ dedupeId: "transient" })],
+      6,
+    );
+
+    await consumeClickBatch(testEnv, batch);
+
+    const result = await getQueueResult(batch, ctx);
+    expect(result.explicitAcks.sort()).toEqual(["m0", "m1"]);
+    expect(await clickCount()).toBe(1);
+    expect(loggedDrop(errors)).toBe(false);
+    errors.mockRestore();
+  });
+
   it("acks a click for a deleted link at once, however many deliveries it has left", async () => {
     await seedLink();
     const errors = vi.spyOn(console, "error").mockImplementation(() => {});

@@ -314,6 +314,43 @@ describe("sweepStalledOrgDeletions", () => {
     });
   });
 
+  it("moves past a full page of active workflows on the next sweep", async () => {
+    const now = 3 * HOUR;
+    const activeIds = Array.from({ length: 50 }, (_, i) => `active-${String(i).padStart(2, "0")}`);
+    const missingId = "missing-after-active";
+    const statements = [...activeIds, missingId].map((id) =>
+      env.DB.prepare(
+        "insert into orgs (id, name, created_at, deleting_at) values (?, ?, 0, 1)",
+      ).bind(id, id),
+    );
+    for (let i = 0; i < statements.length; i += 25) await env.DB.batch(statements.slice(i, i + 25));
+
+    const created: string[] = [];
+    const binding: Env["ORG_DELETE"] = {
+      async create() {
+        throw new Error("the sweep starts missing instances with createBatch");
+      },
+      async get(id) {
+        if (id === missingId) throw new Error("instance not found");
+        return instanceReporting("running");
+      },
+      async createBatch(batch) {
+        created.push(...batch.map((entry) => entry.id ?? ""));
+        return batch.map(() => instanceReporting("running"));
+      },
+      async deleteBatch() {
+        throw new Error("the sweep never deletes a batch");
+      },
+    };
+    const db = drizzle(env.DB, { schema });
+    const testEnv = overrideEnv({ ORG_DELETE: binding });
+
+    expect(await sweepStalledOrgDeletions(db, testEnv, now)).toBe(0);
+    expect(created).toEqual([]);
+    expect(await sweepStalledOrgDeletions(db, testEnv, now)).toBe(1);
+    expect(created).toEqual([missingId]);
+  });
+
   it("creates one when no instance exists at all", async () => {
     // What a failed ambiguous start leaves behind on the account-deletion
     // path, where the only member is the account that was being deleted and

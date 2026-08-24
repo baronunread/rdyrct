@@ -18,7 +18,6 @@ import { hashPassword, verifyPassword } from "./password";
 import { uid } from "./util";
 import { spendToken, type CapScope } from "./cap";
 import { createOwnedOrg } from "./plan";
-import { deleteOrgs } from "./routes/orgs";
 import { defaultOrgName } from "@/shared/org-name";
 import { CAP_FAILED_CODE, CAP_TOKEN_HEADER } from "@/shared/types";
 
@@ -84,35 +83,45 @@ async function ensureOrganization(env: Env, db: DB, userId: string): Promise<voi
 }
 
 /**
- * Every organization this account owns, all of which go with it.
+ * Deletes an account and flags every organization it owns in one D1 act.
  *
  * An org has no plan of its own: `orgPlan()` reads its owner's. Leaving one
  * behind with no owner leaves it with no plan, no billing and nobody who can
- * delete it, so the account cannot be deleted without them. The Settings
- * dialog names each one before it asks (#119).
- */
-async function ownedOrgsForDeletion(db: DB, userId: string): Promise<string[]> {
-  const owned = await db
-    .select({ orgId: schema.orgMembers.orgId })
-    .from(schema.orgMembers)
-    .where(and(eq(schema.orgMembers.userId, userId), eq(schema.orgMembers.role, "owner")));
-  return owned.map((row) => row.orgId);
-}
-
-/**
- * Tears down every organization the account owns, as it is deleted (#119).
+ * delete it, so every owned org goes too. Settings names them before it asks.
  *
- * Recomputed here rather than trusted from anywhere earlier, and the set can
- * have grown: somebody accepting an invite between the two reads used to turn
- * a solo org into a shared one after a refusal had already passed, and the
- * teardown then skipped it. It skips nothing now, so that race has no state
- * left to produce.
+ * Better Auth calls this after it has checked the session and password, then
+ * issues its own idempotent user delete. Doing the real delete here closes the
+ * gap between starting destructive workflows and deleting the account: if D1
+ * refuses either write, it rolls both back and no teardown starts (#119).
  *
- * One flag-write and one workflow start for the whole set, so a failure
- * cannot leave some orgs torn down and some not.
+ * The first statement captures the exact ownership set inside the same batch
+ * that flags it and deletes the user. A membership change before the batch is
+ * included; one after it cannot attach to the deleted user. Workflow starts
+ * come last. If that call fails, the account is still gone and the durable
+ * flags let the stalled-deletion sweep finish the work.
  */
-export async function releaseOwnedOrgs(db: DB, env: Env, userId: string): Promise<void> {
-  await deleteOrgs(db, env, await ownedOrgsForDeletion(db, userId));
+export async function deleteAccountAndOwnedOrgs(env: Env, userId: string): Promise<void> {
+  const now = Date.now();
+  const [owned] = await env.DB.batch<{ orgId: string }>([
+    env.DB.prepare(
+      "select org_id as orgId from org_members where user_id = ? and role = 'owner'",
+    ).bind(userId),
+    env.DB.prepare(
+      `update orgs set deleting_at = ?
+       where deleting_at is null and id in (
+         select org_id from org_members where user_id = ? and role = 'owner'
+       )`,
+    ).bind(now, userId),
+    env.DB.prepare("delete from user where id = ?").bind(userId),
+  ]);
+  const orgIds = owned.results.map((row) => row.orgId);
+  if (orgIds.length === 0) return;
+  try {
+    await env.ORG_DELETE.createBatch(orgIds.map((orgId) => ({ id: orgId, params: { orgId } })));
+  } catch (error) {
+    captureAlert([{ event: "account_org_delete_start_failed", userId, count: orgIds.length }]);
+    console.error("account_org_delete_start_failed", userId, error);
+  }
 }
 
 const DNS_CHECK_TIMEOUT = 3000;
@@ -424,23 +433,12 @@ function buildAuth(env: Env) {
         },
       },
       // Self-service account deletion. Authored links/invites keep working
-      // (ON DELETE SET NULL) and memberships cascade, so a non-owner deletes
-      // cleanly, but an org needs exactly one owner, so an owner must
-      // delete or transfer their orgs first.
+      // (ON DELETE SET NULL) and memberships cascade. Owned organizations are
+      // flagged in the same D1 batch that deletes the account, then torn down.
       deleteUser: {
         enabled: true,
         beforeDelete: async (user) => {
-          // Every account owns an organization from its first session, so
-          // refusing outright (as this used to) would make every account
-          // undeletable. What is theirs alone goes with the account, through
-          // the same teardown the Settings button uses, so R2 objects and KV
-          // keys are cleaned up rather than orphaned.
-          //
-          // The refusal for organizations with other members happens earlier,
-          // in hooks.before: an APIError thrown from here escapes better-auth's
-          // transaction wrapper as an unhandled rejection, even though the
-          // caller does get its 400.
-          await releaseOwnedOrgs(db, env, user.id);
+          await deleteAccountAndOwnedOrgs(env, user.id);
         },
       },
     },
