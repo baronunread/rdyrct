@@ -189,23 +189,6 @@ function MemberRoleCell({
   return <Badge color={roleColor[member.role]}>{member.role}</Badge>;
 }
 
-/**
- * Why somebody who used to be able to edit no longer can (#161).
- *
- * A marker beside the role rather than a sentence under it: the reason is
- * the same on every demoted row, and repeating three lines of it down a
- * 23-person table buries the table it is annotating. The sentence is one
- * hover away, where somebody who does not recognise the word will look.
- */
-function DemotedMarker({ demoted }: { demoted: boolean }) {
-  if (!demoted) return null;
-  return (
-    <Tooltip content="Set to viewer when the plan changed. Upgrading gives back the role they had.">
-      <span className="cursor-help text-xs text-muted">demoted</span>
-    </Tooltip>
-  );
-}
-
 function MemberRemoveCell({
   member,
   isSelf,
@@ -243,10 +226,7 @@ function MemberRow({
       <Td className="truncate">{member.name}</Td>
       <Td className="truncate text-muted">{member.email}</Td>
       <Td>
-        <div className="flex items-center gap-2">
-          <MemberRoleCell member={member} canManage={canManage} onSetRole={onSetRole} />
-          <DemotedMarker demoted={member.demoted} />
-        </div>
+        <MemberRoleCell member={member} canManage={canManage} onSetRole={onSetRole} />
       </Td>
       <Td className="text-xs text-muted">{shortDate(member.createdAt)}</Td>
       {canManage && (
