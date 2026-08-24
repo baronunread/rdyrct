@@ -173,11 +173,13 @@ function OrgNameCard({
 function DangerZoneCard({
   org,
   isOwner,
+  accountDeleteDisabled,
   onDeleteOrg,
   onDeleteAccount,
 }: {
   org: UserOrg | null;
   isOwner: boolean;
+  accountDeleteDisabled: boolean;
   onDeleteOrg: () => void;
   onDeleteAccount: () => void;
 }) {
@@ -200,11 +202,11 @@ function DangerZoneCard({
           </>
         )}
         <p className="text-sm text-muted">
-          Permanently delete your account. This does not delete organizations you belong to as a
-          member, but you must delete any organizations you own first.
+          Permanently delete your account, and every organization you own with it. Organizations you
+          only belong to are left alone.
         </p>
         <div>
-          <Button variant="danger" onClick={onDeleteAccount}>
+          <Button variant="danger" onClick={onDeleteAccount} disabled={accountDeleteDisabled}>
             Delete account
           </Button>
         </div>
@@ -298,6 +300,39 @@ function OrgSettingsCards({
   );
 }
 
+/**
+ * What deleting the account takes with it, named.
+ *
+ * An organization has no plan of its own: `orgPlan` reads its owner's. One
+ * kept alive without an owner would have no plan, no billing and nobody who
+ * could delete it, so the account cannot go without them. That is a large
+ * thing to do quietly, so every organization is listed before the question is
+ * asked (#119).
+ */
+function DeleteAccountWarning({ orgs }: { orgs: UserOrg[] }) {
+  if (orgs.length === 0)
+    return <p className="text-sm">This permanently deletes your account. This cannot be undone.</p>;
+  return (
+    <div className="flex flex-col gap-3">
+      <p className="text-sm">
+        This permanently deletes your account and the{" "}
+        {orgs.length === 1 ? "organization" : `${orgs.length} organizations`} you own:
+      </p>
+      <ul className="flex flex-col gap-1 rounded-xl border border-border bg-surface-2 px-4 py-3">
+        {orgs.map((org) => (
+          <li key={org.id} className="text-sm font-semibold text-text">
+            {org.name}
+          </li>
+        ))}
+      </ul>
+      <p className="text-sm text-muted">
+        Every link, custom domain and all click history goes with them, for everyone in them. Short
+        links stop working immediately. None of it can be recovered.
+      </p>
+    </div>
+  );
+}
+
 export function SettingsPage() {
   const { org } = useCurrentOrg();
   const orgId = org?.id ?? "";
@@ -307,6 +342,11 @@ export function SettingsPage() {
   const { register, rename, currentName, isSubmitting, clearName } = useOrgRenameForm(org);
   const deleteOrgFlow = useDeleteOrgFlow(orgId, clearName);
   const deleteAccountFlow = useDeleteAccountFlow();
+  const ownedOrgs = (currentUser.data?.orgs ?? []).filter((o) => o.role === "owner");
+  // The shell may paint Settings from its cache before this fresh /user
+  // answer arrives. The cache is chrome, never permission to submit a
+  // destructive action, and an empty fallback would hide the org names.
+  const accountDeleteDisabled = currentUser.isLoading || !currentUser.data;
 
   return (
     <div>
@@ -326,6 +366,7 @@ export function SettingsPage() {
         <DangerZoneCard
           org={org}
           isOwner={isOwner}
+          accountDeleteDisabled={accountDeleteDisabled}
           onDeleteOrg={() => deleteOrgFlow.setOpen(true)}
           onDeleteAccount={() => deleteAccountFlow.setOpen(true)}
         />
@@ -341,8 +382,9 @@ export function SettingsPage() {
         confirmLabel="Delete account"
         danger
         pending={deleteAccountFlow.pending}
+        confirmDisabled={accountDeleteDisabled}
       >
-        This permanently deletes your account. This cannot be undone.
+        <DeleteAccountWarning orgs={ownedOrgs} />
       </ConfirmDialog>
     </div>
   );

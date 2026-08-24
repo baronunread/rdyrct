@@ -2,8 +2,9 @@ import { Hono } from "hono";
 import * as v from "valibot";
 import type { JsonValue } from "../../shared/types";
 import { HTTPException } from "hono/http-exception";
-import { eq, and, gte, desc, sql, isNull } from "drizzle-orm";
+import { eq, and, gte, desc, sql, isNull, isNotNull, lt, inArray } from "drizzle-orm";
 import * as schema from "../db/schema";
+import { captureAlert } from "../sentry";
 import type { AppEnv, DB, Env } from "../env";
 import { requireUser } from "../guards";
 import { requireOrgRole, orgRole } from "../org-role";
@@ -270,40 +271,168 @@ orgRoutes.patch("/:orgId", requireOrgRole("admin"), async (c) => {
 const TERMINAL_WORKFLOW_STATUSES = new Set(["errored", "terminated", "complete"]);
 
 /**
- * True if a workflow instance keyed to this org exists and is still doing
- * something. `create()` can fail on the client side (a timeout, say) while
- * still having started the instance server-side, so a create() error alone
- * does not mean nothing is running.
+ * Is a teardown workflow for this org still doing something?
+ *
+ * Three answers, not two. `get()` throws both when the instance does not
+ * exist and when the lookup itself failed, and Workflows gives no way to tell
+ * those apart, so a throw is `null`: we do not know. Reading that as "nothing
+ * is running" is what let a lookup failure reopen writes under a teardown
+ * that was actually in flight (#52).
  */
-async function orgDeleteWorkflowActive(env: Env, orgId: string): Promise<boolean> {
+async function orgDeleteWorkflowActive(env: Env, orgId: string): Promise<boolean | null> {
   try {
     const status = await (await env.ORG_DELETE.get(orgId)).status();
     return !TERMINAL_WORKFLOW_STATUSES.has(status.status);
   } catch {
-    return false;
+    return null;
   }
 }
 
 export async function deleteOrg(db: DB, env: Env, orgId: string): Promise<void> {
-  // Only the request that actually flips the flag tries to start the
-  // workflow, so a double-submitted delete is a no-op on the second call
-  // instead of racing ORG_DELETE.create against its own keyed instance id.
-  const result = await db
+  await deleteOrgs(db, env, [orgId]);
+}
+
+/**
+ * Tears down several orgs as one act, for the account deletion that owns them
+ * all (#119).
+ *
+ * One flag-write and one workflow start, not two per org. Starting them one
+ * at a time meant a failure on the third left the first two torn down and the
+ * caller holding an error for a deletion that did not happen, with no way to
+ * tell which orgs had already gone.
+ */
+/**
+ * How long an org may sit flagged `deleting_at` before the sweep treats its
+ * teardown as stalled. Long enough that a healthy workflow is never disturbed.
+ */
+const STALLED_DELETION_AFTER = 60 * 60 * 1000;
+
+/** How many stalled orgs one sweep restarts. Bounded like every other sweep. */
+const STALLED_DELETION_LIMIT = 50;
+
+/**
+ * Restarts teardowns that are flagged and not running (#52, #119).
+ *
+ * Two ways an org reaches that state, and neither has anyone to fix it.
+ * `createBatch` skips an id already in use whatever that instance's state, so
+ * an instance that errored or was terminated without finishing is never
+ * replaced by a later DELETE: the org answers 200 and nothing runs. And when
+ * a start fails ambiguously, the flag is deliberately left set, which is right
+ * for an org somebody can DELETE again and wrong for one whose only member is
+ * the account that was being deleted at the time.
+ *
+ * Restart rather than create, because the id is still in use. A running or
+ * queued instance is left strictly alone.
+ */
+export async function sweepStalledOrgDeletions(
+  db: DB,
+  env: Env,
+  now = Date.now(),
+): Promise<number> {
+  const stalled = await db
+    .select({ id: schema.orgs.id })
+    .from(schema.orgs)
+    .where(
+      and(
+        isNotNull(schema.orgs.deletingAt),
+        lt(schema.orgs.deletingAt, now - STALLED_DELETION_AFTER),
+      ),
+    )
+    .orderBy(schema.orgs.deletingAt, schema.orgs.id)
+    .limit(STALLED_DELETION_LIMIT);
+  if (stalled.length === 0) return 0;
+
+  const restarted = await Promise.all(stalled.map((org) => restartIfStalled(env, org.id)));
+  // `deleting_at` is also the durable last-check cursor. Without moving the
+  // selected rows forward, 50 old workflows that are still active (or cannot
+  // be read) occupy every daily pass and a later missing instance is never
+  // reached. The flag stays non-null, so writes remain closed throughout.
+  await db
     .update(schema.orgs)
-    .set({ deletingAt: Date.now() })
-    .where(and(eq(schema.orgs.id, orgId), isNull(schema.orgs.deletingAt)));
-  if (result.meta.changes === 0) return;
+    .set({ deletingAt: now })
+    .where(
+      inArray(
+        schema.orgs.id,
+        stalled.map((org) => org.id),
+      ),
+    );
+  return restarted.filter(Boolean).length;
+}
+
+/** True if this org's teardown was actually restarted. Never throws: one
+ * unreadable instance must not stop the sweep reaching the rest. */
+async function restartIfStalled(env: Env, orgId: string): Promise<boolean> {
+  // The lookup and the restart are separate try blocks on purpose. Wrapping
+  // both meant a restart that failed on an instance which plainly exists was
+  // read as "no instance", and the fallback then created for an id already in
+  // use: createBatch skipped it and the sweep still reported a restart that
+  // never happened.
+  let instance;
+  let status;
   try {
-    await env.ORG_DELETE.create({ id: orgId, params: { orgId } });
+    instance = await env.ORG_DELETE.get(orgId);
+    ({ status } = await instance.status());
+  } catch {
+    // The lookup failed, which means either no instance or an unreadable one:
+    // Workflows gives no way to tell those apart. createBatch settles it,
+    // because it skips an id already in use and leaves it out of what it
+    // returns. Without reading that, an unreadable live instance was reported
+    // as a restart that never happened.
+    try {
+      const created = await env.ORG_DELETE.createBatch([{ id: orgId, params: { orgId } }]);
+      if (created.length === 0) return false;
+      captureAlert([{ event: "org_delete_restarted", orgId, status: "missing" }]);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+  if (!TERMINAL_WORKFLOW_STATUSES.has(status)) return false;
+  try {
+    await instance.restart();
+  } catch {
+    // It exists and is terminal, so creating is not an option. The next sweep
+    // tries again.
+    return false;
+  }
+  captureAlert([{ event: "org_delete_restarted", orgId, status }]);
+  return true;
+}
+
+export async function deleteOrgs(db: DB, env: Env, orgIds: string[]): Promise<void> {
+  if (orgIds.length === 0) return;
+  const now = Date.now();
+  const marked = await db
+    .update(schema.orgs)
+    .set({ deletingAt: now })
+    .where(and(inArray(schema.orgs.id, orgIds), isNull(schema.orgs.deletingAt)))
+    .returning({ id: schema.orgs.id });
+  try {
+    // `createBatch` rather than `create`, because it is documented idempotent:
+    // an id already in use is skipped instead of throwing. That is what makes
+    // this safe to call on a repeat DELETE, which is the repair path for an
+    // org left flagged with nothing driving its teardown.
+    await env.ORG_DELETE.createBatch(orgIds.map((orgId) => ({ id: orgId, params: { orgId } })));
   } catch (err) {
-    // A failed create() does not prove nothing started: only undo the flag
-    // if there is truly no instance driving teardown, so a client-side
-    // timeout can never reopen the write window under a workflow that is
-    // actually running. If a real instance is running, leave deleting_at set
-    // and let it finish; the caller still sees this error and can decide
-    // whether to look into it.
-    if (!(await orgDeleteWorkflowActive(env, orgId)))
-      await db.update(schema.orgs).set({ deletingAt: null }).where(eq(schema.orgs.id, orgId));
+    // Only undo a flag when we are certain nothing is running: a terminal
+    // instance is proof, an unreadable one is not. Leaving it set costs a
+    // read-only org until the next DELETE restarts teardown; clearing it on a
+    // guess reopens writes underneath a workflow that has already taken its
+    // snapshot, and those writes survive as public redirects for an org that
+    // is supposed to be gone. Only the flags this call set are candidates:
+    // one it found already set belongs to somebody else's teardown.
+    const statuses = await Promise.all(
+      marked.map(async (row) => ({
+        id: row.id,
+        active: await orgDeleteWorkflowActive(env, row.id),
+      })),
+    );
+    const clearable = statuses.flatMap((s) => (s.active === false ? [s.id] : []));
+    if (clearable.length > 0)
+      await db
+        .update(schema.orgs)
+        .set({ deletingAt: null })
+        .where(inArray(schema.orgs.id, clearable));
     throw err;
   }
 }

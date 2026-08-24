@@ -3,11 +3,11 @@ import type { JsonValue } from "../shared/types";
 import { optionalText, parseOptionalBody } from "./schemas";
 import * as v from "valibot";
 import { lookup } from "../shared/lookup";
-import { APIError, createAuthMiddleware, getSessionFromCtx } from "better-auth/api";
+import { APIError, createAuthMiddleware } from "better-auth/api";
 import { emailOTP } from "better-auth/plugins/email-otp";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { drizzle } from "drizzle-orm/d1";
-import { and, eq, inArray, ne } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import * as schema from "./db/schema";
 import type { DB, Env } from "./env";
 import { captureAlert } from "./sentry";
@@ -18,7 +18,6 @@ import { hashPassword, verifyPassword } from "./password";
 import { uid } from "./util";
 import { spendToken, type CapScope } from "./cap";
 import { createOwnedOrg } from "./plan";
-import { deleteOrg } from "./routes/orgs";
 import { defaultOrgName } from "@/shared/org-name";
 import { CAP_FAILED_CODE, CAP_TOKEN_HEADER } from "@/shared/types";
 
@@ -84,53 +83,45 @@ async function ensureOrganization(env: Env, db: DB, userId: string): Promise<voi
 }
 
 /**
- * Organizations this account owns, split by whether anyone else is in them.
+ * Deletes an account and flags every organization it owns in one D1 act.
  *
- * Account deletion tears down what only they hold and refuses when other
- * people are still members: a solo organization is part of the account, but
- * one with teammates in it is not the deleter's alone to destroy.
- */
-async function ownedOrgsForDeletion(db: DB, userId: string) {
-  const owned = await db
-    .select({ orgId: schema.orgMembers.orgId })
-    .from(schema.orgMembers)
-    .where(and(eq(schema.orgMembers.userId, userId), eq(schema.orgMembers.role, "owner")));
-  if (owned.length === 0) return { solo: [], shared: [] };
-
-  const ids = owned.map((row) => row.orgId);
-  const others = await db
-    .select({ orgId: schema.orgMembers.orgId })
-    .from(schema.orgMembers)
-    .where(and(inArray(schema.orgMembers.orgId, ids), ne(schema.orgMembers.userId, userId)));
-  const sharedIds = new Set(others.map((row) => row.orgId));
-  return {
-    solo: ids.filter((id) => !sharedIds.has(id)),
-    shared: ids.filter((id) => sharedIds.has(id)),
-  };
-}
-
-/**
- * Refuses to delete an account that still owns an organization other people
- * are in: they hand it over or empty it first. Everything they hold by
- * themselves goes with the account, in `beforeDelete`.
+ * An org has no plan of its own: `orgPlan()` reads its owner's. Leaving one
+ * behind with no owner leaves it with no plan, no billing and nobody who can
+ * delete it, so every owned org goes too. Settings names them before it asks.
  *
- * Here rather than in `beforeDelete` because an APIError thrown from that
- * callback escapes better-auth's transaction wrapper as an unhandled
- * rejection, even though the caller still gets its 400.
+ * Better Auth calls this after it has checked the session and password, then
+ * issues its own idempotent user delete. Doing the real delete here closes the
+ * gap between starting destructive workflows and deleting the account: if D1
+ * refuses either write, it rolls both back and no teardown starts (#119).
+ *
+ * The first statement captures the exact ownership set inside the same batch
+ * that flags it and deletes the user. A membership change before the batch is
+ * included; one after it cannot attach to the deleted user. Workflow starts
+ * come last. If that call fails, the account is still gone and the durable
+ * flags let the stalled-deletion sweep finish the work.
  */
-async function guardAccountDeletion(
-  db: DB,
-  ctx: Parameters<Parameters<typeof createAuthMiddleware>[0]>[0],
-) {
-  const session = await getSessionFromCtx(ctx);
-  const userId = session?.user?.id;
-  if (!userId) return;
-  const { shared } = await ownedOrgsForDeletion(db, userId);
-  if (shared.length > 0)
-    throw new APIError("BAD_REQUEST", {
-      message:
-        "Some organizations still have other members. Hand over ownership or remove them first.",
-    });
+export async function deleteAccountAndOwnedOrgs(env: Env, userId: string): Promise<void> {
+  const now = Date.now();
+  const [owned] = await env.DB.batch<{ orgId: string }>([
+    env.DB.prepare(
+      "select org_id as orgId from org_members where user_id = ? and role = 'owner'",
+    ).bind(userId),
+    env.DB.prepare(
+      `update orgs set deleting_at = ?
+       where deleting_at is null and id in (
+         select org_id from org_members where user_id = ? and role = 'owner'
+       )`,
+    ).bind(now, userId),
+    env.DB.prepare("delete from user where id = ?").bind(userId),
+  ]);
+  const orgIds = owned.results.map((row) => row.orgId);
+  if (orgIds.length === 0) return;
+  try {
+    await env.ORG_DELETE.createBatch(orgIds.map((orgId) => ({ id: orgId, params: { orgId } })));
+  } catch (error) {
+    captureAlert([{ event: "account_org_delete_start_failed", userId, count: orgIds.length }]);
+    console.error("account_org_delete_start_failed", userId, error);
+  }
 }
 
 const DNS_CHECK_TIMEOUT = 3000;
@@ -442,26 +433,12 @@ function buildAuth(env: Env) {
         },
       },
       // Self-service account deletion. Authored links/invites keep working
-      // (ON DELETE SET NULL) and memberships cascade, so a non-owner deletes
-      // cleanly, but an org needs exactly one owner, so an owner must
-      // delete or transfer their orgs first.
+      // (ON DELETE SET NULL) and memberships cascade. Owned organizations are
+      // flagged in the same D1 batch that deletes the account, then torn down.
       deleteUser: {
         enabled: true,
         beforeDelete: async (user) => {
-          // Every account owns an organization from its first session, so
-          // refusing outright (as this used to) would make every account
-          // undeletable. What is theirs alone goes with the account, through
-          // the same teardown the Settings button uses, so R2 objects and KV
-          // keys are cleaned up rather than orphaned.
-          //
-          // The refusal for organizations with other members happens earlier,
-          // in hooks.before: an APIError thrown from here escapes better-auth's
-          // transaction wrapper as an unhandled rejection, even though the
-          // caller does get its 400.
-          const { solo } = await ownedOrgsForDeletion(db, user.id);
-          // Together: each teardown is an independent workflow keyed by its
-          // own org, and a person deletes at most three.
-          await Promise.all(solo.map((orgId) => deleteOrg(db, env, orgId)));
+          await deleteAccountAndOwnedOrgs(env, user.id);
         },
       },
     },
@@ -489,7 +466,6 @@ function buildAuth(env: Env) {
               message: "Could not verify you are human. Reload the page and try again.",
             });
         }
-        if (ctx.path === "/delete-user") await guardAccountDeletion(db, ctx);
         if (ctx.path === "/email-otp/send-verification-otp") {
           return guardVerificationOTPSend(db, bodyOf(ctx));
         }

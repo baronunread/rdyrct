@@ -6,7 +6,7 @@ import { eq, and, isNull, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import * as schema from "../db/schema";
 import type { AppEnv, DB, Env } from "../env";
-import { requireOrgRole } from "../org-role";
+import { orgDeleting, requireOrgRole } from "../org-role";
 import { orgPlan, insertDomainWithinLimit } from "../plan";
 import { enqueueStorage, syncDomainMsg } from "../storage";
 import { uid } from "../util";
@@ -360,11 +360,14 @@ domainRoutes.post("/", async (c) => {
   // statement, not from the assertDomainQuota() count fetched above (see
   // issue #18).
   const inserted = await insertDomainWithinLimit(c.env, row, limits.domains);
-  if (!inserted)
+  if (!inserted) {
+    if (await orgDeleting(db, orgId))
+      throw new HTTPException(409, { message: "Organization is being deleted" });
     throw new HTTPException(402, {
       message: "Upgrade your plan to connect more domains",
       cause: { code: "domain_limit" },
     });
+  }
   // Keyed by the row id, so a duplicate create can never spawn a second
   // activation (and so never a second custom hostname) for this domain.
   try {

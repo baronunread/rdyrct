@@ -4,6 +4,7 @@ import { env } from "cloudflare:workers";
 import { getQueueResult, reset } from "cloudflare:test";
 import {
   consumeClickBatch,
+  isDeletedLink,
   logClickDeadLetterBatch,
   sweepDedupeIds,
   type ClickMessage,
@@ -15,6 +16,7 @@ import {
   sampleLink,
   seedLink,
   testEnv,
+  overrideEnv,
 } from "./support";
 
 function clickMessage(overrides: Partial<ClickMessage> = {}): ClickMessage {
@@ -42,6 +44,56 @@ beforeEach(async () => {
   await reset();
   await applyTestMigrations();
 });
+
+/** A D1 binding whose every call fails, standing in for the database being
+ * unavailable. The distinction the salvage draws is "deleted link" against
+ * "everything else", and a deleted link is the only per-row failure a test
+ * can produce for real, so the other side needs the whole binding. */
+function unavailableD1(): typeof env.DB {
+  // One rejected promise, marked handled once and handed out to every call.
+  // A fresh rejection per call leaks: drizzle's batch creates per-statement
+  // promises it abandons as soon as the batch itself fails, and each of those
+  // surfaces as an unhandled rejection that fails the run with every test
+  // green. Awaiting this still throws exactly as before.
+  const failure: Promise<never> = Promise.reject(new Error("D1_ERROR: network"));
+  failure.catch(() => {});
+  const reject = (): Promise<never> => failure;
+  // A statement that binds fine and fails when it runs, which is what a real
+  // binding does when the database is unreachable. Throwing from `prepare`
+  // instead leaves drizzle holding query objects it never awaits, and those
+  // surface as unhandled rejections that fail the run with every test green.
+  // SAFETY: consumeClickBatch's drizzle queries reach only bind and the four
+  // result methods; anything else raises a TypeError naming the member rather
+  // than passing silently.
+  const statement = {
+    bind: () => statement,
+    run: reject,
+    all: reject,
+    first: reject,
+    raw: reject,
+  } as D1PreparedStatement;
+  // SAFETY: consumeClickBatch reaches only prepare and batch on this binding,
+  // and both are present; anything else raises a TypeError naming the member
+  // rather than passing silently.
+  const session = {
+    prepare: () => statement,
+    batch: reject,
+    getBookmark: () => null,
+  };
+  // SAFETY: consumeClickBatch reaches only prepare and batch on this binding,
+  // and both are present; anything else raises a TypeError naming the member.
+  return {
+    prepare: () => statement,
+    batch: reject,
+    exec: reject,
+    dump: reject,
+    withSession: () => session,
+  } as typeof env.DB;
+}
+
+/** Did the salvage report dropping clicks it could never write? */
+const loggedDrop = (errors: { mock: { calls: unknown[][] } }): boolean =>
+  errors.mock.calls.some(([a]) => String(a).includes("click_dropped_unwritable"));
 
 describe("click queue: consumer", () => {
   it("batches every message in the batch into one insert", async () => {
@@ -123,18 +175,153 @@ describe("click queue: consumer", () => {
     expect(await clickCount()).toBe(1);
   });
 
-  it("logs click_batch_dead_letter only once a message reaches its last delivery", async () => {
+  it("stores every good click in a batch when one link was deleted, on the last delivery", async () => {
     await seedLink();
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    // Nine ordinary clicks and one for a link that is gone, on the delivery
+    // that would otherwise dead-letter all ten (#102).
+    const good = Array.from({ length: 9 }, (_, i) => clickMessage({ dedupeId: `ok-${i}` }));
+    const { batch, ctx } = batchOf(
+      "rdyrct-clicks",
+      [...good, clickMessage({ dedupeId: "bad", linkId: "no-such-link" })],
+      6,
+    );
+
+    await consumeClickBatch(testEnv, batch);
+
+    const result = await getQueueResult(batch, ctx);
+    // Acked one at a time now, not ackAll: see the mixed-attempts test above.
+    expect(result.explicitAcks).toHaveLength(10);
+    expect(result.retryMessages).toEqual([]);
+    expect(await clickCount()).toBe(9);
+    expect(loggedDrop(errors)).toBe(true);
+    errors.mockRestore();
+  });
+
+  it("does not count an exhausted transient failure as an unwritable click", async () => {
+    await seedLink();
+    await env.DB.prepare(
+      `create trigger fail_one_click before insert on clicks
+       when new.dedupe_id = 'transient'
+       begin select raise(abort, 'D1_ERROR: busy'); end`,
+    ).run();
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    const { batch, ctx } = batchOf(
+      "rdyrct-clicks",
+      [clickMessage({ dedupeId: "stored" }), clickMessage({ dedupeId: "transient" })],
+      6,
+    );
+
+    await consumeClickBatch(testEnv, batch);
+
+    const result = await getQueueResult(batch, ctx);
+    expect(result.explicitAcks.sort()).toEqual(["m0", "m1"]);
+    expect(await clickCount()).toBe(1);
+    expect(loggedDrop(errors)).toBe(false);
+    errors.mockRestore();
+  });
+
+  it("acks a click for a deleted link at once, however many deliveries it has left", async () => {
+    await seedLink();
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    // Cloudflare re-batches a redelivered message alongside fresh ones, so a
+    // batch containing one exhausted message says nothing about the rest.
+    // Both bad messages here name a link that is gone, which no number of
+    // redeliveries will bring back: acking now saves five deliveries that
+    // would reach the same answer, and the good one is unaffected.
+    const { batch, ctx } = batchOf(
+      "rdyrct-clicks",
+      [
+        clickMessage({ dedupeId: "old-bad", linkId: "no-such-link" }),
+        clickMessage({ dedupeId: "young-bad", linkId: "no-such-link" }),
+        clickMessage({ dedupeId: "good" }),
+      ],
+      [6, 1, 1],
+    );
+
+    await consumeClickBatch(testEnv, batch);
+
+    const result = await getQueueResult(batch, ctx);
+    expect(result.explicitAcks.sort()).toEqual(["m0", "m1", "m2"]);
+    expect(result.retryMessages).toEqual([]);
+    expect(await clickCount()).toBe(1);
+    errors.mockRestore();
+  });
+
+  it("does not double-count a salvaged click that already landed", async () => {
+    await seedLink();
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    const shared = clickMessage({ dedupeId: "shared" });
+    await consumeClickBatch(testEnv, batchOf("rdyrct-clicks", [shared]).batch);
+    expect(await clickCount()).toBe(1);
+
+    // The same message rides a later batch that has to be salvaged. Dedupe
+    // has to survive the split, or a bad neighbour turns into a double count.
+    const { batch } = batchOf(
+      "rdyrct-clicks",
+      [shared, clickMessage({ dedupeId: "bad", linkId: "no-such-link" })],
+      6,
+    );
+    await consumeClickBatch(testEnv, batch);
+
+    expect(await clickCount()).toBe(1);
+    errors.mockRestore();
+  });
+
+  it("retries the whole batch when the database is what failed", async () => {
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    // Acking here would report clicks as stored that D1 never saw, and
+    // counting them as dropped would report an outage as permanent loss.
+    const { batch, ctx } = batchOf("rdyrct-clicks", [clickMessage({ dedupeId: "a" })], 6);
+
+    await consumeClickBatch(overrideEnv({ DB: unavailableD1() }), batch);
+
+    const result = await getQueueResult(batch, ctx);
+    expect(result.retryBatch.retry).toBe(true);
+    expect(errors.mock.calls.some(([a]) => String(a).includes("click_batch_dead_letter"))).toBe(
+      true,
+    );
+    expect(loggedDrop(errors)).toBe(false);
+    errors.mockRestore();
+  });
+
+  it("acks and counts a batch that is entirely clicks for deleted links", async () => {
+    await seedLink();
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    // Nothing stored, but nothing was the database's fault either: one busy
+    // link was deleted and every click in this batch was for it. Reading that
+    // as an outage dead-lettered clicks that should have been acked and
+    // counted.
+    const { batch, ctx } = batchOf(
+      "rdyrct-clicks",
+      [
+        clickMessage({ dedupeId: "a", linkId: "no-such-link" }),
+        clickMessage({ dedupeId: "b", linkId: "no-such-link" }),
+      ],
+      6,
+    );
+
+    await consumeClickBatch(testEnv, batch);
+
+    const result = await getQueueResult(batch, ctx);
+    expect(result.explicitAcks.sort()).toEqual(["m0", "m1"]);
+    expect(result.retryMessages).toEqual([]);
+    expect(loggedDrop(errors)).toBe(true);
+    errors.mockRestore();
+  });
+
+  it("logs click_batch_dead_letter only once a message reaches its last delivery", async () => {
     const errors = vi.spyOn(console, "error").mockImplementation(() => {});
     const loggedDeadLetter = () =>
       errors.mock.calls.some(([a]) => String(a).includes("click_batch_dead_letter"));
+    const failing = overrideEnv({ DB: unavailableD1() });
 
-    const early = batchOf("rdyrct-clicks", [clickMessage({ linkId: "no-such-link" })], 1);
-    await consumeClickBatch(testEnv, early.batch);
+    const early = batchOf("rdyrct-clicks", [clickMessage()], 1);
+    await consumeClickBatch(failing, early.batch);
     expect(loggedDeadLetter()).toBe(false);
 
-    const last = batchOf("rdyrct-clicks", [clickMessage({ linkId: "no-such-link" })], 6);
-    await consumeClickBatch(testEnv, last.batch);
+    const last = batchOf("rdyrct-clicks", [clickMessage()], 6);
+    await consumeClickBatch(failing, last.batch);
     expect(loggedDeadLetter()).toBe(true);
     errors.mockRestore();
   });
@@ -213,5 +400,31 @@ describe("sweepDedupeIds (#70)", () => {
     await seedLink();
     await seedClick(1, 1, "same");
     await expect(seedClick(2, 1, "same")).rejects.toThrow();
+  });
+});
+
+describe("isDeletedLink", () => {
+  it("reads the constraint off the cause, where drizzle puts it", () => {
+    // The whole classification hung on this and was dead code without it:
+    // drizzle wraps a D1 failure in its own error whose message is the query
+    // text, so the top-level message never names the constraint.
+    const wrapped = new Error('Failed query: insert into "clicks" ...', {
+      cause: new Error(
+        "D1_ERROR: FOREIGN KEY constraint failed: SQLITE_CONSTRAINT (extended: SQLITE_CONSTRAINT_FOREIGNKEY)",
+      ),
+    });
+    expect(isDeletedLink(wrapped)).toBe(true);
+  });
+
+  it("reads it off the message too, for a driver that does not wrap", () => {
+    expect(isDeletedLink(new Error("FOREIGN KEY constraint failed"))).toBe(true);
+  });
+
+  it("calls anything else transient, so it keeps its remaining deliveries", () => {
+    expect(isDeletedLink(new Error("D1_ERROR: network"))).toBe(false);
+    expect(
+      isDeletedLink(new Error("Failed query", { cause: new Error("D1_ERROR: timeout") })),
+    ).toBe(false);
+    expect(isDeletedLink(new Error("Failed query", { cause: "not an error" }))).toBe(false);
   });
 });

@@ -96,11 +96,18 @@ export async function enqueueClick(c: Context<AppEnv>, hit: KVLink): Promise<voi
  * than aborting anything.
  *
  * A link deleted between the redirect and this running fails the whole
- * transaction (a foreign key violation), so that batch retries and, if
- * the link stays gone, eventually dead-letters together with its batch
- * mates. That is a rare, small, accepted loss (see the top of this file),
- * not a bug: rather than splitting a failed batch to save the other rows,
- * we trust Cloudflare Queues' retry budget the same way storage.ts does.
+ * transaction (a foreign key violation). While there are deliveries left
+ * that is still answered by retrying the whole batch: it is one D1 write,
+ * and it is what recovers a D1 outage without turning one bad batch into a
+ * hundred separate writes.
+ *
+ * On the last delivery it would instead dead-letter, taking up to 99 valid
+ * clicks with it because one link was deleted (#102). Link deletion is
+ * ordinary use, not an incident, and the loss lands on whoever shared the
+ * batch rather than on the person who deleted the link. So the last attempt
+ * salvages instead: every row goes in on its own, the ones that land are
+ * kept, and the ones that cannot are acked and counted rather than
+ * retried forever.
  */
 export async function consumeClickBatch(
   env: Env,
@@ -130,10 +137,147 @@ export async function consumeClickBatch(
     batch.ackAll();
   } catch (error) {
     Sentry.captureException(error, { extra: { batchSize: batch.messages.length } });
-    if (batch.messages.some((m) => m.attempts >= CLICK_MAX_DELIVERIES)) {
-      console.error("click_batch_dead_letter", batch.messages.length);
+    // Deliveries left: retry the whole batch, unchanged. One write, and a D1
+    // outage recovers from it with no per-row amplification.
+    if (!onLastDelivery(batch)) {
+      batch.retryAll();
+      return;
     }
+    await salvageClickBatch(db, batch);
+  }
+}
+
+/** True when failing again would dead-letter these messages rather than
+ * redeliver them. `attempts` counts the delivery in progress. */
+function onLastDelivery(batch: MessageBatch<ClickMessage>): boolean {
+  return batch.messages.some((m) => m.attempts >= CLICK_MAX_DELIVERIES);
+}
+
+function clickRow(message: Message<ClickMessage>) {
+  const m = message.body;
+  return {
+    linkId: m.linkId,
+    addressId: m.addressId,
+    orgId: m.orgId,
+    ts: m.ts,
+    country: m.country,
+    referrer: m.referrer,
+    device: m.device,
+    dedupeId: m.dedupeId,
+  };
+}
+
+/**
+ * Is this insert failure a link that no longer exists?
+ *
+ * The two causes want opposite answers: a deleted link will never accept this
+ * click however often it comes back, while a database that was briefly
+ * unavailable will. Treating both as "drop it" retried nothing and reported a
+ * transient blip as a permanent loss.
+ */
+export function isDeletedLink(error: Error): boolean {
+  // `cause` as well as the message: drizzle wraps a D1 failure in its own
+  // error whose message is the query text, and the constraint that actually
+  // failed is only named on the cause. Reading the top-level message alone
+  // never matched, so every failure looked transient.
+  return (
+    hasForeignKeyFailure(error) ||
+    (error.cause instanceof Error && hasForeignKeyFailure(error.cause))
+  );
+}
+
+const hasForeignKeyFailure = (error: Error): boolean =>
+  error.message.includes("FOREIGN KEY constraint failed");
+
+/**
+ * The last delivery, one row at a time, so one unwritable click cannot take
+ * the batch down with it.
+ *
+ * Dedupe is unchanged: every row still carries its `dedupeId` and still
+ * conflicts against the same unique index, so a row that landed in an earlier
+ * delivery is skipped here rather than counted twice.
+ *
+ * When nothing at all writes, this is a failing database rather than a
+ * deleted link, and the batch retries as a whole. It dead-letters either way
+ * at this point, but retrying keeps that indistinguishable from today rather
+ * than silently acking a hundred clicks D1 never saw.
+ */
+async function salvageClickBatch(
+  db: ReturnType<typeof drizzle<typeof schema>>,
+  batch: MessageBatch<ClickMessage>,
+): Promise<void> {
+  // Together, not one after another: the rows are independent, a batch is at
+  // most 100 of them, and this only runs on a delivery that has already
+  // failed five times. Order does not matter because dedupe is an index, not
+  // a sequence.
+  const outcomes = await Promise.all(
+    batch.messages.map(async (message) => {
+      try {
+        await db.insert(schema.clicks).values(clickRow(message)).onConflictDoNothing({
+          target: schema.clicks.dedupeId,
+        });
+        return null;
+      } catch (error) {
+        // Narrowed here, where it arrives: only an Error carries a message
+        // worth classifying, and anything else is treated as transient.
+        return { message, unwritable: error instanceof Error && isDeletedLink(error) };
+      }
+    }),
+  );
+  const failures = new Map(
+    outcomes.flatMap((o) => (o === null ? [] : [[o.message, o.unwritable] as const])),
+  );
+  const stored = batch.messages.length - failures.size;
+  // Nothing wrote, and no failure was a deleted link: the database is what
+  // went wrong, so the whole batch retries, dead-letter log included, rather
+  // than silently acking clicks D1 never saw. Asking about the failures
+  // rather than about `stored` matters for a batch whose messages all name
+  // one busy link that was just deleted: that is not an outage, and those
+  // clicks should be acked and counted like any other.
+  if (stored === 0 && [...failures.values()].every((unwritable) => !unwritable)) {
+    console.error("click_batch_dead_letter", batch.messages.length);
     batch.retryAll();
+    return;
+  }
+  // Per message, not ackAll. Cloudflare re-batches a redelivered message with
+  // fresh ones, so "some message here is on its last delivery" says nothing
+  // about the rest: acking the batch would drop a click that failed once and
+  // still has five deliveries to go, which is a bigger loss than the one this
+  // whole function exists to prevent.
+  const unwritableDropped: Message<ClickMessage>[] = [];
+  for (const message of batch.messages) {
+    const unwritable = failures.get(message);
+    if (unwritable === undefined) {
+      message.ack();
+    } else if (unwritable) {
+      // The link is gone, so this click has nowhere to go however many times
+      // it comes back. Acking now saves the redeliveries that would reach the
+      // same answer.
+      message.ack();
+      unwritableDropped.push(message);
+    } else if (message.attempts >= CLICK_MAX_DELIVERIES) {
+      // Something else went wrong and there are no deliveries left. It is
+      // lost either way; acking keeps it out of the dead-letter queue, where
+      // it would only be logged again. It is not counted as unwritable: a
+      // transient database failure is a different kind of loss.
+      message.ack();
+    } else {
+      // Something else went wrong and there is still time to try again.
+      message.retry();
+    }
+  }
+  if (unwritableDropped.length > 0) {
+    // Counted, so the accepted loss has a size rather than being a sentence
+    // in a comment.
+    captureAlert([
+      {
+        event: "click_dropped_unwritable",
+        count: unwritableDropped.length,
+        batchSize: batch.messages.length,
+        orgIds: [...new Set(unwritableDropped.map((m) => m.body.orgId))],
+      },
+    ]);
+    console.error("click_dropped_unwritable", unwritableDropped.length, batch.messages.length);
   }
 }
 

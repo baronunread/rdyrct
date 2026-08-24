@@ -81,3 +81,21 @@ async function orgState(
     .where(eq(schema.orgs.id, orgId));
   return rows[0] ?? { deletingAt: null, lockedAt: null };
 }
+
+/** The statement-level link guards need to distinguish teardown from a cap
+ * refusal after the insert writes nothing. Reuse the same state read as the
+ * route middleware so locked and deleting behavior cannot drift. */
+export async function orgDeleting(db: DB, orgId: string): Promise<boolean> {
+  return (await orgState(db, orgId)).deletingAt != null;
+}
+
+/** An upload can outlive the route middleware's state read. Re-check after
+ * the R2 write so teardown cannot leave an object behind after deleting the
+ * org's prefix. A missing org is no longer writable either. */
+export async function orgPresentAndNotDeleting(db: DB, orgId: string): Promise<boolean> {
+  const rows = await db
+    .select({ deletingAt: schema.orgs.deletingAt })
+    .from(schema.orgs)
+    .where(eq(schema.orgs.id, orgId));
+  return rows[0]?.deletingAt === null;
+}

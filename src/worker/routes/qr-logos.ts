@@ -2,8 +2,8 @@ import { Hono } from "hono";
 import { lookup } from "../../shared/lookup";
 import { HTTPException } from "hono/http-exception";
 import { bodyLimit } from "hono/body-limit";
-import type { AppEnv } from "../env";
-import { requireOrgRole, orgRole } from "../org-role";
+import type { AppEnv, DB } from "../env";
+import { orgPresentAndNotDeleting, requireOrgRole, orgRole } from "../org-role";
 import { orgPlan } from "../plan";
 import { uid, qrLogoUrl, QR_LOGO_FILE_RE } from "../util";
 import { QR_LOGO_MAX_BYTES } from "@/shared/types";
@@ -60,6 +60,23 @@ function validateQrLogoBody(type: string, body: ArrayBuffer): string {
   return ext;
 }
 
+/** Store an upload, then close the window between the route middleware's
+ * state read and R2. If teardown won that race, remove the new object before
+ * reporting the refusal. */
+export async function putQrLogoIfOrgWritable(
+  db: DB,
+  bucket: R2Bucket,
+  orgId: string,
+  key: string,
+  body: ArrayBuffer,
+  contentType: string,
+): Promise<boolean> {
+  await bucket.put(key, body, { httpMetadata: { contentType } });
+  if (await orgPresentAndNotDeleting(db, orgId)) return true;
+  await bucket.delete(key);
+  return false;
+}
+
 qrLogoRoutes.post("/", requireOrgRole("member"), async (c) => {
   // A logo is QR customization: a paid feature.
   const { limits } = await orgPlan(c.var.db, c.req.param("orgId")!);
@@ -74,9 +91,9 @@ qrLogoRoutes.post("/", requireOrgRole("member"), async (c) => {
 
   const file = `${uid()}.${ext}`;
   const orgId = c.req.param("orgId")!;
-  await c.env.QR_LOGOS.put(`${orgId}/${file}`, body, {
-    httpMetadata: { contentType: type },
-  });
+  const key = `${orgId}/${file}`;
+  const stored = await putQrLogoIfOrgWritable(c.var.db, c.env.QR_LOGOS, orgId, key, body, type);
+  if (!stored) throw new HTTPException(409, { message: "Organization is being deleted" });
   return c.json({ url: qrLogoUrl(orgId, file) }, 201);
 });
 

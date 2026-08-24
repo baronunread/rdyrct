@@ -21,7 +21,7 @@ async function runGuarded(env: Env, sql: string, bindings: unknown[]): Promise<b
  * type-checked builder can still take part in a batch built from raw
  * conditional SQL (D1 batch() takes D1PreparedStatement[], not a mix of
  * Drizzle query builders and raw SQL). */
-function toD1Statement(env: Env, query: { sql: string; params: unknown[] }) {
+export function toD1Statement(env: Env, query: { sql: string; params: unknown[] }) {
   return env.DB.prepare(query.sql).bind(...query.params);
 }
 
@@ -65,21 +65,19 @@ export async function createOwnedOrg(
  * spent in the same transaction, so the token is what admits exactly one
  * person rather than a row two requests can both read first (#154).
  *
- * The delete matches on the membership this call just wrote (org, user and
- * the exact `created_at` it was given) rather than on the token alone. That
- * is what keeps the two cases the insert refuses from spending the invite:
- * an org that filled up leaves the token usable once a seat frees, and a
- * member who opens somebody else's link does not burn it on their way to a
- * 409.
+ * The delete asks `changes() = 1`, which is SQLite for "the statement before
+ * me wrote a row". That is the exact question, so the token is spent when
+ * this call created the membership and never otherwise. That is what keeps
+ * the two cases the insert refuses from spending the invite: an org that
+ * filled up leaves the token usable once a seat frees, and a member who opens
+ * somebody else's link does not burn it on their way to a 409.
  *
- * `created_at` stands in for "the row this call inserted" because
- * `(org_id, user_id)` is the primary key, so there is only ever one row to
- * confuse it with: the caller's own earlier membership, and only if they
- * joined in the very millisecond this request is using. Reaching that means
- * one user accepting two different tokens for one org inside the same
- * millisecond, which spends the second token as well as the first. The cost
- * is an unused invite the admin re-issues, so it is left alone rather than
- * traded for a marker column on every membership row.
+ * It used to ask whether a membership existed with this request's exact
+ * `created_at`, which is nearly the same question and not quite: a second
+ * concurrent accept, correctly refused by the insert, still matched the row
+ * the first accept had written in the same millisecond and spent its token
+ * too (#156). `tests/worker/invite-accept.worker.ts` pins both the SQLite
+ * behaviour and the race.
  */
 export async function acceptInviteAtomically(
   env: Env,
@@ -110,12 +108,7 @@ export async function acceptInviteAtomically(
       args.orgId,
       args.memberLimit,
     ),
-    env.DB.prepare(
-      `delete from invites where token = ? and exists (
-         select 1 from org_members
-         where org_id = ? and user_id = ? and created_at = ?
-       )`,
-    ).bind(args.token, args.orgId, args.userId, args.ts),
+    env.DB.prepare("delete from invites where token = ? and changes() = 1").bind(args.token),
   ]);
   return results[0].meta.changes > 0;
 }
@@ -150,6 +143,18 @@ function addressColumns(address: typeof schema.linkAddresses.$inferInsert) {
   ];
 }
 
+/**
+ * "This org is not being torn down", as a clause rather than as a read.
+ *
+ * `requireOrgRole` already refuses a write to an org that is deleting, but it
+ * reads that flag before the handler runs. A create that passed the guard a
+ * moment before `deleteOrg` set the flag still commits afterwards, and the
+ * teardown's gather step has already taken its snapshot, so the address
+ * survives as a public KV redirect for an org that is supposed to be gone
+ * (#52). Inside the insert it is the same statement, so there is no window.
+ */
+const NOT_DELETING = "and not exists (select 1 from orgs where id = ? and deleting_at is not null)";
+
 function guardedAddressInsertStatement(
   env: Env,
   address: typeof schema.linkAddresses.$inferInsert,
@@ -168,8 +173,35 @@ function guardedAddressInsertStatement(
      and (
        select count(*) from link_addresses
        where link_id = ? and retired_at is null
-     ) < ?`,
-  ).bind(...columns, address.orgId, linkLimit, address.linkId, addressLimit);
+     ) < ?
+     ${NOT_DELETING}`,
+  ).bind(...columns, address.orgId, linkLimit, address.linkId, addressLimit, address.orgId);
+}
+
+/**
+ * "This org is not being torn down", for a caller that builds its own batch.
+ *
+ * The rename in links.ts writes the primary address and its 48h alias in one
+ * batch of its own, so it cannot go through the guarded inserts above. It
+ * needs the same clause, from the same place, or the two drift (#52).
+ */
+export const notDeletingSql = (orgId: string) =>
+  sql`not exists (select 1 from ${schema.orgs} where ${schema.orgs.id} = ${orgId} and ${schema.orgs.deletingAt} is not null)`;
+
+/** The renamed link's outgoing slug, kept alive as a temporary alias, refused
+ * outright while the org is being torn down. Raw because a plain INSERT takes
+ * no WHERE, and it has to ride the caller's batch to stay atomic with the
+ * rename it belongs to. */
+export function guardedTempAliasStatement(
+  env: Env,
+  address: typeof schema.linkAddresses.$inferInsert,
+) {
+  return env.DB.prepare(
+    `insert into link_addresses
+       (id, link_id, org_id, domain_id, slug, kind, creation_reason, expires_at, retired_at, created_at)
+     select ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+     where 1 = 1 ${NOT_DELETING}`,
+  ).bind(...addressColumns(address), address.orgId);
 }
 
 /**
@@ -189,16 +221,16 @@ export async function insertAddressWithinLimit(
   addressLimit: number,
 ): Promise<boolean> {
   if (address.kind === "temp_alias") {
-    // Unconditional insert (a temp_alias never counts toward the cap): it
-    // either writes the row or throws, so `changes` is always > 0. Returning
-    // the guard's own result (rather than a hardcoded true) keeps this
-    // honest if the statement ever gains a WHERE clause.
+    // A temp_alias never counts toward the cap, so the only thing that can
+    // refuse it is the org being torn down. Returning the guard's own result
+    // rather than a hardcoded true is what makes that refusal visible.
     return runGuarded(
       env,
       `insert into link_addresses
          (id, link_id, org_id, domain_id, slug, kind, creation_reason, expires_at, retired_at, created_at)
-       values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      addressColumns(address),
+       select ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+       where 1 = 1 ${NOT_DELETING}`,
+      [...addressColumns(address), address.orgId],
     );
   }
   const result = await guardedAddressInsertStatement(env, address, linkLimit, addressLimit).run();
@@ -257,7 +289,8 @@ export async function keepAddressForeverWithinLimit(
 
 /**
  * Inserts a domain row honoring the org's `domains` cap atomically: only
- * writes if the org is still under its cap at write time.
+ * writes if the org is still under its cap and is not being torn down at
+ * write time.
  */
 export async function insertDomainWithinLimit(
   env: Env,
@@ -269,7 +302,8 @@ export async function insertDomainWithinLimit(
     `insert into domains
        (id, org_id, hostname, status, status_reason, root_redirect, cf_hostname_id, created_at)
      select ?, ?, ?, ?, ?, ?, ?, ?
-     where (select count(*) from domains where org_id = ?) < ?`,
+     where (select count(*) from domains where org_id = ?) < ?
+       ${NOT_DELETING}`,
     [
       row.id,
       row.orgId,
@@ -281,6 +315,7 @@ export async function insertDomainWithinLimit(
       row.createdAt,
       row.orgId,
       domainLimit,
+      row.orgId,
     ],
   );
 }

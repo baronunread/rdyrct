@@ -134,7 +134,12 @@ describe("deleting the account", () => {
     expect(results[0]!.deleting_at).not.toBeNull();
   });
 
-  it("refuses while an owned organization still has other members", async () => {
+  it("takes an owned organization that has other members in it too", async () => {
+    // It used to refuse this, which left the account undeletable until the
+    // owner emptied the org by hand. An org has no plan of its own (orgPlan
+    // reads its owner's), so one kept alive without an owner has no plan, no
+    // billing and nobody who can delete it. Settings names every org in the
+    // confirmation before it asks (#119).
     await seedUser("u-lead", "lead@acme.com");
     await seedUser("u-mate", "mate@acme.com");
     const cookie = await signInCookie("lead@acme.com", TEST_PASSWORD);
@@ -146,12 +151,11 @@ describe("deleting the account", () => {
       .run();
 
     const res = await deleteAccount(cookie);
-    expect(res.status).toBe(400);
-    expect(await res.text()).toContain("other members");
+    expect(res.status).toBe(200);
 
-    // Neither the account nor the organization went anywhere.
-    const { results } = await env.DB.prepare("select id from user where id = 'u-lead'").all();
-    expect(results).toHaveLength(1);
-    expect((await ownedOrgs("u-lead"))[0].deletingAt).toBeNull();
+    const row = await env.DB.prepare("select deleting_at from orgs where id = ?")
+      .bind(org.id)
+      .first<{ deleting_at: number | null }>();
+    expect(row!.deleting_at).not.toBeNull();
   });
 });
