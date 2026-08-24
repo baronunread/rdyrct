@@ -200,8 +200,8 @@ async function salvageClickBatch(
       }
     }),
   );
-  const failed = outcomes.filter((m): m is Message<ClickMessage> => m !== null);
-  const stored = batch.messages.length - failed.length;
+  const failed = new Set(outcomes.filter((m): m is Message<ClickMessage> => m !== null));
+  const stored = batch.messages.length - failed.size;
   if (stored === 0) {
     // Nothing wrote at all, so this is the database rather than one deleted
     // link. Retrying keeps that path exactly as it was, dead-letter log
@@ -217,7 +217,7 @@ async function salvageClickBatch(
   // whole function exists to prevent.
   const dropped: Message<ClickMessage>[] = [];
   for (const message of batch.messages) {
-    if (!failed.includes(message)) {
+    if (!failed.has(message)) {
       message.ack();
     } else if (message.attempts >= CLICK_MAX_DELIVERIES) {
       // Out of deliveries: a click whose link is gone has nowhere to go, and
