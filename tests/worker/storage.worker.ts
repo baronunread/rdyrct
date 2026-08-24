@@ -186,7 +186,7 @@ describe("storage queue: dead-letter visibility", () => {
       deleteQrLogoMsg("/api/orgs/org-1/qr-logo/logo.webp")!,
     ]);
 
-    await logDeadLetterBatch(batch);
+    await logDeadLetterBatch(testEnv, batch);
 
     const result = await getQueueResult(batch, ctx);
     expect(result.explicitAcks).toHaveLength(2);

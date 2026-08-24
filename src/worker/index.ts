@@ -30,6 +30,7 @@ import { drizzle } from "drizzle-orm/d1";
 import * as schema from "./db/schema";
 import {
   consumeStorageBatch,
+  drainStorageOutbox,
   logDeadLetterBatch,
   sweepExpiredAliases,
   sweepOrphanQrLogos,
@@ -352,7 +353,7 @@ const wrapped = Sentry.withSentry<Env, StorageMessage | ClickMessage>(
       const storage = batch as MessageBatch<StorageMessage>;
       if (batch.queue.endsWith("-clicks-dlq")) return logClickDeadLetterBatch(clicks);
       if (batch.queue.endsWith("-clicks")) return consumeClickBatch(env, clicks);
-      if (batch.queue.endsWith("-dlq")) return logDeadLetterBatch(storage);
+      if (batch.queue.endsWith("-dlq")) return logDeadLetterBatch(env, storage);
       await consumeStorageBatch(env, storage);
     },
     async scheduled(_controller: ScheduledController, env: Env, _ctx: ExecutionContext) {
@@ -376,6 +377,11 @@ const wrapped = Sentry.withSentry<Env, StorageMessage | ClickMessage>(
       // Daily: delete QR logos no row points at, which an abandoned upload
       // leaves behind with no owner and no delete path (#49).
       await sweepOrphanQrLogos(env);
+
+      // Daily: apply the storage work the queue never took (#118). A failed
+      // send or an exhausted retry leaves KV serving a stale value with
+      // nothing scheduled to fix it; this is that schedule.
+      await drainStorageOutbox(env);
 
       // Daily: retire rename aliases past their 48h deadline (see #38). The
       // redirect path already stopped resolving them; this frees their slugs.

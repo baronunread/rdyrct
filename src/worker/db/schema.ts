@@ -1,4 +1,12 @@
-import { sqliteTable, text, integer, real, primaryKey, index } from "drizzle-orm/sqlite-core";
+import {
+  sqliteTable,
+  text,
+  integer,
+  real,
+  primaryKey,
+  index,
+  uniqueIndex,
+} from "drizzle-orm/sqlite-core";
 
 /* ---------------- BetterAuth-managed tables ---------------- */
 // Shapes follow the BetterAuth core schema (bunx @better-auth/cli generate),
@@ -407,4 +415,34 @@ export const anonLinks = sqliteTable(
     riskProvider: text("risk_provider"),
   },
   (t) => [index("idx_anon_links_expires").on(t.expiresAt)],
+);
+
+/**
+ * Storage work D1 committed and the queue did not (#118).
+ *
+ * The queue is the fast path and stays that way. A row lands here only when
+ * `sendBatch` failed outright, or when a message exhausted every delivery, so
+ * a change that would otherwise be lost is instead applied late by the daily
+ * drain.
+ *
+ * It carries no payload beyond the op and its target. Every storage message
+ * is desired-state: the consumer reads D1 and writes what it finds, so
+ * re-deriving the value when the drain runs is both simpler and more correct
+ * than replaying one captured at the time of the failure.
+ */
+export const storageOutbox = sqliteTable(
+  "storage_outbox",
+  {
+    id: text("id").primaryKey(),
+    op: text("op", { enum: ["kv_sync", "r2_delete", "r2_delete_prefix"] }).notNull(),
+    target: text("target").notNull(),
+    reason: text("reason", { enum: ["send_failed", "gave_up"] }).notNull(),
+    createdAt: integer("created_at").notNull(),
+    attempts: integer("attempts").notNull().default(0),
+    lastError: text("last_error").notNull().default(""),
+  },
+  (t) => [
+    uniqueIndex("idx_storage_outbox_target").on(t.op, t.target),
+    index("idx_storage_outbox_created").on(t.createdAt),
+  ],
 );

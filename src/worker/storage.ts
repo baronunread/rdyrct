@@ -3,7 +3,7 @@ import { eq, isNull, and, lt, ne, inArray } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import * as schema from "./db/schema";
 import type { DB, Env } from "./env";
-import { buildDestination, qrLogoKeyFromUrl } from "./util";
+import { buildDestination, qrLogoKeyFromUrl, uid } from "./util";
 import { captureAlert } from "./sentry";
 import type { KVDomain } from "./kv";
 
@@ -13,14 +13,27 @@ import type { KVDomain } from "./kv";
  * send to the storage queue describing the KV or R2 follow-up: if the send
  * itself fails, the request fails too, so a producer-side drop is never
  * silent. Once a message is on the queue, Cloudflare Queues own the retry,
- * backoff, and dead-letter behavior; a message that exhausts its retries is
- * logged for visibility (see the dead-letter consumer below), not repaired.
+ * backoff, and dead-letter behavior.
  *
- * Every message is a self-healing instruction the consumer can run more than
- * once. A `kv_sync` message names one KV key; the consumer reads the current
- * D1 truth for that key and writes or deletes to match. This makes order not
- * matter: whatever the last message for a key does, it lands on the current
- * D1 state. R2 deletes are naturally idempotent.
+ * **The idempotency contract.** Every message is a self-healing instruction
+ * the consumer may run any number of times, in any order, at any later
+ * moment, and land on the right answer. A `kv_sync` names one KV key and
+ * nothing else: the consumer reads the current D1 truth for that key and
+ * writes or deletes to match, so it carries no value that could go stale
+ * between the send and the apply. R2 deletes are naturally idempotent.
+ *
+ * That contract is what everything below is allowed to assume, so it is
+ * tested rather than trusted: see `tests/worker/storage-outbox.worker.ts`.
+ * Anything added to `StorageMessage` has to keep it. A message carrying the
+ * value to write, rather than the key to look up, would break replay in a way
+ * nothing else here would notice.
+ *
+ * **What repairs a gap.** Both holes are after the D1 commit, so neither can
+ * be answered by failing the request (#118). A `sendBatch` that fails, and a
+ * message that exhausts every delivery, both write a `storage_outbox` row,
+ * and the daily drain applies it. Late rather than lost, and correct when it
+ * lands because the contract above means the drain re-derives the value
+ * instead of replaying an old one.
  */
 
 export type StorageMessage =
@@ -70,7 +83,119 @@ export async function enqueueStorage(
   messages: Array<StorageMessage | null>,
 ): Promise<void> {
   const batch = messages.flatMap((m) => (m ? [{ body: m }] : []));
-  if (batch.length) await env.STORAGE_QUEUE.sendBatch(batch);
+  if (!batch.length) return;
+  try {
+    await env.STORAGE_QUEUE.sendBatch(batch);
+  } catch (error) {
+    // D1 is already committed by the time this runs, so a failed send used to
+    // leave KV serving the old value with nothing scheduled to fix it, and
+    // the caller holding an error for a mutation that succeeded (#118).
+    // Recording the work makes it late rather than lost.
+    await recordOutbox(
+      env,
+      batch.map((entry) => entry.body),
+      "send_failed",
+      // Narrowed here, where it arrives: a caught value is only ever a
+      // string worth keeping when it is an Error.
+      error instanceof Error ? error.message.slice(0, 500) : "",
+    );
+    throw error;
+  }
+}
+
+/* ---------------- outbox: work the queue did not take ---------------- */
+
+/**
+ * Remembers storage work so the daily drain can apply it (#118).
+ *
+ * Never throws. Every caller is already on a failure path, and a repair that
+ * fails is not a reason to turn a succeeded mutation into a second error.
+ *
+ * One pending row per target, because applying desired state twice is a
+ * no-op: a repeat failure for the same key replaces the first rather than
+ * queueing a duplicate drain.
+ */
+async function recordOutbox(
+  env: Env,
+  messages: StorageMessage[],
+  reason: "send_failed" | "gave_up",
+  detail = "",
+): Promise<void> {
+  const now = Date.now();
+  try {
+    await env.DB.batch(
+      messages.map((message) =>
+        env.DB.prepare(
+          `insert into storage_outbox (id, op, target, reason, created_at, attempts, last_error)
+           values (?, ?, ?, ?, ?, 0, ?)
+           on conflict (op, target) do update set
+             reason = excluded.reason,
+             created_at = excluded.created_at,
+             last_error = excluded.last_error`,
+        ).bind(uid(), message.op, targetOf(message), reason, now, detail),
+      ),
+    );
+  } catch (writeError) {
+    captureAlert([{ event: "storage_outbox_write_failed", reason, count: messages.length }]);
+    console.error("storage_outbox_write_failed", reason, writeError);
+  }
+}
+
+/** How many outbox rows one drain will attempt. Bounded so a large backlog
+ * costs several days rather than one cron run that times out. */
+const OUTBOX_DRAIN_LIMIT = 200;
+
+/**
+ * Applies the storage work the queue never did, oldest first (#118).
+ *
+ * This re-derives the value rather than replaying a captured one, which is
+ * what makes a late apply correct instead of merely late: `applyStorageMessage`
+ * reads current D1 state and writes what it finds, so a key whose row changed
+ * twice since the failure lands on the answer it should have now.
+ *
+ * Returns how many rows it cleared.
+ */
+export async function drainStorageOutbox(env: Env): Promise<number> {
+  const db = drizzle(env.DB, { schema });
+  const rows = await db
+    .select()
+    .from(schema.storageOutbox)
+    .orderBy(schema.storageOutbox.createdAt)
+    .limit(OUTBOX_DRAIN_LIMIT);
+  let cleared = 0;
+  for (const row of rows) {
+    try {
+      await applyStorageMessage(env, db, outboxMessage(row));
+      await db.delete(schema.storageOutbox).where(eq(schema.storageOutbox.id, row.id));
+      cleared++;
+    } catch (error) {
+      // Left in place, with its attempt count, so a permanently broken row can
+      // be found rather than retried forever in silence.
+      await db
+        .update(schema.storageOutbox)
+        .set({
+          attempts: row.attempts + 1,
+          lastError: error instanceof Error ? error.message.slice(0, 500) : "",
+        })
+        .where(eq(schema.storageOutbox.id, row.id));
+      captureAlert([
+        {
+          event: "storage_outbox_drain_failed",
+          op: row.op,
+          target: row.target,
+          attempts: row.attempts + 1,
+        },
+      ]);
+    }
+  }
+  return cleared;
+}
+
+/** An outbox row back as the message it stands for. */
+function outboxMessage(row: typeof schema.storageOutbox.$inferSelect): StorageMessage {
+  return row.op === "r2_delete_prefix"
+    ? { op: "r2_delete_prefix", prefix: row.target }
+    : { op: row.op, key: row.target };
 }
 
 /* ---------------- consuming messages ---------------- */
@@ -307,18 +432,30 @@ export async function consumeStorageBatch(
 }
 
 /**
- * Consume the dead-letter queue: log and alert for visibility, then ack.
- * There is nothing to repair here (see the top of this file), just something
- * to see: a message reaching this point means Cloudflare Queues gave up on it
- * after every retry, which is worth knowing even though nothing re-drives it.
+ * Consume the dead-letter queue: record the work, alert, then ack.
+ *
+ * A message reaching this point means Cloudflare Queues gave up on it after
+ * every retry. It used to be alerted on and dropped, with only `op` and
+ * `target` in the alert, so the change could not be replayed even by hand
+ * (#118). It now goes to the outbox first, which is the same two fields plus
+ * somewhere for the daily drain to find them.
  */
-export async function logDeadLetterBatch(batch: MessageBatch<StorageMessage>): Promise<void> {
-  const events = batch.messages.map((message) => ({
-    event: "storage_message_gave_up",
-    op: message.body.op,
-    target: targetOf(message.body),
-  }));
-  captureAlert(events);
+export async function logDeadLetterBatch(
+  env: Env,
+  batch: MessageBatch<StorageMessage>,
+): Promise<void> {
+  await recordOutbox(
+    env,
+    batch.messages.map((message) => message.body),
+    "gave_up",
+  );
+  captureAlert(
+    batch.messages.map((message) => ({
+      event: "storage_message_gave_up",
+      op: message.body.op,
+      target: targetOf(message.body),
+    })),
+  );
   for (const message of batch.messages) message.ack();
 }
 
