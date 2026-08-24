@@ -123,6 +123,10 @@ async function recordOutbox(
 ): Promise<void> {
   const now = Date.now();
   try {
+    // `created_at` is deliberately not updated on conflict: the drain reads
+    // oldest first with a cap, so refreshing it would let one repeatedly
+    // failing key push itself to the back of the queue forever and starve
+    // rows behind it.
     await env.DB.batch(
       messages.map((message) =>
         env.DB.prepare(
@@ -130,7 +134,6 @@ async function recordOutbox(
            values (?, ?, ?, ?, ?, 0, ?)
            on conflict (op, target) do update set
              reason = excluded.reason,
-             created_at = excluded.created_at,
              last_error = excluded.last_error`,
         ).bind(uid(), message.op, targetOf(message), reason, now, detail),
       ),
@@ -166,7 +169,17 @@ export async function drainStorageOutbox(env: Env): Promise<number> {
   for (const row of rows) {
     try {
       await applyStorageMessage(env, db, outboxMessage(row));
-      await db.delete(schema.storageOutbox).where(eq(schema.storageOutbox.id, row.id));
+      // Matched on the row this pass actually read, not just its id: a fresh
+      // failure for the same key upserts in place, and deleting by id alone
+      // would drop that new request unapplied.
+      await db
+        .delete(schema.storageOutbox)
+        .where(
+          and(
+            eq(schema.storageOutbox.id, row.id),
+            eq(schema.storageOutbox.lastError, row.lastError),
+          ),
+        );
       cleared++;
     } catch (error) {
       // Left in place, with its attempt count, so a permanently broken row can

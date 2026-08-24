@@ -200,8 +200,8 @@ async function salvageClickBatch(
       }
     }),
   );
-  const dropped = outcomes.filter((m): m is Message<ClickMessage> => m !== null);
-  const stored = batch.messages.length - dropped.length;
+  const failed = outcomes.filter((m): m is Message<ClickMessage> => m !== null);
+  const stored = batch.messages.length - failed.length;
   if (stored === 0) {
     // Nothing wrote at all, so this is the database rather than one deleted
     // link. Retrying keeps that path exactly as it was, dead-letter log
@@ -210,9 +210,24 @@ async function salvageClickBatch(
     batch.retryAll();
     return;
   }
-  // Acked, not dead-lettered: a click whose link is gone has nowhere to go,
-  // and retrying it costs a redelivery to reach the same answer.
-  batch.ackAll();
+  // Per message, not ackAll. Cloudflare re-batches a redelivered message with
+  // fresh ones, so "some message here is on its last delivery" says nothing
+  // about the rest: acking the batch would drop a click that failed once and
+  // still has five deliveries to go, which is a bigger loss than the one this
+  // whole function exists to prevent.
+  const dropped: Message<ClickMessage>[] = [];
+  for (const message of batch.messages) {
+    if (!failed.includes(message)) {
+      message.ack();
+    } else if (message.attempts >= CLICK_MAX_DELIVERIES) {
+      // Out of deliveries: a click whose link is gone has nowhere to go, and
+      // retrying it costs a redelivery to reach the same answer.
+      message.ack();
+      dropped.push(message);
+    } else {
+      message.retry();
+    }
+  }
   if (dropped.length > 0) {
     // Counted, so the accepted loss has a size rather than being a sentence
     // in a comment.

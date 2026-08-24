@@ -5,7 +5,7 @@ import { drizzle } from "drizzle-orm/d1";
 import worker from "../../src/worker";
 import * as schema from "../../src/worker/db/schema";
 import type { Env } from "../../src/worker/env";
-import { deleteOrg } from "../../src/worker/routes/orgs";
+import { deleteOrg, sweepStalledOrgDeletions } from "../../src/worker/routes/orgs";
 import { adminCookie, applyTestMigrations, authEnv, overrideEnv } from "./support";
 
 // A workflow instance handle that answers the one question deleteOrg asks of
@@ -235,5 +235,102 @@ describe("requireOrgRole: writes during teardown", () => {
 
     const second = await del();
     expect(second.status).toBe(200);
+  });
+});
+
+describe("sweepStalledOrgDeletions", () => {
+  const HOUR = 60 * 60 * 1000;
+
+  /** A workflow whose instance reports `status` and records restarts. */
+  function stalledWorkflow(status?: InstanceStatus["status"]) {
+    const restarts: string[] = [];
+    const created: string[] = [];
+    const binding: Env["ORG_DELETE"] = {
+      async create() {
+        throw new Error("the sweep restarts, it does not create");
+      },
+      async get(id): Promise<WorkflowInstance> {
+        if (!status) throw new Error("instance not found");
+        // Object.assign, not a spread: WorkflowInstance is a declared class,
+        // and TS drops class methods from an object-spread type.
+        return Object.assign(instanceReporting(status), {
+          id,
+          restart: async () => {
+            restarts.push(id);
+          },
+        });
+      },
+      async createBatch(batch) {
+        created.push(...batch.map((entry) => entry.id ?? ""));
+        return [];
+      },
+      async deleteBatch() {
+        throw new Error("the sweep never deletes a batch");
+      },
+    };
+    return { binding, restarts, created };
+  }
+
+  async function flagOrg(ageMs: number) {
+    const db = await seedOrg();
+    await env.DB.prepare("update orgs set deleting_at = ? where id = 'org-1'")
+      .bind(Date.now() - ageMs)
+      .run();
+    return db;
+  }
+
+  /** One sweep against a workflow reporting `status`, and everything it did. */
+  async function sweep(db: Awaited<ReturnType<typeof seedOrg>>, status?: InstanceStatus["status"]) {
+    const { binding, restarts, created } = stalledWorkflow(status);
+    const count = await sweepStalledOrgDeletions(db, overrideEnv({ ORG_DELETE: binding }));
+    return { count, restarts, created };
+  }
+
+  it("restarts a teardown whose instance is terminal", async () => {
+    const db = await flagOrg(2 * HOUR);
+    const { binding, restarts } = stalledWorkflow("errored");
+
+    expect(await sweepStalledOrgDeletions(db, overrideEnv({ ORG_DELETE: binding }))).toBe(1);
+
+    // createBatch skips an id already in use whatever its state, so a repeat
+    // DELETE could never have replaced this one: the org was read-only
+    // forever and its DELETE answered 200 while nothing ran.
+    expect(restarts).toEqual(["org-1"]);
+  });
+
+  it("leaves a teardown that is still running alone", async () => {
+    expect(await sweep(await flagOrg(2 * HOUR), "running")).toEqual({
+      count: 0,
+      restarts: [],
+      created: [],
+    });
+  });
+
+  it("creates one when no instance exists at all", async () => {
+    // What a failed ambiguous start leaves behind on the account-deletion
+    // path, where the only member is the account that was being deleted and
+    // there is nobody left to issue another DELETE.
+    const db = await flagOrg(2 * HOUR);
+    const { binding, created } = stalledWorkflow();
+
+    expect(await sweepStalledOrgDeletions(db, overrideEnv({ ORG_DELETE: binding }))).toBe(1);
+
+    expect(created).toEqual(["org-1"]);
+  });
+
+  it("gives a fresh teardown time to run before touching it", async () => {
+    expect(await sweep(await flagOrg(5 * 60 * 1000), "errored")).toEqual({
+      count: 0,
+      restarts: [],
+      created: [],
+    });
+  });
+
+  it("ignores an org that is not being deleted", async () => {
+    const db = await seedOrg();
+    const { binding, restarts } = stalledWorkflow("errored");
+
+    expect(await sweepStalledOrgDeletions(db, overrideEnv({ ORG_DELETE: binding }))).toBe(0);
+    expect(restarts).toEqual([]);
   });
 });

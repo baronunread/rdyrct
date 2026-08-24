@@ -138,11 +138,40 @@ describe("click queue: consumer", () => {
     await consumeClickBatch(testEnv, batch);
 
     const result = await getQueueResult(batch, ctx);
-    expect(result.ackAll).toBe(true);
+    // Acked one at a time now, not ackAll: see the mixed-attempts test above.
+    expect(result.explicitAcks).toHaveLength(10);
+    expect(result.retryMessages).toEqual([]);
     expect(await clickCount()).toBe(9);
     expect(errors.mock.calls.some(([a]) => String(a).includes("click_dropped_unwritable"))).toBe(
       true,
     );
+    errors.mockRestore();
+  });
+
+  it("retries a young click that shares a batch with one on its last delivery", async () => {
+    await seedLink();
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    // Cloudflare re-batches a redelivered message alongside fresh ones, so a
+    // batch containing one exhausted message says nothing about the rest.
+    // Acking the whole batch here would drop a click that had failed once and
+    // still had five deliveries left, which is a bigger loss than the one the
+    // salvage exists to prevent.
+    const { batch, ctx } = batchOf(
+      "rdyrct-clicks",
+      [
+        clickMessage({ dedupeId: "old-bad", linkId: "no-such-link" }),
+        clickMessage({ dedupeId: "young-bad", linkId: "no-such-link" }),
+        clickMessage({ dedupeId: "good" }),
+      ],
+      [6, 1, 1],
+    );
+
+    await consumeClickBatch(testEnv, batch);
+
+    const result = await getQueueResult(batch, ctx);
+    expect(result.explicitAcks.sort()).toEqual(["m0", "m2"]);
+    expect(result.retryMessages.map((m: { msgId: string }) => m.msgId)).toEqual(["m1"]);
+    expect(await clickCount()).toBe(1);
     errors.mockRestore();
   });
 

@@ -404,10 +404,20 @@ export function captureStorageQueue() {
 // Builds a real MessageBatch via the official cloudflare:test helpers, so ack/
 // retry/dead-letter assertions exercise the same runtime semantics production
 // queue delivery does, rather than hand-rolled spies.
-export function batchOf<Body>(queueName: string, bodies: Body[], attempts = 1) {
+/** `attempts` takes an array to give each message its own delivery count:
+ * Cloudflare re-batches a redelivered message alongside fresh ones, so a
+ * consumer that reads the batch's worst attempt count and acts on the whole
+ * batch is a bug a uniform number cannot catch. */
+export function batchOf<Body>(queueName: string, bodies: Body[], attempts: number | number[] = 1) {
+  const attemptOf = (i: number) => (Array.isArray(attempts) ? (attempts[i] ?? 1) : attempts);
   const batch = createMessageBatch<Body>(
     queueName,
-    bodies.map((body, i) => ({ id: `m${i}`, timestamp: new Date(), attempts, body })),
+    bodies.map((body, i) => ({
+      id: `m${i}`,
+      timestamp: new Date(),
+      attempts: attemptOf(i),
+      body,
+    })),
   );
   const ctx = createExecutionContext();
   return { batch, ctx };

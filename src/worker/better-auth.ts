@@ -110,6 +110,54 @@ async function ownedOrgsForDeletion(db: DB, userId: string) {
 }
 
 /**
+ * What becomes of the organizations an account owns, as it is deleted (#119).
+ *
+ * Recomputed here rather than trusted from `hooks.before`, and the two can
+ * disagree: an invite accepted between the two reads turns a solo org into a
+ * shared one after the refusal has already passed. By this point refusing is
+ * no longer available, so a shared org is handed to its longest-standing
+ * member instead. Without that the owner's membership goes with the account
+ * by cascade and the org is left with members and no owner.
+ *
+ * A shared org whose last other member left in the meantime has nobody to
+ * hand it to. It is solo after all, so it joins the teardown: dropping that
+ * answer left it with zero members and no owner, the same unrepresentable
+ * state one window over.
+ *
+ * Exported because `beforeDelete` cannot be reached with a shared org through
+ * a request (the guard refuses first), so this is the only place a test can
+ * hold the race still.
+ */
+export async function releaseOwnedOrgs(db: DB, env: Env, userId: string): Promise<void> {
+  const { solo, shared } = await ownedOrgsForDeletion(db, userId);
+  const promoted = await Promise.all(
+    shared.map(async (orgId) => ({
+      orgId,
+      handedOver: await promoteLongestStandingMember(env, orgId, userId),
+    })),
+  );
+  // One flag-write and one workflow start for the whole set, so a failure
+  // cannot leave some orgs torn down and some not.
+  await deleteOrgs(db, env, orgsForTeardown(solo, promoted));
+}
+
+/**
+ * Which of an account's organizations the teardown takes.
+ *
+ * Its own function because the answer it adds is easy to drop: a shared org
+ * that could not be handed over is solo after all, and returning only `solo`
+ * leaves it with zero members and no owner once the cascade runs. The race
+ * that produces one cannot be held still inside `releaseOwnedOrgs`, so this
+ * is where a test can reach the decision.
+ */
+export function orgsForTeardown(
+  solo: string[],
+  promoted: { orgId: string; handedOver: boolean }[],
+): string[] {
+  return [...solo, ...promoted.flatMap((p) => (p.handedOver ? [] : [p.orgId]))];
+}
+
+/**
  * Refuses to delete an account that still owns an organization other people
  * are in: they hand it over or empty it first. Everything they hold by
  * themselves goes with the account, in `beforeDelete`.
@@ -458,20 +506,7 @@ function buildAuth(env: Env) {
           // in hooks.before: an APIError thrown from here escapes better-auth's
           // transaction wrapper as an unhandled rejection, even though the
           // caller does get its 400.
-          // Recomputed here, and it can disagree with what hooks.before saw:
-          // an invite accepted between the two reads turns a solo org into a
-          // shared one after the refusal has already passed (#119). By this
-          // point refusing is no longer available, so every org that gained a
-          // member is handed to its longest-standing one instead. Without
-          // that the owner's membership goes with the account by cascade and
-          // the org is left with members and no owner.
-          const { solo, shared } = await ownedOrgsForDeletion(db, user.id);
-          await Promise.all(
-            shared.map((orgId) => promoteLongestStandingMember(env, orgId, user.id)),
-          );
-          // One flag-write and one workflow start for the whole set, so a
-          // failure cannot leave some orgs torn down and some not.
-          await deleteOrgs(db, env, solo);
+          await releaseOwnedOrgs(db, env, user.id);
         },
       },
     },

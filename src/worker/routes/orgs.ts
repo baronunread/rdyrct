@@ -2,8 +2,9 @@ import { Hono } from "hono";
 import * as v from "valibot";
 import type { JsonValue } from "../../shared/types";
 import { HTTPException } from "hono/http-exception";
-import { eq, and, gte, desc, sql, isNull, inArray } from "drizzle-orm";
+import { eq, and, gte, desc, sql, isNull, isNotNull, lt, inArray } from "drizzle-orm";
 import * as schema from "../db/schema";
+import { captureAlert } from "../sentry";
 import type { AppEnv, DB, Env } from "../env";
 import { requireUser } from "../guards";
 import { requireOrgRole, orgRole } from "../org-role";
@@ -300,6 +301,72 @@ export async function deleteOrg(db: DB, env: Env, orgId: string): Promise<void> 
  * caller holding an error for a deletion that did not happen, with no way to
  * tell which orgs had already gone.
  */
+/**
+ * How long an org may sit flagged `deleting_at` before the sweep treats its
+ * teardown as stalled. Long enough that a healthy workflow is never disturbed.
+ */
+const STALLED_DELETION_AFTER = 60 * 60 * 1000;
+
+/** How many stalled orgs one sweep restarts. Bounded like every other sweep. */
+const STALLED_DELETION_LIMIT = 50;
+
+/**
+ * Restarts teardowns that are flagged and not running (#52, #119).
+ *
+ * Two ways an org reaches that state, and neither has anyone to fix it.
+ * `createBatch` skips an id already in use whatever that instance's state, so
+ * an instance that errored or was terminated without finishing is never
+ * replaced by a later DELETE: the org answers 200 and nothing runs. And when
+ * a start fails ambiguously, the flag is deliberately left set, which is right
+ * for an org somebody can DELETE again and wrong for one whose only member is
+ * the account that was being deleted at the time.
+ *
+ * Restart rather than create, because the id is still in use. A running or
+ * queued instance is left strictly alone.
+ */
+export async function sweepStalledOrgDeletions(
+  db: DB,
+  env: Env,
+  now = Date.now(),
+): Promise<number> {
+  const stalled = await db
+    .select({ id: schema.orgs.id })
+    .from(schema.orgs)
+    .where(
+      and(
+        isNotNull(schema.orgs.deletingAt),
+        lt(schema.orgs.deletingAt, now - STALLED_DELETION_AFTER),
+      ),
+    )
+    .limit(STALLED_DELETION_LIMIT);
+  if (stalled.length === 0) return 0;
+
+  const restarted = await Promise.all(stalled.map((org) => restartIfStalled(env, org.id)));
+  return restarted.filter(Boolean).length;
+}
+
+/** True if this org's teardown was actually restarted. Never throws: one
+ * unreadable instance must not stop the sweep reaching the rest. */
+async function restartIfStalled(env: Env, orgId: string): Promise<boolean> {
+  try {
+    const instance = await env.ORG_DELETE.get(orgId);
+    const { status } = await instance.status();
+    if (!TERMINAL_WORKFLOW_STATUSES.has(status)) return false;
+    await instance.restart();
+    captureAlert([{ event: "org_delete_restarted", orgId, status }]);
+    return true;
+  } catch {
+    // No instance to read, so nothing is in use and a plain create works.
+    try {
+      await env.ORG_DELETE.createBatch([{ id: orgId, params: { orgId } }]);
+      captureAlert([{ event: "org_delete_restarted", orgId, status: "missing" }]);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+}
+
 export async function deleteOrgs(db: DB, env: Env, orgIds: string[]): Promise<void> {
   if (orgIds.length === 0) return;
   const now = Date.now();

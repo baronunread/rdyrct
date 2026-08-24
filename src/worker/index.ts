@@ -11,7 +11,12 @@ import { withSession } from "./session";
 import { getAuth } from "./better-auth";
 import { withBackground } from "./background";
 import { userRoutes } from "./routes/auth";
-import { orgRoutes, inviteRoutes, sweepExpiredInvites } from "./routes/orgs";
+import {
+  orgRoutes,
+  inviteRoutes,
+  sweepExpiredInvites,
+  sweepStalledOrgDeletions,
+} from "./routes/orgs";
 import { linkRoutes } from "./routes/links";
 import { qrLogoRoutes } from "./routes/qr-logos";
 import { adminRoutes } from "./routes/admin";
@@ -377,6 +382,12 @@ const wrapped = Sentry.withSentry<Env, StorageMessage | ClickMessage>(
       // Daily: delete QR logos no row points at, which an abandoned upload
       // leaves behind with no owner and no delete path (#49).
       await sweepOrphanQrLogos(env);
+
+      // Daily: restart org teardowns that are flagged and not running (#52).
+      // createBatch skips an id already in use whatever its state, so a
+      // workflow that errored is never replaced by a later DELETE, and an org
+      // whose only member was the deleted account has nobody to retry it.
+      await sweepStalledOrgDeletions(drizzle(env.DB, { schema }), env);
 
       // Daily: apply the storage work the queue never took (#118). A failed
       // send or an exhausted retry leaves KV serving a stale value with

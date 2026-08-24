@@ -12,8 +12,11 @@ import { deleteQrLogoMsg, enqueueStorage, syncLinkMsg } from "../storage";
 import {
   orgPlan,
   countActiveAddresses,
+  guardedTempAliasStatement,
   insertAddressWithinLimit,
   insertLinkWithinLimit,
+  notDeletingSql,
+  toD1Statement,
   keepAddressForeverWithinLimit,
 } from "../plan";
 import {
@@ -989,34 +992,61 @@ linkRoutes.patch("/:linkId", requireOrgRole("member"), async (c) => {
   // The primary link_addresses row is kept in sync with links.domainId/slug
   // in the same batch as the links write, never as a separate follow-up: the
   // two can never observably disagree (see decision #1 in the plan).
+  // Every statement carries the teardown guard, for the reason the guarded
+  // inserts in plan.ts do: requireOrgRole read `deleting_at` before this
+  // handler ran, so a rename that started a moment earlier would otherwise
+  // commit after the teardown workflow took its snapshot and leave the new
+  // slug serving as a public redirect for an org that is gone (#52).
+  const notDeleting = notDeletingSql(orgId);
+  // Raw statements in one D1 batch, not drizzle's: the alias is a conditional
+  // insert, which a plain INSERT builder cannot express, and it has to ride
+  // the same batch as the rename to stay atomic with it.
   const writes = [
-    db.update(schema.links).set(updated).where(eq(schema.links.id, existing.id)),
-    db
-      .update(schema.linkAddresses)
-      .set({ domainId, slug: newSlug })
-      .where(
-        and(eq(schema.linkAddresses.linkId, existing.id), eq(schema.linkAddresses.kind, "primary")),
-      ),
+    toD1Statement(
+      c.env,
+      db
+        .update(schema.links)
+        .set(updated)
+        .where(and(eq(schema.links.id, existing.id), notDeleting))
+        .toSQL(),
+    ),
+    toD1Statement(
+      c.env,
+      db
+        .update(schema.linkAddresses)
+        .set({ domainId, slug: newSlug })
+        .where(
+          and(
+            eq(schema.linkAddresses.linkId, existing.id),
+            eq(schema.linkAddresses.kind, "primary"),
+            notDeleting,
+          ),
+        )
+        .toSQL(),
+    ),
     ...(createsAlias
       ? [
-          db
-            .insert(schema.linkAddresses)
-            .values(
-              newAddressRow(
-                existing.id,
-                orgId,
-                existing.domainId,
-                existing.slug,
-                "temp_alias",
-                "renamed",
-                Date.now() + ALIAS_TTL_MS,
-              ),
+          guardedTempAliasStatement(
+            c.env,
+            newAddressRow(
+              existing.id,
+              orgId,
+              existing.domainId,
+              existing.slug,
+              "temp_alias",
+              "renamed",
+              Date.now() + ALIAS_TTL_MS,
             ),
+          ),
         ]
       : []),
   ];
-  const batch = nonEmpty(writes);
-  if (batch) await db.batch(batch);
+  const results = await c.env.DB.batch(writes);
+  // The guard wrote nothing, so the org started tearing down while this
+  // request was in flight. Say that rather than answering 200 for an edit
+  // that did not happen.
+  if (results[0] && results[0].meta.changes === 0)
+    throw new HTTPException(409, { message: "Organization is being deleted" });
   await enqueueStorage(c.env, messages);
 
   // Re-score a changed destination (#68). This is the trigger that matters:

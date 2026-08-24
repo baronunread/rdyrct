@@ -21,7 +21,7 @@ async function runGuarded(env: Env, sql: string, bindings: unknown[]): Promise<b
  * type-checked builder can still take part in a batch built from raw
  * conditional SQL (D1 batch() takes D1PreparedStatement[], not a mix of
  * Drizzle query builders and raw SQL). */
-function toD1Statement(env: Env, query: { sql: string; params: unknown[] }) {
+export function toD1Statement(env: Env, query: { sql: string; params: unknown[] }) {
   return env.DB.prepare(query.sql).bind(...query.params);
 }
 
@@ -105,16 +105,12 @@ export async function promoteLongestStandingMember(
  * spent in the same transaction, so the token is what admits exactly one
  * person rather than a row two requests can both read first (#154).
  *
- * The delete matches on the membership this call just wrote (org, user and
- * the exact `created_at` it was given) rather than on the token alone. That
- * is what keeps the two cases the insert refuses from spending the invite:
- * an org that filled up leaves the token usable once a seat frees, and a
- * member who opens somebody else's link does not burn it on their way to a
- * 409.
- *
  * The delete asks `changes() = 1`, which is SQLite for "the statement before
  * me wrote a row". That is the exact question, so the token is spent when
- * this call created the membership and never otherwise.
+ * this call created the membership and never otherwise. That is what keeps
+ * the two cases the insert refuses from spending the invite: an org that
+ * filled up leaves the token usable once a seat frees, and a member who opens
+ * somebody else's link does not burn it on their way to a 409.
  *
  * It used to ask whether a membership existed with this request's exact
  * `created_at`, which is nearly the same question and not quite: a second
@@ -220,6 +216,32 @@ function guardedAddressInsertStatement(
      ) < ?
      ${NOT_DELETING}`,
   ).bind(...columns, address.orgId, linkLimit, address.linkId, addressLimit, address.orgId);
+}
+
+/**
+ * "This org is not being torn down", for a caller that builds its own batch.
+ *
+ * The rename in links.ts writes the primary address and its 48h alias in one
+ * batch of its own, so it cannot go through the guarded inserts above. It
+ * needs the same clause, from the same place, or the two drift (#52).
+ */
+export const notDeletingSql = (orgId: string) =>
+  sql`not exists (select 1 from ${schema.orgs} where ${schema.orgs.id} = ${orgId} and ${schema.orgs.deletingAt} is not null)`;
+
+/** The renamed link's outgoing slug, kept alive as a temporary alias, refused
+ * outright while the org is being torn down. Raw because a plain INSERT takes
+ * no WHERE, and it has to ride the caller's batch to stay atomic with the
+ * rename it belongs to. */
+export function guardedTempAliasStatement(
+  env: Env,
+  address: typeof schema.linkAddresses.$inferInsert,
+) {
+  return env.DB.prepare(
+    `insert into link_addresses
+       (id, link_id, org_id, domain_id, slug, kind, creation_reason, expires_at, retired_at, created_at)
+     select ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+     where 1 = 1 ${NOT_DELETING}`,
+  ).bind(...addressColumns(address), address.orgId);
 }
 
 /**

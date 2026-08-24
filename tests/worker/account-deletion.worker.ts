@@ -14,6 +14,7 @@ import { reset } from "cloudflare:test";
 import { drizzle } from "drizzle-orm/d1";
 import * as schema from "../../src/worker/db/schema";
 import { deleteOrgs } from "../../src/worker/routes/orgs";
+import { orgsForTeardown, releaseOwnedOrgs } from "../../src/worker/better-auth";
 import { promoteLongestStandingMember } from "../../src/worker/plan";
 import { applyTestMigrations, overrideEnv, testEnv } from "./support";
 
@@ -56,6 +57,30 @@ async function roleOf(userId: string): Promise<string | null> {
     .bind(ORG, userId)
     .first<{ role: string }>();
   return row?.role ?? null;
+}
+
+/** A teardown binding that records the ids it was asked to start. `fail`
+ * makes the start throw, which is the ambiguous case deleteOrgs fails closed
+ * on. */
+function fakeTeardown(fail = false) {
+  const started: string[] = [];
+  const binding: typeof env.ORG_DELETE = {
+    async create() {
+      throw new Error("teardown starts with createBatch");
+    },
+    async get() {
+      throw new Error("instance not found");
+    },
+    async createBatch(batch) {
+      if (fail) throw new Error("injected workflow start failure");
+      started.push(...batch.map((entry) => entry.id ?? ""));
+      return [];
+    },
+    async deleteBatch() {
+      throw new Error("teardown never deletes a batch");
+    },
+  };
+  return { binding, started };
 }
 
 describe("promoteLongestStandingMember", () => {
@@ -112,27 +137,6 @@ describe("promoteLongestStandingMember", () => {
 });
 
 describe("deleteOrgs", () => {
-  function workflow(fail = false) {
-    const started: string[] = [];
-    const binding: typeof env.ORG_DELETE = {
-      async create() {
-        throw new Error("teardown starts with createBatch");
-      },
-      async get() {
-        throw new Error("instance not found");
-      },
-      async createBatch(batch) {
-        if (fail) throw new Error("injected workflow start failure");
-        started.push(...batch.map((entry) => entry.id ?? ""));
-        return [];
-      },
-      async deleteBatch() {
-        throw new Error("teardown never deletes a batch");
-      },
-    };
-    return { binding, started };
-  }
-
   const deletingIds = async (): Promise<string[]> => {
     const rows = await env.DB.prepare(
       "select id from orgs where deleting_at is not null order by id",
@@ -148,7 +152,7 @@ describe("deleteOrgs", () => {
   });
 
   it("marks and starts every org in one pass", async () => {
-    const { binding, started } = workflow();
+    const { binding, started } = fakeTeardown();
     await deleteOrgs(drizzle(env.DB, { schema }), overrideEnv({ ORG_DELETE: binding }), [
       "org-a",
       "org-b",
@@ -159,14 +163,14 @@ describe("deleteOrgs", () => {
   });
 
   it("does nothing at all when the set is empty", async () => {
-    const { binding, started } = workflow();
+    const { binding, started } = fakeTeardown();
     await deleteOrgs(drizzle(env.DB, { schema }), overrideEnv({ ORG_DELETE: binding }), []);
     expect(started).toEqual([]);
     expect(await deletingIds()).toEqual([]);
   });
 
   it("leaves no org half torn down when the start fails", async () => {
-    const { binding } = workflow(true);
+    const { binding } = fakeTeardown(true);
     await expect(
       deleteOrgs(drizzle(env.DB, { schema }), overrideEnv({ ORG_DELETE: binding }), [
         "org-a",
@@ -178,5 +182,47 @@ describe("deleteOrgs", () => {
     // "the first two went and the third did not". The flags stay set because
     // the lookup cannot prove nothing is running; the next call restarts.
     expect(await deletingIds()).toEqual(["org-a", "org-b"]);
+  });
+});
+
+describe("releaseOwnedOrgs", () => {
+  it("hands over the org that gained a member, and tears down the solo one", async () => {
+    await addMember("user-stayer", 200);
+    await env.DB.batch([
+      env.DB.prepare("insert into orgs (id, name, created_at) values ('solo', 'Solo', 0)"),
+      env.DB.prepare(
+        "insert into org_members (org_id, user_id, role, created_at) values ('solo', ?, 'owner', 0)",
+      ).bind(LEAVING),
+    ]);
+    const { binding, started } = fakeTeardown();
+
+    await releaseOwnedOrgs(
+      drizzle(env.DB, { schema }),
+      overrideEnv({ ORG_DELETE: binding }),
+      LEAVING,
+    );
+
+    expect(await roleOf("user-stayer")).toBe("owner");
+    expect(started).toEqual(["solo"]);
+  });
+});
+
+describe("orgsForTeardown", () => {
+  it("takes the solo orgs", () => {
+    expect(orgsForTeardown(["a", "b"], [])).toEqual(["a", "b"]);
+  });
+
+  it("leaves an org that was successfully handed over", () => {
+    expect(orgsForTeardown([], [{ orgId: "shared", handedOver: true }])).toEqual([]);
+  });
+
+  it("takes an org that could not be handed over, because it is solo after all", () => {
+    // The second window: ownedOrgsForDeletion saw a teammate, they left, and
+    // the promote found nobody. Returning only the solo list here leaves this
+    // org with zero members and no owner once the cascade runs.
+    expect(orgsForTeardown(["solo"], [{ orgId: "orphaned", handedOver: false }])).toEqual([
+      "solo",
+      "orphaned",
+    ]);
   });
 });
