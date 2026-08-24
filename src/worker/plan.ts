@@ -289,7 +289,8 @@ export async function keepAddressForeverWithinLimit(
 
 /**
  * Inserts a domain row honoring the org's `domains` cap atomically: only
- * writes if the org is still under its cap at write time.
+ * writes if the org is still under its cap and is not being torn down at
+ * write time.
  */
 export async function insertDomainWithinLimit(
   env: Env,
@@ -301,7 +302,8 @@ export async function insertDomainWithinLimit(
     `insert into domains
        (id, org_id, hostname, status, status_reason, root_redirect, cf_hostname_id, created_at)
      select ?, ?, ?, ?, ?, ?, ?, ?
-     where (select count(*) from domains where org_id = ?) < ?`,
+     where (select count(*) from domains where org_id = ?) < ?
+       ${NOT_DELETING}`,
     [
       row.id,
       row.orgId,
@@ -313,6 +315,7 @@ export async function insertDomainWithinLimit(
       row.createdAt,
       row.orgId,
       domainLimit,
+      row.orgId,
     ],
   );
 }

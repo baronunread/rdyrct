@@ -88,3 +88,14 @@ async function orgState(
 export async function orgDeleting(db: DB, orgId: string): Promise<boolean> {
   return (await orgState(db, orgId)).deletingAt != null;
 }
+
+/** An upload can outlive the route middleware's state read. Re-check after
+ * the R2 write so teardown cannot leave an object behind after deleting the
+ * org's prefix. A missing org is no longer writable either. */
+export async function orgPresentAndNotDeleting(db: DB, orgId: string): Promise<boolean> {
+  const rows = await db
+    .select({ deletingAt: schema.orgs.deletingAt })
+    .from(schema.orgs)
+    .where(eq(schema.orgs.id, orgId));
+  return rows[0]?.deletingAt === null;
+}

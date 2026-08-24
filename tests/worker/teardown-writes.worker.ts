@@ -19,10 +19,12 @@ import { and, eq } from "drizzle-orm";
 import {
   guardedTempAliasStatement,
   insertAddressWithinLimit,
+  insertDomainWithinLimit,
   insertLinkWithinLimit,
   notDeletingSql,
   toD1Statement,
 } from "../../src/worker/plan";
+import { putQrLogoIfOrgWritable } from "../../src/worker/routes/qr-logos";
 import { applyTestMigrations, testEnv } from "./support";
 
 const ORG = "org-teardown";
@@ -49,6 +51,11 @@ const linkCount = async (): Promise<number> =>
   (await env.DB.prepare("select count(*) as n from links where org_id = ?").bind(ORG).first<{
     n: number;
   }>())!.n;
+
+const domainCount = async (): Promise<number> =>
+  (await env.DB.prepare("select count(*) as n from domains where org_id = ?")
+    .bind(ORG)
+    .first<{ n: number }>())!.n;
 
 function linkRow(id: string) {
   return { id, orgId: ORG, slug: id, destination: "https://example.com", createdAt: Date.now() };
@@ -138,6 +145,46 @@ describe("adding an address to an existing link while the org is tearing down", 
     );
     expect(wrote).toBe(true);
     expect(await addressCount()).toBe(2);
+  });
+});
+
+describe("creating a domain while the org is tearing down", () => {
+  const domainRow = (id: string) => ({
+    id,
+    orgId: ORG,
+    hostname: `${id}.example.com`,
+    createdAt: Date.now(),
+  });
+
+  it("refuses the row after teardown has started", async () => {
+    await markDeleting();
+
+    expect(await insertDomainWithinLimit(testEnv, domainRow("gone"), LIMIT)).toBe(false);
+    expect(await domainCount()).toBe(0);
+  });
+
+  it("still writes before teardown starts", async () => {
+    expect(await insertDomainWithinLimit(testEnv, domainRow("kept"), LIMIT)).toBe(true);
+    expect(await domainCount()).toBe(1);
+  });
+});
+
+describe("uploading a QR logo while the org is tearing down", () => {
+  it("removes the object written after teardown started", async () => {
+    await markDeleting();
+    const key = `${ORG}/late.webp`;
+
+    expect(
+      await putQrLogoIfOrgWritable(
+        drizzle(env.DB, { schema }),
+        env.QR_LOGOS,
+        ORG,
+        key,
+        new Uint8Array([1, 2, 3]).buffer,
+        "image/webp",
+      ),
+    ).toBe(false);
+    expect(await env.QR_LOGOS.head(key)).toBeNull();
   });
 });
 
