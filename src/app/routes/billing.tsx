@@ -14,7 +14,7 @@ import {
 } from "../lib/hooks";
 import { shortDate } from "../lib/dates";
 import { useCurrentOrg } from "../lib/current-org";
-import { PLAN_LIMITS, PLAN_PRICES, type OrgPlan } from "@/shared/types";
+import { PLAN_LIMITS, PLAN_PRICES, type OrgPlan, type PlanLimits } from "@/shared/types";
 import { Button } from "../ui/button";
 import { Badge, Card, PageHeader, Table, Th, Td } from "../ui/misc";
 import { BusyContent } from "../ui/spinner";
@@ -23,28 +23,67 @@ import { useShake } from "../lib/use-shake";
 import { showsCancelNotice, showsConfirmingNotice } from "../lib/plan-status-notes";
 import { useToast } from "../ui/toast";
 import posthog from "../lib/posthog";
+import { shouldOfferFirstLink } from "../lib/billing-page";
 
 /** The three shake handles the page owns, one per button it can bounce. */
 type Shake = Record<"hobby" | "pro" | "portal", ReturnType<typeof useShake>>;
+
+type PlanActionSnapshot = {
+  plan: OrgPlan;
+  hasBillingAccount: boolean;
+  comped: boolean;
+  checkoutPlan: "hobby" | "pro" | null;
+  showPortalOverlay: boolean;
+  confirmTimedOut: boolean;
+  cancelAtPeriodEnd: boolean;
+  periodEnd: number | null;
+};
+
+type PlanActionCommands = {
+  shake: Shake;
+  onUpgrade: (target: "hobby" | "pro") => void;
+  onPortal: () => void;
+};
+
+type UsageSnapshot = {
+  plan: OrgPlan;
+  org: { id: string; name: string; plan: OrgPlan } | null;
+  linkQuotaCount: number | undefined;
+  memberCount: number;
+  domainCount: number;
+  ownedOrgs: number;
+  loading: boolean;
+};
+
+type PortalState = {
+  plan: OrgPlan;
+  cancelAtPeriodEnd: boolean;
+  periodEnd: number | null;
+};
 
 const PORTAL_SNAPSHOT_KEY = "billing:portal-snapshot";
 
 /** Everything the subscription portal can change, as one comparable string:
  * the plan, whether a cancel is scheduled, and when the period ends. Enough
  * to tell "the webhook has landed" from "it has not landed yet". */
-function billingSnapshot(user?: {
+function portalState(user?: {
   plan: OrgPlan;
   polarSubscriptionCancelAtPeriodEnd?: boolean;
   polarSubscriptionCurrentPeriodEnd?: number | null;
-}) {
+}): PortalState {
+  if (!user) return { plan: "free", cancelAtPeriodEnd: false, periodEnd: null };
+  return {
+    plan: user.plan,
+    cancelAtPeriodEnd: user.polarSubscriptionCancelAtPeriodEnd ?? false,
+    periodEnd: user.polarSubscriptionCurrentPeriodEnd ?? null,
+  };
+}
+
+function billingSnapshot(state: PortalState) {
   // JSON, not join: a join renders null as an empty string, so "no period
   // end" and "period end of ''" would compare equal and the wait would end
   // on a change that never happened.
-  return JSON.stringify([
-    user?.plan ?? "free",
-    user?.polarSubscriptionCancelAtPeriodEnd ?? false,
-    user?.polarSubscriptionCurrentPeriodEnd ?? null,
-  ]);
+  return JSON.stringify([state.plan, state.cancelAtPeriodEnd, state.periodEnd]);
 }
 
 const PLAN_LABEL = {
@@ -262,97 +301,74 @@ function NoBillingAccountNote({ plan, comped }: { plan: OrgPlan; comped: boolean
  * button on a paid plan that has an account, and an explanation when it does
  * not. */
 function PlanActionControl({
-  plan,
-  hasBillingAccount,
-  comped,
-  checkoutPlan,
-  showPortalOverlay,
-  shake,
-  onUpgrade,
-  onPortal,
+  snapshot,
+  commands,
 }: {
-  plan: OrgPlan;
-  hasBillingAccount: boolean;
-  comped: boolean;
-  checkoutPlan: "hobby" | "pro" | null;
-  showPortalOverlay: boolean;
-  shake: Shake;
-  onUpgrade: (target: "hobby" | "pro") => void;
-  onPortal: () => void;
+  snapshot: PlanActionSnapshot;
+  commands: PlanActionCommands;
 }) {
-  if (plan === "free")
-    return <FreeUpgradeButtons checkoutPlan={checkoutPlan} shake={shake} onUpgrade={onUpgrade} />;
-  if (!hasBillingAccount) return <NoBillingAccountNote plan={plan} comped={comped} />;
+  if (snapshot.plan === "free")
+    return (
+      <FreeUpgradeButtons
+        checkoutPlan={snapshot.checkoutPlan}
+        shake={commands.shake}
+        onUpgrade={commands.onUpgrade}
+      />
+    );
+  if (!snapshot.hasBillingAccount)
+    return <NoBillingAccountNote plan={snapshot.plan} comped={snapshot.comped} />;
   return (
     <ManageSubscriptionButton
-      showPortalOverlay={showPortalOverlay}
-      shake={shake}
-      onPortal={onPortal}
+      showPortalOverlay={snapshot.showPortalOverlay}
+      shake={commands.shake}
+      onPortal={commands.onPortal}
     />
   );
 }
 
+function PlanComparison({ plan }: { plan: OrgPlan }) {
+  return plan === "free" ? <PlanFeatureComparison /> : null;
+}
+
+function HobbyUpgradeHint({ snapshot }: { snapshot: PlanActionSnapshot }) {
+  if (snapshot.plan !== "hobby" || !snapshot.hasBillingAccount || snapshot.comped) return null;
+  return (
+    <p className="mt-2 text-xs text-muted">Want Pro? Switch plans from the subscription portal.</p>
+  );
+}
+
 function PlanActions({
-  plan,
-  hasBillingAccount,
-  comped,
-  checkoutPlan,
-  showPortalOverlay,
-  confirmTimedOut,
-  cancelAtPeriodEnd,
-  periodEnd,
-  shake,
-  onUpgrade,
-  onPortal,
+  snapshot,
+  commands,
 }: {
-  plan: OrgPlan;
-  hasBillingAccount: boolean;
-  comped: boolean;
-  checkoutPlan: "hobby" | "pro" | null;
-  showPortalOverlay: boolean;
-  confirmTimedOut: boolean;
-  cancelAtPeriodEnd: boolean;
-  periodEnd: number | null;
-  shake: Shake;
-  onUpgrade: (target: "hobby" | "pro") => void;
-  onPortal: () => void;
+  snapshot: PlanActionSnapshot;
+  commands: PlanActionCommands;
 }) {
   return (
     <Card className="max-w-2xl">
       <div className="flex flex-col gap-4">
         <div className="flex items-center justify-between">
           <p className="text-xs font-medium text-muted">Plan</p>
-          <Badge color={plan === "free" ? "muted" : "mint"}>{PLAN_LABEL[plan]}</Badge>
+          <Badge color={snapshot.plan === "free" ? "muted" : "mint"}>
+            {PLAN_LABEL[snapshot.plan]}
+          </Badge>
         </div>
         <p className="text-sm text-muted">
           Billing is per account: your plan applies to every organization you own.
         </p>
         <PlanStatusNotes
-          plan={plan}
-          comped={comped}
-          cancelAtPeriodEnd={cancelAtPeriodEnd}
-          periodEnd={periodEnd}
-          confirmTimedOut={confirmTimedOut}
+          plan={snapshot.plan}
+          comped={snapshot.comped}
+          cancelAtPeriodEnd={snapshot.cancelAtPeriodEnd}
+          periodEnd={snapshot.periodEnd}
+          confirmTimedOut={snapshot.confirmTimedOut}
         />
-        {plan === "free" && <PlanFeatureComparison />}
+        <PlanComparison plan={snapshot.plan} />
         <div>
-          <PlanActionControl
-            plan={plan}
-            hasBillingAccount={hasBillingAccount}
-            comped={comped}
-            checkoutPlan={checkoutPlan}
-            showPortalOverlay={showPortalOverlay}
-            shake={shake}
-            onUpgrade={onUpgrade}
-            onPortal={onPortal}
-          />
+          <PlanActionControl snapshot={snapshot} commands={commands} />
           {/* Not for a comped Hobby: the portal changes the subscription, and
               the comp would still outrank whatever it changed to. */}
-          {plan === "hobby" && hasBillingAccount && !comped && (
-            <p className="mt-2 text-xs text-muted">
-              Want Pro? Switch plans from the subscription portal.
-            </p>
-          )}
+          <HobbyUpgradeHint snapshot={snapshot} />
         </div>
       </div>
     </Card>
@@ -387,44 +403,30 @@ function UsageMeterSkeleton() {
   );
 }
 
-function UsageMeter({
-  plan,
-  org,
-  linkQuotaCount,
-  memberData,
-  domainData,
-  ownedOrgs,
-  linksPending,
-  membersPending,
-  domainsPending,
-}: {
-  plan: OrgPlan;
-  org: { id: string; name: string; plan: OrgPlan } | null;
-  linkQuotaCount: number;
-  memberData: unknown[];
-  domainData: unknown[];
-  ownedOrgs: number;
-  linksPending: boolean;
-  membersPending: boolean;
-  domainsPending: boolean;
-}) {
-  if (!org) return null;
-  const loading = linksPending || membersPending || domainsPending;
-  const limits = PLAN_LIMITS[org.plan];
+function UsageRows({ snapshot, limits }: { snapshot: UsageSnapshot; limits: PlanLimits }) {
+  if (snapshot.loading) return <UsageMeterSkeleton />;
+  return (
+    <>
+      <UsageLine label="Links" count={snapshot.linkQuotaCount ?? 0} limit={limits.links} />
+      <UsageLine label="Members" count={snapshot.memberCount} limit={limits.members} />
+      <UsageLine label="Domains" count={snapshot.domainCount} limit={limits.domains} />
+    </>
+  );
+}
+
+function UsageMeter({ snapshot }: { snapshot: UsageSnapshot }) {
+  if (!snapshot.org) return null;
+  const limits = PLAN_LIMITS[snapshot.org.plan];
   return (
     <Card className="max-w-2xl">
       <div className="flex flex-col gap-1">
-        <p className="mb-2 text-xs font-medium text-muted">Usage: {org.name}</p>
-        {loading ? (
-          <UsageMeterSkeleton />
-        ) : (
-          <>
-            <UsageLine label="Links" count={linkQuotaCount} limit={limits.links} />
-            <UsageLine label="Members" count={memberData.length} limit={limits.members} />
-            <UsageLine label="Domains" count={domainData.length} limit={limits.domains} />
-          </>
-        )}
-        <UsageLine label="Orgs you own" count={ownedOrgs} limit={PLAN_LIMITS[plan].orgs} />
+        <p className="mb-2 text-xs font-medium text-muted">Usage: {snapshot.org.name}</p>
+        <UsageRows snapshot={snapshot} limits={limits} />
+        <UsageLine
+          label="Orgs you own"
+          count={snapshot.ownedOrgs}
+          limit={PLAN_LIMITS[snapshot.plan].orgs}
+        />
       </div>
     </Card>
   );
@@ -670,7 +672,10 @@ function useCheckoutFlow() {
       // Remembered across the trip to Polar, so the return can tell whether
       // the webhook has landed yet. sessionStorage because the browser back
       // button is the only way back and nothing survives that in memory.
-      sessionStorage.setItem(PORTAL_SNAPSHOT_KEY, billingSnapshot(currentUser.data?.user));
+      sessionStorage.setItem(
+        PORTAL_SNAPSHOT_KEY,
+        billingSnapshot(portalState(currentUser.data?.user)),
+      );
       setTimeout(() => window.location.assign(data.url), 800);
     } catch (e) {
       setShowPortalOverlay(false);
@@ -707,7 +712,7 @@ function useCheckoutFlow() {
   }, [qc, setShowCelebration]);
 
   const plan = currentUser.data?.user.plan ?? "free";
-  const snapshot = billingSnapshot(currentUser.data?.user);
+  const snapshot = billingSnapshot(portalState(currentUser.data?.user));
 
   /**
    * The portal return. Silent, with no overlay: unlike the checkout return,
@@ -811,78 +816,96 @@ function useBillingAccount() {
   };
 }
 
-export function BillingPage() {
+function itemCount(items: readonly unknown[] | undefined): number {
+  return items?.length ?? 0;
+}
+
+function quotaCount(quota: { count: number } | undefined): number | undefined {
+  return quota?.count;
+}
+
+function useBillingUsageSnapshot(plan: OrgPlan, ownedOrgs: number): UsageSnapshot {
   const { org } = useCurrentOrg();
   const orgId = org?.id ?? "";
   const { data: linkQuota, isPending: linksPending } = useLinkQuotaUsage(orgId);
-  const navigate = useNavigate();
   const { data: memberData, isPending: membersPending } = useMembers(orgId);
   const { data: domainData, isPending: domainsPending } = useDomains(orgId);
-  const account = useBillingAccount();
-
-  const {
+  return {
     plan,
-    checkoutPlan,
-    showPortalOverlay,
-    showCelebration,
-    confirming,
-    confirmTimedOut,
-    setShowCelebration,
-    handleUpgrade,
-    handlePortal,
-    shake,
-  } = useCheckoutFlow();
+    org,
+    linkQuotaCount: quotaCount(linkQuota),
+    memberCount: itemCount(memberData),
+    domainCount: itemCount(domainData),
+    ownedOrgs,
+    loading: [linksPending, membersPending, domainsPending].includes(true),
+  };
+}
 
-  const overlay = billingOverlayState(checkoutPlan, showPortalOverlay, confirming);
+function firstLinkAction(
+  usage: UsageSnapshot,
+  dismiss: () => void,
+  navigate: ReturnType<typeof useNavigate>,
+): (() => void) | undefined {
+  if (!shouldOfferFirstLink(usage.org, usage.linkQuotaCount)) return undefined;
+  return () => {
+    dismiss();
+    navigate({ to: "/dashboard" });
+  };
+}
+
+function useBillingPageModel() {
+  const account = useBillingAccount();
+  const flow = useCheckoutFlow();
+  const usage = useBillingUsageSnapshot(flow.plan, account.ownedOrgs);
+  const navigate = useNavigate();
+  const dismissCelebration = () => flow.setShowCelebration(false);
+
+  return {
+    planActions: {
+      snapshot: {
+        plan: flow.plan,
+        hasBillingAccount: account.hasBillingAccount,
+        comped: account.comped,
+        checkoutPlan: flow.checkoutPlan,
+        showPortalOverlay: flow.showPortalOverlay,
+        confirmTimedOut: flow.confirmTimedOut,
+        cancelAtPeriodEnd: account.cancelAtPeriodEnd,
+        periodEnd: account.periodEnd,
+      },
+      commands: {
+        shake: flow.shake,
+        onUpgrade: flow.handleUpgrade,
+        onPortal: flow.handlePortal,
+      },
+    },
+    usage,
+    overlay: billingOverlayState(flow.checkoutPlan, flow.showPortalOverlay, flow.confirming),
+    celebration: {
+      show: flow.showCelebration,
+      plan: flow.plan,
+      onDismiss: dismissCelebration,
+      onFirstLink: firstLinkAction(usage, dismissCelebration, navigate),
+    },
+  };
+}
+
+export function BillingPage() {
+  const model = useBillingPageModel();
 
   return (
     <div>
       <PageHeader title="Billing" sub="Your subscription" />
       <div className="flex flex-col gap-4">
-        <PlanActions
-          plan={plan}
-          hasBillingAccount={account.hasBillingAccount}
-          comped={account.comped}
-          checkoutPlan={checkoutPlan}
-          showPortalOverlay={showPortalOverlay}
-          confirmTimedOut={confirmTimedOut}
-          cancelAtPeriodEnd={account.cancelAtPeriodEnd}
-          periodEnd={account.periodEnd}
-          shake={shake}
-          onUpgrade={handleUpgrade}
-          onPortal={handlePortal}
-        />
-        <UsageMeter
-          plan={plan}
-          org={org}
-          linkQuotaCount={linkQuota?.count ?? 0}
-          memberData={memberData ?? []}
-          domainData={domainData ?? []}
-          ownedOrgs={account.ownedOrgs}
-          linksPending={linksPending}
-          membersPending={membersPending}
-          domainsPending={domainsPending}
-        />
+        <PlanActions {...model.planActions} />
+        <UsageMeter snapshot={model.usage} />
       </div>
 
       <LazyMotion features={domAnimation}>
-        <BillingOverlay show={overlay.show} message={overlay.message} />
-        <CelebrationOverlay
-          show={showCelebration}
-          plan={plan}
-          onDismiss={() => setShowCelebration(false)}
-          onFirstLink={
-            // No org means no quota query, so the count never arrives: an
-            // account that checked out from a landing CTA before it had an
-            // organization is exactly the one this hand-off is for.
-            !org || linkQuota?.count === 0
-              ? () => {
-                  setShowCelebration(false);
-                  navigate({ to: "/dashboard" });
-                }
-              : undefined
-          }
-        />
+        <BillingOverlay {...model.overlay} />
+        {/* No org means no quota query, so the count never arrives: an account
+            that checked out from a landing CTA before it had an organization
+            is exactly the one this hand-off is for. */}
+        <CelebrationOverlay {...model.celebration} />
       </LazyMotion>
     </div>
   );
