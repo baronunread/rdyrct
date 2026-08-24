@@ -108,12 +108,24 @@ fix, what was deliberately not done, and what a reviewer should know at
 release (a route rename means anyone on the old bundle gets errors until they
 reload). List every issue it closes.
 
-### Anything with a face gets screenshots
+### Visually check UI changes; post only visible changes
 
-If the change touches an interface, post the screenshots as a PR comment. Not
-because a PR should be pretty: a screenshot is the only part of a review that
-checks what a person will actually see, and prose describing a screen is the
-easiest thing in a PR body to write convincingly and wrongly.
+If the change can affect an interface, drive the relevant states in the real
+app and confirm that nothing broke. This applies to refactors and backend work
+too: tests can pass while a page is blank, stale, or offering a control the
+server refuses.
+
+Upload and post screenshots only when the PR intentionally changes visible
+output: layout, styling, copy, controls, or a user-facing state. A
+behavior-preserving refactor or backend fix still gets the visual check, but
+the result belongs in the PR's test evidence as a sentence, not as hosted
+images. Review comments should show what changed, not prove that an unchanged
+screen still looks unchanged.
+
+When the PR does change visible output, post the screenshots as a PR comment.
+A screenshot is the only part of a review that checks what a person will
+actually see, and prose describing a changed screen is easy to write
+convincingly and wrongly.
 
 They pay for themselves while you take them. Driving #165's states turned up
 an invite form still offered in an org the server would refuse an invite
@@ -161,7 +173,8 @@ Either way, three things that cost a retake each:
 - Menus and dialogs fade in. Wait for them, and in Playwright pass
   `animations: "disabled"`, or the shot catches them half transparent.
 
-**Host them in R2, never in the repo and never in a side branch.** Both put
+**For screenshots that belong on the PR, host them in R2, never in the repo
+and never in a side branch.** Both put
 binaries in git history for a comment, and pushing an orphan branch to serve
 images is using GitHub as a CDN it did not offer to be:
 
@@ -245,12 +258,13 @@ Squash, delete the branch, sync `main`. Only when CI is green **and** both
 reviews are genuinely clean. Confirm the checks ran against the head commit,
 not an earlier push.
 
-Before that, walk the issues the PR closes and check each one has its
-evidence: a test that would fail without it, and a screenshot if it has a
-face. Asked whether #165 had a screenshot for every new feature, the honest
-answer was no: three surfaces, including the entire first issue in the batch,
-were described in the PR body and shown nowhere. "The PR has screenshots" is
-not the same claim as "each issue has one".
+Before that, walk the issues the PR closes and check each one has its evidence:
+a test that would fail without it, a visual check for anything that can affect
+the interface, and a posted screenshot for every intentional visible change.
+Asked whether #165 had a screenshot for every new user-facing state, the
+honest answer was no: three changed surfaces, including the entire first issue
+in the batch, were described in the PR body and shown nowhere. "The PR has
+screenshots" is not the same claim as "each visible change has one".
 
 Then take the next issue.
 
