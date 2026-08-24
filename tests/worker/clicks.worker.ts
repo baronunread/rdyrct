@@ -363,6 +363,14 @@ describe("sweepDedupeIds (#70)", () => {
     return row?.dedupe_id;
   }
 
+  it("indexes only live dedupe ids, not every swept click", async () => {
+    const index = await env.DB.prepare(
+      "select sql from sqlite_master where type = 'index' and name = 'idx_clicks_dedupe_id'",
+    ).first<{ sql: string }>();
+
+    expect(index?.sql.toLowerCase()).toContain("where dedupe_id is not null");
+  });
+
   it("clears ids past the redelivery window and keeps the recent ones", async () => {
     await seedLink();
     await seedClick(1, 30, "dedupe-old");

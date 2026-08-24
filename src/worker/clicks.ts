@@ -130,7 +130,11 @@ export async function consumeClickBatch(
             dedupeId: m.body.dedupeId,
           })),
         )
-        .onConflictDoNothing({ target: schema.clicks.dedupeId }),
+        // The dedupe constraint is a partial unique index: swept NULL ids are
+        // deliberately absent from it. SQLite cannot match a column-only
+        // conflict target to that index, so let it handle the one applicable
+        // unique conflict without naming a target.
+        .onConflictDoNothing(),
     );
     const writes = nonEmpty(inserts);
     if (writes) await db.batch(writes);
