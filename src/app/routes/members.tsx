@@ -486,7 +486,7 @@ function SeatsFullNotice({
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="max-w-prose text-sm text-muted">
           {over
-            ? `This organization has more members than the ${org.plan} plan allows (${memberLimit}). Nobody was removed, and nobody new can be invited until you upgrade.`
+            ? `This organization has more people or open invites than the ${org.plan} plan allows (${memberLimit}). Nobody was removed. Remove a member or revoke an invite to make room, or upgrade to keep everyone.`
             : `Every seat on the ${org.plan} plan is taken (${memberLimit}, counting open invites). Remove someone, or upgrade to invite more.`}
         </p>
         <HrefLink href="/billing" className={buttonClass({ variant: "outline", size: "sm" })}>
