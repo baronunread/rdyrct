@@ -443,6 +443,6 @@ export const storageOutbox = sqliteTable(
   },
   (t) => [
     uniqueIndex("idx_storage_outbox_target").on(t.op, t.target),
-    index("idx_storage_outbox_created").on(t.createdAt),
+    index("idx_storage_outbox_drain").on(t.attempts, t.createdAt),
   ],
 );

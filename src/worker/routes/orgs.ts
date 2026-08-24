@@ -359,9 +359,14 @@ async function restartIfStalled(env: Env, orgId: string): Promise<boolean> {
     instance = await env.ORG_DELETE.get(orgId);
     ({ status } = await instance.status());
   } catch {
-    // Nothing to read, so nothing is in use and a plain create works.
+    // The lookup failed, which means either no instance or an unreadable one:
+    // Workflows gives no way to tell those apart. createBatch settles it,
+    // because it skips an id already in use and leaves it out of what it
+    // returns. Without reading that, an unreadable live instance was reported
+    // as a restart that never happened.
     try {
-      await env.ORG_DELETE.createBatch([{ id: orgId, params: { orgId } }]);
+      const created = await env.ORG_DELETE.createBatch([{ id: orgId, params: { orgId } }]);
+      if (created.length === 0) return false;
       captureAlert([{ event: "org_delete_restarted", orgId, status: "missing" }]);
       return true;
     } catch {

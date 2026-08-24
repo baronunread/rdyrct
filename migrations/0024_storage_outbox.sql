@@ -29,5 +29,7 @@ CREATE TABLE storage_outbox (
 -- queueing a duplicate drain.
 CREATE UNIQUE INDEX idx_storage_outbox_target ON storage_outbox(op, target);
 
--- The drain reads oldest-first in bounded batches.
-CREATE INDEX idx_storage_outbox_created ON storage_outbox(created_at);
+-- The drain reads in bounded batches, fewest attempts first and oldest
+-- within that, so a row that keeps failing sinks behind fresher work instead
+-- of holding the whole limit.
+CREATE INDEX idx_storage_outbox_drain ON storage_outbox(attempts, created_at);

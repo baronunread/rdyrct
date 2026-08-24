@@ -216,6 +216,43 @@ describe("the daily drain", () => {
     expect(rows[0].attempts).toBe(1);
   });
 
+  it("drains a fresh row even when the limit is full of rows that keep failing", async () => {
+    // The limit is 200. With 200 stuck rows older than this one, ordering by
+    // age alone selected exactly those every pass and the recovery recorded
+    // afterwards never drained at all.
+    await seedLink();
+    const stuck = Array.from({ length: 200 }, (_, i) =>
+      env.DB.prepare(
+        "insert into storage_outbox (id, op, target, reason, created_at, attempts) values (?, 'kv_sync', ?, 'gave_up', ?, 5)",
+      ).bind(`stuck-${i}`, `slug:stuck-${i}`, i),
+    );
+    // Chunked: D1 caps how much one batch may carry.
+    for (let i = 0; i < stuck.length; i += 50) await env.DB.batch(stuck.slice(i, i + 50));
+    await queueOutbox("fresh", `slug:${sampleLink.slug}`);
+    await env.DB.prepare("update storage_outbox set created_at = 9999 where id = 'fresh'").run();
+
+    await drainStorageOutbox(testEnv);
+
+    const left = await env.DB.prepare(
+      "select count(*) as n from storage_outbox where id = 'fresh'",
+    ).first<{ n: number }>();
+    expect(left!.n).toBe(0);
+  });
+
+  it("gives every re-record a new id, so a drain cannot delete a newer request", async () => {
+    const failing = overrideEnv({ STORAGE_QUEUE: brokenQueue() });
+    await enqueueStorage(failing, [syncLinkMsg("abc", null)]).catch(() => {});
+    const first = await env.DB.prepare("select id from storage_outbox").first<{ id: string }>();
+
+    await enqueueStorage(failing, [syncLinkMsg("abc", null)]).catch(() => {});
+    const second = await env.DB.prepare("select id from storage_outbox").first<{ id: string }>();
+
+    // The drain deletes by id after applying, so a request that arrives while
+    // its row is being applied has to stop matching. `last_error` could not do
+    // that: two failures with the same message are indistinguishable.
+    expect(second!.id).not.toBe(first!.id);
+  });
+
   it("does nothing when the outbox is empty", async () => {
     expect(await drainStorageOutbox(testEnv)).toBe(0);
   });

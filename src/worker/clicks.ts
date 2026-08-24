@@ -175,9 +175,19 @@ function clickRow(message: Message<ClickMessage>) {
  * unavailable will. Treating both as "drop it" retried nothing and reported a
  * transient blip as a permanent loss.
  */
-function isDeletedLink(error: Error): boolean {
-  return error.message.includes("FOREIGN KEY constraint failed");
+export function isDeletedLink(error: Error): boolean {
+  // `cause` as well as the message: drizzle wraps a D1 failure in its own
+  // error whose message is the query text, and the constraint that actually
+  // failed is only named on the cause. Reading the top-level message alone
+  // never matched, so every failure looked transient.
+  return (
+    hasForeignKeyFailure(error) ||
+    (error.cause instanceof Error && hasForeignKeyFailure(error.cause))
+  );
 }
+
+const hasForeignKeyFailure = (error: Error): boolean =>
+  error.message.includes("FOREIGN KEY constraint failed");
 
 /**
  * The last delivery, one row at a time, so one unwritable click cannot take
@@ -218,10 +228,13 @@ async function salvageClickBatch(
     outcomes.flatMap((o) => (o === null ? [] : [[o.message, o.unwritable] as const])),
   );
   const stored = batch.messages.length - failures.size;
-  if (stored === 0) {
-    // Nothing wrote at all, so this is the database rather than one deleted
-    // link. Retrying keeps that path exactly as it was, dead-letter log
-    // included, instead of silently acking clicks D1 never saw.
+  // Nothing wrote, and no failure was a deleted link: the database is what
+  // went wrong, so the whole batch retries, dead-letter log included, rather
+  // than silently acking clicks D1 never saw. Asking about the failures
+  // rather than about `stored` matters for a batch whose messages all name
+  // one busy link that was just deleted: that is not an outage, and those
+  // clicks should be acked and counted like any other.
+  if (stored === 0 && [...failures.values()].every((unwritable) => !unwritable)) {
     console.error("click_batch_dead_letter", batch.messages.length);
     batch.retryAll();
     return;

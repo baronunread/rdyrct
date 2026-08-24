@@ -242,7 +242,7 @@ describe("sweepStalledOrgDeletions", () => {
   const HOUR = 60 * 60 * 1000;
 
   /** A workflow whose instance reports `status` and records restarts. */
-  function stalledWorkflow(status?: InstanceStatus["status"]) {
+  function stalledWorkflow(status?: InstanceStatus["status"], skipCreate = false) {
     const restarts: string[] = [];
     const created: string[] = [];
     const binding: Env["ORG_DELETE"] = {
@@ -261,8 +261,12 @@ describe("sweepStalledOrgDeletions", () => {
         });
       },
       async createBatch(batch) {
+        // Modelling the documented contract: an id already in use is skipped
+        // and left out of what comes back. `skipCreate` is what an instance
+        // that exists but could not be read looks like from here.
+        if (skipCreate) return [];
         created.push(...batch.map((entry) => entry.id ?? ""));
-        return [];
+        return batch.map(() => instanceReporting("running"));
       },
       async deleteBatch() {
         throw new Error("the sweep never deletes a batch");
@@ -280,8 +284,12 @@ describe("sweepStalledOrgDeletions", () => {
   }
 
   /** One sweep against a workflow reporting `status`, and everything it did. */
-  async function sweep(db: Awaited<ReturnType<typeof seedOrg>>, status?: InstanceStatus["status"]) {
-    const { binding, restarts, created } = stalledWorkflow(status);
+  async function sweep(
+    db: Awaited<ReturnType<typeof seedOrg>>,
+    status?: InstanceStatus["status"],
+    skipCreate = false,
+  ) {
+    const { binding, restarts, created } = stalledWorkflow(status, skipCreate);
     const count = await sweepStalledOrgDeletions(db, overrideEnv({ ORG_DELETE: binding }));
     return { count, restarts, created };
   }
@@ -332,5 +340,35 @@ describe("sweepStalledOrgDeletions", () => {
 
     expect(await sweepStalledOrgDeletions(db, overrideEnv({ ORG_DELETE: binding }))).toBe(0);
     expect(restarts).toEqual([]);
+  });
+});
+
+describe("sweepStalledOrgDeletions: reporting", () => {
+  const HOUR = 60 * 60 * 1000;
+
+  it("counts nothing when the instance was unreadable but is in fact still in use", async () => {
+    const db = await seedOrg();
+    await env.DB.prepare("update orgs set deleting_at = ? where id = 'org-1'")
+      .bind(Date.now() - 2 * HOUR)
+      .run();
+    // get() throws for a missing instance and an unreadable one alike, so the
+    // create is what settles it: an id already in use is skipped and comes
+    // back absent. Reporting a restart on that is a false signal.
+    const binding: Env["ORG_DELETE"] = {
+      async create() {
+        throw new Error("the sweep restarts, it does not create");
+      },
+      async get() {
+        throw new Error("lookup failed");
+      },
+      async createBatch() {
+        return [];
+      },
+      async deleteBatch() {
+        throw new Error("the sweep never deletes a batch");
+      },
+    };
+
+    expect(await sweepStalledOrgDeletions(db, overrideEnv({ ORG_DELETE: binding }))).toBe(0);
   });
 });

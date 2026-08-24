@@ -127,10 +127,11 @@ async function recordOutbox(
 ): Promise<boolean> {
   const now = Date.now();
   try {
-    // `created_at` is deliberately not updated on conflict: the drain reads
-    // oldest first with a cap, so refreshing it would let one repeatedly
-    // failing key push itself to the back of the queue forever and starve
-    // rows behind it.
+    // Neither `created_at` nor `attempts` is reset on conflict. Both are how
+    // the drain decides what to read, and a key that fails a send daily and
+    // fails its drain daily would otherwise look brand new every time: never
+    // sinking behind fresher work, and never accumulating the attempts that
+    // make a permanently broken row findable.
     await env.DB.batch(
       messages.map((message) =>
         env.DB.prepare(
@@ -139,7 +140,6 @@ async function recordOutbox(
            on conflict (op, target) do update set
              id = excluded.id,
              reason = excluded.reason,
-             attempts = 0,
              last_error = excluded.last_error`,
         ).bind(uid(), message.op, targetOf(message), reason, now, detail),
       ),

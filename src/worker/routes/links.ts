@@ -7,7 +7,7 @@ import { HTTPException } from "hono/http-exception";
 import { eq, and, desc, isNull, sql } from "drizzle-orm";
 import * as schema from "../db/schema";
 import type { AppEnv, DB, Env } from "../env";
-import { requireOrgRole } from "../org-role";
+import { orgDeleting, requireOrgRole } from "../org-role";
 import { deleteQrLogoMsg, enqueueStorage, syncLinkMsg } from "../storage";
 import {
   orgPlan,
@@ -188,11 +188,7 @@ async function insertAddressAndRespond(
  * on a path that has already failed.
  */
 async function refuseAddressInsert(db: DB, orgId: string): Promise<never> {
-  const rows = await db
-    .select({ deletingAt: schema.orgs.deletingAt })
-    .from(schema.orgs)
-    .where(eq(schema.orgs.id, orgId));
-  if (rows[0]?.deletingAt != null)
+  if (await orgDeleting(db, orgId))
     throw new HTTPException(409, { message: "Organization is being deleted" });
   throw new HTTPException(402, {
     message: "Upgrade your plan to create more links",

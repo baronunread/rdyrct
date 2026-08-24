@@ -81,3 +81,10 @@ async function orgState(
     .where(eq(schema.orgs.id, orgId));
   return rows[0] ?? { deletingAt: null, lockedAt: null };
 }
+
+/** The statement-level link guards need to distinguish teardown from a cap
+ * refusal after the insert writes nothing. Reuse the same state read as the
+ * route middleware so locked and deleting behavior cannot drift. */
+export async function orgDeleting(db: DB, orgId: string): Promise<boolean> {
+  return (await orgState(db, orgId)).deletingAt != null;
+}
