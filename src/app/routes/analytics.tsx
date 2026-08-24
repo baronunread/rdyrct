@@ -2,7 +2,13 @@ import { useState } from "react";
 import { useStats, useCurrentUser } from "../lib/hooks";
 import { useCurrentOrg } from "../lib/current-org";
 import { clicksByWeekday } from "../lib/click-buckets";
-import { PLAN_LIMITS, type HeatmapRow, type OrgStats, type SeriesPoint } from "@/shared/types";
+import {
+  PLAN_LIMITS,
+  type HeatmapRow,
+  type OrgStats,
+  type SeriesPoint,
+  type UserOrg,
+} from "@/shared/types";
 import {
   AreaChart,
   BarList,
@@ -233,14 +239,10 @@ function AnalyticsReport({
   );
 }
 
-export function Analytics() {
-  const { org } = useCurrentOrg();
-  const currentUser = useCurrentUser();
+function AnalyticsForOrg({ org }: { org: UserOrg }) {
   const [range, setRange] = useState<AnalyticsRange>({});
-  const stats = useStats(org?.id ?? "", range.days, range.bucket);
+  const stats = useStats(org.id, range.days, range.bucket);
 
-  if (currentUser.isLoading) return <AnalyticsSkeleton />;
-  if (!org) return <NoOrgState />;
   if (stats.isLoading) return <AnalyticsSkeleton />;
   if (!stats.data) return <p className="text-sm text-danger">Could not load stats.</p>;
   return (
@@ -251,4 +253,13 @@ export function Analytics() {
       onRangeChange={setRange}
     />
   );
+}
+
+export function Analytics() {
+  const { org } = useCurrentOrg();
+  const currentUser = useCurrentUser();
+
+  if (currentUser.isLoading) return <AnalyticsSkeleton />;
+  if (!org) return <NoOrgState />;
+  return <AnalyticsForOrg org={org} />;
 }
