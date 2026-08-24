@@ -34,7 +34,7 @@ test("new links start on the org's default domain, with the slug field unlocked 
   await page.goto("/domains");
   await page.getByRole("button", { name: `Default new links to ${hostname}` }).click();
   await expect(page.getByText(`New links will use ${hostname}`)).toBeVisible();
-  await expect(page.getByText("default", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: `Stop defaulting to ${hostname}` })).toBeVisible();
 
   // After: the domain is preselected and the slug can be typed.
   const editor = await openNewLinkDialog(page);

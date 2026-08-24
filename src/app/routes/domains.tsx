@@ -21,6 +21,7 @@ import { LockedPanel } from "../components/over-limit";
 import { domainsBlockedBy } from "../lib/org-limits";
 import { graceLabel, graceRunning } from "../lib/grace";
 import { CopyButton } from "../ui/copy-button";
+import { Tooltip } from "../ui/tooltip";
 import { useToast } from "../ui/toast";
 import { cn } from "../ui/cn";
 import { copyToClipboard } from "../lib/clipboard";
@@ -435,7 +436,7 @@ function DomainStatusBadge({
   const { initial, exit, duration } = statusSlideVariants(document.visibilityState === "visible");
   return (
     <>
-      <AnimatePresence mode="popLayout">
+      <AnimatePresence initial={false} mode="popLayout">
         <m.span
           key={d.status}
           initial={initial}
@@ -473,14 +474,15 @@ function DefaultDomainButton({
   onToggle: () => void;
 }) {
   if (d.status !== "active") return null;
+  const label = isDefault
+    ? `Stop defaulting to ${d.hostname}`
+    : `Default new links to ${d.hostname}`;
   return (
-    <IconButton
-      label={isDefault ? `Stop defaulting to ${d.hostname}` : `Default new links to ${d.hostname}`}
-      disabled={pending}
-      onClick={onToggle}
-    >
-      <Star size={14} className={isDefault ? "fill-accent text-accent" : ""} />
-    </IconButton>
+    <Tooltip content={label}>
+      <IconButton label={label} title={undefined} disabled={pending} onClick={onToggle}>
+        <Star size={14} className={isDefault ? "fill-accent text-accent" : ""} />
+      </IconButton>
+    </Tooltip>
   );
 }
 
@@ -600,27 +602,20 @@ function DomainList({
 function DomainRowActions({
   domain: d,
   locked,
-  isDefault,
   refreshing,
-  savingDefault,
   canWrite,
   onRecheck,
-  onToggleDefault,
   onDelete,
 }: {
   domain: DomainDTO;
   locked: boolean;
-  isDefault: boolean;
   refreshing: boolean;
-  savingDefault: boolean;
   canWrite: boolean;
   onRecheck: () => void;
-  onToggleDefault: () => void;
   onDelete: () => void;
 }) {
   return (
     <div className="relative flex items-center gap-1">
-      {isDefault && !locked && <Badge color="mint">default</Badge>}
       {locked ? (
         <Badge color="butter">locked</Badge>
       ) : (
@@ -628,14 +623,6 @@ function DomainRowActions({
           {/* The status and its re-check are reads, so they stay in a locked
               org. Only the two controls that write are hidden. */}
           <DomainStatusBadge domain={d} refreshing={refreshing} onRecheck={onRecheck} />
-          {canWrite && (
-            <DefaultDomainButton
-              domain={d}
-              isDefault={isDefault}
-              pending={savingDefault}
-              onToggle={onToggleDefault}
-            />
-          )}
         </>
       )}
       {canWrite && (
@@ -685,16 +672,23 @@ function DomainRow({
   return (
     <div className="rounded-lg border border-border p-3">
       <div className="flex items-center justify-between gap-2">
-        <span className="font-bold">{d.hostname}</span>
+        <div className="flex min-w-0 items-center gap-1">
+          {canWrite && !locked && (
+            <DefaultDomainButton
+              domain={d}
+              isDefault={isDefault}
+              pending={savingDefault}
+              onToggle={onToggleDefault}
+            />
+          )}
+          <span className="truncate font-bold">{d.hostname}</span>
+        </div>
         <DomainRowActions
           domain={d}
           locked={locked}
-          isDefault={isDefault}
           refreshing={refreshing}
-          savingDefault={savingDefault}
           canWrite={canWrite}
           onRecheck={onRecheck}
-          onToggleDefault={onToggleDefault}
           onDelete={onDelete}
         />
       </div>

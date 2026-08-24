@@ -586,7 +586,7 @@ function SettingsSkeleton() {
 }
 
 /** /links/:slug: header, the clicks chart, and the addresses table. */
-function LinkDetailSkeleton() {
+export function LinkDetailSkeleton() {
   return (
     <SkeletonStatus>
       <HeaderSkeleton action={{ w: "w-40" }} />
