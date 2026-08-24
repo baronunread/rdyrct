@@ -23,6 +23,7 @@ import { useShake } from "../lib/use-shake";
 import { showsCancelNotice, showsConfirmingNotice } from "../lib/plan-status-notes";
 import { useToast } from "../ui/toast";
 import posthog from "../lib/posthog";
+import { shouldOfferFirstLink } from "../lib/billing-page";
 
 /** The three shake handles the page owns, one per button it can bounce. */
 type Shake = Record<"hobby" | "pro" | "portal", ReturnType<typeof useShake>>;
@@ -850,14 +851,6 @@ function firstLinkAction(
     dismiss();
     navigate({ to: "/dashboard" });
   };
-}
-
-export function shouldOfferFirstLink(
-  org: UsageSnapshot["org"],
-  linkQuotaCount: number | undefined,
-): boolean {
-  if (!org) return true;
-  return linkQuotaCount === 0;
 }
 
 function useBillingPageModel() {

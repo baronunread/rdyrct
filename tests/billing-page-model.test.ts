@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { shouldOfferFirstLink } from "../src/app/routes/billing";
+import { shouldOfferFirstLink } from "../src/app/lib/billing-page";
 
 const org = { id: "org-1", name: "Acme", plan: "free" as const };
 
