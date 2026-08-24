@@ -47,7 +47,7 @@ type PlanActionCommands = {
 type UsageSnapshot = {
   plan: OrgPlan;
   org: { id: string; name: string; plan: OrgPlan } | null;
-  linkQuotaCount: number;
+  linkQuotaCount: number | undefined;
   memberCount: number;
   domainCount: number;
   ownedOrgs: number;
@@ -406,7 +406,7 @@ function UsageRows({ snapshot, limits }: { snapshot: UsageSnapshot; limits: Plan
   if (snapshot.loading) return <UsageMeterSkeleton />;
   return (
     <>
-      <UsageLine label="Links" count={snapshot.linkQuotaCount} limit={limits.links} />
+      <UsageLine label="Links" count={snapshot.linkQuotaCount ?? 0} limit={limits.links} />
       <UsageLine label="Members" count={snapshot.memberCount} limit={limits.members} />
       <UsageLine label="Domains" count={snapshot.domainCount} limit={limits.domains} />
     </>
@@ -819,8 +819,8 @@ function itemCount(items: readonly unknown[] | undefined): number {
   return items?.length ?? 0;
 }
 
-function quotaCount(quota: { count: number } | undefined): number {
-  return quota?.count ?? 0;
+function quotaCount(quota: { count: number } | undefined): number | undefined {
+  return quota?.count;
 }
 
 function useBillingUsageSnapshot(plan: OrgPlan, ownedOrgs: number): UsageSnapshot {
@@ -845,11 +845,19 @@ function firstLinkAction(
   dismiss: () => void,
   navigate: ReturnType<typeof useNavigate>,
 ): (() => void) | undefined {
-  if (usage.org && usage.linkQuotaCount !== 0) return undefined;
+  if (!shouldOfferFirstLink(usage.org, usage.linkQuotaCount)) return undefined;
   return () => {
     dismiss();
     navigate({ to: "/dashboard" });
   };
+}
+
+export function shouldOfferFirstLink(
+  org: UsageSnapshot["org"],
+  linkQuotaCount: number | undefined,
+): boolean {
+  if (!org) return true;
+  return linkQuotaCount === 0;
 }
 
 function useBillingPageModel() {
