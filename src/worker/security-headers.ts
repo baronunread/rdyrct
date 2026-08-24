@@ -18,8 +18,12 @@
  * Allowing the ingest calls but not the script left exception capture dead in
  * production while every test stayed green, because the dev server never
  * loads PostHog. Covered now by tests/e2e/production/csp.pw.ts.
+ *
+ * The stats script loads from stats.brnr.dev and sends its page views back to
+ * the same host, so it needs both script-src and connect-src too.
  */
 const POSTHOG = "https://*.posthog.com";
+const STATS = "https://stats.brnr.dev";
 
 /**
  * The theme bootstrap in index.html, allowed by its own sha256 rather than
@@ -61,8 +65,8 @@ const THEME_INIT_HASH = "'sha256-TNM/fq1Z4NFEZtsFlN0od8OC66zTGO+lKXWuYpFqhdg='";
 // path on the phones that need it most, and grants nothing else. The module
 // itself is a same-origin Vite asset, never a CDN.
 const SCRIPT_SRC = import.meta.env.DEV
-  ? `script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' ${POSTHOG}`
-  : `script-src 'self' ${THEME_INIT_HASH} 'wasm-unsafe-eval' ${POSTHOG}`;
+  ? `script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' ${POSTHOG} ${STATS}`
+  : `script-src 'self' ${THEME_INIT_HASH} 'wasm-unsafe-eval' ${POSTHOG} ${STATS}`;
 
 const CSP = [
   "default-src 'self'",
@@ -78,7 +82,7 @@ const CSP = [
   // that a script which already ran could spawn a worker from a string it
   // built, which script-src 'self' still gates on getting there first.
   "worker-src 'self' blob:",
-  `connect-src 'self' ${POSTHOG}`,
+  `connect-src 'self' ${POSTHOG} ${STATS}`,
   "object-src 'none'",
   "base-uri 'self'",
   "form-action 'self'",

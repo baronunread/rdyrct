@@ -34,7 +34,11 @@ test("the built worker serves the production CSP", async ({ page }) => {
   // no 'unsafe-inline', which is the whole point of naming it by hash.
   const scriptSrc = csp?.split(";").find((part) => part.trim().startsWith("script-src"));
   expect(scriptSrc?.trim()).toBe(
-    "script-src 'self' 'sha256-TNM/fq1Z4NFEZtsFlN0od8OC66zTGO+lKXWuYpFqhdg=' 'wasm-unsafe-eval' https://*.posthog.com",
+    "script-src 'self' 'sha256-TNM/fq1Z4NFEZtsFlN0od8OC66zTGO+lKXWuYpFqhdg=' 'wasm-unsafe-eval' https://*.posthog.com https://stats.brnr.dev",
+  );
+  const connectSrc = csp?.split(";").find((part) => part.trim().startsWith("connect-src"));
+  expect(connectSrc?.trim()).toBe(
+    "connect-src 'self' https://*.posthog.com https://stats.brnr.dev",
   );
 });
 
@@ -145,4 +149,19 @@ test("the production CSP permits the scripts PostHog fetches at runtime", async 
   );
 
   expect(blocked).toBe(false);
+});
+
+test("the production CSP permits the stats script", async ({ page }) => {
+  await page.goto("/");
+
+  const script = page.locator(
+    'head script[defer][data-domain="rdyrct.com"][src="https://stats.brnr.dev/js/iTRzwgi-WKuVLgQ6WxxBhRYs.js"]',
+  );
+  await expect(script).toHaveCount(1);
+  expect(
+    await scriptIsBlocked(
+      page,
+      "https://stats.brnr.dev/js/iTRzwgi-WKuVLgQ6WxxBhRYs.js?csp-probe=1",
+    ),
+  ).toBe(false);
 });
