@@ -184,18 +184,24 @@ async function salvageClickBatch(
   db: ReturnType<typeof drizzle<typeof schema>>,
   batch: MessageBatch<ClickMessage>,
 ): Promise<void> {
-  const dropped: Message<ClickMessage>[] = [];
-  let stored = 0;
-  for (const message of batch.messages) {
-    try {
-      await db.insert(schema.clicks).values(clickRow(message)).onConflictDoNothing({
-        target: schema.clicks.dedupeId,
-      });
-      stored++;
-    } catch {
-      dropped.push(message);
-    }
-  }
+  // Together, not one after another: the rows are independent, a batch is at
+  // most 100 of them, and this only runs on a delivery that has already
+  // failed five times. Order does not matter because dedupe is an index, not
+  // a sequence.
+  const outcomes = await Promise.all(
+    batch.messages.map(async (message) => {
+      try {
+        await db.insert(schema.clicks).values(clickRow(message)).onConflictDoNothing({
+          target: schema.clicks.dedupeId,
+        });
+        return null;
+      } catch {
+        return message;
+      }
+    }),
+  );
+  const dropped = outcomes.filter((m): m is Message<ClickMessage> => m !== null);
+  const stored = batch.messages.length - dropped.length;
   if (stored === 0) {
     // Nothing wrote at all, so this is the database rather than one deleted
     // link. Retrying keeps that path exactly as it was, dead-letter log

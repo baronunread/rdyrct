@@ -322,9 +322,13 @@ export async function deleteOrgs(db: DB, env: Env, orgIds: string[]): Promise<vo
     // snapshot, and those writes survive as public redirects for an org that
     // is supposed to be gone. Only the flags this call set are candidates:
     // one it found already set belongs to somebody else's teardown.
-    const clearable: string[] = [];
-    for (const row of marked)
-      if ((await orgDeleteWorkflowActive(env, row.id)) === false) clearable.push(row.id);
+    const statuses = await Promise.all(
+      marked.map(async (row) => ({
+        id: row.id,
+        active: await orgDeleteWorkflowActive(env, row.id),
+      })),
+    );
+    const clearable = statuses.flatMap((s) => (s.active === false ? [s.id] : []));
     if (clearable.length > 0)
       await db
         .update(schema.orgs)
