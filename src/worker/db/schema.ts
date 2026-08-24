@@ -442,6 +442,6 @@ export const storageOutbox = sqliteTable(
     lastError: text("last_error").notNull().default(""),
   },
   // The drain's ordering index is an expression over created_at and attempts,
-  // which drizzle cannot express; it lives in migration 0024.
+  // which drizzle cannot express; it lives in migration 0026.
   (t) => [uniqueIndex("idx_storage_outbox_target").on(t.op, t.target)],
 );
