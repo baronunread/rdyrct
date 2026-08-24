@@ -370,10 +370,11 @@ export const clicks = sqliteTable(
     // Set by the click queue producer (crypto.randomUUID()); lets the queue
     // consumer's batch insert dedupe a redelivered message. Null on rows from
     // before this column existed, and on rows the daily sweep has cleared
-    // once no redelivery can reach them (sweepDedupeIds, #70). Either way
-    // SQLite's unique index treats every NULL as distinct, so those rows
-    // never collide with each other or with real dedupe ids.
-    dedupeId: text("dedupe_id").unique(),
+    // once no redelivery can reach them (sweepDedupeIds, #70).
+    // Migration 0027 owns the partial unique index because Drizzle cannot
+    // express its WHERE clause. It excludes every NULL, so swept rows carry no
+    // index weight and real dedupe ids still cannot clash.
+    dedupeId: text("dedupe_id"),
     // Which address the click came in on (primary or an alias). Null on rows
     // from before this column existed: not backfilled, same reasoning as
     // dedupeId above. Link-level aggregates roll up by linkId regardless.

@@ -130,7 +130,11 @@ export async function consumeClickBatch(
             dedupeId: m.body.dedupeId,
           })),
         )
-        .onConflictDoNothing({ target: schema.clicks.dedupeId }),
+        // The dedupe constraint is a partial unique index: swept NULL ids are
+        // deliberately absent from it. SQLite cannot match a column-only
+        // conflict target to that index, so let it handle the one applicable
+        // unique conflict without naming a target.
+        .onConflictDoNothing(),
     );
     const writes = nonEmpty(inserts);
     if (writes) await db.batch(writes);
@@ -213,9 +217,9 @@ async function salvageClickBatch(
   const outcomes = await Promise.all(
     batch.messages.map(async (message) => {
       try {
-        await db.insert(schema.clicks).values(clickRow(message)).onConflictDoNothing({
-          target: schema.clicks.dedupeId,
-        });
+        // Same partial dedupe index as the batch insert above. Naming only the
+        // column cannot match that index, including on this last-delivery path.
+        await db.insert(schema.clicks).values(clickRow(message)).onConflictDoNothing();
         return null;
       } catch (error) {
         // Narrowed here, where it arrives: only an Error carries a message
