@@ -199,7 +199,11 @@ analyticsDays }`). Slugs on the **shared** domain are always random (every
   Platform admins can **ban** users (`user.banned`): banning wipes their sessions
   and `databaseHooks.session.create.before` (in `better-auth.ts`) refuses new
   ones, while their orgs/links keep working.
-  Self-service account deletion is blocked while the user still owns an org.
+  Deleting an account takes every org it **owns** with it, teammates
+  included: an org has no plan of its own (`orgPlan()` reads its owner's), so
+  one left ownerless would have no plan, no billing and nobody who could
+  delete it. Settings names each org in the confirmation first. Orgs the
+  account only belongs to are untouched.
 - **Bot protection**: Cap proof-of-work (`src/worker/cap.ts`, routes at
   `/api/cap/:scope/{challenge,redeem}`) guards signup and password reset. The
   token rides in an `x-cap-token` header and is spent in `hooks.before`. No

@@ -14,9 +14,8 @@ import { reset } from "cloudflare:test";
 import { drizzle } from "drizzle-orm/d1";
 import * as schema from "../../src/worker/db/schema";
 import { deleteOrgs } from "../../src/worker/routes/orgs";
-import { orgsForTeardown, releaseOwnedOrgs } from "../../src/worker/better-auth";
-import { promoteLongestStandingMember } from "../../src/worker/plan";
-import { applyTestMigrations, overrideEnv, testEnv } from "./support";
+import { releaseOwnedOrgs } from "../../src/worker/better-auth";
+import { applyTestMigrations, overrideEnv } from "./support";
 
 const ORG = "org-handover";
 const LEAVING = "user-leaving";
@@ -52,13 +51,6 @@ async function addMember(userId: string, joinedAt: number, role = "member"): Pro
     .run();
 }
 
-async function roleOf(userId: string): Promise<string | null> {
-  const row = await env.DB.prepare("select role from org_members where org_id = ? and user_id = ?")
-    .bind(ORG, userId)
-    .first<{ role: string }>();
-  return row?.role ?? null;
-}
-
 /** A teardown binding that records the ids it was asked to start. `fail`
  * makes the start throw, which is the ambiguous case deleteOrgs fails closed
  * on. */
@@ -83,56 +75,53 @@ function fakeTeardown(fail = false) {
   return { binding, started };
 }
 
-describe("promoteLongestStandingMember", () => {
-  it("hands the org to whoever joined first, not whoever joined last", async () => {
-    await addMember("user-early", 200);
-    await addMember("user-late", 300);
+describe("releaseOwnedOrgs", () => {
+  /** Runs the deletion's org teardown for the leaving account. */
+  const release = (binding: typeof env.ORG_DELETE) =>
+    releaseOwnedOrgs(drizzle(env.DB, { schema }), overrideEnv({ ORG_DELETE: binding }), LEAVING);
 
-    expect(await promoteLongestStandingMember(testEnv, ORG, LEAVING)).toBe(true);
+  it("takes every organization the account owns, teammates or not", async () => {
+    // The org has no plan of its own: orgPlan reads its owner's. Leaving a
+    // shared one behind gives it no plan, no billing and nobody who can
+    // delete it, so the account cannot be deleted without it.
+    await addMember("user-stayer", 200);
+    await env.DB.batch([
+      env.DB.prepare("insert into orgs (id, name, created_at) values ('solo', 'Solo', 0)"),
+      env.DB.prepare(
+        "insert into org_members (org_id, user_id, role, created_at) values ('solo', ?, 'owner', 0)",
+      ).bind(LEAVING),
+    ]);
+    const { binding, started } = fakeTeardown();
 
-    expect(await roleOf("user-early")).toBe("owner");
-    expect(await roleOf("user-late")).toBe("member");
-    // The leaving owner keeps their row until the cascade removes it: this
-    // hands the org over, it does not evict anyone.
-    expect(await roleOf(LEAVING)).toBe("owner");
+    await release(binding);
+
+    expect(started.sort()).toEqual([ORG, "solo"]);
   });
 
-  it("promotes an admin the same way, since rank is not the tiebreaker", async () => {
-    await addMember("user-early", 200, "member");
-    await addMember("user-admin", 300, "admin");
+  it("leaves an org this account only belongs to", async () => {
+    // Membership is not ownership: someone else's org survives.
+    await env.DB.batch([
+      env.DB.prepare("insert into orgs (id, name, created_at) values ('theirs', 'Theirs', 0)"),
+      env.DB.prepare(
+        "insert into org_members (org_id, user_id, role, created_at) values ('theirs', ?, 'member', 0)",
+      ).bind(LEAVING),
+    ]);
+    const { binding, started } = fakeTeardown();
 
-    await promoteLongestStandingMember(testEnv, ORG, LEAVING);
+    await release(binding);
 
-    expect(await roleOf("user-early")).toBe("owner");
+    expect(started).toEqual([ORG]);
   });
 
-  it("reports false for a genuinely solo org, which belongs to the teardown", async () => {
-    expect(await promoteLongestStandingMember(testEnv, ORG, LEAVING)).toBe(false);
-  });
-
-  it("never promotes the person leaving", async () => {
-    expect(await promoteLongestStandingMember(testEnv, ORG, LEAVING)).toBe(false);
-    // Nobody else exists, so an org with one member cannot be handed on. The
-    // teardown is what deals with it.
-    const rows = await env.DB.prepare("select count(*) as n from org_members where org_id = ?")
-      .bind(ORG)
-      .first<{ n: number }>();
-    expect(rows!.n).toBe(1);
-  });
-
-  it("leaves an org with no owner impossible after a member joins mid-deletion", async () => {
-    // The race, played out: the guard saw a solo org, somebody accepted an
-    // invite, and now the account is being deleted anyway.
+  it("takes an org that gained a member while the deletion was in flight", async () => {
+    // The race #119 was filed for. Nothing is skipped now, so it has no
+    // ownerless state left to produce.
     await addMember("user-joined-late", 400);
-    await promoteLongestStandingMember(testEnv, ORG, LEAVING);
-    await env.DB.prepare("delete from org_members where user_id = ?").bind(LEAVING).run();
+    const { binding, started } = fakeTeardown();
 
-    const owners = await env.DB.prepare(
-      "select count(*) as n from org_members where org_id = ? and role = 'owner'",
-    )
-      .bind(ORG)
-      .first<{ n: number }>();
-    expect(owners!.n).toBe(1);
+    await release(binding);
+
+    expect(started).toEqual([ORG]);
   });
 });
 
@@ -182,47 +171,5 @@ describe("deleteOrgs", () => {
     // "the first two went and the third did not". The flags stay set because
     // the lookup cannot prove nothing is running; the next call restarts.
     expect(await deletingIds()).toEqual(["org-a", "org-b"]);
-  });
-});
-
-describe("releaseOwnedOrgs", () => {
-  it("hands over the org that gained a member, and tears down the solo one", async () => {
-    await addMember("user-stayer", 200);
-    await env.DB.batch([
-      env.DB.prepare("insert into orgs (id, name, created_at) values ('solo', 'Solo', 0)"),
-      env.DB.prepare(
-        "insert into org_members (org_id, user_id, role, created_at) values ('solo', ?, 'owner', 0)",
-      ).bind(LEAVING),
-    ]);
-    const { binding, started } = fakeTeardown();
-
-    await releaseOwnedOrgs(
-      drizzle(env.DB, { schema }),
-      overrideEnv({ ORG_DELETE: binding }),
-      LEAVING,
-    );
-
-    expect(await roleOf("user-stayer")).toBe("owner");
-    expect(started).toEqual(["solo"]);
-  });
-});
-
-describe("orgsForTeardown", () => {
-  it("takes the solo orgs", () => {
-    expect(orgsForTeardown(["a", "b"], [])).toEqual(["a", "b"]);
-  });
-
-  it("leaves an org that was successfully handed over", () => {
-    expect(orgsForTeardown([], [{ orgId: "shared", handedOver: true }])).toEqual([]);
-  });
-
-  it("takes an org that could not be handed over, because it is solo after all", () => {
-    // The second window: ownedOrgsForDeletion saw a teammate, they left, and
-    // the promote found nobody. Returning only the solo list here leaves this
-    // org with zero members and no owner once the cascade runs.
-    expect(orgsForTeardown(["solo"], [{ orgId: "orphaned", handedOver: false }])).toEqual([
-      "solo",
-      "orphaned",
-    ]);
   });
 });

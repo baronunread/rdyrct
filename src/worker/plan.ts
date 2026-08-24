@@ -59,46 +59,6 @@ export async function createOwnedOrg(
 }
 
 /**
- * Hands an org to its longest-standing remaining member.
- *
- * The account-deletion guard refuses to delete somebody who still owns an org
- * with other people in it, and it runs one query before the teardown runs
- * another. An invite accepted between the two turns a solo org into a shared
- * one after the refusal has already passed, so the teardown skips it, the
- * owner's membership goes with the account by cascade, and the org is left
- * with members and no owner: a state nothing in the product can express or
- * repair (#119).
- *
- * Promoting rather than refusing, because by this point the refusal is no
- * longer available: an error thrown from better-auth's `beforeDelete` escapes
- * its transaction wrapper as an unhandled rejection. Longest-standing is the
- * same default reconciliation already uses when it has to pick for somebody.
- *
- * One statement, so a second member joining while it runs cannot land between
- * a read and a write. Returns whether it promoted anyone: false means the org
- * was genuinely solo and belongs to the teardown instead.
- */
-export async function promoteLongestStandingMember(
-  env: Env,
-  orgId: string,
-  leavingUserId: string,
-): Promise<boolean> {
-  return runGuarded(
-    env,
-    `update org_members
-     set role = 'owner'
-     where org_id = ?
-       and user_id = (
-         select user_id from org_members
-         where org_id = ? and user_id != ?
-         order by created_at, user_id
-         limit 1
-       )`,
-    [orgId, orgId, leavingUserId],
-  );
-}
-
-/**
  * Accepts an invite: writes the membership row only if the token is still
  * live, the caller isn't already a member, and the org is under its member
  * cap. All three are re-checked inside the insert itself, and the invite is

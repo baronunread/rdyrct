@@ -3,11 +3,11 @@ import type { JsonValue } from "../shared/types";
 import { optionalText, parseOptionalBody } from "./schemas";
 import * as v from "valibot";
 import { lookup } from "../shared/lookup";
-import { APIError, createAuthMiddleware, getSessionFromCtx } from "better-auth/api";
+import { APIError, createAuthMiddleware } from "better-auth/api";
 import { emailOTP } from "better-auth/plugins/email-otp";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { drizzle } from "drizzle-orm/d1";
-import { and, eq, inArray, ne } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import * as schema from "./db/schema";
 import type { DB, Env } from "./env";
 import { captureAlert } from "./sentry";
@@ -17,7 +17,7 @@ import { renderEmail } from "./email-layout";
 import { hashPassword, verifyPassword } from "./password";
 import { uid } from "./util";
 import { spendToken, type CapScope } from "./cap";
-import { createOwnedOrg, promoteLongestStandingMember } from "./plan";
+import { createOwnedOrg } from "./plan";
 import { deleteOrgs } from "./routes/orgs";
 import { defaultOrgName } from "@/shared/org-name";
 import { CAP_FAILED_CODE, CAP_TOKEN_HEADER } from "@/shared/types";
@@ -84,101 +84,35 @@ async function ensureOrganization(env: Env, db: DB, userId: string): Promise<voi
 }
 
 /**
- * Organizations this account owns, split by whether anyone else is in them.
+ * Every organization this account owns, all of which go with it.
  *
- * Account deletion tears down what only they hold and refuses when other
- * people are still members: a solo organization is part of the account, but
- * one with teammates in it is not the deleter's alone to destroy.
+ * An org has no plan of its own: `orgPlan()` reads its owner's. Leaving one
+ * behind with no owner leaves it with no plan, no billing and nobody who can
+ * delete it, so the account cannot be deleted without them. The Settings
+ * dialog names each one before it asks (#119).
  */
-async function ownedOrgsForDeletion(db: DB, userId: string) {
+async function ownedOrgsForDeletion(db: DB, userId: string): Promise<string[]> {
   const owned = await db
     .select({ orgId: schema.orgMembers.orgId })
     .from(schema.orgMembers)
     .where(and(eq(schema.orgMembers.userId, userId), eq(schema.orgMembers.role, "owner")));
-  if (owned.length === 0) return { solo: [], shared: [] };
-
-  const ids = owned.map((row) => row.orgId);
-  const others = await db
-    .select({ orgId: schema.orgMembers.orgId })
-    .from(schema.orgMembers)
-    .where(and(inArray(schema.orgMembers.orgId, ids), ne(schema.orgMembers.userId, userId)));
-  const sharedIds = new Set(others.map((row) => row.orgId));
-  return {
-    solo: ids.filter((id) => !sharedIds.has(id)),
-    shared: ids.filter((id) => sharedIds.has(id)),
-  };
+  return owned.map((row) => row.orgId);
 }
 
 /**
- * What becomes of the organizations an account owns, as it is deleted (#119).
+ * Tears down every organization the account owns, as it is deleted (#119).
  *
- * Recomputed here rather than trusted from `hooks.before`, and the two can
- * disagree: an invite accepted between the two reads turns a solo org into a
- * shared one after the refusal has already passed. By this point refusing is
- * no longer available, so a shared org is handed to its longest-standing
- * member instead. Without that the owner's membership goes with the account
- * by cascade and the org is left with members and no owner.
+ * Recomputed here rather than trusted from anywhere earlier, and the set can
+ * have grown: somebody accepting an invite between the two reads used to turn
+ * a solo org into a shared one after a refusal had already passed, and the
+ * teardown then skipped it. It skips nothing now, so that race has no state
+ * left to produce.
  *
- * A shared org whose last other member left in the meantime has nobody to
- * hand it to. It is solo after all, so it joins the teardown: dropping that
- * answer left it with zero members and no owner, the same unrepresentable
- * state one window over.
- *
- * Exported because `beforeDelete` cannot be reached with a shared org through
- * a request (the guard refuses first), so this is the only place a test can
- * hold the race still.
+ * One flag-write and one workflow start for the whole set, so a failure
+ * cannot leave some orgs torn down and some not.
  */
 export async function releaseOwnedOrgs(db: DB, env: Env, userId: string): Promise<void> {
-  const { solo, shared } = await ownedOrgsForDeletion(db, userId);
-  const promoted = await Promise.all(
-    shared.map(async (orgId) => ({
-      orgId,
-      handedOver: await promoteLongestStandingMember(env, orgId, userId),
-    })),
-  );
-  // One flag-write and one workflow start for the whole set, so a failure
-  // cannot leave some orgs torn down and some not.
-  await deleteOrgs(db, env, orgsForTeardown(solo, promoted));
-}
-
-/**
- * Which of an account's organizations the teardown takes.
- *
- * Its own function because the answer it adds is easy to drop: a shared org
- * that could not be handed over is solo after all, and returning only `solo`
- * leaves it with zero members and no owner once the cascade runs. The race
- * that produces one cannot be held still inside `releaseOwnedOrgs`, so this
- * is where a test can reach the decision.
- */
-export function orgsForTeardown(
-  solo: string[],
-  promoted: { orgId: string; handedOver: boolean }[],
-): string[] {
-  return [...solo, ...promoted.flatMap((p) => (p.handedOver ? [] : [p.orgId]))];
-}
-
-/**
- * Refuses to delete an account that still owns an organization other people
- * are in: they hand it over or empty it first. Everything they hold by
- * themselves goes with the account, in `beforeDelete`.
- *
- * Here rather than in `beforeDelete` because an APIError thrown from that
- * callback escapes better-auth's transaction wrapper as an unhandled
- * rejection, even though the caller still gets its 400.
- */
-async function guardAccountDeletion(
-  db: DB,
-  ctx: Parameters<Parameters<typeof createAuthMiddleware>[0]>[0],
-) {
-  const session = await getSessionFromCtx(ctx);
-  const userId = session?.user?.id;
-  if (!userId) return;
-  const { shared } = await ownedOrgsForDeletion(db, userId);
-  if (shared.length > 0)
-    throw new APIError("BAD_REQUEST", {
-      message:
-        "Some organizations still have other members. Hand over ownership or remove them first.",
-    });
+  await deleteOrgs(db, env, await ownedOrgsForDeletion(db, userId));
 }
 
 const DNS_CHECK_TIMEOUT = 3000;
@@ -534,7 +468,6 @@ function buildAuth(env: Env) {
               message: "Could not verify you are human. Reload the page and try again.",
             });
         }
-        if (ctx.path === "/delete-user") await guardAccountDeletion(db, ctx);
         if (ctx.path === "/email-otp/send-verification-otp") {
           return guardVerificationOTPSend(db, bodyOf(ctx));
         }
