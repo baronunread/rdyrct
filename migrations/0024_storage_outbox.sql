@@ -30,7 +30,7 @@ CREATE TABLE storage_outbox (
 CREATE UNIQUE INDEX idx_storage_outbox_target ON storage_outbox(op, target);
 
 -- The drain reads in bounded batches, oldest first, counting each failed
--- attempt as an hour of age it has not earned. The expression is indexed so
+-- attempt as a day of age it has not earned. The expression is indexed so
 -- the ordering is a seek rather than a sort; the constant has to match
 -- OUTBOX_RETRY_BACKOFF in storage.ts.
-CREATE INDEX idx_storage_outbox_drain ON storage_outbox(created_at + attempts * 3600000);
+CREATE INDEX idx_storage_outbox_drain ON storage_outbox(created_at + attempts * 86400000);

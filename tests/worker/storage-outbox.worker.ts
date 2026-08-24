@@ -16,6 +16,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { env } from "cloudflare:workers";
 import { getQueueResult, reset } from "cloudflare:test";
 import {
+  OUTBOX_RETRY_BACKOFF,
   drainStorageOutbox,
   enqueueStorage,
   logDeadLetterBatch,
@@ -178,6 +179,17 @@ describe("a dead-letter batch whose outbox row cannot be written", () => {
 });
 
 describe("the daily drain", () => {
+  it("uses the indexed retry order instead of sorting the outbox", async () => {
+    const plan = await env.DB.prepare(
+      `explain query plan
+       select * from storage_outbox
+       order by created_at + attempts * ${OUTBOX_RETRY_BACKOFF}
+       limit 200`,
+    ).all<{ detail: string }>();
+
+    expect(plan.results.some((row) => row.detail.includes("idx_storage_outbox_drain"))).toBe(true);
+  });
+
   it("clears what it applied and keeps what it could not", async () => {
     await seedLink();
     await env.DB.batch([

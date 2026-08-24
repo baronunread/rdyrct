@@ -143,14 +143,18 @@ test("deleting the account takes the organizations it owns, teammates and all", 
   await expect(page).toHaveURL(/\/$/, { timeout: 15_000 });
 
   // Gone, rather than left behind with no owner: that was the state nothing
-  // in the product could express or repair. The teardown workflow runs to
-  // completion here, so the row itself is already away.
-  const owned = await queryRows<{ n: number }>(
-    page,
-    "select count(*) as n from orgs where id in (?, ?)",
-    [owner.org.id, scope.secondOwned.id],
-  );
-  expect(Number(owned[0].n)).toBe(0);
+  // in the product could express or repair. The workflow is asynchronous, so
+  // wait for its durable outcome instead of assuming it beat the redirect.
+  await expect
+    .poll(async () => {
+      const owned = await queryRows<{ n: number }>(
+        page,
+        "select count(*) as n from orgs where id in (?, ?)",
+        [owner.org.id, scope.secondOwned.id],
+      );
+      return Number(owned[0].n);
+    })
+    .toBe(0);
 
   const survivors = await queryRows<{ orgs: number; users: number }>(
     page,

@@ -160,7 +160,7 @@ const OUTBOX_DRAIN_LIMIT = 200;
  * failing key yields to fresher work without ever being excluded outright.
  * The drain runs daily, so the unit is a day too: an hour made 200 old rows
  * monopolise roughly 24 daily passes before one newer repair was selected. */
-const OUTBOX_RETRY_BACKOFF = 24 * 60 * 60 * 1000;
+export const OUTBOX_RETRY_BACKOFF = 24 * 60 * 60 * 1000;
 
 /**
  * Applies the storage work the queue never did, oldest first (#118).
@@ -174,7 +174,7 @@ const OUTBOX_RETRY_BACKOFF = 24 * 60 * 60 * 1000;
  */
 export async function drainStorageOutbox(env: Env): Promise<number> {
   const db = drizzle(env.DB, { schema });
-  // Oldest first, counting each failed attempt as an hour of age it has not
+  // Oldest first, counting each failed attempt as a day of age it has not
   // earned. Both plain orderings starve something: by age alone, 200 rows
   // that always fail hold the whole limit forever and a later recovery never
   // drains; by attempts alone, a steady 200 rows a day of new work means a
@@ -187,7 +187,7 @@ export async function drainStorageOutbox(env: Env): Promise<number> {
     .select()
     .from(schema.storageOutbox)
     .orderBy(
-      sql`${schema.storageOutbox.createdAt} + ${schema.storageOutbox.attempts} * ${OUTBOX_RETRY_BACKOFF}`,
+      sql`${schema.storageOutbox.createdAt} + ${schema.storageOutbox.attempts} * ${sql.raw(String(OUTBOX_RETRY_BACKOFF))}`,
     )
     .limit(OUTBOX_DRAIN_LIMIT);
   let cleared = 0;
