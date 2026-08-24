@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import * as v from "valibot";
 import type { JsonValue } from "../../shared/types";
 import { HTTPException } from "hono/http-exception";
-import { eq, and, gte, desc, sql, isNull } from "drizzle-orm";
+import { eq, and, gte, desc, sql, isNull, inArray } from "drizzle-orm";
 import * as schema from "../db/schema";
 import type { AppEnv, DB, Env } from "../env";
 import { requireUser } from "../guards";
@@ -288,26 +288,48 @@ async function orgDeleteWorkflowActive(env: Env, orgId: string): Promise<boolean
 }
 
 export async function deleteOrg(db: DB, env: Env, orgId: string): Promise<void> {
-  const result = await db
+  await deleteOrgs(db, env, [orgId]);
+}
+
+/**
+ * Tears down several orgs as one act, for the account deletion that owns them
+ * all (#119).
+ *
+ * One flag-write and one workflow start, not two per org. Starting them one
+ * at a time meant a failure on the third left the first two torn down and the
+ * caller holding an error for a deletion that did not happen, with no way to
+ * tell which orgs had already gone.
+ */
+export async function deleteOrgs(db: DB, env: Env, orgIds: string[]): Promise<void> {
+  if (orgIds.length === 0) return;
+  const now = Date.now();
+  const marked = await db
     .update(schema.orgs)
-    .set({ deletingAt: Date.now() })
-    .where(and(eq(schema.orgs.id, orgId), isNull(schema.orgs.deletingAt)));
-  const marked = result.meta.changes > 0;
+    .set({ deletingAt: now })
+    .where(and(inArray(schema.orgs.id, orgIds), isNull(schema.orgs.deletingAt)))
+    .returning({ id: schema.orgs.id });
   try {
     // `createBatch` rather than `create`, because it is documented idempotent:
     // an id already in use is skipped instead of throwing. That is what makes
     // this safe to call on a repeat DELETE, which is the repair path for an
     // org left flagged with nothing driving its teardown.
-    await env.ORG_DELETE.createBatch([{ id: orgId, params: { orgId } }]);
+    await env.ORG_DELETE.createBatch(orgIds.map((orgId) => ({ id: orgId, params: { orgId } })));
   } catch (err) {
-    // Only undo the flag when we are certain nothing is running: a terminal
+    // Only undo a flag when we are certain nothing is running: a terminal
     // instance is proof, an unreadable one is not. Leaving it set costs a
     // read-only org until the next DELETE restarts teardown; clearing it on a
     // guess reopens writes underneath a workflow that has already taken its
     // snapshot, and those writes survive as public redirects for an org that
-    // is supposed to be gone.
-    if (marked && (await orgDeleteWorkflowActive(env, orgId)) === false)
-      await db.update(schema.orgs).set({ deletingAt: null }).where(eq(schema.orgs.id, orgId));
+    // is supposed to be gone. Only the flags this call set are candidates:
+    // one it found already set belongs to somebody else's teardown.
+    const clearable: string[] = [];
+    for (const row of marked)
+      if ((await orgDeleteWorkflowActive(env, row.id)) === false) clearable.push(row.id);
+    if (clearable.length > 0)
+      await db
+        .update(schema.orgs)
+        .set({ deletingAt: null })
+        .where(inArray(schema.orgs.id, clearable));
     throw err;
   }
 }

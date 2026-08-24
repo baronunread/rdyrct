@@ -17,8 +17,8 @@ import { renderEmail } from "./email-layout";
 import { hashPassword, verifyPassword } from "./password";
 import { uid } from "./util";
 import { spendToken, type CapScope } from "./cap";
-import { createOwnedOrg } from "./plan";
-import { deleteOrg } from "./routes/orgs";
+import { createOwnedOrg, promoteLongestStandingMember } from "./plan";
+import { deleteOrgs } from "./routes/orgs";
 import { defaultOrgName } from "@/shared/org-name";
 import { CAP_FAILED_CODE, CAP_TOKEN_HEADER } from "@/shared/types";
 
@@ -458,10 +458,20 @@ function buildAuth(env: Env) {
           // in hooks.before: an APIError thrown from here escapes better-auth's
           // transaction wrapper as an unhandled rejection, even though the
           // caller does get its 400.
-          const { solo } = await ownedOrgsForDeletion(db, user.id);
-          // Together: each teardown is an independent workflow keyed by its
-          // own org, and a person deletes at most three.
-          await Promise.all(solo.map((orgId) => deleteOrg(db, env, orgId)));
+          // Recomputed here, and it can disagree with what hooks.before saw:
+          // an invite accepted between the two reads turns a solo org into a
+          // shared one after the refusal has already passed (#119). By this
+          // point refusing is no longer available, so every org that gained a
+          // member is handed to its longest-standing one instead. Without
+          // that the owner's membership goes with the account by cascade and
+          // the org is left with members and no owner.
+          const { solo, shared } = await ownedOrgsForDeletion(db, user.id);
+          await Promise.all(
+            shared.map((orgId) => promoteLongestStandingMember(env, orgId, user.id)),
+          );
+          // One flag-write and one workflow start for the whole set, so a
+          // failure cannot leave some orgs torn down and some not.
+          await deleteOrgs(db, env, solo);
         },
       },
     },
