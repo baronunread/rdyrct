@@ -96,6 +96,9 @@ export function CountryMap({ countries: data }: { countries: TopEntry[] }) {
       renderer={mapMotion}
       aspectRatio={WIDTH / HEIGHT}
       ariaLabel="Clicks by country"
+      // The map only explains the country ranking beside it. It has no action
+      // of its own, so it must not become a tab stop or draw a focus border.
+      tabIndex={-1}
       renderTooltipBody={({ points }) => {
         const f = points[0]?.datum;
         if (!f) return null;

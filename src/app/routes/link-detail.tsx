@@ -12,6 +12,7 @@ import { NoOrgState } from "../components/no-org";
 import { ExportCsvButton } from "../components/export-csv-button";
 import { Card } from "../ui/misc";
 import { linkDisplayTitle } from "../lib/link-display";
+import { LinkDetailSkeleton } from "../components/skeletons";
 
 function LinkDetailHeader({
   title,
@@ -103,9 +104,9 @@ export function LinkDetailPage() {
   const { data: config } = useConfig();
   const stats = useLinkStats(org?.id ?? "", slug ?? null, domain);
 
-  if (currentUser.isLoading) return <p className="py-8 text-center text-sm text-muted">Loading…</p>;
+  if (currentUser.isLoading) return <LinkDetailSkeleton />;
   if (!org) return <NoOrgState />;
-  if (stats.isLoading) return <p className="py-8 text-center text-sm text-muted">Loading…</p>;
+  if (stats.isLoading) return <LinkDetailSkeleton />;
   if (!stats.data)
     return <p className="py-8 text-center text-sm text-danger">Could not load link stats.</p>;
   const s = stats.data;
