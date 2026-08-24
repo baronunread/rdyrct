@@ -472,13 +472,10 @@ test("a first visit does not ask who it is", async ({ page }) => {
   // The header paints before the rest of the page has even mounted, so
   // asserting here caught nothing: the first version of this test passed
   // against a build that still made the call. Every section has to have
-  // mounted, including the ones that ask this to decide where a CTA points,
-  // and the lazy analytics mock has to have landed.
-  await page
-    .getByRole("link", { name: /start pro/i })
-    .first()
-    .scrollIntoViewIfNeeded();
-  await page.waitForLoadState("networkidle");
+  // mounted, including the lazy analytics mock. Waiting for network idle is
+  // wrong here: product analytics can keep an unrelated request open.
+  await page.locator("#analytics").scrollIntoViewIfNeeded();
+  await expect(page.locator("#analytics").getByLabel("Clicks per day")).toBeVisible();
 
   expect(userCalls, "a browser that was never signed in has nothing to ask").toEqual([]);
 });
@@ -496,7 +493,9 @@ test("the charts bundle waits until the visitor scrolls toward it", async ({ pag
 
   await page.goto("/");
   await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
-  await page.waitForLoadState("networkidle");
+  // This CTA is below the fold, so it proves the page hydrated without
+  // scrolling toward the analytics section that owns the lazy bundle.
+  await expect(page.getByRole("link", { name: /start pro/i }).first()).toBeVisible();
   expect(charts, "nothing above the fold needs the charts bundle").toEqual([]);
 
   // Now go to it. The section renders its placeholder either way, so wait for

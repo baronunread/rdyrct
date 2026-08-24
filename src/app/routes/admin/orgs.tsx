@@ -26,6 +26,7 @@ const roleColor = {
   owner: "accent",
   admin: "mint",
   member: "muted",
+  viewer: "muted",
 } satisfies Record<OrgRole, "accent" | "mint" | "muted">;
 
 const planBadgeColor = {

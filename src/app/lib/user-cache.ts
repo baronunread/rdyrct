@@ -50,6 +50,16 @@ const orgSchema = v.object({
   qrBg: v.string(),
   qrEyeColor: v.string(),
   qrLogoSize: v.nullable(v.number()),
+  // Entitlement state (#158). A cached copy is chrome, same as the rest of
+  // this record: the banner it paints is one page load old, and the query
+  // behind it corrects the moment it lands.
+  locked: v.boolean(),
+  over: v.object({
+    links: v.optional(v.number()),
+    members: v.optional(v.number()),
+    domains: v.optional(v.number()),
+  }),
+  graceEndsAt: v.nullable(v.number()),
 });
 
 /** Whole-record or nothing: a half-parsed user would render a shell with

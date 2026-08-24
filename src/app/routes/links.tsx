@@ -103,6 +103,7 @@ function LinksBrowser({
   dialogs,
   atLimit,
   limitHint,
+  canWrite,
 }: {
   list: ReturnType<typeof useLinkPage>;
   orgId: string;
@@ -111,6 +112,7 @@ function LinksBrowser({
   dialogs: ReturnType<typeof useLinkDialogs>;
   atLimit: boolean;
   limitHint?: string;
+  canWrite: boolean;
 }) {
   return (
     <LinksListArea
@@ -123,7 +125,7 @@ function LinksBrowser({
       }
       atLimit={atLimit}
       limitHint={limitHint}
-      onCreate={dialogs.openCreate}
+      onCreate={canWrite ? dialogs.openCreate : undefined}
     >
       <LinksToolbar
         search={list.search}
@@ -137,6 +139,7 @@ function LinksBrowser({
         paged={list.rows}
         navigate={navigate}
         onQrClick={dialogs.setQrLink}
+        canWrite={canWrite}
         onEdit={dialogs.openEdit}
         onDelete={dialogs.setDeleting}
         onCreateAlias={dialogs.setAliasLink}
@@ -223,6 +226,19 @@ function buildOnSave({
  * made LinksPage the most complex function in the app; here they are one
  * named thing the page reads off.
  */
+/**
+ * What the links counter says when it is worth saying something (#163).
+ *
+ * "Over" and "at" used to read the same, so an org holding 500 links on a
+ * 30-link plan was told to "upgrade for more" as though it were one short.
+ */
+function linkLimitHint(count: number, limit: number): string | undefined {
+  if (count > limit)
+    return `This plan allows ${limit} links. The extras still work, and you can delete some or upgrade.`;
+  if (count === limit) return "Link limit reached: upgrade for more links";
+  return undefined;
+}
+
 function useLinkDialogs(atLimit: boolean) {
   const [editorOpen, setEditorOpen] = useState(false);
   const [editing, setEditing] = useState<LinkDTO | null>(null);
@@ -263,8 +279,17 @@ function useLinkDialogs(atLimit: boolean) {
 }
 
 export function LinksPage() {
-  const { org, orgId, limits, activeDomains, defaultDomainId, orgQr, domains, currentUser } =
-    useOrgLimits();
+  const {
+    org,
+    orgId,
+    limits,
+    canWrite,
+    activeDomains,
+    defaultDomainId,
+    orgQr,
+    domains,
+    currentUser,
+  } = useOrgLimits();
   const quotaUsage = useLinkQuotaUsage(orgId);
   const { create, update, remove } = useLinkMutations(orgId);
   const toast = useToast();
@@ -275,7 +300,8 @@ export function LinksPage() {
   // link plus its kept-forever aliases each count. See useLinkQuotaUsage.
   const linkCount = quotaUsage.data?.count ?? 0;
   const atLimit = linkCount >= limits.links;
-  const limitHint = atLimit ? "Link limit reached: upgrade for more links" : undefined;
+  const overLimit = linkCount > limits.links;
+  const limitHint = linkLimitHint(linkCount, limits.links);
 
   const dialogs = useLinkDialogs(atLimit);
 
@@ -329,17 +355,20 @@ export function LinksPage() {
         sub="Short links, UTM tagging and QR codes"
         action={
           <div className="flex items-center gap-3">
-            <span className="text-xs tnum text-muted">
+            <span className="tnum text-xs text-muted" title={limitHint}>
               {linkCount} / {limits.links} links
+              {overLimit && " (over the limit)"}
             </span>
-            <Button
-              variant="primary"
-              onClick={dialogs.openCreate}
-              disabled={atLimit}
-              title={limitHint}
-            >
-              <Plus size={15} /> New link
-            </Button>
+            {canWrite && (
+              <Button
+                variant="primary"
+                onClick={dialogs.openCreate}
+                disabled={atLimit}
+                title={limitHint}
+              >
+                <Plus size={15} /> New link
+              </Button>
+            )}
           </div>
         }
       />
@@ -352,6 +381,7 @@ export function LinksPage() {
         dialogs={dialogs}
         atLimit={atLimit}
         limitHint={limitHint}
+        canWrite={canWrite}
       />
 
       <LinkDialogStack
@@ -386,7 +416,9 @@ function LinksListArea({
   hasLinks: boolean;
   atLimit: boolean;
   limitHint: string | undefined;
-  onCreate: () => void;
+  /** Undefined for a viewer, who has no way to make the empty state stop
+   * being empty. The screen then explains rather than offering (#157). */
+  onCreate?: () => void;
   children: ReactNode;
 }) {
   if (isLoading) return <TableSkeleton rows={5} />;
@@ -394,11 +426,17 @@ function LinksListArea({
     return (
       <EmptyState
         title="No links yet"
-        hint="Shorten your first address and it appears here, with its clicks, referrers and QR code."
+        hint={
+          onCreate
+            ? "Shorten your first address and it appears here, with its clicks, referrers and QR code."
+            : "Links this organization creates appear here, with their clicks, referrers and QR codes."
+        }
         action={
-          <Button variant="primary" onClick={onCreate} disabled={atLimit} title={limitHint}>
-            <Plus size={15} /> New link
-          </Button>
+          onCreate ? (
+            <Button variant="primary" onClick={onCreate} disabled={atLimit} title={limitHint}>
+              <Plus size={15} /> New link
+            </Button>
+          ) : undefined
         }
       />
     );

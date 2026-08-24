@@ -5,11 +5,6 @@
         "count": 1
       }
     },
-    "src/app/components/charts.tsx": {
-      "crap_moderate": {
-        "count": 2
-      }
-    },
     "src/app/components/country-map.tsx": {
       "crap_high": {
         "count": 1
@@ -39,7 +34,7 @@
       }
     },
     "src/app/components/qr-defaults-card.tsx": {
-      "crap_moderate": {
+      "crap_critical": {
         "count": 1
       }
     },
@@ -75,7 +70,7 @@
       }
     },
     "src/app/routes/analytics.tsx": {
-      "crap_high": {
+      "crap_critical": {
         "count": 1
       }
     },
@@ -84,10 +79,10 @@
         "count": 1
       },
       "crap_high": {
-        "count": 2
+        "count": 1
       },
       "crap_moderate": {
-        "count": 2
+        "count": 3
       }
     },
     "src/app/routes/billing.tsx": {
@@ -106,10 +101,16 @@
     },
     "src/app/routes/dashboard.tsx": {
       "crap_moderate": {
-        "count": 2
+        "count": 3
       }
     },
     "src/app/routes/domains.tsx": {
+      "crap_critical": {
+        "count": 1
+      },
+      "crap_high": {
+        "count": 1
+      },
       "crap_moderate": {
         "count": 2
       }
@@ -120,6 +121,9 @@
       }
     },
     "src/app/routes/links.tsx": {
+      "crap_high": {
+        "count": 2
+      },
       "crap_moderate": {
         "count": 3
       }
@@ -144,6 +148,11 @@
         "count": 1
       }
     },
+    "src/worker/index.ts": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
     "src/worker/routes/admin.ts": {
       "crap_moderate": {
         "count": 1
@@ -158,12 +167,13 @@
       "crap_moderate": {
         "count": 1
       }
+    },
+    "src/worker/storage.ts": {
+      "crap_moderate": {
+        "count": 1
+      }
     }
   },
   "runtime_coverage_findings": [],
-  "target_keys": [
-    "src/app/lib/current-org.ts:high impact",
-    "src/app/lib/theme.ts:high impact",
-    "src/app/lib/use-shake.ts:high impact"
-  ]
+  "target_keys": ["src/app/lib/current-org.ts:high impact", "src/app/lib/use-shake.ts:high impact"]
 }

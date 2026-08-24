@@ -26,6 +26,7 @@ import {
   resolveUtm,
   stripUtmParams,
   validateQrFields,
+  changesQr,
   ALIAS_TTL_MS,
 } from "../util";
 import { jsonBodyLimit } from "../body-limit";
@@ -38,6 +39,7 @@ import type {
   LinkInput,
   OrgPlan,
   PlanLimits,
+  QrOverrides,
   QuotaUsage,
   TopEntry,
 } from "@/shared/types";
@@ -196,19 +198,6 @@ async function assertAliasQuota(db: DB, linkId: string): Promise<void> {
       message: `This link already has ${MAX_ALIASES_PER_LINK} aliases, the most allowed. Remove one before adding another.`,
       cause: { code: "alias_limit_reached" },
     });
-}
-
-/** True when the body carries any QR appearance override (a paid feature). */
-function hasQrOverride(body: LinkInput): boolean {
-  return !!(
-    body.qrLogo ||
-    body.qrStyle ||
-    body.qrColor ||
-    body.qrCorner ||
-    body.qrBg ||
-    body.qrEyeColor ||
-    body.qrLogoSize != null
-  );
 }
 
 /** Fetch a link inside an org or 404. */
@@ -464,10 +453,17 @@ async function domainHostname(
 ): Promise<string | null> {
   if (!domainId) return null;
   const rows = await db
-    .select({ hostname: schema.domains.hostname })
+    .select({ hostname: schema.domains.hostname, lockedAt: schema.domains.lockedAt })
     .from(schema.domains)
     .where(and(eq(schema.domains.id, domainId), eq(schema.domains.orgId, orgId)));
   if (!rows[0]) throw new HTTPException(400, { message: "Unknown domain for this org" });
+  // A locked domain stops serving when the org's grace period ends (#159), so
+  // it takes no new links: one that landed here would die on a known date.
+  if (rows[0].lockedAt !== null)
+    throw new HTTPException(402, {
+      message: "That domain is locked: upgrade to use it again",
+      cause: { code: "domain_locked" },
+    });
   return rows[0].hostname;
 }
 
@@ -481,10 +477,15 @@ function assertLinkQuota(count: number, plan: OrgPlan, limits: PlanLimits): void
     });
 }
 
-function assertQrAllowed(body: LinkInput, limits: PlanLimits): void {
-  if (hasQrOverride(body) && !limits.qrCustom)
+function assertQrAllowed(
+  body: LinkInput,
+  limits: PlanLimits,
+  existing: Partial<QrOverrides> | null,
+): void {
+  if (changesQr(body, existing) && !limits.qrCustom)
     throw new HTTPException(402, {
-      message: "QR customization is a paid feature: upgrade to use it",
+      message: "Changing how QR codes look needs a paid plan",
+      cause: { code: "qr_locked" },
     });
 }
 
@@ -544,7 +545,7 @@ async function resolveRenamedSlug(
  * sorted here rather than in the browser: see links-page.ts for why the
  * browser cannot do either job once it only holds one page.
  */
-linkRoutes.get("/", requireOrgRole("member"), async (c) => {
+linkRoutes.get("/", requireOrgRole("viewer"), async (c) => {
   const params = readLinkPageParams(new URL(c.req.url));
   const query = linkPageQuery(c.req.param("orgId")!, params);
 
@@ -597,7 +598,7 @@ linkRoutes.post("/claim", requireOrgRole("member"), async (c) => {
   return c.json(await linkToDTO(c.var.db, c.req.param("orgId")!, link), 201);
 });
 
-linkRoutes.get("/quota-usage", requireOrgRole("member"), async (c) => {
+linkRoutes.get("/quota-usage", requireOrgRole("viewer"), async (c) => {
   const { quotaUsage, quotaUsageAt } = await quotaUsageFields(c.var.db, c.req.param("orgId")!);
   return c.json({ count: quotaUsage, at: quotaUsageAt });
 });
@@ -740,7 +741,7 @@ linkRoutes.post("/", requireOrgRole("member"), async (c) => {
     orgPlan(db, orgId),
     countActiveAddresses(db, orgId),
   ]);
-  assertQrAllowed(body, limits);
+  assertQrAllowed(body, limits, null);
 
   const domainId = body.domainId ?? null;
   // Slugs on the shared domain are always random (every plan): chosen slugs
@@ -842,7 +843,11 @@ function mergedLinkUpdate(
     qrCorner: body.qrCorner ?? existing.qrCorner,
     qrBg: body.qrBg ?? existing.qrBg,
     qrEyeColor: body.qrEyeColor ?? existing.qrEyeColor,
-    qrLogoSize: body.qrLogoSize ?? existing.qrLogoSize,
+    // `undefined`, not nullish: `null` is how the client clears the logo
+    // size, and `??` swallowed it, so a reset silently kept the old value.
+    // The five fields above take "" for the same job, which is why only this
+    // one needed spelling out.
+    qrLogoSize: body.qrLogoSize !== undefined ? body.qrLogoSize : existing.qrLogoSize,
     ...riskAfterDestinationChange(existing, fields.destination),
   };
 }
@@ -905,9 +910,14 @@ linkRoutes.patch("/:linkId", requireOrgRole("member"), async (c) => {
   const orgId = c.req.param("orgId")!;
   validateInput(body, orgId, true);
   const db = c.var.db;
-  const { limits } = await orgPlan(db, orgId);
-  assertQrAllowed(body, limits);
-  const existing = await findLink(db, orgId, c.req.param("linkId")!);
+  // The plan and the row are independent reads, so they go out together.
+  const [{ limits }, existing] = await Promise.all([
+    orgPlan(db, orgId),
+    findLink(db, orgId, c.req.param("linkId")!),
+  ]);
+  // After the row is read: what the plan gates is a *change* to the styling,
+  // not the styling arriving back unchanged with an edit to some other field.
+  assertQrAllowed(body, limits, existing);
 
   const domainId = body.domainId !== undefined ? body.domainId : existing.domainId;
   // A link's domain is fixed after creation (see `#38`): its aliases are
@@ -1029,7 +1039,7 @@ linkRoutes.delete("/:linkId", requireOrgRole("member"), async (c) => {
 
 /* ---------------- addresses (aliases + primary) ---------------- */
 
-linkRoutes.get("/:linkId/addresses", requireOrgRole("member"), async (c) => {
+linkRoutes.get("/:linkId/addresses", requireOrgRole("viewer"), async (c) => {
   const { db, link } = await linkFromRequest(c);
   const rows = await db
     .select({ address: schema.linkAddresses, hostname: schema.domains.hostname })

@@ -31,9 +31,17 @@ function watchPosts(page: Page): string[] {
   return posted;
 }
 
-/** What the page sent that was not Cap proving the visitor is human. */
-function appPosts(posted: string[]): string[] {
-  return posted.filter((url) => !url.includes("/api/cap/"));
+/** Application POSTs other than Cap proving the visitor is human. */
+function appPosts(page: Page, posted: string[]): string[] {
+  const appOrigin = new URL(page.url()).origin;
+  return posted.filter((url) => {
+    const request = new URL(url);
+    return (
+      request.origin === appOrigin &&
+      request.pathname !== "/api/cap/challenge" &&
+      request.pathname !== "/api/cap/redeem"
+    );
+  });
 }
 
 /**
@@ -112,7 +120,7 @@ test("generates a QR code with no account and no network call", async ({ page })
   await expect(page.getByRole("button", { name: /SVG/ })).toBeEnabled();
   expect((await boxOf(upsell)).y).toBe(settled.y);
 
-  expect(appPosts(posted)).toEqual([]);
+  expect(appPosts(page, posted)).toEqual([]);
 });
 
 test("downloads a printable PNG", async ({ page }) => {
@@ -140,7 +148,7 @@ test("the upsell offers the account rather than making a link", async ({ page })
     "/pricing",
   );
 
-  expect(appPosts(posted)).toEqual([]);
+  expect(appPosts(page, posted)).toEqual([]);
 
   await page.getByRole("link", { name: "Start free" }).click();
   await expect(page).toHaveURL(/\/signup$/);
@@ -177,7 +185,7 @@ test("styling the code is free here, and stays in the browser", async ({ page })
   await page.getByRole("menuitem", { name: "dots" }).click();
   await expect(page.getByRole("button", { name: /PNG/ })).toBeVisible();
 
-  expect(appPosts(posted)).toEqual([]);
+  expect(appPosts(page, posted)).toEqual([]);
 });
 
 test("the page says what it is built on, and carries its own title", async ({ page }) => {

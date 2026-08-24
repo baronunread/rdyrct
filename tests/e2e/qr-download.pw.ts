@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { expect, test } from "@playwright/test";
 import { signUpAndVerify } from "./resend";
-import { rawSql, setPlan } from "./db";
+import { queryRows, rawSql, setPlan } from "./db";
 import { createQuickLink } from "./orgs";
 
 const password = "test-password-123";
@@ -111,6 +111,9 @@ test("a downgraded org can still edit a link that has a QR look", async ({ page 
   await page.getByRole("menuitem", { name: "Edit" }).click();
   const reopened = page.getByRole("dialog", { name: "Edit link" });
   await expect(reopened.getByRole("group", { name: "QR customization" })).toBeHidden();
+  // The controls are gone, and the dialog says the look is kept rather than
+  // offering a feature the QR beside it is visibly already using (#162).
+  await expect(reopened.getByText(/keeps the look it already has/)).toBeVisible();
 
   await reopened.getByLabel("Title").fill("Renamed on the free plan");
   await page.getByRole("button", { name: "Save" }).click();
@@ -119,4 +122,15 @@ test("a downgraded org can still edit a link that has a QR look", async ({ page 
   // did not even offer.
   await expect(reopened).toBeHidden();
   await expect(page.getByText("Renamed on the free plan")).toBeVisible();
+
+  // And the styling is still there. The editor used to clear these fields
+  // before sending, so this same save silently destroyed a logo, colours,
+  // dot and corner style somebody had paid for (#162).
+  const [link] = await queryRows<{ qr_style: string; title: string }>(
+    page,
+    "select qr_style, title from links where destination like ?",
+    ["%downgrade%"],
+  );
+  expect(link.qr_style).toBe("dots");
+  expect(link.title).toBe("Renamed on the free plan");
 });

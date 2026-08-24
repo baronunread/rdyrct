@@ -1,5 +1,5 @@
 import * as v from "valibot";
-import type { JsonValue } from "../shared/types";
+import { INVITABLE_ROLES, type JsonValue } from "../shared/types";
 import { HTTPException } from "hono/http-exception";
 
 /**
@@ -61,6 +61,6 @@ export const optionalFlag = v.optional(v.fallback(v.nullable(v.boolean()), null)
 const MAX_INVITE_EMAILS = 50;
 
 export const inviteBodySchema = v.object({
-  role: v.optional(v.picklist(["admin", "member"]), "member"),
+  role: v.optional(v.picklist(INVITABLE_ROLES), "member"),
   emails: v.optional(v.pipe(v.array(v.string()), v.maxLength(MAX_INVITE_EMAILS)), []),
 });

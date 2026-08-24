@@ -145,7 +145,39 @@ export const orgs = sqliteTable("orgs", {
   // reject writes before the workflow's gather step ever runs. Null means
   // not deleting.
   deletingAt: integer("deleting_at"),
+  // This org is beyond its owner's `orgs` cap, so it is read-only until they
+  // upgrade or pick it as the one to keep (#160). Null means active. Its
+  // links keep redirecting: the lock is between us and the account holder.
+  lockedAt: integer("locked_at"),
 });
+
+/**
+ * What the last reconciliation pass found for one org (#158).
+ *
+ * Written only by reconcile.ts, on every billing event that changes a plan
+ * and by the admin's manual run. Read by the app to explain the state and by
+ * the daily cron to send the day-23 warning. Nothing here decides access on
+ * its own: the marker columns (`orgs.lockedAt`, `domains.lockedAt`,
+ * `orgMembers.previousRole`) are what routes and the redirect path read.
+ */
+export const orgEntitlements = sqliteTable(
+  "org_entitlements",
+  {
+    orgId: text("org_id")
+      .primaryKey()
+      .references(() => orgs.id, { onDelete: "cascade" }),
+    plan: text("plan", { enum: ["free", "hobby", "pro"] }).notNull(),
+    /** JSON `{ links?: n, members?: n, domains?: n }`: the live count of each
+     * resource that is over its cap. `{}` means the org is inside its plan. */
+    overJson: text("over_json").notNull().default("{}"),
+    /** Epoch ms the 30 days run out; null while nothing is over. */
+    graceEndsAt: integer("grace_ends_at"),
+    reconciledAt: integer("reconciled_at").notNull(),
+    notifiedAt: integer("notified_at"),
+    warnedAt: integer("warned_at"),
+  },
+  (t) => [index("idx_org_entitlements_grace").on(t.graceEndsAt)],
+);
 
 export const orgMembers = sqliteTable(
   "org_members",
@@ -156,7 +188,10 @@ export const orgMembers = sqliteTable(
     userId: text("user_id")
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
-    role: text("role", { enum: ["owner", "admin", "member"] }).notNull(),
+    role: text("role", { enum: ["owner", "admin", "member", "viewer"] }).notNull(),
+    // What this member was before a downgrade demoted them to viewer (#161).
+    // Null means they hold the role they were given. Re-upgrading restores it.
+    previousRole: text("previous_role", { enum: ["owner", "admin", "member", "viewer"] }),
     createdAt: integer("created_at").notNull(),
   },
   (t) => [primaryKey({ columns: [t.orgId, t.userId] }), index("idx_org_members_user").on(t.userId)],
@@ -169,7 +204,7 @@ export const invites = sqliteTable(
     orgId: text("org_id")
       .notNull()
       .references(() => orgs.id, { onDelete: "cascade" }),
-    role: text("role", { enum: ["admin", "member"] }).notNull(),
+    role: text("role", { enum: ["admin", "member", "viewer"] }).notNull(),
     // Set when the invite was emailed to a specific address: only that
     // account may accept. Null for copy-only link invites (bearer links).
     email: text("email"),
@@ -199,6 +234,11 @@ export const domains = sqliteTable(
     statusReason: text("status_reason").notNull().default(""),
     rootRedirect: text("root_redirect").notNull().default(""),
     cfHostnameId: text("cf_hostname_id"),
+    // Beyond the org's `domains` cap after a downgrade (#159). It keeps
+    // serving until the org's grace period ends, then stops; the row, the KV
+    // entry and the Cloudflare hostname all stay, so an upgrade restores it
+    // with no re-verification. Null means fine.
+    lockedAt: integer("locked_at"),
     createdAt: integer("created_at").notNull(),
   },
   (t) => [index("idx_domains_org").on(t.orgId)],

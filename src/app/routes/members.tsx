@@ -1,5 +1,5 @@
 import { useState, useMemo, useCallback } from "react";
-import { INVITABLE_ROLES } from "@/shared/types";
+import { type InvitableRole, INVITABLE_ROLES } from "@/shared/types";
 import { oneOf } from "@/shared/lookup";
 import { useForm } from "react-hook-form";
 import { valibotResolver } from "@hookform/resolvers/valibot";
@@ -8,7 +8,14 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { UserPlus, Trash2, Info } from "lucide-react";
 import { useCurrentUser, useMembers, useInvites } from "../lib/hooks";
 import { api } from "../lib/api";
-import { PLAN_LIMITS, type InviteDTO, type OrgRole, type Sort, type UserOrg } from "@/shared/types";
+import {
+  PLAN_LIMITS,
+  type InviteDTO,
+  type MemberDTO,
+  type OrgRole,
+  type Sort,
+  type UserOrg,
+} from "@/shared/types";
 import { Button, IconButton } from "../ui/button";
 import { CopyButton } from "../ui/copy-button";
 import { Field, Input } from "../ui/field";
@@ -16,6 +23,8 @@ import { MenuSelect } from "../ui/menu";
 import { Tooltip } from "../ui/tooltip";
 import { RemoveMemberDialog, InviteMemberDialog } from "../components/member-dialogs";
 import { Table, Th, Td, Badge, Card, PageHeader } from "../ui/misc";
+import { HrefLink } from "../lib/router-search";
+import { buttonClass } from "../ui/button-class";
 import { TableSkeleton } from "../ui/skeleton";
 import { BusyContent } from "../ui/spinner";
 import { useToast } from "../ui/toast";
@@ -32,7 +41,16 @@ const roleColor = {
   owner: "accent",
   admin: "mint",
   member: "muted",
+  viewer: "muted",
 } satisfies Record<OrgRole, "accent" | "mint" | "muted">;
+
+/** What each role can do, said once, where the role is chosen. Without it
+ * "viewer" and "member" look like the same word twice. */
+const ROLE_OPTIONS = [
+  { value: "viewer", label: "viewer" },
+  { value: "member", label: "member" },
+  { value: "admin", label: "admin" },
+];
 
 const inviteUrl = (token: string) => `${window.location.origin}/invite/${token}`;
 
@@ -42,7 +60,7 @@ function useMemberManagement(orgId: string, canManage: boolean) {
   const members = useMembers(orgId);
   const invites = useInvites(orgId, canManage);
   const [inviteOpen, setInviteOpen] = useState(false);
-  const [inviteRole, setInviteRole] = useState<"member" | "admin">("member");
+  const [inviteRole, setInviteRole] = useState<InvitableRole>("member");
   const [removing, setRemoving] = useState<{ userId: string; name: string } | null>(null);
   const [sort, setSort] = useState<Sort>({ key: "createdAt", dir: 1 });
 
@@ -81,7 +99,7 @@ function useMemberManagement(orgId: string, canManage: boolean) {
   });
 
   const sendEmailInvite = useMutation({
-    mutationFn: (params: { email: string; role: "member" | "admin" }) =>
+    mutationFn: (params: { email: string; role: InvitableRole }) =>
       api<{ invites: InviteDTO[] }>(`/orgs/${orgId}/invites`, {
         method: "POST",
         body: { role: params.role, emails: [params.email] },
@@ -143,7 +161,7 @@ function MemberRoleCell({
   canManage,
   onSetRole,
 }: {
-  member: { name: string; role: OrgRole };
+  member: { name: string; role: OrgRole; demoted: boolean };
   canManage: boolean;
   onSetRole: (role: string) => void;
 }) {
@@ -164,10 +182,7 @@ function MemberRoleCell({
         label={`Role for ${member.name}`}
         value={member.role}
         onChange={onSetRole}
-        options={[
-          { value: "member", label: "member" },
-          { value: "admin", label: "admin" },
-        ]}
+        options={ROLE_OPTIONS}
       />
     );
   }
@@ -200,7 +215,7 @@ function MemberRow({
   onSetRole,
   onRemove,
 }: {
-  member: { userId: string; name: string; email: string; role: OrgRole; createdAt: number };
+  member: MemberDTO;
   canManage: boolean;
   isSelf: boolean;
   onSetRole: (role: string) => void;
@@ -234,7 +249,7 @@ function MemberTable({
   onRemove,
 }: {
   isLoading: boolean;
-  sorted: { userId: string; name: string; email: string; role: OrgRole; createdAt: number }[];
+  sorted: MemberDTO[];
   canManage: boolean;
   sort: Sort;
   setSort: (s: Sort) => void;
@@ -344,7 +359,8 @@ export function MembersPage() {
   const orgId = org?.id ?? "";
   const currentUser = useCurrentUser();
   const myRole = resolveMyRole(currentUser.data?.user.isAdmin, org?.role);
-  const canManage = canManageOrg(myRole);
+  // A locked org accepts no writes from anyone, its owner included (#160).
+  const canManage = canManageOrg(myRole) && !org?.locked;
 
   const {
     members,
@@ -368,6 +384,11 @@ export function MembersPage() {
   } = useMemberManagement(orgId, canManage);
 
   const memberLimit = memberLimitFor(org);
+  // An org at or over its cap cannot take another member: the server refuses
+  // the invite with a 402, so offering the form is offering an error (#161).
+  // Counted from the same figure the server uses, members plus open invites.
+  const seatsTaken = (members.data?.length ?? 0) + (invites.data?.length ?? 0);
+  const seatsLeft = Math.max(0, memberLimit - seatsTaken);
 
   if (currentUser.isLoading) return <TableSkeleton rows={4} />;
   if (!org) return <NoOrgState />;
@@ -379,16 +400,34 @@ export function MembersPage() {
         sub="People with access to this organization"
         action={
           canManage && (
-            <Button variant="primary" onClick={() => setInviteOpen(true)}>
-              <UserPlus size={15} /> Invite link
-            </Button>
+            <div className="flex items-center gap-3">
+              <span className="tnum text-xs text-muted">
+                {seatsTaken} / {memberLimit} members
+                {seatsTaken > memberLimit && " (over the limit)"}
+              </span>
+              <Button
+                variant="primary"
+                onClick={() => setInviteOpen(true)}
+                disabled={seatsLeft === 0}
+                title={seatsLeft === 0 ? fullSeatsHint(org, memberLimit) : undefined}
+              >
+                <UserPlus size={15} /> Invite link
+              </Button>
+            </div>
           )
         }
       />
 
-      {canManage && (
-        <InviteByEmailCard org={org} memberLimit={memberLimit} sendEmailInvite={sendEmailInvite} />
-      )}
+      {canManage &&
+        (seatsLeft === 0 ? (
+          <SeatsFullNotice org={org} memberLimit={memberLimit} over={seatsTaken > memberLimit} />
+        ) : (
+          <InviteByEmailCard
+            org={org}
+            memberLimit={memberLimit}
+            sendEmailInvite={sendEmailInvite}
+          />
+        ))}
 
       <MemberTable
         isLoading={members.isLoading}
@@ -430,6 +469,39 @@ export function MembersPage() {
   );
 }
 
+/** What the invite form is replaced by once every seat is taken. Says which
+ * of the two situations it is, because "full" and "over" need different
+ * things done about them. */
+function SeatsFullNotice({
+  org,
+  memberLimit,
+  over,
+}: {
+  org: UserOrg;
+  memberLimit: number;
+  over: boolean;
+}) {
+  return (
+    <Card className="mb-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <p className="max-w-prose text-sm text-muted">
+          {over
+            ? `This organization has more people or open invites than the ${org.plan} plan allows (${memberLimit}). Nobody was removed. Remove a member or revoke an invite to make room, or upgrade to keep everyone.`
+            : `Every seat on the ${org.plan} plan is taken (${memberLimit}, counting open invites). Remove someone, or upgrade to invite more.`}
+        </p>
+        <HrefLink href="/billing" className={buttonClass({ variant: "outline", size: "sm" })}>
+          See plans
+        </HrefLink>
+      </div>
+    </Card>
+  );
+}
+
+/** The tooltip on a disabled invite control. */
+function fullSeatsHint(org: UserOrg, memberLimit: number): string {
+  return `The ${org.plan} plan allows ${memberLimit} members, counting open invites`;
+}
+
 function InviteByEmailCard({
   org,
   memberLimit,
@@ -439,7 +511,7 @@ function InviteByEmailCard({
   memberLimit: number;
   sendEmailInvite: {
     mutate: (
-      params: { email: string; role: "member" | "admin" },
+      params: { email: string; role: InvitableRole },
       opts?: { onSuccess?: () => void },
     ) => void;
     isPending: boolean;
@@ -448,7 +520,7 @@ function InviteByEmailCard({
   const toast = useToast();
   const { register, handleSubmit, watch, setValue, reset } = useForm<{
     email: string;
-    role: "member" | "admin";
+    role: InvitableRole;
   }>({
     resolver: valibotResolver(inviteEmailSchema),
     defaultValues: { email: "", role: "member" },
@@ -456,7 +528,7 @@ function InviteByEmailCard({
   const selectedRole = watch("role");
 
   const submit = useCallback(
-    ({ email, role }: { email: string; role: "member" | "admin" }) => {
+    ({ email, role }: { email: string; role: InvitableRole }) => {
       sendEmailInvite.mutate(
         { email, role },
         {
@@ -508,10 +580,7 @@ function InviteByEmailCard({
               label="Role"
               value={selectedRole}
               onChange={(role) => setValue("role", oneOf(INVITABLE_ROLES, role, "member"))}
-              options={[
-                { value: "member", label: "member" },
-                { value: "admin", label: "admin" },
-              ]}
+              options={ROLE_OPTIONS}
             />
           </Field>
         </div>

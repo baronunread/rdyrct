@@ -14,11 +14,31 @@ interface ExplorerRaw {
   }[];
 }
 
-/** Runs raw SQL against the local D1 database via the dev Explorer API. */
+/** What a bound parameter may be at a call site: one SQL scalar. */
+export type SqlParam = string | number | boolean | null;
+
+/**
+ * One bound parameter, as the Explorer will accept it.
+ *
+ * It rejects anything that is not a string and says only "Invalid input",
+ * which reads like a broken statement rather than a rejected argument.
+ * SQLite's column affinity converts a numeric string back on the way in, so
+ * an integer column still holds an integer.
+ */
+function asExplorerParam(value: SqlParam): string | null {
+  return value === null ? null : String(value);
+}
+
+/**
+ * Runs raw SQL against the local D1 database via the dev Explorer API.
+ *
+ * Parameters go through `asExplorerParam`, which is where the Explorer's
+ * string-only rule is handled.
+ */
 export async function rawSql(
   page: Page,
   sql: string,
-  params: JsonValue[] = [],
+  params: SqlParam[] = [],
 ): Promise<ExplorerRaw> {
   const databases = await page.request.get(`${explorerUrl}/d1/database`);
   expect(databases.ok()).toBe(true);
@@ -27,9 +47,11 @@ export async function rawSql(
   expect(databaseId).toBeTruthy();
 
   const response = await page.request.post(`${explorerUrl}/d1/database/${databaseId}/raw`, {
-    data: { sql, params },
+    data: { sql, params: params.map(asExplorerParam) },
   });
-  expect(response.ok()).toBe(true);
+  // The body carries the actual complaint (a failed constraint, a rejected
+  // parameter). Without it a failure here is an opaque "expected true".
+  expect(response.ok(), `${sql}\n${await response.text()}`).toBe(true);
   return response.json();
 }
 
@@ -42,11 +64,7 @@ export async function rawSql(
  * an error, so the mistake surfaces later as a confusing assertion failure.
  * Callers get objects instead.
  */
-export async function queryRows<T>(
-  page: Page,
-  sql: string,
-  params: JsonValue[] = [],
-): Promise<T[]> {
+export async function queryRows<T>(page: Page, sql: string, params: SqlParam[] = []): Promise<T[]> {
   const { columns, rows } = (await rawSql(page, sql, params)).result[0].results;
   // SAFETY: the caller names the columns its own SELECT asks for. A column it
   // did not select reads as undefined and fails whichever assertion wanted it,
@@ -57,7 +75,7 @@ export async function queryRows<T>(
 async function expectOneRowChanged(
   page: Page,
   sql: string,
-  params: JsonValue[],
+  params: SqlParam[],
   what: string,
 ): Promise<void> {
   const result = await rawSql(page, sql, params);
@@ -138,4 +156,27 @@ export async function compUser(
     [plan, reason, plan, email],
     `no user with email ${email}`,
   );
+}
+
+/**
+ * Reads one KV value through the dev Explorer.
+ *
+ * The redirect hot path answers from KV alone, so this is how a browser test
+ * checks the verdict the Worker will act on: the value is what a real
+ * reconciliation pass wrote, through the real storage queue, not a fixture.
+ */
+export async function kvValue(page: Page, key: string): Promise<JsonValue | null> {
+  const namespaces = await page.request.get(`${explorerUrl}/storage/kv/namespaces`);
+  expect(namespaces.ok()).toBe(true);
+  const listed = await namespaces.json();
+  const id = listed.result.find((n: { title: string }) => n.title.includes("LINKS"))?.id;
+  expect(id).toBeTruthy();
+  const value = await page.request.get(
+    `${explorerUrl}/storage/kv/namespaces/${id}/values/${encodeURIComponent(key)}`,
+  );
+  if (value.status() === 404) return null;
+  expect(value.ok()).toBe(true);
+  // SAFETY: every value this repo writes to LINKS is JSON it produced; the
+  // caller names the shape it asserts on.
+  return JSON.parse(await value.text()) as JsonValue;
 }

@@ -28,9 +28,29 @@ Read the issue, then read the code it names. Two things to establish:
 Say so plainly if either answer is no, then do the right thing and explain
 why in the PR body. Do not silently ship something different.
 
-## 2. Branch
+## 2. Branch, and take several issues at once
 
 Off `main`, always. `main` is protected and direct pushes bypass review.
+
+**Prefer a batch of related issues to one branch per issue.** One branch, one
+PR, one review, one CI run. #153 closed #103, #104 and #137 together and read
+better for it: the reviewer saw the whole shape of the change instead of three
+diffs that each looked arbitrary.
+
+Group by what a reviewer would want to read in one sitting:
+
+- The same area of the code, so the context is loaded once.
+- A chain where each issue depends on the last, so splitting them would mean
+  merging something unusable on its own.
+- A pile of small ones, none of which justifies its own review.
+
+Split when the batch stops being reviewable: unrelated areas, a diff nobody
+can hold in their head, or one risky change that should be revertable on its
+own. A migration or anything touching auth or billing is worth isolating, so
+a revert does not take four unrelated fixes with it.
+
+Name the branch for the theme, not the issue numbers, and list every issue the
+PR closes in the body.
 
 ## 3. Implement
 
@@ -41,6 +61,15 @@ Off `main`, always. `main` is protected and direct pushes bypass review.
   once, at the end. The full e2e suite is CI's job, not a local default.
 - `bun run fallow` before the PR. It catches duplication you would otherwise
   ship.
+- **A new migration needs `bun run db:migrate:local`.** Nothing applies it for
+  you: not `bun run dev`, not the worker tests, which apply migrations into
+  their own database. #165's table was missing from the dev D1 for a whole
+  session, and the thing that finally asked for it was the seeder.
+- **Fix what you trip over, in its own commit.** This branch turned up a
+  pre-commit hook that failed any commit touching only a skill file, and a
+  test helper that swallowed the one error message that would have explained
+  a failure. Both cost twenty minutes and neither had anything to do with the
+  issue. Leaving them costs the next person the same twenty minutes.
 
 ### Mutation-test any new guard
 
@@ -58,12 +87,99 @@ Do this for anything with a branch worth having: a security check, a cap, a
 race guard. It is the difference between "the suite is green" and "this test
 would catch a regression".
 
-## 4. Open the PR
+## 4. Open the PR, once, when it is finished
+
+**Opening the PR is what asks for the review, so only open when you want to be
+reviewed.** Every issue in the batch done, every test written, `bun run
+verify` and `bun run fallow` green locally. Work on the branch as long as you
+need; push nothing to a PR until the branch is the thing you would merge.
+
+A PR opened early gets reviewed against a half-finished diff. That review is
+worse than useless: it reports things you were about to fix, it costs a real
+review (they are rate limited, and running out is how a PR ends up looking
+reviewed when it was not, see step 6), and the findings you then have to sort
+through are noise you created.
+
+No draft PRs as a workaround either. A draft still burns the review and still
+produces comments to triage.
 
 The body carries the reasoning, not just the change. What was wrong, why this
 fix, what was deliberately not done, and what a reviewer should know at
 release (a route rename means anyone on the old bundle gets errors until they
-reload).
+reload). List every issue it closes.
+
+### Anything with a face gets screenshots
+
+If the change touches an interface, post the screenshots as a PR comment. Not
+because a PR should be pretty: a screenshot is the only part of a review that
+checks what a person will actually see, and prose describing a screen is the
+easiest thing in a PR body to write convincingly and wrongly.
+
+They pay for themselves while you take them. Driving #165's states turned up
+an invite form still offered in an org the server would refuse an invite
+from, which every test had passed straight over because no test asks "would a
+person be offered this".
+
+**Shoot the seed data, not data you invented for the shot.** `bun run
+db:seed:local` builds 60 orgs with real names, 90 days of clicks and a few
+orgs already mid-downgrade. A capture script that makes up its own rows gives
+you four links called "Spring campaign 31" and every chart reading zero,
+which shows nothing about how the screen looks in a populated account. It
+also means the screenshots exercise the seeder: doing this for #165 turned up
+a wipe that missed a table, a seeded state that never occurred, and a
+migration that had never been applied to the dev database at all. If the
+feature has a state the seeder cannot produce, add it there rather than
+faking it in the capture.
+
+That decides the tool, too. A seeded user is already verified and shares one
+password, so `bunx agent-browser` can just sign in:
+
+```sh
+bunx agent-browser set viewport 1280 900
+bunx agent-browser open https://rdyrct.localhost/login
+bunx agent-browser eval "localStorage.setItem('rdyrct:consent:v2','granted')"
+bunx agent-browser fill 'input[type="email"]' someone@seed.test
+bunx agent-browser fill 'input[type="password"]' seed-password-123
+bunx agent-browser click 'button[type="submit"]'
+bunx agent-browser open https://rdyrct.localhost/members
+bunx agent-browser screenshot shots/members.png
+```
+
+Use CSS selectors, not the `@ref` handles from `snapshot`: refs go stale on
+every re-render, and a stale one fails silently. Reach for a throwaway
+`tests/e2e/zz-shots.pw.ts` (reusing the helpers in `tests/e2e/orgs.ts`) only
+for a state the seeder cannot reach, since driving a signup and its emailed
+code through the CLI is where agent-browser stops paying off. Delete it once
+the images are out; it is a capture script, not a check.
+
+Either way, three things that cost a retake each:
+
+- The consent banner covers the bottom-right of every page. Clear it through
+  `localStorage`, not by clicking, which is one less thing to go stale.
+- 1280x900, and take the shot on the screen that shows the change, not the
+  prettiest one.
+- Menus and dialogs fade in. Wait for them, and in Playwright pass
+  `animations: "disabled"`, or the shot catches them half transparent.
+
+**Host them in R2, never in the repo and never in a side branch.** Both put
+binaries in git history for a comment, and pushing an orphan branch to serve
+images is using GitHub as a CDN it did not offer to be:
+
+```sh
+bunx wrangler r2 object put "brnr/github/rdyrct/pr-<n>/<name>.png" \
+  --file <name>.png --content-type image/png --remote
+```
+
+They serve from `https://cdn.brnr.dev/github/rdyrct/pr-<n>/<name>.png`. Check
+one with `curl -o /dev/null -w '%{http_code}'` before writing the comment,
+then check GitHub proxied them after: it rewrites external images through
+camo, so `gh api repos/<owner>/<repo>/issues/comments/<id> -H "Accept:
+application/vnd.github.html+json"` should show one `<img>` per image and each
+camo URL should return `image/png`. A broken image reads as a broken feature.
+
+Caption each one with what it proves, not what it is. "Still listed, still
+redirecting, counting down to the day it stops" is a review; "Domains page"
+is a filename.
 
 ## 5. Wait for CI
 
@@ -75,6 +191,12 @@ Seven checks: `static`, `unit`, `react-doctor`, `React Doctor`, `e2e (1..3)`.
 reports pass when its review never ran: it posts a rate-limit warning instead
 and the PR looks reviewed. When that happens, comment `@coderabbitai review`
 once the limit resets and wait for the real thing.
+
+It bites twice. The limit is per-account and shared with every other PR, so
+the run that reviewed your first push says nothing about the commits you
+pushed to answer it. After fixing a review, check that the next one covered
+the fixes: `gh pr view <n> --json comments` and look at which commit the
+latest CodeRabbit comment names.
 
 Every comment ends in one of three states, with a reply on the thread saying
 which:
@@ -98,17 +220,37 @@ Spawn a fresh agent with no context from your session, and give it the PR
 number, the issues it closes, and any deliberate scope decisions it should
 not re-litigate. Ask for a verdict plus findings with `file:line`.
 
-This is the step that catches what you cannot catch on your own diff. It has
-found a sweep with no test (making an acceptance criterion unverified), a
-stale doc comment, and an error string that read as field-name jargon in a
-toast. Tell it to verify claims by running things rather than reasoning about
-them, and to leave the working tree exactly as it found it.
+This is the step that catches what you cannot catch on your own diff, and it
+is worth the wait even when everything says the PR is done. On #165 all seven
+checks were green and all twelve CodeRabbit threads were fixed and resolved;
+the cold review then returned "do not ship" and ten more findings, two of
+which broke the feature outright. One of those was the only event that
+mattered, `subscription.revoked`, silently never running the pass the whole
+branch existed for.
+
+It has also found a sweep with no test (making an acceptance criterion
+unverified), a stale doc comment, and an error string that read as field-name
+jargon in a toast.
+
+Tell it to verify claims by running things rather than reasoning about them,
+and to leave the working tree exactly as it found it. Name the deliberate
+decisions it should not re-litigate, or it spends its budget re-deriving
+choices already argued in the PR body, and say what to hunt for instead:
+where the feature's own rule is broken, which acceptance criteria nothing
+covers, and any path where something is deleted or silently lost.
 
 ## 8. Merge
 
 Squash, delete the branch, sync `main`. Only when CI is green **and** both
 reviews are genuinely clean. Confirm the checks ran against the head commit,
 not an earlier push.
+
+Before that, walk the issues the PR closes and check each one has its
+evidence: a test that would fail without it, and a screenshot if it has a
+face. Asked whether #165 had a screenshot for every new feature, the honest
+answer was no: three surfaces, including the entire first issue in the batch,
+were described in the PR body and shown nowhere. "The PR has screenshots" is
+not the same claim as "each issue has one".
 
 Then take the next issue.
 

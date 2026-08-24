@@ -49,10 +49,11 @@ async function freshOrg(page: Page, name: string): Promise<void> {
   } else {
     defaultOrgSpent = true;
   }
-  // Switching org invalidates the dashboard's queries, which briefly
-  // remounts it into its loading skeleton: settle before touching its form,
-  // so a fill() right after doesn't land in a field about to be replaced.
-  await page.waitForLoadState("networkidle");
+  // Switching org invalidates the dashboard's queries, which briefly remounts
+  // its form. Wait for that form, not network idle: product analytics can
+  // keep an unrelated request open. createQuickLink retries its fill in case
+  // a final query update replaces the field.
+  await expect(page.getByPlaceholder("https://example.com/launch").first()).toBeVisible();
 }
 
 /** Fills the dashboard's quick-create destination field and submits it,

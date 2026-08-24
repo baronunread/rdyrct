@@ -11,6 +11,56 @@ export function canListOrgDomains(isPlatformAdmin: boolean, role: OrgRole | unde
   return isPlatformAdmin || role === "owner" || role === "admin";
 }
 
+/**
+ * Whether this role may change anything in the org (#157).
+ *
+ * A viewer reads everything and writes nothing, so every control that would
+ * submit has to be hidden rather than left to fail: the server refuses them
+ * with a 403, and a button whose only outcome is an error toast is not a
+ * feature. Undefined role means the org has not loaded, which is also not a
+ * moment to offer a write.
+ */
+/**
+ * Whether this role may administer the org: domains, members, invites and the
+ * org-wide QR defaults, none of which a plain member may touch.
+ *
+ * Locked-aware for the same reason `canWriteOrg` is (#160): a locked org
+ * accepts no writes from anyone, its owner included, so a control that would
+ * submit has to be hidden rather than left to 403. Platform admins act as
+ * owner everywhere, and the lock still applies to them, because the server
+ * refuses their write too.
+ */
+export function canAdminOrg(
+  isPlatformAdmin: boolean | undefined,
+  role: OrgRole | undefined,
+  locked = false,
+): boolean {
+  if (locked) return false;
+  return !!isPlatformAdmin || role === "owner" || role === "admin";
+}
+
+export function canWriteOrg(role: OrgRole | undefined, locked = false): boolean {
+  // A locked org is read-only for everyone in it, its owner included (#160).
+  // Same answer as a viewer's, so every control already hidden for a viewer
+  // is hidden here too, and nothing new has to be threaded through.
+  if (locked) return false;
+  return role === "owner" || role === "admin" || role === "member";
+}
+
+/**
+ * Why the domains page cannot offer its add form, which is not one question
+ * but two (#159, #160).
+ *
+ * A locked org is not short of a plan: it is on a plan that covers fewer
+ * organizations than its owner has. Answering it with "custom domains need a
+ * paid plan" is wrong to a Hobby owner reading it, and points at an upgrade
+ * that would not unlock anything.
+ */
+export function domainsBlockedBy(planDomains: number, locked: boolean): "lock" | "plan" | null {
+  if (locked) return "lock";
+  return planDomains > 0 ? null : "plan";
+}
+
 export function useOrgLimits() {
   const { org } = useCurrentOrg();
   const orgId = org?.id ?? "";
@@ -18,11 +68,17 @@ export function useOrgLimits() {
   const limits = PLAN_LIMITS[org?.plan ?? "free"];
   const canListDomains = canListOrgDomains(!!currentUser.data?.user.isAdmin, org?.role);
   const domains = useDomains(orgId, canListDomains);
+  // `lockedAt` as well as `status`: a downgrade leaves a domain `active` and
+  // locked, and a locked one takes no new links (#159). Without this the
+  // editor kept preselecting it and every default-path create came back 402.
   const activeDomains = useMemo(
-    () => (domains.data ?? []).filter((d) => d.status === "active"),
+    () => (domains.data ?? []).filter((d) => d.status === "active" && d.lockedAt === null),
     [domains.data],
   );
   const orgQr = orgQrFrom(org);
+  // Every page that can offer a write already calls this hook, so the answer
+  // lives here rather than being re-derived from the role at each control.
+  const canWrite = canWriteOrg(org?.role, org?.locked);
   // Resolved here rather than at each call site, so nothing preselects a
   // domain that stopped serving (#69).
   const defaultDomainId = resolveDefaultDomainId(org?.defaultDomainId, activeDomains);
@@ -31,6 +87,7 @@ export function useOrgLimits() {
     orgId,
     currentUser,
     limits,
+    canWrite,
     canListDomains,
     domains,
     activeDomains,

@@ -24,6 +24,23 @@ export interface KVDomain {
   domainId: string;
   orgId: string;
   rootRedirect: string;
+  /**
+   * Epoch ms this host stops resolving, or null/absent for "keeps serving"
+   * (#159).
+   *
+   * A downgraded org's extra domains keep working for 30 days, and the
+   * redirect path has to know that without a D1 read, so the deadline rides
+   * in the value rather than being looked up per request. Reconciliation
+   * writes it; nothing rewrites it when the day arrives, because a stored
+   * deadline needs no cron to expire.
+   */
+  servesUntil?: number | null;
+}
+
+/** Whether a custom domain still resolves. A value written before
+ * `servesUntil` existed has it undefined, which means "keeps serving". */
+export function domainServing(domain: KVDomain, now = Date.now()): boolean {
+  return domain.servesUntil == null || domain.servesUntil > now;
 }
 
 const slugKey = (hostname: string | null, slug: string) =>
@@ -69,12 +86,19 @@ export async function resolveSlug(
 
 export async function publishDomain(
   env: Env,
-  domain: { id: string; orgId: string; hostname: string; rootRedirect: string },
+  domain: {
+    id: string;
+    orgId: string;
+    hostname: string;
+    rootRedirect: string;
+    servesUntil?: number | null;
+  },
 ): Promise<void> {
   const value: KVDomain = {
     domainId: domain.id,
     orgId: domain.orgId,
     rootRedirect: domain.rootRedirect,
+    servesUntil: domain.servesUntil ?? null,
   };
   await env.LINKS.put(`domain:${domain.hostname}`, JSON.stringify(value));
 }

@@ -11,8 +11,9 @@ import { Card } from "../ui/misc";
 import { BusyContent } from "../ui/spinner";
 import { useToast } from "../ui/toast";
 import { QrColorAndLogoFields, QrPreviewSidebar, QrPatternFields } from "./qr-fields";
-import { type QrValues } from "../lib/qr-look";
+import { hasAnyQrValue, type QrValues } from "../lib/qr-look";
 import { orgQrFrom } from "../lib/org-qr";
+import { canAdminOrg } from "../lib/org-limits";
 import posthog from "../lib/posthog";
 
 type QrDefaultsValues = QrValues;
@@ -74,22 +75,25 @@ function useQrDefaultsForm(
   return { values, setField, savingQr, save };
 }
 
-/** Owner/admin (or platform admin) can edit; everyone else can only view. */
-function canManageQrDefaults(
-  isPlatformAdmin: boolean | undefined,
-  role: "owner" | "admin" | "member" | undefined,
-) {
-  return !!isPlatformAdmin || role === "owner" || role === "admin";
-}
-
-function UpgradeQrPrompt() {
+/**
+ * What sits here on a plan without `qrCustom`.
+ *
+ * Two sentences, because they are two situations (#162). An org with no
+ * defaults is being offered a feature. An org that already set some, and
+ * downgraded, is keeping them: they still apply to every QR the org
+ * generates, so telling that org to "upgrade to put your logo on every QR
+ * code" describes the state it is already in.
+ */
+function UpgradeQrPrompt({ locked }: { locked: boolean }) {
   return (
-    <p className="text-sm text-muted">
-      QR customization is a paid feature.{" "}
+    <p className="max-w-prose text-sm text-muted">
+      {locked
+        ? "These defaults still apply to every QR code this organization makes. Changing them needs a paid plan. "
+        : "Changing how QR codes look needs a paid plan. "}
       <Link to="/billing" className="text-accent hover:underline">
         Upgrade
       </Link>{" "}
-      to put your logo and style on every QR code.
+      {locked ? "to edit them again." : "to put your logo and style on every QR code."}
     </p>
   );
 }
@@ -117,14 +121,55 @@ function SaveQrDefaultsAction({
   );
 }
 
+/** The editor grid, or the same grid read-only on a plan that kept its
+ * defaults but may no longer change them (#162). */
+function QrDefaultsFields({
+  values,
+  setField,
+  canEdit,
+  savingQr,
+  save,
+}: {
+  values: QrDefaultsValues;
+  setField: ReturnType<typeof useQrDefaultsForm>["setField"];
+  canEdit: boolean;
+  savingQr: boolean;
+  save: () => void;
+}) {
+  return (
+    <div className="grid gap-6 sm:grid-cols-[1fr_auto]">
+      <QrPatternFields values={values} setField={setField} isAdmin={canEdit} />
+      <div className="order-last sm:order-none">
+        <QrPreviewSidebar values={values} url={shortUrl("preview")} />
+      </div>
+      <QrColorAndLogoFields
+        values={values}
+        setField={setField}
+        isAdmin={canEdit}
+        className="sm:col-span-2"
+      />
+      {canEdit && (
+        <div className="sm:col-span-2">
+          <SaveQrDefaultsAction isAdmin={canEdit} savingQr={savingQr} save={save} />
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function QrDefaultsCard() {
   const { org } = useCurrentOrg();
   const orgId = org?.id ?? "";
   const currentUser = useCurrentUser();
-  const isAdmin = canManageQrDefaults(currentUser.data?.user.isAdmin, org?.role);
+  const isAdmin = canAdminOrg(currentUser.data?.user.isAdmin, org?.role, org?.locked);
   const hasQrCustom = org ? PLAN_LIMITS[org.plan].qrCustom : false;
 
   const { values, setField, savingQr, save } = useQrDefaultsForm(orgId, org!);
+  // Defaults the org already set, which keep applying on a plan that no
+  // longer allows new ones: shown, read-only, rather than replaced by an
+  // upsell for the feature they are visibly using (#162).
+  const hasQrDefaults = hasAnyQrValue(values);
+  const canEdit = isAdmin && hasQrCustom;
 
   return (
     <Card className="max-w-2xl">
@@ -135,24 +180,15 @@ export function QrDefaultsCard() {
             Applied to every link's QR code unless the link overrides them.
           </p>
         </div>
-        {!hasQrCustom ? (
-          <UpgradeQrPrompt />
-        ) : (
-          <div className="grid gap-6 sm:grid-cols-[1fr_auto]">
-            <QrPatternFields values={values} setField={setField} isAdmin={isAdmin} />
-            <div className="order-last sm:order-none">
-              <QrPreviewSidebar values={values} url={shortUrl("preview")} />
-            </div>
-            <QrColorAndLogoFields
-              values={values}
-              setField={setField}
-              isAdmin={isAdmin}
-              className="sm:col-span-2"
-            />
-            <div className="sm:col-span-2">
-              <SaveQrDefaultsAction isAdmin={isAdmin} savingQr={savingQr} save={save} />
-            </div>
-          </div>
+        {!hasQrCustom && <UpgradeQrPrompt locked={hasQrDefaults} />}
+        {(hasQrCustom || hasQrDefaults) && (
+          <QrDefaultsFields
+            values={values}
+            setField={setField}
+            canEdit={canEdit}
+            savingQr={savingQr}
+            save={save}
+          />
         )}
       </div>
     </Card>

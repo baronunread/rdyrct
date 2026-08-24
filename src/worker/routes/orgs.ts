@@ -7,14 +7,22 @@ import * as schema from "../db/schema";
 import type { AppEnv, DB, Env } from "../env";
 import { requireUser } from "../guards";
 import { requireOrgRole, orgRole } from "../org-role";
-import { orgPlan, userPlan, createOwnedOrg, acceptInviteAtomically } from "../plan";
+import {
+  orgPlan,
+  userPlan,
+  createOwnedOrg,
+  acceptInviteAtomically,
+  keepOrgActive,
+  setMemberRoleWithinLimit,
+} from "../plan";
 import { sendEmail } from "../email";
 import { renderEmail } from "../email-layout";
 import { deleteQrLogoMsg, enqueueStorage } from "../storage";
-import { uid, referrerHost, validateQrFields } from "../util";
+import { uid, referrerHost, validateQrFields, changesQr } from "../util";
 import { jsonBodyLimit } from "../body-limit";
 import { parseBody, inviteBodySchema } from "../schemas";
 import type {
+  UserOrg,
   MemberDTO,
   InviteDTO,
   OrgStats,
@@ -23,6 +31,7 @@ import type {
   InvitePreview,
   RecentClick,
 } from "@/shared/types";
+import { INVITABLE_ROLES } from "@/shared/types";
 
 export const orgRoutes = new Hono<AppEnv>();
 orgRoutes.use("*", jsonBodyLimit());
@@ -64,10 +73,54 @@ orgRoutes.post("/", requireUser, async (c) => {
       qrBg: "",
       qrEyeColor: "",
       qrLogoSize: null,
-    },
+      defaultDomainId: null,
+      locked: false,
+      over: {},
+      graceEndsAt: null,
+    } satisfies UserOrg,
     201,
   );
 });
+
+/** Who owns this org. Every owned-org decision belongs to them, whoever is
+ * making the request. */
+async function orgOwnerId(db: DB, orgId: string): Promise<string | null> {
+  const rows = await db
+    .select({ userId: schema.orgMembers.userId })
+    .from(schema.orgMembers)
+    .where(and(eq(schema.orgMembers.orgId, orgId), eq(schema.orgMembers.role, "owner")));
+  return rows[0]?.userId ?? null;
+}
+
+/**
+ * Keeps this org active, and locks whichever other one has to give way (#160).
+ *
+ * The owner is over their `orgs` cap and picks which one keeps working. The
+ * pick is reversible: calling this on the other org swaps them back. Runs on
+ * a locked org, which is the whole point, so it opts out of the lock guard.
+ */
+orgRoutes.post(
+  "/:orgId/keep-active",
+  requireOrgRole("owner", { allowWhileLocked: true }),
+  async (c) => {
+    // The org's owner, not the caller: a platform admin passes
+    // requireOrgRole("owner") everywhere (see orgRole), and using their id
+    // here would unlock a customer's org against the admin's own plan and
+    // then lock one of the admin's orgs to pay for it.
+    const userId = await orgOwnerId(c.var.db, c.req.param("orgId"));
+    if (!userId) throw new HTTPException(404, { message: "Organization not found" });
+    const { limits } = await userPlan(c.var.db, userId);
+    // One transaction: two requests picking two different locked orgs could
+    // otherwise leave the owner with every org locked. See keepOrgActive.
+    await keepOrgActive(c.env, {
+      orgId: c.req.param("orgId"),
+      userId,
+      ownedOrgLimit: limits.orgs,
+      ts: Date.now(),
+    });
+    return c.json({ ok: true });
+  },
+);
 
 type OrgQrPatchBody = {
   qrLogo?: string;
@@ -130,19 +183,24 @@ async function applyQrPatch(
   set: Partial<typeof schema.orgs.$inferInsert>,
 ): Promise<string> {
   validateQrFields(body, orgId);
-  // QR customization is a paid feature, so are the org-level defaults.
-  const { limits } = await orgPlan(db, orgId);
-  if (!limits.qrCustom)
+  // The same rule the link editor's save follows (#162): what the plan gates
+  // is a *change* to the styling, not the styling arriving back unchanged
+  // alongside an edit to some other field. Org-level and link-level QR behave
+  // the same on a downgrade, which they did not before: one 402'd on any QR
+  // field being present while the other quietly wiped them.
+  const [{ limits }, rows] = await Promise.all([
+    orgPlan(db, orgId),
+    db.select().from(schema.orgs).where(eq(schema.orgs.id, orgId)),
+  ]);
+  const existing = rows[0] ?? null;
+  if (!limits.qrCustom && changesQr(body, existing))
     throw new HTTPException(402, {
-      message: "QR customization is a paid feature: upgrade to use it",
+      message: "Changing how QR codes look needs a paid plan",
+      cause: { code: "qr_locked" },
     });
   Object.assign(set, qrPatchFields(body));
   if (body.qrLogo === undefined) return "";
-  const rows = await db
-    .select({ qrLogo: schema.orgs.qrLogo })
-    .from(schema.orgs)
-    .where(eq(schema.orgs.id, orgId));
-  return rows[0]?.qrLogo ?? "";
+  return existing?.qrLogo ?? "";
 }
 
 /**
@@ -160,10 +218,17 @@ async function resolveDefaultDomain(
 ): Promise<string | null> {
   if (domainId === null) return null;
   const rows = await db
-    .select({ status: schema.domains.status })
+    .select({ status: schema.domains.status, lockedAt: schema.domains.lockedAt })
     .from(schema.domains)
     .where(and(eq(schema.domains.id, domainId), eq(schema.domains.orgId, orgId)));
   if (!rows.length) throw new HTTPException(404, { message: "Unknown domain" });
+  // A locked domain stops serving when the grace period ends, so pointing new
+  // links at it would build a backlog of links that die on a known date (#159).
+  if (rows[0].lockedAt !== null)
+    throw new HTTPException(402, {
+      message: "That domain is locked: upgrade to use it again",
+      cause: { code: "domain_locked" },
+    });
   if (rows[0].status !== "active")
     throw new HTTPException(400, {
       message: "That domain is not serving yet, so it cannot be the default",
@@ -243,14 +308,20 @@ export async function deleteOrg(db: DB, env: Env, orgId: string): Promise<void> 
   }
 }
 
-orgRoutes.delete("/:orgId", requireOrgRole("owner", { allowWhileDeleting: true }), async (c) => {
-  await deleteOrg(c.var.db, c.env, c.req.param("orgId"));
-  return c.json({ ok: true });
-});
+// A locked org can still be deleted: deleting it is one of the two ways out
+// of the lock, and refusing would trap the owner.
+orgRoutes.delete(
+  "/:orgId",
+  requireOrgRole("owner", { allowWhileDeleting: true, allowWhileLocked: true }),
+  async (c) => {
+    await deleteOrg(c.var.db, c.env, c.req.param("orgId"));
+    return c.json({ ok: true });
+  },
+);
 
 /* ---------------- members ---------------- */
 
-orgRoutes.get("/:orgId/members", requireOrgRole("member"), async (c) => {
+orgRoutes.get("/:orgId/members", requireOrgRole("viewer"), async (c) => {
   const rows = await c.var.db
     .select({
       userId: schema.orgMembers.userId,
@@ -258,26 +329,43 @@ orgRoutes.get("/:orgId/members", requireOrgRole("member"), async (c) => {
       email: schema.user.email,
       role: schema.orgMembers.role,
       createdAt: schema.orgMembers.createdAt,
+      previousRole: schema.orgMembers.previousRole,
     })
     .from(schema.orgMembers)
     .innerJoin(schema.user, eq(schema.orgMembers.userId, schema.user.id))
     .where(eq(schema.orgMembers.orgId, c.req.param("orgId")));
-  return c.json(rows satisfies MemberDTO[]);
+  return c.json(
+    rows.map(({ previousRole, ...row }) => ({
+      ...row,
+      demoted: previousRole !== null,
+    })) satisfies MemberDTO[],
+  );
 });
 
 orgRoutes.patch("/:orgId/members/:userId", requireOrgRole("admin"), async (c) => {
-  const body = await c.req.json<{ role?: "admin" | "member" }>();
-  if (body.role !== "admin" && body.role !== "member")
-    throw new HTTPException(400, { message: "Role must be admin or member" });
+  const body = await c.req.json<{ role?: string }>();
+  const role = INVITABLE_ROLES.find((r) => r === body.role);
+  if (!role) throw new HTTPException(400, { message: "Role must be admin, member or viewer" });
   const { orgId, targetId } = await resolveMember(
     c.var.db,
     c.req.param("orgId"),
     c.req.param("userId"),
   );
-  await c.var.db
-    .update(schema.orgMembers)
-    .set({ role: body.role })
-    .where(memberWhere(orgId, targetId));
+  // Guarded inside the statement, not from a count read first: two admins
+  // promoting two different viewers at once would both find room. Demoting is
+  // always allowed, which is what makes the swap possible.
+  const { limits } = await orgPlan(c.var.db, orgId);
+  const written = await setMemberRoleWithinLimit(c.env, {
+    orgId,
+    userId: targetId,
+    role,
+    memberLimit: limits.members,
+  });
+  if (!written)
+    throw new HTTPException(402, {
+      message: `This plan allows ${limits.members} members who can make changes: set someone else to viewer first`,
+      cause: { code: "member_limit" },
+    });
   return c.json({ ok: true });
 });
 
@@ -610,7 +698,7 @@ async function lookupInvite(db: DB, token: string) {
   return invite;
 }
 
-orgRoutes.get("/:orgId/stats", requireOrgRole("member"), async (c) => {
+orgRoutes.get("/:orgId/stats", requireOrgRole("viewer"), async (c) => {
   const db = c.var.db;
   const orgId = c.req.param("orgId");
   const { limits } = await orgPlan(db, orgId);
@@ -833,7 +921,7 @@ orgRoutes.get("/:orgId/stats", requireOrgRole("member"), async (c) => {
 
 /* ---------------- recent clicks feed (dashboard) ---------------- */
 
-orgRoutes.get("/:orgId/clicks", requireOrgRole("member"), async (c) => {
+orgRoutes.get("/:orgId/clicks", requireOrgRole("viewer"), async (c) => {
   const raw = parseInt(c.req.query("limit") ?? "", 10);
   const limit = Math.min(Math.max(Number.isFinite(raw) ? raw : 8, 1), 50);
   const rows = await c.var.db
@@ -862,7 +950,7 @@ orgRoutes.get("/:orgId/clicks", requireOrgRole("member"), async (c) => {
 
 /* ---------------- per-link stats ---------------- */
 
-orgRoutes.get("/:orgId/links/stats/:slug", requireOrgRole("member"), async (c) => {
+orgRoutes.get("/:orgId/links/stats/:slug", requireOrgRole("viewer"), async (c) => {
   const db = c.var.db;
   const orgId = c.req.param("orgId");
   const slug = c.req.param("slug");

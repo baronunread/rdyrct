@@ -1,7 +1,7 @@
 import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import * as schema from "./db/schema";
 import type { DB, Env } from "./env";
-import { PLAN_LIMITS, type OrgPlan, type PlanLimits } from "@/shared/types";
+import { INVITABLE_ROLES, PLAN_LIMITS, type OrgPlan, type PlanLimits } from "@/shared/types";
 
 /**
  * Runs one raw D1 statement and reports whether it wrote a row. Meant for a
@@ -86,7 +86,7 @@ export async function acceptInviteAtomically(
   args: {
     orgId: string;
     userId: string;
-    role: "admin" | "member";
+    role: (typeof INVITABLE_ROLES)[number];
     ts: number;
     memberLimit: number;
     token: string;
@@ -282,6 +282,83 @@ export async function insertDomainWithinLimit(
       row.orgId,
       domainLimit,
     ],
+  );
+}
+
+/**
+ * Makes one org the active one and locks whatever has to give way, in a
+ * single D1 transaction (#160).
+ *
+ * Two requests picking two different locked orgs could otherwise both clear
+ * `locked_at`, then both lock the org the other had just chosen, leaving an
+ * owner with everything locked and no org they can write to. Batching the two
+ * statements means the second one counts what the first one wrote, and no
+ * concurrent request can interleave between them.
+ *
+ * The surplus is recomputed inside the statement rather than passed in, for
+ * the same reason: a count read before the batch is a count that can be stale
+ * by the time it is used.
+ */
+export async function keepOrgActive(
+  env: Env,
+  args: { orgId: string; userId: string; ownedOrgLimit: number; ts: number },
+): Promise<void> {
+  const ownedActive = `
+    select o.id from orgs o
+    join org_members m on m.org_id = o.id
+    where m.user_id = ? and m.role = 'owner' and o.locked_at is null`;
+  await env.DB.batch([
+    env.DB.prepare(`update orgs set locked_at = null where id = ?`).bind(args.orgId),
+    // Newest first, and never the org being kept, which is what makes the
+    // pick stick where reconciliation's by-age default would overrule it.
+    env.DB.prepare(
+      `update orgs set locked_at = ?
+       where id in (
+         ${ownedActive} and o.id != ?
+         order by o.created_at desc, o.id desc
+         limit max(0, (select count(*) from (${ownedActive})) - ?)
+       )`,
+    ).bind(args.ts, args.userId, args.orgId, args.userId, args.ownedOrgLimit),
+  ]);
+}
+
+/**
+ * Changes a member's role, refusing to hand out write access an org over its
+ * member cap has no room for (#161).
+ *
+ * Guarded inside the statement, not from a count read first: two admins
+ * promoting two different viewers at once would both find room and both take
+ * it. Demoting to viewer is always allowed, and so is changing the role of
+ * somebody who already writes, since neither adds a writer.
+ *
+ * `previous_role` is cleared only when the role actually moves. Confirming a
+ * demoted member as `viewer` used to erase the record of what they were, so a
+ * later upgrade silently left them a viewer: #29's "never delete" applies to
+ * that record too.
+ *
+ * Returns false when the cap refused it, which is the only reason a matched
+ * row goes unwritten: the caller has already checked the membership exists.
+ */
+export async function setMemberRoleWithinLimit(
+  env: Env,
+  args: {
+    orgId: string;
+    userId: string;
+    role: (typeof INVITABLE_ROLES)[number];
+    memberLimit: number;
+  },
+): Promise<boolean> {
+  return runGuarded(
+    env,
+    `update org_members
+     set role = ?, previous_role = case when role = ? then previous_role else null end
+     where org_id = ? and user_id = ?
+       and (
+         ? = 'viewer'
+         or role != 'viewer'
+         or (select count(*) from org_members where org_id = ? and role != 'viewer') < ?
+       )`,
+    [args.role, args.role, args.orgId, args.userId, args.role, args.orgId, args.memberLimit],
   );
 }
 

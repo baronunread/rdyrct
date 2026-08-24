@@ -5,11 +5,12 @@ import { Polar } from "@polar-sh/sdk";
 import { Webhook } from "standardwebhooks";
 import { drizzle } from "drizzle-orm/d1";
 import * as schema from "../db/schema";
-import type { AppEnv, Env } from "../env";
+import type { AppEnv, DB, Env } from "../env";
 import type { JsonValue } from "../../shared/types";
 import { requireUser } from "../guards";
 import { captureAlert } from "../sentry";
 import { effectivePlanSql } from "../entitlement";
+import { reconcileUser } from "../reconcile";
 import { jsonBodyLimit } from "../body-limit";
 import type { BillingProvider } from "../billing-provider";
 
@@ -105,7 +106,9 @@ interface PolarEvent {
   };
 }
 
-type Db = ReturnType<typeof drizzle>;
+// The schema-bound client `handlePolarWebhook` builds; the mutations below
+// and the reconciliation pass share it.
+type Db = DB;
 
 /**
  * When the state an event describes was set at Polar. Events without either
@@ -342,12 +345,41 @@ export async function handlePolarWebhook(req: Request, env: Env): Promise<Respon
   // which is a success as far as Polar is concerned — anything other than a
   // 2xx here earns a retry, and ten consecutive non-2xx responses disable
   // the endpoint outright.
+  // Read *before* the mutation, because `subscription.revoked` clears
+  // `polar_subscription_id`, which is the only thing `subjectOf` has to go on
+  // for an event that carries no metadata.userId. Resolving afterwards
+  // matched no row, so the plan dropped to free and no org was ever locked or
+  // demoted: exactly the case #158 exists for.
+  const subjectId = PLAN_EVENTS.has(event.type) ? await subjectIdOf(db, event) : null;
   const mutation = await mutationFor(db, env, event);
   if (mutation) {
     const result = await mutation;
     if (result.meta.changes === 0) await alertIfNoSuchSubject(db, event);
+    // `reconcileUser` swallows its own failures: a webhook that 500s earns a
+    // retry, and ten of those disable the endpoint.
+    else if (subjectId) await reconcileUser(env, db, subjectId);
   }
   return Response.json({ received: true });
+}
+
+/**
+ * The events that can move `plan`, and so the ones that owe the user's orgs
+ * a reconciliation pass (#158). `subscription.canceled` and
+ * `subscription.uncanceled` only flip the period-end flags, so they cannot
+ * put an org over its caps.
+ */
+const PLAN_EVENTS = new Set([
+  "subscription.active",
+  "subscription.revoked",
+  "subscription.updated",
+]);
+
+/** Which user this event addresses, resolved against the row as it stands
+ * now. Read before any mutation writes over the columns `subjectOf` matches
+ * on (see handlePolarWebhook). */
+async function subjectIdOf(db: Db, event: PolarEvent): Promise<string | null> {
+  const rows = await db.select({ id: schema.user.id }).from(schema.user).where(subjectOf(event));
+  return rows[0]?.id ?? null;
 }
 
 /**
