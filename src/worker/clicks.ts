@@ -217,9 +217,9 @@ async function salvageClickBatch(
   const outcomes = await Promise.all(
     batch.messages.map(async (message) => {
       try {
-        await db.insert(schema.clicks).values(clickRow(message)).onConflictDoNothing({
-          target: schema.clicks.dedupeId,
-        });
+        // Same partial dedupe index as the batch insert above. Naming only the
+        // column cannot match that index, including on this last-delivery path.
+        await db.insert(schema.clicks).values(clickRow(message)).onConflictDoNothing();
         return null;
       } catch (error) {
         // Narrowed here, where it arrives: only an Error carries a message
