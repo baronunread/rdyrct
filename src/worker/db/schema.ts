@@ -441,8 +441,7 @@ export const storageOutbox = sqliteTable(
     attempts: integer("attempts").notNull().default(0),
     lastError: text("last_error").notNull().default(""),
   },
-  (t) => [
-    uniqueIndex("idx_storage_outbox_target").on(t.op, t.target),
-    index("idx_storage_outbox_drain").on(t.attempts, t.createdAt),
-  ],
+  // The drain's ordering index is an expression over created_at and attempts,
+  // which drizzle cannot express; it lives in migration 0024.
+  (t) => [uniqueIndex("idx_storage_outbox_target").on(t.op, t.target)],
 );

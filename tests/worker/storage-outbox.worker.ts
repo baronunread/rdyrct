@@ -239,6 +239,33 @@ describe("the daily drain", () => {
     expect(left!.n).toBe(0);
   });
 
+  it("drains a retry row even under a steady stream of new work", async () => {
+    // The mirror of the test above, and the reason the ordering is a backoff
+    // rather than a priority: ranking by attempts alone means 200 fresh rows
+    // a day keep a row that failed once out of every pass, for good, even
+    // after whatever broke it recovers.
+    await seedLink();
+    // Failed yesterday, so its one attempt has long since been backed off.
+    await env.DB.prepare(
+      "insert into storage_outbox (id, op, target, reason, created_at, attempts) values ('retry', 'kv_sync', ?, 'gave_up', 0, 1)",
+    )
+      .bind(`slug:${sampleLink.slug}`)
+      .run();
+    const fresh = Array.from({ length: 200 }, (_, i) =>
+      env.DB.prepare(
+        "insert into storage_outbox (id, op, target, reason, created_at, attempts) values (?, 'kv_sync', ?, 'gave_up', ?, 0)",
+      ).bind(`fresh-${i}`, `slug:fresh-${i}`, 10_000_000 + i),
+    );
+    for (let i = 0; i < fresh.length; i += 50) await env.DB.batch(fresh.slice(i, i + 50));
+
+    await drainStorageOutbox(testEnv);
+
+    const left = await env.DB.prepare(
+      "select count(*) as n from storage_outbox where id = 'retry'",
+    ).first<{ n: number }>();
+    expect(left!.n).toBe(0);
+  });
+
   it("gives every re-record a new id, so a drain cannot delete a newer request", async () => {
     const failing = overrideEnv({ STORAGE_QUEUE: brokenQueue() });
     await enqueueStorage(failing, [syncLinkMsg("abc", null)]).catch(() => {});

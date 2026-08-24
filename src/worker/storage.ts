@@ -1,5 +1,5 @@
 import * as Sentry from "@sentry/cloudflare";
-import { eq, isNull, and, lt, ne, inArray } from "drizzle-orm";
+import { eq, isNull, and, lt, ne, inArray, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import * as schema from "./db/schema";
 import type { DB, Env } from "./env";
@@ -156,6 +156,12 @@ async function recordOutbox(
  * costs several days rather than one cron run that times out. */
 const OUTBOX_DRAIN_LIMIT = 200;
 
+/** How much later each failed attempt makes a row sort, so a repeatedly
+ * failing key yields to fresher work without ever being excluded outright.
+ * An hour: long enough to matter within one daily pass, short enough that a
+ * row which has failed a few times still comes back within a day. */
+const OUTBOX_RETRY_BACKOFF = 60 * 60 * 1000;
+
 /**
  * Applies the storage work the queue never did, oldest first (#118).
  *
@@ -168,15 +174,21 @@ const OUTBOX_DRAIN_LIMIT = 200;
  */
 export async function drainStorageOutbox(env: Env): Promise<number> {
   const db = drizzle(env.DB, { schema });
-  // Fewest attempts first, then oldest. Ordering by age alone let 200 rows
-  // that always fail hold the whole limit forever, so a recovery recorded
-  // afterwards never drained and KV stayed stale indefinitely. A row that
-  // keeps failing sinks behind every fresher one instead, and is still
-  // retried once the queue ahead of it is clear.
+  // Oldest first, counting each failed attempt as an hour of age it has not
+  // earned. Both plain orderings starve something: by age alone, 200 rows
+  // that always fail hold the whole limit forever and a later recovery never
+  // drains; by attempts alone, a steady 200 rows a day of new work means a
+  // row that failed once never comes up again even after KV recovers.
+  //
+  // Backing a row off by its attempts is neither. It drops behind fresher
+  // work for a while and climbs back as real time passes, so nothing is
+  // permanently excluded and a hot failure cannot monopolise the pass.
   const rows = await db
     .select()
     .from(schema.storageOutbox)
-    .orderBy(schema.storageOutbox.attempts, schema.storageOutbox.createdAt)
+    .orderBy(
+      sql`${schema.storageOutbox.createdAt} + ${schema.storageOutbox.attempts} * ${OUTBOX_RETRY_BACKOFF}`,
+    )
     .limit(OUTBOX_DRAIN_LIMIT);
   let cleared = 0;
   for (const row of rows) {
