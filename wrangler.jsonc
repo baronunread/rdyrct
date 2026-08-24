@@ -425,9 +425,10 @@
           "namespace_id": "24002",
           "simple": {
             // Higher than production's (10): the e2e suite's real sign-ups
-            // and password-reset sends across files share this one budget,
-            // and production's abuse-control number is too tight for that.
-            "limit": 30,
+            // and password-reset sends across files share this one budget.
+            // Three concurrent browser workers can exceed 30 before a minute
+            // elapses, turning an unrelated scenario into a rate-limit test.
+            "limit": 100,
             "period": 60,
           },
         },
