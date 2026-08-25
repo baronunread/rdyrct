@@ -1,19 +1,33 @@
-import { expect, test, type Locator, type Page } from "@playwright/test";
+import { expect, test, type BrowserContext, type Locator, type Page } from "@playwright/test";
 import { makePlatformAdmin } from "./db";
 import { signUpAndVerify } from "./resend";
 
 const password = "test-password-123";
 
-async function signInForLoadingCheck(page: Page, prefix: string) {
-  const email = `${prefix}-${Date.now()}@gmail.com`;
-  await signUpAndVerify(page, email, password);
+async function warmShell(page: Page, email: string) {
   // Let the shell persist its cache before the reload below. The regression
   // only exists when chrome paints from that cache while the page waits for a
   // fresh /user response.
   await page.goto("/dashboard");
   await expect(page.getByText(email)).toBeVisible();
-  return email;
 }
+
+test.describe.configure({ mode: "serial" });
+
+let sharedContext: BrowserContext;
+let sharedPage: Page;
+let sharedEmail: string;
+
+test.beforeAll(async ({ browser }) => {
+  sharedContext = await browser.newContext();
+  sharedPage = await sharedContext.newPage();
+  sharedEmail = `skeleton-${Date.now()}@gmail.com`;
+  await signUpAndVerify(sharedPage, sharedEmail, password);
+});
+
+test.afterAll(async () => {
+  await sharedContext.close();
+});
 
 /** Holds one API response open, which makes the route's first render observable. */
 async function holdApi(page: Page, path: string) {
@@ -45,8 +59,9 @@ async function expectFreshUserSkeleton(
   await expect(settled).toBeVisible();
 }
 
-test("a cold load uses the app-shell skeleton until the first user response", async ({ page }) => {
-  await signInForLoadingCheck(page, "skeleton-cold");
+test("a cold load uses the app-shell skeleton until the first user response", async () => {
+  const page = sharedPage;
+  await warmShell(page, sharedEmail);
   // Keep the authenticated session, but remove the cached chrome answer that
   // lets a returning browser render a route-specific skeleton instead.
   await page.evaluate(() => localStorage.clear());
@@ -58,8 +73,9 @@ test("a cold load uses the app-shell skeleton until the first user response", as
   await expect(page.getByRole("button", { name: "New link" }).first()).toBeVisible();
 });
 
-test("Links keeps its full route shape until the current user arrives", async ({ page }) => {
-  await signInForLoadingCheck(page, "skeleton-links");
+test("Links keeps its full route shape until the current user arrives", async () => {
+  const page = sharedPage;
+  await warmShell(page, sharedEmail);
   await expectFreshUserSkeleton(
     page,
     "/links",
@@ -68,8 +84,9 @@ test("Links keeps its full route shape until the current user arrives", async ({
   );
 });
 
-test("sidebar navigation keeps the Links table usable after its data arrives", async ({ page }) => {
-  await signInForLoadingCheck(page, "skeleton-client-nav");
+test("sidebar navigation keeps the Links table usable after its data arrives", async () => {
+  const page = sharedPage;
+  await warmShell(page, sharedEmail);
   let release = () => {};
   const held = new Promise<void>((resolve) => {
     release = resolve;
@@ -91,8 +108,9 @@ test("sidebar navigation keeps the Links table usable after its data arrives", a
   await expect(page.getByRole("button", { name: "New link" }).first()).toBeVisible();
 });
 
-test("Members keeps invite controls out until the current user arrives", async ({ page }) => {
-  await signInForLoadingCheck(page, "skeleton-members");
+test("Members keeps invite controls out until the current user arrives", async () => {
+  const page = sharedPage;
+  await warmShell(page, sharedEmail);
   await expectFreshUserSkeleton(
     page,
     "/members",
@@ -101,8 +119,9 @@ test("Members keeps invite controls out until the current user arrives", async (
   );
 });
 
-test("Billing waits for the fresh plan before showing upgrade controls", async ({ page }) => {
-  await signInForLoadingCheck(page, "skeleton-billing");
+test("Billing waits for the fresh plan before showing upgrade controls", async () => {
+  const page = sharedPage;
+  await warmShell(page, sharedEmail);
   await expectFreshUserSkeleton(
     page,
     "/billing",
@@ -111,8 +130,9 @@ test("Billing waits for the fresh plan before showing upgrade controls", async (
   );
 });
 
-test("Settings waits for fresh ownership before showing destructive controls", async ({ page }) => {
-  await signInForLoadingCheck(page, "skeleton-settings");
+test("Settings waits for fresh ownership before showing destructive controls", async () => {
+  const page = sharedPage;
+  await warmShell(page, sharedEmail);
   await expectFreshUserSkeleton(
     page,
     "/settings",
@@ -121,8 +141,9 @@ test("Settings waits for fresh ownership before showing destructive controls", a
   );
 });
 
-test("Domains keeps its paid upgrade path out until the current user arrives", async ({ page }) => {
-  await signInForLoadingCheck(page, "skeleton-domains");
+test("Domains keeps its paid upgrade path out until the current user arrives", async () => {
+  const page = sharedPage;
+  await warmShell(page, sharedEmail);
   await expectFreshUserSkeleton(
     page,
     "/domains",
@@ -131,9 +152,10 @@ test("Domains keeps its paid upgrade path out until the current user arrives", a
   );
 });
 
-test("Admin routes show their own skeletons while their data is delayed", async ({ page }) => {
-  const email = await signInForLoadingCheck(page, "skeleton-admin");
-  await makePlatformAdmin(page, email);
+test("Admin routes show their own skeletons while their data is delayed", async () => {
+  const page = sharedPage;
+  await warmShell(page, sharedEmail);
+  await makePlatformAdmin(page, sharedEmail);
 
   // The cached shell still says this account is ordinary. Until the fresh
   // answer arrives, the route must not expose platform controls.
