@@ -34,6 +34,38 @@ const stubAssets: Fetcher = {
   },
 };
 
+/**
+ * Workflow tests inject their own binding when they need to assert scheduling
+ * or instance state. Every other worker test gets a completed no-op instead,
+ * so a real workflow cannot outlive the test and query D1 after its reset.
+ */
+function stubWorkflow<T>(): Workflow<T> {
+  const instance: WorkflowInstance = {
+    id: "test-workflow",
+    status: async () => ({ status: "complete" }),
+    pause: async () => {},
+    resume: async () => {},
+    terminate: async () => {},
+    restart: async () => {},
+    sendEvent: async () => {},
+    delete: async () => {},
+  };
+  return {
+    async create() {
+      return instance;
+    },
+    async get() {
+      return instance;
+    },
+    async createBatch(batch) {
+      return batch.map(() => instance);
+    },
+    async deleteBatch(instanceIds) {
+      return { deleted: instanceIds.map((id) => ({ id })), errors: [] };
+    },
+  };
+}
+
 // The ambient worker-test binding, under the same name the worker knows it by
 // (env.d.ts declares Cloudflare.Env as our own Env, so this needs no cast),
 // with the one binding that environment cannot supply stubbed in.
@@ -43,7 +75,12 @@ const stubAssets: Fetcher = {
 // came back a 500. Tests wrote around it (expiry.worker.ts asserted "not a
 // 302" because it could not assert the status it meant), which is how a
 // stubbed 500 got mistaken for the fallback working.
-export const testEnv: Env = { ...env, ASSETS: stubAssets };
+export const testEnv: Env = {
+  ...env,
+  ASSETS: stubAssets,
+  ORG_DELETE: stubWorkflow(),
+  DOMAIN_ACTIVATE: stubWorkflow(),
+};
 
 export function overrideEnv(overrides: Partial<Env>): Env {
   return { ...testEnv, ...overrides };
