@@ -18,7 +18,7 @@
  * result can deep-link a page and not a scroll position, and the homepage
  * already runs long enough that a ninth section costs more than it returns.
  */
-import { Check } from "lucide-react";
+import { Check } from "@/app/ui/icons";
 import { useAudience } from "../lib/audience";
 import { MarketingPage } from "../components/marketing-page";
 import { GITHUB_URL } from "../ui/footer";

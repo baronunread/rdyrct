@@ -12,7 +12,7 @@
  */
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Ban, Ellipsis, ExternalLink, ShieldQuestionMark, Trash2, Undo2 } from "lucide-react";
+import { Ban, Ellipsis, ExternalLink, ShieldQuestionMark, Trash2, Undo2 } from "@/app/ui/icons";
 import { useAdminAnonLinks, useAdminLinks } from "../../lib/hooks";
 import { api } from "../../lib/api";
 import type { AdminAnonLinkRow, AdminLinkRow, Sort } from "@/shared/types";

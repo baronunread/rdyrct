@@ -9,7 +9,7 @@ import {
 import { useForm, type SubmitErrorHandler } from "react-hook-form";
 import { valibotResolver } from "@hookform/resolvers/valibot";
 import { Link as RouterLink } from "@tanstack/react-router";
-import { Lock, Info } from "lucide-react";
+import { Lock, Info } from "@/app/ui/icons";
 import { shortUrl } from "../lib/api";
 import { QR_CORNER_STYLES, QR_DOT_STYLES, type DomainDTO, type LinkInput } from "@/shared/types";
 import { Button } from "../ui/button";

@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import { errorMessage } from "@/app/lib/error-message";
-import { Check, ImagePlus, X } from "lucide-react";
+import { Check, ImagePlus, X } from "@/app/ui/icons";
 import { Button } from "../ui/button";
 import { cn } from "../ui/cn";
 import { QR_LOGO_MAX_BYTES, QR_LOGO_MAX_DIMENSION } from "@/shared/types";

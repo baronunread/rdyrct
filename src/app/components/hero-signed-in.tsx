@@ -12,7 +12,7 @@
  * what happened while they were away, so the slot answers that instead.
  */
 import { Link } from "@tanstack/react-router";
-import { ArrowRight, Plus } from "lucide-react";
+import { ArrowRight, Plus } from "@/app/ui/icons";
 import { useCurrentOrg } from "../lib/current-org";
 import { useCurrentUser, useStats } from "../lib/hooks";
 import { formatNumber } from "../lib/numbers";

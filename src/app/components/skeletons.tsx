@@ -1,11 +1,9 @@
 import type { ReactElement } from "react";
 import { lookup } from "@/shared/lookup";
 import { useLocation } from "@tanstack/react-router";
-import { ChevronsUpDown, LogOut, Menu as MenuIcon } from "lucide-react";
-// MorphIcon animates between two icons, so it takes lucide icon nodes, not
-// the React components lucide-react exports.
-import { Moon, Sun } from "lucide";
+import { ChevronsUpDown, LogOut, Menu as MenuIcon } from "@/app/ui/icons";
 import { MorphIcon } from "morphicons/react";
+import { moon, sun } from "@/app/ui/icon-nodes";
 import { useTheme } from "../lib/theme";
 import { appNavItems } from "./nav-items";
 import { IconButton } from "../ui/button";
@@ -352,7 +350,7 @@ function SidebarSkeleton() {
             </span>
           </div>
           <IconButton label="Toggle theme" className="p-2" onClick={toggleTheme}>
-            <MorphIcon icon={theme === "dark" ? Sun : Moon} size={15} spring="snappy" />
+            <MorphIcon icon={theme === "dark" ? sun : moon} size={15} spring="snappy" />
           </IconButton>
           <IconButton label="Sign out" danger className="p-2" disabled>
             <LogOut size={15} />

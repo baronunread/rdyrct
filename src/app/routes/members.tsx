@@ -5,7 +5,7 @@ import { useForm } from "react-hook-form";
 import { valibotResolver } from "@hookform/resolvers/valibot";
 import { useCurrentOrg } from "../lib/current-org";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { UserPlus, Trash2, Info } from "lucide-react";
+import { UserPlus, Trash2, Info } from "@/app/ui/icons";
 import { useCurrentUser, useMembers, useInvites } from "../lib/hooks";
 import { api } from "../lib/api";
 import {

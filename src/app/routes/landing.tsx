@@ -19,7 +19,7 @@ import {
   Layers,
   GitMerge,
   Mail,
-} from "lucide-react";
+} from "@/app/ui/icons";
 import {
   LazyMotion,
   MotionConfig,
@@ -560,7 +560,7 @@ export function PricingSection() {
  * rather than a table of them. No card around it: the claim carries itself.
  */
 
-/** The GitHub mark, inline. lucide dropped its brand icons, and the CSP
+/** The GitHub mark, inline. The icon set has no brand icons, and the CSP
  *  forbids fetching one, so the path lives here. */
 function GithubMark({ size = 17 }: { size?: number }) {
   return (

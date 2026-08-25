@@ -1,4 +1,4 @@
-import { Download } from "lucide-react";
+import { Download } from "@/app/ui/icons";
 import { Button } from "../ui/button";
 import { downloadCsv, statsFilename, statsToCsv, type ExportableStats } from "../lib/csv";
 

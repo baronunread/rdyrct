@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Copy, Check } from "lucide"; // icon nodes for MorphIcon
 import { MorphIcon } from "morphicons/react";
+import { check, copy } from "./icon-nodes";
 import { Button, IconButton } from "./button";
 
 // Copy-to-clipboard button whose icon morphs into a tick on success. The
@@ -41,7 +41,7 @@ export function CopyButton({
 
   const icon = (
     <MorphIcon
-      icon={copied ? Check : Copy}
+      icon={copied ? check : copy}
       size={12}
       spring="snappy"
       className={copied ? "text-accent-2" : undefined}

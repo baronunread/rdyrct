@@ -8,7 +8,7 @@ import {
   Pencil,
   QrCode,
   Trash2,
-} from "lucide-react";
+} from "@/app/ui/icons";
 import { AnimatePresence, LazyMotion, domAnimation } from "motion/react";
 import { shortUrl } from "../lib/api";
 import { type LinkDTO, type Sort } from "@/shared/types";

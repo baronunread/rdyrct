@@ -3,7 +3,7 @@ import { QR_CORNER_STYLES, QR_DEFAULT_CORNER } from "@/shared/types";
 import { oneOf } from "@/shared/lookup";
 import QRCodeStyling, { type CornerSquareType, type CornerDotType } from "qr-code-styling";
 import { Button } from "../ui/button";
-import { Download } from "lucide-react";
+import { Download } from "@/app/ui/icons";
 import { eccFor, hasTransparency, imageOptionsFor, resolveLook, type QrLook } from "../lib/qr-look";
 import { fillSeams } from "../lib/qr-seams";
 import { cn } from "../ui/cn";

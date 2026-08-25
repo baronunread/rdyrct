@@ -1,6 +1,6 @@
 import { Dialog as BaseDialog } from "@base-ui/react/dialog";
 import type { ReactNode } from "react";
-import { X } from "lucide-react";
+import { X } from "@/app/ui/icons";
 import { AnimatePresence, LazyMotion, domAnimation, m } from "motion/react";
 import { cn } from "./cn";
 

@@ -3,11 +3,9 @@ import { errorMessage } from "@/app/lib/error-message";
 import { Link, Outlet, useNavigate } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, LazyMotion, domAnimation, m } from "motion/react";
-import { Globe, ChevronsUpDown, Plus, Check, LogOut } from "lucide-react";
-// MorphIcon animates between two icons, so it takes lucide icon nodes, not
-// the React components lucide-react exports.
-import { Sun, Moon, Menu as MenuIcon, X } from "lucide";
+import { Globe, ChevronsUpDown, Plus, Check, LogOut } from "@/app/ui/icons";
 import { MorphIcon } from "morphicons/react";
+import { menu2, moon, sun, x } from "@/app/ui/icon-nodes";
 import { useCurrentUser, useLogout, useShellUser } from "../lib/hooks";
 import { useShellOrgs } from "../lib/current-org";
 import { claimPendingLinks, storedAnonLinks } from "../lib/anon-links";
@@ -200,7 +198,7 @@ function AppSidebar({
             <p className="truncate text-xs text-muted">{user.email}</p>
           </div>
           <IconButton label="Toggle theme" className="p-2" onClick={onToggleTheme}>
-            <MorphIcon icon={theme === "dark" ? Sun : Moon} size={15} spring="snappy" />
+            <MorphIcon icon={theme === "dark" ? sun : moon} size={15} spring="snappy" />
           </IconButton>
           <IconButton
             label="Sign out"
@@ -425,7 +423,7 @@ export function AppShell() {
           aria-label="Menu"
           className="cursor-pointer rounded-md p-1.5 text-muted hover:text-text"
         >
-          <MorphIcon icon={mobileOpen ? X : MenuIcon} size={18} spring="snappy" />
+          <MorphIcon icon={mobileOpen ? x : menu2} size={18} spring="snappy" />
         </button>
         <span className="text-sm font-bold tracking-widest">rdyrct</span>
       </div>

@@ -7,7 +7,7 @@ import { Footer } from "../ui/footer";
  *
  * Its own file, not part of ui/misc.tsx: that file is the general UI kit
  * every authenticated app page pulls from, and this pulls in LandingHeader
- * (theme toggle, trackCta, morphicons), which none of those pages render.
+ * (theme toggle and trackCta), which none of those pages render.
  * Keeping it here keeps that cost off the dashboard's chunks.
  *
  * Two widths, not one. The page shell matches the landing page and the QR

@@ -17,7 +17,7 @@
  *   the countdown when there is one.
  */
 import type { ReactNode } from "react";
-import { Lock } from "lucide-react";
+import { Lock } from "@/app/ui/icons";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { HrefLink } from "../lib/router-search";
 import { errorMessage } from "@/app/lib/error-message";

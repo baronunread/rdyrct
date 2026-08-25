@@ -8,7 +8,7 @@
  * a download and a link-shortening offer on the other) and where the logo
  * ends up: an org uploads it, the free page keeps it in the browser.
  */
-import { Info } from "lucide-react";
+import { Info } from "@/app/ui/icons";
 import { QR_CORNER_STYLES, QR_DEFAULT_BG, QR_DEFAULT_COLOR, QR_DOT_STYLES } from "@/shared/types";
 import { cn } from "../ui/cn";
 import { Field } from "../ui/field";

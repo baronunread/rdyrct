@@ -16,7 +16,7 @@
  */
 import { useState } from "react";
 import { errorMessage } from "@/app/lib/error-message";
-import { ArrowRight } from "lucide-react";
+import { ArrowRight } from "@/app/ui/icons";
 import { Button } from "../ui/button";
 import { buttonClass } from "../ui/button-class";
 import { Input } from "../ui/field";

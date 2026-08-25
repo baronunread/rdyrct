@@ -1,6 +1,6 @@
 import { useCallback, type ReactNode } from "react";
 import { Toast } from "@base-ui/react/toast";
-import { X } from "lucide-react";
+import { X } from "@/app/ui/icons";
 import { cn } from "./cn";
 
 // A standalone manager, not context state, so the many call sites that just

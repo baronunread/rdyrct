@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from "react";
 import { lookup } from "@/shared/lookup";
 import { useNavigate } from "@tanstack/react-router";
-import { Plus } from "lucide-react";
+import { Plus } from "@/app/ui/icons";
 import { useLinks, useLinkMutations, useLinkQuotaUsage } from "../lib/hooks";
 import { useOrgLimits } from "../lib/org-limits";
 import { ApiError } from "../lib/api";

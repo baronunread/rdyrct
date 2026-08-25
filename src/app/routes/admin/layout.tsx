@@ -9,7 +9,7 @@
  * is platform-wide.
  */
 import { Link, Outlet } from "@tanstack/react-router";
-import { Building2, Globe, Link2, ScrollText, UserCog } from "lucide-react";
+import { Building2, Globe, Link2, ScrollText, UserCog } from "@/app/ui/icons";
 
 const TABS = [
   { to: "/admin", end: true, icon: Globe, label: "Usage" },

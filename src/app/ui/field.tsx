@@ -4,7 +4,7 @@ import {
   type SelectHTMLAttributes,
   type ReactNode,
 } from "react";
-import { ChevronDown, Info } from "lucide-react";
+import { ChevronDown, Info } from "@/app/ui/icons";
 import { cn } from "./cn";
 import { Tooltip } from "./tooltip";
 

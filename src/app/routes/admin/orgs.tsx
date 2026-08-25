@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { ArrowRight, Ellipsis, Eye, Trash2 } from "lucide-react";
+import { ArrowRight, Ellipsis, Eye, Trash2 } from "@/app/ui/icons";
 import { HrefLink } from "../../lib/router-search";
 import { Button } from "../../ui/button";
 import { useAdminOrgDetail, useAdminOrgs } from "../../lib/hooks";

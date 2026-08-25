@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Info } from "lucide-react";
+import { Info } from "@/app/ui/icons";
 import { Button } from "../ui/button";
 import { Dialog } from "../ui/dialog";
 import { Field } from "../ui/field";

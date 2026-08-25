@@ -14,8 +14,8 @@
  * than a new one loading.
  */
 import { Link } from "@tanstack/react-router";
-import { Moon, Sun } from "lucide";
 import { MorphIcon } from "morphicons/react";
+import { moon, sun } from "../ui/icon-nodes";
 import { MarketingLink } from "./marketing-link";
 import { useTheme } from "../lib/theme";
 import { trackCta } from "../lib/track-cta";
@@ -65,7 +65,7 @@ export function LandingHeader({ authed }: { authed: boolean }) {
       {/* What the visitor does. */}
       <div className="flex items-center justify-self-end gap-2.5 text-sm sm:gap-4">
         <IconButton label="Toggle theme" className="p-2" onClick={toggleTheme}>
-          <MorphIcon icon={theme === "dark" ? Sun : Moon} size={15} spring="snappy" />
+          <MorphIcon icon={theme === "dark" ? sun : moon} size={15} spring="snappy" />
         </IconButton>
         {authed ? (
           <Link

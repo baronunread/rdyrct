@@ -18,7 +18,7 @@
  */
 import { useState } from "react";
 import { Link } from "@tanstack/react-router";
-import { ArrowRight, ChevronDown, ShieldCheck } from "lucide-react";
+import { ArrowRight, ChevronDown, ShieldCheck } from "@/app/ui/icons";
 import { buttonClass } from "../ui/button-class";
 import { Input } from "../ui/field";
 import { trackCta } from "../lib/track-cta";

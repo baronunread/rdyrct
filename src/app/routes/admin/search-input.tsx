@@ -1,4 +1,4 @@
-import { Search } from "lucide-react";
+import { Search } from "@/app/ui/icons";
 import { Input } from "../../ui/field";
 
 export function SearchInput({

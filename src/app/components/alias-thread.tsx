@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Clock, Ellipsis, Info, Star, Trash2 } from "lucide-react";
+import { Clock, Ellipsis, Info, Star, Trash2 } from "@/app/ui/icons";
 // m.tr renders inside a LazyMotion provider set up by the caller (LinksTable).
 import { m } from "motion/react";
 import { useAddresses, useAddressMutations } from "../lib/hooks";

@@ -1,4 +1,4 @@
-import { ArrowDown, ArrowUp, ArrowUpDown } from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpDown } from "@/app/ui/icons";
 import { Th } from "./misc";
 import { cn } from "./cn";
 import type { Sort } from "@/shared/types";

@@ -3,7 +3,7 @@ import { useForm, type UseFormRegister } from "react-hook-form";
 import { valibotResolver } from "@hookform/resolvers/valibot";
 import { Link } from "@tanstack/react-router";
 import { AnimatePresence, LazyMotion, MotionConfig, domAnimation, m } from "motion/react";
-import { Trash2, RefreshCw, Star } from "lucide-react";
+import { Trash2, RefreshCw, Star } from "@/app/ui/icons";
 import { useCurrentUser, useConfig, useDomains, useDomainMutations } from "../lib/hooks";
 import { useCurrentOrg } from "../lib/current-org";
 import { PLAN_LIMITS, type DomainDTO, type OrgRole, type UserOrg } from "@/shared/types";

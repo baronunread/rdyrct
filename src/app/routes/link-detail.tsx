@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { Link, useParams } from "@tanstack/react-router";
 import { useSearchParams } from "../lib/router-search";
-import { ArrowLeft, ExternalLink } from "lucide-react";
+import { ArrowLeft, ExternalLink } from "@/app/ui/icons";
 import { useLinkStats, useCurrentUser } from "../lib/hooks";
 import { shortDate } from "../lib/dates";
 import { useCurrentOrg } from "../lib/current-org";
