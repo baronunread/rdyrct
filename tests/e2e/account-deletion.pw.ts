@@ -106,7 +106,8 @@ test("the delete-account confirmation names every organization it will destroy",
   });
   await page.goto("/settings");
   const deleteButton = page.getByRole("button", { name: "Delete account" });
-  await expect(deleteButton).toBeDisabled();
+  await expect(page.getByTestId("settings-page-skeleton")).toBeVisible();
+  await expect(deleteButton).toBeHidden();
   releaseUser();
   await expect(deleteButton).toBeEnabled();
   await deleteButton.click();
