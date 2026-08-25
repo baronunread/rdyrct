@@ -45,6 +45,19 @@ async function expectFreshUserSkeleton(
   await expect(settled).toBeVisible();
 }
 
+test("a cold load uses the app-shell skeleton until the first user response", async ({ page }) => {
+  await signInForLoadingCheck(page, "skeleton-cold");
+  // Keep the authenticated session, but remove the cached chrome answer that
+  // lets a returning browser render a route-specific skeleton instead.
+  await page.evaluate(() => localStorage.clear());
+  const release = await holdApi(page, "/api/user");
+  await page.goto("/links");
+  await expect(page.getByTestId("app-shell-skeleton")).toBeVisible();
+  await expect(page.getByRole("button", { name: "New link" })).toBeHidden();
+  release();
+  await expect(page.getByRole("button", { name: "New link" }).first()).toBeVisible();
+});
+
 test("Links keeps its full route shape until the current user arrives", async ({ page }) => {
   await signInForLoadingCheck(page, "skeleton-links");
   await expectFreshUserSkeleton(
@@ -53,6 +66,29 @@ test("Links keeps its full route shape until the current user arrives", async ({
     "links-page-skeleton",
     page.getByRole("button", { name: "New link" }).first(),
   );
+});
+
+test("sidebar navigation keeps the Links table usable after its data arrives", async ({ page }) => {
+  await signInForLoadingCheck(page, "skeleton-client-nav");
+  let release = () => {};
+  const held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  await page.route(
+    (url) => /^\/api\/orgs\/[^/]+\/links$/.test(url.pathname),
+    async (route) => {
+      await held;
+      await route.continue();
+    },
+  );
+
+  await page.getByRole("link", { name: "Links" }).click();
+  await expect(page).toHaveURL(/\/links$/);
+  await expect(page.getByTestId("links-table-skeleton")).toBeVisible();
+  await expect(page.getByRole("button", { name: "New link" }).first()).toBeVisible();
+  release();
+  await expect(page.getByTestId("links-table-skeleton")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "New link" }).first()).toBeVisible();
 });
 
 test("Members keeps invite controls out until the current user arrives", async ({ page }) => {

@@ -367,7 +367,7 @@ function SidebarSkeleton() {
  * content. Layout classes mirror AppShell so the swap doesn't shift. */
 export function AppShellSkeleton() {
   return (
-    <div className="flex min-h-dvh">
+    <div className="flex min-h-dvh" data-testid="app-shell-skeleton">
       {/* desktop sidebar */}
       <aside className="fixed inset-y-0 left-0 z-10 hidden w-60 border-r border-border bg-surface/40 md:block">
         <SidebarSkeleton />

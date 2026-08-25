@@ -424,7 +424,7 @@ function LinksListArea({
   onCreate?: () => void;
   children: ReactNode;
 }) {
-  if (isLoading) return <TableSkeleton rows={5} />;
+  if (isLoading) return <TableSkeleton rows={5} testId="links-table-skeleton" />;
   if (!hasLinks) {
     return (
       <EmptyState
