@@ -116,18 +116,7 @@ function LinksBrowser({
   canWrite: boolean;
 }) {
   return (
-    <LinksListArea
-      isLoading={list.links.isLoading}
-      // An empty first page with nothing typed is an organization with no
-      // links. An empty page with a search behind it is a search that found
-      // nothing, and the toolbar has to stay on screen to be cleared.
-      hasLinks={
-        list.rows.length > 0 || !!list.search || list.domainFilter !== "all" || list.page > 0
-      }
-      atLimit={atLimit}
-      limitHint={limitHint}
-      onCreate={canWrite ? dialogs.openCreate : undefined}
-    >
+    <>
       <LinksToolbar
         search={list.search}
         onSearchChange={list.onSearchChange}
@@ -135,23 +124,36 @@ function LinksBrowser({
         onDomainFilterChange={list.onDomainFilterChange}
         domains={domains}
       />
-      <LinksTable
-        orgId={orgId}
-        paged={list.rows}
-        navigate={navigate}
-        onQrClick={dialogs.setQrLink}
-        canWrite={canWrite}
-        onEdit={dialogs.openEdit}
-        onDelete={dialogs.setDeleting}
-        onCreateAlias={dialogs.setAliasLink}
-        sort={list.sort}
-        onSort={list.setSort}
-        page={list.page}
-        hasNext={list.hasNext}
-        onNext={list.onNext}
-        onBack={list.onBack}
-      />
-    </LinksListArea>
+      <LinksListArea
+        isLoading={list.links.isLoading}
+        // An empty first page with nothing typed is an organization with no
+        // links. An empty page with a search behind it is a search that found
+        // nothing, and the toolbar has to stay on screen to be cleared.
+        hasLinks={
+          list.rows.length > 0 || !!list.search || list.domainFilter !== "all" || list.page > 0
+        }
+        atLimit={atLimit}
+        limitHint={limitHint}
+        onCreate={canWrite ? dialogs.openCreate : undefined}
+      >
+        <LinksTable
+          orgId={orgId}
+          paged={list.rows}
+          navigate={navigate}
+          onQrClick={dialogs.setQrLink}
+          canWrite={canWrite}
+          onEdit={dialogs.openEdit}
+          onDelete={dialogs.setDeleting}
+          onCreateAlias={dialogs.setAliasLink}
+          sort={list.sort}
+          onSort={list.setSort}
+          page={list.page}
+          hasNext={list.hasNext}
+          onNext={list.onNext}
+          onBack={list.onBack}
+        />
+      </LinksListArea>
+    </>
   );
 }
 
@@ -405,8 +407,9 @@ export function LinksPage() {
   );
 }
 
-/** Gates the links table area on load/empty state; renders its children
- * (toolbar + table) only once there's data to show. */
+/** Gates only the links results on load/empty state. The toolbar remains
+ * mounted: its controls are already usable while the first page is loading,
+ * and removing them makes the table jump down on arrival. */
 function LinksListArea({
   isLoading,
   hasLinks,

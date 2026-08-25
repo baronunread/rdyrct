@@ -101,6 +101,7 @@ test("sidebar navigation keeps the Links table usable after its data arrives", a
 
   await page.getByRole("link", { name: "Links" }).click();
   await expect(page).toHaveURL(/\/links$/);
+  await expect(page.getByRole("textbox", { name: "Search links" })).toBeVisible();
   await expect(page.getByTestId("links-table-skeleton")).toBeVisible();
   await expect(page.getByRole("button", { name: "New link" }).first()).toBeVisible();
   release();
