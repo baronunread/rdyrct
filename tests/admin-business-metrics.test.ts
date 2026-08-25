@@ -29,7 +29,7 @@ describe("computeBusinessMetrics", () => {
     });
     expect(metrics.totalUsers).toBe(100);
     expect(metrics.paidUsers).toBe(25);
-    expect(metrics.paidConversionRate).toBe(25);
+    expect(metrics.paidConversionRate).toBe(22);
     expect(metrics.planCounts).toEqual({ free: 60, hobby: 15, pro: 25 });
     // 25 people hold a paid plan and 2 of them pay for it: access and paying
     // are different counts now (#82).

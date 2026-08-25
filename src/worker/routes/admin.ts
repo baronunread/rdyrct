@@ -184,9 +184,11 @@ export function computeBusinessMetrics(rows: {
   // Feature access, comps included: this is "how many people are on a paid
   // plan", which is a different question from "how many people pay".
   const paidUsers = firstCount(rows.proUsers);
+  const compedUsers = firstCount(rows.compedUserRows);
   const planCounts = computePlanCounts(rows.planCountRows);
   const subscriptions = computeSubscriptionCounts(rows.subscriptionRows);
-  const paidConversionRate = totalUsers > 0 ? Math.round((paidUsers / totalUsers) * 100) : null;
+  const payingUsers = Math.max(0, paidUsers - compedUsers);
+  const paidConversionRate = totalUsers > 0 ? Math.round((payingUsers / totalUsers) * 100) : null;
   const signups7d = firstCount(rows.signups7dRows);
   const signups7dPrev = firstCount(rows.signups7dPrevRows);
   const signups7dDelta = computeDelta(signups7d, signups7dPrev);
@@ -195,7 +197,7 @@ export function computeBusinessMetrics(rows: {
     totalUsers,
     paidUsers,
     planCounts,
-    compedUsers: firstCount(rows.compedUserRows),
+    compedUsers,
     ...subscriptions,
     paidConversionRate,
     signups7d,
