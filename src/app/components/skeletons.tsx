@@ -206,7 +206,7 @@ export function AnalyticsSkeleton() {
 /** /admin: header, 6 stat cards, two charts, two ranked lists. */
 export function AdminUsageSkeleton() {
   return (
-    <SkeletonStatus>
+    <SkeletonStatus testId="admin-usage-skeleton">
       <HeaderSkeleton />
       <StatCardsSkeleton count={6} gridClass="grid-cols-2 sm:grid-cols-3 lg:grid-cols-6" />
       <div className="mt-4 grid gap-4 lg:grid-cols-2">
@@ -222,12 +222,17 @@ export function AdminUsageSkeleton() {
 /** /admin/orgs and /admin/users: header, search box, big table. */
 export function AdminTableSkeleton() {
   return (
-    <div>
+    <div data-testid="admin-table-skeleton">
       <HeaderSkeleton />
       <Skeleton className="mb-4 h-9 w-full max-w-xs" />
       <TableSkeleton rows={6} />
     </div>
   );
+}
+
+/** /admin/audit after its real header and search box have already rendered. */
+export function AdminAuditRowsSkeleton() {
+  return <TableSkeleton rows={6} testId="admin-audit-rows-skeleton" />;
 }
 
 /** Generic content placeholder for route guards (e.g. RequireAdmin). */
@@ -392,9 +397,9 @@ export function AppShellSkeleton() {
  * pager under it (24, `mt-4`). The toolbar was missing, so the table used to
  * arrive 36px lower than the skeleton had promised.
  */
-function LinksSkeleton() {
+export function LinksSkeleton() {
   return (
-    <div>
+    <div data-testid="links-page-skeleton">
       <HeaderSkeleton action={{ w: "w-60" }} />
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <Skeleton className="h-9 w-full max-w-xs" />
@@ -412,9 +417,9 @@ function LinksSkeleton() {
  * /members: header with the invite button (52), the invite-by-email card
  * (119), then the table. The card is the part that was missing.
  */
-function MembersSkeleton() {
+export function MembersSkeleton() {
   return (
-    <div>
+    <div data-testid="members-page-skeleton">
       <HeaderSkeleton action={{ w: "w-36" }} />
       <Card className="mb-4">
         <Skeleton className="h-2.5 w-28" />
@@ -439,7 +444,7 @@ function MembersSkeleton() {
  */
 export function DomainsPageSkeleton() {
   return (
-    <div>
+    <div data-testid="domains-page-skeleton">
       <HeaderSkeleton />
       <div className="flex flex-col gap-6 lg:flex-row">
         <Card className="min-w-0 flex-1">
@@ -476,9 +481,9 @@ export function DomainsPageSkeleton() {
 }
 
 /** /billing: header, the plan card, and the usage card beneath it. */
-function BillingSkeleton() {
+export function BillingSkeleton() {
   return (
-    <SkeletonStatus>
+    <SkeletonStatus testId="billing-page-skeleton">
       <HeaderSkeleton />
       {/* both cards are max-w-2xl on the real page: full-width placeholders
           were a third too wide, and the swap moved every edge */}
@@ -511,9 +516,9 @@ function BillingSkeleton() {
  * /settings: header over the stack of cards (organization name, QR defaults,
  * then the account and danger-zone blocks).
  */
-function SettingsSkeleton() {
+export function SettingsSkeleton() {
   return (
-    <SkeletonStatus>
+    <SkeletonStatus testId="settings-page-skeleton">
       <HeaderSkeleton />
       {/* the three cards, at the heights they measure: the name form (216),
           the QR defaults with its preview (656), and the danger zone (270) */}

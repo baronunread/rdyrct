@@ -20,14 +20,16 @@ export function Skeleton({ className, ...props }: HTMLAttributes<HTMLDivElement>
 export function SkeletonStatus({
   label = "loading…",
   className,
+  testId,
   children,
 }: {
   label?: string;
   className?: string;
+  testId?: string;
   children: ReactNode;
 }) {
   return (
-    <div role="status" className={className}>
+    <div role="status" className={className} data-testid={testId}>
       <span className="sr-only">{label}</span>
       {children}
     </div>
@@ -38,9 +40,13 @@ export function SkeletonStatus({
 const firstColWidths = [22, 30, 18, 26, 34, 24];
 
 /** Placeholder for a data Table: a header row plus `rows` body rows. */
-export function TableSkeleton({ rows = 4 }: { rows?: number }) {
+export function TableSkeleton({ rows = 4, testId }: { rows?: number; testId?: string }) {
   return (
-    <div role="status" className="overflow-hidden rounded-lg bg-surface smooth-shadow-ring-xs">
+    <div
+      role="status"
+      className="overflow-hidden rounded-lg bg-surface smooth-shadow-ring-xs"
+      data-testid={testId}
+    >
       <span className="sr-only">loading…</span>
       <div className="flex items-center gap-6 border-b border-border px-4 py-3">
         <Skeleton className="h-2.5 w-16" />

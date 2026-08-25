@@ -17,6 +17,7 @@ import { CopyButton } from "../ui/copy-button";
 import { ConfirmDialog } from "../ui/confirm-dialog";
 import { copyToClipboard } from "../lib/clipboard";
 import { QrDefaultsCard } from "../components/qr-defaults-card";
+import { SettingsSkeleton } from "../components/skeletons";
 import { orgNameSchema } from "../lib/schemas";
 import posthog from "../lib/posthog";
 
@@ -347,6 +348,10 @@ export function SettingsPage() {
   // answer arrives. The cache is chrome, never permission to submit a
   // destructive action, and an empty fallback would hide the org names.
   const accountDeleteDisabled = currentUser.isLoading || !currentUser.data;
+
+  // Organization ownership and platform-admin status are authoritative only
+  // after the fresh user response. The cache may be one page load behind.
+  if (currentUser.isLoading) return <SettingsSkeleton />;
 
   return (
     <div>

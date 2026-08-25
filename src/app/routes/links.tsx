@@ -11,6 +11,7 @@ import { Input } from "../ui/field";
 import { MenuSelect } from "../ui/menu";
 import { EmptyState, PageHeader } from "../ui/misc";
 import { TableSkeleton } from "../ui/skeleton";
+import { LinksSkeleton } from "../components/skeletons";
 import { useToast } from "../ui/toast";
 import { NoOrgState } from "../components/no-org";
 import { LinkEditor } from "../components/link-editor";
@@ -334,7 +335,9 @@ export function LinksPage() {
     );
   };
 
-  if (currentUser.isLoading) return <TableSkeleton rows={5} />;
+  // The cached shell may know the organization before /user confirms the
+  // current role and plan. Do not briefly offer a stale create control.
+  if (currentUser.isLoading) return <LinksSkeleton />;
   if (!org) return <NoOrgState />;
 
   const onSave = buildOnSave({

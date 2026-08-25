@@ -320,7 +320,7 @@ function LinksTable({
 }) {
   // Rows only: this sits below the real header and the real search box,
   // and the page-level skeleton would draw a second one of each.
-  if (isPending) return <TableSkeleton rows={6} />;
+  if (isPending) return <TableSkeleton rows={6} testId="admin-links-rows-skeleton" />;
   if (rows.length === 0)
     return <p className="py-6 text-center text-sm text-muted">No links match that search.</p>;
 
@@ -398,7 +398,7 @@ function AnonymousLinksTable({
 }) {
   // Rows only: this sits below the real header and the real search box,
   // and the page-level skeleton would draw a second one of each.
-  if (isPending) return <TableSkeleton rows={6} />;
+  if (isPending) return <TableSkeleton rows={6} testId="admin-links-rows-skeleton" />;
   if (rows.length === 0)
     return <p className="py-6 text-center text-sm text-muted">Nothing here.</p>;
   return (
