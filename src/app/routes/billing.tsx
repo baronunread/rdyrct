@@ -19,6 +19,7 @@ import { Button } from "../ui/button";
 import { Badge, Card, PageHeader, Table, Th, Td } from "../ui/misc";
 import { BusyContent } from "../ui/spinner";
 import { Skeleton } from "../ui/skeleton";
+import { BillingSkeleton } from "../components/skeletons";
 import { useShake } from "../lib/use-shake";
 import { showsCancelNotice, showsConfirmingNotice } from "../lib/plan-status-notes";
 import { useToast } from "../ui/toast";
@@ -808,6 +809,7 @@ function useBillingAccount() {
   // answered yet.
   const { hasBillingAccount, comped, ...subscription } = currentUser.data?.user ?? NO_ACCOUNT_YET;
   return {
+    isLoading: currentUser.isLoading,
     hasBillingAccount,
     comped,
     cancelAtPeriodEnd: subscription.polarSubscriptionCancelAtPeriodEnd,
@@ -861,6 +863,7 @@ function useBillingPageModel() {
   const dismissCelebration = () => flow.setShowCelebration(false);
 
   return {
+    loading: account.isLoading,
     planActions: {
       snapshot: {
         plan: flow.plan,
@@ -891,6 +894,10 @@ function useBillingPageModel() {
 
 export function BillingPage() {
   const model = useBillingPageModel();
+
+  // The shell cache is deliberately not an authority for plan or billing
+  // state. Rendering its free defaults here made the paid page flash first.
+  if (model.loading) return <BillingSkeleton />;
 
   return (
     <div>

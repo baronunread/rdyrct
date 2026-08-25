@@ -10,7 +10,7 @@ import { useAdminAudit } from "../../lib/hooks";
 import { PageHeader, Table, Td, Th } from "../../ui/misc";
 import { SortTh } from "../../ui/sort-th";
 import { sortRows } from "../../lib/sort";
-import { AdminTableSkeleton } from "../../components/skeletons";
+import { AdminAuditRowsSkeleton } from "../../components/skeletons";
 import { shortDate } from "../../lib/dates";
 import { SearchInput } from "./search-input";
 import { paginate } from "./util";
@@ -67,7 +67,7 @@ export function AdminAuditPage() {
       />
 
       {isPending ? (
-        <AdminTableSkeleton />
+        <AdminAuditRowsSkeleton />
       ) : rows.length === 0 ? (
         <p className="py-6 text-center text-sm text-muted">Nothing recorded yet.</p>
       ) : (

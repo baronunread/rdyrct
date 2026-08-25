@@ -27,6 +27,7 @@ import { Table, Th, Td, Badge, Card, PageHeader } from "../ui/misc";
 import { HrefLink } from "../lib/router-search";
 import { buttonClass } from "../ui/button-class";
 import { TableSkeleton } from "../ui/skeleton";
+import { MembersSkeleton } from "../components/skeletons";
 import { BusyContent } from "../ui/spinner";
 import { useToast } from "../ui/toast";
 import { NoOrgState } from "../components/no-org";
@@ -546,7 +547,9 @@ export function MembersPage() {
   const canManage = memberCanManage(org, currentUser.data);
   const management = useMemberManagement(memberOrgId(org), canManage);
 
-  if (currentUser.isLoading) return <TableSkeleton rows={4} />;
+  // A cached shell is not permission to invite or change a role. Keep the
+  // route's whole shape in place until /user gives the current answer.
+  if (currentUser.isLoading) return <MembersSkeleton />;
   if (!org) return <NoOrgState />;
   return (
     <MembersView
