@@ -1,5 +1,6 @@
 import { Component, type ErrorInfo, type ReactNode } from "react";
 import posthog from "../lib/posthog";
+import { captureClientException } from "../lib/sentry";
 
 type Props = {
   children: ReactNode;
@@ -26,6 +27,7 @@ export class ErrorBoundary extends Component<Props, State> {
 
   componentDidCatch(error: Error, info: ErrorInfo) {
     posthog.captureException(error, { componentStack: info.componentStack });
+    captureClientException(error, info.componentStack);
   }
 
   render() {

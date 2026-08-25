@@ -38,7 +38,7 @@ test("the built worker serves the production CSP", async ({ page }) => {
   );
   const connectSrc = csp?.split(";").find((part) => part.trim().startsWith("connect-src"));
   expect(connectSrc?.trim()).toBe(
-    "connect-src 'self' https://*.posthog.com https://stats.brnr.dev",
+    "connect-src 'self' https://*.posthog.com https://*.ingest.sentry.io https://*.ingest.de.sentry.io https://*.ingest.us.sentry.io https://stats.brnr.dev",
   );
 });
 

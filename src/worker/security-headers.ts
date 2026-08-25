@@ -23,6 +23,8 @@
  * the same host, so it needs both script-src and connect-src too.
  */
 const POSTHOG = "https://*.posthog.com";
+const SENTRY =
+  "https://*.ingest.sentry.io https://*.ingest.de.sentry.io https://*.ingest.us.sentry.io";
 const STATS = "https://stats.brnr.dev";
 
 /**
@@ -82,7 +84,7 @@ const CSP = [
   // that a script which already ran could spawn a worker from a string it
   // built, which script-src 'self' still gates on getting there first.
   "worker-src 'self' blob:",
-  `connect-src 'self' ${POSTHOG} ${STATS}`,
+  `connect-src 'self' ${POSTHOG} ${SENTRY} ${STATS}`,
   "object-src 'none'",
   "base-uri 'self'",
   "form-action 'self'",

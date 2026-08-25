@@ -38,6 +38,7 @@
     "@hookform/resolvers": "^5.9.0",
     "@polar-sh/sdk": "^0.49.0",
     "@sentry/cloudflare": "^10.70.0",
+    "@sentry/react": "^10.71.0",
     "@tanstack/charts": "^0.14.0",
     "@tanstack/react-charts": "^0.14.0",
     "@tanstack/react-query": "^5.101.4",

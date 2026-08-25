@@ -18,7 +18,7 @@ export function PrivacyPage() {
         <h1 className="mb-2 text-xl font-bold">Privacy Policy</h1>
         <p className="text-muted">
           This policy explains what data rdyrct collects, why, the legal basis for it, and how you
-          can exercise your rights. Last updated 19 July 2026.
+          can exercise your rights. Last updated 25 August 2026.
         </p>
       </div>
 
@@ -46,7 +46,10 @@ export function PrivacyPage() {
           the product itself is used: which features you use and app events such as signing in or
           creating a link, tied to your account email and name. We turn off autocapture and session
           recording, so PostHog never records what you type or a replay of your screen. Nothing is
-          sent to PostHog, and no PostHog cookie is set, unless you accept.
+          sent to PostHog, and no PostHog cookie is set, unless you accept. We also use Sentry to
+          receive technical error reports from the app. These reports include technical diagnostic
+          data such as the error, browser, and page path. We remove page query strings before
+          sending them.
         </p>
       </section>
 
@@ -58,7 +61,9 @@ export function PrivacyPage() {
           and team invites (contract), and produce click analytics for your own links (our
           legitimate interest in offering a useful product). The session cookie is strictly
           necessary and requires no consent. Product usage analytics through PostHog runs only on
-          your consent, given or withdrawn at any time through the cookie banner.
+          your consent, given or withdrawn at any time through the cookie banner. We process
+          technical error reports through Sentry for our legitimate interest in keeping the service
+          secure and reliable. Sentry does not set a cookie in rdyrct.
         </p>
       </section>
 
@@ -82,9 +87,9 @@ export function PrivacyPage() {
         <p className="text-muted">
           We rely on a small number of sub-processors to run the service: Cloudflare (hosting, the
           D1 database, and KV storage), Resend (transactional email), Polar (billing, acting as
-          merchant of record), and PostHog, EU region (product usage analytics). Some may process
-          data outside the EU/EEA; where they do, transfers are covered by the appropriate
-          safeguards, such as the EU Standard Contractual Clauses.
+          merchant of record), PostHog, EU region (product usage analytics), and Sentry (technical
+          error monitoring). Some may process data outside the EU/EEA; where they do, transfers are
+          covered by the appropriate safeguards, such as the EU Standard Contractual Clauses.
         </p>
       </section>
 
