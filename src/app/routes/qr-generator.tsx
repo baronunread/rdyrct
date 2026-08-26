@@ -50,6 +50,27 @@ const generateQrInput = v.object({
   background: v.optional(backgroundColor),
   logoSize: v.optional(v.picklist([0.25, 0.5, 0.65])),
 });
+type QrToolInput = v.InferOutput<typeof generateQrInput>;
+
+const qrAppearanceFields = [
+  ["dotStyle", "qrStyle"],
+  ["cornerStyle", "qrCorner"],
+  ["dotColor", "qrColor"],
+  ["eyeColor", "qrEyeColor"],
+  ["background", "qrBg"],
+  ["logoSize", "qrLogoSize"],
+] as const;
+
+/** Changes only the appearance values an agent supplied, preserving the rest. */
+function qrAppearance(input: QrToolInput): Partial<QrValues> {
+  // SAFETY: each tuple pairs a WebMCP input key with a QrValues key, and logoSize is the only numeric input.
+  return Object.fromEntries(
+    qrAppearanceFields.flatMap(([source, target]) => {
+      const value = input[source];
+      return value === undefined ? [] : [[target, String(value)]];
+    }),
+  ) as Partial<QrValues>;
+}
 
 const EMPTY_QR: QrValues = {
   qrStyle: "",
@@ -275,15 +296,7 @@ export function QrGeneratorPage() {
           if (!parsed.success)
             return "That QR value is not valid. Provide non-empty text and try again.";
           setValue(parsed.output.value);
-          setValues((current) => ({
-            ...current,
-            qrStyle: parsed.output.dotStyle ?? current.qrStyle,
-            qrCorner: parsed.output.cornerStyle ?? current.qrCorner,
-            qrColor: parsed.output.dotColor ?? current.qrColor,
-            qrEyeColor: parsed.output.eyeColor ?? current.qrEyeColor,
-            qrBg: parsed.output.background ?? current.qrBg,
-            qrLogoSize: parsed.output.logoSize?.toString() ?? current.qrLogoSize,
-          }));
+          setValues((current) => ({ ...current, ...qrAppearance(parsed.output) }));
           return "The QR generator now shows that value and appearance. You can download it.";
         },
       },
