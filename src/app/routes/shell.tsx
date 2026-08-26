@@ -21,6 +21,7 @@ import { AppShellSkeleton, RouteSkeleton } from "../components/skeletons";
 import { appNavItems } from "../components/nav-items";
 import { OverLimitBanner } from "../components/over-limit";
 import { WebMcpLinkTools } from "../components/webmcp-link-tools";
+import { WebMcpAnalyticsTool } from "../components/webmcp-analytics-tool";
 import { NotFound } from "./not-found";
 import { PLAN_LIMITS, type User, type UserOrg } from "@/shared/types";
 import posthog from "../lib/posthog";
@@ -412,6 +413,7 @@ export function AppShell() {
   return (
     <div className="flex min-h-dvh">
       <WebMcpLinkTools />
+      <WebMcpAnalyticsTool />
       {/* desktop sidebar: fixed so it never moves, not even on overscroll */}
       <aside className="fixed inset-y-0 left-0 z-10 hidden w-60 border-r border-border bg-surface/40 md:block">
         {sidebar}

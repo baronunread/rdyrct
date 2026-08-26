@@ -93,6 +93,7 @@ test("a signed-in browser agent can create and find a link", async ({ page }) =>
   await page.goto("/dashboard");
   await toolNamed(page, "create_link");
   await toolNamed(page, "find_links");
+  await toolNamed(page, "get_analytics");
 
   const destination = `https://example.com/${"browser-agent-".repeat(140)}`;
   const created = await page.evaluate(async (url) => {
@@ -113,6 +114,13 @@ test("a signed-in browser agent can create and find a link", async ({ page }) =>
     return tool?.execute({ query: "browser-agent" }, { signal: new AbortController().signal });
   });
   expect(found).toContain("https://example.com/browser-agent");
+
+  const analytics = await page.evaluate(async () => {
+    const tool = window.webMcpTools.find((candidate) => candidate.name === "get_analytics");
+    return tool?.execute({ focus: "overview" }, { signal: new AbortController().signal });
+  });
+  expect(analytics).toMatch(/Analytics for the current organization/);
+  await expect(page).toHaveURL(/\/analytics$/);
 });
 
 function windowTextLength(value: string | undefined): number {
