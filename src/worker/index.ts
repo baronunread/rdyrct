@@ -321,7 +321,12 @@ async function serveSpa(c: Context<AppEnv>, status?: 404): Promise<Response> {
 app.get("/pricing.md", (c) => {
   const canonicalUrl = new URL(c.req.url);
   canonicalUrl.pathname = "/pricing";
-  return markdownPage(canonicalUrl, "text/markdown")!;
+  // If the pricing entry ever loses its markdown source, say so at the .md
+  // address instead of quietly serving the SPA shell there.
+  return (
+    markdownPage(canonicalUrl, "text/markdown") ??
+    new Response("The pricing page has no Markdown source.", { status: 404 })
+  );
 });
 
 app.get("/:slug", async (c, next) => {

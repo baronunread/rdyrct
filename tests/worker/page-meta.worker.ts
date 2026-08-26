@@ -89,6 +89,7 @@ describe("the Markdown representation", () => {
 
     expect(markdown?.headers.get("content-type")).toBe("text/markdown; charset=utf-8");
     expect(markdown?.headers.get("Vary")).toBe("Accept");
+    expect(markdown?.headers.get("cache-control")).toBe("public, max-age=3600, must-revalidate");
     expect(markdown?.headers.get("Link")).toContain(
       '<https://rdyrct.com/pricing>; rel="canonical"',
     );
@@ -107,6 +108,23 @@ describe("the Markdown representation", () => {
 
     expect(markdownPage(url, "text/markdown")).not.toBeNull();
     expect(markdownPage(url, "text/markdown;q=nonsense")).toBeNull();
+  });
+
+  it("ranks HTML above Markdown through a wildcard and trims around the semicolon", () => {
+    const url = new URL("https://rdyrct.com/pricing");
+
+    expect(markdownPage(url, "text/markdown;q=0.9, */*;q=1")).toBeNull();
+    expect(markdownPage(url, "text/markdown ;q=0.9")).not.toBeNull();
+  });
+
+  it("quotes front matter so prose with colons stays valid YAML", async () => {
+    const markdown = await markdownPage(
+      new URL("https://rdyrct.com/pricing"),
+      "text/markdown;q=1",
+    )?.text();
+
+    expect(markdown).toMatch(/^title: "/m);
+    expect(markdown).toMatch(/^description: "/m);
   });
 
   it("varies the HTML response that has a Markdown alternative", () => {

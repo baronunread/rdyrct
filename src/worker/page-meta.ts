@@ -62,27 +62,41 @@ function canonicalForHeader(url: URL): string {
   return `<${canonicalFor(url, url.pathname)}>; rel="canonical"`;
 }
 
-/** The highest quality `wanted` carries in an Accept header, or 0 when the
- * header never names it. A malformed q, or one outside [0,1], drops the part
- * rather than guessing what it meant. */
-function preferredQuality(accept: string | null | undefined, wanted: string): number {
-  let best = 0;
+/** The q of one already-lowered, already-trimmed Accept segment: the
+ * parameter's value, the default 1 without one, or null when the segment
+ * carries a q nobody can read or trust (outside [0,1]). */
+function segmentQuality(parameters: string[]): number | null {
+  const parameter = parameters.find((piece) => piece.startsWith("q="));
+  if (parameter === undefined) return 1;
+  const value = Number(parameter.slice(2));
+  return Number.isFinite(value) && value >= 0 && value <= 1 ? value : null;
+}
+
+/** The quality `wanted` carries in an Accept header: its own best q when the
+ * header names it exactly, otherwise the best q of a wildcard covering it,
+ * else 0. A named type keeps its own q even at zero, where a wildcard would
+ * otherwise admit it back (RFC 9110 section 12.5.1). */
+function acceptedQuality(accept: string | null | undefined, wanted: string): number {
+  const family = `${wanted.split("/", 1)[0]}/*`;
+  let named: number | null = null;
+  let wildcard = 0;
   for (const part of accept?.toLowerCase().split(",") ?? []) {
-    const [type, ...parameters] = part.trim().split(";");
-    if (type !== wanted) continue;
-    const parameter = parameters.find((candidate) => candidate.trim().startsWith("q="));
-    const value = parameter ? Number(parameter.trim().slice(2)) : 1;
-    if (Number.isFinite(value) && value > best && value <= 1 && value >= 0) best = value;
+    const pieces = part.split(";").map((piece) => piece.trim());
+    const quality = segmentQuality(pieces.slice(1));
+    if (quality === null) continue;
+    if (pieces[0] === wanted) named = Math.max(named ?? 0, quality);
+    else if (pieces[0] === "*/*" || pieces[0] === family) wildcard = Math.max(wildcard, quality);
   }
-  return best;
+  return named ?? wildcard;
 }
 
 /** `text/markdown` must be explicitly preferable to HTML. A browser's broad
- * Accept header is not an instruction to replace the page with a document.
- * Both scores start at 0, so a header that never names Markdown stays HTML
- * and a named-but-zeroed Markdown loses to any HTML. */
+ * Accept header is not an instruction to replace the page with a document:
+ * through a wildcard it still ranks HTML, so only a header that scores
+ * Markdown strictly above it gets the document. Both scores start at 0, so
+ * an unmentioned Markdown stays HTML too. */
 function markdownPreferred(accept: string | null | undefined): boolean {
-  return preferredQuality(accept, "text/markdown") > preferredQuality(accept, "text/html");
+  return acceptedQuality(accept, "text/markdown") > acceptedQuality(accept, "text/html");
 }
 
 function withAcceptVary(response: Response): Response {
@@ -94,16 +108,23 @@ function withAcceptVary(response: Response): Response {
   return varied;
 }
 
+/** What /pricing.md carried in _headers before negotiation moved it into the
+ * Worker. Unhashed, hand-written copy: an hour of cache costs nothing. */
+const MARKDOWN_CACHE = "public, max-age=3600, must-revalidate";
+
 /** A page representation for agents, only when its source explicitly exists. */
 export function markdownPage(url: URL, accept: string | null | undefined): Response | null {
   const meta = lookup(PUBLIC_PAGE_META, url.pathname);
   if (!meta?.markdown || !markdownPreferred(accept)) return null;
   const canonical = canonicalFor(url, url.pathname);
-  const body = `---\ntitle: ${meta.title}\ndescription: ${meta.description}\ncanonical: ${canonical}\n---\n\n${meta.markdown}\n`;
+  // JSON quoting keeps YAML valid whatever the copy says: descriptions read
+  // like prose, and prose is full of colons.
+  const body = `---\ntitle: ${JSON.stringify(meta.title)}\ndescription: ${JSON.stringify(meta.description)}\ncanonical: ${canonical}\n---\n\n${meta.markdown}\n`;
   return withAcceptVary(
     new Response(body, {
       headers: {
         "content-type": "text/markdown; charset=utf-8",
+        "cache-control": MARKDOWN_CACHE,
         Link: `${LINK_HEADER}, ${canonicalForHeader(url)}`,
       },
     }),
