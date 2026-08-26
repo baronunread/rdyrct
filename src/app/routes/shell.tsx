@@ -3,7 +3,7 @@ import { errorMessage } from "@/app/lib/error-message";
 import { Link, Outlet, useNavigate } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, LazyMotion, domAnimation, m } from "motion/react";
-import { Globe, ChevronsUpDown, Plus, Check, LogOut } from "@/app/ui/icons";
+import { Layers, ChevronsUpDown, Plus, Check, LogOut } from "@/app/ui/icons";
 import { MorphIcon } from "morphicons/react";
 import { menu2, moon, sun, x } from "@/app/ui/icon-nodes";
 import { useCurrentUser, useLogout, useShellUser } from "../lib/hooks";
@@ -131,7 +131,7 @@ function PlatformNav({ visible }: { visible: boolean }) {
       <p className="px-2.5 pb-1 text-xs font-medium text-muted">Admin</p>
       <nav className="flex flex-col gap-0.5">
         <Link to="/admin" {...navLinkProps}>
-          <Globe size={15} /> Platform
+          <Layers size={15} /> Platform
         </Link>
       </nav>
     </div>
