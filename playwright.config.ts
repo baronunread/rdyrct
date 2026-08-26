@@ -44,7 +44,10 @@ export default defineConfig({
     {
       // Runs against the built worker and assets, where the real
       // Content-Security-Policy applies. See tests/e2e/production/csp.pw.ts.
+      // A deployed stage serves the same built output from the same Worker, so
+      // the chromium project already covers the policy there.
       name: "production",
+      testIgnore: process.env.STAGE_URL ? "**/*" : undefined,
       testDir: "./tests/e2e/production",
       use: {
         ...devices["Desktop Chrome"],
@@ -53,39 +56,44 @@ export default defineConfig({
       },
     },
   ],
-  webServer: [
-    {
-      command: "bunx emulate --service resend",
-      url: "http://127.0.0.1:4000/emails",
-      reuseExistingServer: !process.env.CI,
-      gracefulShutdown: { signal: "SIGTERM", timeout: 500 },
-    },
-    {
-      command: `bunx vite dev --host localhost --port ${playwrightPort} --strictPort`,
-      url: appUrl,
-      reuseExistingServer: false,
-      gracefulShutdown: { signal: "SIGTERM", timeout: 500 },
-      env: {
-        PLAYWRIGHT_TEST: "1",
-        CLOUDFLARE_ENV: "playwright",
-      },
-    },
-    {
-      // Built output, not the dev server: `vite dev` relaxes script-src for
-      // Vite's inline React Refresh preamble, so only this one serves the
-      // policy that actually ships. The build is part of the command so the
-      // suite can never assert against a stale dist/.
-      command: `bunx vite build && bunx vite preview --port ${previewPort} --strictPort`,
-      url: previewUrl,
-      reuseExistingServer: false,
-      timeout: 180_000,
-      gracefulShutdown: { signal: "SIGTERM", timeout: 500 },
-      // No CLOUDFLARE_ENV here: the built wrangler.json carries no
-      // `playwright` environment, so setting it only produces a warning.
-      // These tests are about response headers and need no backend state.
-      env: {
-        PLAYWRIGHT_TEST: "1",
-      },
-    },
-  ],
+  // A deployed stage starts nothing locally: the Worker, its assets and its
+  // bindings are already up, and the production project has no counterpart
+  // there either.
+  webServer: process.env.STAGE_URL
+    ? []
+    : [
+        {
+          command: "bunx emulate --service resend",
+          url: "http://127.0.0.1:4000/emails",
+          reuseExistingServer: !process.env.CI,
+          gracefulShutdown: { signal: "SIGTERM", timeout: 500 },
+        },
+        {
+          command: `bunx vite dev --host localhost --port ${playwrightPort} --strictPort`,
+          url: appUrl,
+          reuseExistingServer: false,
+          gracefulShutdown: { signal: "SIGTERM", timeout: 500 },
+          env: {
+            PLAYWRIGHT_TEST: "1",
+            CLOUDFLARE_ENV: "playwright",
+          },
+        },
+        {
+          // Built output, not the dev server: `vite dev` relaxes script-src for
+          // Vite's inline React Refresh preamble, so only this one serves the
+          // policy that actually ships. The build is part of the command so the
+          // suite can never assert against a stale dist/.
+          command: `bunx vite build && bunx vite preview --port ${previewPort} --strictPort`,
+          url: previewUrl,
+          reuseExistingServer: false,
+          timeout: 180_000,
+          gracefulShutdown: { signal: "SIGTERM", timeout: 500 },
+          // No CLOUDFLARE_ENV here: the built wrangler.json carries no
+          // `playwright` environment, so setting it only produces a warning.
+          // These tests are about response headers and need no backend state.
+          env: {
+            PLAYWRIGHT_TEST: "1",
+          },
+        },
+      ],
 });
