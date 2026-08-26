@@ -52,7 +52,7 @@
 ## Resources
 
 - [Self-hosted deployment instructions](https://github.com/baronunread/rdyrct)
-- [Pricing](https://rdyrct.com/pricing) ([plain text](https://rdyrct.com/pricing.md))
+- [Pricing](https://rdyrct.com/pricing) (request `Accept: text/markdown` for Markdown)
 - [Development roadmap](https://rdyrct.com/roadmap)
 - [Privacy policy and cookie details](https://rdyrct.com/privacy)
 - [FAQs and feature explanations](https://rdyrct.com/#faq)

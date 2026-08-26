@@ -35,6 +35,25 @@ test("each public page points its canonical at itself", async ({ request }) => {
   }
 });
 
+test("a public page negotiates Markdown without changing the browser document", async ({
+  request,
+}) => {
+  const markdown = await request.get("/pricing", {
+    headers: { Accept: "text/markdown" },
+  });
+  expect(markdown.headers()["content-type"]).toBe("text/markdown; charset=utf-8");
+  expect(markdown.headers()["vary"]).toContain("Accept");
+  expect(markdown.headers()["link"]).toContain(
+    `<${new URL(markdown.url()).origin}/pricing>; rel="canonical"`,
+  );
+  expect(await markdown.text()).toContain("# rdyrct pricing");
+
+  const html = await request.get("/pricing", { headers: { Accept: "text/html" } });
+  expect(html.headers()["content-type"]).toContain("text/html");
+  expect(html.headers()["vary"]).toContain("Accept");
+  expect(await html.text()).toContain('<div id="root">');
+});
+
 test("the QR page describes itself in the share tags, not the landing page", async ({
   request,
 }) => {

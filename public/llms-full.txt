@@ -89,7 +89,7 @@ storage along with the link.
 ## Links
 
 - [Homepage](https://rdyrct.com/)
-- [Pricing](https://rdyrct.com/pricing) ([plain text](https://rdyrct.com/pricing.md))
+- [Pricing](https://rdyrct.com/pricing) (request `Accept: text/markdown` for Markdown)
 - [QR code generator](https://rdyrct.com/qr-code-generator)
 - [Roadmap](https://rdyrct.com/roadmap)
 - [Privacy policy](https://rdyrct.com/privacy)

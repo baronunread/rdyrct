@@ -28,7 +28,7 @@ import { sweepGraceWarnings } from "./reconcile";
 import { shortenRoutes, sweepExpiredAnonLinks } from "./routes/shorten";
 import { resolveSlug, resolveDomain, domainServing, type KVLink } from "./kv";
 import { RESERVED_SLUGS } from "./util";
-import { withPageMeta } from "./page-meta";
+import { markdownPage, withPageMeta } from "./page-meta";
 import { enforcePublicAuthRateLimit, enforceSignedApiRateLimit } from "./rate-limit";
 import { applySecurityHeaders } from "./security-headers";
 import { drizzle } from "drizzle-orm/d1";
@@ -290,6 +290,13 @@ const STATIC_CACHE = "public, max-age=3600, must-revalidate";
  */
 async function serveSpa(c: Context<AppEnv>, status?: 404): Promise<Response> {
   const url = new URL(c.req.url);
+  // Markdown is a representation of the same public page, not another route.
+  // Select it before fetching the SPA shell, which has no useful body for an
+  // agent that does not run JavaScript.
+  if (!status && c.req.method === "GET") {
+    const markdown = markdownPage(url, c.req.header("accept"));
+    if (markdown) return markdown;
+  }
   const response = withPageMeta(await c.env.ASSETS.fetch(c.req.raw), url);
 
   // A conditional request comes back 304 with a null body, and rewriting one
@@ -308,6 +315,19 @@ async function serveSpa(c: Context<AppEnv>, status?: 404): Promise<Response> {
 }
 
 /* ---------------- shared-domain slug redirect ---------------- */
+
+// Keep the old agent-facing address working, but generate it from the same
+// source as negotiated /pricing so those two documents cannot drift apart.
+app.get("/pricing.md", (c) => {
+  const canonicalUrl = new URL(c.req.url);
+  canonicalUrl.pathname = "/pricing";
+  // If the pricing entry ever loses its markdown source, say so at the .md
+  // address instead of quietly serving the SPA shell there.
+  return (
+    markdownPage(canonicalUrl, "text/markdown") ??
+    new Response("The pricing page has no Markdown source.", { status: 404 })
+  );
+});
 
 app.get("/:slug", async (c, next) => {
   const slug = c.req.param("slug");
