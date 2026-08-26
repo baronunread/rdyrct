@@ -102,6 +102,13 @@ describe("the Markdown representation", () => {
     expect(markdownPage(url, "text/markdown;q=0, text/html")).toBeNull();
   });
 
+  it("reads a bare text/markdown as its default q=1 and drops an unparseable q", () => {
+    const url = new URL("https://rdyrct.com/pricing");
+
+    expect(markdownPage(url, "text/markdown")).not.toBeNull();
+    expect(markdownPage(url, "text/markdown;q=nonsense")).toBeNull();
+  });
+
   it("varies the HTML response that has a Markdown alternative", () => {
     const response = withPageMeta(shell(), new URL("https://rdyrct.com/pricing"));
 

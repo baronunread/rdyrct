@@ -62,21 +62,27 @@ function canonicalForHeader(url: URL): string {
   return `<${canonicalFor(url, url.pathname)}>; rel="canonical"`;
 }
 
-/** `text/markdown` must be explicitly preferable to HTML. A browser's broad
- * Accept header is not an instruction to replace the page with a document. */
-function markdownPreferred(accept: string | null | undefined): boolean {
-  if (!accept) return false;
-  let markdown = -1;
-  let html = -1;
-  for (const part of accept.toLowerCase().split(",")) {
+/** The highest quality `wanted` carries in an Accept header, or 0 when the
+ * header never names it. A malformed q, or one outside [0,1], drops the part
+ * rather than guessing what it meant. */
+function preferredQuality(accept: string | null | undefined, wanted: string): number {
+  let best = 0;
+  for (const part of accept?.toLowerCase().split(",") ?? []) {
     const [type, ...parameters] = part.trim().split(";");
-    const quality = parameters.find((parameter) => parameter.trim().startsWith("q="));
-    const value = quality ? Number(quality.trim().slice(2)) : 1;
-    if (!Number.isFinite(value) || value < 0 || value > 1) continue;
-    if (type === "text/markdown") markdown = Math.max(markdown, value);
-    if (type === "text/html") html = Math.max(html, value);
+    if (type !== wanted) continue;
+    const parameter = parameters.find((candidate) => candidate.trim().startsWith("q="));
+    const value = parameter ? Number(parameter.trim().slice(2)) : 1;
+    if (Number.isFinite(value) && value > best && value <= 1 && value >= 0) best = value;
   }
-  return markdown > 0 && markdown > html;
+  return best;
+}
+
+/** `text/markdown` must be explicitly preferable to HTML. A browser's broad
+ * Accept header is not an instruction to replace the page with a document.
+ * Both scores start at 0, so a header that never names Markdown stays HTML
+ * and a named-but-zeroed Markdown loses to any HTML. */
+function markdownPreferred(accept: string | null | undefined): boolean {
+  return preferredQuality(accept, "text/markdown") > preferredQuality(accept, "text/html");
 }
 
 function withAcceptVary(response: Response): Response {
