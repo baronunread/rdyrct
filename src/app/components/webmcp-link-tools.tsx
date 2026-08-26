@@ -26,6 +26,10 @@ function conciseLink(link: LinkDTO): string {
   return `${address} → ${link.destination}${link.title ? ` (${link.title})` : ""}`;
 }
 
+function toolResult(message: string): string {
+  return message.slice(0, 1_500);
+}
+
 /** Browser-agent tools available only after the signed-in answer is current. */
 export function WebMcpLinkTools() {
   const currentUser = useCurrentUser();
@@ -55,7 +59,7 @@ export function WebMcpLinkTools() {
             signal,
           });
           if (result.items.length === 0) return "No matching links in the current organization.";
-          return result.items.map(conciseLink).join("\n").slice(0, 1_500);
+          return toolResult(result.items.map(conciseLink).join("\n"));
         },
       },
       {
@@ -70,6 +74,7 @@ export function WebMcpLinkTools() {
           },
           required: ["destination"],
         },
+        annotations: { readOnlyHint: false, untrustedContentHint: true },
         execute: async (input, { signal }) => {
           const parsed = v.safeParse(createLinkInput, input);
           if (!parsed.success) return inputError();
@@ -85,7 +90,7 @@ export function WebMcpLinkTools() {
             queryClient.invalidateQueries({ queryKey: ["linkQuotaUsage", org.id] }),
           ]);
           await navigate({ to: "/links" });
-          return `Created ${conciseLink(link)}. The Links page now shows it.`;
+          return toolResult(`Created ${conciseLink(link)}. The Links page now shows it.`);
         },
       },
     ];

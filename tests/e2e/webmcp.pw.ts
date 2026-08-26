@@ -18,8 +18,14 @@ async function supportWebMcp(page: Page) {
     Object.defineProperty(window, "webMcpTools", { value: tools });
     Object.defineProperty(document, "modelContext", {
       value: {
-        registerTool(tool: (typeof tools)[number]) {
+        registerTool(tool: (typeof tools)[number], options: { signal: AbortSignal }) {
           tools.push(tool);
+          // Match the browser lifecycle contract: aborting the signal removes
+          // the capability from the currently exposed tool set.
+          options.signal.addEventListener("abort", () => {
+            const index = tools.indexOf(tool);
+            if (index >= 0) tools.splice(index, 1);
+          });
           return Promise.resolve();
         },
       },
@@ -61,6 +67,13 @@ test("a browser agent can fill the visible QR generator", async ({ page }) => {
   });
   expect(invalid).toMatch(/not valid/);
   await expect(page.getByLabel("Link or text")).toHaveValue("https://example.com/agent-qr");
+
+  await page.goto("/pricing");
+  await expect
+    .poll(() =>
+      page.evaluate(() => window.webMcpTools.some((tool) => tool.name === "generate_qr_code")),
+    )
+    .toBe(false);
 });
 
 test("a signed-in browser agent can create and find a link", async ({ page }) => {
@@ -70,7 +83,7 @@ test("a signed-in browser agent can create and find a link", async ({ page }) =>
   await toolNamed(page, "create_link");
   await toolNamed(page, "find_links");
 
-  const destination = "https://example.com/browser-agent";
+  const destination = `https://example.com/${"browser-agent-".repeat(140)}`;
   const created = await page.evaluate(async (url) => {
     const tool = window.webMcpTools.find((candidate) => candidate.name === "create_link");
     return tool?.execute(
@@ -80,6 +93,7 @@ test("a signed-in browser agent can create and find a link", async ({ page }) =>
   }, destination);
 
   expect(created).toMatch(/Created rdyrct.com\//);
+  expect(windowTextLength(created)).toBeLessThanOrEqual(1_500);
   await expect(page).toHaveURL(/\/links$/);
   await expect(page.getByText(destination)).toBeVisible();
 
@@ -87,5 +101,9 @@ test("a signed-in browser agent can create and find a link", async ({ page }) =>
     const tool = window.webMcpTools.find((candidate) => candidate.name === "find_links");
     return tool?.execute({ query: "browser-agent" }, { signal: new AbortController().signal });
   });
-  expect(found).toContain(destination);
+  expect(found).toContain("https://example.com/browser-agent");
 });
+
+function windowTextLength(value: string | undefined): number {
+  return value?.length ?? 0;
+}
