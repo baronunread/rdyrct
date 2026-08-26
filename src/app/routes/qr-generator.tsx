@@ -16,7 +16,7 @@
  * end rather than a button that quietly posts somewhere, which is the only
  * version of it that agrees with what the page says about itself.
  */
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import * as v from "valibot";
 import { ArrowRight, ChevronDown, ShieldCheck } from "@/app/ui/icons";
@@ -34,7 +34,7 @@ import { LandingHeader } from "../components/landing-header";
 import { MarketingLink } from "../components/marketing-link";
 import { Footer } from "../ui/footer";
 import { registerWebMcpTools, type WebMcpTool } from "../lib/webmcp";
-import { QR_CORNER_STYLES, QR_DOT_STYLES } from "@/shared/types";
+import { QR_CORNER_STYLES, QR_DOT_STYLES, type JsonValue } from "@/shared/types";
 
 const hexColor = v.pipe(v.string(), v.regex(/^#[0-9a-fA-F]{6}$/));
 const backgroundColor = v.union([
@@ -50,7 +50,11 @@ const generateQrInput = v.object({
   background: v.optional(backgroundColor),
   logoSize: v.optional(v.picklist([0.25, 0.5, 0.65])),
 });
+const downloadQrInput = v.object({
+  format: v.optional(v.picklist(["png", "svg"])),
+});
 type QrToolInput = v.InferOutput<typeof generateQrInput>;
+type QrState = { encoded: string; values: QrValues };
 
 const qrAppearanceFields = [
   ["dotStyle", "qrStyle"],
@@ -70,6 +74,28 @@ function qrAppearance(input: QrToolInput): Partial<QrValues> {
       return value === undefined ? [] : [[target, String(value)]];
     }),
   ) as Partial<QrValues>;
+}
+
+function qrDownloadFormat(input: JsonValue): "png" | "svg" | null {
+  const parsed = v.safeParse(downloadQrInput, input);
+  return parsed.success ? (parsed.output.format ?? "png") : null;
+}
+
+function enabledQrDownloadButton(extension: "png" | "svg"): HTMLButtonElement | null {
+  const button = document.querySelector<HTMLButtonElement>(
+    `[aria-label="Download QR code as ${extension.toUpperCase()}"]`,
+  );
+  return button?.disabled ? null : button;
+}
+
+function startQrDownload(input: JsonValue, { encoded }: QrState): string {
+  const extension = qrDownloadFormat(input);
+  if (!extension) return "Choose PNG or SVG for the QR download.";
+  if (!encoded) return "Generate a QR code first, then download it.";
+  const button = enabledQrDownloadButton(extension);
+  if (!button) return "The visible QR code is not ready to download yet.";
+  button.click();
+  return `Started the qr.${extension} download in this browser.`;
 }
 
 const EMPTY_QR: QrValues = {
@@ -265,6 +291,11 @@ export function QrGeneratorPage() {
   useMarketingScroll();
   const [value, setValue] = useState("");
   const [values, setValues] = useState<QrValues>(EMPTY_QR);
+  const qrState = useRef({ encoded: "", values: EMPTY_QR });
+
+  useEffect(() => {
+    qrState.current = { encoded: value.trim(), values };
+  }, [value, values]);
 
   useEffect(() => {
     const tools: WebMcpTool[] = [
@@ -295,10 +326,23 @@ export function QrGeneratorPage() {
           const parsed = v.safeParse(generateQrInput, input);
           if (!parsed.success)
             return "That QR value is not valid. Provide non-empty text and try again.";
+          const next = { ...qrState.current.values, ...qrAppearance(parsed.output) };
+          qrState.current = { encoded: parsed.output.value, values: next };
           setValue(parsed.output.value);
-          setValues((current) => ({ ...current, ...qrAppearance(parsed.output) }));
+          setValues(next);
           return "The QR generator now shows that value and appearance. You can download it.";
         },
+      },
+      {
+        name: "download_qr_code",
+        description:
+          "Download the QR code currently visible in the generator as a PNG or SVG. Use after generating a QR code.",
+        inputSchema: {
+          type: "object",
+          properties: { format: { type: "string", enum: ["png", "svg"] } },
+        },
+        annotations: { readOnlyHint: false },
+        execute: async (input) => startQrDownload(input, qrState.current),
       },
     ];
     return registerWebMcpTools(tools);

@@ -45,6 +45,7 @@ test("a browser agent can fill the visible QR generator", async ({ page }) => {
   await supportWebMcp(page);
   await page.goto("/qr-code-generator");
   await toolNamed(page, "generate_qr_code");
+  await toolNamed(page, "download_qr_code");
 
   const result = await page.evaluate(async () => {
     const tool = window.webMcpTools.find((candidate) => candidate.name === "generate_qr_code");
@@ -60,6 +61,16 @@ test("a browser agent can fill the visible QR generator", async ({ page }) => {
   await expect(
     page.getByRole("img", { name: /QR code for https:\/\/example.com\/agent-qr/ }),
   ).toBeVisible();
+
+  const [download, downloaded] = await Promise.all([
+    page.waitForEvent("download"),
+    page.evaluate(async () => {
+      const tool = window.webMcpTools.find((candidate) => candidate.name === "download_qr_code");
+      return tool?.execute({ format: "png" }, { signal: new AbortController().signal });
+    }),
+  ]);
+  expect(downloaded).toBe("Started the qr.png download in this browser.");
+  expect(download.suggestedFilename()).toBe("qr.png");
 
   const invalid = await page.evaluate(async () => {
     const tool = window.webMcpTools.find((candidate) => candidate.name === "generate_qr_code");
