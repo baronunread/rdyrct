@@ -273,7 +273,7 @@ export async function adminCookie(): Promise<string> {
       "insert into user (id, name, email, email_verified, is_admin, plan, created_at, updated_at) values ('admin-1', 'Admin', 'admin@example.com', 1, 1, 'pro', 0, 0)",
     ),
     env.DB.prepare(
-      "insert into account (id, account_id, provider_id, user_id, password, created_at, updated_at) values ('acct-1', 'admin-1', 'credential', 'admin-1', ?, 0, 0)",
+      "insert into account (id, account_id, issuer, provider_id, user_id, password, created_at, updated_at) values ('acct-1', 'admin-1', 'local:credential', 'credential', 'admin-1', ?, 0, 0)",
     ).bind(await hashPassword(TEST_PASSWORD)),
   ]);
   return signInCookie("admin@example.com", TEST_PASSWORD);
@@ -289,7 +289,7 @@ export async function freeOwnerCookie(domain?: { id: string; hostname: string })
       "insert into user (id, name, email, email_verified, is_admin, plan, created_at, updated_at) values ('free-1', 'Free', 'free@example.com', 1, 0, 'free', 0, 0)",
     ),
     env.DB.prepare(
-      "insert into account (id, account_id, provider_id, user_id, password, created_at, updated_at) values ('acct-free-1', 'free-1', 'credential', 'free-1', ?, 0, 0)",
+      "insert into account (id, account_id, issuer, provider_id, user_id, password, created_at, updated_at) values ('acct-free-1', 'free-1', 'local:credential', 'credential', 'free-1', ?, 0, 0)",
     ).bind(await hashPassword(TEST_PASSWORD)),
     env.DB.prepare("insert into orgs (id, name, created_at) values ('org-1', 'Test', 0)"),
     env.DB.prepare(

@@ -16,8 +16,9 @@
  * end rather than a button that quietly posts somewhere, which is the only
  * version of it that agrees with what the page says about itself.
  */
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "@tanstack/react-router";
+import * as v from "valibot";
 import { ArrowRight, ChevronDown, ShieldCheck } from "@/app/ui/icons";
 import { buttonClass } from "../ui/button-class";
 import { Input } from "../ui/field";
@@ -32,6 +33,70 @@ import { useAudience } from "../lib/audience";
 import { LandingHeader } from "../components/landing-header";
 import { MarketingLink } from "../components/marketing-link";
 import { Footer } from "../ui/footer";
+import { registerWebMcpTools, type WebMcpTool } from "../lib/webmcp";
+import { QR_CORNER_STYLES, QR_DOT_STYLES, type JsonValue } from "@/shared/types";
+
+const hexColor = v.pipe(v.string(), v.regex(/^#[0-9a-fA-F]{6}$/));
+const backgroundColor = v.union([
+  v.literal("transparent"),
+  v.pipe(v.string(), v.regex(/^#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$/)),
+]);
+const generateQrInput = v.object({
+  value: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(2_000)),
+  dotStyle: v.optional(v.picklist(QR_DOT_STYLES)),
+  cornerStyle: v.optional(v.picklist(QR_CORNER_STYLES)),
+  dotColor: v.optional(hexColor),
+  eyeColor: v.optional(hexColor),
+  background: v.optional(backgroundColor),
+  logoSize: v.optional(v.picklist([0.25, 0.5, 0.65])),
+});
+const downloadQrInput = v.object({
+  format: v.optional(v.picklist(["png", "svg"])),
+});
+type QrToolInput = v.InferOutput<typeof generateQrInput>;
+type QrState = { encoded: string; values: QrValues };
+
+const qrAppearanceFields = [
+  ["dotStyle", "qrStyle"],
+  ["cornerStyle", "qrCorner"],
+  ["dotColor", "qrColor"],
+  ["eyeColor", "qrEyeColor"],
+  ["background", "qrBg"],
+  ["logoSize", "qrLogoSize"],
+] as const;
+
+/** Changes only the appearance values an agent supplied, preserving the rest. */
+function qrAppearance(input: QrToolInput): Partial<QrValues> {
+  // SAFETY: each tuple pairs a WebMCP input key with a QrValues key, and logoSize is the only numeric input.
+  return Object.fromEntries(
+    qrAppearanceFields.flatMap(([source, target]) => {
+      const value = input[source];
+      return value === undefined ? [] : [[target, String(value)]];
+    }),
+  ) as Partial<QrValues>;
+}
+
+function qrDownloadFormat(input: JsonValue): "png" | "svg" | null {
+  const parsed = v.safeParse(downloadQrInput, input);
+  return parsed.success ? (parsed.output.format ?? "png") : null;
+}
+
+function enabledQrDownloadButton(extension: "png" | "svg"): HTMLButtonElement | null {
+  const button = document.querySelector<HTMLButtonElement>(
+    `[aria-label="Download QR code as ${extension.toUpperCase()}"]`,
+  );
+  return button?.disabled ? null : button;
+}
+
+function startQrDownload(input: JsonValue, { encoded }: QrState): string {
+  const extension = qrDownloadFormat(input);
+  if (!extension) return "Choose PNG or SVG for the QR download.";
+  if (!encoded) return "Generate a QR code first, then download it.";
+  const button = enabledQrDownloadButton(extension);
+  if (!button) return "The visible QR code is not ready to download yet.";
+  button.click();
+  return `Started the qr.${extension} download in this browser.`;
+}
 
 const EMPTY_QR: QrValues = {
   qrStyle: "",
@@ -226,6 +291,62 @@ export function QrGeneratorPage() {
   useMarketingScroll();
   const [value, setValue] = useState("");
   const [values, setValues] = useState<QrValues>(EMPTY_QR);
+  const qrState = useRef({ encoded: "", values: EMPTY_QR });
+
+  useEffect(() => {
+    qrState.current = { encoded: value.trim(), values };
+  }, [value, values]);
+
+  useEffect(() => {
+    const tools: WebMcpTool[] = [
+      {
+        name: "generate_qr_code",
+        description:
+          "Set the value and optional appearance for a QR code in the visible generator. The person can then download it.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            value: { type: "string", minLength: 1, maxLength: 2_000 },
+            dotStyle: { type: "string", enum: [...QR_DOT_STYLES] },
+            cornerStyle: { type: "string", enum: [...QR_CORNER_STYLES] },
+            dotColor: { type: "string", pattern: "^#[0-9a-fA-F]{6}$" },
+            eyeColor: { type: "string", pattern: "^#[0-9a-fA-F]{6}$" },
+            background: {
+              anyOf: [
+                { type: "string", const: "transparent" },
+                { type: "string", pattern: "^#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$" },
+              ],
+            },
+            logoSize: { type: "number", enum: [0.25, 0.5, 0.65] },
+          },
+          required: ["value"],
+        },
+        annotations: { readOnlyHint: false },
+        execute: async (input) => {
+          const parsed = v.safeParse(generateQrInput, input);
+          if (!parsed.success)
+            return "That QR value is not valid. Provide non-empty text and try again.";
+          const next = { ...qrState.current.values, ...qrAppearance(parsed.output) };
+          qrState.current = { encoded: parsed.output.value, values: next };
+          setValue(parsed.output.value);
+          setValues(next);
+          return "The QR generator now shows that value and appearance. You can download it.";
+        },
+      },
+      {
+        name: "download_qr_code",
+        description:
+          "Download the QR code currently visible in the generator as a PNG or SVG. Use after generating a QR code.",
+        inputSchema: {
+          type: "object",
+          properties: { format: { type: "string", enum: ["png", "svg"] } },
+        },
+        annotations: { readOnlyHint: false },
+        execute: async (input) => startQrDownload(input, qrState.current),
+      },
+    ];
+    return registerWebMcpTools(tools);
+  }, []);
 
   const setField = <K extends keyof QrValues>(key: K, next: QrValues[K]) =>
     setValues((current) => ({ ...current, [key]: next }));

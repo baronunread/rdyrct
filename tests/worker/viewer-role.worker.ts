@@ -23,7 +23,7 @@ async function seedViewer(role = "viewer"): Promise<string> {
       "insert into user (id, name, email, email_verified, is_admin, plan, created_at, updated_at) values ('viewer-1', 'Viewer', 'viewer@example.com', 1, 0, 'free', 0, 0)",
     ),
     env.DB.prepare(
-      "insert into account (id, account_id, provider_id, user_id, password, created_at, updated_at) values ('acct-viewer-1', 'viewer-1', 'credential', 'viewer-1', ?, 0, 0)",
+      "insert into account (id, account_id, issuer, provider_id, user_id, password, created_at, updated_at) values ('acct-viewer-1', 'viewer-1', 'local:credential', 'credential', 'viewer-1', ?, 0, 0)",
     ).bind(await hashPassword(TEST_PASSWORD)),
     env.DB.prepare(
       "insert into org_members (org_id, user_id, role, created_at) values ('org-1', 'viewer-1', ?, 0)",
