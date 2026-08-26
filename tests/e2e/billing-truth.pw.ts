@@ -79,20 +79,17 @@ test("an admin can comp a user, and the comp never counts as a subscriber", asyn
   await adminRow.getByText("comped").hover();
   await expect(reason).toBeVisible();
 
-  // Access went up and paying did not, which is the whole point of splitting
-  // the two facts.
-  //
-  // Stated as the gap between the counters rather than each one on its own:
-  // other tests in this run give themselves a paying subscription (setPlan)
-  // whenever they need a paid feature, and each of those adds one to both
-  // totals at a moment this test cannot predict. It leaves the gap alone,
-  // and the gap is what a comp actually moves.
+  // A comp grants access but is not a paying customer: it moves the comped
+  // count and the plan-mix bars, but neither the paid-users total nor the
+  // subscriber total. Stated against the captured `before` values rather
+  // than absolutes: other tests in this run give themselves a paying
+  // subscription (setPlan) whenever they need a paid feature, and each of
+  // those adds to both totals at a moment this test cannot predict.
   await page.goto("/admin");
   await expect(page.getByText("Subscribers", { exact: true })).toBeVisible();
   expect(await compedCount(page)).toBe(before.comped + 1);
-  const paidWithoutSubscription =
-    (await stat(page, "Paid users")) - (await stat(page, "Subscribers"));
-  expect(paidWithoutSubscription).toBe(before.paidUsers - before.subscribers + 1);
+  expect(await stat(page, "Paid users")).toBe(before.paidUsers);
+  expect(await stat(page, "Subscribers")).toBe(before.subscribers);
 
   // Revoking it takes the access away again, and leaves the subscriber alone.
   await page.goto("/admin/users");

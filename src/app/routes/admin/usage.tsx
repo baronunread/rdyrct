@@ -21,16 +21,16 @@ function AdminTableCard({ title, children }: { title: string; children: ReactNod
 }
 
 /**
- * Access and money are separate questions (#82). "Paid users" is how many
- * people hold a paid plan, comps included; "Subscribers" is how many people
- * pay. No money here: Polar knows what it charged, net of discounts, tax and
- * refunds, so revenue is read there.
+ * Access and money are separate questions (#82). "Paid users" is who actually
+ * pays, comps excluded; "Subscribers" is how many people hold a real Polar
+ * subscription. No money here: Polar knows what it charged, net of discounts,
+ * tax and refunds, so revenue is read there.
  */
 function BusinessStats({ s }: { s: AdminUsage }) {
   return (
     <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
       <StatCard label="Users" value={s.users} />
-      <StatCard label="Paid users" value={s.proUsers} />
+      <StatCard label="Paid users" value={s.payingUsers} />
       <StatCard label="Subscribers" value={s.payingSubscribers} />
       <StatCard label="Signups · 7d" value={s.signups7d} delta={s.signups7dDelta} />
       <StatCard label="Weekly active users" value={s.wau} />

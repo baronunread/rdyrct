@@ -424,7 +424,8 @@ export interface AdminUsage {
   links: number;
   clicks: number;
   clicks7d: number;
-  proUsers: number;
+  /** People holding a paid plan who actually pay: comped users are excluded. */
+  payingUsers: number;
   series: SeriesPoint[];
   /** New accounts per day, same window as `series`. */
   signups: SeriesPoint[];
@@ -440,8 +441,9 @@ export interface AdminUsage {
   /** Business row.
    *
    * Counts, never money (#82). `planCounts` describes feature access and
-   * includes comped users; `payingSubscribers` counts real Polar
-   * subscriptions and excludes them; `compedUsers` is the difference. Revenue
+   * includes comped users; `payingUsers` counts people on a paid plan who
+   * actually pay and excludes them; `payingSubscribers` counts real Polar
+   * subscriptions; `compedUsers` is the gap between access and paying. Revenue
    * is read in the Polar dashboard, which knows what it charged net of
    * discounts, tax and refunds. */
   planCounts: { free: number; hobby: number; pro: number };

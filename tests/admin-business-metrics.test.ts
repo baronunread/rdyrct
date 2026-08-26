@@ -15,7 +15,7 @@ describe("computeBusinessMetrics", () => {
   test("computes conversion rate, subscriber counts, and signup delta from raw count rows", () => {
     const metrics = computeBusinessMetrics({
       users: [{ n: 100 }],
-      proUsers: [{ n: 25 }],
+      paidPlanUsers: [{ n: 25 }],
       compedUserRows: [{ n: 3 }],
       subscriptionRows: [{ status: "active" }, { status: "active" }],
       planCountRows: [
@@ -28,7 +28,8 @@ describe("computeBusinessMetrics", () => {
       wauRows: [{ n: 80 }],
     });
     expect(metrics.totalUsers).toBe(100);
-    expect(metrics.paidUsers).toBe(25);
+    // 25 hold a paid plan but 3 are comped, so only 22 actually pay (#82).
+    expect(metrics.payingUsers).toBe(22);
     expect(metrics.paidConversionRate).toBe(22);
     expect(metrics.planCounts).toEqual({ free: 60, hobby: 15, pro: 25 });
     // 25 people hold a paid plan and 2 of them pay for it: access and paying
@@ -43,7 +44,7 @@ describe("computeBusinessMetrics", () => {
   test("conversion rate is null when there are no users yet", () => {
     const metrics = computeBusinessMetrics({
       users: [],
-      proUsers: [],
+      paidPlanUsers: [],
       compedUserRows: [],
       subscriptionRows: [],
       planCountRows: [],

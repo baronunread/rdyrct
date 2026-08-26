@@ -172,7 +172,7 @@ export function firstCount(rows: { n: number }[]): number {
 // out of their raw count-query rows.
 export function computeBusinessMetrics(rows: {
   users: { n: number }[];
-  proUsers: { n: number }[];
+  paidPlanUsers: { n: number }[];
   compedUserRows: { n: number }[];
   subscriptionRows: SubscriptionCountRow[];
   planCountRows: { plan: string; n: number }[];
@@ -181,13 +181,15 @@ export function computeBusinessMetrics(rows: {
   wauRows: { n: number }[];
 }) {
   const totalUsers = firstCount(rows.users);
-  // Feature access, comps included: this is "how many people are on a paid
-  // plan", which is a different question from "how many people pay".
-  const paidUsers = firstCount(rows.proUsers);
+  // Feature access, comps included: this is how many people are on a paid
+  // plan, which is a different question from how many people pay.
+  const paidPlanUsers = firstCount(rows.paidPlanUsers);
   const compedUsers = firstCount(rows.compedUserRows);
   const planCounts = computePlanCounts(rows.planCountRows);
   const subscriptions = computeSubscriptionCounts(rows.subscriptionRows);
-  const payingUsers = Math.max(0, paidUsers - compedUsers);
+  // "Paid users" is who actually pays, so comps come out: a comp grants
+  // access but is not a paying customer (#82).
+  const payingUsers = Math.max(0, paidPlanUsers - compedUsers);
   const paidConversionRate = totalUsers > 0 ? Math.round((payingUsers / totalUsers) * 100) : null;
   const signups7d = firstCount(rows.signups7dRows);
   const signups7dPrev = firstCount(rows.signups7dPrevRows);
@@ -195,7 +197,7 @@ export function computeBusinessMetrics(rows: {
   const wau = firstCount(rows.wauRows);
   return {
     totalUsers,
-    paidUsers,
+    payingUsers,
     planCounts,
     compedUsers,
     ...subscriptions,
@@ -317,7 +319,7 @@ adminRoutes.get("/usage", async (c) => {
     links,
     clicks,
     clicks7d,
-    proUsers,
+    paidPlanUsers,
     seriesRows,
     signupRows,
     topOrgRows,
@@ -473,7 +475,7 @@ adminRoutes.get("/usage", async (c) => {
 
   const {
     totalUsers,
-    paidUsers,
+    payingUsers,
     planCounts,
     compedUsers,
     payingSubscribers,
@@ -483,7 +485,7 @@ adminRoutes.get("/usage", async (c) => {
     wau,
   } = computeBusinessMetrics({
     users,
-    proUsers,
+    paidPlanUsers,
     compedUserRows,
     subscriptionRows,
     planCountRows,
@@ -537,7 +539,7 @@ adminRoutes.get("/usage", async (c) => {
     links: links[0]?.n ?? 0,
     clicks: tableSize,
     clicks7d: clicks7d[0]?.n ?? 0,
-    proUsers: paidUsers,
+    payingUsers,
     series: fillSeries(seriesRows, days),
     signups: fillSeries(signupRows, days),
     topOrgs: topOrgRows.map((o) => ({
