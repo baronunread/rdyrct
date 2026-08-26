@@ -28,9 +28,16 @@ export function registerWebMcpTools(tools: WebMcpTool[]): () => void {
   if (!modelContext) return () => {};
 
   const controller = new AbortController();
-  void Promise.all(
-    tools.map((tool) => modelContext.registerTool(tool, { signal: controller.signal })),
-  ).catch(() => {
+  const registered = tools.map((tool) => {
+    try {
+      return modelContext.registerTool(tool, { signal: controller.signal });
+    } catch {
+      // A partial implementation that throws synchronously is the same
+      // no-op as one that rejects.
+      return Promise.resolve();
+    }
+  });
+  void Promise.all(registered).catch(() => {
     // WebMCP is progressive enhancement. A browser declining a tool must
     // never change what a person can do with the page.
   });
