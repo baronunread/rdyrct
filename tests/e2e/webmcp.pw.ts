@@ -87,6 +87,14 @@ test("a browser agent can fill the visible QR generator", async ({ page }) => {
     .toBe(false);
 });
 
+test("a browser without WebMCP leaves the QR generator working", async ({ page }) => {
+  await page.goto("/qr-code-generator");
+  await page.getByLabel("Link or text").fill("https://example.com/no-webmcp");
+  await expect(
+    page.getByRole("img", { name: /QR code for https:\/\/example.com\/no-webmcp/ }),
+  ).toBeVisible();
+});
+
 test("a signed-in browser agent can create and find a link", async ({ page }) => {
   await supportWebMcp(page);
   await signUpAndVerify(page, `webmcp-${Date.now()}@gmail.com`, "test-password-123");
