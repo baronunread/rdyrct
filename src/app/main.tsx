@@ -26,6 +26,7 @@ import "@fontsource/jetbrains-mono/latin-700.css";
 import "./styles.css";
 import { ToastProvider } from "./ui/toast";
 import { ErrorBoundary } from "./components/error-boundary";
+import { NewVersionBanner } from "./components/new-version-banner";
 import { ConsentBanner } from "./ui/consent-banner";
 import { AppShellSkeleton } from "./components/skeletons";
 import { LandingHeader } from "./components/landing-header";
@@ -383,6 +384,9 @@ createRoot(document.getElementById("root")!).render(
         <ErrorBoundary>
           <RouterProvider router={router} />
         </ErrorBoundary>
+        {/* Outside the boundary: it stays mounted when a chunk failure crashes
+            the app underneath, so the "new version available" prompt survives. */}
+        <NewVersionBanner />
       </ToastProvider>
     </QueryClientProvider>
   </StrictMode>,

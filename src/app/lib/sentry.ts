@@ -1,9 +1,8 @@
 import * as Sentry from "@sentry/react";
+import { signalNewVersionAvailable } from "./new-version";
 
 // SAFETY: Vite exposes configured VITE_ variables as strings and leaves absent values undefined.
 const dsn = import.meta.env.VITE_PUBLIC_SENTRY_DSN as string | undefined;
-const CHUNK_RELOAD_KEY = "rdyrct:chunk-reload-at";
-const CHUNK_RELOAD_WINDOW_MS = 30_000;
 
 // Error reports are operational telemetry, not product analytics: do not add
 // replays, tracing, cookies, or personal data. The DSN is deliberately public
@@ -34,14 +33,14 @@ if (dsn) {
   });
 }
 
+// A failed code-split chunk is almost always a stale build: a visitor has a
+// tab open whose hashed asset filenames no longer exist after a deploy. We
+// surface the in-app "new version available" banner and let them reload when
+// they choose, rather than crashing or reloading under them. Not reported to
+// Sentry: it is either not a bug (stale tab) or a broken deploy that will
+// already surface real errors elsewhere.
 window.addEventListener("vite:preloadError", () => {
-  const previous = Number(sessionStorage.getItem(CHUNK_RELOAD_KEY));
-  const recent = Number.isFinite(previous) && Date.now() - previous < CHUNK_RELOAD_WINDOW_MS;
-  if (recent) return;
-
-  sessionStorage.setItem(CHUNK_RELOAD_KEY, String(Date.now()));
-  captureClientException(new Error("Failed to load a dynamic application chunk"));
-  void flushClientEvents().finally(() => window.location.reload());
+  signalNewVersionAvailable();
 });
 
 export function captureClientException(error: Error, componentStack?: string | null) {
@@ -51,9 +50,4 @@ export function captureClientException(error: Error, componentStack?: string | n
     scope.setContext("react", { componentStack: componentStack ?? "" });
     Sentry.captureException(error);
   });
-}
-
-async function flushClientEvents(): Promise<void> {
-  if (!dsn) return;
-  await Sentry.flush(2_000);
 }
