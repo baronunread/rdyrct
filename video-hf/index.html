@@ -1,0 +1,824 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1920, height=1080" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap"
+      rel="stylesheet"
+    />
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <style>
+      :root {
+        --bg: #17151f;
+        --surface: #1f1c2b;
+        --surface2: #262336;
+        --border: #34304a;
+        --text: #eae7f2;
+        --muted: #c6c2d3;
+        --accent: #cdb9f5;
+        --mint: #b9e6c9;
+      }
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        width: 1920px;
+        height: 1080px;
+        overflow: hidden;
+        background: var(--bg);
+        font-family: "Figtree", sans-serif;
+        color: var(--text);
+      }
+      .mono {
+        font-family: "JetBrains Mono", monospace;
+      }
+      #stage {
+        position: absolute;
+        inset: 0;
+        transform-origin: 50% 50%;
+        will-change: transform;
+      }
+      #glow {
+        position: absolute;
+        top: -200px;
+        left: -200px;
+        width: 2320px;
+        height: 1480px;
+        background: radial-gradient(
+          720px 720px at 50% 50%,
+          rgba(205, 185, 245, 0.16),
+          transparent 70%
+        );
+        pointer-events: none;
+      }
+
+      /* ---- shared chrome ---- */
+      .panel {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 20px;
+        box-shadow: 0 40px 120px rgba(0, 0, 0, 0.45);
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+      }
+      .panel-head {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 18px 24px;
+        border-bottom: 1px solid var(--border);
+      }
+      .dot {
+        width: 11px;
+        height: 11px;
+        border-radius: 50%;
+        background: var(--accent);
+        box-shadow: 0 0 14px var(--accent);
+      }
+      .panel-title {
+        font-weight: 600;
+        font-size: 22px;
+        letter-spacing: 0.01em;
+      }
+      .panel-note {
+        margin-left: auto;
+        font-family: "JetBrains Mono", monospace;
+        font-size: 16px;
+        color: var(--muted);
+      }
+
+      /* ---- intro / outro ---- */
+      .center {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 22px;
+        text-align: center;
+      }
+      .word {
+        font-family: "JetBrains Mono", monospace;
+        font-weight: 700;
+        font-size: 96px;
+        letter-spacing: 0.08em;
+        color: var(--muted);
+      }
+      .word .acc {
+        color: var(--accent);
+      }
+      .tag {
+        font-size: 34px;
+        color: var(--muted);
+        max-width: 900px;
+        line-height: 1.35;
+      }
+
+      /* ---- outro overlay (screen space, sits on the zoomed QR) ---- */
+      #outro {
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+      }
+      #outro .scrim {
+        position: absolute;
+        inset: 0;
+        background: radial-gradient(
+          120% 120% at 50% 42%,
+          rgba(23, 21, 31, 0.86),
+          rgba(23, 21, 31, 0.97)
+        );
+        opacity: 0;
+      }
+      #outro .outro-qr {
+        position: absolute;
+        left: 700px;
+        top: 170px;
+        width: 520px;
+        height: 520px;
+        background: #ece7f7;
+        border-radius: 34px;
+        padding: 34px;
+        box-shadow: 0 30px 90px rgba(0, 0, 0, 0.55);
+        opacity: 0;
+      }
+      #outro .outro-qr svg {
+        width: 100%;
+        height: 100%;
+        display: block;
+      }
+      #outro .outro-text {
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: 120px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 16px;
+        text-align: center;
+      }
+      #vignette {
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        background: radial-gradient(
+          135% 135% at 50% 45%,
+          transparent 58%,
+          rgba(0, 0, 0, 0.55) 100%
+        );
+      }
+
+      /* ---- ambient depth + agent<->app connector ---- */
+      .bg-blob {
+        position: absolute;
+        border-radius: 50%;
+        filter: blur(90px);
+        opacity: 0.13;
+        pointer-events: none;
+      }
+      #bg-a {
+        width: 920px;
+        height: 920px;
+        left: -240px;
+        top: -180px;
+        background: radial-gradient(circle, var(--surface2), transparent 70%);
+      }
+      #bg-b {
+        width: 1120px;
+        height: 1120px;
+        right: -360px;
+        bottom: -380px;
+        background: radial-gradient(circle, #2c2647, transparent 70%);
+      }
+      #connector {
+        position: absolute;
+        left: 900px;
+        top: 520px;
+        width: 200px;
+        height: 40px;
+        pointer-events: none;
+        opacity: 0;
+      }
+      #connector svg {
+        width: 100%;
+        height: 100%;
+        overflow: visible;
+      }
+      #flow-line {
+        stroke: var(--accent);
+      }
+      #flow-dot {
+        fill: var(--accent);
+      }
+
+      /* ---- shell ---- */
+      #shell {
+        position: absolute;
+        inset: 0;
+      }
+      #agent-panel {
+        position: absolute;
+        left: 120px;
+        top: 180px;
+        width: 800px;
+        height: 720px;
+      }
+      #app-panel {
+        position: absolute;
+        left: 940px;
+        top: 180px;
+        width: 860px;
+        height: 720px;
+      }
+      .calls {
+        padding: 24px;
+        display: flex;
+        flex-direction: column;
+        gap: 18px;
+      }
+      .call {
+        background: var(--surface2);
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        padding: 16px 18px;
+        opacity: 0;
+      }
+      .call-head {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        font-family: "JetBrains Mono", monospace;
+        font-size: 17px;
+      }
+      .call-head .tool {
+        color: var(--accent);
+        font-weight: 700;
+      }
+      .call-head .when {
+        margin-left: auto;
+        color: var(--muted);
+        font-size: 14px;
+      }
+      .args {
+        font-family: "JetBrains Mono", monospace;
+        font-size: 15px;
+        line-height: 1.5;
+        color: var(--muted);
+        margin: 10px 0 0;
+        white-space: pre;
+        overflow: hidden;
+      }
+      .result {
+        font-size: 16px;
+        color: var(--mint);
+        margin-top: 8px;
+        opacity: 0;
+      }
+
+      .view {
+        position: absolute;
+        inset: 64px 0 0 0;
+        padding: 28px 32px;
+        opacity: 0;
+      }
+      .row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 16px 18px;
+        border-radius: 12px;
+        font-size: 19px;
+        border: 1px solid transparent;
+      }
+      .row.head {
+        color: var(--muted);
+        font-size: 15px;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        border-bottom: 1px solid var(--border);
+      }
+      .row .num {
+        font-family: "JetBrains Mono", monospace;
+        font-variant-numeric: tabular-nums;
+        color: var(--text);
+      }
+      .row.dim {
+        color: var(--muted);
+      }
+      #row-new {
+        background: rgba(185, 230, 201, 0.08);
+        border-color: rgba(185, 230, 201, 0.35);
+        opacity: 0;
+      }
+
+      .big {
+        display: flex;
+        align-items: baseline;
+        gap: 16px;
+        margin-bottom: 28px;
+      }
+      .big .num {
+        font-family: "JetBrains Mono", monospace;
+        font-size: 64px;
+        font-weight: 700;
+        color: var(--text);
+        font-variant-numeric: tabular-nums;
+      }
+      .big .sub {
+        font-size: 20px;
+        color: var(--muted);
+      }
+      .bars {
+        display: flex;
+        align-items: flex-end;
+        gap: 16px;
+        height: 320px;
+        padding-top: 10px;
+      }
+      .bar {
+        flex: 1;
+        background: linear-gradient(180deg, var(--accent), #8a6fc4);
+        border-radius: 8px 8px 0 0;
+        transform-origin: bottom;
+        transform: scaleY(0);
+      }
+      .axis {
+        margin-top: 18px;
+        font-size: 17px;
+        color: var(--muted);
+      }
+
+      #qr-view {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 22px;
+      }
+      .qr-tile {
+        width: 320px;
+        height: 320px;
+        background: #ece7f7;
+        border-radius: 22px;
+        padding: 22px;
+        opacity: 0;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+      }
+      .qr-tile svg {
+        width: 100%;
+        height: 100%;
+        display: block;
+      }
+      .qr-cap {
+        font-size: 20px;
+        color: var(--muted);
+      }
+      .dl {
+        font-family: "Figtree", sans-serif;
+        font-weight: 600;
+        font-size: 18px;
+        color: var(--bg);
+        background: var(--accent);
+        border: none;
+        border-radius: 12px;
+        padding: 12px 22px;
+        cursor: pointer;
+      }
+    </style>
+  </head>
+  <body>
+    <div
+      id="root"
+      data-composition-id="main"
+      data-start="0"
+      data-duration="15"
+      data-width="1920"
+      data-height="1080"
+    >
+      <div id="stage">
+        <div id="bg-a" class="bg-blob"></div>
+        <div id="bg-b" class="bg-blob"></div>
+
+        <!-- INTRO -->
+        <div id="intro" class="center clip" data-start="0" data-duration="2.6">
+          <div class="word"><span class="acc">rdyrct</span>.com</div>
+          <div class="tag">Short links, QR codes and click analytics for your whole stack.</div>
+        </div>
+
+        <!-- SHELL -->
+        <div id="shell">
+          <div id="connector">
+            <svg viewBox="0 0 200 40">
+              <line
+                id="flow-line"
+                x1="6"
+                y1="20"
+                x2="194"
+                y2="20"
+                stroke-width="2"
+                stroke-dasharray="6 10"
+                stroke-linecap="round"
+              />
+              <circle id="flow-dot" cx="6" cy="20" r="5" />
+            </svg>
+          </div>
+          <div id="agent-panel" class="panel clip" data-start="2.2" data-duration="12.2">
+            <div class="panel-head">
+              <span class="dot"></span>
+              <span class="panel-title">Agent</span>
+              <span class="panel-note">webmcp</span>
+            </div>
+            <div class="calls">
+              <div id="call1" class="call clip" data-start="3.0" data-duration="11.5">
+                <div class="call-head">
+                  <span class="tool">create_link</span>
+                  <span class="when">webmcp</span>
+                </div>
+                <pre class="args">
+create_link({
+  destination: "https://example.com/spring-sale",
+  title: "Spring Sale"
+})</pre>
+                <div class="result">→ Created rdyrct.com/spring-sale</div>
+              </div>
+
+              <div id="call2" class="call clip" data-start="6.5" data-duration="8.0">
+                <div class="call-head">
+                  <span class="tool">get_analytics</span>
+                  <span class="when">webmcp</span>
+                </div>
+                <pre class="args">
+get_analytics({
+  focus: "overview",
+  days: 30
+})</pre>
+                <div class="result">→ 12,408 clicks · top link /spring-sale</div>
+              </div>
+
+              <div id="call3" class="call clip" data-start="9.8" data-duration="4.7">
+                <div class="call-head">
+                  <span class="tool">generate_qr_code</span>
+                  <span class="when">webmcp</span>
+                </div>
+                <pre class="args">
+generate_qr_code({
+  value: "https://rdyrct.com"
+})</pre>
+                <div class="result">→ QR ready · download enabled</div>
+              </div>
+            </div>
+          </div>
+
+          <div id="app-panel" class="panel clip" data-start="2.2" data-duration="12.2">
+            <div class="panel-head">
+              <span class="dot"></span>
+              <span class="panel-title">rdyrct</span>
+              <span class="panel-note">rdyrct.com/links</span>
+            </div>
+
+            <div id="links-view" class="view clip" data-start="2.6" data-duration="5.2">
+              <div class="row head"><span>Short link</span><span>Clicks</span></div>
+              <div id="row-new" class="row">
+                <span class="mono">/spring-sale</span><span class="num">3,411</span>
+              </div>
+              <div class="row dim">
+                <span class="mono">/launch</span><span class="num">1,204</span>
+              </div>
+              <div class="row dim"><span class="mono">/docs</span><span class="num">892</span></div>
+            </div>
+
+            <div id="analytics-view" class="view clip" data-start="7.8" data-duration="3.2">
+              <div class="big">
+                <span class="num">12,408</span><span class="sub">clicks · last 30 days</span>
+              </div>
+              <div class="bars">
+                <div class="bar" style="height: 90px"></div>
+                <div class="bar" style="height: 140px"></div>
+                <div class="bar" style="height: 110px"></div>
+                <div class="bar" style="height: 200px"></div>
+                <div class="bar" style="height: 160px"></div>
+                <div class="bar" style="height: 250px"></div>
+                <div class="bar" style="height: 190px"></div>
+                <div class="bar" style="height: 300px"></div>
+                <div class="bar" style="height: 230px"></div>
+                <div class="bar" style="height: 270px"></div>
+                <div class="bar" style="height: 210px"></div>
+                <div class="bar" style="height: 320px"></div>
+              </div>
+              <div class="axis">Top link · /spring-sale with 3,411 clicks</div>
+            </div>
+
+            <div id="qr-view" class="view clip" data-start="11.0" data-duration="4.0">
+              <div class="qr-tile" id="qr-tile">
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  viewBox="0 0 27 27"
+                  width="100%"
+                  height="100%"
+                  shape-rendering="crispEdges"
+                >
+                  <path fill="#ECE7F7" d="M0 0h27v27H0z" />
+                  <path
+                    stroke="#17151f"
+                    d="M1 1.5h7m1 0h1m1 0h2m2 0h3m1 0h7M1 2.5h1m5 0h1m4 0h3m2 0h1m1 0h1m5 0h1M1 3.5h1m1 0h3m1 0h1m4 0h1m2 0h1m3 0h1m1 0h3m1 0h1M1 4.5h1m1 0h3m1 0h1m1 0h1m1 0h2m4 0h1m1 0h1m1 0h3m1 0h1M1 5.5h1m1 0h3m1 0h1m1 0h2m1 0h1m2 0h3m1 0h1m1 0h3m1 0h1M1 6.5h1m5 0h1m1 0h1m1 0h1m5 0h1m1 0h1m5 0h1M1 7.5h7m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h7M9 8.5h1m4 0h1m2 0h1M1 9.5h1m3 0h1m1 0h3m1 0h2m1 0h1m3 0h5m2 0h1M1 10.5h1m2 0h3m2 0h4m1 0h4m3 0h2m1 0h1M1 11.5h1m1 0h1m2 0h4m2 0h1m3 0h2m3 0h3M1 12.5h1m1 0h4m2 0h1m2 0h2m1 0h1m2 0h1m4 0h2M1 13.5h1m4 0h2m1 0h1m1 0h2m1 0h3m1 0h2m2 0h4M1 14.5h4m1 0h1m1 0h2m3 0h1m2 0h1m1 0h1m2 0h1m2 0h1M3 15.5h1m1 0h1m1 0h1m4 0h12M3 16.5h3m3 0h1m2 0h1m1 0h1m1 0h1m3 0h2m1 0h2M1 17.5h2m2 0h1m1 0h2m1 0h2m1 0h2m2 0h7M9 18.5h1m4 0h4m3 0h1M1 19.5h7m1 0h3m5 0h1m1 0h1m1 0h1M1 20.5h1m5 0h1m5 0h1m1 0h1m1 0h1m3 0h5M1 21.5h1m1 0h3m1 0h1m1 0h1m1 0h2m1 0h2m1 0h7m1 0h1M1 22.5h1m1 0h3m1 0h1m3 0h1m1 0h1m2 0h5m2 0h3M1 23.5h1m1 0h3m1 0h1m2 0h1m1 0h6m1 0h1m2 0h1m1 0h1M1 24.5h1m5 0h1m2 0h3m1 0h1m1 0h1m1 0h1m1 0h5M1 25.5h7m1 0h1m1 0h1m1 0h2m1 0h1m6 0h3"
+                  />
+                </svg>
+              </div>
+              <div class="qr-cap">Scan this · or</div>
+              <button id="download-btn" class="dl">Download PNG</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div id="vignette"></div>
+
+      <!-- OUTRO overlay: sits on top of the zoomed QR, screen space -->
+      <div id="outro" class="clip" data-start="14.3" data-duration="1.2">
+        <div class="scrim"></div>
+        <div class="outro-qr">
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            viewBox="0 0 27 27"
+            width="100%"
+            height="100%"
+            shape-rendering="crispEdges"
+          >
+            <path fill="#ECE7F7" d="M0 0h27v27H0z" />
+            <path
+              stroke="#17151f"
+              d="M1 1.5h7m1 0h1m1 0h2m2 0h3m1 0h7M1 2.5h1m5 0h1m4 0h3m2 0h1m1 0h1m5 0h1M1 3.5h1m1 0h3m1 0h1m4 0h1m2 0h1m3 0h1m1 0h3m1 0h1M1 4.5h1m1 0h3m1 0h1m1 0h1m1 0h2m4 0h1m1 0h1m1 0h3m1 0h1M1 5.5h1m1 0h3m1 0h1m1 0h2m1 0h1m2 0h3m1 0h1m1 0h3m1 0h1M1 6.5h1m5 0h1m1 0h1m1 0h1m5 0h1m1 0h1m5 0h1M1 7.5h7m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h7M9 8.5h1m4 0h1m2 0h1M1 9.5h1m3 0h1m1 0h3m1 0h2m1 0h1m3 0h5m2 0h1M1 10.5h1m2 0h3m2 0h4m1 0h4m3 0h2m1 0h1M1 11.5h1m1 0h1m2 0h4m2 0h1m3 0h2m3 0h3M1 12.5h1m1 0h4m2 0h1m2 0h2m1 0h1m2 0h1m4 0h2M1 13.5h1m4 0h2m1 0h1m1 0h2m1 0h3m1 0h2m2 0h4M1 14.5h4m1 0h1m1 0h2m3 0h1m2 0h1m1 0h1m2 0h1m2 0h1M3 15.5h1m1 0h1m1 0h1m4 0h12M3 16.5h3m3 0h1m2 0h1m1 0h1m1 0h1m3 0h2m1 0h2M1 17.5h2m2 0h1m1 0h2m1 0h2m1 0h2m2 0h7M9 18.5h1m4 0h4m3 0h1M1 19.5h7m1 0h3m5 0h1m1 0h1m1 0h1M1 20.5h1m5 0h1m5 0h1m1 0h1m1 0h1m3 0h5M1 21.5h1m1 0h3m1 0h1m1 0h1m1 0h2m1 0h2m1 0h7m1 0h1M1 22.5h1m1 0h3m1 0h1m3 0h1m1 0h1m2 0h5m2 0h3M1 23.5h1m1 0h3m1 0h1m2 0h1m1 0h6m1 0h1m2 0h1m1 0h1M1 24.5h1m5 0h1m2 0h3m1 0h1m1 0h1m1 0h1m1 0h5M1 25.5h7m1 0h1m1 0h1m1 0h2m1 0h1m6 0h3"
+            />
+          </svg>
+        </div>
+        <div class="outro-text">
+          <div class="word"><span class="acc">rdyrct</span>.com</div>
+          <div class="tag">Give your browser agent the tools you already use.</div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      window.__timelines = window.__timelines || {};
+      const tl = gsap.timeline({ paused: true });
+
+      // ---- camera: anchored and calm; one deliberate move to the QR ----
+      // A single, slow push-in across the whole exchange (no horizontal darting).
+      // The panels carry the action; the camera only builds toward the climax.
+      tl.fromTo(
+        "#stage",
+        { scale: 1.0, x: 0, y: 0 },
+        { scale: 1.05, x: 0, y: 0, duration: 12.2, ease: "none", overwrite: "auto" },
+        0,
+      );
+      // climax: push into the QR and STAY (no pull-back)
+      tl.to(
+        "#stage",
+        { scale: 1.3, x: -533, y: 0, duration: 1.0, ease: "power3.inOut", overwrite: "auto" },
+        12.2,
+      );
+
+      // ---- ambient depth: slow parallax drift (dark-on-dark, no bright light) ----
+      tl.to("#bg-a", { x: 150, y: 80, duration: 9, ease: "sine.inOut", yoyo: true, repeat: -1 }, 0);
+      tl.to(
+        "#bg-b",
+        { x: -130, y: -100, duration: 11, ease: "sine.inOut", yoyo: true, repeat: -1 },
+        0,
+      );
+
+      // ---- connector: visualises the agent <-> app loop ----
+      tl.set("#connector", { opacity: 0 }, 0);
+      tl.to("#connector", { opacity: 0.85, duration: 0.5, ease: "power2.out" }, 2.4);
+      tl.to("#connector", { opacity: 0, duration: 0.4, ease: "power2.in" }, 13.9);
+      tl.set("#connector", { opacity: 0 }, 14.3);
+      tl.to("#flow-line", { strokeDashoffset: -32, duration: 0.9, ease: "none", repeat: -1 }, 2.4);
+      tl.to(
+        "#flow-dot",
+        { attr: { cx: 194 }, duration: 1.4, ease: "power1.inOut", repeat: -1, yoyo: true },
+        2.6,
+      );
+
+      // ---- intro --------------------------------------------------------
+      tl.fromTo(
+        "#intro .word",
+        { opacity: 0, y: 30 },
+        { opacity: 1, y: 0, duration: 1.0, ease: "power3.out" },
+        0.2,
+      );
+      tl.fromTo(
+        "#intro .tag",
+        { opacity: 0, y: 20 },
+        { opacity: 1, y: 0, duration: 0.8, ease: "power2.out" },
+        0.9,
+      );
+      tl.to("#intro", { opacity: 0, duration: 0.6, ease: "power2.in" }, 1.9);
+
+      // ---- shell entrance: springy pop, varied direction ----
+      tl.fromTo(
+        "#agent-panel",
+        { opacity: 0, x: -70, scale: 0.95 },
+        { opacity: 1, x: 0, scale: 1, duration: 0.9, ease: "back.out(1.1)" },
+        2.4,
+      );
+      tl.fromTo(
+        "#app-panel",
+        { opacity: 0, x: 70, scale: 0.95 },
+        { opacity: 1, x: 0, scale: 1, duration: 0.9, ease: "back.out(1.1)" },
+        2.4,
+      );
+      // gentle continuous float so the frame feels alive (different phases)
+      tl.to(
+        "#agent-panel",
+        { y: 10, duration: 3.4, ease: "sine.inOut", yoyo: true, repeat: -1 },
+        2.4,
+      );
+      tl.to(
+        "#app-panel",
+        { y: -10, duration: 4.0, ease: "sine.inOut", yoyo: true, repeat: -1 },
+        2.9,
+      );
+
+      // ---- call 1 -------------------------------------------------------
+      tl.fromTo(
+        "#call1",
+        { opacity: 0, x: -24 },
+        { opacity: 1, x: 0, duration: 0.5, ease: "power3.out" },
+        3.0,
+      );
+      tl.fromTo(
+        "#call1 .result",
+        { opacity: 0, y: 10 },
+        { opacity: 1, y: 0, duration: 0.4, ease: "power2.out" },
+        4.2,
+      );
+      tl.fromTo(
+        "#call1",
+        { boxShadow: "0 0 0 rgba(205,185,245,0)" },
+        {
+          boxShadow: "0 0 34px rgba(205,185,245,0.40)",
+          duration: 0.45,
+          yoyo: true,
+          repeat: 1,
+          ease: "sine.inOut",
+        },
+        3.0,
+      );
+      tl.fromTo(
+        "#call1 .args",
+        { clipPath: "inset(0 100% 0 0)" },
+        { clipPath: "inset(0 0% 0 0)", duration: 0.6, ease: "power1.out" },
+        3.25,
+      );
+      tl.fromTo("#links-view", { opacity: 0 }, { opacity: 1, duration: 0.5 }, 2.6);
+      tl.set("#links-view .row", { opacity: 0 }, 2.6);
+      tl.fromTo(
+        "#links-view .row",
+        { x: -14 },
+        { opacity: 1, x: 0, duration: 0.4, stagger: 0.09, ease: "power2.out" },
+        4.4,
+      );
+      tl.to("#links-view", { opacity: 0, duration: 0.4 }, 7.5);
+
+      // ---- call 2 + analytics ------------------------------------------
+      tl.fromTo(
+        "#call2",
+        { opacity: 0, y: 30 },
+        { opacity: 1, y: 0, duration: 0.5, ease: "power3.out" },
+        6.5,
+      );
+      tl.fromTo(
+        "#call2 .result",
+        { opacity: 0, y: 10 },
+        { opacity: 1, y: 0, duration: 0.4, ease: "power2.out" },
+        7.6,
+      );
+      tl.fromTo(
+        "#call2",
+        { boxShadow: "0 0 0 rgba(205,185,245,0)" },
+        {
+          boxShadow: "0 0 34px rgba(205,185,245,0.40)",
+          duration: 0.45,
+          yoyo: true,
+          repeat: 1,
+          ease: "sine.inOut",
+        },
+        6.5,
+      );
+      tl.fromTo(
+        "#call2 .args",
+        { clipPath: "inset(0 100% 0 0)" },
+        { clipPath: "inset(0 0% 0 0)", duration: 0.6, ease: "power1.out" },
+        6.75,
+      );
+      tl.fromTo("#analytics-view", { opacity: 0, y: 20 }, { opacity: 1, y: 0, duration: 0.5 }, 7.8);
+      tl.fromTo(
+        "#analytics-view .bar",
+        { scaleY: 0 },
+        { scaleY: 1, duration: 0.7, ease: "power2.out", stagger: 0.06 },
+        8.0,
+      );
+      tl.to("#analytics-view", { opacity: 0, duration: 0.4 }, 10.8);
+
+      // ---- call 3 + qr --------------------------------------------------
+      tl.fromTo(
+        "#call3",
+        { opacity: 0, x: 24 },
+        { opacity: 1, x: 0, duration: 0.5, ease: "power3.out" },
+        9.8,
+      );
+      tl.fromTo(
+        "#call3 .result",
+        { opacity: 0, y: 10 },
+        { opacity: 1, y: 0, duration: 0.4, ease: "power2.out" },
+        10.8,
+      );
+      tl.fromTo(
+        "#call3",
+        { boxShadow: "0 0 0 rgba(205,185,245,0)" },
+        {
+          boxShadow: "0 0 34px rgba(205,185,245,0.40)",
+          duration: 0.45,
+          yoyo: true,
+          repeat: 1,
+          ease: "sine.inOut",
+        },
+        9.8,
+      );
+      tl.fromTo(
+        "#call3 .args",
+        { clipPath: "inset(0 100% 0 0)" },
+        { clipPath: "inset(0 0% 0 0)", duration: 0.6, ease: "power1.out" },
+        10.05,
+      );
+      tl.fromTo(
+        "#qr-view",
+        { opacity: 0, scale: 0.96 },
+        { opacity: 1, scale: 1, duration: 0.5 },
+        11.0,
+      );
+      tl.fromTo(
+        "#qr-tile",
+        { opacity: 0, scale: 0.8 },
+        { opacity: 1, scale: 1, duration: 0.5, ease: "back.out(1.6)" },
+        11.2,
+      );
+      tl.to("#qr-tile", { y: -8, duration: 2.8, ease: "sine.inOut", yoyo: true, repeat: -1 }, 11.4);
+      tl.to(
+        "#download-btn",
+        { scale: 0.92, duration: 0.12, yoyo: true, repeat: 1, ease: "power1.inOut" },
+        13.9,
+      );
+
+      // ---- outro: lift the generated QR into a bigger hero spot ----------
+      // Live composition fades away as the QR travels out to its hero position.
+      tl.to("#stage", { opacity: 0, duration: 0.5, ease: "power2.inOut" }, 14.2);
+      tl.fromTo(
+        "#outro .scrim",
+        { opacity: 0 },
+        { opacity: 1, duration: 0.6, ease: "power2.out" },
+        14.2,
+      );
+      // start matched to the zoomed QR (centre 960,582, ~416px) -> hero (centre 960,430, 520px)
+      tl.fromTo(
+        "#outro .outro-qr",
+        { opacity: 0, scale: 0.8, y: 152 },
+        { opacity: 1, scale: 1.0, y: 0, duration: 0.8, ease: "power3.out" },
+        14.3,
+      );
+      tl.fromTo(
+        "#outro .word",
+        { opacity: 0, y: 20 },
+        { opacity: 1, y: 0, duration: 0.6, ease: "power3.out" },
+        14.6,
+      );
+      tl.fromTo(
+        "#outro .tag",
+        { opacity: 0, y: 16 },
+        { opacity: 1, y: 0, duration: 0.5, ease: "power2.out" },
+        14.9,
+      );
+      tl.to(
+        "#outro .outro-qr",
+        {
+          boxShadow: "0 26px 90px rgba(205,185,245,0.30)",
+          duration: 1.4,
+          yoyo: true,
+          repeat: -1,
+          ease: "sine.inOut",
+        },
+        14.3,
+      );
+
+      window.__timelines["main"] = tl;
+    </script>
+  </body>
+</html>
