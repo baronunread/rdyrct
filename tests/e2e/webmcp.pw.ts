@@ -6,7 +6,7 @@ declare global {
   interface Window {
     webMcpTools: Array<{
       name: string;
-      execute: (input: JsonValue, options: { signal: AbortSignal }) => Promise<string>;
+      execute: (input: JsonValue, options?: { signal: AbortSignal }) => Promise<string>;
     }>;
   }
 }
@@ -117,7 +117,7 @@ test("a signed-in browser agent can create and find a link", async ({ page }) =>
 
   const analytics = await page.evaluate(async () => {
     const tool = window.webMcpTools.find((candidate) => candidate.name === "get_analytics");
-    return tool?.execute({ focus: "overview" }, { signal: new AbortController().signal });
+    return tool?.execute({ focus: "overview" });
   });
   expect(analytics).toMatch(/Analytics for the current organization/);
   await expect(page).toHaveURL(/\/analytics$/);

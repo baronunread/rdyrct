@@ -89,13 +89,13 @@ export function WebMcpAnalyticsTool() {
           },
         },
         annotations: { readOnlyHint: true, untrustedContentHint: true },
-        execute: async (input, { signal }) => {
+        execute: async (input, options) => {
           const parsed = v.safeParse(analyticsInput, input);
           if (!parsed.success) return "Choose a whole number of days and a valid analytics focus.";
           const stats = await api<OrgStats>(
             `/orgs/${org.id}/stats${statsQuery(parsed.output.days)}`,
             {
-              signal,
+              signal: options?.signal,
             },
           );
           await navigate({ to: "/analytics" });

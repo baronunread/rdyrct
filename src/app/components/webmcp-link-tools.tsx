@@ -21,6 +21,12 @@ function inputError(): string {
   return "That tool input is not valid. Check the required fields and try again.";
 }
 
+function linkSearchParams(query: string | undefined): string {
+  const params = new URLSearchParams({ limit: "10" });
+  if (query) params.set("q", query);
+  return params.toString();
+}
+
 function conciseLink(link: LinkDTO): string {
   const address = link.domain ? `${link.domain}/${link.slug}` : `rdyrct.com/${link.slug}`;
   return `${address} → ${link.destination}${link.title ? ` (${link.title})` : ""}`;
@@ -50,14 +56,13 @@ export function WebMcpLinkTools() {
           properties: { query: { type: "string", maxLength: 100 } },
         },
         annotations: { readOnlyHint: true, untrustedContentHint: true },
-        execute: async (input, { signal }) => {
+        execute: async (input, options) => {
           const parsed = v.safeParse(findLinksInput, input);
           if (!parsed.success) return inputError();
-          const params = new URLSearchParams({ limit: "10" });
-          if (parsed.output.query) params.set("q", parsed.output.query);
-          const result = await api<{ items: LinkDTO[] }>(`/orgs/${org.id}/links?${params}`, {
-            signal,
-          });
+          const result = await api<{ items: LinkDTO[] }>(
+            `/orgs/${org.id}/links?${linkSearchParams(parsed.output.query)}`,
+            { signal: options?.signal },
+          );
           if (result.items.length === 0) return "No matching links in the current organization.";
           return toolResult(result.items.map(conciseLink).join("\n"));
         },
@@ -75,14 +80,14 @@ export function WebMcpLinkTools() {
           required: ["destination"],
         },
         annotations: { readOnlyHint: false, untrustedContentHint: true },
-        execute: async (input, { signal }) => {
+        execute: async (input, options) => {
           const parsed = v.safeParse(createLinkInput, input);
           if (!parsed.success) return inputError();
           const body: LinkInput = { ...parsed.output, forceSeparateLink: true };
           const link = await api<WithQuotaUsage<LinkDTO>>(`/orgs/${org.id}/links`, {
             method: "POST",
             body,
-            signal,
+            signal: options?.signal,
           });
           await Promise.all([
             queryClient.invalidateQueries({ queryKey: ["links", org.id] }),

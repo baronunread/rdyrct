@@ -9,7 +9,7 @@ export interface WebMcpTool {
     readOnlyHint?: boolean;
     untrustedContentHint?: boolean;
   };
-  execute: (input: JsonValue, options: { signal: AbortSignal }) => Promise<string>;
+  execute: (input: JsonValue, options?: { signal: AbortSignal }) => Promise<string>;
 }
 
 interface ModelContext {
