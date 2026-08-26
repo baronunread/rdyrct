@@ -29,7 +29,7 @@ async function seedFreeUser(id: string, email: string): Promise<string> {
       "insert into user (id, name, email, email_verified, is_admin, plan, created_at, updated_at) values (?, 'Test', ?, 1, 0, 'free', 0, 0)",
     ).bind(id, email),
     env.DB.prepare(
-      "insert into account (id, account_id, provider_id, user_id, password, created_at, updated_at) values (?, ?, 'credential', ?, ?, 0, 0)",
+      "insert into account (id, account_id, issuer, provider_id, user_id, password, created_at, updated_at) values (?, ?, 'local:credential', 'credential', ?, ?, 0, 0)",
     ).bind(`acct-${id}`, id, id, await hashPassword(TEST_PASSWORD)),
   ]);
   const cookie = await signInCookie(email, TEST_PASSWORD);
@@ -115,7 +115,7 @@ async function seedPaidUser(id: string, email: string, plan: "hobby" | "pro"): P
       "insert into user (id, name, email, email_verified, is_admin, plan, created_at, updated_at) values (?, 'Test', ?, 1, 0, ?, 0, 0)",
     ).bind(id, email, plan),
     env.DB.prepare(
-      "insert into account (id, account_id, provider_id, user_id, password, created_at, updated_at) values (?, ?, 'credential', ?, ?, 0, 0)",
+      "insert into account (id, account_id, issuer, provider_id, user_id, password, created_at, updated_at) values (?, ?, 'local:credential', 'credential', ?, ?, 0, 0)",
     ).bind(`acct-${id}`, id, id, await hashPassword(TEST_PASSWORD)),
   ]);
   return signInCookie(email, TEST_PASSWORD);

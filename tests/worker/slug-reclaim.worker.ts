@@ -64,7 +64,7 @@ async function seedOutsider(): Promise<string> {
       "insert into user (id, name, email, email_verified, is_admin, plan, created_at, updated_at) values ('out-1','Outsider','outsider@example.com',1,0,'free',0,0)",
     ),
     env.DB.prepare(
-      "insert into account (id, account_id, provider_id, user_id, password, created_at, updated_at) values ('acct-out-1','out-1','credential','out-1',?,0,0)",
+      "insert into account (id, account_id, issuer, provider_id, user_id, password, created_at, updated_at) values ('acct-out-1','out-1','local:credential','credential','out-1',?,0,0)",
     ).bind(await hashPassword(TEST_PASSWORD)),
     env.DB.prepare("insert into orgs (id, name, created_at) values ('org-2', 'Outsider Co', 0)"),
     env.DB.prepare(

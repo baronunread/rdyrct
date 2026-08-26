@@ -22,7 +22,7 @@ async function seedUser(email: string, emailVerified: boolean) {
       "insert into user (id, name, email, email_verified, is_admin, plan, created_at, updated_at) values ('known-1','Known',?,?,0,'free',0,0)",
     ).bind(email, emailVerified ? 1 : 0),
     env.DB.prepare(
-      "insert into account (id, account_id, provider_id, user_id, password, created_at, updated_at) values ('acct-known','known-1','credential','known-1',?,0,0)",
+      "insert into account (id, account_id, issuer, provider_id, user_id, password, created_at, updated_at) values ('acct-known','known-1','local:credential','credential','known-1',?,0,0)",
     ).bind(await hashPassword(TEST_PASSWORD)),
   ]);
 }

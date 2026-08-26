@@ -31,7 +31,7 @@ async function seedOwner(plan = "free"): Promise<string> {
       "insert into user (id, name, email, email_verified, is_admin, plan, created_at, updated_at) values ('owner-1', 'Owner', 'owner@example.com', 1, 0, ?, 0, 0)",
     ).bind(plan),
     env.DB.prepare(
-      "insert into account (id, account_id, provider_id, user_id, password, created_at, updated_at) values ('acct-1', 'owner-1', 'credential', 'owner-1', ?, 0, 0)",
+      "insert into account (id, account_id, issuer, provider_id, user_id, password, created_at, updated_at) values ('acct-1', 'owner-1', 'local:credential', 'credential', 'owner-1', ?, 0, 0)",
     ).bind(await hashPassword(TEST_PASSWORD)),
     env.DB.prepare("insert into orgs (id, name, created_at) values ('org-1', 'First', 1)"),
     env.DB.prepare("insert into orgs (id, name, created_at) values ('org-2', 'Second', 2)"),
