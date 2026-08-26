@@ -47,7 +47,6 @@
       "!/llms.txt",
       "!/llms-full.txt",
       "!/ai.txt",
-      "!/pricing.md",
     ],
   },
   // Create the real resources with:

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { withPageMeta } from "../../src/worker/page-meta";
+import { markdownPage, withPageMeta } from "../../src/worker/page-meta";
 
 /**
  * The head each public page goes out with (#96).
@@ -79,5 +79,32 @@ describe("the head a public page ships", () => {
     const out = withPageMeta(asset, new URL("https://rdyrct.com/"));
 
     expect(await out.text()).toBe("body{}");
+  });
+});
+
+describe("the Markdown representation", () => {
+  it("serves a canonical Markdown document only when it is preferred", async () => {
+    const url = new URL("https://rdyrct.com/pricing");
+    const markdown = markdownPage(url, "text/html;q=0.4, text/markdown;q=0.9");
+
+    expect(markdown?.headers.get("content-type")).toBe("text/markdown; charset=utf-8");
+    expect(markdown?.headers.get("Vary")).toBe("Accept");
+    expect(markdown?.headers.get("Link")).toContain(
+      '<https://rdyrct.com/pricing>; rel="canonical"',
+    );
+    expect(await markdown?.text()).toContain("# rdyrct pricing");
+  });
+
+  it("keeps HTML when it is at least as preferred as Markdown", () => {
+    const url = new URL("https://rdyrct.com/pricing");
+
+    expect(markdownPage(url, "text/markdown;q=0.8, text/html;q=0.8")).toBeNull();
+    expect(markdownPage(url, "text/markdown;q=0, text/html")).toBeNull();
+  });
+
+  it("varies the HTML response that has a Markdown alternative", () => {
+    const response = withPageMeta(shell(), new URL("https://rdyrct.com/pricing"));
+
+    expect(response.headers.get("Vary")).toBe("Accept");
   });
 });
