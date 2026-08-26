@@ -31,6 +31,28 @@ function looksOptions(look: QrLook) {
 const DOWNLOAD_SIZE = 1024;
 
 /**
+ * Renders the QR as an image data URL (PNG or SVG) at download resolution.
+ *
+ * For agent consumers (WebMCP): a browser file download lands on the person's
+ * disk where a model cannot read it, so it falls back to a screenshot of the
+ * page. Returning the bytes inline is what lets the agent show or attach the
+ * actual code.
+ */
+export async function qrDataUrl(
+  url: string,
+  look: QrLook,
+  extension: "png" | "svg",
+): Promise<string> {
+  const raw = await makeQR(url, DOWNLOAD_SIZE, look).getRawData(extension);
+  if (!raw) throw new Error("Could not render the QR code.");
+  const bytes = raw instanceof Blob ? new Uint8Array(await raw.arrayBuffer()) : new Uint8Array(raw);
+  let binary = "";
+  for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+  const media = extension === "svg" ? "svg+xml" : "png";
+  return `data:image/${media};base64,${btoa(binary)}`;
+}
+
+/**
  * PNG and SVG download controls for a QR.
  *
  * Its own component so a caller can put them somewhere other than directly

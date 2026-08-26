@@ -62,6 +62,19 @@ test("a browser agent can fill the visible QR generator", async ({ page }) => {
     page.getByRole("img", { name: /QR code for https:\/\/example.com\/agent-qr/ }),
   ).toBeVisible();
 
+  // An agent cannot read a browser file download, so the image must come back
+  // inline as a data URL it can show or attach.
+  const image = await page.evaluate(async () => {
+    const tool = window.webMcpTools.find((candidate) => candidate.name === "get_qr_code");
+    return tool?.execute({ format: "png" }, { signal: new AbortController().signal });
+  });
+  expect(image).toMatch(/^data:image\/png;base64,/);
+  const svg = await page.evaluate(async () => {
+    const tool = window.webMcpTools.find((candidate) => candidate.name === "get_qr_code");
+    return tool?.execute({ format: "svg" }, { signal: new AbortController().signal });
+  });
+  expect(svg).toMatch(/^data:image\/svg\+xml;base64,/);
+
   const [download, downloaded] = await Promise.all([
     page.waitForEvent("download"),
     page.evaluate(async () => {

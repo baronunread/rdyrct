@@ -23,7 +23,7 @@ import { ArrowRight, ChevronDown, ShieldCheck } from "@/app/ui/icons";
 import { buttonClass } from "../ui/button-class";
 import { Input } from "../ui/field";
 import { trackCta } from "../lib/track-cta";
-import { QRPreview, QrDownloadButtons } from "../components/qr";
+import { QRPreview, QrDownloadButtons, qrDataUrl } from "../components/qr";
 import { QrColorAndLogoFields, QrPatternFields } from "../components/qr-fields";
 import { qrPreviewProps, resolveLook, type QrValues } from "../lib/qr-look";
 import { useSeo } from "../lib/seo";
@@ -302,7 +302,7 @@ export function QrGeneratorPage() {
       {
         name: "generate_qr_code",
         description:
-          "Set the value and optional appearance for a QR code in the visible generator. The person can then download it.",
+          "Set the value and optional appearance for a QR code in the visible generator. The person can then download it or read it as an image with get_qr_code.",
         inputSchema: {
           type: "object",
           properties: {
@@ -330,13 +330,30 @@ export function QrGeneratorPage() {
           qrState.current = { encoded: parsed.output.value, values: next };
           setValue(parsed.output.value);
           setValues(next);
-          return "The QR generator now shows that value and appearance. You can download it.";
+          return "The QR generator now shows that value and appearance. You can download it or read it with get_qr_code.";
+        },
+      },
+      {
+        name: "get_qr_code",
+        description:
+          "Return the QR code currently visible in the generator as an image data URL (PNG or SVG), so it can be shown or attached directly. Use this instead of download_qr_code when the result must be the image itself rather than a file. Use after generating a QR code.",
+        inputSchema: {
+          type: "object",
+          properties: { format: { type: "string", enum: ["png", "svg"] } },
+        },
+        annotations: { readOnlyHint: true, untrustedContentHint: true },
+        execute: async (input) => {
+          const parsed = v.safeParse(downloadQrInput, input);
+          const extension = (parsed.success ? parsed.output.format : undefined) ?? "png";
+          if (!qrState.current.encoded) return "Generate a QR code first, then read it.";
+          const look = resolveLook(qrPreviewProps(qrState.current.values));
+          return qrDataUrl(qrState.current.encoded, look, extension);
         },
       },
       {
         name: "download_qr_code",
         description:
-          "Download the QR code currently visible in the generator as a PNG or SVG. Use after generating a QR code.",
+          "Download the QR code currently visible in the generator as a PNG or SVG file. Use after generating a QR code. An agent that needs the image itself should use get_qr_code instead.",
         inputSchema: {
           type: "object",
           properties: { format: { type: "string", enum: ["png", "svg"] } },
