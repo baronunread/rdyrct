@@ -106,3 +106,25 @@ jobs:
           cp .env.example .env
       - name: Browser smoke test (shard ${{ matrix.shard }}/3)
         run: bunx playwright test --shard=${{ matrix.shard }}/3
+
+  observability:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.4
+      - uses: actions/cache@v6
+        with:
+          path: node_modules
+          key: node_modules-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+      # Gate the worker's wide-event coverage (see #94, PR #199). Fails the
+      # pipeline if `evlog map` drops below 100/100, so a new route without
+      # logging can't slip through unreviewed. @evlog/cli is pinned in
+      # devDependencies to keep the score stable across CLI releases.
+      - name: evlog map score gate
+        run: bun run check:observability
