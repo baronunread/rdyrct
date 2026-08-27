@@ -172,6 +172,8 @@ export interface User {
    * to know which one it is talking to.
    */
   comped: boolean;
+  /** Same-origin serving URL for the user's avatar, or null (blobatar). */
+  image: string | null;
 }
 
 export interface QrOverrides {
@@ -257,6 +259,8 @@ export interface DomainDTO {
 export interface AppConfig {
   /** Shared redirect host; the CNAME target for custom domains. */
   appHost: string;
+  /** Whether Google sign-in is configured and the button should show. */
+  googleEnabled: boolean;
 }
 
 /** The org's fresh link-quota count, plus when it was read. The timestamp

@@ -177,14 +177,14 @@ describe("uploading a QR logo while the org is tearing down", () => {
     expect(
       await putQrLogoIfOrgWritable(
         drizzle(env.DB, { schema }),
-        env.QR_LOGOS,
+        env.MEDIA,
         ORG,
         key,
         new Uint8Array([1, 2, 3]).buffer,
         "image/webp",
       ),
     ).toBe(false);
-    expect(await env.QR_LOGOS.head(key)).toBeNull();
+    expect(await env.MEDIA.head(key)).toBeNull();
   });
 });
 

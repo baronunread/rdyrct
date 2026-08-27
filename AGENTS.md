@@ -215,7 +215,8 @@ analyticsDays }`). Slugs on the **shared** domain are always random (every
   `domain:{host}`. D1 is authoritative; KV is the redirect hot path. Clicks are
   recorded via `waitUntil` after the redirect is sent, and store only
   country/referrer/device/timestamp, **never an IP address**.
-- **QR logos live in R2** (binding `QR_LOGOS`, bucket `rdyrct-qr-logos`), keyed
+- **User-supplied images live in R2** (binding `MEDIA`, bucket `rdyrct-media` in
+  config; the existing `rdyrct-qr-logos` bucket was rebound), keyed
   `{orgId}/{fileId}.{ext}`. The `qr_logo` columns store only the serving URL
   (`/api/orgs/<orgId>/qr-logo/<file>`), never image bytes. Upload and serving
   are the same org-scoped route (`POST`/`GET /api/orgs/:orgId/qr-logo[/:file]`),

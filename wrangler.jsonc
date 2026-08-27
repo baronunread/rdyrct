@@ -52,7 +52,7 @@
   // Create the real resources with:
   //   wrangler kv namespace create LINKS
   //   wrangler d1 create rdyrct
-  //   wrangler r2 bucket create rdyrct-qr-logos
+  //   wrangler r2 bucket create rdyrct-media
   // then paste the ids below. Local dev works with the placeholders.
   "kv_namespaces": [
     {
@@ -60,11 +60,11 @@
       "id": "aa2cec55f8964d0fba2c23e1e3b5fea1",
     },
   ],
-  // QR logo images; D1 rows store only the serving URL (see
-  // routes/qr-logos.ts).
+  // User-supplied images (QR logos, avatars); D1 rows store only the serving
+  // URL (see routes/qr-logos.ts, routes/avatars.ts).
   "r2_buckets": [
     {
-      "binding": "QR_LOGOS",
+      "binding": "MEDIA",
       "bucket_name": "rdyrct-qr-logos",
     },
   ],
@@ -331,7 +331,7 @@
       ],
       "r2_buckets": [
         {
-          "binding": "QR_LOGOS",
+          "binding": "MEDIA",
           "bucket_name": "rdyrct-playwright-local",
         },
       ],

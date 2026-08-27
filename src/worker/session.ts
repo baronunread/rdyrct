@@ -41,6 +41,7 @@ export const withSession = createMiddleware<AppEnv>(async (c, next) => {
       polarSubscriptionCurrentPeriodEnd: periodEndOf(
         session.user.polarSubscriptionCurrentPeriodEnd,
       ),
+      image: session.user.image ?? null,
     } satisfies SessionUser);
   }
   await next();

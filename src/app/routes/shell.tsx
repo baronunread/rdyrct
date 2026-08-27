@@ -20,6 +20,7 @@ import { Field, Input } from "../ui/field";
 import { AppShellSkeleton, RouteSkeleton } from "../components/skeletons";
 import { appNavItems } from "../components/nav-items";
 import { OverLimitBanner } from "../components/over-limit";
+import { UserAvatar } from "../components/user-avatar";
 import { WebMcpLinkTools } from "../components/webmcp-link-tools";
 import { WebMcpAnalyticsTool } from "../components/webmcp-analytics-tool";
 import { NotFound } from "./not-found";
@@ -195,6 +196,7 @@ function AppSidebar({
           Footer, so both border-t lines form one continuous bottom rule */}
       <div className="mt-auto border-t border-border px-3 py-2.5">
         <div className="flex items-center gap-2 px-1.5">
+          <UserAvatar user={user} size={32} />
           <div className="min-w-0 flex-1">
             <p className="truncate text-sm">{user.name}</p>
             <p className="truncate text-xs text-muted">{user.email}</p>

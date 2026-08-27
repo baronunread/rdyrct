@@ -40,3 +40,12 @@ BLOG_ORIGIN_URL=http://localhost:3000
 # e2e signup on the disabled path. The disabled path has its own worker test,
 # which needs no browser to prove it.
 CAP_SECRET=dev-only-cap-secret-not-a-real-one-0000000000000000
+
+# Google sign-in. Leave blank to disable the "Continue with Google" button.
+# For local dev, point GOOGLE_EMULATOR_URL at an OAuth emulator
+# (e.g. https://www.emulate.dev/mock/oauth2) and set the client id/secret it
+# provides. In production, leave GOOGLE_EMULATOR_URL blank and set the real
+# Google OAuth client id/secret; the worker then uses Google's discovery URL.
+GOOGLE_CLIENT_ID=
+GOOGLE_CLIENT_SECRET=
+GOOGLE_EMULATOR_URL=

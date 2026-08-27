@@ -96,5 +96,8 @@ userRoutes.get("/user", requireUser, async (c) => {
 // Public, non-secret deployment config (the SPA shows appHost in DNS setup
 // instructions for custom domains).
 userRoutes.get("/config", (c) => {
-  return c.json({ appHost: c.env.APP_HOST } satisfies AppConfig);
+  return c.json({
+    appHost: c.env.APP_HOST,
+    googleEnabled: Boolean(c.env.GOOGLE_CLIENT_ID && c.env.GOOGLE_CLIENT_SECRET),
+  } satisfies AppConfig);
 });

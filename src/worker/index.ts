@@ -19,6 +19,7 @@ import {
 } from "./routes/orgs";
 import { linkRoutes } from "./routes/links";
 import { qrLogoRoutes } from "./routes/qr-logos";
+import { avatarRoutes } from "./routes/avatars";
 import { adminRoutes } from "./routes/admin";
 import { billingRoutes, handlePolarWebhook } from "./routes/billing";
 import { domainRoutes } from "./routes/domains";
@@ -216,6 +217,7 @@ api.route("/", userRoutes);
 api.route("/orgs", orgRoutes);
 api.route("/orgs/:orgId/links", linkRoutes);
 api.route("/orgs/:orgId/qr-logo", qrLogoRoutes);
+api.route("/user/avatar", avatarRoutes);
 api.route("/billing", billingRoutes);
 api.route("/orgs/:orgId/domains", domainRoutes);
 api.route("/invites", inviteRoutes);

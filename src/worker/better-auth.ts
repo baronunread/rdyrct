@@ -5,6 +5,7 @@ import * as v from "valibot";
 import { lookup } from "../shared/lookup";
 import { APIError, createAuthMiddleware } from "better-auth/api";
 import { emailOTP } from "better-auth/plugins/email-otp";
+import { genericOAuth } from "better-auth/plugins/generic-oauth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { drizzle } from "drizzle-orm/d1";
 import { and, eq } from "drizzle-orm";
@@ -17,6 +18,7 @@ import { renderEmail } from "./email-layout";
 import { hashPassword, verifyPassword } from "./password";
 import { uid } from "./util";
 import { spendToken, type CapScope } from "./cap";
+import { storeUserAvatar, deleteUserAvatar } from "./storage";
 import { createOwnedOrg } from "./plan";
 import { defaultOrgName } from "@/shared/org-name";
 import { CAP_FAILED_CODE, CAP_TOKEN_HEADER } from "@/shared/types";
@@ -101,6 +103,7 @@ async function ensureOrganization(env: Env, db: DB, userId: string): Promise<voi
  * flags let the stalled-deletion sweep finish the work.
  */
 export async function deleteAccountAndOwnedOrgs(env: Env, userId: string): Promise<void> {
+  await deleteUserAvatar(env, userId);
   const now = Date.now();
   const [owned] = await env.DB.batch<{ orgId: string }>([
     env.DB.prepare(
@@ -346,6 +349,16 @@ function buildAuth(env: Env) {
     // Keeping BetterAuth's per-isolate limiter enabled would create a second,
     // inconsistent 429 shape and would not protect the rest of the app.
     rateLimit: { enabled: false },
+    // Link a Google sign-in to an existing email/password account with the
+    // same (verified) address instead of creating a duplicate. Google is a
+    // trusted provider, so an unverified Google account still links to a
+    // verified local one — acceptable, since Google is the trusted IdP.
+    account: {
+      accountLinking: {
+        enabled: true,
+        trustedProviders: ["google"],
+      },
+    },
     emailAndPassword: {
       enabled: true,
       requireEmailVerification: true,
@@ -413,6 +426,36 @@ function buildAuth(env: Env) {
           );
         },
       }),
+      // Google sign-in via the generic OAuth2 provider (not the built-in
+      // `google`, whose token endpoint is hardcoded and cannot be redirected
+      // at dev/emulate). Endpoints are env-driven: a discovery URL in prod, or
+      // explicit endpoints at the emulate Google emulator in dev. Only
+      // registered when credentials are present, so environments without
+      // Google config simply have no social login.
+      ...(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET
+        ? [
+            genericOAuth({
+              config: [
+                {
+                  providerId: "google",
+                  clientId: env.GOOGLE_CLIENT_ID,
+                  clientSecret: env.GOOGLE_CLIENT_SECRET,
+                  scopes: ["openid", "email", "profile"],
+                  ...(env.GOOGLE_EMULATOR_URL
+                    ? {
+                        authorizationUrl: `${env.GOOGLE_EMULATOR_URL}/o/oauth2/v2/auth`,
+                        tokenUrl: `${env.GOOGLE_EMULATOR_URL}/oauth2/token`,
+                        userInfoUrl: `${env.GOOGLE_EMULATOR_URL}/oauth2/v2/userinfo`,
+                      }
+                    : {
+                        discoveryUrl:
+                          "https://accounts.google.com/.well-known/openid-configuration",
+                      }),
+                },
+              ],
+            }),
+          ]
+        : []),
     ],
     user: {
       additionalFields: {
@@ -508,6 +551,29 @@ function buildAuth(env: Env) {
           },
           after: async (session) => {
             await ensureOrganization(env, db, session.userId);
+            // Re-sync the avatar from Google on every Google sign-in. The OAuth
+            // path refreshes `user.image` to the latest remote URL each time, so
+            // pulling it into R2 here covers both first link and later changes.
+            // Password users already carry the same-origin serving URL and are
+            // skipped. Runs after the org ensure so a brand-new Google user
+            // also gets an org. Any failure here must not abort sign-in, so it
+            // is swallowed: the blobatar stays and re-sync runs next login.
+            try {
+              const [row] = await db
+                .select({ image: schema.user.image })
+                .from(schema.user)
+                .where(eq(schema.user.id, session.userId));
+              if (row?.image?.startsWith("http")) {
+                const serving = await storeUserAvatar(env, session.userId, row.image);
+                if (serving)
+                  await db
+                    .update(schema.user)
+                    .set({ image: serving })
+                    .where(eq(schema.user.id, session.userId));
+              }
+            } catch {
+              // keep the session; the avatar simply stays unset
+            }
           },
         },
       },
