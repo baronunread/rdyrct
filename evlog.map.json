@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generatedAt": "2026-08-27T09:47:29.994Z",
+  "generatedAt": "2026-08-27T10:28:48.735Z",
   "cliVersion": "0.6.0",
   "ruleSetVersion": 1,
   "framework": "hono",
@@ -14,7 +14,7 @@
       "path": "*",
       "file": "src/worker/index.ts",
       "handler": {
-        "line": 382,
+        "line": 384,
         "column": 0
       },
       "id": "cfc6426d0697",
@@ -638,7 +638,7 @@
       "path": "/:slug",
       "file": "src/worker/index.ts",
       "handler": {
-        "line": 366,
+        "line": 368,
         "column": 0
       },
       "id": "4542fd0856a5",
@@ -831,7 +831,7 @@
       "path": "/api/*",
       "file": "src/worker/index.ts",
       "handler": {
-        "line": 257,
+        "line": 259,
         "column": 0
       },
       "id": "74a1ccacc4b3",
@@ -866,7 +866,7 @@
       "path": "/api/auth/*",
       "file": "src/worker/index.ts",
       "handler": {
-        "line": 196,
+        "line": 198,
         "column": 0
       },
       "id": "e75aa52c874e",
@@ -901,7 +901,7 @@
       "path": "/api/auth/*",
       "file": "src/worker/index.ts",
       "handler": {
-        "line": 196,
+        "line": 198,
         "column": 0
       },
       "id": "2d4af6eb10f7",
@@ -936,7 +936,7 @@
       "path": "/api/cap/*",
       "file": "src/worker/index.ts",
       "handler": {
-        "line": 214,
+        "line": 216,
         "column": 0
       },
       "id": "3d9ce45013d9",
@@ -971,7 +971,7 @@
       "path": "/api/webhooks/polar",
       "file": "src/worker/index.ts",
       "handler": {
-        "line": 228,
+        "line": 230,
         "column": 0
       },
       "id": "bbed5d59d114",
@@ -1331,7 +1331,7 @@
       "path": "/pricing.md",
       "file": "src/worker/index.ts",
       "handler": {
-        "line": 353,
+        "line": 355,
         "column": 0
       },
       "id": "c01fb33007bf",

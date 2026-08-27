@@ -78,8 +78,10 @@ function causeFields(cause: unknown): Record<string, JsonValue> {
 const app = new Hono<AppEnv>();
 
 // One wide event per request: accumulates context via c.get('log').set() in
-// every handler and emits once the response completes. See src/evlog.ts.
-app.use(evlogMiddleware);
+// every handler and emits once the response completes. Scoped to /api/* so it
+// never touches the SPA HTML fallback or static assets (which would consume
+// the response body before the browser receives it). See src/worker/evlog.ts.
+app.use("/api/*", evlogMiddleware);
 
 app.onError((err, c) => {
   // JSON errors always: the SPA's api() reads res.json().message and spreads
