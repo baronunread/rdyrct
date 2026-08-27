@@ -239,10 +239,12 @@ const api = new Hono<AppEnv>();
 api.use("*", withSession);
 api.use("*", enforceSignedApiRateLimit);
 // Carry the signed-in user onto the wide event once the session is resolved.
+// Enrich before `await next()` so a short-circuited response (e.g. a 429 from
+// the rate-limit guard) still retains the user context on the wide event.
 api.use("*", async (c, next) => {
-  await next();
   const user = c.get("user");
   if (user) c.get("log")?.set({ user: { id: user.id, plan: user.plan } });
+  await next();
 });
 api.route("/", userRoutes);
 api.route("/orgs", orgRoutes);

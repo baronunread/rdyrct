@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generatedAt": "2026-08-27T11:39:27.449Z",
+  "generatedAt": "2026-08-27T12:06:59.957Z",
   "cliVersion": "0.6.0",
   "ruleSetVersion": 1,
   "framework": "hono",
@@ -14,7 +14,7 @@
       "path": "*",
       "file": "src/worker/index.ts",
       "handler": {
-        "line": 384,
+        "line": 386,
         "column": 0
       },
       "id": "cfc6426d0697",
@@ -638,7 +638,7 @@
       "path": "/:slug",
       "file": "src/worker/index.ts",
       "handler": {
-        "line": 369,
+        "line": 371,
         "column": 0
       },
       "id": "4542fd0856a5",
@@ -831,7 +831,7 @@
       "path": "/api/*",
       "file": "src/worker/index.ts",
       "handler": {
-        "line": 261,
+        "line": 263,
         "column": 0
       },
       "id": "74a1ccacc4b3",
@@ -1331,7 +1331,7 @@
       "path": "/pricing.md",
       "file": "src/worker/index.ts",
       "handler": {
-        "line": 357,
+        "line": 359,
         "column": 0
       },
       "id": "c01fb33007bf",

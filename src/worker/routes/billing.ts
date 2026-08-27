@@ -54,12 +54,6 @@ billingRoutes.post("/checkout", requireUser, async (c) => {
   const body = await c.req.json<CheckoutBody>().catch(() => ({}) as CheckoutBody);
   const plan = body.plan ?? "pro";
   log.set({ userId: user.id, plan });
-  log.audit({
-    action: "billing.checkout",
-    actor: { type: "user", id: user.id },
-    target: { type: "checkout", id: user.id },
-    outcome: "success",
-  });
   if (plan !== "hobby" && plan !== "pro")
     throw new HTTPException(400, { message: "plan must be hobby or pro" });
   const checkout = await polarFor(c.env).checkouts.create({
@@ -69,6 +63,12 @@ billingRoutes.post("/checkout", requireUser, async (c) => {
     successUrl: `${c.env.APP_URL}/billing?checkout_id={CHECKOUT_ID}`,
     customerEmail: user.email,
     metadata: { userId: user.id },
+  });
+  log.audit({
+    action: "billing.checkout",
+    actor: { type: "user", id: user.id },
+    target: { type: "checkout", id: user.id },
+    outcome: "success",
   });
   return c.json({ url: checkout.url });
 });
