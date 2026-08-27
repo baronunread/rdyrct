@@ -47,11 +47,13 @@ interface CheckoutBody {
 }
 
 billingRoutes.post("/checkout", requireUser, async (c) => {
+  const log = c.get("log");
   const user = c.var.user!;
   // SAFETY: an unparseable body stands in for an empty one, and `plan` is
   // optional, so reading it finds the same absence.
   const body = await c.req.json<CheckoutBody>().catch(() => ({}) as CheckoutBody);
   const plan = body.plan ?? "pro";
+  log.set({ userId: user.id, plan });
   if (plan !== "hobby" && plan !== "pro")
     throw new HTTPException(400, { message: "plan must be hobby or pro" });
   const checkout = await polarFor(c.env).checkouts.create({
@@ -62,12 +64,20 @@ billingRoutes.post("/checkout", requireUser, async (c) => {
     customerEmail: user.email,
     metadata: { userId: user.id },
   });
+  log.audit({
+    action: "billing.checkout",
+    actor: { type: "user", id: user.id },
+    target: { type: "checkout", id: user.id },
+    outcome: "success",
+  });
   return c.json({ url: checkout.url });
 });
 
 // POST, not GET: this creates a Polar customer session. A GET that changes
 // something on a third party is one prefetch away from doing it unasked.
 billingRoutes.post("/portal", requireUser, async (c) => {
+  const log = c.get("log");
+  log.set({ userId: c.var.user!.id });
   const rows = await c.var.db
     .select({ customerId: schema.user.polarCustomerId })
     .from(schema.user)

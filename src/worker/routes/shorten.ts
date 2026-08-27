@@ -48,6 +48,8 @@ export const shortenRoutes = new Hono<AppEnv>();
 shortenRoutes.use("*", jsonBodyLimit());
 
 shortenRoutes.post("/", async (c) => {
+  const log = c.get("log");
+  log.set({ route: "/api/shorten" });
   // Its own namespace, not the auth one: a flood here must not lock anybody
   // out of signing in. Keyed by the same HMAC the auth limiter uses, so no
   // raw address reaches storage or logs.
