@@ -72,9 +72,11 @@ const AUDIT_MAX_ROWS = 200;
  * (#104).
  */
 adminRoutes.get("/audit", async (c) => {
+  const log = c.get("log");
   const db = c.var.db;
   const targetType = c.req.query("targetType");
   const targetId = c.req.query("targetId");
+  log.set({ auditTargetType: targetType, auditTargetId: targetId });
   const rows = await db
     .select({
       id: schema.adminActions.id,
@@ -306,6 +308,8 @@ function projectTableGrowth(seriesRows: { day: string; clicks: number }[], table
 /* ─────────── /usage ─────────── */
 
 adminRoutes.get("/usage", async (c) => {
+  const log = c.get("log");
+  log.set({ route: "usage" });
   const db = c.var.db;
   const days = 30;
   const cumDays = 90;
@@ -566,6 +570,8 @@ adminRoutes.get("/usage", async (c) => {
 });
 
 adminRoutes.get("/orgs", async (c) => {
+  const log = c.get("log");
+  log.set({ route: "orgs" });
   const db = c.var.db;
   const rows = await db
     .select({
@@ -592,8 +598,10 @@ adminRoutes.get("/orgs", async (c) => {
 });
 
 adminRoutes.get("/orgs/:orgId", async (c) => {
+  const log = c.get("log");
   const db = c.var.db;
   const orgId = c.req.param("orgId");
+  log.set({ orgId });
   const orgRows = await db.select().from(schema.orgs).where(eq(schema.orgs.id, orgId));
   const org = orgRows[0];
   if (!org) throw new HTTPException(404, { message: "Org not found" });
@@ -653,7 +661,9 @@ adminRoutes.get("/orgs/:orgId", async (c) => {
 });
 
 adminRoutes.delete("/orgs/:orgId", async (c) => {
+  const log = c.get("log");
   const orgId = c.req.param("orgId");
+  log.set({ orgId });
   // Read the name before the teardown removes it: an audit entry saying
   // which org was deleted is the entire value of the entry (#67).
   const rows = await c.var.db
@@ -672,6 +682,8 @@ adminRoutes.delete("/orgs/:orgId", async (c) => {
 });
 
 adminRoutes.get("/users", async (c) => {
+  const log = c.get("log");
+  log.set({ route: "users" });
   const rows = await c.var.db
     .select({
       id: schema.user.id,
@@ -761,8 +773,10 @@ const userPatchSchema = v.object({
 });
 
 adminRoutes.patch("/users/:userId", async (c) => {
+  const log = c.get("log");
   const body = parseOptionalBody(userPatchSchema, await c.req.json<JsonValue>().catch(() => ({})));
   const targetId = c.req.param("userId");
+  log.set({ userId: targetId });
   const self = c.var.user!;
   const db = c.var.db;
 
@@ -823,6 +837,8 @@ async function writeComp(
 /** Grant and revoke both change `plan`, so both owe the owner's orgs a pass
  * (#158). Manual too: an admin fixing a stuck org runs this route. */
 adminRoutes.post("/users/:userId/reconcile", async (c) => {
+  const log = c.get("log");
+  log.set({ userId: c.req.param("userId") });
   await reconcileUser(c.env, c.var.db, c.req.param("userId"));
   return c.json({ ok: true });
 });
@@ -835,6 +851,8 @@ interface CompBody {
 
 /** Grant a comp: paid access an admin gives by hand, recorded as such (#81). */
 adminRoutes.post("/users/:userId/comp", async (c) => {
+  const log = c.get("log");
+  log.set({ userId: c.req.param("userId") });
   // SAFETY: an unparseable body stands in for an empty one, and every field
   // below is optional, so reading it finds the same absence.
   const body = await c.req.json<CompBody>().catch(() => ({}) as CompBody);
@@ -866,6 +884,8 @@ adminRoutes.post("/users/:userId/comp", async (c) => {
 /** Revoke a comp. The subscription underneath, if there is one, comes back:
  * `plan` re-derives from the columns the webhook owns. */
 adminRoutes.delete("/users/:userId/comp", async (c) => {
+  const log = c.get("log");
+  log.set({ userId: c.req.param("userId") });
   await writeComp(c.var.db, c.req.param("userId"), null);
   await reconcileUser(c.env, c.var.db, c.req.param("userId"));
   await recordAdminAction(c.env, {
@@ -878,8 +898,10 @@ adminRoutes.delete("/users/:userId/comp", async (c) => {
 });
 
 adminRoutes.delete("/users/:userId", async (c) => {
+  const log = c.get("log");
   const db = c.var.db;
   const targetId = c.req.param("userId");
+  log.set({ userId: targetId });
   if (targetId === c.var.user!.id)
     throw new HTTPException(400, { message: "Cannot delete yourself" });
   const owned = await db

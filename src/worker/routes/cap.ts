@@ -31,6 +31,8 @@ const redeemBodySchema = v.object({
 export const capRoutes = new Hono<AppEnv>();
 
 capRoutes.post("/:scope/challenge", async (c) => {
+  const log = c.get("log");
+  log.set({ cap: { scope: c.req.param("scope") } });
   if (!capEnabled(c.env)) return c.json({ disabled: true });
   const scope = readScope(c.req.param("scope"));
   if (!scope) return c.json({ message: "Unknown scope" }, 400);
@@ -38,6 +40,8 @@ capRoutes.post("/:scope/challenge", async (c) => {
 });
 
 capRoutes.post("/:scope/redeem", async (c) => {
+  const log = c.get("log");
+  log.set({ cap: { scope: c.req.param("scope") } });
   if (!capEnabled(c.env)) return c.json({ disabled: true });
   const scope = readScope(c.req.param("scope"));
   const body = parseOptionalBody(redeemBodySchema, await c.req.json<JsonValue>().catch(() => ({})));

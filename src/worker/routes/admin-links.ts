@@ -195,8 +195,10 @@ function adminLinkOrder(sort: AdminLinkSort) {
 }
 
 adminLinkRoutes.get("/", async (c) => {
+  const log = c.get("log");
   const db = c.var.db;
   const sortParam = c.req.query("sort") ?? "created";
+  log.set({ linkSort: sortParam });
   const sort = oneOf(ADMIN_LINK_SORTS, sortParam, "created");
   const filters = adminLinkFilters(c);
 
@@ -271,6 +273,8 @@ async function setSuspended(
  * and a reason is required to suspend but meaningless to undo.
  */
 adminLinkRoutes.patch("/:linkId", async (c) => {
+  const log = c.get("log");
+  log.set({ linkId: c.req.param("linkId") });
   const body = parseOptionalBody(
     suspensionBodySchema,
     await c.req.json<JsonValue>().catch(() => ({})),
@@ -294,8 +298,10 @@ adminLinkRoutes.patch("/:linkId", async (c) => {
  * it at 02:14" is part of the answer.
  */
 adminLinkRoutes.post("/:linkId/rescore", async (c) => {
+  const log = c.get("log");
   const db = c.var.db;
   const linkId = c.req.param("linkId")!;
+  log.set({ linkId });
   const link = await requireLink(db, linkId);
 
   const verdict = await scoreDestination(link.destination);
@@ -337,8 +343,10 @@ adminLinkRoutes.post("/:linkId/rescore", async (c) => {
  * the first: clicks cascade with it and nothing here can put it back.
  */
 adminLinkRoutes.delete("/:linkId", async (c) => {
+  const log = c.get("log");
   const db = c.var.db;
   const linkId = c.req.param("linkId")!;
+  log.set({ linkId });
   const link = await requireLink(db, linkId);
 
   // Addresses first: after the row is gone there is nothing to read them
@@ -374,7 +382,9 @@ adminLinkRoutes.delete("/:linkId", async (c) => {
  * irreversible; this is the reversible version.
  */
 adminLinkRoutes.post("/orgs/:orgId/suspend", async (c) => {
+  const log = c.get("log");
   const suspend = c.req.query("suspend") !== "0";
+  log.set({ orgId: c.req.param("orgId"), suspend });
   const reason = await requiredReason(c, suspend);
 
   const db = c.var.db;
@@ -419,6 +429,8 @@ adminLinkRoutes.post("/orgs/:orgId/suspend", async (c) => {
  * suspending something that is about to vanish is bookkeeping nobody reads.
  */
 adminLinkRoutes.get("/anonymous", async (c) => {
+  const log = c.get("log");
+  log.set({ route: "anonymous-links" });
   const rows = await c.var.db
     .select({
       id: schema.anonLinks.id,
@@ -442,8 +454,10 @@ adminLinkRoutes.get("/anonymous", async (c) => {
 });
 
 adminLinkRoutes.delete("/anonymous/:id", async (c) => {
+  const log = c.get("log");
   const db = c.var.db;
   const id = c.req.param("id")!;
+  log.set({ anonLinkId: id });
   const rows = await db.select().from(schema.anonLinks).where(eq(schema.anonLinks.id, id));
   const anon = rows[0];
   if (!anon) throw new HTTPException(404, { message: "Link not found" });

@@ -40,8 +40,10 @@ orgRoutes.use("*", jsonBodyLimit());
 const INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
 orgRoutes.post("/", requireUser, async (c) => {
+  const log = c.get("log");
   const body = await c.req.json<{ name?: string }>();
   const name = requireOrgName(body.name ?? "");
+  log.set({ orgName: name, userId: c.var.user!.id });
 
   const { limits } = await userPlan(c.var.db, c.var.user!.id);
 
@@ -1222,6 +1224,15 @@ export const inviteRoutes = new Hono<AppEnv>();
 inviteRoutes.use("*", jsonBodyLimit());
 
 inviteRoutes.get("/:token", async (c) => {
+  const log = c.get("log");
+  const token = c.req.param("token");
+  log.set({ token });
+  log.audit({
+    action: "invite.view",
+    actor: { type: "user", id: c.get("user")?.id ?? "anonymous" },
+    target: { type: "invite", id: token },
+    outcome: "success",
+  });
   const rows = await c.var.db
     .select({
       role: schema.invites.role,
@@ -1271,6 +1282,15 @@ async function explainRefusedInvite(
 }
 
 inviteRoutes.post("/:token/accept", requireUser, async (c) => {
+  const log = c.get("log");
+  const token = c.req.param("token");
+  log.set({ token });
+  log.audit({
+    action: "invite.accept",
+    actor: { type: "user", id: c.var.user!.id },
+    target: { type: "invite", id: token },
+    outcome: "success",
+  });
   const db = c.var.db;
   const invite = await lookupInvite(db, c.req.param("token"));
 
