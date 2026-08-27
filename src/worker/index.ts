@@ -78,10 +78,12 @@ function causeFields(cause: unknown): Record<string, JsonValue> {
 const app = new Hono<AppEnv>();
 
 // One wide event per request: accumulates context via c.get('log').set() in
-// every handler and emits once the response completes. Scoped to /api/* so it
-// never touches the SPA HTML fallback or static assets (which would consume
-// the response body before the browser receives it). See src/worker/evlog.ts.
-app.use("/api/*", evlogMiddleware);
+// every handler and emits once the response completes. Emit is scoped to /api/**
+// inside the middleware (see src/worker/evlog.ts) so the SPA HTML fallback and
+// the root slug redirect are never wrapped/drained. The middleware still runs
+// for every route, attaching `log`; non-API handlers guard with `?.` since
+// evlog skips (and does not attach) filtered-out routes.
+app.use(evlogMiddleware);
 
 app.onError((err, c) => {
   // JSON errors always: the SPA's api() reads res.json().message and spreads
@@ -240,7 +242,7 @@ api.use("*", enforceSignedApiRateLimit);
 api.use("*", async (c, next) => {
   await next();
   const user = c.get("user");
-  if (user) c.get("log").set({ user: { id: user.id, plan: user.plan } });
+  if (user) c.get("log")?.set({ user: { id: user.id, plan: user.plan } });
 });
 api.route("/", userRoutes);
 api.route("/orgs", orgRoutes);
@@ -353,8 +355,7 @@ async function serveSpa(c: Context<AppEnv>, status?: 404): Promise<Response> {
 // Keep the old agent-facing address working, but generate it from the same
 // source as negotiated /pricing so those two documents cannot drift apart.
 app.get("/pricing.md", (c) => {
-  const log = c.get("log");
-  log.set({ route: c.req.path });
+  c.get("log")?.set({ route: c.req.path });
   const canonicalUrl = new URL(c.req.url);
   canonicalUrl.pathname = "/pricing";
   // If the pricing entry ever loses its markdown source, say so at the .md
@@ -366,9 +367,8 @@ app.get("/pricing.md", (c) => {
 });
 
 app.get("/:slug", async (c, next) => {
-  const log = c.get("log");
   const slug = c.req.param("slug");
-  log.set({ slug });
+  c.get("log")?.set({ slug });
   // Root keywords the SPA owns (/dashboard, /links, /login, …) never resolve as
   // slugs; they can't be created as slugs either, this is belt-and-suspenders.
   if (RESERVED_SLUGS.has(slug.toLowerCase())) return next();
@@ -382,8 +382,7 @@ app.get("/:slug", async (c, next) => {
 });
 
 app.all("*", (c) => {
-  const log = c.get("log");
-  log.set({ route: c.req.path });
+  c.get("log")?.set({ route: c.req.path });
   return serveSpa(c);
 });
 
