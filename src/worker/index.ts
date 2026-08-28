@@ -25,6 +25,7 @@ import { billingRoutes, handlePolarWebhook } from "./routes/billing";
 import { domainRoutes } from "./routes/domains";
 import { capRoutes } from "./routes/cap";
 import { revalidateOnRedirect } from "./risk";
+import { evlogMiddleware } from "./evlog";
 import { sweepGraceWarnings } from "./reconcile";
 import { shortenRoutes, sweepExpiredAnonLinks } from "./routes/shorten";
 import { resolveSlug, resolveDomain, domainServing, type KVLink } from "./kv";
@@ -77,6 +78,14 @@ function causeFields(cause: unknown): Record<string, JsonValue> {
 
 const app = new Hono<AppEnv>();
 
+// One wide event per request: accumulates context via c.get('log').set() in
+// every handler and emits once the response completes. Emit is scoped to /api/**
+// inside the middleware (see src/worker/evlog.ts) so the SPA HTML fallback and
+// the root slug redirect are never wrapped/drained. The middleware still runs
+// for every route, attaching `log`; non-API handlers guard with `?.` since
+// evlog skips (and does not attach) filtered-out routes.
+app.use(evlogMiddleware);
+
 app.onError((err, c) => {
   // JSON errors always: the SPA's api() reads res.json().message and spreads
   // the rest of the body onto ApiError.data, so a route's `cause` can carry
@@ -84,6 +93,10 @@ app.onError((err, c) => {
   // matchedLinkId/matchedLink) straight through to the caller.
   const respond = (body: ErrorBody, status: ContentfulStatusCode) =>
     applySecurityHeaders(c.json(body, status));
+  // Attach the error to the wide event so it reaches Sentry Logs with the
+  // request context already accumulated. withSentry still captures the
+  // exception as a Sentry Issue for alerting.
+  c.get("log")?.error(err);
   if (err instanceof HTTPException) {
     return respond({ message: err.message, ...causeFields(err.cause) }, err.status);
   }
@@ -186,6 +199,13 @@ app.use(
 
 // BetterAuth owns /api/auth/* (signup, login, logout, verify, reset).
 app.on(["GET", "POST"], "/api/auth/*", async (c) => {
+  const log = c.get("log");
+  log.set({ route: "/api/auth/*", method: c.req.method });
+  log.audit({
+    action: "auth.proxy",
+    actor: { type: "user", id: c.get("user")?.id ?? "anonymous" },
+    outcome: "success",
+  });
   const limited = await enforcePublicAuthRateLimit(c);
   if (limited) return limited;
   // withBackground so an auth hook can send mail after the response instead
@@ -197,6 +217,8 @@ app.on(["GET", "POST"], "/api/auth/*", async (c) => {
 // Cap (#98): public, and necessarily so, since it guards signup itself.
 // Same public rate limit as the auth routes it protects.
 app.post("/api/cap/*", async (c, next) => {
+  const log = c.get("log");
+  log.set({ route: c.req.path });
   const limited = await enforcePublicAuthRateLimit(c);
   return limited ?? next();
 });
@@ -208,11 +230,23 @@ app.route("/api/cap", capRoutes);
 app.route("/api/shorten", shortenRoutes);
 
 // Polar webhook: public, signature-verified, no session middleware.
-app.post("/api/webhooks/polar", (c) => handlePolarWebhook(c.req.raw, c.env));
+app.post("/api/webhooks/polar", (c) => {
+  const log = c.get("log");
+  log.set({ route: c.req.path });
+  return handlePolarWebhook(c.req.raw, c.env);
+});
 
 const api = new Hono<AppEnv>();
 api.use("*", withSession);
 api.use("*", enforceSignedApiRateLimit);
+// Carry the signed-in user onto the wide event once the session is resolved.
+// Enrich before `await next()` so a short-circuited response (e.g. a 429 from
+// the rate-limit guard) still retains the user context on the wide event.
+api.use("*", async (c, next) => {
+  const user = c.get("user");
+  if (user) c.get("log")?.set({ user: { id: user.id, plan: user.plan } });
+  await next();
+});
 api.route("/", userRoutes);
 api.route("/orgs", orgRoutes);
 api.route("/orgs/:orgId/links", linkRoutes);
@@ -228,7 +262,11 @@ app.route("/api", api);
 // an API path means an HTML page under a 200. A caller who mistyped a route
 // gets an answer it can read instead, and the 405 middleware above has a 404
 // to convert when the path exists under another method.
-app.all("/api/*", (c) => c.json({ message: "Not found" }, 404));
+app.all("/api/*", (c) => {
+  const log = c.get("log");
+  log.set({ route: c.req.path });
+  return c.json({ message: "Not found" }, 404);
+});
 
 /* ---------------- SPA fallback ---------------- */
 
@@ -321,6 +359,7 @@ async function serveSpa(c: Context<AppEnv>, status?: 404): Promise<Response> {
 // Keep the old agent-facing address working, but generate it from the same
 // source as negotiated /pricing so those two documents cannot drift apart.
 app.get("/pricing.md", (c) => {
+  c.get("log")?.set({ route: c.req.path });
   const canonicalUrl = new URL(c.req.url);
   canonicalUrl.pathname = "/pricing";
   // If the pricing entry ever loses its markdown source, say so at the .md
@@ -333,6 +372,7 @@ app.get("/pricing.md", (c) => {
 
 app.get("/:slug", async (c, next) => {
   const slug = c.req.param("slug");
+  c.get("log")?.set({ slug });
   // Root keywords the SPA owns (/dashboard, /links, /login, …) never resolve as
   // slugs; they can't be created as slugs either, this is belt-and-suspenders.
   if (RESERVED_SLUGS.has(slug.toLowerCase())) return next();
@@ -345,7 +385,10 @@ app.get("/:slug", async (c, next) => {
   return serveSpa(c, 404);
 });
 
-app.all("*", (c) => serveSpa(c));
+app.all("*", (c) => {
+  c.get("log")?.set({ route: c.req.path });
+  return serveSpa(c);
+});
 
 /* ---------------- Queue consumer: KV/R2 follow-up work + click ingestion ---------------- */
 

@@ -28,7 +28,8 @@
     "db:seed:local": "NODE_EXTRA_CA_CERTS=\"$HOME/.portless/ca.pem\" bun scripts/seed-local.ts",
     "check:contrast": "bun scripts/check-contrast.ts",
     "doctor": "react-doctor",
-    "fallow": "fallow audit --base origin/main"
+    "fallow": "fallow audit --base origin/main",
+    "check:observability": "evlog map --min-score 100"
   },
   "dependencies": {
     "@base-ui/react": "^1.7.0",
@@ -53,6 +54,7 @@
     "d3-scale": "^4.0.2",
     "d3-shape": "^3.2.0",
     "drizzle-orm": "^0.45.2",
+    "evlog": "2.24.0",
     "hono": "^4.13.3",
     "iso-3166-1": "^2.1.1",
     "morphicons": "^1.7.0",
@@ -74,6 +76,7 @@
     "@cloudflare/vite-plugin": "^1.53.1",
     "@cloudflare/vitest-pool-workers": "^0.22.0",
     "@cloudflare/workers-types": "^5.20260822.1",
+    "@evlog/cli": "0.6.0",
     "@oxlint/plugins": "1.79.0",
     "@playwright/test": "^1.62.1",
     "@tailwindcss/vite": "^4.3.3",

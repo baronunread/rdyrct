@@ -102,7 +102,9 @@ qrLogoRoutes.post("/", requireOrgRole("member"), async (c) => {
 // header keeps an SVG logo from running scripts if the URL is opened directly.
 // Unauthorized access always returns 404 so the URL leaks nothing.
 qrLogoRoutes.get("/:file", async (c) => {
+  const log = c.get("log");
   const file = c.req.param("file");
+  log.set({ orgId: c.req.param("orgId"), file });
   if (!QR_LOGO_FILE_RE.test(file)) throw new HTTPException(404, { message: "Not found" });
 
   const user = c.var.user;

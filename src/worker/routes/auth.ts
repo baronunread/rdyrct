@@ -90,12 +90,16 @@ async function currentUserFor(
 }
 
 userRoutes.get("/user", requireUser, async (c) => {
+  const log = c.get("log");
+  log.set({ userId: c.var.user!.id });
   return c.json(await currentUserFor(c.var.db, c.var.user!));
 });
 
 // Public, non-secret deployment config (the SPA shows appHost in DNS setup
 // instructions for custom domains).
 userRoutes.get("/config", (c) => {
+  const log = c.get("log");
+  log.set({ route: "config" });
   return c.json({
     appHost: c.env.APP_HOST,
     googleEnabled: Boolean(c.env.GOOGLE_CLIENT_ID && c.env.GOOGLE_CLIENT_SECRET),

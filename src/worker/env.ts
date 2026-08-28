@@ -3,6 +3,7 @@ import type * as schema from "./db/schema";
 import type { StorageMessage } from "./storage";
 import type { ClickMessage } from "./clicks";
 import type { BillingProvider } from "./billing-provider";
+import type { AuditableLogger } from "evlog";
 
 export interface Env {
   DB: D1Database;
@@ -93,6 +94,8 @@ export interface SessionUser {
 export type Vars = {
   db: DB;
   user: SessionUser | null;
+  /** Request-scoped evlog wide-event logger, set by the evlog middleware. */
+  log: AuditableLogger;
 };
 
 export type AppEnv = { Bindings: Env; Variables: Vars };

@@ -56,8 +56,10 @@ async function cfRequest<T = Record<string, JsonValue>>(
       // what handles a response that is not it.
       const parsed = JSON.parse(text) as { errors?: { message?: string }[] };
       message = parsed.errors?.[0]?.message ?? message;
-    } catch {
-      // Keep the status-based fallback when Cloudflare does not return JSON.
+    } catch (e) {
+      // Keep the status-based fallback when Cloudflare does not return JSON,
+      // but surface the unparseable body so a regression is visible.
+      Sentry.captureException(e);
     }
     throw new HTTPException(502, { message });
   }
@@ -288,6 +290,8 @@ async function getDomain(c: { var: { db: DB } }, orgId: string, id: string) {
 // List domains. A pure read: activation runs in the background workflow, never
 // on a GET, so this never calls Cloudflare or writes D1/KV.
 domainRoutes.get("/", async (c) => {
+  const log = c.get("log");
+  log.set({ orgId: c.req.param("orgId") });
   const rows = await c.var.db
     .select()
     .from(schema.domains)
@@ -336,8 +340,10 @@ async function resolveNewHostname(
 // workflow. The request never calls Cloudflare, so provider latency and partial
 // failures stay out of the user-facing path.
 domainRoutes.post("/", async (c) => {
+  const log = c.get("log");
   const db = c.var.db;
   const orgId = c.req.param("orgId")!;
+  log.set({ orgId });
   const { limits } = await orgPlan(db, orgId);
   await assertDomainQuota(db, orgId, limits);
 
@@ -373,6 +379,7 @@ domainRoutes.post("/", async (c) => {
   try {
     await c.env.DOMAIN_ACTIVATE.create({ id, params: { domainId: id, hostname } });
   } catch (err) {
+    log.error(err instanceof Error ? err : new Error(String(err)));
     // Could not start activation: roll the row back so the domain does not sit
     // stuck in checking_dns with no workflow driving it.
     Sentry.captureException(err);
@@ -388,11 +395,15 @@ domainRoutes.post("/", async (c) => {
 // this only reflects the latest D1 status the workflow wrote, which is why it
 // is a GET (#104).
 domainRoutes.get("/:id", async (c) => {
+  const log = c.get("log");
+  log.set({ orgId: c.req.param("orgId"), domainId: c.req.param("id") });
   const row = await getDomain(c, c.req.param("orgId")!, c.req.param("id"));
   return c.json(toDTO(row));
 });
 
 domainRoutes.patch("/:id", async (c) => {
+  const log = c.get("log");
+  log.set({ orgId: c.req.param("orgId"), domainId: c.req.param("id") });
   const db = c.var.db;
   const [row, body] = await Promise.all([
     getDomain(c, c.req.param("orgId")!, c.req.param("id")),
@@ -412,6 +423,8 @@ domainRoutes.patch("/:id", async (c) => {
 });
 
 domainRoutes.delete("/:id", async (c) => {
+  const log = c.get("log");
+  log.set({ orgId: c.req.param("orgId"), domainId: c.req.param("id") });
   const db = c.var.db;
   const row = await getDomain(c, c.req.param("orgId")!, c.req.param("id"));
   // link_addresses covers both a link's primary address and its aliases, so
