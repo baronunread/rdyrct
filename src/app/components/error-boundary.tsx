@@ -1,6 +1,7 @@
 import { Component, type ErrorInfo, type ReactNode } from "react";
 import posthog from "../lib/posthog";
 import { captureClientException } from "../lib/sentry";
+import { signalNewVersionAvailable } from "../lib/new-version";
 
 type Props = {
   children: ReactNode;
@@ -8,7 +9,20 @@ type Props = {
   fallback?: ReactNode;
 };
 
-type State = { crashed: boolean };
+type State = { crashed: boolean; chunkError: boolean };
+
+/**
+ * A failed code-split chunk load almost always means a stale build: a visitor
+ * has a tab open whose hashed asset filenames no longer exist after a deploy.
+ * It is recoverable by reloading onto the current build, so we prompt a reload
+ * rather than render the crash page.
+ */
+const CHUNK_LOAD_ERROR =
+  /failed to fetch dynamically imported module|importing a module script failed|error loading dynamically imported module|failed to load a dynamic application chunk/i;
+
+function isChunkLoadError(error: Error): boolean {
+  return CHUNK_LOAD_ERROR.test(error.message);
+}
 
 /**
  * Catches render/commit-phase exceptions so one broken subtree degrades to a
@@ -19,13 +33,21 @@ type State = { crashed: boolean };
  * unmount the whole app and a visitor would see nothing.
  */
 export class ErrorBoundary extends Component<Props, State> {
-  state: State = { crashed: false };
+  state: State = { crashed: false, chunkError: false };
 
-  static getDerivedStateFromError(): State {
-    return { crashed: true };
+  static getDerivedStateFromError(error: Error): State {
+    return { crashed: true, chunkError: isChunkLoadError(error) };
   }
 
   componentDidCatch(error: Error, info: ErrorInfo) {
+    if (isChunkLoadError(error)) {
+      // A stale tab after a deploy: surface the "new version available"
+      // banner and let the visitor reload. The app can't render the failed
+      // chunk, so we stay blank behind the banner rather than flash the
+      // crash notice.
+      signalNewVersionAvailable();
+      return;
+    }
     posthog.captureException(error, { componentStack: info.componentStack });
     captureClientException(error, info.componentStack);
   }
@@ -33,6 +55,9 @@ export class ErrorBoundary extends Component<Props, State> {
   render() {
     if (!this.state.crashed) return this.props.children;
     if (this.props.fallback !== undefined) return this.props.fallback;
+    // A chunk-load failure renders blank behind the banner; everything else
+    // gets the crash notice.
+    if (this.state.chunkError) return null;
     return <FullPageError />;
   }
 }
