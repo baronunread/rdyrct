@@ -1,12 +1,8 @@
 import type { ReactElement } from "react";
 import { lookup } from "@/shared/lookup";
 import { useLocation } from "@tanstack/react-router";
-import { ChevronsUpDown, LogOut, Menu as MenuIcon } from "@/app/ui/icons";
-import { MorphIcon } from "morphicons/react";
-import { moon, sun } from "@/app/ui/icon-nodes";
-import { useTheme } from "../lib/theme";
+import { ChevronsUpDown, Menu as MenuIcon } from "@/app/ui/icons";
 import { appNavItems } from "./nav-items";
-import { IconButton } from "../ui/button";
 import { cn } from "../ui/cn";
 import { Card } from "../ui/misc";
 import { Skeleton, SkeletonStatus, TableSkeleton } from "../ui/skeleton";
@@ -309,7 +305,6 @@ export function InviteSkeleton() {
  * mirror AppShell's sidebar.
  */
 function SidebarSkeleton() {
-  const [theme, toggleTheme] = useTheme();
   return (
     <div className="flex h-full flex-col">
       <div className="hidden px-3 pt-4 pb-2 md:block">
@@ -338,23 +333,15 @@ function SidebarSkeleton() {
         ))}
       </nav>
 
-      {/* user footer: name and email are data, the theme toggle is live */}
+      {/* user footer: the avatar frame is chrome, the name is data. Settings,
+          theme and sign out live inside the account menu now. */}
       <div className="mt-auto border-t border-border px-3 py-2.5">
-        <div className="flex items-center gap-2 px-1.5">
-          <div className="min-w-0 flex-1">
-            <span className="flex h-5 items-center">
-              <Skeleton className="h-3 w-2/3" />
-            </span>
-            <span className="flex h-4 items-center">
-              <Skeleton className="h-2.5 w-4/5" />
-            </span>
-          </div>
-          <IconButton label="Toggle theme" className="p-2" onClick={toggleTheme}>
-            <MorphIcon icon={theme === "dark" ? sun : moon} size={15} spring="snappy" />
-          </IconButton>
-          <IconButton label="Sign out" danger className="p-2" disabled>
-            <LogOut size={15} />
-          </IconButton>
+        <div className="flex items-center gap-2 px-1.5 py-1">
+          <Skeleton className="h-8 w-8 shrink-0 rounded-full" />
+          <span className="flex h-5 min-w-0 flex-1 items-center">
+            <Skeleton className="h-3 w-2/3" />
+          </span>
+          <ChevronsUpDown size={14} className="shrink-0 text-muted" />
         </div>
       </div>
     </div>
