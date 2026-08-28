@@ -1,8 +1,9 @@
 import { expect, test } from "@playwright/test";
+import { signOut } from "./pages";
 
-// Drives the Google button. The button only renders when Google is configured
-// (GOOGLE_CLIENT_ID/SECRET in .dev.vars), so when it isn't we skip rather than
-// fail: the gating itself is covered by /api/config.
+// Drives the Google button against the local emulate google service (started
+// by the resend webServer, see playwright.config.ts). When Google isn't
+// configured the button doesn't render, so we skip rather than fail.
 test.describe("Google sign-in", () => {
   test("Continue with Google starts an OAuth session", async ({ page }) => {
     const cfg = await (await page.request.get("/api/config")).json();
@@ -21,12 +22,28 @@ test.describe("Google sign-in", () => {
 
     await button.click();
     await expect.poll(() => socialStarted).toBe(true);
+  });
 
-    // The method is remembered: a return visit flags the Google button.
+  test("a full Google round trip signs in, and /login then offers 'continue as'", async ({
+    page,
+  }) => {
+    const cfg = await (await page.request.get("/api/config")).json();
+    if (!cfg.googleEnabled) test.skip(true, "Google sign-in not configured");
+
     await page.goto("/login");
-    await expect(
-      page.getByRole("button", { name: /Continue with Google/i }).getByText("Last used"),
-    ).toBeVisible();
+    await page.getByRole("button", { name: /Continue with Google/i }).click();
+
+    // The emulate consent screen: pick the seeded test account.
+    await page.getByRole("button", { name: /testuser@gmail\.com/ }).click();
+    await expect(page).toHaveURL(/\/dashboard$/);
+
+    // Sign out, and the login page now leads with a one-click row for that
+    // account instead of the plain button.
+    await signOut(page);
+    await expect(page).toHaveURL(/\/login$/);
+    const resume = page.getByRole("button", { name: "Continue as testuser@gmail.com" });
+    await expect(resume).toBeVisible();
+    await expect(resume).toContainText("Last used");
   });
 
   test("shows the Google button on signup too", async ({ page }) => {

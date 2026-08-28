@@ -4,7 +4,7 @@ import { valibotResolver } from "@hookform/resolvers/valibot";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useSearchParams, HrefLink } from "../lib/router-search";
 import { useQueryClient, type QueryClient } from "@tanstack/react-query";
-import { Check } from "@/app/ui/icons";
+import { ArrowRight, Check } from "@/app/ui/icons";
 import { AuthCard, PasswordMeter } from "../components/auth-form";
 import { authClient } from "../lib/auth-client";
 import { friendlyAuthError } from "../lib/auth-errors";
@@ -14,11 +14,10 @@ import { useShake } from "../lib/use-shake";
 import { useCap } from "../lib/cap";
 import { useCurrentUser, useConfig } from "../lib/hooks";
 import { storedAnonLinks } from "../lib/anon-links";
-import { lastAuthMethod, setLastAuthMethod } from "../lib/last-auth";
+import { lastAuth, setLastAuth } from "../lib/last-auth";
 import { firstFormError } from "../lib/form-errors";
 import { cn } from "../ui/cn";
 import { Button } from "../ui/button";
-import { Badge } from "../ui/misc";
 import { Field, Input } from "../ui/field";
 import { OtpInput } from "../ui/otp";
 import { BusyContent } from "../ui/spinner";
@@ -245,6 +244,41 @@ function PasswordHint({
   return <PasswordMeter password={password} />;
 }
 
+/**
+ * The Google sign-in control. A plain button by default; when this browser
+ * last signed in with Google and we kept the address, it becomes a
+ * one-click "continue as you@…" row instead.
+ */
+function GoogleEntry({ email, onClick }: { email?: string; onClick: () => void }) {
+  if (!email) {
+    return (
+      <button
+        type="button"
+        onClick={onClick}
+        className="flex items-center justify-center gap-2 rounded-lg border border-border bg-surface py-2.5 text-sm font-medium transition-colors hover:bg-surface-2"
+      >
+        <GoogleG />
+        Continue with Google
+      </button>
+    );
+  }
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={`Continue as ${email}`}
+      className="flex items-center gap-3 rounded-lg border border-border bg-surface px-3 py-2.5 text-sm transition-colors hover:bg-surface-2"
+    >
+      <GoogleG />
+      <span className="min-w-0 flex-1 truncate text-left font-medium">{email}</span>
+      <span className="shrink-0 rounded-full bg-accent/10 px-2 py-0.5 text-2xs font-medium text-accent">
+        Last used
+      </span>
+      <ArrowRight size={16} className="shrink-0 text-muted" />
+    </button>
+  );
+}
+
 /** Inline Google "G" mark (no remote image, CSP-safe). */
 function GoogleG() {
   return (
@@ -292,15 +326,15 @@ function AuthFormView({
   const toast = useToast();
   const config = useConfig();
   // Read once on mount: a returning visitor who last signed in with Google
-  // gets that button flagged.
-  const [googleLastUsed] = useState(() => lastAuthMethod() === "google");
+  // gets a one-click "continue as you" row.
+  const [lastUsed] = useState(lastAuth);
   const { register, handleSubmit, watch, getValues } = useForm<AuthForm>({
     resolver: valibotResolver(copy.schema),
     defaultValues: { email: "", password: "" },
   });
 
   const startGoogle = () => {
-    setLastAuthMethod("google");
+    setLastAuth("google");
     posthog.capture("user_google_signin_started");
     // Full-page redirect to Google; returns to /api/auth/callback/google, then
     // to `next`. Same flow on login and signup (account linking handles an
@@ -329,19 +363,10 @@ function AuthFormView({
         {mode === "signup" && <SignupSubtitle next={next} />}
         {config.data?.googleEnabled && (
           <>
-            <button
-              type="button"
+            <GoogleEntry
+              email={lastUsed?.method === "google" ? lastUsed.email : undefined}
               onClick={startGoogle}
-              className="flex items-center justify-center gap-2 rounded-lg border border-border bg-surface py-2.5 text-sm font-medium transition-colors hover:bg-surface-2"
-            >
-              <GoogleG />
-              Continue with Google
-              {googleLastUsed && (
-                <Badge color="accent" className="ml-1">
-                  Last used
-                </Badge>
-              )}
-            </button>
+            />
             <div className="flex items-center gap-3 text-xs text-muted">
               <span className="h-px flex-1 bg-border" />
               or
@@ -434,7 +459,7 @@ interface SubmitDeps {
 async function trySignIn(email: string, password: string, deps: SubmitDeps) {
   const { error: signInError } = await authClient.signIn.email({ email, password });
   if (!signInError) {
-    setLastAuthMethod("password");
+    setLastAuth("password", email);
     await deps.qc.refetchQueries({ queryKey: ["user"] });
     const isAdmin = deps.qc.getQueryData<CurrentUser | null>(["user"])?.user.isAdmin ?? false;
     posthog.capture("user_signed_in");
