@@ -14,9 +14,11 @@ import { useShake } from "../lib/use-shake";
 import { useCap } from "../lib/cap";
 import { useCurrentUser, useConfig } from "../lib/hooks";
 import { storedAnonLinks } from "../lib/anon-links";
+import { lastAuthMethod, setLastAuthMethod } from "../lib/last-auth";
 import { firstFormError } from "../lib/form-errors";
 import { cn } from "../ui/cn";
 import { Button } from "../ui/button";
+import { Badge } from "../ui/misc";
 import { Field, Input } from "../ui/field";
 import { OtpInput } from "../ui/otp";
 import { BusyContent } from "../ui/spinner";
@@ -293,12 +295,16 @@ function AuthFormView({
   const copy = AUTH_MODE_COPY[mode];
   const toast = useToast();
   const config = useConfig();
+  // Read once on mount: a returning visitor who last signed in with Google
+  // gets that button flagged.
+  const [googleLastUsed] = useState(() => lastAuthMethod() === "google");
   const { register, handleSubmit, watch, getValues } = useForm<AuthForm>({
     resolver: valibotResolver(copy.schema),
     defaultValues: { email: "", password: "" },
   });
 
   const startGoogle = () => {
+    setLastAuthMethod("google");
     posthog.capture("user_google_signin_started");
     // Full-page redirect to Google; returns to /api/auth/callback/google, then
     // to `next`. Same flow on login and signup (account linking handles an
@@ -368,6 +374,11 @@ function AuthFormView({
             >
               <GoogleG />
               Continue with Google
+              {googleLastUsed && (
+                <Badge color="accent" className="ml-1">
+                  Last used
+                </Badge>
+              )}
             </button>
           </>
         )}
@@ -427,6 +438,7 @@ interface SubmitDeps {
 async function trySignIn(email: string, password: string, deps: SubmitDeps) {
   const { error: signInError } = await authClient.signIn.email({ email, password });
   if (!signInError) {
+    setLastAuthMethod("password");
     await deps.qc.refetchQueries({ queryKey: ["user"] });
     const isAdmin = deps.qc.getQueryData<CurrentUser | null>(["user"])?.user.isAdmin ?? false;
     posthog.capture("user_signed_in");

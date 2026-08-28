@@ -21,6 +21,12 @@ test.describe("Google sign-in", () => {
 
     await button.click();
     await expect.poll(() => socialStarted).toBe(true);
+
+    // The method is remembered: a return visit flags the Google button.
+    await page.goto("/login");
+    await expect(
+      page.getByRole("button", { name: /Continue with Google/i }).getByText("Last used"),
+    ).toBeVisible();
   });
 
   test("shows the Google button on signup too", async ({ page }) => {
