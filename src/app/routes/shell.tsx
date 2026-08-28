@@ -21,6 +21,7 @@ import { AppShellSkeleton, RouteSkeleton } from "../components/skeletons";
 import { appNavItems } from "../components/nav-items";
 import { OverLimitBanner } from "../components/over-limit";
 import { UserAvatar } from "../components/user-avatar";
+import { CommandMenu } from "../components/command-menu";
 import { WebMcpLinkTools } from "../components/webmcp-link-tools";
 import { WebMcpAnalyticsTool } from "../components/webmcp-analytics-tool";
 import { NotFound } from "./not-found";
@@ -418,6 +419,7 @@ export function AppShell() {
 
   return (
     <div className="flex min-h-dvh">
+      <CommandMenu />
       <WebMcpLinkTools />
       <WebMcpAnalyticsTool />
       {/* desktop sidebar: fixed so it never moves, not even on overscroll */}
