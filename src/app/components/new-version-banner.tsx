@@ -23,7 +23,7 @@ export function NewVersionBanner() {
       role="alert"
       className="fixed inset-x-0 top-0 z-[100] flex items-center justify-center gap-3 border-b border-border bg-surface px-4 py-2.5 text-sm"
     >
-      <span className="text-text">A new version of the app is available.</span>
+      <span className="text-text">A new version is available.</span>
       <Button variant="primary" size="sm" onClick={reloadNow}>
         Reload
       </Button>

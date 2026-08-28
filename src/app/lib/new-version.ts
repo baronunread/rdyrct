@@ -39,23 +39,30 @@ export function reloadNow() {
   window.location.reload();
 }
 
-const RELOADED_KEY = "rdyrct:chunk-reloaded";
+const RELOADED_PREFIX = "rdyrct:chunk-reloaded:";
 
 /**
  * One forced reload onto the current build, for when a chunk failed while
  * rendering a route the visitor just navigated to: the old UI is already
- * gone, so a reload is the fix, not a banner over a blank page. Guarded by a
- * session flag so a genuinely broken deploy (reload doesn't fix the chunk)
- * can't loop: it returns false on the second chunk failure in a session, or
- * when there's no sessionStorage to remember the first one, and the caller
- * falls back to the notice.
+ * gone, so a reload is the fix, not a banner over a blank page.
+ *
+ * `key` names the specific failure (the error message, which carries the
+ * missing hashed chunk's name). The reload is latched per key in
+ * sessionStorage, so a broken deploy that keeps 404ing the same chunk falls
+ * through to the notice instead of looping, while the next deploy (new chunk
+ * names, so new messages) still gets its own retry. Returns false when the
+ * latch is already set, when TanStack Router already reloaded for this same
+ * failure (`lazyRouteComponent` has its own one-shot reload), or when there's
+ * no sessionStorage to latch with.
  */
-export function reloadForNewVersion(): boolean {
+export function reloadForNewVersion(key: string): boolean {
+  const mine = RELOADED_PREFIX + key;
   try {
-    if (sessionStorage.getItem(RELOADED_KEY)) return false;
-    sessionStorage.setItem(RELOADED_KEY, "1");
+    if (sessionStorage.getItem(`tanstack_router_reload:${key}`)) return false;
+    if (sessionStorage.getItem(mine)) return false;
+    sessionStorage.setItem(mine, "1");
   } catch {
-    // No sessionStorage to guard the reload with (some locked-down privacy
+    // No sessionStorage to latch the reload with (some locked-down privacy
     // configs): show the notice instead, so a still-missing chunk can't loop.
     return false;
   }

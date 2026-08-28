@@ -1,7 +1,7 @@
 import { Component, type ErrorInfo, type ReactNode } from "react";
 import posthog from "../lib/posthog";
 import { captureClientException } from "../lib/sentry";
-import { reloadForNewVersion } from "../lib/new-version";
+import { dismissNewVersion, reloadForNewVersion } from "../lib/new-version";
 
 type Props = {
   children: ReactNode;
@@ -40,16 +40,17 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, info: ErrorInfo) {
-    if (isChunkLoadError(error)) {
-      // A stale tab after a deploy. The route the visitor navigated to can't
-      // render, so reload onto the current build: that fixes it and lands
-      // them where they were going. `reloadForNewVersion` returns false if
-      // we already reloaded once this session and the chunk is still
-      // failing (a broken deploy), in which case we fall through to the
-      // notice below rather than loop.
-      if (reloadForNewVersion()) return;
-      return;
-    }
+    // A stale tab after a deploy: the route the visitor navigated to can't
+    // render, so reload onto the current build. That fixes it and lands them
+    // where they were going. Latched per failure, so if it returns false the
+    // chunk is genuinely gone, not stale, and we fall through.
+    if (isChunkLoadError(error) && reloadForNewVersion(error.message)) return;
+    // Clear the top banner the failed import queued via `vite:preloadError`:
+    // the full-page notice `render()` is about to show says the same thing,
+    // and two stacked copies is the blank-page-behind-a-banner problem again.
+    if (isChunkLoadError(error)) dismissNewVersion();
+    // A chunk error that got here without reloading is a broken deploy, worth
+    // reporting; anything else is the crash the boundary exists for.
     posthog.captureException(error, { componentStack: info.componentStack });
     captureClientException(error, info.componentStack);
   }
