@@ -31,10 +31,14 @@ const DARK = {
   accent: "#cdb9f5",
 };
 
-// JetBrains Mono is the product's face, but email cannot fetch a webfont,
-// so this names it for the machines that already have it and falls back to
-// each platform's own mono.
-const FONT = `ui-monospace, "JetBrains Mono", SFMono-Regular, Menlo, Consolas, monospace`;
+// Figtree is the product's face, but email cannot fetch a webfont, so this
+// names it for the machines that already have it and falls back to each
+// platform's own sans-serif. Mirrors the app's --font-sans.
+const FONT = `"Figtree Variable", Figtree, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif`;
+
+// The one-time code stays monospace so its digits line up under the letter
+// spacing. Mirrors the app's --font-mono.
+const CODE_FONT = `ui-monospace, "JetBrains Mono", SFMono-Regular, Menlo, Consolas, monospace`;
 
 export interface EmailContent {
   /** The grey line inboxes show next to the subject. */
@@ -77,7 +81,7 @@ function ctaBlock(cta: { label: string; url: string }): SafeHtml {
 }
 
 function codeBlock(code: string): SafeHtml {
-  return emailHtml`<div class="code" style="margin:24px 0;padding:16px;border:1px solid ${LIGHT.border};border-radius:8px;background:${LIGHT.surface2};font-family:${FONT};font-size:30px;font-weight:700;letter-spacing:6px;text-align:center;color:${LIGHT.text}">${code}</div>`;
+  return emailHtml`<div class="code" style="margin:24px 0;padding:16px;border:1px solid ${LIGHT.border};border-radius:8px;background:${LIGHT.surface2};font-family:${CODE_FONT};font-size:30px;font-weight:700;letter-spacing:6px;text-align:center;color:${LIGHT.text}">${code}</div>`;
 }
 
 /** Renders the HTML and plain-text parts of one email from the same content. */

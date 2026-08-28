@@ -524,25 +524,35 @@ function DangerCardSkeleton() {
   );
 }
 
-/** /settings: the account card (name, email, save, dark-mode row) and the
- * delete-account danger card. */
+/** /settings: the account card (name and email beside the picture, save, then
+ * the dark-mode row) and the delete-account danger card. */
 export function SettingsSkeleton() {
   return (
     <SkeletonStatus testId="settings-page-skeleton">
       <HeaderSkeleton />
       <div className="flex flex-col gap-4">
         <Card className="max-w-2xl">
-          {[0, 1].map((i) => (
-            <div key={i} className={i === 0 ? "" : "mt-4"}>
-              <Skeleton className="h-2.5 w-24" />
-              <Skeleton className="mt-2 h-9 w-full" />
+          <div className="flex flex-col gap-6">
+            <div className="flex flex-col gap-4">
+              <div className="flex flex-col-reverse gap-5 sm:flex-row sm:items-start sm:gap-6">
+                <div className="flex min-w-0 flex-1 flex-col gap-4">
+                  {[0, 1].map((i) => (
+                    <div key={i}>
+                      <Skeleton className="h-2.5 w-24" />
+                      <Skeleton className="mt-2 h-9 w-full" />
+                    </div>
+                  ))}
+                </div>
+                <Skeleton className="h-32 w-32 shrink-0 rounded-full" />
+              </div>
+              <Skeleton className="h-9 w-24" />
             </div>
-          ))}
-          <Skeleton className="mt-4 h-9 w-24" />
-          <div className="mt-4 border-t border-border pt-4">
-            <div className="flex items-center justify-between">
-              <Skeleton className="h-3 w-20" />
-              <Skeleton className="h-5 w-9 rounded-full" />
+            <div className="flex items-center justify-between gap-4 border-t border-border pt-5">
+              <div>
+                <Skeleton className="h-3.5 w-20" />
+                <Skeleton className="mt-2 h-3 w-56 max-w-full" />
+              </div>
+              <Skeleton className="h-5 w-9 shrink-0 rounded-full" />
             </div>
           </div>
         </Card>
