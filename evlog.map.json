@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generatedAt": "2026-08-27T12:07:47.333Z",
+  "generatedAt": "2026-08-28T01:40:26.183Z",
   "cliVersion": "0.6.0",
   "ruleSetVersion": 1,
   "framework": "hono",
@@ -14,7 +14,7 @@
       "path": "*",
       "file": "src/worker/index.ts",
       "handler": {
-        "line": 386,
+        "line": 388,
         "column": 0
       },
       "id": "cfc6426d0697",
@@ -82,7 +82,44 @@
       },
       "sensitivity": {
         "level": "medium",
-        "reasons": ["pii: write operation with sensitive fields"]
+        "reasons": [
+          "pii: write operation with sensitive fields"
+        ]
+      },
+      "score": 100
+    },
+    {
+      "framework": "hono",
+      "kind": "api",
+      "method": "GET",
+      "path": "/",
+      "file": "src/worker/routes/avatars.ts",
+      "handler": {
+        "line": 11,
+        "column": 0
+      },
+      "id": "4350f835247a",
+      "checks": {
+        "audit": {
+          "status": "n/a"
+        },
+        "error-handling": {
+          "status": "n/a"
+        },
+        "wide-event": {
+          "status": "pass"
+        },
+        "context": {
+          "status": "pass"
+        },
+        "structured-errors": {
+          "status": "pass"
+        }
+      },
+      "suggestions": {},
+      "sensitivity": {
+        "level": "none",
+        "reasons": []
       },
       "score": 100
     },
@@ -126,7 +163,9 @@
       },
       "sensitivity": {
         "level": "medium",
-        "reasons": ["pii: write operation with sensitive fields"]
+        "reasons": [
+          "pii: write operation with sensitive fields"
+        ]
       },
       "score": 100
     },
@@ -170,7 +209,9 @@
       },
       "sensitivity": {
         "level": "medium",
-        "reasons": ["pii: write operation with sensitive fields"]
+        "reasons": [
+          "pii: write operation with sensitive fields"
+        ]
       },
       "score": 100
     },
@@ -205,7 +246,9 @@
       "suggestions": {},
       "sensitivity": {
         "level": "medium",
-        "reasons": ["pii: write operation with sensitive fields"]
+        "reasons": [
+          "pii: write operation with sensitive fields"
+        ]
       },
       "score": 100
     },
@@ -249,7 +292,9 @@
       },
       "sensitivity": {
         "level": "medium",
-        "reasons": ["pii: write operation with sensitive fields"]
+        "reasons": [
+          "pii: write operation with sensitive fields"
+        ]
       },
       "score": 100
     },
@@ -337,7 +382,9 @@
       },
       "sensitivity": {
         "level": "medium",
-        "reasons": ["pii: write operation with sensitive fields"]
+        "reasons": [
+          "pii: write operation with sensitive fields"
+        ]
       },
       "score": 100
     },
@@ -381,7 +428,9 @@
       },
       "sensitivity": {
         "level": "medium",
-        "reasons": ["pii: write operation with sensitive fields"]
+        "reasons": [
+          "pii: write operation with sensitive fields"
+        ]
       },
       "score": 100
     },
@@ -425,7 +474,9 @@
       },
       "sensitivity": {
         "level": "medium",
-        "reasons": ["pii: write operation with sensitive fields"]
+        "reasons": [
+          "pii: write operation with sensitive fields"
+        ]
       },
       "score": 100
     },
@@ -469,7 +520,9 @@
       },
       "sensitivity": {
         "level": "medium",
-        "reasons": ["pii: write operation with sensitive fields"]
+        "reasons": [
+          "pii: write operation with sensitive fields"
+        ]
       },
       "score": 100
     },
@@ -513,7 +566,9 @@
       },
       "sensitivity": {
         "level": "medium",
-        "reasons": ["pii: write operation with sensitive fields"]
+        "reasons": [
+          "pii: write operation with sensitive fields"
+        ]
       },
       "score": 100
     },
@@ -557,7 +612,9 @@
       },
       "sensitivity": {
         "level": "medium",
-        "reasons": ["pii: write operation with sensitive fields"]
+        "reasons": [
+          "pii: write operation with sensitive fields"
+        ]
       },
       "score": 100
     },
@@ -638,7 +695,7 @@
       "path": "/:slug",
       "file": "src/worker/index.ts",
       "handler": {
-        "line": 371,
+        "line": 373,
         "column": 0
       },
       "id": "4542fd0856a5",
@@ -673,7 +730,7 @@
       "path": "/:token",
       "file": "src/worker/routes/orgs.ts",
       "handler": {
-        "line": 1226,
+        "line": 1227,
         "column": 0
       },
       "id": "c8b0bedaf935",
@@ -697,7 +754,10 @@
       "suggestions": {},
       "sensitivity": {
         "level": "high",
-        "reasons": ["auth: path says \"token\"", "pii: write operation with sensitive fields"]
+        "reasons": [
+          "auth: path says \"token\"",
+          "pii: write operation with sensitive fields"
+        ]
       },
       "score": 100
     },
@@ -708,7 +768,7 @@
       "path": "/:token/accept",
       "file": "src/worker/routes/orgs.ts",
       "handler": {
-        "line": 1284,
+        "line": 1285,
         "column": 0
       },
       "id": "d4b536c251be",
@@ -732,7 +792,10 @@
       "suggestions": {},
       "sensitivity": {
         "level": "high",
-        "reasons": ["auth: path says \"token\"", "pii: write operation with sensitive fields"]
+        "reasons": [
+          "auth: path says \"token\"",
+          "pii: write operation with sensitive fields"
+        ]
       },
       "score": 100
     },
@@ -776,7 +839,9 @@
       },
       "sensitivity": {
         "level": "medium",
-        "reasons": ["pii: write operation with sensitive fields"]
+        "reasons": [
+          "pii: write operation with sensitive fields"
+        ]
       },
       "score": 100
     },
@@ -820,7 +885,9 @@
       },
       "sensitivity": {
         "level": "medium",
-        "reasons": ["pii: write operation with sensitive fields"]
+        "reasons": [
+          "pii: write operation with sensitive fields"
+        ]
       },
       "score": 100
     },
@@ -831,7 +898,7 @@
       "path": "/api/*",
       "file": "src/worker/index.ts",
       "handler": {
-        "line": 263,
+        "line": 265,
         "column": 0
       },
       "id": "74a1ccacc4b3",
@@ -866,7 +933,7 @@
       "path": "/api/auth/*",
       "file": "src/worker/index.ts",
       "handler": {
-        "line": 200,
+        "line": 201,
         "column": 0
       },
       "id": "e75aa52c874e",
@@ -890,7 +957,9 @@
       "suggestions": {},
       "sensitivity": {
         "level": "high",
-        "reasons": ["auth: path says \"auth\""]
+        "reasons": [
+          "auth: path says \"auth\""
+        ]
       },
       "score": 100
     },
@@ -901,7 +970,7 @@
       "path": "/api/auth/*",
       "file": "src/worker/index.ts",
       "handler": {
-        "line": 200,
+        "line": 201,
         "column": 0
       },
       "id": "2d4af6eb10f7",
@@ -925,7 +994,9 @@
       "suggestions": {},
       "sensitivity": {
         "level": "high",
-        "reasons": ["auth: path says \"auth\""]
+        "reasons": [
+          "auth: path says \"auth\""
+        ]
       },
       "score": 100
     },
@@ -936,7 +1007,7 @@
       "path": "/api/cap/*",
       "file": "src/worker/index.ts",
       "handler": {
-        "line": 218,
+        "line": 219,
         "column": 0
       },
       "id": "3d9ce45013d9",
@@ -971,7 +1042,7 @@
       "path": "/api/webhooks/polar",
       "file": "src/worker/index.ts",
       "handler": {
-        "line": 232,
+        "line": 233,
         "column": 0
       },
       "id": "bbed5d59d114",
@@ -1039,7 +1110,9 @@
       },
       "sensitivity": {
         "level": "medium",
-        "reasons": ["pii: write operation with sensitive fields"]
+        "reasons": [
+          "pii: write operation with sensitive fields"
+        ]
       },
       "score": 100
     },
@@ -1074,7 +1147,10 @@
       "suggestions": {},
       "sensitivity": {
         "level": "high",
-        "reasons": ["money: path says \"checkout\"", "pii: write operation with sensitive fields"]
+        "reasons": [
+          "money: path says \"checkout\"",
+          "pii: write operation with sensitive fields"
+        ]
       },
       "score": 100
     },
@@ -1153,7 +1229,9 @@
       },
       "sensitivity": {
         "level": "medium",
-        "reasons": ["pii: write operation with sensitive fields"]
+        "reasons": [
+          "pii: write operation with sensitive fields"
+        ]
       },
       "score": 100
     },
@@ -1197,7 +1275,9 @@
       },
       "sensitivity": {
         "level": "medium",
-        "reasons": ["pii: write operation with sensitive fields"]
+        "reasons": [
+          "pii: write operation with sensitive fields"
+        ]
       },
       "score": 100
     },
@@ -1241,7 +1321,9 @@
       },
       "sensitivity": {
         "level": "medium",
-        "reasons": ["pii: write operation with sensitive fields"]
+        "reasons": [
+          "pii: write operation with sensitive fields"
+        ]
       },
       "score": 100
     },
@@ -1285,7 +1367,9 @@
       },
       "sensitivity": {
         "level": "medium",
-        "reasons": ["pii: write operation with sensitive fields"]
+        "reasons": [
+          "pii: write operation with sensitive fields"
+        ]
       },
       "score": 100
     },
@@ -1320,7 +1404,9 @@
       "suggestions": {},
       "sensitivity": {
         "level": "medium",
-        "reasons": ["pii: write operation with sensitive fields"]
+        "reasons": [
+          "pii: write operation with sensitive fields"
+        ]
       },
       "score": 100
     },
@@ -1331,7 +1417,7 @@
       "path": "/pricing.md",
       "file": "src/worker/index.ts",
       "handler": {
-        "line": 359,
+        "line": 361,
         "column": 0
       },
       "id": "c01fb33007bf",
@@ -1399,7 +1485,9 @@
       },
       "sensitivity": {
         "level": "medium",
-        "reasons": ["pii: write operation with sensitive fields"]
+        "reasons": [
+          "pii: write operation with sensitive fields"
+        ]
       },
       "score": 100
     },
@@ -1478,7 +1566,9 @@
       },
       "sensitivity": {
         "level": "medium",
-        "reasons": ["pii: write operation with sensitive fields"]
+        "reasons": [
+          "pii: write operation with sensitive fields"
+        ]
       },
       "score": 100
     },
@@ -1522,7 +1612,9 @@
       },
       "sensitivity": {
         "level": "medium",
-        "reasons": ["pii: write operation with sensitive fields"]
+        "reasons": [
+          "pii: write operation with sensitive fields"
+        ]
       },
       "score": 100
     },
@@ -1566,7 +1658,9 @@
       },
       "sensitivity": {
         "level": "medium",
-        "reasons": ["pii: write operation with sensitive fields"]
+        "reasons": [
+          "pii: write operation with sensitive fields"
+        ]
       },
       "score": 100
     },
@@ -1610,7 +1704,9 @@
       },
       "sensitivity": {
         "level": "medium",
-        "reasons": ["pii: write operation with sensitive fields"]
+        "reasons": [
+          "pii: write operation with sensitive fields"
+        ]
       },
       "score": 100
     },
@@ -1654,7 +1750,9 @@
       },
       "sensitivity": {
         "level": "medium",
-        "reasons": ["pii: write operation with sensitive fields"]
+        "reasons": [
+          "pii: write operation with sensitive fields"
+        ]
       },
       "score": 100
     },
@@ -1698,7 +1796,9 @@
       },
       "sensitivity": {
         "level": "medium",
-        "reasons": ["pii: write operation with sensitive fields"]
+        "reasons": [
+          "pii: write operation with sensitive fields"
+        ]
       },
       "score": 100
     }

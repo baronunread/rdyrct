@@ -9,10 +9,14 @@ import { AVATAR_PREFIX } from "./../storage";
 export const avatarRoutes = new Hono<AppEnv>();
 
 avatarRoutes.get("/", async (c) => {
+  const log = c.get("log");
+  log.set({ route: "user-avatar" });
   const user = c.var.user;
   if (!user) throw new HTTPException(401, { message: "Not signed in" });
+  log.set({ userId: user.id });
 
   const obj = await c.env.MEDIA.get(`${AVATAR_PREFIX}${user.id}`);
+  log.set({ avatarFound: Boolean(obj) });
   if (!obj) throw new HTTPException(404, { message: "No avatar" });
 
   const headers = new Headers();
