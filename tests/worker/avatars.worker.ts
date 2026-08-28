@@ -1,9 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { env } from "cloudflare:workers";
-import { applyTestMigrations, overrideEnv } from "./support";
+import { reset } from "cloudflare:test";
+import { applyTestMigrations, fetchWorker, freeOwnerCookie, overrideEnv, testDb } from "./support";
+import { eq } from "drizzle-orm";
+import * as schema from "../../src/worker/db/schema";
 import {
   AVATAR_PREFIX,
-  avatarUrl,
   deleteUserAvatar,
   sweepOrphanQrLogos,
   storeUserAvatar,
@@ -11,6 +13,7 @@ import {
 import { captureStorageQueue } from "./support";
 
 const JPEG = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0, 0, 0, 0, 0, 0]);
+const AVATAR_URL_RE = /^\/api\/user\/avatar(\?v=\d+)?$/;
 
 describe("storeUserAvatar", () => {
   afterEach(() => vi.unstubAllGlobals());
@@ -38,7 +41,7 @@ describe("storeUserAvatar", () => {
       vi.fn(async () => new Response(JPEG, { headers: { "content-type": "image/jpeg" } })),
     );
     const got = await storeUserAvatar(env, "user-1", "https://lh3.googleusercontent.com/p");
-    expect(got).toBe(avatarUrl());
+    expect(got).toMatch(AVATAR_URL_RE);
     const obj = await env.MEDIA.get(`${AVATAR_PREFIX}user-1`);
     expect(obj).not.toBeNull();
     expect(obj!.httpMetadata!.contentType).toBe("image/jpeg");
@@ -51,7 +54,7 @@ describe("storeUserAvatar", () => {
     );
     const e = overrideEnv({ GOOGLE_EMULATOR_URL: "http://localhost:9999" });
     const got = await storeUserAvatar(e, "user-2", "http://localhost:9999/avatars/u2");
-    expect(got).toBe(avatarUrl());
+    expect(got).toMatch(AVATAR_URL_RE);
   });
 });
 
@@ -63,6 +66,60 @@ describe("deleteUserAvatar", () => {
     await deleteUserAvatar(e, "user-3");
     expect(await env.MEDIA.get(`${AVATAR_PREFIX}user-3`)).toBeNull();
     expect(sent).toEqual([{ op: "r2_delete_prefix", prefix: `${AVATAR_PREFIX}user-3` }]);
+  });
+});
+
+describe("POST/DELETE /api/user/avatar", () => {
+  beforeEach(applyTestMigrations);
+  afterEach(() => reset());
+
+  const upload = (cookie: string, body: BodyInit, type: string) =>
+    fetchWorker(
+      new Request("http://localhost/api/user/avatar", {
+        method: "POST",
+        headers: { cookie, "content-type": type },
+        body,
+      }),
+    );
+
+  it("stores an uploaded PNG and points user.image at it", async () => {
+    const cookie = await freeOwnerCookie();
+    const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0]);
+    const res = await upload(cookie, png, "image/png");
+    expect(res.status).toBe(200);
+    // SAFETY: the 200 branch of POST /api/user/avatar returns `{ image }`.
+    const { image } = (await res.json()) as { image: string };
+    expect(image).toMatch(AVATAR_URL_RE);
+
+    const obj = await env.MEDIA.get(`${AVATAR_PREFIX}free-1`);
+    expect(obj?.httpMetadata?.contentType).toBe("image/png");
+    const [row] = await testDb().select().from(schema.user).where(eq(schema.user.id, "free-1"));
+    expect(row.image).toBe(image);
+  });
+
+  it("rejects a body whose bytes are not an image", async () => {
+    const cookie = await freeOwnerCookie();
+    const res = await upload(cookie, "not an image", "image/png");
+    expect(res.status).toBe(400);
+    expect(await env.MEDIA.get(`${AVATAR_PREFIX}free-1`)).toBeNull();
+  });
+
+  it("401s an unauthenticated upload", async () => {
+    const res = await upload("", new Uint8Array([0xff, 0xd8, 0xff]), "image/jpeg");
+    expect(res.status).toBe(401);
+  });
+
+  it("DELETE clears the object and user.image", async () => {
+    const cookie = await freeOwnerCookie();
+    await upload(cookie, new Uint8Array([0xff, 0xd8, 0xff, 0, 0, 0]), "image/jpeg");
+
+    const res = await fetchWorker(
+      new Request("http://localhost/api/user/avatar", { method: "DELETE", headers: { cookie } }),
+    );
+    expect(res.status).toBe(204);
+    expect(await env.MEDIA.get(`${AVATAR_PREFIX}free-1`)).toBeNull();
+    const [row] = await testDb().select().from(schema.user).where(eq(schema.user.id, "free-1"));
+    expect(row.image).toBeNull();
   });
 });
 

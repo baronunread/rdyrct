@@ -345,15 +345,22 @@ export async function deleteR2Prefix(env: Env, prefix: string): Promise<void> {
 
 /* ---------------- user avatars ---------------- */
 
-const AVATAR_MAX_BYTES = 2 * 1024 * 1024;
+// Generous margin for a Google-hosted photo pulled server-side; a Settings
+// upload is checked against the stricter shared AVATAR_MAX_BYTES in the route.
+const AVATAR_FETCH_MAX_BYTES = 2 * 1024 * 1024;
 export const AVATAR_PREFIX = "avatars/";
 const AVATAR_SERVING_PATH = "/api/user/avatar";
 
-/** The serving URL stored in `user.image`. Same for every user: the route
- * reads the object keyed by the session user, so the URL never embeds an
- * extension or a secret. */
-export function avatarUrl(): string {
-  return AVATAR_SERVING_PATH;
+/**
+ * The serving URL stored in `user.image`. The route reads the object keyed by
+ * the session user, so the path carries no id or secret. A `version` (upload
+ * time) is appended so replacing the picture changes the URL and the browser
+ * refetches instead of serving the old bytes.
+ */
+export function avatarUrl(version?: string | number): string {
+  return version === undefined
+    ? AVATAR_SERVING_PATH
+    : `${AVATAR_SERVING_PATH}?v=${encodeURIComponent(String(version))}`;
 }
 
 function tryUrl(value: string): URL | null {
@@ -410,7 +417,7 @@ export async function storeUserAvatar(
   } catch {
     return null;
   }
-  if (body.byteLength === 0 || body.byteLength > AVATAR_MAX_BYTES) return null;
+  if (body.byteLength === 0 || body.byteLength > AVATAR_FETCH_MAX_BYTES) return null;
 
   try {
     const key = `${AVATAR_PREFIX}${userId}`;
@@ -418,7 +425,7 @@ export async function storeUserAvatar(
   } catch {
     return null;
   }
-  return avatarUrl();
+  return avatarUrl(Date.now());
 }
 
 /** Remove a user's avatar bytes (called on account deletion). */

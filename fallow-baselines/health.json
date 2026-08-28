@@ -135,7 +135,10 @@
     },
     "src/app/routes/settings.tsx": {
       "crap_moderate": {
-        "count": 2
+        "count": 1
+      },
+      "crap_critical": {
+        "count": 1
       }
     },
     "src/app/ui/dialog.tsx": {
@@ -174,6 +177,11 @@
       }
     },
     "src/app/routes/organization.tsx": {
+      "crap_high": {
+        "count": 1
+      }
+    },
+    "src/worker/routes/avatars.ts": {
       "crap_high": {
         "count": 1
       }

@@ -76,5 +76,25 @@ export async function uploadQrLogo(orgId: string, file: File): Promise<string> {
   return url;
 }
 
+const uploadedAvatarSchema = v.object({ image: v.string() });
+
+/** Upload a profile picture (raw body, not JSON); returns the new serving URL. */
+export async function uploadUserAvatar(file: Blob): Promise<string> {
+  const res = await fetch("/api/user/avatar", {
+    method: "POST",
+    headers: { "content-type": file.type },
+    body: file,
+  });
+  await throwIfNotOk(res);
+  const { image } = v.parse(uploadedAvatarSchema, await res.json());
+  return image;
+}
+
+/** Remove the profile picture, reverting to the generated blobatar. */
+export async function deleteUserAvatar(): Promise<void> {
+  const res = await fetch("/api/user/avatar", { method: "DELETE" });
+  await throwIfNotOk(res);
+}
+
 export const shortUrl = (slug: string, domain?: string | null) =>
   domain ? `https://${domain}/${slug}` : `${window.location.origin}/${slug}`;

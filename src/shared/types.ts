@@ -143,6 +143,11 @@ export const QR_DEFAULT_LOGO_SIZE = 0.35;
 export const QR_LOGO_MAX_BYTES = 256 * 1024;
 export const QR_LOGO_MAX_DIMENSION = 512;
 
+/** Profile pictures: the client downscales to a square WebP within these
+ * bounds; the worker rejects anything past them. */
+export const AVATAR_MAX_BYTES = 256 * 1024;
+export const AVATAR_MAX_DIMENSION = 512;
+
 export interface User {
   id: string;
   email: string;

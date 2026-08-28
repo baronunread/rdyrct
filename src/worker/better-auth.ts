@@ -357,11 +357,11 @@ function buildAuth(env: Env) {
       accountLinking: {
         enabled: true,
         trustedProviders: ["google"],
-        // Copy the Google profile's name and picture onto the local user on
-        // link (email/emailVerified are never touched). Without this, linking
-        // Google to an existing password account leaves user.image null, so
-        // the R2 avatar sync in session.create.after has nothing to pull.
-        updateUserInfoOnLink: true,
+        // Deliberately no updateUserInfoOnLink: linking Google must not
+        // overwrite a name the user set. A fresh Google signup still gets its
+        // picture (better-auth sets user.image on user creation, and
+        // session.create.after pulls it into R2); anyone else sets a picture
+        // from Settings.
       },
     },
     emailAndPassword: {
