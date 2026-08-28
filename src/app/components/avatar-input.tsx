@@ -3,6 +3,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { errorMessage } from "@/app/lib/error-message";
 import { AVATAR_MAX_BYTES, AVATAR_MAX_DIMENSION, type User } from "@/shared/types";
 import { Button } from "../ui/button";
+import { Pencil } from "@/app/ui/icons";
 import { Spinner } from "../ui/spinner";
 import { useToast } from "../ui/toast";
 import { UserAvatar } from "./user-avatar";
@@ -91,8 +92,18 @@ export function AvatarInput({ user }: { user: User }) {
 
   return (
     <div className="flex flex-col items-center gap-2">
-      <div className="relative">
-        <UserAvatar user={user} size={72} />
+      <div className="group relative">
+        <UserAvatar user={user} size={96} className="border-2 border-border" />
+        <button
+          type="button"
+          aria-label="Change picture"
+          title="Change picture"
+          disabled={busy}
+          onClick={() => input.current?.click()}
+          className="absolute inset-0 flex cursor-pointer items-center justify-center rounded-full bg-bg/55 text-text opacity-0 transition-opacity duration-150 group-hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none disabled:pointer-events-none"
+        >
+          <Pencil size={18} />
+        </button>
         {busy && (
           <span className="absolute inset-0 flex items-center justify-center rounded-full bg-bg/60">
             <Spinner />
@@ -106,16 +117,11 @@ export function AvatarInput({ user }: { user: User }) {
         className="hidden"
         onChange={(e) => void onFile(e.target.files?.[0])}
       />
-      <div className="flex flex-col items-center gap-0.5">
-        <Button size="sm" variant="ghost" disabled={busy} onClick={() => input.current?.click()}>
-          Change
+      {user.image && (
+        <Button size="sm" variant="ghost" disabled={busy} onClick={() => void onRemove()}>
+          Remove
         </Button>
-        {user.image && (
-          <Button size="sm" variant="ghost" disabled={busy} onClick={() => void onRemove()}>
-            Remove
-          </Button>
-        )}
-      </div>
+      )}
     </div>
   );
 }
