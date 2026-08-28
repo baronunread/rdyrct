@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { type ReactNode, useState, useEffect, useRef } from "react";
 import { errorMessage } from "@/app/lib/error-message";
 import { useForm } from "react-hook-form";
 import { valibotResolver } from "@hookform/resolvers/valibot";
@@ -69,7 +69,13 @@ function useAccountNameForm(currentUserName: string | undefined) {
   return { register, save, currentName, isSubmitting };
 }
 
-function AccountCard({ userName }: { userName: string | undefined }) {
+function AccountCard({
+  userName,
+  userEmail,
+}: {
+  userName: string | undefined;
+  userEmail: string | undefined;
+}) {
   const { register, save, currentName, isSubmitting } = useAccountNameForm(userName);
   const [theme, toggleTheme] = useTheme();
   return (
@@ -77,6 +83,9 @@ function AccountCard({ userName }: { userName: string | undefined }) {
       <div className="flex flex-col gap-4">
         <Field label="Your name">
           <Input {...register("name")} />
+        </Field>
+        <Field label="Email">
+          <Input value={userEmail ?? ""} disabled readOnly />
         </Field>
         <div>
           <Button
@@ -251,44 +260,37 @@ function OrgNameCard({
   );
 }
 
-function DangerZoneCard({
-  org,
-  isOwner,
-  accountDeleteDisabled,
-  onDeleteOrg,
-  onDeleteAccount,
-}: {
-  org: UserOrg | null;
-  isOwner: boolean;
-  accountDeleteDisabled: boolean;
-  onDeleteOrg: () => void;
-  onDeleteAccount: () => void;
-}) {
+function DeleteAccountCard({ disabled, onDelete }: { disabled: boolean; onDelete: () => void }) {
   return (
     <Card className="max-w-2xl">
       <div className="flex flex-col gap-3">
         <p className="text-xs font-medium text-danger">Danger zone</p>
-        {org && isOwner && (
-          <>
-            <p className="text-sm text-muted">
-              Permanently delete <span className="text-text">{org.name}</span> with every link,
-              custom domain, and all click history. Short links stop working immediately.
-            </p>
-            <div>
-              <Button variant="danger" onClick={onDeleteOrg}>
-                Delete organization
-              </Button>
-            </div>
-            <div className="my-1 border-t border-border" />
-          </>
-        )}
         <p className="text-sm text-muted">
           Permanently delete your account, and every organization you own with it. Organizations you
           only belong to are left alone.
         </p>
         <div>
-          <Button variant="danger" onClick={onDeleteAccount} disabled={accountDeleteDisabled}>
+          <Button variant="danger" onClick={onDelete} disabled={disabled}>
             Delete account
+          </Button>
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+function DeleteOrgCard({ orgName, onDelete }: { orgName: string; onDelete: () => void }) {
+  return (
+    <Card className="max-w-2xl">
+      <div className="flex flex-col gap-3">
+        <p className="text-xs font-medium text-danger">Danger zone</p>
+        <p className="text-sm text-muted">
+          Permanently delete <span className="text-text">{orgName}</span> with every link, custom
+          domain, and all click history. Short links stop working immediately.
+        </p>
+        <div>
+          <Button variant="danger" onClick={onDelete}>
+            Delete organization
           </Button>
         </div>
       </div>
@@ -348,36 +350,13 @@ function isOrgOwner(isPlatformAdmin: boolean, role: OrgRole | undefined): boolea
   return isPlatformAdmin || role === "owner";
 }
 
-function OrgSettingsCards({
-  org,
-  orgId,
-  isOwner,
-  register,
-  rename,
-  currentName,
-  isSubmitting,
-}: {
-  org: UserOrg | null;
-  orgId: string;
-  isOwner: boolean;
-  register: ReturnType<typeof useOrgRenameForm>["register"];
-  rename: () => void;
-  currentName: string | undefined;
-  isSubmitting: boolean;
-}) {
-  if (!org) return null;
+/** A titled group of settings cards. */
+function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <>
-      <OrgNameCard
-        orgId={orgId}
-        isOwner={isOwner}
-        register={register}
-        rename={rename}
-        currentName={currentName}
-        isSubmitting={isSubmitting}
-      />
-      <QrDefaultsCard key={org.id} />
-    </>
+    <section className="flex flex-col gap-4">
+      <h2 className="text-sm font-semibold text-muted">{title}</h2>
+      {children}
+    </section>
   );
 }
 
@@ -436,27 +415,34 @@ export function SettingsPage() {
   return (
     <div>
       <PageHeader title="Settings" sub="Account and organization settings" />
-      <div className="flex flex-col gap-4">
-        <AccountCard userName={currentUser.data?.user.name} />
+      <div className="flex flex-col gap-8">
+        <Section title="Your account">
+          <AccountCard
+            userName={currentUser.data?.user.name}
+            userEmail={currentUser.data?.user.email}
+          />
+          <DeleteAccountCard
+            disabled={accountDeleteDisabled}
+            onDelete={() => deleteAccountFlow.setOpen(true)}
+          />
+        </Section>
 
-        {/* org cards only when an org exists; account deletion always */}
-        <OrgSettingsCards
-          org={org}
-          orgId={orgId}
-          isOwner={isOwner}
-          register={register}
-          rename={rename}
-          currentName={currentName}
-          isSubmitting={isSubmitting}
-        />
-
-        <DangerZoneCard
-          org={org}
-          isOwner={isOwner}
-          accountDeleteDisabled={accountDeleteDisabled}
-          onDeleteOrg={() => deleteOrgFlow.setOpen(true)}
-          onDeleteAccount={() => deleteAccountFlow.setOpen(true)}
-        />
+        {org && (
+          <Section title="Organization">
+            <OrgNameCard
+              orgId={orgId}
+              isOwner={isOwner}
+              register={register}
+              rename={rename}
+              currentName={currentName}
+              isSubmitting={isSubmitting}
+            />
+            <QrDefaultsCard key={org.id} />
+            {isOwner && (
+              <DeleteOrgCard orgName={org.name} onDelete={() => deleteOrgFlow.setOpen(true)} />
+            )}
+          </Section>
+        )}
       </div>
 
       {org && <DeleteOrgDialog org={org} flow={deleteOrgFlow} />}

@@ -206,8 +206,6 @@ function AppSidebar({
             </div>
           }
         >
-          <p className="truncate px-2.5 py-1.5 text-xs text-muted">{user.email}</p>
-          <MenuSeparator />
           <MenuItem onClick={() => void navigate({ to: "/settings" })}>
             <Settings size={15} /> Settings
           </MenuItem>
