@@ -41,6 +41,32 @@ test("a new account arrives with an organization and one question", async ({ pag
   await expect(page.getByText("Clicks · 7d")).toBeVisible();
 });
 
+test("typing or pasting anywhere on the dashboard goes into the link field", async ({ page }) => {
+  await signUpAndVerify(page, `typeahead-${Date.now()}@gmail.com`, password);
+
+  const field = page.getByPlaceholder("https://example.com/launch").first();
+  await expect(field).toBeVisible();
+
+  // The hint that this is possible, always on screen.
+  await expect(page.getByText("Paste or start typing anywhere on the page.")).toBeVisible();
+
+  // Move focus off the field, then type: it should catch the keystrokes.
+  await page.getByRole("heading", { name: "Shorten your first link" }).click();
+  await page.keyboard.type("example.com/typed");
+  await expect(field).toHaveValue("example.com/typed");
+  await expect(field).toBeFocused();
+
+  // A paste while the field is not focused fills it without submitting.
+  await page.getByRole("heading", { name: "Shorten your first link" }).click();
+  await page.evaluate(() => {
+    const data = new DataTransfer();
+    data.setData("text", "  https://pasted.example/launch  ");
+    document.dispatchEvent(new ClipboardEvent("paste", { clipboardData: data, bubbles: true }));
+  });
+  await expect(field).toHaveValue("https://pasted.example/launch");
+  await expect(page.getByRole("dialog", { name: "Link created" })).toHaveCount(0);
+});
+
 test("deleting the last organization asks for a new one, not for a first link", async ({
   page,
 }) => {

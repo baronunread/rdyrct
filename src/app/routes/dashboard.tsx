@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { dashboardView } from "./dashboard-view";
 import { valibotResolver } from "@hookform/resolvers/valibot";
@@ -265,12 +265,47 @@ function QuickCreateCard({
   const [picked, setPicked] = useState<string | null | undefined>(undefined);
   const domainId = picked === undefined ? defaultDomainId : picked;
 
-  const { register, handleSubmit, reset, watch } = useForm({
+  const { register, handleSubmit, reset, watch, setValue, setFocus } = useForm({
     resolver: valibotResolver(destinationSchema),
     defaultValues: { destination: "" },
   });
 
   const destination = watch("destination");
+
+  // Type or paste anywhere on the dashboard and it lands in this field:
+  // this screen has one job, so a keystroke is enough to start it.
+  useEffect(() => {
+    const busyElsewhere = () => {
+      const el = document.activeElement;
+      return (
+        el instanceof HTMLElement &&
+        (el.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(el.tagName))
+      );
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.ctrlKey || e.metaKey || e.altKey || e.key.length !== 1 || busyElsewhere()) return;
+      // The browser won't route this keystroke to an input we focus mid-event,
+      // so append it by hand. busyElsewhere() already excluded the field
+      // itself, so there's no double-insert.
+      e.preventDefault();
+      setValue("destination", (watch("destination") ?? "") + e.key, { shouldValidate: true });
+      setFocus("destination");
+    };
+    const onPaste = (e: ClipboardEvent) => {
+      if (busyElsewhere()) return;
+      const text = e.clipboardData?.getData("text")?.trim();
+      if (!text) return;
+      e.preventDefault();
+      setValue("destination", text, { shouldValidate: true });
+      setFocus("destination");
+    };
+    document.addEventListener("keydown", onKeyDown);
+    document.addEventListener("paste", onPaste);
+    return () => {
+      document.removeEventListener("keydown", onKeyDown);
+      document.removeEventListener("paste", onPaste);
+    };
+  }, [setFocus, setValue, watch]);
 
   const submit = handleSubmit(
     (data) => {
@@ -304,8 +339,8 @@ function QuickCreateCard({
             {...register("destination")}
             placeholder="https://example.com/launch"
             aria-label="Destination URL"
-            autoFocus
           />
+          <p className="mt-1 text-xs text-muted">Paste or start typing anywhere on the page.</p>
         </div>
         <QuickCreateDomainSelect
           activeDomains={activeDomains}
