@@ -57,6 +57,15 @@ test("a new owner can create an organization and a scheme-less quick link", asyn
   await page.getByRole("button", { name: "Save", exact: true }).last().click();
   await expect(page.getByText("Organization renamed")).toBeVisible();
 
+  // The theme item in the account menu toggles without closing the menu.
+  const beforeMenuTheme = await rootEl.getAttribute("data-theme");
+  await page.getByRole("button", { name: "Account menu" }).click();
+  const themeItem = page.getByRole("menuitem", { name: /theme$/ });
+  await themeItem.click();
+  await expect(rootEl).not.toHaveAttribute("data-theme", beforeMenuTheme ?? "");
+  await expect(themeItem).toBeVisible();
+  await page.keyboard.press("Escape");
+
   const signOutUrl = "**/api/auth/sign-out";
   await page.route(signOutUrl, async (route) => {
     await route.fulfill({

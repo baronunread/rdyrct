@@ -3,7 +3,7 @@ import { errorMessage } from "@/app/lib/error-message";
 import { Link, Outlet, useNavigate } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, LazyMotion, domAnimation, m } from "motion/react";
-import { Layers, ChevronsUpDown, Plus, Check, LogOut } from "@/app/ui/icons";
+import { Layers, ChevronsUpDown, Plus, Check, LogOut, Settings } from "@/app/ui/icons";
 import { MorphIcon } from "morphicons/react";
 import { menu2, moon, sun, x } from "@/app/ui/icon-nodes";
 import { useCurrentUser, useLogout, useShellUser } from "../lib/hooks";
@@ -208,8 +208,10 @@ function AppSidebar({
         >
           <p className="truncate px-2.5 py-1.5 text-xs text-muted">{user.email}</p>
           <MenuSeparator />
-          <MenuItem onClick={() => void navigate({ to: "/settings" })}>Settings</MenuItem>
-          <MenuItem onClick={onToggleTheme}>
+          <MenuItem onClick={() => void navigate({ to: "/settings" })}>
+            <Settings size={15} /> Settings
+          </MenuItem>
+          <MenuItem closeOnClick={false} onClick={onToggleTheme}>
             <MorphIcon icon={theme === "dark" ? sun : moon} size={15} spring="snappy" />
             {theme === "dark" ? "Light theme" : "Dark theme"}
           </MenuItem>
