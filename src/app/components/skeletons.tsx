@@ -525,8 +525,12 @@ export function SettingsSkeleton() {
                 <div className="flex min-w-0 flex-1 flex-col gap-4">
                   {[0, 1].map((i) => (
                     <div key={i}>
-                      <Skeleton className="h-2.5 w-24" />
-                      <Skeleton className="mt-2 h-9 w-full" />
+                      {/* label line box: text-xs (16px) + mb-1.5, so the swap
+                          to a real Field doesn't nudge the card */}
+                      <span className="mb-1.5 flex h-4 items-center">
+                        <Skeleton className="h-2.5 w-24" />
+                      </span>
+                      <Skeleton className="h-9 w-full" />
                     </div>
                   ))}
                 </div>
@@ -536,8 +540,13 @@ export function SettingsSkeleton() {
             </div>
             <div className="flex items-center justify-between gap-4 border-t border-border pt-5">
               <div>
-                <Skeleton className="h-3.5 w-20" />
-                <Skeleton className="mt-2 h-3 w-56 max-w-full" />
+                {/* text-sm (20px) over text-xs (16px), matched line for line */}
+                <span className="flex h-5 items-center">
+                  <Skeleton className="h-3 w-20" />
+                </span>
+                <span className="flex h-4 items-center">
+                  <Skeleton className="h-2.5 w-56 max-w-full" />
+                </span>
               </div>
               <Skeleton className="h-5 w-9 shrink-0 rounded-full" />
             </div>
