@@ -71,21 +71,22 @@ function AccountCard({ user }: { user: User | undefined }) {
   return (
     <Card className="max-w-2xl">
       <div className="flex flex-col gap-6">
-        <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:gap-6">
-          {user && <AvatarInput user={user} />}
-          <div className="flex min-w-0 flex-1 flex-col gap-4">
-            <Field label="Your name">
-              <Input {...register("name")} />
-            </Field>
-            <div>
-              <p className="mb-1 text-xs text-muted">Email</p>
-              <p className="truncate font-mono text-sm text-text">{user?.email}</p>
+        <div className="flex flex-col gap-4">
+          <div className="flex flex-col-reverse gap-5 sm:flex-row sm:items-start sm:gap-6">
+            <div className="flex min-w-0 flex-1 flex-col gap-4">
+              <Field label="Your name">
+                <Input {...register("name")} />
+              </Field>
+              <Field label="Email">
+                <Input value={user?.email ?? ""} disabled readOnly className="font-mono text-xs" />
+              </Field>
             </div>
-            <div>
-              <Button variant="primary" onClick={save} disabled={nameUnchanged || isSubmitting}>
-                <BusyContent busy={isSubmitting}>Save</BusyContent>
-              </Button>
-            </div>
+            {user && <AvatarInput user={user} />}
+          </div>
+          <div>
+            <Button variant="primary" onClick={save} disabled={nameUnchanged || isSubmitting}>
+              <BusyContent busy={isSubmitting}>Save</BusyContent>
+            </Button>
           </div>
         </div>
 
