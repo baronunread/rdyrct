@@ -17,14 +17,11 @@ type State = { crashed: boolean; chunkError: boolean };
  * It is recoverable by reloading onto the current build, so we prompt a reload
  * rather than render the crash page.
  */
-function isChunkLoadError(error: unknown): boolean {
-  if (!(error instanceof Error) || !error.message) return false;
-  return (
-    /failed to fetch dynamically imported module/i.test(error.message) ||
-    /importing a module script failed/i.test(error.message) ||
-    /error loading dynamically imported module/i.test(error.message) ||
-    /failed to load a dynamic application chunk/i.test(error.message)
-  );
+const CHUNK_LOAD_ERROR =
+  /failed to fetch dynamically imported module|importing a module script failed|error loading dynamically imported module|failed to load a dynamic application chunk/i;
+
+function isChunkLoadError(error: Error): boolean {
+  return CHUNK_LOAD_ERROR.test(error.message);
 }
 
 /**
