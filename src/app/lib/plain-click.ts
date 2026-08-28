@@ -3,8 +3,6 @@
  * take over, rather than one the browser keeps for itself (new tab, new
  * window, download) or one something else has already dealt with.
  */
-const MODIFIER_KEYS = ["metaKey", "ctrlKey", "shiftKey", "altKey"] as const;
-
 export function isPlainLeftClick(event: {
   defaultPrevented: boolean;
   button: number;
@@ -13,6 +11,6 @@ export function isPlainLeftClick(event: {
   shiftKey: boolean;
   altKey: boolean;
 }) {
-  const modified = MODIFIER_KEYS.some((key) => event[key]);
+  const modified = event.metaKey || event.ctrlKey || event.shiftKey || event.altKey;
   return !event.defaultPrevented && event.button === 0 && !modified;
 }
