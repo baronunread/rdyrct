@@ -44,40 +44,46 @@ function sniff(b: Uint8Array): ImageType | null {
   return null;
 }
 
-/** Read pixel dimensions from the header, without decoding the image. Returns
- * null when the header is unrecognised or truncated. */
-function dimensions(b: Uint8Array, type: ImageType): [number, number] | null {
-  const dv = new DataView(b.buffer, b.byteOffset, b.byteLength);
-  if (type === "image/png") {
-    // IHDR is the first chunk: 8-byte sig, 4-byte length, "IHDR", W, H (BE).
-    return b.length >= 24 ? [dv.getUint32(16), dv.getUint32(20)] : null;
+type Size = [number, number] | null;
+
+/** PNG: W, H (BE uint32) right after the 8-byte sig, 4-byte length and "IHDR". */
+function pngSize(b: Uint8Array, dv: DataView): Size {
+  return b.length >= 24 ? [dv.getUint32(16), dv.getUint32(20)] : null;
+}
+
+/** JPEG: walk the marker segments to the first SOF, which carries H then W (BE). */
+function jpegSize(b: Uint8Array, dv: DataView): Size {
+  for (let i = 2; i + 9 < b.length && b[i] === 0xff; i += 2 + dv.getUint16(i + 2)) {
+    const m = b[i + 1];
+    const isSof = m >= 0xc0 && m <= 0xcf && m !== 0xc4 && m !== 0xc8 && m !== 0xcc;
+    if (isSof) return [dv.getUint16(i + 7), dv.getUint16(i + 5)];
   }
-  if (type === "image/jpeg") {
-    let i = 2;
-    while (i + 9 < b.length && b[i] === 0xff) {
-      const marker = b[i + 1];
-      // SOF0..SOF15, minus the non-frame markers, carry H then W (BE).
-      if (marker >= 0xc0 && marker <= 0xcf && ![0xc4, 0xc8, 0xcc].includes(marker))
-        return [dv.getUint16(i + 7), dv.getUint16(i + 5)];
-      i += 2 + dv.getUint16(i + 2);
-    }
-    return null;
-  }
-  // WebP: the fourcc after "WEBP" says which sub-format, each stores size
-  // differently. 30 bytes covers the header of all three.
+  return null;
+}
+
+/** WebP: the fourcc after "WEBP" picks one of three size encodings. */
+function webpSize(b: Uint8Array, dv: DataView): Size {
   if (b.length < 30) return null;
-  const fourcc = String.fromCharCode(...b.slice(12, 16));
-  if (fourcc === "VP8 " && b[23] === 0x9d && b[24] === 0x01 && b[25] === 0x2a)
+  const cc = String.fromCharCode(...b.slice(12, 16));
+  if (cc === "VP8 " && b[23] === 0x9d && b[24] === 0x01 && b[25] === 0x2a)
     return [dv.getUint16(26, true) & 0x3fff, dv.getUint16(28, true) & 0x3fff];
-  if (fourcc === "VP8L" && b[20] === 0x2f) {
+  if (cc === "VP8L" && b[20] === 0x2f) {
     const bits = dv.getUint32(21, true);
     return [1 + (bits & 0x3fff), 1 + ((bits >> 14) & 0x3fff)];
   }
-  if (fourcc === "VP8X") {
+  if (cc === "VP8X") {
     const u24 = (o: number) => b[o] | (b[o + 1] << 8) | (b[o + 2] << 16);
     return [1 + u24(24), 1 + u24(27)];
   }
   return null;
+}
+
+/** Pixel dimensions from the header, without decoding. Null when unreadable. */
+function dimensions(b: Uint8Array, type: ImageType): Size {
+  const dv = new DataView(b.buffer, b.byteOffset, b.byteLength);
+  if (type === "image/png") return pngSize(b, dv);
+  if (type === "image/jpeg") return jpegSize(b, dv);
+  return webpSize(b, dv);
 }
 
 avatarRoutes.post("/", async (c) => {
