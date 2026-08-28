@@ -345,7 +345,7 @@ export async function deleteR2Prefix(env: Env, prefix: string): Promise<void> {
 
 /* ---------------- user avatars ---------------- */
 
-export const AVATAR_MAX_BYTES = 2 * 1024 * 1024;
+const AVATAR_MAX_BYTES = 2 * 1024 * 1024;
 export const AVATAR_PREFIX = "avatars/";
 const AVATAR_SERVING_PATH = "/api/user/avatar";
 
@@ -354,6 +354,27 @@ const AVATAR_SERVING_PATH = "/api/user/avatar";
  * extension or a secret. */
 export function avatarUrl(): string {
   return AVATAR_SERVING_PATH;
+}
+
+function tryUrl(value: string): URL | null {
+  try {
+    return new URL(value);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Whether a profile-picture URL may be fetched: one of Google's avatar hosts
+ * over https, or the local emulator's host in dev (which serves over http, so
+ * the protocol check is relaxed for it).
+ */
+function avatarHostAllowed(url: URL, env: Env): boolean {
+  const googleHost = /^lh[0-9a-z.-]*\.googleusercontent\.com$/i;
+  const emulatorUrl = env.GOOGLE_EMULATOR_URL ? tryUrl(env.GOOGLE_EMULATOR_URL) : null;
+  const isEmulator = emulatorUrl !== null && url.host === emulatorUrl.host;
+  if (!isEmulator && url.protocol !== "https:") return false;
+  return googleHost.test(url.hostname) || isEmulator;
 }
 
 /**
@@ -370,27 +391,8 @@ export async function storeUserAvatar(
   pictureUrl: string | null | undefined,
 ): Promise<string | null> {
   if (!pictureUrl) return null;
-  let url: URL;
-  try {
-    url = new URL(pictureUrl);
-  } catch {
-    return null;
-  }
-  // Only Google's avatar hosts, or the local emulator's host in dev (which
-  // serves over http, so the protocol check is relaxed for it).
-  const googleHost = /^lh[0-9a-z.-]*\.googleusercontent\.com$/i;
-  const emulatorHost = env.GOOGLE_EMULATOR_URL
-    ? (() => {
-        try {
-          return new URL(env.GOOGLE_EMULATOR_URL).host;
-        } catch {
-          return "";
-        }
-      })()
-    : "";
-  const isEmulator = Boolean(emulatorHost) && url.host === emulatorHost;
-  if (!isEmulator && url.protocol !== "https:") return null;
-  if (!(googleHost.test(url.hostname) || isEmulator)) return null;
+  const url = tryUrl(pictureUrl);
+  if (!url || !avatarHostAllowed(url, env)) return null;
 
   let resp: Response;
   try {
