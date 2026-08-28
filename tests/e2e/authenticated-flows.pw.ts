@@ -49,7 +49,7 @@ test("a new owner can create an organization and a scheme-less quick link", asyn
   );
   const rootEl = page.locator("html");
   const themeBefore = await rootEl.getAttribute("data-theme");
-  await page.getByRole("button", { name: /^Switch to (dark|light)$/ }).click();
+  await page.getByRole("switch", { name: "Dark mode" }).click();
   await expect(rootEl).not.toHaveAttribute("data-theme", themeBefore ?? "");
 
   const organizationName = page.getByLabel("Organization name");

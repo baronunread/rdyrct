@@ -10,6 +10,7 @@ import type { OrgRole, UserOrg } from "@/shared/types";
 import { authClient } from "../lib/auth-client";
 import { Button } from "../ui/button";
 import { Field, Input } from "../ui/field";
+import { Switch } from "../ui/switch";
 import { Card, PageHeader } from "../ui/misc";
 import { BusyContent } from "../ui/spinner";
 import { useToast } from "../ui/toast";
@@ -90,13 +91,12 @@ function AccountCard({ userName }: { userName: string | undefined }) {
         </div>
         <div className="border-t border-border" />
         <div className="flex items-center justify-between gap-4">
-          <div>
-            <p className="text-sm">Theme</p>
-            <p className="text-xs text-muted">Currently {theme === "dark" ? "dark" : "light"}.</p>
-          </div>
-          <Button variant="outline" onClick={toggleTheme}>
-            Switch to {theme === "dark" ? "light" : "dark"}
-          </Button>
+          <p className="text-sm">Dark mode</p>
+          <Switch
+            label="Dark mode"
+            checked={theme === "dark"}
+            onCheckedChange={(on) => on !== (theme === "dark") && toggleTheme()}
+          />
         </div>
       </div>
     </Card>
