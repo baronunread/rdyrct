@@ -59,7 +59,7 @@ function failingKv(): KVNamespace {
 }
 
 function failingR2(): R2Bucket {
-  return overriding(env.QR_LOGOS, {
+  return overriding(env.MEDIA, {
     delete: async () => {
       throw new Error("injected R2 failure");
     },
@@ -140,20 +140,20 @@ describe("storage queue: consumer retry", () => {
   });
 
   it("retries an R2 delete under outage, then applies it", async () => {
-    await env.QR_LOGOS.put("org-1/logo.webp", "logo");
+    await env.MEDIA.put("org-1/logo.webp", "logo");
     const message = deleteQrLogoMsg("/api/orgs/org-1/qr-logo/logo.webp")!;
 
     const down = batchOf("rdyrct-storage", [message]);
-    await consumeStorageBatch(overrideEnv({ QR_LOGOS: failingR2() }), down.batch);
+    await consumeStorageBatch(overrideEnv({ MEDIA: failingR2() }), down.batch);
     const failed = await getQueueResult(down.batch, down.ctx);
     expect(failed.retryMessages).toHaveLength(1);
-    expect(await env.QR_LOGOS.head("org-1/logo.webp")).not.toBeNull();
+    expect(await env.MEDIA.head("org-1/logo.webp")).not.toBeNull();
 
     const up = batchOf("rdyrct-storage", [message]);
     await consumeStorageBatch(testEnv, up.batch);
     const succeeded = await getQueueResult(up.batch, up.ctx);
     expect(succeeded.explicitAcks).toHaveLength(1);
-    expect(await env.QR_LOGOS.head("org-1/logo.webp")).toBeNull();
+    expect(await env.MEDIA.head("org-1/logo.webp")).toBeNull();
   });
 });
 
@@ -203,7 +203,7 @@ describe("org teardown steps under secondary-store outage", () => {
   it("removes the org from D1 and keeps cleanup durable across an outage", async () => {
     const db = await seedLink();
     await env.LINKS.put("slug:sale", "stale");
-    await env.QR_LOGOS.put("org-1/logo.webp", "logo");
+    await env.MEDIA.put("org-1/logo.webp", "logo");
 
     // Step 1: gather while the org still exists.
     const gathered = await orgDeleteGather(db, "org-1");
@@ -218,17 +218,17 @@ describe("org teardown steps under secondary-store outage", () => {
     await expect(
       deleteKvKeys(overrideEnv({ LINKS: failingKv() }), gathered.kvKeys),
     ).rejects.toThrow("injected KV failure");
-    await expect(deleteR2Prefix(overrideEnv({ QR_LOGOS: failingR2() }), "org-1/")).rejects.toThrow(
+    await expect(deleteR2Prefix(overrideEnv({ MEDIA: failingR2() }), "org-1/")).rejects.toThrow(
       "injected R2 failure",
     );
     expect(await env.LINKS.get("slug:sale")).not.toBeNull();
-    expect(await env.QR_LOGOS.head("org-1/logo.webp")).not.toBeNull();
+    expect(await env.MEDIA.head("org-1/logo.webp")).not.toBeNull();
 
     // Once the stores recover the steps complete and are idempotent.
     await deleteKvKeys(testEnv, gathered.kvKeys);
     await deleteR2Prefix(testEnv, "org-1/");
     expect(await env.LINKS.get("slug:sale")).toBeNull();
-    expect(await env.QR_LOGOS.head("org-1/logo.webp")).toBeNull();
+    expect(await env.MEDIA.head("org-1/logo.webp")).toBeNull();
   });
 });
 
@@ -261,15 +261,15 @@ describe("sweepOrphanQrLogos (#49)", () => {
    * period. R2's `uploaded` is set by the store, so an old object is faked by
    * overriding list() rather than by waiting a day. */
   async function putLogo(key: string) {
-    await env.QR_LOGOS.put(key, new Uint8Array([1, 2, 3]));
+    await env.MEDIA.put(key, new Uint8Array([1, 2, 3]));
   }
 
   /** The sweep only looks at objects older than the grace period, so run it
    * against an R2 whose listing reports every object as a day and a half old. */
   function agedEnv(): Env {
-    const real = env.QR_LOGOS;
+    const real = env.MEDIA;
     const uploaded = new Date(Date.now() - 1.5 * DAY_MS);
-    const QR_LOGOS = overriding(real, {
+    const MEDIA = overriding(real, {
       list: async (options?: R2ListOptions) => {
         const page = await real.list(options);
         return overriding(page, {
@@ -277,11 +277,11 @@ describe("sweepOrphanQrLogos (#49)", () => {
         });
       },
     });
-    return overrideEnv({ QR_LOGOS });
+    return overrideEnv({ MEDIA });
   }
 
   async function keysInBucket() {
-    return (await env.QR_LOGOS.list()).objects.map((o) => o.key).sort();
+    return (await env.MEDIA.list()).objects.map((o) => o.key).sort();
   }
 
   it("deletes an object no row points at, and keeps the one a link uses", async () => {

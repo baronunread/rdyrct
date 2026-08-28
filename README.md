@@ -108,7 +108,7 @@ Prefer the manual path, or need to redeploy after the button above? Create the r
 ```sh
 bunx wrangler kv namespace create LINKS
 bunx wrangler d1 create rdyrct
-bunx wrangler r2 bucket create rdyrct-qr-logos
+bunx wrangler r2 bucket create rdyrct-media
 ```
 
 Paste the returned ids into `wrangler.jsonc`:

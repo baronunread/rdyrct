@@ -337,10 +337,94 @@ async function kvSync(env: Env, db: DB, key: string): Promise<void> {
 /** Delete every R2 object under a prefix, one page at a time. */
 export async function deleteR2Prefix(env: Env, prefix: string): Promise<void> {
   for (;;) {
-    const page = await env.QR_LOGOS.list({ prefix, limit: R2_LIST_LIMIT });
+    const page = await env.MEDIA.list({ prefix, limit: R2_LIST_LIMIT });
     if (!page.objects.length) return;
-    await env.QR_LOGOS.delete(page.objects.map((object) => object.key));
+    await env.MEDIA.delete(page.objects.map((object) => object.key));
   }
+}
+
+/* ---------------- user avatars ---------------- */
+
+const AVATAR_MAX_BYTES = 2 * 1024 * 1024;
+export const AVATAR_PREFIX = "avatars/";
+const AVATAR_SERVING_PATH = "/api/user/avatar";
+
+/** The serving URL stored in `user.image`. Same for every user: the route
+ * reads the object keyed by the session user, so the URL never embeds an
+ * extension or a secret. */
+export function avatarUrl(): string {
+  return AVATAR_SERVING_PATH;
+}
+
+function tryUrl(value: string): URL | null {
+  try {
+    return new URL(value);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Whether a profile-picture URL may be fetched: one of Google's avatar hosts
+ * over https, or the local emulator's host in dev (which serves over http, so
+ * the protocol check is relaxed for it).
+ */
+function avatarHostAllowed(url: URL, env: Env): boolean {
+  const googleHost = /^lh[0-9a-z.-]*\.googleusercontent\.com$/i;
+  const emulatorUrl = env.GOOGLE_EMULATOR_URL ? tryUrl(env.GOOGLE_EMULATOR_URL) : null;
+  const isEmulator = emulatorUrl !== null && url.host === emulatorUrl.host;
+  if (!isEmulator && url.protocol !== "https:") return false;
+  return googleHost.test(url.hostname) || isEmulator;
+}
+
+/**
+ * Download a Google profile picture to R2 and return its serving URL.
+ *
+ * Runs at Google link/re-login time (see better-auth.ts). Only Google's hosts
+ * are accepted, and only raster JPEG/PNG (SVG is a script surface). A picture
+ * that fails any check is skipped rather than throwing, so a bad profile can
+ * never break sign-in. Returns null when nothing was stored.
+ */
+export async function storeUserAvatar(
+  env: Env,
+  userId: string,
+  pictureUrl: string | null | undefined,
+): Promise<string | null> {
+  if (!pictureUrl) return null;
+  const url = tryUrl(pictureUrl);
+  if (!url || !avatarHostAllowed(url, env)) return null;
+
+  let resp: Response;
+  try {
+    resp = await fetch(pictureUrl);
+  } catch {
+    // A failed download must never break sign-in; the blobatar stays.
+    return null;
+  }
+  if (!resp.ok) return null;
+  const type = (resp.headers.get("content-type") ?? "").split(";")[0].trim().toLowerCase();
+  if (type !== "image/jpeg" && type !== "image/png") return null;
+  let body: ArrayBuffer;
+  try {
+    body = await resp.arrayBuffer();
+  } catch {
+    return null;
+  }
+  if (body.byteLength === 0 || body.byteLength > AVATAR_MAX_BYTES) return null;
+
+  try {
+    const key = `${AVATAR_PREFIX}${userId}`;
+    await env.MEDIA.put(key, body, { httpMetadata: { contentType: type } });
+  } catch {
+    return null;
+  }
+  return avatarUrl();
+}
+
+/** Remove a user's avatar bytes (called on account deletion). */
+export async function deleteUserAvatar(env: Env, userId: string): Promise<void> {
+  await env.MEDIA.delete(`${AVATAR_PREFIX}${userId}`);
+  await enqueueStorage(env, [{ op: "r2_delete_prefix", prefix: `${AVATAR_PREFIX}${userId}` }]);
 }
 
 /**
@@ -388,12 +472,16 @@ export async function sweepOrphanQrLogos(env: Env): Promise<number> {
   let cursor: string | undefined;
   let deleted = 0;
   for (;;) {
-    const page = await env.QR_LOGOS.list({ cursor, limit: R2_LIST_LIMIT });
+    const page = await env.MEDIA.list({ cursor, limit: R2_LIST_LIMIT });
     const orphans = page.objects.flatMap((object) =>
-      object.uploaded.getTime() < cutoff && !referenced.has(object.key) ? [object.key] : [],
+      object.uploaded.getTime() < cutoff &&
+      !referenced.has(object.key) &&
+      !object.key.startsWith(AVATAR_PREFIX)
+        ? [object.key]
+        : [],
     );
     if (orphans.length) {
-      await env.QR_LOGOS.delete(orphans);
+      await env.MEDIA.delete(orphans);
       deleted += orphans.length;
     }
     if (!page.truncated) return deleted;
@@ -415,7 +503,7 @@ export async function applyStorageMessage(
       await kvSync(env, db, message.key);
       return;
     case "r2_delete":
-      await env.QR_LOGOS.delete(message.key);
+      await env.MEDIA.delete(message.key);
       return;
     case "r2_delete_prefix":
       await deleteR2Prefix(env, message.prefix);

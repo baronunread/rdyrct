@@ -100,5 +100,8 @@ userRoutes.get("/user", requireUser, async (c) => {
 userRoutes.get("/config", (c) => {
   const log = c.get("log");
   log.set({ route: "config" });
-  return c.json({ appHost: c.env.APP_HOST } satisfies AppConfig);
+  return c.json({
+    appHost: c.env.APP_HOST,
+    googleEnabled: Boolean(c.env.GOOGLE_CLIENT_ID && c.env.GOOGLE_CLIENT_SECRET),
+  } satisfies AppConfig);
 });

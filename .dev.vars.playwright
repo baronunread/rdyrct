@@ -24,3 +24,8 @@ CF_DEV_ENV=instant
 # wrangler prefer it, so a secret only in .dev.vars leaves every e2e signup
 # running the disabled path while looking like it covers the real one.
 CAP_SECRET=playwright-only-cap-secret-32-chars-min
+
+# Google sign-in (emulate.dev OAuth emulator) for the browser suite.
+GOOGLE_CLIENT_ID=emulate-dev-google-client-id
+GOOGLE_CLIENT_SECRET=emulate-dev-google-client-secret
+GOOGLE_EMULATOR_URL=https://www.emulate.dev/mock/oauth2

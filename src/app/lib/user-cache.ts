@@ -35,6 +35,7 @@ const userSchema = v.object({
   polarSubscriptionCurrentPeriodEnd: v.nullable(v.number()),
   hasBillingAccount: v.boolean(),
   comped: v.boolean(),
+  image: v.nullable(v.string()),
 });
 
 const orgSchema = v.object({

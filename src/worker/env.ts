@@ -8,7 +8,7 @@ import type { AuditableLogger } from "evlog";
 export interface Env {
   DB: D1Database;
   LINKS: KVNamespace;
-  QR_LOGOS: R2Bucket;
+  MEDIA: R2Bucket;
   ASSETS: Fetcher;
 
   /* storage recovery: KV/R2 follow-up work and the org-teardown workflow */
@@ -38,9 +38,15 @@ export interface Env {
   BETTER_AUTH_SECRET: string;
   SUPERADMIN_EMAIL: string;
   RESEND_API_KEY: string;
-  MAIL_FROM: string; // var, e.g. "rdyrct <no-reply@mail.rdyrct.com>"
+  MAIL_FROM: string; // var, e.g. "me <no-reply@mail.rdyrct.com>"
   APP_URL: string; // var, e.g. "https://rdyrct.com"; SPA/API origin
   RESEND_BASE_URL?: string; // var; dev points at the emulate.dev Resend emulator
+
+  /* Google OAuth (generic OAuth2 provider). clientSecret is a secret; the
+     emulator URL is a var and only set in dev to redirect the flow at emulate. */
+  GOOGLE_CLIENT_ID?: string;
+  GOOGLE_CLIENT_SECRET?: string;
+  GOOGLE_EMULATOR_URL?: string;
 
   /* billing (Polar) */
   POLAR_ACCESS_TOKEN: string;
@@ -81,6 +87,8 @@ export interface SessionUser {
   plan: "free" | "hobby" | "pro";
   polarSubscriptionCancelAtPeriodEnd: boolean;
   polarSubscriptionCurrentPeriodEnd: number | null;
+  /** Same-origin serving URL for the user's avatar, or null (blobatar). */
+  image: string | null;
 }
 
 export type Vars = {

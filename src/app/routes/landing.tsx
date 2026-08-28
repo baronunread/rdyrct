@@ -631,8 +631,8 @@ const resources = [
   },
   {
     name: "R2",
-    id: "rdyrct-qr-logos",
-    desc: "QR logo images, uploaded and served through the Worker.",
+    id: "rdyrct-media",
+    desc: "User-supplied images (QR logos, avatars), uploaded and served through the Worker.",
   },
   {
     name: "Worker",

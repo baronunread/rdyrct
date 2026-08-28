@@ -813,6 +813,7 @@ async function assertMember(
       plan: "free",
       polarSubscriptionCancelAtPeriodEnd: false,
       polarSubscriptionCurrentPeriodEnd: null,
+      image: null,
     },
     orgId,
   );

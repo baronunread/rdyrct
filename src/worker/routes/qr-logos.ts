@@ -92,7 +92,7 @@ qrLogoRoutes.post("/", requireOrgRole("member"), async (c) => {
   const file = `${uid()}.${ext}`;
   const orgId = c.req.param("orgId")!;
   const key = `${orgId}/${file}`;
-  const stored = await putQrLogoIfOrgWritable(c.var.db, c.env.QR_LOGOS, orgId, key, body, type);
+  const stored = await putQrLogoIfOrgWritable(c.var.db, c.env.MEDIA, orgId, key, body, type);
   if (!stored) throw new HTTPException(409, { message: "Organization is being deleted" });
   return c.json({ url: qrLogoUrl(orgId, file) }, 201);
 });
@@ -113,7 +113,7 @@ qrLogoRoutes.get("/:file", async (c) => {
   const role = await orgRole(c.var.db, user, orgId);
   if (!role) throw new HTTPException(404, { message: "Not found" });
 
-  const obj = await c.env.QR_LOGOS.get(`${orgId}/${file}`);
+  const obj = await c.env.MEDIA.get(`${orgId}/${file}`);
   if (!obj) throw new HTTPException(404, { message: "Not found" });
   const headers = new Headers();
   obj.writeHttpMetadata(headers);
