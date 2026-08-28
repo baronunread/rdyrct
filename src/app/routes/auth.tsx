@@ -510,7 +510,10 @@ interface VerifyDeps {
  * hand. Returns false when it already handled navigation itself. */
 async function establishSessionAfterVerify(deps: VerifyDeps): Promise<boolean> {
   const sess = await authClient.getSession();
-  if (sess?.data) return true;
+  if (sess?.data) {
+    setLastAuth("password", deps.authEmail);
+    return true;
+  }
   if (!deps.authPassword) {
     clearPending();
     deps.toast("Email verified. Sign in to continue.");
@@ -525,6 +528,7 @@ async function establishSessionAfterVerify(deps: VerifyDeps): Promise<boolean> {
     deps.toast(friendlyAuthError(signInError), "error");
     return false;
   }
+  setLastAuth("password", deps.authEmail);
   return true;
 }
 
