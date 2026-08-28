@@ -211,22 +211,18 @@ const AUTH_MODE_COPY = {
 };
 
 /**
- * One line under "Create an account", saying what happens next.
- *
- * The card used to render identically whether somebody arrived cold, clicked
- * "Start Pro", or clicked "Keep this link" with a link waiting to be claimed:
- * every reassurance the landing page built was dropped at the door. It also
- * never mentioned the emailed code, which is the step people abandon.
- *
- * Nothing under "Sign in". Somebody who already has an account does not need
- * to be sold the plan.
+ * One line under "Create an account", only when the visitor arrived with
+ * context to carry through: a link waiting to be claimed, or a checkout
+ * they were mid-way into. A cold visitor gets nothing, and neither does
+ * "Sign in": somebody who already has an account does not need a pitch.
  */
 function SignupSubtitle({ next }: { next: string }) {
   const body = storedAnonLinks().length
     ? "Your link is waiting. Sign up and it becomes permanent, with the clicks it earns."
     : next.startsWith("/billing")
       ? "Create your account, then check out. No card needed to create the account."
-      : "Free plan, no credit card. We'll email you a 6-digit code to confirm your address.";
+      : null;
+  if (!body) return null;
   return <p className="-mt-2 text-xs text-muted">{body}</p>;
 }
 
@@ -331,6 +327,28 @@ function AuthFormView({
       >
         <h1 className="font-bold">{copy.title}</h1>
         {mode === "signup" && <SignupSubtitle next={next} />}
+        {config.data?.googleEnabled && (
+          <>
+            <button
+              type="button"
+              onClick={startGoogle}
+              className="flex items-center justify-center gap-2 rounded-lg border border-border bg-surface py-2.5 text-sm font-medium transition-colors hover:bg-surface-2"
+            >
+              <GoogleG />
+              Continue with Google
+              {googleLastUsed && (
+                <Badge color="accent" className="ml-1">
+                  Last used
+                </Badge>
+              )}
+            </button>
+            <div className="flex items-center gap-3 text-xs text-muted">
+              <span className="h-px flex-1 bg-border" />
+              or
+              <span className="h-px flex-1 bg-border" />
+            </div>
+          </>
+        )}
         <Field label="Email">
           <Input type="email" {...register("email")} required autoComplete="email" />
         </Field>
@@ -360,28 +378,6 @@ function AuthFormView({
         >
           <BusyContent busy={busy}>{copy.submitLabel}</BusyContent>
         </Button>
-        {config.data?.googleEnabled && (
-          <>
-            <div className="flex items-center gap-3 text-xs text-muted">
-              <span className="h-px flex-1 bg-border" />
-              or
-              <span className="h-px flex-1 bg-border" />
-            </div>
-            <button
-              type="button"
-              onClick={startGoogle}
-              className="flex items-center justify-center gap-2 rounded-lg border border-border bg-surface py-2.5 text-sm font-medium transition-colors hover:bg-surface-2"
-            >
-              <GoogleG />
-              Continue with Google
-              {googleLastUsed && (
-                <Badge color="accent" className="ml-1">
-                  Last used
-                </Badge>
-              )}
-            </button>
-          </>
-        )}
         <p className="text-center text-xs text-muted">
           {copy.footerPrompt}{" "}
           <HrefLink href={`${copy.footerTo}?next=${encodeURIComponent(next)}`}>
