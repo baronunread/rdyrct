@@ -255,7 +255,7 @@ function GoogleEntry({ email, onClick }: { email?: string; onClick: () => void }
       <button
         type="button"
         onClick={onClick}
-        className="flex items-center justify-center gap-2 rounded-lg border border-border bg-surface py-2.5 text-sm font-medium transition-colors hover:bg-surface-2"
+        className="flex cursor-pointer items-center justify-center gap-2 rounded-lg border border-border bg-surface py-2.5 text-sm font-medium transition-colors hover:bg-surface-2"
       >
         <GoogleG />
         Continue with Google
@@ -267,7 +267,7 @@ function GoogleEntry({ email, onClick }: { email?: string; onClick: () => void }
       type="button"
       onClick={onClick}
       aria-label={`Continue as ${email}`}
-      className="flex items-center gap-3 rounded-lg border border-border bg-surface px-3 py-2.5 text-sm transition-colors hover:bg-surface-2"
+      className="flex cursor-pointer items-center gap-3 rounded-lg border border-border bg-surface px-3 py-2.5 text-sm transition-colors hover:bg-surface-2"
     >
       <GoogleG />
       <span className="min-w-0 flex-1 truncate text-left font-medium">{email}</span>
