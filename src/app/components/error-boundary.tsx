@@ -1,7 +1,7 @@
 import { Component, type ErrorInfo, type ReactNode } from "react";
 import posthog from "../lib/posthog";
 import { captureClientException } from "../lib/sentry";
-import { signalNewVersionAvailable } from "../lib/new-version";
+import { reloadForNewVersion } from "../lib/new-version";
 
 type Props = {
   children: ReactNode;
@@ -41,11 +41,13 @@ export class ErrorBoundary extends Component<Props, State> {
 
   componentDidCatch(error: Error, info: ErrorInfo) {
     if (isChunkLoadError(error)) {
-      // A stale tab after a deploy: surface the "new version available"
-      // banner and let the visitor reload. The app can't render the failed
-      // chunk, so we stay blank behind the banner rather than flash the
-      // crash notice.
-      signalNewVersionAvailable();
+      // A stale tab after a deploy. The route the visitor navigated to can't
+      // render, so reload onto the current build: that fixes it and lands
+      // them where they were going. `reloadForNewVersion` returns false if
+      // we already reloaded once this session and the chunk is still
+      // failing (a broken deploy), in which case we fall through to the
+      // notice below rather than loop.
+      if (reloadForNewVersion()) return;
       return;
     }
     posthog.captureException(error, { componentStack: info.componentStack });
@@ -55,19 +57,20 @@ export class ErrorBoundary extends Component<Props, State> {
   render() {
     if (!this.state.crashed) return this.props.children;
     if (this.props.fallback !== undefined) return this.props.fallback;
-    // A chunk-load failure renders blank behind the banner; everything else
-    // gets the crash notice.
-    if (this.state.chunkError) return null;
-    return <FullPageError />;
+    return <FullPageError chunk={this.state.chunkError} />;
   }
 }
 
-function FullPageError() {
+function FullPageError({ chunk }: { chunk?: boolean }) {
   return (
     <div className="grid min-h-screen place-items-center bg-bg px-6 text-center">
       <div className="flex max-w-md flex-col items-center gap-4">
-        <h1 className="text-lg font-bold">Something broke on this page.</h1>
-        <p className="text-sm text-muted">Reload to try again.</p>
+        <h1 className="text-lg font-bold">
+          {chunk ? "A new version is available." : "Something broke on this page."}
+        </h1>
+        <p className="text-sm text-muted">
+          {chunk ? "Reload to get the latest version." : "Reload to try again."}
+        </p>
         <button
           type="button"
           onClick={() => window.location.reload()}
