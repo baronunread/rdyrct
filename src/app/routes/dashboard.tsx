@@ -265,7 +265,7 @@ function QuickCreateCard({
   const [picked, setPicked] = useState<string | null | undefined>(undefined);
   const domainId = picked === undefined ? defaultDomainId : picked;
 
-  const { register, handleSubmit, reset, watch, setValue, setFocus } = useForm({
+  const { register, handleSubmit, reset, watch, getValues, setValue, setFocus } = useForm({
     resolver: valibotResolver(destinationSchema),
     defaultValues: { destination: "" },
   });
@@ -277,10 +277,12 @@ function QuickCreateCard({
   useEffect(() => {
     const busyElsewhere = () => {
       const el = document.activeElement;
-      return (
-        el instanceof HTMLElement &&
-        (el.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(el.tagName))
-      );
+      if (!(el instanceof HTMLElement)) return false;
+      return el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName);
+    };
+    const fill = (value: string) => {
+      setValue("destination", value, { shouldValidate: true });
+      setFocus("destination");
     };
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.ctrlKey || e.metaKey || e.altKey || e.key.length !== 1 || busyElsewhere()) return;
@@ -288,16 +290,14 @@ function QuickCreateCard({
       // so append it by hand. busyElsewhere() already excluded the field
       // itself, so there's no double-insert.
       e.preventDefault();
-      setValue("destination", (watch("destination") ?? "") + e.key, { shouldValidate: true });
-      setFocus("destination");
+      fill((getValues("destination") ?? "") + e.key);
     };
     const onPaste = (e: ClipboardEvent) => {
       if (busyElsewhere()) return;
       const text = e.clipboardData?.getData("text")?.trim();
       if (!text) return;
       e.preventDefault();
-      setValue("destination", text, { shouldValidate: true });
-      setFocus("destination");
+      fill(text);
     };
     document.addEventListener("keydown", onKeyDown);
     document.addEventListener("paste", onPaste);
@@ -305,7 +305,7 @@ function QuickCreateCard({
       document.removeEventListener("keydown", onKeyDown);
       document.removeEventListener("paste", onPaste);
     };
-  }, [setFocus, setValue, watch]);
+  }, [getValues, setFocus, setValue]);
 
   const submit = handleSubmit(
     (data) => {
