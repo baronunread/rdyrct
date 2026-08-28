@@ -42,7 +42,8 @@ test("a new owner can create an organization and a scheme-less quick link", asyn
     "Playwright Person",
   );
   // No uploaded image, so the footer shows a blobatar (inline SVG data URI).
-  await expect(page.locator('button[aria-label="Account menu"] img')).toHaveAttribute(
+  // The menu trigger renders as a div with role=button, not a <button> tag.
+  await expect(page.getByRole("button", { name: "Account menu" }).locator("img")).toHaveAttribute(
     "src",
     /^data:image\/svg\+xml/,
   );

@@ -7,9 +7,12 @@ const password = "test-password-123";
 async function warmShell(page: Page, email: string) {
   // Let the shell persist its cache before the reload below. The regression
   // only exists when chrome paints from that cache while the page waits for a
-  // fresh /user response.
+  // fresh /user response. The footer shows the name, which signup derives
+  // from the email local-part.
   await page.goto("/dashboard");
-  await expect(page.getByText(email)).toBeVisible();
+  await expect(page.getByRole("button", { name: "Account menu" })).toContainText(
+    email.split("@")[0],
+  );
 }
 
 test.describe.configure({ mode: "serial" });

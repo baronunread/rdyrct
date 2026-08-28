@@ -14,10 +14,13 @@ const password = "test-password-123";
  */
 test("the sidebar survives a reload before /user answers", async ({ page }) => {
   const email = `playwright-shell-${Date.now()}@gmail.com`;
+  // The footer shows the name, derived from the email local-part at signup.
+  const shellName = email.split("@")[0];
+  const footer = page.getByRole("button", { name: "Account menu" });
   await signUpAndVerify(page, email, password);
 
   await page.goto("/links");
-  await expect(page.getByText(email)).toBeVisible();
+  await expect(footer).toContainText(shellName);
 
   let release = () => {};
   const held = new Promise<void>((resolve) => (release = resolve));
@@ -29,7 +32,7 @@ test("the sidebar survives a reload before /user answers", async ({ page }) => {
 
   await page.reload();
   // No answer to /user has been given, and the shell is already there.
-  await expect(page.getByText(email)).toBeVisible();
+  await expect(footer).toContainText(shellName);
   await expect(page.getByRole("link", { name: "Links" })).toBeVisible();
   // The chrome is cached; the page under it is not. A form offered from the
   // cache would carry settings one page load out of date, which is how a
@@ -45,7 +48,7 @@ test("the sidebar survives a reload before /user answers", async ({ page }) => {
 
   // Let the check land: the cache is a first frame, not a replacement for it.
   release();
-  await expect(page.getByText(email)).toBeVisible();
+  await expect(footer).toContainText(shellName);
   await expect(newLink).toBeVisible();
 });
 
@@ -53,6 +56,7 @@ test("the sidebar survives a reload before /user answers", async ({ page }) => {
  * stranger, and must not see the last person's name flash on screen. */
 test("signing out clears the cached shell", async ({ page }) => {
   const email = `playwright-signout-${Date.now()}@gmail.com`;
+  const shellName = email.split("@")[0];
   await signUpAndVerify(page, email, password);
 
   await signOut(page);
@@ -60,5 +64,5 @@ test("signing out clears the cached shell", async ({ page }) => {
 
   await page.goto("/dashboard");
   await expect(page).toHaveURL(/\/login/);
-  await expect(page.getByText(email)).toBeHidden();
+  await expect(page.getByText(shellName)).toBeHidden();
 });
