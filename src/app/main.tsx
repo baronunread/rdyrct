@@ -77,6 +77,9 @@ const DomainsPage = lazy(() =>
 const SettingsPage = lazy(() =>
   import("./routes/settings").then((m) => ({ default: m.SettingsPage })),
 );
+const OrganizationPage = lazy(() =>
+  import("./routes/organization").then((m) => ({ default: m.OrganizationPage })),
+);
 const AdminUsagePage = lazy(() =>
   import("./routes/admin/usage").then((m) => ({
     default: m.AdminUsagePage,
@@ -293,6 +296,11 @@ const settingsRoute = createRoute({
   path: "/settings",
   component: SettingsPage,
 });
+const organizationRoute = createRoute({
+  getParentRoute: () => appShellRoute,
+  path: "/organization",
+  component: OrganizationPage,
+});
 
 // One guard for the whole section, and one place for its sub-navigation.
 // Four separate RequireAdmin routes was four chances to forget one, and one
@@ -355,6 +363,7 @@ const routeTree = rootRoute.addChildren([
     billingRoute,
     domainsRoute,
     settingsRoute,
+    organizationRoute,
     adminRoute.addChildren([
       adminUsageRoute,
       adminLinksRoute,

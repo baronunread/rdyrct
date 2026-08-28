@@ -46,7 +46,7 @@ test("deleting the last organization asks for a new one, not for a first link", 
 }) => {
   await signUpAndVerify(page, `lastorg-${Date.now()}@gmail.com`, password);
 
-  await page.goto("/settings");
+  await page.goto("/organization");
   const name = await page.getByLabel("Organization name").inputValue();
   await page.getByRole("button", { name: "Delete organization" }).first().click();
   const dialog = page.getByRole("dialog", { name: "Delete organization" });

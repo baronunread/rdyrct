@@ -1,4 +1,5 @@
 import {
+  Building2,
   ChartColumn,
   CreditCard,
   LayoutDashboard,
@@ -16,6 +17,7 @@ export const appNavItems = [
   { to: "/links", icon: Link2, label: "Links" },
   { to: "/domains", icon: WorldWww, label: "Domains" },
   { to: "/members", icon: Users, label: "Members" },
+  { to: "/organization", icon: Building2, label: "Organization" },
   { to: "/billing", icon: CreditCard, label: "Billing" },
   { to: "/settings", icon: Settings, label: "Settings" },
 ] as const;

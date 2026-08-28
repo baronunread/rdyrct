@@ -510,31 +510,68 @@ export function BillingSkeleton() {
   );
 }
 
-/**
- * /settings: header over the stack of cards (organization name, QR defaults,
- * then the account and danger-zone blocks).
- */
+/** One danger-zone card: the label, a two-line blurb, and a button. */
+function DangerCardSkeleton() {
+  return (
+    <Card className="max-w-2xl">
+      <Skeleton className="h-2.5 w-24" />
+      <div className="mt-4">
+        <Skeleton className="h-3 w-full max-w-md" />
+        <Skeleton className="mt-2 h-3 w-3/5" />
+        <Skeleton className="mt-4 h-9 w-40" />
+      </div>
+    </Card>
+  );
+}
+
+/** /settings: the account card (name, email, save, dark-mode row) and the
+ * delete-account danger card. */
 export function SettingsSkeleton() {
   return (
     <SkeletonStatus testId="settings-page-skeleton">
       <HeaderSkeleton />
-      {/* the three cards, at the heights they measure: the name form (216),
-          the QR defaults with its preview (656), and the danger zone (270) */}
       <div className="flex flex-col gap-4">
         <Card className="max-w-2xl">
-          <Skeleton className="h-2.5 w-32" />
-          <div className="mt-5">
-            <Skeleton className="h-2.5 w-24" />
-            <Skeleton className="mt-2 h-9 w-full max-w-sm" />
+          {[0, 1].map((i) => (
+            <div key={i} className={i === 0 ? "" : "mt-4"}>
+              <Skeleton className="h-2.5 w-24" />
+              <Skeleton className="mt-2 h-9 w-full" />
+            </div>
+          ))}
+          <Skeleton className="mt-4 h-9 w-24" />
+          <div className="mt-4 border-t border-border pt-4">
+            <div className="flex items-center justify-between">
+              <Skeleton className="h-3 w-20" />
+              <Skeleton className="h-5 w-9 rounded-full" />
+            </div>
           </div>
-          <Skeleton className="mt-5 h-9 w-32" />
-          <Skeleton className="mt-5 h-3 w-56" />
+        </Card>
+        <DangerCardSkeleton />
+      </div>
+    </SkeletonStatus>
+  );
+}
+
+/** /organization: the name/id card, the QR defaults card, and the
+ * delete-organization danger card. */
+export function OrganizationSkeleton() {
+  return (
+    <SkeletonStatus testId="organization-page-skeleton">
+      <HeaderSkeleton />
+      <div className="flex flex-col gap-4">
+        <Card className="max-w-2xl">
+          {[0, 1].map((i) => (
+            <div key={i} className={i === 0 ? "" : "mt-4"}>
+              <Skeleton className="h-2.5 w-32" />
+              <Skeleton className="mt-2 h-9 w-full" />
+            </div>
+          ))}
+          <Skeleton className="mt-4 h-9 w-24" />
         </Card>
         {/* QR defaults, 656: the label pair beside the 160x185 preview, then
             the colour, background and logo fields full width under them, then
             the save button. */}
         <Card className="max-w-2xl">
-          {/* the card's own label (17) and its note (16) */}
           <span className="flex h-[17px] items-center">
             <Skeleton className="h-2.5 w-32" />
           </span>
@@ -573,16 +610,7 @@ export function SettingsSkeleton() {
           </div>
           <Skeleton className="mt-5 h-9 w-full" />
         </Card>
-        <Card className="max-w-2xl">
-          <Skeleton className="h-2.5 w-24" />
-          {[0, 1].map((i) => (
-            <div key={i} className="mt-6">
-              <Skeleton className="h-3 w-full max-w-md" />
-              <Skeleton className="mt-2 h-3 w-3/5" />
-              <Skeleton className="mt-4 h-9 w-40" />
-            </div>
-          ))}
-        </Card>
+        <DangerCardSkeleton />
       </div>
     </SkeletonStatus>
   );
@@ -618,6 +646,7 @@ const PAGE_SKELETONS = {
   "/domains": DomainsPageSkeleton,
   "/billing": BillingSkeleton,
   "/settings": SettingsSkeleton,
+  "/organization": OrganizationSkeleton,
   "/admin": AdminUsageSkeleton,
 } satisfies Record<string, () => ReactElement>;
 

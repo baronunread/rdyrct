@@ -145,6 +145,17 @@ test("Settings waits for fresh ownership before showing destructive controls", a
   );
 });
 
+test("Organization waits for fresh ownership before showing destructive controls", async () => {
+  const page = sharedPage;
+  await warmShell(page, sharedEmail);
+  await expectFreshUserSkeleton(
+    page,
+    "/organization",
+    "organization-page-skeleton",
+    page.getByRole("button", { name: "Delete organization" }),
+  );
+});
+
 test("Domains keeps its paid upgrade path out until the current user arrives", async () => {
   const page = sharedPage;
   await warmShell(page, sharedEmail);

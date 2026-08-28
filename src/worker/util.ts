@@ -44,6 +44,7 @@ export const RESERVED_SLUGS = new Set([
   "analytics",
   "links",
   "members",
+  "organization",
   "billing",
   "domains",
   "settings",

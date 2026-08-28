@@ -34,9 +34,9 @@ test("a new owner can create an organization and a scheme-less quick link", asyn
 
   await page.goto("/settings");
 
-  // Account card: change your own display name and flip the theme.
+  // Account settings: change your own display name and flip the theme.
   await page.getByLabel("Your name").fill("Playwright Person");
-  await page.getByRole("button", { name: "Save", exact: true }).first().click();
+  await page.getByRole("button", { name: "Save", exact: true }).click();
   await expect(page.getByText("Name saved")).toBeVisible();
   await expect(page.getByRole("button", { name: "Account menu" })).toContainText(
     "Playwright Person",
@@ -52,9 +52,10 @@ test("a new owner can create an organization and a scheme-less quick link", asyn
   await page.getByRole("switch", { name: "Dark mode" }).click();
   await expect(rootEl).not.toHaveAttribute("data-theme", themeBefore ?? "");
 
-  const organizationName = page.getByLabel("Organization name");
-  await organizationName.fill("Playwright Org Renamed");
-  await page.getByRole("button", { name: "Save", exact: true }).last().click();
+  // Organization settings live on their own page now.
+  await page.goto("/organization");
+  await page.getByLabel("Organization name").fill("Playwright Org Renamed");
+  await page.getByRole("button", { name: "Save", exact: true }).click();
   await expect(page.getByText("Organization renamed")).toBeVisible();
 
   // The theme item in the account menu toggles without closing the menu.
@@ -76,7 +77,7 @@ test("a new owner can create an organization and a scheme-less quick link", asyn
   });
   await signOut(page);
   await expect(page.getByText("Sign-out service unavailable")).toBeVisible();
-  await expect(page).toHaveURL(/\/settings$/);
+  await expect(page).toHaveURL(/\/organization$/);
 
   await page.unroute(signOutUrl);
   await signOut(page);
