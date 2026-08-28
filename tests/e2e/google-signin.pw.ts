@@ -1,13 +1,17 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 import { signOut } from "./pages";
 
 // Drives the Google button against the local emulate google service (started
 // by the resend webServer, see playwright.config.ts). When Google isn't
 // configured the button doesn't render, so we skip rather than fail.
+async function requireGoogle(page: Page) {
+  const cfg = await (await page.request.get("/api/config")).json();
+  if (!cfg.googleEnabled) test.skip(true, "Google sign-in not configured");
+}
+
 test.describe("Google sign-in", () => {
   test("Continue with Google starts an OAuth session", async ({ page }) => {
-    const cfg = await (await page.request.get("/api/config")).json();
-    if (!cfg.googleEnabled) test.skip(true, "Google sign-in not configured");
+    await requireGoogle(page);
 
     let socialStarted = false;
     await page.route("**/api/auth/sign-in/social**", async (route) => {
@@ -27,8 +31,7 @@ test.describe("Google sign-in", () => {
   test("a full Google round trip signs in, and /login then offers 'continue as'", async ({
     page,
   }) => {
-    const cfg = await (await page.request.get("/api/config")).json();
-    if (!cfg.googleEnabled) test.skip(true, "Google sign-in not configured");
+    await requireGoogle(page);
 
     await page.goto("/login");
     await page.getByRole("button", { name: /Continue with Google/i }).click();
@@ -47,8 +50,7 @@ test.describe("Google sign-in", () => {
   });
 
   test("shows the Google button on signup too", async ({ page }) => {
-    const cfg = await (await page.request.get("/api/config")).json();
-    if (!cfg.googleEnabled) test.skip(true, "Google sign-in not configured");
+    await requireGoogle(page);
 
     await page.goto("/signup");
     await expect(page.getByRole("button", { name: /Continue with Google/i })).toBeVisible();
