@@ -15,6 +15,21 @@ import { captureStorageQueue } from "./support";
 const JPEG = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0, 0, 0, 0, 0, 0]);
 const AVATAR_URL_RE = /^\/api\/user\/avatar(\?v=\d+)?$/;
 
+// A real 1x1 transparent PNG (its IHDR is well-formed, so dimensions() reads it).
+const PNG_1x1 = Uint8Array.from(
+  atob(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+  ),
+  (ch) => ch.charCodeAt(0),
+);
+
+/** The same PNG with its IHDR width rewritten to `w`. */
+function pngWithWidth(w: number): Uint8Array {
+  const b = PNG_1x1.slice();
+  new DataView(b.buffer).setUint32(16, w);
+  return b;
+}
+
 describe("storeUserAvatar", () => {
   afterEach(() => vi.unstubAllGlobals());
 
@@ -84,8 +99,7 @@ describe("POST/DELETE /api/user/avatar", () => {
 
   it("stores an uploaded PNG and points user.image at it", async () => {
     const cookie = await freeOwnerCookie();
-    const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0]);
-    const res = await upload(cookie, png, "image/png");
+    const res = await upload(cookie, PNG_1x1, "image/png");
     expect(res.status).toBe(200);
     // SAFETY: the 200 branch of POST /api/user/avatar returns `{ image }`.
     const { image } = (await res.json()) as { image: string };
@@ -104,14 +118,22 @@ describe("POST/DELETE /api/user/avatar", () => {
     expect(await env.MEDIA.get(`${AVATAR_PREFIX}free-1`)).toBeNull();
   });
 
+  it("rejects an image larger than the max dimension", async () => {
+    const cookie = await freeOwnerCookie();
+    const res = await upload(cookie, pngWithWidth(1024), "image/png");
+    expect(res.status).toBe(400);
+    expect(await res.text()).toContain("512px");
+    expect(await env.MEDIA.get(`${AVATAR_PREFIX}free-1`)).toBeNull();
+  });
+
   it("401s an unauthenticated upload", async () => {
-    const res = await upload("", new Uint8Array([0xff, 0xd8, 0xff]), "image/jpeg");
+    const res = await upload("", PNG_1x1, "image/png");
     expect(res.status).toBe(401);
   });
 
   it("DELETE clears the object and user.image", async () => {
     const cookie = await freeOwnerCookie();
-    await upload(cookie, new Uint8Array([0xff, 0xd8, 0xff, 0, 0, 0]), "image/jpeg");
+    await upload(cookie, PNG_1x1, "image/png");
 
     const res = await fetchWorker(
       new Request("http://localhost/api/user/avatar", { method: "DELETE", headers: { cookie } }),

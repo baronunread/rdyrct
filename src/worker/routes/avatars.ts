@@ -5,7 +5,7 @@ import { eq } from "drizzle-orm";
 import * as schema from "../db/schema";
 import type { AppEnv } from "../env";
 import { AVATAR_PREFIX, avatarUrl, deleteUserAvatar } from "./../storage";
-import { AVATAR_MAX_BYTES } from "@/shared/types";
+import { AVATAR_MAX_BYTES, AVATAR_MAX_DIMENSION } from "@/shared/types";
 
 // Mounted at /api/user/avatar. Upload, serving and removal are all keyed by
 // the session user id, so no URL ever carries a user id and an unauthorized
@@ -28,9 +28,10 @@ function requireUser(c: { var: AppEnv["Variables"] }) {
   return user;
 }
 
+type ImageType = "image/jpeg" | "image/png" | "image/webp";
+
 /** JPEG (FF D8 FF), PNG (89 50 4E 47), or WebP (RIFF....WEBP). */
-function sniff(body: ArrayBuffer): "image/jpeg" | "image/png" | "image/webp" | null {
-  const b = new Uint8Array(body);
+function sniff(b: Uint8Array): ImageType | null {
   if (b.length >= 3 && b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff) return "image/jpeg";
   if (b.length >= 4 && b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47)
     return "image/png";
@@ -43,17 +44,60 @@ function sniff(body: ArrayBuffer): "image/jpeg" | "image/png" | "image/webp" | n
   return null;
 }
 
+/** Read pixel dimensions from the header, without decoding the image. Returns
+ * null when the header is unrecognised or truncated. */
+function dimensions(b: Uint8Array, type: ImageType): [number, number] | null {
+  const dv = new DataView(b.buffer, b.byteOffset, b.byteLength);
+  if (type === "image/png") {
+    // IHDR is the first chunk: 8-byte sig, 4-byte length, "IHDR", W, H (BE).
+    return b.length >= 24 ? [dv.getUint32(16), dv.getUint32(20)] : null;
+  }
+  if (type === "image/jpeg") {
+    let i = 2;
+    while (i + 9 < b.length && b[i] === 0xff) {
+      const marker = b[i + 1];
+      // SOF0..SOF15, minus the non-frame markers, carry H then W (BE).
+      if (marker >= 0xc0 && marker <= 0xcf && ![0xc4, 0xc8, 0xcc].includes(marker))
+        return [dv.getUint16(i + 7), dv.getUint16(i + 5)];
+      i += 2 + dv.getUint16(i + 2);
+    }
+    return null;
+  }
+  // WebP: the fourcc after "WEBP" says which sub-format, each stores size
+  // differently. 30 bytes covers the header of all three.
+  if (b.length < 30) return null;
+  const fourcc = String.fromCharCode(...b.slice(12, 16));
+  if (fourcc === "VP8 " && b[23] === 0x9d && b[24] === 0x01 && b[25] === 0x2a)
+    return [dv.getUint16(26, true) & 0x3fff, dv.getUint16(28, true) & 0x3fff];
+  if (fourcc === "VP8L" && b[20] === 0x2f) {
+    const bits = dv.getUint32(21, true);
+    return [1 + (bits & 0x3fff), 1 + ((bits >> 14) & 0x3fff)];
+  }
+  if (fourcc === "VP8X") {
+    const u24 = (o: number) => b[o] | (b[o + 1] << 8) | (b[o + 2] << 16);
+    return [1 + u24(24), 1 + u24(27)];
+  }
+  return null;
+}
+
 avatarRoutes.post("/", async (c) => {
   const log = c.get("log");
   const user = requireUser(c);
   log.set({ route: "user-avatar", userId: user.id });
 
   const body = await c.req.arrayBuffer();
-  if (body.byteLength === 0) throw new HTTPException(400, { message: "Empty file" });
-  if (body.byteLength > AVATAR_MAX_BYTES)
+  const bytes = new Uint8Array(body);
+  if (bytes.byteLength === 0) throw new HTTPException(400, { message: "Empty file" });
+  if (bytes.byteLength > AVATAR_MAX_BYTES)
     throw new HTTPException(400, { message: "Picture too large (max 256 KB)" });
-  const type = sniff(body);
+  const type = sniff(bytes);
   if (!type) throw new HTTPException(400, { message: "Picture must be a JPEG, PNG or WebP image" });
+  const size = dimensions(bytes, type);
+  if (!size) throw new HTTPException(400, { message: "Could not read this image" });
+  if (size[0] > AVATAR_MAX_DIMENSION || size[1] > AVATAR_MAX_DIMENSION)
+    throw new HTTPException(400, {
+      message: `Picture must be at most ${AVATAR_MAX_DIMENSION}px on a side`,
+    });
 
   await c.env.MEDIA.put(`${AVATAR_PREFIX}${user.id}`, body, {
     httpMetadata: { contentType: type },
