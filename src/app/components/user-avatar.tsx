@@ -8,11 +8,12 @@ type AvatarUser = {
   email?: string;
 };
 
-/** Deterministic blobatar (blobatar.dev) for users with no uploaded image:
- * the same id always renders the same creature. Seeded on the id, not the
- * name, so a rename keeps the same face. */
+/** Deterministic blobatar (blobatar.dev) for users with no uploaded image.
+ * Seeded on the display name (then email, then id), so it tracks a rename:
+ * the settings form previews this live as you type. */
 function blobatarDataUri(user: AvatarUser): string {
-  const svg = blobatar(user.id, { title: user.name || user.email || "avatar" });
+  const seed = user.name?.trim() || user.email?.trim() || user.id;
+  const svg = blobatar(seed, { title: seed });
   return `data:image/svg+xml,${encodeURIComponent(svg)}`;
 }
 

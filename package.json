@@ -65,6 +65,7 @@
     "react": "^19.2.8",
     "react-colorful": "^5.8.0",
     "react-dom": "^19.2.8",
+    "react-easy-crop": "^6.2.3",
     "react-hook-form": "^7.86.0",
     "shadow-plugin": "^2.1.0",
     "standardwebhooks": "^1.0.0",

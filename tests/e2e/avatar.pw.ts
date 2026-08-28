@@ -1,29 +1,50 @@
 import { expect, test } from "@playwright/test";
 import { signUpAndVerify } from "./resend";
 
-// A valid 1x1 transparent PNG.
-const PNG = Buffer.from(
-  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
-  "base64",
-);
-
-test("upload and remove a profile picture from Settings", async ({ page }) => {
+test("upload/crop, save, and remove a profile picture from Settings", async ({ page }) => {
   await signUpAndVerify(page, `avatar-${Date.now()}@gmail.com`, "test-password-123");
 
   const footerImg = page.getByRole("button", { name: "Account menu" }).locator("img");
-  // Starts as a generated blobatar (inline SVG data URI).
   await expect(footerImg).toHaveAttribute("src", /^data:image\/svg\+xml/);
 
   await page.goto("/settings");
-  await page
-    .locator('input[type="file"]')
-    .setInputFiles({ name: "me.png", mimeType: "image/png", buffer: PNG });
-  await expect(page.getByText("Picture updated")).toBeVisible();
+  const save = page.getByRole("button", { name: "Save", exact: true });
+  const openDialog = () => page.getByRole("button", { name: "Change picture" }).click();
 
-  // Footer now serves the stored avatar, same-origin.
+  // A 300x300 PNG built in the page.
+  const dataUrl = await page.evaluate(() => {
+    const c = document.createElement("canvas");
+    c.width = c.height = 300;
+    const x = c.getContext("2d")!;
+    x.fillStyle = "#35875e";
+    x.fillRect(0, 0, 300, 300);
+    return c.toDataURL("image/png");
+  });
+  const buf = Buffer.from(dataUrl.split(",")[1], "base64");
+
+  // Pencil opens the dialog; its centre is the upload CTA.
+  await openDialog();
+  const dialog = page.getByRole("dialog", { name: "Profile picture" });
+  await expect(dialog.getByRole("button", { name: /Upload a picture/ })).toBeVisible();
+  await dialog
+    .locator('input[type="file"]')
+    .setInputFiles({ name: "me.png", mimeType: "image/png", buffer: buf });
+
+  // Now the crop view; Apply stages it without saving.
+  await dialog.getByRole("button", { name: "Apply" }).click();
+  await expect(dialog).toBeHidden();
+  await expect(save).toBeEnabled();
+  await expect(footerImg).toHaveAttribute("src", /^data:image\/svg\+xml/);
+
+  await save.click();
+  await expect(page.getByText("Picture updated")).toBeVisible();
   await expect(footerImg).toHaveAttribute("src", /^\/api\/user\/avatar/);
 
-  await page.getByRole("button", { name: "Remove" }).click();
+  // Remove lives in the dialog, and is also deferred to Save.
+  await openDialog();
+  await dialog.getByRole("button", { name: "Remove picture" }).click();
+  await expect(dialog).toBeHidden();
+  await save.click();
   await expect(page.getByText("Picture removed")).toBeVisible();
   await expect(footerImg).toHaveAttribute("src", /^data:image\/svg\+xml/);
 });
