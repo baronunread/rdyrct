@@ -93,7 +93,7 @@ export function AvatarInput({ user }: { user: User }) {
   return (
     <div className="flex flex-col items-center gap-2">
       <div className="group relative">
-        <UserAvatar user={user} size={96} className="border-2 border-border" />
+        <UserAvatar user={user} size={128} className="border-2 border-border" />
         <button
           type="button"
           aria-label="Change picture"
@@ -102,7 +102,7 @@ export function AvatarInput({ user }: { user: User }) {
           onClick={() => input.current?.click()}
           className="absolute inset-0 flex cursor-pointer items-center justify-center rounded-full bg-bg/55 text-text opacity-0 transition-opacity duration-150 group-hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none disabled:pointer-events-none"
         >
-          <Pencil size={18} />
+          <Pencil size={22} />
         </button>
         {busy && (
           <span className="absolute inset-0 flex items-center justify-center rounded-full bg-bg/60">
