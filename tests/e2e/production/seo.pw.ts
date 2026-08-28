@@ -103,6 +103,7 @@ test("robots.txt keeps the private routes out of the index", async ({ request })
     "/analytics",
     "/links",
     "/members",
+    "/organization",
     "/billing",
     "/domains",
     "/settings",

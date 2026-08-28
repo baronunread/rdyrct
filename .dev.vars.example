@@ -41,11 +41,12 @@ BLOG_ORIGIN_URL=http://localhost:3000
 # which needs no browser to prove it.
 CAP_SECRET=dev-only-cap-secret-not-a-real-one-0000000000000000
 
-# Google sign-in. Leave blank to disable the "Continue with Google" button.
-# For local dev, point GOOGLE_EMULATOR_URL at an OAuth emulator
-# (e.g. https://www.emulate.dev/mock/oauth2) and set the client id/secret it
-# provides. In production, leave GOOGLE_EMULATOR_URL blank and set the real
-# Google OAuth client id/secret; the worker then uses Google's discovery URL.
-GOOGLE_CLIENT_ID=
-GOOGLE_CLIENT_SECRET=
-GOOGLE_EMULATOR_URL=
+# Google sign-in. Leave all three blank to hide the "Continue with Google"
+# button. For local dev, `bun run dev` starts the emulate google service
+# behind portless at https://google.emulate.localhost, so the values below
+# work as-is (the client id/secret are arbitrary, the emulator accepts any).
+# In production, leave GOOGLE_EMULATOR_URL blank and set the real Google
+# OAuth client id/secret; the worker then uses Google's discovery URL.
+GOOGLE_CLIENT_ID=test-client
+GOOGLE_CLIENT_SECRET=test-secret
+GOOGLE_EMULATOR_URL=https://google.emulate.localhost

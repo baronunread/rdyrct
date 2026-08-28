@@ -17,7 +17,7 @@ Always use **bun**, never npm/npx.
 
 ```sh
 bun install
-bun run dev                 # vite dev (Worker + SPA) via portless: https://rdyrct.localhost
+bun run dev                 # vite dev (Worker + SPA) via portless: https://rdyrct.localhost, plus the Google OAuth emulator at https://google.emulate.localhost
 bun run mail                # local Resend inbox via portless: https://mail.rdyrct.localhost (read: curl https://mail.rdyrct.localhost/emails -H 'authorization: Bearer test_token_admin')
 bun run db:migrate:local    # apply migrations to local D1
 bun run db:reset:local      # wipe local D1 + KV, re-apply migrations (start from scratch; restart dev after)

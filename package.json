@@ -5,7 +5,7 @@
   "license": "MIT",
   "type": "module",
   "scripts": {
-    "dev": "portless rdyrct vite dev",
+    "dev": "trap 'kill 0' INT TERM; portless rdyrct vite dev & bun run mail & bunx emulate start --service google --portless --port 4001 & wait",
     "mail": "portless mail.rdyrct bunx emulate --service resend",
     "polar:listen": "NODE_EXTRA_CA_CERTS=\"$HOME/.portless/ca.pem\" polar listen https://rdyrct.localhost/api/webhooks/polar",
     "build": "vite build",
@@ -47,6 +47,7 @@
     "@tanstack/react-query": "^5.102.0",
     "@tanstack/react-router": "^1.170.31",
     "better-auth": "^1.7.1",
+    "blobatar": "^2.5.0",
     "browser-image-compression": "^2.0.2",
     "canvas-confetti": "^1.9.4",
     "capjs-core": "0.1.2",

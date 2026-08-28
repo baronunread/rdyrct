@@ -20,6 +20,7 @@ Disallow: /dashboard
 Disallow: /analytics
 Disallow: /links
 Disallow: /members
+Disallow: /organization
 Disallow: /billing
 Disallow: /domains
 Disallow: /settings

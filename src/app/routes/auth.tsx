@@ -4,7 +4,7 @@ import { valibotResolver } from "@hookform/resolvers/valibot";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useSearchParams, HrefLink } from "../lib/router-search";
 import { useQueryClient, type QueryClient } from "@tanstack/react-query";
-import { Check } from "@/app/ui/icons";
+import { ArrowRight, Check } from "@/app/ui/icons";
 import { AuthCard, PasswordMeter } from "../components/auth-form";
 import { authClient } from "../lib/auth-client";
 import { friendlyAuthError } from "../lib/auth-errors";
@@ -14,6 +14,7 @@ import { useShake } from "../lib/use-shake";
 import { useCap } from "../lib/cap";
 import { useCurrentUser, useConfig } from "../lib/hooks";
 import { storedAnonLinks } from "../lib/anon-links";
+import { lastAuth, setLastAuth } from "../lib/last-auth";
 import { firstFormError } from "../lib/form-errors";
 import { cn } from "../ui/cn";
 import { Button } from "../ui/button";
@@ -209,22 +210,18 @@ const AUTH_MODE_COPY = {
 };
 
 /**
- * One line under "Create an account", saying what happens next.
- *
- * The card used to render identically whether somebody arrived cold, clicked
- * "Start Pro", or clicked "Keep this link" with a link waiting to be claimed:
- * every reassurance the landing page built was dropped at the door. It also
- * never mentioned the emailed code, which is the step people abandon.
- *
- * Nothing under "Sign in". Somebody who already has an account does not need
- * to be sold the plan.
+ * One line under "Create an account", only when the visitor arrived with
+ * context to carry through: a link waiting to be claimed, or a checkout
+ * they were mid-way into. A cold visitor gets nothing, and neither does
+ * "Sign in": somebody who already has an account does not need a pitch.
  */
 function SignupSubtitle({ next }: { next: string }) {
   const body = storedAnonLinks().length
     ? "Your link is waiting. Sign up and it becomes permanent, with the clicks it earns."
     : next.startsWith("/billing")
       ? "Create your account, then check out. No card needed to create the account."
-      : "Free plan, no credit card. We'll email you a 6-digit code to confirm your address.";
+      : null;
+  if (!body) return null;
   return <p className="-mt-2 text-xs text-muted">{body}</p>;
 }
 
@@ -245,6 +242,41 @@ function PasswordHint({
     );
   }
   return <PasswordMeter password={password} />;
+}
+
+/**
+ * The Google sign-in control. A plain button by default; when this browser
+ * last signed in with Google and we kept the address, it becomes a
+ * one-click "continue as you@…" row instead.
+ */
+function GoogleEntry({ email, onClick }: { email?: string; onClick: () => void }) {
+  if (!email) {
+    return (
+      <button
+        type="button"
+        onClick={onClick}
+        className="flex items-center justify-center gap-2 rounded-lg border border-border bg-surface py-2.5 text-sm font-medium transition-colors hover:bg-surface-2"
+      >
+        <GoogleG />
+        Continue with Google
+      </button>
+    );
+  }
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={`Continue as ${email}`}
+      className="flex items-center gap-3 rounded-lg border border-border bg-surface px-3 py-2.5 text-sm transition-colors hover:bg-surface-2"
+    >
+      <GoogleG />
+      <span className="min-w-0 flex-1 truncate text-left font-medium">{email}</span>
+      <span className="shrink-0 rounded-full bg-accent/10 px-2 py-0.5 text-2xs font-medium text-accent">
+        Last used
+      </span>
+      <ArrowRight size={16} className="shrink-0 text-muted" />
+    </button>
+  );
 }
 
 /** Inline Google "G" mark (no remote image, CSP-safe). */
@@ -293,12 +325,16 @@ function AuthFormView({
   const copy = AUTH_MODE_COPY[mode];
   const toast = useToast();
   const config = useConfig();
+  // Read once on mount: a returning visitor who last signed in with Google
+  // gets a one-click "continue as you" row.
+  const [lastUsed] = useState(lastAuth);
   const { register, handleSubmit, watch, getValues } = useForm<AuthForm>({
     resolver: valibotResolver(copy.schema),
     defaultValues: { email: "", password: "" },
   });
 
   const startGoogle = () => {
+    setLastAuth("google");
     posthog.capture("user_google_signin_started");
     // Full-page redirect to Google; returns to /api/auth/callback/google, then
     // to `next`. Same flow on login and signup (account linking handles an
@@ -325,6 +361,19 @@ function AuthFormView({
       >
         <h1 className="font-bold">{copy.title}</h1>
         {mode === "signup" && <SignupSubtitle next={next} />}
+        {config.data?.googleEnabled && (
+          <>
+            <GoogleEntry
+              email={lastUsed?.method === "google" ? lastUsed.email : undefined}
+              onClick={startGoogle}
+            />
+            <div className="flex items-center gap-3 text-xs text-muted">
+              <span className="h-px flex-1 bg-border" />
+              or
+              <span className="h-px flex-1 bg-border" />
+            </div>
+          </>
+        )}
         <Field label="Email">
           <Input type="email" {...register("email")} required autoComplete="email" />
         </Field>
@@ -354,23 +403,6 @@ function AuthFormView({
         >
           <BusyContent busy={busy}>{copy.submitLabel}</BusyContent>
         </Button>
-        {config.data?.googleEnabled && (
-          <>
-            <div className="flex items-center gap-3 text-xs text-muted">
-              <span className="h-px flex-1 bg-border" />
-              or
-              <span className="h-px flex-1 bg-border" />
-            </div>
-            <button
-              type="button"
-              onClick={startGoogle}
-              className="flex items-center justify-center gap-2 rounded-lg border border-border bg-surface py-2.5 text-sm font-medium transition-colors hover:bg-surface-2"
-            >
-              <GoogleG />
-              Continue with Google
-            </button>
-          </>
-        )}
         <p className="text-center text-xs text-muted">
           {copy.footerPrompt}{" "}
           <HrefLink href={`${copy.footerTo}?next=${encodeURIComponent(next)}`}>
@@ -427,6 +459,7 @@ interface SubmitDeps {
 async function trySignIn(email: string, password: string, deps: SubmitDeps) {
   const { error: signInError } = await authClient.signIn.email({ email, password });
   if (!signInError) {
+    setLastAuth("password", email);
     await deps.qc.refetchQueries({ queryKey: ["user"] });
     const isAdmin = deps.qc.getQueryData<CurrentUser | null>(["user"])?.user.isAdmin ?? false;
     posthog.capture("user_signed_in");
@@ -477,7 +510,10 @@ interface VerifyDeps {
  * hand. Returns false when it already handled navigation itself. */
 async function establishSessionAfterVerify(deps: VerifyDeps): Promise<boolean> {
   const sess = await authClient.getSession();
-  if (sess?.data) return true;
+  if (sess?.data) {
+    setLastAuth("password", deps.authEmail);
+    return true;
+  }
   if (!deps.authPassword) {
     clearPending();
     deps.toast("Email verified. Sign in to continue.");
@@ -492,6 +528,7 @@ async function establishSessionAfterVerify(deps: VerifyDeps): Promise<boolean> {
     deps.toast(friendlyAuthError(signInError), "error");
     return false;
   }
+  setLastAuth("password", deps.authEmail);
   return true;
 }
 

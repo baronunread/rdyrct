@@ -14,6 +14,17 @@ export const orgNameSchema = v.object({
   ),
 });
 
+/** Your own display name. Shown in the sidebar and used for the blobatar
+ * initials. Same shape as an org name: something typed, 100 chars or fewer. */
+export const accountNameSchema = v.object({
+  name: v.pipe(
+    v.string(),
+    v.trim(),
+    v.minLength(1, "Enter your name"),
+    v.maxLength(100, "Name must be 100 characters or fewer"),
+  ),
+});
+
 const tryUrl = (val: string) => v.is(v.pipe(v.string(), v.url()), val);
 
 const destinationField = v.pipe(

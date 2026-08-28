@@ -3,6 +3,7 @@ import { appUrl } from "./environment";
 import { signUpAndVerify } from "./resend";
 import { setPlan } from "./db";
 import { addCustomDomain, createQuickLink } from "./orgs";
+import { signOut } from "./pages";
 
 const password = "test-password-123";
 
@@ -32,10 +33,39 @@ test("a new owner can create an organization and a scheme-less quick link", asyn
   await expect(page.getByText("Invite sent")).toBeVisible();
 
   await page.goto("/settings");
-  const organizationName = page.getByLabel("Organization name");
-  await organizationName.fill("Playwright Org Renamed");
+
+  // Account settings: change your own display name and flip the theme.
+  await page.getByLabel("Your name").fill("Playwright Person");
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(page.getByText("Name saved")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Account menu" })).toContainText(
+    "Playwright Person",
+  );
+  // No uploaded image, so the footer shows a blobatar (inline SVG data URI).
+  // The menu trigger renders as a div with role=button, not a <button> tag.
+  await expect(page.getByRole("button", { name: "Account menu" }).locator("img")).toHaveAttribute(
+    "src",
+    /^data:image\/svg\+xml/,
+  );
+  const rootEl = page.locator("html");
+  const themeBefore = await rootEl.getAttribute("data-theme");
+  await page.getByRole("switch", { name: "Dark mode" }).click();
+  await expect(rootEl).not.toHaveAttribute("data-theme", themeBefore ?? "");
+
+  // Organization settings live on their own page now.
+  await page.goto("/organization");
+  await page.getByLabel("Organization name").fill("Playwright Org Renamed");
   await page.getByRole("button", { name: "Save", exact: true }).click();
   await expect(page.getByText("Organization renamed")).toBeVisible();
+
+  // The theme item in the account menu toggles without closing the menu.
+  const beforeMenuTheme = await rootEl.getAttribute("data-theme");
+  await page.getByRole("button", { name: "Account menu" }).click();
+  const themeItem = page.getByRole("menuitem", { name: /theme$/ });
+  await themeItem.click();
+  await expect(rootEl).not.toHaveAttribute("data-theme", beforeMenuTheme ?? "");
+  await expect(themeItem).toBeVisible();
+  await page.keyboard.press("Escape");
 
   const signOutUrl = "**/api/auth/sign-out";
   await page.route(signOutUrl, async (route) => {
@@ -45,12 +75,12 @@ test("a new owner can create an organization and a scheme-less quick link", asyn
       body: JSON.stringify({ message: "Sign-out service unavailable" }),
     });
   });
-  await page.getByLabel("Sign out").click();
+  await signOut(page);
   await expect(page.getByText("Sign-out service unavailable")).toBeVisible();
-  await expect(page).toHaveURL(/\/settings$/);
+  await expect(page).toHaveURL(/\/organization$/);
 
   await page.unroute(signOutUrl);
-  await page.getByLabel("Sign out").click();
+  await signOut(page);
   await expect(page).toHaveURL(/\/login$/);
   await page.reload();
   await expect(page).toHaveURL(/\/login$/);

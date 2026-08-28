@@ -55,7 +55,9 @@ export default defineConfig({
   ],
   webServer: [
     {
-      command: "bunx emulate --service resend",
+      // resend on 4000, google OAuth on 4001 (see GOOGLE_EMULATOR_URL in
+      // .dev.vars.playwright). One process, so one webServer entry.
+      command: "bunx emulate --service resend,google",
       url: "http://127.0.0.1:4000/emails",
       reuseExistingServer: !process.env.CI,
       gracefulShutdown: { signal: "SIGTERM", timeout: 500 },

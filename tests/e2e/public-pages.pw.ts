@@ -331,13 +331,11 @@ test("the analytics preview ends on an ask", async ({ page }) => {
   await expect(page).toHaveURL(/\/signup/);
 });
 
-// Signup used to render the same card whether you arrived cold or clicked
-// "Keep this link" with a link waiting. The subtitle is what carries the
-// context across the door, and the default has to name the emailed code:
-// that is the step people abandon.
-test("signup says what happens next", async ({ page }) => {
+// A cold signup is bare (no subtitle), but arriving with context keeps it:
+// a link waiting to be claimed, or a checkout the visitor was mid-way into.
+test("signup carries context across the door", async ({ page }) => {
   await page.goto("/signup");
-  await expect(page.getByText(/6-digit code/i)).toBeVisible();
+  await expect(page.getByText(/then check out/i)).toBeHidden();
 
   await page.goto("/signup?next=%2Fbilling%3Fplan%3Dpro");
   await expect(page.getByText(/then check out/i)).toBeVisible();

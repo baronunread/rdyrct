@@ -7,9 +7,12 @@ const password = "test-password-123";
 async function warmShell(page: Page, email: string) {
   // Let the shell persist its cache before the reload below. The regression
   // only exists when chrome paints from that cache while the page waits for a
-  // fresh /user response.
+  // fresh /user response. The footer shows the name, which signup derives
+  // from the email local-part.
   await page.goto("/dashboard");
-  await expect(page.getByText(email)).toBeVisible();
+  await expect(page.getByRole("button", { name: "Account menu" })).toContainText(
+    email.split("@")[0],
+  );
 }
 
 test.describe.configure({ mode: "serial" });
@@ -139,6 +142,17 @@ test("Settings waits for fresh ownership before showing destructive controls", a
     "/settings",
     "settings-page-skeleton",
     page.getByRole("button", { name: "Delete account" }),
+  );
+});
+
+test("Organization waits for fresh ownership before showing destructive controls", async () => {
+  const page = sharedPage;
+  await warmShell(page, sharedEmail);
+  await expectFreshUserSkeleton(
+    page,
+    "/organization",
+    "organization-page-skeleton",
+    page.getByRole("button", { name: "Delete organization" }),
   );
 });
 

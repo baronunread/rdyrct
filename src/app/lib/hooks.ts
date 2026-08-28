@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient, keepPreviousData } from "@tansta
 import { api, ApiError } from "./api";
 import { authClient } from "./auth-client";
 import { readCachedUser, writeCachedUser } from "./user-cache";
+import { lastAuth, setLastAuth } from "./last-auth";
 import posthog from "./posthog";
 import { FUNNEL } from "./funnel";
 import type {
@@ -51,6 +52,11 @@ export function useCurrentUser(enabled = true) {
           plan: user.user.plan,
           is_admin: user.user.isAdmin,
         });
+        // Backfill the Google address once the OAuth round trip lands, so a
+        // later visit to /login can offer "continue as <email>".
+        if (lastAuth()?.method === "google" && lastAuth()?.email !== user.user.email) {
+          setLastAuth("google", user.user.email);
+        }
         return user;
       } catch (e) {
         if (e instanceof ApiError && e.status === 401) {
