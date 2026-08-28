@@ -90,28 +90,28 @@ export function AvatarInput({ user }: { user: User }) {
   };
 
   return (
-    <div className="flex items-center gap-4">
+    <div className="flex flex-col items-center gap-2">
       <div className="relative">
-        <UserAvatar user={user} size={56} />
+        <UserAvatar user={user} size={72} />
         {busy && (
           <span className="absolute inset-0 flex items-center justify-center rounded-full bg-bg/60">
             <Spinner />
           </span>
         )}
       </div>
-      <div className="flex flex-wrap gap-2">
-        <input
-          ref={input}
-          type="file"
-          accept="image/png,image/jpeg,image/webp"
-          className="hidden"
-          onChange={(e) => void onFile(e.target.files?.[0])}
-        />
-        <Button variant="outline" disabled={busy} onClick={() => input.current?.click()}>
-          Change picture
+      <input
+        ref={input}
+        type="file"
+        accept="image/png,image/jpeg,image/webp"
+        className="hidden"
+        onChange={(e) => void onFile(e.target.files?.[0])}
+      />
+      <div className="flex flex-col items-center gap-0.5">
+        <Button size="sm" variant="ghost" disabled={busy} onClick={() => input.current?.click()}>
+          Change
         </Button>
         {user.image && (
-          <Button variant="ghost" disabled={busy} onClick={() => void onRemove()}>
+          <Button size="sm" variant="ghost" disabled={busy} onClick={() => void onRemove()}>
             Remove
           </Button>
         )}

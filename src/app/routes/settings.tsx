@@ -67,34 +67,33 @@ function useAccountNameForm(currentUserName: string | undefined) {
 function AccountCard({ user }: { user: User | undefined }) {
   const { register, save, currentName, isSubmitting } = useAccountNameForm(user?.name);
   const [theme, toggleTheme] = useTheme();
+  const nameUnchanged = !currentName?.trim() || currentName.trim() === (user?.name ?? "");
   return (
     <Card className="max-w-2xl">
-      <div className="flex flex-col gap-4">
-        {user && (
-          <Field label="Picture">
-            <AvatarInput user={user} />
-          </Field>
-        )}
-        <Field label="Your name">
-          <Input {...register("name")} />
-        </Field>
-        <Field label="Email">
-          <Input value={user?.email ?? ""} disabled readOnly />
-        </Field>
-        <div>
-          <Button
-            variant="primary"
-            onClick={save}
-            disabled={
-              !currentName?.trim() || currentName.trim() === (user?.name ?? "") || isSubmitting
-            }
-          >
-            <BusyContent busy={isSubmitting}>Save</BusyContent>
-          </Button>
+      <div className="flex flex-col gap-6">
+        <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:gap-6">
+          {user && <AvatarInput user={user} />}
+          <div className="flex min-w-0 flex-1 flex-col gap-4">
+            <Field label="Your name">
+              <Input {...register("name")} />
+            </Field>
+            <div>
+              <p className="mb-1 text-xs text-muted">Email</p>
+              <p className="truncate font-mono text-sm text-text">{user?.email}</p>
+            </div>
+            <div>
+              <Button variant="primary" onClick={save} disabled={nameUnchanged || isSubmitting}>
+                <BusyContent busy={isSubmitting}>Save</BusyContent>
+              </Button>
+            </div>
+          </div>
         </div>
-        <div className="border-t border-border" />
-        <div className="flex items-center justify-between gap-4">
-          <p className="text-sm">Dark mode</p>
+
+        <div className="flex items-center justify-between gap-4 border-t border-border pt-5">
+          <div>
+            <p className="text-sm">Dark mode</p>
+            <p className="text-xs text-muted">Also on the account menu, bottom left.</p>
+          </div>
           <Switch
             label="Dark mode"
             checked={theme === "dark"}
