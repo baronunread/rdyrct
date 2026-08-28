@@ -4,7 +4,8 @@ import { useForm } from "react-hook-form";
 import { valibotResolver } from "@hookform/resolvers/valibot";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCurrentUser } from "../lib/hooks";
-import type { UserOrg } from "@/shared/types";
+import type { User, UserOrg } from "@/shared/types";
+import { AvatarInput } from "../components/avatar-input";
 import { authClient } from "../lib/auth-client";
 import { Button } from "../ui/button";
 import { Field, Input } from "../ui/field";
@@ -63,30 +64,29 @@ function useAccountNameForm(currentUserName: string | undefined) {
   return { register, save, currentName, isSubmitting };
 }
 
-function AccountCard({
-  userName,
-  userEmail,
-}: {
-  userName: string | undefined;
-  userEmail: string | undefined;
-}) {
-  const { register, save, currentName, isSubmitting } = useAccountNameForm(userName);
+function AccountCard({ user }: { user: User | undefined }) {
+  const { register, save, currentName, isSubmitting } = useAccountNameForm(user?.name);
   const [theme, toggleTheme] = useTheme();
   return (
     <Card className="max-w-2xl">
       <div className="flex flex-col gap-4">
+        {user && (
+          <Field label="Picture">
+            <AvatarInput user={user} />
+          </Field>
+        )}
         <Field label="Your name">
           <Input {...register("name")} />
         </Field>
         <Field label="Email">
-          <Input value={userEmail ?? ""} disabled readOnly />
+          <Input value={user?.email ?? ""} disabled readOnly />
         </Field>
         <div>
           <Button
             variant="primary"
             onClick={save}
             disabled={
-              !currentName?.trim() || currentName.trim() === (userName ?? "") || isSubmitting
+              !currentName?.trim() || currentName.trim() === (user?.name ?? "") || isSubmitting
             }
           >
             <BusyContent busy={isSubmitting}>Save</BusyContent>
@@ -199,10 +199,7 @@ export function SettingsPage() {
     <div>
       <PageHeader title="Settings" sub="Your account" />
       <div className="flex flex-col gap-4">
-        <AccountCard
-          userName={currentUser.data?.user.name}
-          userEmail={currentUser.data?.user.email}
-        />
+        <AccountCard user={currentUser.data?.user} />
         <DeleteAccountCard
           disabled={accountDeleteDisabled}
           onDelete={() => deleteAccountFlow.setOpen(true)}

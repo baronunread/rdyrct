@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=1920, height=1080" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="" />
     <link
       href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap"
       rel="stylesheet"
@@ -397,6 +397,7 @@
   </head>
   <body>
     <div
+      data-hf-id="hf-kbh8"
       id="root"
       data-composition-id="main"
       data-start="0"
@@ -404,21 +405,26 @@
       data-width="1920"
       data-height="1080"
     >
-      <div id="stage">
-        <div id="bg-a" class="bg-blob"></div>
-        <div id="bg-b" class="bg-blob"></div>
+      <div data-hf-id="hf-1rt5" id="stage">
+        <div data-hf-id="hf-k3hq" id="bg-a" class="bg-blob"></div>
+        <div data-hf-id="hf-g5dp" id="bg-b" class="bg-blob"></div>
 
         <!-- INTRO -->
-        <div id="intro" class="center clip" data-start="0" data-duration="2.6">
-          <div class="word"><span class="acc">rdyrct</span>.com</div>
-          <div class="tag">Short links, QR codes and click analytics for your whole stack.</div>
+        <div data-hf-id="hf-drsx" id="intro" class="center clip" data-start="0" data-duration="2.6">
+          <div data-hf-id="hf-3ei3" class="word">
+            <span data-hf-id="hf-2vne" class="acc">rdyrct</span>.com
+          </div>
+          <div data-hf-id="hf-ahfe" class="tag">
+            Short links, QR codes and click analytics for your whole stack.
+          </div>
         </div>
 
         <!-- SHELL -->
-        <div id="shell">
-          <div id="connector">
-            <svg viewBox="0 0 200 40">
+        <div data-hf-id="hf-b035" id="shell">
+          <div data-hf-id="hf-eqvq" id="connector">
+            <svg data-hf-id="hf-km71" viewBox="0 0 200 40">
               <line
+                data-hf-id="hf-hsuj"
                 id="flow-line"
                 x1="6"
                 y1="20"
@@ -428,141 +434,207 @@
                 stroke-dasharray="6 10"
                 stroke-linecap="round"
               />
-              <circle id="flow-dot" cx="6" cy="20" r="5" />
+              <circle data-hf-id="hf-ah7v" id="flow-dot" cx="6" cy="20" r="5" />
             </svg>
           </div>
-          <div id="agent-panel" class="panel clip" data-start="2.2" data-duration="12.2">
-            <div class="panel-head">
-              <span class="dot"></span>
-              <span class="panel-title">Agent</span>
-              <span class="panel-note">webmcp</span>
+          <div
+            data-hf-id="hf-34g7"
+            id="agent-panel"
+            class="panel clip"
+            data-start="2.2"
+            data-duration="12.2"
+          >
+            <div data-hf-id="hf-95fx" class="panel-head">
+              <span data-hf-id="hf-9gry" class="dot"></span>
+              <span data-hf-id="hf-5j9d" class="panel-title">Agent</span>
+              <span data-hf-id="hf-lzj0" class="panel-note">webmcp</span>
             </div>
-            <div class="calls">
-              <div id="call1" class="call clip" data-start="3.0" data-duration="11.5">
-                <div class="call-head">
-                  <span class="tool">create_link</span>
-                  <span class="when">webmcp</span>
+            <div data-hf-id="hf-b1fn" class="calls">
+              <div
+                data-hf-id="hf-kksz"
+                id="call1"
+                class="call clip"
+                data-start="3.0"
+                data-duration="11.5"
+              >
+                <div data-hf-id="hf-k98v" class="call-head">
+                  <span data-hf-id="hf-oezw" class="tool">create_link</span>
+                  <span data-hf-id="hf-yj83" class="when">webmcp</span>
                 </div>
-                <pre class="args">
+                <pre data-hf-id="hf-iysp" class="args">
 create_link({
   destination: "https://example.com/spring-sale",
   title: "Spring Sale"
 })</pre>
-                <div class="result">→ Created rdyrct.com/spring-sale</div>
+                <div data-hf-id="hf-ytic" class="result">→ Created rdyrct.com/spring-sale</div>
               </div>
 
-              <div id="call2" class="call clip" data-start="6.5" data-duration="8.0">
-                <div class="call-head">
-                  <span class="tool">get_analytics</span>
-                  <span class="when">webmcp</span>
+              <div
+                data-hf-id="hf-2b3v"
+                id="call2"
+                class="call clip"
+                data-start="6.5"
+                data-duration="8.0"
+              >
+                <div data-hf-id="hf-1yi7" class="call-head">
+                  <span data-hf-id="hf-ro3a" class="tool">get_analytics</span>
+                  <span data-hf-id="hf-525v" class="when">webmcp</span>
                 </div>
-                <pre class="args">
+                <pre data-hf-id="hf-mhm8" class="args">
 get_analytics({
   focus: "overview",
   days: 30
 })</pre>
-                <div class="result">→ 12,408 clicks · top link /spring-sale</div>
+                <div data-hf-id="hf-dihl" class="result">
+                  → 12,408 clicks · top link /spring-sale
+                </div>
               </div>
 
-              <div id="call3" class="call clip" data-start="9.8" data-duration="4.7">
-                <div class="call-head">
-                  <span class="tool">generate_qr_code</span>
-                  <span class="when">webmcp</span>
+              <div
+                data-hf-id="hf-yx4z"
+                id="call3"
+                class="call clip"
+                data-start="9.8"
+                data-duration="4.7"
+              >
+                <div data-hf-id="hf-1k76" class="call-head">
+                  <span data-hf-id="hf-6efm" class="tool">generate_qr_code</span>
+                  <span data-hf-id="hf-4nuu" class="when">webmcp</span>
                 </div>
-                <pre class="args">
+                <pre data-hf-id="hf-36ey" class="args">
 generate_qr_code({
   value: "https://rdyrct.com"
 })</pre>
-                <div class="result">→ QR ready · download enabled</div>
+                <div data-hf-id="hf-9zgt" class="result">→ QR ready · download enabled</div>
               </div>
             </div>
           </div>
 
-          <div id="app-panel" class="panel clip" data-start="2.2" data-duration="12.2">
-            <div class="panel-head">
-              <span class="dot"></span>
-              <span class="panel-title">rdyrct</span>
-              <span class="panel-note">rdyrct.com/links</span>
+          <div
+            data-hf-id="hf-32n9"
+            id="app-panel"
+            class="panel clip"
+            data-start="2.2"
+            data-duration="12.2"
+          >
+            <div data-hf-id="hf-uupt" class="panel-head">
+              <span data-hf-id="hf-zcc2" class="dot"></span>
+              <span data-hf-id="hf-hfnu" class="panel-title">rdyrct</span>
+              <span data-hf-id="hf-kvtl" class="panel-note">rdyrct.com/links</span>
             </div>
 
-            <div id="links-view" class="view clip" data-start="2.6" data-duration="5.2">
-              <div class="row head"><span>Short link</span><span>Clicks</span></div>
-              <div id="row-new" class="row">
-                <span class="mono">/spring-sale</span><span class="num">3,411</span>
+            <div
+              data-hf-id="hf-hbld"
+              id="links-view"
+              class="view clip"
+              data-start="2.6"
+              data-duration="5.2"
+            >
+              <div data-hf-id="hf-w11e" class="row head">
+                <span data-hf-id="hf-fr7z">Short link</span><span data-hf-id="hf-4pbc">Clicks</span>
               </div>
-              <div class="row dim">
-                <span class="mono">/launch</span><span class="num">1,204</span>
+              <div data-hf-id="hf-h96z" id="row-new" class="row">
+                <span data-hf-id="hf-y2j4" class="mono">/spring-sale</span
+                ><span data-hf-id="hf-rrt6" class="num">3,411</span>
               </div>
-              <div class="row dim"><span class="mono">/docs</span><span class="num">892</span></div>
+              <div data-hf-id="hf-w2bq" class="row dim">
+                <span data-hf-id="hf-8rsu" class="mono">/launch</span
+                ><span data-hf-id="hf-9rrw" class="num">1,204</span>
+              </div>
+              <div data-hf-id="hf-zz62" class="row dim">
+                <span data-hf-id="hf-ubgq" class="mono">/docs</span
+                ><span data-hf-id="hf-kt42" class="num">892</span>
+              </div>
             </div>
 
-            <div id="analytics-view" class="view clip" data-start="7.8" data-duration="3.2">
-              <div class="big">
-                <span class="num">12,408</span><span class="sub">clicks · last 30 days</span>
+            <div
+              data-hf-id="hf-tpx1"
+              id="analytics-view"
+              class="view clip"
+              data-start="7.8"
+              data-duration="3.2"
+            >
+              <div data-hf-id="hf-vf1u" class="big">
+                <span data-hf-id="hf-69r4" class="num">12,408</span
+                ><span data-hf-id="hf-dvb5" class="sub">clicks · last 30 days</span>
               </div>
-              <div class="bars">
-                <div class="bar" style="height: 90px"></div>
-                <div class="bar" style="height: 140px"></div>
-                <div class="bar" style="height: 110px"></div>
-                <div class="bar" style="height: 200px"></div>
-                <div class="bar" style="height: 160px"></div>
-                <div class="bar" style="height: 250px"></div>
-                <div class="bar" style="height: 190px"></div>
-                <div class="bar" style="height: 300px"></div>
-                <div class="bar" style="height: 230px"></div>
-                <div class="bar" style="height: 270px"></div>
-                <div class="bar" style="height: 210px"></div>
-                <div class="bar" style="height: 320px"></div>
+              <div data-hf-id="hf-umx2" class="bars">
+                <div data-hf-id="hf-e30d" class="bar" style="height: 90px"></div>
+                <div data-hf-id="hf-pywb" class="bar" style="height: 140px"></div>
+                <div data-hf-id="hf-2mdw" class="bar" style="height: 110px"></div>
+                <div data-hf-id="hf-7mek" class="bar" style="height: 200px"></div>
+                <div data-hf-id="hf-wwg1" class="bar" style="height: 160px"></div>
+                <div data-hf-id="hf-dw1v" class="bar" style="height: 250px"></div>
+                <div data-hf-id="hf-e718" class="bar" style="height: 190px"></div>
+                <div data-hf-id="hf-25yd" class="bar" style="height: 300px"></div>
+                <div data-hf-id="hf-9vbp" class="bar" style="height: 230px"></div>
+                <div data-hf-id="hf-r0mx" class="bar" style="height: 270px"></div>
+                <div data-hf-id="hf-2xrz" class="bar" style="height: 210px"></div>
+                <div data-hf-id="hf-ktvz" class="bar" style="height: 320px"></div>
               </div>
-              <div class="axis">Top link · /spring-sale with 3,411 clicks</div>
+              <div data-hf-id="hf-razh" class="axis">Top link · /spring-sale with 3,411 clicks</div>
             </div>
 
-            <div id="qr-view" class="view clip" data-start="11.0" data-duration="4.0">
-              <div class="qr-tile" id="qr-tile">
+            <div
+              data-hf-id="hf-oyno"
+              id="qr-view"
+              class="view clip"
+              data-start="11.0"
+              data-duration="4.0"
+            >
+              <div data-hf-id="hf-pvlu" class="qr-tile" id="qr-tile">
                 <svg
+                  data-hf-id="hf-kcsk"
                   xmlns="http://www.w3.org/2000/svg"
                   viewBox="0 0 27 27"
                   width="100%"
                   height="100%"
                   shape-rendering="crispEdges"
                 >
-                  <path fill="#ECE7F7" d="M0 0h27v27H0z" />
+                  <path data-hf-id="hf-ovtj" fill="#ECE7F7" d="M0 0h27v27H0z" />
                   <path
+                    data-hf-id="hf-voas"
                     stroke="#17151f"
                     d="M1 1.5h7m1 0h1m1 0h2m2 0h3m1 0h7M1 2.5h1m5 0h1m4 0h3m2 0h1m1 0h1m5 0h1M1 3.5h1m1 0h3m1 0h1m4 0h1m2 0h1m3 0h1m1 0h3m1 0h1M1 4.5h1m1 0h3m1 0h1m1 0h1m1 0h2m4 0h1m1 0h1m1 0h3m1 0h1M1 5.5h1m1 0h3m1 0h1m1 0h2m1 0h1m2 0h3m1 0h1m1 0h3m1 0h1M1 6.5h1m5 0h1m1 0h1m1 0h1m5 0h1m1 0h1m5 0h1M1 7.5h7m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h7M9 8.5h1m4 0h1m2 0h1M1 9.5h1m3 0h1m1 0h3m1 0h2m1 0h1m3 0h5m2 0h1M1 10.5h1m2 0h3m2 0h4m1 0h4m3 0h2m1 0h1M1 11.5h1m1 0h1m2 0h4m2 0h1m3 0h2m3 0h3M1 12.5h1m1 0h4m2 0h1m2 0h2m1 0h1m2 0h1m4 0h2M1 13.5h1m4 0h2m1 0h1m1 0h2m1 0h3m1 0h2m2 0h4M1 14.5h4m1 0h1m1 0h2m3 0h1m2 0h1m1 0h1m2 0h1m2 0h1M3 15.5h1m1 0h1m1 0h1m4 0h12M3 16.5h3m3 0h1m2 0h1m1 0h1m1 0h1m3 0h2m1 0h2M1 17.5h2m2 0h1m1 0h2m1 0h2m1 0h2m2 0h7M9 18.5h1m4 0h4m3 0h1M1 19.5h7m1 0h3m5 0h1m1 0h1m1 0h1M1 20.5h1m5 0h1m5 0h1m1 0h1m1 0h1m3 0h5M1 21.5h1m1 0h3m1 0h1m1 0h1m1 0h2m1 0h2m1 0h7m1 0h1M1 22.5h1m1 0h3m1 0h1m3 0h1m1 0h1m2 0h5m2 0h3M1 23.5h1m1 0h3m1 0h1m2 0h1m1 0h6m1 0h1m2 0h1m1 0h1M1 24.5h1m5 0h1m2 0h3m1 0h1m1 0h1m1 0h1m1 0h5M1 25.5h7m1 0h1m1 0h1m1 0h2m1 0h1m6 0h3"
                   />
                 </svg>
               </div>
-              <div class="qr-cap">Scan this · or</div>
-              <button id="download-btn" class="dl">Download PNG</button>
+              <div data-hf-id="hf-e8u5" class="qr-cap">Scan this · or</div>
+              <button data-hf-id="hf-r2jf" id="download-btn" class="dl">Download PNG</button>
             </div>
           </div>
         </div>
       </div>
 
-      <div id="vignette"></div>
+      <div data-hf-id="hf-h7i3" id="vignette"></div>
 
       <!-- OUTRO overlay: sits on top of the zoomed QR, screen space -->
-      <div id="outro" class="clip" data-start="14.3" data-duration="1.2">
-        <div class="scrim"></div>
-        <div class="outro-qr">
+      <div data-hf-id="hf-1gfo" id="outro" class="clip" data-start="14.3" data-duration="1.2">
+        <div data-hf-id="hf-261e" class="scrim"></div>
+        <div data-hf-id="hf-qawn" class="outro-qr">
           <svg
+            data-hf-id="hf-47wc"
             xmlns="http://www.w3.org/2000/svg"
             viewBox="0 0 27 27"
             width="100%"
             height="100%"
             shape-rendering="crispEdges"
           >
-            <path fill="#ECE7F7" d="M0 0h27v27H0z" />
+            <path data-hf-id="hf-9jpz" fill="#ECE7F7" d="M0 0h27v27H0z" />
             <path
+              data-hf-id="hf-q0ho"
               stroke="#17151f"
               d="M1 1.5h7m1 0h1m1 0h2m2 0h3m1 0h7M1 2.5h1m5 0h1m4 0h3m2 0h1m1 0h1m5 0h1M1 3.5h1m1 0h3m1 0h1m4 0h1m2 0h1m3 0h1m1 0h3m1 0h1M1 4.5h1m1 0h3m1 0h1m1 0h1m1 0h2m4 0h1m1 0h1m1 0h3m1 0h1M1 5.5h1m1 0h3m1 0h1m1 0h2m1 0h1m2 0h3m1 0h1m1 0h3m1 0h1M1 6.5h1m5 0h1m1 0h1m1 0h1m5 0h1m1 0h1m5 0h1M1 7.5h7m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h7M9 8.5h1m4 0h1m2 0h1M1 9.5h1m3 0h1m1 0h3m1 0h2m1 0h1m3 0h5m2 0h1M1 10.5h1m2 0h3m2 0h4m1 0h4m3 0h2m1 0h1M1 11.5h1m1 0h1m2 0h4m2 0h1m3 0h2m3 0h3M1 12.5h1m1 0h4m2 0h1m2 0h2m1 0h1m2 0h1m4 0h2M1 13.5h1m4 0h2m1 0h1m1 0h2m1 0h3m1 0h2m2 0h4M1 14.5h4m1 0h1m1 0h2m3 0h1m2 0h1m1 0h1m2 0h1m2 0h1M3 15.5h1m1 0h1m1 0h1m4 0h12M3 16.5h3m3 0h1m2 0h1m1 0h1m1 0h1m3 0h2m1 0h2M1 17.5h2m2 0h1m1 0h2m1 0h2m1 0h2m2 0h7M9 18.5h1m4 0h4m3 0h1M1 19.5h7m1 0h3m5 0h1m1 0h1m1 0h1M1 20.5h1m5 0h1m5 0h1m1 0h1m1 0h1m3 0h5M1 21.5h1m1 0h3m1 0h1m1 0h1m1 0h2m1 0h2m1 0h7m1 0h1M1 22.5h1m1 0h3m1 0h1m3 0h1m1 0h1m2 0h5m2 0h3M1 23.5h1m1 0h3m1 0h1m2 0h1m1 0h6m1 0h1m2 0h1m1 0h1M1 24.5h1m5 0h1m2 0h3m1 0h1m1 0h1m1 0h1m1 0h5M1 25.5h7m1 0h1m1 0h1m1 0h2m1 0h1m6 0h3"
             />
           </svg>
         </div>
-        <div class="outro-text">
-          <div class="word"><span class="acc">rdyrct</span>.com</div>
-          <div class="tag">Give your browser agent the tools you already use.</div>
+        <div data-hf-id="hf-mlxb" class="outro-text">
+          <div data-hf-id="hf-3aiz" class="word">
+            <span data-hf-id="hf-58wu" class="acc">rdyrct</span>.com
+          </div>
+          <div data-hf-id="hf-7715" class="tag">
+            Give your browser agent the tools you already use.
+          </div>
         </div>
       </div>
     </div>

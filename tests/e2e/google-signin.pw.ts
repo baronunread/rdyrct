@@ -14,6 +14,14 @@ async function requireGoogle(page: Page) {
   if (!cfg.googleEnabled) test.skip(true, "Google sign-in not configured");
 }
 
+/** From /login through the emulate consent screen to a signed-in dashboard. */
+async function signInWithGoogle(page: Page) {
+  await page.goto("/login");
+  await page.getByRole("button", { name: /Continue with Google/i }).click();
+  await page.getByRole("button", { name: /testuser@gmail\.com/ }).click();
+  await expect(page).toHaveURL(/\/dashboard$/);
+}
+
 test.describe("Google sign-in", () => {
   test("Continue with Google starts an OAuth session", async ({ page }) => {
     await requireGoogle(page);
@@ -40,7 +48,7 @@ test.describe("Google sign-in", () => {
     await expect(page.getByRole("button", { name: /Continue with Google/i })).toBeVisible();
   });
 
-  test("linking Google to an existing account pulls in the Google profile", async ({ page }) => {
+  test("linking Google to an existing account keeps the local name", async ({ page }) => {
     await requireGoogle(page);
 
     // A password account under the address the emulator signs in as.
@@ -49,26 +57,18 @@ test.describe("Google sign-in", () => {
     await expect(menu).toContainText("testuser");
 
     await signOut(page);
-    await page.goto("/login");
-    await page.getByRole("button", { name: /Continue with Google/i }).click();
-    await page.getByRole("button", { name: /testuser@gmail\.com/ }).click();
-    await expect(page).toHaveURL(/\/dashboard$/);
+    await signInWithGoogle(page);
 
-    // updateUserInfoOnLink copied the Google display name onto the account.
-    await expect(menu).toContainText("Test User");
+    // The link must not overwrite the name with the Google profile's.
+    await expect(menu).toContainText("testuser");
+    await expect(menu).not.toContainText("Test User");
   });
 
   test("a full Google round trip signs in, and /login then offers 'continue as'", async ({
     page,
   }) => {
     await requireGoogle(page);
-
-    await page.goto("/login");
-    await page.getByRole("button", { name: /Continue with Google/i }).click();
-
-    // The emulate consent screen: pick the seeded test account.
-    await page.getByRole("button", { name: /testuser@gmail\.com/ }).click();
-    await expect(page).toHaveURL(/\/dashboard$/);
+    await signInWithGoogle(page);
 
     // Sign out, and the login page now leads with a one-click row for that
     // account instead of the plain button.
