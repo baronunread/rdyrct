@@ -3,6 +3,7 @@ import { appUrl } from "./environment";
 import { signUpAndVerify } from "./resend";
 import { setPlan } from "./db";
 import { addCustomDomain, createQuickLink } from "./orgs";
+import { signOut } from "./pages";
 
 const password = "test-password-123";
 
@@ -32,9 +33,22 @@ test("a new owner can create an organization and a scheme-less quick link", asyn
   await expect(page.getByText("Invite sent")).toBeVisible();
 
   await page.goto("/settings");
+
+  // Account card: change your own display name and flip the theme.
+  await page.getByLabel("Your name").fill("Playwright Person");
+  await page.getByRole("button", { name: "Save", exact: true }).first().click();
+  await expect(page.getByText("Name saved")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Account menu" })).toContainText(
+    "Playwright Person",
+  );
+  const rootEl = page.locator("html");
+  const themeBefore = await rootEl.getAttribute("data-theme");
+  await page.getByRole("button", { name: /^Switch to (dark|light)$/ }).click();
+  await expect(rootEl).not.toHaveAttribute("data-theme", themeBefore ?? "");
+
   const organizationName = page.getByLabel("Organization name");
   await organizationName.fill("Playwright Org Renamed");
-  await page.getByRole("button", { name: "Save", exact: true }).click();
+  await page.getByRole("button", { name: "Save", exact: true }).last().click();
   await expect(page.getByText("Organization renamed")).toBeVisible();
 
   const signOutUrl = "**/api/auth/sign-out";
@@ -45,12 +59,12 @@ test("a new owner can create an organization and a scheme-less quick link", asyn
       body: JSON.stringify({ message: "Sign-out service unavailable" }),
     });
   });
-  await page.getByLabel("Sign out").click();
+  await signOut(page);
   await expect(page.getByText("Sign-out service unavailable")).toBeVisible();
   await expect(page).toHaveURL(/\/settings$/);
 
   await page.unroute(signOutUrl);
-  await page.getByLabel("Sign out").click();
+  await signOut(page);
   await expect(page).toHaveURL(/\/login$/);
   await page.reload();
   await expect(page).toHaveURL(/\/login$/);

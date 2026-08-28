@@ -18,10 +18,90 @@ import { ConfirmDialog } from "../ui/confirm-dialog";
 import { copyToClipboard } from "../lib/clipboard";
 import { QrDefaultsCard } from "../components/qr-defaults-card";
 import { SettingsSkeleton } from "../components/skeletons";
-import { orgNameSchema } from "../lib/schemas";
+import { accountNameSchema, orgNameSchema } from "../lib/schemas";
+import { useTheme } from "../lib/theme";
 import posthog from "../lib/posthog";
 
 type OrgNameForm = { name: string };
+type AccountNameForm = { name: string };
+
+/** The account-name field: same PATCH-on-save shape as the org rename, but
+ * it goes through BetterAuth's own updateUser endpoint. */
+function useAccountNameForm(currentUserName: string | undefined) {
+  const qc = useQueryClient();
+  const toast = useToast();
+
+  const {
+    register,
+    handleSubmit,
+    reset,
+    watch,
+    formState: { isSubmitting },
+  } = useForm<AccountNameForm>({
+    resolver: valibotResolver(accountNameSchema),
+    defaultValues: { name: "" },
+  });
+  const synced = useRef<string | undefined>(undefined);
+
+  useEffect(() => {
+    if (currentUserName === undefined || synced.current === currentUserName) return;
+    synced.current = currentUserName;
+    reset({ name: currentUserName });
+  }, [currentUserName, reset]);
+
+  const currentName = watch("name");
+
+  const save = handleSubmit(
+    async (data) => {
+      const { error } = await authClient.updateUser({ name: data.name.trim() });
+      if (error) {
+        toast(error.message ?? "Could not save your name", "error");
+        return;
+      }
+      await qc.invalidateQueries({ queryKey: ["user"] });
+      posthog.capture("account_name_changed");
+      toast("Name saved");
+    },
+    (errors) => toast(errors.name?.message ?? "Enter your name", "error"),
+  );
+
+  return { register, save, currentName, isSubmitting };
+}
+
+function AccountCard({ userName }: { userName: string | undefined }) {
+  const { register, save, currentName, isSubmitting } = useAccountNameForm(userName);
+  const [theme, toggleTheme] = useTheme();
+  return (
+    <Card className="max-w-2xl">
+      <div className="flex flex-col gap-4">
+        <Field label="Your name">
+          <Input {...register("name")} />
+        </Field>
+        <div>
+          <Button
+            variant="primary"
+            onClick={save}
+            disabled={
+              !currentName?.trim() || currentName.trim() === (userName ?? "") || isSubmitting
+            }
+          >
+            <BusyContent busy={isSubmitting}>Save</BusyContent>
+          </Button>
+        </div>
+        <div className="border-t border-border" />
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <p className="text-sm">Theme</p>
+            <p className="text-xs text-muted">Currently {theme === "dark" ? "dark" : "light"}.</p>
+          </div>
+          <Button variant="outline" onClick={toggleTheme}>
+            Switch to {theme === "dark" ? "light" : "dark"}
+          </Button>
+        </div>
+      </div>
+    </Card>
+  );
+}
 
 /** The org-name field: syncs its default value when the current org
  * changes, and saves via PATCH. */
@@ -357,6 +437,8 @@ export function SettingsPage() {
     <div>
       <PageHeader title="Settings" sub="Account and organization settings" />
       <div className="flex flex-col gap-4">
+        <AccountCard userName={currentUser.data?.user.name} />
+
         {/* org cards only when an org exists; account deletion always */}
         <OrgSettingsCards
           org={org}

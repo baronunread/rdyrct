@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { signUpAndVerify } from "./resend";
+import { signOut } from "./pages";
 
 const password = "test-password-123";
 
@@ -54,7 +55,7 @@ test("signing out clears the cached shell", async ({ page }) => {
   const email = `playwright-signout-${Date.now()}@gmail.com`;
   await signUpAndVerify(page, email, password);
 
-  await page.getByLabel("Sign out").click();
+  await signOut(page);
   await expect(page).toHaveURL(/\/login$/);
 
   await page.goto("/dashboard");

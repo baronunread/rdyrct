@@ -492,7 +492,7 @@ async function seed() {
   });
   const accountRows = users.map(
     (u) =>
-      `(${q(`seed-acc-${u.id.slice(5)}`)}, ${q(u.id)}, 'credential', ${q(u.id)}, ${q(passwordHash)}, ${u.createdAt}, ${u.createdAt})`,
+      `(${q(`seed-acc-${u.id.slice(5)}`)}, ${q(u.id)}, 'local:credential', 'credential', ${q(u.id)}, ${q(passwordHash)}, ${u.createdAt}, ${u.createdAt})`,
   );
   await sqlBatch([
     `INSERT INTO user (id, name, email, email_verified, plan, subscription_plan,
@@ -500,7 +500,7 @@ async function seed() {
        polar_subscription_cancel_at_period_end,
        comp_plan, comp_reason, comp_granted_at, created_at, updated_at)
      VALUES ${userRows.join(",")}`,
-    `INSERT INTO account (id, account_id, provider_id, user_id, password, created_at, updated_at) VALUES ${accountRows.join(",")}`,
+    `INSERT INTO account (id, account_id, issuer, provider_id, user_id, password, created_at, updated_at) VALUES ${accountRows.join(",")}`,
   ]);
 
   /* orgs + members */

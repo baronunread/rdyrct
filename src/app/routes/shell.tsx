@@ -14,7 +14,7 @@ import { useTheme } from "../lib/theme";
 import { useToast } from "../ui/toast";
 import { Menu, MenuItem, MenuSeparator } from "../ui/menu";
 import { Dialog } from "../ui/dialog";
-import { Button, IconButton } from "../ui/button";
+import { Button } from "../ui/button";
 import { Field, Input } from "../ui/field";
 
 import { AppShellSkeleton, RouteSkeleton } from "../components/skeletons";
@@ -162,6 +162,7 @@ function AppSidebar({
   onSignOut: () => void;
   signOutPending: boolean;
 }) {
+  const navigate = useNavigate();
   return (
     <div className="flex h-full flex-col">
       {/* brand — desktop only; on mobile the top bar already shows it */}
@@ -195,25 +196,28 @@ function AppSidebar({
       {/* user footer — py-2.5 makes this block exactly as tall as the main
           Footer, so both border-t lines form one continuous bottom rule */}
       <div className="mt-auto border-t border-border px-3 py-2.5">
-        <div className="flex items-center gap-2 px-1.5">
-          <UserAvatar user={user} size={32} />
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-sm">{user.name}</p>
-            <p className="truncate text-xs text-muted">{user.email}</p>
-          </div>
-          <IconButton label="Toggle theme" className="p-2" onClick={onToggleTheme}>
+        <Menu
+          label="Account menu"
+          trigger={
+            <div className="flex items-center gap-2 rounded-md px-1.5 py-1 hover:bg-surface-2">
+              <UserAvatar user={user} size={32} />
+              <p className="min-w-0 flex-1 truncate text-sm">{user.name}</p>
+              <ChevronsUpDown size={14} className="shrink-0 text-muted" />
+            </div>
+          }
+        >
+          <p className="truncate px-2.5 py-1.5 text-xs text-muted">{user.email}</p>
+          <MenuSeparator />
+          <MenuItem onClick={() => void navigate({ to: "/settings" })}>Settings</MenuItem>
+          <MenuItem onClick={onToggleTheme}>
             <MorphIcon icon={theme === "dark" ? sun : moon} size={15} spring="snappy" />
-          </IconButton>
-          <IconButton
-            label="Sign out"
-            danger
-            className="p-2"
-            disabled={signOutPending}
-            onClick={onSignOut}
-          >
-            <LogOut size={15} />
-          </IconButton>
-        </div>
+            {theme === "dark" ? "Light theme" : "Dark theme"}
+          </MenuItem>
+          <MenuSeparator />
+          <MenuItem className="text-danger" disabled={signOutPending} onClick={onSignOut}>
+            <LogOut size={15} /> Sign out
+          </MenuItem>
+        </Menu>
       </div>
     </div>
   );

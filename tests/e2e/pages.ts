@@ -1,5 +1,11 @@
 import { expect, type Page } from "@playwright/test";
 
+/** Sign out through the account menu in the app-shell sidebar footer. */
+export async function signOut(page: Page): Promise<void> {
+  await page.getByRole("button", { name: "Account menu" }).click();
+  await page.getByRole("menuitem", { name: "Sign out" }).click();
+}
+
 const LEGAL_PAGES = [
   { path: "/privacy", heading: "Privacy Policy" },
   { path: "/terms", heading: "Terms of Service" },

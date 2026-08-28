@@ -1,6 +1,7 @@
 import { expect, type Page, test } from "@playwright/test";
 import { signUpAndVerify } from "./resend";
 import { rawSql } from "./db";
+import { signOut } from "./pages";
 
 async function blockAuthRequests(page: Page) {
   const counter = { count: 0 };
@@ -18,7 +19,7 @@ test.describe("authentication forms", () => {
 
     await signUpAndVerify(page, email, password);
 
-    await page.getByLabel("Sign out").click();
+    await signOut(page);
     await expect(page).toHaveURL(/\/login$/);
 
     await page.getByLabel("Email").fill(email);
