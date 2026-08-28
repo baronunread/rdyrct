@@ -28,7 +28,10 @@ test("a new account arrives with an organization and one question", async ({ pag
   await expect(page.getByRole("heading", { name: "Shorten your first link" })).toBeVisible();
   await expect(page.getByText("Clicks · 7d")).toHaveCount(0);
 
-  await page.getByPlaceholder("https://example.com/launch").first().fill("example.com/first-run");
+  await page
+    .getByPlaceholder("Paste a URL, or just start typing")
+    .first()
+    .fill("example.com/first-run");
   await page.getByRole("button", { name: "Create link" }).click();
 
   // The QR and the short URL, in the same dialog every other creation uses.
@@ -44,11 +47,9 @@ test("a new account arrives with an organization and one question", async ({ pag
 test("typing or pasting anywhere on the dashboard goes into the link field", async ({ page }) => {
   await signUpAndVerify(page, `typeahead-${Date.now()}@gmail.com`, password);
 
-  const field = page.getByPlaceholder("https://example.com/launch").first();
+  // The placeholder says any keystroke or paste on this screen lands here.
+  const field = page.getByPlaceholder("Paste a URL, or just start typing").first();
   await expect(field).toBeVisible();
-
-  // The hint that this is possible, always on screen.
-  await expect(page.getByText("Paste or start typing anywhere on the page.")).toBeVisible();
 
   // Move focus off the field, then type: it should catch the keystrokes.
   await page.getByRole("heading", { name: "Shorten your first link" }).click();

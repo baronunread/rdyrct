@@ -77,7 +77,7 @@ export async function signUpAndVerify(page: Page, email: string, password: strin
   // in a test carries Playwright's default 5s, which is not a budget for
   // three round trips on a loaded runner. Callers were failing on their own
   // first line for the same reason sign-up above needed 30s.
-  await expect(page.getByPlaceholder("https://example.com/launch").first()).toBeVisible({
+  await expect(page.getByPlaceholder("Paste a URL, or just start typing").first()).toBeVisible({
     timeout: 30_000,
   });
 }

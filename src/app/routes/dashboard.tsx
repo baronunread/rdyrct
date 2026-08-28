@@ -333,15 +333,15 @@ function QuickCreateCard({
 
   return (
     <Card>
-      <form onSubmit={submit} className="flex flex-col gap-3 sm:flex-row sm:items-start">
-        <div className="min-w-0 flex-1">
-          <Input
-            {...register("destination")}
-            placeholder="https://example.com/launch"
-            aria-label="Destination URL"
-          />
-          <p className="mt-1 text-xs text-muted">Paste or start typing anywhere on the page.</p>
-        </div>
+      <form onSubmit={submit} className="flex flex-col gap-3 sm:flex-row sm:items-center">
+        <Input
+          {...register("destination")}
+          className="min-w-0 flex-1"
+          // The placeholder carries the hint that any keystroke or paste on
+          // this screen lands here, so it needs no line of its own.
+          placeholder="Paste a URL, or just start typing"
+          aria-label="Destination URL"
+        />
         <QuickCreateDomainSelect
           activeDomains={activeDomains}
           domainId={domainId}

@@ -53,13 +53,13 @@ async function freshOrg(page: Page, name: string): Promise<void> {
   // its form. Wait for that form, not network idle: product analytics can
   // keep an unrelated request open. createQuickLink retries its fill in case
   // a final query update replaces the field.
-  await expect(page.getByPlaceholder("https://example.com/launch").first()).toBeVisible();
+  await expect(page.getByPlaceholder("Paste a URL, or just start typing").first()).toBeVisible();
 }
 
 /** Fills the dashboard's quick-create destination field and submits it,
  * waiting for the "Link created" confirmation dialog. */
 async function createQuickLink(page: Page, destination: string) {
-  const field = page.getByPlaceholder("https://example.com/launch").first();
+  const field = page.getByPlaceholder("Paste a URL, or just start typing").first();
   const button = page.getByRole("button", { name: "Create link" });
   // Right after switching org, the dashboard's data queries can still be
   // settling and remount the form underneath a fill(): keep re-filling

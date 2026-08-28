@@ -51,7 +51,7 @@ export async function openNewLinkDialog(page: Page) {
  * confirmation dialog. The first thing a signed-in test does, since an
  * account starts with an organization and no links. */
 export async function createQuickLink(page: Page, destination: string) {
-  const field = page.getByPlaceholder("https://example.com/launch").first();
+  const field = page.getByPlaceholder("Paste a URL, or just start typing").first();
   await expect(field).toBeVisible();
   await field.fill(destination);
   await page.getByRole("button", { name: "Create link" }).click();

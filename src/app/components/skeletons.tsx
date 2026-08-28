@@ -112,9 +112,8 @@ function BarListCardSkeleton({ rows = 4 }: { rows?: number }) {
 
 /**
  * /dashboard, measured against a populated account: header (52), the
- * create card (a field with a helper line, beside the button), the three
- * stat cards (109), the clicks-and-activity pair (245) and the three list
- * cards (231).
+ * create card (a field beside the button), the three stat cards (109), the
+ * clicks-and-activity pair (245) and the three list cards (231).
  *
  * An account on its very first run has only the first two, so it watches the
  * rest disappear once. Every visit after that, and every visit by everyone
@@ -125,16 +124,8 @@ export function DashboardSkeleton() {
     <SkeletonStatus>
       <HeaderSkeleton />
       <Card>
-        {/* the create row aligns to the top (`sm:items-start`), because the
-            URL field carries a `text-xs` helper line under it that the
-            button and domain select do not */}
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
-          <div className="min-w-0 flex-1">
-            <Skeleton className="h-9 w-full" />
-            <span className="mt-1 flex h-4 items-center">
-              <Skeleton className="h-2.5 w-56 max-w-full" />
-            </span>
-          </div>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+          <Skeleton className="h-9 min-w-0 flex-1" />
           <Skeleton className="h-9 sm:w-24" />
         </div>
       </Card>

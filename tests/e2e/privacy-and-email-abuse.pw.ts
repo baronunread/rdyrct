@@ -10,7 +10,7 @@ const password = "test-password-123";
  * is nothing to predict, and scraping the rendered URL out of surrounding
  * copy is the brittle part of this test, not the part under test. */
 async function createQuickLink(page: Page): Promise<string> {
-  const destination = page.getByPlaceholder("https://example.com/launch").first();
+  const destination = page.getByPlaceholder("Paste a URL, or just start typing").first();
   await expect(destination).toBeVisible();
   await destination.fill("example.com/referrer-privacy");
   await page.getByRole("button", { name: "Create link" }).click();
