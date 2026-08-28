@@ -40,7 +40,7 @@ test("reloads once, then refuses so the tab can't loop", () => {
   expect(reloads).toBe(1);
 });
 
-test("reloads anyway when sessionStorage is unavailable", () => {
+test("shows the notice instead of reloading when sessionStorage is unavailable", () => {
   Object.assign(globalThis, {
     sessionStorage: {
       getItem() {
@@ -52,6 +52,8 @@ test("reloads anyway when sessionStorage is unavailable", () => {
     },
   });
 
-  expect(reloadForNewVersion()).toBe(true);
-  expect(reloads).toBe(1);
+  // No way to remember a reload happened, so an unguarded reload could loop:
+  // fall back to the notice.
+  expect(reloadForNewVersion()).toBe(false);
+  expect(reloads).toBe(0);
 });

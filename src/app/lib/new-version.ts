@@ -46,17 +46,18 @@ const RELOADED_KEY = "rdyrct:chunk-reloaded";
  * rendering a route the visitor just navigated to: the old UI is already
  * gone, so a reload is the fix, not a banner over a blank page. Guarded by a
  * session flag so a genuinely broken deploy (reload doesn't fix the chunk)
- * can't loop: the second chunk failure in a session returns false and the
- * caller falls back to the notice.
+ * can't loop: it returns false on the second chunk failure in a session, or
+ * when there's no sessionStorage to remember the first one, and the caller
+ * falls back to the notice.
  */
 export function reloadForNewVersion(): boolean {
   try {
     if (sessionStorage.getItem(RELOADED_KEY)) return false;
     sessionStorage.setItem(RELOADED_KEY, "1");
   } catch {
-    // No sessionStorage (some private-mode configs): reload anyway. One
-    // unguarded reload still beats a blank page; a loop needs the chunk to
-    // keep failing, which is the rare broken-deploy case.
+    // No sessionStorage to guard the reload with (some locked-down privacy
+    // configs): show the notice instead, so a still-missing chunk can't loop.
+    return false;
   }
   window.location.reload();
   return true;
