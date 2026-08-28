@@ -12,7 +12,7 @@ test("an owner can export the analytics view as a CSV (#78)", async ({ page }) =
   await signUpAndVerify(page, `export-${Date.now()}@gmail.com`, password);
 
   // One link, so the org has something to report on.
-  const destination = page.getByPlaceholder("Paste a URL, or just start typing").first();
+  const destination = page.getByPlaceholder("https://example.com/launch").first();
   await expect(destination).toBeVisible();
   await destination.fill("example.com/export");
   await page.getByRole("button", { name: "Create link" }).click();

@@ -6,7 +6,7 @@ const password = "test-password-123";
 test("link stats keep their layout while loading (#174)", async ({ page }) => {
   await signUpAndVerify(page, `link-skeleton-${Date.now()}@gmail.com`, password);
 
-  const destination = page.getByPlaceholder("Paste a URL, or just start typing").first();
+  const destination = page.getByPlaceholder("https://example.com/launch").first();
   await destination.fill("https://example.com/loading");
   await page.getByRole("button", { name: "Create link" }).click();
   await expect(page.getByRole("dialog", { name: "Link created" })).toBeVisible();

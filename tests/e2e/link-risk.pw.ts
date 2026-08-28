@@ -24,7 +24,7 @@ test("a new link is created immediately and scored afterwards (#68)", async ({ p
   const email = `risk-${Date.now()}@gmail.com`;
   await signUpAndVerify(page, email, password);
 
-  const destination = page.getByPlaceholder("Paste a URL, or just start typing").first();
+  const destination = page.getByPlaceholder("https://example.com/launch").first();
   await expect(destination).toBeVisible();
   await destination.fill(BLOCKED_DESTINATION);
 

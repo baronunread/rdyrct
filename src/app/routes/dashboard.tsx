@@ -337,9 +337,7 @@ function QuickCreateCard({
         <Input
           {...register("destination")}
           className="min-w-0 flex-1"
-          // The placeholder carries the hint that any keystroke or paste on
-          // this screen lands here, so it needs no line of its own.
-          placeholder="Paste a URL, or just start typing"
+          placeholder="https://example.com/launch"
           aria-label="Destination URL"
         />
         <QuickCreateDomainSelect
