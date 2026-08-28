@@ -41,6 +41,11 @@ test("a new owner can create an organization and a scheme-less quick link", asyn
   await expect(page.getByRole("button", { name: "Account menu" })).toContainText(
     "Playwright Person",
   );
+  // No uploaded image, so the footer shows a blobatar (inline SVG data URI).
+  await expect(page.locator('button[aria-label="Account menu"] img')).toHaveAttribute(
+    "src",
+    /^data:image\/svg\+xml/,
+  );
   const rootEl = page.locator("html");
   const themeBefore = await rootEl.getAttribute("data-theme");
   await page.getByRole("button", { name: /^Switch to (dark|light)$/ }).click();
