@@ -361,6 +361,10 @@ function PaletteBody({
   return (
     <>
       {looksLikeUrl(search) && <CreateGroup arg={search} onRun={onCreate} />}
+      <ActionGroup heading="Go to" items={matchingActions(actions, "Go to", search)} />
+      <ActionGroup heading="Actions" items={matchingActions(actions, "Actions", search)} />
+      {/* Last, so a matching page or action keeps the default selection and
+          Enter runs it rather than diverting into link search. */}
       {search !== "" && (
         <CommandGroup heading="Search">
           <CommandItem value="__search-links" onSelect={onEnterLinks}>
@@ -371,8 +375,6 @@ function PaletteBody({
           </CommandItem>
         </CommandGroup>
       )}
-      <ActionGroup heading="Go to" items={matchingActions(actions, "Go to", search)} />
-      <ActionGroup heading="Actions" items={matchingActions(actions, "Actions", search)} />
     </>
   );
 }
@@ -416,7 +418,10 @@ export function CommandMenu() {
   }, [open]);
 
   const onValueChange = (value: string) => {
-    const pill = scope === "all" ? detectPill(value) : null;
+    // Checked in every scope, not just `all`: a fast typist can land a
+    // keystroke on the controlled field before React clears the prefix, so
+    // the value can still arrive as "link:foo" while already in link scope.
+    const pill = detectPill(value);
     if (pill) {
       setScope(pill.scope);
       setSearch(pill.rest);
