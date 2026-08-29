@@ -52,6 +52,11 @@ test("the link scope searches the org's links, and Backspace pops the pill", asy
     .first();
   await expect(result).toBeVisible();
 
+  // The per-row Copy button does not select the row (no navigation).
+  await result.getByRole("button", { name: /^Copy https?:\/\// }).click();
+  await expect(page).toHaveURL(/\/dashboard$/);
+  await expect(page.getByPlaceholder(LINKS)).toBeVisible();
+
   // Backspace on the empty field clears the pill, back to the default scope.
   await page.getByPlaceholder(LINKS).fill("");
   await page.keyboard.press("Backspace");

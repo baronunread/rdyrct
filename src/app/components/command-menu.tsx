@@ -1,7 +1,19 @@
 import { useEffect, useState, type ComponentType, type KeyboardEvent } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import * as v from "valibot";
-import { Layers, Link2, LogOut, Moon, Plus, Search, Sun, UserPlus, WorldWww } from "@/app/ui/icons";
+import {
+  ArrowUpDown,
+  Copy,
+  Layers,
+  Link2,
+  LogOut,
+  Moon,
+  Plus,
+  Search,
+  Sun,
+  UserPlus,
+  WorldWww,
+} from "@/app/ui/icons";
 import {
   CommandDialog,
   CommandEmpty,
@@ -22,6 +34,7 @@ import { useTheme } from "../lib/theme";
 import { useToast } from "../ui/toast";
 import { ApiError, shortUrl } from "../lib/api";
 import { withErrorToast } from "../lib/mutation-toast";
+import { copyToClipboard } from "../lib/clipboard";
 import { destinationSchema } from "../lib/schemas";
 import type { LinkDTO, LinkInput } from "@/shared/types";
 
@@ -86,16 +99,54 @@ function looksLikeUrl(s: string): boolean {
   return /^https?:\/\//i.test(s) || (/\.[a-z]{2,}/i.test(s) && !/\s/.test(s));
 }
 
+/** Switch the current org, then stay put unless the route names a link (its
+ * slug may not exist under the new org). Mirrors the sidebar switcher. */
+function makeSwitchTo(
+  close: () => void,
+  setOrg: (id: string) => void,
+  navigate: ReturnType<typeof useNavigate>,
+): (id: string) => void {
+  return (id) => {
+    close();
+    setOrg(id);
+    if (window.location.pathname.startsWith("/links/")) navigate({ to: "/dashboard" });
+  };
+}
+
+/** "Switch to <Org>" for every org the user is in except the current one. */
+function switchOrgActions(
+  orgs: { id: string; name: string }[],
+  currentId: string | undefined,
+  switchTo: (id: string) => void,
+): Action[] {
+  return orgs.flatMap((o) =>
+    o.id === currentId
+      ? []
+      : [
+          {
+            value: `switch organization ${o.name}`,
+            label: `Switch to ${o.name}`,
+            icon: ArrowUpDown,
+            group: "Go to" as const,
+            run: () => switchTo(o.id),
+          },
+        ],
+  );
+}
+
 /**
  * One flat list of everything the palette can do, built from the current
  * user, org and theme. A later shortcuts sheet can render from the same
  * array.
  */
+// A registry builder: the CRAP score is optional-chain and zero-coverage
+// noise over a handful of plain conditionals.
+// fallow-ignore-next-line complexity
 function useActions(close: () => void, enterLinks: () => void): Action[] {
   const navigate = useNavigate();
   const [theme, toggleTheme] = useTheme();
   const shell = useShellUser();
-  const { org } = useCurrentOrg();
+  const { org, orgs, setOrg } = useCurrentOrg();
   const logout = useLogout();
   const toast = useToast();
 
@@ -125,6 +176,7 @@ function useActions(close: () => void, enterLinks: () => void): Action[] {
       run: goto("/admin"),
     });
   }
+  nav.push(...switchOrgActions(orgs, org?.id, makeSwitchTo(close, setOrg, navigate)));
 
   const actions: Action[] = [
     {
@@ -299,16 +351,30 @@ function CreateGroup({ arg, onRun }: { arg: string; onRun: (arg: string) => void
 }
 
 function LinksGroup({ links }: { links: LinkMatch[] }) {
+  const toast = useToast();
   if (links.length === 0) return null;
   return (
     <CommandGroup heading="Links">
       {links.map((l) => (
         <CommandItem key={l.key} value={`${l.key} ${l.name}`} onSelect={l.run}>
           <Link2 size={15} className="mt-0.5 shrink-0 self-start text-muted" />
-          <span className="flex min-w-0 flex-col">
+          <span className="flex min-w-0 flex-1 flex-col">
             <span className="truncate">{l.name}</span>
             <span className="truncate text-xs text-muted">{l.url}</span>
           </span>
+          <button
+            type="button"
+            aria-label={`Copy ${l.url}`}
+            // Stop the press from selecting the row (which would navigate).
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={(e) => {
+              e.stopPropagation();
+              void copyToClipboard(l.url, toast).catch(() => {});
+            }}
+            className="shrink-0 cursor-pointer rounded p-1 text-muted hover:text-text"
+          >
+            <Copy size={14} />
+          </button>
         </CommandItem>
       ))}
     </CommandGroup>
