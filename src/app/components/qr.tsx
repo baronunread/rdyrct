@@ -43,7 +43,12 @@ export async function qrDataUrl(
   look: QrLook,
   extension: "png" | "svg",
 ): Promise<string> {
-  const raw = await makeQR(url, DOWNLOAD_SIZE, look).getRawData(extension);
+  const raw = await makeQR(
+    url,
+    DOWNLOAD_SIZE,
+    look,
+    extension === "png" ? "canvas" : "svg",
+  ).getRawData(extension);
   if (!raw) throw new Error("Could not render the QR code.");
   const bytes = raw instanceof Blob ? new Uint8Array(await raw.arrayBuffer()) : new Uint8Array(raw);
   let binary = "";
@@ -84,7 +89,10 @@ export function QrDownloadButtons({
   const toast = useToast();
   const download = async (extension: "png" | "svg") => {
     try {
-      await makeQR(url, DOWNLOAD_SIZE, resolved).download({ name, extension });
+      await makeQR(url, DOWNLOAD_SIZE, resolved, extension === "png" ? "canvas" : "svg").download({
+        name,
+        extension,
+      });
       posthog.capture("qr_code_downloaded", { format: extension });
     } catch {
       // Drawing at 1024px can fail on a browser short of memory, and the
@@ -140,11 +148,17 @@ const MARGIN_RATIO = 8 / 208;
  */
 const PREVIEW_RENDER_SIZE = 1024;
 
-function makeQR(url: string, size: number, look: QrLook) {
+// A PNG asks for `canvas`: rasterizing an SVG instance goes SVG string -> img
+// decode -> drawImage -> toBlob, and that chain throws "the operation failed
+// for an unknown transient reason" intermittently. A canvas instance draws
+// straight to the bitmap. The seam merge below is an SVG-DOM rewrite and only
+// shows on a scaled SVG anyway, so a canvas render skips it with no visible
+// difference.
+function makeQR(url: string, size: number, look: QrLook, renderAs: "svg" | "canvas" = "svg") {
   const qr = new QRCodeStyling({
     width: size,
     height: size,
-    type: "svg",
+    type: renderAs,
     data: url,
     image: look.logo,
     margin: Math.round(size * MARGIN_RATIO),
@@ -154,7 +168,7 @@ function makeQR(url: string, size: number, look: QrLook) {
   });
   // Runs after every draw, on the same element the preview shows and the SVG
   // download serializes, so neither can ship the seams.
-  qr.applyExtension(fillSeams);
+  if (renderAs === "svg") qr.applyExtension(fillSeams);
   return qr;
 }
 

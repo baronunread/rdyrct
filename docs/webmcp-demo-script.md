@@ -20,10 +20,10 @@ First, let's ask the browser agent to make a QR code for the Devpost page for th
 
 That one call did two things. It rendered a QR code and handed the agent an image, and it moved us to the real generator with the value filled in. That matters, because this page has its own tools.
 
-Let's ask the agent to give the dots a dark green, and download it as an SVG.
+Let's ask the agent to give the dots a dark green, and download it as a PNG.
 
           - - - - - GAP: generate_qr_code recolors the visible generator,
-          then download_qr_code saves the SVG file. Stay silent. Resume once
+          then download_qr_code saves the PNG file. Stay silent. Resume once
           the file lands. - - - - -
 
 So the agent walked from a public page onto the generator and drove it like a person would. Recolored it, and downloaded a file. Next to these there's also a pricing tool that hands the agent the real plan numbers, so it never scrapes the page to answer what rdyrct costs.
