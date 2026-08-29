@@ -81,7 +81,7 @@ export function WebMcpMarketingTools() {
       {
         name: "create_qr_code",
         description:
-          "Generate a free QR code for any link or text. Returns it as an image data URL (PNG or SVG) and opens the full generator at rdyrct.com/qr-code-generator with that value, where generate_qr_code and download_qr_code can change the colors, dot style, or logo and save a file. No account needed, and nothing is sent anywhere.",
+          "Generate a free QR code for any link or text. Returns it as an SVG image data URL (pass format png for a PNG) and opens the full generator at rdyrct.com/qr-code-generator with that value, where generate_qr_code and download_qr_code can change the colors, dot style, or logo and save a file. No account needed, and nothing is sent anywhere.",
         inputSchema: {
           type: "object",
           properties: {
@@ -97,11 +97,12 @@ export function WebMcpMarketingTools() {
           const { qrDataUrl } = await import("./qr");
           const look = resolveLook({});
           const value = parsed.output.value;
-          // qrDataUrl renders a PNG through a canvas instance now, but keep a
-          // SVG fallback so a flaky raster still returns something usable.
+          // Default to SVG: it is a plain string, so it never hits the canvas
+          // raster that fails intermittently in some agent browsers. PNG is
+          // still there on request, with an SVG fallback if its raster flakes.
           const render = (format: "png" | "svg") =>
             qrDataUrl(value, look, format).catch(() => null);
-          const dataUrl = (await render(parsed.output.format ?? "png")) ?? (await render("svg"));
+          const dataUrl = (await render(parsed.output.format ?? "svg")) ?? (await render("svg"));
           await navigate({ to: "/qr-code-generator", search: { value } });
           return (
             dataUrl ??
