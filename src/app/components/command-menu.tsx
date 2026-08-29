@@ -46,7 +46,8 @@ type Action = {
   group: "Go to" | "Actions";
   danger?: boolean;
   disabled?: boolean;
-  /** Shown regardless of the typed filter (e.g. the entry into link scope). */
+  /** Shown while the field is empty even with no match (e.g. the entry into
+   * link scope); a typed filter still has to match. */
   always?: boolean;
   run: () => void;
 };
@@ -415,7 +416,8 @@ const PLACEHOLDER = {
 
 function matchingActions(actions: Action[], group: Action["group"], search: string): Action[] {
   return actions.filter(
-    (a) => a.group === group && (a.always || hit(`${a.label} ${a.value}`, search)),
+    (a) =>
+      a.group === group && ((a.always && search === "") || hit(`${a.label} ${a.value}`, search)),
   );
 }
 
