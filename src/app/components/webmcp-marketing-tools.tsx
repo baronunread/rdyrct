@@ -95,13 +95,18 @@ export function WebMcpMarketingTools() {
           const parsed = v.safeParse(qrInput, input);
           if (!parsed.success) return "Provide a non-empty link or text of up to 2000 characters.";
           const { qrDataUrl } = await import("./qr");
-          const dataUrl = qrDataUrl(
-            parsed.output.value,
-            resolveLook({}),
-            parsed.output.format ?? "png",
+          const look = resolveLook({});
+          const value = parsed.output.value;
+          // qrDataUrl renders a PNG through a canvas instance now, but keep a
+          // SVG fallback so a flaky raster still returns something usable.
+          const render = (format: "png" | "svg") =>
+            qrDataUrl(value, look, format).catch(() => null);
+          const dataUrl = (await render(parsed.output.format ?? "png")) ?? (await render("svg"));
+          await navigate({ to: "/qr-code-generator", search: { value } });
+          return (
+            dataUrl ??
+            "Opened the QR generator with that value. Use download_qr_code there to save the file."
           );
-          await navigate({ to: "/qr-code-generator", search: { value: parsed.output.value } });
-          return dataUrl;
         },
       },
     ];
