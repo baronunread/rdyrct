@@ -2,7 +2,7 @@ import { Dialog as BaseDialog } from "@base-ui/react/dialog";
 import { Command as CommandPrimitive } from "cmdk";
 import type { ComponentProps, ReactNode } from "react";
 import { AnimatePresence, domAnimation, LazyMotion, m } from "motion/react";
-import { Search } from "@/app/ui/icons";
+import { Search, X } from "@/app/ui/icons";
 import { cn } from "./cn";
 
 /**
@@ -72,10 +72,32 @@ export function CommandDialog({
   );
 }
 
-export function CommandInput(props: ComponentProps<typeof CommandPrimitive.Input>) {
+/** A scope chip shown before the input, cleared by its × or by Backspace on
+ * an empty field. */
+export function CommandPill({ label, onClear }: { label: string; onClear: () => void }) {
   return (
-    <div className="flex items-center gap-2.5 border-b border-border px-4">
+    <span className="flex shrink-0 items-center gap-1 rounded bg-surface-2 py-0.5 pr-1 pl-1.5 text-xs text-text">
+      {label}
+      <button
+        type="button"
+        aria-label={`Clear ${label} filter`}
+        onClick={onClear}
+        className="cursor-pointer text-muted hover:text-text"
+      >
+        <X size={12} />
+      </button>
+    </span>
+  );
+}
+
+export function CommandInput({
+  pill,
+  ...props
+}: ComponentProps<typeof CommandPrimitive.Input> & { pill?: ReactNode }) {
+  return (
+    <div className="flex items-center gap-2 border-b border-border px-4">
       <Search size={16} className="shrink-0 text-muted" />
+      {pill}
       <CommandPrimitive.Input
         {...props}
         // The global :focus-visible rule (styles.css) is unlayered, so it

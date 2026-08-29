@@ -1,7 +1,7 @@
-import { useEffect, useState, type ComponentType } from "react";
+import { useEffect, useState, type ComponentType, type KeyboardEvent } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import * as v from "valibot";
-import { Layers, Link2, LogOut, Moon, Plus, Sun, UserPlus, WorldWww } from "@/app/ui/icons";
+import { Layers, Link2, LogOut, Moon, Plus, Search, Sun, UserPlus, WorldWww } from "@/app/ui/icons";
 import {
   CommandDialog,
   CommandEmpty,
@@ -9,6 +9,7 @@ import {
   CommandInput,
   CommandItem,
   CommandList,
+  CommandPill,
 } from "@/app/ui/command";
 import { appNavItems } from "./nav-items";
 import { LinkPreviewDialog } from "./link-preview-dialog";
@@ -35,14 +36,41 @@ type Action = {
   run: () => void;
 };
 
+/**
+ * The palette has three scopes. `all` filters pages and actions locally and
+ * hits nothing; the network only wakes once you are `in` a scope. A `link:`
+ * or `create:` prefix (Discord style) turns into a pill and switches scope;
+ * Backspace on the empty field pops the pill.
+ */
+type Scope = "all" | "links" | "create";
+
+const PILL_LABEL = { links: "link", create: "create" } satisfies Record<
+  Exclude<Scope, "all">,
+  string
+>;
+
+const PREFIXES: [RegExp, Exclude<Scope, "all">][] = [
+  [/^(?:search )?links?:\s*/i, "links"],
+  [/^create(?: link)?:\s*/i, "create"],
+];
+
+/** A prefix the field just gained, with the text left after it. */
+function detectPill(value: string): { scope: Exclude<Scope, "all">; rest: string } | null {
+  for (const [re, scope] of PREFIXES) {
+    const m = value.match(re);
+    if (m) return { scope, rest: value.slice(m[0].length) };
+  }
+  return null;
+}
+
 /** ⌘K opens on any key with a Cmd/Ctrl modifier and no Alt. */
-function isToggleChord(e: KeyboardEvent): boolean {
+function isToggleChord(e: globalThis.KeyboardEvent): boolean {
   return (e.metaKey || e.ctrlKey) && !e.altKey && e.key.toLowerCase() === "k";
 }
 
 /** Every word of the query has to appear somewhere in the item's text.
- * cmdk's own fuzzy filter is off (link results are already server-filtered),
- * so the static list matches here instead. */
+ * cmdk's own fuzzy filter is off (link results are server-filtered, and the
+ * scope pill already narrowed things), so the static list matches here. */
 function hit(text: string, query: string): boolean {
   const hay = text.toLowerCase();
   return query
@@ -54,21 +82,6 @@ function hit(text: string, query: string): boolean {
 /** A one-token string with a dot in it: enough to read as "make this a link". */
 function looksLikeUrl(s: string): boolean {
   return /^https?:\/\//i.test(s) || (/\.[a-z]{2,}/i.test(s) && !/\s/.test(s));
-}
-
-type Query =
-  | { kind: "create"; arg: string }
-  | { kind: "search-links"; arg: string }
-  | { kind: "plain"; arg: string };
-
-/** `create link: <url>` and `search link: <text>` are explicit modes; a bare
- * URL also reads as create; everything else is a plain filter. */
-function parseQuery(raw: string): Query {
-  const create = raw.match(/^create link:\s*(.*)$/is);
-  if (create) return { kind: "create", arg: create[1].trim() };
-  const search = raw.match(/^search link:\s*(.*)$/is);
-  if (search) return { kind: "search-links", arg: search[1].trim() };
-  return { kind: "plain", arg: raw.trim() };
 }
 
 /**
@@ -167,8 +180,9 @@ function linkHref(l: LinkDTO): string {
   return l.domain ? `/links/${l.slug}?domain=${encodeURIComponent(l.domain)}` : `/links/${l.slug}`;
 }
 
-/** The current org's links matching `term`, capped at six. The query reaches
- * the server (the list is paged), so it lags a keystroke. */
+/** The current org's links matching `term`, capped at six. Only called with a
+ * term while the `link` scope is active, so the palette never searches on a
+ * stray keystroke. The query reaches the server, so it lags a keystroke. */
 // Linear fetch-and-shape; the CRAP score is inflated by the nullable-data
 // guards and fallow's assumed 0% coverage.
 // fallow-ignore-next-line complexity
@@ -195,11 +209,11 @@ type Match = { input: LinkInput; matchedLinks: LinkDTO[] };
  * Creating a link from the palette follows the dashboard's quick-create flow
  * exactly: on success the QR-and-short-URL dialog opens; when the
  * destination already has a link the same "add this address to it" dialog
- * offers to alias it or make a separate link (#38). Returns a `start(url)`
- * and the two dialogs to render.
+ * offers to alias it or make a separate link (#38). Returns `start(url)` and
+ * the two dialogs to render.
  */
 // fallow-ignore-next-line complexity
-function useLinkCreateFlow(close: () => void) {
+function useLinkCreateFlow() {
   const { orgId, defaultDomainId, orgQr } = useOrgLimits();
   const toast = useToast();
   const { create } = useLinkMutations(orgId);
@@ -233,7 +247,6 @@ function useLinkCreateFlow(close: () => void) {
       toast("Enter a valid URL", "error");
       return;
     }
-    close();
     submit({ destination: value, domainId: defaultDomainId }, {});
   };
 
@@ -272,6 +285,7 @@ function CreateGroup({ arg, onRun }: { arg: string; onRun: (arg: string) => void
 }
 
 function LinksGroup({ links }: { links: LinkMatch[] }) {
+  if (links.length === 0) return null;
   return (
     <CommandGroup heading="Links">
       {links.map((l) => (
@@ -310,20 +324,57 @@ function ActionGroup({ heading, items }: { heading: string; items: Action[] }) {
   );
 }
 
-/** An explicit `create link:` prefix, or a bare URL, offers a create item. */
-function wantsCreate(q: Query): boolean {
-  return q.kind === "create" || (q.kind === "plain" && looksLikeUrl(q.arg));
+const PLACEHOLDER = {
+  all: "Search pages and actions…",
+  links: "Search your links",
+  create: "Paste or type a URL",
+} satisfies Record<Scope, string>;
+
+function matchingActions(actions: Action[], group: Action["group"], search: string): Action[] {
+  return actions.filter((a) => a.group === group && hit(`${a.label} ${a.value}`, search));
 }
 
-/** Pages and actions show only in plain mode, filtered by the term. */
-function actionsIn(actions: Action[], q: Query, group: Action["group"]): Action[] {
-  if (q.kind !== "plain") return [];
-  return actions.filter((a) => a.group === group && hit(`${a.label} ${a.value}`, q.arg));
-}
-
-/** What to feed the link search: nothing while composing a `create link:`. */
-function linkTerm(q: Query): string {
-  return q.kind === "create" ? "" : q.arg;
+/** The list contents for the current scope. `all` shows a jump-to-links
+ * shortcut plus the filtered pages and actions; the scoped views show just
+ * their one thing. */
+function PaletteBody({
+  scope,
+  search,
+  actions,
+  links,
+  onCreate,
+  onEnterLinks,
+}: {
+  scope: Scope;
+  search: string;
+  actions: Action[];
+  links: LinkMatch[];
+  onCreate: (arg: string) => void;
+  onEnterLinks: () => void;
+}) {
+  if (scope !== "all") {
+    return {
+      links: <LinksGroup links={links} />,
+      create: <CreateGroup arg={search} onRun={onCreate} />,
+    }[scope];
+  }
+  return (
+    <>
+      {looksLikeUrl(search) && <CreateGroup arg={search} onRun={onCreate} />}
+      {search !== "" && (
+        <CommandGroup heading="Search">
+          <CommandItem value="__search-links" onSelect={onEnterLinks}>
+            <Search size={15} className="text-muted" />
+            <span className="truncate">
+              Search links for <span className="text-text">{search}</span>
+            </span>
+          </CommandItem>
+        </CommandGroup>
+      )}
+      <ActionGroup heading="Go to" items={matchingActions(actions, "Go to", search)} />
+      <ActionGroup heading="Actions" items={matchingActions(actions, "Actions", search)} />
+    </>
+  );
 }
 
 /**
@@ -332,23 +383,23 @@ function linkTerm(q: Query): string {
  * otherwise keeps quiet (type or paste anywhere on the dashboard, and
  * whatever lands here next).
  *
- * Typing filters pages and actions and searches the org's links. Prefix with
- * `search link:` to see links only, `create link:` (or just paste a URL) to
- * make one on the spot. The bare-keystroke listener on the dashboard ignores
- * anything with a modifier, so ⌘K never collides with it.
+ * Default scope filters pages and actions only. Type `link:` to search the
+ * org's links, `create:` (or a bare URL) to make one, each shown as a pill.
+ * The bare-keystroke listener on the dashboard ignores anything with a
+ * modifier, so ⌘K never collides with it.
  */
 export function CommandMenu() {
   const [open, setOpen] = useState(false);
+  const [scope, setScope] = useState<Scope>("all");
   const [search, setSearch] = useState("");
   const close = () => setOpen(false);
 
-  const parsed = parseQuery(search);
   const actions = useActions(close);
-  const links = useLinkMatches(linkTerm(parsed), close);
-  const { start: createLink, dialogs: createDialogs } = useLinkCreateFlow(close);
+  const links = useLinkMatches(scope === "links" ? search : "", close);
+  const { start, dialogs } = useLinkCreateFlow();
 
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
+    const onKey = (e: globalThis.KeyboardEvent) => {
       if (!isToggleChord(e)) return;
       e.preventDefault();
       setOpen((value) => !value);
@@ -357,29 +408,63 @@ export function CommandMenu() {
     return () => document.removeEventListener("keydown", onKey);
   }, []);
 
-  // Fresh each open: a stale term would show stale results for a frame.
+  // Fresh each open.
   useEffect(() => {
-    if (!open) setSearch("");
+    if (open) return;
+    setScope("all");
+    setSearch("");
   }, [open]);
+
+  const onValueChange = (value: string) => {
+    const pill = scope === "all" ? detectPill(value) : null;
+    if (pill) {
+      setScope(pill.scope);
+      setSearch(pill.rest);
+    } else {
+      setSearch(value);
+    }
+  };
+
+  const onKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
+    // Read the live value, not `search`: a controlled reset to "" can lag a
+    // render behind the keystroke that empties the field.
+    if (e.key === "Backspace" && e.currentTarget.value === "" && scope !== "all") {
+      e.preventDefault();
+      setScope("all");
+    }
+  };
 
   return (
     <>
       <CommandDialog open={open} onOpenChange={setOpen} label="Command menu" shouldFilter={false}>
         <CommandInput
-          placeholder="Search pages, links, actions… or paste a URL"
+          placeholder={PLACEHOLDER[scope]}
           value={search}
-          onValueChange={setSearch}
+          onValueChange={onValueChange}
+          onKeyDown={onKeyDown}
+          pill={
+            scope === "all" ? undefined : (
+              <CommandPill label={PILL_LABEL[scope]} onClear={() => setScope("all")} />
+            )
+          }
         />
         <CommandList>
           <CommandEmpty>No matches.</CommandEmpty>
-          {wantsCreate(parsed) && <CreateGroup arg={parsed.arg} onRun={createLink} />}
-          {links.length > 0 && <LinksGroup links={links} />}
-          <ActionGroup heading="Go to" items={actionsIn(actions, parsed, "Go to")} />
-          <ActionGroup heading="Actions" items={actionsIn(actions, parsed, "Actions")} />
+          <PaletteBody
+            scope={scope}
+            search={search}
+            actions={actions}
+            links={links}
+            onCreate={(arg) => {
+              close();
+              start(arg);
+            }}
+            onEnterLinks={() => setScope("links")}
+          />
         </CommandList>
       </CommandDialog>
 
-      {createDialogs}
+      {dialogs}
     </>
   );
 }
