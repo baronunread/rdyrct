@@ -1,33 +1,47 @@
 import { expect, type Page } from "@playwright/test";
 import type { JsonValue } from "../../src/shared/types";
 
-/** Depth-first search through an arbitrary JSON value (the emulator's
- * /emails response) for the email object that mentions `email`, then pulls
- * the 6-digit code out of its body.
- *
- * The plain-text part is read first, and only a line that is nothing but the
- * six digits counts. Scanning the whole serialized object for `\d{6}` used to
- * work, but the shared layout carries hex colours, and `#262336` is six
- * digits with word boundaries on both sides: it would be read as the code. */
-export function otpForEmail(value: JsonValue, email: string): string {
-  if (Array.isArray(value)) {
-    return value.map((item) => otpForEmail(item, email)).find(Boolean) ?? "";
-  }
-  if (!(value instanceof Object)) return "";
+function isRecord(value: JsonValue): value is { [k: string]: JsonValue } {
+  return value instanceof Object && !Array.isArray(value);
+}
 
-  const serialized = JSON.stringify(value);
-  if (serialized.includes(email) && ("html" in value || "text" in value)) {
-    // The emulator sends `text` as a string. Anything else stringifies to
-    // something that cannot be a line of six digits, which is the whole test.
-    const onItsOwnLine = String(value.text ?? "").match(/^\s*(\d{6})\s*$/m)?.[1];
-    if (onItsOwnLine) return onItsOwnLine;
-    return serialized.match(/\b\d{6}\b/)?.[0] ?? "";
-  }
+/** The 6-digit code out of one email's body. The plain-text part is read
+ * first (a line that is nothing but six digits, then any `\d{6}` in it),
+ * and the html last: the shared layout inlines hex colours, and `#262336`
+ * is a bare `\d{6}`, so it must never be reached while the text carries a
+ * real code. */
+function codeFromBody(email: { [k: string]: JsonValue }): string {
+  const text = String(email.text ?? "");
+  const html = String(email.html ?? "");
   return (
-    Object.values(value)
-      .map((item) => otpForEmail(item, email))
-      .find(Boolean) ?? ""
+    text.match(/^\s*(\d{6})\s*$/m)?.[1] ??
+    text.match(/\b\d{6}\b/)?.[0] ??
+    html.match(/\b\d{6}\b/)?.[0] ??
+    ""
   );
+}
+
+/** The verification code from the *newest* email the emulator holds for
+ * `email`. The `/emails` list is in send order, so scanning it back to front
+ * means a retry that re-sends to the same address, or a busy shared inbox,
+ * can never hand back a stale code: the last match wins. Accepts the raw
+ * `{ data: [...] }` list or a bare array. Returns "" when there is no code
+ * yet. */
+export function otpForEmail(value: JsonValue, email: string): string {
+  const list = Array.isArray(value)
+    ? value
+    : isRecord(value) && Array.isArray(value.data)
+      ? value.data
+      : [];
+  for (let i = list.length - 1; i >= 0; i--) {
+    const item = list[i];
+    if (!isRecord(item)) continue;
+    const to = Array.isArray(item.to) ? item.to : item.to == null ? [] : [item.to];
+    if (!to.some((addr) => String(addr).includes(email))) continue;
+    const code = codeFromBody(item);
+    if (code) return code;
+  }
+  return "";
 }
 
 export async function latestOtp(page: Page, email: string) {
