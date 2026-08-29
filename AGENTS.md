@@ -61,7 +61,7 @@ suite.** `bun run verify:e2e` is the gate CI runs, unscoped, before a PR
 merges — that stays mandatory, and the full `e2e:smoke` run only happens
 there, never as a local default. Re-running every unit test, worker test and
 e2e spec after every edit is not extra safety, it's noise that hides which
-check actually matters: a change to QR-logo storage doesn't need the billing
+check matters: a change to QR-logo storage doesn't need the billing
 or short-link-creation specs to pass again, it needs the ones that touch R2,
 the qr-logo routes, and whatever renders the logo. Find the blast radius
 first (`codegraph_explore`'s blast-radius summary, or `git diff` against
@@ -141,7 +141,7 @@ Shell writes to repo files are sandboxed; edit through the editor tools, not
   `/login`, `/signup`, `/privacy`, `/terms`, `/reset-password`,
   `/invite/:token`. The app lives at root keywords: `/dashboard` (quick link
   creation, quick stats, recent activity), `/analytics` (the full stats page), `/links`,
-  `/domains`, `/members`, `/billing`, `/settings`, `/admin`. There is **no org id
+  `/domains`, `/members`, `/billing`, `/settings`, `/admin`. **No org id
   in URLs**: the current org is a localStorage-backed store, `useCurrentOrg`
   (`src/app/lib/current-org.ts`). Those keywords are reserved from custom slugs
   via `RESERVED_SLUGS` in `src/worker/util.ts` (the Worker also guards `/:slug`).
@@ -166,7 +166,7 @@ analyticsDays }`). Slugs on the **shared** domain are always random (every
   can't be squatted. Every account gets an org at
   sign-up (#65), named from the email domain (`src/shared/org-name.ts`) and
   renameable in Settings, so nobody meets a dead app behind a form asking
-  for a company name. The dashboard asks for a **link** until there is one,
+  for a company name. The dashboard asks for a **link** until one exists,
   then goes back to being a dashboard. `NoOrgState`
   (`src/app/components/no-org.tsx`) is still there for the account that has
   no org left (it deleted the only one), and `/billing` still works org-less,

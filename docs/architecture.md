@@ -141,7 +141,7 @@ one key, and its consumer reads current D1 state before it changes KV. This make
 duplicate and out-of-order messages safe. R2 deletes and Workflow steps are also
 designed to run more than once.
 
-There are two distinct consistency promises:
+Two distinct consistency promises:
 
 - D1 is the product truth. API reads after a successful write use D1.
 - KV is a fast, eventually consistent redirect index. Cloudflare states that a

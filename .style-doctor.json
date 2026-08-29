@@ -1,0 +1,3 @@
+{
+  "exclude": ["video-hf/**", "THIRD_PARTY_LICENSES.md", "public/llms-full.txt", "public/robots.txt"]
+}

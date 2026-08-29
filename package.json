@@ -29,7 +29,8 @@
     "check:contrast": "bun scripts/check-contrast.ts",
     "doctor": "react-doctor",
     "fallow": "fallow audit --base origin/main",
-    "check:observability": "evlog map --min-score 100"
+    "check:observability": "evlog map --min-score 100",
+    "style": "style-doctor --scope changed --base origin/main"
   },
   "dependencies": {
     "@base-ui/react": "^1.7.0",
@@ -102,6 +103,7 @@
     "oxlint": "1.79.0",
     "portless": "^0.15.5",
     "react-doctor": "^0.9.12",
+    "style-doctor": "0.2.0",
     "tailwindcss": "^4.3.3",
     "typescript": "^7.0.2",
     "vite": "^8.2.2",
