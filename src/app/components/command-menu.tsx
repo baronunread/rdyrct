@@ -150,11 +150,13 @@ function useActions(close: () => void): Action[] {
       run: goto("/members"),
     },
     {
+      // No `act`: the palette stays open so you can flip back, and the
+      // item's own label swaps as the theme changes.
       value: "toggle theme dark light appearance",
       label: flip.label,
       icon: flip.icon,
       group: "Actions",
-      run: act(toggleTheme),
+      run: toggleTheme,
     },
     {
       value: "sign out log out",

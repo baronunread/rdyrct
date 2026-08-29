@@ -19,16 +19,16 @@ test("the command menu navigates and toggles the theme", async ({ page }) => {
   await expect(page).toHaveURL(/\/links$/);
   await expect(input).toBeHidden();
 
-  // Reopen, run the theme item, the root flips.
+  // Reopen, run the theme item: the root flips and the palette stays open
+  // so you can flip straight back.
   await page.keyboard.press("ControlOrMeta+KeyK");
   await page.getByPlaceholder(ALL).fill("theme");
   const before = await page.locator("html").getAttribute("data-theme");
   await page.keyboard.press("Enter");
   await expect.poll(() => page.locator("html").getAttribute("data-theme")).not.toBe(before);
+  await expect(page.getByPlaceholder(ALL)).toBeVisible();
 
   // Esc closes it.
-  await page.keyboard.press("ControlOrMeta+KeyK");
-  await expect(page.getByPlaceholder(ALL)).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(page.getByPlaceholder(ALL)).toBeHidden();
 });
