@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 import { signUpAndVerify } from "./resend";
 import { createQuickLink } from "./orgs";
 
@@ -6,12 +6,16 @@ const password = "test-password-123";
 const ALL = "Search pages and actions…";
 const LINKS = "Search your links";
 
-test("the command menu navigates and toggles the theme", async ({ page }) => {
-  await signUpAndVerify(page, `cmdk-${Date.now()}@gmail.com`, password);
+/** A fresh verified account on the empty dashboard, with ⌘K already open. */
+async function freshPalette(page: Page, prefix: string) {
+  await signUpAndVerify(page, `${prefix}-${Date.now()}@gmail.com`, password);
   await expect(page.getByRole("heading", { name: "Shorten your first link" })).toBeVisible();
-
-  // ⌘K / Ctrl+K opens it, focused; typing filters; Enter runs the top match.
   await page.keyboard.press("ControlOrMeta+KeyK");
+}
+
+test("the command menu navigates and toggles the theme", async ({ page }) => {
+  // ⌘K opens it, focused; typing filters; Enter runs the top match.
+  await freshPalette(page, "cmdk-nav");
   const input = page.getByPlaceholder(ALL);
   await expect(input).toBeFocused();
   await input.fill("links");
@@ -64,10 +68,7 @@ test("the link scope searches the org's links, and Backspace pops the pill", asy
 });
 
 test("the command menu creates a link, alias flow included", async ({ page }) => {
-  await signUpAndVerify(page, `cmdk-create-${Date.now()}@gmail.com`, password);
-  await expect(page.getByRole("heading", { name: "Shorten your first link" })).toBeVisible();
-
-  await page.keyboard.press("ControlOrMeta+KeyK");
+  await freshPalette(page, "cmdk-create");
   await page.getByPlaceholder(ALL).fill("https://example.com/from-cmdk");
 
   // A URL-shaped query offers a create item; running it makes the link and
@@ -94,11 +95,10 @@ test("the command menu creates a link, alias flow included", async ({ page }) =>
 });
 
 test("the palette's contextual create and invite actions", async ({ page }) => {
-  await signUpAndVerify(page, `cmdk-actions-${Date.now()}@gmail.com`, password);
+  await freshPalette(page, "cmdk-actions");
 
   // A typed email offers "Invite <email>"; running it sends the org invite.
   const invitee = `invitee-${Date.now()}@gmail.com`;
-  await page.keyboard.press("ControlOrMeta+KeyK");
   await page.getByPlaceholder(ALL).fill(invitee);
   await page.getByRole("option", { name: `Invite ${invitee}` }).click();
   await expect(page.getByText(`Invite sent to ${invitee}`)).toBeVisible();

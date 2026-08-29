@@ -21,27 +21,32 @@ function codeFromBody(email: { [k: string]: JsonValue }): string {
   );
 }
 
+/** The emulator's `/emails` payload as a flat array: the raw `{ data: [...] }`
+ * list, a bare array, or nothing. */
+function inboxList(value: JsonValue): JsonValue[] {
+  if (Array.isArray(value)) return value;
+  if (isRecord(value) && Array.isArray(value.data)) return value.data;
+  return [];
+}
+
+/** Whether an inbox entry was sent to `email` (its `to` is one address or an
+ * array of them). */
+function addressedTo(item: JsonValue, email: string): boolean {
+  if (!isRecord(item)) return false;
+  const to = Array.isArray(item.to) ? item.to : [item.to];
+  return to.some((addr) => String(addr).includes(email));
+}
+
 /** The verification code from the *newest* email the emulator holds for
- * `email`. The `/emails` list is in send order, so scanning it back to front
- * means a retry that re-sends to the same address, or a busy shared inbox,
- * can never hand back a stale code: the last match wins. Accepts the raw
- * `{ data: [...] }` list or a bare array. Returns "" when there is no code
- * yet. */
+ * `email`. The list is in send order, so taking the last code means a retry
+ * that re-sends to the same address, or a busy shared inbox, can never hand
+ * back a stale one. Returns "" when there is no code yet. */
 export function otpForEmail(value: JsonValue, email: string): string {
-  const list = Array.isArray(value)
-    ? value
-    : isRecord(value) && Array.isArray(value.data)
-      ? value.data
-      : [];
-  for (let i = list.length - 1; i >= 0; i--) {
-    const item = list[i];
-    if (!isRecord(item)) continue;
-    const to = Array.isArray(item.to) ? item.to : item.to == null ? [] : [item.to];
-    if (!to.some((addr) => String(addr).includes(email))) continue;
-    const code = codeFromBody(item);
-    if (code) return code;
-  }
-  return "";
+  const codes = inboxList(value)
+    .filter((item) => addressedTo(item, email))
+    .map((item) => (isRecord(item) ? codeFromBody(item) : ""))
+    .filter(Boolean);
+  return codes[codes.length - 1] ?? "";
 }
 
 export async function latestOtp(page: Page, email: string) {
