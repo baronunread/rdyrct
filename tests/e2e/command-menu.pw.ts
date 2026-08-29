@@ -40,13 +40,15 @@ test("the link scope searches the org's links, and Backspace pops the pill", asy
 
   await page.keyboard.press("ControlOrMeta+KeyK");
   // `link:` becomes a pill and the field switches to searching links.
-  await page.getByPlaceholder(ALL).pressSequentially("link:palette-target");
+  await page.getByPlaceholder(ALL).fill("link:");
   await expect(page.getByPlaceholder(LINKS)).toBeVisible();
   await expect(page.getByRole("button", { name: "Clear link filter" })).toBeVisible();
 
+  await page.getByPlaceholder(LINKS).fill("palette-target");
+  // In link scope every option is a short URL; the host varies by env.
   const result = page
     .getByRole("option")
-    .filter({ hasText: /rdyrct/ })
+    .filter({ hasText: /https?:\/\// })
     .first();
   await expect(result).toBeVisible();
 
