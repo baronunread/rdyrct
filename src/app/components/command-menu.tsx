@@ -187,7 +187,7 @@ function useActions(close: () => void, enterLinks: () => void): Action[] {
   return [...nav, ...actions];
 }
 
-type LinkMatch = { key: string; url: string; run: () => void };
+type LinkMatch = { key: string; name: string; url: string; run: () => void };
 
 function linkHref(l: LinkDTO): string {
   return l.domain ? `/links/${l.slug}?domain=${encodeURIComponent(l.domain)}` : `/links/${l.slug}`;
@@ -208,6 +208,7 @@ function useLinkMatches(term: string, close: () => void): LinkMatch[] {
   const items = settled ? (data?.items ?? []) : [];
   return items.map((l) => ({
     key: `link:${l.domain ?? ""}:${l.slug}`,
+    name: l.title || l.destination,
     url: shortUrl(l.slug, l.domain),
     run: () => {
       close();
@@ -302,9 +303,12 @@ function LinksGroup({ links }: { links: LinkMatch[] }) {
   return (
     <CommandGroup heading="Links">
       {links.map((l) => (
-        <CommandItem key={l.key} value={l.key} onSelect={l.run}>
-          <Link2 size={15} className="text-muted" />
-          <span className="truncate">{l.url}</span>
+        <CommandItem key={l.key} value={`${l.key} ${l.name}`} onSelect={l.run}>
+          <Link2 size={15} className="mt-0.5 shrink-0 self-start text-muted" />
+          <span className="flex min-w-0 flex-col">
+            <span className="truncate">{l.name}</span>
+            <span className="truncate text-xs text-muted">{l.url}</span>
+          </span>
         </CommandItem>
       ))}
     </CommandGroup>
