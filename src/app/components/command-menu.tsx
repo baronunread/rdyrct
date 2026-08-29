@@ -11,6 +11,7 @@ import {
   CommandList,
 } from "@/app/ui/command";
 import { appNavItems } from "./nav-items";
+import { LinkPreviewDialog } from "./link-preview-dialog";
 import { useLinkMutations, useLinks, useLogout, useShellUser } from "../lib/hooks";
 import { useCurrentOrg } from "../lib/current-org";
 import { useOrgLimits } from "../lib/org-limits";
@@ -188,12 +189,16 @@ function useLinkMatches(term: string, close: () => void): LinkMatch[] {
 }
 
 /** Create a link straight from the palette: validate the destination, POST
- * it, then land on the new link. A destination that already has a link is
- * left to the user to find rather than opening the alias flow here. */
+ * it, then hand the new link back so the caller can show its QR and short
+ * URL, the same dialog the dashboard's quick-create opens. A destination
+ * that already has a link is left to the user to find rather than opening
+ * the alias flow here. */
 // fallow-ignore-next-line complexity
-function useCreateLink(close: () => void): (destination: string) => void {
+function useCreateLink(
+  close: () => void,
+  onCreated: (link: LinkDTO) => void,
+): (destination: string) => void {
   const { orgId, defaultDomainId } = useOrgLimits();
-  const navigate = useNavigate();
   const toast = useToast();
   const { create } = useLinkMutations(orgId);
 
@@ -207,10 +212,7 @@ function useCreateLink(close: () => void): (destination: string) => void {
     create.mutate(
       { destination: value, domainId: defaultDomainId },
       {
-        onSuccess: (link) => {
-          toast("Link created");
-          navigate({ href: linkHref(link) });
-        },
+        onSuccess: onCreated,
         onError: (e) => {
           if (e instanceof ApiError && e.code === "same_destination_match") {
             toast("That destination already has a link. Search for it above.");
@@ -305,12 +307,14 @@ function linkTerm(q: Query): string {
 export function CommandMenu() {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
+  const [created, setCreated] = useState<LinkDTO | null>(null);
   const close = () => setOpen(false);
 
+  const { orgQr } = useOrgLimits();
   const parsed = parseQuery(search);
   const actions = useActions(close);
   const links = useLinkMatches(linkTerm(parsed), close);
-  const createLink = useCreateLink(close);
+  const createLink = useCreateLink(close, setCreated);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -328,19 +332,29 @@ export function CommandMenu() {
   }, [open]);
 
   return (
-    <CommandDialog open={open} onOpenChange={setOpen} label="Command menu" shouldFilter={false}>
-      <CommandInput
-        placeholder="Search pages, links, actions… or paste a URL"
-        value={search}
-        onValueChange={setSearch}
+    <>
+      <CommandDialog open={open} onOpenChange={setOpen} label="Command menu" shouldFilter={false}>
+        <CommandInput
+          placeholder="Search pages, links, actions… or paste a URL"
+          value={search}
+          onValueChange={setSearch}
+        />
+        <CommandList>
+          <CommandEmpty>No matches.</CommandEmpty>
+          {wantsCreate(parsed) && <CreateGroup arg={parsed.arg} onRun={createLink} />}
+          {links.length > 0 && <LinksGroup links={links} />}
+          <ActionGroup heading="Go to" items={actionsIn(actions, parsed, "Go to")} />
+          <ActionGroup heading="Actions" items={actionsIn(actions, parsed, "Actions")} />
+        </CommandList>
+      </CommandDialog>
+
+      {/* Same QR-and-short-URL dialog the dashboard's quick-create opens. */}
+      <LinkPreviewDialog
+        title="Link created"
+        link={created}
+        orgQr={orgQr}
+        onClose={() => setCreated(null)}
       />
-      <CommandList>
-        <CommandEmpty>No matches.</CommandEmpty>
-        {wantsCreate(parsed) && <CreateGroup arg={parsed.arg} onRun={createLink} />}
-        {links.length > 0 && <LinksGroup links={links} />}
-        <ActionGroup heading="Go to" items={actionsIn(actions, parsed, "Go to")} />
-        <ActionGroup heading="Actions" items={actionsIn(actions, parsed, "Actions")} />
-      </CommandList>
-    </CommandDialog>
+    </>
   );
 }

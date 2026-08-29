@@ -58,10 +58,14 @@ test("the command menu creates a link from a pasted URL", async ({ page }) => {
   await page.getByPlaceholder(PLACEHOLDER).fill("https://example.com/from-cmdk");
 
   // A URL-shaped query offers a create item; running it makes the link and
-  // lands on its detail page.
+  // opens the same QR-and-short-URL dialog the dashboard quick-create uses.
   const create = page.getByRole("option", { name: /Create link for/ });
   await expect(create).toBeVisible();
   await create.click();
-  await expect(page).toHaveURL(/\/links\/[^/]+$/);
-  await expect(page.getByText("https://example.com/from-cmdk")).toBeVisible();
+
+  const dialog = page.getByRole("dialog", { name: "Link created" });
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByRole("img", { name: /QR/i })).toBeVisible();
+  await dialog.getByRole("button", { name: /Close/i }).click();
+  await expect(dialog).toBeHidden();
 });
