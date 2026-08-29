@@ -1,6 +1,6 @@
 import { Dialog } from "../ui/dialog";
 import { CopyButton } from "../ui/copy-button";
-import { Spinner } from "../ui/spinner";
+import { Skeleton, SkeletonStatus } from "../ui/skeleton";
 import { useToast } from "../ui/toast";
 import { copyToClipboard } from "../lib/clipboard";
 import { shortUrl } from "../lib/api";
@@ -26,14 +26,22 @@ function LinkPreviewContent({ link, orgQr }: { link: LinkDTO; orgQr: OrgQr }) {
   );
 }
 
-/** Same footprint as the filled content, so the dialog does not resize when
- * the link arrives. */
+/** Mirrors LinkPreviewContent block for block, at the same sizes, so the
+ * dialog does not resize when the link arrives: the 208px QR box, the two
+ * download buttons (h-8), then the short-URL line and its copy button. */
 function LinkPreviewLoading() {
   return (
-    <div className="flex min-h-52 flex-col items-center justify-center gap-3 text-muted">
-      <Spinner className="h-6 w-6" />
-      <p className="text-sm">Creating your link…</p>
-    </div>
+    <SkeletonStatus label="Creating your link…" className="flex flex-col items-center gap-3">
+      <Skeleton className="h-52 w-52 rounded-lg" />
+      <div className="flex gap-2">
+        <Skeleton className="h-8 w-[4.5rem]" />
+        <Skeleton className="h-8 w-[4.5rem]" />
+      </div>
+      <div className="flex items-center gap-2">
+        <Skeleton className="h-5 w-44" />
+        <Skeleton className="h-6 w-6" />
+      </div>
+    </SkeletonStatus>
   );
 }
 
@@ -41,9 +49,9 @@ function LinkPreviewLoading() {
  * just created" (dashboard quick-create) and "show QR" (links table row
  * action). Same content, different title.
  *
- * `loading` opens the dialog before the link exists, so the palette's
- * quick-create shows a spinner in place of the gap between the click and
- * the created link.
+ * `loading` opens the dialog before the link exists, showing a placeholder
+ * the exact size of the filled content, so the palette's quick-create has
+ * something on screen between the click and the created link.
  *
  * The QR is here on every plan. Only its look (logo, colors, shapes) is
  * paid, and `orgQr` already resolves to the built-in defaults for a free

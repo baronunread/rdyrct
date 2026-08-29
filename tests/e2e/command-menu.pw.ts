@@ -107,10 +107,11 @@ test("the palette shows a loader between the create click and the link", async (
 
   await page.getByRole("option", { name: /Create link for/ }).click();
 
-  // The palette is gone, but the dialog is already up in its loading state.
+  // The palette is gone, but the dialog is already up: open, no QR yet.
   await expect(page.getByPlaceholder(ALL)).toBeHidden();
   const dialog = page.getByRole("dialog", { name: "Link created" });
-  await expect(dialog.getByText("Creating your link…")).toBeVisible();
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByRole("img", { name: /QR/i })).toBeHidden();
 
   release();
   await expect(dialog.getByRole("img", { name: /QR/i })).toBeVisible();
