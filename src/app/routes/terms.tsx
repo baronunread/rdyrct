@@ -1,6 +1,7 @@
 // fallow-ignore-file code-duplication -- legal sections share structural patterns
 import { SUPPORT_EMAIL, GITHUB_URL } from "../ui/footer";
 import { LegalPageLayout } from "../components/legal-page-layout";
+import { WebMcpMarketingTools } from "../components/webmcp-marketing-tools";
 import { useSeo } from "../lib/seo";
 import { useMarketingScroll } from "../lib/marketing-scroll";
 import { useAudience } from "../lib/audience";
@@ -14,6 +15,7 @@ export function TermsPage() {
   useMarketingScroll();
   return (
     <LegalPageLayout authed={authed}>
+      <WebMcpMarketingTools />
       <div>
         <h1 className="mb-2 text-xl font-bold">Terms of Service</h1>
         <p className="text-muted">

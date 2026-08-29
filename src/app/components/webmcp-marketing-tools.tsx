@@ -1,5 +1,7 @@
 import { useEffect } from "react";
+import * as v from "valibot";
 import { ORG_PLANS, PLAN_LIMITS, PLAN_PRICES, type OrgPlan } from "@/shared/types";
+import { resolveLook } from "../lib/qr-look";
 import { registerWebMcpTools, type WebMcpTool } from "../lib/webmcp";
 
 /**
@@ -7,7 +9,17 @@ import { registerWebMcpTools, type WebMcpTool } from "../lib/webmcp";
  * browser agent the same plan numbers and product summary the pages show,
  * so it answers "what does rdyrct cost" from a value it was given rather
  * than by scraping the layout. First-party static copy, no API, no auth.
+ *
+ * The one exception is `create_qr_code`: it renders a real code so an agent
+ * on any page can make one from a link. The renderer is a dynamic import so
+ * qr-code-styling never lands in the marketing bundle, only in the chunk the
+ * tool call pulls.
  */
+
+const qrInput = v.object({
+  value: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(2_000)),
+  format: v.optional(v.picklist(["png", "svg"])),
+});
 
 function plural(n: number, word: string): string {
   return `${n} ${word}${n === 1 ? "" : "s"}`;
@@ -42,7 +54,8 @@ function marketingResult(message: string): string {
   return message.slice(0, 2_000);
 }
 
-/** Mounted on the landing page and every standalone marketing page. */
+/** Mounted on the landing page and every standalone marketing page, including
+ * the QR generator and the legal pages. */
 export function WebMcpMarketingTools() {
   useEffect(() => {
     const tools: WebMcpTool[] = [
@@ -61,6 +74,26 @@ export function WebMcpMarketingTools() {
         inputSchema: { type: "object", properties: {} },
         annotations: { readOnlyHint: true },
         execute: async () => marketingResult(OVERVIEW),
+      },
+      {
+        name: "create_qr_code",
+        description:
+          "Generate a free QR code for any link or text and return it as an image data URL (PNG or SVG). No account needed, and nothing is sent anywhere. For colors, a logo, or dot styles, open rdyrct.com/qr-code-generator.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            value: { type: "string", minLength: 1, maxLength: 2_000 },
+            format: { type: "string", enum: ["png", "svg"] },
+          },
+          required: ["value"],
+        },
+        annotations: { readOnlyHint: true, untrustedContentHint: true },
+        execute: async (input) => {
+          const parsed = v.safeParse(qrInput, input);
+          if (!parsed.success) return "Provide a non-empty link or text of up to 2000 characters.";
+          const { qrDataUrl } = await import("./qr");
+          return qrDataUrl(parsed.output.value, resolveLook({}), parsed.output.format ?? "png");
+        },
       },
     ];
 
