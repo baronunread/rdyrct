@@ -100,6 +100,23 @@ test("a browser agent can fill the visible QR generator", async ({ page }) => {
     .toBe(false);
 });
 
+test("the logged-out landing page exposes marketing tools", async ({ page }) => {
+  await supportWebMcp(page);
+  await page.goto("/");
+  await toolNamed(page, "get_rdyrct_pricing");
+  await toolNamed(page, "get_rdyrct_overview");
+
+  const [pricing, overview] = await page.evaluate(async () => {
+    const run = (name: string) =>
+      window.webMcpTools.find((tool) => tool.name === name)?.execute({});
+    return Promise.all([run("get_rdyrct_pricing"), run("get_rdyrct_overview")]);
+  });
+
+  expect(pricing).toContain("Hobby ($4/mo)");
+  expect(pricing).toContain("Pro ($9/mo)");
+  expect(overview).toMatch(/link shortener and QR code generator/);
+});
+
 test("a browser without WebMCP leaves the QR generator working", async ({ page }) => {
   await page.goto("/qr-code-generator");
   await page.getByLabel("Link or text").fill("https://example.com/no-webmcp");
@@ -142,6 +159,37 @@ test("a signed-in browser agent can create and find a link", async ({ page }) =>
   });
   expect(analytics).toMatch(/Analytics for the current organization/);
   await expect(page).toHaveURL(/\/analytics$/);
+
+  const slug = created?.match(/rdyrct\.com\/(\S+)/)?.[1] ?? "";
+  expect(slug).not.toBe("");
+
+  await toolNamed(page, "get_link");
+  await toolNamed(page, "update_link");
+  await toolNamed(page, "delete_link");
+
+  const details = await page.evaluate(async (linkSlug) => {
+    const tool = window.webMcpTools.find((candidate) => candidate.name === "get_link");
+    return tool?.execute({ slug: linkSlug }, { signal: new AbortController().signal });
+  }, slug);
+  expect(details).toContain("0 clicks");
+
+  const updated = await page.evaluate(async (linkSlug) => {
+    const tool = window.webMcpTools.find((candidate) => candidate.name === "update_link");
+    return tool?.execute(
+      { slug: linkSlug, destination: "https://example.com/agent-moved", title: "Moved" },
+      { signal: new AbortController().signal },
+    );
+  }, slug);
+  expect(updated).toMatch(/Updated rdyrct\.com\//);
+  await expect(page).toHaveURL(/\/links$/);
+  await expect(page.getByText("https://example.com/agent-moved")).toBeVisible();
+
+  const deleted = await page.evaluate(async (linkSlug) => {
+    const tool = window.webMcpTools.find((candidate) => candidate.name === "delete_link");
+    return tool?.execute({ slug: linkSlug }, { signal: new AbortController().signal });
+  }, slug);
+  expect(deleted).toMatch(/no longer redirects/);
+  await expect(page.getByText("https://example.com/agent-moved")).toHaveCount(0);
 });
 
 function windowTextLength(value: string | undefined): number {
