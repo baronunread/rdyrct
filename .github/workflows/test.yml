@@ -44,6 +44,13 @@ jobs:
       # introduced, not inherited debt. See AGENTS.md.
       - name: Fallow audit
         run: bun run fallow
+      # Prose health for the docs this branch touched (AGENTS.md, README,
+      # docs/**). Default --blocking error: the strong LLM tells and
+      # filler openers fail CI; passive-voice and hedge words stay
+      # advisory. Generated and vendored files are excluded in
+      # .style-doctor.json.
+      - name: Style Doctor
+        run: bun run style
 
   unit:
     runs-on: ubuntu-latest
