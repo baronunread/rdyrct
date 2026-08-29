@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { useNavigate } from "@tanstack/react-router";
 import * as v from "valibot";
 import { ORG_PLANS, PLAN_LIMITS, PLAN_PRICES, type OrgPlan } from "@/shared/types";
 import { resolveLook } from "../lib/qr-look";
@@ -57,6 +58,8 @@ function marketingResult(message: string): string {
 /** Mounted on the landing page and every standalone marketing page, including
  * the QR generator and the legal pages. */
 export function WebMcpMarketingTools() {
+  const navigate = useNavigate();
+
   useEffect(() => {
     const tools: WebMcpTool[] = [
       {
@@ -78,7 +81,7 @@ export function WebMcpMarketingTools() {
       {
         name: "create_qr_code",
         description:
-          "Generate a free QR code for any link or text and return it as an image data URL (PNG or SVG). No account needed, and nothing is sent anywhere. For colors, a logo, or dot styles, open rdyrct.com/qr-code-generator.",
+          "Generate a free QR code for any link or text. Returns it as an image data URL (PNG or SVG) and opens the full generator at rdyrct.com/qr-code-generator with that value, where generate_qr_code and download_qr_code can change the colors, dot style, or logo and save a file. No account needed, and nothing is sent anywhere.",
         inputSchema: {
           type: "object",
           properties: {
@@ -92,13 +95,19 @@ export function WebMcpMarketingTools() {
           const parsed = v.safeParse(qrInput, input);
           if (!parsed.success) return "Provide a non-empty link or text of up to 2000 characters.";
           const { qrDataUrl } = await import("./qr");
-          return qrDataUrl(parsed.output.value, resolveLook({}), parsed.output.format ?? "png");
+          const dataUrl = qrDataUrl(
+            parsed.output.value,
+            resolveLook({}),
+            parsed.output.format ?? "png",
+          );
+          await navigate({ to: "/qr-code-generator", search: { value: parsed.output.value } });
+          return dataUrl;
         },
       },
     ];
 
     return registerWebMcpTools(tools);
-  }, []);
+  }, [navigate]);
 
   return null;
 }

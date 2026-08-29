@@ -290,7 +290,12 @@ export function QrGeneratorPage() {
   const { authed } = useAudience();
   useSeo("/qr-code-generator");
   useMarketingScroll();
-  const [value, setValue] = useState("");
+  // WebMCP's create_qr_code (on any marketing page) hands off to here by
+  // navigating with ?value=, so the code is already on screen when a browser
+  // agent follows up with generate_qr_code or download_qr_code.
+  const [value, setValue] = useState(
+    () => new URLSearchParams(window.location.search).get("value")?.trim().slice(0, 2_000) ?? "",
+  );
   const [values, setValues] = useState<QrValues>(EMPTY_QR);
   const qrState = useRef({ encoded: "", values: EMPTY_QR });
 
