@@ -39,8 +39,8 @@ test("the link scope searches the org's links, and Backspace pops the pill", asy
   await page.getByRole("button", { name: /Close/i }).click();
 
   await page.keyboard.press("ControlOrMeta+KeyK");
-  // `link:` becomes a pill and the field switches to searching links.
-  await page.getByPlaceholder(ALL).fill("link:");
+  // The "Search links" action drops into link scope, same as typing `link:`.
+  await page.getByRole("option", { name: "Search links" }).click();
   await expect(page.getByPlaceholder(LINKS)).toBeVisible();
   await expect(page.getByRole("button", { name: "Clear link filter" })).toBeVisible();
 

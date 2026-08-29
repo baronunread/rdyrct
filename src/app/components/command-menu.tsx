@@ -33,6 +33,8 @@ type Action = {
   group: "Go to" | "Actions";
   danger?: boolean;
   disabled?: boolean;
+  /** Shown regardless of the typed filter (e.g. the entry into link scope). */
+  always?: boolean;
   run: () => void;
 };
 
@@ -89,7 +91,7 @@ function looksLikeUrl(s: string): boolean {
  * user, org and theme. A later shortcuts sheet can render from the same
  * array.
  */
-function useActions(close: () => void): Action[] {
+function useActions(close: () => void, enterLinks: () => void): Action[] {
   const navigate = useNavigate();
   const [theme, toggleTheme] = useTheme();
   const shell = useShellUser();
@@ -125,6 +127,15 @@ function useActions(close: () => void): Action[] {
   }
 
   const actions: Action[] = [
+    {
+      // No `act`: this swaps to the link pill, it does not leave the palette.
+      value: "search links find open",
+      label: "Search links",
+      icon: Search,
+      group: "Actions",
+      always: true,
+      run: enterLinks,
+    },
     {
       value: "create link new",
       label: "Create link",
@@ -333,26 +344,26 @@ const PLACEHOLDER = {
 } satisfies Record<Scope, string>;
 
 function matchingActions(actions: Action[], group: Action["group"], search: string): Action[] {
-  return actions.filter((a) => a.group === group && hit(`${a.label} ${a.value}`, search));
+  return actions.filter(
+    (a) => a.group === group && (a.always || hit(`${a.label} ${a.value}`, search)),
+  );
 }
 
-/** The list contents for the current scope. `all` shows a jump-to-links
- * shortcut plus the filtered pages and actions; the scoped views show just
- * their one thing. */
+/** The list contents for the current scope. `all` shows the filtered pages
+ * and actions (a create item too when the query is a URL); the scoped views
+ * show just their one thing. */
 function PaletteBody({
   scope,
   search,
   actions,
   links,
   onCreate,
-  onEnterLinks,
 }: {
   scope: Scope;
   search: string;
   actions: Action[];
   links: LinkMatch[];
   onCreate: (arg: string) => void;
-  onEnterLinks: () => void;
 }) {
   if (scope !== "all") {
     return {
@@ -365,18 +376,6 @@ function PaletteBody({
       {looksLikeUrl(search) && <CreateGroup arg={search} onRun={onCreate} />}
       <ActionGroup heading="Go to" items={matchingActions(actions, "Go to", search)} />
       <ActionGroup heading="Actions" items={matchingActions(actions, "Actions", search)} />
-      {/* Last, so a matching page or action keeps the default selection and
-          Enter runs it rather than diverting into link search. */}
-      {search !== "" && (
-        <CommandGroup heading="Search">
-          <CommandItem value="__search-links" onSelect={onEnterLinks}>
-            <Search size={15} className="text-muted" />
-            <span className="truncate">
-              Search links for <span className="text-text">{search}</span>
-            </span>
-          </CommandItem>
-        </CommandGroup>
-      )}
     </>
   );
 }
@@ -398,7 +397,7 @@ export function CommandMenu() {
   const [search, setSearch] = useState("");
   const close = () => setOpen(false);
 
-  const actions = useActions(close);
+  const actions = useActions(close, () => setScope("links"));
   const links = useLinkMatches(scope === "links" ? search : "", close);
   const { start, dialogs } = useLinkCreateFlow();
 
@@ -466,7 +465,6 @@ export function CommandMenu() {
               close();
               start(arg);
             }}
-            onEnterLinks={() => setScope("links")}
           />
         </CommandList>
       </CommandDialog>
