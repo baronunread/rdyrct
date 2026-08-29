@@ -68,4 +68,14 @@ test("the command menu creates a link from a pasted URL", async ({ page }) => {
   await expect(dialog.getByRole("img", { name: /QR/i })).toBeVisible();
   await dialog.getByRole("button", { name: /Close/i }).click();
   await expect(dialog).toBeHidden();
+
+  // Creating the same destination again runs the dashboard's alias flow.
+  await page.keyboard.press("ControlOrMeta+KeyK");
+  await page.getByPlaceholder(PLACEHOLDER).fill("https://example.com/from-cmdk");
+  await page.getByRole("option", { name: /Create link for/ }).click();
+
+  const dup = page.getByRole("dialog", { name: "This destination already has a link" });
+  await expect(dup).toBeVisible();
+  await dup.getByRole("button", { name: "Create separate link" }).click();
+  await expect(page.getByRole("dialog", { name: "Link created" })).toBeVisible();
 });

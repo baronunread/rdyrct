@@ -16,7 +16,9 @@ export function Tooltip({ content, children }: { content: ReactNode; children: R
             before anyone reads it as lag. */}
         <BaseTooltip.Trigger delay={40} closeDelay={120} render={children} />
         <BaseTooltip.Portal>
-          <BaseTooltip.Positioner sideOffset={6} className="z-50">
+          {/* Above every dialog, the nested ones (z-[70]) included: a tooltip
+              is transient and always explains what is on top of it. */}
+          <BaseTooltip.Positioner sideOffset={6} className="z-[100]">
             {/* It grows out of the mark that opened it, rather than out of
                 its own middle: --transform-origin is the anchor's side, so a
                 tip above a control expands downward toward it and one below

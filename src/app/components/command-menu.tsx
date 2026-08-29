@@ -12,6 +12,7 @@ import {
 } from "@/app/ui/command";
 import { appNavItems } from "./nav-items";
 import { LinkPreviewDialog } from "./link-preview-dialog";
+import { SameDestinationDialog } from "./same-destination-dialog";
 import { useLinkMutations, useLinks, useLogout, useShellUser } from "../lib/hooks";
 import { useCurrentOrg } from "../lib/current-org";
 import { useOrgLimits } from "../lib/org-limits";
@@ -21,7 +22,7 @@ import { useToast } from "../ui/toast";
 import { ApiError, shortUrl } from "../lib/api";
 import { withErrorToast } from "../lib/mutation-toast";
 import { destinationSchema } from "../lib/schemas";
-import type { LinkDTO } from "@/shared/types";
+import type { LinkDTO, LinkInput } from "@/shared/types";
 
 type Action = {
   /** cmdk match string: label plus a few synonyms. */
@@ -188,41 +189,73 @@ function useLinkMatches(term: string, close: () => void): LinkMatch[] {
   }));
 }
 
-/** Create a link straight from the palette: validate the destination, POST
- * it, then hand the new link back so the caller can show its QR and short
- * URL, the same dialog the dashboard's quick-create opens. A destination
- * that already has a link is left to the user to find rather than opening
- * the alias flow here. */
+type Match = { input: LinkInput; matchedLinks: LinkDTO[] };
+
+/**
+ * Creating a link from the palette follows the dashboard's quick-create flow
+ * exactly: on success the QR-and-short-URL dialog opens; when the
+ * destination already has a link the same "add this address to it" dialog
+ * offers to alias it or make a separate link (#38). Returns a `start(url)`
+ * and the two dialogs to render.
+ */
 // fallow-ignore-next-line complexity
-function useCreateLink(
-  close: () => void,
-  onCreated: (link: LinkDTO) => void,
-): (destination: string) => void {
-  const { orgId, defaultDomainId } = useOrgLimits();
+function useLinkCreateFlow(close: () => void) {
+  const { orgId, defaultDomainId, orgQr } = useOrgLimits();
   const toast = useToast();
   const { create } = useLinkMutations(orgId);
+  const [created, setCreated] = useState<LinkDTO | null>(null);
+  const [match, setMatch] = useState<Match | null>(null);
 
-  return (destination) => {
-    const value = destination.trim();
-    if (!v.safeParse(destinationSchema, { destination: value }).success) {
-      toast("Enter a valid URL", "error");
-      return;
-    }
-    close();
+  const submit = (input: LinkInput, extra: Partial<LinkInput>) =>
     create.mutate(
-      { destination: value, domainId: defaultDomainId },
+      { ...input, ...extra },
       {
-        onSuccess: onCreated,
+        onSuccess: (link) => {
+          setMatch(null);
+          setCreated(link);
+        },
         onError: (e) => {
           if (e instanceof ApiError && e.code === "same_destination_match") {
-            toast("That destination already has a link. Search for it above.");
+            // SAFETY: the route that sets same_destination_match attaches
+            // matchedLinks alongside it, same shape the dashboard reads.
+            const { matchedLinks } = e.data as { matchedLinks: LinkDTO[] };
+            setMatch({ input, matchedLinks });
             return;
           }
           withErrorToast(toast)(e);
         },
       },
     );
+
+  const start = (destination: string) => {
+    const value = destination.trim();
+    if (!v.safeParse(destinationSchema, { destination: value }).success) {
+      toast("Enter a valid URL", "error");
+      return;
+    }
+    close();
+    submit({ destination: value, domainId: defaultDomainId }, {});
   };
+
+  const dialogs = (
+    <>
+      <LinkPreviewDialog
+        title="Link created"
+        link={created}
+        orgQr={orgQr}
+        onClose={() => setCreated(null)}
+      />
+      <SameDestinationDialog
+        matchedLinks={match?.matchedLinks ?? null}
+        pending={create.isPending}
+        onClose={() => setMatch(null)}
+        onAddToExisting={(l) => match && submit(match.input, { mergeIntoLinkId: l.id })}
+        onCreateSeparate={() => match && submit(match.input, { forceSeparateLink: true })}
+      />
+    </>
+  );
+
+  return { start, dialogs };
 }
 
 function CreateGroup({ arg, onRun }: { arg: string; onRun: (arg: string) => void }) {
@@ -307,14 +340,12 @@ function linkTerm(q: Query): string {
 export function CommandMenu() {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
-  const [created, setCreated] = useState<LinkDTO | null>(null);
   const close = () => setOpen(false);
 
-  const { orgQr } = useOrgLimits();
   const parsed = parseQuery(search);
   const actions = useActions(close);
   const links = useLinkMatches(linkTerm(parsed), close);
-  const createLink = useCreateLink(close, setCreated);
+  const { start: createLink, dialogs: createDialogs } = useLinkCreateFlow(close);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -348,13 +379,7 @@ export function CommandMenu() {
         </CommandList>
       </CommandDialog>
 
-      {/* Same QR-and-short-URL dialog the dashboard's quick-create opens. */}
-      <LinkPreviewDialog
-        title="Link created"
-        link={created}
-        orgQr={orgQr}
-        onClose={() => setCreated(null)}
-      />
+      {createDialogs}
     </>
   );
 }
