@@ -17,6 +17,7 @@ import { useSeo } from "../lib/seo";
 import { useMarketingScroll } from "../lib/marketing-scroll";
 import { useAudience } from "../lib/audience";
 import { LandingHeader } from "./landing-header";
+import { WebMcpMarketingTools } from "./webmcp-marketing-tools";
 import { Footer } from "../ui/footer";
 
 export function MarketingPage({
@@ -39,6 +40,7 @@ export function MarketingPage({
     <MotionConfig reducedMotion="user">
       <LazyMotion features={domAnimation}>
         <div className="relative mx-auto min-h-dvh max-w-5xl px-6">
+          <WebMcpMarketingTools />
           <LandingHeader authed={authed} />
 
           <main>

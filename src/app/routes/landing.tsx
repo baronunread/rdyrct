@@ -45,6 +45,7 @@ import { Footer, GITHUB_URL } from "../ui/footer";
 import { HeroShortener } from "../components/hero-shortener";
 import { HeroSignedIn } from "../components/hero-signed-in";
 import { LandingHeader } from "../components/landing-header";
+import { WebMcpMarketingTools } from "../components/webmcp-marketing-tools";
 import cloudflareLogo from "../assets/cloudflare.svg";
 /**
  * The mock pulls in the whole charts bundle (Plot, the renderer, the scales):
@@ -1404,6 +1405,7 @@ export function LandingPage() {
       <LazyMotion features={domAnimation}>
         <div className="relative mx-auto min-h-dvh max-w-5xl px-6">
           <FaqJsonLd faqs={faqs} />
+          <WebMcpMarketingTools />
           <style>{`@keyframes cursorBlink { 50% { opacity: 0; } }`}</style>
           {/* soft accent glow behind the hero */}
           <div
