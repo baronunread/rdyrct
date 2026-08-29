@@ -94,6 +94,28 @@ test("the command menu creates a link, alias flow included", async ({ page }) =>
   await expect(page.getByRole("dialog", { name: "Link created" })).toBeVisible();
 });
 
+test("the palette shows a loader between the create click and the link", async ({ page }) => {
+  await freshPalette(page, "cmdk-loader");
+  await page.getByPlaceholder(ALL).fill("https://example.com/cmdk-loader");
+
+  // Hold the create request open so the in-between state is observable.
+  let release = () => {};
+  await page.route("**/api/orgs/*/links", async (route) => {
+    if (route.request().method() === "POST") await new Promise<void>((r) => (release = r));
+    await route.continue();
+  });
+
+  await page.getByRole("option", { name: /Create link for/ }).click();
+
+  // The palette is gone, but the dialog is already up in its loading state.
+  await expect(page.getByPlaceholder(ALL)).toBeHidden();
+  const dialog = page.getByRole("dialog", { name: "Link created" });
+  await expect(dialog.getByText("Creating your link…")).toBeVisible();
+
+  release();
+  await expect(dialog.getByRole("img", { name: /QR/i })).toBeVisible();
+});
+
 test("the palette's contextual create and invite actions", async ({ page }) => {
   await freshPalette(page, "cmdk-actions");
 

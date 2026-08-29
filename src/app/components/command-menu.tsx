@@ -298,6 +298,10 @@ function useLinkCreateFlow() {
   const { create } = useLinkMutations(orgId);
   const [created, setCreated] = useState<LinkDTO | null>(null);
   const [match, setMatch] = useState<Match | null>(null);
+  // The palette closes on click, so without this the first request runs with
+  // nothing on screen. True only for the opening request; the merge/separate
+  // resubmits show their spinner inside SameDestinationDialog.
+  const [starting, setStarting] = useState(false);
 
   const submit = (input: LinkInput, extra: Partial<LinkInput>) =>
     create.mutate(
@@ -317,6 +321,7 @@ function useLinkCreateFlow() {
           }
           withErrorToast(toast)(e);
         },
+        onSettled: () => setStarting(false),
       },
     );
 
@@ -326,6 +331,7 @@ function useLinkCreateFlow() {
       toast("Enter a valid URL", "error");
       return;
     }
+    setStarting(true);
     submit({ destination: value, domainId: defaultDomainId }, {});
   };
 
@@ -334,8 +340,12 @@ function useLinkCreateFlow() {
       <LinkPreviewDialog
         title="Link created"
         link={created}
+        loading={starting}
         orgQr={orgQr}
-        onClose={() => setCreated(null)}
+        onClose={() => {
+          setCreated(null);
+          setStarting(false);
+        }}
       />
       <SameDestinationDialog
         matchedLinks={match?.matchedLinks ?? null}

@@ -1,5 +1,6 @@
 import { Dialog } from "../ui/dialog";
 import { CopyButton } from "../ui/copy-button";
+import { Spinner } from "../ui/spinner";
 import { useToast } from "../ui/toast";
 import { copyToClipboard } from "../lib/clipboard";
 import { shortUrl } from "../lib/api";
@@ -25,9 +26,24 @@ function LinkPreviewContent({ link, orgQr }: { link: LinkDTO; orgQr: OrgQr }) {
   );
 }
 
+/** Same footprint as the filled content, so the dialog does not resize when
+ * the link arrives. */
+function LinkPreviewLoading() {
+  return (
+    <div className="flex min-h-52 flex-col items-center justify-center gap-3 text-muted">
+      <Spinner className="h-6 w-6" />
+      <p className="text-sm">Creating your link…</p>
+    </div>
+  );
+}
+
 /** The short URL and its QR code for one link, in a dialog: shared by "link
  * just created" (dashboard quick-create) and "show QR" (links table row
  * action). Same content, different title.
+ *
+ * `loading` opens the dialog before the link exists, so the palette's
+ * quick-create shows a spinner in place of the gap between the click and
+ * the created link.
  *
  * The QR is here on every plan. Only its look (logo, colors, shapes) is
  * paid, and `orgQr` already resolves to the built-in defaults for a free
@@ -37,15 +53,17 @@ export function LinkPreviewDialog({
   link,
   orgQr,
   onClose,
+  loading = false,
 }: {
   title: string;
   link: LinkDTO | null;
   orgQr: OrgQr;
   onClose: () => void;
+  loading?: boolean;
 }) {
   return (
-    <Dialog open={!!link} onOpenChange={(o) => !o && onClose()} title={title}>
-      {link && <LinkPreviewContent link={link} orgQr={orgQr} />}
+    <Dialog open={!!link || loading} onOpenChange={(o) => !o && onClose()} title={title}>
+      {link ? <LinkPreviewContent link={link} orgQr={orgQr} /> : loading && <LinkPreviewLoading />}
     </Dialog>
   );
 }
