@@ -92,3 +92,26 @@ test("the command menu creates a link, alias flow included", async ({ page }) =>
   await dup.getByRole("button", { name: "Create separate link" }).click();
   await expect(page.getByRole("dialog", { name: "Link created" })).toBeVisible();
 });
+
+test("the Create link action opens the link editor on the links page", async ({ page }) => {
+  await signUpAndVerify(page, `cmdk-editor-${Date.now()}@gmail.com`, password);
+  await expect(page.getByRole("heading", { name: "Shorten your first link" })).toBeVisible();
+
+  await page.keyboard.press("ControlOrMeta+KeyK");
+  await page.getByPlaceholder(ALL).fill("create link");
+  await page.getByRole("option", { name: "Create link" }).click();
+
+  await expect(page).toHaveURL(/\/links$/);
+  await expect(page.getByRole("dialog", { name: "New link" })).toBeVisible();
+});
+
+test("a typed email offers an Invite action from the palette", async ({ page }) => {
+  await signUpAndVerify(page, `cmdk-invite-${Date.now()}@gmail.com`, password);
+
+  const invitee = `invitee-${Date.now()}@gmail.com`;
+  await page.keyboard.press("ControlOrMeta+KeyK");
+  await page.getByPlaceholder(ALL).fill(invitee);
+  await page.getByRole("option", { name: `Invite ${invitee}` }).click();
+
+  await expect(page.getByText(`Invite sent to ${invitee}`)).toBeVisible();
+});

@@ -1,4 +1,5 @@
 import { useEffect, useState, type ComponentType, type KeyboardEvent } from "react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import * as v from "valibot";
 import {
@@ -32,7 +33,7 @@ import { useOrgLimits } from "../lib/org-limits";
 import { useDebounced } from "../lib/use-debounced";
 import { useTheme } from "../lib/theme";
 import { useToast } from "../ui/toast";
-import { ApiError, shortUrl } from "../lib/api";
+import { api, ApiError, shortUrl } from "../lib/api";
 import { withErrorToast } from "../lib/mutation-toast";
 import { copyToClipboard } from "../lib/clipboard";
 import { destinationSchema } from "../lib/schemas";
@@ -95,9 +96,17 @@ function hit(text: string, query: string): boolean {
     .every((word) => hay.includes(word));
 }
 
-/** A one-token string with a dot in it: enough to read as "make this a link". */
+/** A one-token string with a dot in it: enough to read as "make this a link".
+ * An `@` rules it out so `name@host.com` is only ever read as an email. */
 function looksLikeUrl(s: string): boolean {
-  return /^https?:\/\//i.test(s) || (/\.[a-z]{2,}/i.test(s) && !/\s/.test(s));
+  return /^https?:\/\//i.test(s) || (/\.[a-z]{2,}/i.test(s) && !/\s/.test(s) && !s.includes("@"));
+}
+
+const EMAIL = v.pipe(v.string(), v.email());
+
+/** A bare email address: offer to invite it to the current org. */
+function looksLikeEmail(s: string): boolean {
+  return v.safeParse(EMAIL, s.trim()).success;
 }
 
 /** Switch the current org, then stay put unless the route names a link (its
@@ -156,6 +165,8 @@ function useActions(close: () => void, enterLinks: () => void): Action[] {
     fn();
   };
   const goto = (to: string) => act(() => navigate({ to }));
+  // A runtime href (carries its own query string), same idea as goto.
+  const gotoHref = (href: string) => act(() => navigate({ href }));
   // A locked org takes no writes from anyone until it is active again (#160).
   const locked = !!org?.locked;
   const flip =
@@ -195,7 +206,8 @@ function useActions(close: () => void, enterLinks: () => void): Action[] {
       icon: Plus,
       group: "Actions",
       disabled: locked,
-      run: goto("/dashboard"),
+      // Land on the links page with its editor already open.
+      run: gotoHref("/links?new=1"),
     },
     {
       value: "add domain",
@@ -338,6 +350,33 @@ function useLinkCreateFlow() {
   return { start, dialogs };
 }
 
+/**
+ * Invite an email to the current org straight from the palette: the same
+ * endpoint the members page posts to, role `member`. Roles, resending and
+ * revoking stay on the members page; this is just the fast path.
+ */
+function useInviteFlow(close: () => void): (email: string) => void {
+  const { org } = useCurrentOrg();
+  const toast = useToast();
+  const qc = useQueryClient();
+  const invite = useMutation({
+    mutationFn: (email: string) =>
+      api(`/orgs/${org?.id ?? ""}/invites`, {
+        method: "POST",
+        body: { role: "member", emails: [email] },
+      }),
+    onSuccess: (_data, email) => {
+      void qc.invalidateQueries({ queryKey: ["invites", org?.id] });
+      toast(`Invite sent to ${email}`);
+    },
+    onError: withErrorToast(toast),
+  });
+  return (email) => {
+    close();
+    invite.mutate(email.trim());
+  };
+}
+
 function CreateGroup({ arg, onRun }: { arg: string; onRun: (arg: string) => void }) {
   return (
     <CommandGroup heading="Create">
@@ -345,6 +384,19 @@ function CreateGroup({ arg, onRun }: { arg: string; onRun: (arg: string) => void
         <Plus size={15} className="text-muted" />
         <span className="truncate">
           Create link for <span className="text-text">{arg || "…"}</span>
+        </span>
+      </CommandItem>
+    </CommandGroup>
+  );
+}
+
+function InviteGroup({ email, onRun }: { email: string; onRun: (email: string) => void }) {
+  return (
+    <CommandGroup heading="Invite">
+      <CommandItem value="__invite" onSelect={() => onRun(email)}>
+        <UserPlus size={15} className="text-muted" />
+        <span className="truncate">
+          Invite <span className="text-text">{email}</span>
         </span>
       </CommandItem>
     </CommandGroup>
@@ -430,12 +482,14 @@ function PaletteBody({
   actions,
   links,
   onCreate,
+  onInvite,
 }: {
   scope: Scope;
   search: string;
   actions: Action[];
   links: LinkMatch[];
   onCreate: (arg: string) => void;
+  onInvite: (email: string) => void;
 }) {
   if (scope !== "all") {
     return {
@@ -446,6 +500,7 @@ function PaletteBody({
   return (
     <>
       {looksLikeUrl(search) && <CreateGroup arg={search} onRun={onCreate} />}
+      {looksLikeEmail(search) && <InviteGroup email={search.trim()} onRun={onInvite} />}
       <ActionGroup heading="Go to" items={matchingActions(actions, "Go to", search)} />
       <ActionGroup heading="Actions" items={matchingActions(actions, "Actions", search)} />
     </>
@@ -472,6 +527,7 @@ export function CommandMenu() {
   const actions = useActions(close, () => setScope("links"));
   const links = useLinkMatches(scope === "links" ? search : "", close);
   const { start, dialogs } = useLinkCreateFlow();
+  const invite = useInviteFlow(close);
 
   useEffect(() => {
     const onKey = (e: globalThis.KeyboardEvent) => {
@@ -537,6 +593,7 @@ export function CommandMenu() {
               close();
               start(arg);
             }}
+            onInvite={invite}
           />
         </CommandList>
       </CommandDialog>
