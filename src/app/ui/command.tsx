@@ -16,12 +16,15 @@ export function CommandDialog({
   open,
   onOpenChange,
   label,
+  shouldFilter,
   children,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   /** Accessible name for the palette; not shown. */
   label: string;
+  /** Pass false when results are already filtered (e.g. a server search). */
+  shouldFilter?: boolean;
   children: ReactNode;
 }) {
   return (
@@ -53,7 +56,11 @@ export function CommandDialog({
                 }
               >
                 <BaseDialog.Title className="sr-only">{label}</BaseDialog.Title>
-                <CommandPrimitive label={label} className="flex max-h-[60dvh] flex-col">
+                <CommandPrimitive
+                  label={label}
+                  shouldFilter={shouldFilter}
+                  className="flex max-h-[60dvh] flex-col"
+                >
                   {children}
                 </CommandPrimitive>
               </BaseDialog.Popup>
@@ -71,7 +78,11 @@ export function CommandInput(props: ComponentProps<typeof CommandPrimitive.Input
       <Search size={16} className="shrink-0 text-muted" />
       <CommandPrimitive.Input
         {...props}
-        className="h-12 min-w-0 flex-1 bg-transparent text-sm text-text outline-none placeholder:text-placeholder"
+        // The global :focus-visible rule (styles.css) is unlayered, so it
+        // beats an `outline-none` utility. The palette's own frame is the
+        // focus indicator here; the input needs no ring of its own.
+        style={{ outline: "none" }}
+        className="h-12 min-w-0 flex-1 bg-transparent text-sm text-text placeholder:text-placeholder"
       />
     </div>
   );

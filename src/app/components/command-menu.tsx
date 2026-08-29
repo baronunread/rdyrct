@@ -1,6 +1,6 @@
 import { useEffect, useState, type ComponentType } from "react";
 import { useNavigate } from "@tanstack/react-router";
-import { Layers, LogOut, Moon, Plus, Sun, UserPlus, WorldWww } from "@/app/ui/icons";
+import { Layers, Link2, LogOut, Moon, Plus, Sun, UserPlus, WorldWww } from "@/app/ui/icons";
 import {
   CommandDialog,
   CommandEmpty,
@@ -10,10 +10,13 @@ import {
   CommandList,
 } from "@/app/ui/command";
 import { appNavItems } from "./nav-items";
-import { useLogout, useShellUser } from "../lib/hooks";
+import { useLinks, useLogout, useShellUser } from "../lib/hooks";
 import { useCurrentOrg } from "../lib/current-org";
+import { useDebounced } from "../lib/use-debounced";
 import { useTheme } from "../lib/theme";
 import { useToast } from "../ui/toast";
+import { shortUrl } from "../lib/api";
+import type { LinkDTO } from "@/shared/types";
 
 type Action = {
   /** cmdk match string: label plus a few synonyms. */
@@ -29,6 +32,17 @@ type Action = {
 /** ⌘K opens on any key with a Cmd/Ctrl modifier and no Alt. */
 function isToggleChord(e: KeyboardEvent): boolean {
   return (e.metaKey || e.ctrlKey) && !e.altKey && e.key.toLowerCase() === "k";
+}
+
+/** Every word of the query has to appear somewhere in the item's text.
+ * cmdk's own fuzzy filter is off (link results are already server-filtered),
+ * so the static list matches here instead. */
+function hit(text: string, query: string): boolean {
+  const hay = text.toLowerCase();
+  return query
+    .toLowerCase()
+    .split(/\s+/)
+    .every((word) => hay.includes(word));
 }
 
 /**
@@ -121,6 +135,34 @@ function useActions(close: () => void): Action[] {
   return [...nav, ...actions];
 }
 
+type LinkMatch = { key: string; url: string; run: () => void };
+
+function linkHref(l: LinkDTO): string {
+  return l.domain ? `/links/${l.slug}?domain=${encodeURIComponent(l.domain)}` : `/links/${l.slug}`;
+}
+
+/** The current org's links matching the typed term, capped at six. The query
+ * reaches the server (the list is paged), so it lags a keystroke. */
+// Linear fetch-and-shape; the CRAP score is inflated by the nullable-data
+// guards and fallow's assumed 0% coverage.
+// fallow-ignore-next-line complexity
+function useLinkMatches(search: string, close: () => void): LinkMatch[] {
+  const navigate = useNavigate();
+  const { org } = useCurrentOrg();
+  const term = useDebounced(search.trim());
+  // orgId doubles as the query's enable switch: blank it and useLinks idles.
+  const { data } = useLinks(term ? (org?.id ?? "") : "", { q: term, limit: 6 });
+  const items = term ? (data?.items ?? []) : [];
+  return items.map((l) => ({
+    key: `link:${l.domain ?? ""}:${l.slug}`,
+    url: shortUrl(l.slug, l.domain),
+    run: () => {
+      close();
+      navigate({ href: linkHref(l) });
+    },
+  }));
+}
+
 /**
  * ⌘K / Ctrl+K command palette. Mounted once in AppShell, so it rides on every
  * app route. It is the one discoverable home for the shortcuts the app
@@ -132,7 +174,10 @@ function useActions(close: () => void): Action[] {
  */
 export function CommandMenu() {
   const [open, setOpen] = useState(false);
-  const actions = useActions(() => setOpen(false));
+  const [search, setSearch] = useState("");
+  const close = () => setOpen(false);
+  const actions = useActions(close);
+  const links = useLinkMatches(search, close);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -144,18 +189,41 @@ export function CommandMenu() {
     return () => document.removeEventListener("keydown", onKey);
   }, []);
 
+  // Fresh each open: a stale term would show stale results for a frame.
+  useEffect(() => {
+    if (!open) setSearch("");
+  }, [open]);
+
   const groups = ["Go to", "Actions"] as const;
+  const shown = (a: Action) => hit(`${a.label} ${a.value}`, search);
 
   return (
-    <CommandDialog open={open} onOpenChange={setOpen} label="Command menu">
-      <CommandInput placeholder="Search pages and actions…" />
+    <CommandDialog open={open} onOpenChange={setOpen} label="Command menu" shouldFilter={false}>
+      <CommandInput
+        placeholder="Search pages, links and actions…"
+        value={search}
+        onValueChange={setSearch}
+      />
       <CommandList>
         <CommandEmpty>No matches.</CommandEmpty>
-        {groups.map((group) => (
-          <CommandGroup key={group} heading={group}>
-            {actions
-              .filter((a) => a.group === group)
-              .map((a) => (
+
+        {links.length > 0 && (
+          <CommandGroup heading="Links">
+            {links.map((l) => (
+              <CommandItem key={l.key} value={l.key} onSelect={l.run}>
+                <Link2 size={15} className="text-muted" />
+                <span className="truncate">{l.url}</span>
+              </CommandItem>
+            ))}
+          </CommandGroup>
+        )}
+
+        {groups.map((group) => {
+          const items = actions.filter((a) => a.group === group && shown(a));
+          if (items.length === 0) return null;
+          return (
+            <CommandGroup key={group} heading={group}>
+              {items.map((a) => (
                 <CommandItem
                   key={a.value}
                   value={a.value}
@@ -167,8 +235,9 @@ export function CommandMenu() {
                   <span className={a.danger ? "text-danger" : undefined}>{a.label}</span>
                 </CommandItem>
               ))}
-          </CommandGroup>
-        ))}
+            </CommandGroup>
+          );
+        })}
       </CommandList>
     </CommandDialog>
   );
