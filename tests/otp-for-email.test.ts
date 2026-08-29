@@ -37,6 +37,17 @@ describe("otpForEmail", () => {
     expect(otpForEmail(emails, "a@example.com")).toBe("654321");
   });
 
+  test("takes the code from the newest email when the address repeats", () => {
+    // A retry re-sends to the same address; the stale first code must lose.
+    const emails = {
+      data: [
+        { to: ["a@example.com"], text: "111111" },
+        { to: ["a@example.com"], text: "999999" },
+      ],
+    };
+    expect(otpForEmail(emails, "a@example.com")).toBe("999999");
+  });
+
   test("returns empty for primitives, null, and arrays with no match", () => {
     expect(otpForEmail(null, "a@example.com")).toBe("");
     expect(otpForEmail("just a string", "a@example.com")).toBe("");

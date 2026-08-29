@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { lookup } from "@/shared/lookup";
 import { useNavigate } from "@tanstack/react-router";
 import { Plus } from "@/app/ui/icons";
@@ -22,6 +22,7 @@ import { CreateAliasDialog } from "../components/create-alias-dialog";
 import { LinkPreviewDialog } from "../components/link-preview-dialog";
 import { withErrorToast } from "../lib/mutation-toast";
 import { useDebounced } from "../lib/use-debounced";
+import { useSearchParams } from "../lib/router-search";
 import posthog from "../lib/posthog";
 
 const PAGE_SIZE = 25;
@@ -309,6 +310,18 @@ export function LinksPage() {
   const dialogs = useLinkDialogs(atLimit);
 
   const list = useLinkPage(orgId);
+
+  // The command palette's "Create link" sends people here with ?new=1: open
+  // the editor once, then drop the flag so a reload doesn't reopen it.
+  const [urlParams, setUrlParams] = useSearchParams();
+  useEffect(() => {
+    if (!urlParams.has("new")) return;
+    dialogs.openCreate();
+    const next = new URLSearchParams(urlParams);
+    next.delete("new");
+    setUrlParams(next, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   /**
    * Answer the duplicate-destination prompt (#45).

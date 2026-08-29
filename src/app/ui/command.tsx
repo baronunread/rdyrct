@@ -1,0 +1,146 @@
+import { Dialog as BaseDialog } from "@base-ui/react/dialog";
+import { Command as CommandPrimitive } from "cmdk";
+import type { ComponentProps, ReactNode } from "react";
+import { AnimatePresence, domAnimation, LazyMotion, m } from "motion/react";
+import { Search, X } from "@/app/ui/icons";
+import { cn } from "./cn";
+
+/**
+ * Command palette primitives: cmdk wearing the app's tokens. Same split as
+ * shadcn's command.tsx, but the dialog shell is our own base-ui + motion one,
+ * so the backdrop, blur, fade and z-index match every other Dialog rather
+ * than pulling in a second dialog implementation.
+ */
+
+export function CommandDialog({
+  open,
+  onOpenChange,
+  label,
+  shouldFilter,
+  children,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  /** Accessible name for the palette; not shown. */
+  label: string;
+  /** Pass false when results are already filtered (e.g. a server search). */
+  shouldFilter?: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <LazyMotion features={domAnimation}>
+      <AnimatePresence>
+        {open && (
+          <BaseDialog.Root open onOpenChange={onOpenChange}>
+            <BaseDialog.Portal keepMounted>
+              <BaseDialog.Backdrop
+                className="fixed inset-0 z-40 bg-black/55 backdrop-blur-[2px]"
+                render={
+                  <m.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.15 }}
+                  />
+                }
+              />
+              <BaseDialog.Popup
+                className="fixed top-[14dvh] left-1/2 z-50 w-[calc(100vw-2rem)] max-w-xl -translate-x-1/2 overflow-hidden rounded-xl bg-surface text-text smooth-shadow-ring-2xl"
+                render={
+                  <m.div
+                    initial={{ opacity: 0, scale: 0.97 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.97 }}
+                    transition={{ duration: 0.15 }}
+                  />
+                }
+              >
+                <BaseDialog.Title className="sr-only">{label}</BaseDialog.Title>
+                <CommandPrimitive
+                  label={label}
+                  shouldFilter={shouldFilter}
+                  className="flex max-h-[60dvh] flex-col"
+                >
+                  {children}
+                </CommandPrimitive>
+              </BaseDialog.Popup>
+            </BaseDialog.Portal>
+          </BaseDialog.Root>
+        )}
+      </AnimatePresence>
+    </LazyMotion>
+  );
+}
+
+/** A scope chip shown before the input, cleared by its × or by Backspace on
+ * an empty field. */
+export function CommandPill({ label, onClear }: { label: string; onClear: () => void }) {
+  return (
+    <span className="flex shrink-0 items-center gap-1 rounded bg-surface-2 py-0.5 pr-1 pl-1.5 text-xs text-text">
+      {label}
+      <button
+        type="button"
+        aria-label={`Clear ${label} filter`}
+        onClick={onClear}
+        className="cursor-pointer text-muted hover:text-text"
+      >
+        <X size={12} />
+      </button>
+    </span>
+  );
+}
+
+export function CommandInput({
+  pill,
+  ...props
+}: ComponentProps<typeof CommandPrimitive.Input> & { pill?: ReactNode }) {
+  return (
+    <div className="flex items-center gap-2 border-b border-border px-4">
+      <Search size={16} className="shrink-0 text-muted" />
+      {pill}
+      <CommandPrimitive.Input
+        {...props}
+        // The global :focus-visible rule (styles.css) is unlayered, so it
+        // beats an `outline-none` utility. The palette's own frame is the
+        // focus indicator here; the input needs no ring of its own.
+        style={{ outline: "none" }}
+        className="h-12 min-w-0 flex-1 bg-transparent text-sm text-text placeholder:text-placeholder"
+      />
+    </div>
+  );
+}
+
+export function CommandList(props: ComponentProps<typeof CommandPrimitive.List>) {
+  return (
+    <CommandPrimitive.List
+      {...props}
+      className="scroll-py-1 overflow-x-hidden overflow-y-auto overscroll-contain p-1"
+    />
+  );
+}
+
+export function CommandEmpty(props: ComponentProps<typeof CommandPrimitive.Empty>) {
+  return <CommandPrimitive.Empty {...props} className="px-3 py-6 text-center text-sm text-muted" />;
+}
+
+export function CommandGroup(props: ComponentProps<typeof CommandPrimitive.Group>) {
+  return (
+    <CommandPrimitive.Group
+      {...props}
+      className="[&_[cmdk-group-heading]]:px-2.5 [&_[cmdk-group-heading]]:pt-2 [&_[cmdk-group-heading]]:pb-1 [&_[cmdk-group-heading]]:text-xs [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:text-muted"
+    />
+  );
+}
+
+export function CommandItem({ className, ...props }: ComponentProps<typeof CommandPrimitive.Item>) {
+  return (
+    <CommandPrimitive.Item
+      {...props}
+      className={cn(
+        "flex cursor-pointer items-center gap-2.5 rounded-md px-2.5 py-2 text-sm text-text outline-none select-none",
+        "data-[selected=true]:bg-surface-2 data-[disabled=true]:pointer-events-none data-[disabled=true]:opacity-50",
+        className,
+      )}
+    />
+  );
+}

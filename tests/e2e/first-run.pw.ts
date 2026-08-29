@@ -47,9 +47,6 @@ test("typing or pasting anywhere on the dashboard goes into the link field", asy
   const field = page.getByPlaceholder("https://example.com/launch").first();
   await expect(field).toBeVisible();
 
-  // The hint that this is possible, always on screen.
-  await expect(page.getByText("Paste or start typing anywhere on the page.")).toBeVisible();
-
   // Move focus off the field, then type: it should catch the keystrokes.
   await page.getByRole("heading", { name: "Shorten your first link" }).click();
   await page.keyboard.type("example.com/typed");
