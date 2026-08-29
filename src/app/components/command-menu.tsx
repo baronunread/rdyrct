@@ -1,5 +1,6 @@
 import { useEffect, useState, type ComponentType } from "react";
 import { useNavigate } from "@tanstack/react-router";
+import * as v from "valibot";
 import { Layers, Link2, LogOut, Moon, Plus, Sun, UserPlus, WorldWww } from "@/app/ui/icons";
 import {
   CommandDialog,
@@ -10,12 +11,15 @@ import {
   CommandList,
 } from "@/app/ui/command";
 import { appNavItems } from "./nav-items";
-import { useLinks, useLogout, useShellUser } from "../lib/hooks";
+import { useLinkMutations, useLinks, useLogout, useShellUser } from "../lib/hooks";
 import { useCurrentOrg } from "../lib/current-org";
+import { useOrgLimits } from "../lib/org-limits";
 import { useDebounced } from "../lib/use-debounced";
 import { useTheme } from "../lib/theme";
 import { useToast } from "../ui/toast";
-import { shortUrl } from "../lib/api";
+import { ApiError, shortUrl } from "../lib/api";
+import { withErrorToast } from "../lib/mutation-toast";
+import { destinationSchema } from "../lib/schemas";
 import type { LinkDTO } from "@/shared/types";
 
 type Action = {
@@ -43,6 +47,26 @@ function hit(text: string, query: string): boolean {
     .toLowerCase()
     .split(/\s+/)
     .every((word) => hay.includes(word));
+}
+
+/** A one-token string with a dot in it: enough to read as "make this a link". */
+function looksLikeUrl(s: string): boolean {
+  return /^https?:\/\//i.test(s) || (/\.[a-z]{2,}/i.test(s) && !/\s/.test(s));
+}
+
+type Query =
+  | { kind: "create"; arg: string }
+  | { kind: "search-links"; arg: string }
+  | { kind: "plain"; arg: string };
+
+/** `create link: <url>` and `search link: <text>` are explicit modes; a bare
+ * URL also reads as create; everything else is a plain filter. */
+function parseQuery(raw: string): Query {
+  const create = raw.match(/^create link:\s*(.*)$/is);
+  if (create) return { kind: "create", arg: create[1].trim() };
+  const search = raw.match(/^search link:\s*(.*)$/is);
+  if (search) return { kind: "search-links", arg: search[1].trim() };
+  return { kind: "plain", arg: raw.trim() };
 }
 
 /**
@@ -141,18 +165,18 @@ function linkHref(l: LinkDTO): string {
   return l.domain ? `/links/${l.slug}?domain=${encodeURIComponent(l.domain)}` : `/links/${l.slug}`;
 }
 
-/** The current org's links matching the typed term, capped at six. The query
- * reaches the server (the list is paged), so it lags a keystroke. */
+/** The current org's links matching `term`, capped at six. The query reaches
+ * the server (the list is paged), so it lags a keystroke. */
 // Linear fetch-and-shape; the CRAP score is inflated by the nullable-data
 // guards and fallow's assumed 0% coverage.
 // fallow-ignore-next-line complexity
-function useLinkMatches(search: string, close: () => void): LinkMatch[] {
+function useLinkMatches(term: string, close: () => void): LinkMatch[] {
   const navigate = useNavigate();
   const { org } = useCurrentOrg();
-  const term = useDebounced(search.trim());
+  const settled = useDebounced(term.trim());
   // orgId doubles as the query's enable switch: blank it and useLinks idles.
-  const { data } = useLinks(term ? (org?.id ?? "") : "", { q: term, limit: 6 });
-  const items = term ? (data?.items ?? []) : [];
+  const { data } = useLinks(settled ? (org?.id ?? "") : "", { q: settled, limit: 6 });
+  const items = settled ? (data?.items ?? []) : [];
   return items.map((l) => ({
     key: `link:${l.domain ?? ""}:${l.slug}`,
     url: shortUrl(l.slug, l.domain),
@@ -163,27 +187,136 @@ function useLinkMatches(search: string, close: () => void): LinkMatch[] {
   }));
 }
 
+/** Create a link straight from the palette: validate the destination, POST
+ * it, then land on the new link. A destination that already has a link is
+ * left to the user to find rather than opening the alias flow here. */
+// fallow-ignore-next-line complexity
+function useCreateLink(close: () => void): (destination: string) => void {
+  const { orgId, defaultDomainId } = useOrgLimits();
+  const navigate = useNavigate();
+  const toast = useToast();
+  const { create } = useLinkMutations(orgId);
+
+  return (destination) => {
+    const value = destination.trim();
+    if (!v.safeParse(destinationSchema, { destination: value }).success) {
+      toast("Enter a valid URL", "error");
+      return;
+    }
+    close();
+    create.mutate(
+      { destination: value, domainId: defaultDomainId },
+      {
+        onSuccess: (link) => {
+          toast("Link created");
+          navigate({ href: linkHref(link) });
+        },
+        onError: (e) => {
+          if (e instanceof ApiError && e.code === "same_destination_match") {
+            toast("That destination already has a link. Search for it above.");
+            return;
+          }
+          withErrorToast(toast)(e);
+        },
+      },
+    );
+  };
+}
+
+function CreateGroup({ arg, onRun }: { arg: string; onRun: (arg: string) => void }) {
+  return (
+    <CommandGroup heading="Create">
+      <CommandItem value="__create" disabled={arg === ""} onSelect={() => onRun(arg)}>
+        <Plus size={15} className="text-muted" />
+        <span className="truncate">
+          Create link for <span className="text-text">{arg || "…"}</span>
+        </span>
+      </CommandItem>
+    </CommandGroup>
+  );
+}
+
+function LinksGroup({ links }: { links: LinkMatch[] }) {
+  return (
+    <CommandGroup heading="Links">
+      {links.map((l) => (
+        <CommandItem key={l.key} value={l.key} onSelect={l.run}>
+          <Link2 size={15} className="text-muted" />
+          <span className="truncate">{l.url}</span>
+        </CommandItem>
+      ))}
+    </CommandGroup>
+  );
+}
+
+function ActionRow({ action }: { action: Action }) {
+  const tint = action.danger ? "text-danger" : "text-muted";
+  return (
+    <CommandItem
+      value={action.value}
+      disabled={action.disabled}
+      onSelect={action.run}
+      className={action.danger ? "data-[selected=true]:bg-danger/10" : undefined}
+    >
+      <action.icon size={15} className={tint} />
+      <span className={action.danger ? "text-danger" : undefined}>{action.label}</span>
+    </CommandItem>
+  );
+}
+
+function ActionGroup({ heading, items }: { heading: string; items: Action[] }) {
+  if (items.length === 0) return null;
+  return (
+    <CommandGroup heading={heading}>
+      {items.map((a) => (
+        <ActionRow key={a.value} action={a} />
+      ))}
+    </CommandGroup>
+  );
+}
+
+/** An explicit `create link:` prefix, or a bare URL, offers a create item. */
+function wantsCreate(q: Query): boolean {
+  return q.kind === "create" || (q.kind === "plain" && looksLikeUrl(q.arg));
+}
+
+/** Pages and actions show only in plain mode, filtered by the term. */
+function actionsIn(actions: Action[], q: Query, group: Action["group"]): Action[] {
+  if (q.kind !== "plain") return [];
+  return actions.filter((a) => a.group === group && hit(`${a.label} ${a.value}`, q.arg));
+}
+
+/** What to feed the link search: nothing while composing a `create link:`. */
+function linkTerm(q: Query): string {
+  return q.kind === "create" ? "" : q.arg;
+}
+
 /**
  * ⌘K / Ctrl+K command palette. Mounted once in AppShell, so it rides on every
  * app route. It is the one discoverable home for the shortcuts the app
  * otherwise keeps quiet (type or paste anywhere on the dashboard, and
  * whatever lands here next).
  *
- * The bare-keystroke listener on the dashboard ignores anything with a
- * modifier, so ⌘K never collides with it.
+ * Typing filters pages and actions and searches the org's links. Prefix with
+ * `search link:` to see links only, `create link:` (or just paste a URL) to
+ * make one on the spot. The bare-keystroke listener on the dashboard ignores
+ * anything with a modifier, so ⌘K never collides with it.
  */
 export function CommandMenu() {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
   const close = () => setOpen(false);
+
+  const parsed = parseQuery(search);
   const actions = useActions(close);
-  const links = useLinkMatches(search, close);
+  const links = useLinkMatches(linkTerm(parsed), close);
+  const createLink = useCreateLink(close);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (!isToggleChord(e)) return;
       e.preventDefault();
-      setOpen((v) => !v);
+      setOpen((value) => !value);
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
@@ -194,50 +327,19 @@ export function CommandMenu() {
     if (!open) setSearch("");
   }, [open]);
 
-  const groups = ["Go to", "Actions"] as const;
-  const shown = (a: Action) => hit(`${a.label} ${a.value}`, search);
-
   return (
     <CommandDialog open={open} onOpenChange={setOpen} label="Command menu" shouldFilter={false}>
       <CommandInput
-        placeholder="Search pages, links and actions…"
+        placeholder="Search pages, links, actions… or paste a URL"
         value={search}
         onValueChange={setSearch}
       />
       <CommandList>
         <CommandEmpty>No matches.</CommandEmpty>
-
-        {links.length > 0 && (
-          <CommandGroup heading="Links">
-            {links.map((l) => (
-              <CommandItem key={l.key} value={l.key} onSelect={l.run}>
-                <Link2 size={15} className="text-muted" />
-                <span className="truncate">{l.url}</span>
-              </CommandItem>
-            ))}
-          </CommandGroup>
-        )}
-
-        {groups.map((group) => {
-          const items = actions.filter((a) => a.group === group && shown(a));
-          if (items.length === 0) return null;
-          return (
-            <CommandGroup key={group} heading={group}>
-              {items.map((a) => (
-                <CommandItem
-                  key={a.value}
-                  value={a.value}
-                  disabled={a.disabled}
-                  onSelect={a.run}
-                  className={a.danger ? "data-[selected=true]:bg-danger/10" : undefined}
-                >
-                  <a.icon size={15} className={a.danger ? "text-danger" : "text-muted"} />
-                  <span className={a.danger ? "text-danger" : undefined}>{a.label}</span>
-                </CommandItem>
-              ))}
-            </CommandGroup>
-          );
-        })}
+        {wantsCreate(parsed) && <CreateGroup arg={parsed.arg} onRun={createLink} />}
+        {links.length > 0 && <LinksGroup links={links} />}
+        <ActionGroup heading="Go to" items={actionsIn(actions, parsed, "Go to")} />
+        <ActionGroup heading="Actions" items={actionsIn(actions, parsed, "Actions")} />
       </CommandList>
     </CommandDialog>
   );

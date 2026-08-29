@@ -49,3 +49,19 @@ test("the command menu searches the org's links", async ({ page }) => {
   await result.click();
   await expect(page).toHaveURL(/\/links\/[^/]+$/);
 });
+
+test("the command menu creates a link from a pasted URL", async ({ page }) => {
+  await signUpAndVerify(page, `cmdk-create-${Date.now()}@gmail.com`, password);
+  await expect(page.getByRole("heading", { name: "Shorten your first link" })).toBeVisible();
+
+  await page.keyboard.press("ControlOrMeta+KeyK");
+  await page.getByPlaceholder(PLACEHOLDER).fill("https://example.com/from-cmdk");
+
+  // A URL-shaped query offers a create item; running it makes the link and
+  // lands on its detail page.
+  const create = page.getByRole("option", { name: /Create link for/ });
+  await expect(create).toBeVisible();
+  await create.click();
+  await expect(page).toHaveURL(/\/links\/[^/]+$/);
+  await expect(page.getByText("https://example.com/from-cmdk")).toBeVisible();
+});
