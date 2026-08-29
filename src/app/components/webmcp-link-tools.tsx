@@ -126,8 +126,10 @@ export function WebMcpLinkTools() {
         annotations: { readOnlyHint: true, untrustedContentHint: true },
         execute: (input, options) =>
           withLink(getLinkInput, input, options?.signal, async (link) =>
+            // Counts first: a very long destination in conciseLink would
+            // otherwise push them past the toolResult length cap.
             toolResult(
-              `${conciseLink(link)}. ${link.clicks} clicks, ${link.addressCount} addresses.`,
+              `${link.clicks} clicks, ${link.addressCount} addresses. ${conciseLink(link)}`,
             ),
           ),
       },
