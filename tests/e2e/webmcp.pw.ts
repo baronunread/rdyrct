@@ -105,6 +105,7 @@ test("the logged-out landing page exposes marketing tools", async ({ page }) => 
   await page.goto("/");
   await toolNamed(page, "get_rdyrct_pricing");
   await toolNamed(page, "get_rdyrct_overview");
+  await toolNamed(page, "create_qr_code");
 
   const [pricing, overview] = await page.evaluate(async () => {
     const run = (name: string) =>
@@ -115,6 +116,38 @@ test("the logged-out landing page exposes marketing tools", async ({ page }) => 
   expect(pricing).toContain("Hobby ($4/mo)");
   expect(pricing).toContain("Pro ($9/mo)");
   expect(overview).toMatch(/link shortener and QR code generator/);
+
+  // A data URL in the tool result is invisible in a chat-style client, so
+  // create_qr_code opens the generator instead. The code renders there.
+  const qr = await page.evaluate(async () => {
+    const tool = window.webMcpTools.find((candidate) => candidate.name === "create_qr_code");
+    return tool?.execute(
+      { value: "https://example.com/marketing-qr" },
+      { signal: new AbortController().signal },
+    );
+  });
+  expect(qr).toMatch(/qr-code-generator/);
+  await expect(page).toHaveURL(/\/qr-code-generator$/);
+  await toolNamed(page, "generate_qr_code");
+
+  const invalid = await page.evaluate(async () => {
+    const tool = window.webMcpTools.find((candidate) => candidate.name === "create_qr_code");
+    return tool?.execute({ value: "   " }, { signal: new AbortController().signal });
+  });
+  expect(invalid).toMatch(/non-empty link or text/);
+});
+
+test("the marketing tools ride along on the QR generator and legal pages", async ({ page }) => {
+  await supportWebMcp(page);
+
+  await page.goto("/qr-code-generator");
+  await toolNamed(page, "get_rdyrct_pricing");
+  await toolNamed(page, "get_rdyrct_overview");
+  await toolNamed(page, "create_qr_code");
+
+  await page.goto("/privacy");
+  await toolNamed(page, "get_rdyrct_pricing");
+  await toolNamed(page, "create_qr_code");
 });
 
 test("a browser without WebMCP leaves the QR generator working", async ({ page }) => {

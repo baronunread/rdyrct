@@ -33,6 +33,7 @@ import { useAudience } from "../lib/audience";
 import { LandingHeader } from "../components/landing-header";
 import { MarketingLink } from "../components/marketing-link";
 import { Footer } from "../ui/footer";
+import { WebMcpMarketingTools } from "../components/webmcp-marketing-tools";
 import { registerWebMcpTools, type WebMcpTool } from "../lib/webmcp";
 import { QR_CORNER_STYLES, QR_DOT_STYLES, type JsonValue } from "@/shared/types";
 
@@ -372,6 +373,7 @@ export function QrGeneratorPage() {
 
   return (
     <div className="relative mx-auto min-h-dvh max-w-5xl px-6">
+      <WebMcpMarketingTools />
       <LandingHeader authed={authed} />
 
       <main className="flex flex-col items-center gap-8 py-14 sm:py-20">

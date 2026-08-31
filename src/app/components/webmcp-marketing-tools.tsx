@@ -1,4 +1,6 @@
 import { useEffect } from "react";
+import { useNavigate } from "@tanstack/react-router";
+import * as v from "valibot";
 import { ORG_PLANS, PLAN_LIMITS, PLAN_PRICES, type OrgPlan } from "@/shared/types";
 import { registerWebMcpTools, type WebMcpTool } from "../lib/webmcp";
 
@@ -7,7 +9,15 @@ import { registerWebMcpTools, type WebMcpTool } from "../lib/webmcp";
  * browser agent the same plan numbers and product summary the pages show,
  * so it answers "what does rdyrct cost" from a value it was given rather
  * than by scraping the layout. First-party static copy, no API, no auth.
+ *
+ * `create_qr_code` is the one that navigates: it opens the QR generator with
+ * the value, so the code renders on a page the person can see. A data URL in
+ * the tool result is invisible to a chat-style caller.
  */
+
+const qrInput = v.object({
+  value: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(2_000)),
+});
 
 function plural(n: number, word: string): string {
   return `${n} ${word}${n === 1 ? "" : "s"}`;
@@ -42,8 +52,11 @@ function marketingResult(message: string): string {
   return message.slice(0, 2_000);
 }
 
-/** Mounted on the landing page and every standalone marketing page. */
+/** Mounted on the landing page and every standalone marketing page, including
+ * the QR generator and the legal pages. */
 export function WebMcpMarketingTools() {
+  const navigate = useNavigate();
+
   useEffect(() => {
     const tools: WebMcpTool[] = [
       {
@@ -62,10 +75,30 @@ export function WebMcpMarketingTools() {
         annotations: { readOnlyHint: true },
         execute: async () => marketingResult(OVERVIEW),
       },
+      {
+        name: "create_qr_code",
+        description:
+          "Show a free QR code for any link or text. Opens the QR generator at rdyrct.com/qr-code-generator; after it loads, call generate_qr_code with the same value to render the code on the page, and again to change its color, dot style, or logo. No account needed, nothing is sent anywhere.",
+        inputSchema: {
+          type: "object",
+          properties: { value: { type: "string", minLength: 1, maxLength: 2_000 } },
+          required: ["value"],
+        },
+        annotations: { readOnlyHint: true },
+        execute: async (input) => {
+          const parsed = v.safeParse(qrInput, input);
+          if (!parsed.success) return "Provide a non-empty link or text of up to 2000 characters.";
+          // A data URL in the tool result is invisible to the caller, so this
+          // just opens the generator. The navigate must not reject, or the
+          // failure shows instead. generate_qr_code fills the form from there.
+          await navigate({ to: "/qr-code-generator" }).catch(() => {});
+          return `The QR generator is open at rdyrct.com/qr-code-generator. Call generate_qr_code with value "${parsed.output.value}" to render the code on the page.`;
+        },
+      },
     ];
 
     return registerWebMcpTools(tools);
-  }, []);
+  }, [navigate]);
 
   return null;
 }
