@@ -1,7 +1,15 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { env } from "cloudflare:workers";
 import { reset } from "cloudflare:test";
-import { applyTestMigrations, fetchWorker, freeOwnerCookie, overrideEnv, testDb } from "./support";
+import {
+  applyTestMigrations,
+  authEnv,
+  fetchWorker,
+  freeOwnerCookie,
+  overrideEnv,
+  testDb,
+} from "./support";
+import type { Env } from "../../src/worker/env";
 import { eq } from "drizzle-orm";
 import * as schema from "../../src/worker/db/schema";
 import {
@@ -142,6 +150,50 @@ describe("POST/DELETE /api/user/avatar", () => {
     expect(await env.MEDIA.get(`${AVATAR_PREFIX}free-1`)).toBeNull();
     const [row] = await testDb().select().from(schema.user).where(eq(schema.user.id, "free-1"));
     expect(row.image).toBeNull();
+  });
+});
+
+describe("GET /api/user/avatar", () => {
+  beforeEach(applyTestMigrations);
+  afterEach(() => reset());
+
+  const get = (cookie: string, testEnv?: Env) =>
+    fetchWorker(new Request("http://localhost/api/user/avatar", { headers: { cookie } }), testEnv);
+
+  const put = (cookie: string) =>
+    fetchWorker(
+      new Request("http://localhost/api/user/avatar", {
+        method: "POST",
+        headers: { cookie, "content-type": "image/png" },
+        body: PNG_1x1,
+      }),
+    );
+
+  it("serves the stored picture with a cacheable header", async () => {
+    const cookie = await freeOwnerCookie();
+    await put(cookie);
+    const res = await get(cookie);
+    expect(res.status).toBe(200);
+    expect(res.headers.get("cache-control")).toBe("private, max-age=300");
+  });
+
+  it("degrades to 503 when the R2 read throws", async () => {
+    const cookie = await freeOwnerCookie();
+    await put(cookie);
+    // SAFETY: the GET handler only calls MEDIA.get; every other member is
+    // untouched on this path, so the partial proxy stands in for R2Bucket.
+    const fakeMedia = new Proxy(env.MEDIA, {
+      get(_t, prop) {
+        if (prop === "get")
+          return async () => {
+            throw new Error("get: Reduce your rate of simultaneous reads (10058)");
+          };
+        return undefined;
+      },
+    }) as R2Bucket;
+    const res = await get(cookie, { ...authEnv(), MEDIA: fakeMedia });
+    expect(res.status).toBe(503);
+    expect(res.headers.get("retry-after")).toBe("2");
   });
 });
 

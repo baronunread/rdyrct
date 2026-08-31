@@ -40,6 +40,13 @@ test("upload/crop, save, and remove a profile picture from Settings", async ({ p
   await expect(page.getByText("Picture updated")).toBeVisible();
   await expect(footerImg).toHaveAttribute("src", /^\/api\/user\/avatar/);
 
+  // The served picture is cacheable, so a reload does not re-read R2 on every
+  // navigation (Sentry RDYRCT-7: R2 error 10058 on simultaneous reads).
+  const src = await footerImg.getAttribute("src");
+  const served = await page.request.get(src!);
+  expect(served.status()).toBe(200);
+  expect(served.headers()["cache-control"]).toBe("private, max-age=300");
+
   // Remove lives in the dialog, and is also deferred to Save.
   await openDialog();
   await dialog.getByRole("button", { name: "Remove picture" }).click();

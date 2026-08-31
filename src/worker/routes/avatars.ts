@@ -141,15 +141,27 @@ avatarRoutes.get("/", async (c) => {
   const user = requireUser(c);
   log.set({ userId: user.id });
 
-  const obj = await c.env.MEDIA.get(`${AVATAR_PREFIX}${user.id}`);
+  // Served on every page load (sidebar, org switcher, footer). R2 throttles
+  // simultaneous reads of one object (error 10058) and has transient blips
+  // (10001); neither is worth a 500 or a Sentry issue, so degrade to a 503
+  // the client just retries.
+  let obj: R2ObjectBody | null;
+  try {
+    obj = await c.env.MEDIA.get(`${AVATAR_PREFIX}${user.id}`);
+  } catch (err) {
+    log.set({ avatarReadError: String(err) });
+    return c.body(null, 503, { "Retry-After": "2", "Cache-Control": "no-store" });
+  }
   log.set({ avatarFound: Boolean(obj) });
   if (!obj) throw new HTTPException(404, { message: "No avatar" });
 
   const headers = new Headers();
   obj.writeHttpMetadata(headers);
-  // The URL carries a `?v=` upload stamp, so a given version is immutable, but
-  // a stale tab may still hold the old `?v=`; revalidate rather than pin.
-  headers.set("cache-control", "private, max-age=0, must-revalidate");
+  // The URL carries a `?v=` upload stamp, so each version is immutable and a
+  // new upload is a new URL: let the browser hold it a few minutes instead of
+  // revalidating on every navigation. A tab that never refreshes shows a
+  // picture at most 5 minutes stale.
+  headers.set("cache-control", "private, max-age=300");
   headers.set("etag", obj.httpEtag);
   headers.set("x-content-type-options", "nosniff");
   return new Response(obj.body, { headers });
