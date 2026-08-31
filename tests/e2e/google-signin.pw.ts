@@ -23,6 +23,11 @@ async function signInWithGoogle(page: Page) {
 }
 
 test.describe("Google sign-in", () => {
+  // The emulator is one shared identity and these tests build on each other:
+  // the linking test claims the password account, the rest sign into it. The
+  // suite's fullyParallel would race them, so pin the order.
+  test.describe.configure({ mode: "serial" });
+
   test("Continue with Google starts an OAuth session", async ({ page }) => {
     await requireGoogle(page);
 
