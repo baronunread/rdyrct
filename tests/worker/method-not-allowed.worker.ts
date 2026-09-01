@@ -35,4 +35,12 @@ describe("wrong method, wrong path", () => {
     expect(res.headers.get("content-type")).toContain("application/json");
     expect(await res.json()).toEqual({ message: "Not found" });
   });
+
+  it("answers a bare /api without crashing on the missing wide-event logger", async () => {
+    // `/api/*` matches `/api`, but evlog's include globs don't, so `log` is
+    // absent here (RDYRCT-9): the fallback must not call `.set` on it.
+    const res = await call("GET", "/api");
+    expect(res.status).toBe(404);
+    expect(await res.json()).toEqual({ message: "Not found" });
+  });
 });

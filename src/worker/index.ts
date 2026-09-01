@@ -263,8 +263,9 @@ app.route("/api", api);
 // gets an answer it can read instead, and the 405 middleware above has a 404
 // to convert when the path exists under another method.
 app.all("/api/*", (c) => {
-  const log = c.get("log");
-  log.set({ route: c.req.path });
+  // `log` is absent for a bare `/api`: Hono's `/api/*` matches it but evlog's
+  // include globs (`/api/**`, `/api/*`) don't, so no wide event is attached.
+  c.get("log")?.set({ route: c.req.path });
   return c.json({ message: "Not found" }, 404);
 });
 
