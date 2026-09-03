@@ -55,7 +55,7 @@ rdyrct is a free URL shortener and QR code generator for teams. Create short lin
   "/qr-code-generator": {
     title: "Free QR code generator with logo - PNG and SVG, no account",
     description:
-      "Make a custom QR code online for free: your logo in the middle, your colors, rounded dots, and a PNG or SVG download. No sign-up, no watermark, and the code is generated in your browser.",
+      "Make a custom QR code for free: your logo, your colors, rounded dots, and a PNG or SVG download. No sign-up, no watermark, and the code is made in your browser.",
     markdown: `# Free QR code generator
 
 Make a QR code for a link, text, Wi-Fi details, or any other string. Add a logo, choose colours and dot styles, then download a PNG or SVG.
@@ -65,9 +65,9 @@ No account, watermark, or expiry is required. The code is generated in your brow
 [Open the QR code generator](/qr-code-generator)`,
   },
   "/pricing": {
-    title: "Pricing - rdyrct URL shortener and QR codes",
+    title: "URL shortener and QR code generator pricing - rdyrct",
     description:
-      "Free, Hobby and Pro plans for rdyrct: short links, custom domains, branded QR codes and click analytics. Start free, or self-host on your own Cloudflare account.",
+      "Free, Hobby and Pro plans for rdyrct: short links, custom domains, branded QR codes and click analytics. Start free, or self-host on your Cloudflare account.",
     markdown: `# rdyrct pricing
 
 rdyrct is an organization-based link shortener and QR code generator that runs entirely on Cloudflare.
@@ -119,9 +119,9 @@ rdyrct is MIT licensed. Deploy it to your own Cloudflare account and set your ow
 - Click analytics never store an IP address.`,
   },
   "/roadmap": {
-    title: "Roadmap - rdyrct URL shortener",
+    title: "URL shortener roadmap - API, API keys, and an MCP server",
     description:
-      "What rdyrct is building next: a public REST API, API keys, an OpenAPI document, and an MCP server for agents. Every item is an open issue you can read and comment on.",
+      "What rdyrct is building next: a REST API, API keys, an OpenAPI document, and an MCP server for agents. Every item is an open issue you can read and comment on.",
     markdown: undefined,
   },
   "/signup": {
@@ -136,7 +136,7 @@ rdyrct is MIT licensed. Deploy it to your own Cloudflare account and set your ow
     markdown: undefined,
   },
   "/privacy": {
-    title: "Privacy policy - rdyrct",
+    title: "Privacy policy - rdyrct never stores your IP address",
     description:
       "What rdyrct stores and what it does not: click analytics keep country, referrer, device and time, never an IP address or a precise location.",
     markdown: `# Privacy policy
@@ -172,8 +172,9 @@ We retain account and organization data while your account is active. You can ac
 For help, email [support@rdyrct.com](mailto:support@rdyrct.com).`,
   },
   "/terms": {
-    title: "Terms of service - rdyrct",
-    description: "The terms covering rdyrct short links, QR codes and analytics.",
+    title: "Terms of service - rdyrct URL shortener and QR codes",
+    description:
+      "The rules for using rdyrct: acceptable use for links and QR codes, account and organization responsibilities, billing via Polar, and the self-host license.",
     markdown: `# Terms of service
 
 These terms govern your use of rdyrct. By creating an account or using the service, you agree to them. Last updated 19 July 2026.
