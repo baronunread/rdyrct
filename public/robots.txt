@@ -30,4 +30,4 @@ Disallow: /reset-password
 Disallow: /invite/
 
 Sitemap: https://rdyrct.com/sitemap.xml
-Sitemap: https://rdyrct.com/blog/sitemap-index.xml
+Sitemap: https://rdyrct.com/blog/sitemap.xml
