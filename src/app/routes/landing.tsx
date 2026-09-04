@@ -358,6 +358,63 @@ function planPrice(plan: "hobby" | "pro", interval: "month" | "year") {
   return interval === "year" ? `${PLAN_PRICES_YEARLY[plan]}/mo` : `${PLAN_PRICES[plan]}/mo`;
 }
 
+/** One tier in the mobile plan stack. Its own component (not an inline
+ * `.map` callback) so the price/sub-line/feature-list render logic has a
+ * name and isn't retyped as a 7-prop JSX closure on every tier. */
+function MobilePlanCard({
+  name,
+  tagline,
+  price,
+  sub,
+  features,
+  cta,
+  highlight,
+}: {
+  name: string;
+  tagline: string;
+  price: string;
+  sub: string;
+  features: string[];
+  cta: ReactNode;
+  highlight?: boolean;
+}) {
+  return (
+    <div
+      className={cn(
+        "rounded-lg border p-4",
+        highlight ? "border-accent/40 bg-accent/5" : "border-border bg-surface",
+      )}
+    >
+      <div className="flex items-baseline justify-between gap-2">
+        <div>
+          <p className={highlight ? "font-bold text-accent" : "font-bold"}>
+            {name}
+            {highlight && (
+              <span className="ml-2 rounded-full border border-accent/40 px-2 py-0.5 text-2xs text-accent">
+                Most popular
+              </span>
+            )}
+          </p>
+          <p className="text-xs text-muted">{tagline}</p>
+        </div>
+        <p className="tnum text-base font-bold">
+          {price}
+          {sub && <span className="block text-2xs font-normal text-muted">{sub}</span>}
+        </p>
+      </div>
+      <ul className="my-4 flex flex-col gap-1.5">
+        {features.map((f) => (
+          <li key={f} className="flex items-start gap-1.5 text-sm text-muted">
+            <Check size={14} className="mt-0.5 shrink-0 text-accent-2" />
+            {f}
+          </li>
+        ))}
+      </ul>
+      {cta}
+    </div>
+  );
+}
+
 /** Stacked plan cards for phones, where the comparison table can't breathe. */
 function MobilePlans({
   paidTo,
@@ -440,41 +497,8 @@ function MobilePlans({
 
   return (
     <div className="flex flex-col gap-4 sm:hidden">
-      {tiers.map(({ name, tagline, price, sub, features, cta, highlight }) => (
-        <div
-          key={name}
-          className={cn(
-            "rounded-lg border p-4",
-            highlight ? "border-accent/40 bg-accent/5" : "border-border bg-surface",
-          )}
-        >
-          <div className="flex items-baseline justify-between gap-2">
-            <div>
-              <p className={highlight ? "font-bold text-accent" : "font-bold"}>
-                {name}
-                {highlight && (
-                  <span className="ml-2 rounded-full border border-accent/40 px-2 py-0.5 text-2xs text-accent">
-                    Most popular
-                  </span>
-                )}
-              </p>
-              <p className="text-xs text-muted">{tagline}</p>
-            </div>
-            <p className="tnum text-base font-bold">
-              {price}
-              {sub && <span className="block text-2xs font-normal text-muted">{sub}</span>}
-            </p>
-          </div>
-          <ul className="my-4 flex flex-col gap-1.5">
-            {features.map((f) => (
-              <li key={f} className="flex items-start gap-1.5 text-sm text-muted">
-                <Check size={14} className="mt-0.5 shrink-0 text-accent-2" />
-                {f}
-              </li>
-            ))}
-          </ul>
-          {cta}
-        </div>
+      {tiers.map((tier) => (
+        <MobilePlanCard key={tier.name} {...tier} />
       ))}
       <p className="text-center text-xs text-muted">
         Prefer your own infra? rdyrct is open source:{" "}
@@ -1386,6 +1410,65 @@ function FinalCtaSection({ ctaTo, ctaLabel }: { ctaTo: string; ctaLabel: string 
  * draw this line the same place: a light teaser on the homepage, the detail
  * on its own page.
  */
+/** One tier in the homepage pricing teaser. Its own component for the same
+ * reason as MobilePlanCard above: a named unit beats a 9-prop `.map` closure. */
+function PricingTierCard({
+  name,
+  price,
+  sub,
+  pitch,
+  to,
+  cta,
+  variant,
+  onClick,
+  highlight,
+}: {
+  name: string;
+  price: string;
+  sub: string;
+  pitch: string;
+  to: string;
+  cta: string;
+  variant: "outline" | "primary";
+  onClick: () => void;
+  highlight?: boolean;
+}) {
+  return (
+    <div
+      className={cn(
+        "flex flex-col gap-4 rounded-lg border p-5",
+        highlight ? "border-accent/40 bg-accent/5" : "border-border bg-surface",
+      )}
+    >
+      <div>
+        {/* Same pill as the full table and the mobile plan cards. The
+            homepage is where the steering is worth most, and it was the
+            one of the three missing it. */}
+        <p className={highlight ? "font-bold text-accent" : "font-bold"}>
+          {name}
+          {highlight && (
+            <span className="ml-2 rounded-full border border-accent/40 px-2 py-0.5 text-2xs text-accent">
+              Most popular
+            </span>
+          )}
+        </p>
+        <p className="tnum mt-1 text-2xl font-bold">
+          {price}
+          {sub && <span className="ml-1 text-2xs font-normal text-muted">yearly</span>}
+        </p>
+        <p className="mt-1 text-sm text-muted">{pitch}</p>
+      </div>
+      <HrefLink
+        href={to}
+        onClick={onClick}
+        className={buttonClass({ variant, size: "sm", className: "mt-auto w-full" })}
+      >
+        {cta}
+      </HrefLink>
+    </div>
+  );
+}
+
 function PricingTeaser() {
   const paidTo = usePaidPlanTo();
   const [interval, setInterval] = useState<"month" | "year">("month");
@@ -1444,40 +1527,8 @@ function PricingTeaser() {
       <BillingCycleToggle interval={interval} onChange={setInterval} />
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        {tiers.map(({ name, price, sub, pitch, to, cta, variant, onClick, highlight }) => (
-          <div
-            key={name}
-            className={cn(
-              "flex flex-col gap-4 rounded-lg border p-5",
-              highlight ? "border-accent/40 bg-accent/5" : "border-border bg-surface",
-            )}
-          >
-            <div>
-              {/* Same pill as the full table and the mobile plan cards. The
-                  homepage is where the steering is worth most, and it was the
-                  one of the three missing it. */}
-              <p className={highlight ? "font-bold text-accent" : "font-bold"}>
-                {name}
-                {highlight && (
-                  <span className="ml-2 rounded-full border border-accent/40 px-2 py-0.5 text-2xs text-accent">
-                    Most popular
-                  </span>
-                )}
-              </p>
-              <p className="tnum mt-1 text-2xl font-bold">
-                {price}
-                {sub && <span className="ml-1 text-2xs font-normal text-muted">yearly</span>}
-              </p>
-              <p className="mt-1 text-sm text-muted">{pitch}</p>
-            </div>
-            <HrefLink
-              href={to}
-              onClick={onClick}
-              className={buttonClass({ variant, size: "sm", className: "mt-auto w-full" })}
-            >
-              {cta}
-            </HrefLink>
-          </div>
+        {tiers.map((tier) => (
+          <PricingTierCard key={tier.name} {...tier} />
         ))}
       </div>
 
