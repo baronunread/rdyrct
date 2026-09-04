@@ -160,6 +160,8 @@ export async function fetchWorker(request: Request, testEnv: Env = authEnv()): P
 // validates on requests made with this env.
 export const POLAR_HOBBY_PRODUCT_ID = "prod_hobby";
 export const POLAR_PRO_PRODUCT_ID = "prod_pro";
+export const POLAR_HOBBY_YEARLY_PRODUCT_ID = "prod_hobby_yearly";
+export const POLAR_PRO_YEARLY_PRODUCT_ID = "prod_pro_yearly";
 export const POLAR_WEBHOOK_SECRET = "test-webhook-secret";
 export const billingEnv = () =>
   overrideEnv({
@@ -167,6 +169,8 @@ export const billingEnv = () =>
     POLAR_WEBHOOK_SECRET,
     POLAR_HOBBY_PRODUCT_ID,
     POLAR_PRO_PRODUCT_ID,
+    POLAR_HOBBY_YEARLY_PRODUCT_ID,
+    POLAR_PRO_YEARLY_PRODUCT_ID,
   });
 
 /** One outbound Resend send, as the worker posted it. */

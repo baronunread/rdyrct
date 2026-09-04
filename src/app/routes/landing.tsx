@@ -29,7 +29,7 @@ import {
   useReducedMotion,
   type Variants,
 } from "motion/react";
-import { lazy, Suspense, useEffect, useRef } from "react";
+import { lazy, Suspense, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useSeo } from "../lib/seo";
 import { useMarketingScroll } from "../lib/marketing-scroll";
 import { FaqJsonLd } from "../components/faq-json-ld";
@@ -38,7 +38,12 @@ import { useAudience } from "../lib/audience";
 import posthog from "../lib/posthog";
 import { FUNNEL, landingContext } from "../lib/funnel";
 import { trackCta } from "../lib/track-cta";
-import { PLAN_LIMITS, PLAN_PRICES } from "@/shared/types";
+import {
+  PLAN_LIMITS,
+  PLAN_PRICES,
+  PLAN_PRICES_YEARLY,
+  YEARLY_DISCOUNT_LABEL,
+} from "@/shared/types";
 import { buttonClass } from "../ui/button-class";
 import { Table, Th, Td } from "../ui/misc";
 import { Footer, GITHUB_URL } from "../ui/footer";
@@ -163,7 +168,7 @@ const faqs = [
   },
   {
     q: "What's the difference between Hobby and Pro?",
-    a: `Hobby (${PLAN_PRICES.hobby}/mo) puts your logo and colors on QR codes (plain ones are free), and adds a custom domain with your own slugs, ${PLAN_LIMITS.hobby.links} links, ${PLAN_LIMITS.hobby.members} team members, and ${PLAN_LIMITS.hobby.analyticsDays}-day analytics for one organization. Pro (${PLAN_PRICES.pro}/mo) raises everything: ${PLAN_LIMITS.pro.orgs} organizations, ${formatNumber(PLAN_LIMITS.pro.links)} links, ${PLAN_LIMITS.pro.members} team members, ${PLAN_LIMITS.pro.domains} custom domains each, ${PLAN_LIMITS.pro.analyticsDays}-day analytics, and direct email support. Only the organization owner needs a paid plan: one subscription covers every organization they own.`,
+    a: `Hobby (${PLAN_PRICES.hobby}/mo) puts your logo and colors on QR codes (plain ones are free), and adds a custom domain with your own slugs, ${PLAN_LIMITS.hobby.links} links, ${PLAN_LIMITS.hobby.members} team members, and ${PLAN_LIMITS.hobby.analyticsDays}-day analytics for one organization. Pro (${PLAN_PRICES.pro}/mo) raises everything: ${PLAN_LIMITS.pro.orgs} organizations, ${formatNumber(PLAN_LIMITS.pro.links)} links, ${PLAN_LIMITS.pro.members} team members, ${PLAN_LIMITS.pro.domains} custom domains each, ${PLAN_LIMITS.pro.analyticsDays}-day analytics, and direct email support. Only the organization owner needs a paid plan: one subscription covers every organization they own. Yearly billing saves 10%.`,
   },
   {
     q: "How is rdyrct privacy-friendly?",
@@ -270,19 +275,104 @@ function usePaidPlanTo() {
   // it. It also reads better while the query is in flight, where `authed`
   // falls back to what this browser was last time instead of "no".
   const { authed } = useAudience();
-  return (plan: "hobby" | "pro") =>
-    authed
-      ? `/billing?plan=${plan}`
-      : `/signup?next=${encodeURIComponent(`/billing?plan=${plan}`)}`;
+  return (plan: "hobby" | "pro", interval: "month" | "year" = "month") => {
+    const dest = `/billing?plan=${plan}${interval === "year" ? "&interval=year" : ""}`;
+    return authed ? dest : `/signup?next=${encodeURIComponent(dest)}`;
+  };
+}
+
+/** Monthly / yearly switch for the pricing sections. Yearly shows the saving
+ * so it is visible before a plan is picked. */
+/** Same measured-pill approach as billing.tsx's `BillingCycleToggle`:
+ * `layoutId` alone does not animate a plain conditional swap (no exit phase
+ * for Framer to measure a "from" rect), so one persistent pill tweens to the
+ * active button's own rect instead. */
+function BillingCycleToggle({
+  interval,
+  onChange,
+}: {
+  interval: "month" | "year";
+  onChange: (next: "month" | "year") => void;
+}) {
+  const reduced = useReducedMotion();
+  const containerRef = useRef<HTMLDivElement>(null);
+  const buttonRefs = useRef<Record<"month" | "year", HTMLButtonElement | null>>({
+    month: null,
+    year: null,
+  });
+  const [pillRect, setPillRect] = useState<{
+    left: number;
+    top: number;
+    width: number;
+    height: number;
+  } | null>(null);
+
+  useLayoutEffect(() => {
+    const btn = buttonRefs.current[interval];
+    const container = containerRef.current;
+    if (!btn || !container) return;
+    const b = btn.getBoundingClientRect();
+    const c = container.getBoundingClientRect();
+    setPillRect({ left: b.left - c.left, top: b.top - c.top, width: b.width, height: b.height });
+  }, [interval]);
+
+  return (
+    <LazyMotion features={domAnimation}>
+      <div
+        ref={containerRef}
+        className="relative mx-auto mb-8 flex w-fit items-center gap-1 rounded-md border border-border bg-surface p-1 text-sm"
+      >
+        {pillRect && (
+          <m.span
+            className="absolute rounded bg-accent"
+            initial={false}
+            animate={pillRect}
+            transition={reduced ? { duration: 0 } : { type: "spring", stiffness: 500, damping: 35 }}
+          />
+        )}
+        {(["month", "year"] as const).map((value) => (
+          <button
+            key={value}
+            ref={(el) => {
+              buttonRefs.current[value] = el;
+            }}
+            type="button"
+            aria-pressed={interval === value}
+            onClick={() => onChange(value)}
+            className={cn(
+              "relative rounded px-3 py-1 font-medium transition-colors",
+              interval === value ? "text-bg" : "text-muted hover:text-text",
+            )}
+          >
+            {value === "month" ? "Monthly" : `Yearly · ${YEARLY_DISCOUNT_LABEL}`}
+          </button>
+        ))}
+      </div>
+    </LazyMotion>
+  );
+}
+
+/** The price line for a paid plan at the chosen interval: "$4/mo", or
+ * "$3.60/mo" with a "billed yearly" sub-line the caller renders. */
+function planPrice(plan: "hobby" | "pro", interval: "month" | "year") {
+  return interval === "year" ? `${PLAN_PRICES_YEARLY[plan]}/mo` : `${PLAN_PRICES[plan]}/mo`;
 }
 
 /** Stacked plan cards for phones, where the comparison table can't breathe. */
-function MobilePlans({ paidTo }: { paidTo: (p: "hobby" | "pro") => string }) {
+function MobilePlans({
+  paidTo,
+  interval,
+}: {
+  paidTo: (p: "hobby" | "pro", interval: "month" | "year") => string;
+  interval: "month" | "year";
+}) {
+  const yearly = interval === "year";
   const tiers = [
     {
       name: "Free",
       tagline: "For side projects",
       price: "$0",
+      sub: "",
       features: [
         `${PLAN_LIMITS.free.links} links`,
         `${PLAN_LIMITS.free.members} team members`,
@@ -303,7 +393,8 @@ function MobilePlans({ paidTo }: { paidTo: (p: "hobby" | "pro") => string }) {
     {
       name: "Hobby",
       tagline: "For creators & solo brands",
-      price: `${PLAN_PRICES.hobby}/mo`,
+      price: planPrice("hobby", interval),
+      sub: yearly ? "billed yearly" : "",
       features: [
         `${PLAN_LIMITS.hobby.links} links`,
         `${PLAN_LIMITS.hobby.members} team members`,
@@ -313,7 +404,7 @@ function MobilePlans({ paidTo }: { paidTo: (p: "hobby" | "pro") => string }) {
       ],
       cta: (
         <HrefLink
-          href={paidTo("hobby")}
+          href={paidTo("hobby", interval)}
           onClick={() => trackCta("pricing_hobby")}
           className={buttonClass({ variant: "outline", size: "sm", className: "w-full" })}
         >
@@ -324,7 +415,8 @@ function MobilePlans({ paidTo }: { paidTo: (p: "hobby" | "pro") => string }) {
     {
       name: "Pro",
       tagline: "For brands & growing teams",
-      price: `${PLAN_PRICES.pro}/mo`,
+      price: planPrice("pro", interval),
+      sub: yearly ? "billed yearly" : "",
       highlight: true,
       features: [
         `${PLAN_LIMITS.pro.orgs} organizations (only the owner pays)`,
@@ -336,7 +428,7 @@ function MobilePlans({ paidTo }: { paidTo: (p: "hobby" | "pro") => string }) {
       ],
       cta: (
         <HrefLink
-          href={paidTo("pro")}
+          href={paidTo("pro", interval)}
           onClick={() => trackCta("pricing_pro")}
           className={buttonClass({ variant: "primary", size: "sm", className: "w-full" })}
         >
@@ -348,7 +440,7 @@ function MobilePlans({ paidTo }: { paidTo: (p: "hobby" | "pro") => string }) {
 
   return (
     <div className="flex flex-col gap-4 sm:hidden">
-      {tiers.map(({ name, tagline, price, features, cta, highlight }) => (
+      {tiers.map(({ name, tagline, price, sub, features, cta, highlight }) => (
         <div
           key={name}
           className={cn(
@@ -368,7 +460,10 @@ function MobilePlans({ paidTo }: { paidTo: (p: "hobby" | "pro") => string }) {
               </p>
               <p className="text-xs text-muted">{tagline}</p>
             </div>
-            <p className="tnum text-base font-bold">{price}</p>
+            <p className="tnum text-base font-bold">
+              {price}
+              {sub && <span className="block text-2xs font-normal text-muted">{sub}</span>}
+            </p>
           </div>
           <ul className="my-4 flex flex-col gap-1.5">
             {features.map((f) => (
@@ -408,13 +503,17 @@ function MobilePlans({ paidTo }: { paidTo: (p: "hobby" | "pro") => string }) {
  */
 export function PricingSection() {
   const paidTo = usePaidPlanTo();
+  const [interval, setInterval] = useState<"month" | "year">("month");
+  const yearly = interval === "year";
   return (
     <Section
       id="pricing"
       className="scroll-mt-16 py-16"
       onEnter={() => posthog.capture(FUNNEL.pricingViewed)}
     >
-      <MobilePlans paidTo={paidTo} />
+      <BillingCycleToggle interval={interval} onChange={setInterval} />
+
+      <MobilePlans paidTo={paidTo} interval={interval} />
 
       <div className="hidden sm:block">
         <Table>
@@ -451,13 +550,14 @@ export function PricingSection() {
               <Td className="font-bold">Price</Td>
               <Td>$0</Td>
               <Td>
-                <span className="text-base font-bold">{PLAN_PRICES.hobby}/mo</span>
+                <span className="text-base font-bold">{planPrice("hobby", interval)}</span>
+                {yearly && <span className="ml-1 text-2xs font-normal text-muted">yearly</span>}
               </Td>
               <Cell tier="pro">
-                <span className="text-base font-bold text-accent">{PLAN_PRICES.pro}/mo</span>
-                <span className="block text-2xs font-normal text-muted">
-                  only the org owner pays
+                <span className="text-base font-bold text-accent">
+                  {planPrice("pro", interval)}
                 </span>
+                {yearly && <span className="ml-1 text-2xs font-normal text-muted">yearly</span>}
               </Cell>
             </tr>
             <tr>
@@ -527,7 +627,7 @@ export function PricingSection() {
               </Td>
               <Td>
                 <HrefLink
-                  href={paidTo("hobby")}
+                  href={paidTo("hobby", interval)}
                   onClick={() => trackCta("pricing_hobby")}
                   className={buttonClass({ variant: "outline", size: "sm", className: "w-full" })}
                 >
@@ -536,7 +636,7 @@ export function PricingSection() {
               </Td>
               <Cell tier="pro">
                 <HrefLink
-                  href={paidTo("pro")}
+                  href={paidTo("pro", interval)}
                   onClick={() => trackCta("pricing_pro")}
                   className={buttonClass({ variant: "primary", size: "sm", className: "w-full" })}
                 >
@@ -1288,10 +1388,13 @@ function FinalCtaSection({ ctaTo, ctaLabel }: { ctaTo: string; ctaLabel: string 
  */
 function PricingTeaser() {
   const paidTo = usePaidPlanTo();
+  const [interval, setInterval] = useState<"month" | "year">("month");
+  const yearly = interval === "year";
   const tiers = [
     {
       name: "Free",
       price: "$0",
+      sub: "",
       // Says the generous part and the catch in one line. The free teammates
       // are the strongest free thing here and were missing; the random slugs
       // are the fact most likely to feel like a bait if somebody only meets
@@ -1304,18 +1407,20 @@ function PricingTeaser() {
     },
     {
       name: "Hobby",
-      price: `${PLAN_PRICES.hobby}/mo`,
+      price: planPrice("hobby", interval),
+      sub: yearly ? "billed yearly" : "",
       pitch: `${PLAN_LIMITS.hobby.links} links, a custom domain with your own slugs, QR codes with your logo and colors, ${PLAN_LIMITS.hobby.members} team members, and ${PLAN_LIMITS.hobby.analyticsDays}-day analytics.`,
-      to: paidTo("hobby"),
+      to: paidTo("hobby", interval),
       cta: "Start Hobby",
       variant: "outline" as const,
       onClick: () => trackCta("pricing_hobby"),
     },
     {
       name: "Pro",
-      price: `${PLAN_PRICES.pro}/mo`,
+      price: planPrice("pro", interval),
+      sub: yearly ? "billed yearly" : "",
       pitch: `Everything in Hobby, plus ${PLAN_LIMITS.pro.orgs} organizations, ${formatNumber(PLAN_LIMITS.pro.links)} links, ${PLAN_LIMITS.pro.domains} custom domains, ${PLAN_LIMITS.pro.members} team members, and ${PLAN_LIMITS.pro.analyticsDays}-day analytics.`,
-      to: paidTo("pro"),
+      to: paidTo("pro", interval),
       cta: "Start Pro",
       variant: "primary" as const,
       onClick: () => trackCta("pricing_pro"),
@@ -1336,8 +1441,10 @@ function PricingTeaser() {
         </p>
       </div>
 
+      <BillingCycleToggle interval={interval} onChange={setInterval} />
+
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        {tiers.map(({ name, price, pitch, to, cta, variant, onClick, highlight }) => (
+        {tiers.map(({ name, price, sub, pitch, to, cta, variant, onClick, highlight }) => (
           <div
             key={name}
             className={cn(
@@ -1357,7 +1464,10 @@ function PricingTeaser() {
                   </span>
                 )}
               </p>
-              <p className="tnum mt-1 text-2xl font-bold">{price}</p>
+              <p className="tnum mt-1 text-2xl font-bold">
+                {price}
+                {sub && <span className="ml-1 text-2xs font-normal text-muted">yearly</span>}
+              </p>
               <p className="mt-1 text-sm text-muted">{pitch}</p>
             </div>
             <HrefLink
