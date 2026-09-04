@@ -58,6 +58,7 @@ describe("Cloudflare rate limiting", () => {
     expect(signedApiGroup("/api/orgs/org-1/domains/id", "GET")).toBe("domain");
     expect(signedApiGroup("/api/billing/checkout", "POST")).toBe("checkout");
     expect(signedApiGroup("/api/billing/portal", "POST")).toBe("checkout");
+    expect(signedApiGroup("/api/billing/checkout/abc-123/confirm", "POST")).toBe("checkout");
     expect(signedApiGroup("/api/orgs/org-1/links", "GET")).toBeNull();
   });
 
