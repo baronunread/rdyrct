@@ -13,8 +13,8 @@ import { expect, test } from "@playwright/test";
 const PAGES = [
   { path: "/", title: /URL shortener and QR code generator/ },
   { path: "/qr-code-generator", title: /Free QR code generator with logo/ },
-  { path: "/pricing", title: /Pricing - rdyrct/ },
-  { path: "/roadmap", title: /Roadmap - rdyrct/ },
+  { path: "/pricing", title: /URL shortener and QR code generator pricing/ },
+  { path: "/roadmap", title: /URL shortener roadmap/ },
   { path: "/signup", title: /Sign up/ },
   { path: "/privacy", title: /Privacy policy/ },
 ];
@@ -60,7 +60,7 @@ test("the QR page describes itself in the share tags, not the landing page", asy
   const html = await (await request.get("/qr-code-generator")).text();
 
   expect(html).toMatch(/"og:title" content="Free QR code generator/);
-  expect(html).toMatch(/"og:description" content="Make a custom QR code online for free/);
+  expect(html).toMatch(/"og:description" content="Make a custom QR code for free/);
   expect(html).toMatch(/"og:url" content="[^"]*\/qr-code-generator"/);
 });
 
@@ -72,14 +72,13 @@ test("the signed-in app keeps the default head", async ({ request }) => {
 });
 
 test("robots.txt declares both sitemaps", async ({ request }) => {
-  // The blog is a separate Worker (rdyrct-blog) with its own sitemap, built
-  // by @astrojs/sitemap as sitemap-index.xml. Naming only the app's own
-  // sitemap left posts undiscoverable outside crawling the blog's
-  // pagination directly.
+  // The blog is a separate Worker (rdyrct-blog) with its own sitemap at
+  // /blog/sitemap.xml. Naming only the app's own sitemap left posts
+  // undiscoverable outside crawling the blog's pagination directly.
   const robots = await (await request.get("/robots.txt")).text();
 
   expect(robots).toContain("Sitemap: https://rdyrct.com/sitemap.xml");
-  expect(robots).toContain("Sitemap: https://rdyrct.com/blog/sitemap-index.xml");
+  expect(robots).toContain("Sitemap: https://rdyrct.com/blog/sitemap.xml");
 });
 
 // What the live site serves is two sources merged: Cloudflare puts a managed
