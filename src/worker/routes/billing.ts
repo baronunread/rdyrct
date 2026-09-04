@@ -29,7 +29,8 @@ billingRoutes.use("*", jsonBodyLimit());
 
 /**
  * Which plan a Polar product grants: an explicit allowlist that fails
- * closed. An unrecognized product id (a misconfigured env var, a new Polar
+ * closed. Both the monthly and yearly product for a plan map to the same
+ * plan. An unrecognized product id (a misconfigured env var, a new Polar
  * product nobody wired up, a stale id from a deleted product) must never
  * grant a plan by falling through to the highest tier — that's how a mapping
  * mistake used to hand out Pro for free (see issue #17).
@@ -38,12 +39,23 @@ function planForProduct(env: Env, productId: string | undefined): "hobby" | "pro
   if (!productId) return null;
   if (productId === env.POLAR_HOBBY_PRODUCT_ID) return "hobby";
   if (productId === env.POLAR_PRO_PRODUCT_ID) return "pro";
+  if (productId === env.POLAR_HOBBY_YEARLY_PRODUCT_ID) return "hobby";
+  if (productId === env.POLAR_PRO_YEARLY_PRODUCT_ID) return "pro";
   return null;
+}
+
+/** The Polar product to check out for a plan at a billing interval. Yearly is
+ * a separate product priced 10% below twelve months. */
+function productIdFor(env: Env, plan: "hobby" | "pro", interval: "month" | "year"): string {
+  if (plan === "hobby")
+    return interval === "year" ? env.POLAR_HOBBY_YEARLY_PRODUCT_ID : env.POLAR_HOBBY_PRODUCT_ID;
+  return interval === "year" ? env.POLAR_PRO_YEARLY_PRODUCT_ID : env.POLAR_PRO_PRODUCT_ID;
 }
 
 /** What the checkout route reads off its request body. */
 interface CheckoutBody {
   plan?: string;
+  interval?: string;
 }
 
 billingRoutes.post("/checkout", requireUser, async (c) => {
@@ -53,13 +65,18 @@ billingRoutes.post("/checkout", requireUser, async (c) => {
   // optional, so reading it finds the same absence.
   const body = await c.req.json<CheckoutBody>().catch(() => ({}) as CheckoutBody);
   const plan = body.plan ?? "pro";
-  log.set({ userId: user.id, plan });
+  const interval = body.interval ?? "month";
+  log.set({ userId: user.id, plan, interval });
   if (plan !== "hobby" && plan !== "pro")
     throw new HTTPException(400, { message: "plan must be hobby or pro" });
+  if (interval !== "month" && interval !== "year")
+    throw new HTTPException(400, { message: "interval must be month or year" });
   const checkout = await polarFor(c.env).checkouts.create({
-    products: [plan === "hobby" ? c.env.POLAR_HOBBY_PRODUCT_ID : c.env.POLAR_PRO_PRODUCT_ID],
+    products: [productIdFor(c.env, plan, interval)],
     // Polar interpolates {CHECKOUT_ID}; the SPA uses it to confirm the
-    // upgrade before celebrating (webhook is still the entitlement source).
+    // upgrade before celebrating. The webhook is the primary entitlement
+    // source; POST /checkout/:id/confirm below is the fallback for when it
+    // never lands.
     successUrl: `${c.env.APP_URL}/billing?checkout_id={CHECKOUT_ID}`,
     customerEmail: user.email,
     metadata: { userId: user.id },
@@ -71,6 +88,72 @@ billingRoutes.post("/checkout", requireUser, async (c) => {
     outcome: "success",
   });
   return c.json({ url: checkout.url });
+});
+
+/**
+ * Fallback for when the webhook hasn't landed by the time the client's poll
+ * gives up (see WEBHOOK_POLL_MS/WEBHOOK_POLL_TRIES in billing.tsx): asks
+ * Polar directly whether the checkout succeeded and, if so, grants the plan
+ * itself instead of leaving someone who already paid looking free on every
+ * reload. Idempotent with a webhook that arrives later (or redelivers): both
+ * paths funnel into `applyPolarEvent`, which is timestamp-guarded
+ * (`notStale`), so whichever lands first stands and the other is a no-op.
+ *
+ * POST, not GET: same reasoning as /portal below, and this one actually
+ * writes a plan onto the account, so a GET's cousin (a prefetch) is worse.
+ */
+billingRoutes.post("/checkout/:id/confirm", requireUser, async (c) => {
+  const log = c.get("log");
+  const user = c.var.user!;
+  const checkoutId = c.req.param("id");
+  const checkout = await polarFor(c.env).checkouts.get({ id: checkoutId });
+  // SAFETY: only the checkout this account's own upgrade created may
+  // reconcile this account. metadata.userId is set server-side at creation
+  // (POST /checkout above) and Polar does not let the client change it, so
+  // this rejects both a stranger's checkout id and a stale one from before
+  // an account switch.
+  if (String(checkout.metadata.userId ?? "") !== user.id) {
+    throw new HTTPException(404, { message: "Not found" });
+  }
+  log.set({ userId: user.id, checkoutId, checkoutStatus: checkout.status });
+  // `status` is all a checkouts:write/checkouts:read token can see:
+  // Polar never backfills subscriptionId onto the checkout itself (verified
+  // against the sandbox API, not just undocumented), and reading the order or
+  // subscription that succeeding it created needs orders:read/
+  // subscriptions:read, a scope this integration doesn't carry. Polar's own
+  // guidance treats checkout status as the UX confirmation signal and the
+  // webhook as the entitlement source of truth, so this grants the plan on
+  // status alone and stands in a placeholder id: the real one arrives on
+  // whichever webhook (redelivered or fresh) lands next, matched by
+  // metadata.userId same as always, and overwrites it. Known gap: if that
+  // webhook's own timestamp is older than "now" (a stale redelivery, not a
+  // fresh event), notStale drops it entirely and the placeholder lingers
+  // until a genuinely later event (a renewal, a plan change) corrects it.
+  // Cosmetic: nothing reads polarSubscriptionId except the webhook's own
+  // fallback subject match, and hasBillingAccount / the portal button key off
+  // polarCustomerId, which this does set correctly.
+  if (checkout.status === "succeeded") {
+    await applyPolarEvent(c.env, c.var.db, {
+      type: "subscription.active",
+      data: {
+        id: `pending:${checkoutId}`,
+        customer_id: checkout.customerId ?? undefined,
+        product_id: checkout.productId ?? undefined,
+        status: "active",
+        metadata: checkout.metadata,
+        // "Now": the freshest fact we have. A later webhook redelivery
+        // carrying the subscription's real (earlier) created_at loses to
+        // this under notStale, which is correct: this row already reflects
+        // it.
+        modified_at: new Date().toISOString(),
+      },
+    });
+  }
+  const rows = await c.var.db
+    .select({ plan: schema.user.plan })
+    .from(schema.user)
+    .where(eq(schema.user.id, user.id));
+  return c.json({ plan: rows[0]?.plan ?? "free" });
 });
 
 // POST, not GET: this creates a Polar customer session. A GET that changes
@@ -333,6 +416,33 @@ async function mutationFor(db: Db, env: Env, event: PolarEvent) {
   }
 }
 
+/**
+ * Applies one event's effect and, if it actually changed the plan, runs the
+ * entitlement reconciliation pass (#158). Shared by the webhook handler and
+ * the checkout-confirm fallback (POST /checkout/:id/confirm above), which
+ * synthesizes a subscription.active event from a checkout when Polar's own
+ * webhook never delivers one.
+ *
+ * One guarded statement, no delivery ledger: see `notStale` for why
+ * out-of-order deliveries are the case worth defending against and
+ * duplicates are not. A stale event matches no row and changes nothing.
+ * Read the subject *before* the mutation, because `subscription.revoked`
+ * clears `polar_subscription_id`, which is the only thing `subjectOf` has to
+ * go on for an event that carries no metadata.userId. Resolving afterwards
+ * matched no row, so the plan dropped to free and no org was ever locked or
+ * demoted: exactly the case #158 exists for.
+ */
+async function applyPolarEvent(env: Env, db: Db, event: PolarEvent): Promise<void> {
+  const subjectId = PLAN_EVENTS.has(event.type) ? await subjectIdOf(db, event) : null;
+  const mutation = await mutationFor(db, env, event);
+  if (!mutation) return;
+  const result = await mutation;
+  if (result.meta.changes === 0) await alertIfNoSuchSubject(db, event);
+  // `reconcileUser` swallows its own failures: a webhook that 500s earns a
+  // retry, and ten of those disable the endpoint.
+  else if (subjectId) await reconcileUser(env, db, subjectId);
+}
+
 export async function handlePolarWebhook(req: Request, env: Env): Promise<Response> {
   const body = await req.text();
   try {
@@ -348,27 +458,10 @@ export async function handlePolarWebhook(req: Request, env: Env): Promise<Respon
   // and id, which the handlers below branch on before reading anything else.
   const event = JSON.parse(body) as PolarEvent;
   const db = drizzle(env.DB, { schema });
-
-  // One guarded statement, no delivery ledger: see `notStale` for why
-  // out-of-order deliveries are the case worth defending against and
-  // duplicates are not. A stale event matches no row and changes nothing,
-  // which is a success as far as Polar is concerned — anything other than a
-  // 2xx here earns a retry, and ten consecutive non-2xx responses disable
-  // the endpoint outright.
-  // Read *before* the mutation, because `subscription.revoked` clears
-  // `polar_subscription_id`, which is the only thing `subjectOf` has to go on
-  // for an event that carries no metadata.userId. Resolving afterwards
-  // matched no row, so the plan dropped to free and no org was ever locked or
-  // demoted: exactly the case #158 exists for.
-  const subjectId = PLAN_EVENTS.has(event.type) ? await subjectIdOf(db, event) : null;
-  const mutation = await mutationFor(db, env, event);
-  if (mutation) {
-    const result = await mutation;
-    if (result.meta.changes === 0) await alertIfNoSuchSubject(db, event);
-    // `reconcileUser` swallows its own failures: a webhook that 500s earns a
-    // retry, and ten of those disable the endpoint.
-    else if (subjectId) await reconcileUser(env, db, subjectId);
-  }
+  // Anything other than a 2xx here earns a retry, and ten consecutive
+  // non-2xx responses disable the endpoint outright, so applyPolarEvent's
+  // own failures are left to propagate rather than swallowed here.
+  await applyPolarEvent(env, db, event);
   return Response.json({ received: true });
 }
 

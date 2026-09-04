@@ -122,6 +122,15 @@ export const PLAN_PRICES = {
   pro: "$9",
 } satisfies Record<Exclude<OrgPlan, "free">, string>;
 
+/** Monthly-equivalent price when billed yearly: 10% off PLAN_PRICES. The real
+ * charge lives on the yearly product in Polar. */
+export const PLAN_PRICES_YEARLY = {
+  hobby: "$3.60",
+  pro: "$8.10",
+} satisfies Record<Exclude<OrgPlan, "free">, string>;
+
+export const YEARLY_DISCOUNT_LABEL = "Save 10%";
+
 /** QR dot styles supported by qr-code-styling; "" means inherit/default. */
 export const QR_DOT_STYLES = [
   "rounded",
