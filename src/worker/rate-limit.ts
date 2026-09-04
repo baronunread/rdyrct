@@ -186,7 +186,7 @@ export function signedApiGroup(
   path: string,
   method: string,
 ): Exclude<RateLimitGroup, "auth" | "cap" | "email" | "click" | "anon_link"> | null {
-  if (/^\/api\/billing\/(?:checkout|portal)$/.test(path)) return "checkout";
+  if (/^\/api\/billing\/(?:checkout(?:\/[^/]+\/confirm)?|portal)$/.test(path)) return "checkout";
   if (method === "POST" && /^\/api\/orgs\/[^/]+\/qr-logo\/?$/.test(path)) return "qr_upload";
   if (/^\/api\/orgs\/[^/]+\/domains(?:\/|$)/.test(path)) return "domain";
   if (method === "POST" || method === "PUT" || method === "PATCH" || method === "DELETE")
