@@ -269,6 +269,54 @@ describe("POST /api/billing/portal", () => {
   });
 });
 
+/** The checkouts.get() response for "free-1"'s pro checkout, with per-test
+ * overrides — every /confirm test starts from one of these two shapes. */
+function succeededCheckout(overrides: Partial<CheckoutStatus> = {}): CheckoutStatus {
+  return {
+    status: "succeeded",
+    productId: POLAR_PRO_PRODUCT_ID,
+    customerId: "cus_1",
+    subscriptionId: null,
+    metadata: { userId: "free-1" },
+    ...overrides,
+  };
+}
+function openCheckout(): CheckoutStatus {
+  return {
+    status: "open",
+    productId: null,
+    customerId: null,
+    subscriptionId: null,
+    metadata: { userId: "free-1" },
+  };
+}
+
+/** The subscription.active payload for "free-1"'s sub_1, with per-test
+ * overrides — the /confirm redelivery/renewal tests below only differ by
+ * timestamp. Distinct from subscriptionActivePayload() above, which is
+ * user-1's fixed payload for the older redelivery tests. */
+function confirmRedeliveryPayload(
+  overrides: Partial<{
+    id: string;
+    customer_id: string;
+    product_id: string;
+    metadata: { userId: string };
+    created_at: string;
+    modified_at: string;
+  }> = {},
+) {
+  return {
+    type: "subscription.active",
+    data: {
+      id: "sub_1",
+      customer_id: "cus_1",
+      product_id: POLAR_PRO_PRODUCT_ID,
+      metadata: { userId: "free-1" },
+      ...overrides,
+    },
+  };
+}
+
 describe("POST /api/billing/checkout/:id/confirm", () => {
   it("requires sign-in", async () => {
     expect((await confirmCheckout("", "checkout_1")).status).toBe(401);
@@ -276,13 +324,7 @@ describe("POST /api/billing/checkout/:id/confirm", () => {
 
   it("grants the plan from status alone, since subscriptionId never populates on a checkout in practice", async () => {
     const cookie = await freeOwnerCookie();
-    checkoutsGet.mockResolvedValueOnce({
-      status: "succeeded",
-      productId: POLAR_PRO_PRODUCT_ID,
-      customerId: "cus_1",
-      subscriptionId: null,
-      metadata: { userId: "free-1" },
-    });
+    checkoutsGet.mockResolvedValueOnce(succeededCheckout());
     const res = await confirmCheckout(cookie, "checkout_1");
     expect(res.status).toBe(200);
     expect(await jsonBody(res)).toEqual({ plan: "pro" });
@@ -297,13 +339,7 @@ describe("POST /api/billing/checkout/:id/confirm", () => {
 
   it("leaves the plan alone when the checkout hasn't succeeded yet", async () => {
     const cookie = await freeOwnerCookie();
-    checkoutsGet.mockResolvedValueOnce({
-      status: "open",
-      productId: null,
-      customerId: null,
-      subscriptionId: null,
-      metadata: { userId: "free-1" },
-    });
+    checkoutsGet.mockResolvedValueOnce(openCheckout());
     const res = await confirmCheckout(cookie, "checkout_1");
     expect(res.status).toBe(200);
     expect(await jsonBody(res)).toEqual({ plan: "free" });
@@ -311,13 +347,9 @@ describe("POST /api/billing/checkout/:id/confirm", () => {
 
   it("rejects a checkout that belongs to someone else", async () => {
     const cookie = await freeOwnerCookie();
-    checkoutsGet.mockResolvedValueOnce({
-      status: "succeeded",
-      productId: POLAR_PRO_PRODUCT_ID,
-      customerId: "cus_1",
-      subscriptionId: "sub_1",
-      metadata: { userId: "someone-else" },
-    });
+    checkoutsGet.mockResolvedValueOnce(
+      succeededCheckout({ subscriptionId: "sub_1", metadata: { userId: "someone-else" } }),
+    );
     const res = await confirmCheckout(cookie, "checkout_1");
     expect(res.status).toBe(404);
     const rows = await db().select().from(schema.user).where(eq(schema.user.id, "free-1"));
@@ -326,29 +358,14 @@ describe("POST /api/billing/checkout/:id/confirm", () => {
 
   it("ignores a webhook redelivery whose timestamp is older than the fallback's own (still correct, just doesn't fix the placeholder id)", async () => {
     const cookie = await freeOwnerCookie();
-    checkoutsGet.mockResolvedValueOnce({
-      status: "succeeded",
-      productId: POLAR_PRO_PRODUCT_ID,
-      customerId: "cus_1",
-      subscriptionId: null,
-      metadata: { userId: "free-1" },
-    });
+    checkoutsGet.mockResolvedValueOnce(succeededCheckout());
     await confirmCheckout(cookie, "checkout_1");
 
     // A genuinely stale redelivery, carrying the subscription's real
     // created_at from before the fallback ran. notStale correctly drops the
     // whole write, id included: this is the design's one known gap, noted on
     // the route itself, not a bug in this test.
-    await postWebhook({
-      type: "subscription.active",
-      data: {
-        id: "sub_1",
-        customer_id: "cus_1",
-        product_id: POLAR_PRO_PRODUCT_ID,
-        metadata: { userId: "free-1" },
-        created_at: new Date(0).toISOString(),
-      },
-    });
+    await postWebhook(confirmRedeliveryPayload({ created_at: new Date(0).toISOString() }));
 
     const rows = await db().select().from(schema.user).where(eq(schema.user.id, "free-1"));
     expect(rows[0]?.plan).toBe("pro");
@@ -357,25 +374,12 @@ describe("POST /api/billing/checkout/:id/confirm", () => {
 
   it("a later event (e.g. a renewal) replaces the placeholder id with the real one", async () => {
     const cookie = await freeOwnerCookie();
-    checkoutsGet.mockResolvedValueOnce({
-      status: "succeeded",
-      productId: POLAR_PRO_PRODUCT_ID,
-      customerId: "cus_1",
-      subscriptionId: null,
-      metadata: { userId: "free-1" },
-    });
+    checkoutsGet.mockResolvedValueOnce(succeededCheckout());
     await confirmCheckout(cookie, "checkout_1");
 
-    await postWebhook({
-      type: "subscription.active",
-      data: {
-        id: "sub_1",
-        customer_id: "cus_1",
-        product_id: POLAR_PRO_PRODUCT_ID,
-        metadata: { userId: "free-1" },
-        modified_at: new Date(Date.now() + 60_000).toISOString(),
-      },
-    });
+    await postWebhook(
+      confirmRedeliveryPayload({ modified_at: new Date(Date.now() + 60_000).toISOString() }),
+    );
 
     const rows = await db().select().from(schema.user).where(eq(schema.user.id, "free-1"));
     expect(rows[0]?.plan).toBe("pro");
