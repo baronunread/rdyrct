@@ -11,10 +11,13 @@ import {
   adminCookie,
   applyTestMigrations,
   billingEnv,
+  freeOwnerCookie,
   jsonBody,
   overrideEnv,
   POLAR_HOBBY_PRODUCT_ID,
   POLAR_PRO_PRODUCT_ID,
+  POLAR_HOBBY_YEARLY_PRODUCT_ID,
+  POLAR_PRO_YEARLY_PRODUCT_ID,
   POLAR_WEBHOOK_SECRET,
   seedBillingUser as seedUser,
 } from "./support";
@@ -28,11 +31,27 @@ import type { BillingProvider } from "../../src/worker/billing-provider";
 // they hand over a queue or a rate limiter, and stay about our own route
 // logic.
 const checkoutsCreate = vi.fn(async () => ({ url: "https://sandbox.polar.sh/checkout/test" }));
+/** The shape `checkouts.get` returns, named so the default mock below states
+ * it once instead of widening each null field with an inline assertion. */
+type CheckoutStatus = {
+  status: string;
+  productId: string | null;
+  customerId: string | null;
+  subscriptionId: string | null;
+  metadata: Record<string, JsonValue>;
+};
+const checkoutsGet = vi.fn<() => Promise<CheckoutStatus>>(async () => ({
+  status: "open",
+  productId: null,
+  customerId: null,
+  subscriptionId: null,
+  metadata: {},
+}));
 const customerSessionsCreate = vi.fn(async () => ({
   customerPortalUrl: "https://sandbox.polar.sh/portal/test",
 }));
 const billingProvider: BillingProvider = {
-  checkouts: { create: checkoutsCreate },
+  checkouts: { create: checkoutsCreate, get: checkoutsGet },
   customerSessions: { create: customerSessionsCreate },
 };
 
@@ -42,6 +61,7 @@ const polarEnv = (): Env => ({ ...billingEnv(), BILLING: billingProvider });
 beforeEach(async () => {
   await applyTestMigrations();
   checkoutsCreate.mockClear();
+  checkoutsGet.mockClear();
   customerSessionsCreate.mockClear();
 });
 
@@ -77,6 +97,20 @@ async function portal(cookie?: string): Promise<Response> {
   const ctx = createExecutionContext();
   const res = await worker.fetch(
     new Request("http://localhost/api/billing/portal", {
+      method: "POST",
+      headers: cookie ? { cookie } : {},
+    }),
+    polarEnv(),
+    ctx,
+  );
+  await waitOnExecutionContext(ctx);
+  return res;
+}
+
+async function confirmCheckout(cookie: string, checkoutId: string): Promise<Response> {
+  const ctx = createExecutionContext();
+  const res = await worker.fetch(
+    new Request(`http://localhost/api/billing/checkout/${checkoutId}/confirm`, {
       method: "POST",
       headers: cookie ? { cookie } : {},
     }),
@@ -167,9 +201,36 @@ describe("POST /api/billing/checkout", () => {
     );
   });
 
+  it("defaults to monthly when no interval is given", async () => {
+    const cookie = await adminCookie();
+    await checkout(cookie, { plan: "pro" });
+    expect(checkoutsCreate).toHaveBeenCalledWith(
+      expect.objectContaining({ products: [POLAR_PRO_PRODUCT_ID] }),
+    );
+  });
+
+  it("maps a yearly interval to the yearly product for each plan", async () => {
+    const cookie = await adminCookie();
+    await checkout(cookie, { plan: "pro", interval: "year" });
+    expect(checkoutsCreate).toHaveBeenLastCalledWith(
+      expect.objectContaining({ products: [POLAR_PRO_YEARLY_PRODUCT_ID] }),
+    );
+    await checkout(cookie, { plan: "hobby", interval: "year" });
+    expect(checkoutsCreate).toHaveBeenLastCalledWith(
+      expect.objectContaining({ products: [POLAR_HOBBY_YEARLY_PRODUCT_ID] }),
+    );
+  });
+
   it("rejects a plan that isn't hobby or pro", async () => {
     const cookie = await adminCookie();
     const res = await checkout(cookie, { plan: "diamond" });
+    expect(res.status).toBe(400);
+    expect(checkoutsCreate).not.toHaveBeenCalled();
+  });
+
+  it("rejects an interval that isn't month or year", async () => {
+    const cookie = await adminCookie();
+    const res = await checkout(cookie, { plan: "pro", interval: "decade" });
     expect(res.status).toBe(400);
     expect(checkoutsCreate).not.toHaveBeenCalled();
   });
@@ -205,6 +266,145 @@ describe("POST /api/billing/portal", () => {
     expect(customerSessionsCreate).toHaveBeenCalledWith(
       expect.objectContaining({ customerId: "cus_123" }),
     );
+  });
+});
+
+/** The checkouts.get() response for "free-1"'s pro checkout, with per-test
+ * overrides — every /confirm test starts from one of these two shapes. */
+function succeededCheckout(overrides: Partial<CheckoutStatus> = {}): CheckoutStatus {
+  return {
+    status: "succeeded",
+    productId: POLAR_PRO_PRODUCT_ID,
+    customerId: "cus_1",
+    subscriptionId: null,
+    metadata: { userId: "free-1" },
+    ...overrides,
+  };
+}
+function openCheckout(): CheckoutStatus {
+  return {
+    status: "open",
+    productId: null,
+    customerId: null,
+    subscriptionId: null,
+    metadata: { userId: "free-1" },
+  };
+}
+
+/** The subscription.active payload for "free-1"'s sub_1, with per-test
+ * overrides — the /confirm redelivery/renewal tests below only differ by
+ * timestamp. Distinct from subscriptionActivePayload() above, which is
+ * user-1's fixed payload for the older redelivery tests. */
+function confirmRedeliveryPayload(
+  overrides: Partial<{
+    id: string;
+    customer_id: string;
+    product_id: string;
+    metadata: { userId: string };
+    created_at: string;
+    modified_at: string;
+  }> = {},
+) {
+  return {
+    type: "subscription.active",
+    data: {
+      id: "sub_1",
+      customer_id: "cus_1",
+      product_id: POLAR_PRO_PRODUCT_ID,
+      metadata: { userId: "free-1" },
+      ...overrides,
+    },
+  };
+}
+
+describe("POST /api/billing/checkout/:id/confirm", () => {
+  it("requires sign-in", async () => {
+    expect((await confirmCheckout("", "checkout_1")).status).toBe(401);
+  });
+
+  it("grants the plan from status alone, since subscriptionId never populates on a checkout in practice", async () => {
+    const cookie = await freeOwnerCookie();
+    checkoutsGet.mockResolvedValueOnce(succeededCheckout());
+    const res = await confirmCheckout(cookie, "checkout_1");
+    expect(res.status).toBe(200);
+    expect(await jsonBody(res)).toEqual({ plan: "pro" });
+    const rows = await db().select().from(schema.user).where(eq(schema.user.id, "free-1"));
+    expect(rows[0]?.plan).toBe("pro");
+    expect(rows[0]?.polarCustomerId).toBe("cus_1");
+    // A placeholder, not the real subscription id (which Polar never handed
+    // back): see the route's own comment for why, and the redelivery tests
+    // below for what replaces it once a webhook does arrive.
+    expect(rows[0]?.polarSubscriptionId).toBe("pending:checkout_1");
+  });
+
+  it("leaves the plan alone when the checkout hasn't succeeded yet", async () => {
+    const cookie = await freeOwnerCookie();
+    checkoutsGet.mockResolvedValueOnce(openCheckout());
+    const res = await confirmCheckout(cookie, "checkout_1");
+    expect(res.status).toBe(200);
+    expect(await jsonBody(res)).toEqual({ plan: "free" });
+  });
+
+  it("rejects a checkout that belongs to someone else", async () => {
+    const cookie = await freeOwnerCookie();
+    checkoutsGet.mockResolvedValueOnce(
+      succeededCheckout({ subscriptionId: "sub_1", metadata: { userId: "someone-else" } }),
+    );
+    const res = await confirmCheckout(cookie, "checkout_1");
+    expect(res.status).toBe(404);
+    const rows = await db().select().from(schema.user).where(eq(schema.user.id, "free-1"));
+    expect(rows[0]?.plan).toBe("free");
+  });
+
+  it("ignores a webhook redelivery whose timestamp is older than the fallback's own (still correct, just doesn't fix the placeholder id)", async () => {
+    const cookie = await freeOwnerCookie();
+    checkoutsGet.mockResolvedValueOnce(succeededCheckout());
+    await confirmCheckout(cookie, "checkout_1");
+
+    // A genuinely stale redelivery, carrying the subscription's real
+    // created_at from before the fallback ran. notStale correctly drops the
+    // whole write, id included: this is the design's one known gap, noted on
+    // the route itself, not a bug in this test.
+    await postWebhook(confirmRedeliveryPayload({ created_at: new Date(0).toISOString() }));
+
+    const rows = await db().select().from(schema.user).where(eq(schema.user.id, "free-1"));
+    expect(rows[0]?.plan).toBe("pro");
+    expect(rows[0]?.polarSubscriptionId).toBe("pending:checkout_1");
+  });
+
+  it("a later event (e.g. a renewal) replaces the placeholder id with the real one", async () => {
+    const cookie = await freeOwnerCookie();
+    checkoutsGet.mockResolvedValueOnce(succeededCheckout());
+    await confirmCheckout(cookie, "checkout_1");
+
+    await postWebhook(
+      confirmRedeliveryPayload({ modified_at: new Date(Date.now() + 60_000).toISOString() }),
+    );
+
+    const rows = await db().select().from(schema.user).where(eq(schema.user.id, "free-1"));
+    expect(rows[0]?.plan).toBe("pro");
+    expect(rows[0]?.polarSubscriptionId).toBe("sub_1");
+  });
+
+  it("does not clobber a real subscription id the webhook already wrote, even if the client's poll races it", async () => {
+    const cookie = await freeOwnerCookie();
+
+    // The real webhook lands first, with a realistic (recent) timestamp.
+    await postWebhook(confirmRedeliveryPayload({ modified_at: new Date().toISOString() }));
+    const afterWebhook = await db().select().from(schema.user).where(eq(schema.user.id, "free-1"));
+    expect(afterWebhook[0]?.plan).toBe("pro");
+    expect(afterWebhook[0]?.polarSubscriptionId).toBe("sub_1");
+
+    // The client's poll didn't see it land yet and calls confirm anyway.
+    // Without the already-granted check, this route's synthetic "now"
+    // timestamp always outranks the webhook's, and it would overwrite sub_1
+    // with a placeholder.
+    checkoutsGet.mockResolvedValueOnce(succeededCheckout());
+    await confirmCheckout(cookie, "checkout_1");
+
+    const rows = await db().select().from(schema.user).where(eq(schema.user.id, "free-1"));
+    expect(rows[0]?.plan).toBe("pro");
+    expect(rows[0]?.polarSubscriptionId).toBe("sub_1");
   });
 });
 
@@ -342,6 +542,19 @@ describe("POST /api/webhooks/polar", () => {
       data: { id: "sub_1", product_id: POLAR_HOBBY_PRODUCT_ID, metadata: { userId: "user-1" } },
     });
     expect((await getUser()).plan).toBe("hobby");
+  });
+
+  it("subscription.active maps a yearly product to the same plan", async () => {
+    await seedUser();
+    await postWebhook({
+      type: "subscription.active",
+      data: {
+        id: "sub_1",
+        product_id: POLAR_PRO_YEARLY_PRODUCT_ID,
+        metadata: { userId: "user-1" },
+      },
+    });
+    expect((await getUser()).plan).toBe("pro");
   });
 
   it("subscription.active is a no-op without a userId in metadata", async () => {

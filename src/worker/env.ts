@@ -51,8 +51,10 @@ export interface Env {
   /* billing (Polar) */
   POLAR_ACCESS_TOKEN: string;
   POLAR_WEBHOOK_SECRET: string;
-  POLAR_PRO_PRODUCT_ID: string; // var
-  POLAR_HOBBY_PRODUCT_ID: string; // var
+  POLAR_PRO_PRODUCT_ID: string; // var, monthly
+  POLAR_HOBBY_PRODUCT_ID: string; // var, monthly
+  POLAR_PRO_YEARLY_PRODUCT_ID: string; // var, yearly (10% off)
+  POLAR_HOBBY_YEARLY_PRODUCT_ID: string; // var, yearly (10% off)
   POLAR_SERVER?: "sandbox" | "production"; // var, default sandbox
   /* the checkout/portal client, injected by tests; unset everywhere else,
      where the routes build a real Polar client from the token above */
