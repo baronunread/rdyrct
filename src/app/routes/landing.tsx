@@ -1454,7 +1454,7 @@ function PricingTierCard({
         </p>
         <p className="tnum mt-1 text-2xl font-bold">
           {price}
-          {sub && <span className="ml-1 text-2xs font-normal text-muted">yearly</span>}
+          {sub && <span className="ml-1 text-2xs font-normal text-muted">{sub}</span>}
         </p>
         <p className="mt-1 text-sm text-muted">{pitch}</p>
       </div>

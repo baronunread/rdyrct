@@ -385,6 +385,27 @@ describe("POST /api/billing/checkout/:id/confirm", () => {
     expect(rows[0]?.plan).toBe("pro");
     expect(rows[0]?.polarSubscriptionId).toBe("sub_1");
   });
+
+  it("does not clobber a real subscription id the webhook already wrote, even if the client's poll races it", async () => {
+    const cookie = await freeOwnerCookie();
+
+    // The real webhook lands first, with a realistic (recent) timestamp.
+    await postWebhook(confirmRedeliveryPayload({ modified_at: new Date().toISOString() }));
+    const afterWebhook = await db().select().from(schema.user).where(eq(schema.user.id, "free-1"));
+    expect(afterWebhook[0]?.plan).toBe("pro");
+    expect(afterWebhook[0]?.polarSubscriptionId).toBe("sub_1");
+
+    // The client's poll didn't see it land yet and calls confirm anyway.
+    // Without the already-granted check, this route's synthetic "now"
+    // timestamp always outranks the webhook's, and it would overwrite sub_1
+    // with a placeholder.
+    checkoutsGet.mockResolvedValueOnce(succeededCheckout());
+    await confirmCheckout(cookie, "checkout_1");
+
+    const rows = await db().select().from(schema.user).where(eq(schema.user.id, "free-1"));
+    expect(rows[0]?.plan).toBe("pro");
+    expect(rows[0]?.polarSubscriptionId).toBe("sub_1");
+  });
 });
 
 describe("GET /api/user reports whether a billing account exists (#85)", () => {

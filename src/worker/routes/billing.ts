@@ -90,6 +90,71 @@ billingRoutes.post("/checkout", requireUser, async (c) => {
   return c.json({ url: checkout.url });
 });
 
+/** One user's current plan, read fresh — used both to decide whether the
+ * confirm fallback below needs to write anything and to answer it. */
+async function currentPlan(db: Db, userId: string) {
+  const rows = await db
+    .select({ plan: schema.user.plan })
+    .from(schema.user)
+    .where(eq(schema.user.id, userId));
+  return rows[0]?.plan ?? "free";
+}
+
+/**
+ * Grants the plan a succeeded checkout paid for, unless the row already
+ * shows it. `status` is all a checkouts:write/checkouts:read token can see:
+ * Polar never backfills subscriptionId onto the checkout itself (verified
+ * against the sandbox API, not just undocumented), and reading the order or
+ * subscription that succeeding it created needs orders:read/subscriptions:read,
+ * a scope this integration doesn't carry. Polar's own guidance treats checkout
+ * status as the UX confirmation signal and the webhook as the entitlement
+ * source of truth, so this grants the plan on status alone and stands in a
+ * placeholder id: the real one arrives on whichever webhook (redelivered or
+ * fresh) lands next, matched by metadata.userId same as always, and
+ * overwrites it. Known gap: if that webhook's own timestamp is older than
+ * "now" (a stale redelivery, not a fresh event), notStale drops it entirely
+ * and the placeholder lingers until a genuinely later event (a renewal, a
+ * plan change) corrects it. Cosmetic: nothing reads polarSubscriptionId
+ * except the webhook's own fallback subject match, and hasBillingAccount /
+ * the portal button key off polarCustomerId, which this does set correctly.
+ *
+ * Skips the write entirely once the row already shows the target plan: the
+ * client's poll can race a webhook that landed a moment before this call,
+ * and notStale alone doesn't protect against that, because this route's
+ * synthetic timestamp is always "now" and so always outranks a real,
+ * slightly-earlier webhook write. Without this check that race replaces a
+ * real, freshly-written subscription id with this route's placeholder.
+ */
+async function confirmCheckoutPlan(
+  env: Env,
+  db: Db,
+  userId: string,
+  checkoutId: string,
+  checkout: Pick<
+    Awaited<ReturnType<BillingProvider["checkouts"]["get"]>>,
+    "status" | "productId" | "customerId" | "metadata"
+  >,
+) {
+  const before = await currentPlan(db, userId);
+  const targetPlan = planForProduct(env, checkout.productId ?? undefined);
+  if (checkout.status !== "succeeded" || !targetPlan || before === targetPlan) return before;
+  await applyPolarEvent(env, db, {
+    type: "subscription.active",
+    data: {
+      id: `pending:${checkoutId}`,
+      customer_id: checkout.customerId ?? undefined,
+      product_id: checkout.productId ?? undefined,
+      status: "active",
+      metadata: checkout.metadata,
+      // "Now": the freshest fact we have. A later webhook redelivery
+      // carrying the subscription's real (earlier) created_at loses to
+      // this under notStale, which is correct: this row already reflects it.
+      modified_at: new Date().toISOString(),
+    },
+  });
+  return currentPlan(db, userId);
+}
+
 /**
  * Fallback for when the webhook hasn't landed by the time the client's poll
  * gives up (see WEBHOOK_POLL_MS/WEBHOOK_POLL_TRIES in billing.tsx): asks
@@ -116,44 +181,8 @@ billingRoutes.post("/checkout/:id/confirm", requireUser, async (c) => {
     throw new HTTPException(404, { message: "Not found" });
   }
   log.set({ userId: user.id, checkoutId, checkoutStatus: checkout.status });
-  // `status` is all a checkouts:write/checkouts:read token can see:
-  // Polar never backfills subscriptionId onto the checkout itself (verified
-  // against the sandbox API, not just undocumented), and reading the order or
-  // subscription that succeeding it created needs orders:read/
-  // subscriptions:read, a scope this integration doesn't carry. Polar's own
-  // guidance treats checkout status as the UX confirmation signal and the
-  // webhook as the entitlement source of truth, so this grants the plan on
-  // status alone and stands in a placeholder id: the real one arrives on
-  // whichever webhook (redelivered or fresh) lands next, matched by
-  // metadata.userId same as always, and overwrites it. Known gap: if that
-  // webhook's own timestamp is older than "now" (a stale redelivery, not a
-  // fresh event), notStale drops it entirely and the placeholder lingers
-  // until a genuinely later event (a renewal, a plan change) corrects it.
-  // Cosmetic: nothing reads polarSubscriptionId except the webhook's own
-  // fallback subject match, and hasBillingAccount / the portal button key off
-  // polarCustomerId, which this does set correctly.
-  if (checkout.status === "succeeded") {
-    await applyPolarEvent(c.env, c.var.db, {
-      type: "subscription.active",
-      data: {
-        id: `pending:${checkoutId}`,
-        customer_id: checkout.customerId ?? undefined,
-        product_id: checkout.productId ?? undefined,
-        status: "active",
-        metadata: checkout.metadata,
-        // "Now": the freshest fact we have. A later webhook redelivery
-        // carrying the subscription's real (earlier) created_at loses to
-        // this under notStale, which is correct: this row already reflects
-        // it.
-        modified_at: new Date().toISOString(),
-      },
-    });
-  }
-  const rows = await c.var.db
-    .select({ plan: schema.user.plan })
-    .from(schema.user)
-    .where(eq(schema.user.id, user.id));
-  return c.json({ plan: rows[0]?.plan ?? "free" });
+  const plan = await confirmCheckoutPlan(c.env, c.var.db, user.id, checkoutId, checkout);
+  return c.json({ plan });
 });
 
 // POST, not GET: this creates a Polar customer session. A GET that changes
