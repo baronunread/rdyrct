@@ -51,16 +51,17 @@ clicks from 21:36 to 00:00 UTC were dropped silently with no outbox row.
 
 ## Root causes
 
-1. **No abuse prevention on link creation.** A verified free account created a phishing
-   link 48 s after signup. `risk.ts` scores destinations but never blocks, there is no
-   new-account link cap, and no per-org redirect-rate ceiling. Nothing stopped one account
-   from generating 100x the platform's entire traffic.
-2. **Queues Free plan is a hard cliff for a redirect service.** Click volume is the
-   dominant operation source and scales with traffic, wanted or not. 10,000 ops/day is
-   ~3,300 redirects/day across the whole platform. There is no headroom and no overage,
-   just a stop.
-3. **No alerting.** We learned from a Cloudflare email and a user, hours after the freeze.
-   Nothing watches queue operation volume or the daily cap.
+1. **No cap on redirect volume from one account.** The two links pointed at other public
+   URL shorteners (`bitly.cx`, `smsg.us`), which resolve fine, so `risk.ts` scored them
+   "Clean" and always would. `clickAnalyticsAllowed` rate-limits per org but on
+   Cloudflare's per-location limiter, which can't bound a daily total (#50). Nothing
+   stopped one free account from generating 100x the platform's entire traffic.
+2. **One queue message per click.** Each click costs ~3 Queues operations and one D1 row
+   write, both unbounded by traffic. On the Free plan's 10,000 ops/day that is ~3,300
+   redirects/day platform-wide. The amplification is the defect; the Free-plan cap only
+   sets where it bites.
+3. **Slow to react.** Cloudflare emailed on the cap, but nobody was watching for it and
+   the first internal signal was users reporting failed edits, ~1 h in.
 4. **A durable-write success still returns an error.** Once `enqueueStorage` has recorded
    the work to the outbox, the mutation is safe. Rethrowing turns a handled degradation
    into a user-visible 500.
@@ -69,13 +70,15 @@ clicks from 21:36 to 00:00 UTC were dropped silently with no outbox row.
 
 ## Follow-up
 
-| Issue                                                                                                             | Root cause | Priority |
-| ----------------------------------------------------------------------------------------------------------------- | ---------- | -------- |
-| [#224](https://github.com/baronunread/rdyrct/issues/224) Block or throttle abusive link creation                  | 1          | P1       |
-| [#225](https://github.com/baronunread/rdyrct/issues/225) Take Queues off the Free plan cliff                      | 2          | P1       |
-| [#226](https://github.com/baronunread/rdyrct/issues/226) Alert on Queues operation volume                         | 3          | P2       |
-| [#227](https://github.com/baronunread/rdyrct/issues/227) `enqueueStorage`: stop rethrowing once outbox is written | 4          | P2       |
-| [#228](https://github.com/baronunread/rdyrct/issues/228) Drain `storage_outbox` more than once a day              | 5          | P2       |
+| Issue                                                                                                                                 | Root cause | Priority |
+| ------------------------------------------------------------------------------------------------------------------------------------- | ---------- | -------- |
+| [#224](https://github.com/baronunread/rdyrct/issues/224) Cap abusive redirect volume: shortener-chain block + durable per-org ceiling | 1          | P1       |
+| [#225](https://github.com/baronunread/rdyrct/issues/225) Replace `CLICK_QUEUE` with a Durable Object click buffer                     | 2          | P1       |
+| [#227](https://github.com/baronunread/rdyrct/issues/227) `enqueueStorage`: stop rethrowing once outbox is written                     | 4          | P2       |
+| [#228](https://github.com/baronunread/rdyrct/issues/228) Drain `storage_outbox` more than once a day                                  | 5          | P2       |
+
+Not filed: alerting on the Queues cap (root cause 3). Cloudflare already emails on it;
+the internal-monitoring piece is folded into #224's auto-suspend path.
 
 ## Timeline (UTC, 2026-09-10)
 
