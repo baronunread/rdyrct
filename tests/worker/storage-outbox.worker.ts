@@ -120,24 +120,34 @@ describe("the idempotency contract", () => {
 });
 
 describe("a send the queue refuses", () => {
-  it("records the work and still reports the failure to the caller", async () => {
+  it("records the work and returns, because the mutation already committed", async () => {
     const failing = overrideEnv({ STORAGE_QUEUE: brokenQueue() });
 
-    await expect(enqueueStorage(failing, [syncLinkMsg("abc", null)])).rejects.toThrow(
-      "queue unavailable",
-    );
+    // No throw: the row below is the durable record the drain replays from, so
+    // the committed mutation is late, not lost, and a 500 to the caller would
+    // be a lie (#227). The outage is still reported, through captureAlert.
+    await expect(enqueueStorage(failing, [syncLinkMsg("abc", null)])).resolves.toBeUndefined();
 
-    // The caller still hears about it: the mutation is committed either way,
-    // and swallowing this would hide a queue outage completely.
     expect(await outboxRows()).toEqual([
       { op: "kv_sync", target: "slug:abc", reason: "send_failed", attempts: 0 },
     ]);
   });
 
+  it("rethrows when the outbox write fails too, because then the work is gone", async () => {
+    const failing = overrideEnv({ STORAGE_QUEUE: brokenQueue() });
+    // Dropping the table makes recordOutbox fail the way a transient D1 error
+    // would: now there is no record of the work anywhere, so the caller has to
+    // hear about it.
+    await env.DB.exec("drop table storage_outbox");
+
+    await expect(enqueueStorage(failing, [syncLinkMsg("abc", null)])).rejects.toThrow(
+      "queue unavailable",
+    );
+  });
+
   it("keeps one row per target however many times it fails", async () => {
     const failing = overrideEnv({ STORAGE_QUEUE: brokenQueue() });
-    for (let i = 0; i < 3; i++)
-      await enqueueStorage(failing, [syncLinkMsg("abc", null)]).catch(() => {});
+    for (let i = 0; i < 3; i++) await enqueueStorage(failing, [syncLinkMsg("abc", null)]);
 
     // Re-applying desired state is a no-op, so a repeat failure replaces the
     // row rather than queueing the same drain three times.
@@ -285,10 +295,10 @@ describe("the daily drain", () => {
 
   it("gives every re-record a new id, so a drain cannot delete a newer request", async () => {
     const failing = overrideEnv({ STORAGE_QUEUE: brokenQueue() });
-    await enqueueStorage(failing, [syncLinkMsg("abc", null)]).catch(() => {});
+    await enqueueStorage(failing, [syncLinkMsg("abc", null)]);
     const first = await env.DB.prepare("select id from storage_outbox").first<{ id: string }>();
 
-    await enqueueStorage(failing, [syncLinkMsg("abc", null)]).catch(() => {});
+    await enqueueStorage(failing, [syncLinkMsg("abc", null)]);
     const second = await env.DB.prepare("select id from storage_outbox").first<{ id: string }>();
 
     // The drain deletes by id after applying, so a request that arrives while

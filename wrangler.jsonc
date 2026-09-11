@@ -297,10 +297,13 @@
   ],
   "workers_dev": false,
   "preview_urls": false,
-  // One daily trigger: trim old clicks. The storage queue drives all KV/R2
-  // follow-up work; nothing here reconciles it.
+  // "0 6 * * *": the daily batch (trim old clicks, sweeps, grace warnings, and
+  // a storage_outbox drain). "*/10 * * * *": drain storage_outbox only, so a
+  // transient STORAGE_QUEUE send failure recovers in minutes rather than
+  // waiting for the daily pass (#228). The scheduled() handler switches on the
+  // cron string; only "0 6 * * *" runs the daily batch.
   "triggers": {
-    "crons": ["0 6 * * *"],
+    "crons": ["0 6 * * *", "*/10 * * * *"],
   },
   // Browser tests select this environment so Wrangler loads
   // .dev.vars.playwright instead of a developer's local values. Resource

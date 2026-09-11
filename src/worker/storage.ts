@@ -91,7 +91,7 @@ export async function enqueueStorage(
     // leave KV serving the old value with nothing scheduled to fix it, and
     // the caller holding an error for a mutation that succeeded (#118).
     // Recording the work makes it late rather than lost.
-    await recordOutbox(
+    const recorded = await recordOutbox(
       env,
       batch.map((entry) => entry.body),
       "send_failed",
@@ -99,6 +99,21 @@ export async function enqueueStorage(
       // string worth keeping when it is an Error.
       error instanceof Error ? error.message.slice(0, 500) : "",
     );
+    // A recorded row is the durable record the drain replays from: the work is
+    // late, not lost, and the caller's mutation did commit, so a 500 here would
+    // be a lie (#227). Alert anyway, so a queue outage is still visible in
+    // Sentry without a user meeting an error. Only rethrow when the outbox
+    // write failed too, because then the work really is gone.
+    if (recorded) {
+      captureAlert([
+        {
+          event: "storage_send_failed",
+          count: batch.length,
+          error: error instanceof Error ? error.message.slice(0, 200) : "",
+        },
+      ]);
+      return;
+    }
     throw error;
   }
 }
@@ -158,8 +173,9 @@ const OUTBOX_DRAIN_LIMIT = 200;
 
 /** How much later each failed attempt makes a row sort, so a repeatedly
  * failing key yields to fresher work without ever being excluded outright.
- * The drain runs daily, so the unit is a day too: an hour made 200 old rows
- * monopolise roughly 24 daily passes before one newer repair was selected. */
+ * A day per attempt: the ordering is by real time, so however often the drain
+ * runs (queue-consume, the frequent cron, the daily batch), a row that failed
+ * once still drops behind newer work for roughly a day before it climbs back. */
 export const OUTBOX_RETRY_BACKOFF = 24 * 60 * 60 * 1000;
 
 /**

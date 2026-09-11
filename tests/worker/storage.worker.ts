@@ -243,14 +243,25 @@ describe("producing messages", () => {
     expect(sent).toEqual([{ op: "kv_sync", key: "slug:sale" }]);
   });
 
-  it("propagates a producer-side send failure instead of swallowing it", async () => {
+  it("records a producer-side send failure to the outbox and returns", async () => {
+    // The mutation that called this already committed, so the recovery path is
+    // the outbox row, not a thrown error the caller would surface as a 500
+    // (#227). The full contract, including the rethrow when the outbox write
+    // also fails, is in storage-outbox.worker.ts.
     const queue = stubQueue<StorageMessage>(() => {
       throw new Error("injected queue-send failure");
     });
 
     await expect(
       enqueueStorage(overrideEnv({ STORAGE_QUEUE: queue }), [syncLinkMsg("sale", null)]),
-    ).rejects.toThrow("injected queue-send failure");
+    ).resolves.toBeUndefined();
+
+    const row = await env.DB.prepare("select op, target, reason from storage_outbox").first<{
+      op: string;
+      target: string;
+      reason: string;
+    }>();
+    expect(row).toEqual({ op: "kv_sync", target: "slug:sale", reason: "send_failed" });
   });
 });
 

@@ -426,8 +426,23 @@ const wrapped = Sentry.withSentry<Env, StorageMessage | ClickMessage>(
       if (batch.queue.endsWith("-clicks")) return consumeClickBatch(env, clicks);
       if (batch.queue.endsWith("-dlq")) return logDeadLetterBatch(env, storage);
       await consumeStorageBatch(env, storage);
+      // While the storage queue is flowing, spend a bounded slice of the outbox
+      // too (#228). A transient send failure recorded a row that would
+      // otherwise wait for a cron; draining here recovers it within seconds of
+      // the queue coming back. Idempotent and bounded, so a steady state and
+      // racing invocations both cost one indexed read.
+      await drainStorageOutbox(env);
     },
-    async scheduled(_controller: ScheduledController, env: Env, _ctx: ExecutionContext) {
+    async scheduled(controller: ScheduledController, env: Env, _ctx: ExecutionContext) {
+      // The frequent trigger (see wrangler.jsonc crons) only drains the outbox:
+      // a frozen queue is exactly when the queue-consume drain above cannot
+      // run, so a schedule has to cover it (#228). Only the daily string runs
+      // the batch below, so adding another frequent cron needs no change here.
+      if (controller.cron !== "0 6 * * *") {
+        await drainStorageOutbox(env);
+        return;
+      }
+
       // Daily: trim old clicks.
       const cutoff = Date.now() - 400 * 24 * 60 * 60 * 1000;
       // Bounded batches: one unbounded DELETE can hit D1 statement limits once
