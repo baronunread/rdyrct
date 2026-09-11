@@ -155,13 +155,13 @@ test("the production CSP permits the stats script", async ({ page }) => {
   await page.goto("/");
 
   const script = page.locator(
-    'head script[defer][data-domain="rdyrct.com"][src="https://stats.brnr.dev/js/iTRzwgi-WKuVLgQ6WxxBhRYs.js"]',
+    'head script[defer][data-domain="rdyrct.com"][src="https://stats.brnr.dev/js/4c6e73d608dd3a5e7b28ec7a6fd6a53a.js"]',
   );
   await expect(script).toHaveCount(1);
   expect(
     await scriptIsBlocked(
       page,
-      "https://stats.brnr.dev/js/iTRzwgi-WKuVLgQ6WxxBhRYs.js?csp-probe=1",
+      "https://stats.brnr.dev/js/4c6e73d608dd3a5e7b28ec7a6fd6a53a.js?csp-probe=1",
     ),
   ).toBe(false);
 });
