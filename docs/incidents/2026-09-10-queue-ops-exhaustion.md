@@ -70,12 +70,14 @@ clicks from 21:36 to 00:00 UTC were dropped silently with no outbox row.
 
 ## Follow-up
 
-| Issue                                                                                                                                 | Root cause | Priority |
-| ------------------------------------------------------------------------------------------------------------------------------------- | ---------- | -------- |
-| [#224](https://github.com/baronunread/rdyrct/issues/224) Cap abusive redirect volume: shortener-chain block + durable per-org ceiling | 1          | P1       |
-| [#225](https://github.com/baronunread/rdyrct/issues/225) Replace `CLICK_QUEUE` with a Durable Object click buffer                     | 2          | P1       |
-| [#227](https://github.com/baronunread/rdyrct/issues/227) `enqueueStorage`: stop rethrowing once outbox is written                     | 4          | P2       |
-| [#228](https://github.com/baronunread/rdyrct/issues/228) Drain `storage_outbox` more than once a day                                  | 5          | P2       |
+All four landed on branch `incident/queue-ops-exhaustion`.
+
+| Issue                                                                                                                                 | Root cause | Priority | Done as                      |
+| ------------------------------------------------------------------------------------------------------------------------------------- | ---------- | -------- | ---------------------------- |
+| [#224](https://github.com/baronunread/rdyrct/issues/224) Cap abusive redirect volume: shortener-chain block + durable per-org ceiling | 1          | P1       | `src/worker/abuse.ts`        |
+| [#225](https://github.com/baronunread/rdyrct/issues/225) Replace `CLICK_QUEUE` with a Durable Object click buffer                     | 2          | P1       | `src/worker/click-buffer.ts` |
+| [#227](https://github.com/baronunread/rdyrct/issues/227) `enqueueStorage`: stop rethrowing once outbox is written                     | 4          | P2       | `src/worker/storage.ts`      |
+| [#228](https://github.com/baronunread/rdyrct/issues/228) Drain `storage_outbox` more than once a day                                  | 5          | P2       | `queue()` + `*/10` cron      |
 
 Not filed: alerting on the Queues cap (root cause 3). Cloudflare already emails on it;
 the internal-monitoring piece is folded into #224's auto-suspend path.
