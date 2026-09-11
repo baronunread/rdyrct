@@ -238,6 +238,9 @@ describe("the daily drain", () => {
     expect(rows[0].attempts).toBe(1);
   });
 
+  // 201 rows means 201 sequential KV round trips inside drainStorageOutbox,
+  // which is what the next two tests are proving the ordering handles at
+  // all. That is comfortably past the 5s default on a loaded CI runner.
   it("drains a fresh row even when the limit is full of rows that keep failing", async () => {
     const DAY = 24 * 60 * 60 * 1000;
     // The limit is 200. With 200 stuck rows older than this one, ordering by
@@ -263,7 +266,7 @@ describe("the daily drain", () => {
       "select count(*) as n from storage_outbox where id = 'fresh'",
     ).first<{ n: number }>();
     expect(left!.n).toBe(0);
-  });
+  }, 15_000);
 
   it("drains a retry row even under a steady stream of new work", async () => {
     const DAY = 24 * 60 * 60 * 1000;
@@ -291,7 +294,7 @@ describe("the daily drain", () => {
       "select count(*) as n from storage_outbox where id = 'retry'",
     ).first<{ n: number }>();
     expect(left!.n).toBe(0);
-  });
+  }, 15_000);
 
   it("gives every re-record a new id, so a drain cannot delete a newer request", async () => {
     const failing = overrideEnv({ STORAGE_QUEUE: brokenQueue() });
