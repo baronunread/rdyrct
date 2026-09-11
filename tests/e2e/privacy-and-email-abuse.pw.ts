@@ -35,43 +35,32 @@ test("a click records the referring host, never the URL it came from (#20)", asy
 
   // A real referring URL: the path and query are the parts that carry other
   // people's search terms and session tokens, and neither may be stored.
-  // Publishing the slug to KV rides the storage queue, so the redirect goes
-  // live a moment after the row exists. Poll rather than assume.
-  await expect
-    .poll(
-      async () =>
-        (
-          await page.request.get(`${appUrl}/${slug}`, {
-            headers: {
-              referer: "https://forum.example.com/threads/42?q=private+search&token=secret",
-            },
-            maxRedirects: 0,
-          })
-        ).status(),
-      // Generous: the local storage queue batches on a 5s timeout, so the
-      // default 5s poll window is exactly the flaky boundary.
-      { message: "slug never became a live redirect", timeout: 30_000 },
-    )
-    .toBe(302);
-
-  // The click rides the shared click buffer (#225), which flushes on a ~10s
-  // alarm, so wait for that rather than assuming it has already landed.
-  // Scoped to this test's own link: the buffer batches every concurrent
-  // test's clicks into the same flush, so "the last click" is not
-  // necessarily this one.
-  await expect
-    .poll(
-      async () => {
-        const rows = await queryRows<{ referrer: string }>(
-          page,
-          "SELECT referrer FROM clicks WHERE link_id = ? ORDER BY id DESC LIMIT 1",
-          [linkId],
-        );
-        return rows[0]?.referrer ?? null;
+  //
+  // Re-sends the redirect on every attempt, not just re-reads D1: the slug
+  // may not be live on KV yet (that publish rides the storage queue), and the
+  // click itself is best-effort (the buffer (#225), and clickAnalyticsAllowed
+  // upstream of it, both fail closed rather than block a redirect) -- a
+  // single hit can land nothing to poll for. A fresh hit each attempt covers
+  // both without needing to know which one happened. Scoped to this test's
+  // own link: the buffer batches every concurrent test's clicks into the same
+  // flush, so "the last click" in the whole table is not necessarily this one.
+  await expect(async () => {
+    const res = await page.request.get(`${appUrl}/${slug}`, {
+      headers: {
+        referer: "https://forum.example.com/threads/42?q=private+search&token=secret",
       },
-      { message: "click never reached the clicks table", timeout: 30_000 },
-    )
-    .toBe("forum.example.com");
+      maxRedirects: 0,
+    });
+    expect(res.status(), "slug never became a live redirect").toBe(302);
+
+    const rows = await queryRows<{ referrer: string }>(
+      page,
+      "SELECT referrer FROM clicks WHERE link_id = ? ORDER BY id DESC LIMIT 1",
+      [linkId],
+    );
+    expect(rows[0]?.referrer, "click never reached the clicks table").toBe("forum.example.com");
+    // Generous per attempt: the buffer flushes on a ~10s alarm.
+  }).toPass({ timeout: 60_000, intervals: [12_000] });
 
   const stored = await queryRows<{ referrer: string }>(page, "SELECT referrer FROM clicks");
   expect(stored.length).toBeGreaterThan(0);
