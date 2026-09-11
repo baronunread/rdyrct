@@ -42,7 +42,7 @@ describe("the head a public page ships", () => {
     const html = await rewrite("/qr-code-generator");
 
     expect(html).toContain("<title>Free QR code generator with logo - PNG and SVG, no account");
-    expect(html).toMatch(/name="description" content="Make a custom QR code online for free/);
+    expect(html).toMatch(/name="description" content="Make a custom QR code for free/);
     expect(html).toContain('href="https://rdyrct.com/qr-code-generator"');
   });
 
