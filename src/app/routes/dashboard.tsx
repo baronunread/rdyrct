@@ -230,6 +230,7 @@ function QuickCreateDomainSelect({
     <div className="sm:w-56">
       <MenuSelect
         label="Domain"
+        className="h-11 text-base sm:h-9 sm:text-sm"
         value={domainId ?? ""}
         onChange={(v) => onChange(v || null)}
         options={[
@@ -336,7 +337,7 @@ function QuickCreateCard({
       <form onSubmit={submit} className="flex flex-col gap-3 sm:flex-row sm:items-center">
         <Input
           {...register("destination")}
-          className="min-w-0 flex-1"
+          className="h-11 min-w-0 flex-1 text-base sm:h-9 sm:text-sm"
           placeholder="https://example.com/launch"
           aria-label="Destination URL"
         />
