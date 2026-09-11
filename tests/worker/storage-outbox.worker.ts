@@ -313,4 +313,23 @@ describe("the daily drain", () => {
   it("does nothing when the outbox is empty", async () => {
     expect(await drainStorageOutbox(testEnv)).toBe(0);
   });
+
+  it("skips a row whose backed-off retry is not due yet", async () => {
+    await seedLink();
+    // One failed attempt backs it off a full day (OUTBOX_RETRY_BACKOFF); a
+    // row that failed moments ago is nowhere near due. With the outbox this
+    // small (well under OUTBOX_DRAIN_LIMIT), it would otherwise be retried
+    // on every drain regardless -- several times an hour between the
+    // queue-consume and */10 crons -- instead of respecting that day.
+    await env.DB.prepare(
+      "insert into storage_outbox (id, op, target, reason, created_at, attempts) values ('not-due', 'kv_sync', ?, 'gave_up', ?, 1)",
+    )
+      .bind(`slug:${sampleLink.slug}`, Date.now())
+      .run();
+
+    expect(await drainStorageOutbox(testEnv)).toBe(0);
+    expect(await outboxRows()).toEqual([
+      { op: "kv_sync", target: `slug:${sampleLink.slug}`, reason: "gave_up", attempts: 1 },
+    ]);
+  });
 });

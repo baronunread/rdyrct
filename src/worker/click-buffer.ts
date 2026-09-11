@@ -87,13 +87,20 @@ export class ClickBuffer extends DurableObject<Env> {
     const rows = this.#buf;
     this.#buf = [];
     try {
-      const retry = await insertClicks(this.env, rows);
-      this.#buf.unshift(...retry.slice(0, MAX_BUFFER - this.#buf.length));
-      this.#failedFlushes = retry.length === 0 ? 0 : this.#failedFlushes + 1;
+      const { retry, hadFailure } = await insertClicks(this.env, rows);
+      // Clamped: retry.length can exceed the room left in an emptied buffer
+      // (a big flush plus clicks that arrived during it), and a negative
+      // slice bound keeps almost everything instead of dropping down to fit.
+      // Whatever doesn't fit is the accepted loss (clicks are best-effort).
+      this.#buf.unshift(...retry.slice(0, Math.max(0, MAX_BUFFER - this.#buf.length)));
+      // A row merely deferred for this invocation's D1 subrequest budget
+      // isn't a failure: only count consecutive passes that actually hit one,
+      // so a big-but-healthy backlog never trips the give-up threshold below.
+      this.#failedFlushes = hadFailure ? this.#failedFlushes + 1 : 0;
     } catch (error) {
       // insertClicks handles a per-row failure itself; reaching here is
       // something unexpected. Keep the rows for the next alarm.
-      this.#buf.unshift(...rows.slice(0, MAX_BUFFER - this.#buf.length));
+      this.#buf.unshift(...rows.slice(0, Math.max(0, MAX_BUFFER - this.#buf.length)));
       this.#failedFlushes++;
       Sentry.captureException(error, { extra: { pending: this.#buf.length } });
     } finally {

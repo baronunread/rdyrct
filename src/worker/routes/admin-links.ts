@@ -354,6 +354,14 @@ adminLinkRoutes.post("/orgs/:orgId/suspend", async (c) => {
 
   const db = c.var.db;
   const orgId = c.req.param("orgId")!;
+  // Set (or cleared) unconditionally, same as abuse.ts's suspendOrgLinks:
+  // requireOrgRole reads this on every write, so a suspended org cannot mint
+  // a replacement link before its links are individually caught up below.
+  await db
+    .update(schema.orgs)
+    .set({ linksSuspendedAt: suspend ? Date.now() : null })
+    .where(eq(schema.orgs.id, orgId));
+
   // One expression, used to select and then to update: built twice they can
   // drift, and a drift here means updating rows the count never mentioned.
   const affected = and(

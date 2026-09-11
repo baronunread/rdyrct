@@ -9,7 +9,7 @@
 
 ## What happened
 
-A free account (`redacted@example.com`, "name redacted") signed up at 17:17 UTC
+A free account (banned; identifiers omitted here since this doc is public) signed up at 17:17 UTC
 and created a link to a phishing redirect chain (`bitly.cx`) 48 seconds later. A second
 phishing link (`smsg.us`) went up at 21:01. The two links took **3,388 redirects** on
 2026-09-10 against a baseline of ~35 redirects/day.

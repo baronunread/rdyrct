@@ -98,14 +98,26 @@ function toRow(m: ClickMessage) {
   };
 }
 
+/** What one insertClicks pass leaves for the caller to do next. `hadFailure`
+ * is true only when a row was actually attempted and did not write (a real D1
+ * problem) -- never for a row this pass chose not to attempt, so a big but
+ * otherwise healthy backlog never reads as a string of failures. */
+export type InsertResult = { retry: ClickMessage[]; hadFailure: boolean };
+
+// The Workers Free plan allows 50 subrequests per invocation, and the failed
+// db.batch() attempt already spends one. insertClicksPerRow spends one more
+// per row it attempts, so a flush of thousands of rows falling back to
+// per-row writes would blow well past that on its own. Bounding it here means
+// a big backlog is drained over several flushes ~10 s apart instead of in one
+// invocation that errors out; the rows this pass skips come back as retry,
+// unattempted, and the next flush (or the one after) gets its own budget.
+const MAX_PER_ROW_FALLBACK = 40;
+
 /**
  * Write a batch of buffered clicks.
  *
  * The happy path is one `db.batch()` of multi-row inserts, deduped on
- * `dedupeId` so a re-run after a partial flush never double-counts. Returns
- * the rows that hit a transient failure and should be tried again on the next
- * flush; an empty array means everything was either written or deliberately
- * dropped.
+ * `dedupeId` so a re-run after a partial flush never double-counts.
  *
  * A link deleted between the redirect and the flush turns its row into a
  * foreign-key violation that aborts the whole `db.batch`. Rather than lose a
@@ -113,8 +125,8 @@ function toRow(m: ClickMessage) {
  * inserts row by row: the ones that land are kept, a row whose link is gone is
  * dropped and counted, and anything else is returned for retry.
  */
-export async function insertClicks(env: Env, rows: ClickMessage[]): Promise<ClickMessage[]> {
-  if (rows.length === 0) return [];
+export async function insertClicks(env: Env, rows: ClickMessage[]): Promise<InsertResult> {
+  if (rows.length === 0) return { retry: [], hadFailure: false };
   const db = drizzle(env.DB, { schema });
   try {
     const writes = nonEmpty(
@@ -127,7 +139,7 @@ export async function insertClicks(env: Env, rows: ClickMessage[]): Promise<Clic
       ),
     );
     if (writes) await db.batch(writes);
-    return [];
+    return { retry: [], hadFailure: false };
   } catch {
     return insertClicksPerRow(db, rows);
   }
@@ -136,11 +148,13 @@ export async function insertClicks(env: Env, rows: ClickMessage[]): Promise<Clic
 async function insertClicksPerRow(
   db: ReturnType<typeof drizzle<typeof schema>>,
   rows: ClickMessage[],
-): Promise<ClickMessage[]> {
+): Promise<InsertResult> {
+  const attempt = rows.slice(0, MAX_PER_ROW_FALLBACK);
+  const deferred = rows.slice(MAX_PER_ROW_FALLBACK);
   // Together, not one after another: the rows are independent and order does
   // not matter, because dedupe is an index, not a sequence.
   const outcomes = await Promise.all(
-    rows.map(async (row) => {
+    attempt.map(async (row) => {
       try {
         await db.insert(schema.clicks).values(toRow(row)).onConflictDoNothing();
         return { row, state: "ok" as const };
@@ -153,10 +167,14 @@ async function insertClicksPerRow(
     }),
   );
   const gone: ClickMessage[] = [];
-  const retry: ClickMessage[] = [];
+  const retry: ClickMessage[] = [...deferred];
+  let hadFailure = false;
   for (const { row, state } of outcomes) {
     if (state === "gone") gone.push(row);
-    else if (state === "retry") retry.push(row);
+    else if (state === "retry") {
+      retry.push(row);
+      hadFailure = true;
+    }
   }
   if (gone.length > 0) {
     // Counted, so the accepted loss has a size rather than being a sentence in
@@ -169,7 +187,7 @@ async function insertClicksPerRow(
       },
     ]);
   }
-  return retry;
+  return { retry, hadFailure };
 }
 
 /**

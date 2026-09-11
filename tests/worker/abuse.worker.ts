@@ -41,6 +41,12 @@ async function seedFreeOwner() {
   ]);
 }
 
+/** seedLink() dates org-1 at epoch 0, which reads as an ancient, established
+ * org under the new-org gate. The auto-suspend tests want a fresh one. */
+async function seedNewOrg() {
+  await env.DB.prepare("update orgs set created_at = ? where id = 'org-1'").bind(Date.now()).run();
+}
+
 /** `count` click rows for the sample link, all timestamped today. */
 async function seedClicksToday(count: number) {
   await env.DB.prepare(
@@ -117,12 +123,38 @@ describe("suspendOrgLinks", () => {
     const second = await suspendOrgLinks(testEnv, db(), sampleLink.orgId, null, "test");
     expect(second).toBe(0);
   });
+
+  it("blocks new link creation until the org is unsuspended (org-role.ts's assertOrgWritable)", async () => {
+    const cookie = await freeOwnerCookie();
+    await suspendOrgLinks(testEnv, db(), "org-1", null, "test");
+
+    const blocked = await fetchWorker(
+      new Request("http://localhost/api/orgs/org-1/links", {
+        method: "POST",
+        headers: { cookie, "content-type": "application/json" },
+        body: JSON.stringify({ destination: "https://example.com/new" }),
+      }),
+    );
+    expect(blocked.status).toBe(403);
+
+    await env.DB.prepare("update orgs set links_suspended_at = null where id = 'org-1'").run();
+
+    const restored = await fetchWorker(
+      new Request("http://localhost/api/orgs/org-1/links", {
+        method: "POST",
+        headers: { cookie, "content-type": "application/json" },
+        body: JSON.stringify({ destination: "https://example.com/new" }),
+      }),
+    );
+    expect(restored.status).toBe(201);
+  });
 });
 
 describe("sweepAbusiveOrgs", () => {
-  it("suspends a free org past the redirect ceiling and alerts", async () => {
+  it("suspends a free, brand-new org past the redirect ceiling and alerts", async () => {
     await seedLink();
     await seedFreeOwner();
+    await seedNewOrg();
     await seedClicksToday(REDIRECT_CEILING_PER_DAY + 1);
     const alert = vi.spyOn(Sentry, "captureMessage").mockReturnValue("");
 
@@ -139,6 +171,7 @@ describe("sweepAbusiveOrgs", () => {
   it("leaves an org under the ceiling alone", async () => {
     await seedLink();
     await seedFreeOwner();
+    await seedNewOrg();
     await seedClicksToday(REDIRECT_CEILING_PER_DAY - 1);
 
     await sweepAbusiveOrgs(testEnv);
@@ -149,6 +182,7 @@ describe("sweepAbusiveOrgs", () => {
   it("does not touch a paid org over the ceiling", async () => {
     await seedLink();
     await seedFreeOwner();
+    await seedNewOrg();
     await env.DB.prepare("update user set plan = 'pro' where id = 'owner-1'").run();
     await seedClicksToday(REDIRECT_CEILING_PER_DAY + 1);
 
@@ -160,6 +194,7 @@ describe("sweepAbusiveOrgs", () => {
   it("is idempotent: a second pass suspends nothing more", async () => {
     await seedLink();
     await seedFreeOwner();
+    await seedNewOrg();
     await seedClicksToday(REDIRECT_CEILING_PER_DAY + 1);
     const alert = vi.spyOn(Sentry, "captureMessage").mockReturnValue("");
 
@@ -167,6 +202,28 @@ describe("sweepAbusiveOrgs", () => {
     alert.mockClear();
     await sweepAbusiveOrgs(testEnv);
 
+    expect(alert).not.toHaveBeenCalledWith("org_auto_suspended", expect.anything());
+    alert.mockRestore();
+  });
+
+  it("alerts but does not suspend an established org over the ceiling", async () => {
+    // A flood aimed at any org's public link can clear the ceiling in
+    // minutes (RL_CLICK_RECORDING allows 600/min), so raw volume alone
+    // cannot be trusted to suspend an org that isn't new: that would make
+    // our own abuse control a way to take down a stranger's links. seedLink
+    // dates org-1 at epoch 0, well past the new-org window.
+    await seedLink();
+    await seedFreeOwner();
+    await seedClicksToday(REDIRECT_CEILING_PER_DAY + 1);
+    const alert = vi.spyOn(Sentry, "captureMessage").mockReturnValue("");
+
+    await sweepAbusiveOrgs(testEnv);
+
+    expect(await suspendedCount()).toBe(0);
+    expect(alert).toHaveBeenCalledWith(
+      "org_high_redirect_volume",
+      expect.objectContaining({ level: "error" }),
+    );
     expect(alert).not.toHaveBeenCalledWith("org_auto_suspended", expect.anything());
     alert.mockRestore();
   });

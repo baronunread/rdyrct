@@ -126,7 +126,7 @@ describe("insertClicks", () => {
     // parameters and exceed D1's cap of 100. insertClicks chunks internally.
     const rows = Array.from({ length: 100 }, (_, i) => clickMessage({ dedupeId: `bulk-${i}` }));
 
-    expect(await insertClicks(testEnv, rows)).toEqual([]);
+    expect(await insertClicks(testEnv, rows)).toEqual({ retry: [], hadFailure: false });
 
     expect(await clickCount()).toBe(100);
   });
@@ -139,9 +139,10 @@ describe("insertClicks", () => {
       clickMessage({ dedupeId: "bad", linkId: "no-such-link" }),
     ];
 
-    // Nothing to retry: the nine good rows landed and the tenth can never
-    // land, so it is dropped rather than returned.
-    expect(await insertClicks(testEnv, rows)).toEqual([]);
+    // Nothing to retry, and a deleted link is not a failure: the nine good
+    // rows landed and the tenth can never land, so it is dropped rather than
+    // returned.
+    expect(await insertClicks(testEnv, rows)).toEqual({ retry: [], hadFailure: false });
 
     expect(await clickCount()).toBe(9);
     expect(captureSpy).toHaveBeenCalledWith(
@@ -155,11 +156,30 @@ describe("insertClicks", () => {
     const captureSpy = vi.spyOn(Sentry, "captureMessage").mockReturnValue("");
     const rows = [clickMessage({ dedupeId: "a" }), clickMessage({ dedupeId: "b" })];
 
-    const retry = await insertClicks(overrideEnv({ DB: unavailableD1() }), rows);
+    const { retry, hadFailure } = await insertClicks(overrideEnv({ DB: unavailableD1() }), rows);
 
     expect(retry.map((r) => r.dedupeId).sort()).toEqual(["a", "b"]);
+    expect(hadFailure).toBe(true);
     expect(captureSpy).not.toHaveBeenCalledWith("click_dropped_unwritable", expect.anything());
     captureSpy.mockRestore();
+  });
+
+  it("defers rows past the per-row subrequest budget instead of attempting them, and that is not a failure", async () => {
+    await seedLink();
+    // The batch attempt fails as a whole (one link is gone), so this falls
+    // back to per-row. With more good rows than the fallback's
+    // per-invocation budget, the rest come back as retry, unattempted --
+    // not as failures, and not counted toward the give-up threshold.
+    const rows = [
+      clickMessage({ dedupeId: "bad", linkId: "no-such-link" }),
+      ...Array.from({ length: 60 }, (_, i) => clickMessage({ dedupeId: `n-${i}` })),
+    ];
+
+    const { retry, hadFailure } = await insertClicks(testEnv, rows);
+
+    expect(hadFailure).toBe(false); // nothing attempted actually failed
+    expect(retry.length).toBeGreaterThan(0); // the rest were deferred, not attempted
+    expect(await clickCount()).toBeLessThan(60);
   });
 
   it("dedupes a row that already landed", async () => {
@@ -170,7 +190,7 @@ describe("insertClicks", () => {
 
     // The same row rides a later batch that falls back to per-row because a
     // neighbour's link is gone. Dedupe has to survive the split.
-    const retry = await insertClicks(testEnv, [
+    const { retry } = await insertClicks(testEnv, [
       shared,
       clickMessage({ dedupeId: "bad", linkId: "no-such-link" }),
     ]);
@@ -180,7 +200,7 @@ describe("insertClicks", () => {
   });
 
   it("does nothing with an empty batch", async () => {
-    expect(await insertClicks(testEnv, [])).toEqual([]);
+    expect(await insertClicks(testEnv, [])).toEqual({ retry: [], hadFailure: false });
   });
 });
 

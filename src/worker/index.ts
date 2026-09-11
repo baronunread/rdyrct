@@ -399,6 +399,15 @@ type WorkerHandler = {
   scheduled: ExportedHandlerScheduledHandler<Env>;
 };
 
+/** Runs independent scheduled tasks together, so one throwing does not stop
+ * the ones after it from ever starting. Every rejection is still reported. */
+async function runIsolated(tasks: Array<() => Promise<void>>): Promise<void> {
+  const results = await Promise.allSettled(tasks.map((task) => task()));
+  for (const result of results) {
+    if (result.status === "rejected") Sentry.captureException(result.reason);
+  }
+}
+
 const wrapped = Sentry.withSentry<Env, StorageMessage>((env: Env) => ({ dsn: env.SENTRY_DSN }), {
   fetch: app.fetch,
   async queue(batch: MessageBatch<StorageMessage>, env: Env, _ctx: ExecutionContext) {
@@ -421,8 +430,12 @@ const wrapped = Sentry.withSentry<Env, StorageMessage>((env: Env) => ({ dsn: env
     // flooding the redirect path before it exhausts a daily budget (#224).
     // Only the daily string runs the batch below.
     if (controller.cron !== "0 6 * * *") {
-      await drainStorageOutbox(env);
-      await sweepAbusiveOrgs(env);
+      // Isolated: one throwing must not stop the other from ever starting,
+      // and there is no ordering dependency between them to preserve.
+      await runIsolated([
+        async () => void (await drainStorageOutbox(env)),
+        () => sweepAbusiveOrgs(env),
+      ]);
       return;
     }
 
@@ -453,11 +466,6 @@ const wrapped = Sentry.withSentry<Env, StorageMessage>((env: Env) => ({ dsn: env
     // whose only member was the deleted account has nobody to retry it.
     await sweepStalledOrgDeletions(drizzle(env.DB, { schema }), env);
 
-    // Daily: apply the storage work the queue never took (#118). A failed
-    // send or an exhausted retry leaves KV serving a stale value with
-    // nothing scheduled to fix it; this is that schedule.
-    await drainStorageOutbox(env);
-
     // Daily: retire rename aliases past their 48h deadline (see #38). The
     // redirect path already stopped resolving them; this frees their slugs.
     await sweepExpiredAliases(env, drizzle(env.DB, { schema }));
@@ -475,9 +483,14 @@ const wrapped = Sentry.withSentry<Env, StorageMessage>((env: Env) => ({ dsn: env
     // (#158). Day 0 goes out from the reconciliation pass itself.
     await sweepGraceWarnings(env, drizzle(env.DB, { schema }));
 
-    // Daily as well as every 10 minutes: a free org over the redirect ceiling
-    // has its links auto-suspended (#224).
-    await sweepAbusiveOrgs(env);
+    // Daily as well as every 10 minutes: apply the storage work the queue
+    // never took (#118), and check for a free org over the redirect ceiling
+    // (#224). Isolated from each other and from every sweep above: one
+    // throwing must not stop the other from starting.
+    await runIsolated([
+      async () => void (await drainStorageOutbox(env)),
+      () => sweepAbusiveOrgs(env),
+    ]);
   },
 });
 

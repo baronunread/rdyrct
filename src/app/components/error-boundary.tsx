@@ -60,14 +60,16 @@ export class ErrorBoundary extends Component<Props, State> {
       if (reloadForNewVersion(error.message)) return;
       // Reload couldn't fix it (see reloadForNewVersion's own budget): a
       // genuinely broken deploy, not a stale tab. Nothing left to try
-      // automatically, so this is the one case that shows anything at all.
-      // Clear the top banner the failed import queued via `vite:preloadError`
+      // automatically, so this is the one case that shows anything at all,
+      // and worth reporting -- the terminal fallback showing is itself the
+      // symptom of a broken deploy nobody would otherwise hear about. Clear
+      // the top banner the failed import queued via `vite:preloadError`
       // first, so the notice below isn't a second stacked copy of it.
       dismissNewVersion();
       this.setState({ giveUp: true });
-      return;
     }
-    // Anything else is the crash this boundary exists for, worth reporting.
+    // Everything reaching here is worth reporting: either the crash this
+    // boundary exists for, or a chunk error that ran out of reload budget.
     posthog.captureException(error, { componentStack: info.componentStack });
     captureClientException(error, info.componentStack);
   }

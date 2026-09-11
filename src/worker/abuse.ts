@@ -91,6 +91,23 @@ export const REDIRECT_CEILING_PER_DAY = 2_000;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 /**
+ * Only an org this new gets auto-suspended by volume alone; an older one is
+ * alerted but left for a human to look at.
+ *
+ * The ceiling counts *recorded* clicks on the public redirect path, which
+ * anyone can drive: `RL_CLICK_RECORDING` allows 600/minute per org, so an
+ * unauthenticated requester can clear 2,000 in about four minutes just by
+ * hammering any org's public link. Acting on raw volume alone would make our
+ * own abuse control a way to take down a stranger's org -- point a flood at
+ * their link and the sweep suspends the victim. A brand-new org hitting the
+ * ceiling is the 2026-09-10 incident's actual shape (an account minting
+ * abuse minutes after signup); a long-standing org suddenly seeing volume is
+ * at least as likely to be a link that went viral as it is to be abuse, and
+ * either way is a case for a human, not an unattended suspension.
+ */
+const NEW_ORG_WINDOW_MS = 7 * DAY_MS;
+
+/**
  * Suspend every currently-live link in an organization and republish so the
  * redirect path stops serving them. This is the automatic path; the manual
  * one is `POST /admin/links/orgs/:orgId/suspend`, which does the same select /
@@ -109,6 +126,15 @@ export async function suspendOrgLinks(
   suspendedBy: string | null,
   reason: string,
 ): Promise<number> {
+  // Set first and unconditionally: this is what stops the org minting a
+  // replacement link the moment its existing ones go dark (requireOrgRole
+  // reads it on every write), independent of how many link rows below
+  // actually change on a given call.
+  await db
+    .update(schema.orgs)
+    .set({ linksSuspendedAt: Date.now() })
+    .where(eq(schema.orgs.id, orgId));
+
   const live = and(eq(schema.links.orgId, orgId), isNull(schema.links.suspendedAt));
   const links = await db.select({ id: schema.links.id }).from(schema.links).where(live);
   if (links.length === 0) return 0;
@@ -149,8 +175,17 @@ export async function sweepAbusiveOrgs(env: Env): Promise<void> {
   // rare), so handle them together rather than one round trip at a time.
   await Promise.all(
     rows.map(async ({ orgId, n }) => {
-      const { plan } = await orgPlan(db, orgId);
+      const [{ plan }, createdAt] = await Promise.all([
+        orgPlan(db, orgId),
+        orgCreatedAt(db, orgId),
+      ]);
       if (plan !== "free") return;
+      if (createdAt === null || Date.now() - createdAt > NEW_ORG_WINDOW_MS) {
+        // Established org: worth a human's attention, not worth suspending
+        // unattended (see NEW_ORG_WINDOW_MS above).
+        captureAlert([{ event: "org_high_redirect_volume", orgId, redirects: n }]);
+        return;
+      }
       const reason = `Automatic: ${n} redirects today, over the free-plan ceiling of ${REDIRECT_CEILING_PER_DAY}.`;
       const suspended = await suspendOrgLinks(env, db, orgId, null, reason);
       if (suspended === 0) return;
@@ -158,6 +193,14 @@ export async function sweepAbusiveOrgs(env: Env): Promise<void> {
       await notifyAutoSuspend(env, db, orgId, n).catch(() => {});
     }),
   );
+}
+
+async function orgCreatedAt(db: DB, orgId: string): Promise<number | null> {
+  const rows = await db
+    .select({ createdAt: schema.orgs.createdAt })
+    .from(schema.orgs)
+    .where(eq(schema.orgs.id, orgId));
+  return rows[0]?.createdAt ?? null;
 }
 
 async function notifyAutoSuspend(

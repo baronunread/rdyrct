@@ -199,12 +199,19 @@ export async function drainStorageOutbox(env: Env): Promise<number> {
   // Backing a row off by its attempts is neither. It drops behind fresher
   // work for a while and climbs back as real time passes, so nothing is
   // permanently excluded and a hot failure cannot monopolise the pass.
+  // Built once and reused for both the filter and the order below, so they
+  // cannot drift apart.
+  const dueOrder = sql`${schema.storageOutbox.createdAt} + ${schema.storageOutbox.attempts} * ${sql.raw(String(OUTBOX_RETRY_BACKOFF))}`;
   const rows = await db
     .select()
     .from(schema.storageOutbox)
-    .orderBy(
-      sql`${schema.storageOutbox.createdAt} + ${schema.storageOutbox.attempts} * ${sql.raw(String(OUTBOX_RETRY_BACKOFF))}`,
-    )
+    // A row not yet due for its backed-off retry is excluded, not merely
+    // sorted last. Without this, a small outbox (under OUTBOX_DRAIN_LIMIT)
+    // retries and re-alerts on a persistently failing row every drain --
+    // now several times an hour between the queue-consume and */10 crons --
+    // instead of respecting the day OUTBOX_RETRY_BACKOFF backed it off to.
+    .where(sql`${dueOrder} <= ${Date.now()}`)
+    .orderBy(dueOrder)
     .limit(OUTBOX_DRAIN_LIMIT);
   let cleared = 0;
   for (const row of rows) {
