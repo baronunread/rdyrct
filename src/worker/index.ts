@@ -25,6 +25,7 @@ import { billingRoutes, handlePolarWebhook } from "./routes/billing";
 import { domainRoutes } from "./routes/domains";
 import { capRoutes } from "./routes/cap";
 import { revalidateOnRedirect } from "./risk";
+import { sweepAbusiveOrgs } from "./abuse";
 import { evlogMiddleware } from "./evlog";
 import { sweepGraceWarnings } from "./reconcile";
 import { shortenRoutes, sweepExpiredAnonLinks } from "./routes/shorten";
@@ -414,12 +415,14 @@ const wrapped = Sentry.withSentry<Env, StorageMessage>((env: Env) => ({ dsn: env
     await drainStorageOutbox(env);
   },
   async scheduled(controller: ScheduledController, env: Env, _ctx: ExecutionContext) {
-    // The frequent trigger (see wrangler.jsonc crons) only drains the outbox:
-    // a frozen queue is exactly when the queue-consume drain above cannot
-    // run, so a schedule has to cover it (#228). Only the daily string runs
-    // the batch below, so adding another frequent cron needs no change here.
+    // The frequent trigger (see wrangler.jsonc crons) runs the two things that
+    // must not wait a day: draining the outbox when a frozen queue kept the
+    // queue-consume drain from running (#228), and catching an org that is
+    // flooding the redirect path before it exhausts a daily budget (#224).
+    // Only the daily string runs the batch below.
     if (controller.cron !== "0 6 * * *") {
       await drainStorageOutbox(env);
+      await sweepAbusiveOrgs(env);
       return;
     }
 
@@ -471,6 +474,10 @@ const wrapped = Sentry.withSentry<Env, StorageMessage>((env: Env) => ({ dsn: env
     // Daily: the day-23 email for every org whose 30 days are nearly up
     // (#158). Day 0 goes out from the reconciliation pass itself.
     await sweepGraceWarnings(env, drizzle(env.DB, { schema }));
+
+    // Daily as well as every 10 minutes: a free org over the redirect ceiling
+    // has its links auto-suspended (#224).
+    await sweepAbusiveOrgs(env);
   },
 });
 
