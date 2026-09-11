@@ -33,6 +33,7 @@ import {
   ALIAS_TTL_MS,
 } from "../util";
 import { jsonBodyLimit } from "../body-limit";
+import { assertNotShortener } from "../abuse";
 import { scoreAndRecord } from "../risk";
 import { claimAnonLink } from "./shorten";
 import { cursorValueOf, linkPageQuery, readLinkPageParams, takePage } from "../links-page";
@@ -77,6 +78,7 @@ function validateInput(body: LinkInput, orgId: string, partial = false) {
       throw new HTTPException(400, {
         message: "Destination must be a valid http(s) URL",
       });
+    assertNotShortener(body.destination);
   }
   validateSlug(body.slug);
   validateQrFields(body, orgId);

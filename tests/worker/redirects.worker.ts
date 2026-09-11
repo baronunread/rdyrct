@@ -1,13 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { env } from "cloudflare:workers";
 import { reset } from "cloudflare:test";
-import type { ClickMessage } from "../../src/worker/clicks";
 import {
   applyTestMigrations,
-  captureClickQueue,
+  bufferedClicks,
+  clicksStub,
   fetchWorker,
   overrideEnv,
-  stubQueue,
+  overriding,
+  resetClicks,
 } from "./support";
 
 afterEach(async () => {
@@ -16,6 +17,7 @@ afterEach(async () => {
 
 beforeEach(async () => {
   await applyTestMigrations();
+  await resetClicks();
   await env.DB.batch([
     env.DB.prepare("insert into orgs (id, name, created_at) values (?, ?, ?)").bind(
       "org-1",
@@ -59,17 +61,16 @@ describe("redirect hot path", () => {
       "slug:summer",
       JSON.stringify({ linkId: "link-1", orgId: "org-1", url: "https://example.com/sale" }),
     );
-    const { env: testEnv, sent } = captureClickQueue();
-
     const response = await fetchWorker(
       new Request("http://localhost/summer", { redirect: "manual" }),
-      testEnv,
     );
 
     expect(response.status).toBe(302);
     expect(response.headers.get("location")).toBe("https://example.com/sale");
-    expect(sent).toHaveLength(1);
-    expect(sent[0]).toMatchObject({ linkId: "link-1", orgId: "org-1" });
+    const buffered = await bufferedClicks();
+    expect(buffered).toHaveLength(1);
+    expect(buffered[0]).toMatchObject({ linkId: "link-1", orgId: "org-1" });
+    // Buffered, not yet flushed to D1.
     expect(
       (await env.DB.prepare("select count(*) as count from clicks").first<{ count: number }>())
         ?.count,
@@ -100,27 +101,31 @@ describe("redirect hot path", () => {
       }),
     );
     await env.RL_CLICK_RECORDING.limit({ key: "click:org:org-limited" });
-    const { env: testEnv, sent } = captureClickQueue();
 
     const response = await fetchWorker(
       new Request("http://localhost/viral", { redirect: "manual" }),
-      testEnv,
     );
 
     expect(response.status).toBe(302);
     expect(response.headers.get("location")).toBe("https://example.com/viral");
-    expect(sent).toEqual([]);
+    expect(await bufferedClicks()).toEqual([]);
   });
 
-  it("still redirects when the click queue send itself fails", async () => {
+  it("still redirects when the hand-off to the click buffer fails", async () => {
     await env.LINKS.put(
       "slug:summer",
       JSON.stringify({ linkId: "link-1", orgId: "org-1", url: "https://example.com/sale" }),
     );
-    const downQueue = stubQueue<ClickMessage>(() => {
-      throw new Error("injected queue-send failure");
+    const failingEnv = overrideEnv({
+      CLICK_BUFFER: overriding(env.CLICK_BUFFER, {
+        get: () =>
+          overriding(clicksStub(), {
+            add: async () => {
+              throw new Error("injected buffer failure");
+            },
+          }),
+      }),
     });
-    const failingEnv = overrideEnv({ CLICK_QUEUE: downQueue });
     const errors = vi.spyOn(console, "error").mockImplementation(() => {});
 
     const response = await fetchWorker(
@@ -175,21 +180,19 @@ describe("redirect hot path", () => {
       "slug:summer",
       JSON.stringify({ linkId: "link-1", orgId: "org-1", url: "https://example.com/sale" }),
     );
-    const { env: testEnv, sent } = captureClickQueue();
-
     const trimmed = await fetchWorker(
       new Request("http://localhost/summer/", { redirect: "manual" }),
-      testEnv,
     );
     expect(trimmed.status).toBe(301);
     const location = trimmed.headers.get("location");
     expect(location).toBe("http://localhost/summer");
 
-    const followed = await fetchWorker(new Request(location!, { redirect: "manual" }), testEnv);
+    const followed = await fetchWorker(new Request(location!, { redirect: "manual" }));
     expect(followed.status).toBe(302);
     expect(followed.headers.get("location")).toBe("https://example.com/sale");
-    expect(sent).toHaveLength(1);
-    expect(sent[0]).toMatchObject({ linkId: "link-1", orgId: "org-1" });
+    const buffered = await bufferedClicks();
+    expect(buffered).toHaveLength(1);
+    expect(buffered[0]).toMatchObject({ linkId: "link-1", orgId: "org-1" });
   });
 
   it("resolves a trailing-slash slug on a custom domain without a detour through the SPA's redirect", async () => {

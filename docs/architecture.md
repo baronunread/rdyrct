@@ -20,6 +20,7 @@ flowchart TB
     assets[React SPA static assets]
     cron[Daily maintenance]
     queueConsumer[Queue consumers]
+    clickBuffer[Click buffer Durable Object]
     domainWorkflow[Domain activation workflow]
     deleteWorkflow[Organization delete workflow]
   end
@@ -29,7 +30,6 @@ flowchart TB
     kv[(Workers KV<br/>redirect index)]
     r2[(R2<br/>QR logos)]
     storageQueue[[Storage queue and DLQ]]
-    clickQueue[[Click queue and DLQ]]
   end
 
   subgraph external[External services]
@@ -59,11 +59,11 @@ flowchart TB
   api --> polar
   blog --> blogOrigin
 
-  custom -. click event .-> clickQueue
-  shared -. click event .-> clickQueue
+  custom -. click event .-> clickBuffer
+  shared -. click event .-> clickBuffer
   shared -. stale risk check .-> riskProvider
   custom -. stale risk check .-> riskProvider
-  clickQueue --> queueConsumer --> d1
+  clickBuffer -->|~10s alarm, batched insert| d1
 
   api -->|after a D1 mutation| storageQueue
   storageQueue --> queueConsumer
@@ -98,7 +98,7 @@ Polar, Resend, the risk provider, and the Vercel blog remain separate services.
 | D1 schema and indexes                                              | `src/worker/db/schema.ts` and `migrations/`             |
 | D1-to-KV and D1-to-R2 sync                                         | `src/worker/storage.ts`                                 |
 | KV key reads                                                       | `src/worker/kv.ts`                                      |
-| Click queue producer and consumer                                  | `src/worker/clicks.ts`                                  |
+| Click buffer Durable Object and the D1 insert it flushes           | `src/worker/click-buffer.ts` and `src/worker/clicks.ts` |
 | Domain activation and organization deletion                        | `src/worker/workflows.ts`                               |
 | Authentication and sessions                                        | `src/worker/better-auth.ts` and `src/worker/session.ts` |
 | API route groups                                                   | `src/worker/routes/`                                    |
@@ -127,14 +127,14 @@ Route order matters because the Worker serves several products from one host:
 
 ## Data ownership and consistency
 
-| Data                                                                              | Authoritative store           | Read path                                   | Write and recovery model                                                                                   |
-| --------------------------------------------------------------------------------- | ----------------------------- | ------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
-| Users, sessions, organizations, links, domains, plans, invites, and audit records | D1                            | API reads D1                                | API routes write D1                                                                                        |
-| Shared and custom-domain redirects                                                | D1                            | Redirects read KV                           | After a D1 write, a storage queue message rebuilds or deletes the KV value from current D1 state           |
-| Click events                                                                      | D1                            | Analytics routes query D1                   | Redirects send best-effort queue messages; the consumer inserts deduplicated batches                       |
-| QR logos                                                                          | R2, with the owning URL in D1 | Signed org route reads R2                   | Uploads write R2; replacements and deletes enqueue cleanup; a daily orphan sweep removes abandoned uploads |
-| Custom hostname state                                                             | D1 plus Cloudflare for SaaS   | API reads D1; redirect host lookup reads KV | A Workflow creates the hostname, polls DNS and TLS, records state in D1, then publishes KV                 |
-| Billing entitlement                                                               | D1, derived from Polar events | API reads D1                                | Signature-checked webhooks apply idempotent, timestamp-ordered updates                                     |
+| Data                                                                              | Authoritative store           | Read path                                   | Write and recovery model                                                                                                               |
+| --------------------------------------------------------------------------------- | ----------------------------- | ------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| Users, sessions, organizations, links, domains, plans, invites, and audit records | D1                            | API reads D1                                | API routes write D1                                                                                                                    |
+| Shared and custom-domain redirects                                                | D1                            | Redirects read KV                           | After a D1 write, a storage queue message rebuilds or deletes the KV value from current D1 state                                       |
+| Click events                                                                      | D1                            | Analytics routes query D1                   | Redirects hand each click to the ClickBuffer Durable Object, best-effort; it flushes deduplicated batches to D1 on a ~10s alarm (#225) |
+| QR logos                                                                          | R2, with the owning URL in D1 | Signed org route reads R2                   | Uploads write R2; replacements and deletes enqueue cleanup; a daily orphan sweep removes abandoned uploads                             |
+| Custom hostname state                                                             | D1 plus Cloudflare for SaaS   | API reads D1; redirect host lookup reads KV | A Workflow creates the hostname, polls DNS and TLS, records state in D1, then publishes KV                                             |
+| Billing entitlement                                                               | D1, derived from Polar events | API reads D1                                | Signature-checked webhooks apply idempotent, timestamp-ordered updates                                                                 |
 
 The storage queue carries instructions, not snapshots. A `kv_sync` message names
 one key, and its consumer reads current D1 state before it changes KV. This makes
@@ -159,20 +159,21 @@ sequenceDiagram
   participant V as Visitor
   participant W as Worker
   participant K as KV
-  participant Q as Click queue
+  participant B as Click buffer DO
   participant D as D1
 
   V->>W: GET /slug
   W->>K: Read domain and slug keys
   K-->>W: Destination, link, address, expiry
   W-->>V: 302 Location
-  W-)Q: waitUntil click message
-  Q->>D: Deduplicated batch insert
+  W-)B: waitUntil add(click)
+  B->>D: Deduplicated batch insert on its ~10s alarm
 ```
 
 The redirect does not wait for D1 or click storage. Anonymous links skip click
-recording. Registered links rate-limit click analytics by organization. Queue
-send failures do not block redirects, so analytics are intentionally best-effort.
+recording. Registered links rate-limit click analytics by organization. A failed
+hand-off to the buffer does not block redirects, so analytics are intentionally
+best-effort.
 
 ### Link or domain mutation
 

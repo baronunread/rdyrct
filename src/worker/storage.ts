@@ -91,7 +91,7 @@ export async function enqueueStorage(
     // leave KV serving the old value with nothing scheduled to fix it, and
     // the caller holding an error for a mutation that succeeded (#118).
     // Recording the work makes it late rather than lost.
-    await recordOutbox(
+    const recorded = await recordOutbox(
       env,
       batch.map((entry) => entry.body),
       "send_failed",
@@ -99,6 +99,21 @@ export async function enqueueStorage(
       // string worth keeping when it is an Error.
       error instanceof Error ? error.message.slice(0, 500) : "",
     );
+    // A recorded row is the durable record the drain replays from: the work is
+    // late, not lost, and the caller's mutation did commit, so a 500 here would
+    // be a lie (#227). Alert anyway, so a queue outage is still visible in
+    // Sentry without a user meeting an error. Only rethrow when the outbox
+    // write failed too, because then the work really is gone.
+    if (recorded) {
+      captureAlert([
+        {
+          event: "storage_send_failed",
+          count: batch.length,
+          error: error instanceof Error ? error.message.slice(0, 200) : "",
+        },
+      ]);
+      return;
+    }
     throw error;
   }
 }
@@ -158,8 +173,9 @@ const OUTBOX_DRAIN_LIMIT = 200;
 
 /** How much later each failed attempt makes a row sort, so a repeatedly
  * failing key yields to fresher work without ever being excluded outright.
- * The drain runs daily, so the unit is a day too: an hour made 200 old rows
- * monopolise roughly 24 daily passes before one newer repair was selected. */
+ * A day per attempt: the ordering is by real time, so however often the drain
+ * runs (queue-consume, the frequent cron, the daily batch), a row that failed
+ * once still drops behind newer work for roughly a day before it climbs back. */
 export const OUTBOX_RETRY_BACKOFF = 24 * 60 * 60 * 1000;
 
 /**
@@ -183,12 +199,19 @@ export async function drainStorageOutbox(env: Env): Promise<number> {
   // Backing a row off by its attempts is neither. It drops behind fresher
   // work for a while and climbs back as real time passes, so nothing is
   // permanently excluded and a hot failure cannot monopolise the pass.
+  // Built once and reused for both the filter and the order below, so they
+  // cannot drift apart.
+  const dueOrder = sql`${schema.storageOutbox.createdAt} + ${schema.storageOutbox.attempts} * ${sql.raw(String(OUTBOX_RETRY_BACKOFF))}`;
   const rows = await db
     .select()
     .from(schema.storageOutbox)
-    .orderBy(
-      sql`${schema.storageOutbox.createdAt} + ${schema.storageOutbox.attempts} * ${sql.raw(String(OUTBOX_RETRY_BACKOFF))}`,
-    )
+    // A row not yet due for its backed-off retry is excluded, not merely
+    // sorted last. Without this, a small outbox (under OUTBOX_DRAIN_LIMIT)
+    // retries and re-alerts on a persistently failing row every drain --
+    // now several times an hour between the queue-consume and */10 crons --
+    // instead of respecting the day OUTBOX_RETRY_BACKOFF backed it off to.
+    .where(sql`${dueOrder} <= ${Date.now()}`)
+    .orderBy(dueOrder)
     .limit(OUTBOX_DRAIN_LIMIT);
   let cleared = 0;
   for (const row of rows) {
@@ -630,6 +653,38 @@ export async function orgDeleteGather(
 /** Delete a set of KV keys. Idempotent: deleting a missing key is a no-op. */
 export async function deleteKvKeys(env: Env, keys: string[]): Promise<void> {
   await Promise.all(keys.map((key) => env.LINKS.delete(key)));
+}
+
+/** Cloudflare caps a queue send at 100 messages. */
+const REPUBLISH_BATCH = 100;
+
+/**
+ * Re-sync every KV key an org's links resolve through, in a fixed number of
+ * round trips. Used after a bulk state change on the org's links (suspend from
+ * the admin route, auto-suspend from the abuse sweep): the consumer reads the
+ * current row and writes what the key should be, so this does not need to know
+ * which links actually changed.
+ *
+ * One query and one send per link does not survive the size of org this is
+ * for. At the Pro cap of 3,000 links that was 3,002 D1 statements and 3,000
+ * sends, past both D1's per-invocation query limit and the subrequest ceiling:
+ * the request died partway, after the flag was already committed, leaving the
+ * links whose messages never went out still redirecting. Every address in one
+ * query, then sends of at most a hundred: 3,000 links become 31 round trips.
+ */
+export async function republishOrgLinks(env: Env, db: DB, orgId: string): Promise<void> {
+  const addresses = await db
+    .select({ slug: schema.linkAddresses.slug, hostname: schema.domains.hostname })
+    .from(schema.linkAddresses)
+    .innerJoin(schema.links, eq(schema.linkAddresses.linkId, schema.links.id))
+    .leftJoin(schema.domains, eq(schema.linkAddresses.domainId, schema.domains.id))
+    .where(and(eq(schema.links.orgId, orgId), isNull(schema.linkAddresses.retiredAt)));
+  const batches: StorageMessage[][] = [];
+  for (let i = 0; i < addresses.length; i += REPUBLISH_BATCH)
+    batches.push(
+      addresses.slice(i, i + REPUBLISH_BATCH).map((a) => syncLinkMsg(a.slug, a.hostname)),
+    );
+  await Promise.all(batches.map((batch) => enqueueStorage(env, batch)));
 }
 
 // Cloudflare Queues caps sendBatch at 100 messages: this sweep enqueues one

@@ -161,6 +161,12 @@ export const orgs = sqliteTable("orgs", {
   // upgrade or pick it as the one to keep (#160). Null means active. Its
   // links keep redirecting: the lock is between us and the account holder.
   lockedAt: integer("locked_at"),
+  // Set alongside a whole-org link suspension (abuse.ts's suspendOrgLinks, or
+  // the admin route), so the org cannot mint a replacement the moment its
+  // existing links stop redirecting. Null means not suspended. Unlike
+  // `lockedAt`, its links do NOT keep redirecting -- suspension means the
+  // content itself is the problem, not the plan.
+  linksSuspendedAt: integer("links_suspended_at"),
 });
 
 /**

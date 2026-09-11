@@ -12,6 +12,7 @@ import worker from "../../src/worker";
 import * as schema from "../../src/worker/db/schema";
 import type { Env } from "../../src/worker/env";
 import type { ClickMessage } from "../../src/worker/clicks";
+import type { ClickBuffer } from "../../src/worker/click-buffer";
 import type { StorageMessage } from "../../src/worker/storage";
 import { hashPassword } from "../../src/worker/password";
 
@@ -111,14 +112,41 @@ export function stubQueue<Body>(onSend: (body: Body) => void): Queue<Body> {
 }
 
 /**
- * A CLICK_QUEUE that records what was sent, so the redirect path's enqueue
- * can be asserted without a live queue delivering the message back into the
- * worker under test (consumption is covered by tests/worker/clicks.worker.ts).
+ * The real object with a few members swapped out.
+ *
+ * Everything not named keeps working, so a test can prove one operation
+ * misbehaved rather than that the whole binding was replaced. Methods are
+ * re-bound to the target because a native Cloudflare binding rejects any other
+ * receiver.
  */
-export function captureClickQueue() {
-  const sent: ClickMessage[] = [];
-  const CLICK_QUEUE = stubQueue<ClickMessage>((m) => sent.push(m));
-  return { env: overrideEnv({ CLICK_QUEUE }), sent };
+export function overriding<T extends object>(target: T, overrides: Partial<T>): T {
+  return new Proxy(target, {
+    get(actual, property) {
+      // SAFETY: a `get` trap only ever runs for a key looked up on `actual`,
+      // so the trap's key is a key of T.
+      const key = property as keyof T;
+      if (key in overrides) return overrides[key];
+      const value = actual[key];
+      return value instanceof Function ? value.bind(actual) : value;
+    },
+  });
+}
+
+/** The single ClickBuffer instance the redirect path writes to (#225). Its
+ * add/alarm/buffered/reset methods are callable straight off the stub as RPC. */
+export function clicksStub(): DurableObjectStub<ClickBuffer> {
+  return env.CLICK_BUFFER.get(env.CLICK_BUFFER.idFromName("clicks"));
+}
+
+/** The clicks still sitting in the buffer, unwritten. */
+export function bufferedClicks(): Promise<ClickMessage[]> {
+  return clicksStub().buffered();
+}
+
+/** Drop whatever the buffer is holding, so one test's clicks do not leak into
+ * the next. */
+export async function resetClicks(): Promise<void> {
+  await clicksStub().reset();
 }
 
 // Env with a non-empty auth secret, independent of the ambient .dev.vars, so

@@ -1,7 +1,7 @@
 import type { DrizzleD1Database } from "drizzle-orm/d1";
 import type * as schema from "./db/schema";
 import type { StorageMessage } from "./storage";
-import type { ClickMessage } from "./clicks";
+import type { ClickBuffer } from "./click-buffer";
 import type { BillingProvider } from "./billing-provider";
 import type { AuditableLogger } from "evlog";
 
@@ -16,8 +16,9 @@ export interface Env {
   ORG_DELETE: Workflow<{ orgId: string }>;
   /* custom-domain activation as a durable background workflow */
   DOMAIN_ACTIVATE: Workflow<{ domainId: string; hostname: string }>;
-  /* click ingestion: redirects enqueue instead of writing D1 directly */
-  CLICK_QUEUE: Queue<ClickMessage>;
+  /* click ingestion: redirects buffer here instead of writing D1 directly
+     (#225), one instance, flushed to D1 on a ~10 s alarm */
+  CLICK_BUFFER: DurableObjectNamespace<ClickBuffer>;
   RL_AUTH_PUBLIC: RateLimit;
   /* Cap's challenge and redeem endpoints (#98), on their own budget: issuing
      a challenge is cheap for us and the proof-of-work is what costs the

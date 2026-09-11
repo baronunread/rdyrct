@@ -120,24 +120,34 @@ describe("the idempotency contract", () => {
 });
 
 describe("a send the queue refuses", () => {
-  it("records the work and still reports the failure to the caller", async () => {
+  it("records the work and returns, because the mutation already committed", async () => {
     const failing = overrideEnv({ STORAGE_QUEUE: brokenQueue() });
 
-    await expect(enqueueStorage(failing, [syncLinkMsg("abc", null)])).rejects.toThrow(
-      "queue unavailable",
-    );
+    // No throw: the row below is the durable record the drain replays from, so
+    // the committed mutation is late, not lost, and a 500 to the caller would
+    // be a lie (#227). The outage is still reported, through captureAlert.
+    await expect(enqueueStorage(failing, [syncLinkMsg("abc", null)])).resolves.toBeUndefined();
 
-    // The caller still hears about it: the mutation is committed either way,
-    // and swallowing this would hide a queue outage completely.
     expect(await outboxRows()).toEqual([
       { op: "kv_sync", target: "slug:abc", reason: "send_failed", attempts: 0 },
     ]);
   });
 
+  it("rethrows when the outbox write fails too, because then the work is gone", async () => {
+    const failing = overrideEnv({ STORAGE_QUEUE: brokenQueue() });
+    // Dropping the table makes recordOutbox fail the way a transient D1 error
+    // would: now there is no record of the work anywhere, so the caller has to
+    // hear about it.
+    await env.DB.exec("drop table storage_outbox");
+
+    await expect(enqueueStorage(failing, [syncLinkMsg("abc", null)])).rejects.toThrow(
+      "queue unavailable",
+    );
+  });
+
   it("keeps one row per target however many times it fails", async () => {
     const failing = overrideEnv({ STORAGE_QUEUE: brokenQueue() });
-    for (let i = 0; i < 3; i++)
-      await enqueueStorage(failing, [syncLinkMsg("abc", null)]).catch(() => {});
+    for (let i = 0; i < 3; i++) await enqueueStorage(failing, [syncLinkMsg("abc", null)]);
 
     // Re-applying desired state is a no-op, so a repeat failure replaces the
     // row rather than queueing the same drain three times.
@@ -228,6 +238,9 @@ describe("the daily drain", () => {
     expect(rows[0].attempts).toBe(1);
   });
 
+  // 201 rows means 201 sequential KV round trips inside drainStorageOutbox,
+  // which is what the next two tests are proving the ordering handles at
+  // all. That is comfortably past the 5s default on a loaded CI runner.
   it("drains a fresh row even when the limit is full of rows that keep failing", async () => {
     const DAY = 24 * 60 * 60 * 1000;
     // The limit is 200. With 200 stuck rows older than this one, ordering by
@@ -253,7 +266,7 @@ describe("the daily drain", () => {
       "select count(*) as n from storage_outbox where id = 'fresh'",
     ).first<{ n: number }>();
     expect(left!.n).toBe(0);
-  });
+  }, 15_000);
 
   it("drains a retry row even under a steady stream of new work", async () => {
     const DAY = 24 * 60 * 60 * 1000;
@@ -281,14 +294,14 @@ describe("the daily drain", () => {
       "select count(*) as n from storage_outbox where id = 'retry'",
     ).first<{ n: number }>();
     expect(left!.n).toBe(0);
-  });
+  }, 15_000);
 
   it("gives every re-record a new id, so a drain cannot delete a newer request", async () => {
     const failing = overrideEnv({ STORAGE_QUEUE: brokenQueue() });
-    await enqueueStorage(failing, [syncLinkMsg("abc", null)]).catch(() => {});
+    await enqueueStorage(failing, [syncLinkMsg("abc", null)]);
     const first = await env.DB.prepare("select id from storage_outbox").first<{ id: string }>();
 
-    await enqueueStorage(failing, [syncLinkMsg("abc", null)]).catch(() => {});
+    await enqueueStorage(failing, [syncLinkMsg("abc", null)]);
     const second = await env.DB.prepare("select id from storage_outbox").first<{ id: string }>();
 
     // The drain deletes by id after applying, so a request that arrives while
@@ -299,5 +312,24 @@ describe("the daily drain", () => {
 
   it("does nothing when the outbox is empty", async () => {
     expect(await drainStorageOutbox(testEnv)).toBe(0);
+  });
+
+  it("skips a row whose backed-off retry is not due yet", async () => {
+    await seedLink();
+    // One failed attempt backs it off a full day (OUTBOX_RETRY_BACKOFF); a
+    // row that failed moments ago is nowhere near due. With the outbox this
+    // small (well under OUTBOX_DRAIN_LIMIT), it would otherwise be retried
+    // on every drain regardless -- several times an hour between the
+    // queue-consume and */10 crons -- instead of respecting that day.
+    await env.DB.prepare(
+      "insert into storage_outbox (id, op, target, reason, created_at, attempts) values ('not-due', 'kv_sync', ?, 'gave_up', ?, 1)",
+    )
+      .bind(`slug:${sampleLink.slug}`, Date.now())
+      .run();
+
+    expect(await drainStorageOutbox(testEnv)).toBe(0);
+    expect(await outboxRows()).toEqual([
+      { op: "kv_sync", target: `slug:${sampleLink.slug}`, reason: "gave_up", attempts: 1 },
+    ]);
   });
 });

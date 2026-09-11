@@ -27,6 +27,7 @@ import { drizzle } from "drizzle-orm/d1";
 import * as schema from "../db/schema";
 import type { AppEnv, Env } from "../env";
 import { jsonBodyLimit } from "../body-limit";
+import { assertNotShortener } from "../abuse";
 import { publishLink, resolveSlug, unpublishLink } from "../kv";
 import { scoreAndRecord } from "../risk";
 import { spendToken } from "../cap";
@@ -78,6 +79,7 @@ shortenRoutes.post("/", async (c) => {
   const destination = normalizeUrl(body.destination.trim());
   if (!isValidHttpUrl(destination))
     throw new HTTPException(400, { message: "That does not look like a web address" });
+  assertNotShortener(destination);
 
   const db = drizzle(c.env.DB, { schema });
   const now = Date.now();

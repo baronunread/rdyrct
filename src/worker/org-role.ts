@@ -41,8 +41,8 @@ export function requireOrgRole(
 }
 
 /**
- * The two states that stop an org accepting writes while leaving its reads
- * open. Both are checked here rather than in each route, for the same
+ * The three states that stop an org accepting writes while leaving its reads
+ * open. All are checked here rather than in each route, for the same
  * reason: no route has to remember.
  *
  * Teardown: a link or domain created in that window would be missed by the
@@ -52,6 +52,11 @@ export function requireOrgRole(
  *
  * Locked: the org is beyond its owner's plan (#160), so it keeps serving its
  * links and accepts no changes, its owner included.
+ *
+ * Suspended: abuse.ts's sweep or an admin suspended every link in the org
+ * (#224). No opt-out: a link-creation route without this check is exactly
+ * how an org whose links were just suspended could mint a replacement before
+ * the next pass caught it.
  */
 async function assertOrgWritable(
   db: DB,
@@ -66,6 +71,11 @@ async function assertOrgWritable(
       message: "This organization is locked: upgrade to Pro to use it again",
       cause: { code: "org_locked" },
     });
+  if (state.linksSuspendedAt != null)
+    throw new HTTPException(403, {
+      message: "This organization's links are suspended.",
+      cause: { code: "org_suspended" },
+    });
 }
 
 async function orgState(
@@ -74,12 +84,17 @@ async function orgState(
 ): Promise<{
   deletingAt: number | null;
   lockedAt: number | null;
+  linksSuspendedAt: number | null;
 }> {
   const rows = await db
-    .select({ deletingAt: schema.orgs.deletingAt, lockedAt: schema.orgs.lockedAt })
+    .select({
+      deletingAt: schema.orgs.deletingAt,
+      lockedAt: schema.orgs.lockedAt,
+      linksSuspendedAt: schema.orgs.linksSuspendedAt,
+    })
     .from(schema.orgs)
     .where(eq(schema.orgs.id, orgId));
-  return rows[0] ?? { deletingAt: null, lockedAt: null };
+  return rows[0] ?? { deletingAt: null, lockedAt: null, linksSuspendedAt: null };
 }
 
 /** The statement-level link guards need to distinguish teardown from a cap
