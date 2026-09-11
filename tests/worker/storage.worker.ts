@@ -23,32 +23,12 @@ import {
   batchOf,
   captureStorageQueue as captureQueue,
   overrideEnv,
+  overriding,
   sampleLink,
   seedLink,
   stubQueue,
   testEnv,
 } from "./support";
-
-/**
- * The real object with a few members swapped out.
- *
- * Everything not named keeps working, so a test can prove one operation
- * misbehaved rather than that the whole binding was replaced. Methods are
- * re-bound to the target because a native Cloudflare binding rejects any other
- * receiver.
- */
-function overriding<T extends object>(target: T, overrides: Partial<T>): T {
-  return new Proxy(target, {
-    get(actual, property) {
-      // SAFETY: a `get` trap only ever runs for a key looked up on `actual`,
-      // so the trap's key is a key of T.
-      const key = property as keyof T;
-      if (key in overrides) return overrides[key];
-      const value = actual[key];
-      return value instanceof Function ? value.bind(actual) : value;
-    },
-  });
-}
 
 const kvDown = async (): Promise<never> => {
   throw new Error("injected KV failure");

@@ -4,11 +4,12 @@ import { createExecutionContext, reset, waitOnExecutionContext } from "cloudflar
 import worker from "../../src/worker";
 import type { ClickMessage } from "../../src/worker/clicks";
 import { normalizeReferrer } from "../../src/worker/util";
-import { applyTestMigrations, captureClickQueue, sampleLink, seedLink } from "./support";
+import { applyTestMigrations, bufferedClicks, resetClicks, sampleLink, seedLink } from "./support";
 
 beforeEach(async () => {
   await reset();
   await applyTestMigrations();
+  await resetClicks();
 });
 afterEach(reset);
 
@@ -75,7 +76,7 @@ describe("normalizeReferrer (#20)", () => {
 });
 
 describe("click ingestion stores a hostname, not a URL (#20)", () => {
-  // Asserts on the queued message rather than a stored row: the claim under
+  // Asserts on the buffered message rather than a stored row: the claim under
   // test is that the URL's path and query never leave the request handler.
   async function redirectWithReferer(referer: string): Promise<ClickMessage> {
     await seedLink();
@@ -87,7 +88,6 @@ describe("click ingestion stores a hostname, not a URL (#20)", () => {
         url: sampleLink.destination,
       }),
     );
-    const { env: testEnv, sent } = captureClickQueue();
 
     const ctx = createExecutionContext();
     const res = await worker.fetch(
@@ -95,14 +95,15 @@ describe("click ingestion stores a hostname, not a URL (#20)", () => {
         headers: { referer },
         redirect: "manual",
       }),
-      testEnv,
+      env,
       ctx,
     );
     await waitOnExecutionContext(ctx);
 
     expect(res.status).toBe(302);
-    expect(sent).toHaveLength(1);
-    return sent[0]!;
+    const buffered = await bufferedClicks();
+    expect(buffered).toHaveLength(1);
+    return buffered[0]!;
   }
 
   it("reduces a referring URL to its hostname before the click is enqueued", async () => {

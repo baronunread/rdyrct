@@ -93,29 +93,21 @@
       "migrations_dir": "migrations",
     },
   ],
-  // KV/R2 follow-up work, and click ingestion off the redirect hot path
-  // (issue #16). A storage-queue send is awaited after committing D1, so a
-  // producer-side failure fails the request instead of vanishing silently; a
-  // click-queue send is best-effort instead (see clicks.ts), because a click
-  // is analytics, not a correctness-critical follow-up. Each queue's give-ups
-  // land on its own DLQ, which this same Worker also consumes (see the
-  // `queue()` handler) purely to log them for visibility: nothing repairs or
-  // re-drives either. Create all four queues before first deploy:
+  // KV/R2 follow-up work off the redirect hot path (issue #16). A storage-queue
+  // send is awaited after committing D1; a producer-side failure is recorded to
+  // storage_outbox rather than failing the request (#118, #227). Give-ups land
+  // on the DLQ, which this same Worker also consumes (see the `queue()`
+  // handler) to record and alert. Create both queues before first deploy:
   //   bunx wrangler queues create rdyrct-storage
   //   bunx wrangler queues create rdyrct-storage-dlq
-  //   bunx wrangler queues create rdyrct-clicks
-  //   bunx wrangler queues create rdyrct-clicks-dlq
-  // Keep max_retries here in sync with STORAGE_MAX_DELIVERIES (storage.ts)
-  // and CLICK_MAX_DELIVERIES (clicks.ts).
+  // Keep max_retries here in sync with STORAGE_MAX_DELIVERIES (storage.ts).
+  // Click ingestion is NOT a queue: it buffers in the ClickBuffer Durable
+  // Object and flushes to D1 on an alarm (#225, see durable_objects below).
   "queues": {
     "producers": [
       {
         "binding": "STORAGE_QUEUE",
         "queue": "rdyrct-storage",
-      },
-      {
-        "binding": "CLICK_QUEUE",
-        "queue": "rdyrct-clicks",
       },
     ],
     "consumers": [
@@ -134,26 +126,15 @@
         "max_retries": 3,
         "retry_delay": 30,
       },
-      {
-        "queue": "rdyrct-clicks",
-        // Larger, time-boxed batches: clicks are high-volume and each batch
-        // becomes one multi-row D1 insert, so bigger batches mean fewer
-        // writes under load.
-        "max_batch_size": 100,
-        "max_batch_timeout": 5,
-        "max_retries": 5,
-        "retry_delay": 30,
-        "dead_letter_queue": "rdyrct-clicks-dlq",
-      },
-      {
-        "queue": "rdyrct-clicks-dlq",
-        "max_batch_size": 100,
-        "max_batch_timeout": 5,
-        "max_retries": 3,
-        "retry_delay": 30,
-      },
     ],
   },
+  // Click ingestion (#225). One instance, addressed idFromName("clicks"): every
+  // redirect calls add(), a ~10 s alarm flushes the buffer to D1 in one batch.
+  // SQLite-backed so it runs on the Workers Free plan.
+  "durable_objects": {
+    "bindings": [{ "name": "CLICK_BUFFER", "class_name": "ClickBuffer" }],
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["ClickBuffer"] }],
   // Durable, per-step-retried background processes: org teardown (ordered
   // cleanup) and custom-domain activation (CF hostname create + DNS/TLS polling
   // off the request path).
@@ -352,10 +333,6 @@
             "binding": "STORAGE_QUEUE",
             "queue": "rdyrct-playwright-storage",
           },
-          {
-            "binding": "CLICK_QUEUE",
-            "queue": "rdyrct-playwright-clicks",
-          },
         ],
         "consumers": [
           {
@@ -373,23 +350,14 @@
             "max_retries": 3,
             "retry_delay": 30,
           },
-          {
-            "queue": "rdyrct-playwright-clicks",
-            "max_batch_size": 100,
-            "max_batch_timeout": 5,
-            "max_retries": 5,
-            "retry_delay": 30,
-            "dead_letter_queue": "rdyrct-playwright-clicks-dlq",
-          },
-          {
-            "queue": "rdyrct-playwright-clicks-dlq",
-            "max_batch_size": 100,
-            "max_batch_timeout": 5,
-            "max_retries": 3,
-            "retry_delay": 30,
-          },
         ],
       },
+      // A named env inherits neither block from the top level once it sets its
+      // own queues/workflows, so the click buffer is repeated here.
+      "durable_objects": {
+        "bindings": [{ "name": "CLICK_BUFFER", "class_name": "ClickBuffer" }],
+      },
+      "migrations": [{ "tag": "v1", "new_sqlite_classes": ["ClickBuffer"] }],
       "workflows": [
         {
           "binding": "ORG_DELETE",
