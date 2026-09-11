@@ -152,7 +152,12 @@ async function insertClicksPerRow(
       }
     }),
   );
-  const gone = outcomes.filter((o) => o.state === "gone").map((o) => o.row);
+  const gone: ClickMessage[] = [];
+  const retry: ClickMessage[] = [];
+  for (const { row, state } of outcomes) {
+    if (state === "gone") gone.push(row);
+    else if (state === "retry") retry.push(row);
+  }
   if (gone.length > 0) {
     // Counted, so the accepted loss has a size rather than being a sentence in
     // a comment.
@@ -164,7 +169,7 @@ async function insertClicksPerRow(
       },
     ]);
   }
-  return outcomes.filter((o) => o.state === "retry").map((o) => o.row);
+  return retry;
 }
 
 /**

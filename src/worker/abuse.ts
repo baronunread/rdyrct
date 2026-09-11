@@ -5,10 +5,10 @@ import * as schema from "./db/schema";
 import type { DB, Env } from "./env";
 import { sendEmail } from "./email";
 import { renderEmail } from "./email-layout";
-import { orgPlan } from "./plan";
+import { orgOwnerEmail, orgPlan } from "./plan";
 import { recordAdminAction } from "./audit";
 import { captureAlert } from "./sentry";
-import { enqueueStorage, syncLinkMsg } from "./storage";
+import { republishOrgLinks } from "./storage";
 
 /**
  * Abuse controls the 2026-09-10 incident showed were missing
@@ -88,7 +88,6 @@ export function assertNotShortener(destination: string): void {
  */
 export const REDIRECT_CEILING_PER_DAY = 2_000;
 
-const REPUBLISH_BATCH = 100;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 /**
@@ -131,20 +130,6 @@ export async function suspendOrgLinks(
   return links.length;
 }
 
-async function republishOrgLinks(env: Env, db: DB, orgId: string): Promise<void> {
-  const addresses = await db
-    .select({ slug: schema.linkAddresses.slug, hostname: schema.domains.hostname })
-    .from(schema.linkAddresses)
-    .innerJoin(schema.links, eq(schema.linkAddresses.linkId, schema.links.id))
-    .leftJoin(schema.domains, eq(schema.linkAddresses.domainId, schema.domains.id))
-    .where(and(eq(schema.links.orgId, orgId), isNull(schema.linkAddresses.retiredAt)));
-  for (let i = 0; i < addresses.length; i += REPUBLISH_BATCH)
-    await enqueueStorage(
-      env,
-      addresses.slice(i, i + REPUBLISH_BATCH).map((a) => syncLinkMsg(a.slug, a.hostname)),
-    );
-}
-
 /**
  * Find free organizations over the daily redirect ceiling and suspend them.
  * Idempotent: an org whose links are already suspended is skipped, so running
@@ -160,15 +145,19 @@ export async function sweepAbusiveOrgs(env: Env): Promise<void> {
     .groupBy(schema.clicks.orgId)
     .having(sql`count(*) > ${REDIRECT_CEILING_PER_DAY}`);
 
-  for (const { orgId, n } of rows) {
-    const { plan } = await orgPlan(db, orgId);
-    if (plan !== "free") continue;
-    const reason = `Automatic: ${n} redirects today, over the free-plan ceiling of ${REDIRECT_CEILING_PER_DAY}.`;
-    const suspended = await suspendOrgLinks(env, db, orgId, null, reason);
-    if (suspended === 0) continue;
-    captureAlert([{ event: "org_auto_suspended", orgId, redirects: n, links: suspended }]);
-    await notifyAutoSuspend(env, db, orgId, n).catch(() => {});
-  }
+  // Independent per org, and the list is short (an org over the ceiling is
+  // rare), so handle them together rather than one round trip at a time.
+  await Promise.all(
+    rows.map(async ({ orgId, n }) => {
+      const { plan } = await orgPlan(db, orgId);
+      if (plan !== "free") return;
+      const reason = `Automatic: ${n} redirects today, over the free-plan ceiling of ${REDIRECT_CEILING_PER_DAY}.`;
+      const suspended = await suspendOrgLinks(env, db, orgId, null, reason);
+      if (suspended === 0) return;
+      captureAlert([{ event: "org_auto_suspended", orgId, redirects: n, links: suspended }]);
+      await notifyAutoSuspend(env, db, orgId, n).catch(() => {});
+    }),
+  );
 }
 
 async function notifyAutoSuspend(
@@ -177,11 +166,7 @@ async function notifyAutoSuspend(
   orgId: string,
   redirects: number,
 ): Promise<void> {
-  const rows = await db
-    .select({ email: schema.user.email })
-    .from(schema.orgMembers)
-    .innerJoin(schema.user, eq(schema.orgMembers.userId, schema.user.id))
-    .where(and(eq(schema.orgMembers.orgId, orgId), eq(schema.orgMembers.role, "owner")));
+  const owner = await orgOwnerEmail(db, orgId);
 
   const heading = "Your organization is suspended";
   const body = renderEmail({
@@ -195,7 +180,7 @@ async function notifyAutoSuspend(
     cta: { label: "See your plan", url: `${env.APP_URL}/billing` },
   });
 
-  const to = [rows[0]?.email, env.SUPERADMIN_EMAIL].filter((addr): addr is string => !!addr);
+  const to = [owner, env.SUPERADMIN_EMAIL].filter((addr): addr is string => !!addr);
   // One failed send must not stop the other, and neither is worth failing the
   // sweep over: the suspension already happened and the alert already fired.
   await Promise.all(to.map((addr) => sendEmail(env, addr, heading, body).catch(() => {})));

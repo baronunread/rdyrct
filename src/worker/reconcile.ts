@@ -2,7 +2,7 @@ import * as v from "valibot";
 import { and, asc, eq, isNotNull, isNull, lte, or, sql } from "drizzle-orm";
 import * as schema from "./db/schema";
 import type { DB, Env } from "./env";
-import { countActiveAddresses } from "./plan";
+import { countActiveAddresses, orgOwnerEmail } from "./plan";
 import { enqueueStorage, syncDomainMsg } from "./storage";
 import { sendEmail } from "./email";
 import { renderEmail } from "./email-layout";
@@ -439,16 +439,6 @@ function graceSentence(graceEndsAt: number | null, hasDomains: boolean): string[
   return [`Your custom domains keep redirecting until ${date}, then they stop.`];
 }
 
-/** Who to write to about an org: its owner. */
-async function ownerEmail(db: DB, orgId: string): Promise<string | null> {
-  const rows = await db
-    .select({ email: schema.user.email })
-    .from(schema.orgMembers)
-    .innerJoin(schema.user, eq(schema.orgMembers.userId, schema.user.id))
-    .where(and(eq(schema.orgMembers.orgId, orgId), eq(schema.orgMembers.role, "owner")));
-  return rows[0]?.email ?? null;
-}
-
 async function sendDowngradeEmail(
   env: Env,
   db: DB,
@@ -457,7 +447,7 @@ async function sendDowngradeEmail(
   state: OrgEntitlement,
   kind: "now" | "warning",
 ): Promise<boolean> {
-  const to = await ownerEmail(db, org.id);
+  const to = await orgOwnerEmail(db, org.id);
   if (!to) return false;
   const limits = PLAN_LIMITS[plan];
   // Named for what is actually over. "loses its custom domains soon" went to

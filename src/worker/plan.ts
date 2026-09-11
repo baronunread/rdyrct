@@ -402,17 +402,32 @@ export async function setMemberRoleWithinLimit(
  * Free/Hobby/Pro subscription), so an org's effective limits come from whoever owns
  * it: resolve the owner membership and read that user's plan.
  */
+/** The owner's plan and email for an org, or undefined if it has no owner
+ * (mid-teardown). The one place the owner membership is resolved. */
+async function ownerUser(
+  db: DB,
+  orgId: string,
+): Promise<{ plan: OrgPlan; email: string } | undefined> {
+  const rows = await db
+    .select({ plan: schema.user.plan, email: schema.user.email })
+    .from(schema.orgMembers)
+    .innerJoin(schema.user, eq(schema.orgMembers.userId, schema.user.id))
+    .where(and(eq(schema.orgMembers.orgId, orgId), eq(schema.orgMembers.role, "owner")));
+  return rows[0];
+}
+
 export async function orgPlan(
   db: DB,
   orgId: string,
 ): Promise<{ plan: OrgPlan; limits: PlanLimits }> {
-  const rows = await db
-    .select({ plan: schema.user.plan })
-    .from(schema.orgMembers)
-    .innerJoin(schema.user, eq(schema.orgMembers.userId, schema.user.id))
-    .where(and(eq(schema.orgMembers.orgId, orgId), eq(schema.orgMembers.role, "owner")));
-  const plan = rows[0]?.plan ?? "free";
+  const plan = (await ownerUser(db, orgId))?.plan ?? "free";
   return { plan, limits: PLAN_LIMITS[plan] };
+}
+
+/** The email address to write to about an org: its owner's. Null if the org
+ * has no owner row (mid-teardown). */
+export async function orgOwnerEmail(db: DB, orgId: string): Promise<string | null> {
+  return (await ownerUser(db, orgId))?.email ?? null;
 }
 
 /**

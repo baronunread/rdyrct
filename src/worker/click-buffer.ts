@@ -44,7 +44,11 @@ export class ClickBuffer extends DurableObject<Env> {
   #flushing = false;
   #failedFlushes = 0;
 
+  // add/alarm/buffered/reset are reached by RPC or by the runtime (the alarm),
+  // which fallow's static graph cannot see.
+
   /** Record one click. Returns immediately; the write happens on the alarm. */
+  // fallow-ignore-next-line unused-class-member
   async add(row: ClickMessage): Promise<void> {
     this.#buf.push(row);
     if (this.#buf.length >= MAX_BUFFER) {
@@ -56,16 +60,19 @@ export class ClickBuffer extends DurableObject<Env> {
     }
   }
 
+  // fallow-ignore-next-line unused-class-member
   async alarm(): Promise<void> {
     await this.#flush();
   }
 
   /** The rows waiting to be written. Test inspection only. */
+  // fallow-ignore-next-line unused-class-member
   buffered(): ClickMessage[] {
     return [...this.#buf];
   }
 
   /** Drop everything pending. Test cleanup only. */
+  // fallow-ignore-next-line unused-class-member
   async reset(): Promise<void> {
     this.#buf = [];
     this.#failedFlushes = 0;

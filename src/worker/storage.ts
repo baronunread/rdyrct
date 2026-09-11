@@ -648,6 +648,38 @@ export async function deleteKvKeys(env: Env, keys: string[]): Promise<void> {
   await Promise.all(keys.map((key) => env.LINKS.delete(key)));
 }
 
+/** Cloudflare caps a queue send at 100 messages. */
+const REPUBLISH_BATCH = 100;
+
+/**
+ * Re-sync every KV key an org's links resolve through, in a fixed number of
+ * round trips. Used after a bulk state change on the org's links (suspend from
+ * the admin route, auto-suspend from the abuse sweep): the consumer reads the
+ * current row and writes what the key should be, so this does not need to know
+ * which links actually changed.
+ *
+ * One query and one send per link does not survive the size of org this is
+ * for. At the Pro cap of 3,000 links that was 3,002 D1 statements and 3,000
+ * sends, past both D1's per-invocation query limit and the subrequest ceiling:
+ * the request died partway, after the flag was already committed, leaving the
+ * links whose messages never went out still redirecting. Every address in one
+ * query, then sends of at most a hundred: 3,000 links become 31 round trips.
+ */
+export async function republishOrgLinks(env: Env, db: DB, orgId: string): Promise<void> {
+  const addresses = await db
+    .select({ slug: schema.linkAddresses.slug, hostname: schema.domains.hostname })
+    .from(schema.linkAddresses)
+    .innerJoin(schema.links, eq(schema.linkAddresses.linkId, schema.links.id))
+    .leftJoin(schema.domains, eq(schema.linkAddresses.domainId, schema.domains.id))
+    .where(and(eq(schema.links.orgId, orgId), isNull(schema.linkAddresses.retiredAt)));
+  const batches: StorageMessage[][] = [];
+  for (let i = 0; i < addresses.length; i += REPUBLISH_BATCH)
+    batches.push(
+      addresses.slice(i, i + REPUBLISH_BATCH).map((a) => syncLinkMsg(a.slug, a.hostname)),
+    );
+  await Promise.all(batches.map((batch) => enqueueStorage(env, batch)));
+}
+
 // Cloudflare Queues caps sendBatch at 100 messages: this sweep enqueues one
 // sync message per expired row in a single sendBatch call below, so the page
 // size can't exceed that.
