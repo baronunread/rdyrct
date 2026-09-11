@@ -5,30 +5,33 @@ import { signUpAndVerify } from "./resend";
 
 const password = "test-password-123";
 
-/** Creates a quick link and returns its slug. The slug comes from D1 rather
- * than from the dialog's text: shared-domain slugs are generated, so there
- * is nothing to predict, and scraping the rendered URL out of surrounding
- * copy is the brittle part of this test, not the part under test. */
-async function createQuickLink(page: Page): Promise<string> {
+/** Creates a quick link and returns its slug and id. The slug comes from D1
+ * rather than from the dialog's text: shared-domain slugs are generated, so
+ * there is nothing to predict, and scraping the rendered URL out of
+ * surrounding copy is the brittle part of this test, not the part under
+ * test. The id is what lets the click assertion below find its own click
+ * rather than the globally-last one: the click buffer (#225) is one shared
+ * instance across every test the suite runs in parallel (playwright.config.ts
+ * runs 2 workers), so two tests' clicks can land in the very same flush. */
+async function createQuickLink(page: Page): Promise<{ slug: string; id: string }> {
   const destination = page.getByPlaceholder("https://example.com/launch").first();
   await expect(destination).toBeVisible();
   await destination.fill("example.com/referrer-privacy");
   await page.getByRole("button", { name: "Create link" }).click();
   await expect(page.getByRole("dialog", { name: "Link created" })).toBeVisible();
 
-  const rows = await queryRows<{ slug: string }>(
+  const rows = await queryRows<{ slug: string; id: string }>(
     page,
-    "SELECT slug FROM links WHERE destination LIKE '%referrer-privacy%' ORDER BY created_at DESC LIMIT 1",
+    "SELECT slug, id FROM links WHERE destination LIKE '%referrer-privacy%' ORDER BY created_at DESC LIMIT 1",
   );
-  const slug = rows[0]?.slug;
-  expect(slug).toBeTruthy();
-  return slug!;
+  expect(rows[0]?.slug).toBeTruthy();
+  return rows[0]!;
 }
 
 test("a click records the referring host, never the URL it came from (#20)", async ({ page }) => {
   const email = `referrer-${Date.now()}@gmail.com`;
   await signUpAndVerify(page, email, password);
-  const slug = await createQuickLink(page);
+  const { slug, id: linkId } = await createQuickLink(page);
 
   // A real referring URL: the path and query are the parts that carry other
   // people's search terms and session tokens, and neither may be stored.
@@ -51,14 +54,18 @@ test("a click records the referring host, never the URL it came from (#20)", asy
     )
     .toBe(302);
 
-  // The click rides a queue, so wait for the consumer rather than assuming
-  // it has already landed.
+  // The click rides the shared click buffer (#225), which flushes on a ~10s
+  // alarm, so wait for that rather than assuming it has already landed.
+  // Scoped to this test's own link: the buffer batches every concurrent
+  // test's clicks into the same flush, so "the last click" is not
+  // necessarily this one.
   await expect
     .poll(
       async () => {
         const rows = await queryRows<{ referrer: string }>(
           page,
-          "SELECT referrer FROM clicks ORDER BY id DESC LIMIT 1",
+          "SELECT referrer FROM clicks WHERE link_id = ? ORDER BY id DESC LIMIT 1",
+          [linkId],
         );
         return rows[0]?.referrer ?? null;
       },
