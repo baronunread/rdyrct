@@ -4,13 +4,15 @@ import { Skeleton, SkeletonStatus } from "../ui/skeleton";
 import { useToast } from "../ui/toast";
 import { copyToClipboard } from "../lib/clipboard";
 import { shortUrl } from "../lib/api";
+import { useLinkHost } from "../lib/hooks";
 import { resolveQrLook, type OrgQr } from "../lib/org-qr";
 import { QRPreview } from "./qr";
 import type { LinkDTO } from "@/shared/types";
 
 function LinkPreviewContent({ link, orgQr }: { link: LinkDTO; orgQr: OrgQr }) {
   const toast = useToast();
-  const url = shortUrl(link.slug, link.domain);
+  const linkHost = useLinkHost();
+  const url = shortUrl(link.slug, link.domain, linkHost);
   return (
     <div className="flex flex-col items-center gap-3">
       <QRPreview url={url} {...resolveQrLook(link, orgQr)} downloadName={`qr-${link.slug}`} />

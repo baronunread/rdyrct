@@ -1024,7 +1024,7 @@ function CustomDomainSection() {
           <InboxMail
             from="Acme Store"
             subject="Your 20% code ends tonight"
-            link="rdyrct.com/m22fs5w"
+            link="rdyr.cc/m22fs5w"
             verdict="Doesn't match the sender"
           />
           <InboxMail

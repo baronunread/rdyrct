@@ -146,7 +146,8 @@ function isLive(hit: KVLink): boolean {
 // Hosts we don't know (e.g. *.workers.dev previews) fall through to the app.
 app.use("*", async (c, next) => {
   const host = c.req.header("host")?.toLowerCase();
-  if (!host || host === c.env.APP_HOST.toLowerCase()) return next();
+  const sharedHosts = [c.env.APP_HOST.toLowerCase(), c.env.SHARED_LINK_HOST.toLowerCase()];
+  if (!host || sharedHosts.includes(host)) return next();
   const domain = await resolveDomain(c.env, host);
   if (!domain) return next();
   // A locked domain past its 30 days stops resolving, with no D1 read: the

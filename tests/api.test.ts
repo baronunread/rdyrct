@@ -55,6 +55,10 @@ describe("shortUrl", () => {
     expect(shortUrl("abc123")).toBe("http://localhost:5173/abc123");
     expect(shortUrl("abc123", null)).toBe("http://localhost:5173/abc123");
   });
+
+  test("uses the shared link host when given one", () => {
+    expect(shortUrl("abc123", null, "rdyr.cc")).toBe("https://rdyr.cc/abc123");
+  });
 });
 
 describe("api", () => {
