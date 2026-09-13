@@ -60,7 +60,11 @@ export interface Env {
   BILLING?: BillingProvider;
 
   /* custom domains (Cloudflare for SaaS) */
-  APP_HOST: string; // var, e.g. "rdyrct.com"; the shared redirect host
+  APP_HOST: string; // var, e.g. "rdyrct.com"; the app/API origin and CNAME target
+  // var, e.g. "rdyr.cc"; the shorter host new shared-domain links use. Requests
+  // on either host take the shared-domain path (index.ts); both read the same
+  // KV keys, since a shared-domain slug's key has no host in it.
+  SHARED_LINK_HOST: string;
   CF_API_TOKEN?: string; // secret, Custom Hostnames edit
   CF_ZONE_ID?: string; // var
   // var, dev/test only: fakes the Custom Hostnames API. "simulated" walks a

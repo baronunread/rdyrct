@@ -21,7 +21,7 @@ import { useToast } from "../ui/toast";
 import { copyToClipboard } from "../lib/clipboard";
 import { cn } from "../ui/cn";
 import { AliasThread } from "./alias-thread";
-import { useConfig } from "../lib/hooks";
+import { useLinkHost } from "../lib/hooks";
 import { CursorPager } from "../ui/pagination";
 
 function linkDetailPath(link: LinkDTO): string {
@@ -45,13 +45,13 @@ interface RowActions {
 /** The short link itself: expander, domain badge, slug, copy button. */
 function LinkCell({
   link,
-  appHost,
+  linkHost,
   isExpanded,
   onToggle,
   navigate,
 }: {
   link: LinkDTO;
-  appHost: string;
+  linkHost: string;
   isExpanded: boolean;
   onToggle: (() => void) | null;
   navigate: (to: string) => void;
@@ -86,14 +86,14 @@ function LinkCell({
             Badge, which is for state (active, pending, blocked) rather than
             for an identifier. */}
         <span className="min-w-0 max-w-full truncate font-mono text-2xs text-muted">
-          {link.domain || appHost}
+          {link.domain || linkHost}
         </span>
         <Slug slug={link.slug} className="font-bold text-accent group-hover:underline" />
       </button>
       <span className="shrink-0">
         <CopyButton
-          text={shortUrl(link.slug, link.domain)}
-          label={`Copy ${shortUrl(link.slug, link.domain)}`}
+          text={shortUrl(link.slug, link.domain, linkHost)}
+          label={`Copy ${shortUrl(link.slug, link.domain, linkHost)}`}
           onCopy={(text) => copyToClipboard(text, toast)}
         />
       </span>
@@ -142,14 +142,14 @@ function RowMenu({ link, actions }: { link: LinkDTO; actions: RowActions }) {
 function LinkRow({
   orgId,
   link,
-  appHost,
+  linkHost,
   isExpanded,
   onToggle,
   actions,
 }: {
   orgId: string;
   link: LinkDTO;
-  appHost: string;
+  linkHost: string;
   isExpanded: boolean;
   onToggle: (() => void) | null;
   actions: RowActions;
@@ -160,7 +160,7 @@ function LinkRow({
         <Td>
           <LinkCell
             link={link}
-            appHost={appHost}
+            linkHost={linkHost}
             isExpanded={isExpanded}
             onToggle={onToggle}
             navigate={actions.navigate}
@@ -218,8 +218,7 @@ export function LinksTable({
   onNext: () => void;
   onBack: () => void;
 }) {
-  const config = useConfig();
-  const appHost = config.data?.appHost ?? window.location.host;
+  const linkHost = useLinkHost();
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const toggleExpanded = (id: string) =>
     setExpanded((prev) => {
@@ -279,7 +278,7 @@ export function LinksTable({
                 key={link.id}
                 orgId={orgId}
                 link={link}
-                appHost={appHost}
+                linkHost={linkHost}
                 isExpanded={hasAliases && expanded.has(link.id)}
                 onToggle={hasAliases ? () => toggleExpanded(link.id) : null}
                 actions={actions}

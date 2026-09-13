@@ -124,7 +124,7 @@ shortenRoutes.post("/", async (c) => {
   return c.json(
     {
       slug: row.slug,
-      url: `${c.env.APP_URL}/${row.slug}`,
+      url: `https://${c.env.SHARED_LINK_HOST}/${row.slug}`,
       claimToken: row.claimToken,
       expiresAt,
     },

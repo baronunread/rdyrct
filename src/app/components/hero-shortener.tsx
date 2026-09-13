@@ -109,7 +109,7 @@ function MadeLink({ link }: { link: StoredAnonLink }) {
         </Suspense>
       </div>
       {/* Smaller on a phone so the slug keeps its width: truncating
-          "rdyrct.com/m22fs5w" loses exactly the part that identifies it. */}
+          "rdyr.cc/m22fs5w" loses exactly the part that identifies it. */}
       <Suspense
         fallback={<div className="size-20 shrink-0 sm:size-26" aria-label="Preparing QR code" />}
       >

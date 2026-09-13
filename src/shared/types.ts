@@ -262,8 +262,10 @@ export interface DomainDTO {
 
 /** Public deployment config the SPA needs (no secrets). */
 export interface AppConfig {
-  /** Shared redirect host; the CNAME target for custom domains. */
+  /** App/API origin; the CNAME target for custom domains. */
   appHost: string;
+  /** Host new shared-domain links use for display, copy, and redirects. */
+  linkHost: string;
   /** Whether Google sign-in is configured and the button should show. */
   googleEnabled: boolean;
 }
