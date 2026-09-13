@@ -96,5 +96,8 @@ export async function deleteUserAvatar(): Promise<void> {
   await throwIfNotOk(res);
 }
 
-export const shortUrl = (slug: string, domain?: string | null) =>
-  domain ? `https://${domain}/${slug}` : `${window.location.origin}/${slug}`;
+export const shortUrl = (slug: string, domain?: string | null, linkHost?: string) => {
+  if (domain) return `https://${domain}/${slug}`;
+  if (linkHost) return `https://${linkHost}/${slug}`;
+  return `${window.location.origin}/${slug}`;
+};

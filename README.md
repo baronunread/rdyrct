@@ -120,6 +120,8 @@ Fill in the non-secret vars in `wrangler.jsonc`:
 
 - `APP_URL=https://rdyrct.com`
 - `APP_HOST=rdyrct.com`
+- `SHARED_LINK_HOST=rdyr.cc` — a second, shorter domain for new shared-domain
+  links; can be the same as `APP_HOST` if you don't have one
 - `MAIL_FROM=rdyrct <no-reply@mail.rdyrct.com>`
 - `POLAR_SERVER=sandbox` (or `production` when live)
 - `POLAR_PRO_PRODUCT_ID` — create a recurring Pro product in Polar and paste its id
@@ -166,7 +168,7 @@ Paid access an admin grants by hand is a **comp**, stored apart from the subscri
 
 The admin console reports counts, never money: how many people hold a paid plan, how many pay for it, and how many are comped. Who is cancelling shows on their own row in the user list, where it names someone. Revenue is read in the Polar dashboard, which knows what it charged net of discounts, tax and refunds.
 
-Finally, point `rdyrct.com` at the Worker as a **custom domain**: Cloudflare dashboard → Workers → your worker → **Settings → Domains & Routes**. Short links live at the root (`https://rdyrct.com/<slug>`); the app is served on every other path.
+Finally, point `rdyrct.com` at the Worker as a **custom domain**: Cloudflare dashboard → Workers → your worker → **Settings → Domains & Routes**. Short links live at the root (`https://rdyrct.com/<slug>`); the app is served on every other path. Attach `SHARED_LINK_HOST` the same way if you have one: it takes the same shared-domain redirect path, since a shared-domain slug's KV key has no host in it, so it works on either host with no other setup.
 
 Review the [rate-limiting policies, monitoring, WAF rule, and rollback steps](docs/rate-limiting.md)
 before the first production deploy.
@@ -190,6 +192,7 @@ before changing link, domain, logo, or organization delete flows.
 | `CF_API_TOKEN`           | secret         | Cloudflare token with **Zone → SSL and Certificates → Edit** (custom domains)       |
 | `APP_URL`                | var            | Full public URL of the app, e.g. `https://rdyrct.com`                               |
 | `APP_HOST`               | var            | Public host, e.g. `rdyrct.com`                                                      |
+| `SHARED_LINK_HOST`       | var            | Second shared-domain host for new links, e.g. `rdyr.cc`                             |
 | `MAIL_FROM`              | var            | From address for outgoing email                                                     |
 | `RESEND_BASE_URL`        | var (dev only) | Points at the local Resend emulator                                                 |
 | `POLAR_SERVER`           | var            | `sandbox` or `production`                                                           |
