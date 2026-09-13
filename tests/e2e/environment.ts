@@ -2,6 +2,10 @@ export const playwrightPort = 5174;
 export const appUrl = `http://localhost:${playwrightPort}`;
 export const explorerUrl = `${appUrl}/cdn-cgi/explorer/api`;
 
+// SHARED_LINK_HOST in .dev.vars.playwright: the host a new shared-domain
+// link is shown and copied on, distinct from appUrl (the app's own origin).
+export const sharedLinkHost = "rdyr.cc";
+
 // `vite preview` serves the *built* worker and assets, which is the only way
 // to exercise the production Content-Security-Policy: `vite dev` relaxes
 // script-src to admit the React Refresh preamble Vite injects, so a page that
