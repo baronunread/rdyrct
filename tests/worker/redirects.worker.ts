@@ -77,10 +77,22 @@ describe("redirect hot path", () => {
     ).toBe(0);
   });
 
-  it("redirects the same shared-host slug on the second shared link host", async () => {
+  it("redirects the same shared-host slug on the second shared link host, not the custom-domain path", async () => {
     await env.LINKS.put(
       "slug:summer",
       JSON.stringify({ linkId: "link-1", orgId: "org-1", url: "https://example.com/sale" }),
+    );
+    // A domain entry under this exact host, with a different destination and
+    // no slug of its own: if the shared-host check ever stopped short-
+    // circuiting before the custom-domain lookup, this is what would answer
+    // instead, and the assertions below would catch it.
+    await env.LINKS.put(
+      `domain:${env.SHARED_LINK_HOST}`,
+      JSON.stringify({
+        domainId: "domain-2",
+        orgId: "org-2",
+        rootRedirect: "https://example.com/wrong-if-treated-as-a-custom-domain",
+      }),
     );
 
     const response = await fetchWorker(
