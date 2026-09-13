@@ -2,7 +2,7 @@ import { useState } from "react";
 import { errorMessage } from "@/app/lib/error-message";
 import { Link } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
-import { useCurrentUser } from "../lib/hooks";
+import { useCurrentUser, useLinkHost } from "../lib/hooks";
 import { useCurrentOrg } from "../lib/current-org";
 import { api, shortUrl } from "../lib/api";
 import { PLAN_LIMITS } from "@/shared/types";
@@ -136,11 +136,12 @@ function QrDefaultsFields({
   savingQr: boolean;
   save: () => void;
 }) {
+  const linkHost = useLinkHost();
   return (
     <div className="grid gap-6 sm:grid-cols-[1fr_auto]">
       <QrPatternFields values={values} setField={setField} isAdmin={canEdit} />
       <div className="order-last sm:order-none">
-        <QrPreviewSidebar values={values} url={shortUrl("preview")} />
+        <QrPreviewSidebar values={values} url={shortUrl("preview", undefined, linkHost)} />
       </div>
       <QrColorAndLogoFields
         values={values}

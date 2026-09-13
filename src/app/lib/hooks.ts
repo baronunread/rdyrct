@@ -98,6 +98,10 @@ export const useConfig = () =>
     staleTime: Infinity,
   });
 
+// The host shared-domain links display, copy, and redirect through. Falls
+// back to the current origin's host while config is still loading.
+export const useLinkHost = () => useConfig().data?.linkHost ?? window.location.host;
+
 export function useLogout() {
   const qc = useQueryClient();
   return useMutation({

@@ -77,6 +77,23 @@ describe("redirect hot path", () => {
     ).toBe(0);
   });
 
+  it("redirects the same shared-host slug on the second shared link host", async () => {
+    await env.LINKS.put(
+      "slug:summer",
+      JSON.stringify({ linkId: "link-1", orgId: "org-1", url: "https://example.com/sale" }),
+    );
+
+    const response = await fetchWorker(
+      new Request("http://localhost/summer", {
+        headers: { host: env.SHARED_LINK_HOST },
+        redirect: "manual",
+      }),
+    );
+
+    expect(response.status).toBe(302);
+    expect(response.headers.get("location")).toBe("https://example.com/sale");
+  });
+
   it("keeps custom-domain links separate from shared-host links", async () => {
     await putCustomDomainAndSlug();
 

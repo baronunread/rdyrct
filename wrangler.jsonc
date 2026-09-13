@@ -79,6 +79,7 @@
   "vars": {
     "APP_URL": "https://rdyrct.com",
     "APP_HOST": "rdyrct.com",
+    "SHARED_LINK_HOST": "rdyr.cc",
     "MAIL_FROM": "rdyrct <no-reply@mail.rdyrct.com>",
     // "production" or "sandbox" — the SDK maps this to the API base URL.
     "POLAR_SERVER": "production",
@@ -309,6 +310,7 @@
       "vars": {
         "APP_URL": "http://localhost:5174",
         "APP_HOST": "localhost:5174",
+        "SHARED_LINK_HOST": "rdyr.cc",
         "MAIL_FROM": "rdyrct <no-reply@localhost>",
         "POLAR_SERVER": "sandbox",
         "POLAR_PRO_PRODUCT_ID": "playwright_pro_product",
