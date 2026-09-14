@@ -159,25 +159,26 @@ function isLive(hit: KVLink): boolean {
   return hit.expiresAt == null || hit.expiresAt > Date.now();
 }
 
-// Custom domains (Cloudflare for SaaS) and the second shared link host are
-// both redirect-only: no API, no SPA. Only APP_HOST gets the full app —
-// SHARED_LINK_HOST must not, or it would also serve /api/auth/* and
-// /api/cap/*, unprotected by the WAF rules that are only ever added to
-// APP_HOST's zone (see docs/rate-limiting.md).
+// Redirect-only, same as a custom domain: no API, no SPA. SHARED_LINK_HOST
+// must not fall through to the full app, or it would also serve
+// /api/auth/* and /api/cap/*, unprotected by the WAF rules that are only
+// ever added to APP_HOST's zone (see docs/rate-limiting.md).
+async function resolveSharedLinkHost(c: Context<AppEnv>): Promise<Response> {
+  const path = new URL(c.req.url).pathname;
+  const slug = path.slice(1).replace(/\/+$/, "");
+  if (slug && !slug.includes("/") && !RESERVED_SLUGS.has(slug.toLowerCase())) {
+    const hit = await resolveSlug(c.env, slug, null);
+    if (hit && isLive(hit)) return redirectWithClick(c, hit);
+  }
+  return c.text("Not found", 404);
+}
+
+// Custom domains (Cloudflare for SaaS) are redirect-only: no API, no SPA.
 // Hosts we don't know (e.g. *.workers.dev previews) fall through to the app.
 app.use("*", async (c, next) => {
   const host = c.req.header("host")?.toLowerCase();
   if (!host || host === c.env.APP_HOST.toLowerCase()) return next();
-
-  if (host === c.env.SHARED_LINK_HOST.toLowerCase()) {
-    const path = new URL(c.req.url).pathname;
-    const slug = path.slice(1).replace(/\/+$/, "");
-    if (slug && !slug.includes("/") && !RESERVED_SLUGS.has(slug.toLowerCase())) {
-      const hit = await resolveSlug(c.env, slug, null);
-      if (hit && isLive(hit)) return redirectWithClick(c, hit);
-    }
-    return c.text("Not found", 404);
-  }
+  if (host === c.env.SHARED_LINK_HOST.toLowerCase()) return resolveSharedLinkHost(c);
 
   const domain = await resolveDomain(c.env, host);
   if (!domain) return next();
