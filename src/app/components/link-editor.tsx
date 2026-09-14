@@ -11,6 +11,7 @@ import { valibotResolver } from "@hookform/resolvers/valibot";
 import { Link as RouterLink } from "@tanstack/react-router";
 import { Lock, Info } from "@/app/ui/icons";
 import { shortUrl } from "../lib/api";
+import { useLinkHost } from "../lib/hooks";
 import { QR_CORNER_STYLES, QR_DOT_STYLES, type DomainDTO, type LinkInput } from "@/shared/types";
 import { Button } from "../ui/button";
 import { buttonClass } from "../ui/button-class";
@@ -398,6 +399,7 @@ function DomainField({
   editing: boolean;
   activeDomains: DomainDTO[];
 }) {
+  const linkHost = useLinkHost();
   if (!activeDomains.length) return null;
   const onDomainChange = (v: string) => setForm({ ...form, domainId: v || null, slug: "" });
   return (
@@ -415,7 +417,7 @@ function DomainField({
         onChange={onDomainChange}
         disabled={editing}
         options={[
-          { value: "", label: `shared: ${window.location.host}` },
+          { value: "", label: `shared: ${linkHost}` },
           ...activeDomains.map((d) => ({ value: d.id, label: d.hostname })),
         ]}
       />
@@ -650,10 +652,11 @@ export function LinkEditor({
 
   const selectedDomain = activeDomains.find((d) => d.id === form.domainId)?.hostname ?? null;
   const slugLocked = !form.domainId;
+  const linkHost = useLinkHost();
 
   const previewUrl = useMemo(
-    () => shortUrl(form.slug?.trim() || "preview", selectedDomain),
-    [form.slug, selectedDomain],
+    () => shortUrl(form.slug?.trim() || "preview", selectedDomain, linkHost),
+    [form.slug, selectedDomain, linkHost],
   );
 
   return (

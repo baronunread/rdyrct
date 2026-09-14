@@ -11,6 +11,7 @@ export default defineConfig({
         bindings: {
           APP_HOST: "localhost",
           APP_URL: "http://localhost",
+          SHARED_LINK_HOST: "short.localhost",
           TEST_MIGRATIONS: await readD1Migrations(path.join(import.meta.dirname, "migrations")),
         },
         // A one-token click bucket makes the redirect fail-open behavior

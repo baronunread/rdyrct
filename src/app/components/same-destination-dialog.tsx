@@ -6,6 +6,7 @@ import { Field } from "../ui/field";
 import { MenuSelect } from "../ui/menu";
 import { Tooltip } from "../ui/tooltip";
 import { shortUrl } from "../lib/api";
+import { useLinkHost } from "../lib/hooks";
 import type { LinkDTO } from "@/shared/types";
 
 /**
@@ -39,11 +40,12 @@ function MatchChoice({
   selectedId: string;
   onSelect: (id: string) => void;
 }) {
+  const linkHost = useLinkHost();
   const only = matchedLinks.length <= 1 ? matchedLinks[0] : null;
   if (matchedLinks.length <= 1)
     return (
       <p className="truncate rounded-lg border border-border bg-surface-2 px-3 py-2 font-mono text-xs">
-        {only && shortUrl(only.slug, only.domain)}
+        {only && shortUrl(only.slug, only.domain, linkHost)}
       </p>
     );
   return (
@@ -54,7 +56,10 @@ function MatchChoice({
         onChange={onSelect}
         options={[
           { value: "", label: "Choose a link…" },
-          ...matchedLinks.map((l) => ({ value: l.id, label: shortUrl(l.slug, l.domain) })),
+          ...matchedLinks.map((l) => ({
+            value: l.id,
+            label: shortUrl(l.slug, l.domain, linkHost),
+          })),
         ]}
       />
     </Field>

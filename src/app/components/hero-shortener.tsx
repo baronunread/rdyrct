@@ -83,7 +83,7 @@ function MadeLink({ link }: { link: StoredAnonLink }) {
         <QrDownloadButtons url={link.url} name={`qr-${link.slug}`} className="mt-0.5" />
       </div>
       {/* Smaller on a phone so the slug keeps its width: truncating
-          "rdyrct.com/m22fs5w" loses exactly the part that identifies it. */}
+          "rdyr.cc/m22fs5w" loses exactly the part that identifies it. */}
       <QRPreview url={link.url} sizeClass="size-20 sm:size-26" />
     </div>
   );

@@ -267,3 +267,40 @@ describe("domain reads do not mutate", () => {
     for (const c of cfCalls.mock.calls) expect(String(c[0])).not.toContain("api.cloudflare.com");
   });
 });
+
+describe("adding a domain rejects either of this app's own hosts", () => {
+  // Well-formed hostnames (the ambient "localhost"/"short.localhost" test
+  // bindings would fail the format check first, never reaching the check
+  // this describes).
+  const ownHostsEnv = () =>
+    overrideEnv({ APP_HOST: "app.example.com", SHARED_LINK_HOST: "short.example.com" });
+
+  async function call(request: Request): Promise<Response> {
+    const ctx = createExecutionContext();
+    const res = await worker.fetch(request, ownHostsEnv(), ctx);
+    await waitOnExecutionContext(ctx);
+    return res;
+  }
+
+  it.each(["app.example.com", "short.example.com"])("rejects %s", async (hostname) => {
+    const cookie = await adminCookie();
+    await env.DB.batch([
+      env.DB.prepare("insert into orgs (id, name, created_at) values ('org-1', 'Test', 0)"),
+      // Admin owns it (pro plan), so assertDomainQuota's paid-feature check
+      // passes before the hostname is even looked at.
+      env.DB.prepare(
+        "insert into org_members (org_id, user_id, role, created_at) values ('org-1', 'admin-1', 'owner', 0)",
+      ),
+    ]);
+
+    const res = await call(
+      new Request("http://localhost/api/orgs/org-1/domains", {
+        method: "POST",
+        headers: { cookie, "content-type": "application/json" },
+        body: JSON.stringify({ hostname }),
+      }),
+    );
+
+    expect(res.status).toBe(400);
+  });
+});

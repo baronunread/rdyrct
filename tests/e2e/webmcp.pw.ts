@@ -175,7 +175,8 @@ test("a signed-in browser agent can create and find a link", async ({ page }) =>
     );
   }, destination);
 
-  expect(created).toMatch(/Created rdyrct.com\//);
+  // rdyr.cc: SHARED_LINK_HOST in .dev.vars.playwright, not the app's own host.
+  expect(created).toMatch(/Created rdyr\.cc\//);
   expect(windowTextLength(created)).toBeLessThanOrEqual(1_500);
   await expect(page).toHaveURL(/\/links$/);
   await expect(page.getByText(destination)).toBeVisible();
@@ -193,7 +194,7 @@ test("a signed-in browser agent can create and find a link", async ({ page }) =>
   expect(analytics).toMatch(/Analytics for the current organization/);
   await expect(page).toHaveURL(/\/analytics$/);
 
-  const slug = created?.match(/rdyrct\.com\/(\S+)/)?.[1] ?? "";
+  const slug = created?.match(/rdyr\.cc\/(\S+)/)?.[1] ?? "";
   expect(slug).not.toBe("");
 
   await toolNamed(page, "get_link");
@@ -213,7 +214,7 @@ test("a signed-in browser agent can create and find a link", async ({ page }) =>
       { signal: new AbortController().signal },
     );
   }, slug);
-  expect(updated).toMatch(/Updated rdyrct\.com\//);
+  expect(updated).toMatch(/Updated rdyr\.cc\//);
   await expect(page).toHaveURL(/\/links$/);
   await expect(page.getByText("https://example.com/agent-moved")).toBeVisible();
 

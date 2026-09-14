@@ -314,19 +314,19 @@ async function assertDomainQuota(db: DB, orgId: string, limits: PlanLimits): Pro
     });
 }
 
-/** Validates and normalizes a requested hostname: well-formed, not this
- * app's own host, and not already connected to another org. */
+/** Validates and normalizes a requested hostname: well-formed, not one of
+ * this app's own hosts, and not already connected to another org. */
 async function resolveNewHostname(
   db: DB,
   body: { hostname?: string },
-  appHost: string,
+  ownHosts: string[],
 ): Promise<string> {
   const hostname = body.hostname?.trim().toLowerCase() ?? "";
   if (!HOSTNAME_RE.test(hostname))
     throw new HTTPException(400, {
       message: "Enter a bare hostname like links.example.com",
     });
-  if (hostname === appHost)
+  if (ownHosts.includes(hostname))
     throw new HTTPException(400, { message: "That is this app's own domain" });
   const taken = await db
     .select({ id: schema.domains.id })
@@ -348,7 +348,7 @@ domainRoutes.post("/", async (c) => {
   await assertDomainQuota(db, orgId, limits);
 
   const body = await c.req.json<{ hostname?: string }>();
-  const hostname = await resolveNewHostname(db, body, c.env.APP_HOST);
+  const hostname = await resolveNewHostname(db, body, [c.env.APP_HOST, c.env.SHARED_LINK_HOST]);
 
   const id = uid();
   const row = {
