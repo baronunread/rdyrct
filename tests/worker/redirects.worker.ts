@@ -106,6 +106,20 @@ describe("redirect hot path", () => {
     expect(response.headers.get("location")).toBe("https://example.com/sale");
   });
 
+  it("keeps the second shared link host redirect-only: no API, no app", async () => {
+    // SHARED_LINK_HOST never gets its own WAF rate-limiting rules (see
+    // docs/rate-limiting.md): those only ever go on APP_HOST's zone, on the
+    // premise that this host serves nothing but redirects. If it ever fell
+    // through to the app like APP_HOST does, auth would be reachable there
+    // unprotected by that layer.
+    for (const path of ["/api/auth/get-session", "/api/cap/signup/challenge", "/", "/dashboard"]) {
+      const res = await fetchWorker(
+        new Request(`http://localhost${path}`, { headers: { host: env.SHARED_LINK_HOST } }),
+      );
+      expect(res.status, `status of ${path} on the shared link host`).toBe(404);
+    }
+  });
+
   it("keeps custom-domain links separate from shared-host links", async () => {
     await putCustomDomainAndSlug();
 
