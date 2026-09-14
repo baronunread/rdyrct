@@ -142,12 +142,26 @@ function isLive(hit: KVLink): boolean {
   return hit.expiresAt == null || hit.expiresAt > Date.now();
 }
 
-// Custom domains (Cloudflare for SaaS) are redirect-only: no API, no SPA.
+// Custom domains (Cloudflare for SaaS) and the second shared link host are
+// both redirect-only: no API, no SPA. Only APP_HOST gets the full app —
+// SHARED_LINK_HOST must not, or it would also serve /api/auth/* and
+// /api/cap/*, unprotected by the WAF rules that are only ever added to
+// APP_HOST's zone (see docs/rate-limiting.md).
 // Hosts we don't know (e.g. *.workers.dev previews) fall through to the app.
 app.use("*", async (c, next) => {
   const host = c.req.header("host")?.toLowerCase();
-  const sharedHosts = [c.env.APP_HOST.toLowerCase(), c.env.SHARED_LINK_HOST.toLowerCase()];
-  if (!host || sharedHosts.includes(host)) return next();
+  if (!host || host === c.env.APP_HOST.toLowerCase()) return next();
+
+  if (host === c.env.SHARED_LINK_HOST.toLowerCase()) {
+    const path = new URL(c.req.url).pathname;
+    const slug = path.slice(1).replace(/\/+$/, "");
+    if (slug && !slug.includes("/") && !RESERVED_SLUGS.has(slug.toLowerCase())) {
+      const hit = await resolveSlug(c.env, slug, null);
+      if (hit && isLive(hit)) return redirectWithClick(c, hit);
+    }
+    return c.text("Not found", 404);
+  }
+
   const domain = await resolveDomain(c.env, host);
   if (!domain) return next();
   // A locked domain past its 30 days stops resolving, with no D1 read: the
