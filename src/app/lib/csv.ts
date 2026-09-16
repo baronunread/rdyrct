@@ -8,19 +8,9 @@
  */
 
 import type { SeriesPoint, TopEntry } from "@/shared/types";
+import { toCsv } from "@/shared/csv";
 
-/** One field, quoted only when it has to be. */
-function field(value: string): string {
-  // A leading =, +, - or @ is a formula to Excel and Sheets, so a referrer
-  // like "=cmd|..." would run on open. Prefixing a quote makes it text.
-  const guarded = /^[=+\-@]/.test(value) ? `'${value}` : value;
-  return /[",\n\r]/.test(guarded) ? `"${guarded.replace(/"/g, '""')}"` : guarded;
-}
-
-export function toCsv(rows: readonly (readonly string[])[]): string {
-  // CRLF, which is what RFC 4180 says and what Excel wants.
-  return rows.map((row) => row.map(field).join(",")).join("\r\n");
-}
+export { toCsv } from "@/shared/csv";
 
 /**
  * Hand the file to the browser.

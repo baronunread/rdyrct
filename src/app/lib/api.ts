@@ -23,7 +23,7 @@ const errorBodySchema = v.object({
   code: v.optional(v.fallback(v.string(), ""), ""),
 });
 
-async function throwIfNotOk(res: Response): Promise<void> {
+export async function throwIfNotOk(res: Response): Promise<void> {
   if (res.ok) return;
   let message = res.statusText;
   let code: string | undefined;

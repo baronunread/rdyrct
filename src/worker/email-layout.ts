@@ -145,7 +145,7 @@ ${preheaderBlock(content.preheader)}
         <tr>
           <td style="padding:24px 26px 26px">
             <hr style="border:none;border-top:1px solid ${LIGHT.border};margin:0 0 14px">
-            <p class="muted" style="margin:0;font-family:${FONT};font-size:12px;line-height:1.6;color:${LIGHT.muted}">rdyrct, link shortening and QR codes. You are getting this because someone used this address on rdyrct.com.</p>
+            <p class="muted" style="margin:0;font-family:${FONT};font-size:12px;line-height:1.6;color:${LIGHT.muted}">rdyrct, link shortening and QR codes. You got this email because you signed up at rdyrct.com or accepted an invite from someone who did. Not you? Ignore it, or write to support@rdyrct.com.</p>
           </td>
         </tr>
       </table>

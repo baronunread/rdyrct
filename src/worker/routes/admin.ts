@@ -25,6 +25,7 @@ import { reconcileUser } from "../reconcile";
 import { jsonBodyLimit } from "../body-limit";
 import { adminLinkRoutes } from "./admin-links";
 import { recordAdminAction } from "../audit";
+import { toCsv } from "@/shared/csv";
 
 // An org's effective plan is its owner's plan (billing is per-user). A single
 // correlated subquery pulls it for list views. Note: `user` is a SQL keyword,
@@ -679,6 +680,28 @@ adminRoutes.delete("/orgs/:orgId", async (c) => {
     detail: { name: rows[0]?.name ?? null },
   });
   return c.json({ ok: true });
+});
+
+adminRoutes.get("/users/emails.csv", async (c) => {
+  const log = c.get("log");
+  const rows = await c.var.db
+    .select({ email: schema.user.email })
+    .from(schema.user)
+    .where(and(eq(schema.user.emailVerified, true), eq(schema.user.banned, false)))
+    .orderBy(schema.user.email);
+  const csv = toCsv([["email"], ...rows.map((row) => [row.email])], { protectFormulas: false });
+  log.set({ export: { count: rows.length } });
+  log.audit({
+    action: "user.email_export",
+    actor: { type: "user", id: c.var.user!.id },
+    target: { type: "users", id: "verified-non-banned", count: rows.length },
+    outcome: "success",
+  });
+  return c.body(csv, 200, {
+    "Content-Type": "text/csv; charset=utf-8",
+    "Content-Disposition": 'attachment; filename="rdyrct-verified-user-emails.csv"',
+    "Cache-Control": "no-store",
+  });
 });
 
 adminRoutes.get("/users", async (c) => {
