@@ -4,7 +4,10 @@ import { Ban, Check, Ellipsis, Trash2 } from "@/app/ui/icons";
 import { MorphIcon } from "morphicons/react";
 import { shieldMinus, shieldPlus } from "@/app/ui/icon-nodes";
 import { useAdminUsers, useCurrentUser } from "../../lib/hooks";
-import { api } from "../../lib/api";
+import { api, throwIfNotOk } from "../../lib/api";
+import { downloadCsv } from "../../lib/csv";
+import { Button } from "../../ui/button";
+import { BusyContent } from "../../ui/spinner";
 import type { AdminUserRow, OrgPlan, Sort } from "@/shared/types";
 import { Menu, MenuItem, MenuSeparator } from "../../ui/menu";
 import { Badge, PageHeader, Table, Td, Th } from "../../ui/misc";
@@ -497,6 +500,31 @@ function useAdminUserActions() {
   };
 }
 
+function ExportEmailsButton() {
+  const toast = useToast();
+  const download = useMutation({
+    mutationFn: async () => {
+      const response = await fetch("/api/admin/users/emails.csv", { cache: "no-store" });
+      await throwIfNotOk(response);
+      downloadCsv("rdyrct-verified-user-emails.csv", await response.text());
+    },
+    onError: withErrorToast(toast),
+  });
+
+  return (
+    <Button
+      variant="outline"
+      size="sm"
+      disabled={download.isPending}
+      aria-busy={download.isPending}
+      aria-describedby="email-export-hint"
+      onClick={() => download.mutate()}
+    >
+      <BusyContent busy={download.isPending}>Export emails CSV</BusyContent>
+    </Button>
+  );
+}
+
 export function AdminUsersPage() {
   const users = useAdminUsers();
   const currentUser = useCurrentUser();
@@ -533,7 +561,15 @@ export function AdminUsersPage() {
   if (users.isLoading) return <AdminTableSkeleton />;
   return (
     <div>
-      <PageHeader title="Users" sub="All accounts on this instance" />
+      <PageHeader
+        title="Users"
+        sub="All accounts on this instance"
+        action={<ExportEmailsButton />}
+      />
+      <p id="email-export-hint" className="mb-4 text-sm text-muted">
+        Exports all verified users, regardless of search or page. Excludes unverified and banned
+        accounts. Email verification is not consent to marketing.
+      </p>
       <SearchInput
         value={q}
         onChange={(v) => {
