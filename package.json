@@ -53,6 +53,7 @@
     "canvas-confetti": "^1.9.4",
     "capjs-core": "0.1.2",
     "cmdk": "^1.1.1",
+    "cn": "^0.2.4",
     "d3-geo": "^3.1.1",
     "d3-scale": "^4.0.2",
     "d3-shape": "^3.2.0",
@@ -72,7 +73,6 @@
     "shadow-plugin": "^2.1.0",
     "standardwebhooks": "^1.0.0",
     "svgo": "^4.0.2",
-    "tailwind-merge": "^3.6.0",
     "topojson-client": "^3.1.0",
     "valibot": "^1.4.2"
   },
