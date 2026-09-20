@@ -81,13 +81,14 @@ jobs:
 
   e2e:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
     steps:
-      # fetch-depth: 0 gives leanest the full git history it needs to diff
-      # against origin/main to select which e2e specs this PR can affect.
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
-          fetch-depth: 0
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.3.4
@@ -110,16 +111,8 @@ jobs:
         run: |
           cp .dev.vars.example .dev.vars
           cp .env.example .env
-      # leanest selects only the e2e specs this PR's diff could affect and
-      # runs those through the real Playwright runner (fails open to the
-      # full suite on any judge error, so a missing/broken provider never
-      # hides a test). Using classifier-dev: free, no-auth, so this needs
-      # no secret. See baronunread/leanest.
-      - name: Browser smoke test (leanest-selected specs)
-        uses: baronunread/leanest@v1
-        with:
-          framework: playwright
-          provider: classifier-dev
+      - name: Browser smoke test (shard ${{ matrix.shard }}/3)
+        run: bunx playwright test --shard=${{ matrix.shard }}/3
 
   observability:
     runs-on: ubuntu-latest
