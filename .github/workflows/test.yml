@@ -112,13 +112,14 @@ jobs:
           cp .env.example .env
       # leanest selects only the e2e specs this PR's diff could affect and
       # runs those through the real Playwright runner (fails open to the
-      # full suite on any Jev error, so a missing/broken key never hides a
-      # test). See baronunread/leanest.
+      # full suite on any judge error, so a missing/broken provider never
+      # hides a test). Using classifier-dev: free, no-auth, so this needs
+      # no secret. See baronunread/leanest.
       - name: Browser smoke test (leanest-selected specs)
         uses: baronunread/leanest@v1
         with:
           framework: playwright
-          typesafe-api-key: ${{ secrets.TYPESAFE_API_KEY }}
+          provider: classifier-dev
 
   observability:
     runs-on: ubuntu-latest
