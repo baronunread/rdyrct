@@ -23,6 +23,9 @@ export function Footer() {
           <MarketingLink to="/roadmap" className="hover:text-accent">
             Roadmap
           </MarketingLink>
+          <MarketingLink to="/docs" className="hover:text-accent">
+            Docs
+          </MarketingLink>
           <MarketingLink to="/privacy" className="hover:text-accent">
             Privacy
           </MarketingLink>

@@ -39,6 +39,7 @@ export const RESERVED_SLUGS = new Set([
   "qr-code-generator",
   "pricing",
   "roadmap",
+  "docs",
   // authenticated app tabs
   "dashboard",
   "analytics",
