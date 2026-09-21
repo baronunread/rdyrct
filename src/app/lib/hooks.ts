@@ -27,6 +27,7 @@ import type {
   AdminActionRow,
   QuotaUsage,
   WithQuotaUsage,
+  ApiKeyDTO,
 } from "@/shared/types";
 
 /**
@@ -368,6 +369,77 @@ export function useDomainMutations(orgId: string) {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["user"] }),
   });
   return { add, refresh, setRootRedirect, remove, setDefault };
+}
+
+// API keys (#131): minted per-user but scoped through an owned org (the
+// route is owner-only), same shape as domains above.
+export const useApiKeys = (orgId: string, enabled = true) =>
+  useQuery<ApiKeyDTO[]>({
+    queryKey: ["api-keys", orgId],
+    queryFn: () => api(`/orgs/${orgId}/api-keys`),
+    enabled: enabled && !!orgId,
+  });
+
+export function useApiKeyMutations(orgId: string) {
+  const qc = useQueryClient();
+  const invalidate = () => qc.invalidateQueries({ queryKey: ["api-keys", orgId] });
+  const create = useMutation({
+    mutationFn: (name: string) =>
+      api<ApiKeyDTO>(`/orgs/${orgId}/api-keys`, { method: "POST", body: { name } }),
+    onSuccess: invalidate,
+  });
+  const revoke = useMutation({
+    mutationFn: (id: string) => api(`/orgs/${orgId}/api-keys/${id}`, { method: "DELETE" }),
+    onSuccess: invalidate,
+  });
+  return { create, revoke };
+}
+
+export interface ConnectedApp {
+  id: string;
+  clientId: string;
+  clientName: string;
+  scopes: string[];
+  createdAt: Date;
+}
+
+// Connected apps (#139 follow-up): an OAuth grant, unlike an API key, is
+// per-user with no owner gate — the oauth-provider endpoints below are
+// session-scoped to whoever is signed in, not to an org, so any member sees
+// and revokes their own connections regardless of role.
+export const useConnectedApps = () =>
+  useQuery<ConnectedApp[]>({
+    queryKey: ["connected-apps"],
+    queryFn: async () => {
+      const { data, error } = await authClient.oauth2.getConsents();
+      if (error) throw new Error(error.message ?? "Could not load connected apps");
+      return Promise.all(
+        (data ?? []).map(async (consent) => {
+          const client = await authClient.oauth2.publicClient({
+            query: { client_id: consent.clientId },
+          });
+          return {
+            id: consent.id,
+            clientId: consent.clientId,
+            clientName: client.data?.client_name || consent.clientId,
+            scopes: consent.scopes,
+            createdAt: consent.createdAt,
+          };
+        }),
+      );
+    },
+  });
+
+// Not authClient.oauth2.deleteConsent: better-auth's own endpoint only
+// deletes the consent row, leaving any access/refresh token it already
+// minted live. This route (oauth-connections.ts) deletes those too, so
+// disconnecting here actually stops the grant.
+export function useRevokeConnectedApp() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api(`/oauth-connections/${id}`, { method: "DELETE" }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["connected-apps"] }),
+  });
 }
 
 // Billing is per-user (the caller's own subscription), so no orgId.

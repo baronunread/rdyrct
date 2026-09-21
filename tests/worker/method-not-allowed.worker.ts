@@ -1,7 +1,7 @@
-import { describe, expect, it } from "vitest";
-import { createExecutionContext, waitOnExecutionContext } from "cloudflare:test";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { createExecutionContext, reset, waitOnExecutionContext } from "cloudflare:test";
 import worker from "../../src/worker";
-import { testEnv } from "./support";
+import { applyTestMigrations, testEnv } from "./support";
 
 async function call(method: string, path: string): Promise<Response> {
   const ctx = createExecutionContext();
@@ -15,6 +15,14 @@ async function call(method: string, path: string): Promise<Response> {
 }
 
 describe("wrong method, wrong path", () => {
+  // Every request here reaches withSession, which now resolves the auth
+  // instance's oauth-provider bookkeeping (the MCP OAuth plugin, #139
+  // follow-up) even for a route with nothing to do with it — migrated, or
+  // every one of these 500s before it gets anywhere near the routing this
+  // file actually tests.
+  beforeEach(applyTestMigrations);
+  afterEach(reset);
+
   it("answers 405 and names the methods the path does take", async () => {
     // /api/orgs is POST-only, so GET has to say so rather than serve the SPA.
     const res = await call("GET", "/api/orgs");

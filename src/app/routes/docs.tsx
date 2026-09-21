@@ -28,6 +28,7 @@ import { Table, Th, Td } from "../ui/misc";
 import { CopyButton } from "../ui/copy-button";
 import { copyToClipboard } from "../lib/clipboard";
 import { useToast } from "../ui/toast";
+import { McpSetupCopyButton } from "../components/mcp-setup-prompt";
 
 /** A static, developer-written example, highlighted and copyable. `lang`
  * defaults to plaintext for the HTTP request-line/header lines sugar-high
@@ -179,11 +180,13 @@ export function DocsPage() {
 
                   <h3 className="mt-2 font-bold">Getting a key</h3>
                   <p>
-                    While signed in, create one for an organization you own:{" "}
-                    <code className="font-mono">POST /api/orgs/:orgId/api-keys</code> with{" "}
-                    <code className="font-mono">{`{"name": "..."}`}</code>. The response carries the
-                    raw key once. There is no Settings screen for this yet: the routes work today, a
-                    button for them is still to come.
+                    While signed in, create one for an organization you own from{" "}
+                    <a href="/api-keys" className="text-accent hover:underline">
+                      API keys
+                    </a>
+                    , or directly: <code className="font-mono">POST /api/orgs/:orgId/api-keys</code>{" "}
+                    with <code className="font-mono">{`{"name": "..."}`}</code>. The response
+                    carries the raw key once.
                   </p>
                   <p>
                     Revoke one with{" "}
@@ -213,15 +216,44 @@ Authorization: Bearer rdyrct_live_...`}</CodeBlock>
                     >
                       MCP
                     </a>{" "}
-                    endpoint, for an AI chatbot's connectors. Same key as the API, above: no
-                    separate credential, no OAuth flow yet.
+                    endpoint, for an AI chatbot's connectors. It answers to OAuth (recommended) or a
+                    scoped API key, the same two ways the REST API does above.
                   </p>
 
                   <h3 className="mt-2 font-bold">Endpoint</h3>
                   <CodeBlock>https://rdyrct.com/api/mcp</CodeBlock>
                   <p>
                     One address, stateless: nothing to establish before calling a tool, nothing to
-                    carry between calls.
+                    carry between calls. Most clients ask for the URL and an auth header separately;
+                    copy both at once and swap in your own key:
+                  </p>
+                  <div>
+                    <McpSetupCopyButton />
+                  </div>
+
+                  <h3 className="mt-2 font-bold">OAuth (recommended)</h3>
+                  <p>
+                    rdyrct is a full OAuth 2.1 authorization server for this endpoint: point an MCP
+                    client at it and it discovers the flow itself from{" "}
+                    <code className="font-mono">/.well-known/oauth-protected-resource/api/mcp</code>
+                    , no key to copy or lose. Signing in shows a consent screen naming the client
+                    and what it's asking for; revoke it any time from{" "}
+                    <a href="/api-keys" className="text-accent hover:underline">
+                      API & MCP
+                    </a>
+                    's Connected apps.
+                  </p>
+                  <p>
+                    Client identity is a URL (a{" "}
+                    <a
+                      href="https://better-auth.com/docs/plugins/cimd"
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-accent hover:underline"
+                    >
+                      Client ID Metadata Document
+                    </a>
+                    ), not a pre-registered id: current MCP clients handle this automatically.
                   </p>
 
                   <h3 className="mt-2 font-bold">Tools</h3>
@@ -249,7 +281,12 @@ Authorization: Bearer rdyrct_live_...`}</CodeBlock>
                     sole organization, and asks which one you mean if you belong to more than one.
                   </p>
 
-                  <h3 className="mt-2 font-bold">Calling a tool</h3>
+                  <h3 className="mt-2 font-bold">Calling a tool (API key)</h3>
+                  <p>
+                    An OAuth access token authenticates the same call the same way: swap the header
+                    for{" "}
+                    <code className="font-mono">Authorization: Bearer &lt;access_token&gt;</code>.
+                  </p>
                   <CodeBlock>{`POST /api/mcp
 Authorization: Bearer rdyrct_live_...
 Content-Type: application/json

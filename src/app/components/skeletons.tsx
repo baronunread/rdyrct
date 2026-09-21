@@ -607,6 +607,23 @@ export function SettingsSkeleton() {
   );
 }
 
+/** /api-keys: the name field beside a fixed-width Create button, then the
+ * keys table. */
+export function ApiKeysSkeleton() {
+  return (
+    <SkeletonStatus testId="api-keys-page-skeleton">
+      <HeaderSkeleton action={{ w: "w-40" }} />
+      <div className="flex flex-col gap-4">
+        <div className="flex gap-2">
+          <Skeleton className="h-9 min-w-0 flex-1" />
+          <Skeleton className="h-9 w-28 shrink-0" />
+        </div>
+        <TableSkeleton rows={3} />
+      </div>
+    </SkeletonStatus>
+  );
+}
+
 /** /organization: the name/id card, the QR defaults card, and the
  * delete-organization danger card. */
 export function OrganizationSkeleton() {
@@ -679,6 +696,7 @@ const PAGE_SKELETONS = {
   "/domains": DomainsPageSkeleton,
   "/billing": BillingSkeleton,
   "/settings": SettingsSkeleton,
+  "/api-keys": ApiKeysSkeleton,
   "/organization": OrganizationSkeleton,
   "/admin": AdminUsageSkeleton,
 } satisfies Record<string, () => ReactElement>;

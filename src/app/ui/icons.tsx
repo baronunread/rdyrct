@@ -28,6 +28,7 @@ export {
   IconFileText as ScrollText,
   IconGlobe as Globe,
   IconInfoCircle as Info,
+  IconKey as KeyRound,
   IconStack2 as Layers,
   IconLink as Link,
   IconLink as Link2,

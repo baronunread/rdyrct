@@ -3,7 +3,12 @@
   "name": "rdyrct",
   "main": "src/worker/index.ts",
   "compatibility_date": "2026-01-01",
-  "compatibility_flags": ["nodejs_compat"],
+  // global_fetch_strictly_public: required by the MCP OAuth plugin's CIMD
+  // client-metadata fetch (better-auth.ts) — the Worker cannot pin a DNS
+  // resolution itself, so the platform does the SSRF-hardening (rejects any
+  // non-public-routable address) and our fetch wrapper only has to refuse
+  // redirects on top of it.
+  "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
   "assets": {
     "binding": "ASSETS",
     "not_found_handling": "single-page-application",

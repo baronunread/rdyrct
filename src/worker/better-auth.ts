@@ -6,6 +6,9 @@ import { lookup } from "../shared/lookup";
 import { APIError, createAuthMiddleware } from "better-auth/api";
 import { emailOTP } from "better-auth/plugins/email-otp";
 import { genericOAuth } from "better-auth/plugins/generic-oauth";
+import { jwt } from "better-auth/plugins/jwt";
+import { mcp } from "@better-auth/mcp";
+import { cimd } from "@better-auth/cimd";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { drizzle } from "drizzle-orm/d1";
 import { and, eq } from "drizzle-orm";
@@ -22,6 +25,7 @@ import { storeUserAvatar, deleteUserAvatar } from "./storage";
 import { createOwnedOrg } from "./plan";
 import { defaultOrgName } from "@/shared/org-name";
 import { CAP_FAILED_CODE, CAP_TOKEN_HEADER } from "@/shared/types";
+import { mcpResource, fetchClientMetadataResource } from "./mcp-oauth";
 
 /** better-auth paths that must carry a solved Cap token, and the scope the
  * token has to have been minted for. Keyed by `ctx.path`, which is relative
@@ -343,6 +347,14 @@ function buildAuth(env: Env) {
         session: schema.session,
         account: schema.account,
         verification: schema.verification,
+        jwks: schema.jwks,
+        oauthClient: schema.oauthClient,
+        oauthResource: schema.oauthResource,
+        oauthClientResource: schema.oauthClientResource,
+        oauthRefreshToken: schema.oauthRefreshToken,
+        oauthAccessToken: schema.oauthAccessToken,
+        oauthConsent: schema.oauthConsent,
+        oauthClientAssertion: schema.oauthClientAssertion,
       },
     }),
     // Cloudflare Workers Rate Limiting bindings guard auth before BetterAuth.
@@ -461,6 +473,23 @@ function buildAuth(env: Env) {
             }),
           ]
         : []),
+      // MCP OAuth (#139 follow-up): turns this app into an OAuth 2.1
+      // authorization server for MCP clients, so a chatbot connects with a
+      // consent screen instead of a pasted API key. jwt() supplies the
+      // signing key mcp() uses for access tokens and the /jwks endpoint
+      // session.ts verifies them against; cimd() is how a client identifies
+      // itself (a URL, not a pre-registered id) per the current MCP spec,
+      // which deprecated classic dynamic client registration.
+      jwt(),
+      mcp({
+        loginPage: "/login",
+        consentPage: "/consent",
+        resource: mcpResource(env),
+      }),
+      cimd({
+        fetchClientMetadataResource,
+        metadataProfile: "mcp-2026-07-28",
+      }),
     ],
     user: {
       additionalFields: {

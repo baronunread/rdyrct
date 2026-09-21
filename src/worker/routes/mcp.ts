@@ -14,9 +14,12 @@ import {
   type CallToolResult,
   type Tool,
 } from "@modelcontextprotocol/sdk/types.js";
+import { requireMcpAuth } from "@better-auth/mcp";
 import * as schema from "../db/schema";
 import type { AppEnv, DB, Env, SessionUser } from "../env";
 import { withSession } from "../session";
+import { getAuth } from "../better-auth";
+import { mcpResource } from "../mcp-oauth";
 import { enforceSignedApiRateLimit } from "../rate-limit";
 import { orgRole } from "../org-role";
 import { orgPlan, countActiveAddresses } from "../plan";
@@ -628,13 +631,28 @@ mcpRoutes.all("/", async (c) => {
   log.set({ route: "/api/mcp" });
   const user = c.var.user;
   const authorization = c.req.header("authorization");
-  if (!user || !authorization)
-    throw createError({
-      status: 401,
-      message: "Not signed in",
-      why: "This endpoint takes a scoped API key, not a browser session.",
-      fix: "Send Authorization: Bearer <api key>. Mint one from Settings.",
-    });
+  if (!user || !authorization) {
+    // withSession (session.ts) already tried a cookie, an API key, and an
+    // OAuth access token and found none of them; requireMcpAuth's own
+    // independent re-check exists here only to build the RFC 9728
+    // WWW-Authenticate challenge correctly (the resource-metadata URL, the
+    // realm) rather than hand-rolling that header. Its handler firing would
+    // mean it accepted a token session.ts just rejected — session.ts and
+    // this call verify the same signature/issuer/audience, so that would be
+    // a real bug, not a race; treated as the same 401 either way.
+    return requireMcpAuth(
+      getAuth(c.env),
+      () => {
+        throw createError({
+          status: 401,
+          message: "Not signed in",
+          why: "This endpoint takes an OAuth access token or a scoped API key, not a browser session.",
+          fix: "Connect via OAuth from an MCP client, or send Authorization: Bearer <api key> minted from API keys.",
+        });
+      },
+      { resource: mcpResource(c.env) },
+    )(c.req.raw);
+  }
 
   const server = new Server({ name: "rdyrct", version: "1.0.0" }, { capabilities: { tools: {} } });
   server.setRequestHandler(ListToolsRequestSchema, () => ({ tools: TOOLS }));

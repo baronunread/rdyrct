@@ -5,10 +5,15 @@ import { hashPassword } from "../../src/worker/password";
 import { signInCookie, TEST_PASSWORD } from "./support";
 
 const issuerMigration = "0028_better_auth_account_issuer.sql";
+// The MCP OAuth plugin (#139 follow-up) needs its tables to exist before
+// withSession can resolve a session at all, on any route — unrelated to the
+// account.issuer story this file replays, so it's applied unconditionally
+// rather than gated behind `< issuerMigration` like the rest of the setup.
+const oauthTablesMigration = "0031_mcp_oauth.sql";
 
-function issuerMigrationStatement() {
-  const migration = env.TEST_MIGRATIONS.find((item) => item.name === issuerMigration);
-  if (!migration) throw new Error(`migration ${issuerMigration} is missing from the test bundle`);
+function migrationNamed(name: string) {
+  const migration = env.TEST_MIGRATIONS.find((item) => item.name === name);
+  if (!migration) throw new Error(`migration ${name} is missing from the test bundle`);
   return migration;
 }
 
@@ -32,6 +37,7 @@ beforeEach(async () => {
     env.DB,
     env.TEST_MIGRATIONS.filter((migration) => migration.name < issuerMigration),
   );
+  await applyD1Migrations(env.DB, [migrationNamed(oauthTablesMigration)]);
 });
 afterEach(reset);
 
@@ -41,7 +47,7 @@ test("migration 0028 backfills credential accounts and keeps them able to sign i
     await legacyAccount("legacy-account", "legacy-user", "legacy-user"),
   ]);
 
-  await applyD1Migrations(env.DB, [issuerMigrationStatement()]);
+  await applyD1Migrations(env.DB, [migrationNamed(issuerMigration)]);
 
   const row = await env.DB.prepare(
     "select issuer, account_id from account where id = 'legacy-account'",
@@ -62,7 +68,7 @@ test("migration 0028 backfills every account, not just the first", async () => {
     await legacyAccount("account-b", "user-b", "user-b"),
   ]);
 
-  await applyD1Migrations(env.DB, [issuerMigrationStatement()]);
+  await applyD1Migrations(env.DB, [migrationNamed(issuerMigration)]);
 
   const row = await env.DB.prepare(
     "select count(*) as count from account where issuer = 'local:credential'",
@@ -77,5 +83,5 @@ test("migration 0028 rejects when two accounts share an account id", async () =>
     await legacyAccount("second", "shared", "owner"),
   ]);
 
-  await expect(applyD1Migrations(env.DB, [issuerMigrationStatement()])).rejects.toThrow();
+  await expect(applyD1Migrations(env.DB, [migrationNamed(issuerMigration)])).rejects.toThrow();
 });

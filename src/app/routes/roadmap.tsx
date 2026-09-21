@@ -2,11 +2,10 @@
  * The public roadmap.
  *
  * It exists because the landing page claims rdyrct is built for marketing
- * teams *and* developers, and every one of the twelve feature cards under
- * that claim is a marketer's feature: there is no API, no key, no agent
- * access anywhere in the product yet. A developer who reads the claim and
- * finds no evidence has been told something untrue. The honest fix is not to
- * cut the claim, it is to back it.
+ * teams *and* developers, and most of the twelve feature cards under that
+ * claim are a marketer's feature. API keys, a scoped REST API and a remote
+ * MCP server (#131, #132, #139) back the developer half now; what is left
+ * here is what still makes that story incomplete.
  *
  * Every planned item is a real open issue, linked. No dates: a date is what
  * turns a roadmap into a liability, and this one is maintained by one person.
@@ -29,28 +28,8 @@ import type { ReactNode } from "react";
 
 /**
  * Being built next, each one an open issue.
- *
- * Ordered the way the work has to happen, not by how exciting it is: the keys
- * come before the API that checks them, and the MCP server is last because it
- * is a client of everything above it. That ordering is the honest answer to
- * "when do I get the MCP server", and it costs nothing to show.
  */
 const PLANNED: { issue: number; title: string; body: ReactNode }[] = [
-  {
-    issue: 131,
-    title: "API keys, scopes and revocation",
-    body: "The model underneath everything else here: a key belongs to one organization, carries scopes, and can be killed on the spot.",
-  },
-  {
-    issue: 134,
-    title: "API keys in Settings",
-    body: "Create and revoke them yourself, with the quota your plan already gives you.",
-  },
-  {
-    issue: 132,
-    title: "A public REST API",
-    body: "Create, update and read links, QR codes and analytics from your own code.",
-  },
   {
     issue: 133,
     title: "An OpenAPI document",
@@ -67,11 +46,6 @@ const PLANNED: { issue: number; title: string; body: ReactNode }[] = [
     issue: 135,
     title: "Rate limits and quotas per key",
     body: "The same caps your plan has today, counted per key, so one runaway script cannot spend the whole organization's budget.",
-  },
-  {
-    issue: 139,
-    title: "A remote MCP server",
-    body: "Point an agent at it and let it shorten, tag, and read the numbers back, without you writing the glue.",
   },
 ];
 
@@ -90,6 +64,7 @@ const SHIPPED = [
   "Organizations, roles, and single-use email invites",
   "Anonymous shortening with no account at all",
   "The whole thing, MIT, running on your own Cloudflare account",
+  "API keys, a scoped REST API, and a remote MCP server for agents",
 ];
 
 function PlannedCard({ issue, title, body }: { issue: number; title: string; body: ReactNode }) {

@@ -90,7 +90,6 @@ export const account = sqliteTable(
   {
     id: text("id").primaryKey(),
     accountId: text("account_id").notNull(),
-    issuer: text("issuer").notNull(),
     providerId: text("provider_id").notNull(),
     userId: text("user_id")
       .notNull()
@@ -109,10 +108,7 @@ export const account = sqliteTable(
     createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
     updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),
   },
-  (t) => [
-    index("idx_account_user").on(t.userId),
-    uniqueIndex("idx_account_issuer_account_id").on(t.issuer, t.accountId),
-  ],
+  (t) => [index("idx_account_user").on(t.userId)],
 );
 
 export const verification = sqliteTable(
@@ -477,3 +473,224 @@ export const apiKeys = sqliteTable(
   },
   (t) => [index("idx_api_keys_user").on(t.userId)],
 );
+
+/* ---------------- MCP OAuth (#139 follow-up) ---------------- */
+// Shapes follow @better-auth/mcp's (jwt + oauth-provider + cimd) own schema,
+// dumped via `getSchema()` from those plugins' config rather than guessed:
+// see the PR that added this block for the exact field list. `id` on every
+// table below is better-auth's own generated primary key, the same
+// convention as user/session/account/verification above.
+
+/** Signing keys the jwt plugin rotates in; mcp() uses them for access and ID
+ * tokens, and serves the public half at /api/auth/jwks. */
+export const jwks = sqliteTable("jwks", {
+  id: text("id").primaryKey(),
+  publicKey: text("public_key").notNull(),
+  privateKey: text("private_key").notNull(),
+  createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
+  expiresAt: integer("expires_at", { mode: "timestamp_ms" }),
+  alg: text("alg"),
+  crv: text("crv"),
+});
+
+/** An MCP client, one row per `client_id`: either discovered from a Client ID
+ * Metadata Document (cimd, `clientDiscoveryId` set) or created by hand
+ * (`auth.api.adminCreateOAuthClient`, none exist yet). `userId` is null for
+ * every client here — that column is for a user's own dynamically-registered
+ * client, which this app does not offer (MCP deprecated DCR; see cimd()). */
+export const oauthClient = sqliteTable(
+  "oauth_client",
+  {
+    id: text("id").primaryKey(),
+    clientId: text("client_id").notNull().unique(),
+    clientSecret: text("client_secret"),
+    clientDiscoveryId: text("client_discovery_id"),
+    disabled: integer("disabled", { mode: "boolean" }).notNull().default(false),
+    skipConsent: integer("skip_consent", { mode: "boolean" }),
+    enableEndSession: integer("enable_end_session", { mode: "boolean" }),
+    subjectType: text("subject_type"),
+    scopes: text("scopes", { mode: "json" }).$type<string[]>(),
+    clientCredentialsScopes: text("client_credentials_scopes", { mode: "json" })
+      .$type<string[]>()
+      .notNull()
+      .default([]),
+    userId: text("user_id").references(() => user.id),
+    createdAt: integer("created_at", { mode: "timestamp_ms" }),
+    updatedAt: integer("updated_at", { mode: "timestamp_ms" }),
+    name: text("name"),
+    uri: text("uri"),
+    icon: text("icon"),
+    contacts: text("contacts", { mode: "json" }).$type<string[]>(),
+    tos: text("tos"),
+    policy: text("policy"),
+    softwareId: text("software_id"),
+    softwareVersion: text("software_version"),
+    softwareStatement: text("software_statement"),
+    redirectUris: text("redirect_uris", { mode: "json" }).$type<string[]>().notNull(),
+    postLogoutRedirectUris: text("post_logout_redirect_uris", { mode: "json" }).$type<string[]>(),
+    backchannelLogoutUri: text("backchannel_logout_uri"),
+    backchannelLogoutSessionRequired: integer("backchannel_logout_session_required", {
+      mode: "boolean",
+    }),
+    tokenEndpointAuthMethod: text("token_endpoint_auth_method"),
+    applicationType: text("application_type"),
+    jwks: text("jwks"),
+    jwksUri: text("jwks_uri"),
+    grantTypes: text("grant_types", { mode: "json" }).$type<string[]>(),
+    responseTypes: text("response_types", { mode: "json" }).$type<string[]>(),
+    requirePKCE: integer("require_pkce", { mode: "boolean" }),
+    dpopBoundAccessTokens: integer("dpop_bound_access_tokens", { mode: "boolean" })
+      .notNull()
+      .default(false),
+    referenceId: text("reference_id"),
+    metadata: text("metadata", { mode: "json" }),
+  },
+  (t) => [index("idx_oauth_client_user").on(t.userId)],
+);
+
+/** A protected resource this authorization server issues tokens for. One row
+ * (the MCP endpoint itself, `mcpResource()` in mcp-oauth.ts); the table
+ * exists because the plugin supports more than one resource server, not
+ * because this app has more than one yet. */
+export const oauthResource = sqliteTable("oauth_resource", {
+  id: text("id").primaryKey(),
+  identifier: text("identifier").notNull().unique(),
+  name: text("name").notNull(),
+  accessTokenTtl: integer("access_token_ttl"),
+  refreshTokenTtl: integer("refresh_token_ttl"),
+  signingAlgorithm: text("signing_algorithm"),
+  signingKeyId: text("signing_key_id"),
+  allowedScopes: text("allowed_scopes", { mode: "json" }).$type<string[]>(),
+  customClaims: text("custom_claims", { mode: "json" }),
+  dpopBoundAccessTokensRequired: integer("dpop_bound_access_tokens_required", { mode: "boolean" })
+    .notNull()
+    .default(false),
+  disabled: integer("disabled", { mode: "boolean" }).notNull().default(false),
+  createdAt: integer("created_at", { mode: "timestamp_ms" }),
+  updatedAt: integer("updated_at", { mode: "timestamp_ms" }),
+  policyVersion: integer("policy_version").notNull().default(1),
+  metadata: text("metadata", { mode: "json" }),
+});
+
+/** Which resources a client is allowed to request tokens for. */
+export const oauthClientResource = sqliteTable(
+  "oauth_client_resource",
+  {
+    id: text("id").primaryKey(),
+    clientId: text("client_id")
+      .notNull()
+      .references(() => oauthClient.clientId, { onDelete: "cascade" }),
+    resourceId: text("resource_id")
+      .notNull()
+      .references(() => oauthResource.identifier, { onDelete: "cascade" }),
+    metadata: text("metadata", { mode: "json" }),
+    createdAt: integer("created_at", { mode: "timestamp_ms" }),
+  },
+  (t) => [
+    index("idx_oauth_client_resource_client").on(t.clientId),
+    index("idx_oauth_client_resource_resource").on(t.resourceId),
+    uniqueIndex("idx_oauth_client_resource_pair").on(t.clientId, t.resourceId),
+  ],
+);
+
+/** A minted refresh token: exchanging it re-issues an access token without
+ * the user going through consent again. `revoked`/`rotatedAt` are set, not
+ * deleted, so a reused rotated token can still be recognized as reuse. */
+export const oauthRefreshToken = sqliteTable(
+  "oauth_refresh_token",
+  {
+    id: text("id").primaryKey(),
+    token: text("token").notNull().unique(),
+    clientId: text("client_id")
+      .notNull()
+      .references(() => oauthClient.clientId),
+    sessionId: text("session_id").references(() => session.id, { onDelete: "set null" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id),
+    referenceId: text("reference_id"),
+    authorizationCodeId: text("authorization_code_id"),
+    resources: text("resources", { mode: "json" }).$type<string[]>(),
+    requestedUserInfoClaims: text("requested_user_info_claims", { mode: "json" }).$type<string[]>(),
+    expiresAt: integer("expires_at", { mode: "timestamp_ms" }),
+    createdAt: integer("created_at", { mode: "timestamp_ms" }),
+    revoked: integer("revoked", { mode: "timestamp_ms" }),
+    rotatedAt: integer("rotated_at", { mode: "timestamp_ms" }),
+    rotationReplayResponse: text("rotation_replay_response"),
+    rotationReplayExpiresAt: integer("rotation_replay_expires_at", { mode: "timestamp_ms" }),
+    authTime: integer("auth_time", { mode: "timestamp_ms" }),
+    confirmation: text("confirmation", { mode: "json" }),
+    scopes: text("scopes", { mode: "json" }).$type<string[]>().notNull(),
+  },
+  (t) => [
+    index("idx_oauth_refresh_token_client").on(t.clientId),
+    index("idx_oauth_refresh_token_session").on(t.sessionId),
+    index("idx_oauth_refresh_token_user").on(t.userId),
+    index("idx_oauth_refresh_token_auth_code").on(t.authorizationCodeId),
+  ],
+);
+
+/** A minted access token: what session.ts verifies (as a JWT, against
+ * /api/auth/jwks) on every MCP request. This row is what makes it revocable
+ * before its natural expiry — the JWT itself carries no revocation check. */
+export const oauthAccessToken = sqliteTable(
+  "oauth_access_token",
+  {
+    id: text("id").primaryKey(),
+    token: text("token").unique(),
+    clientId: text("client_id")
+      .notNull()
+      .references(() => oauthClient.clientId),
+    sessionId: text("session_id").references(() => session.id, { onDelete: "set null" }),
+    userId: text("user_id").references(() => user.id),
+    referenceId: text("reference_id"),
+    authorizationCodeId: text("authorization_code_id"),
+    resources: text("resources", { mode: "json" }).$type<string[]>(),
+    requestedUserInfoClaims: text("requested_user_info_claims", { mode: "json" }).$type<string[]>(),
+    refreshId: text("refresh_id").references(() => oauthRefreshToken.id),
+    expiresAt: integer("expires_at", { mode: "timestamp_ms" }),
+    createdAt: integer("created_at", { mode: "timestamp_ms" }),
+    revoked: integer("revoked", { mode: "timestamp_ms" }),
+    confirmation: text("confirmation", { mode: "json" }),
+    scopes: text("scopes", { mode: "json" }).$type<string[]>().notNull(),
+  },
+  (t) => [
+    index("idx_oauth_access_token_client").on(t.clientId),
+    index("idx_oauth_access_token_session").on(t.sessionId),
+    index("idx_oauth_access_token_user").on(t.userId),
+    index("idx_oauth_access_token_auth_code").on(t.authorizationCodeId),
+    index("idx_oauth_access_token_refresh").on(t.refreshId),
+  ],
+);
+
+/** One row per (client, user): what "Connected apps" reads and deletes from
+ * (api-keys.tsx). Revoking here is what the oauth-provider plugin uses to
+ * cascade-kill every access and refresh token the grant produced. */
+export const oauthConsent = sqliteTable(
+  "oauth_consent",
+  {
+    id: text("id").primaryKey(),
+    clientId: text("client_id")
+      .notNull()
+      .references(() => oauthClient.clientId),
+    userId: text("user_id").references(() => user.id),
+    referenceId: text("reference_id"),
+    resources: text("resources", { mode: "json" }).$type<string[]>(),
+    requestedUserInfoClaims: text("requested_user_info_claims", { mode: "json" }).$type<string[]>(),
+    scopes: text("scopes", { mode: "json" }).$type<string[]>().notNull(),
+    createdAt: integer("created_at", { mode: "timestamp_ms" }),
+    updatedAt: integer("updated_at", { mode: "timestamp_ms" }),
+  },
+  (t) => [
+    index("idx_oauth_consent_client").on(t.clientId),
+    index("idx_oauth_consent_user").on(t.userId),
+  ],
+);
+
+/** Replay protection for `private_key_jwt` client assertions: one row per
+ * assertion `jti`, kept only until it expires. Unused until a client
+ * authenticates with a signed JWT instead of a client secret — none do yet. */
+export const oauthClientAssertion = sqliteTable("oauth_client_assertion", {
+  id: text("id").primaryKey(),
+  expiresAt: integer("expires_at", { mode: "timestamp_ms" }).notNull(),
+});

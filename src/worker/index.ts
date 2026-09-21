@@ -20,6 +20,7 @@ import {
 } from "./routes/orgs";
 import { linkRoutes } from "./routes/links";
 import { apiKeyRoutes } from "./routes/api-keys";
+import { oauthConnectionRoutes } from "./routes/oauth-connections";
 import { mcpRoutes } from "./routes/mcp";
 import { qrLogoRoutes } from "./routes/qr-logos";
 import { avatarRoutes } from "./routes/avatars";
@@ -226,6 +227,19 @@ app.on(["GET", "POST"], "/api/auth/*", async (c) => {
   return withBackground(c.executionCtx, () => getAuth(c.env).handler(c.req.raw));
 });
 
+// RFC 9728 protected-resource metadata for the MCP endpoint (#139 follow-up):
+// the mcp() plugin's own onRequest hook serves it, but only for a request
+// that reaches BetterAuth's handler — and this path lives at the site
+// origin, not under /api/auth (unlike the authorization-server metadata
+// above, which the plugin also answers under /api/auth/.well-known/...).
+// No audit/rate-limit here: it's public, cacheable discovery metadata, not
+// an auth action.
+app.on(
+  ["GET", "HEAD"],
+  ["/.well-known/oauth-protected-resource", "/.well-known/oauth-protected-resource/api/mcp"],
+  (c) => getAuth(c.env).handler(c.req.raw),
+);
+
 // Cap (#98): public, and necessarily so, since it guards signup itself.
 // Same public rate limit as the auth routes it protects.
 app.post("/api/cap/*", async (c, next) => {
@@ -267,6 +281,7 @@ api.route("/user/avatar", avatarRoutes);
 api.route("/billing", billingRoutes);
 api.route("/orgs/:orgId/domains", domainRoutes);
 api.route("/orgs/:orgId/api-keys", apiKeyRoutes);
+api.route("/oauth-connections", oauthConnectionRoutes);
 api.route("/invites", inviteRoutes);
 api.route("/admin", adminRoutes);
 // The remote MCP server (#139): its own mount, not under /orgs/:orgId, since
