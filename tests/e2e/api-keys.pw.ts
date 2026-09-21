@@ -95,6 +95,8 @@ test("the connect wizard notices a new connection while waiting", async ({ page 
     [`consent-${clientId}`, clientId],
   );
 
-  await expect(page.getByText("Wizard Client")).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByRole("cell", { name: "Wizard Client", exact: true })).toBeVisible({
+    timeout: 10_000,
+  });
   await expect(page.getByText("Waiting for the connection")).not.toBeVisible();
 });
