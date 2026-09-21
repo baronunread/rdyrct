@@ -524,10 +524,10 @@ async function listLinksTool(t: ToolCtx): Promise<CallToolResult> {
   // SAFETY: a round trip, not a cast on the original value — LinkSummary
   // (built by v.parse in searchLinks) is already plain JSON, but as a named
   // interface it has no index signature, so TS never considers it a
-  // structural JsonValue; JSON.parse's return is genuinely one.
-  // eslint-disable-next-line react-doctor/no-json-parse-stringify-clone --
-  // not a deep clone: structuredClone would preserve LinkSummary's exact
-  // (non-JsonValue) type instead of widening it, which is the whole point.
+  // structural JsonValue; JSON.parse's return is genuinely one. Not a deep
+  // clone: structuredClone would preserve LinkSummary's exact (non-JsonValue)
+  // type instead of widening it, which is the whole point of the round trip.
+  // eslint-disable-next-line react-doctor/no-json-parse-stringify-clone
   return textResult(JSON.parse(JSON.stringify(links)) as JsonValue);
 }
 
