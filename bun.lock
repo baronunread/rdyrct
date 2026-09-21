@@ -46,6 +46,7 @@
         "react-hook-form": "^7.86.0",
         "shadow-plugin": "^2.1.0",
         "standardwebhooks": "^1.0.0",
+        "sugar-high": "^2.4.1",
         "svgo": "^4.0.2",
         "tailwind-merge": "^3.6.0",
         "topojson-client": "^3.1.0",
@@ -1648,6 +1649,8 @@
     "stubborn-utils": ["stubborn-utils@1.0.2", "", {}, "sha512-zOh9jPYI+xrNOyisSelgym4tolKTJCQd5GBhK0+0xJvcYDcwlOoxF/rnFKQ2KRZknXSG9jWAp66fwP6AxN9STg=="],
 
     "style-doctor": ["style-doctor@0.2.0", "", { "bin": { "style-doctor": "cli.js" } }, "sha512-DU2ehd9HZUm06KxpHqa2XwWeS1wLo+4nVdWMnuDvQA19dU8YK5jzXdJgTFpqSWbyQjrgF3eD3NXIm5RdogmQzw=="],
+
+    "sugar-high": ["sugar-high@2.4.1", "", { "peerDependencies": { "gpu-lexer": ">=0.0.2" }, "optionalPeers": ["gpu-lexer"] }, "sha512-w4uhunMgEP+9f/2W/ZLBjvrVBLY14oL4b6a2+Ca/JWECd0Rc45KqL89bDvUOVFGrr0D14q5hoEqBXkgxwxL6RQ=="],
 
     "supports-color": ["supports-color@7.2.0", "", { "dependencies": { "has-flag": "^4.0.0" } }, "sha512-qpCAvRl9stuOHveKsn7HncJRvv501qIacKzQlO/+Lwxc9+0q2wLyv4Dfvt80/DPn2pqOBsJdDiogXGR9+OvwRw=="],
 

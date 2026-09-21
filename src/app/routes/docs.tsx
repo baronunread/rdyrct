@@ -16,6 +16,7 @@
  */
 import type { ReactNode } from "react";
 import { LazyMotion, MotionConfig, domAnimation } from "motion/react";
+import { highlight, type LanguageName } from "sugar-high";
 import { useSeo } from "../lib/seo";
 import { useMarketingScroll } from "../lib/marketing-scroll";
 import { useAudience } from "../lib/audience";
@@ -24,12 +25,32 @@ import { WebMcpMarketingTools } from "../components/webmcp-marketing-tools";
 import { Footer } from "../ui/footer";
 import { MarketingLink } from "../components/marketing-link";
 import { Table, Th, Td } from "../ui/misc";
+import { CopyButton } from "../ui/copy-button";
+import { copyToClipboard } from "../lib/clipboard";
+import { useToast } from "../ui/toast";
 
-function CodeBlock({ children }: { children: string }) {
+/** A static, developer-written example, highlighted and copyable. `lang`
+ * defaults to plaintext for the HTTP request-line/header lines sugar-high
+ * has no grammar for; pass "json" for an actual JSON body. */
+function CodeBlock({ children, lang = "plaintext" }: { children: string; lang?: LanguageName }) {
+  const toast = useToast();
+  const html = highlight(children, { lang });
   return (
-    <pre className="overflow-x-auto rounded-lg bg-surface-2 p-4 font-mono text-xs leading-relaxed">
-      {children}
-    </pre>
+    <div className="group relative">
+      <pre className="overflow-x-auto rounded-lg bg-surface-2 p-4 font-mono text-xs leading-relaxed">
+        {/* eslint-disable-next-line react-doctor/dangerous-html-sink -- our
+            own literal string above, run through sugar-high, which produces
+            markup rather than text; nothing here is user input. */}
+        <code dangerouslySetInnerHTML={{ __html: html }} />
+      </pre>
+      <div className="absolute top-2 right-2 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
+        <CopyButton
+          text={children}
+          label="Copy code"
+          onCopy={(text) => copyToClipboard(text, toast)}
+        />
+      </div>
+    </div>
   );
 }
 
@@ -232,9 +253,8 @@ Authorization: Bearer rdyrct_live_...`}</CodeBlock>
                   <CodeBlock>{`POST /api/mcp
 Authorization: Bearer rdyrct_live_...
 Content-Type: application/json
-Accept: application/json, text/event-stream
-
-{
+Accept: application/json, text/event-stream`}</CodeBlock>
+                  <CodeBlock lang="json">{`{
   "jsonrpc": "2.0",
   "id": 1,
   "method": "tools/call",
