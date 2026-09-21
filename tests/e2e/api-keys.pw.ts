@@ -51,7 +51,8 @@ test("the selected tab survives a full page reload", async ({ page }) => {
   await signUpAndVerify(page, `apikeys-tab-${Date.now()}@gmail.com`, E2E_PASSWORD);
   await page.goto("/api-keys");
 
-  await page.getByRole("button", { name: "MCP" }).click();
+  // exact: the "Copy MCP setup" button's accessible name also contains "MCP".
+  await page.getByRole("button", { name: "MCP", exact: true }).click();
   await expect(page).toHaveURL(/[?&]tab=mcp/);
   await expect(page.getByText("No connected apps yet")).toBeVisible();
 

@@ -49,6 +49,7 @@ async function registerTestClient(page: Page, clientId: string) {
 
 test("connects an MCP client via OAuth consent, then revokes it from Connected apps", async ({
   page,
+  request,
 }) => {
   await signUpAndVerify(page, `mcp-oauth-${Date.now()}@gmail.com`, E2E_PASSWORD);
 
@@ -80,7 +81,12 @@ test("connects an MCP client via OAuth consent, then revokes it from Connected a
   const code = new URL(page.url()).searchParams.get("code");
   expect(code).toBeTruthy();
 
-  const tokenRes = await page.request.post(`${appUrl}/api/auth/oauth2/token`, {
+  // The `request` fixture, not `page.request`: the page has just navigated
+  // to example.com to get here, and page.request ties its behavior to the
+  // page's current (now cross-origin) browsing context. This one is its own
+  // independent APIRequestContext, the same shape api-keys.pw.ts's `request`
+  // calls already use successfully.
+  const tokenRes = await request.post(`${appUrl}/api/auth/oauth2/token`, {
     form: {
       grant_type: "authorization_code",
       code: code!,
@@ -93,7 +99,7 @@ test("connects an MCP client via OAuth consent, then revokes it from Connected a
   const { access_token } = await tokenRes.json();
   expect(access_token).toBeTruthy();
 
-  const mcpRes = await page.request.post(`${appUrl}/api/mcp`, {
+  const mcpRes = await request.post(`${appUrl}/api/mcp`, {
     headers: {
       authorization: `Bearer ${access_token}`,
       accept: "application/json, text/event-stream",
@@ -109,7 +115,7 @@ test("connects an MCP client via OAuth consent, then revokes it from Connected a
   await page.getByRole("button", { name: "Disconnect" }).click();
   await expect(page.getByText("No connected apps yet")).toBeVisible();
 
-  const revokedMcpRes = await page.request.post(`${appUrl}/api/mcp`, {
+  const revokedMcpRes = await request.post(`${appUrl}/api/mcp`, {
     headers: {
       authorization: `Bearer ${access_token}`,
       accept: "application/json, text/event-stream",
