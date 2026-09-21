@@ -118,6 +118,50 @@ rdyrct is MIT licensed. Deploy it to your own Cloudflare account and set your ow
 - Slugs on rdyrct.com are always random. Choosing a slug needs a custom domain.
 - Click analytics never store an IP address.`,
   },
+  "/docs": {
+    title: "rdyrct developer docs - REST API and MCP server",
+    description:
+      "How to authenticate against the rdyrct REST API and its hosted MCP server: getting an API key, the endpoints, and the full MCP tool list. Free on every plan.",
+    markdown: `# rdyrct developer docs
+
+Both the REST API and the MCP server answer to the same scoped API key, and both are free on every plan.
+
+## REST API
+
+Every organization route under \`/api/orgs/:orgId\` answers to a key the same way it answers to a signed-in browser: create, read, update and delete links, read click analytics, manage domains and members.
+
+**Getting a key**: while signed in, \`POST /api/orgs/:orgId/api-keys\` with \`{"name": "..."}\`, as the organization's owner. The response carries the raw key once. There is no Settings screen for this yet.
+
+**Revoking one**: \`DELETE /api/orgs/:orgId/api-keys/:keyId\`. Takes effect at once.
+
+\`\`\`
+GET /api/orgs/org_id/links
+Authorization: Bearer rdyrct_live_...
+\`\`\`
+
+## MCP server
+
+A hosted [MCP](https://modelcontextprotocol.io) endpoint at \`https://rdyrct.com/api/mcp\`, stateless, for an AI chatbot's connectors. Same key as the API.
+
+Tools: \`create_link\`, \`update_link\`, \`delete_link\`, \`list_links\`, \`get_link_stats\`, \`get_org_stats\`, \`get_plan_usage\`, \`invite_member\`, \`generate_qr_code\`. Every tool but the last takes an optional \`org_id\`, and assumes your sole organization when it is left out.
+
+\`\`\`
+POST /api/mcp
+Authorization: Bearer rdyrct_live_...
+Content-Type: application/json
+Accept: application/json, text/event-stream
+
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "tools/call",
+  "params": {
+    "name": "create_link",
+    "arguments": { "destination": "https://example.com/blog/post" }
+  }
+}
+\`\`\``,
+  },
   "/roadmap": {
     title: "URL shortener roadmap - API, API keys, and an MCP server",
     description:

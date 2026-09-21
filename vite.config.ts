@@ -83,6 +83,12 @@ export default defineConfig(async () => ({
       "javascript-obfuscator": fileURLToPath(
         new URL("./src/worker/cap-unused-dep-stub.ts", import.meta.url),
       ),
+      // qrcode's package.json "browser" field remaps its own main entry to a
+      // canvas/document-based build with no toBuffer, and no DOM to draw
+      // into anyway; the Worker always wants the pure-JS server build (#139,
+      // generate_qr_code). Aliasing the bare specifier keeps `import ...
+      // from "qrcode"` and its @types intact while forcing that resolution.
+      qrcode: fileURLToPath(new URL("./node_modules/qrcode/lib/server.js", import.meta.url)),
     },
   },
   // dev-only: let curl -H "Host: linker.example.com" exercise the

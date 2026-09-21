@@ -36,6 +36,21 @@
   --chart: #7a5fc2;
   --danger: #c2607f;
 
+  /* sugar-high's token colours (docs.tsx code blocks), aliased onto the
+     tokens above instead of a separate palette: var() resolves against
+     whichever theme is active where it is used, so this one block covers
+     both without repeating itself in [data-theme="dark"]. Restrained on
+     purpose, same two colours the rest of the app highlights with. */
+  --sh-keyword: var(--accent);
+  --sh-class: var(--accent);
+  --sh-string: var(--accent-2);
+  --sh-jsxliterals: var(--accent-2);
+  --sh-property: var(--text);
+  --sh-identifier: var(--text);
+  --sh-entity: var(--butter);
+  --sh-sign: var(--muted);
+  --sh-comment: var(--muted);
+
   color-scheme: light;
 }
 

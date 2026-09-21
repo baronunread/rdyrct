@@ -25,7 +25,11 @@ export default defineConfig({
     })),
   ],
   resolve: {
-    alias: { "@": fileURLToPath(new URL("./src", import.meta.url)) },
+    alias: {
+      "@": fileURLToPath(new URL("./src", import.meta.url)),
+      // See vite.config.ts: qrcode's "browser" field has no toBuffer.
+      qrcode: fileURLToPath(new URL("./node_modules/qrcode/lib/server.js", import.meta.url)),
+    },
   },
   test: {
     include: ["tests/worker/**/*.worker.ts"],

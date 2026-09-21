@@ -3,6 +3,7 @@ import { Hono } from "hono";
 import type { JsonValue } from "../shared/types";
 import type { Context } from "hono";
 import { HTTPException } from "hono/http-exception";
+import { EvlogError } from "evlog";
 import { methodNotAllowed } from "hono/method-not-allowed";
 import { trimTrailingSlash } from "hono/trailing-slash";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
@@ -18,6 +19,8 @@ import {
   sweepStalledOrgDeletions,
 } from "./routes/orgs";
 import { linkRoutes } from "./routes/links";
+import { apiKeyRoutes } from "./routes/api-keys";
+import { mcpRoutes } from "./routes/mcp";
 import { qrLogoRoutes } from "./routes/qr-logos";
 import { avatarRoutes } from "./routes/avatars";
 import { adminRoutes } from "./routes/admin";
@@ -95,6 +98,19 @@ app.onError((err, c) => {
   c.get("log")?.error(err);
   if (err instanceof HTTPException) {
     return respond({ message: err.message, ...causeFields(err.cause) }, err.status);
+  }
+  // createError()'s structured shape (see AGENTS.md's logging section): why
+  // and fix are meant for the caller, same contract as HTTPException's cause
+  // fields above; internal stays off the EvlogError instance's own JSON, so
+  // there is nothing to filter out here.
+  if (EvlogError.isEvlogError(err)) {
+    // SAFETY: every createError() call site in this Worker passes a real
+    // HTTP status (400-599); the fallback only covers a call that left it
+    // unset, same default EvlogError itself applies.
+    return respond(
+      { message: err.message, ...(err.why && { why: err.why }), ...(err.fix && { fix: err.fix }) },
+      (err.status ?? 500) as ContentfulStatusCode,
+    );
   }
   Sentry.captureException(err);
   return respond({ message: "Internal error" }, 500);
@@ -250,8 +266,12 @@ api.route("/orgs/:orgId/qr-logo", qrLogoRoutes);
 api.route("/user/avatar", avatarRoutes);
 api.route("/billing", billingRoutes);
 api.route("/orgs/:orgId/domains", domainRoutes);
+api.route("/orgs/:orgId/api-keys", apiKeyRoutes);
 api.route("/invites", inviteRoutes);
 api.route("/admin", adminRoutes);
+// The remote MCP server (#139): its own mount, not under /orgs/:orgId, since
+// a tool call names the org itself rather than reading it off the path.
+api.route("/mcp", mcpRoutes);
 app.route("/api", api);
 
 // Everything below serves the SPA to whatever it doesn't recognise, which for
