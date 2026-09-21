@@ -1,6 +1,7 @@
 import { Hono, type Context } from "hono";
 import { HTTPException } from "hono/http-exception";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
+import { createError } from "evlog";
 import { and, eq } from "drizzle-orm";
 import * as v from "valibot";
 import * as QRCode from "qrcode";
@@ -93,7 +94,12 @@ function ok(result: DispatchResult): JsonValue {
     : `Request failed with status ${result.status}`;
   // SAFETY: `result.status` always came out of a Response this same Worker
   // built (internal.request), so it is a valid HTTP status code.
-  throw new HTTPException(result.status as ContentfulStatusCode, { message });
+  throw createError({
+    status: result.status as ContentfulStatusCode,
+    message,
+    why: "The underlying API route refused the request.",
+    fix: "Read the message: it is the same one the REST API itself returns.",
+  });
 }
 
 function textResult(value: JsonValue): CallToolResult {
@@ -475,6 +481,9 @@ async function listLinksTool(t: ToolCtx): Promise<CallToolResult> {
   // (built by v.parse in searchLinks) is already plain JSON, but as a named
   // interface it has no index signature, so TS never considers it a
   // structural JsonValue; JSON.parse's return is genuinely one.
+  // eslint-disable-next-line react-doctor/no-json-parse-stringify-clone --
+  // not a deep clone: structuredClone would preserve LinkSummary's exact
+  // (non-JsonValue) type instead of widening it, which is the whole point.
   return textResult(JSON.parse(JSON.stringify(links)) as JsonValue);
 }
 
@@ -570,11 +579,16 @@ export const mcpRoutes = new Hono<AppEnv>();
 mcpRoutes.use("*", jsonBodyLimit());
 
 mcpRoutes.all("/", async (c) => {
+  const log = c.get("log");
+  log.set({ route: "/api/mcp" });
   const user = c.var.user;
   const authorization = c.req.header("authorization");
   if (!user || !authorization)
-    throw new HTTPException(401, {
-      message: "Not signed in: send Authorization: Bearer <api key>",
+    throw createError({
+      status: 401,
+      message: "Not signed in",
+      why: "This endpoint takes a scoped API key, not a browser session.",
+      fix: "Send Authorization: Bearer <api key>. Mint one from Settings.",
     });
 
   const server = new Server({ name: "rdyrct", version: "1.0.0" }, { capabilities: { tools: {} } });

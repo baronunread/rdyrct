@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generatedAt": "2026-08-28T01:47:34.537Z",
+  "generatedAt": "2026-09-21T17:42:21.260Z",
   "cliVersion": "0.6.0",
   "ruleSetVersion": 1,
   "framework": "hono",
@@ -14,7 +14,7 @@
       "path": "*",
       "file": "src/worker/index.ts",
       "handler": {
-        "line": 388,
+        "line": 402,
         "column": 0
       },
       "id": "cfc6426d0697",
@@ -45,11 +45,87 @@
     {
       "framework": "hono",
       "kind": "api",
+      "method": null,
+      "path": "/",
+      "file": "src/worker/routes/mcp.ts",
+      "handler": {
+        "line": 581,
+        "column": 0
+      },
+      "id": "0d9557579aed",
+      "checks": {
+        "audit": {
+          "status": "n/a"
+        },
+        "wide-event": {
+          "status": "pass"
+        },
+        "context": {
+          "status": "pass"
+        },
+        "structured-errors": {
+          "status": "fail",
+          "message": "throw new Error() — use createError({ why, fix })",
+          "evidence": {
+            "file": "src/worker/routes/mcp.ts",
+            "line": 146,
+            "snippet": "throw new Error(`You are not a member of organization \"${orgId}\".`);"
+          }
+        },
+        "error-handling": {
+          "status": "pass"
+        }
+      },
+      "suggestions": {},
+      "sensitivity": {
+        "level": "none",
+        "reasons": []
+      },
+      "score": 80
+    },
+    {
+      "framework": "hono",
+      "kind": "api",
+      "method": "DELETE",
+      "path": "/",
+      "file": "src/worker/routes/avatars.ts",
+      "handler": {
+        "line": 122,
+        "column": 0
+      },
+      "id": "6beb7301e254",
+      "checks": {
+        "audit": {
+          "status": "n/a"
+        },
+        "wide-event": {
+          "status": "pass"
+        },
+        "context": {
+          "status": "pass"
+        },
+        "structured-errors": {
+          "status": "pass"
+        },
+        "error-handling": {
+          "status": "pass"
+        }
+      },
+      "suggestions": {},
+      "sensitivity": {
+        "level": "none",
+        "reasons": []
+      },
+      "score": 100
+    },
+    {
+      "framework": "hono",
+      "kind": "api",
       "method": "GET",
       "path": "/",
       "file": "src/worker/routes/admin-links.ts",
       "handler": {
-        "line": 197,
+        "line": 162,
         "column": 0
       },
       "id": "4350f835247a",
@@ -76,7 +152,7 @@
           "message": "changes state with no audit record — the project records audit events elsewhere",
           "evidence": {
             "file": "src/worker/routes/admin-links.ts",
-            "line": 245
+            "line": 210
           }
         }
       },
@@ -93,15 +169,12 @@
       "path": "/",
       "file": "src/worker/routes/avatars.ts",
       "handler": {
-        "line": 11,
+        "line": 138,
         "column": 0
       },
       "id": "4350f835247a",
       "checks": {
         "audit": {
-          "status": "n/a"
-        },
-        "error-handling": {
           "status": "n/a"
         },
         "wide-event": {
@@ -111,6 +184,9 @@
           "status": "pass"
         },
         "structured-errors": {
+          "status": "pass"
+        },
+        "error-handling": {
           "status": "pass"
         }
       },
@@ -162,6 +238,41 @@
       "sensitivity": {
         "level": "medium",
         "reasons": ["pii: write operation with sensitive fields"]
+      },
+      "score": 100
+    },
+    {
+      "framework": "hono",
+      "kind": "api",
+      "method": "POST",
+      "path": "/",
+      "file": "src/worker/routes/avatars.ts",
+      "handler": {
+        "line": 89,
+        "column": 0
+      },
+      "id": "0554bedfef79",
+      "checks": {
+        "audit": {
+          "status": "n/a"
+        },
+        "wide-event": {
+          "status": "pass"
+        },
+        "context": {
+          "status": "pass"
+        },
+        "structured-errors": {
+          "status": "pass"
+        },
+        "error-handling": {
+          "status": "pass"
+        }
+      },
+      "suggestions": {},
+      "sensitivity": {
+        "level": "none",
+        "reasons": []
       },
       "score": 100
     },
@@ -251,7 +362,7 @@
       "path": "/",
       "file": "src/worker/routes/shorten.ts",
       "handler": {
-        "line": 50,
+        "line": 51,
         "column": 0
       },
       "id": "0554bedfef79",
@@ -278,7 +389,7 @@
           "message": "changes state with no audit record — the project records audit events elsewhere",
           "evidence": {
             "file": "src/worker/routes/shorten.ts",
-            "line": 97
+            "line": 99
           }
         }
       },
@@ -471,7 +582,7 @@
       "path": "/:linkId",
       "file": "src/worker/routes/admin-links.ts",
       "handler": {
-        "line": 345,
+        "line": 310,
         "column": 0
       },
       "id": "e1ca5e8b260a",
@@ -498,7 +609,7 @@
           "message": "changes state with no audit record — the project records audit events elsewhere",
           "evidence": {
             "file": "src/worker/routes/admin-links.ts",
-            "line": 245
+            "line": 210
           }
         }
       },
@@ -515,7 +626,7 @@
       "path": "/:linkId",
       "file": "src/worker/routes/admin-links.ts",
       "handler": {
-        "line": 275,
+        "line": 240,
         "column": 0
       },
       "id": "8e8fff5d79b1",
@@ -542,7 +653,7 @@
           "message": "changes state with no audit record — the project records audit events elsewhere",
           "evidence": {
             "file": "src/worker/routes/admin-links.ts",
-            "line": 245
+            "line": 210
           }
         }
       },
@@ -559,7 +670,7 @@
       "path": "/:linkId/rescore",
       "file": "src/worker/routes/admin-links.ts",
       "handler": {
-        "line": 300,
+        "line": 265,
         "column": 0
       },
       "id": "a60e23e051c8",
@@ -586,7 +697,7 @@
           "message": "changes state with no audit record — the project records audit events elsewhere",
           "evidence": {
             "file": "src/worker/routes/admin-links.ts",
-            "line": 245
+            "line": 210
           }
         }
       },
@@ -673,7 +784,7 @@
       "path": "/:slug",
       "file": "src/worker/index.ts",
       "handler": {
-        "line": 373,
+        "line": 387,
         "column": 0
       },
       "id": "4542fd0856a5",
@@ -778,7 +889,7 @@
       "path": "/anonymous",
       "file": "src/worker/routes/admin-links.ts",
       "handler": {
-        "line": 431,
+        "line": 404,
         "column": 0
       },
       "id": "4c455e704c8e",
@@ -805,7 +916,7 @@
           "message": "changes state with no audit record — the project records audit events elsewhere",
           "evidence": {
             "file": "src/worker/routes/admin-links.ts",
-            "line": 245
+            "line": 210
           }
         }
       },
@@ -822,7 +933,7 @@
       "path": "/anonymous/:id",
       "file": "src/worker/routes/admin-links.ts",
       "handler": {
-        "line": 456,
+        "line": 429,
         "column": 0
       },
       "id": "a8b1ad6c6690",
@@ -849,7 +960,7 @@
           "message": "changes state with no audit record — the project records audit events elsewhere",
           "evidence": {
             "file": "src/worker/routes/admin-links.ts",
-            "line": 245
+            "line": 210
           }
         }
       },
@@ -866,7 +977,7 @@
       "path": "/api/*",
       "file": "src/worker/index.ts",
       "handler": {
-        "line": 265,
+        "line": 278,
         "column": 0
       },
       "id": "74a1ccacc4b3",
@@ -901,7 +1012,7 @@
       "path": "/api/auth/*",
       "file": "src/worker/index.ts",
       "handler": {
-        "line": 201,
+        "line": 210,
         "column": 0
       },
       "id": "e75aa52c874e",
@@ -936,7 +1047,7 @@
       "path": "/api/auth/*",
       "file": "src/worker/index.ts",
       "handler": {
-        "line": 201,
+        "line": 210,
         "column": 0
       },
       "id": "2d4af6eb10f7",
@@ -971,7 +1082,7 @@
       "path": "/api/cap/*",
       "file": "src/worker/index.ts",
       "handler": {
-        "line": 219,
+        "line": 228,
         "column": 0
       },
       "id": "3d9ce45013d9",
@@ -1006,7 +1117,7 @@
       "path": "/api/webhooks/polar",
       "file": "src/worker/index.ts",
       "handler": {
-        "line": 233,
+        "line": 242,
         "column": 0
       },
       "id": "bbed5d59d114",
@@ -1287,7 +1398,7 @@
       "path": "/orgs/:orgId/suspend",
       "file": "src/worker/routes/admin-links.ts",
       "handler": {
-        "line": 384,
+        "line": 349,
         "column": 0
       },
       "id": "06abb4f07afe",
@@ -1314,7 +1425,7 @@
           "message": "changes state with no audit record — the project records audit events elsewhere",
           "evidence": {
             "file": "src/worker/routes/admin-links.ts",
-            "line": 245
+            "line": 210
           }
         }
       },
@@ -1366,7 +1477,7 @@
       "path": "/pricing.md",
       "file": "src/worker/index.ts",
       "handler": {
-        "line": 361,
+        "line": 375,
         "column": 0
       },
       "id": "c01fb33007bf",

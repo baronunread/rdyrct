@@ -3,6 +3,7 @@ import { Hono } from "hono";
 import type { JsonValue } from "../shared/types";
 import type { Context } from "hono";
 import { HTTPException } from "hono/http-exception";
+import { EvlogError } from "evlog";
 import { methodNotAllowed } from "hono/method-not-allowed";
 import { trimTrailingSlash } from "hono/trailing-slash";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
@@ -97,6 +98,19 @@ app.onError((err, c) => {
   c.get("log")?.error(err);
   if (err instanceof HTTPException) {
     return respond({ message: err.message, ...causeFields(err.cause) }, err.status);
+  }
+  // createError()'s structured shape (see AGENTS.md's logging section): why
+  // and fix are meant for the caller, same contract as HTTPException's cause
+  // fields above; internal stays off the EvlogError instance's own JSON, so
+  // there is nothing to filter out here.
+  if (EvlogError.isEvlogError(err)) {
+    // SAFETY: every createError() call site in this Worker passes a real
+    // HTTP status (400-599); the fallback only covers a call that left it
+    // unset, same default EvlogError itself applies.
+    return respond(
+      { message: err.message, ...(err.why && { why: err.why }), ...(err.fix && { fix: err.fix }) },
+      (err.status ?? 500) as ContentfulStatusCode,
+    );
   }
   Sentry.captureException(err);
   return respond({ message: "Internal error" }, 500);
