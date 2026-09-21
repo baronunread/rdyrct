@@ -407,9 +407,16 @@ export interface ConnectedApp {
 // per-user with no owner gate — the oauth-provider endpoints below are
 // session-scoped to whoever is signed in, not to an org, so any member sees
 // and revokes their own connections regardless of role.
-export const useConnectedApps = () =>
+//
+// `polling`: the connect wizard turns this on while it's waiting for a
+// brand-new grant to show up (there is no webhook for "the user finished
+// the OAuth flow in their AI tool" — this list appearing is the signal),
+// and off the moment it does or the person navigates away, so an idle tab
+// on this page isn't polling forever.
+export const useConnectedApps = (polling = false) =>
   useQuery<ConnectedApp[]>({
     queryKey: ["connected-apps"],
+    refetchInterval: polling ? 3000 : false,
     queryFn: async () => {
       const { data, error } = await authClient.oauth2.getConsents();
       if (error) throw new Error(error.message ?? "Could not load connected apps");

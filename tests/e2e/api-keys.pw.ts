@@ -1,5 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { signUpAndVerify } from "./resend";
+import { rawSql } from "./db";
+import { appUrl } from "./environment";
 
 const E2E_PASSWORD = "test-password-123";
 
@@ -54,9 +56,45 @@ test("the selected tab survives a full page reload", async ({ page }) => {
   // exact: the "Copy MCP setup" button's accessible name also contains "MCP".
   await page.getByRole("button", { name: "MCP", exact: true }).click();
   await expect(page).toHaveURL(/[?&]tab=mcp/);
-  await expect(page.getByText("No connected apps yet")).toBeVisible();
+  await expect(page.getByText("Connect an AI assistant")).toBeVisible();
 
   await page.reload();
-  await expect(page.getByText("No connected apps yet")).toBeVisible();
+  await expect(page.getByText("Connect an AI assistant")).toBeVisible();
   await expect(page.getByPlaceholder("Key name, e.g. Claude")).not.toBeVisible();
+});
+
+test("the connect wizard notices a new connection while waiting", async ({ page }) => {
+  await signUpAndVerify(page, `apikeys-wizard-${Date.now()}@gmail.com`, E2E_PASSWORD);
+  await page.goto("/api-keys?tab=mcp");
+
+  await page.getByRole("button", { name: "I've added the server" }).click();
+  await expect(page.getByText("Waiting for the connection")).toBeVisible();
+
+  // Simulates what a real OAuth consent screen approval does to the
+  // database — tests/e2e/mcp-oauth.pw.ts drives that full flow through the
+  // browser; this one is about the wizard noticing it, not redoing it.
+  const clientId = `wizard-client-${Date.now()}`;
+  await rawSql(
+    page,
+    `insert or ignore into oauth_resource (id, identifier, name, created_at, updated_at)
+     values (?, ?, 'rdyrct MCP', 0, 0)`,
+    [`resource-${clientId}`, `${appUrl}/api/mcp`],
+  );
+  await rawSql(
+    page,
+    `insert into oauth_client (id, client_id, disabled, redirect_uris,
+       token_endpoint_auth_method, grant_types, response_types, created_at, updated_at, name)
+     values (?, ?, 0, '[]', 'none', '["authorization_code"]', '["code"]', 0, 0, 'Wizard Client')`,
+    [`client-${clientId}`, clientId],
+  );
+  await rawSql(
+    page,
+    `insert into oauth_consent (id, client_id, user_id, scopes, created_at, updated_at)
+     select ?, ?, id, '["openid"]', unixepoch() * 1000, unixepoch() * 1000
+     from user order by created_at desc limit 1`,
+    [`consent-${clientId}`, clientId],
+  );
+
+  await expect(page.getByText("Wizard Client")).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByText("Waiting for the connection")).not.toBeVisible();
 });

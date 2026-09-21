@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { errorMessage } from "@/app/lib/error-message";
 import { useCurrentOrg } from "../lib/current-org";
 import { useSearchParams } from "../lib/router-search";
@@ -23,6 +23,7 @@ import { relativeDate } from "../lib/dates";
 import { Trash2 } from "../ui/icons";
 import { cn } from "../ui/cn";
 import { McpSetupCopyButton } from "../components/mcp-setup-prompt";
+import { McpConnectWizard } from "../components/mcp-connect-wizard";
 import { NoOrgState } from "../components/no-org";
 
 /** The key value shown once, right after minting, with a copy button. */
@@ -97,23 +98,16 @@ function ConnectedAppRow({ app, onRevoke }: { app: ConnectedApp; onRevoke: () =>
  * lose. Per-user, not per-org: unlike API keys below, any member sees and
  * revokes their own connections, since authorizing one is a session action
  * (a browser consent screen), not minting a standing credential. */
+// Loading and empty are both handled a level up, by ConnectedAppsSection's
+// wizard gate: the empty case shows the connect guide instead of a plain
+// "no apps yet" line, so this only ever renders once `apps` is non-empty.
 function ConnectedAppsTable({
   apps,
-  loading,
   onRevoke,
 }: {
-  apps: ConnectedApp[] | undefined;
-  loading: boolean;
+  apps: ConnectedApp[];
   onRevoke: (app: ConnectedApp) => void;
 }) {
-  if (loading) return <TableSkeleton rows={3} testId="connected-apps-rows-skeleton" />;
-  if (!apps || apps.length === 0)
-    return (
-      <EmptyState
-        title="No connected apps yet"
-        hint="Add rdyrct as an MCP connector in an AI assistant to see it here."
-      />
-    );
   return (
     <Table>
       <thead>
@@ -133,9 +127,43 @@ function ConnectedAppsTable({
   );
 }
 
+/** Drives the connect wizard's two states (the guide, and waiting for the
+ * first grant to appear) on top of the same useConnectedApps() query the
+ * table below reads — there's no webhook for "finished the OAuth flow in
+ * your AI tool", so a new id showing up in this list, polled while waiting,
+ * is the only signal there is. */
+function useConnectWizard() {
+  const toast = useToast();
+  const [waiting, setWaiting] = useState(false);
+  const [guideOpen, setGuideOpen] = useState(false);
+  const knownIds = useRef<Set<string>>(new Set());
+  const apps = useConnectedApps(waiting);
+
+  useEffect(() => {
+    if (!waiting) return;
+    const fresh = apps.data?.find((app) => !knownIds.current.has(app.id));
+    if (!fresh) return;
+    toast(`${fresh.clientName} connected`);
+    setWaiting(false);
+    setGuideOpen(false);
+  }, [waiting, apps.data, toast]);
+
+  return {
+    apps,
+    waiting,
+    showWizard: !apps.isLoading && (waiting || guideOpen || apps.data?.length === 0),
+    startWaiting: () => {
+      knownIds.current = new Set((apps.data ?? []).map((app) => app.id));
+      setWaiting(true);
+    },
+    cancelWaiting: () => setWaiting(false),
+    openGuide: () => setGuideOpen(true),
+  };
+}
+
 function ConnectedAppsSection() {
   const toast = useToast();
-  const apps = useConnectedApps();
+  const { apps, waiting, showWizard, startWaiting, cancelWaiting, openGuide } = useConnectWizard();
   const revokeApp = useRevokeConnectedApp();
   const [revokeTarget, setRevokeTarget] = useState<ConnectedApp | null>(null);
 
@@ -158,7 +186,24 @@ function ConnectedAppsSection() {
         MCP client.
       </p>
 
-      <ConnectedAppsTable apps={apps.data} loading={apps.isLoading} onRevoke={setRevokeTarget} />
+      {apps.isLoading ? (
+        <TableSkeleton rows={3} testId="connected-apps-rows-skeleton" />
+      ) : showWizard ? (
+        <McpConnectWizard
+          waiting={waiting}
+          onStartWaiting={startWaiting}
+          onCancelWaiting={cancelWaiting}
+        />
+      ) : (
+        <>
+          <ConnectedAppsTable apps={apps.data ?? []} onRevoke={setRevokeTarget} />
+          <div>
+            <Button variant="outline" size="sm" onClick={openGuide}>
+              Connect another app
+            </Button>
+          </div>
+        </>
+      )}
 
       <ConfirmDialog
         title="Disconnect app"
@@ -417,11 +462,7 @@ export function ApiKeysPage() {
 
   return (
     <div>
-      <PageHeader
-        title="API"
-        sub="Connect an AI assistant, or call the API"
-        action={<McpSetupCopyButton />}
-      />
+      <PageHeader title="API" sub="Connect an AI assistant, or call the API" />
       <ApiTabBar active={tab} onChange={setTab} />
       {tab === "mcp" ? <ConnectedAppsSection /> : <ApiKeysSection />}
     </div>

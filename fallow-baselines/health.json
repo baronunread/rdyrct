@@ -81,7 +81,7 @@
     },
     "src/app/routes/api-keys.tsx": {
       "crap_moderate": {
-        "count": 1
+        "count": 3
       }
     },
     "src/app/routes/auth.tsx": {

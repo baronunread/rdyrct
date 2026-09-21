@@ -624,7 +624,7 @@ function ApiTabBarSkeleton() {
 function ApiKeysSkeleton() {
   return (
     <SkeletonStatus testId="api-keys-page-skeleton">
-      <HeaderSkeleton action={{ w: "w-40" }} />
+      <HeaderSkeleton />
       <ApiTabBarSkeleton />
       <div className="flex flex-col gap-4">
         <div className="flex gap-2">
@@ -637,12 +637,14 @@ function ApiKeysSkeleton() {
   );
 }
 
-/** /api-keys?tab=mcp: same header and tab bar, just the connected-apps
- * table below it, with no create form. */
+/** /api-keys?tab=mcp: same header and tab bar. A table-shaped guess below
+ * them either way — whether this resolves to the connect guide (a first
+ * visit) or the connected-apps table (a returning one) isn't known until
+ * the query answers, and this is a brief, transient state either way. */
 function McpTabSkeleton() {
   return (
     <SkeletonStatus testId="mcp-tab-skeleton">
-      <HeaderSkeleton action={{ w: "w-40" }} />
+      <HeaderSkeleton />
       <ApiTabBarSkeleton />
       <TableSkeleton rows={3} />
     </SkeletonStatus>
