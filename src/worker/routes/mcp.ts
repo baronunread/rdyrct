@@ -22,6 +22,7 @@ import { orgPlan, countActiveAddresses } from "../plan";
 import { linkRoutes } from "./links";
 import { orgRoutes } from "./orgs";
 import { isValidHttpUrl } from "../util";
+import { jsonBodyLimit } from "../body-limit";
 
 // Mounted at /api/mcp, inside the same `api` sub-app as everything else
 // (withSession + enforceSignedApiRateLimit already ran, so c.var.user is
@@ -101,6 +102,22 @@ function textResult(value: JsonValue): CallToolResult {
 
 function errorResult(message: string): CallToolResult {
   return { content: [{ type: "text", text: message }], isError: true };
+}
+
+/** Parses a tool's raw arguments without throwing: `v.parse`'s ValiError,
+ * left to propagate up through the MCP SDK's own request-dispatch promise
+ * chain, surfaces there as an unhandled rejection even once our own
+ * try/catch in mcpRoutes.all() has already turned it into a clean
+ * CallToolResult (security-audit finding, #139) — safeParse and an
+ * early-return keeps a bad tool argument from ever being a thrown
+ * exception in the first place. */
+function parseArgs<T>(
+  schema: v.GenericSchema<unknown, T>,
+  raw: JsonValue | undefined,
+): { ok: true; value: T } | { ok: false; result: CallToolResult } {
+  const parsed = v.safeParse(schema, raw);
+  if (parsed.success) return { ok: true, value: parsed.output };
+  return { ok: false, result: errorResult(parsed.issues[0]?.message ?? "Invalid arguments.") };
 }
 
 /* ---------------- org resolution ---------------- */
@@ -257,7 +274,10 @@ const inviteArgs = v.object({
   org_id: orgIdField,
 });
 
-const qrArgs = v.object({ url: v.pipe(v.string(), v.trim(), v.minLength(1)) });
+// generate_qr_code is the one tool with no org-membership check (see the
+// handler below), so this length cap is its only real cost control before
+// the url reaches the qrcode library's own proportional-cost encoding work.
+const qrArgs = v.object({ url: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(2048)) });
 
 /* ---------------- tool list (protocol-facing JSON Schema) ---------------- */
 
@@ -404,7 +424,9 @@ interface ToolCtx {
 type ToolHandler = (t: ToolCtx) => Promise<CallToolResult>;
 
 async function createLink(t: ToolCtx): Promise<CallToolResult> {
-  const args = v.parse(createLinkArgs, t.rawArgs);
+  const parsed = parseArgs(createLinkArgs, t.rawArgs);
+  if (!parsed.ok) return parsed.result;
+  const args = parsed.value;
   const orgId = await resolveOrg(t.db, t.user, args.org_id);
   const domainId = args.domain ? await resolveDomainId(t.db, orgId, args.domain) : undefined;
   const dto = ok(
@@ -419,7 +441,9 @@ async function createLink(t: ToolCtx): Promise<CallToolResult> {
 }
 
 async function updateLink(t: ToolCtx): Promise<CallToolResult> {
-  const args = v.parse(updateLinkArgs, t.rawArgs);
+  const parsed = parseArgs(updateLinkArgs, t.rawArgs);
+  if (!parsed.ok) return parsed.result;
+  const args = parsed.value;
   const orgId = await resolveOrg(t.db, t.user, args.org_id);
   const link = await findOneLink(t.env, t.ctx, t.authorization, orgId, args);
   const dto = ok(
@@ -432,7 +456,9 @@ async function updateLink(t: ToolCtx): Promise<CallToolResult> {
 }
 
 async function deleteLink(t: ToolCtx): Promise<CallToolResult> {
-  const args = v.parse(deleteLinkArgs, t.rawArgs);
+  const parsed = parseArgs(deleteLinkArgs, t.rawArgs);
+  if (!parsed.ok) return parsed.result;
+  const args = parsed.value;
   const orgId = await resolveOrg(t.db, t.user, args.org_id);
   const link = await findOneLink(t.env, t.ctx, t.authorization, orgId, args);
   ok(await dispatch(t.env, t.ctx, t.authorization, "DELETE", `/orgs/${orgId}/links/${link.id}`));
@@ -440,7 +466,9 @@ async function deleteLink(t: ToolCtx): Promise<CallToolResult> {
 }
 
 async function listLinksTool(t: ToolCtx): Promise<CallToolResult> {
-  const args = v.parse(listLinksArgs, t.rawArgs);
+  const parsed = parseArgs(listLinksArgs, t.rawArgs);
+  if (!parsed.ok) return parsed.result;
+  const args = parsed.value;
   const orgId = await resolveOrg(t.db, t.user, args.org_id);
   const links = await searchLinks(t.env, t.ctx, t.authorization, orgId, args.query ?? "");
   // SAFETY: a round trip, not a cast on the original value — LinkSummary
@@ -451,7 +479,9 @@ async function listLinksTool(t: ToolCtx): Promise<CallToolResult> {
 }
 
 async function getLinkStats(t: ToolCtx): Promise<CallToolResult> {
-  const args = v.parse(linkStatsArgs, t.rawArgs);
+  const parsed = parseArgs(linkStatsArgs, t.rawArgs);
+  if (!parsed.ok) return parsed.result;
+  const args = parsed.value;
   const orgId = await resolveOrg(t.db, t.user, args.org_id);
   const qs = args.domain ? `?domain=${encodeURIComponent(args.domain)}` : "";
   const stats = ok(
@@ -467,7 +497,9 @@ async function getLinkStats(t: ToolCtx): Promise<CallToolResult> {
 }
 
 async function getOrgStats(t: ToolCtx): Promise<CallToolResult> {
-  const args = v.parse(orgStatsArgs, t.rawArgs);
+  const parsed = parseArgs(orgStatsArgs, t.rawArgs);
+  if (!parsed.ok) return parsed.result;
+  const args = parsed.value;
   const orgId = await resolveOrg(t.db, t.user, args.org_id);
   const qs = args.days ? `?days=${args.days}` : "";
   const stats = ok(
@@ -477,7 +509,9 @@ async function getOrgStats(t: ToolCtx): Promise<CallToolResult> {
 }
 
 async function getPlanUsage(t: ToolCtx): Promise<CallToolResult> {
-  const args = v.parse(planUsageArgs, t.rawArgs);
+  const parsed = parseArgs(planUsageArgs, t.rawArgs);
+  if (!parsed.ok) return parsed.result;
+  const args = parsed.value;
   const orgId = await resolveOrg(t.db, t.user, args.org_id);
   const [{ plan, limits }, used] = await Promise.all([
     orgPlan(t.db, orgId),
@@ -487,7 +521,9 @@ async function getPlanUsage(t: ToolCtx): Promise<CallToolResult> {
 }
 
 async function inviteMember(t: ToolCtx): Promise<CallToolResult> {
-  const args = v.parse(inviteArgs, t.rawArgs);
+  const parsed = parseArgs(inviteArgs, t.rawArgs);
+  if (!parsed.ok) return parsed.result;
+  const args = parsed.value;
   const orgId = await resolveOrg(t.db, t.user, args.org_id);
   const result = ok(
     await dispatch(t.env, t.ctx, t.authorization, "POST", `/orgs/${orgId}/invites`, {
@@ -499,8 +535,10 @@ async function inviteMember(t: ToolCtx): Promise<CallToolResult> {
 }
 
 async function generateQrCode(t: ToolCtx): Promise<CallToolResult> {
-  const args = v.parse(qrArgs, t.rawArgs);
-  if (!isValidHttpUrl(args.url)) throw new Error("That is not a valid http(s) URL.");
+  const parsed = parseArgs(qrArgs, t.rawArgs);
+  if (!parsed.ok) return parsed.result;
+  const args = parsed.value;
+  if (!isValidHttpUrl(args.url)) return errorResult("That is not a valid http(s) URL.");
   const png = new Uint8Array(await QRCode.toBuffer(args.url, { width: 512, margin: 2 }));
   let binary = "";
   for (let i = 0; i < png.length; i++) binary += String.fromCharCode(png[i]!);
@@ -529,6 +567,7 @@ async function handleTool(name: string, t: ToolCtx): Promise<CallToolResult> {
 /* ---------------- wiring ---------------- */
 
 export const mcpRoutes = new Hono<AppEnv>();
+mcpRoutes.use("*", jsonBodyLimit());
 
 mcpRoutes.all("/", async (c) => {
   const user = c.var.user;

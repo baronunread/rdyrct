@@ -154,4 +154,44 @@ describe("remote MCP server (#139)", () => {
     const after = await callMcp(`Bearer ${key}`, { jsonrpc: "2.0", id: 1, method: "tools/list" });
     expect(after.status).toBe(401);
   });
+
+  // Security-audit regressions: an oversized body or an unbounded QR url both
+  // reach generate_qr_code with no org-membership check gating them, so these
+  // are its only cost controls (see docs/mcp-server.md history / #139 audit).
+  it("413s an oversized JSON-RPC body instead of buffering it", async () => {
+    const cookie = await freeOwnerCookie();
+    const { key } = await mintKey(cookie);
+    const res = await callMcp(
+      `Bearer ${key}`,
+      toolCall("generate_qr_code", { url: `https://example.com/${"a".repeat(64 * 1024)}` }),
+    );
+    expect(res.status).toBe(413);
+  });
+
+  it("rejects a generate_qr_code url over the length cap before it reaches the encoder", async () => {
+    const cookie = await freeOwnerCookie();
+    const { key } = await mintKey(cookie);
+    const res = await callMcp(
+      `Bearer ${key}`,
+      toolCall("generate_qr_code", { url: `https://example.com/${"a".repeat(2048)}` }),
+    );
+    const body = await jsonBody<JsonRpcResponse>(res);
+    expect(body.result?.isError).toBe(true);
+  });
+
+  it("a tool error thrown after an await (not a bad argument) still comes back clean", async () => {
+    const cookie = await freeOwnerCookie();
+    const { key } = await mintKey(cookie);
+    // resolveOrg's membership check runs an awaited DB query before it
+    // throws, unlike the argument-validation errors above: a different
+    // shape of error path through the same handler.
+    const res = await callMcp(
+      `Bearer ${key}`,
+      toolCall("get_link_stats", { slug: "sale", org_id: "not-my-org" }),
+    );
+    expect(res.status).toBe(200);
+    const body = await jsonBody<JsonRpcResponse>(res);
+    expect(body.result?.isError).toBe(true);
+    expect(body.result?.content?.[0]?.text).toContain("not a member");
+  });
 });
