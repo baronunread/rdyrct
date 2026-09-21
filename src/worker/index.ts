@@ -18,6 +18,8 @@ import {
   sweepStalledOrgDeletions,
 } from "./routes/orgs";
 import { linkRoutes } from "./routes/links";
+import { apiKeyRoutes } from "./routes/api-keys";
+import { mcpRoutes } from "./routes/mcp";
 import { qrLogoRoutes } from "./routes/qr-logos";
 import { avatarRoutes } from "./routes/avatars";
 import { adminRoutes } from "./routes/admin";
@@ -250,8 +252,12 @@ api.route("/orgs/:orgId/qr-logo", qrLogoRoutes);
 api.route("/user/avatar", avatarRoutes);
 api.route("/billing", billingRoutes);
 api.route("/orgs/:orgId/domains", domainRoutes);
+api.route("/orgs/:orgId/api-keys", apiKeyRoutes);
 api.route("/invites", inviteRoutes);
 api.route("/admin", adminRoutes);
+// The remote MCP server (#139): its own mount, not under /orgs/:orgId, since
+// a tool call names the org itself rather than reading it off the path.
+api.route("/mcp", mcpRoutes);
 app.route("/api", api);
 
 // Everything below serves the SPA to whatever it doesn't recognise, which for

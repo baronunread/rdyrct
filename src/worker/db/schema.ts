@@ -452,3 +452,28 @@ export const storageOutbox = sqliteTable(
   // which drizzle cannot express; it lives in migration 0026.
   (t) => [uniqueIndex("idx_storage_outbox_target").on(t.op, t.target)],
 );
+
+/**
+ * Scoped API keys (#131, minimal form): the credential a remote caller with
+ * no browser session (an MCP client, #139) authenticates with. Bound to a
+ * user, exactly like a session — requireOrgRole still decides what the key
+ * may do in each org the user belongs to, so this carries no scopes of its
+ * own yet. Only the hash is stored; the raw key is shown once, at creation.
+ */
+export const apiKeys = sqliteTable(
+  "api_keys",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    keyHash: text("key_hash").notNull().unique(),
+    /** Shown in the UI so a person can tell keys apart without the raw value. */
+    keyPrefix: text("key_prefix").notNull(),
+    createdAt: integer("created_at").notNull(),
+    lastUsedAt: integer("last_used_at"),
+    revokedAt: integer("revoked_at"),
+  },
+  (t) => [index("idx_api_keys_user").on(t.userId)],
+);

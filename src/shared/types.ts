@@ -283,6 +283,18 @@ export interface QuotaUsage {
  * the follow-up GET /links/quota-usage. */
 export type WithQuotaUsage<T> = T & QuotaUsage;
 
+/** A scoped API key (#131), as returned by list/create. `key` carries the
+ * raw value and is present only in the create response, shown once. */
+export interface ApiKeyDTO {
+  id: string;
+  name: string;
+  keyPrefix: string;
+  createdAt: number;
+  lastUsedAt: number | null;
+  revokedAt: number | null;
+  key?: string;
+}
+
 export interface LinkDTO extends QrOverrides {
   id: string;
   domainId: string | null;
