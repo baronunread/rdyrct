@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generatedAt": "2026-09-21T17:42:21.260Z",
+  "generatedAt": "2026-09-21T17:47:13.943Z",
   "cliVersion": "0.6.0",
   "ruleSetVersion": 1,
   "framework": "hono",
@@ -14,7 +14,7 @@
       "path": "*",
       "file": "src/worker/index.ts",
       "handler": {
-        "line": 402,
+        "line": 405,
         "column": 0
       },
       "id": "cfc6426d0697",
@@ -49,7 +49,7 @@
       "path": "/",
       "file": "src/worker/routes/mcp.ts",
       "handler": {
-        "line": 581,
+        "line": 626,
         "column": 0
       },
       "id": "0d9557579aed",
@@ -64,13 +64,7 @@
           "status": "pass"
         },
         "structured-errors": {
-          "status": "fail",
-          "message": "throw new Error() — use createError({ why, fix })",
-          "evidence": {
-            "file": "src/worker/routes/mcp.ts",
-            "line": 146,
-            "snippet": "throw new Error(`You are not a member of organization \"${orgId}\".`);"
-          }
+          "status": "pass"
         },
         "error-handling": {
           "status": "pass"
@@ -81,7 +75,7 @@
         "level": "none",
         "reasons": []
       },
-      "score": 80
+      "score": 100
     },
     {
       "framework": "hono",
@@ -784,7 +778,7 @@
       "path": "/:slug",
       "file": "src/worker/index.ts",
       "handler": {
-        "line": 387,
+        "line": 390,
         "column": 0
       },
       "id": "4542fd0856a5",
@@ -977,7 +971,7 @@
       "path": "/api/*",
       "file": "src/worker/index.ts",
       "handler": {
-        "line": 278,
+        "line": 281,
         "column": 0
       },
       "id": "74a1ccacc4b3",
@@ -1012,7 +1006,7 @@
       "path": "/api/auth/*",
       "file": "src/worker/index.ts",
       "handler": {
-        "line": 210,
+        "line": 213,
         "column": 0
       },
       "id": "e75aa52c874e",
@@ -1047,7 +1041,7 @@
       "path": "/api/auth/*",
       "file": "src/worker/index.ts",
       "handler": {
-        "line": 210,
+        "line": 213,
         "column": 0
       },
       "id": "2d4af6eb10f7",
@@ -1082,7 +1076,7 @@
       "path": "/api/cap/*",
       "file": "src/worker/index.ts",
       "handler": {
-        "line": 228,
+        "line": 231,
         "column": 0
       },
       "id": "3d9ce45013d9",
@@ -1117,7 +1111,7 @@
       "path": "/api/webhooks/polar",
       "file": "src/worker/index.ts",
       "handler": {
-        "line": 242,
+        "line": 245,
         "column": 0
       },
       "id": "bbed5d59d114",
@@ -1477,7 +1471,7 @@
       "path": "/pricing.md",
       "file": "src/worker/index.ts",
       "handler": {
-        "line": 375,
+        "line": 378,
         "column": 0
       },
       "id": "c01fb33007bf",

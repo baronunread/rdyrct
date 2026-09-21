@@ -1,7 +1,7 @@
 import { Hono, type Context } from "hono";
 import { HTTPException } from "hono/http-exception";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
-import { createError } from "evlog";
+import { createError, EvlogError } from "evlog";
 import { and, eq } from "drizzle-orm";
 import * as v from "valibot";
 import * as QRCode from "qrcode";
@@ -143,14 +143,30 @@ async function userOrgs(db: DB, userId: string): Promise<{ id: string; name: str
 async function resolveOrg(db: DB, user: SessionUser, orgId: string | undefined): Promise<string> {
   if (orgId) {
     if (!(await orgRole(db, user, orgId)))
-      throw new Error(`You are not a member of organization "${orgId}".`);
+      throw createError({
+        status: 400,
+        message: `You are not a member of organization "${orgId}".`,
+        why: "The org_id argument named an organization you don't belong to.",
+        fix: "Use an org_id you're a member of, or omit it.",
+      });
     return orgId;
   }
   const orgs = await userOrgs(db, user.id);
   if (orgs.length === 1) return orgs[0]!.id;
-  if (orgs.length === 0) throw new Error("You have no organization yet.");
+  if (orgs.length === 0)
+    throw createError({
+      status: 400,
+      message: "You have no organization yet.",
+      why: "Every tool needs an organization to act on.",
+      fix: "Create one first.",
+    });
   const names = orgs.map((o) => `${o.name} (${o.id})`).join(", ");
-  throw new Error(`You belong to more than one organization: ${names}. Say which one (org_id).`);
+  throw createError({
+    status: 400,
+    message: `You belong to more than one organization: ${names}. Say which one (org_id).`,
+    why: "org_id was omitted and more than one organization matched.",
+    fix: "Call the tool again with an explicit org_id.",
+  });
 }
 
 /** "my domain" as a hostname resolves to the org's active custom domain id,
@@ -162,9 +178,20 @@ async function resolveDomainId(db: DB, orgId: string, hostname: string): Promise
     .from(schema.domains)
     .where(and(eq(schema.domains.orgId, orgId), eq(schema.domains.hostname, hostname)));
   const row = rows[0];
-  if (!row) throw new Error(`"${hostname}" is not one of this organization's domains.`);
+  if (!row)
+    throw createError({
+      status: 400,
+      message: `"${hostname}" is not one of this organization's domains.`,
+      why: "The domain argument didn't match a domain on this organization.",
+      fix: "Check the hostname, or omit domain to use the shared domain.",
+    });
   if (row.status !== "active")
-    throw new Error(`"${hostname}" is not active yet (still ${row.status}).`);
+    throw createError({
+      status: 400,
+      message: `"${hostname}" is not active yet (still ${row.status}).`,
+      why: "A link can only go on a domain that has finished DNS/TLS setup.",
+      fix: "Wait for the domain to become active, or omit domain.",
+    });
   return row.id;
 }
 
@@ -220,15 +247,32 @@ async function findOneLink(
   by: { slug?: string; destination?: string },
 ): Promise<LinkSummary> {
   const needle = by.slug ?? by.destination;
-  if (!needle) throw new Error("Give either a slug or a destination URL to find the link.");
+  if (!needle)
+    throw createError({
+      status: 400,
+      message: "Give either a slug or a destination URL to find the link.",
+      why: "Neither slug nor destination was given.",
+      fix: "Pass one of them.",
+    });
   const candidates = await searchLinks(env, ctx, authorization, orgId, needle);
   const matches = by.slug
     ? candidates.filter((l) => l.slug === by.slug)
     : candidates.filter((l) => l.destination.includes(by.destination!));
-  if (matches.length === 0) throw new Error(`No link found matching "${needle}".`);
+  if (matches.length === 0)
+    throw createError({
+      status: 404,
+      message: `No link found matching "${needle}".`,
+      why: "Nothing in this organization's links matched.",
+      fix: "Check the slug or destination and try again.",
+    });
   if (matches.length > 1) {
     const listed = matches.map((l) => `${l.slug} → ${l.destination}`).join(", ");
-    throw new Error(`More than one link matches "${needle}": ${listed}. Say which slug you mean.`);
+    throw createError({
+      status: 400,
+      message: `More than one link matches "${needle}": ${listed}. Say which slug you mean.`,
+      why: "The destination substring matched more than one link.",
+      fix: "Use the exact slug instead.",
+    });
   }
   return matches[0]!;
 }
@@ -567,9 +611,10 @@ const TOOL_HANDLERS = {
 } satisfies Record<string, ToolHandler>;
 
 async function handleTool(name: string, t: ToolCtx): Promise<CallToolResult> {
-  if (!(name in TOOL_HANDLERS)) return errorResult(`Unknown tool "${name}".`);
-  // SAFETY: the `in` check above confirms `name` is one of TOOL_HANDLERS'
-  // own literal keys, which is exactly what `keyof typeof TOOL_HANDLERS` is.
+  if (!Object.hasOwn(TOOL_HANDLERS, name)) return errorResult(`Unknown tool "${name}".`);
+  // SAFETY: the hasOwn check above confirms `name` is one of TOOL_HANDLERS'
+  // own literal keys (not an inherited one, unlike `in`), which is exactly
+  // what `keyof typeof TOOL_HANDLERS` is.
   return TOOL_HANDLERS[name as keyof typeof TOOL_HANDLERS](t);
 }
 
@@ -610,8 +655,15 @@ mcpRoutes.all("/", async (c) => {
       // reason back (an over-cap quota, an ambiguous slug, a bad role) and
       // can explain it or retry, rather than the connection dying (#139
       // "an agent hitting the link cap should get an error it can explain").
+      // Only HTTPException and createError() messages are app-authored and
+      // safe to show as-is; anything else (a raw driver error, an
+      // unexpected runtime exception) gets a fixed generic message instead
+      // of leaking internal detail to the caller, and is logged server-side
+      // so it is still visible.
       if (err instanceof HTTPException) return errorResult(err.message);
-      return errorResult(err instanceof Error ? err.message : "That tool call failed.");
+      if (EvlogError.isEvlogError(err)) return errorResult(err.message);
+      log.error(err instanceof Error ? err : new Error(String(err)));
+      return errorResult("That tool call failed.");
     }
   });
 
