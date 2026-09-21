@@ -53,6 +53,11 @@
         "count": 1
       }
     },
+    "src/app/components/skeletons.tsx": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
     "src/app/routes/admin/comp-dialog.tsx": {
       "crap_moderate": {
         "count": 1
@@ -75,9 +80,6 @@
       }
     },
     "src/app/routes/api-keys.tsx": {
-      "crap_high": {
-        "count": 1
-      },
       "crap_moderate": {
         "count": 1
       }

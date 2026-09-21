@@ -107,7 +107,7 @@ function ConsentDetails({
 
       <p className="mt-4 text-xs text-muted">
         It can call the API and MCP tools as you, the same as a scoped API key. Revoke it any time
-        from API & MCP.
+        from the API page's MCP tab.
       </p>
 
       <div className="mt-5 flex flex-col gap-2">

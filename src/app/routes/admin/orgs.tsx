@@ -10,7 +10,8 @@ import { AreaChart } from "../../components/charts";
 import { Dialog } from "../../ui/dialog";
 import { Menu, MenuItem, MenuSeparator } from "../../ui/menu";
 import { Badge, Card, PageHeader, Table, Td, Th } from "../../ui/misc";
-import { AdminTableSkeleton, OrgDetailSkeleton } from "../../components/skeletons";
+import { OrgDetailSkeleton } from "../../components/skeletons";
+import { TableSkeleton } from "../../ui/skeleton";
 import { useToast } from "../../ui/toast";
 import { ConfirmDialog } from "../../ui/confirm-dialog";
 import { SearchInput } from "./search-input";
@@ -179,7 +180,6 @@ export function AdminOrgsPage() {
 
   const { totalPages, safePage, rows } = paginate(filtered, page);
 
-  if (orgs.isLoading) return <AdminTableSkeleton />;
   return (
     <div>
       <PageHeader title="Organizations" sub="All organizations on this instance" />
@@ -192,106 +192,112 @@ export function AdminOrgsPage() {
         placeholder="Search by org name or owner…"
         label="Search organizations"
       />
-      <Table minWidth="min-w-[56rem]">
-        <thead>
-          <tr>
-            <SortTh label="Name" sortKey="name" sort={sort} onSort={setSort} />
-            <SortTh label="Owner" sortKey="owner" sort={sort} onSort={setSort} />
-            <Th>Plan</Th>
-            <SortTh
-              label="Members"
-              sortKey="members"
-              sort={sort}
-              onSort={setSort}
-              className="text-right"
-            />
-            <SortTh
-              label="Links"
-              sortKey="links"
-              sort={sort}
-              onSort={setSort}
-              className="text-right"
-            />
-            <SortTh
-              label="Clicks"
-              sortKey="clicks"
-              sort={sort}
-              onSort={setSort}
-              className="text-right"
-            />
-            <SortTh label="Created" sortKey="created" sort={sort} onSort={setSort} />
-            <Th className="text-right">Actions</Th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((org) => (
-            <tr key={org.id}>
-              <Td className="max-w-48 font-bold">
-                <button
-                  type="button"
-                  onClick={() => setViewing(org)}
-                  title={org.name}
-                  className="block max-w-full cursor-pointer truncate text-accent hover:underline"
-                >
-                  {org.name}
-                </button>
-              </Td>
-              <Td className="max-w-48">
-                {org.ownerName ? (
-                  <>
-                    <span className="block truncate" title={org.ownerName}>
-                      {org.ownerName}
-                    </span>
-                    <span
-                      className="block truncate text-xs text-muted"
-                      title={org.ownerEmail ?? ""}
-                    >
-                      {org.ownerEmail}
-                    </span>
-                  </>
-                ) : (
-                  <span className="text-muted">—</span>
-                )}
-              </Td>
-              <Td>
-                <Badge color={planBadgeColor[org.plan]}>{org.plan}</Badge>
-              </Td>
-              <Td className="tnum text-right">{org.members}</Td>
-              <Td className="tnum text-right">{org.links}</Td>
-              <Td className="tnum text-right">{org.clicks}</Td>
-              <Td className="text-xs text-muted">{shortDate(org.createdAt)}</Td>
-              <Td>
-                <Menu
-                  align="end"
-                  label={`Actions for ${org.name}`}
-                  trigger={
-                    <div className="flex justify-end">
-                      <span className="rounded p-1.5 text-muted hover:bg-surface-2 hover:text-text">
-                        <Ellipsis size={15} />
-                      </span>
-                    </div>
-                  }
-                >
-                  <MenuItem onClick={() => setViewing(org)}>
-                    <Eye size={14} /> View details
-                  </MenuItem>
-                  <MenuSeparator />
-                  <MenuItem className="text-danger" onClick={() => setDeleting(org)}>
-                    <Trash2 size={14} /> Delete organization
-                  </MenuItem>
-                </Menu>
-              </Td>
-            </tr>
-          ))}
-          {rows.length === 0 && (
+      {/* Rows only: the header and search box above are real, so the
+          page-level skeleton would draw a second one of each. */}
+      {orgs.isLoading ? (
+        <TableSkeleton rows={6} testId="admin-orgs-rows-skeleton" />
+      ) : (
+        <Table minWidth="min-w-[56rem]">
+          <thead>
             <tr>
-              <Td colSpan={8} className="py-8 text-center text-muted">
-                No organizations match “{q.trim()}”.
-              </Td>
+              <SortTh label="Name" sortKey="name" sort={sort} onSort={setSort} />
+              <SortTh label="Owner" sortKey="owner" sort={sort} onSort={setSort} />
+              <Th>Plan</Th>
+              <SortTh
+                label="Members"
+                sortKey="members"
+                sort={sort}
+                onSort={setSort}
+                className="text-right"
+              />
+              <SortTh
+                label="Links"
+                sortKey="links"
+                sort={sort}
+                onSort={setSort}
+                className="text-right"
+              />
+              <SortTh
+                label="Clicks"
+                sortKey="clicks"
+                sort={sort}
+                onSort={setSort}
+                className="text-right"
+              />
+              <SortTh label="Created" sortKey="created" sort={sort} onSort={setSort} />
+              <Th className="text-right">Actions</Th>
             </tr>
-          )}
-        </tbody>
-      </Table>
+          </thead>
+          <tbody>
+            {rows.map((org) => (
+              <tr key={org.id}>
+                <Td className="max-w-48 font-bold">
+                  <button
+                    type="button"
+                    onClick={() => setViewing(org)}
+                    title={org.name}
+                    className="block max-w-full cursor-pointer truncate text-accent hover:underline"
+                  >
+                    {org.name}
+                  </button>
+                </Td>
+                <Td className="max-w-48">
+                  {org.ownerName ? (
+                    <>
+                      <span className="block truncate" title={org.ownerName}>
+                        {org.ownerName}
+                      </span>
+                      <span
+                        className="block truncate text-xs text-muted"
+                        title={org.ownerEmail ?? ""}
+                      >
+                        {org.ownerEmail}
+                      </span>
+                    </>
+                  ) : (
+                    <span className="text-muted">—</span>
+                  )}
+                </Td>
+                <Td>
+                  <Badge color={planBadgeColor[org.plan]}>{org.plan}</Badge>
+                </Td>
+                <Td className="tnum text-right">{org.members}</Td>
+                <Td className="tnum text-right">{org.links}</Td>
+                <Td className="tnum text-right">{org.clicks}</Td>
+                <Td className="text-xs text-muted">{shortDate(org.createdAt)}</Td>
+                <Td>
+                  <Menu
+                    align="end"
+                    label={`Actions for ${org.name}`}
+                    trigger={
+                      <div className="flex justify-end">
+                        <span className="rounded p-1.5 text-muted hover:bg-surface-2 hover:text-text">
+                          <Ellipsis size={15} />
+                        </span>
+                      </div>
+                    }
+                  >
+                    <MenuItem onClick={() => setViewing(org)}>
+                      <Eye size={14} /> View details
+                    </MenuItem>
+                    <MenuSeparator />
+                    <MenuItem className="text-danger" onClick={() => setDeleting(org)}>
+                      <Trash2 size={14} /> Delete organization
+                    </MenuItem>
+                  </Menu>
+                </Td>
+              </tr>
+            ))}
+            {rows.length === 0 && (
+              <tr>
+                <Td colSpan={8} className="py-8 text-center text-muted">
+                  No organizations match “{q.trim()}”.
+                </Td>
+              </tr>
+            )}
+          </tbody>
+        </Table>
+      )}
       <Pager page={safePage} totalPages={totalPages} onPageChange={setPage} />
 
       <OrgDetailDialog org={viewing} onClose={() => setViewing(null)} />

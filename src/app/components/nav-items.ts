@@ -19,7 +19,7 @@ export const appNavItems = [
   { to: "/domains", icon: WorldWww, label: "Domains" },
   { to: "/members", icon: Users, label: "Members" },
   { to: "/organization", icon: Building2, label: "Organization" },
-  { to: "/api-keys", icon: KeyRound, label: "API & MCP" },
+  { to: "/api-keys", icon: KeyRound, label: "API" },
   { to: "/billing", icon: CreditCard, label: "Billing" },
   { to: "/settings", icon: Settings, label: "Settings" },
 ] as const;

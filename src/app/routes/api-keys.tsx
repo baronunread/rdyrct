@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { errorMessage } from "@/app/lib/error-message";
 import { useCurrentOrg } from "../lib/current-org";
+import { useSearchParams } from "../lib/router-search";
 import {
   useApiKeys,
   useApiKeyMutations,
@@ -12,16 +13,17 @@ import type { ApiKeyDTO } from "@/shared/types";
 import { Button, IconButton } from "../ui/button";
 import { Input } from "../ui/field";
 import { Table, Th, Td, EmptyState, PageHeader } from "../ui/misc";
-import { BusyContent, Spinner } from "../ui/spinner";
+import { BusyContent } from "../ui/spinner";
+import { TableSkeleton } from "../ui/skeleton";
 import { useToast } from "../ui/toast";
 import { ConfirmDialog } from "../ui/confirm-dialog";
 import { CopyButton } from "../ui/copy-button";
 import { copyToClipboard } from "../lib/clipboard";
 import { relativeDate } from "../lib/dates";
 import { Trash2 } from "../ui/icons";
+import { cn } from "../ui/cn";
 import { McpSetupCopyButton } from "../components/mcp-setup-prompt";
 import { NoOrgState } from "../components/no-org";
-import { ApiKeysSkeleton } from "../components/skeletons";
 
 /** The key value shown once, right after minting, with a copy button. */
 function NewKeyBanner({ apiKey, onDismiss }: { apiKey: ApiKeyDTO; onDismiss: () => void }) {
@@ -104,7 +106,7 @@ function ConnectedAppsTable({
   loading: boolean;
   onRevoke: (app: ConnectedApp) => void;
 }) {
-  if (loading) return <Spinner />;
+  if (loading) return <TableSkeleton rows={3} testId="connected-apps-rows-skeleton" />;
   if (!apps || apps.length === 0)
     return (
       <EmptyState
@@ -151,13 +153,10 @@ function ConnectedAppsSection() {
 
   return (
     <div className="flex flex-col gap-4">
-      <div>
-        <h2 className="font-bold">Connected apps</h2>
-        <p className="text-sm text-muted">
-          AI assistants and other apps you've connected via OAuth. This is the recommended way to
-          connect an MCP client.
-        </p>
-      </div>
+      <p className="text-sm text-muted">
+        AI assistants and other apps you've connected via OAuth: the recommended way to connect an
+        MCP client.
+      </p>
 
       <ConnectedAppsTable apps={apps.data} loading={apps.isLoading} onRevoke={setRevokeTarget} />
 
@@ -230,7 +229,7 @@ function ApiKeysTable({
   loading: boolean;
   onRevoke: (key: ApiKeyDTO) => void;
 }) {
-  if (loading) return <Spinner />;
+  if (loading) return <TableSkeleton rows={3} testId="api-keys-rows-skeleton" />;
   if (!keys || keys.length === 0)
     return (
       <EmptyState
@@ -314,23 +313,17 @@ function ApiKeysSection() {
 
   if (!isOwner) {
     return (
-      <div>
-        <h2 className="font-bold">API keys</h2>
-        <p className="mt-1 text-sm text-muted">
-          Only this organization's owner can create or revoke API keys.
-        </p>
-      </div>
+      <p className="text-sm text-muted">
+        Only this organization's owner can create or revoke API keys.
+      </p>
     );
   }
 
   return (
     <div className="flex flex-col gap-4">
-      <div>
-        <h2 className="font-bold">API keys</h2>
-        <p className="text-sm text-muted">
-          Call the REST API directly, or connect an MCP client that doesn't support OAuth yet.
-        </p>
-      </div>
+      <p className="text-sm text-muted">
+        Call the REST API directly, or connect an MCP client that doesn't support OAuth yet.
+      </p>
 
       <CreateKeyForm
         name={section.name}
@@ -360,30 +353,77 @@ function ApiKeysSection() {
   );
 }
 
-/** API & MCP (#131/#134/#139 follow-up): its own nav tab, not a card buried
+/** API (#131/#134/#139 follow-up): its own nav tab, not a card buried
  * in Settings. OAuth connections are per-user and open to every member; API
  * keys stay owner-only, since minting a standing credential is the same
  * trust level as changing who has one (see api-keys.ts). */
+type ApiTab = "keys" | "mcp";
+const TABS: { id: ApiTab; label: string }[] = [
+  { id: "keys", label: "API keys" },
+  { id: "mcp", label: "MCP" },
+];
+
+/** The tab param, read and written through the URL rather than local state,
+ * so a shell reload lands back on whichever tab was open instead of always
+ * resetting to "keys". "keys" has no ?tab= of its own (the default), so a
+ * plain /api-keys link never needs one. */
+function useApiTab(): [ApiTab, (tab: ApiTab) => void] {
+  const [params, setParams] = useSearchParams();
+  const tab: ApiTab = params.get("tab") === "mcp" ? "mcp" : "keys";
+  const setTab = (next: ApiTab) => {
+    const nextParams = new URLSearchParams(params);
+    if (next === "keys") nextParams.delete("tab");
+    else nextParams.set("tab", next);
+    setParams(nextParams, { replace: true });
+  };
+  return [tab, setTab];
+}
+
+function ApiTabBar({ active, onChange }: { active: ApiTab; onChange: (tab: ApiTab) => void }) {
+  return (
+    <nav aria-label="API sections" className="mb-6 flex gap-1 border-b border-border">
+      {TABS.map((tab) => (
+        <button
+          key={tab.id}
+          type="button"
+          onClick={() => onChange(tab.id)}
+          className={cn(
+            "border-b-2 px-3 py-2 text-sm transition-colors",
+            active === tab.id
+              ? "border-accent text-text"
+              : "border-transparent text-muted hover:text-text",
+          )}
+        >
+          {tab.label}
+        </button>
+      ))}
+    </nav>
+  );
+}
+
+/** API (#131/#134/#139 follow-up): its own nav tab, not a card buried in
+ * Settings. The MCP tab (OAuth connections) is per-user and open to every
+ * member; the API keys tab stays owner-only, since minting a standing
+ * credential is the same trust level as changing who has one (see
+ * api-keys.ts). Both tabs render eagerly alongside the header and tab bar —
+ * only their own content area shows a skeleton while its query loads,
+ * matching every other page here, so switching or reloading on either tab
+ * never blanks the chrome around it. */
 export function ApiKeysPage() {
   const { org } = useCurrentOrg();
-  const isOwner = org?.role === "owner";
-  const orgId = org?.id ?? "";
-  const keys = useApiKeys(orgId, isOwner);
+  const [tab, setTab] = useApiTab();
 
   if (!org) return <NoOrgState />;
-  if (keys.isLoading && isOwner) return <ApiKeysSkeleton />;
 
   return (
     <div>
       <PageHeader
-        title="API & MCP"
+        title="API"
         sub="Connect an AI assistant, or call the API"
         action={<McpSetupCopyButton />}
       />
-      <div className="flex flex-col gap-8">
-        <ConnectedAppsSection />
-        <ApiKeysSection />
-      </div>
+      <ApiTabBar active={tab} onChange={setTab} />
+      {tab === "mcp" ? <ConnectedAppsSection /> : <ApiKeysSection />}
     </div>
   );
 }

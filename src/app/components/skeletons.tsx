@@ -214,7 +214,7 @@ export function AdminUsageSkeleton() {
 }
 
 /** /admin/orgs and /admin/users: header, search box, big table. */
-export function AdminTableSkeleton() {
+function AdminTableSkeleton() {
   return (
     <div data-testid="admin-table-skeleton">
       <HeaderSkeleton />
@@ -607,12 +607,25 @@ export function SettingsSkeleton() {
   );
 }
 
-/** /api-keys: the name field beside a fixed-width Create button, then the
- * keys table. */
-export function ApiKeysSkeleton() {
+/** The "API keys" / "MCP" tab bar on /api-keys, standing in for its two
+ * text-sized labels under one underline — shared by both tab skeletons below
+ * so switching tabs (or reloading on either one) never moves the bar itself. */
+function ApiTabBarSkeleton() {
+  return (
+    <div className="mb-6 flex gap-4 border-b border-border pb-2">
+      <Skeleton className="h-4 w-16" />
+      <Skeleton className="h-4 w-10" />
+    </div>
+  );
+}
+
+/** /api-keys?tab=keys (the default): the name field beside a fixed-width
+ * Create button, then the keys table. */
+function ApiKeysSkeleton() {
   return (
     <SkeletonStatus testId="api-keys-page-skeleton">
       <HeaderSkeleton action={{ w: "w-40" }} />
+      <ApiTabBarSkeleton />
       <div className="flex flex-col gap-4">
         <div className="flex gap-2">
           <Skeleton className="h-9 min-w-0 flex-1" />
@@ -620,6 +633,18 @@ export function ApiKeysSkeleton() {
         </div>
         <TableSkeleton rows={3} />
       </div>
+    </SkeletonStatus>
+  );
+}
+
+/** /api-keys?tab=mcp: same header and tab bar, just the connected-apps
+ * table below it, with no create form. */
+function McpTabSkeleton() {
+  return (
+    <SkeletonStatus testId="mcp-tab-skeleton">
+      <HeaderSkeleton action={{ w: "w-40" }} />
+      <ApiTabBarSkeleton />
+      <TableSkeleton rows={3} />
     </SkeletonStatus>
   );
 }
@@ -696,22 +721,29 @@ const PAGE_SKELETONS = {
   "/domains": DomainsPageSkeleton,
   "/billing": BillingSkeleton,
   "/settings": SettingsSkeleton,
-  "/api-keys": ApiKeysSkeleton,
   "/organization": OrganizationSkeleton,
   "/admin": AdminUsageSkeleton,
 } satisfies Record<string, () => ReactElement>;
 
-function skeletonFor(pathname: string): () => ReactElement {
+/** /api-keys carries which of its two tabs is open in ?tab=, not in the
+ * path, so PAGE_SKELETONS can't tell them apart on its own. */
+function apiKeysSkeletonFor(search: string): () => ReactElement {
+  return new URLSearchParams(search).get("tab") === "mcp" ? McpTabSkeleton : ApiKeysSkeleton;
+}
+
+function skeletonFor(pathname: string, search: string): () => ReactElement {
   // The two routes with something after the prefix: an admin tab is a table,
   // and a single link is its own page.
   if (pathname.startsWith("/admin/")) return AdminTableSkeleton;
   if (pathname.startsWith("/links/")) return LinkDetailSkeleton;
+  if (pathname === "/api-keys") return apiKeysSkeletonFor(search);
   return lookup(PAGE_SKELETONS, pathname) ?? PageSkeleton;
 }
 
 /** The same thing for callers that are inside the router and have no path in
  * hand, which is all of them. */
 export function RouteSkeleton() {
-  const Page = skeletonFor(useLocation().pathname);
+  const location = useLocation();
+  const Page = skeletonFor(location.pathname, location.searchStr);
   return <Page />;
 }

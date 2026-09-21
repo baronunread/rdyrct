@@ -237,11 +237,11 @@ Authorization: Bearer rdyrct_live_...`}</CodeBlock>
                     client at it and it discovers the flow itself from{" "}
                     <code className="font-mono">/.well-known/oauth-protected-resource/api/mcp</code>
                     , no key to copy or lose. Signing in shows a consent screen naming the client
-                    and what it's asking for; revoke it any time from{" "}
+                    and what it's asking for; revoke it any time from the{" "}
                     <a href="/api-keys" className="text-accent hover:underline">
-                      API & MCP
-                    </a>
-                    's Connected apps.
+                      API
+                    </a>{" "}
+                    page's MCP tab.
                   </p>
                   <p>
                     Client identity is a URL (a{" "}

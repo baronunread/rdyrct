@@ -102,7 +102,8 @@ test("connects an MCP client via OAuth consent, then revokes it from Connected a
   });
   expect(mcpRes.status()).toBe(200);
 
-  await page.goto(`${appUrl}/api-keys`);
+  // Connected apps live under the MCP tab, not the default (API keys) one.
+  await page.goto(`${appUrl}/api-keys?tab=mcp`);
   await expect(page.getByText("Playwright Client")).toBeVisible();
   await page.getByRole("button", { name: "Revoke Playwright Client" }).click();
   await page.getByRole("button", { name: "Disconnect" }).click();

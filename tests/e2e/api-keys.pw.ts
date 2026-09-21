@@ -6,8 +6,9 @@ const E2E_PASSWORD = "test-password-123";
 test("mint a key from its own nav tab, use it, then revoke it", async ({ page, request }) => {
   await signUpAndVerify(page, `apikeys-${Date.now()}@gmail.com`, E2E_PASSWORD);
 
-  await page.getByRole("link", { name: "API & MCP" }).click();
-  await expect(page.getByRole("heading", { name: "API & MCP" })).toBeVisible();
+  await page.getByRole("link", { name: "API" }).click();
+  await expect(page.getByRole("heading", { name: "API" })).toBeVisible();
+  // "API keys" is the default tab, so no click needed to land on it.
 
   await page.getByPlaceholder("Key name, e.g. Claude").fill("Playwright key");
   await page.getByRole("button", { name: "Create key" }).click();
@@ -44,4 +45,17 @@ test("mint a key from its own nav tab, use it, then revoke it", async ({ page, r
     data: { jsonrpc: "2.0", id: 1, method: "tools/list" },
   });
   expect(revokedRes.status()).toBe(401);
+});
+
+test("the selected tab survives a full page reload", async ({ page }) => {
+  await signUpAndVerify(page, `apikeys-tab-${Date.now()}@gmail.com`, E2E_PASSWORD);
+  await page.goto("/api-keys");
+
+  await page.getByRole("button", { name: "MCP" }).click();
+  await expect(page).toHaveURL(/[?&]tab=mcp/);
+  await expect(page.getByText("No connected apps yet")).toBeVisible();
+
+  await page.reload();
+  await expect(page.getByText("No connected apps yet")).toBeVisible();
+  await expect(page.getByPlaceholder("Key name, e.g. Claude")).not.toBeVisible();
 });
