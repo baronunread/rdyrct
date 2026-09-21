@@ -95,6 +95,42 @@ function ConnectedAppRow({ app, onRevoke }: { app: ConnectedApp; onRevoke: () =>
  * lose. Per-user, not per-org: unlike API keys below, any member sees and
  * revokes their own connections, since authorizing one is a session action
  * (a browser consent screen), not minting a standing credential. */
+function ConnectedAppsTable({
+  apps,
+  loading,
+  onRevoke,
+}: {
+  apps: ConnectedApp[] | undefined;
+  loading: boolean;
+  onRevoke: (app: ConnectedApp) => void;
+}) {
+  if (loading) return <Spinner />;
+  if (!apps || apps.length === 0)
+    return (
+      <EmptyState
+        title="No connected apps yet"
+        hint="Add rdyrct as an MCP connector in an AI assistant to see it here."
+      />
+    );
+  return (
+    <Table>
+      <thead>
+        <tr>
+          <Th>App</Th>
+          <Th>Access</Th>
+          <Th>Connected</Th>
+          <Th />
+        </tr>
+      </thead>
+      <tbody>
+        {apps.map((app) => (
+          <ConnectedAppRow key={app.id} app={app} onRevoke={() => onRevoke(app)} />
+        ))}
+      </tbody>
+    </Table>
+  );
+}
+
 function ConnectedAppsSection() {
   const toast = useToast();
   const apps = useConnectedApps();
@@ -123,30 +159,7 @@ function ConnectedAppsSection() {
         </p>
       </div>
 
-      {apps.isLoading ? (
-        <Spinner />
-      ) : apps.data && apps.data.length > 0 ? (
-        <Table>
-          <thead>
-            <tr>
-              <Th>App</Th>
-              <Th>Access</Th>
-              <Th>Connected</Th>
-              <Th />
-            </tr>
-          </thead>
-          <tbody>
-            {apps.data.map((app) => (
-              <ConnectedAppRow key={app.id} app={app} onRevoke={() => setRevokeTarget(app)} />
-            ))}
-          </tbody>
-        </Table>
-      ) : (
-        <EmptyState
-          title="No connected apps yet"
-          hint="Add rdyrct as an MCP connector in an AI assistant to see it here."
-        />
-      )}
+      <ConnectedAppsTable apps={apps.data} loading={apps.isLoading} onRevoke={setRevokeTarget} />
 
       <ConfirmDialog
         title="Disconnect app"
@@ -166,12 +179,89 @@ function ConnectedAppsSection() {
   );
 }
 
-function ApiKeysSection() {
+/** The create-key form, name field plus button, and the just-minted banner
+ * above it. Its own component so ApiKeysSection reads as sections wired
+ * together, not one function holding the whole flow. */
+function CreateKeyForm({
+  name,
+  onNameChange,
+  onCreate,
+  creating,
+  justCreated,
+  onDismissBanner,
+}: {
+  name: string;
+  onNameChange: (name: string) => void;
+  onCreate: () => void;
+  creating: boolean;
+  justCreated: ApiKeyDTO | null;
+  onDismissBanner: () => void;
+}) {
+  return (
+    <>
+      {justCreated && <NewKeyBanner apiKey={justCreated} onDismiss={onDismissBanner} />}
+      <div className="flex gap-2">
+        <Input
+          value={name}
+          onChange={(e) => onNameChange(e.target.value)}
+          placeholder="Key name, e.g. Claude"
+          className="min-w-0 flex-1"
+          onKeyDown={(e) => e.key === "Enter" && onCreate()}
+        />
+        <Button
+          variant="primary"
+          onClick={onCreate}
+          disabled={!name.trim() || creating}
+          className="shrink-0 whitespace-nowrap"
+        >
+          <BusyContent busy={creating}>Create key</BusyContent>
+        </Button>
+      </div>
+    </>
+  );
+}
+
+function ApiKeysTable({
+  keys,
+  loading,
+  onRevoke,
+}: {
+  keys: ApiKeyDTO[] | undefined;
+  loading: boolean;
+  onRevoke: (key: ApiKeyDTO) => void;
+}) {
+  if (loading) return <Spinner />;
+  if (!keys || keys.length === 0)
+    return (
+      <EmptyState
+        title="No API keys yet"
+        hint="Create one to call the API or connect an MCP client."
+      />
+    );
+  return (
+    <Table>
+      <thead>
+        <tr>
+          <Th>Name</Th>
+          <Th>Prefix</Th>
+          <Th>Created</Th>
+          <Th>Last used</Th>
+          <Th />
+        </tr>
+      </thead>
+      <tbody>
+        {keys.map((k) => (
+          <ApiKeyRow key={k.id} apiKey={k} onRevoke={() => onRevoke(k)} />
+        ))}
+      </tbody>
+    </Table>
+  );
+}
+
+/** State and mutations for the API keys section: create, revoke, and the
+ * two pending-target bits of UI state that go with them. */
+function useApiKeysSection(orgId: string) {
   const toast = useToast();
-  const { org } = useCurrentOrg();
-  const isOwner = org?.role === "owner";
-  const orgId = org?.id ?? "";
-  const keys = useApiKeys(orgId, isOwner);
   const mutations = useApiKeyMutations(orgId);
   const [name, setName] = useState("");
   const [justCreated, setJustCreated] = useState<ApiKeyDTO | null>(null);
@@ -201,6 +291,27 @@ function ApiKeysSection() {
     }
   };
 
+  return {
+    name,
+    setName,
+    justCreated,
+    setJustCreated,
+    revokeTarget,
+    setRevokeTarget,
+    create,
+    revoke,
+    creating: mutations.create.isPending,
+    revoking: mutations.revoke.isPending,
+  };
+}
+
+function ApiKeysSection() {
+  const { org } = useCurrentOrg();
+  const isOwner = org?.role === "owner";
+  const orgId = org?.id ?? "";
+  const keys = useApiKeys(orgId, isOwner);
+  const section = useApiKeysSection(orgId);
+
   if (!isOwner) {
     return (
       <div>
@@ -221,63 +332,28 @@ function ApiKeysSection() {
         </p>
       </div>
 
-      {justCreated && <NewKeyBanner apiKey={justCreated} onDismiss={() => setJustCreated(null)} />}
+      <CreateKeyForm
+        name={section.name}
+        onNameChange={section.setName}
+        onCreate={section.create}
+        creating={section.creating}
+        justCreated={section.justCreated}
+        onDismissBanner={() => section.setJustCreated(null)}
+      />
 
-      <div className="flex gap-2">
-        <Input
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder="Key name, e.g. Claude"
-          className="min-w-0 flex-1"
-          onKeyDown={(e) => e.key === "Enter" && create()}
-        />
-        <Button
-          variant="primary"
-          onClick={create}
-          disabled={!name.trim() || mutations.create.isPending}
-          className="shrink-0 whitespace-nowrap"
-        >
-          <BusyContent busy={mutations.create.isPending}>Create key</BusyContent>
-        </Button>
-      </div>
-
-      {keys.isLoading ? (
-        <Spinner />
-      ) : keys.data && keys.data.length > 0 ? (
-        <Table>
-          <thead>
-            <tr>
-              <Th>Name</Th>
-              <Th>Prefix</Th>
-              <Th>Created</Th>
-              <Th>Last used</Th>
-              <Th />
-            </tr>
-          </thead>
-          <tbody>
-            {keys.data.map((k) => (
-              <ApiKeyRow key={k.id} apiKey={k} onRevoke={() => setRevokeTarget(k)} />
-            ))}
-          </tbody>
-        </Table>
-      ) : (
-        <EmptyState
-          title="No API keys yet"
-          hint="Create one to call the API or connect an MCP client."
-        />
-      )}
+      <ApiKeysTable keys={keys.data} loading={keys.isLoading} onRevoke={section.setRevokeTarget} />
 
       <ConfirmDialog
         title="Revoke API key"
-        open={!!revokeTarget}
-        onClose={() => setRevokeTarget(null)}
-        onConfirm={revoke}
+        open={!!section.revokeTarget}
+        onClose={() => section.setRevokeTarget(null)}
+        onConfirm={section.revoke}
         confirmLabel="Revoke key"
         danger
-        pending={mutations.revoke.isPending}
+        pending={section.revoking}
       >
         <p className="text-sm">
-          Anything using <strong>{revokeTarget?.name}</strong> stops working immediately.
+          Anything using <strong>{section.revokeTarget?.name}</strong> stops working immediately.
         </p>
       </ConfirmDialog>
     </div>

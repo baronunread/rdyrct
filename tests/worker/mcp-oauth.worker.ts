@@ -107,7 +107,10 @@ async function grantAuthorizationCode(
   return code!;
 }
 
-async function exchangeCode(code: string, verifier: string): Promise<string> {
+async function exchangeCode(
+  code: string,
+  verifier: string,
+): Promise<{ access_token: string; refresh_token?: string }> {
   const tokenRes = await fetchWorker(
     new Request("http://localhost/api/auth/oauth2/token", {
       method: "POST",
@@ -123,9 +126,9 @@ async function exchangeCode(code: string, verifier: string): Promise<string> {
     authEnv(),
   );
   expect(tokenRes.status).toBe(200);
-  const token = await jsonBody<{ access_token: string }>(tokenRes);
+  const token = await jsonBody<{ access_token: string; refresh_token?: string }>(tokenRes);
   expect(token.access_token).toBeTruthy();
-  return token.access_token;
+  return token;
 }
 
 function callMcp(accessToken: string) {
@@ -158,7 +161,7 @@ describe("MCP OAuth (#139 follow-up)", () => {
     const { verifier, challenge } = await pkcePair();
 
     const code = await grantAuthorizationCode(cookie, challenge);
-    const accessToken = await exchangeCode(code, verifier);
+    const { access_token: accessToken } = await exchangeCode(code, verifier);
 
     const res = await callMcp(accessToken);
     expect(res.status).toBe(200);
@@ -200,22 +203,7 @@ describe("MCP OAuth (#139 follow-up)", () => {
     // prove dead: a code-only grant never gets one to revoke in the first
     // place.
     const code = await grantAuthorizationCode(cookie, challenge, "openid offline_access");
-
-    const tokenRes = await fetchWorker(
-      new Request("http://localhost/api/auth/oauth2/token", {
-        method: "POST",
-        headers: { "content-type": "application/x-www-form-urlencoded" },
-        body: new URLSearchParams({
-          grant_type: "authorization_code",
-          code,
-          redirect_uri: REDIRECT_URI,
-          client_id: CLIENT_ID,
-          code_verifier: verifier,
-        }).toString(),
-      }),
-      authEnv(),
-    );
-    const { refresh_token } = await jsonBody<{ refresh_token?: string }>(tokenRes);
+    const { refresh_token } = await exchangeCode(code, verifier);
     expect(refresh_token).toBeTruthy();
 
     const [{ id: consentId }] = await env.DB.prepare(

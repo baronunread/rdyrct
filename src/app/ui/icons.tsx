@@ -47,8 +47,6 @@ export {
   IconSelector as ChevronsUpDown,
   IconSettings as Settings,
   IconShieldCheck as ShieldCheck,
-  IconShieldMinus as ShieldMinus,
-  IconShieldPlus as ShieldPlus,
   IconShieldQuestion as ShieldQuestionMark,
   IconStar as Star,
   IconSun as Sun,

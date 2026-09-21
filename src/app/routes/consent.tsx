@@ -64,6 +64,64 @@ async function respond(oauthQuery: string, accept: boolean): Promise<string> {
   return body.url;
 }
 
+/** The request itself: who's asking, what for, and the Allow/Deny pair.
+ * Split from ConsentPage so that component only has to decide which of
+ * loading/error/this to show. */
+function ConsentDetails({
+  clientName,
+  email,
+  scopes,
+  onDecide,
+  deciding,
+}: {
+  clientName: string;
+  email: string | undefined;
+  scopes: string[];
+  onDecide: (accept: boolean) => void;
+  deciding: boolean;
+}) {
+  return (
+    <>
+      <p className="text-sm">
+        <span className="font-bold text-accent">{clientName}</span> wants to connect to your rdyrct
+        account
+        {email && (
+          <>
+            {" "}
+            (<span className="font-mono text-xs">{email}</span>)
+          </>
+        )}
+        .
+      </p>
+
+      {scopes.length > 0 && (
+        <ul className="mt-4 flex flex-col gap-1.5 text-left text-sm text-muted">
+          {scopes.map((scope) => (
+            <li key={scope} className="flex items-center gap-2">
+              <span className="h-1 w-1 shrink-0 rounded-full bg-muted" />
+              {lookup(SCOPE_LABELS, scope) ?? scope}
+            </li>
+          ))}
+        </ul>
+      )}
+
+      <p className="mt-4 text-xs text-muted">
+        It can call the API and MCP tools as you, the same as a scoped API key. Revoke it any time
+        from API & MCP.
+      </p>
+
+      <div className="mt-5 flex flex-col gap-2">
+        <Button variant="primary" onClick={() => onDecide(true)} disabled={deciding}>
+          Allow
+        </Button>
+        <Button variant="outline" onClick={() => onDecide(false)} disabled={deciding}>
+          Deny
+        </Button>
+      </div>
+    </>
+  );
+}
+
 export function ConsentPage() {
   const toast = useToast();
   const currentUser = useCurrentUser();
@@ -89,7 +147,6 @@ export function ConsentPage() {
   });
 
   const loading = currentUser.isLoading || client.isLoading;
-  const clientName = client.data?.client_name || clientId;
 
   return (
     <div className="grid min-h-dvh place-items-center px-4">
@@ -101,52 +158,13 @@ export function ConsentPage() {
         ) : client.isError ? (
           <p className="text-sm text-muted">{errorMessage(client.error)}</p>
         ) : (
-          <>
-            <p className="text-sm">
-              <span className="font-bold text-accent">{clientName}</span> wants to connect to your
-              rdyrct account
-              {currentUser.data?.user.email && (
-                <>
-                  {" "}
-                  (<span className="font-mono text-xs">{currentUser.data.user.email}</span>)
-                </>
-              )}
-              .
-            </p>
-
-            {scopes.length > 0 && (
-              <ul className="mt-4 flex flex-col gap-1.5 text-left text-sm text-muted">
-                {scopes.map((scope) => (
-                  <li key={scope} className="flex items-center gap-2">
-                    <span className="h-1 w-1 shrink-0 rounded-full bg-muted" />
-                    {lookup(SCOPE_LABELS, scope) ?? scope}
-                  </li>
-                ))}
-              </ul>
-            )}
-
-            <p className="mt-4 text-xs text-muted">
-              It can call the API and MCP tools as you, the same as a scoped API key. Revoke it any
-              time from API & MCP.
-            </p>
-
-            <div className="mt-5 flex flex-col gap-2">
-              <Button
-                variant="primary"
-                onClick={() => decide.mutate(true)}
-                disabled={decide.isPending}
-              >
-                Allow
-              </Button>
-              <Button
-                variant="outline"
-                onClick={() => decide.mutate(false)}
-                disabled={decide.isPending}
-              >
-                Deny
-              </Button>
-            </div>
-          </>
+          <ConsentDetails
+            clientName={client.data?.client_name || clientId}
+            email={currentUser.data?.user.email}
+            scopes={scopes}
+            onDecide={(accept) => decide.mutate(accept)}
+            deciding={decide.isPending}
+          />
         )}
       </div>
     </div>

@@ -6,8 +6,8 @@ const E2E_PASSWORD = "test-password-123";
 test("mint a key from its own nav tab, use it, then revoke it", async ({ page, request }) => {
   await signUpAndVerify(page, `apikeys-${Date.now()}@gmail.com`, E2E_PASSWORD);
 
-  await page.getByRole("link", { name: "API keys" }).click();
-  await expect(page.getByRole("heading", { name: "API keys" })).toBeVisible();
+  await page.getByRole("link", { name: "API & MCP" }).click();
+  await expect(page.getByRole("heading", { name: "API & MCP" })).toBeVisible();
 
   await page.getByPlaceholder("Key name, e.g. Claude").fill("Playwright key");
   await page.getByRole("button", { name: "Create key" }).click();

@@ -71,13 +71,13 @@ test("connects an MCP client via OAuth consent, then revokes it from Connected a
   await page.goto(authorizeUrl.toString());
   await expect(page.getByText("Playwright Client wants to connect")).toBeVisible();
 
-  // A redirect to the client's own callback leaves this app's origin, so
-  // catch it instead of waiting for a load that never resolves here.
-  const [request] = await Promise.all([
-    page.waitForRequest((req) => req.url().startsWith(REDIRECT_URI)),
-    page.getByRole("button", { name: "Allow" }).click(),
-  ]);
-  const code = new URL(request.url()).searchParams.get("code");
+  // The consent page's own success handler does a real
+  // window.location.assign to the client's redirect_uri, leaving this app's
+  // origin: wait for that navigation (not its response, which CI's sandbox
+  // may not be able to fetch) rather than a raw network-request listener.
+  await page.getByRole("button", { name: "Allow" }).click();
+  await page.waitForURL(`${REDIRECT_URI}*`);
+  const code = new URL(page.url()).searchParams.get("code");
   expect(code).toBeTruthy();
 
   const tokenRes = await page.request.post(`${appUrl}/api/auth/oauth2/token`, {
