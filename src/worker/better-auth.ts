@@ -265,6 +265,7 @@ async function sendExistingAccountNotice(env: Env, email: string) {
         note: "If this was not you, you can ignore this email. Nobody can use your address without reading this inbox.",
       },
       env.APP_URL,
+      email,
     ),
   );
 }
@@ -405,6 +406,7 @@ function buildAuth(env: Env) {
               note: "The link expires in one hour. If this was not you, ignore this email and nothing changes.",
             },
             env.APP_URL,
+            user.email,
           ),
         );
       },
@@ -448,6 +450,7 @@ function buildAuth(env: Env) {
                 note: "The code expires in 10 minutes.",
               },
               env.APP_URL,
+              email,
             ),
           );
         },

@@ -416,6 +416,7 @@ async function notifyOrgsLocked(
       cta: { label: "See your plan", url: `${env.APP_URL}/billing` },
     },
     env.APP_URL,
+    to,
   );
   await sendEmail(env, to, heading, body).catch(() => {});
 }
@@ -473,6 +474,7 @@ async function sendDowngradeEmail(
       cta: { label: "See your plan", url: `${env.APP_URL}/billing` },
     },
     env.APP_URL,
+    to,
   );
   await sendEmail(env, to, heading, body);
   return true;

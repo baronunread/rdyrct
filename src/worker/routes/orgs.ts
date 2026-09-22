@@ -640,6 +640,7 @@ orgRoutes.post("/:orgId/invites", requireOrgRole("admin"), async (c) => {
             note: "The invite expires in 7 days.",
           },
           c.env.APP_URL,
+          invite.email,
         ),
       ),
     ),

@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { renderEmail } from "../src/worker/email-layout";
 
 const APP_URL = "https://rdyrct.example";
+const TO = "person@example.com";
 
 const base = {
   preheader: "Join Acme on rdyrct.",
@@ -11,14 +12,14 @@ const base = {
 
 describe("renderEmail (#73)", () => {
   test("returns both parts from one call", () => {
-    const { html, text } = renderEmail(base, APP_URL);
+    const { html, text } = renderEmail(base, APP_URL, TO);
     expect(html.html).toContain("<!doctype html>");
     expect(text).toContain("You're invited to join Acme");
     expect(text).not.toContain("<");
   });
 
   test("puts the preheader before the body so inboxes preview it", () => {
-    const { html } = renderEmail(base, APP_URL);
+    const { html } = renderEmail(base, APP_URL, TO);
     const preheaderAt = html.html.indexOf("Join Acme on rdyrct.");
     const headingAt = html.html.indexOf("<h1");
     expect(preheaderAt).toBeGreaterThan(-1);
@@ -27,7 +28,7 @@ describe("renderEmail (#73)", () => {
 
   test("hides the preheader from the rendered message", () => {
     // It belongs in the inbox preview line, not at the top of the email.
-    expect(renderEmail(base, APP_URL).html.html).toContain("display:none");
+    expect(renderEmail(base, APP_URL, TO).html.html).toContain("display:none");
   });
 
   test("escapes user-controlled content in both parts", () => {
@@ -39,6 +40,7 @@ describe("renderEmail (#73)", () => {
         paragraphs: [hostile],
       },
       APP_URL,
+      TO,
     );
 
     expect(html.html).not.toContain(`href="https://phish.example"`);
@@ -55,6 +57,7 @@ describe("renderEmail (#73)", () => {
         cta: { label: "Accept the invite", url: "https://rdyrct.com/invite/abc" },
       },
       APP_URL,
+      TO,
     );
 
     expect(html.html).toContain(`href="https://rdyrct.com/invite/abc"`);
@@ -68,6 +71,7 @@ describe("renderEmail (#73)", () => {
         cta: { label: "Go", url: "javascript:alert(1)" },
       },
       APP_URL,
+      TO,
     );
 
     expect(html.html).not.toContain("javascript:");
@@ -84,6 +88,7 @@ describe("renderEmail (#73)", () => {
         note: "The code expires in 10 minutes.",
       },
       APP_URL,
+      TO,
     );
 
     expect(html.html).toContain("123456");
@@ -92,20 +97,26 @@ describe("renderEmail (#73)", () => {
   });
 
   test("carries a sender footer in both parts", () => {
-    const { html, text } = renderEmail(base, APP_URL);
+    const { html, text } = renderEmail(base, APP_URL, TO);
     expect(html.html).toContain("rdyrct, link shortening and QR codes");
     expect(text).toContain("rdyrct, link shortening and QR codes.");
   });
 
+  test("states the recipient as a plain fact, not a guessed reason", () => {
+    const { html, text } = renderEmail(base, APP_URL, TO);
+    expect(html.html).toContain(`Sent to ${TO}.`);
+    expect(text).toContain(`Sent to ${TO}.`);
+  });
+
   test("keeps a dark-mode block but styles light without it", () => {
-    const { html } = renderEmail(base, APP_URL);
+    const { html } = renderEmail(base, APP_URL, TO);
     expect(html.html).toContain("prefers-color-scheme: dark");
     // The light values are inline, so a client that drops <style> still reads.
     expect(html.html).toContain("background:#f7f4ef");
   });
 
   test("omits the code, CTA, and note blocks when unused", () => {
-    const { html } = renderEmail(base, APP_URL);
+    const { html } = renderEmail(base, APP_URL, TO);
     expect(html.html).not.toContain("letter-spacing:6px");
     expect(html.html).not.toContain("<a ");
     expect(html.html).not.toContain("undefined");
