@@ -705,15 +705,19 @@ function useAuthFlow(mode: "login" | "signup") {
         onInvalid?.();
         return false;
       }
-      if (mode === "signup") {
-        // Fire here, not after establishSessionAfterVerify: the account is
-        // created and verified at this point regardless of whether we can
-        // also sign them in (e.g. authPasswordRef was lost to a reload).
-        posthog.capture(USER_SIGNED_UP);
-        // Funnel step 5b (#64). Only on signup: a sign-in that happens to
-        // re-verify is not someone crossing this step for the first time.
-        posthog.capture(FUNNEL.verificationCompleted);
-      }
+      // Fire here, not after establishSessionAfterVerify: the account is
+      // created and verified at this point regardless of whether we can
+      // also sign them in (e.g. authPasswordRef was lost to a reload).
+      //
+      // Not gated on `mode`: goVerify is only ever reached while the account
+      // is unverified (trySignUp fresh, or trySignIn's EMAIL_NOT_VERIFIED
+      // retry), so a successful verifyEmail here is always that account's
+      // one-time activation, whether the visitor is currently on /signup or
+      // came back through /login to finish an abandoned signup. Gating on
+      // `mode === "signup"` undercounted exactly that second case.
+      posthog.capture(USER_SIGNED_UP);
+      // Funnel step 5b (#64).
+      posthog.capture(FUNNEL.verificationCompleted);
       const established = await establishSessionAfterVerify({
         authEmail,
         authPassword: authPasswordRef.current,

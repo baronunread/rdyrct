@@ -1,5 +1,5 @@
 import { expect, type Page, test } from "@playwright/test";
-import { signUpAndVerify } from "./resend";
+import { signUpAndVerify, latestOtp } from "./resend";
 import { rawSql } from "./db";
 import { signOut } from "./pages";
 
@@ -10,6 +10,27 @@ async function blockAuthRequests(page: Page) {
     await route.fulfill({ status: 500 });
   });
   return counter;
+}
+
+const CONSENT_KEY = "rdyrct:consent:v2";
+
+/** Records every PostHog capture this page attempts, decoded to plain JSON
+ *  strings, then blocks the request (nothing here needs a real backend). */
+async function trapCaptures(page: Page) {
+  const captured: string[] = [];
+  await page.route("**/*.i.posthog.com/**", async (route) => {
+    const body = route.request().postData();
+    const match = body?.match(/(?:^|&)data=([^&]+)/);
+    if (match) {
+      try {
+        captured.push(Buffer.from(decodeURIComponent(match[1]), "base64").toString("utf8"));
+      } catch {
+        /* not base64: not worth failing the trap over */
+      }
+    }
+    await route.abort();
+  });
+  return captured;
 }
 
 test.describe("authentication forms", () => {
@@ -30,6 +51,49 @@ test.describe("authentication forms", () => {
     // Signed in and already able to work: the account was given an
     // organization on its first session, so the switcher names one.
     await expect(page.getByTitle("Switch organization")).not.toHaveText("No organization");
+  });
+
+  // Regression for the case a mode-gated capture missed: someone signs up,
+  // closes the tab before entering the code, and later comes back through
+  // /login instead of /signup. trySignIn's EMAIL_NOT_VERIFIED branch sends
+  // them to the same verify-otp screen, but under mode="login" this time.
+  // That verification is still this account's one and only activation, so
+  // it must still count as a signup (see auth.tsx's runVerify).
+  test("resuming an abandoned signup through /login still counts as a signup", async ({ page }) => {
+    const email = `resume-${Date.now()}@gmail.com`;
+    const password = "test-password-123";
+
+    await page.goto("/signup");
+    await page.getByLabel("Email").fill(email);
+    await page.getByLabel("Password").fill(password);
+    await page.getByRole("button", { name: "Sign up" }).click();
+    await expect(page.getByRole("heading", { name: "Enter your code" })).toBeVisible({
+      timeout: 30_000,
+    });
+
+    // Grant consent only once the account exists but before coming back to
+    // verify: this is what makes the capture in step 2 observable at all.
+    await page.evaluate((key) => localStorage.setItem(key, "accepted"), CONSENT_KEY);
+    const captured = await trapCaptures(page);
+
+    // Simulates closing the tab and coming back later through /login
+    // instead of resuming the signup tab: a full navigation, so nothing
+    // in-memory (authPasswordRef, the `mode` this screen last rendered
+    // under) survives.
+    await page.goto("/login");
+    await page.getByLabel("Email").fill(email);
+    await page.getByLabel("Password").fill(password);
+    await page.getByRole("button", { name: "Sign in" }).click();
+    await expect(page.getByRole("heading", { name: "Enter your code" })).toBeVisible({
+      timeout: 30_000,
+    });
+
+    const otp = await latestOtp(page, email);
+    await page.locator("input").first().focus();
+    await page.keyboard.insertText(otp);
+    await expect(page).toHaveURL(/\/dashboard$/, { timeout: 30_000 });
+
+    expect(captured.some((body) => body.includes("user_signed_up"))).toBe(true);
   });
 
   test("keeps invalid login details in the browser instead of sending an auth request", async ({
