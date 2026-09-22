@@ -76,10 +76,11 @@ test.describe("authentication forms", () => {
     await page.evaluate((key) => localStorage.setItem(key, "accepted"), CONSENT_KEY);
     const captured = await trapCaptures(page);
 
-    // Simulates closing the tab and coming back later through /login
-    // instead of resuming the signup tab: a full navigation, so nothing
-    // in-memory (authPasswordRef, the `mode` this screen last rendered
-    // under) survives.
+    // Simulates actually closing the tab: sessionStorage's pendingVerify
+    // survives a same-tab navigation, and readPending() would otherwise
+    // resume straight to the code screen and skip the /login form (and the
+    // EMAIL_NOT_VERIFIED branch this test means to exercise) entirely.
+    await page.evaluate(() => sessionStorage.removeItem("rdyrct:pendingVerify"));
     await page.goto("/login");
     await page.getByLabel("Email").fill(email);
     await page.getByLabel("Password").fill(password);
