@@ -227,16 +227,28 @@ app.on(["GET", "POST"], "/api/auth/*", async (c) => {
   return withBackground(c.executionCtx, () => getAuth(c.env).handler(c.req.raw));
 });
 
-// RFC 9728 protected-resource metadata for the MCP endpoint (#139 follow-up):
-// the mcp() plugin's own onRequest hook serves it, but only for a request
-// that reaches BetterAuth's handler — and this path lives at the site
-// origin, not under /api/auth (unlike the authorization-server metadata
-// above, which the plugin also answers under /api/auth/.well-known/...).
-// No audit/rate-limit here: it's public, cacheable discovery metadata, not
-// an auth action.
+// RFC 9728 protected-resource metadata for the MCP endpoint, and RFC 8414
+// authorization-server metadata for the issuer (#139 follow-up): the mcp()
+// plugin's own onRequest hook serves both, but only for a request that
+// reaches BetterAuth's handler, and both paths live at the site origin, not
+// under /api/auth. BetterAuth's own /api/auth/* route also answers the
+// authorization-server one in its *suffix* form
+// (/api/auth/.well-known/oauth-authorization-server), but RFC 8414 (which
+// the MCP spec requires clients to follow) constructs the discovery URL by
+// inserting /.well-known/... before the issuer's path, not after it — a
+// spec-compliant client (confirmed against the `claude mcp add` CLI) never
+// tries the suffix form at all. No audit/rate-limit here: it's public,
+// cacheable discovery metadata, not an auth action.
 app.on(
   ["GET", "HEAD"],
-  ["/.well-known/oauth-protected-resource", "/.well-known/oauth-protected-resource/api/mcp"],
+  [
+    "/.well-known/oauth-protected-resource",
+    "/.well-known/oauth-protected-resource/api/mcp",
+    "/.well-known/oauth-authorization-server",
+    "/.well-known/oauth-authorization-server/api/auth",
+    "/.well-known/openid-configuration",
+    "/.well-known/openid-configuration/api/auth",
+  ],
   (c) => getAuth(c.env).handler(c.req.raw),
 );
 
