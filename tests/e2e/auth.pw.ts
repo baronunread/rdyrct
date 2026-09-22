@@ -1,5 +1,5 @@
 import { expect, type Page, test } from "@playwright/test";
-import { signUpAndVerify } from "./resend";
+import { signUpAndVerify, latestOtp } from "./resend";
 import { rawSql } from "./db";
 import { signOut } from "./pages";
 
@@ -30,6 +30,51 @@ test.describe("authentication forms", () => {
     // Signed in and already able to work: the account was given an
     // organization on its first session, so the switcher names one.
     await expect(page.getByTitle("Switch organization")).not.toHaveText("No organization");
+  });
+
+  // Regression for the case a mode-gated capture missed: someone signs up,
+  // closes the tab before entering the code, and later comes back through
+  // /login instead of /signup. trySignIn's EMAIL_NOT_VERIFIED branch sends
+  // them to the same verify-otp screen, but under mode="login" this time.
+  // That verification is still this account's one and only activation, so
+  // it must still count as a signup (see auth.tsx's runVerify).
+  test("resuming an abandoned signup through /login still counts as a signup", async ({ page }) => {
+    const email = `resume-${Date.now()}@gmail.com`;
+    const password = "test-password-123";
+
+    await page.goto("/signup");
+    await page.getByLabel("Email").fill(email);
+    await page.getByLabel("Password").fill(password);
+    await page.getByRole("button", { name: "Sign up" }).click();
+    await expect(page.getByRole("heading", { name: "Enter your code" })).toBeVisible({
+      timeout: 30_000,
+    });
+
+    // Simulates actually closing the tab: sessionStorage's pendingVerify
+    // survives a same-tab navigation, and readPending() would otherwise
+    // resume straight to the code screen and skip the /login form (and the
+    // EMAIL_NOT_VERIFIED branch this test means to exercise) entirely.
+    await page.evaluate(() => sessionStorage.removeItem("rdyrct:pendingVerify"));
+    await page.goto("/login");
+    await page.getByLabel("Email").fill(email);
+    await page.getByLabel("Password").fill(password);
+    await page.getByRole("button", { name: "Sign in" }).click();
+    await expect(page.getByRole("heading", { name: "Enter your code" })).toBeVisible({
+      timeout: 30_000,
+    });
+
+    const otp = await latestOtp(page, email);
+    await page.locator("input").first().focus();
+    await page.keyboard.insertText(otp);
+    // The functional regression this covers: verifying through /login used
+    // to run the exact same code path as verifying through /signup (see
+    // runVerify in auth.tsx), just under mode="login". Reaching /dashboard
+    // here, which nothing exercised before this test, is what proves that
+    // path still completes; the analytics side-effect it also fixes
+    // (posthog.capture(USER_SIGNED_UP) no longer gated on mode) isn't
+    // reliably observable from Playwright, since posthog-js's capture
+    // transport isn't consistently interceptable at the network layer.
+    await expect(page).toHaveURL(/\/dashboard$/, { timeout: 30_000 });
   });
 
   test("keeps invalid login details in the browser instead of sending an auth request", async ({

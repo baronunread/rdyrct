@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { installBrowserGlobals, removeBrowserGlobals } from "./browser-globals";
-import { FUNNEL, isFunnelEvent, landingContext } from "../src/app/lib/funnel";
+import { FUNNEL, isFunnelEvent, landingContext, USER_SIGNED_UP } from "../src/app/lib/funnel";
 
 /** Minimal stand-ins for the two globals landingContext() reads. */
 function browser({ search = "", referrer = "", host = "rdyrct.com" } = {}) {
@@ -23,6 +23,15 @@ describe("isFunnelEvent", () => {
     expect(isFunnelEvent("qr_code_downloaded")).toBe(false);
     expect(isFunnelEvent("user_signed_in")).toBe(false);
     expect(isFunnelEvent("")).toBe(false);
+  });
+
+  // Not funnel-shaped itself, but fired from the same call site as
+  // verificationCompleted right after OTP verification. Without this, a
+  // visitor who hadn't yet answered the consent banner at that moment had
+  // this event dropped while verificationCompleted survived, undercounting
+  // signups relative to completed verifications.
+  test("holds user_signed_up too, so it doesn't undercount against verificationCompleted", () => {
+    expect(isFunnelEvent(USER_SIGNED_UP)).toBe(true);
   });
 });
 

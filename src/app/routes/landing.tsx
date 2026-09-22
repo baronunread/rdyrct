@@ -29,13 +29,13 @@ import {
   useReducedMotion,
   type Variants,
 } from "motion/react";
-import { lazy, Suspense, useEffect, useRef } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { useSeo } from "../lib/seo";
 import { useMarketingScroll } from "../lib/marketing-scroll";
 import { FaqJsonLd } from "../components/faq-json-ld";
 import { MarketingLink } from "../components/marketing-link";
 import { useAudience } from "../lib/audience";
-import posthog from "../lib/posthog";
+import posthog, { onFlagVariant } from "../lib/posthog";
 import { FUNNEL, landingContext } from "../lib/funnel";
 import { trackCta } from "../lib/track-cta";
 import { PLAN_LIMITS, PLAN_PRICES } from "@/shared/types";
@@ -794,7 +794,85 @@ function DeployTerminal() {
   );
 }
 
-function HeroSection({
+const CTA_TEST_FLAG = "landing-page-cta-test";
+
+/** The hero's variant in the CTA A/B test (#... notebook v4JI): `control` is
+ *  today's copy-first hero, `test` leads with the working demo instead.
+ *  Anything other than the literal "test" value stays control, including no
+ *  answer yet and no consent (an unconsented visitor can't be measured, so
+ *  they are never bucketed into the experiment either).
+ *
+ *  `enabled` gates the subscription itself, not just the render: an authed
+ *  visitor always gets the control hero regardless of variant, so without
+ *  this an authed page load would still call getFeatureFlag() and record a
+ *  $feature_flag_called exposure for someone who was never actually at
+ *  risk of seeing the test arm, inflating the experiment's participant
+ *  count with people it can't have affected. */
+function useHeroCtaVariant(enabled: boolean): "control" | "test" {
+  const [variant, setVariant] = useState<"control" | "test">("control");
+  useEffect(() => {
+    if (!enabled) return;
+    return onFlagVariant(CTA_TEST_FLAG, (value) =>
+      setVariant(value === "test" ? "test" : "control"),
+    );
+  }, [enabled]);
+  return variant;
+}
+
+/**
+ * The `test` arm of the CTA experiment: the notebook's diagnosis was that
+ * 64% of visitors leave before clicking anything, which a button-copy or
+ * checklist-placement change can't reach because it never gets read that
+ * far. This leads with the thing itself instead: one column, the working
+ * demo directly under a one-line pitch, no second button competing with it.
+ * A visitor who skips the demo still has a plain way to the signup form.
+ *
+ * Every click the demo already tracks (`hero_shortener`,
+ * `hero_shortener_claim` in hero-shortener.tsx) fires the same
+ * `funnel_cta_clicked` event this section's control arm does, just with a
+ * different `placement`, so the experiment's goal metric counts them without
+ * any separate wiring.
+ */
+function HeroTestVariant() {
+  return (
+    <m.div
+      initial={{ opacity: 0, y: 12 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.5, ease: "easeOut" }}
+      className="mx-auto flex max-w-xl flex-col items-center gap-6 py-14 text-center md:py-20"
+    >
+      <h1 className="text-3xl font-bold tracking-tight text-balance sm:text-4xl lg:text-5xl">
+        Shorten a link. See who clicks it.
+      </h1>
+      <p className="max-w-md text-sm text-muted sm:text-base">
+        Country, referrer and device for every click, without storing IP addresses.
+      </p>
+      <HeroShortener />
+      <ul className="flex flex-wrap items-center justify-center gap-x-5 gap-y-1 text-xs text-muted">
+        <li className="flex items-center gap-1.5">
+          <Check size={13} className="text-accent-2" /> Free plan forever
+        </li>
+        <li className="flex items-center gap-1.5">
+          <Check size={13} className="text-accent-2" /> No credit card required
+        </li>
+        <li className="flex items-center gap-1.5">
+          <Check size={13} className="text-accent-2" /> No IP tracking
+        </li>
+      </ul>
+      {/* A plain link, not a second accent button: the demo's own "Shorten
+          it" already carries the one primary action on this screen. */}
+      <a
+        href="/signup"
+        onClick={() => trackCta("hero_primary")}
+        className="text-sm text-muted underline hover:text-accent"
+      >
+        Skip the demo, get started free
+      </a>
+    </m.div>
+  );
+}
+
+function HeroControlVariant({
   ctaTo,
   ctaLabel,
   authed,
@@ -890,6 +968,18 @@ function HeroSection({
       </m.div>
     </section>
   );
+}
+
+function HeroSection(props: {
+  ctaTo: string;
+  ctaLabel: string;
+  authed: boolean;
+  /** Empty until the session resolves; the card handles that itself. */
+  name: string;
+}) {
+  const ctaVariant = useHeroCtaVariant(!props.authed);
+  if (!props.authed && ctaVariant === "test") return <HeroTestVariant />;
+  return <HeroControlVariant {...props} />;
 }
 
 /**

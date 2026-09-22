@@ -9,7 +9,7 @@ import { AuthCard, PasswordMeter } from "../components/auth-form";
 import { authClient } from "../lib/auth-client";
 import { friendlyAuthError } from "../lib/auth-errors";
 import posthog from "../lib/posthog";
-import { FUNNEL } from "../lib/funnel";
+import { FUNNEL, USER_SIGNED_UP } from "../lib/funnel";
 import { useShake } from "../lib/use-shake";
 import { useCap } from "../lib/cap";
 import { useCurrentUser, useConfig } from "../lib/hooks";
@@ -537,7 +537,6 @@ async function establishSessionAfterVerify(deps: VerifyDeps): Promise<boolean> {
  * page changes. Out here because none of it is state, it is a sequence, and
  * it was the bulk of what made runVerify hard to read. */
 async function finishVerifiedSignIn(deps: {
-  mode: "login" | "signup";
   next: string;
   qc: ReturnType<typeof useQueryClient>;
   navigate: ReturnType<typeof useNavigate>;
@@ -547,12 +546,6 @@ async function finishVerifiedSignIn(deps: {
   await new Promise((resolve) => setTimeout(resolve, 900));
   clearPending();
   await deps.qc.refetchQueries({ queryKey: ["user"] });
-  if (deps.mode === "signup") {
-    posthog.capture("user_signed_up");
-    // Funnel step 5b (#64). Only on signup: a sign-in that happens to
-    // re-verify is not someone crossing this step for the first time.
-    posthog.capture(FUNNEL.verificationCompleted);
-  }
   const isAdmin = deps.qc.getQueryData<CurrentUser | null>(["user"])?.user.isAdmin ?? false;
   deps.setVerifyPhase("leaving");
   await new Promise((resolve) => setTimeout(resolve, 300));
@@ -712,6 +705,19 @@ function useAuthFlow(mode: "login" | "signup") {
         onInvalid?.();
         return false;
       }
+      // Fire here, not after establishSessionAfterVerify: the account is
+      // created and verified at this point regardless of whether we can
+      // also sign them in (e.g. authPasswordRef was lost to a reload).
+      //
+      // Not gated on `mode`: goVerify is only ever reached while the account
+      // is unverified (trySignUp fresh, or trySignIn's EMAIL_NOT_VERIFIED
+      // retry), so a successful verifyEmail here is always that account's
+      // one-time activation, whether the visitor is currently on /signup or
+      // came back through /login to finish an abandoned signup. Gating on
+      // `mode === "signup"` undercounted exactly that second case.
+      posthog.capture(USER_SIGNED_UP);
+      // Funnel step 5b (#64).
+      posthog.capture(FUNNEL.verificationCompleted);
       const established = await establishSessionAfterVerify({
         authEmail,
         authPassword: authPasswordRef.current,
@@ -720,7 +726,7 @@ function useAuthFlow(mode: "login" | "signup") {
         toast,
       });
       if (!established) return false;
-      await finishVerifiedSignIn({ mode, next, qc, navigate, setVerifyPhase });
+      await finishVerifiedSignIn({ next, qc, navigate, setVerifyPhase });
       return true;
     } finally {
       setBusy(false);
