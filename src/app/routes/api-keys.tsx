@@ -80,9 +80,6 @@ function ConnectedAppRow({ app, onRevoke }: { app: ConnectedApp; onRevoke: () =>
   return (
     <tr>
       <Td className="truncate">{app.clientName}</Td>
-      <Td className="text-xs text-muted">
-        {app.scopes.filter((s) => s !== "openid" && s !== "offline_access").join(", ") || "—"}
-      </Td>
       <Td className="text-xs text-muted">{relativeDate(app.createdAt)}</Td>
       <Td>
         <div className="flex justify-end">
@@ -115,7 +112,6 @@ function ConnectedAppsTable({
       <thead>
         <tr>
           <Th>App</Th>
-          <Th>Access</Th>
           <Th>Connected</Th>
           <Th />
         </tr>
