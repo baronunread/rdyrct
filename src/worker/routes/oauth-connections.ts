@@ -3,6 +3,7 @@ import { and, eq } from "drizzle-orm";
 import { HTTPException } from "hono/http-exception";
 import * as schema from "../db/schema";
 import type { AppEnv } from "../env";
+import { requireUser } from "../guards";
 
 // Mounted at /api/oauth-connections. Per-user, not per-org: an OAuth grant
 // (#139 follow-up) is a session action a member takes for themselves, not a
@@ -23,7 +24,7 @@ import type { AppEnv } from "../env";
 // window a stolen session cookie or API key already has.
 export const oauthConnectionRoutes = new Hono<AppEnv>();
 
-oauthConnectionRoutes.delete("/:consentId", async (c) => {
+oauthConnectionRoutes.delete("/:consentId", requireUser, async (c) => {
   const db = c.var.db;
   const user = c.var.user!;
   const consentId = c.req.param("consentId");

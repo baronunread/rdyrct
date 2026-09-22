@@ -279,4 +279,12 @@ describe("MCP OAuth (#139 follow-up)", () => {
       .then((r) => r.results);
     expect(count).toBe(1);
   });
+
+  it("401s an unauthenticated revoke instead of 500ing on a null user", async () => {
+    const res = await fetchWorker(
+      new Request("http://localhost/api/oauth-connections/whatever", { method: "DELETE" }),
+      authEnv(),
+    );
+    expect(res.status).toBe(401);
+  });
 });
