@@ -181,11 +181,6 @@ function ConnectedAppsSection() {
 
   return (
     <div className="flex flex-col gap-4">
-      <p className="text-sm text-muted">
-        AI assistants and other apps you've connected via OAuth: the recommended way to connect an
-        MCP client.
-      </p>
-
       {apps.isLoading ? (
         <TableSkeleton rows={3} testId="connected-apps-rows-skeleton" />
       ) : showWizard ? (
@@ -366,10 +361,6 @@ function ApiKeysSection() {
 
   return (
     <div className="flex flex-col gap-4">
-      <p className="text-sm text-muted">
-        Call the REST API directly, or connect an MCP client that doesn't support OAuth yet.
-      </p>
-
       <CreateKeyForm
         name={section.name}
         onNameChange={section.setName}

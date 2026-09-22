@@ -11,7 +11,8 @@ import { useState } from "react";
 import { cn } from "../ui/cn";
 import { Button } from "../ui/button";
 import { Spinner } from "../ui/spinner";
-import { McpUrlCopyButton, McpAgentPromptButton, mcpUrl } from "./mcp-setup-prompt";
+import { McpUrlCopyButton, McpAgentPromptButton } from "./mcp-setup-prompt";
+import { mcpUrl } from "../lib/mcp-url";
 
 interface Guide {
   id: string;

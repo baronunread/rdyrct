@@ -1,12 +1,8 @@
 import { Button } from "../ui/button";
 import { Copy } from "../ui/icons";
 import { copyToClipboard } from "../lib/clipboard";
+import { mcpUrl } from "../lib/mcp-url";
 import { useToast } from "../ui/toast";
-
-// A function, not a module-level constant: self-hosted instances serve this
-// page from their own domain, and the MCP URL a client needs to add always
-// matches the origin it was copied from.
-export const mcpUrl = () => `${window.location.origin}/api/mcp`;
 
 /** The endpoint and header an MCP client's "Add custom connector" form asks
  * for, as one paste instead of two fields copied separately, for a client

@@ -28,7 +28,8 @@ import { Table, Th, Td } from "../ui/misc";
 import { CopyButton } from "../ui/copy-button";
 import { copyToClipboard } from "../lib/clipboard";
 import { useToast } from "../ui/toast";
-import { McpSetupCopyButton, mcpUrl } from "../components/mcp-setup-prompt";
+import { McpSetupCopyButton } from "../components/mcp-setup-prompt";
+import { mcpUrl } from "../lib/mcp-url";
 
 /** A static, developer-written example, highlighted and copyable. `lang`
  * defaults to plaintext for the HTTP request-line/header lines sugar-high

@@ -614,11 +614,12 @@ export function SettingsSkeleton() {
  * shorter than the real thing, so the whole page below it jumped up once
  * the real tabs landed. Shared by both tab skeletons below so switching
  * tabs (or reloading on either one) never moves the bar itself. */
+const apiTabLabelWidths = ["w-16", "w-10"];
+
 function ApiTabBarSkeleton() {
-  const labelWidths = ["w-16", "w-10"];
   return (
     <div className="mb-6 flex gap-1 border-b border-border">
-      {labelWidths.map((w) => (
+      {apiTabLabelWidths.map((w) => (
         <div key={w} className="border-b-2 border-transparent px-3 py-2">
           <span className="flex h-5 items-center">
             <Skeleton className={cn("h-3", w)} />
