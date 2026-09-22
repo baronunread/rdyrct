@@ -64,7 +64,8 @@ test("the selected tab survives a full page reload", async ({ page }) => {
 });
 
 test("the connect wizard notices a new connection while waiting", async ({ page }) => {
-  await signUpAndVerify(page, `apikeys-wizard-${Date.now()}@gmail.com`, E2E_PASSWORD);
+  const email = `apikeys-wizard-${Date.now()}@gmail.com`;
+  await signUpAndVerify(page, email, E2E_PASSWORD);
   await page.goto("/api-keys?tab=mcp");
 
   await page.getByRole("button", { name: "I've added the server" }).click();
@@ -91,8 +92,8 @@ test("the connect wizard notices a new connection while waiting", async ({ page 
     page,
     `insert into oauth_consent (id, client_id, user_id, scopes, created_at, updated_at)
      select ?, ?, id, '["openid"]', unixepoch() * 1000, unixepoch() * 1000
-     from user order by created_at desc limit 1`,
-    [`consent-${clientId}`, clientId],
+     from user where email = ?`,
+    [`consent-${clientId}`, clientId, email],
   );
 
   await expect(page.getByRole("cell", { name: "Wizard Client", exact: true })).toBeVisible({
