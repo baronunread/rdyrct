@@ -243,7 +243,7 @@ function CreateKeyForm({
           onChange={(e) => onNameChange(e.target.value)}
           placeholder="Key name, e.g. Claude"
           className="min-w-0 flex-1"
-          onKeyDown={(e) => e.key === "Enter" && onCreate()}
+          onKeyDown={(e) => e.key === "Enter" && !creating && onCreate()}
         />
         <Button
           variant="primary"
