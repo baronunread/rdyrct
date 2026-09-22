@@ -404,16 +404,19 @@ async function notifyOrgsLocked(
   const names = locked.map((org) => org.name).join(", ");
   const heading =
     locked.length === 1 ? `${names} is read-only` : `Some organizations are read-only`;
-  const body = renderEmail({
-    preheader: `Your plan covers ${limit === 1 ? "one organization" : `${limit} organizations`}.`,
-    heading,
-    paragraphs: [
-      `Your plan covers ${limit === 1 ? "one organization" : `${limit} organizations`}, and you own more, so ${names} ${locked.length === 1 ? "is" : "are"} now read-only.`,
-      "Nothing was deleted, and every link in them keeps redirecting.",
-      "Upgrade to unlock all of them, or open one and choose to keep it active instead.",
-    ],
-    cta: { label: "See your plan", url: `${env.APP_URL}/billing` },
-  });
+  const body = renderEmail(
+    {
+      preheader: `Your plan covers ${limit === 1 ? "one organization" : `${limit} organizations`}.`,
+      heading,
+      paragraphs: [
+        `Your plan covers ${limit === 1 ? "one organization" : `${limit} organizations`}, and you own more, so ${names} ${locked.length === 1 ? "is" : "are"} now read-only.`,
+        "Nothing was deleted, and every link in them keeps redirecting.",
+        "Upgrade to unlock all of them, or open one and choose to keep it active instead.",
+      ],
+      cta: { label: "See your plan", url: `${env.APP_URL}/billing` },
+    },
+    env.APP_URL,
+  );
   await sendEmail(env, to, heading, body).catch(() => {});
 }
 
@@ -457,17 +460,20 @@ async function sendDowngradeEmail(
     kind === "warning" && state.over.domains !== undefined
       ? `${org.name} loses its custom domains soon`
       : `${org.name} is over its plan`;
-  const body = renderEmail({
-    preheader: overSentence(state.over, limits),
-    heading,
-    paragraphs: [
-      `${org.name} is on the ${plan} plan and holds ${overSentence(state.over, limits)}.`,
-      "Nothing was deleted. Your links, members and numbers are all still there.",
-      ...graceSentence(state.graceEndsAt, state.over.domains !== undefined),
-      "Upgrade to put it all back. If you leave it, you keep what you have and cannot add more.",
-    ],
-    cta: { label: "See your plan", url: `${env.APP_URL}/billing` },
-  });
+  const body = renderEmail(
+    {
+      preheader: overSentence(state.over, limits),
+      heading,
+      paragraphs: [
+        `${org.name} is on the ${plan} plan and holds ${overSentence(state.over, limits)}.`,
+        "Nothing was deleted. Your links, members and numbers are all still there.",
+        ...graceSentence(state.graceEndsAt, state.over.domains !== undefined),
+        "Upgrade to put it all back. If you leave it, you keep what you have and cannot add more.",
+      ],
+      cta: { label: "See your plan", url: `${env.APP_URL}/billing` },
+    },
+    env.APP_URL,
+  );
   await sendEmail(env, to, heading, body);
   return true;
 }
