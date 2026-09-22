@@ -11,7 +11,7 @@ import { useState } from "react";
 import { cn } from "../ui/cn";
 import { Button } from "../ui/button";
 import { Spinner } from "../ui/spinner";
-import { McpUrlCopyButton, MCP_URL } from "./mcp-setup-prompt";
+import { McpUrlCopyButton, McpAgentPromptButton, MCP_URL } from "./mcp-setup-prompt";
 
 interface Guide {
   id: string;
@@ -96,6 +96,13 @@ function ConnectGuide({ onStartWaiting }: { onStartWaiting: () => void }) {
           {MCP_URL}
         </code>
         <McpUrlCopyButton />
+      </div>
+
+      <div className="flex items-center gap-2 border-t border-border pt-4">
+        <p className="flex-1 text-xs text-muted">
+          Or tell your agent to help you set it up for you.
+        </p>
+        <McpAgentPromptButton />
       </div>
 
       <div>

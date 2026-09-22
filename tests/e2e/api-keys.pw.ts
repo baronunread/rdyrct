@@ -56,10 +56,10 @@ test("the selected tab survives a full page reload", async ({ page }) => {
   // exact: the "Copy MCP setup" button's accessible name also contains "MCP".
   await page.getByRole("button", { name: "MCP", exact: true }).click();
   await expect(page).toHaveURL(/[?&]tab=mcp/);
-  await expect(page.getByText("Connect an AI assistant")).toBeVisible();
+  await expect(page.getByText("Connect an AI assistant", { exact: true })).toBeVisible();
 
   await page.reload();
-  await expect(page.getByText("Connect an AI assistant")).toBeVisible();
+  await expect(page.getByText("Connect an AI assistant", { exact: true })).toBeVisible();
   await expect(page.getByPlaceholder("Key name, e.g. Claude")).not.toBeVisible();
 });
 

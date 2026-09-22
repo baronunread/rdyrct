@@ -40,3 +40,41 @@ export function McpUrlCopyButton() {
     </Button>
   );
 }
+
+// Coding agents (Claude Code, Cursor, etc.) can be told to wire up a remote
+// MCP server themselves rather than walking a person through settings
+// screens by hand. The prompt has to cover both paths a client can take,
+// since the agent won't know which one applies until it looks: OAuth if the
+// tool supports a remote server with sign-in, or a minted API key as a
+// bearer header if it only takes a static one. It names one concrete
+// command (Claude Code's CLI) as an example, then falls back to "find the
+// setting yourself" for everything else, rather than guessing every tool's
+// config file.
+const AGENT_PROMPT = `Connect the rdyrct MCP server to this tool.
+
+Server URL: ${MCP_URL}
+
+It's a remote MCP server over streamable HTTP that supports OAuth 2.1, so most current MCP clients can add it with just the URL and handle sign-in themselves.
+
+1. Find where this tool manages MCP (or "connector") servers.
+2. If it supports a remote server with its own sign-in, add one with the URL above. For example, in Claude Code: \`claude mcp add --transport http rdyrct ${MCP_URL}\`.
+3. If it only takes a static bearer token, ask me to mint an API key at https://rdyrct.com/api-keys, then configure the server with the URL above and header \`Authorization: Bearer <the key>\`.
+4. If you can't find the setting, tell me exactly which menu or file to edit instead of guessing.
+
+Confirm once it's connected.`;
+
+/** Outline, not primary: it sits beside the guide's own primary action
+ * ("I've added the server") as an alternative path, not a competing one. */
+export function McpAgentPromptButton() {
+  const toast = useToast();
+  return (
+    <Button
+      variant="outline"
+      size="sm"
+      onClick={() => copyToClipboard(AGENT_PROMPT, toast)}
+      className="shrink-0"
+    >
+      <Copy size={14} /> Copy prompt
+    </Button>
+  );
+}

@@ -114,7 +114,7 @@ test("connects an MCP client via OAuth consent, then revokes it from Connected a
   await page.getByRole("button", { name: "Revoke Playwright Client" }).click();
   await page.getByRole("button", { name: "Disconnect" }).click();
   // Back to zero connections: the connect guide, not a bare empty line.
-  await expect(page.getByText("Connect an AI assistant")).toBeVisible();
+  await expect(page.getByText("Connect an AI assistant", { exact: true })).toBeVisible();
 
   const revokedMcpRes = await request.post(`${appUrl}/api/mcp`, {
     headers: {
