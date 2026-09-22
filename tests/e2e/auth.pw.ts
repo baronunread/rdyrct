@@ -94,7 +94,11 @@ test.describe("authentication forms", () => {
     await page.keyboard.insertText(otp);
     await expect(page).toHaveURL(/\/dashboard$/, { timeout: 30_000 });
 
-    expect(captured.some((body) => body.includes("user_signed_up"))).toBe(true);
+    // posthog-js batches captures rather than sending each one immediately,
+    // so the request can still be in flight a moment after the redirect.
+    await expect
+      .poll(() => captured.some((body) => body.includes("user_signed_up")), { timeout: 10_000 })
+      .toBe(true);
   });
 
   test("keeps invalid login details in the browser instead of sending an auth request", async ({
