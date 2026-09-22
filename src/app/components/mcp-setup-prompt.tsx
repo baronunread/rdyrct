@@ -16,7 +16,11 @@ export function McpSetupCopyButton({ apiKey }: { apiKey?: string }) {
   const text = `URL: ${mcpUrl()}
 Header: Authorization: Bearer ${apiKey ?? "YOUR_API_KEY"}`;
   return (
-    <Button variant="outline" size="sm" onClick={() => copyToClipboard(text, toast)}>
+    <Button
+      variant="outline"
+      size="sm"
+      onClick={() => void copyToClipboard(text, toast).catch(() => {})}
+    >
       <Copy size={14} /> Copy MCP setup
     </Button>
   );
@@ -32,7 +36,7 @@ export function McpUrlCopyButton() {
     <Button
       variant="outline"
       size="sm"
-      onClick={() => copyToClipboard(mcpUrl(), toast)}
+      onClick={() => void copyToClipboard(mcpUrl(), toast).catch(() => {})}
       className="shrink-0"
     >
       <Copy size={14} /> Copy URL
@@ -74,7 +78,7 @@ export function McpAgentPromptButton() {
     <Button
       variant="outline"
       size="sm"
-      onClick={() => copyToClipboard(agentPrompt(), toast)}
+      onClick={() => void copyToClipboard(agentPrompt(), toast).catch(() => {})}
       className="shrink-0"
     >
       <Copy size={14} /> Copy prompt
