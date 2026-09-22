@@ -124,6 +124,32 @@ export function revokeAnalyticsConsent() {
   }
 }
 
+/**
+ * Subscribes to a multivariate flag's variant, calling `cb` whenever PostHog
+ * has an answer. Skipped entirely without consent: an unconsented visitor
+ * can't be measured, so they are never bucketed into the experiment either.
+ * Returns an unsubscribe function; `onFeatureFlags` can fire more than once
+ * (a persisted value, then a fresh one from the network), so callers must
+ * treat `cb` as idempotent and unsubscribe on cleanup.
+ */
+export function onFlagVariant(
+  key: string,
+  cb: (variant: string | boolean | undefined) => void,
+): () => void {
+  const client = loadClient();
+  if (!client) return () => {};
+  let cancelled = false;
+  let unsubscribe: (() => void) | undefined;
+  void client.then((p) => {
+    if (!p || cancelled) return;
+    unsubscribe = p.onFeatureFlags(() => cb(p.getFeatureFlag(key)));
+  });
+  return () => {
+    cancelled = true;
+    unsubscribe?.();
+  };
+}
+
 const posthog = {
   capture(event: string, properties?: EventProperties) {
     const client = loadClient();

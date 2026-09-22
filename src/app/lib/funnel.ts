@@ -41,7 +41,15 @@ export const FUNNEL = {
   linkCreated: "funnel_link_created",
 } as const;
 
-const FUNNEL_EVENTS: ReadonlySet<string> = new Set(Object.values(FUNNEL));
+/** Not funnel-shaped (kept for its own PostHog history), but the same
+ *  moment as `verificationCompleted` and just as easy to lose: fired from
+ *  the same call site, right after OTP verification succeeds. Buffered
+ *  alongside the funnel steps below, or a visitor who hasn't yet answered
+ *  the consent banner when they verify has this dropped silently while
+ *  `verificationCompleted` survives, undercounting signups. */
+export const USER_SIGNED_UP = "user_signed_up";
+
+const FUNNEL_EVENTS: ReadonlySet<string> = new Set([...Object.values(FUNNEL), USER_SIGNED_UP]);
 
 /** Buffer this event when it fires before the visitor has answered the
  *  consent banner. Only funnel steps are worth holding; a QR download by an
