@@ -215,7 +215,7 @@ test("a signed-in browser agent can create and find a link", async ({ page }) =>
       { signal: new AbortController().signal },
     );
   }, slug);
-  expect(updated).toMatch(/Updated rdyrct\.com\//);
+  expect(updated).toMatch(new RegExp(`^Updated ${appHost.replace(".", "\\.")}/`));
   await expect(page).toHaveURL(/\/links$/);
   await expect(page.getByText("https://example.com/agent-moved")).toBeVisible();
 
