@@ -614,7 +614,7 @@ export function SettingsSkeleton() {
  * shorter than the real thing, so the whole page below it jumped up once
  * the real tabs landed. Shared by both tab skeletons below so switching
  * tabs (or reloading on either one) never moves the bar itself. */
-const apiTabLabelWidths = ["w-16", "w-10"];
+const apiTabLabelWidths = ["w-14", "w-8"];
 
 function ApiTabBarSkeleton() {
   return (
@@ -632,7 +632,7 @@ function ApiTabBarSkeleton() {
 
 /** /api-keys?tab=keys (the default): the name field beside a fixed-width
  * Create button, then the keys table. */
-function ApiKeysSkeleton() {
+export function ApiKeysSkeleton() {
   return (
     <SkeletonStatus testId="api-keys-page-skeleton">
       <HeaderSkeleton />
