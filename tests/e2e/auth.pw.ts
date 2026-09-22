@@ -15,7 +15,10 @@ async function blockAuthRequests(page: Page) {
 const CONSENT_KEY = "rdyrct:consent:v2";
 
 /** Records every PostHog capture this page attempts, decoded to plain JSON
- *  strings, then blocks the request (nothing here needs a real backend). */
+ *  strings, then answers with a benign success instead of a real backend.
+ *  Aborting instead of fulfilling looked equivalent but wasn't: an aborted
+ *  /flags/ request left the SDK's own init/retry state unhealthy, and
+ *  capture() never flushed at all as a result. */
 async function trapCaptures(page: Page) {
   const captured: string[] = [];
   await page.route("**/*.i.posthog.com/**", async (route) => {
@@ -28,7 +31,7 @@ async function trapCaptures(page: Page) {
         /* not base64: not worth failing the trap over */
       }
     }
-    await route.abort();
+    await route.fulfill({ status: 200, contentType: "application/json", body: "{}" });
   });
   return captured;
 }
