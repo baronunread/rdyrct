@@ -47,6 +47,36 @@ const PLANNED: { issue: number; title: string; body: ReactNode }[] = [
     title: "Rate limits and quotas per key",
     body: "The same caps your plan has today, counted per key, so one runaway script cannot spend the whole organization's budget.",
   },
+  {
+    issue: 136,
+    title: "A machine-readable API catalog",
+    body: (
+      <>
+        Served at <span className="font-mono">/.well-known/api-catalog</span>, so an agent finds the
+        API without being told where to look.
+      </>
+    ),
+  },
+  {
+    issue: 138,
+    title: "A registration doc for agents",
+    body: (
+      <>
+        <span className="font-mono">/auth.md</span> spells out how an agent signs itself up for API
+        access, in the format agents are starting to expect.
+      </>
+    ),
+  },
+  {
+    issue: 77,
+    title: "Password-protected and targeted links",
+    body: "Gate a link with a password, or send visitors to different destinations by country or device.",
+  },
+  {
+    issue: 75,
+    title: "Bulk link import and export",
+    body: "Move an existing shortener's links in, or take yours out, in one CSV.",
+  },
 ];
 
 /**
@@ -97,24 +127,12 @@ export function RoadmapPage() {
       intro="rdyrct is built in the open, so this is the work itself rather than a promise about it. Every item below is an issue you can read, argue with, or send a patch to. No dates: one person maintains this, and a date would be a guess dressed up as a commitment."
     >
       <section className="py-12">
-        <h2 className="mb-6 text-xl font-bold">Next: the API and agent access</h2>
+        <h2 className="mb-6 text-xl font-bold">Next up</h2>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           {PLANNED.map((item) => (
             <PlannedCard key={item.issue} {...item} />
           ))}
         </div>
-        <p className="mt-6 text-sm">
-          These hang off one thread,{" "}
-          <a
-            href={`${GITHUB_URL}/issues/141`}
-            target="_blank"
-            rel="noreferrer"
-            className="text-accent hover:underline"
-          >
-            make rdyrct usable by an AI agent
-          </a>
-          , which is where the whole shape gets argued out.
-        </p>
       </section>
 
       <section className="border-t border-border py-12">
