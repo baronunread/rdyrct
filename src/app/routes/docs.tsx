@@ -257,6 +257,17 @@ Authorization: Bearer rdyrct_live_...`}</CodeBlock>
                     ), not a pre-registered id: current MCP clients handle this automatically.
                   </p>
 
+                  <h3 className="mt-2 font-bold">Access requirements</h3>
+                  <p>
+                    Any rdyrct account works, on any plan. Sign in with OAuth or authenticate with
+                    an API key, no region or extra approval needed. A tool call can only see or
+                    change what the signed-in account has permission for: reading needs at least a{" "}
+                    <code className="font-mono">viewer</code> role on the organization, most writes
+                    need <code className="font-mono">member</code>. What a tool can do is capped by
+                    the org's plan limits (links, domains, and so on), the same limits that apply in
+                    the app itself.
+                  </p>
+
                   <h3 className="mt-2 font-bold">Tools</h3>
                   <Table>
                     <thead>
