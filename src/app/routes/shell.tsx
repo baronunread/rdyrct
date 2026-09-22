@@ -17,7 +17,7 @@ import { Dialog } from "../ui/dialog";
 import { Button } from "../ui/button";
 import { Field, Input } from "../ui/field";
 
-import { AppShellSkeleton, RouteSkeleton } from "../components/skeletons";
+import { AdminPlatformSkeleton, AppShellSkeleton, RouteSkeleton } from "../components/skeletons";
 import { appNavItems } from "../components/nav-items";
 import { OverLimitBanner } from "../components/over-limit";
 import { UserAvatar } from "../components/user-avatar";
@@ -67,7 +67,7 @@ export function RequireAuth({ children }: { children: ReactNode }) {
  * admin area's existence isn't revealed to regular users. */
 export function RequireAdmin({ children }: { children: ReactNode }) {
   const currentUser = useCurrentUser();
-  if (currentUser.isLoading) return <RouteSkeleton />;
+  if (currentUser.isLoading) return <AdminPlatformSkeleton />;
   if (!currentUser.data?.user.isAdmin) return <NotFound />;
   return children;
 }

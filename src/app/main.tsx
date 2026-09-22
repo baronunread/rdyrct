@@ -28,7 +28,7 @@ import { ToastProvider } from "./ui/toast";
 import { ErrorBoundary } from "./components/error-boundary";
 import { NewVersionBanner } from "./components/new-version-banner";
 import { ConsentBanner } from "./ui/consent-banner";
-import { AppShellSkeleton } from "./components/skeletons";
+import { AppShellSkeleton, AdminPlatformSkeleton } from "./components/skeletons";
 import { LandingHeader } from "./components/landing-header";
 import { readAuthHint } from "./lib/user-cache";
 import { resumeAnalyticsIfConsented } from "./lib/posthog";
@@ -332,9 +332,11 @@ const adminRoute = createRoute({
   getParentRoute: () => appShellRoute,
   path: "/admin",
   component: () => (
-    <RequireAdmin>
-      <AdminLayout />
-    </RequireAdmin>
+    <Suspense fallback={<AdminPlatformSkeleton />}>
+      <RequireAdmin>
+        <AdminLayout />
+      </RequireAdmin>
+    </Suspense>
   ),
 });
 const adminUsageRoute = createRoute({

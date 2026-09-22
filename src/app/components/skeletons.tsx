@@ -197,6 +197,43 @@ export function AnalyticsSkeleton() {
   );
 }
 
+/** admin/layout.tsx's own tab widths, measured (icon + label + padding):
+ * Usage, Links, Organizations, Users, Audit log. Only shown while
+ * AdminLayout's chunk is still loading and its real nav hasn't mounted yet
+ * (AdminPlatformSkeleton below); AdminLayout's own inner Suspense falls back
+ * to the content-only skeletons beneath, since by then the real nav is
+ * already on screen. */
+const adminTabWidths = ["w-10", "w-8", "w-[5.5rem]", "w-9", "w-14"];
+
+function AdminTabBarSkeleton() {
+  return (
+    <nav className="-mx-1 flex gap-1 overflow-x-auto border-b border-border px-1 pb-px">
+      {adminTabWidths.map((w) => (
+        <div key={w} className="flex items-center gap-1.5 border-b-2 border-transparent px-3 py-2">
+          <Skeleton className="h-[15px] w-[15px] shrink-0 rounded-sm" />
+          <span className="flex h-5 items-center">
+            <Skeleton className={cn("h-3", w)} />
+          </span>
+        </div>
+      ))}
+    </nav>
+  );
+}
+
+/** The whole /admin section before AdminLayout's own lazy chunk has
+ * resolved: its nav doesn't exist yet, so without this the tab bar popped
+ * in above the header once it did, shoving everything below it down. */
+export function AdminPlatformSkeleton() {
+  const location = useLocation();
+  const Content = skeletonFor(location.pathname, location.searchStr);
+  return (
+    <div className="flex flex-col gap-5">
+      <AdminTabBarSkeleton />
+      <Content />
+    </div>
+  );
+}
+
 /** /admin: header, 6 stat cards, two charts, two ranked lists. */
 export function AdminUsageSkeleton() {
   return (
