@@ -22,12 +22,21 @@ export function mcpResource(env: Env): string {
  * `redirect: "manual"` hands back the 3xx itself rather than an opaque
  * redirect (that's a browser-fetch concept this runtime doesn't have), so
  * rejecting a 3xx status is the whole check.
+ *
+ * A slow or stalled response from that URL would otherwise hold the
+ * authorization request open for as long as the client cared to wait
+ * (Cloudflare puts no fixed limit on a subrequest's own duration), so this
+ * also bounds it.
  */
+const CLIENT_METADATA_TIMEOUT_MS = 5_000;
+
 export async function fetchClientMetadataResource(
   input: RequestInfo | URL,
   init?: RequestInit,
 ): Promise<Response> {
-  const res = await fetch(input, { ...init, redirect: "manual" });
+  const timeout = AbortSignal.timeout(CLIENT_METADATA_TIMEOUT_MS);
+  const signal = init?.signal ? AbortSignal.any([init.signal, timeout]) : timeout;
+  const res = await fetch(input, { ...init, redirect: "manual", signal });
   if (res.status >= 300 && res.status < 400)
     throw new Error("Client metadata fetch refused a redirect.");
   return res;
