@@ -195,7 +195,7 @@ test("a signed-in browser agent can create and find a link", async ({ page }) =>
   expect(analytics).toMatch(/Analytics for the current organization/);
   await expect(page).toHaveURL(/\/analytics$/);
 
-  const slug = created?.match(/rdyrct\.com\/(\S+)/)?.[1] ?? "";
+  const slug = created?.match(new RegExp(`${appHost.replace(".", "\\.")}/(\\S+)`))?.[1] ?? "";
   expect(slug).not.toBe("");
 
   await toolNamed(page, "get_link");
