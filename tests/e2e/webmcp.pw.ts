@@ -1,6 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import type { JsonValue } from "@/shared/types";
 import { signUpAndVerify } from "./resend";
+import { appUrl } from "./environment";
 
 declare global {
   interface Window {
@@ -175,7 +176,8 @@ test("a signed-in browser agent can create and find a link", async ({ page }) =>
     );
   }, destination);
 
-  expect(created).toMatch(/Created rdyrct.com\//);
+  const appHost = new URL(appUrl).host;
+  expect(created).toMatch(new RegExp(`^Created ${appHost.replace(".", "\\.")}/`));
   expect(windowTextLength(created)).toBeLessThanOrEqual(1_500);
   await expect(page).toHaveURL(/\/links$/);
   await expect(page.getByText(destination)).toBeVisible();
