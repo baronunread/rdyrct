@@ -45,6 +45,9 @@ CAP_SECRET=dev-only-cap-secret-not-a-real-one-0000000000000000
 # button. For local dev, `bun run dev` starts the emulate google service
 # behind portless at https://google.emulate.localhost, so the values below
 # work as-is (the client id/secret are arbitrary, the emulator accepts any).
+# It's seeded from google.emulate.yaml with two accounts: testuser@gmail.com
+# (a regular account) and admin@gmail.com. Set SUPERADMIN_EMAIL above to the
+# latter to test the platform admin locally through the emulator.
 # In production, leave GOOGLE_EMULATOR_URL blank and set the real Google
 # OAuth client id/secret; the worker then uses Google's discovery URL.
 GOOGLE_CLIENT_ID=test-client
