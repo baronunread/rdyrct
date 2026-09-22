@@ -864,7 +864,7 @@ function HeroTestVariant() {
   );
 }
 
-function HeroSection({
+function HeroControlVariant({
   ctaTo,
   ctaLabel,
   authed,
@@ -876,9 +876,6 @@ function HeroSection({
   /** Empty until the session resolves; the card handles that itself. */
   name: string;
 }) {
-  const ctaVariant = useHeroCtaVariant();
-  if (!authed && ctaVariant === "test") return <HeroTestVariant />;
-
   return (
     // Two columns from md up, one below it. Most products put a screenshot in
     // the right half because you cannot use them without an account; the
@@ -963,6 +960,18 @@ function HeroSection({
       </m.div>
     </section>
   );
+}
+
+function HeroSection(props: {
+  ctaTo: string;
+  ctaLabel: string;
+  authed: boolean;
+  /** Empty until the session resolves; the card handles that itself. */
+  name: string;
+}) {
+  const ctaVariant = useHeroCtaVariant();
+  if (!props.authed && ctaVariant === "test") return <HeroTestVariant />;
+  return <HeroControlVariant {...props} />;
 }
 
 /**
