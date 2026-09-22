@@ -141,7 +141,7 @@ Authorization: Bearer rdyrct_live_...
 
 ## MCP server
 
-A hosted [MCP](https://modelcontextprotocol.io) endpoint at \`https://rdyrct.com/api/mcp\`, stateless, for an AI chatbot's connectors. Same key as the API.
+A hosted [MCP](https://modelcontextprotocol.io) endpoint at \`{{MCP_URL}}\`, stateless, for an AI chatbot's connectors. Same key as the API.
 
 Tools: \`create_link\`, \`update_link\`, \`delete_link\`, \`list_links\`, \`get_link_stats\`, \`get_org_stats\`, \`get_plan_usage\`, \`invite_member\`, \`generate_qr_code\`. Every tool but the last takes an optional \`org_id\`, and assumes your sole organization when it is left out.
 

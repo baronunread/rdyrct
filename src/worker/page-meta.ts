@@ -119,7 +119,8 @@ export function markdownPage(url: URL, accept: string | null | undefined): Respo
   const canonical = canonicalFor(url, url.pathname);
   // JSON quoting keeps YAML valid whatever the copy says: descriptions read
   // like prose, and prose is full of colons.
-  const body = `---\ntitle: ${JSON.stringify(meta.title)}\ndescription: ${JSON.stringify(meta.description)}\ncanonical: ${canonical}\n---\n\n${meta.markdown}\n`;
+  const markdown = meta.markdown.replaceAll("{{MCP_URL}}", canonicalFor(url, "/api/mcp"));
+  const body = `---\ntitle: ${JSON.stringify(meta.title)}\ndescription: ${JSON.stringify(meta.description)}\ncanonical: ${canonical}\n---\n\n${markdown}\n`;
   return withAcceptVary(
     new Response(body, {
       headers: {
