@@ -27,10 +27,10 @@ interface PublicClient {
 }
 
 const SCOPE_LABELS = {
-  openid: "Confirm who you are",
-  profile: "Your name",
-  email: "Your email address",
-  offline_access: "Stay connected when you're not using it",
+  openid: "Confirm your identity",
+  profile: "Read your name",
+  email: "Read your email address",
+  offline_access: "Stay connected after this session ends",
 } satisfies Record<string, string>;
 
 /**
@@ -83,7 +83,7 @@ function ConsentDetails({
   return (
     <>
       <p className="text-sm">
-        <span className="font-bold text-accent">{clientName}</span> wants to connect to your rdyrct
+        <span className="font-bold text-accent">{clientName}</span> wants access to your rdyrct
         account
         {email && (
           <>
@@ -95,19 +95,23 @@ function ConsentDetails({
       </p>
 
       {scopes.length > 0 && (
-        <ul className="mt-4 flex flex-col gap-1.5 text-left text-sm text-muted">
-          {scopes.map((scope) => (
-            <li key={scope} className="flex items-center gap-2">
-              <span className="h-1 w-1 shrink-0 rounded-full bg-muted" />
-              {lookup(SCOPE_LABELS, scope) ?? scope}
-            </li>
-          ))}
-        </ul>
+        <>
+          <p className="mt-4 text-left text-xs text-muted">This will let it:</p>
+          <ul className="mt-1.5 flex flex-col gap-1.5 text-left text-sm text-muted">
+            {scopes.map((scope) => (
+              <li key={scope} className="flex items-center gap-2">
+                <span className="h-1 w-1 shrink-0 rounded-full bg-muted" />
+                {lookup(SCOPE_LABELS, scope) ?? scope}
+              </li>
+            ))}
+          </ul>
+        </>
       )}
 
       <p className="mt-4 text-xs text-muted">
-        It can call the API and MCP tools as you, the same as a scoped API key. Revoke it any time
-        from the API page's MCP tab.
+        <span className="font-bold text-text">Full account access:</span> it can call the API and
+        MCP tools as you, the same as a scoped API key. Revoke it anytime from the API page's MCP
+        tab.
       </p>
 
       <div className="mt-5 flex flex-col gap-2">
