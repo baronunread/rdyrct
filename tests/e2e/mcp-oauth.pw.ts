@@ -70,7 +70,7 @@ test("connects an MCP client via OAuth consent, then revokes it from Connected a
   }).toString();
 
   await page.goto(authorizeUrl.toString());
-  await expect(page.getByText("Playwright Client wants to connect")).toBeVisible();
+  await expect(page.getByText("Playwright Client wants access")).toBeVisible();
 
   // The consent page's own success handler does a real
   // window.location.assign to the client's redirect_uri, leaving this app's
