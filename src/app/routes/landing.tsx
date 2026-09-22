@@ -800,14 +800,22 @@ const CTA_TEST_FLAG = "landing-page-cta-test";
  *  today's copy-first hero, `test` leads with the working demo instead.
  *  Anything other than the literal "test" value stays control, including no
  *  answer yet and no consent (an unconsented visitor can't be measured, so
- *  they are never bucketed into the experiment either). */
-function useHeroCtaVariant(): "control" | "test" {
+ *  they are never bucketed into the experiment either).
+ *
+ *  `enabled` gates the subscription itself, not just the render: an authed
+ *  visitor always gets the control hero regardless of variant, so without
+ *  this an authed page load would still call getFeatureFlag() and record a
+ *  $feature_flag_called exposure for someone who was never actually at
+ *  risk of seeing the test arm, inflating the experiment's participant
+ *  count with people it can't have affected. */
+function useHeroCtaVariant(enabled: boolean): "control" | "test" {
   const [variant, setVariant] = useState<"control" | "test">("control");
-  useEffect(
-    () =>
-      onFlagVariant(CTA_TEST_FLAG, (value) => setVariant(value === "test" ? "test" : "control")),
-    [],
-  );
+  useEffect(() => {
+    if (!enabled) return;
+    return onFlagVariant(CTA_TEST_FLAG, (value) =>
+      setVariant(value === "test" ? "test" : "control"),
+    );
+  }, [enabled]);
   return variant;
 }
 
@@ -969,7 +977,7 @@ function HeroSection(props: {
   /** Empty until the session resolves; the card handles that itself. */
   name: string;
 }) {
-  const ctaVariant = useHeroCtaVariant();
+  const ctaVariant = useHeroCtaVariant(!props.authed);
   if (!props.authed && ctaVariant === "test") return <HeroTestVariant />;
   return <HeroControlVariant {...props} />;
 }
