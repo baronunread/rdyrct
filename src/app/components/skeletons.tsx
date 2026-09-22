@@ -607,14 +607,24 @@ export function SettingsSkeleton() {
   );
 }
 
-/** The "API keys" / "MCP" tab bar on /api-keys, standing in for its two
- * text-sized labels under one underline — shared by both tab skeletons below
- * so switching tabs (or reloading on either one) never moves the bar itself. */
+/** The "API keys" / "MCP" tab bar on /api-keys, matching ApiTabBar's own box
+ * model button for button: each tab is `px-3 py-2 text-sm` with its own
+ * `border-b-2`, inside a nav that has its own `border-b` beneath them. A
+ * bare pair of bars under one `pb-2` line, what this used to be, sat 14px
+ * shorter than the real thing, so the whole page below it jumped up once
+ * the real tabs landed. Shared by both tab skeletons below so switching
+ * tabs (or reloading on either one) never moves the bar itself. */
 function ApiTabBarSkeleton() {
+  const labelWidths = ["w-16", "w-10"];
   return (
-    <div className="mb-6 flex gap-4 border-b border-border pb-2">
-      <Skeleton className="h-4 w-16" />
-      <Skeleton className="h-4 w-10" />
+    <div className="mb-6 flex gap-1 border-b border-border">
+      {labelWidths.map((w) => (
+        <div key={w} className="border-b-2 border-transparent px-3 py-2">
+          <span className="flex h-5 items-center">
+            <Skeleton className={cn("h-3", w)} />
+          </span>
+        </div>
+      ))}
     </div>
   );
 }
