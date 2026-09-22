@@ -84,8 +84,13 @@ function codeBlock(code: string): SafeHtml {
   return emailHtml`<div class="code" style="margin:24px 0;padding:16px;border:1px solid ${LIGHT.border};border-radius:8px;background:${LIGHT.surface2};font-family:${CODE_FONT};font-size:30px;font-weight:700;letter-spacing:6px;text-align:center;color:${LIGHT.text}">${code}</div>`;
 }
 
-/** Renders the HTML and plain-text parts of one email from the same content. */
-export function renderEmail(content: EmailContent): EmailBody {
+/** Renders the HTML and plain-text parts of one email from the same content.
+ * appUrl (env.APP_URL) signs the plain-text part with the sending instance,
+ * so a self-hosted deploy signs its own mail rather than rdyrct.com's. `to`
+ * is the one recipient this render is for: the footer states the plain fact
+ * ("sent to X") rather than guessing at why, which was never something this
+ * function actually knew. */
+export function renderEmail(content: EmailContent, appUrl: string, to: string): EmailBody {
   // Every element that sets its own colour carries the matching class: an
   // inline colour beats an inherited one, so a dark-mode override on the
   // wrapping cell alone would leave these dark-on-dark.
@@ -145,7 +150,7 @@ ${preheaderBlock(content.preheader)}
         <tr>
           <td style="padding:24px 26px 26px">
             <hr style="border:none;border-top:1px solid ${LIGHT.border};margin:0 0 14px">
-            <p class="muted" style="margin:0;font-family:${FONT};font-size:12px;line-height:1.6;color:${LIGHT.muted}">rdyrct, link shortening and QR codes. You are getting this because someone used this address on rdyrct.com.</p>
+            <p class="muted" style="margin:0;font-family:${FONT};font-size:12px;line-height:1.6;color:${LIGHT.muted}">rdyrct, link shortening and QR codes. Sent to ${to}.</p>
           </td>
         </tr>
       </table>
@@ -155,18 +160,18 @@ ${preheaderBlock(content.preheader)}
 </body>
 </html>`;
 
-  return { html, text: renderText(content) };
+  return { html, text: renderText(content, appUrl, to) };
 }
 
 /**
  * The plain-text part. Not a fallback nobody reads: HTML-only mail is a
  * deliverability penalty, and text-only clients otherwise get nothing.
  */
-function renderText(content: EmailContent): string {
+function renderText(content: EmailContent, appUrl: string, to: string): string {
   const lines = [content.heading, "", ...content.paragraphs.flatMap((p) => [p, ""])];
   if (content.code) lines.push(content.code, "");
   if (content.cta) lines.push(`${content.cta.label}: ${safeUrl(content.cta.url)}`, "");
   if (content.note) lines.push(content.note, "");
-  lines.push("--", "rdyrct, link shortening and QR codes.", "https://rdyrct.com");
+  lines.push("--", "rdyrct, link shortening and QR codes.", `Sent to ${to}.`, appUrl);
   return lines.join("\n");
 }

@@ -33,6 +33,7 @@ export const RESERVED_SLUGS = new Set([
   "onboarding",
   "reset-password",
   "invite",
+  "consent",
   "privacy",
   "terms",
   "blog",
@@ -49,6 +50,7 @@ export const RESERVED_SLUGS = new Set([
   "billing",
   "domains",
   "settings",
+  "api-keys",
   "admin",
   "audit",
 ]);

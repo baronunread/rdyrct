@@ -1,0 +1,8 @@
+google:
+  users:
+    - email: testuser@gmail.com
+      name: Test User
+      email_verified: true
+    - email: admin@gmail.com
+      name: Admin User
+      email_verified: true

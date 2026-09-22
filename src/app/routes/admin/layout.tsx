@@ -8,8 +8,10 @@
  * as tabs, where their labels are unambiguous because everything around them
  * is platform-wide.
  */
+import { Suspense } from "react";
 import { Link, Outlet } from "@tanstack/react-router";
 import { Activity, Building2, Link2, ScrollText, UserCog } from "@/app/ui/icons";
+import { RouteSkeleton } from "../../components/skeletons";
 
 const TABS = [
   { to: "/admin", end: true, icon: Activity, label: "Usage" },
@@ -39,7 +41,13 @@ export function AdminLayout() {
           </Link>
         ))}
       </nav>
-      <Outlet />
+      {/* Local to the section, not just the shell's outer one: without it, a
+          tab whose chunk hasn't downloaded yet suspends past this nav too,
+          so switching tabs used to blank the nav bar itself, not just the
+          content below it. */}
+      <Suspense fallback={<RouteSkeleton />}>
+        <Outlet />
+      </Suspense>
     </div>
   );
 }

@@ -78,7 +78,7 @@ export function WebMcpMarketingTools() {
       {
         name: "create_qr_code",
         description:
-          "Show a free QR code for any link or text. Opens the QR generator at rdyrct.com/qr-code-generator; after it loads, call generate_qr_code with the same value to render the code on the page, and again to change its color, dot style, or logo. No account needed, nothing is sent anywhere.",
+          "Show a free QR code for any link or text. Opens the QR generator at this site's /qr-code-generator page; after it loads, call generate_qr_code with the same value to render the code on the page, and again to change its color, dot style, or logo. No account needed, nothing is sent anywhere.",
         inputSchema: {
           type: "object",
           properties: { value: { type: "string", minLength: 1, maxLength: 2_000 } },
@@ -92,7 +92,8 @@ export function WebMcpMarketingTools() {
           // just opens the generator. The navigate must not reject, or the
           // failure shows instead. generate_qr_code fills the form from there.
           await navigate({ to: "/qr-code-generator" }).catch(() => {});
-          return `The QR generator is open at rdyrct.com/qr-code-generator. Call generate_qr_code with value "${parsed.output.value}" to render the code on the page.`;
+          const url = `${window.location.origin}/qr-code-generator`;
+          return `The QR generator is open at ${url}. Call generate_qr_code with value "${parsed.output.value}" to render the code on the page.`;
         },
       },
     ];

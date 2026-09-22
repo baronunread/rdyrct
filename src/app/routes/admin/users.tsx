@@ -9,10 +9,10 @@ import type { AdminUserRow, OrgPlan, Sort } from "@/shared/types";
 import { Menu, MenuItem, MenuSeparator } from "../../ui/menu";
 import { Badge, PageHeader, Table, Td, Th } from "../../ui/misc";
 import { Tooltip } from "../../ui/tooltip";
-import { AdminTableSkeleton } from "../../components/skeletons";
 import { useToast } from "../../ui/toast";
 import { ConfirmDialog } from "../../ui/confirm-dialog";
 import { SearchInput } from "./search-input";
+import { TableSkeleton } from "../../ui/skeleton";
 import { paginate } from "./util";
 import { SortTh } from "../../ui/sort-th";
 import { withErrorToast } from "../../lib/mutation-toast";
@@ -530,7 +530,6 @@ export function AdminUsersPage() {
 
   const { totalPages, safePage, rows } = paginate(filtered, page);
 
-  if (users.isLoading) return <AdminTableSkeleton />;
   return (
     <div>
       <PageHeader title="Users" sub="All accounts on this instance" />
@@ -543,16 +542,22 @@ export function AdminUsersPage() {
         placeholder="Search name or email…"
         label="Search users"
       />
-      <UsersTable
-        rows={rows}
-        meId={currentUser.data?.user.id}
-        sort={sort}
-        setSort={setSort}
-        onGrantComp={(u) => setCompFor(u)}
-        onRevokeComp={(u) => revokeComp.mutate(u.id)}
-        onConfirm={(kind, u) => setConfirm({ kind, user: u })}
-        searchTerm={q.trim()}
-      />
+      {/* Rows only: the header and search box above are real, so the
+          page-level skeleton would draw a second one of each. */}
+      {users.isLoading ? (
+        <TableSkeleton rows={6} testId="admin-users-rows-skeleton" />
+      ) : (
+        <UsersTable
+          rows={rows}
+          meId={currentUser.data?.user.id}
+          sort={sort}
+          setSort={setSort}
+          onGrantComp={(u) => setCompFor(u)}
+          onRevokeComp={(u) => revokeComp.mutate(u.id)}
+          onConfirm={(kind, u) => setConfirm({ kind, user: u })}
+          searchTerm={q.trim()}
+        />
+      )}
       <Pager page={safePage} totalPages={totalPages} onPageChange={setPage} />
 
       <UserActionConfirmDialog

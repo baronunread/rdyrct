@@ -5,7 +5,8 @@ import * as v from "valibot";
 import type { JsonValue, LinkDTO, LinkInput, WithQuotaUsage } from "@/shared/types";
 import { api } from "../lib/api";
 import { useCurrentOrg } from "../lib/current-org";
-import { useCurrentUser } from "../lib/hooks";
+import { useConfig, useCurrentUser } from "../lib/hooks";
+import { linkDisplayTitle } from "../lib/link-display";
 import { registerWebMcpTools, type WebMcpTool } from "../lib/webmcp";
 
 const findLinksInput = v.object({
@@ -41,8 +42,8 @@ function linkSearchParams(query: string | undefined): string {
   return params.toString();
 }
 
-function conciseLink(link: LinkDTO): string {
-  const address = link.domain ? `${link.domain}/${link.slug}` : `rdyrct.com/${link.slug}`;
+function conciseLink(link: LinkDTO, appHost: string): string {
+  const address = linkDisplayTitle(appHost, link.domain, link.slug);
   return `${address} → ${link.destination}${link.title ? ` (${link.title})` : ""}`;
 }
 
@@ -54,8 +55,10 @@ function toolResult(message: string): string {
 export function WebMcpLinkTools() {
   const currentUser = useCurrentUser();
   const { org } = useCurrentOrg();
+  const config = useConfig();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
+  const appHost = config.data?.appHost ?? window.location.host;
 
   useEffect(() => {
     if (!currentUser.data || !org) return;
@@ -111,7 +114,7 @@ export function WebMcpLinkTools() {
             { signal: options?.signal },
           );
           if (result.items.length === 0) return "No matching links in the current organization.";
-          return toolResult(result.items.map(conciseLink).join("\n"));
+          return toolResult(result.items.map((link) => conciseLink(link, appHost)).join("\n"));
         },
       },
       {
@@ -129,7 +132,7 @@ export function WebMcpLinkTools() {
             // Counts first: a very long destination in conciseLink would
             // otherwise push them past the toolResult length cap.
             toolResult(
-              `${link.clicks} clicks, ${link.addressCount} addresses. ${conciseLink(link)}`,
+              `${link.clicks} clicks, ${link.addressCount} addresses. ${conciseLink(link, appHost)}`,
             ),
           ),
       },
@@ -157,7 +160,7 @@ export function WebMcpLinkTools() {
           });
           await refreshLinks();
           await navigate({ to: "/links" });
-          return toolResult(`Created ${conciseLink(link)}. The Links page now shows it.`);
+          return toolResult(`Created ${conciseLink(link, appHost)}. The Links page now shows it.`);
         },
       },
       {
@@ -195,7 +198,7 @@ export function WebMcpLinkTools() {
               );
               await refreshLinks();
               await navigate({ to: "/links" });
-              return toolResult(`Updated ${conciseLink(updated)}.`);
+              return toolResult(`Updated ${conciseLink(updated, appHost)}.`);
             },
           ),
       },
@@ -217,13 +220,14 @@ export function WebMcpLinkTools() {
             });
             await refreshLinks();
             await navigate({ to: "/links" });
-            return toolResult(`Deleted rdyrct.com/${link.slug}. It no longer redirects.`);
+            const address = linkDisplayTitle(appHost, link.domain, link.slug);
+            return toolResult(`Deleted ${address}. It no longer redirects.`);
           }),
       },
     ];
 
     return registerWebMcpTools(tools);
-  }, [currentUser.data, navigate, org, queryClient]);
+  }, [appHost, currentUser.data, navigate, org, queryClient]);
 
   return null;
 }

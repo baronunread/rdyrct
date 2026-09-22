@@ -212,7 +212,7 @@ async function notifyAutoSuspend(
   const owner = await orgOwnerEmail(db, orgId);
 
   const heading = "Your organization is suspended";
-  const body = renderEmail({
+  const content = {
     preheader: "Its links stopped redirecting because of unusual traffic.",
     heading,
     paragraphs: [
@@ -221,10 +221,16 @@ async function notifyAutoSuspend(
       "If this is real traffic, reply to this email or upgrade and we will restore it.",
     ],
     cta: { label: "See your plan", url: `${env.APP_URL}/billing` },
-  });
+  };
 
   const to = [owner, env.SUPERADMIN_EMAIL].filter((addr): addr is string => !!addr);
   // One failed send must not stop the other, and neither is worth failing the
   // sweep over: the suspension already happened and the alert already fired.
-  await Promise.all(to.map((addr) => sendEmail(env, addr, heading, body).catch(() => {})));
+  // Rendered once per recipient (not shared), so each footer names its own
+  // address rather than the org owner's for both the owner and the CC.
+  await Promise.all(
+    to.map((addr) =>
+      sendEmail(env, addr, heading, renderEmail(content, env.APP_URL, addr)).catch(() => {}),
+    ),
+  );
 }

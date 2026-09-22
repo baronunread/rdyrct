@@ -20,6 +20,7 @@ import {
 } from "./routes/orgs";
 import { linkRoutes } from "./routes/links";
 import { apiKeyRoutes } from "./routes/api-keys";
+import { oauthConnectionRoutes } from "./routes/oauth-connections";
 import { mcpRoutes } from "./routes/mcp";
 import { qrLogoRoutes } from "./routes/qr-logos";
 import { avatarRoutes } from "./routes/avatars";
@@ -226,6 +227,31 @@ app.on(["GET", "POST"], "/api/auth/*", async (c) => {
   return withBackground(c.executionCtx, () => getAuth(c.env).handler(c.req.raw));
 });
 
+// RFC 9728 protected-resource metadata for the MCP endpoint, and RFC 8414
+// authorization-server metadata for the issuer (#139 follow-up): the mcp()
+// plugin's own onRequest hook serves both, but only for a request that
+// reaches BetterAuth's handler, and both paths live at the site origin, not
+// under /api/auth. BetterAuth's own /api/auth/* route also answers the
+// authorization-server one in its *suffix* form
+// (/api/auth/.well-known/oauth-authorization-server), but RFC 8414 (which
+// the MCP spec requires clients to follow) constructs the discovery URL by
+// inserting /.well-known/... before the issuer's path, not after it — a
+// spec-compliant client (confirmed against the `claude mcp add` CLI) never
+// tries the suffix form at all. No audit/rate-limit here: it's public,
+// cacheable discovery metadata, not an auth action.
+app.on(
+  ["GET", "HEAD"],
+  [
+    "/.well-known/oauth-protected-resource",
+    "/.well-known/oauth-protected-resource/api/mcp",
+    "/.well-known/oauth-authorization-server",
+    "/.well-known/oauth-authorization-server/api/auth",
+    "/.well-known/openid-configuration",
+    "/.well-known/openid-configuration/api/auth",
+  ],
+  (c) => getAuth(c.env).handler(c.req.raw),
+);
+
 // Cap (#98): public, and necessarily so, since it guards signup itself.
 // Same public rate limit as the auth routes it protects.
 app.post("/api/cap/*", async (c, next) => {
@@ -249,7 +275,9 @@ app.post("/api/webhooks/polar", (c) => {
 });
 
 const api = new Hono<AppEnv>();
-api.use("*", withSession);
+// An OAuth token's aud claim already names /api/mcp; withSession enforces
+// that as the only path such a token may authenticate against (#242).
+api.use("*", withSession({ oauthTokenPath: "/api/mcp" }));
 api.use("*", enforceSignedApiRateLimit);
 // Carry the signed-in user onto the wide event once the session is resolved.
 // Enrich before `await next()` so a short-circuited response (e.g. a 429 from
@@ -267,6 +295,7 @@ api.route("/user/avatar", avatarRoutes);
 api.route("/billing", billingRoutes);
 api.route("/orgs/:orgId/domains", domainRoutes);
 api.route("/orgs/:orgId/api-keys", apiKeyRoutes);
+api.route("/oauth-connections", oauthConnectionRoutes);
 api.route("/invites", inviteRoutes);
 api.route("/admin", adminRoutes);
 // The remote MCP server (#139): its own mount, not under /orgs/:orgId, since

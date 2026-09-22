@@ -5,7 +5,7 @@ import { createError, EvlogError } from "evlog";
 import { and, eq } from "drizzle-orm";
 import * as v from "valibot";
 import * as QRCode from "qrcode";
-import type { JsonValue } from "../../shared/types";
+import type { JsonValue, LinkStats, OrgStats } from "../../shared/types";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StreamableHTTPTransport } from "@hono/mcp";
 import {
@@ -14,9 +14,12 @@ import {
   type CallToolResult,
   type Tool,
 } from "@modelcontextprotocol/sdk/types.js";
+import { requireMcpAuth } from "@better-auth/mcp";
 import * as schema from "../db/schema";
 import type { AppEnv, DB, Env, SessionUser } from "../env";
 import { withSession } from "../session";
+import { getAuth } from "../better-auth";
+import { mcpResource } from "../mcp-oauth";
 import { enforceSignedApiRateLimit } from "../rate-limit";
 import { orgRole } from "../org-role";
 import { orgPlan, countActiveAddresses } from "../plan";
@@ -44,7 +47,11 @@ import { jsonBodyLimit } from "../body-limit";
  * same key or session the outer request already authenticated.
  */
 const internal = new Hono<AppEnv>();
-internal.use("*", withSession);
+// Unrestricted: this app is never reachable by a real inbound request (its
+// own paths carry no /api prefix at all), only by dispatch() below, so an
+// OAuth token authenticates here exactly as it did at the public /api/mcp
+// route that already checked it once (#242).
+internal.use("*", withSession());
 internal.use("*", enforceSignedApiRateLimit);
 internal.route("/orgs", orgRoutes);
 internal.route("/orgs/:orgId/links", linkRoutes);
@@ -531,6 +538,30 @@ async function listLinksTool(t: ToolCtx): Promise<CallToolResult> {
   return textResult(JSON.parse(JSON.stringify(links)) as JsonValue);
 }
 
+/** What get_link_stats' description promises: clicks and where they came
+ * from. The chart data LinkStats also carries (a year of daily series,
+ * deltas, rangeDays) is for the dashboard, not this tool. */
+type LinkStatsSummary = Pick<
+  LinkStats,
+  | "slug"
+  | "domain"
+  | "destination"
+  | "title"
+  | "totalClicks"
+  | "clicks7d"
+  | "lastClick"
+  | "countries"
+  | "referrers"
+  | "devices"
+>;
+
+/** What get_org_stats' description promises: total/recent clicks, top
+ * links, dead links. Same trim as LinkStatsSummary above. */
+type OrgStatsSummary = Pick<
+  OrgStats,
+  "totalClicks" | "totalLinks" | "clicks7d" | "topLinks" | "deadLinks"
+>;
+
 async function getLinkStats(t: ToolCtx): Promise<CallToolResult> {
   const parsed = parseArgs(linkStatsArgs, t.rawArgs);
   if (!parsed.ok) return parsed.result;
@@ -546,7 +577,28 @@ async function getLinkStats(t: ToolCtx): Promise<CallToolResult> {
       `/orgs/${orgId}/links/stats/${encodeURIComponent(args.slug)}${qs}`,
     ),
   );
-  return textResult(stats);
+  // SAFETY: dispatched to our own /links/stats route, whose body is a
+  // LinkStats; the round trip narrows it the same way listLinksTool's does
+  // above, and turns the trimmed object below back into a JsonValue.
+  // eslint-disable-next-line react-doctor/no-json-parse-stringify-clone
+  const s = JSON.parse(JSON.stringify(stats)) as LinkStats;
+  // The dashboard's chart data (a year of daily series, deltas, rangeDays)
+  // has no use here: the tool promises clicks and where they came from, and
+  // the full DTO was ~370 lines of mostly zeros for a fresh link.
+  const summary: LinkStatsSummary = {
+    slug: s.slug,
+    domain: s.domain,
+    destination: s.destination,
+    title: s.title,
+    totalClicks: s.totalClicks,
+    clicks7d: s.clicks7d,
+    lastClick: s.lastClick,
+    countries: s.countries,
+    referrers: s.referrers,
+    devices: s.devices,
+  };
+  // eslint-disable-next-line react-doctor/no-json-parse-stringify-clone
+  return textResult(JSON.parse(JSON.stringify(summary)));
 }
 
 async function getOrgStats(t: ToolCtx): Promise<CallToolResult> {
@@ -558,7 +610,21 @@ async function getOrgStats(t: ToolCtx): Promise<CallToolResult> {
   const stats = ok(
     await dispatch(t.env, t.ctx, t.authorization, "GET", `/orgs/${orgId}/stats${qs}`),
   );
-  return textResult(stats);
+  // SAFETY: dispatched to our own /stats route, whose body is an OrgStats;
+  // same round trip as getLinkStats above.
+  // eslint-disable-next-line react-doctor/no-json-parse-stringify-clone
+  const s = JSON.parse(JSON.stringify(stats)) as OrgStats;
+  // Same trim as getLinkStats: the daily/hourly series, UTM breakdowns and
+  // heatmap are dashboard chart data the tool's description never promised.
+  const summary: OrgStatsSummary = {
+    totalClicks: s.totalClicks,
+    totalLinks: s.totalLinks,
+    clicks7d: s.clicks7d,
+    topLinks: s.topLinks,
+    deadLinks: s.deadLinks,
+  };
+  // eslint-disable-next-line react-doctor/no-json-parse-stringify-clone
+  return textResult(JSON.parse(JSON.stringify(summary)));
 }
 
 async function getPlanUsage(t: ToolCtx): Promise<CallToolResult> {
@@ -628,13 +694,28 @@ mcpRoutes.all("/", async (c) => {
   log.set({ route: "/api/mcp" });
   const user = c.var.user;
   const authorization = c.req.header("authorization");
-  if (!user || !authorization)
-    throw createError({
-      status: 401,
-      message: "Not signed in",
-      why: "This endpoint takes a scoped API key, not a browser session.",
-      fix: "Send Authorization: Bearer <api key>. Mint one from Settings.",
-    });
+  if (!user || !authorization) {
+    // withSession (session.ts) already tried a cookie, an API key, and an
+    // OAuth access token and found none of them; requireMcpAuth's own
+    // independent re-check exists here only to build the RFC 9728
+    // WWW-Authenticate challenge correctly (the resource-metadata URL, the
+    // realm) rather than hand-rolling that header. Its handler firing would
+    // mean it accepted a token session.ts just rejected — session.ts and
+    // this call verify the same signature/issuer/audience, so that would be
+    // a real bug, not a race; treated as the same 401 either way.
+    return requireMcpAuth(
+      getAuth(c.env),
+      () => {
+        throw createError({
+          status: 401,
+          message: "Not signed in",
+          why: "This endpoint takes an OAuth access token or a scoped API key, not a browser session.",
+          fix: "Connect via OAuth from an MCP client, or send Authorization: Bearer <api key> minted from API keys.",
+        });
+      },
+      { resource: mcpResource(c.env) },
+    )(c.req.raw);
+  }
 
   const server = new Server({ name: "rdyrct", version: "1.0.0" }, { capabilities: { tools: {} } });
   server.setRequestHandler(ListToolsRequestSchema, () => ({ tools: TOOLS }));

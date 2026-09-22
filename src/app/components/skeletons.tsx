@@ -197,6 +197,43 @@ export function AnalyticsSkeleton() {
   );
 }
 
+/** admin/layout.tsx's own tab widths, measured (icon + label + padding):
+ * Usage, Links, Organizations, Users, Audit log. Only shown while
+ * AdminLayout's chunk is still loading and its real nav hasn't mounted yet
+ * (AdminPlatformSkeleton below); AdminLayout's own inner Suspense falls back
+ * to the content-only skeletons beneath, since by then the real nav is
+ * already on screen. */
+const adminTabWidths = ["w-10", "w-8", "w-[5.5rem]", "w-9", "w-14"];
+
+function AdminTabBarSkeleton() {
+  return (
+    <nav className="-mx-1 flex gap-1 overflow-x-auto border-b border-border px-1 pb-px">
+      {adminTabWidths.map((w) => (
+        <div key={w} className="flex items-center gap-1.5 border-b-2 border-transparent px-3 py-2">
+          <Skeleton className="h-[15px] w-[15px] shrink-0 rounded-sm" />
+          <span className="flex h-5 items-center">
+            <Skeleton className={cn("h-3", w)} />
+          </span>
+        </div>
+      ))}
+    </nav>
+  );
+}
+
+/** The whole /admin section before AdminLayout's own lazy chunk has
+ * resolved: its nav doesn't exist yet, so without this the tab bar popped
+ * in above the header once it did, shoving everything below it down. */
+export function AdminPlatformSkeleton() {
+  const location = useLocation();
+  const Content = skeletonFor(location.pathname, location.searchStr);
+  return (
+    <div className="flex flex-col gap-5">
+      <AdminTabBarSkeleton />
+      <Content />
+    </div>
+  );
+}
+
 /** /admin: header, 6 stat cards, two charts, two ranked lists. */
 export function AdminUsageSkeleton() {
   return (
@@ -214,7 +251,7 @@ export function AdminUsageSkeleton() {
 }
 
 /** /admin/orgs and /admin/users: header, search box, big table. */
-export function AdminTableSkeleton() {
+function AdminTableSkeleton() {
   return (
     <div data-testid="admin-table-skeleton">
       <HeaderSkeleton />
@@ -607,6 +644,61 @@ export function SettingsSkeleton() {
   );
 }
 
+/** The "API keys" / "MCP" tab bar on /api-keys, matching ApiTabBar's own box
+ * model button for button: each tab is `px-3 py-2 text-sm` with its own
+ * `border-b-2`, inside a nav that has its own `border-b` beneath them. A
+ * bare pair of bars under one `pb-2` line, what this used to be, sat 14px
+ * shorter than the real thing, so the whole page below it jumped up once
+ * the real tabs landed. Shared by both tab skeletons below so switching
+ * tabs (or reloading on either one) never moves the bar itself. */
+const apiTabLabelWidths = ["w-14", "w-8"];
+
+function ApiTabBarSkeleton() {
+  return (
+    <div className="mb-6 flex gap-1 border-b border-border">
+      {apiTabLabelWidths.map((w) => (
+        <div key={w} className="border-b-2 border-transparent px-3 py-2">
+          <span className="flex h-5 items-center">
+            <Skeleton className={cn("h-3", w)} />
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** /api-keys?tab=keys (the default): the name field beside a fixed-width
+ * Create button, then the keys table. */
+export function ApiKeysSkeleton() {
+  return (
+    <SkeletonStatus testId="api-keys-page-skeleton">
+      <HeaderSkeleton />
+      <ApiTabBarSkeleton />
+      <div className="flex flex-col gap-4">
+        <div className="flex gap-2">
+          <Skeleton className="h-9 min-w-0 flex-1" />
+          <Skeleton className="h-9 w-28 shrink-0" />
+        </div>
+        <TableSkeleton rows={3} />
+      </div>
+    </SkeletonStatus>
+  );
+}
+
+/** /api-keys?tab=mcp: same header and tab bar. A table-shaped guess below
+ * them either way — whether this resolves to the connect guide (a first
+ * visit) or the connected-apps table (a returning one) isn't known until
+ * the query answers, and this is a brief, transient state either way. */
+function McpTabSkeleton() {
+  return (
+    <SkeletonStatus testId="mcp-tab-skeleton">
+      <HeaderSkeleton />
+      <ApiTabBarSkeleton />
+      <TableSkeleton rows={3} />
+    </SkeletonStatus>
+  );
+}
+
 /** /organization: the name/id card, the QR defaults card, and the
  * delete-organization danger card. */
 export function OrganizationSkeleton() {
@@ -683,17 +775,25 @@ const PAGE_SKELETONS = {
   "/admin": AdminUsageSkeleton,
 } satisfies Record<string, () => ReactElement>;
 
-function skeletonFor(pathname: string): () => ReactElement {
+/** /api-keys carries which of its two tabs is open in ?tab=, not in the
+ * path, so PAGE_SKELETONS can't tell them apart on its own. */
+function apiKeysSkeletonFor(search: string): () => ReactElement {
+  return new URLSearchParams(search).get("tab") === "mcp" ? McpTabSkeleton : ApiKeysSkeleton;
+}
+
+function skeletonFor(pathname: string, search: string): () => ReactElement {
   // The two routes with something after the prefix: an admin tab is a table,
   // and a single link is its own page.
   if (pathname.startsWith("/admin/")) return AdminTableSkeleton;
   if (pathname.startsWith("/links/")) return LinkDetailSkeleton;
+  if (pathname === "/api-keys") return apiKeysSkeletonFor(search);
   return lookup(PAGE_SKELETONS, pathname) ?? PageSkeleton;
 }
 
 /** The same thing for callers that are inside the router and have no path in
  * hand, which is all of them. */
 export function RouteSkeleton() {
-  const Page = skeletonFor(useLocation().pathname);
+  const location = useLocation();
+  const Page = skeletonFor(location.pathname, location.searchStr);
   return <Page />;
 }

@@ -28,7 +28,7 @@ import { ToastProvider } from "./ui/toast";
 import { ErrorBoundary } from "./components/error-boundary";
 import { NewVersionBanner } from "./components/new-version-banner";
 import { ConsentBanner } from "./ui/consent-banner";
-import { AppShellSkeleton } from "./components/skeletons";
+import { AppShellSkeleton, AdminPlatformSkeleton } from "./components/skeletons";
 import { LandingHeader } from "./components/landing-header";
 import { readAuthHint } from "./lib/user-cache";
 import { resumeAnalyticsIfConsented } from "./lib/posthog";
@@ -46,6 +46,9 @@ const ResetPasswordPage = lazy(() =>
   })),
 );
 const InvitePage = lazy(() => import("./routes/invite").then((m) => ({ default: m.InvitePage })));
+const ConsentPage = lazy(() =>
+  import("./routes/consent").then((m) => ({ default: m.ConsentPage })),
+);
 const PrivacyPage = lazyRouteComponent(() => import("./routes/privacy"), "PrivacyPage");
 const TermsPage = lazyRouteComponent(() => import("./routes/terms"), "TermsPage");
 const QrGeneratorPage = lazyRouteComponent(
@@ -77,6 +80,9 @@ const DomainsPage = lazy(() =>
 );
 const SettingsPage = lazy(() =>
   import("./routes/settings").then((m) => ({ default: m.SettingsPage })),
+);
+const ApiKeysPage = lazy(() =>
+  import("./routes/api-keys").then((m) => ({ default: m.ApiKeysPage })),
 );
 const OrganizationPage = lazy(() =>
   import("./routes/organization").then((m) => ({ default: m.OrganizationPage })),
@@ -239,6 +245,11 @@ const inviteRoute = createRoute({
   path: "/invite/$token",
   component: InvitePage,
 });
+const consentRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/consent",
+  component: ConsentPage,
+});
 
 // onboarding is gone: the app renders a create-org empty state instead;
 // keep stale links working
@@ -303,6 +314,11 @@ const settingsRoute = createRoute({
   path: "/settings",
   component: SettingsPage,
 });
+const apiKeysRoute = createRoute({
+  getParentRoute: () => appShellRoute,
+  path: "/api-keys",
+  component: ApiKeysPage,
+});
 const organizationRoute = createRoute({
   getParentRoute: () => appShellRoute,
   path: "/organization",
@@ -316,9 +332,11 @@ const adminRoute = createRoute({
   getParentRoute: () => appShellRoute,
   path: "/admin",
   component: () => (
-    <RequireAdmin>
-      <AdminLayout />
-    </RequireAdmin>
+    <Suspense fallback={<AdminPlatformSkeleton />}>
+      <RequireAdmin>
+        <AdminLayout />
+      </RequireAdmin>
+    </Suspense>
   ),
 });
 const adminUsageRoute = createRoute({
@@ -361,6 +379,7 @@ const routeTree = rootRoute.addChildren([
   signupRoute,
   resetPasswordRoute,
   inviteRoute,
+  consentRoute,
   onboardingRoute,
   appShellRoute.addChildren([
     dashboardRoute,
@@ -371,6 +390,7 @@ const routeTree = rootRoute.addChildren([
     billingRoute,
     domainsRoute,
     settingsRoute,
+    apiKeysRoute,
     organizationRoute,
     adminRoute.addChildren([
       adminUsageRoute,

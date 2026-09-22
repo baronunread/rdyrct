@@ -194,4 +194,46 @@ describe("remote MCP server (#139)", () => {
     expect(body.result?.isError).toBe(true);
     expect(body.result?.content?.[0]?.text).toContain("not a member");
   });
+
+  // get_link_stats/get_org_stats used to return the dashboard's own DTO
+  // unfiltered: a year of daily series, deltas, rangeDays, and (for the org
+  // one) an hourSeries, heatmap and UTM breakdowns nobody asked for. Locks
+  // in that the trim stays a trim, not just that the promised fields exist.
+  it("get_link_stats and get_org_stats answer only what their descriptions promise", async () => {
+    const cookie = await freeOwnerCookie();
+    const { key } = await mintKey(cookie);
+    const created = await callMcp(
+      `Bearer ${key}`,
+      toolCall("create_link", { destination: "https://example.com/promo" }),
+    );
+    const createdBody = await jsonBody<JsonRpcResponse>(created);
+    const { slug } = JSON.parse(createdBody.result!.content![0]!.text!);
+
+    const linkRes = await callMcp(`Bearer ${key}`, toolCall("get_link_stats", { slug }));
+    const linkBody = await jsonBody<JsonRpcResponse>(linkRes);
+    const linkStats = JSON.parse(linkBody.result!.content![0]!.text!);
+    expect(linkStats).toEqual({
+      slug,
+      domain: null,
+      destination: "https://example.com/promo",
+      title: "",
+      totalClicks: 0,
+      clicks7d: 0,
+      lastClick: null,
+      countries: [],
+      referrers: [],
+      devices: [],
+    });
+
+    const orgRes = await callMcp(`Bearer ${key}`, toolCall("get_org_stats", {}));
+    const orgBody = await jsonBody<JsonRpcResponse>(orgRes);
+    const orgStats = JSON.parse(orgBody.result!.content![0]!.text!);
+    expect(orgStats).toEqual({
+      totalClicks: 0,
+      totalLinks: 1,
+      clicks7d: 0,
+      topLinks: [],
+      deadLinks: [],
+    });
+  });
 });
