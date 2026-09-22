@@ -6,6 +6,7 @@ import {
   useApiKeys,
   useApiKeyMutations,
   useConnectedApps,
+  useCurrentUser,
   useRevokeConnectedApp,
   type ConnectedApp,
 } from "../lib/hooks";
@@ -25,6 +26,7 @@ import { cn } from "../ui/cn";
 import { McpSetupCopyButton } from "../components/mcp-setup-prompt";
 import { McpConnectWizard } from "../components/mcp-connect-wizard";
 import { NoOrgState } from "../components/no-org";
+import { ApiKeysSkeleton } from "../components/skeletons";
 
 /** The key value shown once, right after minting, with a copy button. */
 function NewKeyBanner({ apiKey, onDismiss }: { apiKey: ApiKeyDTO; onDismiss: () => void }) {
@@ -447,8 +449,12 @@ function ApiTabBar({ active, onChange }: { active: ApiTab; onChange: (tab: ApiTa
  * never blanks the chrome around it. */
 export function ApiKeysPage() {
   const { org } = useCurrentOrg();
+  const currentUser = useCurrentUser();
   const [tab, setTab] = useApiTab();
 
+  // The cached shell may know the organization before /user confirms the
+  // current role and plan. Do not briefly offer a stale create control.
+  if (currentUser.isLoading) return <ApiKeysSkeleton />;
   if (!org) return <NoOrgState />;
 
   return (
