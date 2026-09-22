@@ -25,10 +25,10 @@ import { WebMcpMarketingTools } from "../components/webmcp-marketing-tools";
 import { Footer } from "../ui/footer";
 import { MarketingLink } from "../components/marketing-link";
 import { Table, Th, Td } from "../ui/misc";
+import { McpAgentPromptButton } from "../components/mcp-setup-prompt";
 import { CopyButton } from "../ui/copy-button";
 import { copyToClipboard } from "../lib/clipboard";
 import { useToast } from "../ui/toast";
-import { McpSetupCopyButton } from "../components/mcp-setup-prompt";
 import { mcpUrl } from "../lib/mcp-url";
 
 /** A static, developer-written example, highlighted and copyable. `lang`
@@ -217,28 +217,24 @@ Authorization: Bearer rdyrct_live_...`}</CodeBlock>
                     >
                       MCP
                     </a>{" "}
-                    endpoint, for an AI chatbot's connectors. It answers to OAuth (recommended) or a
-                    scoped API key, the same two ways the REST API does above.
+                    endpoint, for an AI chatbot's connectors. It answers to OAuth, which is the way
+                    to use it: no key to copy or lose, and every current MCP client supports it.
                   </p>
 
                   <h3 className="mt-2 font-bold">Endpoint</h3>
                   <CodeBlock>{mcpUrl()}</CodeBlock>
                   <p>
                     One address, stateless: nothing to establish before calling a tool, nothing to
-                    carry between calls. Most clients ask for the URL and an auth header separately;
-                    copy both at once and swap in your own key:
+                    carry between calls.
                   </p>
-                  <div>
-                    <McpSetupCopyButton />
-                  </div>
 
-                  <h3 className="mt-2 font-bold">OAuth (recommended)</h3>
+                  <h3 className="mt-2 font-bold">OAuth</h3>
                   <p>
                     rdyrct is a full OAuth 2.1 authorization server for this endpoint: point an MCP
                     client at it and it discovers the flow itself from{" "}
                     <code className="font-mono">/.well-known/oauth-protected-resource/api/mcp</code>
-                    , no key to copy or lose. Signing in shows a consent screen naming the client
-                    and what it's asking for; revoke it any time from the{" "}
+                    . Signing in shows a consent screen naming the client and what it's asking for;
+                    revoke it any time from the{" "}
                     <a href="/api-keys" className="text-accent hover:underline">
                       API
                     </a>{" "}
@@ -254,8 +250,12 @@ Authorization: Bearer rdyrct_live_...`}</CodeBlock>
                     >
                       Client ID Metadata Document
                     </a>
-                    ), not a pre-registered id: current MCP clients handle this automatically.
+                    ), not a pre-registered id: current MCP clients handle this automatically. Or
+                    tell your agent to set it up for you:
                   </p>
+                  <div>
+                    <McpAgentPromptButton />
+                  </div>
 
                   <h3 className="mt-2 font-bold">Access requirements</h3>
                   <p>
@@ -293,12 +293,27 @@ Authorization: Bearer rdyrct_live_...`}</CodeBlock>
                     sole organization, and asks which one you mean if you belong to more than one.
                   </p>
 
-                  <h3 className="mt-2 font-bold">Calling a tool (API key)</h3>
+                  <h3 className="mt-2 font-bold">Example prompts</h3>
+                  <p>Once connected, an assistant can act on these directly:</p>
+                  <ul className="list-disc pl-5 text-muted">
+                    <li>"Shorten this URL and tag it 'launch': https://example.com/blog/post"</li>
+                    <li>"Make a QR code for our menu page"</li>
+                    <li>"How many clicks has my 'launch' link gotten, by country?"</li>
+                    <li>"What's my org's plan usage, links and domains?"</li>
+                    <li>"Invite jane@company.com to my org as a member"</li>
+                  </ul>
+
+                  <h3 className="mt-2 font-bold">API key (alternative to OAuth)</h3>
                   <p>
-                    An OAuth access token authenticates the same call the same way: swap the header
-                    for{" "}
-                    <code className="font-mono">Authorization: Bearer &lt;access_token&gt;</code>.
+                    For a client that takes a static bearer token instead of doing OAuth itself, use
+                    a scoped{" "}
+                    <a href="/api-keys" className="text-accent hover:underline">
+                      API key
+                    </a>{" "}
+                    the same way the REST API does above:
                   </p>
+                  <CodeBlock>{`URL: ${mcpUrl()}
+Header: Authorization: Bearer YOUR_API_KEY`}</CodeBlock>
                   <CodeBlock>{`POST /api/mcp
 Authorization: Bearer rdyrct_live_...
 Content-Type: application/json
