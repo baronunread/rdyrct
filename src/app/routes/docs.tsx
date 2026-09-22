@@ -28,7 +28,7 @@ import { Table, Th, Td } from "../ui/misc";
 import { CopyButton } from "../ui/copy-button";
 import { copyToClipboard } from "../lib/clipboard";
 import { useToast } from "../ui/toast";
-import { McpSetupCopyButton } from "../components/mcp-setup-prompt";
+import { McpSetupCopyButton, mcpUrl } from "../components/mcp-setup-prompt";
 
 /** A static, developer-written example, highlighted and copyable. `lang`
  * defaults to plaintext for the HTTP request-line/header lines sugar-high
@@ -221,7 +221,7 @@ Authorization: Bearer rdyrct_live_...`}</CodeBlock>
                   </p>
 
                   <h3 className="mt-2 font-bold">Endpoint</h3>
-                  <CodeBlock>https://rdyrct.com/api/mcp</CodeBlock>
+                  <CodeBlock>{mcpUrl()}</CodeBlock>
                   <p>
                     One address, stateless: nothing to establish before calling a tool, nothing to
                     carry between calls. Most clients ask for the URL and an auth header separately;

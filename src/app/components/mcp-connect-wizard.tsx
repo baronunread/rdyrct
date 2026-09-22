@@ -11,7 +11,7 @@ import { useState } from "react";
 import { cn } from "../ui/cn";
 import { Button } from "../ui/button";
 import { Spinner } from "../ui/spinner";
-import { McpUrlCopyButton, McpAgentPromptButton, MCP_URL } from "./mcp-setup-prompt";
+import { McpUrlCopyButton, McpAgentPromptButton, mcpUrl } from "./mcp-setup-prompt";
 
 interface Guide {
   id: string;
@@ -93,7 +93,7 @@ function ConnectGuide({ onStartWaiting }: { onStartWaiting: () => void }) {
 
       <div className="flex items-center gap-2">
         <code className="min-w-0 flex-1 truncate rounded-md bg-surface px-3 py-2 font-mono text-xs">
-          {MCP_URL}
+          {mcpUrl()}
         </code>
         <McpUrlCopyButton />
       </div>

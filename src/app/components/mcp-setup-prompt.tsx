@@ -3,7 +3,10 @@ import { Copy } from "../ui/icons";
 import { copyToClipboard } from "../lib/clipboard";
 import { useToast } from "../ui/toast";
 
-export const MCP_URL = "https://rdyrct.com/api/mcp";
+// A function, not a module-level constant: self-hosted instances serve this
+// page from their own domain, and the MCP URL a client needs to add always
+// matches the origin it was copied from.
+export const mcpUrl = () => `${window.location.origin}/api/mcp`;
 
 /** The endpoint and header an MCP client's "Add custom connector" form asks
  * for, as one paste instead of two fields copied separately, for a client
@@ -14,7 +17,7 @@ export const MCP_URL = "https://rdyrct.com/api/mcp";
  * job. */
 export function McpSetupCopyButton({ apiKey }: { apiKey?: string }) {
   const toast = useToast();
-  const text = `URL: ${MCP_URL}
+  const text = `URL: ${mcpUrl()}
 Header: Authorization: Bearer ${apiKey ?? "YOUR_API_KEY"}`;
   return (
     <Button variant="outline" size="sm" onClick={() => copyToClipboard(text, toast)}>
@@ -33,7 +36,7 @@ export function McpUrlCopyButton() {
     <Button
       variant="outline"
       size="sm"
-      onClick={() => copyToClipboard(MCP_URL, toast)}
+      onClick={() => copyToClipboard(mcpUrl(), toast)}
       className="shrink-0"
     >
       <Copy size={14} /> Copy URL
@@ -50,18 +53,22 @@ export function McpUrlCopyButton() {
 // command (Claude Code's CLI) as an example, then falls back to "find the
 // setting yourself" for everything else, rather than guessing every tool's
 // config file.
-const AGENT_PROMPT = `Connect the rdyrct MCP server to this tool.
+function agentPrompt() {
+  const url = mcpUrl();
+  const apiKeysUrl = `${window.location.origin}/api-keys`;
+  return `Connect the rdyrct MCP server to this tool.
 
-Server URL: ${MCP_URL}
+Server URL: ${url}
 
 It's a remote MCP server over streamable HTTP that supports OAuth 2.1, so most current MCP clients can add it with just the URL and handle sign-in themselves.
 
 1. Find where this tool manages MCP (or "connector") servers.
-2. If it supports a remote server with its own sign-in, add one with the URL above. For example, in Claude Code: \`claude mcp add --transport http rdyrct ${MCP_URL}\`.
-3. If it only takes a static bearer token, ask me to mint an API key at https://rdyrct.com/api-keys, then configure the server with the URL above and header \`Authorization: Bearer <the key>\`.
+2. If it supports a remote server with its own sign-in, add one with the URL above. For example, in Claude Code: \`claude mcp add --transport http rdyrct ${url}\`.
+3. If it only takes a static bearer token, ask me to mint an API key at ${apiKeysUrl}, then configure the server with the URL above and header \`Authorization: Bearer <the key>\`.
 4. If you can't find the setting, tell me exactly which menu or file to edit instead of guessing.
 
 Confirm once it's connected.`;
+}
 
 /** Outline, not primary: it sits beside the guide's own primary action
  * ("I've added the server") as an alternative path, not a competing one. */
@@ -71,7 +78,7 @@ export function McpAgentPromptButton() {
     <Button
       variant="outline"
       size="sm"
-      onClick={() => copyToClipboard(AGENT_PROMPT, toast)}
+      onClick={() => copyToClipboard(agentPrompt(), toast)}
       className="shrink-0"
     >
       <Copy size={14} /> Copy prompt
