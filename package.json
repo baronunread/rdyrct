@@ -68,7 +68,7 @@
     "jose": "6.2.3",
     "morphicons": "^1.7.0",
     "motion": "^13.1.1",
-    "posthog-js": "1.418.10",
+    "posthog-js": "^1.434.9",
     "qr-code-styling": "^1.9.2",
     "qrcode": "^1.5.4",
     "react": "^19.2.8",
