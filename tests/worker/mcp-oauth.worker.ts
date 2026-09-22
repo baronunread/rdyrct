@@ -174,6 +174,27 @@ describe("MCP OAuth (#139 follow-up)", () => {
     });
   });
 
+  it("a granted access token does not authenticate a direct non-MCP API call (#242)", async () => {
+    const cookie = await freeOwnerCookie();
+    await registerTestClient();
+    const { verifier, challenge } = await pkcePair();
+
+    const code = await grantAuthorizationCode(cookie, challenge);
+    const { access_token: accessToken } = await exchangeCode(code, verifier);
+
+    // Same token that authenticates /api/mcp above, aimed at a real REST
+    // route instead: its aud claim names only /api/mcp, and withSession's
+    // oauthTokenPath now enforces that, so this must come back unauthed
+    // rather than resolving to the token owner's full session.
+    const res = await fetchWorker(
+      new Request("http://localhost/api/user", {
+        headers: { authorization: `Bearer ${accessToken}` },
+      }),
+      authEnv(),
+    );
+    expect(res.status).toBe(401);
+  });
+
   it("401s an unauthenticated request with an RFC 9728 WWW-Authenticate challenge", async () => {
     const res = await fetchWorker(
       new Request("http://localhost/api/mcp", {

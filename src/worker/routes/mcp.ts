@@ -47,7 +47,11 @@ import { jsonBodyLimit } from "../body-limit";
  * same key or session the outer request already authenticated.
  */
 const internal = new Hono<AppEnv>();
-internal.use("*", withSession);
+// Unrestricted: this app is never reachable by a real inbound request (its
+// own paths carry no /api prefix at all), only by dispatch() below, so an
+// OAuth token authenticates here exactly as it did at the public /api/mcp
+// route that already checked it once (#242).
+internal.use("*", withSession());
 internal.use("*", enforceSignedApiRateLimit);
 internal.route("/orgs", orgRoutes);
 internal.route("/orgs/:orgId/links", linkRoutes);

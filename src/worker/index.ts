@@ -275,7 +275,9 @@ app.post("/api/webhooks/polar", (c) => {
 });
 
 const api = new Hono<AppEnv>();
-api.use("*", withSession);
+// An OAuth token's aud claim already names /api/mcp; withSession enforces
+// that as the only path such a token may authenticate against (#242).
+api.use("*", withSession({ oauthTokenPath: "/api/mcp" }));
 api.use("*", enforceSignedApiRateLimit);
 // Carry the signed-in user onto the wide event once the session is resolved.
 // Enrich before `await next()` so a short-circuited response (e.g. a 429 from

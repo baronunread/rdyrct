@@ -110,51 +110,68 @@ async function userFromOAuthToken(
   }
 }
 
-/** Attaches db + user to context, from the BetterAuth session cookie or, for
+/**
+ * Attaches db + user to context, from the BetterAuth session cookie or, for
  * a caller with no browser session (a remote MCP client, #139), either a
  * scoped API key (#131) or an MCP OAuth access token (#139 follow-up) as
  * `Authorization: Bearer …`. Every path ends up the same SessionUser shape,
  * so every existing :orgId route (requireOrgRole) authorizes a key or a
- * token exactly as it would a browser. */
-export const withSession = createMiddleware<AppEnv>(async (c, next) => {
-  const db = drizzle(c.env.DB, { schema });
-  c.set("db", db);
-  c.set("user", null);
+ * token exactly as it would a browser.
+ *
+ * `oauthTokenPath`, when given, is the one request path an OAuth token may
+ * authenticate: the token's own `aud` claim already names `/api/mcp` (see
+ * mcpResource), so this enforces the boundary the token already declares
+ * about itself, rather than letting a grant for "confirm your identity"
+ * also authorize every other /api/orgs/* route the way a full session or
+ * API key does (#242). The public `api` app passes it; mcp.ts's `internal`
+ * app (re-dispatching a tool call to the real route handler, in-process,
+ * under a path with no /api prefix at all) omits it, since that app is
+ * never reachable by a real inbound request — only by mcp.ts's own already-
+ * authenticated dispatch() — and restricting it there would break every
+ * OAuth-authenticated tool call.
+ */
+export function withSession(opts: { oauthTokenPath?: string } = {}) {
+  return createMiddleware<AppEnv>(async (c, next) => {
+    const db = drizzle(c.env.DB, { schema });
+    c.set("db", db);
+    c.set("user", null);
 
-  const session = await getAuth(c.env).api.getSession({
-    headers: c.req.raw.headers,
-  });
-  if (session) {
-    c.set("user", {
-      id: session.user.id,
-      email: session.user.email,
-      name: session.user.name,
-      isAdmin: session.user.isAdmin ?? false,
-      emailVerified: session.user.emailVerified,
-      plan: orgPlanOf(session.user.plan),
-      polarSubscriptionCancelAtPeriodEnd: session.user.polarSubscriptionCancelAtPeriodEnd ?? false,
-      // better-auth types its extra user fields loosely; the column is an
-      // integer, and periodEndOf keeps "no subscription" as null.
-      polarSubscriptionCurrentPeriodEnd: periodEndOf(
-        session.user.polarSubscriptionCurrentPeriodEnd,
-      ),
-      image: session.user.image ?? null,
-    } satisfies SessionUser);
-  } else {
-    const authorization = c.req.header("authorization");
-    const viaKey = await userFromApiKey(db, authorization);
-    if (viaKey) {
-      c.set("user", viaKey.user);
-      c.executionCtx.waitUntil(
-        db
-          .update(schema.apiKeys)
-          .set({ lastUsedAt: Date.now() })
-          .where(eq(schema.apiKeys.id, viaKey.keyId)),
-      );
+    const session = await getAuth(c.env).api.getSession({
+      headers: c.req.raw.headers,
+    });
+    if (session) {
+      c.set("user", {
+        id: session.user.id,
+        email: session.user.email,
+        name: session.user.name,
+        isAdmin: session.user.isAdmin ?? false,
+        emailVerified: session.user.emailVerified,
+        plan: orgPlanOf(session.user.plan),
+        polarSubscriptionCancelAtPeriodEnd:
+          session.user.polarSubscriptionCancelAtPeriodEnd ?? false,
+        // better-auth types its extra user fields loosely; the column is an
+        // integer, and periodEndOf keeps "no subscription" as null.
+        polarSubscriptionCurrentPeriodEnd: periodEndOf(
+          session.user.polarSubscriptionCurrentPeriodEnd,
+        ),
+        image: session.user.image ?? null,
+      } satisfies SessionUser);
     } else {
-      const viaOAuth = await userFromOAuthToken(c.env, db, authorization);
-      if (viaOAuth) c.set("user", viaOAuth);
+      const authorization = c.req.header("authorization");
+      const viaKey = await userFromApiKey(db, authorization);
+      if (viaKey) {
+        c.set("user", viaKey.user);
+        c.executionCtx.waitUntil(
+          db
+            .update(schema.apiKeys)
+            .set({ lastUsedAt: Date.now() })
+            .where(eq(schema.apiKeys.id, viaKey.keyId)),
+        );
+      } else if (!opts.oauthTokenPath || c.req.path === opts.oauthTokenPath) {
+        const viaOAuth = await userFromOAuthToken(c.env, db, authorization);
+        if (viaOAuth) c.set("user", viaOAuth);
+      }
     }
-  }
-  await next();
-});
+    await next();
+  });
+}
