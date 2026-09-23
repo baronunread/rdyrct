@@ -137,9 +137,19 @@
   // redirect calls add(), a ~10 s alarm flushes the buffer to D1 in one batch.
   // SQLite-backed so it runs on the Workers Free plan.
   "durable_objects": {
-    "bindings": [{ "name": "CLICK_BUFFER", "class_name": "ClickBuffer" }],
+    "bindings": [
+      {
+        "name": "CLICK_BUFFER",
+        "class_name": "ClickBuffer",
+      },
+    ],
   },
-  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["ClickBuffer"] }],
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["ClickBuffer"],
+    },
+  ],
   // Durable, per-step-retried background processes: org teardown (ordered
   // cleanup) and custom-domain activation (CF hostname create + DNS/TLS polling
   // off the request path).
@@ -360,9 +370,19 @@
       // A named env inherits neither block from the top level once it sets its
       // own queues/workflows, so the click buffer is repeated here.
       "durable_objects": {
-        "bindings": [{ "name": "CLICK_BUFFER", "class_name": "ClickBuffer" }],
+        "bindings": [
+          {
+            "name": "CLICK_BUFFER",
+            "class_name": "ClickBuffer",
+          },
+        ],
       },
-      "migrations": [{ "tag": "v1", "new_sqlite_classes": ["ClickBuffer"] }],
+      "migrations": [
+        {
+          "tag": "v1",
+          "new_sqlite_classes": ["ClickBuffer"],
+        },
+      ],
       "workflows": [
         {
           "binding": "ORG_DELETE",
@@ -484,5 +504,18 @@
   },
   "observability": {
     "enabled": true,
+    "head_sampling_rate": 1,
+    "redact_query_string": false,
+    "logs": {
+      "enabled": true,
+      "head_sampling_rate": 1,
+      "invocation_logs": true,
+      "persist": true,
+    },
+    "traces": {
+      "enabled": true,
+      "head_sampling_rate": 1,
+      "persist": true,
+    },
   },
 }
