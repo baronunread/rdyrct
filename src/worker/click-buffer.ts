@@ -28,7 +28,9 @@ import { captureAlert } from "./sentry";
  * ponytail: single collector, shard by linkId hash if one instance saturates.
  */
 
-/** Flush the buffer this long after the first click lands in an empty one. */
+/** Flush the buffer this long after the first click lands in an empty one.
+ * `CLICK_FLUSH_MS` overrides it, so the e2e suite can wait half a second for
+ * a click instead of racing its own test timeout against a 10 s alarm. */
 const FLUSH_MS = 10_000;
 
 /** Flush early rather than let a spike grow the buffer without bound. At ~120
@@ -36,11 +38,14 @@ const FLUSH_MS = 10_000;
 const MAX_BUFFER = 5_000;
 
 /** Drop the buffer after this many consecutive failed flushes, so a broken D1
- * write is a bounded loss with one alert rather than a silent forever-retry. */
+ * write is a bounded loss with one alert rather than a silent forever-retry.
+ * Counted in flushes, not time: about a minute in production, 3 s under the
+ * e2e CLICK_FLUSH_MS. */
 const MAX_FLUSH_FAILS = 6;
 
 export class ClickBuffer extends DurableObject<Env> {
   #buf: ClickMessage[] = [];
+  #flushMs = Number(this.env.CLICK_FLUSH_MS) || FLUSH_MS;
   #flushing = false;
   #failedFlushes = 0;
 
@@ -56,7 +61,7 @@ export class ClickBuffer extends DurableObject<Env> {
       return;
     }
     if ((await this.ctx.storage.getAlarm()) === null) {
-      await this.ctx.storage.setAlarm(Date.now() + FLUSH_MS);
+      await this.ctx.storage.setAlarm(Date.now() + this.#flushMs);
     }
   }
 
@@ -102,6 +107,9 @@ export class ClickBuffer extends DurableObject<Env> {
       // something unexpected. Keep the rows for the next alarm.
       this.#buf.unshift(...rows.slice(0, Math.max(0, MAX_BUFFER - this.#buf.length)));
       this.#failedFlushes++;
+      // Also to the console: Sentry is off wherever SENTRY_DSN is unset
+      // (every e2e run), and this is the only trace a lost flush leaves.
+      console.error("click_flush_failed", rows.length, error);
       Sentry.captureException(error, { extra: { pending: this.#buf.length } });
     } finally {
       this.#flushing = false;
@@ -114,7 +122,7 @@ export class ClickBuffer extends DurableObject<Env> {
       return;
     }
     if (this.#buf.length > 0 && (await this.ctx.storage.getAlarm()) === null) {
-      await this.ctx.storage.setAlarm(Date.now() + FLUSH_MS);
+      await this.ctx.storage.setAlarm(Date.now() + this.#flushMs);
     }
   }
 }

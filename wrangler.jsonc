@@ -318,6 +318,9 @@
         // so the staged DNS/TLS delays local dev shows off would only be a
         // timer for the test to race.
         "CF_DEV_ENV": "instant",
+        // Flush clicks after 0.5 s, not 10: a test that follows a click to
+        // D1 should not spend a sixth of its timeout waiting on an alarm.
+        "CLICK_FLUSH_MS": "500",
         // env vars aren't inherited from the top-level "vars": left unset
         // (capture no-ops) so e2e never calls out to Sentry.
         "SENTRY_DSN": "",

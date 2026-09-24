@@ -4,10 +4,10 @@ import { queryRows } from "./db";
 
 /**
  * Clicks no longer ride a queue. The redirect hands each one to the ClickBuffer
- * Durable Object, which batches them in memory and flushes to D1 on a ~10 s
- * alarm (#225). The worker tests cover the buffer in isolation; this is the
- * end-to-end claim: a real redirect, and the row turning up a few seconds
- * later.
+ * Durable Object, which batches them in memory and flushes to D1 on an alarm
+ * (#225): 10 s in production, 0.5 s here under CLICK_FLUSH_MS. The worker
+ * tests cover the buffer in isolation; this is the end-to-end claim: a real
+ * redirect, and the row turning up shortly after.
  */
 
 const password = "test-password-123";
@@ -43,7 +43,6 @@ test("a redirect's click reaches D1 through the buffer (#225)", async ({ page })
   const res = await page.request.get(`/${slug}`, { maxRedirects: 0 });
   expect(res.headers()["location"]).toBe(destination);
 
-  // The flush alarm is ~10 s out; poll past it.
   await expect
     .poll(
       async () => {
@@ -54,7 +53,7 @@ test("a redirect's click reaches D1 through the buffer (#225)", async ({ page })
         );
         return Number(rows[0].n);
       },
-      { timeout: 25_000, intervals: [1_000] },
+      { timeout: 15_000, intervals: [500] },
     )
     .toBeGreaterThanOrEqual(1);
 });

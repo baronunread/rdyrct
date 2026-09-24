@@ -65,11 +65,16 @@ export async function latestOtp(page: Page, email: string) {
   return otp;
 }
 
-export async function signUpAndVerify(page: Page, email: string, password: string) {
+/** Fills in and submits the sign-up form, and stops there. */
+export async function submitSignup(page: Page, email: string, password: string) {
   await page.goto("/signup");
   await page.getByLabel("Email").fill(email);
   await page.getByLabel("Password").fill(password);
   await page.getByRole("button", { name: "Sign up" }).click();
+}
+
+export async function signUpAndVerify(page: Page, email: string, password: string) {
+  await submitSignup(page, email, password);
 
   // Not the default 5s: a sign-up here is a Cap proof-of-work solve, an
   // account write and a mail send, and with the suite running in parallel
