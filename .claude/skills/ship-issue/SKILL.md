@@ -175,7 +175,7 @@ Either way, three things that cost a retake each:
 
 **Attach screenshots to the PR comment with `gh --attach`, never commit them
 to the repo or a side branch.** Both put binaries in git history for a
-comment. `gh` (2.100+) uploads the file to GitHub itself and rewrites the
+comment. `gh` (2.99+) uploads the file to GitHub itself and rewrites the
 reference in the body:
 
 ```sh
@@ -183,8 +183,10 @@ gh pr comment <n> --body-file comment.md \
   --attach './banner.png#Cookie banner, with the new Accept wording'
 ```
 
-Write `![caption](./banner.png)` in the body to place each image. An attached
-file the body does not reference is appended at the end. Keep the files
+Write `![caption](./banner.png)` in the body to place each image. The
+reference has to match the `--attach` path exactly (`./banner.png` in both,
+run from the folder holding the shots). A path that does not match leaves the
+reference broken and appends the upload at the end instead. Keep the files
 outside the repo (the session scratchpad), so none of them can be staged by
 accident. Then open the comment and check each image renders: a broken image
 reads as a broken feature.
