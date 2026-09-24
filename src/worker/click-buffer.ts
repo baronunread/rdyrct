@@ -38,7 +38,9 @@ const FLUSH_MS = 10_000;
 const MAX_BUFFER = 5_000;
 
 /** Drop the buffer after this many consecutive failed flushes, so a broken D1
- * write is a bounded loss with one alert rather than a silent forever-retry. */
+ * write is a bounded loss with one alert rather than a silent forever-retry.
+ * Counted in flushes, not time: about a minute in production, 3 s under the
+ * e2e CLICK_FLUSH_MS. */
 const MAX_FLUSH_FAILS = 6;
 
 export class ClickBuffer extends DurableObject<Env> {

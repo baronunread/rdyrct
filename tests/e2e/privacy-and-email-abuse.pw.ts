@@ -37,26 +37,22 @@ test("a click records the referring host, never the URL it came from (#20)", asy
   // people's search terms and session tokens, and neither may be stored.
   const referer = "https://forum.example.com/threads/42?q=private+search&token=secret";
 
-  // Two short polls, not one long retry loop: the slug goes live on KV a beat
-  // after the row exists (that publish rides the storage queue), and the
-  // click reaches D1 when the buffer (#225) flushes, 0.5 s out under
-  // CLICK_FLUSH_MS. Each redirect poll carries the referer, so every hit that
-  // lands is a click to find. Scoped to this test's own link: the buffer
-  // batches every concurrent test's clicks into the same flush, so "the last
-  // click" in the whole table is not necessarily this one.
-  await expect
-    .poll(
-      async () =>
-        (
-          await page.request.get(`${appUrl}/${slug}`, { headers: { referer }, maxRedirects: 0 })
-        ).status(),
-      { message: "slug never became a live redirect", timeout: 15_000, intervals: [500] },
-    )
-    .toBe(302);
-
+  // Polled every 0.5 s, not retried every 12 s: the buffer (#225) flushes
+  // 0.5 s out under CLICK_FLUSH_MS, and a slow sign-up used to leave a 12 s
+  // retry loop too little of the test's budget. Each attempt re-sends the
+  // redirect: the slug may not be live on KV yet (that publish rides the
+  // storage queue), and a click is best-effort (clickAnalyticsAllowed and
+  // the buffer both fail closed rather than block a redirect), so one hit can
+  // land nothing to poll for. Scoped to this test's own link: the buffer
+  // batches every concurrent test's clicks into the same flush.
   await expect
     .poll(
       async () => {
+        const res = await page.request.get(`${appUrl}/${slug}`, {
+          headers: { referer },
+          maxRedirects: 0,
+        });
+        if (res.status() !== 302) return `redirect answered ${res.status()}`;
         const rows = await queryRows<{ referrer: string }>(
           page,
           "SELECT referrer FROM clicks WHERE link_id = ? ORDER BY id DESC LIMIT 1",
@@ -64,7 +60,7 @@ test("a click records the referring host, never the URL it came from (#20)", asy
         );
         return rows[0]?.referrer;
       },
-      { message: "click never reached the clicks table", timeout: 15_000, intervals: [500] },
+      { message: "click never reached the clicks table", timeout: 25_000, intervals: [500] },
     )
     .toBe("forum.example.com");
 
