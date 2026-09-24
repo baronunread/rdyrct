@@ -14,7 +14,7 @@
  * localStorage and the app spends it once the new account has an org, so the
  * first dashboard is not empty (#65).
  */
-import { useState } from "react";
+import { lazy, Suspense, useState, type ComponentProps, type ComponentType } from "react";
 import { errorMessage } from "@/app/lib/error-message";
 import { ArrowRight } from "@/app/ui/icons";
 import { Button } from "../ui/button";
@@ -34,7 +34,30 @@ import {
 import { shortenAnonymously } from "../lib/shorten-anon";
 import { trackCta } from "../lib/track-cta";
 import { HrefLink } from "../lib/router-search";
-import { QRPreview, QrDownloadButtons } from "./qr";
+
+// A QR code is useful only after this form has made a link. Keeping the renderer
+// behind that success state avoids loading its QR encoder for everyone who only
+// reads the landing page or starts filling in the form.
+//
+// A failed load (usually a stale tab after a deploy) shows no QR rather than
+// reaching the app's error boundary, which would reload the page over the link
+// the visitor just made.
+type Qr = typeof import("./qr");
+const loadQr = () => import("./qr").catch(() => null);
+const QRPreview = lazy(
+  async (): Promise<{ default: ComponentType<ComponentProps<Qr["QRPreview"]>> }> => ({
+    default: (await loadQr())?.QRPreview ?? NoQr,
+  }),
+);
+const QrDownloadButtons = lazy(
+  async (): Promise<{ default: ComponentType<ComponentProps<Qr["QrDownloadButtons"]>> }> => ({
+    default: (await loadQr())?.QrDownloadButtons ?? NoQr,
+  }),
+);
+
+function NoQr() {
+  return null;
+}
 
 /** The server's own message when it sent one: it says what was wrong with
  * the address, which a generic fallback cannot. */
@@ -81,11 +104,17 @@ function MadeLink({ link }: { link: StoredAnonLink }) {
           />
         </div>
         <p className="truncate text-2xs text-muted">from {link.source}</p>
-        <QrDownloadButtons url={link.url} name={`qr-${link.slug}`} className="mt-0.5" />
+        <Suspense fallback={<div className="mt-0.5 h-8" aria-hidden="true" />}>
+          <QrDownloadButtons url={link.url} name={`qr-${link.slug}`} className="mt-0.5" />
+        </Suspense>
       </div>
       {/* Smaller on a phone so the slug keeps its width: truncating
           "rdyrct.com/m22fs5w" loses exactly the part that identifies it. */}
-      <QRPreview url={link.url} sizeClass="size-20 sm:size-26" />
+      <Suspense
+        fallback={<div className="size-20 shrink-0 sm:size-26" aria-label="Preparing QR code" />}
+      >
+        <QRPreview url={link.url} sizeClass="size-20 sm:size-26" />
+      </Suspense>
     </div>
   );
 }

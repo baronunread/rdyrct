@@ -185,6 +185,31 @@ test("the link can still download its own QR", async ({ page }) => {
   expect(download.suggestedFilename()).toContain(slug);
 });
 
+// The QR renderer loads only once a link exists. If that load fails (a stale
+// tab after a deploy), the visitor keeps the link they just made: no QR, but
+// no page reload over it either.
+test("a failed QR load still leaves the new link on the page", async ({ page }) => {
+  let qrLoadFailed!: () => void;
+  const qrAborted = new Promise<void>((resolve) => (qrLoadFailed = resolve));
+  await page.route("**/src/app/components/qr.tsx*", async (route) => {
+    await route.abort();
+    qrLoadFailed();
+  });
+  await page.goto("/");
+  await page.evaluate(() => (document.documentElement.dataset.stayed = "yes"));
+
+  const field = page.getByLabel("Shorten a link, no account needed");
+  await field.fill(`https://example.com/qr-fail-${Date.now()}`);
+  await page.getByRole("button", { name: "Shorten it" }).click();
+
+  // Only once the QR load has failed: before that the link shows either way.
+  await qrAborted;
+  await page.waitForTimeout(500);
+  await expect(page.getByRole("link", { name: "Your short link" }).first()).toBeVisible();
+  await expect(page.getByRole("button", { name: /PNG/ })).toHaveCount(0);
+  expect(await page.evaluate(() => document.documentElement.dataset.stayed)).toBe("yes");
+});
+
 /** The anonymous shortener must still complete its core task on a phone. */
 test.describe("on a phone", () => {
   test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
