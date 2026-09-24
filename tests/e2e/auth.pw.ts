@@ -1,5 +1,5 @@
 import { expect, type Page, test } from "@playwright/test";
-import { signUpAndVerify, latestOtp } from "./resend";
+import { signUpAndVerify, latestOtp, submitSignup } from "./resend";
 import { rawSql } from "./db";
 import { signOut } from "./pages";
 
@@ -42,10 +42,7 @@ test.describe("authentication forms", () => {
     const email = `resume-${Date.now()}@gmail.com`;
     const password = "test-password-123";
 
-    await page.goto("/signup");
-    await page.getByLabel("Email").fill(email);
-    await page.getByLabel("Password").fill(password);
-    await page.getByRole("button", { name: "Sign up" }).click();
+    await submitSignup(page, email, password);
     await expect(page.getByRole("heading", { name: "Enter your code" })).toBeVisible({
       timeout: 30_000,
     });
