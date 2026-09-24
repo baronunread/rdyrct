@@ -162,6 +162,9 @@ async function insertClicksPerRow(
         // Narrowed here: only an Error carries a message worth classifying,
         // and anything else is treated as transient.
         const gone = error instanceof Error && isDeletedLink(error);
+        // Sentry is off wherever SENTRY_DSN is unset (every e2e run), so
+        // this is the only trace a row kept back for retry leaves there.
+        if (!gone) console.error("click_insert_failed", error);
         return { row, state: gone ? ("gone" as const) : ("retry" as const) };
       }
     }),

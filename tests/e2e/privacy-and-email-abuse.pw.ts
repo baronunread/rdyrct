@@ -1,7 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import { appUrl } from "./environment";
 import { queryRows } from "./db";
-import { signUpAndVerify } from "./resend";
+import { signUpAndVerify, submitSignup } from "./resend";
 
 const password = "test-password-123";
 
@@ -35,32 +35,38 @@ test("a click records the referring host, never the URL it came from (#20)", asy
 
   // A real referring URL: the path and query are the parts that carry other
   // people's search terms and session tokens, and neither may be stored.
-  //
-  // Re-sends the redirect on every attempt, not just re-reads D1: the slug
-  // may not be live on KV yet (that publish rides the storage queue), and the
-  // click itself is best-effort (the buffer (#225), and clickAnalyticsAllowed
-  // upstream of it, both fail closed rather than block a redirect) -- a
-  // single hit can land nothing to poll for. A fresh hit each attempt covers
-  // both without needing to know which one happened. Scoped to this test's
-  // own link: the buffer batches every concurrent test's clicks into the same
-  // flush, so "the last click" in the whole table is not necessarily this one.
-  await expect(async () => {
-    const res = await page.request.get(`${appUrl}/${slug}`, {
-      headers: {
-        referer: "https://forum.example.com/threads/42?q=private+search&token=secret",
-      },
-      maxRedirects: 0,
-    });
-    expect(res.status(), "slug never became a live redirect").toBe(302);
+  const referer = "https://forum.example.com/threads/42?q=private+search&token=secret";
 
-    const rows = await queryRows<{ referrer: string }>(
-      page,
-      "SELECT referrer FROM clicks WHERE link_id = ? ORDER BY id DESC LIMIT 1",
-      [linkId],
-    );
-    expect(rows[0]?.referrer, "click never reached the clicks table").toBe("forum.example.com");
-    // Generous per attempt: the buffer flushes on a ~10s alarm.
-  }).toPass({ timeout: 60_000, intervals: [12_000] });
+  // Two short polls, not one long retry loop: the slug goes live on KV a beat
+  // after the row exists (that publish rides the storage queue), and the
+  // click reaches D1 when the buffer (#225) flushes, 0.5 s out under
+  // CLICK_FLUSH_MS. Each redirect poll carries the referer, so every hit that
+  // lands is a click to find. Scoped to this test's own link: the buffer
+  // batches every concurrent test's clicks into the same flush, so "the last
+  // click" in the whole table is not necessarily this one.
+  await expect
+    .poll(
+      async () =>
+        (
+          await page.request.get(`${appUrl}/${slug}`, { headers: { referer }, maxRedirects: 0 })
+        ).status(),
+      { message: "slug never became a live redirect", timeout: 15_000, intervals: [500] },
+    )
+    .toBe(302);
+
+  await expect
+    .poll(
+      async () => {
+        const rows = await queryRows<{ referrer: string }>(
+          page,
+          "SELECT referrer FROM clicks WHERE link_id = ? ORDER BY id DESC LIMIT 1",
+          [linkId],
+        );
+        return rows[0]?.referrer;
+      },
+      { message: "click never reached the clicks table", timeout: 15_000, intervals: [500] },
+    )
+    .toBe("forum.example.com");
 
   const stored = await queryRows<{ referrer: string }>(page, "SELECT referrer FROM clicks");
   expect(stored.length).toBeGreaterThan(0);
@@ -119,10 +125,7 @@ test("a throttled verification email still lands on the code screen (#50)", asyn
     }),
   );
 
-  await page.goto("/signup");
-  await page.getByLabel("Email").fill(email);
-  await page.getByLabel("Password").fill(password);
-  await page.getByRole("button", { name: "Sign up" }).click();
+  await submitSignup(page, email, password);
 
   // The toast shows for 3.25s, and a sign-up under a loaded suite can take
   // longer than the default 5s to answer at all: this waits for the whole

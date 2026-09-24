@@ -43,7 +43,7 @@ test("a redirect's click reaches D1 through the buffer (#225)", async ({ page })
   const res = await page.request.get(`/${slug}`, { maxRedirects: 0 });
   expect(res.headers()["location"]).toBe(destination);
 
-  // The flush alarm is ~10 s out; poll past it.
+  // The flush alarm is 0.5 s out under CLICK_FLUSH_MS (10 s in production).
   await expect
     .poll(
       async () => {

@@ -73,6 +73,9 @@ export interface Env {
   /* bot protection: Cap proof-of-work (#98). Unset disables the check. */
   CAP_SECRET?: string; // secret, `openssl rand -hex 32`
 
+  /* click buffer: flush interval in ms, e2e only. Unset means 10 s. */
+  CLICK_FLUSH_MS?: string; // var
+
   /* error tracking: unset disables capture (see sentry.ts, index.ts) */
   SENTRY_DSN?: string; // var, from sentry.io project settings
 }
