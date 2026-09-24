@@ -1,7 +1,7 @@
 import type { default as PosthogClient } from "posthog-js";
 import type { JsonValue } from "@/shared/types";
 import { bufferBeforeConsent, discardBuffer, drainBuffer } from "./consent-buffer";
-import { readConsent, writeConsent } from "./consent";
+import { CONSENT_KEY, readConsent, writeConsent } from "./consent";
 import { isFunnelEvent } from "./funnel";
 import { shownHeroVariant } from "./hero-variant";
 
@@ -21,12 +21,14 @@ export type EventProperties = Record<string, JsonValue | undefined>;
 
 let pendingIdentity: { id: string; properties?: EventProperties } | null = null;
 let identifiedId: string | null = null;
+let identifiedProperties: EventProperties | undefined;
 
 function identifyPendingUser(posthog: typeof PosthogClient | null) {
   if (!posthog || !pendingIdentity || pendingIdentity.id === identifiedId) return;
   const { id, properties } = pendingIdentity;
   pendingIdentity = null;
   identifiedId = id;
+  identifiedProperties = properties;
   posthog.identify(id, properties);
 }
 
@@ -56,16 +58,28 @@ function loadClient(): Promise<typeof PosthogClient | null> | null {
       posthog.init(token!, {
         api_host: host!,
         defaults: "2026-01-30",
-        // The privacy policy promises both are off. Say so here rather than
-        // leave the promise to a project setting someone can flip.
+        // The privacy policy promises no autocapture and no screen replay.
+        // Each of these otherwise falls back to a project setting someone
+        // can flip, so say so here instead.
         autocapture: false,
         disable_session_recording: true,
+        capture_heatmaps: false,
+        capture_dead_clicks: false,
+        capture_performance: false,
+        // Withdrawing consent then deletes PostHog's cookie and storage, not
+        // just the right to send.
+        opt_out_persistence_by_default: true,
         capture_exceptions: {
           capture_unhandled_errors: true,
           capture_unhandled_rejections: true,
         },
       });
       identifyPendingUser(posthog);
+      // A Reject in another tab, or the answer lapsing, has to stop this
+      // tab's client too: the SDK sends pageviews and errors on its own.
+      window.addEventListener("storage", (event) => {
+        if (event.key === CONSENT_KEY && !hasAnalyticsConsent()) posthog.opt_out_capturing();
+      });
       return posthog;
     });
   }
@@ -103,9 +117,10 @@ function flushPending(posthog: typeof PosthogClient | null) {
 export function grantAnalyticsConsent() {
   writeConsent("accepted");
   void loadClient()?.then((posthog) => {
-    // Only when "Cookie settings" reopened the banner after a withdrawal in
-    // this same document: the client is already loaded, but opted out.
+    // After an earlier withdrawal: the opt-out flag outlives the page, so this
+    // runs on a later visit too, not only after "Cookie settings".
     if (posthog?.has_opted_out_capturing()) posthog.opt_in_capturing();
+    identifyPendingUser(posthog);
     flushPending(posthog);
   });
 }
@@ -113,13 +128,39 @@ export function grantAnalyticsConsent() {
 export function revokeAnalyticsConsent() {
   discardBuffer();
   writeConsent("rejected");
+  // A later Accept in this page should identify the user again.
+  if (identifiedId) pendingIdentity ??= { id: identifiedId, properties: identifiedProperties };
+  identifiedId = null;
   if (clientPromise) {
-    void clientPromise.then((posthog) => {
-      // reset() first drops the stored distinct id, so a withdrawal leaves no
-      // identifier behind, only the opt-out flag.
-      posthog?.reset();
-      posthog?.opt_out_capturing();
-    });
+    // opt_out_persistence_by_default makes this delete PostHog's cookie and
+    // storage too, leaving only the opt-out flag. No reset(): it would mint a
+    // fresh id and reload flags from PostHog after the refusal.
+    void clientPromise.then((posthog) => posthog?.opt_out_capturing());
+  } else {
+    clearPostHogStorage();
+  }
+}
+
+/** What an earlier Accept left behind when no client is loaded to remove it,
+ *  e.g. a Reject after the six months lapsed. Cookies are expired on this
+ *  host and on each parent domain, since PostHog sets them site-wide. */
+function clearPostHogStorage() {
+  const persisted = /^ph_.+_posthog$/;
+  try {
+    for (const key of Object.keys(localStorage)) {
+      if (persisted.test(key)) localStorage.removeItem(key);
+    }
+  } catch {
+    /* ignore */
+  }
+  const labels = location.hostname.split(".");
+  const domains = labels.map((_, i) => labels.slice(i).join(".")).slice(0, -1);
+  for (const cookie of document.cookie.split("; ")) {
+    const name = cookie.split("=")[0];
+    if (!persisted.test(name)) continue;
+    for (const domain of ["", ...domains.map((d) => `; domain=${d}`)]) {
+      document.cookie = `${name}=; max-age=0; path=/${domain}`;
+    }
   }
 }
 

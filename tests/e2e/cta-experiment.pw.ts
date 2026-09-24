@@ -54,6 +54,36 @@ test.describe("landing hero A/B test", () => {
 });
 
 test.describe("cookie settings", () => {
+  test("withdrawing deletes PostHog's cookie and storage and sends nothing more", async ({
+    page,
+  }) => {
+    const attempts: string[] = [];
+    await page.route(POSTHOG_GLOB, (route) => {
+      attempts.push(route.request().url());
+      return route.abort();
+    });
+    await page.addInitScript((key) => {
+      if (localStorage.getItem(key) === null) localStorage.setItem(key, "accepted");
+    }, CONSENT_KEY);
+    await page.goto("/privacy");
+
+    const posthogStorage = () =>
+      page.evaluate(() => ({
+        stored: Object.keys(localStorage).filter((key) => /^ph_.+_posthog$/.test(key)),
+        cookies: document.cookie.split("; ").filter((c) => /^ph_.+_posthog=/.test(c)),
+      }));
+    // The client has loaded and written its identity.
+    await expect.poll(async () => (await posthogStorage()).stored.length).toBeGreaterThan(0);
+
+    await page.getByRole("contentinfo").getByRole("button", { name: "Cookie settings" }).click();
+    const before = attempts.length;
+    await page.getByRole("button", { name: "Reject" }).click();
+
+    await expect.poll(posthogStorage).toEqual({ stored: [], cookies: [] });
+    await page.waitForTimeout(600);
+    expect(attempts.slice(before)).toEqual([]);
+  });
+
   test("reopens the banner so an earlier Accept can be withdrawn", async ({ page }) => {
     await page.addInitScript((key) => {
       if (localStorage.getItem(key) === null) localStorage.setItem(key, "accepted");
