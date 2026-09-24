@@ -189,7 +189,7 @@ Accept: application/json, text/event-stream
       "What rdyrct stores and what it does not: click analytics keep country, referrer, device and time, never an IP address or a precise location.",
     markdown: `# Privacy policy
 
-This policy explains what rdyrct collects, why, the legal basis for it, and how you can exercise your rights. Last updated 25 August 2026.
+This policy explains what rdyrct collects, why, the legal basis for it, and how you can exercise your rights. Last updated 24 September 2026.
 
 ## Data controller
 
@@ -199,11 +199,11 @@ Andrea Bruno is the data controller for rdyrct. For a privacy request or questio
 
 We collect your account email address and name, plus the organizations, links, domains, and settings you create. Click analytics keep only an approximate country, referrer host, device type, and timestamp. We do not store an IP address, precise location, or data that enables cross-site tracking.
 
-If you accept analytics, PostHog records product events tied to your account. It does not autocapture what you type or replay your screen. Sentry receives technical error reports with the error, browser, and page path, after query strings are removed.
+If you accept analytics, PostHog records product events tied to your account. It does not autocapture what you type or replay your screen. Until you answer the banner, a few steps on the current page are held in browser memory: accepting sends them, rejecting discards them. The home page shows one of two versions, picked at random on each load without storing anything; if you accept, events say which version you saw. Sentry receives technical error reports with the error, browser, and page path, after query strings are removed.
 
 ## Why we process it
 
-We process account and organization data to provide the service, send transactional email, and provide click analytics. The session cookie is necessary to sign you in. PostHog runs only with your consent. We process technical error reports to keep the service secure and reliable.
+We process account and organization data to provide the service, send transactional email, and provide click analytics. The session cookie is necessary to sign you in. PostHog runs only with your consent, which you can withdraw at any time from Cookie settings. We ask again after six months. We process technical error reports to keep the service secure and reliable.
 
 ## Cookies
 

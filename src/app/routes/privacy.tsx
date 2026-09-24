@@ -21,7 +21,7 @@ export function PrivacyPage() {
         <h1 className="mb-2 text-xl font-bold">Privacy Policy</h1>
         <p className="text-muted">
           This policy explains what data rdyrct collects, why, the legal basis for it, and how you
-          can exercise your rights. Last updated 25 August 2026.
+          can exercise your rights. Last updated 24 September 2026.
         </p>
       </div>
 
