@@ -29,7 +29,9 @@ export function ConsentBanner() {
         <Button size="sm" variant="outline" className="flex-1" onClick={revokeAnalyticsConsent}>
           Reject
         </Button>
-        <Button size="sm" variant="primary" className="flex-1" onClick={grantAnalyticsConsent}>
+        {/* Same variant on purpose: the Garante and the EDPB treat a bright
+            Accept next to a muted Reject as steering the answer. */}
+        <Button size="sm" variant="outline" className="flex-1" onClick={grantAnalyticsConsent}>
           Accept
         </Button>
       </div>
