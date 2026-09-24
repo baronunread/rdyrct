@@ -1,19 +1,16 @@
 import type { default as PosthogClient } from "posthog-js";
 import type { JsonValue } from "@/shared/types";
 import { bufferBeforeConsent, discardBuffer, drainBuffer } from "./consent-buffer";
+import { readConsent, writeConsent } from "./consent";
+import { isFunnelEvent } from "./funnel";
+import { shownHeroVariant } from "./hero-variant";
 
 // Nothing here loads posthog-js or contacts PostHog until the user accepts
 // analytics in the consent banner (see consent-banner.tsx): before that,
 // capture/identify/reset are no-ops and the library is never even
 // downloaded, so anonymous visitors (landing page, login) pay nothing.
-export const CONSENT_KEY = "rdyrct:consent:v2";
-
 function hasAnalyticsConsent(): boolean {
-  try {
-    return localStorage.getItem(CONSENT_KEY) === "accepted";
-  } catch {
-    return false;
-  }
+  return readConsent() === "accepted";
 }
 
 let clientPromise: Promise<typeof PosthogClient | null> | null = null;
@@ -59,6 +56,10 @@ function loadClient(): Promise<typeof PosthogClient | null> | null {
       posthog.init(token!, {
         api_host: host!,
         defaults: "2026-01-30",
+        // The privacy policy promises both are off. Say so here rather than
+        // leave the promise to a project setting someone can flip.
+        autocapture: false,
+        disable_session_recording: true,
         capture_exceptions: {
           capture_unhandled_errors: true,
           capture_unhandled_rejections: true,
@@ -86,11 +87,7 @@ export function resumeAnalyticsIfConsented() {
  * only decides when to ask it and how to replay it.
  */
 function consentUnanswered(): boolean {
-  try {
-    return localStorage.getItem(CONSENT_KEY) === null;
-  } catch {
-    return false;
-  }
+  return readConsent() === null;
 }
 
 function flushPending(posthog: typeof PosthogClient | null) {
@@ -104,54 +101,39 @@ function flushPending(posthog: typeof PosthogClient | null) {
 }
 
 export function grantAnalyticsConsent() {
-  try {
-    localStorage.setItem(CONSENT_KEY, "accepted");
-  } catch {
-    /* ignore */
-  }
-  void loadClient()?.then(flushPending);
+  writeConsent("accepted");
+  void loadClient()?.then((posthog) => {
+    // Only when "Cookie settings" reopened the banner after a withdrawal in
+    // this same document: the client is already loaded, but opted out.
+    if (posthog?.has_opted_out_capturing()) posthog.opt_in_capturing();
+    flushPending(posthog);
+  });
 }
 
 export function revokeAnalyticsConsent() {
   discardBuffer();
-  try {
-    localStorage.setItem(CONSENT_KEY, "rejected");
-  } catch {
-    /* ignore */
-  }
+  writeConsent("rejected");
   if (clientPromise) {
-    void clientPromise.then((posthog) => posthog?.opt_out_capturing());
+    void clientPromise.then((posthog) => {
+      // reset() first drops the stored distinct id, so a withdrawal leaves no
+      // identifier behind, only the opt-out flag.
+      posthog?.reset();
+      posthog?.opt_out_capturing();
+    });
   }
 }
 
-/**
- * Subscribes to a multivariate flag's variant, calling `cb` whenever PostHog
- * has an answer. Skipped entirely without consent: an unconsented visitor
- * can't be measured, so they are never bucketed into the experiment either.
- * Returns an unsubscribe function; `onFeatureFlags` can fire more than once
- * (a persisted value, then a fresh one from the network), so callers must
- * treat `cb` as idempotent and unsubscribe on cleanup.
- */
-export function onFlagVariant(
-  key: string,
-  cb: (variant: string | boolean | undefined) => void,
-): () => void {
-  const client = loadClient();
-  if (!client) return () => {};
-  let cancelled = false;
-  let unsubscribe: (() => void) | undefined;
-  void client.then((p) => {
-    if (!p || cancelled) return;
-    unsubscribe = p.onFeatureFlags(() => cb(p.getFeatureFlag(key)));
-  });
-  return () => {
-    cancelled = true;
-    unsubscribe?.();
-  };
+/** Funnel steps from a document that showed the landing hero say which
+ *  version it was, so the A/B test is read straight off the funnel. */
+function withHeroVariant(event: string, properties?: EventProperties) {
+  const variant = shownHeroVariant();
+  if (!variant || !isFunnelEvent(event)) return properties;
+  return { ...properties, hero_variant: variant };
 }
 
 const posthog = {
-  capture(event: string, properties?: EventProperties) {
+  capture(event: string, eventProperties?: EventProperties) {
+    const properties = withHeroVariant(event, eventProperties);
     const client = loadClient();
     // Null means no consent yet. Hold funnel steps so the path survives a
     // later Accept; everything else is dropped, as before.

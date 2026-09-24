@@ -1,4 +1,5 @@
 import { MarketingLink } from "../components/marketing-link";
+import { CookieSettingsButton } from "./consent-banner";
 
 export const GITHUB_URL = "https://github.com/baronunread/rdyrct";
 export const SUPPORT_EMAIL = "support@mail.rdyrct.com";
@@ -32,6 +33,7 @@ export function Footer() {
           <MarketingLink to="/privacy" hash="cookies" className="hover:text-accent">
             Cookies
           </MarketingLink>
+          <CookieSettingsButton className="text-left whitespace-nowrap hover:text-accent" />
           <MarketingLink to="/terms" className="hover:text-accent">
             Terms
           </MarketingLink>

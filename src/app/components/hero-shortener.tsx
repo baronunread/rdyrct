@@ -33,6 +33,7 @@ import {
 } from "../lib/anon-links";
 import { shortenAnonymously } from "../lib/shorten-anon";
 import { trackCta } from "../lib/track-cta";
+import { HrefLink } from "../lib/router-search";
 import { QRPreview, QrDownloadButtons } from "./qr";
 
 /** The server's own message when it sent one: it says what was wrong with
@@ -99,13 +100,13 @@ function KeepItFooter() {
         This link works for 24 hours. Sign up and it becomes yours permanently, and starts counting
         every click: country, referrer, device, campaign.
       </p>
-      <a
+      <HrefLink
         href="/signup"
         onClick={() => trackCta("hero_shortener_claim")}
         className={buttonClass({ variant: "primary", size: "sm" })}
       >
         Keep this link <ArrowRight size={14} />
-      </a>
+      </HrefLink>
     </div>
   );
 }

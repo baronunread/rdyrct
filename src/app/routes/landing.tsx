@@ -29,13 +29,14 @@ import {
   useReducedMotion,
   type Variants,
 } from "motion/react";
-import { lazy, Suspense, useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useRef } from "react";
 import { useSeo } from "../lib/seo";
 import { useMarketingScroll } from "../lib/marketing-scroll";
 import { FaqJsonLd } from "../components/faq-json-ld";
 import { MarketingLink } from "../components/marketing-link";
 import { useAudience } from "../lib/audience";
-import posthog, { onFlagVariant } from "../lib/posthog";
+import posthog from "../lib/posthog";
+import { heroVariant } from "../lib/hero-variant";
 import { FUNNEL, landingContext } from "../lib/funnel";
 import { trackCta } from "../lib/track-cta";
 import { PLAN_LIMITS, PLAN_PRICES } from "@/shared/types";
@@ -794,31 +795,6 @@ function DeployTerminal() {
   );
 }
 
-const CTA_TEST_FLAG = "landing-page-cta-test";
-
-/** The hero's variant in the CTA A/B test (#... notebook v4JI): `control` is
- *  today's copy-first hero, `test` leads with the working demo instead.
- *  Anything other than the literal "test" value stays control, including no
- *  answer yet and no consent (an unconsented visitor can't be measured, so
- *  they are never bucketed into the experiment either).
- *
- *  `enabled` gates the subscription itself, not just the render: an authed
- *  visitor always gets the control hero regardless of variant, so without
- *  this an authed page load would still call getFeatureFlag() and record a
- *  $feature_flag_called exposure for someone who was never actually at
- *  risk of seeing the test arm, inflating the experiment's participant
- *  count with people it can't have affected. */
-function useHeroCtaVariant(enabled: boolean): "control" | "test" {
-  const [variant, setVariant] = useState<"control" | "test">("control");
-  useEffect(() => {
-    if (!enabled) return;
-    return onFlagVariant(CTA_TEST_FLAG, (value) =>
-      setVariant(value === "test" ? "test" : "control"),
-    );
-  }, [enabled]);
-  return variant;
-}
-
 /**
  * The `test` arm of the CTA experiment: the notebook's diagnosis was that
  * 64% of visitors leave before clicking anything, which a button-copy or
@@ -861,13 +837,15 @@ function HeroTestVariant() {
       </ul>
       {/* A plain link, not a second accent button: the demo's own "Shorten
           it" already carries the one primary action on this screen. */}
-      <a
+      {/* A router link, not a plain anchor: a full page load would drop the
+          click before the visitor ever answers the consent banner. */}
+      <HrefLink
         href="/signup"
         onClick={() => trackCta("hero_primary")}
         className="text-sm text-muted underline hover:text-accent"
       >
         Skip the demo, get started free
-      </a>
+      </HrefLink>
     </m.div>
   );
 }
@@ -977,8 +955,9 @@ function HeroSection(props: {
   /** Empty until the session resolves; the card handles that itself. */
   name: string;
 }) {
-  const ctaVariant = useHeroCtaVariant(!props.authed);
-  if (!props.authed && ctaVariant === "test") return <HeroTestVariant />;
+  // A signed-in visitor always gets the control hero and never flips the
+  // coin, so they are not counted as shown either arm (see hero-variant.ts).
+  if (!props.authed && heroVariant() === "test") return <HeroTestVariant />;
   return <HeroControlVariant {...props} />;
 }
 
