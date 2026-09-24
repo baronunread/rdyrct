@@ -33,3 +33,14 @@ export async function visitLegalPages(
     await afterEach?.(path);
   }
 }
+
+/** Pins the landing hero's coin flip (src/app/lib/hero-variant.ts) before the
+ *  page loads, for tests written against one arm of the A/B test. */
+export async function pinHeroVariant(page: Page, variant: "control" | "test"): Promise<void> {
+  await page.addInitScript(
+    (value) => {
+      Math.random = () => value;
+    },
+    variant === "control" ? 0.1 : 0.9,
+  );
+}

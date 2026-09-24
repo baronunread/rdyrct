@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { visitLegalPages } from "./pages";
+import { pinHeroVariant, visitLegalPages } from "./pages";
 
 test("landing page keeps the main sign-up path", async ({ page }) => {
   await page.goto("/");
@@ -18,6 +18,7 @@ test("landing page keeps the main sign-up path", async ({ page }) => {
 test("the hero's second CTA stays on the site and self-hosting sits under pricing", async ({
   page,
 }) => {
+  await pinHeroVariant(page, "control");
   await page.goto("/");
 
   const hero = page.locator("section").first();
@@ -141,6 +142,7 @@ test("the standalone pricing page has the full table and no self-host pitch", as
 test("the hero keeps its shortener and primary path usable on desktop and phone", async ({
   page,
 }) => {
+  await pinHeroVariant(page, "control");
   await page.goto("/");
   const heading = page.getByRole("heading", { level: 1 });
   const card = page.getByLabel("Shorten a link, no account needed");

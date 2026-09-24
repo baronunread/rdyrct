@@ -173,22 +173,23 @@ Either way, three things that cost a retake each:
 - Menus and dialogs fade in. Wait for them, and in Playwright pass
   `animations: "disabled"`, or the shot catches them half transparent.
 
-**For screenshots that belong on the PR, host them in R2, never in the repo
-and never in a side branch.** Both put
-binaries in git history for a comment, and pushing an orphan branch to serve
-images is using GitHub as a CDN it did not offer to be:
+**Attach screenshots to the PR comment with `gh --attach`, never commit them
+to the repo or a side branch.** Both put binaries in git history for a
+comment. `gh` (2.99+) uploads the file to GitHub itself and rewrites the
+reference in the body:
 
 ```sh
-bunx wrangler r2 object put "brnr/github/rdyrct/pr-<n>/<name>.png" \
-  --file <name>.png --content-type image/png --remote
+gh pr comment <n> --body-file comment.md \
+  --attach './banner.png#Cookie banner, with the new Accept wording'
 ```
 
-They serve from `https://cdn.brnr.dev/github/rdyrct/pr-<n>/<name>.png`. Check
-one with `curl -o /dev/null -w '%{http_code}'` before writing the comment,
-then check GitHub proxied them after: it rewrites external images through
-camo, so `gh api repos/<owner>/<repo>/issues/comments/<id> -H "Accept:
-application/vnd.github.html+json"` should show one `<img>` per image and each
-camo URL should return `image/png`. A broken image reads as a broken feature.
+Write `![caption](./banner.png)` in the body to place each image. The
+reference has to match the `--attach` path exactly (`./banner.png` in both,
+run from the folder holding the shots). A path that does not match leaves the
+reference broken and appends the upload at the end instead. Keep the files
+outside the repo (the session scratchpad), so none of them can be staged by
+accident. Then open the comment and check each image renders: a broken image
+reads as a broken feature.
 
 Caption each one with what it proves, not what it is. "Still listed, still
 redirecting, counting down to the day it stops" is a review; "Domains page"

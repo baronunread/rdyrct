@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { pinHeroVariant } from "./pages";
 
 // The funnel (#64) is only worth anything if the consent gate holds, so these
 // assert the privacy behaviour first and the instrumentation second.
@@ -30,6 +31,8 @@ async function trapPostHog(page: import("@playwright/test").Page) {
  *  here starts this way. */
 async function openLanding(page: import("@playwright/test").Page) {
   const attempts = await trapPostHog(page);
+  // These click "See the analytics", which only the control hero has.
+  await pinHeroVariant(page, "control");
   await page.goto("/");
   await expect(page.getByRole("heading", { level: 1 }).first()).toBeVisible();
   return attempts;

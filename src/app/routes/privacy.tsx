@@ -1,5 +1,6 @@
 // fallow-ignore-file code-duplication -- legal sections share structural patterns
 import { SUPPORT_EMAIL } from "../ui/footer";
+import { CookieSettingsButton } from "../ui/consent-banner";
 import { LegalPageLayout } from "../components/legal-page-layout";
 import { WebMcpMarketingTools } from "../components/webmcp-marketing-tools";
 import { useSeo } from "../lib/seo";
@@ -20,7 +21,7 @@ export function PrivacyPage() {
         <h1 className="mb-2 text-xl font-bold">Privacy Policy</h1>
         <p className="text-muted">
           This policy explains what data rdyrct collects, why, the legal basis for it, and how you
-          can exercise your rights. Last updated 25 August 2026.
+          can exercise your rights. Last updated 24 September 2026.
         </p>
       </div>
 
@@ -48,10 +49,15 @@ export function PrivacyPage() {
           the product itself is used: which features you use and app events such as signing in or
           creating a link, tied to your account email and name. We turn off autocapture and session
           recording, so PostHog never records what you type or a replay of your screen. Nothing is
-          sent to PostHog, and no PostHog cookie is set, unless you accept. We also use Sentry to
-          receive technical error reports from the app. These reports include technical diagnostic
-          data such as the error, browser, and page path. We remove page query strings before
-          sending them.
+          sent to PostHog, and no PostHog cookie is set, unless you accept. Until you answer the
+          banner, a few steps you take on the current page (such as viewing it or clicking a button)
+          are held in your browser&apos;s memory: accepting sends them, with the time they happened;
+          rejecting or leaving the page discards them. The home page shows one of two versions,
+          picked at random each time it loads, so we can compare which works better. Picking it
+          stores nothing on your device and sends nothing; if you accept analytics, the events above
+          say which version you saw. We also use Sentry to receive technical error reports from the
+          app. These reports include technical diagnostic data such as the error, browser, and page
+          path. We remove page query strings before sending them.
         </p>
       </section>
 
@@ -63,9 +69,11 @@ export function PrivacyPage() {
           and team invites (contract), and produce click analytics for your own links (our
           legitimate interest in offering a useful product). The session cookie is strictly
           necessary and requires no consent. Product usage analytics through PostHog runs only on
-          your consent, given or withdrawn at any time through the cookie banner. We process
-          technical error reports through Sentry for our legitimate interest in keeping the service
-          secure and reliable. Sentry does not set a cookie in rdyrct.
+          your consent, given or withdrawn at any time through the cookie banner. Reopen it with{" "}
+          <CookieSettingsButton className="text-accent hover:underline" />, here or at the foot of
+          any public page. We ask again after six months. We process technical error reports through
+          Sentry for our legitimate interest in keeping the service secure and reliable. Sentry does
+          not set a cookie in rdyrct.
         </p>
       </section>
 
@@ -79,7 +87,8 @@ export function PrivacyPage() {
         <p className="text-muted">
           rdyrct sets a strictly-necessary session cookie to keep you signed in. If you accept
           analytics in the cookie banner, PostHog also sets a cookie to recognize you across visits;
-          if you reject or ignore the banner, that cookie is never set. We do not use advertising
+          if you reject or ignore the banner, that cookie is never set. Your answer to the banner is
+          kept in your browser&apos;s local storage for six months. We do not use advertising
           cookies of any kind.
         </p>
       </section>
