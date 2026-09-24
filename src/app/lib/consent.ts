@@ -29,6 +29,12 @@ export function readConsent(now: number = Date.now()): ConsentAnswer | null {
     } else if (now - at > LIFETIME_MS) {
       localStorage.removeItem(CONSENT_KEY);
       localStorage.removeItem(ANSWERED_AT_KEY);
+      // Deferred: this can run inside the banner's snapshot read, which must
+      // not notify synchronously.
+      queueMicrotask(() => {
+        lapseHandler?.();
+        notify();
+      });
       return null;
     }
     return value === "accepted" ? "accepted" : "rejected";
@@ -47,6 +53,14 @@ export function writeConsent(answer: ConsentAnswer, now: number = Date.now()) {
   }
   bannerOpen = false;
   notify();
+}
+
+let lapseHandler: (() => void) | null = null;
+
+/** What to stop when an accepted answer lapses in a page that is still open.
+ *  Registered by posthog.ts, which this module cannot import. */
+export function onConsentLapse(handler: () => void) {
+  lapseHandler = handler;
 }
 
 let bannerOpen = false;

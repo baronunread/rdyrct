@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { installBrowserGlobals, removeBrowserGlobals } from "./browser-globals";
-import { CONSENT_KEY, readConsent, writeConsent } from "../src/app/lib/consent";
+import { CONSENT_KEY, onConsentLapse, readConsent, writeConsent } from "../src/app/lib/consent";
 import { discardBuffer, drainBuffer } from "../src/app/lib/consent-buffer";
 import { FUNNEL } from "../src/app/lib/funnel";
 import { heroVariant } from "../src/app/lib/hero-variant";
@@ -35,6 +35,21 @@ describe("the stored answer", () => {
     expect(readConsent(answeredAt + 180 * DAY)).toBe("accepted");
     expect(readConsent(answeredAt + 190 * DAY)).toBeNull();
     expect(store.has(CONSENT_KEY)).toBe(false);
+  });
+
+  test("a lapse in an open page stops what the answer allowed", async () => {
+    const stopped: string[] = [];
+    onConsentLapse(() => stopped.push("stopped"));
+    const answeredAt = Date.UTC(2026, 0, 1);
+    writeConsent("accepted", answeredAt);
+
+    readConsent(answeredAt + 10 * DAY);
+    await Promise.resolve();
+    expect(stopped).toEqual([]);
+
+    readConsent(answeredAt + 190 * DAY);
+    await Promise.resolve();
+    expect(stopped).toEqual(["stopped"]);
   });
 
   test("an answer from before the timestamp existed starts its six months now", () => {

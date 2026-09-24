@@ -1,7 +1,7 @@
 import type { default as PosthogClient } from "posthog-js";
 import type { JsonValue } from "@/shared/types";
 import { bufferBeforeConsent, discardBuffer, drainBuffer } from "./consent-buffer";
-import { CONSENT_KEY, readConsent, writeConsent } from "./consent";
+import { CONSENT_KEY, onConsentLapse, readConsent, writeConsent } from "./consent";
 import { isFunnelEvent } from "./funnel";
 import { shownHeroVariant } from "./hero-variant";
 
@@ -75,10 +75,12 @@ function loadClient(): Promise<typeof PosthogClient | null> | null {
         },
       });
       identifyPendingUser(posthog);
-      // A Reject in another tab, or the answer lapsing, has to stop this
-      // tab's client too: the SDK sends pageviews and errors on its own.
+      // An answer given in another tab applies to this one too: the SDK
+      // sends pageviews and errors on its own, not only through capture().
       window.addEventListener("storage", (event) => {
-        if (event.key === CONSENT_KEY && !hasAnalyticsConsent()) posthog.opt_out_capturing();
+        if (event.key !== CONSENT_KEY) return;
+        if (hasAnalyticsConsent()) resumeCapturing(posthog);
+        else stopCapturing();
       });
       return posthog;
     });
@@ -117,17 +119,26 @@ function flushPending(posthog: typeof PosthogClient | null) {
 export function grantAnalyticsConsent() {
   writeConsent("accepted");
   void loadClient()?.then((posthog) => {
-    // After an earlier withdrawal: the opt-out flag outlives the page, so this
-    // runs on a later visit too, not only after "Cookie settings".
-    if (posthog?.has_opted_out_capturing()) posthog.opt_in_capturing();
-    identifyPendingUser(posthog);
+    resumeCapturing(posthog);
     flushPending(posthog);
   });
 }
 
+function resumeCapturing(posthog: typeof PosthogClient | null) {
+  // After an earlier withdrawal: the opt-out flag outlives the page, so this
+  // runs on a later visit too, not only after "Cookie settings".
+  if (posthog?.has_opted_out_capturing()) posthog.opt_in_capturing();
+  identifyPendingUser(posthog);
+}
+
 export function revokeAnalyticsConsent() {
-  discardBuffer();
   writeConsent("rejected");
+  stopCapturing();
+}
+
+/** Shared by Reject, a Reject in another tab, and the answer lapsing. */
+function stopCapturing() {
+  discardBuffer();
   // A later Accept in this page should identify the user again.
   if (identifiedId) pendingIdentity ??= { id: identifiedId, properties: identifiedProperties };
   identifiedId = null;
@@ -141,10 +152,13 @@ export function revokeAnalyticsConsent() {
   }
 }
 
+onConsentLapse(stopCapturing);
+
 /** What an earlier Accept left behind when no client is loaded to remove it,
  *  e.g. a Reject after the six months lapsed. Cookies are expired on this
  *  host and on each parent domain, since PostHog sets them site-wide. */
 function clearPostHogStorage() {
+  if (!("document" in globalThis)) return;
   const persisted = /^ph_.+_posthog$/;
   try {
     for (const key of Object.keys(localStorage)) {
