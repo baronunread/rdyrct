@@ -71,25 +71,15 @@ function wait(ms: number, signal: AbortSignal) {
 /** Runs a scene's script while `playing`, aborting it when that stops. */
 function useScript(playing: boolean, script: (signal: AbortSignal) => Promise<void>) {
   const ref = useRef(script);
-  ref.current = script;
+  useEffect(() => {
+    ref.current = script;
+  });
   useEffect(() => {
     if (!playing) return;
     const ctrl = new AbortController();
     void ref.current(ctrl.signal);
     return () => ctrl.abort();
   }, [playing]);
-}
-
-/** The step on screen, moving on by itself while the tour is in view and
- * the visitor has not asked for less motion. */
-function useAutoStep(running: boolean) {
-  const [step, setStep] = useState(0);
-  useEffect(() => {
-    if (!running) return;
-    const t = setTimeout(() => setStep((s) => (s + 1) % STEPS.length), STEP_MS);
-    return () => clearTimeout(t);
-  }, [step, running]);
-  return [step, setStep] as const;
 }
 
 /** False until `when` is first true, then true for good. */
@@ -104,7 +94,10 @@ export function ProductTour({ footer }: { footer?: ReactNode }) {
   const inView = useInView(win, { amount: 0.3 });
   const still = useReducedMotion() ?? false;
   const running = inView && !still;
-  const [step, setStep] = useAutoStep(running);
+  const [step, setStep] = useState(0);
+  // The selected tab's progress bar is the only clock: the step moves on when
+  // its animation ends, so pausing off screen pauses both together.
+  const next = () => setStep((s) => (s + 1) % STEPS.length);
 
   return (
     <div className="flex flex-col gap-3">
@@ -112,10 +105,12 @@ export function ProductTour({ footer }: { footer?: ReactNode }) {
         {STEPS.map((s, i) => (
           <TourTab
             key={s.label}
+            index={i}
             label={`${i + 1}. ${s.label}`}
             selected={step === i}
             running={running}
             onSelect={() => setStep(i)}
+            onDone={next}
           />
         ))}
       </div>
@@ -147,13 +142,13 @@ function TourScreens({ step, inView, still }: { step: number; inView: boolean; s
   const playing = (i: number) => step === i && inView;
   return (
     <div className="relative grid min-w-0 overflow-hidden p-5 md:p-6">
-      <Scene on={step === 0}>
+      <Scene index={0} on={step === 0}>
         <DashboardScene playing={playing(0)} still={still} />
       </Scene>
-      <Scene on={step === 1}>
+      <Scene index={1} on={step === 1}>
         <LinksScene playing={playing(1)} still={still} />
       </Scene>
-      <Scene on={step === 2}>
+      <Scene index={2} on={step === 2}>
         {wantCharts && (
           <Suspense fallback={null}>
             <AnalyticsScreen />
@@ -167,20 +162,26 @@ function TourScreens({ step, inView, still }: { step: number; inView: boolean; s
 /** One step's tab. Its bar fills over the step's time, and pauses with the
  * tour when it leaves the screen. */
 function TourTab({
+  index,
   label,
   selected,
   running,
   onSelect,
+  onDone,
 }: {
+  index: number;
   label: string;
   selected: boolean;
   running: boolean;
   onSelect: () => void;
+  onDone: () => void;
 }) {
   return (
     <button
       type="button"
       role="tab"
+      id={`tour-tab-${index}`}
+      aria-controls={`tour-panel-${index}`}
       aria-selected={selected}
       onClick={onSelect}
       className="flex cursor-pointer flex-col gap-1.5 text-left text-sm font-medium text-muted hover:text-text aria-selected:text-text"
@@ -189,6 +190,7 @@ function TourTab({
       <span className="h-0.5 overflow-hidden rounded-full bg-border">
         {selected && (
           <span
+            onAnimationEnd={running ? onDone : undefined}
             className="tour-progress block h-full bg-accent"
             style={{
               animationDuration: `${STEP_MS}ms`,
@@ -203,9 +205,12 @@ function TourTab({
 
 /** Every screen stays mounted in the same grid cell and cross-fades, so the
  * window never changes height between them. */
-function Scene({ on, children }: { on: boolean; children: ReactNode }) {
+function Scene({ index, on, children }: { index: number; on: boolean; children: ReactNode }) {
   return (
     <div
+      id={`tour-panel-${index}`}
+      role="tabpanel"
+      aria-labelledby={`tour-tab-${index}`}
       className={cn(
         "col-start-1 row-start-1 flex min-w-0 flex-col gap-3 transition-opacity duration-300",
         on ? "opacity-100" : "invisible opacity-0",
@@ -297,7 +302,9 @@ async function typeOut(text: string, set: (v: string) => void, signal: AbortSign
  * watch its first clicks arrive. */
 function useDashboardScript(playing: boolean, still: boolean) {
   const [typed, setTyped] = useState("");
-  const [phase, setPhase] = useState<Phase>(still ? "done" : "idle");
+  const [played, setPhase] = useState<Phase>("idle");
+  // Reduced motion never runs the script, so it sees the finished screen.
+  const phase: Phase = still ? "done" : played;
   const [clicks, setClicks] = useState(CLICKS);
 
   useScript(playing && !still, async (signal) => {
@@ -477,10 +484,11 @@ const ROWS: Row[] = [
   },
 ];
 
-function LinksScene({ playing, still }: { playing: boolean; still: boolean }) {
-  const [shown, setShown] = useState(still);
+/** The links screen's script: the new link arrives at the top, then its
+ * clicks start counting. */
+function useLinksScript(playing: boolean, still: boolean) {
+  const [arrived, setShown] = useState(false);
   const [count, setCount] = useState(3);
-
   useScript(playing && !still, async (signal) => {
     setShown(false);
     setCount(0);
@@ -491,6 +499,12 @@ function LinksScene({ playing, still }: { playing: boolean; still: boolean }) {
       setCount(n * 2);
     }
   });
+  // Reduced motion never runs the script, so it sees the finished screen.
+  return { shown: still || arrived, count };
+}
+
+function LinksScene({ playing, still }: { playing: boolean; still: boolean }) {
+  const { shown, count } = useLinksScript(playing, still);
 
   const rows = shown
     ? [

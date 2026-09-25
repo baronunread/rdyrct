@@ -875,7 +875,10 @@ const FACTS = [
   ["No IP addresses", "A click keeps its country, referrer, device and time. Nothing else."],
   ["Runs on Cloudflare", "Redirects are served from the data center nearest each visitor."],
   ["Open source", "Read the code, or deploy it to your own Cloudflare account."],
-  [`Your domain for ${PLAN_PRICES.hobby}`, "A custom domain with automatic TLS on the Hobby plan."],
+  [
+    `Your domain for ${PLAN_PRICES.hobby} a month`,
+    "A custom domain with automatic TLS on the Hobby plan.",
+  ],
 ] as const;
 
 function FactsSection() {
@@ -1095,6 +1098,8 @@ function AudienceSection() {
             key={a}
             type="button"
             role="tab"
+            id={`audience-tab-${a}`}
+            aria-controls={`audience-panel-${a}`}
             aria-selected={audience === a}
             onClick={() => setAudience(a)}
             className={cn(
@@ -1108,7 +1113,9 @@ function AudienceSection() {
       </div>
       <m.div
         key={audience}
+        id={`audience-panel-${audience}`}
         role="tabpanel"
+        aria-labelledby={`audience-tab-${audience}`}
         initial={{ opacity: 0, y: 6 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.25 }}

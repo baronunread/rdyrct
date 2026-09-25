@@ -6,12 +6,17 @@
  * sales device. It stays out of the way while the hero card that already
  * shows the link is on screen, and one click hides it for the visit.
  */
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { X } from "../ui/icons";
 import { buttonClass } from "../ui/button-class";
 import { HrefLink } from "../lib/router-search";
 import { trackCta } from "../lib/track-cta";
-import { ANON_LINKS_CHANGED, storedAnonLinks, type StoredAnonLink } from "../lib/anon-links";
+import {
+  anonLinksSnapshot,
+  storedAnonLinks,
+  subscribeAnonLinks,
+  type StoredAnonLink,
+} from "../lib/anon-links";
 
 function timeLeft(ms: number): string {
   const s = Math.max(0, Math.floor(ms / 1000));
@@ -22,13 +27,10 @@ function timeLeft(ms: number): string {
 
 /** The newest link this browser made, kept current as the hero makes one. */
 function useStoredAnonLink() {
-  const [link, setLink] = useState<StoredAnonLink | undefined>(() => storedAnonLinks()[0]);
-  useEffect(() => {
-    const read = () => setLink(storedAnonLinks()[0]);
-    window.addEventListener(ANON_LINKS_CHANGED, read);
-    return () => window.removeEventListener(ANON_LINKS_CHANGED, read);
-  }, []);
-  return link;
+  const raw = useSyncExternalStore(subscribeAnonLinks, anonLinksSnapshot, () => null);
+  // Parsed through storedAnonLinks, which validates and drops expired links;
+  // `raw` is only what tells this to look again.
+  return useMemo(() => (raw ? storedAnonLinks()[0] : undefined), [raw]);
 }
 
 /** Whether the hero's shortener form is on screen. Signed-in visitors and
