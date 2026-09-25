@@ -133,7 +133,17 @@ jobs:
         if: matrix.shard == 0
         env:
           LEANEST_PROVIDER: classifier-dev
-        run: bunx leanest@0.2.3 playwright --base "origin/${{ github.base_ref }}" --dir .
+        # 0.2.1, not later: 0.2.2+ only starts when argv[1] is the real
+        # cli.js path, so through bunx's bin symlink it exits 0 having run
+        # nothing. The grep below fails the job if that ever happens again:
+        # a leanest run that never reports a selection is not a pass.
+        run: |
+          set -o pipefail
+          bunx leanest@0.2.1 playwright --base "origin/${{ github.base_ref }}" --dir . 2>&1 | tee leanest.log
+          grep -Eq '^Selected [0-9]+ / [0-9]+ tests' leanest.log || {
+            echo "::error::leanest reported no selection, so no e2e spec ran"
+            exit 1
+          }
       - name: Browser smoke test (full suite, shard ${{ matrix.shard }}/3)
         if: matrix.shard != 0
         run: bunx playwright test --shard=${{ matrix.shard }}/3

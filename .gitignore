@@ -13,3 +13,4 @@ package-lock.json
 
 # remotion renders
 out/
+leanest.log
