@@ -1161,7 +1161,7 @@ const PLAN_CHANGE_STEPS = [
   ],
   [
     "Always",
-    "Links on rdyrct.com keep working",
+    "Links on rdyr.cc and rdyrct.com keep working",
     "On every plan, paid or free. We never switch a printed code off.",
   ],
 ] as const;
