@@ -28,6 +28,7 @@ import type {
   QuotaUsage,
   WithQuotaUsage,
   ApiKeyDTO,
+  OrgPlan,
 } from "@/shared/types";
 
 /**
@@ -456,10 +457,10 @@ export function useRevokeConnectedApp() {
 export function useCheckout() {
   // react-doctor-disable-next-line react-doctor/query-mutation-missing-invalidation
   return useMutation({
-    mutationFn: (plan: "hobby" | "pro") =>
+    mutationFn: ({ plan, interval }: { plan: "hobby" | "pro"; interval: "month" | "year" }) =>
       api<{ url: string }>(`/billing/checkout`, {
         method: "POST",
-        body: { plan },
+        body: { plan, interval },
       }),
   });
 }
@@ -468,6 +469,17 @@ export function usePortal() {
   // react-doctor-disable-next-line react-doctor/query-mutation-missing-invalidation
   return useMutation({
     mutationFn: () => api<{ url: string }>(`/billing/portal`, { method: "POST" }),
+  });
+}
+
+/** Fallback for when the checkout-return poll gives up before the webhook
+ * lands: asks the server to ask Polar directly. See billing.tsx's
+ * useAwaitWebhook/onGaveUp and the worker route this calls. */
+export function useConfirmCheckout() {
+  // react-doctor-disable-next-line react-doctor/query-mutation-missing-invalidation
+  return useMutation({
+    mutationFn: (checkoutId: string) =>
+      api<{ plan: OrgPlan }>(`/billing/checkout/${checkoutId}/confirm`, { method: "POST" }),
   });
 }
 
