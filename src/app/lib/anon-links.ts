@@ -89,7 +89,27 @@ export function storedAnonLinks(): StoredAnonLink[] {
 
 /** Fired on window whenever this tab records a link. The `storage` event
  * only reaches other tabs, and the landing page's link bar lives in this one. */
-export const ANON_LINKS_CHANGED = "rdyrct:anon-links";
+const ANON_LINKS_CHANGED = "rdyrct:anon-links";
+
+/** The raw stored value, for useSyncExternalStore: a string compares by
+ * value, so an unchanged store never looks like a new snapshot. */
+export function anonLinksSnapshot(): string | null {
+  try {
+    return localStorage.getItem(KEY);
+  } catch {
+    return null;
+  }
+}
+
+/** Calls back when this tab records a link or another tab changes the store. */
+export function subscribeAnonLinks(onChange: () => void): () => void {
+  window.addEventListener(ANON_LINKS_CHANGED, onChange);
+  window.addEventListener("storage", onChange);
+  return () => {
+    window.removeEventListener(ANON_LINKS_CHANGED, onChange);
+    window.removeEventListener("storage", onChange);
+  };
+}
 
 function write(links: StoredAnonLink[]): void {
   try {
