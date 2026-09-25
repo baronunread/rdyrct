@@ -106,19 +106,22 @@ export function AreaChart({
           },
         }),
       ],
-      x: {
-        scale: thinnedPointScale(data.map((d) => d.day)),
-        grid: false,
-        // Charts 0.8 moved the tick formatter under `axis.ticks`. It stayed
-        // assignable at the axis root, where nothing reads it, so the axis
-        // quietly went back to printing whole ISO strings ("2026-07-17"
-        // instead of "07-17", and every timestamp in full on the hourly
-        // range).
-        axis: { ticks: { format: tickFormat } },
-      },
-      y: {
-        scale: scaleLinear().domain([0, max]).nice(),
-        grid: true,
+      // Charts 0.18 (Alpha) moved the Cartesian scales under `scales`.
+      scales: {
+        x: {
+          scale: thinnedPointScale(data.map((d) => d.day)),
+          grid: false,
+          // Charts 0.8 moved the tick formatter under `axis.ticks`. It stayed
+          // assignable at the axis root, where nothing reads it, so the axis
+          // quietly went back to printing whole ISO strings ("2026-07-17"
+          // instead of "07-17", and every timestamp in full on the hourly
+          // range).
+          axis: { ticks: { format: tickFormat } },
+        },
+        y: {
+          scale: scaleLinear().domain([0, max]).nice(),
+          grid: true,
+        },
       },
       theme: { foreground: "var(--text)", muted: "var(--muted)", grid: "var(--border)" },
       // Nearest-x, unbounded distance: the slice shows anywhere over the
@@ -284,12 +287,14 @@ export function ClicksByHour({ data, height = 260 }: { data: HeatmapRow[]; heigh
       // All 24 hours are labelled: they fit, and thinning them would make the
       // reader count bars to find an hour. `thin` drops labels itself if a
       // narrow card ever takes that choice away.
-      x: {
-        scale: scaleBand<number>().domain(HOURS),
-        grid: false,
-        axis: { tickLabels: { thin: true } },
+      scales: {
+        x: {
+          scale: scaleBand<number>().domain(HOURS),
+          grid: false,
+          axis: { tickLabels: { thin: true } },
+        },
+        y: { scale: scaleLinear().domain([0, max]).nice(), grid: true },
       },
-      y: { scale: scaleLinear().domain([0, max]).nice(), grid: true },
       theme: { foreground: "var(--text)", muted: "var(--muted)", grid: "var(--border)" },
       focusRing: false,
       tooltip: pointerTooltip,

@@ -80,7 +80,9 @@ export function CountryMap({ countries: data }: { countries: TopEntry[] }) {
           strokeWidth: 0.5,
         }),
       ],
-      // A map has no axes to draw, and no grid to draw them on.
+      // A map has no axes to draw, and no grid to draw them on. Charts 0.18
+      // requires both Cartesian entries anyway; null says "not used".
+      scales: { x: null, y: null },
       guides: false,
       focusRing: false,
       maxFocusDistance: 60,

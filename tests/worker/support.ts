@@ -50,6 +50,10 @@ function stubWorkflow<T>(): Workflow<T> {
     restart: async () => {},
     sendEvent: async () => {},
     delete: async () => {},
+    // workers-types 5.20260919 added this; nothing in the app subscribes.
+    subscribe: () => {
+      throw new Error("no worker test subscribes to workflow events");
+    },
   };
   return {
     async create() {

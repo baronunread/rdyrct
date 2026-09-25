@@ -24,6 +24,7 @@ function instanceReporting(status: InstanceStatus["status"]): WorkflowInstance {
     restart: untested,
     sendEvent: untested,
     delete: untested,
+    subscribe: untested,
   };
 }
 
