@@ -150,7 +150,7 @@ ${preheaderBlock(content.preheader)}
         <tr>
           <td style="padding:24px 26px 26px">
             <hr style="border:none;border-top:1px solid ${LIGHT.border};margin:0 0 14px">
-            <p class="muted" style="margin:0;font-family:${FONT};font-size:12px;line-height:1.6;color:${LIGHT.muted}">rdyrct, link shortening and QR codes. Sent to ${to}.</p>
+            <p class="muted" style="margin:0;font-family:${FONT};font-size:12px;line-height:1.6;color:${LIGHT.muted}">rdyrct, link shortening and QR codes. Sent to ${to}. ${NOT_YOU}</p>
           </td>
         </tr>
       </table>
@@ -163,6 +163,9 @@ ${preheaderBlock(content.preheader)}
   return { html, text: renderText(content, appUrl, to) };
 }
 
+/** What to do with mail you did not expect, in both parts of every email. */
+const NOT_YOU = "Not you? Ignore it, or write to support@rdyrct.com.";
+
 /**
  * The plain-text part. Not a fallback nobody reads: HTML-only mail is a
  * deliverability penalty, and text-only clients otherwise get nothing.
@@ -172,6 +175,6 @@ function renderText(content: EmailContent, appUrl: string, to: string): string {
   if (content.code) lines.push(content.code, "");
   if (content.cta) lines.push(`${content.cta.label}: ${safeUrl(content.cta.url)}`, "");
   if (content.note) lines.push(content.note, "");
-  lines.push("--", "rdyrct, link shortening and QR codes.", `Sent to ${to}.`, appUrl);
+  lines.push("--", "rdyrct, link shortening and QR codes.", `Sent to ${to}.`, NOT_YOU, appUrl);
   return lines.join("\n");
 }
