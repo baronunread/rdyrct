@@ -116,7 +116,7 @@ export function LinkDetailPage() {
   return (
     <div>
       <LinkDetailHeader
-        title={linkDisplayTitle(config?.appHost, s.domain, s.slug)}
+        title={linkDisplayTitle(config?.linkHost, s.domain, s.slug)}
         subtitle={s.title}
         fullUrl={fullUrl}
         action={<ExportCsvButton stats={s} scope={`link-${s.slug}`} days={s.rangeDays} />}
