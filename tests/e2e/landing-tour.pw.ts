@@ -26,6 +26,16 @@ test("the product tour switches between the dashboard, links and analytics", asy
   );
 });
 
+// The selected tab's progress bar is the tour's only clock, so the step has
+// to move on by itself when the bar fills, and each tab has to name its panel.
+test("the tour moves on by itself while it is on screen", async ({ page }) => {
+  await page.goto("/");
+  await page.locator("#analytics").scrollIntoViewIfNeeded();
+  const share = page.getByRole("tab", { name: /share it/i });
+  await expect(share).toHaveAttribute("aria-selected", "true", { timeout: 12_000 });
+  await expect(page.getByRole("tabpanel", { name: /share it/i })).toBeVisible();
+});
+
 async function shorten(page: Page, destination: string) {
   await page.goto("/");
   await page.getByLabel("Shorten a link, no account needed").fill(destination);
