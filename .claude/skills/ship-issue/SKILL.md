@@ -197,7 +197,13 @@ is a filename.
 
 ## 5. Wait for CI
 
-Seven checks: `static`, `unit`, `react-doctor`, `React Doctor`, `e2e (1..3)`.
+While you work, each push runs `static`, `unit`, `observability`,
+`react-doctor`, `React Doctor` and `e2e (selected)`: only the e2e specs
+leanest picks from the diff.
+
+Before merging, add the `ready` label. That reruns the workflow with the
+full e2e suite as `e2e (1/3)`, `e2e (2/3)` and `e2e (3/3)`, and those three
+have to pass. A green `e2e (selected)` is never enough to merge.
 
 ## 6. Handle the review
 
