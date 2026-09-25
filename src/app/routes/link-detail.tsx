@@ -111,12 +111,12 @@ export function LinkDetailPage() {
     return <p className="py-8 text-center text-sm text-danger">Could not load link stats.</p>;
   const s = stats.data;
 
-  const fullUrl = shortUrl(s.slug, s.domain);
+  const fullUrl = shortUrl(s.slug, s.domain, config?.linkHost);
 
   return (
     <div>
       <LinkDetailHeader
-        title={linkDisplayTitle(config?.appHost, s.domain, s.slug)}
+        title={linkDisplayTitle(config?.linkHost, s.domain, s.slug)}
         subtitle={s.title}
         fullUrl={fullUrl}
         action={<ExportCsvButton stats={s} scope={`link-${s.slug}`} days={s.rangeDays} />}

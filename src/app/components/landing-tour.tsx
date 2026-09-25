@@ -459,7 +459,7 @@ const ROWS: Row[] = [
     created: "Sep 18, 2026",
   },
   {
-    host: "rdyrct.com",
+    host: "rdyr.cc",
     slug: "p8kd2mq",
     title: "Press kit",
     dest: "https://northwind.co/press",

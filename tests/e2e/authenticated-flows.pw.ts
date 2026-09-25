@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { appUrl } from "./environment";
+import { sharedLinkHost } from "./environment";
 import { signUpAndVerify } from "./resend";
 import { setPlan } from "./db";
 import { addCustomDomain, createQuickLink } from "./orgs";
@@ -13,7 +13,7 @@ test("a new owner can create an organization and a scheme-less quick link", asyn
   await signUpAndVerify(page, email, password);
 
   await createQuickLink(page, "example.com/playwright");
-  await expect(page.getByRole("dialog")).toContainText(`${appUrl}/`);
+  await expect(page.getByRole("dialog")).toContainText(`${sharedLinkHost}/`);
 
   await setPlan(page, email);
   const hostname = await addCustomDomain(page, `links-${Date.now()}.example.com`);
