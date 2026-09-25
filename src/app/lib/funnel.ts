@@ -75,6 +75,9 @@ export type CtaPlacement =
   // The custom-domain second screen (Direction C of #96), the first paid
   // ask on the page.
   | "second_screen_domain"
+  // The bar that follows a visitor who made an anonymous link down the page,
+  // with its 24-hour countdown.
+  | "anon_link_bar"
   // The one ask in the long middle of the page, at the end of the analytics
   // preview. Worth its own placement: it fires right after somebody has been
   // shown the payoff, so it measures whether the mock actually sells.

@@ -87,9 +87,14 @@ export function storedAnonLinks(): StoredAnonLink[] {
   }
 }
 
+/** Fired on window whenever this tab records a link. The `storage` event
+ * only reaches other tabs, and the landing page's link bar lives in this one. */
+export const ANON_LINKS_CHANGED = "rdyrct:anon-links";
+
 function write(links: StoredAnonLink[]): void {
   try {
     localStorage.setItem(KEY, JSON.stringify(links.slice(0, MAX_ANON_LINKS)));
+    window.dispatchEvent(new Event(ANON_LINKS_CHANGED));
   } catch {
     // Private mode, or storage disabled. The links still work for 24 hours.
   }

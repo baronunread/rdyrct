@@ -443,6 +443,61 @@ body {
   }
 }
 
+/* The landing product tour (landing-tour.tsx). Each one is a state change on
+   a screen of the app: a step's time running out, a row arriving, a dialog
+   opening. */
+/* Clear of a phone's home indicator, and never wider than the screen. */
+.anon-link-bar {
+  bottom: calc(1rem + env(safe-area-inset-bottom, 0px));
+  max-width: calc(100vw - 2rem);
+}
+.tour-window {
+  height: 640px;
+}
+@media (min-width: 48rem) {
+  .tour-window {
+    grid-template-columns: 200px 1fr;
+  }
+}
+.tour-progress {
+  width: 0;
+  animation: tour-progress linear forwards;
+}
+@keyframes tour-progress {
+  to {
+    width: 100%;
+  }
+}
+.tour-row-in {
+  animation: anon-link-in 300ms ease-out both;
+}
+.tour-row-new > td {
+  animation:
+    anon-link-in 400ms ease-out both,
+    tour-row-highlight 2.4s ease-out 400ms both;
+}
+@keyframes tour-row-highlight {
+  from {
+    background: color-mix(in srgb, var(--accent) 14%, transparent);
+  }
+}
+.tour-fade {
+  animation: tour-fade 200ms ease-out both;
+}
+@keyframes tour-fade {
+  from {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tour-row-in,
+  .tour-row-new > td,
+  .tour-fade {
+    animation: none;
+  }
+}
+
 /* skeleton blocks hold a static shade instead of pulsing */
 @media (prefers-reduced-motion: reduce) {
   .animate-pulse {
