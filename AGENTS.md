@@ -59,7 +59,10 @@ though writing it does not require running the full suite locally.
 **Run tests scoped to the blast radius while iterating, not the full
 suite.** `bun run verify:e2e` is the gate CI runs, unscoped, before a PR
 merges — that stays mandatory, and the full `e2e:smoke` run only happens
-there, never as a local default. Re-running every unit test, worker test and
+there, never as a local default. In CI, a PR's pushes run only the e2e specs
+[leanest](https://github.com/baronunread/leanest) selects from its diff;
+labelling the PR `ready` runs the full sharded suite, which must pass before
+merging. Every push to main runs the full suite too. Re-running every unit test, worker test and
 e2e spec after every edit is not extra safety, it's noise that hides which
 check matters: a change to QR-logo storage doesn't need the billing
 or short-link-creation specs to pass again, it needs the ones that touch R2,
@@ -82,8 +85,9 @@ Workers globals in one directory, so they need untangling first.
 files, because that is the one job that repairs instead of complaining.
 Everything that reports runs in CI, where nobody can pass `--no-verify`:
 `.github/workflows/test.yml` runs the same checks as `bun run verify:e2e`,
-split across parallel jobs (static checks, unit/worker tests, and a 3-way
-sharded e2e run) to cut wall-clock time, and
+split across parallel jobs (static checks, unit/worker tests, and e2e: the
+specs leanest selects on each push, the full suite sharded 3 ways once the
+PR is labelled `ready` and on main) to cut wall-clock time, and
 `.github/workflows/react-doctor.yml` blocks on any new react-doctor finding
 (changed files, against the merge base) for PRs and main.
 
