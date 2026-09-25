@@ -123,6 +123,10 @@ including the admin screens. It exists because this repo is edited by agents
 constantly and each one otherwise re-derives the same conventions out of
 `src/app/ui/` by guessing. Same reason this file exists.
 
+**rdyrct-email** (`.claude/skills/rdyrct-email`, symlinked from
+`.agents/skills`) is how mail gets built and previewed on `renderEmail()`,
+and why a Broadcast only ever goes to people who opted in.
+
 **ship-issue** (`.claude/skills/ship-issue`, symlinked from `.agents/skills`)
 is how work gets landed: evaluate the issue before branching, mutation-test
 any new guard, read the review body rather than trusting the green check, get
