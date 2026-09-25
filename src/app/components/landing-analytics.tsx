@@ -56,7 +56,7 @@ function DeltaBadge({ delta }: { delta: number }) {
 
 function StatTile({ label, value, delta }: { label: string; value: number; delta?: number }) {
   return (
-    <div className="rounded-lg border border-border bg-bg/40 p-3">
+    <div className="rounded-lg bg-surface smooth-shadow-ring-xs p-3">
       <p className="truncate text-xs font-medium text-muted">{label}</p>
       <p className="tnum mt-1 text-xl font-bold">{formatNumber(value)}</p>
       {delta != null && delta !== 0 && <DeltaBadge delta={delta} />}
@@ -93,7 +93,7 @@ function RangeTabs({
 }
 
 /**
- * Analytics-page mockup for the landing page, built from the app's real chart
+ * The analytics screen of the landing product tour, built from the app's real chart
  * components (AreaChart + BarList + ClicksByHour) over demo data: theme-aware and
  * CSP-safe like everything else on the page. The range presets really switch
  * the series (hourly buckets for 24h, like the product), and the area chart's
@@ -105,73 +105,62 @@ export function LandingAnalyticsMock() {
   const series = useMemo(() => SERIES[range], [range]);
 
   return (
-    <div className="w-full max-w-4xl rounded-2xl bg-surface smooth-shadow-ring-2xl">
-      {/* fake browser chrome, mirrors the hero mockup */}
-      <div className="flex items-center gap-2 border-b border-border px-6 py-4">
-        <span className="h-3 w-3 rounded-full bg-pink/60" />
-        <span className="h-3 w-3 rounded-full bg-butter/60" />
-        <span className="h-3 w-3 rounded-full bg-mint/60" />
-        <span className="ml-3 flex-1 truncate rounded-md bg-surface-2 px-3 py-1.5 text-xs text-muted">
-          rdyrct.com/analytics
-        </span>
-      </div>
-
-      <div className="flex flex-col gap-4 p-6 sm:p-8">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div>
-            <p className="font-bold">Analytics</p>
-            <p className="text-xs text-muted">
-              {active.bucket === "hour" ? "Last 24 hours" : `Last ${active.days} days`}
-            </p>
-          </div>
-          <RangeTabs active={range} onSelect={setRange} />
-        </div>
-
-        <div className="grid grid-cols-3 gap-3">
-          <StatTile label="Total clicks" value={8412} delta={18} />
-          <StatTile label="Clicks · 7d" value={CLICKS_7D} delta={12} />
-          <StatTile label="Active links" value={12} />
-        </div>
-
-        <div className="rounded-lg border border-border bg-bg/40 p-4">
-          <p className="mb-3 text-xs font-medium text-muted">
-            {active.bucket === "hour" ? "Clicks per hour" : "Clicks per day"}
+    // The product tour (landing-tour.tsx) supplies the window around this.
+    <div className="flex flex-col gap-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <p className="text-lg font-bold">Analytics</p>
+          <p className="text-sm text-muted">
+            {active.bucket === "hour" ? "Last 24 hours" : `Last ${active.days} days`}
           </p>
-          <AreaChart
-            data={series}
-            height={160}
-            tickFormat={active.bucket === "hour" ? (day) => day.slice(11, 16) : undefined}
-          />
         </div>
-
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-          <div className="rounded-lg border border-border bg-bg/40 p-4">
-            <p className="mb-3 text-xs font-medium text-muted">Campaigns</p>
-            <BarList items={CAMPAIGNS} />
-          </div>
-          <div className="rounded-lg border border-border bg-bg/40 p-4">
-            <p className="mb-3 text-xs font-medium text-muted">Countries</p>
-            <BarList items={COUNTRIES} />
-          </div>
-          <div className="rounded-lg border border-border bg-bg/40 p-4">
-            <p className="mb-3 text-xs font-medium text-muted">Devices</p>
-            <BarList items={DEVICES} />
-          </div>
-        </div>
-
-        {active.bucket !== "hour" && (
-          <div className="grid gap-4 md:grid-cols-3">
-            <div className="rounded-lg border border-border bg-bg/40 p-4 md:col-span-2">
-              <p className="mb-3 text-xs font-medium text-muted">By hour</p>
-              <ClicksByHour data={HEATMAP} />
-            </div>
-            <div className="rounded-lg border border-border bg-bg/40 p-4">
-              <p className="mb-3 text-xs font-medium text-muted">By weekday</p>
-              <BarList items={clicksByWeekday(HEATMAP)} />
-            </div>
-          </div>
-        )}
+        <RangeTabs active={range} onSelect={setRange} />
       </div>
+
+      <div className="grid grid-cols-3 gap-3">
+        <StatTile label="Total clicks" value={8412} delta={18} />
+        <StatTile label="Clicks · 7d" value={CLICKS_7D} delta={12} />
+        <StatTile label="Active links" value={12} />
+      </div>
+
+      <div className="rounded-lg bg-surface smooth-shadow-ring-xs p-4">
+        <p className="mb-3 text-xs font-medium text-muted">
+          {active.bucket === "hour" ? "Clicks per hour" : "Clicks per day"}
+        </p>
+        <AreaChart
+          data={series}
+          height={160}
+          tickFormat={active.bucket === "hour" ? (day) => day.slice(11, 16) : undefined}
+        />
+      </div>
+
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <div className="rounded-lg bg-surface smooth-shadow-ring-xs p-4">
+          <p className="mb-3 text-xs font-medium text-muted">Campaigns</p>
+          <BarList items={CAMPAIGNS} />
+        </div>
+        <div className="rounded-lg bg-surface smooth-shadow-ring-xs p-4">
+          <p className="mb-3 text-xs font-medium text-muted">Countries</p>
+          <BarList items={COUNTRIES} />
+        </div>
+        <div className="rounded-lg bg-surface smooth-shadow-ring-xs p-4">
+          <p className="mb-3 text-xs font-medium text-muted">Devices</p>
+          <BarList items={DEVICES} />
+        </div>
+      </div>
+
+      {active.bucket !== "hour" && (
+        <div className="grid gap-4 md:grid-cols-3">
+          <div className="rounded-lg bg-surface smooth-shadow-ring-xs p-4 md:col-span-2">
+            <p className="mb-3 text-xs font-medium text-muted">By hour</p>
+            <ClicksByHour data={HEATMAP} />
+          </div>
+          <div className="rounded-lg bg-surface smooth-shadow-ring-xs p-4">
+            <p className="mb-3 text-xs font-medium text-muted">By weekday</p>
+            <BarList items={clicksByWeekday(HEATMAP)} />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

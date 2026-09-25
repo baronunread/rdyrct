@@ -2,24 +2,7 @@
 import type { ReactNode } from "react";
 import { Link } from "@tanstack/react-router";
 import { HrefLink } from "../lib/router-search";
-import {
-  Link2,
-  QrCode,
-  Globe,
-  Users,
-  BarChart3,
-  ShieldCheck,
-  Check,
-  Code2,
-  ChevronDown,
-  ArrowRight,
-  Target,
-  TrendingDown,
-  Activity,
-  Layers,
-  GitMerge,
-  Mail,
-} from "@/app/ui/icons";
+import { ArrowRight, BarChart3, Check, Code2, ChevronDown } from "@/app/ui/icons";
 import {
   LazyMotion,
   MotionConfig,
@@ -29,7 +12,7 @@ import {
   useReducedMotion,
   type Variants,
 } from "motion/react";
-import { lazy, Suspense, useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useSeo } from "../lib/seo";
 import { useMarketingScroll } from "../lib/marketing-scroll";
 import { FaqJsonLd } from "../components/faq-json-ld";
@@ -47,116 +30,10 @@ import { HeroShortener } from "../components/hero-shortener";
 import { HeroSignedIn } from "../components/hero-signed-in";
 import { LandingHeader } from "../components/landing-header";
 import { WebMcpMarketingTools } from "../components/webmcp-marketing-tools";
-import cloudflareLogo from "../assets/cloudflare.svg";
-/**
- * The mock pulls in the whole charts bundle (Plot, the renderer, the scales):
- * 117 KB to draw one decorative chart most of a screen below the fold, and
- * the largest single thing the landing page can fetch.
- *
- * Lazy keeps it out of the entry chunk, so it is never parsed before first
- * paint. AnalyticsPreviewSection decides *when* it is fetched at all, which
- * is the half that saves the bytes rather than just reordering them.
- */
-const LandingAnalyticsMock = lazy(() =>
-  import("../components/landing-analytics").then((m) => ({ default: m.LandingAnalyticsMock })),
-);
+import { ProductTour } from "../components/landing-tour";
+import { AnonLinkBar } from "../components/anon-link-bar";
 import { formatNumber } from "../lib/numbers";
 import { cn } from "../ui/cn";
-
-const steps = [
-  {
-    title: "Paste your URL",
-    body: "Drop in any long link and tag it with the built-in UTM builder. On your own domain, pick any slug you like.",
-  },
-  {
-    title: "Share it anywhere",
-    body: "Use it as a short link or a scannable QR code, served from our domain or your own.",
-  },
-  {
-    title: "See who's clicking",
-    body: "Country, referrer, device, and campaign breakdowns update in real time, without storing a single IP.",
-  },
-];
-
-const featureGroups = [
-  {
-    title: "Create & share",
-    items: [
-      {
-        icon: Link2,
-        title: "Short links + UTM builder",
-        body: "Turn unreadable URLs into short links, with a built-in UTM builder that also reads parameters already in the URL you paste. On every plan.",
-      },
-      {
-        icon: QrCode,
-        title: "QR codes, branded on paid plans",
-        body: "One click turns any link into a QR code you can download and print, on every plan. Paid plans bake in your logo, colors, and dot styles: set org-wide defaults and override them per link.",
-      },
-      {
-        icon: Globe,
-        title: "Custom domains & slugs",
-        body: "Serve short links from your own domain with automatic TLS and any slug you like, so every click reinforces your brand, not ours.",
-        plan: "Paid",
-      },
-      {
-        icon: Layers,
-        title: "Rename without breaking links",
-        body: "Change a slug and the old one keeps redirecting for 48 hours, so links already printed or shared never break. Add extra aliases to route a slug to a link on purpose.",
-      },
-    ],
-  },
-  {
-    title: "Track what works",
-    items: [
-      {
-        icon: BarChart3,
-        title: "Click analytics",
-        body: "Zoom from the last 24 hours to a full year, compare any period with the one before, and spot your busiest hours on the heatmap.",
-      },
-      {
-        icon: Target,
-        title: "Campaign tracking",
-        body: "UTM campaigns, sources, and mediums ranked by clicks, so you can see which channel earns its keep.",
-      },
-      {
-        icon: TrendingDown,
-        title: "Link health",
-        body: "rdyrct flags links that go quiet: zero clicks in 30 days, or a drop of more than half week over week.",
-      },
-      {
-        icon: Activity,
-        title: "Live click feed",
-        body: "A feed of the latest clicks sits on your dashboard and refreshes on its own: slug, referrer, country, and device.",
-      },
-    ],
-  },
-  {
-    title: "Built for teams",
-    items: [
-      {
-        icon: Users,
-        title: "Organizations & roles",
-        body: "Owner, admin, and member roles control who can edit links, connect domains, and invite people.",
-      },
-      {
-        icon: Mail,
-        title: "Magic-link invites",
-        body: "Invite teammates by email. Each invite is single-use and stays valid for 7 days.",
-      },
-      {
-        icon: GitMerge,
-        title: "No duplicate links",
-        body: "Shorten a URL you've already shortened and rdyrct offers to add it as an alias on the existing link instead of creating a copy, so its stats stay in one place.",
-      },
-      {
-        icon: ShieldCheck,
-        title: "Privacy-friendly",
-        body: "No IP addresses, no precise location, no cross-site tracking. Analytics your legal team can sign off on.",
-      },
-    ],
-  },
-];
-
 const faqs = [
   {
     q: "Is the free plan really free?",
@@ -263,7 +140,7 @@ function NoCell({ tier }: { tier?: Tier }) {
  * (/billing?plan=…), everyone else signs up first with that destination as
  * `next`, so the intent survives OTP verification.
  */
-function usePaidPlanTo() {
+export function usePaidPlanTo() {
   // Through useAudience rather than useCurrentUser directly: this asks the
   // same question the header does ("is this a stranger?"), and asking it
   // twice meant asking the server twice, once through the gate that skips the
@@ -407,7 +284,10 @@ function MobilePlans({ paidTo }: { paidTo: (p: "hobby" | "pro") => string }) {
  * "Simple pricing" h1 and subtitle immediately above it (see PricingPage),
  * and this used to repeat both, word for word, right under them.
  */
-export function PricingSection() {
+/** The full plan table. On a phone it is stacked cards, unless the page
+ * already shows the plans as cards above it (`/pricing`), where the table
+ * scrolls sideways instead of repeating them. */
+export function PricingSection({ phoneCards = true }: { phoneCards?: boolean }) {
   const paidTo = usePaidPlanTo();
   return (
     <Section
@@ -415,10 +295,10 @@ export function PricingSection() {
       className="scroll-mt-16 py-16"
       onEnter={() => posthog.capture(FUNNEL.pricingViewed)}
     >
-      <MobilePlans paidTo={paidTo} />
+      {phoneCards && <MobilePlans paidTo={paidTo} />}
 
-      <div className="hidden sm:block">
-        <Table>
+      <div className={phoneCards ? "hidden sm:block" : undefined}>
+        <Table minWidth={phoneCards ? undefined : "min-w-2xl"}>
           <thead>
             <tr>
               <Th></Th>
@@ -615,183 +495,6 @@ function SelfHostSection() {
         </div>
       </div>
     </Section>
-  );
-}
-
-/* ---------------- Fake deploy terminal ---------------- */
-
-const resources = [
-  {
-    name: "KV",
-    id: "rdyrct-redirects",
-    desc: "Slug cache on the redirect hot path. Reads never touch the database.",
-  },
-  {
-    name: "D1",
-    id: "rdyrct",
-    desc: "Source of truth for links, organizations, members, and click analytics.",
-  },
-  {
-    name: "R2",
-    id: "rdyrct-media",
-    desc: "User-supplied images (QR logos, avatars), uploaded and served through the Worker.",
-  },
-  {
-    name: "Worker",
-    id: "rdyrct",
-    desc: "Routing, redirects, and API at the edge, nearest data center.",
-  },
-  {
-    name: "Cloudflare for SaaS",
-    id: "*.yourdomain.co",
-    desc: "TLS terminated automatically on every custom domain.",
-  },
-];
-
-const delays = [
-  0.2, // prompt
-  0.7, // build
-  1.2, // upload
-  1.7, // deploy
-  2.2, // blank
-  2.4, // header
-  2.8, // kv
-  3.2, // d1
-  3.6, // r2
-  4.0, // worker
-  4.4, // saas
-  4.8, // summary blank
-  5.0, // summary
-];
-
-const lineVariant: Variants = {
-  hidden: { opacity: 0, y: 6 },
-  visible: (delay: number) => ({
-    opacity: 1,
-    y: 0,
-    transition: { duration: 0.3, delay, ease: "easeOut" },
-  }),
-};
-
-/**
- * The window buttons of the terminal below. Their three colours are the ones
- * macOS actually uses and 9px is the size it actually draws them: a picture of
- * something real, so the values are fixed rather than ours to theme. Same for
- * the green tick in `OK`, which is the same green as the third button.
- */
-// fallow-ignore-next-line css-token-drift
-const DOT = "h-[9px] w-[9px] rounded-full";
-// fallow-ignore-next-line css-token-drift
-const OK = "text-[#27c93f]";
-
-function TrafficLights({ hidden = false }: { hidden?: boolean }) {
-  return (
-    <div className={`flex items-center gap-1.5 ${hidden ? "invisible" : ""}`}>
-      {/* fallow-ignore-next-line css-token-drift */}
-      {["bg-[#ff5f56]", "bg-[#ffbd2e]", "bg-[#27c93f]"].map((color) => (
-        <span key={color} className={`${DOT} ${color}`} />
-      ))}
-    </div>
-  );
-}
-
-/**
- * A fake "bun run deploy" terminal that, when scrolled into view, walks
- * through building, uploading, and deploying the Worker, then explains each
- * Cloudflare primitive that was deployed.
- */
-function DeployTerminal() {
-  const reduce = useReducedMotion();
-  const animated = !reduce;
-
-  // A block caret is the size of the character it stands in for, which is the
-  // mono face at this size and no token on the spacing scale.
-  const cursor = animated ? (
-    <span
-      aria-hidden
-      // fallow-ignore-next-line css-token-drift
-      className="inline-block h-[13px] w-[5px] translate-y-px bg-accent align-middle ml-0.5"
-      style={{ animation: "cursorBlink 1s step-end infinite" }}
-    />
-  ) : null;
-
-  const lines = [
-    /* 0 */ <span key="prompt">
-      <span className="text-accent">$</span> bun run deploy{cursor}
-    </span>,
-    /* 1 */ <span key="build">
-      <span className={OK}>✓</span> src/worker/index.ts → dist/worker.js{" "}
-      <span className="text-muted">(2.4s)</span>
-    </span>,
-    /* 2 */ <span key="upload">
-      <span className={OK}>✓</span> Optimizing bundle...{" "}
-      <span className="text-muted">124 kB gzipped</span>
-    </span>,
-    /* 3 */ <span key="deploy">
-      <span className={OK}>✓</span> Deploying to Cloudflare global network
-    </span>,
-    /* 4 */ <span key="b1" />,
-    /* 5 */ <span key="header">
-      <span className="text-muted">Deployed resources:</span>
-    </span>,
-    /* 6-10 */ ...resources.map((r) => (
-      <span key={r.name}>
-        <span className="text-accent font-semibold">{r.name}</span>
-        <span className="text-muted"> {r.id}</span>
-        <span className="text-muted"> · </span>
-        <span className="text-muted">{r.desc}</span>
-      </span>
-    )),
-    /* 11 */ <span key="b2" />,
-    /* 12 */ <span key="summary">
-      <span className="text-accent">Deployed to prod.</span>{" "}
-      <span className="text-muted">330+ cities · 5 primitives</span>
-    </span>,
-  ];
-
-  // Terminal line spacing, looser than prose and tighter than leading-loose.
-  // Indexes 4 and 11 are the blank lines between blocks.
-  // fallow-ignore-next-line css-token-drift
-  const lineClass = "whitespace-pre-wrap leading-[1.9]";
-  const spacingOf = (i: number) => (i === 4 || i === 11 ? "h-2" : lineClass);
-
-  const content = animated ? (
-    <m.div initial="hidden" whileInView="visible" viewport={{ once: true, margin: "-60px" }}>
-      {lines.map((node, i) => (
-        <m.div
-          key={String(node.key)}
-          variants={lineVariant}
-          custom={delays[i]}
-          className={spacingOf(i)}
-        >
-          {node}
-        </m.div>
-      ))}
-    </m.div>
-  ) : (
-    <div>
-      {lines.map((node, i) => (
-        <div key={String(node.key)} className={spacingOf(i)}>
-          {node}
-        </div>
-      ))}
-    </div>
-  );
-
-  return (
-    // translate="no": the animated terminal mounts/unmounts text nodes on a
-    // loop, and a page translator rewriting them would break React's
-    // placement anchors and blank the page. Keep the translator out.
-    <div translate="no" className="overflow-hidden rounded-xl bg-surface smooth-shadow-ring-lg">
-      <div className="flex items-center border-b border-border bg-surface-2 px-4 py-2.5">
-        <TrafficLights />
-        <span className="flex-1 text-center font-mono text-xs text-muted">rdyrct deploy</span>
-        {/* The second set is a spacer: without it the title centres on the
-            space the first set leaves, not on the window. */}
-        <TrafficLights hidden />
-      </div>
-      <div className="px-4 py-3 font-mono text-xs">{content}</div>
-    </div>
   );
 }
 
@@ -1143,151 +846,346 @@ function CustomDomainSection() {
   );
 }
 
-function HowItWorksSection() {
+/**
+ * The product tour, under the id the hero's "See the analytics" has always
+ * pointed at. It ends on the one ask in the middle of the page, placed where
+ * somebody has just watched a link get made and clicked.
+ */
+function TourSection() {
+  const { authed } = useAudience();
   return (
-    <Section className="py-8">
-      <div className="mb-8 text-center">
-        <h2 className="text-xl font-bold">From paste to published in seconds</h2>
+    <Section id="analytics" className="scroll-mt-20 pb-16">
+      <ProductTour
+        footer={
+          <p className="text-center text-sm">
+            <HrefLink
+              href={authed ? "/analytics" : "/signup"}
+              onClick={() => trackCta("analytics_preview")}
+              className="text-accent hover:underline"
+            >
+              See this on your own links →
+            </HrefLink>
+          </p>
+        }
+      />
+    </Section>
+  );
+}
+
+/** Four facts in place of a logo wall: things a visitor can check, not
+ * customers we would be asking them to take on trust. */
+const FACTS = [
+  ["No IP addresses", "A click keeps its country, referrer, device and time. Nothing else."],
+  ["Runs on Cloudflare", "Redirects are served from the data center nearest each visitor."],
+  ["Open source", "Read the code, or deploy it to your own Cloudflare account."],
+  [
+    `Your domain for ${PLAN_PRICES.hobby} a month`,
+    "A custom domain with automatic TLS on the Hobby plan.",
+  ],
+] as const;
+
+function FactsSection() {
+  return (
+    <section className="grid grid-cols-2 border-y border-border md:grid-cols-4">
+      {FACTS.map(([title, body]) => (
+        <div
+          key={title}
+          className="flex flex-col gap-1 py-5 pr-5 md:border-l md:border-border md:pl-5 md:first:border-l-0 md:first:pl-0"
+        >
+          <p className="font-bold">{title}</p>
+          <p className="text-sm text-muted">{body}</p>
+        </div>
+      ))}
+    </section>
+  );
+}
+
+const AUDIENCE_KEYS = ["marketers", "teams", "developers"] as const;
+type Audience = (typeof AUDIENCE_KEYS)[number];
+
+const AUDIENCES = {
+  marketers: {
+    title: "Know which post, email or poster paid off.",
+    points: [
+      [
+        "UTM builder in every link",
+        "Fill in source, medium and campaign, or paste a URL that already has them.",
+      ],
+      [
+        "Compared with the period before",
+        "Every total shows the change, from 24 hours up to a year.",
+      ],
+      [
+        "Busiest hours and quiet links",
+        "When people click, and which links stopped getting clicks.",
+      ],
+    ],
+  },
+  teams: {
+    title: "Share the work without sharing a password.",
+    points: [
+      [
+        "Owner, admin, member and viewer",
+        "Decide who can edit links, connect domains and invite people.",
+      ],
+      ["Invites by email", "Each invite works once and lasts 7 days."],
+      ["Your own domain", "Add a CNAME record. rdyrct finds it and issues TLS by itself."],
+    ],
+  },
+  developers: {
+    title: "Everything in the app is in the API.",
+    points: [
+      [
+        "REST API with scoped keys",
+        "Create links, read stats and manage members with a key per organization.",
+      ],
+      [
+        "MCP server on every plan",
+        "Connect Claude, ChatGPT or any MCP client with OAuth. No key to copy.",
+      ],
+      ["Same limits, same roles", "A key acts as you, so your role and your plan still apply."],
+    ],
+  },
+} satisfies Record<Audience, { title: string; points: [string, string][] }>;
+
+const DOMAIN_STATUSES = ["Checking DNS", "Issuing TLS", "active"] as const;
+
+/** A new domain walking through the app's real statuses once it is on
+ * screen: the CNAME found, the certificate issued, live. */
+function useDomainStatus(ref: React.RefObject<HTMLDivElement | null>) {
+  const inView = useInView(ref, { once: true, amount: 0.5 });
+  const still = useReducedMotion() ?? false;
+  const last = DOMAIN_STATUSES.length - 1;
+  const [status, setStatus] = useState(still ? last : 0);
+  const moving = inView && status < last;
+  useEffect(() => {
+    if (!moving) return;
+    const t = setTimeout(() => setStatus((s) => s + 1), 1300);
+    return () => clearTimeout(t);
+  }, [moving, status]);
+  return status;
+}
+
+function TeamsPanel() {
+  const ref = useRef<HTMLDivElement>(null);
+  const status = useDomainStatus(ref);
+  const joined = status === DOMAIN_STATUSES.length - 1;
+  const members = [
+    ["Ana Ruiz", "ana@northwind.co", "owner", "Mar 3, 2026"],
+    ["Marco Bellini", "marco@northwind.co", "admin", "Apr 14, 2026"],
+    ["Dana Park", "dana@northwind.co", "member", "Jun 2, 2026"],
+    ["Sam Okafor", "sam@northwind.co", "viewer", joined ? "Today" : "Invite sent"],
+  ] as const;
+  return (
+    <div ref={ref} className="flex flex-col gap-3">
+      <Table>
+        <thead>
+          <tr>
+            <Th>Name</Th>
+            <Th className="hidden sm:table-cell">Email</Th>
+            <Th>Role</Th>
+            <Th>Joined</Th>
+          </tr>
+        </thead>
+        <tbody>
+          {members.map(([name, email, role, joined]) => (
+            <tr key={name}>
+              <Td>{name}</Td>
+              <Td className="hidden sm:table-cell">{email}</Td>
+              <Td>{role}</Td>
+              <Td className="tnum whitespace-nowrap">{joined}</Td>
+            </tr>
+          ))}
+        </tbody>
+      </Table>
+      <DomainCard status={status} live={joined} />
+    </div>
+  );
+}
+
+function DomainCard({ status, live }: { status: number; live: boolean }) {
+  return (
+    <div className="flex flex-col gap-2 rounded-lg bg-surface p-4 smooth-shadow-ring-xs">
+      <div className="flex items-center justify-between gap-3">
+        <span className="font-bold">links.northwind.co</span>
+        <span
+          className={cn(
+            "rounded-full px-2 py-0.5 text-xs font-medium",
+            live ? "bg-accent-2/15 text-accent-2" : "bg-butter/15 text-butter",
+          )}
+        >
+          {DOMAIN_STATUSES[status]}
+        </span>
       </div>
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        {steps.map(({ title, body }, i) => (
-          <div key={title} className="rounded-lg bg-surface p-4 smooth-shadow-ring-xs">
-            <span className="mb-3 inline-flex h-7 w-7 items-center justify-center rounded-full border border-accent/40 font-mono text-xs font-bold text-accent">
-              {i + 1}
-            </span>
-            <p className="font-bold">{title}</p>
-            <p className="mt-1 text-sm text-muted">{body}</p>
-          </div>
+      <code className="overflow-x-auto rounded-md bg-surface-2 px-3 py-2 font-mono text-xs whitespace-nowrap text-muted">
+        links.northwind.co CNAME rdyrct.com
+      </code>
+    </div>
+  );
+}
+
+function AudiencePanel({ audience }: { audience: Audience }) {
+  if (audience === "teams") return <TeamsPanel />;
+  if (audience === "developers")
+    return (
+      <pre className="overflow-x-auto rounded-lg bg-surface-2 p-4 font-mono text-xs leading-relaxed">
+        {`curl -X POST https://rdyrct.com/api/orgs/org_8f2k/links \\
+  -H "Authorization: Bearer rdyrct_live_..." \\
+  -d '{
+    "domainId": "dom_northwind",
+    "slug": "spring",
+    "destination": "https://shop.northwind.co/linen",
+    "utmSource": "newsletter",
+    "utmCampaign": "spring26"
+  }'`}
+      </pre>
+    );
+  return (
+    <Table>
+      <thead>
+        <tr>
+          <Th>Source</Th>
+          <Th>Medium</Th>
+          <Th className="text-right">Clicks</Th>
+          <Th className="text-right">Change</Th>
+        </tr>
+      </thead>
+      <tbody>
+        {(
+          [
+            ["newsletter", "email", 1642, "+24%"],
+            ["instagram", "social", 1391, "+9%"],
+            ["poster", "qr", 1102, "New"],
+            ["podcast", "audio", 783, "-6%"],
+          ] as const
+        ).map(([source, medium, clicks, change]) => (
+          <tr key={source}>
+            <Td>{source}</Td>
+            <Td>{medium}</Td>
+            <Td className="tnum text-right">{formatNumber(clicks)}</Td>
+            <Td
+              className={cn(
+                "tnum text-right",
+                change.startsWith("+") ? "text-accent-2" : "text-muted",
+              )}
+            >
+              {change}
+            </Td>
+          </tr>
+        ))}
+      </tbody>
+    </Table>
+  );
+}
+
+function AudienceSection() {
+  const [audience, setAudience] = useState<Audience>("marketers");
+  const { title, points } = AUDIENCES[audience];
+  return (
+    <Section className="flex flex-col gap-8 py-20">
+      <div className="max-w-xl">
+        <h2 className="text-2xl font-bold tracking-tight text-balance sm:text-3xl">
+          One link, three kinds of people.
+        </h2>
+        <p className="mt-2 text-muted">
+          The marketer who tags it, the team that shares the work, the developer who automates it.
+        </p>
+      </div>
+      <div
+        role="tablist"
+        aria-label="Who it is for"
+        className="flex w-fit gap-1 rounded-xl bg-surface-2 p-1"
+      >
+        {AUDIENCE_KEYS.map((a) => (
+          <button
+            key={a}
+            type="button"
+            role="tab"
+            id={`audience-tab-${a}`}
+            aria-controls={`audience-panel-${a}`}
+            aria-selected={audience === a}
+            onClick={() => setAudience(a)}
+            className={cn(
+              "cursor-pointer rounded-lg px-4 py-1.5 text-sm font-medium capitalize",
+              audience === a ? "bg-surface text-text smooth-shadow-ring-xs" : "text-muted",
+            )}
+          >
+            {a}
+          </button>
         ))}
       </div>
+      <m.div
+        key={audience}
+        id={`audience-panel-${audience}`}
+        role="tabpanel"
+        aria-labelledby={`audience-tab-${audience}`}
+        initial={{ opacity: 0, y: 6 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.25 }}
+        className="grid items-start gap-8 md:grid-cols-[0.9fr_1.1fr]"
+      >
+        <div className="flex flex-col gap-5">
+          <h3 className="text-xl font-bold text-balance">{title}</h3>
+          <ul className="flex flex-col gap-4">
+            {points.map(([head, body]) => (
+              <li key={head}>
+                <p className="font-bold">{head}</p>
+                <p className="text-sm text-muted">{body}</p>
+              </li>
+            ))}
+          </ul>
+          {audience === "developers" && (
+            <MarketingLink to="/roadmap" className="text-sm text-accent hover:underline">
+              See what is next on the roadmap →
+            </MarketingLink>
+          )}
+        </div>
+        <AudiencePanel audience={audience} />
+      </m.div>
     </Section>
   );
 }
 
 /**
- * The mock's own outer shell, empty, at the mock's own height. Same footprint,
- * so the swap changes what is inside the card and never where anything below
- * it sits.
- *
- * The three heights are measured, not estimated, and they are three because
- * the mock relayouts twice: the bar-list row goes from stacked to three
- * columns at `sm`, and the heatmap and weekday cards go side by side at `md`.
- * A first pass here guessed two heights and was short by 383px to 703px at
- * every width. It measured as CLS 0 anyway, because the swap happens 600px
- * before the section is on screen, which is exactly the kind of wrong that
- * survives its own test. tests/e2e/public-pages.pw.ts pins all three against
- * the real thing.
+ * What happens when somebody stops paying, said as a sequence because it is
+ * one (#29, #159). QR tools that switch printed codes off when a trial ends
+ * are the reason this earns a section: nobody else says it on their homepage.
  */
-function AnalyticsMockPlaceholder() {
-  return (
-    <div className="h-[1795px] w-full max-w-4xl rounded-2xl bg-surface sm:h-[1423px] md:h-[1103px] smooth-shadow-ring-2xl" />
-  );
-}
+const PLAN_CHANGE_STEPS = [
+  ["Day 0", "You downgrade", "Nothing is deleted. We email you what is over the new plan."],
+  ["Day 23", "A second email", "A reminder a week before anything changes."],
+  [
+    "Day 30",
+    "Custom domain links pause",
+    "Links on your own domain stop until you upgrade again, then come straight back.",
+  ],
+  [
+    "Always",
+    "Links on rdyrct.com keep working",
+    "On every plan, paid or free. We never switch a printed code off.",
+  ],
+] as const;
 
-function AnalyticsPreviewSection() {
-  const { authed } = useAudience();
-  // Most visitors never scroll this far, so the charts bundle is not fetched
-  // until they are heading for it: 600px of margin, most of a phone screen of
-  // warning, so the mock is usually there before the section is.
-  //
-  // Lazy alone (which is what this was) only moved the bytes off the critical
-  // path. They still went out to everybody who opened the homepage.
-  const nearby = useRef<HTMLDivElement>(null);
-  const approaching = useInView(nearby, { once: true, margin: "600px" });
+export function PlanChangeSection() {
   return (
-    // The hero's second CTA lands here, so it needs an id and room under the
-    // sticky header.
-    <Section id="analytics" className="scroll-mt-16 py-16">
-      <div className="mb-8 text-center">
-        <h2 className="text-xl font-bold text-balance">See every click, respect every visitor</h2>
-        <p className="mx-auto mt-2 max-w-xl text-sm text-muted">
-          Country, device, referrer, and campaign breakdowns for every link, from the last 24 hours
-          to the last year. Never an IP address, never cross-site tracking. The real analytics page,
-          on sample data.
+    <Section className="flex flex-col gap-10 py-20">
+      <div className="max-w-xl">
+        <h2 className="text-2xl font-bold tracking-tight text-balance sm:text-3xl">
+          Change plans without breaking a printed code.
+        </h2>
+        <p className="mt-2 text-muted">
+          Downgrading never deletes anything. Here is what happens if you stop paying.
         </p>
       </div>
-      <div ref={nearby} className="flex justify-center">
-        {approaching ? (
-          <Suspense fallback={<AnalyticsMockPlaceholder />}>
-            <LandingAnalyticsMock />
-          </Suspense>
-        ) : (
-          <AnalyticsMockPlaceholder />
-        )}
-      </div>
-
-      {/* The only ask between the hero and the pricing table. On a phone this
-          section and the feature grid run to about 4,200px back to back, and
-          without this there is nothing to click for roughly 6,200px. This is
-          also the best moment to ask: they have just been shown the payoff. */}
-      <p className="mt-8 text-center text-sm">
-        <HrefLink
-          href={authed ? "/analytics" : "/signup"}
-          onClick={() => trackCta("analytics_preview")}
-          className="text-accent hover:underline"
-        >
-          See this on your own links →
-        </HrefLink>
-      </p>
-    </Section>
-  );
-}
-
-function FeaturesSection() {
-  return (
-    <Section>
-      <div className="mb-8 text-center">
-        <h2 className="text-xl font-bold">Everything your team needs on a link</h2>
-        {/* Every card below is worked from the dashboard, because that is what
-            is built. Saying so is the honest version of the old "built for the
-            people who run the campaigns", which named an audience instead of
-            saying what they get, and left developers to guess. */}
-        <p className="mx-auto mt-2 max-w-xl text-sm text-muted">
-          All of it works from the dashboard.{" "}
-          <MarketingLink to="/roadmap" className="text-accent hover:underline">
-            The API is on the roadmap
-          </MarketingLink>
-          .
-        </p>
-      </div>
-      <div className="space-y-10">
-        {featureGroups.map(({ title, items }) => (
-          <div key={title}>
-            <h3 className="mb-4 text-xs font-semibold text-muted">{title}</h3>
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
-              {items.map(({ icon: Icon, title, body, plan }) => (
-                <div
-                  key={title}
-                  className="rounded-lg border border-border bg-surface p-4 transition-colors hover:border-accent/40"
-                >
-                  <div className="mb-2 flex items-center gap-2">
-                    <Icon size={16} className="text-accent" />
-                    <p className="font-bold">{title}</p>
-                    {plan && <span className="text-xs text-muted">{plan}</span>}
-                  </div>
-                  <p className="text-sm text-muted">{body}</p>
-                </div>
-              ))}
-            </div>
-          </div>
+      <ol className="grid gap-8 border-t-2 border-border pt-6 sm:grid-cols-2 lg:grid-cols-4">
+        {PLAN_CHANGE_STEPS.map(([when, head, body]) => (
+          <li key={when} className="flex flex-col gap-1">
+            <span className="tnum text-sm text-muted">{when}</span>
+            <p className="font-bold">{head}</p>
+            <p className="text-sm text-muted">{body}</p>
+          </li>
         ))}
-      </div>
-    </Section>
-  );
-}
-
-function CloudflareSection() {
-  return (
-    <Section>
-      <div className="mb-8 text-center">
-        <img src={cloudflareLogo} alt="Cloudflare" className="mx-auto mb-5 h-10 w-auto" />
-        <h2 className="text-xl font-bold">Runs entirely on Cloudflare</h2>
-        <p className="mx-auto mt-2 max-w-xl text-sm text-muted">
-          No servers to patch, no databases to babysit: rdyrct is built from Cloudflare's own
-          primitives, end to end.
-        </p>
-      </div>
-      <DeployTerminal />
+      </ol>
     </Section>
   );
 }
@@ -1489,11 +1387,11 @@ export function LandingPage() {
           <LandingHeader authed={authed} />
           <main>
             <HeroSection ctaTo={ctaTo} ctaLabel={ctaLabel} authed={authed} name={name} />
+            <TourSection />
+            <FactsSection />
             <CustomDomainSection />
-            <HowItWorksSection />
-            <AnalyticsPreviewSection />
-            <FeaturesSection />
-            <CloudflareSection />
+            <AudienceSection />
+            <PlanChangeSection />
             <PricingTeaser />
             <SelfHostSection />
             <FaqSection />
@@ -1501,6 +1399,7 @@ export function LandingPage() {
           </main>
 
           <Footer />
+          {!authed && <AnonLinkBar />}
         </div>
       </LazyMotion>
     </MotionConfig>
