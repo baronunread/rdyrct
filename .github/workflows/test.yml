@@ -110,16 +110,22 @@ jobs:
         run: |
           cp .dev.vars.example .dev.vars
           cp .env.example .env
-      # leanest selects only the e2e specs this PR's diff could affect and
-      # runs those through the real Playwright runner (fails open to the
-      # full suite on any judge error, so a missing/broken provider never
-      # hides a test). Using classifier-dev: free, no-auth, so this needs
-      # no secret. See baronunread/leanest.
+      # On a pull request, leanest selects the e2e specs this diff could
+      # affect and runs them through the real Playwright runner. It fails
+      # open to the full suite on any judge error, so a broken provider never
+      # hides a test. classifier-dev is free and needs no secret. Called
+      # directly at a pinned version, not through baronunread/leanest@v1: the
+      # action installs an unpinned leanest and re-runs setup-bun with
+      # `latest`, which moved this job off the Bun pinned above.
       - name: Browser smoke test (leanest-selected specs)
-        uses: baronunread/leanest@v1
-        with:
-          framework: playwright
-          provider: classifier-dev
+        if: github.event_name == 'pull_request'
+        env:
+          LEANEST_PROVIDER: classifier-dev
+        run: bunx leanest@0.2.3 playwright --base "origin/${{ github.base_ref }}" --dir .
+      # On main there is no diff to select from: run everything.
+      - name: Browser smoke test (full suite)
+        if: github.event_name != 'pull_request'
+        run: bunx playwright test
 
   observability:
     runs-on: ubuntu-latest
