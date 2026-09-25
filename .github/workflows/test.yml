@@ -2,6 +2,9 @@ name: Tests
 
 on:
   pull_request:
+    # labeled/unlabeled: adding the `ready` label is what switches a PR from
+    # the selected e2e specs to the full sharded suite (see the e2e job).
+    types: [opened, synchronize, reopened, labeled, unlabeled]
   push:
     branches: [main]
 
@@ -79,8 +82,17 @@ jobs:
           bun run test
           bun run test:worker
 
+  # Two modes, one job. While a PR is being worked on, leanest runs only the
+  # specs its diff can affect (shard 0). Before it merges, the full suite has
+  # to pass: labelling the PR `ready` runs everything, sharded three ways, and
+  # so does every push to main. AGENTS.md describes the same rule.
   e2e:
+    name: ${{ matrix.shard == 0 && 'e2e (selected)' || format('e2e ({0}/3)', matrix.shard) }}
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: ${{ fromJSON((github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'ready')) && '[1,2,3]' || '[0]') }}
     steps:
       # fetch-depth: 0 gives leanest the full git history it needs to diff
       # against origin/main to select which e2e specs this PR can affect.
@@ -118,14 +130,13 @@ jobs:
       # action installs an unpinned leanest and re-runs setup-bun with
       # `latest`, which moved this job off the Bun pinned above.
       - name: Browser smoke test (leanest-selected specs)
-        if: github.event_name == 'pull_request'
+        if: matrix.shard == 0
         env:
           LEANEST_PROVIDER: classifier-dev
         run: bunx leanest@0.2.3 playwright --base "origin/${{ github.base_ref }}" --dir .
-      # On main there is no diff to select from: run everything.
-      - name: Browser smoke test (full suite)
-        if: github.event_name != 'pull_request'
-        run: bunx playwright test
+      - name: Browser smoke test (full suite, shard ${{ matrix.shard }}/3)
+        if: matrix.shard != 0
+        run: bunx playwright test --shard=${{ matrix.shard }}/3
 
   observability:
     runs-on: ubuntu-latest
