@@ -140,7 +140,7 @@ function NoCell({ tier }: { tier?: Tier }) {
  * (/billing?plan=…), everyone else signs up first with that destination as
  * `next`, so the intent survives OTP verification.
  */
-function usePaidPlanTo() {
+export function usePaidPlanTo() {
   // Through useAudience rather than useCurrentUser directly: this asks the
   // same question the header does ("is this a stranger?"), and asking it
   // twice meant asking the server twice, once through the gate that skips the
@@ -284,7 +284,10 @@ function MobilePlans({ paidTo }: { paidTo: (p: "hobby" | "pro") => string }) {
  * "Simple pricing" h1 and subtitle immediately above it (see PricingPage),
  * and this used to repeat both, word for word, right under them.
  */
-export function PricingSection() {
+/** The full plan table. On a phone it is stacked cards, unless the page
+ * already shows the plans as cards above it (`/pricing`), where the table
+ * scrolls sideways instead of repeating them. */
+export function PricingSection({ phoneCards = true }: { phoneCards?: boolean }) {
   const paidTo = usePaidPlanTo();
   return (
     <Section
@@ -292,10 +295,10 @@ export function PricingSection() {
       className="scroll-mt-16 py-16"
       onEnter={() => posthog.capture(FUNNEL.pricingViewed)}
     >
-      <MobilePlans paidTo={paidTo} />
+      {phoneCards && <MobilePlans paidTo={paidTo} />}
 
-      <div className="hidden sm:block">
-        <Table>
+      <div className={phoneCards ? "hidden sm:block" : undefined}>
+        <Table minWidth={phoneCards ? undefined : "min-w-2xl"}>
           <thead>
             <tr>
               <Th></Th>
@@ -1163,7 +1166,7 @@ const PLAN_CHANGE_STEPS = [
   ],
 ] as const;
 
-function PlanChangeSection() {
+export function PlanChangeSection() {
   return (
     <Section className="flex flex-col gap-10 py-20">
       <div className="max-w-xl">
