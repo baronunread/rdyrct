@@ -57,9 +57,10 @@ the app runs in a browser — only `verify:e2e` (or CI) proves that. Add a
 though writing it does not require running the full suite locally.
 
 **Run tests scoped to the blast radius while iterating, not the full
-suite.** `bun run verify:e2e` is the gate CI runs, unscoped, before a PR
-merges — that stays mandatory, and the full `e2e:smoke` run only happens
-there, never as a local default. Re-running every unit test, worker test and
+suite.** `bun run verify:e2e` is the gate CI runs: on a PR, leanest runs
+the e2e specs the diff could affect; on main, after the merge, the full
+`e2e:smoke` suite runs. The full run only happens there, never as a local
+default. Re-running every unit test, worker test and
 e2e spec after every edit is not extra safety, it's noise that hides which
 check matters: a change to QR-logo storage doesn't need the billing
 or short-link-creation specs to pass again, it needs the ones that touch R2,
@@ -68,8 +69,8 @@ first (`codegraph_explore`'s blast-radius summary, or `git diff` against
 callers) and run only the matching files: `bun test tests/<file>.test.ts`,
 `bunx vitest run tests/worker/<file>.worker.ts`,
 `bunx playwright test tests/e2e/<file>.pw.ts`. Run `bun run verify` (still no
-e2e) once, at the end, before calling the work done — CI is what decides
-whether the full browser suite passes.
+e2e) once, at the end, before calling the work done. CI is what decides
+whether the browser suite passes.
 
 **The worker tests typecheck.** vitest does not, so `verify` runs tsc over
 `tests/worker` as its own project. `tests/worker/env.d.ts` declares
@@ -85,7 +86,10 @@ Everything that reports runs in CI, where nobody can pass `--no-verify`:
 split across parallel jobs (static checks, unit/worker tests, and a 3-way
 sharded e2e run) to cut wall-clock time, and
 `.github/workflows/react-doctor.yml` blocks on any new react-doctor finding
-(changed files, against the merge base) for PRs and main.
+(changed files, against the merge base) for PRs and main. On a PR the e2e
+run goes through [leanest](https://github.com/baronunread/leanest), which
+runs only the specs the diff could affect, and every spec when it is unsure.
+A push to main always runs the full suite.
 
 Lint and format take no path list: `.` plus the ignores in `.gitignore` and
 `.oxfmtrc.json`. One scope, so the hook and CI cannot check different files.
