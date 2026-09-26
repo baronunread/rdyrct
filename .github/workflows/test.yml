@@ -86,9 +86,12 @@ jobs:
       matrix:
         shard: [1, 2, 3]
     steps:
+      # fetch-depth: 0 so leanest can diff against the PR base (or the
+      # previous commit on push).
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
+          fetch-depth: 0
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.3.4
@@ -111,7 +114,20 @@ jobs:
         run: |
           cp .dev.vars.example .dev.vars
           cp .env.example .env
-      - name: Browser smoke test (shard ${{ matrix.shard }}/3)
+      # On a PR, leanest runs only the specs this diff could affect and hands
+      # them to playwright unchanged. It fails open: a judge error or a
+      # low-confidence answer runs the full suite. The default provider
+      # (classifier.dev) sees the diff and the spec sources; the repo is
+      # public, so that's fine. Each shard selects on its own, so a spec can
+      # slip through on a PR; main runs the full suite to catch it.
+      - name: Browser smoke test, affected specs (shard ${{ matrix.shard }}/3)
+        if: github.event_name == 'pull_request'
+        uses: baronunread/leanest@v0.2.6
+        with:
+          framework: playwright
+          args: --shard=${{ matrix.shard }}/3
+      - name: Browser smoke test, full suite (shard ${{ matrix.shard }}/3)
+        if: github.event_name != 'pull_request'
         run: bunx playwright test --shard=${{ matrix.shard }}/3
 
   observability:
