@@ -81,6 +81,12 @@ jobs:
 
   e2e:
     runs-on: ubuntu-latest
+    # pull-requests: write lets leanest post its selection report as a PR
+    # comment. Job-level permissions replace the workflow's, so contents:
+    # read is repeated here.
+    permissions:
+      contents: read
+      pull-requests: write
     strategy:
       fail-fast: false
       matrix:
@@ -116,13 +122,14 @@ jobs:
           cp .env.example .env
       # On a PR, leanest runs only the specs this diff could affect and hands
       # them to playwright unchanged. It fails open: a judge error or a
-      # low-confidence answer runs the full suite. The default provider
+      # low-confidence answer runs the full suite, and so does any change to
+      # runner setup (package.json, bun.lock, .github/workflows/). The default provider
       # (classifier.dev) sees the diff and the spec sources; the repo is
       # public, so that's fine. Each shard selects on its own, so a spec can
       # slip through on a PR; main runs the full suite to catch it.
       - name: Browser smoke test, affected specs (shard ${{ matrix.shard }}/3)
         if: github.event_name == 'pull_request'
-        uses: baronunread/leanest@v0.2.6
+        uses: baronunread/leanest@v0.2.7
         with:
           framework: playwright
           args: --shard=${{ matrix.shard }}/3
