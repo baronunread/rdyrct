@@ -359,6 +359,20 @@ function planPrice(plan: "hobby" | "pro", interval: "month" | "year") {
   return interval === "year" ? `${PLAN_PRICES_YEARLY[plan]}/mo` : `${PLAN_PRICES[plan]}/mo`;
 }
 
+/** A tier's name, with the "Most popular" pill on the highlighted one. */
+function PlanName({ name, highlight }: { name: string; highlight?: boolean }) {
+  return (
+    <p className={highlight ? "font-bold text-accent" : "font-bold"}>
+      {name}
+      {highlight && (
+        <span className="ml-2 rounded-full border border-accent/40 px-2 py-0.5 text-2xs text-accent">
+          Most popular
+        </span>
+      )}
+    </p>
+  );
+}
+
 /** One tier in the mobile plan stack. Its own component (not an inline
  * `.map` callback) so the price/sub-line/feature-list render logic has a
  * name and isn't retyped as a 7-prop JSX closure on every tier. */
@@ -388,14 +402,7 @@ function MobilePlanCard({
     >
       <div className="flex items-baseline justify-between gap-2">
         <div>
-          <p className={highlight ? "font-bold text-accent" : "font-bold"}>
-            {name}
-            {highlight && (
-              <span className="ml-2 rounded-full border border-accent/40 px-2 py-0.5 text-2xs text-accent">
-                Most popular
-              </span>
-            )}
-          </p>
+          <PlanName name={name} highlight={highlight} />
           <p className="text-xs text-muted">{tagline}</p>
         </div>
         <p className="tnum text-base font-bold">
@@ -1513,14 +1520,7 @@ function PricingTierCard({
         {/* Same pill as the full table and the mobile plan cards. The
             homepage is where the steering is worth most, and it was the
             one of the three missing it. */}
-        <p className={highlight ? "font-bold text-accent" : "font-bold"}>
-          {name}
-          {highlight && (
-            <span className="ml-2 rounded-full border border-accent/40 px-2 py-0.5 text-2xs text-accent">
-              Most popular
-            </span>
-          )}
-        </p>
+        <PlanName name={name} highlight={highlight} />
         <p className="tnum mt-1 text-2xl font-bold">
           {price}
           {sub && <span className="ml-1 text-2xs font-normal text-muted">{sub}</span>}

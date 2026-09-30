@@ -73,8 +73,8 @@ function db() {
   return drizzle(env.DB, { schema });
 }
 
-async function getUser() {
-  const rows = await db().select().from(schema.user).where(eq(schema.user.id, "user-1"));
+async function getUser(id = "user-1") {
+  const rows = await db().select().from(schema.user).where(eq(schema.user.id, id));
   return rows[0];
 }
 
@@ -328,13 +328,13 @@ describe("POST /api/billing/checkout/:id/confirm", () => {
     const res = await confirmCheckout(cookie, "checkout_1");
     expect(res.status).toBe(200);
     expect(await jsonBody(res)).toEqual({ plan: "pro" });
-    const rows = await db().select().from(schema.user).where(eq(schema.user.id, "free-1"));
-    expect(rows[0]?.plan).toBe("pro");
-    expect(rows[0]?.polarCustomerId).toBe("cus_1");
+    const user = await getUser("free-1");
+    expect(user?.plan).toBe("pro");
+    expect(user?.polarCustomerId).toBe("cus_1");
     // A placeholder, not the real subscription id (which Polar never handed
     // back): see the route's own comment for why, and the redelivery tests
     // below for what replaces it once a webhook does arrive.
-    expect(rows[0]?.polarSubscriptionId).toBe("pending:checkout_1");
+    expect(user?.polarSubscriptionId).toBe("pending:checkout_1");
   });
 
   it("leaves the plan alone when the checkout hasn't succeeded yet", async () => {
@@ -352,8 +352,8 @@ describe("POST /api/billing/checkout/:id/confirm", () => {
     );
     const res = await confirmCheckout(cookie, "checkout_1");
     expect(res.status).toBe(404);
-    const rows = await db().select().from(schema.user).where(eq(schema.user.id, "free-1"));
-    expect(rows[0]?.plan).toBe("free");
+    const user = await getUser("free-1");
+    expect(user?.plan).toBe("free");
   });
 
   it("ignores a webhook redelivery whose timestamp is older than the fallback's own (still correct, just doesn't fix the placeholder id)", async () => {
@@ -367,9 +367,9 @@ describe("POST /api/billing/checkout/:id/confirm", () => {
     // the route itself, not a bug in this test.
     await postWebhook(confirmRedeliveryPayload({ created_at: new Date(0).toISOString() }));
 
-    const rows = await db().select().from(schema.user).where(eq(schema.user.id, "free-1"));
-    expect(rows[0]?.plan).toBe("pro");
-    expect(rows[0]?.polarSubscriptionId).toBe("pending:checkout_1");
+    const user = await getUser("free-1");
+    expect(user?.plan).toBe("pro");
+    expect(user?.polarSubscriptionId).toBe("pending:checkout_1");
   });
 
   it("a later event (e.g. a renewal) replaces the placeholder id with the real one", async () => {
@@ -381,9 +381,9 @@ describe("POST /api/billing/checkout/:id/confirm", () => {
       confirmRedeliveryPayload({ modified_at: new Date(Date.now() + 60_000).toISOString() }),
     );
 
-    const rows = await db().select().from(schema.user).where(eq(schema.user.id, "free-1"));
-    expect(rows[0]?.plan).toBe("pro");
-    expect(rows[0]?.polarSubscriptionId).toBe("sub_1");
+    const user = await getUser("free-1");
+    expect(user?.plan).toBe("pro");
+    expect(user?.polarSubscriptionId).toBe("sub_1");
   });
 
   it("does not clobber a real subscription id the webhook already wrote, even if the client's poll races it", async () => {
@@ -391,9 +391,9 @@ describe("POST /api/billing/checkout/:id/confirm", () => {
 
     // The real webhook lands first, with a realistic (recent) timestamp.
     await postWebhook(confirmRedeliveryPayload({ modified_at: new Date().toISOString() }));
-    const afterWebhook = await db().select().from(schema.user).where(eq(schema.user.id, "free-1"));
-    expect(afterWebhook[0]?.plan).toBe("pro");
-    expect(afterWebhook[0]?.polarSubscriptionId).toBe("sub_1");
+    const afterWebhook = await getUser("free-1");
+    expect(afterWebhook?.plan).toBe("pro");
+    expect(afterWebhook?.polarSubscriptionId).toBe("sub_1");
 
     // The client's poll didn't see it land yet and calls confirm anyway.
     // Without the already-granted check, this route's synthetic "now"
@@ -402,9 +402,9 @@ describe("POST /api/billing/checkout/:id/confirm", () => {
     checkoutsGet.mockResolvedValueOnce(succeededCheckout());
     await confirmCheckout(cookie, "checkout_1");
 
-    const rows = await db().select().from(schema.user).where(eq(schema.user.id, "free-1"));
-    expect(rows[0]?.plan).toBe("pro");
-    expect(rows[0]?.polarSubscriptionId).toBe("sub_1");
+    const user = await getUser("free-1");
+    expect(user?.plan).toBe("pro");
+    expect(user?.polarSubscriptionId).toBe("sub_1");
   });
 });
 
