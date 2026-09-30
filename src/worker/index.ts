@@ -457,91 +457,113 @@ async function runIsolated(tasks: Array<() => Promise<void>>): Promise<void> {
   }
 }
 
-const wrapped = Sentry.withSentry<Env, StorageMessage>((env: Env) => ({ dsn: env.SENTRY_DSN }), {
-  fetch: app.fetch,
-  async queue(batch: MessageBatch<StorageMessage>, env: Env, _ctx: ExecutionContext) {
-    // The dead-letter consumer routes to this same handler (see
-    // wrangler.jsonc); a DLQ's messages only get logged, never retried or
-    // repaired.
-    if (batch.queue.endsWith("-dlq")) return logDeadLetterBatch(env, batch);
-    await consumeStorageBatch(env, batch);
-    // While the storage queue is flowing, spend a bounded slice of the outbox
-    // too (#228). A transient send failure recorded a row that would
-    // otherwise wait for a cron; draining here recovers it within seconds of
-    // the queue coming back. Idempotent and bounded, so a steady state and
-    // racing invocations both cost one indexed read.
-    await drainStorageOutbox(env);
-  },
-  async scheduled(controller: ScheduledController, env: Env, _ctx: ExecutionContext) {
-    // The frequent trigger (see wrangler.jsonc crons) runs the two things that
-    // must not wait a day: draining the outbox when a frozen queue kept the
-    // queue-consume drain from running (#228), and catching an org that is
-    // flooding the redirect path before it exhausts a daily budget (#224).
-    // Only the daily string runs the batch below.
-    if (controller.cron !== "0 6 * * *") {
-      // Isolated: one throwing must not stop the other from ever starting,
-      // and there is no ordering dependency between them to preserve.
+const wrapped = Sentry.withSentry<
+  Env,
+  StorageMessage,
+  unknown,
+  ExportedHandler<Env, StorageMessage>
+>(
+  (env: Env) => ({
+    dsn: env.SENTRY_DSN,
+    // Sentry 11 collects every category by default (headers carry the
+    // visitor's IP and session cookie); turn each one off.
+    dataCollection: {
+      userInfo: false,
+      cookies: false,
+      httpHeaders: false,
+      httpBodies: [],
+      urlQueryParams: false,
+      stackFrameVariables: false,
+      databaseQueryData: false,
+      queues: false,
+    },
+  }),
+  {
+    fetch: app.fetch,
+    async queue(batch: MessageBatch<StorageMessage>, env: Env, _ctx: ExecutionContext) {
+      // The dead-letter consumer routes to this same handler (see
+      // wrangler.jsonc); a DLQ's messages only get logged, never retried or
+      // repaired.
+      if (batch.queue.endsWith("-dlq")) return logDeadLetterBatch(env, batch);
+      await consumeStorageBatch(env, batch);
+      // While the storage queue is flowing, spend a bounded slice of the outbox
+      // too (#228). A transient send failure recorded a row that would
+      // otherwise wait for a cron; draining here recovers it within seconds of
+      // the queue coming back. Idempotent and bounded, so a steady state and
+      // racing invocations both cost one indexed read.
+      await drainStorageOutbox(env);
+    },
+    async scheduled(controller: ScheduledController, env: Env, _ctx: ExecutionContext) {
+      // The frequent trigger (see wrangler.jsonc crons) runs the two things that
+      // must not wait a day: draining the outbox when a frozen queue kept the
+      // queue-consume drain from running (#228), and catching an org that is
+      // flooding the redirect path before it exhausts a daily budget (#224).
+      // Only the daily string runs the batch below.
+      if (controller.cron !== "0 6 * * *") {
+        // Isolated: one throwing must not stop the other from ever starting,
+        // and there is no ordering dependency between them to preserve.
+        await runIsolated([
+          async () => void (await drainStorageOutbox(env)),
+          () => sweepAbusiveOrgs(env),
+        ]);
+        return;
+      }
+
+      // Daily: trim old clicks.
+      const cutoff = Date.now() - 400 * 24 * 60 * 60 * 1000;
+      // Bounded batches: one unbounded DELETE can hit D1 statement limits once
+      // the table is large.
+      const stmt = env.DB.prepare(
+        `delete from clicks where id in (select id from clicks where ts < ? limit 1000)`,
+      );
+      let changes = 0;
+      do {
+        changes = (await stmt.bind(cutoff).run()).meta.changes;
+      } while (changes > 0);
+
+      // Daily: drop dedupe ids the queue can no longer redeliver, so a unique
+      // index over 400 days of history stops carrying a guarantee that only
+      // has to hold for minutes (#70).
+      await sweepDedupeIds(env);
+
+      // Daily: delete QR logos no row points at, which an abandoned upload
+      // leaves behind with no owner and no delete path (#49).
+      await sweepOrphanQrLogos(env);
+
+      // Daily: restart org teardowns that are flagged and not running (#52).
+      // createBatch skips an id already in use whatever its state, so a
+      // workflow that errored is never replaced by a later DELETE, and an org
+      // whose only member was the deleted account has nobody to retry it.
+      await sweepStalledOrgDeletions(drizzle(env.DB, { schema }), env);
+
+      // Daily: retire rename aliases past their 48h deadline (see #38). The
+      // redirect path already stopped resolving them; this frees their slugs.
+      await sweepExpiredAliases(env, drizzle(env.DB, { schema }));
+
+      // Daily: drop invites nobody opened before they expired (#103). An
+      // accepted one is already deleted at accept time; this clears the rest,
+      // so no token and no invited address outlives the week it was good for.
+      await sweepExpiredInvites(env);
+
+      // Daily: drop anonymous links nobody claimed inside their 24 hours, and
+      // the KV keys they were resolving through (Direction A of #96).
+      await sweepExpiredAnonLinks(env);
+
+      // Daily: the day-23 email for every org whose 30 days are nearly up
+      // (#158). Day 0 goes out from the reconciliation pass itself.
+      await sweepGraceWarnings(env, drizzle(env.DB, { schema }));
+
+      // Daily as well as every 10 minutes: apply the storage work the queue
+      // never took (#118), and check for a free org over the redirect ceiling
+      // (#224). Isolated from each other and from every sweep above: one
+      // throwing must not stop the other from starting.
       await runIsolated([
         async () => void (await drainStorageOutbox(env)),
         () => sweepAbusiveOrgs(env),
       ]);
-      return;
-    }
-
-    // Daily: trim old clicks.
-    const cutoff = Date.now() - 400 * 24 * 60 * 60 * 1000;
-    // Bounded batches: one unbounded DELETE can hit D1 statement limits once
-    // the table is large.
-    const stmt = env.DB.prepare(
-      `delete from clicks where id in (select id from clicks where ts < ? limit 1000)`,
-    );
-    let changes = 0;
-    do {
-      changes = (await stmt.bind(cutoff).run()).meta.changes;
-    } while (changes > 0);
-
-    // Daily: drop dedupe ids the queue can no longer redeliver, so a unique
-    // index over 400 days of history stops carrying a guarantee that only
-    // has to hold for minutes (#70).
-    await sweepDedupeIds(env);
-
-    // Daily: delete QR logos no row points at, which an abandoned upload
-    // leaves behind with no owner and no delete path (#49).
-    await sweepOrphanQrLogos(env);
-
-    // Daily: restart org teardowns that are flagged and not running (#52).
-    // createBatch skips an id already in use whatever its state, so a
-    // workflow that errored is never replaced by a later DELETE, and an org
-    // whose only member was the deleted account has nobody to retry it.
-    await sweepStalledOrgDeletions(drizzle(env.DB, { schema }), env);
-
-    // Daily: retire rename aliases past their 48h deadline (see #38). The
-    // redirect path already stopped resolving them; this frees their slugs.
-    await sweepExpiredAliases(env, drizzle(env.DB, { schema }));
-
-    // Daily: drop invites nobody opened before they expired (#103). An
-    // accepted one is already deleted at accept time; this clears the rest,
-    // so no token and no invited address outlives the week it was good for.
-    await sweepExpiredInvites(env);
-
-    // Daily: drop anonymous links nobody claimed inside their 24 hours, and
-    // the KV keys they were resolving through (Direction A of #96).
-    await sweepExpiredAnonLinks(env);
-
-    // Daily: the day-23 email for every org whose 30 days are nearly up
-    // (#158). Day 0 goes out from the reconciliation pass itself.
-    await sweepGraceWarnings(env, drizzle(env.DB, { schema }));
-
-    // Daily as well as every 10 minutes: apply the storage work the queue
-    // never took (#118), and check for a free org over the redirect ceiling
-    // (#224). Isolated from each other and from every sweep above: one
-    // throwing must not stop the other from starting.
-    await runIsolated([
-      async () => void (await drainStorageOutbox(env)),
-      () => sweepAbusiveOrgs(env),
-    ]);
+    },
   },
-});
+);
 
 // SAFETY: withSentry's return type marks fetch/queue/scheduled optional (a
 // handler need not implement all three) and types fetch's request against

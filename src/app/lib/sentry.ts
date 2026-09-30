@@ -12,7 +12,15 @@ if (dsn) {
   Sentry.init({
     dsn,
     defaultIntegrations: false,
-    sendDefaultPii: false,
+    // Sentry 11 collects every category by default; turn each one off.
+    dataCollection: {
+      userInfo: false,
+      cookies: false,
+      httpHeaders: false,
+      httpBodies: [],
+      urlQueryParams: false,
+      stackFrameVariables: false,
+    },
     beforeSend(event) {
       if (event.request?.url) {
         const url = new URL(event.request.url);
