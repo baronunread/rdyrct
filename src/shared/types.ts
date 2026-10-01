@@ -545,6 +545,8 @@ export interface AdminLinkRow {
   id: string;
   slug: string;
   domain: string | null;
+  /** The full short link, on its custom domain or the shared link host. */
+  url: string;
   destination: string;
   orgId: string;
   orgName: string;

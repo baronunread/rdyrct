@@ -304,9 +304,13 @@ describe("the cross-org search", () => {
     await createLink(owner, "https://example.com/mine");
 
     const cookie = await adminCookie();
-    const mine = await jsonBody<{ orgId: string }[]>(await admin("/links?org=org-1", cookie));
+    const mine = await jsonBody<{ orgId: string; slug: string; url: string }[]>(
+      await admin("/links?org=org-1", cookie),
+    );
     expect(mine.length).toBeGreaterThan(0);
     expect(mine.every((r) => r.orgId === "org-1")).toBe(true);
+    // A shared link shows its host, not a bare "/slug".
+    expect(mine[0]!.url).toBe(`https://${env.SHARED_LINK_HOST}/${mine[0]!.slug}`);
 
     const other = await jsonBody<unknown[]>(await admin("/links?org=org-nobody", cookie));
     expect(other).toEqual([]);
