@@ -9,7 +9,7 @@ import type { AppEnv, DB, Env } from "../env";
 import { orgDeleting, requireOrgRole } from "../org-role";
 import { orgPlan, insertDomainWithinLimit } from "../plan";
 import { enqueueStorage, syncDomainMsg } from "../storage";
-import { uid } from "../util";
+import { sharedLinkHost, uid } from "../util";
 import { isValidHttpUrl, normalizeUrl } from "../util";
 import { jsonBodyLimit } from "../body-limit";
 import type { DomainDTO, PlanLimits } from "@/shared/types";
@@ -348,7 +348,7 @@ domainRoutes.post("/", async (c) => {
   await assertDomainQuota(db, orgId, limits);
 
   const body = await c.req.json<{ hostname?: string }>();
-  const hostname = await resolveNewHostname(db, body, [c.env.APP_HOST, c.env.SHARED_LINK_HOST]);
+  const hostname = await resolveNewHostname(db, body, [c.env.APP_HOST, sharedLinkHost(c.env)]);
 
   const id = uid();
   const row = {

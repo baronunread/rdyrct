@@ -208,6 +208,7 @@ interface LinkSummary {
   id: string;
   slug: string;
   domain: string | null;
+  url: string;
   destination: string;
   title: string;
   clicks: number;
@@ -231,6 +232,7 @@ async function searchLinks(
           id: v.string(),
           slug: v.string(),
           domain: v.nullable(v.string()),
+          url: v.string(),
           destination: v.string(),
           title: v.string(),
           clicks: v.number(),
@@ -545,6 +547,7 @@ type LinkStatsSummary = Pick<
   LinkStats,
   | "slug"
   | "domain"
+  | "url"
   | "destination"
   | "title"
   | "totalClicks"
@@ -588,6 +591,7 @@ async function getLinkStats(t: ToolCtx): Promise<CallToolResult> {
   const summary: LinkStatsSummary = {
     slug: s.slug,
     domain: s.domain,
+    url: s.url,
     destination: s.destination,
     title: s.title,
     totalClicks: s.totalClicks,

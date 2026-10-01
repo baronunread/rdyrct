@@ -11,6 +11,9 @@ import {
   resetClicks,
 } from "./support";
 
+// SAFETY: vitest.config.ts binds SHARED_LINK_HOST for every worker test.
+const sharedHost = env.SHARED_LINK_HOST!;
+
 afterEach(async () => {
   await reset();
 });
@@ -87,7 +90,7 @@ describe("redirect hot path", () => {
     // circuiting before the custom-domain lookup, this is what would answer
     // instead, and the assertions below would catch it.
     await env.LINKS.put(
-      `domain:${env.SHARED_LINK_HOST}`,
+      `domain:${sharedHost}`,
       JSON.stringify({
         domainId: "domain-2",
         orgId: "org-2",
@@ -97,7 +100,7 @@ describe("redirect hot path", () => {
 
     const response = await fetchWorker(
       new Request("http://localhost/summer", {
-        headers: { host: env.SHARED_LINK_HOST },
+        headers: { host: sharedHost },
         redirect: "manual",
       }),
     );
@@ -112,12 +115,20 @@ describe("redirect hot path", () => {
     // premise that this host serves nothing but redirects. If it ever fell
     // through to the app like APP_HOST does, auth would be reachable there
     // unprotected by that layer.
-    for (const path of ["/api/auth/get-session", "/api/cap/signup/challenge", "/", "/dashboard"]) {
+    for (const path of ["/api/auth/get-session", "/api/cap/signup/challenge", "/dashboard"]) {
       const res = await fetchWorker(
-        new Request(`http://localhost${path}`, { headers: { host: env.SHARED_LINK_HOST } }),
+        new Request(`http://localhost${path}`, { headers: { host: sharedHost } }),
       );
       expect(res.status, `status of ${path} on the shared link host`).toBe(404);
     }
+  });
+
+  it("sends the second shared link host's bare root to the app", async () => {
+    const res = await fetchWorker(
+      new Request("http://localhost/", { headers: { host: sharedHost }, redirect: "manual" }),
+    );
+    expect(res.status).toBe(302);
+    expect(res.headers.get("location")).toBe(env.APP_URL);
   });
 
   it("keeps custom-domain links separate from shared-host links", async () => {

@@ -168,7 +168,9 @@ function isLive(hit: KVLink): boolean {
 async function resolveSharedLinkHost(c: Context<AppEnv>): Promise<Response> {
   const path = new URL(c.req.url).pathname;
   const slug = path.slice(1).replace(/\/+$/, "");
-  if (slug && !slug.includes("/") && !RESERVED_SLUGS.has(slug.toLowerCase())) {
+  // Somebody who types the bare host wants to know what it is.
+  if (!slug) return c.redirect(c.env.APP_URL, 302);
+  if (!slug.includes("/") && !RESERVED_SLUGS.has(slug.toLowerCase())) {
     const hit = await resolveSlug(c.env, slug, null);
     if (hit && isLive(hit)) return redirectWithClick(c, hit);
   }
@@ -180,7 +182,7 @@ async function resolveSharedLinkHost(c: Context<AppEnv>): Promise<Response> {
 app.use("*", async (c, next) => {
   const host = c.req.header("host")?.toLowerCase();
   if (!host || host === c.env.APP_HOST.toLowerCase()) return next();
-  if (host === c.env.SHARED_LINK_HOST.toLowerCase()) return resolveSharedLinkHost(c);
+  if (host === c.env.SHARED_LINK_HOST?.toLowerCase()) return resolveSharedLinkHost(c);
 
   const domain = await resolveDomain(c.env, host);
   if (!domain) return next();

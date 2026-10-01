@@ -2,14 +2,13 @@ import { useState } from "react";
 import { Clock, Ellipsis, Info, Star, Trash2 } from "@/app/ui/icons";
 // m.tr renders inside a LazyMotion provider set up by the caller (LinksTable).
 import { m } from "motion/react";
-import { useAddresses, useAddressMutations, useLinkHost } from "../lib/hooks";
+import { useAddresses, useAddressMutations } from "../lib/hooks";
 import { withErrorToast } from "../lib/mutation-toast";
 import { useToast } from "../ui/toast";
 import { Slug, Td } from "../ui/misc";
 import { Menu, MenuItem, MenuSeparator } from "../ui/menu";
 import { CopyButton } from "../ui/copy-button";
 import { copyToClipboard } from "../lib/clipboard";
-import { shortUrl } from "../lib/api";
 import { shortDate } from "../lib/dates";
 import { Skeleton, SkeletonStatus } from "../ui/skeleton";
 import { Tooltip } from "../ui/tooltip";
@@ -43,7 +42,6 @@ function AliasRow({
   pending: boolean;
 }) {
   const toast = useToast();
-  const linkHost = useLinkHost();
   const isTemp = address.kind === "temp_alias";
 
   return (
@@ -60,8 +58,8 @@ function AliasRow({
           <Slug slug={address.slug} className="font-mono text-xs text-muted" />
           <span className="shrink-0">
             <CopyButton
-              text={shortUrl(address.slug, address.domain, linkHost)}
-              label={`Copy ${shortUrl(address.slug, address.domain, linkHost)}`}
+              text={address.url}
+              label={`Copy ${address.url}`}
               onCopy={(text) => copyToClipboard(text, toast)}
             />
           </span>
@@ -126,7 +124,6 @@ export function AliasThread({ orgId, link }: { orgId: string; link: LinkDTO }) {
   const addresses = useAddresses(orgId, link.id);
   const { keepForever, remove, promote } = useAddressMutations(orgId, link.id);
   const toast = useToast();
-  const linkHost = useLinkHost();
   const [removing, setRemoving] = useState<AddressDTO | null>(null);
 
   if (addresses.isLoading)
@@ -205,9 +202,9 @@ export function AliasThread({ orgId, link }: { orgId: string; link: LinkDTO }) {
           <div className="flex flex-col gap-2">
             <p
               className="max-w-full truncate rounded-lg border border-border bg-surface-2 px-3 py-2 font-mono text-xs"
-              title={shortUrl(removing.slug, removing.domain, linkHost)}
+              title={removing.url}
             >
-              {shortUrl(removing.slug, removing.domain, linkHost)}
+              {removing.url}
             </p>
             <p>will stop resolving immediately. This can't be undone.</p>
           </div>
