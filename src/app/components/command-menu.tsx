@@ -27,13 +27,13 @@ import {
 import { appNavItems } from "./nav-items";
 import { LinkPreviewDialog } from "./link-preview-dialog";
 import { SameDestinationDialog } from "./same-destination-dialog";
-import { useLinkHost, useLinkMutations, useLinks, useLogout, useShellUser } from "../lib/hooks";
+import { useLinkMutations, useLinks, useLogout, useShellUser } from "../lib/hooks";
 import { useCurrentOrg } from "../lib/current-org";
 import { useOrgLimits } from "../lib/org-limits";
 import { useDebounced } from "../lib/use-debounced";
 import { useTheme } from "../lib/theme";
 import { useToast } from "../ui/toast";
-import { api, ApiError, shortUrl } from "../lib/api";
+import { api, ApiError } from "../lib/api";
 import { withErrorToast } from "../lib/mutation-toast";
 import { copyToClipboard } from "../lib/clipboard";
 import { destinationSchema } from "../lib/schemas";
@@ -267,7 +267,6 @@ function linkHref(l: LinkDTO): string {
 function useLinkMatches(term: string, close: () => void): LinkMatch[] {
   const navigate = useNavigate();
   const { org } = useCurrentOrg();
-  const linkHost = useLinkHost();
   const settled = useDebounced(term.trim());
   // orgId doubles as the query's enable switch: blank it and useLinks idles.
   const { data } = useLinks(settled ? (org?.id ?? "") : "", { q: settled, limit: 6 });
@@ -275,7 +274,7 @@ function useLinkMatches(term: string, close: () => void): LinkMatch[] {
   return items.map((l) => ({
     key: `link:${l.domain ?? ""}:${l.slug}`,
     name: l.title || l.destination,
-    url: shortUrl(l.slug, l.domain, linkHost),
+    url: l.url,
     run: () => {
       close();
       navigate({ href: linkHref(l) });

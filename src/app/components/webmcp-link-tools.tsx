@@ -5,7 +5,7 @@ import * as v from "valibot";
 import type { JsonValue, LinkDTO, LinkInput, WithQuotaUsage } from "@/shared/types";
 import { api } from "../lib/api";
 import { useCurrentOrg } from "../lib/current-org";
-import { useCurrentUser, useLinkHost } from "../lib/hooks";
+import { useCurrentUser } from "../lib/hooks";
 import { linkDisplayTitle } from "../lib/link-display";
 import { registerWebMcpTools, type WebMcpTool } from "../lib/webmcp";
 
@@ -42,8 +42,8 @@ function linkSearchParams(query: string | undefined): string {
   return params.toString();
 }
 
-function conciseLink(link: LinkDTO, linkHost: string): string {
-  const address = linkDisplayTitle(linkHost, link.domain, link.slug);
+function conciseLink(link: LinkDTO): string {
+  const address = linkDisplayTitle(link.url);
   return `${address} → ${link.destination}${link.title ? ` (${link.title})` : ""}`;
 }
 
@@ -57,7 +57,6 @@ export function WebMcpLinkTools() {
   const { org } = useCurrentOrg();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
-  const linkHost = useLinkHost();
 
   useEffect(() => {
     if (!currentUser.data || !org) return;
@@ -113,7 +112,7 @@ export function WebMcpLinkTools() {
             { signal: options?.signal },
           );
           if (result.items.length === 0) return "No matching links in the current organization.";
-          return toolResult(result.items.map((link) => conciseLink(link, linkHost)).join("\n"));
+          return toolResult(result.items.map((link) => conciseLink(link)).join("\n"));
         },
       },
       {
@@ -131,7 +130,7 @@ export function WebMcpLinkTools() {
             // Counts first: a very long destination in conciseLink would
             // otherwise push them past the toolResult length cap.
             toolResult(
-              `${link.clicks} clicks, ${link.addressCount} addresses. ${conciseLink(link, linkHost)}`,
+              `${link.clicks} clicks, ${link.addressCount} addresses. ${conciseLink(link)}`,
             ),
           ),
       },
@@ -159,7 +158,7 @@ export function WebMcpLinkTools() {
           });
           await refreshLinks();
           await navigate({ to: "/links" });
-          return toolResult(`Created ${conciseLink(link, linkHost)}. The Links page now shows it.`);
+          return toolResult(`Created ${conciseLink(link)}. The Links page now shows it.`);
         },
       },
       {
@@ -197,7 +196,7 @@ export function WebMcpLinkTools() {
               );
               await refreshLinks();
               await navigate({ to: "/links" });
-              return toolResult(`Updated ${conciseLink(updated, linkHost)}.`);
+              return toolResult(`Updated ${conciseLink(updated)}.`);
             },
           ),
       },
@@ -219,14 +218,14 @@ export function WebMcpLinkTools() {
             });
             await refreshLinks();
             await navigate({ to: "/links" });
-            const address = linkDisplayTitle(linkHost, link.domain, link.slug);
+            const address = linkDisplayTitle(link.url);
             return toolResult(`Deleted ${address}. It no longer redirects.`);
           }),
       },
     ];
 
     return registerWebMcpTools(tools);
-  }, [linkHost, currentUser.data, navigate, org, queryClient]);
+  }, [currentUser.data, navigate, org, queryClient]);
 
   return null;
 }

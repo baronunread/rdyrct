@@ -120,8 +120,8 @@ Fill in the non-secret vars in `wrangler.jsonc`:
 
 - `APP_URL=https://rdyrct.com`
 - `APP_HOST=rdyrct.com`
-- `SHARED_LINK_HOST=rdyr.cc` — a second, shorter domain for new shared-domain
-  links; can be the same as `APP_HOST` if you don't have one
+- `SHARED_LINK_HOST=rdyr.cc` (optional): a second, shorter domain for new
+  shared-domain links. Leave it out and they use `APP_HOST`
 - `MAIL_FROM=rdyrct <no-reply@mail.rdyrct.com>`
 - `POLAR_SERVER=sandbox` (or `production` when live)
 - `POLAR_PRO_PRODUCT_ID` — create a recurring Pro product in Polar and paste its id
@@ -192,7 +192,7 @@ before changing link, domain, logo, or organization delete flows.
 | `CF_API_TOKEN`           | secret         | Cloudflare token with **Zone → SSL and Certificates → Edit** (custom domains)       |
 | `APP_URL`                | var            | Full public URL of the app, e.g. `https://rdyrct.com`                               |
 | `APP_HOST`               | var            | Public host, e.g. `rdyrct.com`                                                      |
-| `SHARED_LINK_HOST`       | var            | Second shared-domain host for new links, e.g. `rdyr.cc`                             |
+| `SHARED_LINK_HOST`       | var (optional) | Second shared-domain host for new links, e.g. `rdyr.cc`                             |
 | `MAIL_FROM`              | var            | From address for outgoing email                                                     |
 | `RESEND_BASE_URL`        | var (dev only) | Points at the local Resend emulator                                                 |
 | `POLAR_SERVER`           | var            | `sandbox` or `production`                                                           |

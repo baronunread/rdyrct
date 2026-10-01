@@ -4,7 +4,7 @@ import { Field, Input } from "../ui/field";
 import { Button } from "../ui/button";
 import { BusyContent } from "../ui/spinner";
 import { useToast } from "../ui/toast";
-import { useAddressMutations, useLinkHost } from "../lib/hooks";
+import { useAddressMutations } from "../lib/hooks";
 import { withErrorToast } from "../lib/mutation-toast";
 import posthog from "../lib/posthog";
 import type { LinkDTO } from "@/shared/types";
@@ -23,7 +23,6 @@ function CreateAliasForm({
 }) {
   const toast = useToast();
   const { create } = useAddressMutations(orgId, link.id);
-  const linkHost = useLinkHost();
   const [slug, setSlug] = useState("");
 
   // An alias always lives on the same domain as the link it addresses (#38):
@@ -49,7 +48,7 @@ function CreateAliasForm({
       <div className="flex flex-col gap-4">
         <p className="text-sm text-muted">
           Add another address on{" "}
-          <span className="font-mono text-text">{link.domain ?? linkHost}</span> that redirects to
+          <span className="font-mono text-text">{new URL(link.url).host}</span> that redirects to
           the same destination as <span className="font-mono text-text">/{link.slug}</span>.
         </p>
 
