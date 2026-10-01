@@ -19,7 +19,7 @@ import {
 import { sendEmail } from "../email";
 import { renderEmail } from "../email-layout";
 import { deleteQrLogoMsg, enqueueStorage } from "../storage";
-import { uid, referrerHost, validateQrFields, changesQr } from "../util";
+import { uid, referrerHost, validateQrFields, changesQr, linkUrl } from "../util";
 import { jsonBodyLimit } from "../body-limit";
 import { parseBody, inviteBodySchema } from "../schemas";
 import type {
@@ -1215,6 +1215,7 @@ orgRoutes.get("/:orgId/links/stats/:slug", requireOrgRole("viewer"), async (c) =
     devices: cleanDim(devices),
     slug: link.slug,
     domain: link.domain,
+    url: linkUrl(c.env, link.domain, link.slug),
     destination: link.destination,
     title: link.title,
     createdAt: link.createdAt,

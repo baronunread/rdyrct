@@ -2,6 +2,7 @@ BETTER_AUTH_SECRET=playwright-only-secret-with-32-characters
 SUPERADMIN_EMAIL=playwright-admin@example.com
 APP_URL=http://localhost:5174
 APP_HOST=localhost:5174
+SHARED_LINK_HOST=rdyr.cc
 
 RESEND_API_KEY=re_local_emulated
 RESEND_BASE_URL=http://localhost:4000

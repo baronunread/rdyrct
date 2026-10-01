@@ -5,8 +5,6 @@ import { ArrowLeft, ExternalLink } from "@/app/ui/icons";
 import { useLinkStats, useCurrentUser } from "../lib/hooks";
 import { shortDate } from "../lib/dates";
 import { useCurrentOrg } from "../lib/current-org";
-import { useConfig } from "../lib/hooks";
-import { shortUrl } from "../lib/api";
 import { AreaChart, StatCard, ClickBreakdown } from "../components/charts";
 import { NoOrgState } from "../components/no-org";
 import { ExportCsvButton } from "../components/export-csv-button";
@@ -101,7 +99,6 @@ export function LinkDetailPage() {
   const domain = searchParams.get("domain");
   const { org } = useCurrentOrg();
   const currentUser = useCurrentUser();
-  const { data: config } = useConfig();
   const stats = useLinkStats(org?.id ?? "", slug ?? null, domain);
 
   if (currentUser.isLoading) return <LinkDetailSkeleton />;
@@ -111,14 +108,12 @@ export function LinkDetailPage() {
     return <p className="py-8 text-center text-sm text-danger">Could not load link stats.</p>;
   const s = stats.data;
 
-  const fullUrl = shortUrl(s.slug, s.domain);
-
   return (
     <div>
       <LinkDetailHeader
-        title={linkDisplayTitle(config?.appHost, s.domain, s.slug)}
+        title={linkDisplayTitle(s.url)}
         subtitle={s.title}
-        fullUrl={fullUrl}
+        fullUrl={s.url}
         action={<ExportCsvButton stats={s} scope={`link-${s.slug}`} days={s.rangeDays} />}
       />
 

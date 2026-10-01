@@ -115,7 +115,7 @@ rdyrct is MIT licensed. Deploy it to your own Cloudflare account and set your ow
 ## Notes
 
 - Billing is per user, not per organization. An organization's limits come from its owner's plan.
-- Slugs on rdyrct.com are always random. Choosing a slug needs a custom domain.
+- Slugs on the shared domain are always random. Choosing a slug needs a custom domain.
 - Click analytics never store an IP address.`,
   },
   "/docs": {

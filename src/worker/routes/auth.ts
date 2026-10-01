@@ -3,6 +3,7 @@ import { and, eq } from "drizzle-orm";
 import { alias } from "drizzle-orm/sqlite-core";
 import * as schema from "../db/schema";
 import type { AppEnv } from "../env";
+import { sharedLinkHost } from "../util";
 import { requireUser } from "../guards";
 import { jsonBodyLimit } from "../body-limit";
 import type { AppConfig, CurrentUser } from "@/shared/types";
@@ -96,12 +97,13 @@ userRoutes.get("/user", requireUser, async (c) => {
 });
 
 // Public, non-secret deployment config (the SPA shows appHost in DNS setup
-// instructions for custom domains).
+// instructions for custom domains, and linkHost for shared-domain links).
 userRoutes.get("/config", (c) => {
   const log = c.get("log");
   log.set({ route: "config" });
   return c.json({
     appHost: c.env.APP_HOST,
+    linkHost: sharedLinkHost(c.env),
     googleEnabled: Boolean(c.env.GOOGLE_CLIENT_ID && c.env.GOOGLE_CLIENT_SECRET),
   } satisfies AppConfig);
 });

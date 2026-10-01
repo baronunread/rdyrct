@@ -792,7 +792,7 @@ function CustomDomainSection() {
           <InboxMail
             from="Acme Store"
             subject="Your 20% code ends tonight"
-            link="rdyrct.com/m22fs5w"
+            link="rdyr.cc/m22fs5w"
             verdict="Doesn't match the sender"
           />
           <InboxMail
@@ -1157,7 +1157,7 @@ const PLAN_CHANGE_STEPS = [
   ],
   [
     "Always",
-    "Links on rdyrct.com keep working",
+    "Links on rdyr.cc and rdyrct.com keep working",
     "On every plan, paid or free. We never switch a printed code off.",
   ],
 ] as const;

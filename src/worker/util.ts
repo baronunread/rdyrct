@@ -287,6 +287,7 @@ export function isValidHttpUrl(value: string): boolean {
 
 import { HTTPException } from "hono/http-exception";
 import { QR_CORNER_STYLES, QR_DOT_STYLES, type QrOverrides } from "@/shared/types";
+import type { Env } from "./env";
 
 /**
  * Logo images live in R2; D1 rows store only the serving URL. Upload and
@@ -396,4 +397,16 @@ export function changesQr(
     if (next !== (existing?.[field] ?? "")) return true;
   }
   return body.qrLogoSize != null && body.qrLogoSize !== (existing?.qrLogoSize ?? null);
+}
+
+/** The host shared-domain links use: SHARED_LINK_HOST, or the app's own host
+ * on a deployment with no second domain. */
+export const sharedLinkHost = (env: Env) => env.SHARED_LINK_HOST || env.APP_HOST;
+
+/** A link's full address, built here once so the app, the REST API and the
+ * MCP server all hand out the same one. */
+export function linkUrl(env: Env, domain: string | null, slug: string): string {
+  if (domain) return `https://${domain}/${slug}`;
+  if (env.SHARED_LINK_HOST) return `https://${env.SHARED_LINK_HOST}/${slug}`;
+  return `${env.APP_URL}/${slug}`;
 }

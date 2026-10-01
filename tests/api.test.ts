@@ -7,7 +7,9 @@ import type { JsonValue } from "../src/shared/types";
 // modules (loaded up front, before any test runs) must see a real absence of
 // `window`, not this shim.
 beforeAll(() => {
-  installBrowserGlobals({ window: { location: { origin: "http://localhost:5173" } } });
+  installBrowserGlobals({
+    window: { location: { origin: "http://localhost:5173", host: "localhost:5173" } },
+  });
 });
 
 const realFetch = globalThis.fetch;
@@ -54,6 +56,17 @@ describe("shortUrl", () => {
   test("falls back to the current origin", () => {
     expect(shortUrl("abc123")).toBe("http://localhost:5173/abc123");
     expect(shortUrl("abc123", null)).toBe("http://localhost:5173/abc123");
+  });
+
+  test("uses the shared link host when given one", () => {
+    expect(shortUrl("abc123", null, "rdyr.cc")).toBe("https://rdyr.cc/abc123");
+  });
+
+  // No SHARED_LINK_HOST: the link host is the app's own, and the worker
+  // builds those links from APP_URL, scheme included. A forced https here
+  // previewed a QR code for an address that does not exist on plain http.
+  test("keeps the page's scheme when the link host is the app's own", () => {
+    expect(shortUrl("abc123", null, "localhost:5173")).toBe("http://localhost:5173/abc123");
   });
 });
 

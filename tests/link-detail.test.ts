@@ -2,19 +2,17 @@ import { describe, expect, test } from "bun:test";
 import { linkDisplayTitle } from "../src/app/lib/link-display";
 
 describe("linkDisplayTitle", () => {
-  test("prefers the link's custom domain over the app host", () => {
-    expect(linkDisplayTitle("rdyrct.com", "brand.example", "abc")).toBe("brand.example/abc");
+  test("drops the scheme from a custom-domain link", () => {
+    expect(linkDisplayTitle("https://brand.example/abc")).toBe("brand.example/abc");
   });
 
-  // Regression: appHost is a bare host (e.g. "rdyrct.com"), the same shape
-  // domains.tsx shows for CNAME targets, never a full URL. Passing it to
-  // `new URL()` threw "Invalid URL" and crashed the whole page for every
-  // shared-domain link.
-  test("falls back to the bare app host when there's no custom domain", () => {
-    expect(linkDisplayTitle("rdyrct.com", null, "abc")).toBe("rdyrct.com/abc");
+  test("drops the scheme from a shared-host link", () => {
+    expect(linkDisplayTitle("https://rdyr.cc/abc")).toBe("rdyr.cc/abc");
   });
 
-  test("falls back to just the slug when neither is known yet", () => {
-    expect(linkDisplayTitle(undefined, null, "abc")).toBe("/abc");
+  // A deployment with no SHARED_LINK_HOST builds shared links from APP_URL,
+  // which is plain http in local e2e runs.
+  test("drops a plain http scheme too", () => {
+    expect(linkDisplayTitle("http://localhost:5174/abc")).toBe("localhost:5174/abc");
   });
 });

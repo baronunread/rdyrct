@@ -262,8 +262,10 @@ export interface DomainDTO {
 
 /** Public deployment config the SPA needs (no secrets). */
 export interface AppConfig {
-  /** Shared redirect host; the CNAME target for custom domains. */
+  /** App/API origin; the CNAME target for custom domains. */
   appHost: string;
+  /** Host new shared-domain links use for display, copy, and redirects. */
+  linkHost: string;
   /** Whether Google sign-in is configured and the button should show. */
   googleEnabled: boolean;
 }
@@ -301,6 +303,8 @@ export interface LinkDTO extends QrOverrides {
   /** hostname of the custom domain, null = shared default domain */
   domain: string | null;
   slug: string;
+  /** The full short link, on its custom domain or the shared link host. */
+  url: string;
   destination: string;
   title: string;
   utmSource: string;
@@ -323,6 +327,8 @@ export interface AddressDTO {
   /** hostname of the custom domain, null = shared default domain */
   domain: string | null;
   slug: string;
+  /** The full address, on its custom domain or the shared link host. */
+  url: string;
   kind: "primary" | "temp_alias" | "permanent_alias";
   creationReason: "created" | "renamed" | "promoted" | "same_destination_merge" | "";
   /** Epoch ms; null = never expires. Set only on a temp_alias. */
@@ -432,6 +438,8 @@ export interface LinkStats {
   devices: TopEntry[];
   slug: string;
   domain: string | null;
+  /** The full short link, on its custom domain or the shared link host. */
+  url: string;
   destination: string;
   title: string;
   createdAt: number;
@@ -537,6 +545,8 @@ export interface AdminLinkRow {
   id: string;
   slug: string;
   domain: string | null;
+  /** The full short link, on its custom domain or the shared link host. */
+  url: string;
   destination: string;
   orgId: string;
   orgName: string;

@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createExecutionContext, reset, waitOnExecutionContext } from "cloudflare:test";
+import { env } from "cloudflare:workers";
 import worker from "../../src/worker";
 import { applyTestMigrations, authEnv, freeOwnerCookie, jsonBody } from "./support";
 import type { ApiKeyDTO, JsonValue } from "../../src/shared/types";
@@ -207,7 +208,9 @@ describe("remote MCP server (#139)", () => {
       toolCall("create_link", { destination: "https://example.com/promo" }),
     );
     const createdBody = await jsonBody<JsonRpcResponse>(created);
-    const { slug } = JSON.parse(createdBody.result!.content![0]!.text!);
+    const { slug, url } = JSON.parse(createdBody.result!.content![0]!.text!);
+    // The client gets the address to hand out, rather than guessing a host.
+    expect(url).toBe(`https://${env.SHARED_LINK_HOST}/${slug}`);
 
     const linkRes = await callMcp(`Bearer ${key}`, toolCall("get_link_stats", { slug }));
     const linkBody = await jsonBody<JsonRpcResponse>(linkRes);
@@ -215,6 +218,7 @@ describe("remote MCP server (#139)", () => {
     expect(linkStats).toEqual({
       slug,
       domain: null,
+      url,
       destination: "https://example.com/promo",
       title: "",
       totalClicks: 0,

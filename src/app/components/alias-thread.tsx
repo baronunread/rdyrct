@@ -9,7 +9,6 @@ import { Slug, Td } from "../ui/misc";
 import { Menu, MenuItem, MenuSeparator } from "../ui/menu";
 import { CopyButton } from "../ui/copy-button";
 import { copyToClipboard } from "../lib/clipboard";
-import { shortUrl } from "../lib/api";
 import { shortDate } from "../lib/dates";
 import { Skeleton, SkeletonStatus } from "../ui/skeleton";
 import { Tooltip } from "../ui/tooltip";
@@ -59,8 +58,8 @@ function AliasRow({
           <Slug slug={address.slug} className="font-mono text-xs text-muted" />
           <span className="shrink-0">
             <CopyButton
-              text={shortUrl(address.slug, address.domain)}
-              label={`Copy ${shortUrl(address.slug, address.domain)}`}
+              text={address.url}
+              label={`Copy ${address.url}`}
               onCopy={(text) => copyToClipboard(text, toast)}
             />
           </span>
@@ -203,9 +202,9 @@ export function AliasThread({ orgId, link }: { orgId: string; link: LinkDTO }) {
           <div className="flex flex-col gap-2">
             <p
               className="max-w-full truncate rounded-lg border border-border bg-surface-2 px-3 py-2 font-mono text-xs"
-              title={shortUrl(removing.slug, removing.domain)}
+              title={removing.url}
             >
-              {shortUrl(removing.slug, removing.domain)}
+              {removing.url}
             </p>
             <p>will stop resolving immediately. This can't be undone.</p>
           </div>

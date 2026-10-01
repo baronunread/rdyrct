@@ -11,6 +11,9 @@ import {
   resetClicks,
 } from "./support";
 
+// SAFETY: vitest.config.ts binds SHARED_LINK_HOST for every worker test.
+const sharedHost = env.SHARED_LINK_HOST!;
+
 afterEach(async () => {
   await reset();
 });
@@ -75,6 +78,57 @@ describe("redirect hot path", () => {
       (await env.DB.prepare("select count(*) as count from clicks").first<{ count: number }>())
         ?.count,
     ).toBe(0);
+  });
+
+  it("redirects the same shared-host slug on the second shared link host, not the custom-domain path", async () => {
+    await env.LINKS.put(
+      "slug:summer",
+      JSON.stringify({ linkId: "link-1", orgId: "org-1", url: "https://example.com/sale" }),
+    );
+    // A domain entry under this exact host, with a different destination and
+    // no slug of its own: if the shared-host check ever stopped short-
+    // circuiting before the custom-domain lookup, this is what would answer
+    // instead, and the assertions below would catch it.
+    await env.LINKS.put(
+      `domain:${sharedHost}`,
+      JSON.stringify({
+        domainId: "domain-2",
+        orgId: "org-2",
+        rootRedirect: "https://example.com/wrong-if-treated-as-a-custom-domain",
+      }),
+    );
+
+    const response = await fetchWorker(
+      new Request("http://localhost/summer", {
+        headers: { host: sharedHost },
+        redirect: "manual",
+      }),
+    );
+
+    expect(response.status).toBe(302);
+    expect(response.headers.get("location")).toBe("https://example.com/sale");
+  });
+
+  it("keeps the second shared link host redirect-only: no API, no app", async () => {
+    // SHARED_LINK_HOST never gets its own WAF rate-limiting rules (see
+    // docs/rate-limiting.md): those only ever go on APP_HOST's zone, on the
+    // premise that this host serves nothing but redirects. If it ever fell
+    // through to the app like APP_HOST does, auth would be reachable there
+    // unprotected by that layer.
+    for (const path of ["/api/auth/get-session", "/api/cap/signup/challenge", "/dashboard"]) {
+      const res = await fetchWorker(
+        new Request(`http://localhost${path}`, { headers: { host: sharedHost } }),
+      );
+      expect(res.status, `status of ${path} on the shared link host`).toBe(404);
+    }
+  });
+
+  it("sends the second shared link host's bare root to the app", async () => {
+    const res = await fetchWorker(
+      new Request("http://localhost/", { headers: { host: sharedHost }, redirect: "manual" }),
+    );
+    expect(res.status).toBe(302);
+    expect(res.headers.get("location")).toBe(env.APP_URL);
   });
 
   it("keeps custom-domain links separate from shared-host links", async () => {
