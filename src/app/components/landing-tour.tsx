@@ -359,7 +359,10 @@ function QuickCreate({ typed, phase }: { typed: string; phase: Phase }) {
           phase === "typing" ? "border-accent" : "border-border",
         )}
       >
-        {typed || <span className="text-placeholder">https://example.com/launch</span>}
+        {/* text-muted, not text-placeholder: this is a span drawn to look
+            like an input, so the contrast exemption real placeholders get
+            does not apply, and Lighthouse flags the lighter colour. */}
+        {typed || <span className="text-muted">https://example.com/launch</span>}
       </span>
       <span className="hidden h-9 w-40 items-center rounded-md border border-border bg-bg px-3 text-sm sm:flex">
         {NEW_LINK.host}
