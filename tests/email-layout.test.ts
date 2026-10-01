@@ -108,6 +108,12 @@ describe("renderEmail (#73)", () => {
     expect(text).toContain(`Sent to ${TO}.`);
   });
 
+  test("says where to go when the mail was not expected, in both parts", () => {
+    const { html, text } = renderEmail(base, APP_URL, TO);
+    expect(html.html).toContain("Not you? Ignore it, or write to support@rdyrct.com.");
+    expect(text).toContain("Not you? Ignore it, or write to support@rdyrct.com.");
+  });
+
   test("keeps a dark-mode block but styles light without it", () => {
     const { html } = renderEmail(base, APP_URL, TO);
     expect(html.html).toContain("prefers-color-scheme: dark");
