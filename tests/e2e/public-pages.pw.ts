@@ -59,7 +59,8 @@ test("the homepage teases three prices and points at the full comparison", async
   await expect(teaser).not.toContainText(/self-hosted/i);
   await expect(teaser.getByText("Free", { exact: true })).toBeVisible();
   await expect(teaser.getByText("Hobby", { exact: true })).toBeVisible();
-  await expect(teaser.getByText("Most popular")).toBeVisible();
+  // No "Most popular" pill: it would be a claim we cannot back.
+  await expect(teaser.getByText("Most popular")).toHaveCount(0);
   await expect(teaser.locator("table")).toHaveCount(0);
 
   // The free plan has to say the generous part and the catch in the same

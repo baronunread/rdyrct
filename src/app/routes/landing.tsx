@@ -236,14 +236,7 @@ function MobilePlans({ paidTo }: { paidTo: (p: "hobby" | "pro") => string }) {
         >
           <div className="flex items-baseline justify-between gap-2">
             <div>
-              <p className={highlight ? "font-bold text-accent" : "font-bold"}>
-                {name}
-                {highlight && (
-                  <span className="ml-2 rounded-full border border-accent/40 px-2 py-0.5 text-2xs text-accent">
-                    Most popular
-                  </span>
-                )}
-              </p>
+              <p className={highlight ? "font-bold text-accent" : "font-bold"}>{name}</p>
               <p className="text-xs text-muted">{tagline}</p>
             </div>
             <p className="tnum text-base font-bold">{price}</p>
@@ -315,12 +308,7 @@ export function PricingSection({ phoneCards = true }: { phoneCards?: boolean }) 
                 </span>
               </Th>
               <Th className="border-x border-x-accent/25 bg-accent/10">
-                <span className="inline-flex items-center gap-2 text-accent">
-                  Pro
-                  <span className="rounded-full border border-accent/40 px-2 py-0.5 text-2xs text-accent">
-                    Most popular
-                  </span>
-                </span>
+                <span className="text-accent">Pro</span>
                 <span className="mt-0.5 block normal-case tracking-normal text-accent">
                   For brands & growing teams
                 </span>
@@ -763,16 +751,10 @@ function InboxMail({
  * so the next thought is "that URL is not mine". This answers it straight
  * away rather than three sections later.
  *
- * It argues by showing the link where it is actually read, on somebody
- * else's phone, next to a decision about whether to tap it. An earlier
- * version put the two URLs side by side and asserted the difference, which
- * argued about our branding instead of their result.
- *
- * SMS on purpose: it is the one place where shortening is forced rather than
- * chosen, since the message is charged by the character, and it is where
- * people distrust short links most, because it is where the scams are. An
- * order-tracking link would be wrong here, since those come out of a
- * shipping platform on their own and nobody shortens one by hand.
+ * It argues by showing the link where it is actually read, in somebody's
+ * inbox, next to a decision about whether to open it. An earlier version put
+ * the two URLs side by side and asserted the difference, which argued about
+ * our branding instead of their result.
  */
 function CustomDomainSection() {
   const paidTo = usePaidPlanTo();
@@ -1227,8 +1209,8 @@ function FinalCtaSection({ ctaTo, ctaLabel }: { ctaTo: string; ctaLabel: string 
           Start shortening in seconds.
         </h2>
         <p className="max-w-md text-sm text-muted">
-          Create your first short link on the free plan. No credit card, no visitor tracking, no
-          servers to run.
+          Create your first short link on the free plan. No credit card, no IP addresses, no servers
+          to run.
         </p>
         <HrefLink
           href={ctaTo}
@@ -1313,17 +1295,7 @@ function PricingTeaser() {
             )}
           >
             <div>
-              {/* Same pill as the full table and the mobile plan cards. The
-                  homepage is where the steering is worth most, and it was the
-                  one of the three missing it. */}
-              <p className={highlight ? "font-bold text-accent" : "font-bold"}>
-                {name}
-                {highlight && (
-                  <span className="ml-2 rounded-full border border-accent/40 px-2 py-0.5 text-2xs text-accent">
-                    Most popular
-                  </span>
-                )}
-              </p>
+              <p className={highlight ? "font-bold text-accent" : "font-bold"}>{name}</p>
               <p className="tnum mt-1 text-2xl font-bold">{price}</p>
               <p className="mt-1 text-sm text-muted">{pitch}</p>
             </div>
