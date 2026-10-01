@@ -236,7 +236,14 @@ function MobilePlans({ paidTo }: { paidTo: (p: "hobby" | "pro") => string }) {
         >
           <div className="flex items-baseline justify-between gap-2">
             <div>
-              <p className={highlight ? "font-bold text-accent" : "font-bold"}>{name}</p>
+              <p className={highlight ? "font-bold text-accent" : "font-bold"}>
+                {name}
+                {highlight && (
+                  <span className="ml-2 rounded-full border border-accent/40 px-2 py-0.5 text-2xs text-accent">
+                    Best value
+                  </span>
+                )}
+              </p>
               <p className="text-xs text-muted">{tagline}</p>
             </div>
             <p className="tnum text-base font-bold">{price}</p>
@@ -308,7 +315,14 @@ export function PricingSection({ phoneCards = true }: { phoneCards?: boolean }) 
                 </span>
               </Th>
               <Th className="border-x border-x-accent/25 bg-accent/10">
-                <span className="text-accent">Pro</span>
+                {/* "Best value", not "Most popular": per link Pro costs about a
+                    third of Hobby, which the limits table backs. */}
+                <span className="inline-flex items-center gap-2 text-accent">
+                  Pro
+                  <span className="rounded-full border border-accent/40 px-2 py-0.5 text-2xs text-accent">
+                    Best value
+                  </span>
+                </span>
                 <span className="mt-0.5 block normal-case tracking-normal text-accent">
                   For brands & growing teams
                 </span>
@@ -1295,7 +1309,14 @@ function PricingTeaser() {
             )}
           >
             <div>
-              <p className={highlight ? "font-bold text-accent" : "font-bold"}>{name}</p>
+              <p className={highlight ? "font-bold text-accent" : "font-bold"}>
+                {name}
+                {highlight && (
+                  <span className="ml-2 rounded-full border border-accent/40 px-2 py-0.5 text-2xs text-accent">
+                    Best value
+                  </span>
+                )}
+              </p>
               <p className="tnum mt-1 text-2xl font-bold">{price}</p>
               <p className="mt-1 text-sm text-muted">{pitch}</p>
             </div>

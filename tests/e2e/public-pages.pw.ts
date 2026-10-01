@@ -59,7 +59,9 @@ test("the homepage teases three prices and points at the full comparison", async
   await expect(teaser).not.toContainText(/self-hosted/i);
   await expect(teaser.getByText("Free", { exact: true })).toBeVisible();
   await expect(teaser.getByText("Hobby", { exact: true })).toBeVisible();
-  // No "Most popular" pill: it would be a claim we cannot back.
+  // "Best value", which the limits back; never "Most popular", which
+  // nothing does.
+  await expect(teaser.getByText("Best value")).toBeVisible();
   await expect(teaser.getByText("Most popular")).toHaveCount(0);
   await expect(teaser.locator("table")).toHaveCount(0);
 
