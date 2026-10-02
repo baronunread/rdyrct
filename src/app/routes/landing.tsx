@@ -1486,8 +1486,16 @@ export function LandingPage() {
             }}
           />
 
+          {/* First focusable thing on the page, so a keyboard user can jump
+              past the header nav. Hidden until it takes focus. */}
+          <a
+            href="#main"
+            className="sr-only rounded-md bg-surface px-3 py-2 text-sm focus:not-sr-only focus:absolute focus:top-3 focus:left-6 focus:z-50 focus:outline-2 focus:outline-accent"
+          >
+            Skip to content
+          </a>
           <LandingHeader authed={authed} />
-          <main>
+          <main id="main">
             <HeroSection ctaTo={ctaTo} ctaLabel={ctaLabel} authed={authed} name={name} />
             <CustomDomainSection />
             <HowItWorksSection />

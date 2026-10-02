@@ -480,3 +480,19 @@ test("public pages point at their machine-readable description", async ({ reques
   const dashboard = await request.get("/dashboard");
   expect(dashboard.headers()["link"] ?? "").toBe("");
 });
+
+// A keyboard user's first Tab on the homepage lands on a way past the header,
+// and following it puts them in the main landmark rather than on the nav.
+test("the homepage's first Tab is a skip link into main", async ({ page }) => {
+  await page.goto("/");
+  await expect(page.getByRole("heading", { level: 1 }).first()).toBeVisible();
+
+  await page.keyboard.press("Tab");
+  const skip = page.getByRole("link", { name: "Skip to content" });
+  await expect(skip).toBeFocused();
+  await expect(skip).toBeVisible();
+
+  await page.keyboard.press("Enter");
+  await expect(page).toHaveURL(/#main$/);
+  await expect(page.getByRole("main")).toHaveAttribute("id", "main");
+});

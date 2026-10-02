@@ -87,3 +87,44 @@ test("the quoted price is the price this app charges", () => {
   expect(offers.lowPrice, "the free plan is the bottom of the range").toBe("0");
   expect(offers.priceCurrency).toBe("USD");
 });
+
+const FaqPage = v.object({
+  "@context": v.literal("https://schema.org"),
+  "@type": v.literal("FAQPage"),
+  mainEntity: v.array(
+    v.object({
+      "@type": v.literal("Question"),
+      name: v.string(),
+      acceptedAnswer: v.object({ "@type": v.literal("Answer"), text: v.string() }),
+    }),
+  ),
+});
+
+/** Tags stripped, whitespace collapsed: what a reader of the fallback sees. */
+function plain(html: string) {
+  return html
+    .replace(/<[^>]+>/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/**
+ * The crawler fallback in #root carries its FAQ as FAQPage too, and markup
+ * that says something the page does not is worse than none. Every question
+ * and answer in the block has to be an h3 and the paragraph under it.
+ */
+test("the fallback's FAQPage says what the fallback's FAQ says", () => {
+  const html = readFileSync("index.html", "utf8");
+  const block = html.match(/<script type="application\/ld\+json" id="faq">([\s\S]*?)<\/script>/);
+  expect(block, "index.html should carry the fallback FAQ block").not.toBeNull();
+  const { mainEntity } = v.parse(FaqPage, JSON.parse(block?.[1] ?? ""));
+
+  const faq = html.slice(html.indexOf("<h2>Frequently asked questions</h2>"));
+  const visible = [...faq.matchAll(/<h3>([\s\S]*?)<\/h3>\s*<p>([\s\S]*?)<\/p>/g)].map(
+    ([, q, a]) => ({ q: plain(q), a: plain(a) }),
+  );
+
+  expect(
+    mainEntity.map(({ name, acceptedAnswer }) => ({ q: name, a: acceptedAnswer.text })),
+  ).toEqual(visible);
+});
