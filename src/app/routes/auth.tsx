@@ -225,6 +225,14 @@ function SignupSubtitle({ next }: { next: string }) {
   return <p className="-mt-2 text-xs text-muted">{body}</p>;
 }
 
+/** Step 3a (#64), once per mount of the signup form. */
+function SignupViewed() {
+  useEffect(() => {
+    posthog.capture(FUNNEL.signupViewed);
+  }, []);
+  return null;
+}
+
 function PasswordHint({
   mode,
   password,
@@ -328,11 +336,8 @@ function AuthFormView({
   // Read once on mount: a returning visitor who last signed in with Google
   // gets a one-click "continue as you" row.
   const [lastUsed] = useState(lastAuth);
-  // Steps 3a and 3b (#64): what separates "reached the form" from "typed in
-  // it" from "submitted it". Signup only; the login form is not a funnel.
-  useEffect(() => {
-    if (mode === "signup") posthog.capture(FUNNEL.signupViewed);
-  }, [mode]);
+  // Step 3b (#64): what separates "reached the form" from "typed in it".
+  // Signup only; the login form is not a funnel.
   const started = useRef(false);
   const onInput = () => {
     if (mode === "signup" && !started.current) {
@@ -380,6 +385,7 @@ function AuthFormView({
       >
         <h1 className="font-bold">{copy.title}</h1>
         {mode === "signup" && <SignupSubtitle next={next} />}
+        {mode === "signup" && <SignupViewed />}
         {config.data?.googleEnabled && (
           <>
             <GoogleEntry
