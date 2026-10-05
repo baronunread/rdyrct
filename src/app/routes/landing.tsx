@@ -281,7 +281,7 @@ function MobilePlans({ paidTo }: { paidTo: (p: "hobby" | "pro") => string }) {
  * second table that could drift from this one.
  *
  * No heading of its own: the page that renders this owns the page-level
- * "Simple pricing" h1 and subtitle immediately above it (see PricingPage),
+ * h1 and subtitle immediately above it (see PricingPage),
  * and this used to repeat both, word for word, right under them.
  */
 /** The full plan table. On a phone it is stacked cards, unless the page

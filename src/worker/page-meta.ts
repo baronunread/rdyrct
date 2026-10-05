@@ -17,8 +17,9 @@
  * Only the public routes are listed. Everything behind the login can keep the
  * default: it wants no traffic from a search engine.
  */
-import { PUBLIC_PAGE_META } from "@/shared/page-meta";
+import { PUBLIC_PAGE_META, type PageMeta } from "@/shared/page-meta";
 import { lookup } from "../shared/lookup";
+import { marked } from "marked";
 
 /** The absolute URL a page should call canonical, on whichever host is
  * serving it. */
@@ -37,6 +38,13 @@ class Href {
   constructor(private readonly value: string) {}
   element(element: Element) {
     element.setAttribute("href", this.value);
+  }
+}
+
+class Html {
+  constructor(private readonly value: string) {}
+  element(element: Element) {
+    element.setInnerContent(this.value, { html: true });
   }
 }
 
@@ -132,6 +140,31 @@ export function markdownPage(url: URL, accept: string | null | undefined): Respo
   );
 }
 
+/** The same links index.html's fallback ends on, so every page a crawler
+ * reads still leads to the others. */
+const FALLBACK_NAV = `<nav aria-label="Footer"><a href="/">Home</a> <a href="/pricing">Pricing</a> <a href="/docs">API and MCP docs</a> <a href="/qr-code-generator">QR code generator</a> <a href="/roadmap">Roadmap</a> <a href="/privacy">Privacy policy</a> <a href="/terms">Terms of service</a> <a href="/signup">Sign up</a></nav>`;
+
+/**
+ * What a client that never runs JavaScript reads in this page's body.
+ *
+ * index.html carries the homepage's copy, so without this /pricing served
+ * the homepage's H1 and text to every crawler, link preview and AI fetcher:
+ * the same body on every URL, and nothing on the pricing page about prices.
+ * The page's own Markdown goes in its place, or its title and description
+ * when it has none. Clipped like the original, so screen readers still reach
+ * it until React replaces it.
+ */
+function crawlerBody(meta: PageMeta, url: URL): string {
+  // Our own copy from src/shared/page-meta.ts, never user input, so marked's
+  // pass-through of raw HTML is not a way in.
+  const markdown = (meta.markdown ?? `# ${meta.title}\n\n${meta.description}`).replaceAll(
+    "{{MCP_URL}}",
+    canonicalFor(url, "/api/mcp"),
+  );
+  const content = marked.parse(markdown, { async: false });
+  return `<div style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%)">${content}${FALLBACK_NAV}</div>`;
+}
+
 /**
  * Rewrites the head of an HTML response for `path`, or returns it untouched
  * when the path is not a page we describe.
@@ -147,7 +180,11 @@ export function withPageMeta(response: Response, url: URL): Response {
   const canonical = canonicalFor(url, url.pathname);
   const described = new Response(response.body, response);
   described.headers.set("Link", LINK_HEADER);
-  const rewritten = new HTMLRewriter()
+  const rewriter = new HTMLRewriter();
+  // The homepage keeps index.html's hand-written fallback, which says more
+  // than its Markdown does.
+  if (url.pathname !== "/") rewriter.on("#root", new Html(crawlerBody(meta, url)));
+  const rewritten = rewriter
     .on("title", new Text(meta.title))
     .on('meta[name="description"]', new MetaContent(meta.description))
     .on('meta[property="og:title"]', new MetaContent(meta.title))

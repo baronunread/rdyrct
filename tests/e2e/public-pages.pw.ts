@@ -134,7 +134,9 @@ test("the header is on screen before the homepage chunk arrives", async ({ page 
 test("the standalone pricing page has the full table and no self-host pitch", async ({ page }) => {
   await page.goto("/pricing");
 
-  await expect(page.getByRole("heading", { level: 1, name: /simple pricing/i })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { level: 1, name: /URL shortener pricing/i }),
+  ).toBeVisible();
   const headers = page.locator("#pricing thead th");
   await expect(headers).toHaveCount(4);
   await expect(headers.nth(2)).toContainText("Hobby");

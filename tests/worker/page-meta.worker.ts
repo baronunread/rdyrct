@@ -133,3 +133,40 @@ describe("the Markdown representation", () => {
     expect(response.headers.get("Vary")).toBe("Accept");
   });
 });
+
+// What a crawler, a link preview or an AI fetcher reads without running the
+// app. index.html carries the homepage's copy, so before this /pricing served
+// the homepage's H1 to all of them.
+describe("the body a page ships before JavaScript", () => {
+  const withRoot = () =>
+    new Response(
+      SHELL.replace("<body></body>", '<body><div id="root"><h1>Homepage copy</h1></div></body>'),
+      { headers: { "content-type": "text/html; charset=utf-8" } },
+    );
+  const body = (path: string) =>
+    withPageMeta(withRoot(), new URL(`https://rdyrct.com${path}`)).text();
+
+  it("gives the pricing page its own copy in place of the homepage's", async () => {
+    const html = await body("/pricing");
+    expect(html).not.toContain("Homepage copy");
+    expect(html).toContain("<h1>rdyrct pricing</h1>");
+    expect(html).toContain("<h2>Hobby: $4/month</h2>");
+    expect(html).toContain('<a href="/signup">Sign up free</a>');
+  });
+
+  it("fills in the MCP address on the docs page", async () => {
+    const html = await body("/docs");
+    expect(html).toContain("https://rdyrct.com/api/mcp");
+    expect(html).not.toContain("{{MCP_URL}}");
+  });
+
+  it("falls back to the title and description where a page has no Markdown", async () => {
+    const html = await body("/roadmap");
+    expect(html).not.toContain("Homepage copy");
+    expect(html).toContain("<h1>URL shortener roadmap - what rdyrct is building next</h1>");
+  });
+
+  it("leaves the homepage's hand-written fallback alone", async () => {
+    expect(await body("/")).toContain("Homepage copy");
+  });
+});
