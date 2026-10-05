@@ -32,7 +32,7 @@ import { revalidateOnRedirect } from "./risk";
 import { sweepAbusiveOrgs } from "./abuse";
 import { evlogMiddleware } from "./evlog";
 import { sweepGraceWarnings } from "./reconcile";
-import { countAnonClick, shortenRoutes, sweepExpiredAnonLinks } from "./routes/shorten";
+import { shortenRoutes, sweepExpiredAnonLinks } from "./routes/shorten";
 import { resolveSlug, resolveDomain, domainServing, type KVLink } from "./kv";
 import { RESERVED_SLUGS } from "./util";
 import { markdownPage, withPageMeta } from "./page-meta";
@@ -49,7 +49,7 @@ import {
   type StorageMessage,
 } from "./storage";
 
-import { enqueueClick, sweepDedupeIds } from "./clicks";
+import { countAnonClick, enqueueClick, sweepDedupeIds } from "./clicks";
 
 export { OrgDeleteWorkflow, DomainActivateWorkflow } from "./workflows";
 export { ClickBuffer } from "./click-buffer";

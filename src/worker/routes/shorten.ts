@@ -22,7 +22,7 @@ import type { JsonValue } from "../../shared/types";
 import { optionalText, parseOptionalBody } from "../schemas";
 import * as v from "valibot";
 import { HTTPException } from "hono/http-exception";
-import { and, eq, isNull, lt, sql } from "drizzle-orm";
+import { and, eq, isNull, lt } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import * as schema from "../db/schema";
 import type { AppEnv, Env } from "../env";
@@ -33,7 +33,7 @@ import { scoreAndRecord } from "../risk";
 import { spendToken } from "../cap";
 import { CAP_FAILED_CODE } from "@/shared/types";
 import { isValidHttpUrl, normalizeUrl, randomSlug, uid } from "../util";
-import { clickAnalyticsAllowed, publicClientKey, rateLimitAllows } from "../rate-limit";
+import { publicClientKey, rateLimitAllows } from "../rate-limit";
 import { insertLinkWithinLimit, orgPlan } from "../plan";
 
 /** How long an unclaimed link keeps working. */
@@ -156,23 +156,6 @@ shortenRoutes.get("/clicks", async (c) => {
     throw new HTTPException(404, { message: "No such link" });
   return c.json({ clicks: row.clicks });
 });
-
-/**
- * Adds one to an anonymous link's total. Best-effort, after the redirect is
- * sent, and through the same per-key limiter real clicks pass, so somebody
- * reloading their own link in a loop costs a bounded number of writes.
- */
-export async function countAnonClick(env: Env, id: string, method: string): Promise<void> {
-  try {
-    if (!(await clickAnalyticsAllowed(env, `anon:${id}`, method))) return;
-    await drizzle(env.DB, { schema })
-      .update(schema.anonLinks)
-      .set({ clicks: sql`${schema.anonLinks.clicks} + 1` })
-      .where(eq(schema.anonLinks.id, id));
-  } catch {
-    // A lost count on a 24-hour link is not worth failing anything over.
-  }
-}
 
 /**
  * Scores an anonymous destination, reusing the link scorer's write shape.

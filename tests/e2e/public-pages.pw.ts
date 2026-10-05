@@ -277,7 +277,7 @@ test("the second screen argues with two messages, not two URLs (#96)", async ({ 
   // The point is made by showing the link where it is read. If this ever
   // becomes two URLs side by side again, it is back to asserting instead of
   // showing.
-  await expect(page.getByText(/click links they recognize/i)).toBeVisible();
+  await expect(page.getByText(/on your own domain get clicked/i)).toBeVisible();
   await expect(page.getByText("Doesn't match the sender")).toBeVisible();
   await expect(page.getByText("Matches the sender")).toBeVisible();
   await expect(page.getByRole("link", { name: /Connect your domain/i })).toBeVisible();
@@ -285,7 +285,7 @@ test("the second screen argues with two messages, not two URLs (#96)", async ({ 
   // Sold on recognition, the way every competitor sells it, not by making
   // somebody picture being taken for a scammer. Bitly sells against a
   // generic shortener domain and still never says the word.
-  const section = page.locator("section").filter({ hasText: /click links they recognize/i });
+  const section = page.locator("section").filter({ hasText: /on your own domain get clicked/i });
   await expect(section).not.toContainText(/scam|spam|fraud/i);
 });
 
