@@ -175,6 +175,10 @@ function isLive(hit: KVLink): boolean {
  *
  * Only a string that could be a slug reaches D1. Scanners asking for
  * /wp-login.php or /.env, and favicon variants, stop at the pattern.
+ *
+ * A D1 error is a miss, not a 500: the redirect path worked on KV alone
+ * before this fallback, and a D1 outage must not turn every unknown slug
+ * into a server error. The error is logged on the request's event.
  */
 async function resolveLink(
   c: Context<AppEnv>,
@@ -183,7 +187,12 @@ async function resolveLink(
 ): Promise<KVLink | null> {
   const hit = await resolveSlug(c.env, slug, hostname);
   if (hit || !SLUG_RE.test(slug)) return hit;
-  return desiredLink(drizzle(c.env.DB, { schema }), slug, hostname);
+  try {
+    return await desiredLink(drizzle(c.env.DB, { schema }), slug, hostname);
+  } catch (error) {
+    c.get("log")?.error(error instanceof Error ? error : String(error));
+    return null;
+  }
 }
 
 // Redirect-only, same as a custom domain: no API, no SPA. SHARED_LINK_HOST

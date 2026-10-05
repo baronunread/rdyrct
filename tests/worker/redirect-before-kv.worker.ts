@@ -93,6 +93,18 @@ describe("a miss", () => {
     expect((await follow("http://localhost/nobodys1")).status).toBe(404);
   });
 
+  // D1 down must not turn every unknown slug into a 500: the redirect path
+  // answered from KV alone before the fallback existed.
+  it("is a 404, not a 500, when D1 fails", async () => {
+    const DB = overriding(env.DB, {
+      prepare: () => {
+        throw new Error("D1 unavailable");
+      },
+    });
+    const res = await follow(`http://${SHARED_HOST}/nobodys2`, overrideEnv({ ...authEnv(), DB }));
+    expect(res.status).toBe(404);
+  });
+
   // Scanners ask for these by the thousand. None can be a slug, so none
   // costs a D1 read: a database that throws on use proves it was not asked.
   it("never reads D1 for a path that cannot be a slug", async () => {
