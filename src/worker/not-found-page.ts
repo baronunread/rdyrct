@@ -1,42 +1,39 @@
 /**
  * The 404 a short-link host answers with: rdyr.cc and customers' custom
- * domains, which are redirect-only and so never boot the app.
+ * domains, which are redirect-only and never boot the app.
  *
- * It used to be the plain text "Not found", while rdyrct.com showed the
- * app's styled page for the same miss. This is that page, drawn without the
- * app: inline styles (the CSP allows them), the design tokens for both
- * themes, no script and no request of its own.
+ * It is the app's own 404 (NotFoundView), rendered into the built
+ * index.html at build time by scripts/prerender-404.tsx, so it carries the
+ * app's stylesheet, font and theme script. Here it only gets its link: back
+ * to rdyrct on rdyr.cc, none on a customer's own domain, where a pointer to
+ * rdyrct would be our brand on their miss.
  *
- * On a custom domain it names nobody: the visitor followed the customer's
- * link, and a pointer to rdyrct there would be our brand on their miss.
+ * Without the prerendered file (dev, the worker tests) the asset store
+ * answers with the app shell instead; that is caught and replaced with a
+ * plain 404 rather than booting the app on a redirect-only host.
  */
 
-// The light and dark tokens from src/app/styles.css.
-const STYLE = `
-:root { color-scheme: light dark; --bg: #f7f4ef; --text: #2a2733; --muted: #544f61; --accent: #745ab8; }
-@media (prefers-color-scheme: dark) {
-  :root { --bg: #17151f; --text: #eae7f2; --muted: #c6c2d3; --accent: #cdb9f5; }
-}
-* { margin: 0; }
-body {
-  min-height: 100dvh; display: grid; place-items: center; padding: 0 16px;
-  background: var(--bg); color: var(--text); text-align: center;
-  font: 16px/1.5 Figtree, system-ui, -apple-system, "Segoe UI", sans-serif;
-}
-.code { font-size: 2.25rem; font-weight: 700; color: var(--accent); }
-p { margin-top: 0.5rem; font-size: 0.875rem; color: var(--muted); }
-a { display: inline-block; margin-top: 1rem; font-size: 0.875rem; color: var(--accent); }
-`;
+const HEADERS = {
+  "content-type": "text/html; charset=utf-8",
+  // A miss today can be a link tomorrow: never let a cache keep it.
+  "cache-control": "no-store",
+};
 
-export function notFoundPage(home: string | null): Response {
-  const link = home ? `<a href="${home}">Go to rdyrct</a>` : "";
-  const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex"><title>Not found</title><style>${STYLE}</style></head><body><main><div class="code">404</div><p>This short link does not exist (or the page moved).</p>${link}</main></body></html>`;
-  return new Response(html, {
-    status: 404,
-    headers: {
-      "content-type": "text/html; charset=utf-8",
-      // A miss today can be a link tomorrow: never let a cache keep it.
-      "cache-control": "no-store",
+export async function notFoundPage(
+  assets: Fetcher,
+  requestUrl: string,
+  home: string | null,
+): Promise<Response> {
+  const page = await assets.fetch(new Request(new URL("/404-short", requestUrl)));
+  const html = page.ok ? await page.text() : "";
+  if (!html.includes('data-page="404-short"')) {
+    return new Response("Not found", { status: 404, headers: { "cache-control": "no-store" } });
+  }
+  const link = new HTMLRewriter().on("#root a", {
+    element(element) {
+      if (home) element.setAttribute("href", home);
+      else element.remove();
     },
   });
+  return link.transform(new Response(html, { status: 404, headers: HEADERS }));
 }

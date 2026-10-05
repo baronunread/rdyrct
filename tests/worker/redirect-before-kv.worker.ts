@@ -147,6 +147,24 @@ describe("the page a short-link host 404s with", () => {
     expect(res.status).toBe(404);
     const html = await res.text();
     expect(html).toContain("This short link does not exist");
-    expect(html).not.toContain("rdyrct");
+    expect(html).not.toContain("Go home");
+  });
+
+  // Dev and any build that skipped the prerender step have no such file, and
+  // the asset store answers with the app shell. That must not boot the app
+  // on a redirect-only host: it becomes a plain 404.
+  it("falls back to a plain 404 when the page was never built", async () => {
+    const ASSETS = overriding(authEnv().ASSETS, {
+      fetch: async () =>
+        new Response('<!doctype html><div id="root"></div>', {
+          headers: { "content-type": "text/html" },
+        }),
+    });
+    const res = await follow(
+      `http://${SHARED_HOST}/nobodys5`,
+      overrideEnv({ ...authEnv(), ASSETS }),
+    );
+    expect(res.status).toBe(404);
+    expect(await res.text()).toBe("Not found");
   });
 });

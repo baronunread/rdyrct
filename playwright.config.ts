@@ -77,7 +77,7 @@ export default defineConfig({
       // Vite's inline React Refresh preamble, so only this one serves the
       // policy that actually ships. The build is part of the command so the
       // suite can never assert against a stale dist/.
-      command: `bunx vite build && bunx vite preview --port ${previewPort} --strictPort`,
+      command: `bun run build && bunx vite preview --port ${previewPort} --strictPort`,
       url: previewUrl,
       reuseExistingServer: false,
       timeout: 180_000,

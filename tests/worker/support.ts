@@ -23,13 +23,22 @@ import { hashPassword } from "../../src/worker/password";
  */
 const SPA_SHELL = `<!doctype html><html><head><title>rdyrct - branded short links for your team</title></head><body><div id="root"></div></body></html>`;
 
-// The worker reaches this binding through exactly one call, serveSpa's
-// `c.env.ASSETS.fetch` in src/worker/index.ts. `connect` is here because
+/** What `bun run build` writes to 404-short.html (scripts/prerender-404.tsx),
+ * cut down to the parts the Worker reads: the marker and the link. */
+const SHORT_404 = `<!doctype html><html><head><title>Not found</title></head><body data-page="404-short"><div id="root"><p>This short link does not exist (or the page moved).</p><p><a href="/">Go home</a></p></div></body></html>`;
+
+// The worker reaches this binding through serveSpa's `c.env.ASSETS.fetch`
+// in src/worker/index.ts, and for the short-host 404. `connect` is here because
 // Fetcher declares it, and it throws rather than returning something: nothing
 // opens a socket to the asset bundle, so a caller that got here is lost.
 const stubAssets: Fetcher = {
-  fetch: async () =>
-    new Response(SPA_SHELL, { headers: { "content-type": "text/html; charset=utf-8" } }),
+  fetch: async (input) =>
+    new Response(
+      new URL(new Request(input).url).pathname === "/404-short" ? SHORT_404 : SPA_SHELL,
+      {
+        headers: { "content-type": "text/html; charset=utf-8" },
+      },
+    ),
   connect: () => {
     throw new Error("ASSETS.connect: the asset bundle serves requests, not sockets");
   },

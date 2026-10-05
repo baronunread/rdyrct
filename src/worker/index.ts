@@ -209,7 +209,7 @@ async function resolveSharedLinkHost(c: Context<AppEnv>): Promise<Response> {
     const hit = await resolveLink(c, slug, null);
     if (hit && isLive(hit)) return redirectWithClick(c, hit);
   }
-  return notFoundPage(c.env.APP_URL);
+  return notFoundPage(c.env.ASSETS, c.req.url, c.env.APP_URL);
 }
 
 // Custom domains (Cloudflare for SaaS) are redirect-only: no API, no SPA.
@@ -225,7 +225,7 @@ app.use("*", async (c, next) => {
   // deadline is in the value (#159). A 404 rather than a page explaining the
   // downgrade, because most of what reaches a dead short link is a machine,
   // and an honest 404 is the answer a machine can act on.
-  if (!domainServing(domain)) return notFoundPage(null);
+  if (!domainServing(domain)) return notFoundPage(c.env.ASSETS, c.req.url, null);
 
   const path = new URL(c.req.url).pathname;
   // This middleware is a dead end for a host it owns: it never calls next(),
@@ -239,7 +239,7 @@ app.use("*", async (c, next) => {
   }
   // root and misses land on the org's configured root redirect
   if (domain.rootRedirect) return c.redirect(domain.rootRedirect, 302);
-  return notFoundPage(null);
+  return notFoundPage(c.env.ASSETS, c.req.url, null);
 });
 
 // A trailing slash on a GET (`/abc/`) fell through the shared-domain slug

@@ -154,7 +154,15 @@ const FALLBACK_NAV = `<nav aria-label="Footer"><a href="/">Home</a> <a href="/pr
  * when it has none. Clipped like the original, so screen readers still reach
  * it until React replaces it.
  */
+/** Each page's copy as HTML, converted once per isolate: it only changes
+ * with a deploy, and a deploy starts fresh isolates. Keyed by the page and
+ * the origin, the one part that varies (the MCP address on /docs). */
+const crawlerBodies = new Map<string, string>();
+
 function crawlerBody(meta: PageMeta, url: URL): string {
+  const key = `${url.origin}${url.pathname}`;
+  const cached = crawlerBodies.get(key);
+  if (cached) return cached;
   // Our own copy from src/shared/page-meta.ts, never user input, so marked's
   // pass-through of raw HTML is not a way in.
   const markdown = (meta.markdown ?? `# ${meta.title}\n\n${meta.description}`).replaceAll(
@@ -162,7 +170,9 @@ function crawlerBody(meta: PageMeta, url: URL): string {
     canonicalFor(url, "/api/mcp"),
   );
   const content = marked.parse(markdown, { async: false });
-  return `<div style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%)">${content}${FALLBACK_NAV}</div>`;
+  const body = `<div style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%)">${content}${FALLBACK_NAV}</div>`;
+  crawlerBodies.set(key, body);
+  return body;
 }
 
 /**
