@@ -133,6 +133,13 @@ export function overriding<T extends object>(target: T, overrides: Partial<T>): 
       const value = actual[key];
       return value instanceof Function ? value.bind(actual) : value;
     },
+    // A write lands on the view, never on the real binding. Sentry's D1
+    // instrumentation assigns a wrapped `prepare` onto whatever env.DB it is
+    // handed; without this trap that assignment went through to the shared
+    // binding and every later test in the file read the broken override.
+    set(_actual, property, value) {
+      return Reflect.set(overrides, property, value);
+    },
   });
 }
 
