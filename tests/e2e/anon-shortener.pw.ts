@@ -43,7 +43,10 @@ test("a visitor with no account gets a working short link", async ({ page }) => 
   expect(response.headers()["location"]).toBe(destination);
 });
 
-test("an anonymous link records no clicks, which is what signing up buys", async ({ page }) => {
+// A running total is the reason to come back and keep the link; where the
+// clicks came from is what signing up buys. So the hero shows the count, and
+// the clicks table still holds nothing for a link with no org.
+test("an anonymous link shows its click total but records no click details", async ({ page }) => {
   const destination = `https://example.com/anon-clicks-${Date.now()}`;
   const shortUrl = await shorten(page, destination);
   const slug = shortUrl.split("/").pop()!;
@@ -60,6 +63,10 @@ test("an anonymous link records no clicks, which is what signing up buys", async
     "select count(*) as n from clicks where link_id not in (select id from links)",
   );
   expect(Number(clicks[0].n)).toBe(0);
+
+  // The stored link comes back on reload, and its count with it.
+  await page.reload();
+  await expect(page.getByText("1 click so far.")).toBeVisible({ timeout: 15_000 });
 });
 
 test("signing up keeps the link that was made before the account (#65)", async ({ page }) => {

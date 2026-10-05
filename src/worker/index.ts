@@ -32,7 +32,7 @@ import { revalidateOnRedirect } from "./risk";
 import { sweepAbusiveOrgs } from "./abuse";
 import { evlogMiddleware } from "./evlog";
 import { sweepGraceWarnings } from "./reconcile";
-import { shortenRoutes, sweepExpiredAnonLinks } from "./routes/shorten";
+import { countAnonClick, shortenRoutes, sweepExpiredAnonLinks } from "./routes/shorten";
 import { resolveSlug, resolveDomain, domainServing, type KVLink } from "./kv";
 import { RESERVED_SLUGS } from "./util";
 import { markdownPage, withPageMeta } from "./page-meta";
@@ -138,11 +138,13 @@ app.use("*", async (c, next) => {
 // (waitUntil): the request enqueues an event and returns rather than
 // touching D1 itself. See clicks.ts.
 function redirectWithClick(c: Context<AppEnv>, hit: KVLink): Response {
-  // An anonymous link (Direction A of #96) has no org and no links row, so
-  // there is nothing for a click to belong to and no owner who could ever
-  // read it. Skipping the write is also the honest version of the pitch:
-  // analytics is what signing up buys.
-  if (hit.orgId) c.executionCtx.waitUntil(enqueueClick(c, hit));
+  // An anonymous link (Direction A of #96) has no org and no links row, so it
+  // gets a bare total and nothing else: enough for "3 clicks so far" to give
+  // its maker a reason to come back, while where they came from stays what
+  // signing up buys.
+  c.executionCtx.waitUntil(
+    hit.orgId ? enqueueClick(c, hit) : countAnonClick(c.env, hit.linkId, c.req.method),
+  );
   // Re-check the destination if its verdict has gone stale (#68). After the
   // redirect is sent, so it costs the person clicking nothing, and only for
   // hosts nobody has checked in the last day.

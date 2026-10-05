@@ -11,6 +11,7 @@ import { X } from "../ui/icons";
 import { buttonClass } from "../ui/button-class";
 import { HrefLink } from "../lib/router-search";
 import { trackCta } from "../lib/track-cta";
+import { clicksLabel, useAnonClicks } from "../lib/shorten-anon";
 import {
   anonLinksSnapshot,
   storedAnonLinks,
@@ -78,6 +79,7 @@ function useLiveLink(link: StoredAnonLink | undefined) {
 export function AnonLinkBar() {
   const [hidden, setHidden] = useState(false);
   const live = useLiveLink(useVisibleLink(hidden));
+  const clicks = useAnonClicks(live?.link);
   if (!live) return null;
   const { link, now } = live;
   return (
@@ -89,6 +91,7 @@ export function AnonLinkBar() {
       <span className="min-w-0 truncate font-mono font-bold">
         {link.url.replace(/^https?:\/\//, "")}
       </span>
+      {clicks ? <span className="tnum shrink-0 font-bold">{clicksLabel(clicks)}</span> : null}
       <span className="tnum hidden shrink-0 opacity-80 sm:inline">
         {timeLeft(link.expiresAt - now)} left
       </span>
