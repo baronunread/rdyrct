@@ -470,6 +470,37 @@ export function captureStorageQueue() {
   return { queue: stubQueue<StorageMessage>((m) => sent.push(m)), sent };
 }
 
+/**
+ * Every storage follow-up a mutation produced, whichever path ran it: a KV
+ * key written in the request (a small batch of link syncs) or a message the
+ * queue was handed (R2 work, bulk syncs, failed writes). Both land in `sent`
+ * as messages, so a test asserts which keys were resynced, not how.
+ */
+export function captureStorage() {
+  const { queue, sent } = captureStorageQueue();
+  const real = env.LINKS;
+  const LINKS = overriding(real, {
+    put: async (key, value, options) => {
+      sent.push({ op: "kv_sync", key });
+      return real.put(key, value, options);
+    },
+    delete: async (key) => {
+      sent.push({ op: "kv_sync", key });
+      return real.delete(key);
+    },
+  });
+  return { env: { STORAGE_QUEUE: queue, LINKS } satisfies Partial<Env>, sent };
+}
+
+/** KV whose writes fail, so a link sync cannot be applied in the request
+ * and goes to the queue instead. */
+export function failingKv(): KVNamespace {
+  const fail = async () => {
+    throw new Error("injected KV failure");
+  };
+  return overriding(env.LINKS, { put: fail, delete: fail });
+}
+
 // Builds a real MessageBatch via the official cloudflare:test helpers, so ack/
 // retry/dead-letter assertions exercise the same runtime semantics production
 // queue delivery does, rather than hand-rolled spies.

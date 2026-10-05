@@ -32,15 +32,9 @@ test("a redirect's click reaches D1 through the buffer (#225)", async ({ page })
   );
   expect(slug).toBeTruthy();
 
-  // The KV publish rides the storage queue, so the redirect is live a beat
-  // after the row exists.
-  await expect
-    .poll(async () => (await page.request.get(`/${slug}`, { maxRedirects: 0 })).status(), {
-      timeout: 15_000,
-      intervals: [500],
-    })
-    .toBe(302);
+  // KV is written in the create request, so the redirect is live at once.
   const res = await page.request.get(`/${slug}`, { maxRedirects: 0 });
+  expect(res.status()).toBe(302);
   expect(res.headers()["location"]).toBe(destination);
 
   await expect

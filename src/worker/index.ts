@@ -34,7 +34,7 @@ import { evlogMiddleware } from "./evlog";
 import { sweepGraceWarnings } from "./reconcile";
 import { shortenRoutes, sweepExpiredAnonLinks } from "./routes/shorten";
 import { resolveSlug, resolveDomain, domainServing, type KVLink } from "./kv";
-import { RESERVED_SLUGS } from "./util";
+import { RESERVED_SLUGS, SLUG_RE } from "./util";
 import { markdownPage, withPageMeta } from "./page-meta";
 import { enforcePublicAuthRateLimit, enforceSignedApiRateLimit } from "./rate-limit";
 import { applySecurityHeaders } from "./security-headers";
@@ -42,6 +42,7 @@ import { drizzle } from "drizzle-orm/d1";
 import * as schema from "./db/schema";
 import {
   consumeStorageBatch,
+  desiredLink,
   drainStorageOutbox,
   logDeadLetterBatch,
   sweepExpiredAliases,
@@ -161,6 +162,30 @@ function isLive(hit: KVLink): boolean {
   return hit.expiresAt == null || hit.expiresAt > Date.now();
 }
 
+/**
+ * The link a slug points at: KV first, then D1 when KV has no answer.
+ *
+ * Link writes reach KV in the request that makes them (see storage.ts), but
+ * KV can still say "not found" for a while: a write that failed and went to
+ * the queue, a location far from where the write landed, or a slug somebody
+ * tried before it existed, whose miss KV keeps answering for up to a minute.
+ * D1 has the row, and `desiredLink` is the same derivation that writes KV,
+ * so the answer here cannot disagree with it. Nothing is written back, and
+ * no miss is cached: Dub's redirect path does the same against Redis.
+ *
+ * Only a string that could be a slug reaches D1. Scanners asking for
+ * /wp-login.php or /.env, and favicon variants, stop at the pattern.
+ */
+async function resolveLink(
+  c: Context<AppEnv>,
+  slug: string,
+  hostname: string | null,
+): Promise<KVLink | null> {
+  const hit = await resolveSlug(c.env, slug, hostname);
+  if (hit || !SLUG_RE.test(slug)) return hit;
+  return desiredLink(drizzle(c.env.DB, { schema }), slug, hostname);
+}
+
 // Redirect-only, same as a custom domain: no API, no SPA. SHARED_LINK_HOST
 // must not fall through to the full app, or it would also serve
 // /api/auth/* and /api/cap/*, unprotected by the WAF rules that are only
@@ -171,7 +196,7 @@ async function resolveSharedLinkHost(c: Context<AppEnv>): Promise<Response> {
   // Somebody who types the bare host wants to know what it is.
   if (!slug) return c.redirect(c.env.APP_URL, 302);
   if (!slug.includes("/") && !RESERVED_SLUGS.has(slug.toLowerCase())) {
-    const hit = await resolveSlug(c.env, slug, null);
+    const hit = await resolveLink(c, slug, null);
     if (hit && isLive(hit)) return redirectWithClick(c, hit);
   }
   return c.text("Not found", 404);
@@ -199,7 +224,7 @@ app.use("*", async (c, next) => {
   // a miss and falls all the way through to the domain's root redirect.
   const slug = path.slice(1).replace(/\/+$/, "");
   if (slug && !slug.includes("/")) {
-    const hit = await resolveSlug(c.env, slug, host);
+    const hit = await resolveLink(c, slug, host);
     if (hit && isLive(hit)) return redirectWithClick(c, hit);
   }
   // root and misses land on the org's configured root redirect
@@ -442,7 +467,7 @@ app.get("/:slug", async (c, next) => {
   // Root keywords the SPA owns (/dashboard, /links, /login, …) never resolve as
   // slugs; they can't be created as slugs either, this is belt-and-suspenders.
   if (RESERVED_SLUGS.has(slug.toLowerCase())) return next();
-  const hit = await resolveSlug(c.env, slug, null);
+  const hit = await resolveLink(c, slug, null);
   if (hit && isLive(hit)) return redirectWithClick(c, hit);
   // A slug nobody registered, or one that has expired, is not a page. This
   // used to fall through to the SPA under a 200, so every mistyped or retired
