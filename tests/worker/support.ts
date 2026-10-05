@@ -133,6 +133,13 @@ export function overriding<T extends object>(target: T, overrides: Partial<T>): 
       const value = actual[key];
       return value instanceof Function ? value.bind(actual) : value;
     },
+    // A write lands on the view, never on the real binding. Sentry's D1
+    // instrumentation assigns a wrapped `prepare` onto whatever env.DB it is
+    // handed; without this trap that assignment went through to the shared
+    // binding and every later test in the file read the broken override.
+    set(_actual, property, value) {
+      return Reflect.set(overrides, property, value);
+    },
   });
 }
 
@@ -468,6 +475,37 @@ export async function addressesOf(linkId: string) {
 export function captureStorageQueue() {
   const sent: StorageMessage[] = [];
   return { queue: stubQueue<StorageMessage>((m) => sent.push(m)), sent };
+}
+
+/**
+ * Every storage follow-up a mutation produced, whichever path ran it: a KV
+ * key written in the request (a small batch of link syncs) or a message the
+ * queue was handed (R2 work, bulk syncs, failed writes). Both land in `sent`
+ * as messages, so a test asserts which keys were resynced, not how.
+ */
+export function captureStorage() {
+  const { queue, sent } = captureStorageQueue();
+  const real = env.LINKS;
+  const LINKS = overriding(real, {
+    put: async (key, value, options) => {
+      sent.push({ op: "kv_sync", key });
+      return real.put(key, value, options);
+    },
+    delete: async (key) => {
+      sent.push({ op: "kv_sync", key });
+      return real.delete(key);
+    },
+  });
+  return { env: { STORAGE_QUEUE: queue, LINKS } satisfies Partial<Env>, sent };
+}
+
+/** KV whose writes fail, so a link sync cannot be applied in the request
+ * and goes to the queue instead. */
+export function failingKv(): KVNamespace {
+  const fail = async () => {
+    throw new Error("injected KV failure");
+  };
+  return overriding(env.LINKS, { put: fail, delete: fail });
 }
 
 // Builds a real MessageBatch via the official cloudflare:test helpers, so ack/

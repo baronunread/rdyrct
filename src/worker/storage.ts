@@ -5,11 +5,23 @@ import * as schema from "./db/schema";
 import type { DB, Env } from "./env";
 import { buildDestination, qrLogoKeyFromUrl, uid } from "./util";
 import { captureAlert } from "./sentry";
-import type { KVDomain } from "./kv";
+import type { KVDomain, KVLink } from "./kv";
 
 /**
  * Storage recovery. D1 is the source of truth. KV serves redirects and R2
- * stores QR logos. A request handler commits its D1 change, then awaits a
+ * stores QR logos.
+ *
+ * **KV is written in the request.** `enqueueStorage` applies every `kv_sync`
+ * itself, before the handler responds, and sends only what failed to the
+ * queue. It used to send everything: the consumer's 5 s batch window meant a
+ * new link 404'd for its first seconds, and a click in that window made KV
+ * cache the miss at that edge for a further minute (measured in production,
+ * 2026-10-05). Dub writes its redirect cache the same way, straight after
+ * the database. R2 deletes still go through the queue; nobody waits on them.
+ *
+ * What follows describes the queue path, which is now the repair path for a
+ * KV write that failed and the only path for R2. A request handler commits
+ * its D1 change, then awaits a
  * send to the storage queue describing the KV or R2 follow-up: if the send
  * itself fails, the request fails too, so a producer-side drop is never
  * silent. Once a message is on the queue, Cloudflare Queues own the retry,
@@ -82,7 +94,11 @@ export async function enqueueStorage(
   env: Env,
   messages: Array<StorageMessage | null>,
 ): Promise<void> {
-  const batch = messages.flatMap((m) => (m ? [{ body: m }] : []));
+  const pending = await applyKvSyncs(
+    env,
+    messages.flatMap((m) => (m ? [m] : [])),
+  );
+  const batch = pending.map((body) => ({ body }));
   if (!batch.length) return;
   try {
     await env.STORAGE_QUEUE.sendBatch(batch);
@@ -116,6 +132,34 @@ export async function enqueueStorage(
     }
     throw error;
   }
+}
+
+/** The most KV keys one request applies itself; more go to the queue. */
+const INLINE_KV_SYNC_LIMIT = 10;
+
+/**
+ * Applies every `kv_sync` now and returns what is left for the queue: the
+ * R2 work, and any KV write that failed. Same `kvSync` the consumer runs, so
+ * the idempotency contract above still holds: each one re-reads D1 after the
+ * caller's commit, and a failed one is retried by the queue from D1 again.
+ *
+ * Only for a small batch: one link and its aliases, which is what somebody
+ * is waiting on. A bulk change (suspending an org, a plan reconciliation)
+ * resyncs hundreds of keys, each a D1 read and a KV write, which would blow
+ * the per-request subrequest budget; those stay on the queue, where a few
+ * seconds cost nobody anything.
+ *
+ * ponytail: two requests editing one link at the same instant can finish
+ * their KV writes out of order and leave the older value until the next
+ * edit. Rare enough to accept; a per-link Durable Object would close it.
+ */
+async function applyKvSyncs(env: Env, messages: StorageMessage[]): Promise<StorageMessage[]> {
+  const db = drizzle(env.DB, { schema });
+  const kv = messages.filter((m) => m.op === "kv_sync");
+  if (kv.length > INLINE_KV_SYNC_LIMIT) return messages;
+  const rest = messages.filter((m) => m.op !== "kv_sync");
+  const results = await Promise.allSettled(kv.map((m) => kvSync(env, db, m.key)));
+  return [...rest, ...kv.filter((_, i) => results[i]?.status === "rejected")];
 }
 
 /* ---------------- outbox: work the queue did not take ---------------- */
@@ -271,55 +315,72 @@ function parseSlugKey(key: string) {
 async function desiredKvValue(db: DB, key: string): Promise<string | null> {
   if (key.startsWith("slug:")) {
     const { hostname, slug } = parseSlugKey(key);
-    // Resolved through link_addresses, not links directly: a slug key names
-    // one active address (primary or alias), which always answers with its
-    // parent link's effective destination, never one of its own. An
-    // already-expired-but-not-yet-swept temp_alias still resolves here (its
-    // retiredAt is still null) — the redirect path's own expiresAt check is
-    // what actually stops it resolving; see index.ts.
-    const rows = await db
-      .select({
-        addressId: schema.linkAddresses.id,
-        expiresAt: schema.linkAddresses.expiresAt,
-        linkId: schema.links.id,
-        orgId: schema.links.orgId,
-        destination: schema.links.destination,
-        utmSource: schema.links.utmSource,
-        utmMedium: schema.links.utmMedium,
-        utmCampaign: schema.links.utmCampaign,
-        utmTerm: schema.links.utmTerm,
-        utmContent: schema.links.utmContent,
-        hostname: schema.domains.hostname,
-      })
-      .from(schema.linkAddresses)
-      .innerJoin(schema.links, eq(schema.linkAddresses.linkId, schema.links.id))
-      .leftJoin(schema.domains, eq(schema.linkAddresses.domainId, schema.domains.id))
-      .where(
-        and(
-          eq(schema.linkAddresses.slug, slug),
-          isNull(schema.linkAddresses.retiredAt),
-          // Suspension is enforced here and nowhere else (#67). Every
-          // republish runs through this function, so a suspended link stays
-          // dark through any later edit, rename, or alias change. A check in
-          // the suspend route alone would be undone by the next save.
-          isNull(schema.links.suspendedAt),
-          hostname === null
-            ? isNull(schema.linkAddresses.domainId)
-            : eq(schema.domains.hostname, hostname),
-        ),
-      )
-      .limit(1);
-    const address = rows[0];
-    if (!address) return null;
-    return JSON.stringify({
-      linkId: address.linkId,
-      addressId: address.addressId,
-      orgId: address.orgId,
-      url: buildDestination(address.destination, address),
-      expiresAt: address.expiresAt,
-    });
+    const link = await desiredLink(db, slug, hostname);
+    return link && JSON.stringify(link);
   }
+  return desiredDomainValue(db, key);
+}
 
+/**
+ * What `slug:{hostname}:{slug}` should hold, read from D1: the same answer the
+ * queue consumer writes to KV, for the redirect path to use while that write
+ * has not landed yet (see `resolveLink` in index.ts).
+ */
+export async function desiredLink(
+  db: DB,
+  slug: string,
+  hostname: string | null,
+): Promise<KVLink | null> {
+  // Resolved through link_addresses, not links directly: a slug key names
+  // one active address (primary or alias), which always answers with its
+  // parent link's effective destination, never one of its own. An
+  // already-expired-but-not-yet-swept temp_alias still resolves here (its
+  // retiredAt is still null) — the redirect path's own expiresAt check is
+  // what actually stops it resolving; see index.ts.
+  const rows = await db
+    .select({
+      addressId: schema.linkAddresses.id,
+      expiresAt: schema.linkAddresses.expiresAt,
+      linkId: schema.links.id,
+      orgId: schema.links.orgId,
+      destination: schema.links.destination,
+      utmSource: schema.links.utmSource,
+      utmMedium: schema.links.utmMedium,
+      utmCampaign: schema.links.utmCampaign,
+      utmTerm: schema.links.utmTerm,
+      utmContent: schema.links.utmContent,
+      hostname: schema.domains.hostname,
+    })
+    .from(schema.linkAddresses)
+    .innerJoin(schema.links, eq(schema.linkAddresses.linkId, schema.links.id))
+    .leftJoin(schema.domains, eq(schema.linkAddresses.domainId, schema.domains.id))
+    .where(
+      and(
+        eq(schema.linkAddresses.slug, slug),
+        isNull(schema.linkAddresses.retiredAt),
+        // Suspension is enforced here and nowhere else (#67). Every
+        // republish runs through this function, so a suspended link stays
+        // dark through any later edit, rename, or alias change. A check in
+        // the suspend route alone would be undone by the next save.
+        isNull(schema.links.suspendedAt),
+        hostname === null
+          ? isNull(schema.linkAddresses.domainId)
+          : eq(schema.domains.hostname, hostname),
+      ),
+    )
+    .limit(1);
+  const address = rows[0];
+  if (!address) return null;
+  return {
+    linkId: address.linkId,
+    addressId: address.addressId,
+    orgId: address.orgId,
+    url: buildDestination(address.destination, address),
+    expiresAt: address.expiresAt,
+  };
+}
+
+async function desiredDomainValue(db: DB, key: string): Promise<string | null> {
   if (key.startsWith("domain:")) {
     const hostname = key.slice("domain:".length);
     // The org's grace period rides along, because a locked domain's verdict

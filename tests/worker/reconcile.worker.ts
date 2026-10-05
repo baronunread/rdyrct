@@ -9,7 +9,8 @@ import { GRACE_PERIOD_MS } from "../../src/shared/types";
 import {
   applyTestMigrations,
   captureEmails,
-  captureStorageQueue,
+  captureStorage,
+  failingKv,
   overrideEnv,
   stubQueue,
   testDb,
@@ -86,8 +87,8 @@ async function setPlan(plan: string) {
  * cases that are about the emails wrap themselves in `withMail`.
  */
 function quietEnv() {
-  const { queue, sent } = captureStorageQueue();
-  return { env: overrideEnv({ STORAGE_QUEUE: queue }), storage: sent };
+  const { env: captured, sent } = captureStorage();
+  return { env: overrideEnv(captured), storage: sent };
 }
 
 async function entitlement(orgId = "org-0") {
@@ -173,6 +174,8 @@ describe("entitlement reconciliation", () => {
   it("requeues locked domains after a storage queue failure", async () => {
     await seed({ plan: "free", domains: 2 });
     const failing = overrideEnv({
+      // KV refuses the in-request write and the queue refuses the fallback.
+      LINKS: failingKv(),
       STORAGE_QUEUE: stubQueue<StorageMessage>(() => {
         throw new Error("injected storage queue failure");
       }),

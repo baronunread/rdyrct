@@ -11,7 +11,7 @@ import {
   addressesOf,
   applyTestMigrations,
   authEnv,
-  captureStorageQueue as captureQueue,
+  captureStorage,
   freeOwnerCookie,
   jsonBody,
   overrideEnv,
@@ -150,9 +150,9 @@ describe("PATCH /orgs/:orgId/links/:linkId: renaming a custom-domain address", (
     await api(cookie, "POST", `/links/${id}/addresses`, {});
     const { slug: aliasSlug } = (await addressesOf(id)).find((a) => a.kind === "permanent_alias")!;
 
-    const { queue, sent } = captureQueue();
+    const { env: captured, sent } = captureStorage();
     const res = await apiWithEnv(
-      overrideEnv({ BETTER_AUTH_SECRET: "test-secret", STORAGE_QUEUE: queue }),
+      overrideEnv({ BETTER_AUTH_SECRET: "test-secret", ...captured }),
       cookie,
       "PATCH",
       `/links/${id}`,

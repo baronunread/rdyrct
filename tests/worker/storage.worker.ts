@@ -213,14 +213,41 @@ describe("org teardown steps under secondary-store outage", () => {
 });
 
 describe("producing messages", () => {
-  it("skips null messages and sends the rest as a batch", async () => {
+  const r2: StorageMessage = { op: "r2_delete", key: "org-1/logo.png" };
+
+  // A link sync is applied in the request, so the link is live before the
+  // response; only R2 work, which nobody waits on, goes to the queue.
+  it("applies a link sync itself and sends only R2 work, skipping nulls", async () => {
+    await env.LINKS.put("slug:sale", "stale");
     const { queue, sent } = captureQueue();
     await enqueueStorage(overrideEnv({ STORAGE_QUEUE: queue }), [
       syncLinkMsg("sale", null),
       null,
-      deleteQrLogoMsg(""),
+      r2,
     ]);
+    expect(sent).toEqual([r2]);
+    // No link row in D1, so the sync's answer is "this key should not exist".
+    expect(await env.LINKS.get("slug:sale")).toBeNull();
+  });
+
+  it("sends a link sync it could not apply to the queue, which retries it", async () => {
+    const { queue, sent } = captureQueue();
+    const LINKS = overriding(env.LINKS, {
+      delete: async () => {
+        throw new Error("injected KV failure");
+      },
+    });
+    await enqueueStorage(overrideEnv({ STORAGE_QUEUE: queue, LINKS }), [syncLinkMsg("sale", null)]);
     expect(sent).toEqual([{ op: "kv_sync", key: "slug:sale" }]);
+  });
+
+  // A bulk change would spend the request's subrequest budget on D1 reads
+  // and KV writes; it goes to the queue whole.
+  it("leaves a bulk batch of link syncs to the queue", async () => {
+    const { queue, sent } = captureQueue();
+    const many = Array.from({ length: 11 }, (_, i) => syncLinkMsg(`s${i}`, null));
+    await enqueueStorage(overrideEnv({ STORAGE_QUEUE: queue }), many);
+    expect(sent).toEqual(many);
   });
 
   it("records a producer-side send failure to the outbox and returns", async () => {
@@ -233,7 +260,7 @@ describe("producing messages", () => {
     });
 
     await expect(
-      enqueueStorage(overrideEnv({ STORAGE_QUEUE: queue }), [syncLinkMsg("sale", null)]),
+      enqueueStorage(overrideEnv({ STORAGE_QUEUE: queue }), [r2]),
     ).resolves.toBeUndefined();
 
     const row = await env.DB.prepare("select op, target, reason from storage_outbox").first<{
@@ -241,7 +268,7 @@ describe("producing messages", () => {
       target: string;
       reason: string;
     }>();
-    expect(row).toEqual({ op: "kv_sync", target: "slug:sale", reason: "send_failed" });
+    expect(row).toEqual({ op: "r2_delete", target: "org-1/logo.png", reason: "send_failed" });
   });
 });
 

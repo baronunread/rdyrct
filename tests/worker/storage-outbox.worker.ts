@@ -27,6 +27,7 @@ import {
   applyTestMigrations,
   batchOf,
   overrideEnv,
+  overriding,
   sampleLink,
   seedLink,
   stubQueue,
@@ -35,6 +36,18 @@ import {
 
 afterEach(reset);
 beforeEach(applyTestMigrations);
+
+/** KV whose writes fail, so a link sync cannot be applied in the request
+ * and falls through to the queue: the only way one reaches it now. */
+const brokenKv = () =>
+  overriding(env.LINKS, {
+    put: async () => {
+      throw new Error("kv unavailable");
+    },
+    delete: async () => {
+      throw new Error("kv unavailable");
+    },
+  });
 
 /** A STORAGE_QUEUE whose sendBatch always fails, which is the hole. */
 const brokenQueue = () =>
@@ -121,7 +134,7 @@ describe("the idempotency contract", () => {
 
 describe("a send the queue refuses", () => {
   it("records the work and returns, because the mutation already committed", async () => {
-    const failing = overrideEnv({ STORAGE_QUEUE: brokenQueue() });
+    const failing = overrideEnv({ STORAGE_QUEUE: brokenQueue(), LINKS: brokenKv() });
 
     // No throw: the row below is the durable record the drain replays from, so
     // the committed mutation is late, not lost, and a 500 to the caller would
@@ -134,7 +147,7 @@ describe("a send the queue refuses", () => {
   });
 
   it("rethrows when the outbox write fails too, because then the work is gone", async () => {
-    const failing = overrideEnv({ STORAGE_QUEUE: brokenQueue() });
+    const failing = overrideEnv({ STORAGE_QUEUE: brokenQueue(), LINKS: brokenKv() });
     // Dropping the table makes recordOutbox fail the way a transient D1 error
     // would: now there is no record of the work anywhere, so the caller has to
     // hear about it.
@@ -146,7 +159,7 @@ describe("a send the queue refuses", () => {
   });
 
   it("keeps one row per target however many times it fails", async () => {
-    const failing = overrideEnv({ STORAGE_QUEUE: brokenQueue() });
+    const failing = overrideEnv({ STORAGE_QUEUE: brokenQueue(), LINKS: brokenKv() });
     for (let i = 0; i < 3; i++) await enqueueStorage(failing, [syncLinkMsg("abc", null)]);
 
     // Re-applying desired state is a no-op, so a repeat failure replaces the
@@ -155,7 +168,7 @@ describe("a send the queue refuses", () => {
   });
 
   it("writes nothing when there was nothing to send", async () => {
-    const failing = overrideEnv({ STORAGE_QUEUE: brokenQueue() });
+    const failing = overrideEnv({ STORAGE_QUEUE: brokenQueue(), LINKS: brokenKv() });
     await enqueueStorage(failing, [null]);
     expect(await outboxRows()).toEqual([]);
   });
@@ -297,7 +310,7 @@ describe("the daily drain", () => {
   }, 15_000);
 
   it("gives every re-record a new id, so a drain cannot delete a newer request", async () => {
-    const failing = overrideEnv({ STORAGE_QUEUE: brokenQueue() });
+    const failing = overrideEnv({ STORAGE_QUEUE: brokenQueue(), LINKS: brokenKv() });
     await enqueueStorage(failing, [syncLinkMsg("abc", null)]);
     const first = await env.DB.prepare("select id from storage_outbox").first<{ id: string }>();
 
