@@ -64,7 +64,7 @@ export const SIGNUP_FAILED = "signup_failed";
 /** Appended by the server's redirect after a Google sign-in that created the
  *  account (BetterAuth's newUserCallbackURL), because that signup never
  *  passes through the form or the code screen that fire the events above. */
-export const GOOGLE_SIGNUP_PARAM = "signup";
+const GOOGLE_SIGNUP_PARAM = "signup";
 
 const FUNNEL_EVENTS: ReadonlySet<string> = new Set([
   ...Object.values(FUNNEL),

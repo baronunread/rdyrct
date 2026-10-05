@@ -1,3 +1,4 @@
+// fallow-ignore-file code-duplication -- BetterAuth's OAuth token tables share columns by design
 import {
   sqliteTable,
   text,

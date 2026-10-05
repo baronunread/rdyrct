@@ -37,6 +37,7 @@ test.describe("landing hero A/B test", () => {
     await expect(page.getByLabel("Shorten a link, no account needed")).toBeVisible();
 
     // Picking the arm contacted nobody and wrote nothing down.
+    // fallow-ignore-next-line code-duplication -- the same privacy check as funnel.pw.ts, said twice on purpose
     await page.waitForTimeout(600);
     expect(attempts).toEqual([]);
     const stored = await page.evaluate(() => JSON.stringify(Object.entries(localStorage)));
