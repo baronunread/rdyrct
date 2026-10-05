@@ -120,8 +120,6 @@ Fill in the non-secret vars in `wrangler.jsonc`:
 
 - `APP_URL=https://rdyrct.com`
 - `APP_HOST=rdyrct.com`
-- `SHARED_LINK_HOST=rdyr.cc` (optional): a second, shorter domain for new
-  shared-domain links. Leave it out and they use `APP_HOST`
 - `MAIL_FROM=rdyrct <no-reply@mail.rdyrct.com>`
 - `POLAR_SERVER=sandbox` (or `production` when live)
 - `POLAR_PRO_PRODUCT_ID` — create a recurring Pro product in Polar and paste its id
@@ -168,7 +166,7 @@ Paid access an admin grants by hand is a **comp**, stored apart from the subscri
 
 The admin console reports counts, never money: how many people hold a paid plan, how many pay for it, and how many are comped. Who is cancelling shows on their own row in the user list, where it names someone. Revenue is read in the Polar dashboard, which knows what it charged net of discounts, tax and refunds.
 
-Finally, point `rdyrct.com` at the Worker as a **custom domain**: Cloudflare dashboard → Workers → your worker → **Settings → Domains & Routes**. Short links live at the root (`https://rdyrct.com/<slug>`); the app is served on every other path. Attach `SHARED_LINK_HOST` the same way if you have one: it takes the same shared-domain redirect path, since a shared-domain slug's KV key has no host in it, so it works on either host with no other setup.
+Finally, point `rdyrct.com` at the Worker as a **custom domain**: Cloudflare dashboard → Workers → your worker → **Settings → Domains & Routes**. Short links live at the root (`https://rdyrct.com/<slug>`); the app is served on every other path. Optionally, a second, shorter domain for new shared-domain links (`rdyr.cc` on rdyrct.com). Attach it the same way, check that `https://<it>/` answers with a redirect, and only then turn it on with `bunx wrangler secret put SHARED_LINK_HOST`. It takes effect without a deploy, and `bunx wrangler secret delete SHARED_LINK_HOST` turns it off. In that order because every new link starts using it at once: set before the domain resolves, it hands out links that go nowhere. Old links keep working on both hosts, since a shared-domain slug's KV key has no host in it. Unset, shared links use `APP_HOST`.
 
 Review the [rate-limiting policies, monitoring, WAF rule, and rollback steps](docs/rate-limiting.md)
 before the first production deploy.
@@ -192,7 +190,7 @@ before changing link, domain, logo, or organization delete flows.
 | `CF_API_TOKEN`           | secret         | Cloudflare token with **Zone → SSL and Certificates → Edit** (custom domains)       |
 | `APP_URL`                | var            | Full public URL of the app, e.g. `https://rdyrct.com`                               |
 | `APP_HOST`               | var            | Public host, e.g. `rdyrct.com`                                                      |
-| `SHARED_LINK_HOST`       | var (optional) | Second shared-domain host for new links, e.g. `rdyr.cc`                             |
+| `SHARED_LINK_HOST`       | secret (opt.)  | Second shared-domain host for new links, e.g. `rdyr.cc`; set after it resolves      |
 | `MAIL_FROM`              | var            | From address for outgoing email                                                     |
 | `RESEND_BASE_URL`        | var (dev only) | Points at the local Resend emulator                                                 |
 | `POLAR_SERVER`           | var            | `sandbox` or `production`                                                           |
