@@ -15,6 +15,9 @@ POLAR_ACCESS_TOKEN=polar_oat_replace_me
 POLAR_WEBHOOK_SECRET=polar_whs_replace_me
 POLAR_PRO_PRODUCT_ID=replace_me
 POLAR_HOBBY_PRODUCT_ID=replace_me
+# Yearly products, priced 10% below twelve months
+POLAR_PRO_YEARLY_PRODUCT_ID=replace_me
+POLAR_HOBBY_YEARLY_PRODUCT_ID=replace_me
 POLAR_SERVER=sandbox
 
 # Custom domains: leave CF_API_TOKEN blank and CF_DEV_ENV=simulated to fake the
