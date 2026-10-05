@@ -9,7 +9,7 @@ import { AuthCard, PasswordMeter } from "../components/auth-form";
 import { authClient } from "../lib/auth-client";
 import { friendlyAuthError } from "../lib/auth-errors";
 import posthog from "../lib/posthog";
-import { FUNNEL, USER_SIGNED_UP } from "../lib/funnel";
+import { FUNNEL, SIGNUP_FAILED, USER_SIGNED_UP, googleSignupUrl } from "../lib/funnel";
 import { useShake } from "../lib/use-shake";
 import { useCap } from "../lib/cap";
 import { useCurrentUser, useConfig } from "../lib/hooks";
@@ -225,6 +225,14 @@ function SignupSubtitle({ next }: { next: string }) {
   return <p className="-mt-2 text-xs text-muted">{body}</p>;
 }
 
+/** Step 3a (#64), once per mount of the signup form. */
+function SignupViewed() {
+  useEffect(() => {
+    posthog.capture(FUNNEL.signupViewed);
+  }, []);
+  return null;
+}
+
 function PasswordHint({
   mode,
   password,
@@ -328,6 +336,16 @@ function AuthFormView({
   // Read once on mount: a returning visitor who last signed in with Google
   // gets a one-click "continue as you" row.
   const [lastUsed] = useState(lastAuth);
+  // Step 3b (#64): what separates "reached the form" from "typed in it".
+  // Signup only; the login form is not a funnel.
+  const started = useRef(false);
+  const onInput = () => {
+    if (mode === "signup" && !started.current) {
+      started.current = true;
+      posthog.capture(FUNNEL.signupStarted);
+    }
+    onFirstInput();
+  };
   const { register, handleSubmit, watch, getValues } = useForm<AuthForm>({
     resolver: valibotResolver(copy.schema),
     defaultValues: { email: "", password: "" },
@@ -339,13 +357,19 @@ function AuthFormView({
     // Full-page redirect to Google; returns to /api/auth/callback/google, then
     // to `next`. Same flow on login and signup (account linking handles an
     // existing email/password account).
-    void authClient.signIn.social({ provider: "google", callbackURL: next });
+    void authClient.signIn.social({
+      provider: "google",
+      callbackURL: next,
+      newUserCallbackURL: googleSignupUrl(next),
+    });
   };
 
   const password = watch("password");
   const onFormSubmit = handleSubmit(
     (data) => onSubmit(data.email, data.password),
     (errors) => {
+      if (mode === "signup")
+        posthog.capture(SIGNUP_FAILED, { reason: `invalid_${Object.keys(errors).join("_")}` });
       toast(firstFormError(errors, "Check your email and password"), "error");
       shake.start();
     },
@@ -355,12 +379,13 @@ function AuthFormView({
     <AuthCard>
       <form
         onSubmit={onFormSubmit}
-        onInput={onFirstInput}
+        onInput={onInput}
         noValidate
         className="flex flex-col gap-4 rounded-xl bg-surface p-6 smooth-shadow-ring-sm"
       >
         <h1 className="font-bold">{copy.title}</h1>
         {mode === "signup" && <SignupSubtitle next={next} />}
+        {mode === "signup" && <SignupViewed />}
         {config.data?.googleEnabled && (
           <>
             <GoogleEntry
@@ -486,6 +511,7 @@ async function trySignUp(
     authClient.signUp.email({ email, password, name: email.split("@")[0] }, { headers }),
   );
   if (signUpError) {
+    posthog.capture(SIGNUP_FAILED, { reason: signUpError.code ?? `http_${signUpError.status}` });
     deps.failSubmit(friendlyAuthError(signUpError));
   } else {
     // Funnel step 4 (#64), at the boundary that actually means "an account

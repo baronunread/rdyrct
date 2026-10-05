@@ -1,3 +1,4 @@
+// fallow-ignore-file code-duplication -- BetterAuth's OAuth token tables share columns by design
 import {
   sqliteTable,
   text,
@@ -419,6 +420,8 @@ export const anonLinks = sqliteTable(
     riskReasons: text("risk_reasons"),
     riskCheckedAt: integer("risk_checked_at"),
     riskProvider: text("risk_provider"),
+    /** A total only, for "3 clicks so far". No country, referrer or device. */
+    clicks: integer("clicks").notNull().default(0),
   },
   (t) => [index("idx_anon_links_expires").on(t.expiresAt)],
 );

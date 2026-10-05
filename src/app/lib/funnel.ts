@@ -21,6 +21,13 @@ export const FUNNEL = {
   ctaClicked: "funnel_cta_clicked",
   /** 3. The pricing section scrolled into view. */
   pricingViewed: "funnel_pricing_viewed",
+  /** 3a. The signup form rendered. 19 people reached /signup in the 60 days
+   *  before this existed and 3 submitted it, with nothing in between to say
+   *  why. */
+  signupViewed: "funnel_signup_viewed",
+  /** 3b. The first keystroke in the signup form. Viewed but not started is
+   *  a page problem; started but not submitted is a form problem. */
+  signupStarted: "funnel_signup_started",
   /** 4. Signup form submitted and accepted. Already covered by
    *  `user_signed_up`; this is the funnel-shaped name for the same moment. */
   signupSubmitted: "funnel_signup_submitted",
@@ -49,7 +56,40 @@ export const FUNNEL = {
  *  `verificationCompleted` survives, undercounting signups. */
 export const USER_SIGNED_UP = "user_signed_up";
 
-const FUNNEL_EVENTS: ReadonlySet<string> = new Set([...Object.values(FUNNEL), USER_SIGNED_UP]);
+/** A signup submit that did not create an account, with `reason` set to the
+ *  error code (never the address). Buffered like the steps: it is the answer
+ *  to "started but not submitted". */
+export const SIGNUP_FAILED = "signup_failed";
+
+/** Appended by the server's redirect after a Google sign-in that created the
+ *  account (BetterAuth's newUserCallbackURL), because that signup never
+ *  passes through the form or the code screen that fire the events above. */
+const GOOGLE_SIGNUP_PARAM = "signup";
+
+const FUNNEL_EVENTS: ReadonlySet<string> = new Set([
+  ...Object.values(FUNNEL),
+  USER_SIGNED_UP,
+  SIGNUP_FAILED,
+]);
+
+/** `next` with `?signup=google` added, for newUserCallbackURL. */
+export function googleSignupUrl(next: string): string {
+  const url = new URL(next, window.location.origin);
+  url.searchParams.set(GOOGLE_SIGNUP_PARAM, "google");
+  return url.pathname + url.search + url.hash;
+}
+
+/** Fires the signup events for a Google account created on the round trip
+ *  that just landed, then takes the marker out of the address bar so a
+ *  reload does not count it twice. */
+export function captureGoogleSignup(capture: (event: string, props: { method: string }) => void) {
+  const url = new URL(window.location.href);
+  if (url.searchParams.get(GOOGLE_SIGNUP_PARAM) !== "google") return;
+  url.searchParams.delete(GOOGLE_SIGNUP_PARAM);
+  window.history.replaceState(window.history.state, "", url.pathname + url.search + url.hash);
+  capture(FUNNEL.signupSubmitted, { method: "google" });
+  capture(USER_SIGNED_UP, { method: "google" });
+}
 
 /** Buffer this event when it fires before the visitor has answered the
  *  consent banner. Only funnel steps are worth holding; a QR download by an
@@ -75,6 +115,9 @@ export type CtaPlacement =
   // The custom-domain second screen (Direction C of #96), the first paid
   // ask on the page.
   | "second_screen_domain"
+  // The bar that follows a visitor who made an anonymous link down the page,
+  // with its 24-hour countdown.
+  | "anon_link_bar"
   // The one ask in the long middle of the page, at the end of the analytics
   // preview. Worth its own placement: it fires right after somebody has been
   // shown the payoff, so it measures whether the mock actually sells.

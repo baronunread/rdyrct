@@ -1,5 +1,6 @@
 import type { Context } from "hono";
 import { nonEmpty } from "../shared/lookup";
+import { eq, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import * as schema from "./db/schema";
 import type { Env } from "./env";
@@ -253,4 +254,22 @@ export async function sweepDedupeIds(env: Env): Promise<number> {
     cleared += changes;
   } while (changes > 0);
   return cleared;
+}
+
+/**
+ * Adds one to an anonymous link's total. Best-effort, after the redirect is
+ * sent, and through the same per-key limiter real clicks pass, so somebody
+ * reloading their own link in a loop costs a bounded number of writes.
+ */
+export async function countAnonClick(env: Env, id: string, method: string): Promise<void> {
+  try {
+    if (!(await clickAnalyticsAllowed(env, `anon:${id}`, method))) return;
+    await drizzle(env.DB, { schema })
+      .update(schema.anonLinks)
+      .set({ clicks: sql`${schema.anonLinks.clicks} + 1` })
+      .where(eq(schema.anonLinks.id, id));
+  } catch (error) {
+    // A lost count on a 24-hour link is not worth failing anything over.
+    console.error("anon click count failed", error);
+  }
 }

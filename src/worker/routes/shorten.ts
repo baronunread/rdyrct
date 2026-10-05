@@ -132,6 +132,31 @@ shortenRoutes.post("/", async (c) => {
   );
 });
 
+/** The header the maker's browser proves itself with when it asks for the
+ * count. A header, not a query parameter, so the token stays out of logs. */
+const CLAIM_TOKEN_HEADER = "x-claim-token";
+
+/**
+ * How many clicks an anonymous link has had, for the browser that made it.
+ *
+ * Keyed by the claim token rather than the slug, so nobody can read the
+ * count of a link they did not make. An unknown or expired token is a 404,
+ * the same answer either way.
+ */
+shortenRoutes.get("/clicks", async (c) => {
+  const token = c.req.header(CLAIM_TOKEN_HEADER);
+  if (!token) throw new HTTPException(404, { message: "No such link" });
+  const db = drizzle(c.env.DB, { schema });
+  const [row] = await db
+    .select({ clicks: schema.anonLinks.clicks, expiresAt: schema.anonLinks.expiresAt })
+    .from(schema.anonLinks)
+    .where(eq(schema.anonLinks.claimToken, token))
+    .limit(1);
+  if (!row || row.expiresAt <= Date.now())
+    throw new HTTPException(404, { message: "No such link" });
+  return c.json({ clicks: row.clicks });
+});
+
 /**
  * Scores an anonymous destination, reusing the link scorer's write shape.
  *

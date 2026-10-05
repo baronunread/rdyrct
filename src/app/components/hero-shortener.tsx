@@ -31,7 +31,7 @@ import {
   storedAnonLinks,
   type StoredAnonLink,
 } from "../lib/anon-links";
-import { shortenAnonymously } from "../lib/shorten-anon";
+import { clicksLabel, shortenAnonymously, useAnonClicks } from "../lib/shorten-anon";
 import { trackCta } from "../lib/track-cta";
 import { HrefLink } from "../lib/router-search";
 
@@ -119,16 +119,26 @@ function MadeLink({ link }: { link: StoredAnonLink }) {
   );
 }
 
-/** The ask, once, under the link it is about. */
-function KeepItFooter() {
+/** The ask, once, under the link it is about. Once the link has been
+ * clicked, the count leads: it is the visitor's own result, and "see where
+ * they came from" is what the account adds to it. */
+function KeepItFooter({ link }: { link: StoredAnonLink }) {
+  const clicks = useAnonClicks(link);
   return (
     // A beat behind the link itself, so the eye lands on the short URL first
     // and the ask arrives after it.
     <div className="anon-link-in flex flex-wrap items-center gap-2 border-t border-border pt-3 [animation-delay:70ms]">
-      <p className="min-w-52 flex-1 text-xs text-muted">
-        This link works for 24 hours. Sign up and it becomes yours permanently, and starts counting
-        every click: country, referrer, device, campaign.
-      </p>
+      {clicks ? (
+        <p className="min-w-52 flex-1 text-xs text-muted">
+          <span className="tnum font-bold text-text">{clicksLabel(clicks)} so far.</span> Sign up to
+          keep this link and see where they came from: country, referrer, device, campaign.
+        </p>
+      ) : (
+        <p className="min-w-52 flex-1 text-xs text-muted">
+          This link works for 24 hours. Share it and its clicks count up here. Sign up to keep it
+          and see where they came from: country, referrer, device, campaign.
+        </p>
+      )}
       <HrefLink
         href="/signup"
         onClick={() => trackCta("hero_shortener_claim")}
@@ -154,7 +164,7 @@ function MadeLinks({ made }: { made: StoredAnonLink[] }) {
       {/* Keyed by slug so a new link is a new element: the animation runs on
           mount, and a re-render for anything else does not replay it. */}
       <MadeLink key={link.slug} link={link} />
-      <KeepItFooter />
+      <KeepItFooter link={link} />
     </>
   );
 }

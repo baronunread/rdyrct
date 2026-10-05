@@ -1,6 +1,14 @@
 import { expect, test } from "@playwright/test";
 import { pinHeroVariant, visitLegalPages } from "./pages";
 
+/** Scroll to the product tour and open its analytics screen, the one that
+ * draws with the lazy charts bundle, then wait for the chart itself. */
+async function openTourAnalytics(page: import("@playwright/test").Page) {
+  await page.locator("#analytics").scrollIntoViewIfNeeded();
+  await page.getByRole("tab", { name: /see what worked/i }).click();
+  await expect(page.locator("#analytics").getByLabel("Clicks per day")).toBeVisible();
+}
+
 test("landing page keeps the main sign-up path", async ({ page }) => {
   await page.goto("/");
 
@@ -24,7 +32,7 @@ test("the hero's second CTA stays on the site and self-hosting sits under pricin
   const hero = page.locator("section").first();
   await expect(hero.getByRole("link", { name: /self-host/i })).toHaveCount(0);
 
-  await hero.getByRole("link", { name: /see the analytics/i }).click();
+  await hero.getByRole("link", { name: /see how it works/i }).click();
   await expect(page).toHaveURL(/#analytics$/);
   await expect(page.locator("#analytics")).toBeInViewport();
 
@@ -51,7 +59,10 @@ test("the homepage teases three prices and points at the full comparison", async
   await expect(teaser).not.toContainText(/self-hosted/i);
   await expect(teaser.getByText("Free", { exact: true })).toBeVisible();
   await expect(teaser.getByText("Hobby", { exact: true })).toBeVisible();
-  await expect(teaser.getByText("Most popular")).toBeVisible();
+  // "Best value", which the limits back; never "Most popular", which
+  // nothing does.
+  await expect(teaser.getByText("Best value")).toBeVisible();
+  await expect(teaser.getByText("Most popular")).toHaveCount(0);
   await expect(teaser.locator("table")).toHaveCount(0);
 
   // The free plan has to say the generous part and the catch in the same
@@ -123,7 +134,9 @@ test("the header is on screen before the homepage chunk arrives", async ({ page 
 test("the standalone pricing page has the full table and no self-host pitch", async ({ page }) => {
   await page.goto("/pricing");
 
-  await expect(page.getByRole("heading", { level: 1, name: /simple pricing/i })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { level: 1, name: /URL shortener pricing/i }),
+  ).toBeVisible();
   const headers = page.locator("#pricing thead th");
   await expect(headers).toHaveCount(4);
   await expect(headers.nth(2)).toContainText("Hobby");
@@ -264,7 +277,7 @@ test("the second screen argues with two messages, not two URLs (#96)", async ({ 
   // The point is made by showing the link where it is read. If this ever
   // becomes two URLs side by side again, it is back to asserting instead of
   // showing.
-  await expect(page.getByText(/click links they recognize/i)).toBeVisible();
+  await expect(page.getByText(/on your own domain get clicked/i)).toBeVisible();
   await expect(page.getByText("Doesn't match the sender")).toBeVisible();
   await expect(page.getByText("Matches the sender")).toBeVisible();
   await expect(page.getByRole("link", { name: /Connect your domain/i })).toBeVisible();
@@ -272,7 +285,7 @@ test("the second screen argues with two messages, not two URLs (#96)", async ({ 
   // Sold on recognition, the way every competitor sells it, not by making
   // somebody picture being taken for a scammer. Bitly sells against a
   // generic shortener domain and still never says the word.
-  const section = page.locator("section").filter({ hasText: /click links they recognize/i });
+  const section = page.locator("section").filter({ hasText: /on your own domain get clicked/i });
   await expect(section).not.toContainText(/scam|spam|fraud/i);
 });
 
@@ -287,7 +300,7 @@ test("a signed-out visitor still gets the anonymous shortener, not a dashboard c
 // The page claims it serves developers, and every feature card on it is a
 // marketer's feature: there is no API in the product yet. The roadmap page is
 // what makes the claim honest, so it has to exist, it has to point at real
-// open issues, and both the feature grid and the footer have to lead there.
+// open issues, and both the developers tab and the footer have to lead there.
 test("the developer claim is backed by a roadmap of real issues", async ({ page }) => {
   await page.goto("/roadmap");
   await expect(
@@ -309,10 +322,15 @@ test("the developer claim is backed by a roadmap of real issues", async ({ page 
   await expect(page.getByRole("heading", { name: /already working/i })).toBeVisible();
 });
 
-test("the roadmap is reachable from the footer and from the feature grid", async ({ page }) => {
+// The developers tab sells an API and MCP server that ship today, so it
+// points at their docs, not at the roadmap.
+test("the docs are reachable from the developers tab, the roadmap from the footer", async ({
+  page,
+}) => {
   await page.goto("/");
-  await page.getByRole("link", { name: /the API is on the roadmap/i }).click();
-  await expect(page).toHaveURL(/\/roadmap$/);
+  await page.getByRole("tab", { name: "developers" }).click();
+  await page.getByRole("link", { name: /API and MCP docs/i }).click();
+  await expect(page).toHaveURL(/\/docs$/);
 
   await page.goto("/pricing");
   await page.locator("footer").getByRole("link", { name: "Roadmap" }).click();
@@ -431,16 +449,15 @@ test("a first visit does not ask who it is", async ({ page }) => {
   // The header paints before the rest of the page has even mounted, so
   // asserting here caught nothing: the first version of this test passed
   // against a build that still made the call. Every section has to have
-  // mounted, including the lazy analytics mock. Waiting for network idle is
-  // wrong here: product analytics can keep an unrelated request open.
-  await page.locator("#analytics").scrollIntoViewIfNeeded();
-  await expect(page.locator("#analytics").getByLabel("Clicks per day")).toBeVisible();
+  // mounted, including the tour's lazy analytics screen. Waiting for network
+  // idle is wrong here: product analytics can keep an unrelated request open.
+  await openTourAnalytics(page);
 
   expect(userCalls, "a browser that was never signed in has nothing to ask").toEqual([]);
 });
 
 // The charts bundle is 117 KB, the largest single thing the homepage can
-// fetch, and it exists to draw one decorative mock most of a screen down.
+// fetch, and it exists to draw one screen of the product tour.
 // Lazy alone was not enough: the chunk still went out to everybody who opened
 // the page, it just stopped blocking the paint. It must not be requested until
 // the visitor is heading for it.
@@ -451,16 +468,14 @@ test("the charts bundle waits until the visitor scrolls toward it", async ({ pag
   });
 
   await page.goto("/");
-  await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
-  // This CTA is below the fold, so it proves the page hydrated without
-  // scrolling toward the analytics section that owns the lazy bundle.
+  // The pricing CTA is below the fold, so it proves the page hydrated without
+  // anybody opening the tour's analytics screen, which owns the lazy bundle.
   await expect(page.getByRole("link", { name: /start pro/i }).first()).toBeVisible();
-  expect(charts, "nothing above the fold needs the charts bundle").toEqual([]);
+  expect(charts, "nothing before that screen needs the charts bundle").toEqual([]);
 
-  // Now go to it. The section renders its placeholder either way, so wait for
-  // the chart the bundle is actually for.
-  await page.locator("#analytics").scrollIntoViewIfNeeded();
-  await expect(page.locator("#analytics").getByLabel("Clicks per day")).toBeVisible();
+  // Now go to it: the product tour asks for the bundle once it moves past its
+  // first screen, so wait for the chart the bundle is actually for.
+  await openTourAnalytics(page);
   expect(charts.length, "and it arrives once they do").toBeGreaterThan(0);
 });
 

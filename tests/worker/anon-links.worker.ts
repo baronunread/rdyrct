@@ -1,10 +1,18 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { env } from "cloudflare:workers";
 import { reset } from "cloudflare:test";
-import { applyTestMigrations, authEnv, fetchWorker, freeOwnerCookie, jsonBody } from "./support";
+import {
+  applyTestMigrations,
+  authEnv,
+  fetchWorker,
+  freeOwnerCookie,
+  jsonBody,
+  recordingLimit,
+} from "./support";
 import { drizzle } from "drizzle-orm/d1";
 import * as schema from "../../src/worker/db/schema";
 import { claimAnonLink, slugTaken, sweepExpiredAnonLinks } from "../../src/worker/routes/shorten";
+import { publishLink } from "../../src/worker/kv";
 
 /**
  * Claiming an anonymous link, and letting go of one (Direction A of #96).
@@ -334,5 +342,66 @@ describe("the sweep", () => {
     await seedAnon({ expiresAt: Date.now() - HOUR });
     await sweepExpiredAnonLinks(authEnv());
     expect(await countIn("links", slug)).toBe(1);
+  });
+});
+
+// The landing page shows "3 clicks so far" on the link a visitor made, so
+// they have a reason to come back and keep it. A total only: there is no
+// org, so nothing may land in the clicks table.
+describe("the click total", () => {
+  async function publishAnon(anon: Awaited<ReturnType<typeof seedAnon>>) {
+    await publishLink(
+      authEnv(),
+      {
+        id: anon.id,
+        addressId: anon.id,
+        orgId: "",
+        slug: anon.slug,
+        destination: anon.destination,
+        expiresAt: anon.expiresAt,
+        utmSource: "",
+        utmMedium: "",
+        utmCampaign: "",
+        utmTerm: "",
+        utmContent: "",
+      },
+      null,
+    );
+  }
+  const clicksFor = (token: string) =>
+    fetchWorker(
+      new Request("http://localhost/api/shorten/clicks", { headers: { "x-claim-token": token } }),
+    );
+
+  it("counts each redirect and tells only the maker", async () => {
+    const anon = await seedAnon();
+    await publishAnon(anon);
+    // Open, so the test config's one-a-minute budget does not decide it, and
+    // recording, so the budget is shown to be this link's own.
+    const keys: string[] = [];
+    const testEnv = { ...authEnv(), RL_CLICK_RECORDING: recordingLimit(keys) };
+    for (let i = 0; i < 2; i++) {
+      const res = await fetchWorker(
+        new Request(`http://localhost/${anon.slug}`, { redirect: "manual" }),
+        testEnv,
+      );
+      expect(res.status).toBe(302);
+    }
+    expect(keys).toEqual([`click:org:anon:${anon.id}`, `click:org:anon:${anon.id}`]);
+
+    const res = await clicksFor(anon.claimToken);
+    expect(res.status).toBe(200);
+    expect(await jsonBody<{ clicks: number }>(res)).toEqual({ clicks: 2 });
+
+    const clickRows = await env.DB.prepare("select count(*) as n from clicks").first<{
+      n: number;
+    }>();
+    expect(clickRows?.n).toBe(0);
+  });
+
+  it("answers an unknown or expired token with the same 404", async () => {
+    const expired = await seedAnon({ expiresAt: Date.now() - HOUR });
+    expect((await clicksFor("tok-nobody")).status).toBe(404);
+    expect((await clicksFor(expired.claimToken)).status).toBe(404);
   });
 });
