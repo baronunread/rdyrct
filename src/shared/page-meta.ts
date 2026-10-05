@@ -167,9 +167,9 @@ Accept: application/json, text/event-stream
 \`\`\``,
   },
   "/roadmap": {
-    title: "URL shortener roadmap - API, API keys, and an MCP server",
+    title: "URL shortener roadmap - what rdyrct is building next",
     description:
-      "What rdyrct is building next: a REST API, API keys, an OpenAPI document, and an MCP server for agents. Every item is an open issue you can read and comment on.",
+      "What rdyrct is building next, and what already works. Every item is an open issue you can read and comment on.",
     markdown: undefined,
   },
   "/signup": {

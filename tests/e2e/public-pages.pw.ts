@@ -320,11 +320,15 @@ test("the developer claim is backed by a roadmap of real issues", async ({ page 
   await expect(page.getByRole("heading", { name: /already working/i })).toBeVisible();
 });
 
-test("the roadmap is reachable from the footer and from the developers tab", async ({ page }) => {
+// The developers tab sells an API and MCP server that ship today, so it
+// points at their docs, not at the roadmap.
+test("the docs are reachable from the developers tab, the roadmap from the footer", async ({
+  page,
+}) => {
   await page.goto("/");
   await page.getByRole("tab", { name: "developers" }).click();
-  await page.getByRole("link", { name: /next on the roadmap/i }).click();
-  await expect(page).toHaveURL(/\/roadmap$/);
+  await page.getByRole("link", { name: /API and MCP docs/i }).click();
+  await expect(page).toHaveURL(/\/docs$/);
 
   await page.goto("/pricing");
   await page.locator("footer").getByRole("link", { name: "Roadmap" }).click();

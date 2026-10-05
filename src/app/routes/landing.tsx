@@ -610,7 +610,7 @@ function HeroControlVariant({
             onClick={() => trackCta("hero_secondary")}
             className={buttonClass({ variant: "outline", className: "h-11 px-6 text-base" })}
           >
-            <BarChart3 size={16} /> See the analytics
+            <BarChart3 size={16} /> See how it works
           </a>
         </div>
 
@@ -821,7 +821,7 @@ function CustomDomainSection() {
               would be the same dishonesty in a nicer suit. The messages to
               the right are the evidence instead. */}
           <h2 className="text-xl font-bold text-balance sm:text-2xl">
-            People click links they recognize.
+            Short links on your own domain get clicked.
           </h2>
           <p className="max-w-xl text-sm text-muted">
             Connect a domain you own and every short link goes out under it, with TLS issued
@@ -843,7 +843,7 @@ function CustomDomainSection() {
 }
 
 /**
- * The product tour, under the id the hero's "See the analytics" has always
+ * The product tour, under the id the hero's "See how it works" has always
  * pointed at. It ends on the one ask in the middle of the page, placed where
  * somebody has just watched a link get made and clicked.
  */
@@ -851,6 +851,9 @@ function TourSection() {
   const { authed } = useAudience();
   return (
     <Section id="analytics" className="scroll-mt-20 pb-16">
+      <h2 className="mb-6 text-2xl font-bold tracking-tight text-balance sm:text-3xl">
+        Make a short link, share it, see where the clicks came from.
+      </h2>
       <ProductTour
         footer={
           <p className="text-center text-sm">
@@ -1076,7 +1079,6 @@ function AudiencePanel({ audience }: { audience: Audience }) {
 
 function AudienceSection() {
   const [audience, setAudience] = useState<Audience>("marketers");
-  const { title, points } = AUDIENCES[audience];
   return (
     <Section className="flex flex-col gap-8 py-20">
       <div className="max-w-xl">
@@ -1110,34 +1112,40 @@ function AudienceSection() {
           </button>
         ))}
       </div>
-      <m.div
-        key={audience}
-        id={`audience-panel-${audience}`}
-        role="tabpanel"
-        aria-labelledby={`audience-tab-${audience}`}
-        initial={{ opacity: 0, y: 6 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.25 }}
-        className="grid items-start gap-8 md:grid-cols-[0.9fr_1.1fr]"
-      >
-        <div className="flex flex-col gap-5">
-          <h3 className="text-xl font-bold text-balance">{title}</h3>
-          <ul className="flex flex-col gap-4">
-            {points.map(([head, body]) => (
-              <li key={head}>
-                <p className="font-bold">{head}</p>
-                <p className="text-sm text-muted">{body}</p>
-              </li>
-            ))}
-          </ul>
-          {audience === "developers" && (
-            <MarketingLink to="/roadmap" className="text-sm text-accent hover:underline">
-              See what is next on the roadmap →
-            </MarketingLink>
-          )}
-        </div>
-        <AudiencePanel audience={audience} />
-      </m.div>
+      {/* Every panel is in the page, the inactive ones hidden, so a crawler
+          reads the roles, custom domain, API and MCP copy too, not only
+          whichever tab happens to open first. */}
+      {AUDIENCE_KEYS.map((a) => (
+        <m.div
+          key={a}
+          id={`audience-panel-${a}`}
+          role="tabpanel"
+          aria-labelledby={`audience-tab-${a}`}
+          hidden={a !== audience}
+          initial={false}
+          animate={a === audience ? { opacity: 1, y: 0 } : { opacity: 0, y: 6 }}
+          transition={{ duration: 0.25 }}
+          className="grid items-start gap-8 md:grid-cols-[0.9fr_1.1fr]"
+        >
+          <div className="flex flex-col gap-5">
+            <h3 className="text-xl font-bold text-balance">{AUDIENCES[a].title}</h3>
+            <ul className="flex flex-col gap-4">
+              {AUDIENCES[a].points.map(([head, body]) => (
+                <li key={head}>
+                  <p className="font-bold">{head}</p>
+                  <p className="text-sm text-muted">{body}</p>
+                </li>
+              ))}
+            </ul>
+            {a === "developers" && (
+              <MarketingLink to="/docs" className="text-sm text-accent hover:underline">
+                Read the API and MCP docs →
+              </MarketingLink>
+            )}
+          </div>
+          <AudiencePanel audience={a} />
+        </m.div>
+      ))}
     </Section>
   );
 }
@@ -1158,7 +1166,7 @@ const PLAN_CHANGE_STEPS = [
   [
     "Always",
     "Links on rdyrct.com keep working",
-    "On every plan, paid or free. We never switch a printed code off.",
+    "On every plan, paid or free, a code printed with an rdyrct.com link keeps working.",
   ],
 ] as const;
 
@@ -1167,7 +1175,7 @@ export function PlanChangeSection() {
     <Section className="flex flex-col gap-10 py-20">
       <div className="max-w-xl">
         <h2 className="text-2xl font-bold tracking-tight text-balance sm:text-3xl">
-          Change plans without breaking a printed code.
+          Stop paying and nothing gets deleted.
         </h2>
         <p className="mt-2 text-muted">
           Downgrading never deletes anything. Here is what happens if you stop paying.

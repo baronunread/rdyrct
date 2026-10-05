@@ -25,7 +25,7 @@ test.describe("landing hero A/B test", () => {
     await expect(page.getByRole("heading", { level: 1 })).toHaveText(
       "Short links and QR codes that show which channel earned the click.",
     );
-    await expect(page.getByRole("link", { name: "See the analytics" })).toBeVisible();
+    await expect(page.getByRole("link", { name: "See how it works" })).toBeVisible();
   });
 
   test("the test arm shows the demo-first hero, before and without consent", async ({ page }) => {
@@ -33,7 +33,7 @@ test.describe("landing hero A/B test", () => {
     await expect(page.getByRole("heading", { level: 1 })).toHaveText(
       "Shorten a link. See who clicks it.",
     );
-    await expect(page.getByRole("link", { name: "See the analytics" })).toHaveCount(0);
+    await expect(page.getByRole("link", { name: "See how it works" })).toHaveCount(0);
     await expect(page.getByLabel("Shorten a link, no account needed")).toBeVisible();
 
     // Picking the arm contacted nobody and wrote nothing down.

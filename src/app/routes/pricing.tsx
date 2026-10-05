@@ -46,17 +46,20 @@ const CARDS = [
   {
     plan: "hobby",
     who: "For creators and small shops",
+    // Without it "API and MCP" reads as a Free-only feature.
+    plus: "Everything in Free, plus",
     points: [
       `${PLAN_LIMITS.hobby.links} links`,
       `${PLAN_LIMITS.hobby.members} members`,
       "1 custom domain, your own slugs",
       `${PLAN_LIMITS.hobby.analyticsDays} days of analytics`,
-      "QR codes with your logo and colours",
+      "QR codes with your logo and colors",
     ],
   },
   {
     plan: "pro",
     who: "For brands and growing teams",
+    plus: "Everything in Hobby, plus",
     points: [
       `${formatNumber(PLAN_LIMITS.pro.links)} links, ${PLAN_LIMITS.pro.orgs} organizations`,
       `${PLAN_LIMITS.pro.members} members`,
@@ -70,8 +73,16 @@ const CARDS = [
 function PlanCards({ match }: { match: OrgPlan | null }) {
   return (
     <div className="grid gap-4 pt-10 md:grid-cols-3">
+      {/* One primary button, on the plan the finder picked, so the cards,
+          the finder and the button all point at the same plan. Pro keeps it
+          when nothing fits. */}
       {CARDS.map((card) => (
-        <PlanCard key={card.plan} {...card} match={match === card.plan} />
+        <PlanCard
+          key={card.plan}
+          {...card}
+          match={match === card.plan}
+          primary={match ? match === card.plan : card.plan === "pro"}
+        />
       ))}
     </div>
   );
@@ -81,12 +92,16 @@ function PlanCard({
   plan,
   who,
   points,
+  plus,
   match,
+  primary,
 }: {
   plan: OrgPlan;
   who: string;
   points: readonly string[];
+  plus?: string;
   match: boolean;
+  primary: boolean;
 }) {
   return (
     <div
@@ -100,6 +115,7 @@ function PlanCard({
       <PlanHead plan={plan} match={match} />
       <PlanPrice plan={plan} />
       <p className="text-sm text-muted">{who}</p>
+      {plus && <p className="-mb-2 text-xs text-muted">{plus}:</p>}
       <ul className="flex flex-col gap-1.5 text-sm">
         {points.map((point) => (
           <li key={point} className="flex items-center gap-2">
@@ -107,7 +123,7 @@ function PlanCard({
           </li>
         ))}
       </ul>
-      <PlanCta plan={plan} />
+      <PlanCta plan={plan} primary={primary} />
     </div>
   );
 }
@@ -130,14 +146,17 @@ function PlanPrice({ plan }: { plan: OrgPlan }) {
   );
 }
 
-function PlanCta({ plan }: { plan: OrgPlan }) {
+function PlanCta({ plan, primary }: { plan: OrgPlan; primary: boolean }) {
   const paidTo = usePaidPlanTo();
   if (plan === "free")
     return (
       <Link
         to="/signup"
         onClick={() => trackCta("pricing_free")}
-        className={buttonClass({ variant: "outline", className: "mt-auto w-full" })}
+        className={buttonClass({
+          variant: primary ? "primary" : "outline",
+          className: "mt-auto w-full",
+        })}
       >
         Sign up free
       </Link>
@@ -147,7 +166,10 @@ function PlanCta({ plan }: { plan: OrgPlan }) {
     <HrefLink
       href={paidTo(plan)}
       onClick={() => trackCta(pro ? "pricing_pro" : "pricing_hobby")}
-      className={buttonClass({ variant: pro ? "primary" : "outline", className: "mt-auto w-full" })}
+      className={buttonClass({
+        variant: primary ? "primary" : "outline",
+        className: "mt-auto w-full",
+      })}
     >
       Start {PLAN_NAMES[plan]}
     </HrefLink>
@@ -348,7 +370,7 @@ export function PricingPage() {
   return (
     <MarketingPage
       path="/pricing"
-      title="Simple pricing, start free"
+      title={`URL shortener pricing: free, ${PLAN_PRICES.hobby} or ${PLAN_PRICES.pro} a month`}
       intro="Only the organization's owner pays. Everyone they invite works under the owner's plan."
     >
       <PlanCards match={fit.plan} />
