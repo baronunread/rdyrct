@@ -31,6 +31,7 @@ import {
   validateQrFields,
   changesQr,
   ALIAS_TTL_MS,
+  linkUrl,
 } from "../util";
 import { jsonBodyLimit } from "../body-limit";
 import { assertNotShortener } from "../abuse";
@@ -97,6 +98,7 @@ const addressCount = sql<number>`(
 )`.as("addressCount");
 
 function toDTO(
+  env: Env,
   row: typeof schema.links.$inferSelect,
   clicks: number,
   domain: string | null,
@@ -107,6 +109,7 @@ function toDTO(
     domainId: row.domainId,
     domain,
     slug: row.slug,
+    url: linkUrl(env, domain, row.slug),
     destination: row.destination,
     title: row.title,
     utmSource: row.utmSource,
@@ -132,6 +135,7 @@ function toDTO(
  * its DTO: the shape every route handler needs after writing to a link, so
  * they all funnel through here instead of repeating the same two queries. */
 async function linkToDTO(
+  env: Env,
   db: DB,
   orgId: string,
   row: typeof schema.links.$inferSelect,
@@ -144,7 +148,7 @@ async function linkToDTO(
       .where(eq(schema.clicks.linkId, row.id)),
     countAddressesForLink(db, row.id),
   ]);
-  return toDTO(row, clicks[0]?.n ?? 0, hostname, addressCount);
+  return toDTO(env, row, clicks[0]?.n ?? 0, hostname, addressCount);
 }
 
 /** Inserts a new address row, publishes its KV key, and responds with the
@@ -176,7 +180,10 @@ async function insertAddressAndRespond(
   );
   if (!inserted) await refuseAddressInsert(db, orgId);
   await enqueueStorage(env, [syncLinkMsg(address.slug, hostname)]);
-  const [dto, quota] = await Promise.all([linkToDTO(db, orgId, link), quotaUsageFields(db, orgId)]);
+  const [dto, quota] = await Promise.all([
+    linkToDTO(env, db, orgId, link),
+    quotaUsageFields(db, orgId),
+  ]);
   return { dto: { ...dto, ...quota }, status } as const;
 }
 
@@ -349,6 +356,7 @@ async function addressClickStats(
 }
 
 function addressToDTO(
+  env: Env,
   row: typeof schema.linkAddresses.$inferSelect,
   hostname: string | null,
   stats: { recentClicks: number; lastUse: number | null; referrers: TopEntry[] },
@@ -358,6 +366,7 @@ function addressToDTO(
     domainId: row.domainId,
     domain: hostname,
     slug: row.slug,
+    url: linkUrl(env, hostname, row.slug),
     kind: row.kind,
     creationReason: row.creationReason,
     expiresAt: row.expiresAt,
@@ -582,7 +591,7 @@ linkRoutes.get("/", requireOrgRole("viewer"), async (c) => {
     .limit(query.limit);
 
   const page = takePage(
-    rows.map((r) => toDTO(r.link, r.clicks, r.domain, r.addressCount)),
+    rows.map((r) => toDTO(c.env, r.link, r.clicks, r.domain, r.addressCount)),
     params,
     cursorValueOf(params.sort),
   );
@@ -614,7 +623,7 @@ linkRoutes.post("/claim", requireOrgRole("member"), async (c) => {
 
   const link = await claimAnonLink(c.env, c.req.param("orgId")!, c.var.user!.id, claimToken);
   if (!link) throw new HTTPException(404, { message: "That link is no longer available" });
-  return c.json(await linkToDTO(c.var.db, c.req.param("orgId")!, link), 201);
+  return c.json(await linkToDTO(c.env, c.var.db, c.req.param("orgId")!, link), 201);
 });
 
 linkRoutes.get("/quota-usage", requireOrgRole("viewer"), async (c) => {
@@ -802,7 +811,9 @@ linkRoutes.post("/", requireOrgRole("member"), async (c) => {
   if (!body.forceSeparateLink) {
     const matches = await findSameDestinationLinks(db, orgId, body.destination, utm, domainId);
     if (matches.length) {
-      const matchedLinks = await Promise.all(matches.map((match) => linkToDTO(db, orgId, match)));
+      const matchedLinks = await Promise.all(
+        matches.map((match) => linkToDTO(c.env, db, orgId, match)),
+      );
       throw new HTTPException(409, {
         message:
           "This destination already belongs to a link. Add this address to the same link so its settings and analytics stay together.",
@@ -825,7 +836,10 @@ linkRoutes.post("/", requireOrgRole("member"), async (c) => {
   // Score the destination after the response (#68), the way clicks are
   // recorded: it scores, it never blocks, and nobody waits on it.
   c.executionCtx.waitUntil(scoreAndRecord(c.env.DB, link.id, link.destination));
-  return c.json({ ...toDTO(link, 0, hostname, 1), ...(await quotaUsageFields(db, orgId)) }, 201);
+  return c.json(
+    { ...toDTO(c.env, link, 0, hostname, 1), ...(await quotaUsageFields(db, orgId)) },
+    201,
+  );
 });
 
 /** Merges a PATCH body over the existing row: an unset field (undefined)
@@ -1058,7 +1072,7 @@ linkRoutes.patch("/:linkId", requireOrgRole("member"), async (c) => {
     c.executionCtx.waitUntil(scoreAndRecord(c.env.DB, existing.id, updated.destination));
 
   const [dto, quota] = await Promise.all([
-    linkToDTO(db, orgId, updated),
+    linkToDTO(c.env, db, orgId, updated),
     quotaUsageFields(db, orgId),
   ]);
   return c.json({ ...dto, ...quota });
@@ -1094,7 +1108,7 @@ linkRoutes.get("/:linkId/addresses", requireOrgRole("viewer"), async (c) => {
         r.address.kind === "primary"
           ? { recentClicks: 0, lastUse: null, referrers: [] }
           : await addressClickStats(db, r.address.id);
-      return addressToDTO(r.address, r.hostname, stats);
+      return addressToDTO(c.env, r.address, r.hostname, stats);
     }),
   );
   return c.json(dtos);
@@ -1220,7 +1234,7 @@ async function promoteAddress(c: Context<AppEnv>) {
   const { db, orgId, link: existing, address } = await findLinkAndAddress(c);
   if (address.kind === "primary") {
     const [dto, quota] = await Promise.all([
-      linkToDTO(db, orgId, existing),
+      linkToDTO(c.env, db, orgId, existing),
       quotaUsageFields(db, orgId),
     ]);
     return c.json({ ...dto, ...quota });
@@ -1293,7 +1307,7 @@ async function promoteAddress(c: Context<AppEnv>) {
   ]);
 
   const [dto, quota] = await Promise.all([
-    linkToDTO(db, orgId, updated),
+    linkToDTO(c.env, db, orgId, updated),
     quotaUsageFields(db, orgId),
   ]);
   return c.json({ ...dto, ...quota });

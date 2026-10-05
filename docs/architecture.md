@@ -121,7 +121,10 @@ Route order matters because the Worker serves several products from one host:
    admin handlers.
 6. `/blog/*` proxies to the separate Vercel blog and strips cookies and
    authorization headers before the request leaves Cloudflare.
-7. A non-reserved `/:slug` on `rdyrct.com` checks KV for a shared-domain link.
+7. A non-reserved `/:slug` on `rdyrct.com` or `SHARED_LINK_HOST` (e.g. `rdyr.cc`)
+   checks KV for a shared-domain link. Both hosts read the same key: a
+   shared-domain slug's KV key carries no host, so it resolves identically on
+   either one.
 8. Every remaining path goes to the static asset binding. Its SPA fallback lets
    React Router own app and public pages.
 

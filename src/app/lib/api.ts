@@ -96,5 +96,10 @@ export async function deleteUserAvatar(): Promise<void> {
   await throwIfNotOk(res);
 }
 
-export const shortUrl = (slug: string, domain?: string | null) =>
-  domain ? `https://${domain}/${slug}` : `${window.location.origin}/${slug}`;
+export const shortUrl = (slug: string, domain?: string | null, linkHost?: string) => {
+  if (domain) return `https://${domain}/${slug}`;
+  // The app's own host takes the page's scheme, which is what the worker's
+  // linkUrl does with APP_URL; anything else is the HTTPS shared link host.
+  if (linkHost && linkHost !== window.location.host) return `https://${linkHost}/${slug}`;
+  return `${window.location.origin}/${slug}`;
+};

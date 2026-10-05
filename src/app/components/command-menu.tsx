@@ -33,7 +33,7 @@ import { useOrgLimits } from "../lib/org-limits";
 import { useDebounced } from "../lib/use-debounced";
 import { useTheme } from "../lib/theme";
 import { useToast } from "../ui/toast";
-import { api, ApiError, shortUrl } from "../lib/api";
+import { api, ApiError } from "../lib/api";
 import { withErrorToast } from "../lib/mutation-toast";
 import { copyToClipboard } from "../lib/clipboard";
 import { destinationSchema } from "../lib/schemas";
@@ -274,7 +274,7 @@ function useLinkMatches(term: string, close: () => void): LinkMatch[] {
   return items.map((l) => ({
     key: `link:${l.domain ?? ""}:${l.slug}`,
     name: l.title || l.destination,
-    url: shortUrl(l.slug, l.domain),
+    url: l.url,
     run: () => {
       close();
       navigate({ href: linkHref(l) });

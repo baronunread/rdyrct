@@ -32,7 +32,7 @@ import { publishLink, resolveSlug, unpublishLink } from "../kv";
 import { scoreAndRecord } from "../risk";
 import { spendToken } from "../cap";
 import { CAP_FAILED_CODE } from "@/shared/types";
-import { isValidHttpUrl, normalizeUrl, randomSlug, uid } from "../util";
+import { isValidHttpUrl, linkUrl, normalizeUrl, randomSlug, uid } from "../util";
 import { publicClientKey, rateLimitAllows } from "../rate-limit";
 import { insertLinkWithinLimit, orgPlan } from "../plan";
 
@@ -124,7 +124,7 @@ shortenRoutes.post("/", async (c) => {
   return c.json(
     {
       slug: row.slug,
-      url: `${c.env.APP_URL}/${row.slug}`,
+      url: linkUrl(c.env, null, row.slug),
       claimToken: row.claimToken,
       expiresAt,
     },

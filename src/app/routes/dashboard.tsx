@@ -3,7 +3,14 @@ import { useForm } from "react-hook-form";
 import { dashboardView } from "./dashboard-view";
 import { valibotResolver } from "@hookform/resolvers/valibot";
 import { HrefLink } from "../lib/router-search";
-import { useStats, useLinks, useMembers, useLinkMutations, useRecentClicks } from "../lib/hooks";
+import {
+  useStats,
+  useLinks,
+  useMembers,
+  useLinkMutations,
+  useRecentClicks,
+  useLinkHost,
+} from "../lib/hooks";
 import { useOrgLimits } from "../lib/org-limits";
 import { ApiError } from "../lib/api";
 import { type DomainDTO, type LinkDTO, type LinkInput, type RecentClick } from "@/shared/types";
@@ -225,6 +232,7 @@ function QuickCreateDomainSelect({
   domainId: string | null;
   onChange: (id: string | null) => void;
 }) {
+  const linkHost = useLinkHost();
   if (!activeDomains.length) return null;
   return (
     <div className="sm:w-56">
@@ -234,7 +242,7 @@ function QuickCreateDomainSelect({
         value={domainId ?? ""}
         onChange={(v) => onChange(v || null)}
         options={[
-          { value: "", label: `shared: ${window.location.host}` },
+          { value: "", label: `shared: ${linkHost}` },
           ...activeDomains.map((d) => ({ value: d.id, label: d.hostname })),
         ]}
       />

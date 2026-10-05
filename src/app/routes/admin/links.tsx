@@ -15,6 +15,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Ban, Ellipsis, ExternalLink, ShieldQuestionMark, Trash2, Undo2 } from "@/app/ui/icons";
 import { useAdminAnonLinks, useAdminLinks } from "../../lib/hooks";
 import { api } from "../../lib/api";
+import { linkDisplayTitle } from "../../lib/link-display";
 import type { AdminAnonLinkRow, AdminLinkRow, Sort } from "@/shared/types";
 import { Badge, PageHeader, Table, Td, Th } from "../../ui/misc";
 import { Button } from "../../ui/button";
@@ -189,7 +190,7 @@ function SuspendDialog({ link, onClose }: { link: AdminLinkRow | null; onClose: 
       {link && (
         <div className="flex flex-col gap-4">
           <div className="rounded-lg bg-surface-2 p-3 text-xs">
-            <p className="font-mono font-bold">/{link.slug}</p>
+            <p className="font-mono font-bold">{linkDisplayTitle(link.url)}</p>
             <p className="mt-1 break-all text-muted">{link.destination}</p>
           </div>
           <p className="text-xs text-muted">
@@ -229,7 +230,7 @@ function LinkRow({ link, ...actions }: { link: AdminLinkRow } & RowActions) {
     <tr className={link.suspendedAt ? "opacity-60" : undefined}>
       <Td>
         <span className="block truncate font-mono text-xs font-bold">
-          {link.domain ?? ""}/{link.slug}
+          {linkDisplayTitle(link.url)}
         </span>
         {link.suspendedAt && (
           <span className="mt-1 block">

@@ -24,6 +24,9 @@ no billable invocation. Unlike the Workers limiters below, the counters are
 global rather than per-location.
 
 Add them at **Security → WAF → Rate limiting rules** on the `rdyrct.com` zone.
+All three rules target auth/Cap paths, which only ever get hit on that zone
+(the shared redirect host from `SHARED_LINK_HOST`, e.g. `rdyr.cc`, only ever
+serves redirects), so there is nothing to add on its zone for these.
 
 ### Rule 1: authentication endpoints
 

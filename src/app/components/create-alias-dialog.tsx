@@ -48,9 +48,8 @@ function CreateAliasForm({
       <div className="flex flex-col gap-4">
         <p className="text-sm text-muted">
           Add another address on{" "}
-          <span className="font-mono text-text">{link.domain ?? window.location.host}</span> that
-          redirects to the same destination as{" "}
-          <span className="font-mono text-text">/{link.slug}</span>.
+          <span className="font-mono text-text">{new URL(link.url).host}</span> that redirects to
+          the same destination as <span className="font-mono text-text">/{link.slug}</span>.
         </p>
 
         <Field

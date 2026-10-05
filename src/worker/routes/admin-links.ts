@@ -27,6 +27,7 @@ import { enqueueStorage, republishOrgLinks, syncLinkMsg } from "../storage";
 import { recordAdminAction } from "../audit";
 import { scoreDestination } from "../risk";
 import { jsonBodyLimit } from "../body-limit";
+import { linkUrl } from "../util";
 import {
   ADMIN_LINK_SORTS,
   type AdminAnonLinkRow,
@@ -192,7 +193,11 @@ adminLinkRoutes.get("/", async (c) => {
     .limit(MAX_ROWS);
 
   return c.json(
-    rows.map((r) => ({ ...r, riskReasons: parseReasons(r.riskReasons) })) satisfies AdminLinkRow[],
+    rows.map((r) => ({
+      ...r,
+      url: linkUrl(c.env, r.domain, r.slug),
+      riskReasons: parseReasons(r.riskReasons),
+    })) satisfies AdminLinkRow[],
   );
 });
 

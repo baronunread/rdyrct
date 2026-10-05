@@ -79,6 +79,11 @@
   "vars": {
     "APP_URL": "https://rdyrct.com",
     "APP_HOST": "rdyrct.com",
+    // No SHARED_LINK_HOST here on purpose. It is set per deployment, as a
+    // secret, once its domain is attached and resolving
+    // (`wrangler secret put SHARED_LINK_HOST`). Committed, it would switch
+    // every new link to a host that may not exist yet, on this deploy and on
+    // every fork of the repo. Unset, shared links use APP_HOST.
     "MAIL_FROM": "rdyrct <no-reply@mail.rdyrct.com>",
     // "production" or "sandbox" — the SDK maps this to the API base URL.
     "POLAR_SERVER": "production",
@@ -309,6 +314,7 @@
       "vars": {
         "APP_URL": "http://localhost:5174",
         "APP_HOST": "localhost:5174",
+        "SHARED_LINK_HOST": "rdyr.cc",
         "MAIL_FROM": "rdyrct <no-reply@localhost>",
         "POLAR_SERVER": "sandbox",
         "POLAR_PRO_PRODUCT_ID": "playwright_pro_product",

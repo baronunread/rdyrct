@@ -43,6 +43,15 @@ test("a visitor with no account gets a working short link", async ({ page }) => 
   expect(response.headers()["location"]).toBe(destination);
 });
 
+test("the short link is on the shared link host, not the app's own host", async ({ page }) => {
+  // .dev.vars.playwright pins SHARED_LINK_HOST to "rdyr.cc", distinct from
+  // APP_HOST ("localhost:5174"): the anonymous shortener runs on the app
+  // host but must hand back a link on the shorter shared host.
+  const destination = `https://example.com/host-${Date.now()}`;
+  const shortUrl = await shorten(page, destination);
+  expect(new URL(shortUrl).host).toBe("rdyr.cc");
+});
+
 // A running total is the reason to come back and keep the link; where the
 // clicks came from is what signing up buys. So the hero shows the count, and
 // the clicks table still holds nothing for a link with no org.
