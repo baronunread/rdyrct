@@ -5,7 +5,7 @@ import { authClient } from "./auth-client";
 import { readCachedUser, writeCachedUser } from "./user-cache";
 import { lastAuth, setLastAuth } from "./last-auth";
 import posthog from "./posthog";
-import { FUNNEL } from "./funnel";
+import { FUNNEL, captureGoogleSignup } from "./funnel";
 import type {
   CurrentUser,
   AppConfig,
@@ -53,6 +53,7 @@ export function useCurrentUser(enabled = true) {
           plan: user.user.plan,
           is_admin: user.user.isAdmin,
         });
+        captureGoogleSignup((event, props) => posthog.capture(event, props));
         // Backfill the Google address once the OAuth round trip lands, so a
         // later visit to /login can offer "continue as <email>".
         if (lastAuth()?.method === "google" && lastAuth()?.email !== user.user.email) {

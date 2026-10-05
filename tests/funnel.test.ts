@@ -1,6 +1,14 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { installBrowserGlobals, removeBrowserGlobals } from "./browser-globals";
-import { FUNNEL, isFunnelEvent, landingContext, USER_SIGNED_UP } from "../src/app/lib/funnel";
+import {
+  captureGoogleSignup,
+  FUNNEL,
+  googleSignupUrl,
+  isFunnelEvent,
+  landingContext,
+  SIGNUP_FAILED,
+  USER_SIGNED_UP,
+} from "../src/app/lib/funnel";
 
 /** Minimal stand-ins for the two globals landingContext() reads. */
 function browser({ search = "", referrer = "", host = "rdyrct.com" } = {}) {
@@ -88,5 +96,47 @@ describe("landingContext", () => {
   test("survives a malformed referrer instead of failing the pageview", () => {
     browser({ referrer: "not a url" });
     expect(landingContext()).toEqual({});
+  });
+});
+
+// A Google signup never touches the form or the code screen, so before this
+// it was missing from the funnel entirely: six Google starts in 60 days and
+// no way to tell which ones made an account.
+describe("Google signups", () => {
+  function at(href: string) {
+    const replaced: string[] = [];
+    const location = { origin: "https://rdyrct.com", href };
+    installBrowserGlobals({
+      window: {
+        location,
+        history: { state: null, replaceState: (_s, _u, url) => replaced.push(url) },
+      },
+    });
+    return replaced;
+  }
+
+  test("the new-user redirect carries the marker and keeps next's own query", () => {
+    at("https://rdyrct.com/signup");
+    expect(googleSignupUrl("/billing?plan=pro")).toBe("/billing?plan=pro&signup=google");
+    expect(googleSignupUrl("/dashboard")).toBe("/dashboard?signup=google");
+  });
+
+  test("landing with the marker counts one signup and strips it", () => {
+    const replaced = at("https://rdyrct.com/billing?plan=pro&signup=google");
+    const events: string[] = [];
+    captureGoogleSignup((event) => events.push(event));
+    expect(events).toEqual([FUNNEL.signupSubmitted, USER_SIGNED_UP]);
+    expect(replaced).toEqual(["/billing?plan=pro"]);
+  });
+
+  test("a returning Google sign-in, with no marker, counts nothing", () => {
+    at("https://rdyrct.com/dashboard");
+    const events: string[] = [];
+    captureGoogleSignup((event) => events.push(event));
+    expect(events).toEqual([]);
+  });
+
+  test("a failed signup is buffered like the steps", () => {
+    expect(isFunnelEvent(SIGNUP_FAILED)).toBe(true);
   });
 });

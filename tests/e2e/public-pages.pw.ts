@@ -32,7 +32,7 @@ test("the hero's second CTA stays on the site and self-hosting sits under pricin
   const hero = page.locator("section").first();
   await expect(hero.getByRole("link", { name: /self-host/i })).toHaveCount(0);
 
-  await hero.getByRole("link", { name: /see the analytics/i }).click();
+  await hero.getByRole("link", { name: /see how it works/i }).click();
   await expect(page).toHaveURL(/#analytics$/);
   await expect(page.locator("#analytics")).toBeInViewport();
 

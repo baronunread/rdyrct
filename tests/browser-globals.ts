@@ -9,6 +9,7 @@
 export interface BrowserGlobals {
   window?: {
     location?: { origin?: string; search?: string; hostname?: string; href?: string };
+    history?: { state: null; replaceState: (state: null, unused: string, url: string) => void };
   };
   document?: { referrer?: string };
   localStorage?: Pick<Storage, "getItem" | "setItem" | "removeItem">;
