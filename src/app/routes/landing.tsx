@@ -95,12 +95,13 @@ function Section({
   onEnter?: () => void;
 }) {
   return (
-    // Still, not revealed on scroll: the design rules forbid gating reading
-    // behind an animation. Motion stays only for onEnter's viewport check.
     <m.section
       id={id}
+      initial={{ opacity: 0, y: 8 }}
+      whileInView={{ opacity: 1, y: 0 }}
       onViewportEnter={onEnter}
       viewport={{ once: true, margin: "-80px" }}
+      transition={{ duration: 0.3, ease: "easeOut" }}
       className={className}
     >
       {children}
@@ -515,7 +516,12 @@ function SelfHostSection() {
  */
 function HeroTestVariant() {
   return (
-    <div className="mx-auto flex max-w-xl flex-col items-center gap-6 py-14 text-center md:py-20">
+    <m.div
+      initial={{ opacity: 0, y: 6 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.2, ease: "easeOut" }}
+      className="mx-auto flex max-w-xl flex-col items-center gap-6 py-14 text-center md:py-20"
+    >
       <h1 className="text-3xl font-bold tracking-tight text-balance sm:text-4xl lg:text-5xl">
         Shorten a link. See who clicks it.
       </h1>
@@ -545,7 +551,7 @@ function HeroTestVariant() {
       >
         Skip the demo, get started free
       </HrefLink>
-    </div>
+    </m.div>
   );
 }
 
@@ -572,7 +578,12 @@ function HeroControlVariant({
     // primary actions in one column. Side by side they are no longer in the
     // same column, so the primary CTA is primary again.
     <section className="grid items-center gap-10 py-14 md:grid-cols-2 md:gap-12 md:py-20">
-      <div className="flex flex-col items-center gap-6 text-center md:items-start md:text-left">
+      <m.div
+        initial={{ opacity: 0, y: 6 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.2, ease: "easeOut" }}
+        className="flex flex-col items-center gap-6 text-center md:items-start md:text-left"
+      >
         <h1 className="text-3xl font-bold tracking-tight text-balance sm:text-4xl lg:text-5xl">
           Short links and QR codes that show which channel earned the click.
         </h1>
@@ -621,18 +632,23 @@ function HeroControlVariant({
             <Check size={13} className="text-accent-2" /> No IP tracking
           </li>
         </ul>
-      </div>
+      </m.div>
 
       {/* The right half on a wide screen, and directly under the copy on a
           phone, where it has to stay near the fold: it is the one thing on
           this page that turns a stranger into an account. */}
-      <div className="flex w-full justify-center md:justify-end">
+      <m.div
+        initial={{ opacity: 0, y: 6 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.2, ease: "easeOut" }}
+        className="flex w-full justify-center md:justify-end"
+      >
         {/* The anonymous shortener is an argument aimed at a stranger. A
             signed-in visitor has already been convinced, and offering them a
             link that expires in 24 hours and can be "kept" by signing up for
             the account they are in reads as nobody having tried it. */}
         {authed ? <HeroSignedIn name={name} /> : <HeroShortener />}
-      </div>
+      </m.div>
     </section>
   );
 }
