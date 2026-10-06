@@ -1,8 +1,0 @@
-# HyperFrames build artifacts
-node_modules/
-renders/
-transcript.json
-*.wav
-*.log
-*.mp4
-.DS_Store
