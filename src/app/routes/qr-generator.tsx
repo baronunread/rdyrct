@@ -475,8 +475,9 @@ export function QrGeneratorPage() {
           <h2 className="text-xl font-bold text-balance">Choose PNG or SVG for your QR code</h2>
           <p className="text-muted">
             PNG is a fixed-size image for websites, email, documents and slides. SVG is a vector
-            file that stays sharp when a printer scales it for a poster or package. For print, scan
-            a proof at its intended size before making a large run.
+            file that keeps the QR pattern sharp when a printer scales it for a poster or package.
+            Raster logos can still blur when enlarged beyond their effective resolution. For print,
+            scan a proof at its intended size before making a large run.
           </p>
           <h2 className="pt-3 text-xl font-bold text-balance">Static QR codes and scan tracking</h2>
           <p className="text-muted">
