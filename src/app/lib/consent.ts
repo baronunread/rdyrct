@@ -12,6 +12,8 @@ import { useSyncExternalStore } from "react";
 export const CONSENT_KEY = "rdyrct:consent:v2";
 const ANSWERED_AT_KEY = "rdyrct:consent:v2:at";
 const LIFETIME_MS = 183 * 24 * 60 * 60 * 1000;
+const browserReady = () => true;
+const serverSnapshot = () => false;
 
 export type ConsentAnswer = "accepted" | "rejected";
 
@@ -68,9 +70,27 @@ const listeners = new Set<() => void>();
 function notify() {
   for (const listener of listeners) listener();
 }
+
+if ("window" in globalThis) {
+  globalThis.window.addEventListener("storage", (event) => {
+    if (event.key === CONSENT_KEY || event.key === ANSWERED_AT_KEY) notify();
+  });
+}
+
 function subscribe(listener: () => void) {
   listeners.add(listener);
   return () => listeners.delete(listener);
+}
+
+/** Whether this browser has accepted analytics, updated in other tabs too. */
+export function useAnalyticsConsent() {
+  const ready = useSyncExternalStore(subscribe, browserReady, serverSnapshot);
+  const accepted = useSyncExternalStore(
+    subscribe,
+    () => readConsent() === "accepted",
+    serverSnapshot,
+  );
+  return { ready, accepted: ready && accepted };
 }
 
 /** Shows the banner again, whatever the stored answer. */

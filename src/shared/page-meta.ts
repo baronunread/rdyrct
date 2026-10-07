@@ -19,6 +19,15 @@ export interface PageMeta {
   markdown?: string;
 }
 
+export const PRERENDERED_PUBLIC_PATHS = new Set<string>([
+  "/",
+  "/pricing",
+  "/qr-code-generator",
+  "/docs",
+  "/privacy",
+  "/terms",
+]);
+
 /**
  * What index.html ships, and therefore what every page that has no entry of
  * its own should read. Kept here rather than left implicit in the HTML: the
@@ -58,9 +67,23 @@ rdyrct is a free URL shortener and QR code generator for teams. Create short lin
       "Make a custom QR code for free: your logo, your colors, rounded dots, and a PNG or SVG download. No sign-up, no watermark, and the code is made in your browser.",
     markdown: `# Free QR code generator
 
-Make a QR code for a link, text, Wi-Fi details, or any other string. Add a logo, choose colours and dot styles, then download a PNG or SVG.
+Make a QR code for a link or any text. Add your logo, choose colours and dot styles, then download a PNG or SVG. This free QR code generator works in your browser, with no account or watermark.
 
-No account, watermark, or expiry is required. The code is generated in your browser, and rdyrct does not store what you enter.
+## How to make a QR code
+
+1. Enter a link or text in the generator.
+2. Choose a dot style and colours, then add an optional logo.
+3. Download the finished code as a PNG or SVG.
+
+## PNG and SVG downloads
+
+PNG is a fixed-size image for websites, documents, email, and slides. SVG is a vector file that stays sharp when a printer scales it for a poster or package. Open the downloaded file at its intended size and scan it with a phone before printing a large batch.
+
+## Static QR codes and tracking
+
+This generator makes static QR codes: the link or text is stored in the pattern itself. The code does not expire and has no scan limit, but changing its destination means making a new code. To measure scans or change where a code leads later, make a QR code for a short link you manage. The short link can count visits while the QR code stays the same.
+
+The QR code and optional logo are processed in your browser. rdyrct does not receive or store the value you enter or the logo you choose.
 
 [Open the QR code generator](/qr-code-generator)`,
   },
@@ -199,7 +222,7 @@ Andrea Bruno is the data controller for rdyrct. For a privacy request or questio
 
 We collect your account email address and name, plus the organizations, links, domains, and settings you create. Click analytics keep only an approximate country, referrer host, device type, and timestamp. We do not store an IP address, precise location, or data that enables cross-site tracking.
 
-If you accept analytics, PostHog records product events tied to your account. It does not autocapture what you type or replay your screen. Until you answer the banner, a few steps on the current page are held in browser memory: accepting sends them, rejecting discards them. The home page shows one of two versions, picked at random on each load without storing anything; if you accept, events say which version you saw. Sentry receives technical error reports with the error, browser, and page path, after query strings are removed.
+If you accept analytics, PostHog records product events tied to your account. It does not autocapture what you type or replay your screen. Until you answer the banner, a few steps on the current page are held in browser memory: accepting sends them, rejecting discards them. The home page starts with the same version for everyone. After you accept analytics, it picks one of two versions at random and keeps that choice in your browser until you withdraw consent or it expires. Events sent after that choice say which version you saw. Sentry receives technical error reports with the error, browser, and page path, after query strings are removed.
 
 ## Why we process it
 

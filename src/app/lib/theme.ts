@@ -29,9 +29,13 @@ function toggle() {
 }
 
 export function useTheme(): [Theme, () => void] {
-  const theme = useSyncExternalStore((cb) => {
-    listeners.add(cb);
-    return () => listeners.delete(cb);
-  }, current);
+  const theme = useSyncExternalStore(
+    (cb) => {
+      listeners.add(cb);
+      return () => listeners.delete(cb);
+    },
+    current,
+    (): Theme => "light",
+  );
   return [theme, toggle];
 }

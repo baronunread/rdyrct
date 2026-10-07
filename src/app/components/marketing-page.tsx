@@ -19,6 +19,7 @@ import { useAudience } from "../lib/audience";
 import { LandingHeader } from "./landing-header";
 import { WebMcpMarketingTools } from "./webmcp-marketing-tools";
 import { Footer } from "../ui/footer";
+import { MarketingGlow } from "./marketing-glow";
 
 export function MarketingPage({
   path,
@@ -40,11 +41,12 @@ export function MarketingPage({
     <MotionConfig reducedMotion="user">
       <LazyMotion features={domAnimation}>
         <div className="relative mx-auto min-h-dvh max-w-5xl px-6">
+          <MarketingGlow />
           <WebMcpMarketingTools />
           <LandingHeader authed={authed} />
 
           <main>
-            <div className="pt-14 pb-2 text-center sm:pt-20">
+            <div className="first-paint-hero pt-14 pb-2 text-center sm:pt-20">
               <h1 className="text-3xl font-bold tracking-tight text-balance sm:text-4xl">
                 {title}
               </h1>

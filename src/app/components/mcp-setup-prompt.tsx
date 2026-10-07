@@ -1,7 +1,7 @@
 import { Button } from "../ui/button";
 import { Copy } from "../ui/icons";
 import { copyToClipboard } from "../lib/clipboard";
-import { mcpUrl } from "../lib/mcp-url";
+import { useMcpUrl } from "../lib/mcp-url";
 import { useToast } from "../ui/toast";
 
 /** The endpoint and header an MCP client's "Add custom connector" form asks
@@ -13,13 +13,17 @@ import { useToast } from "../ui/toast";
  * job. */
 export function McpSetupCopyButton({ apiKey }: { apiKey?: string }) {
   const toast = useToast();
-  const text = `URL: ${mcpUrl()}
-Header: Authorization: Bearer ${apiKey ?? "YOUR_API_KEY"}`;
+  const url = useMcpUrl();
   return (
     <Button
       variant="outline"
       size="sm"
-      onClick={() => void copyToClipboard(text, toast).catch(() => {})}
+      onClick={() =>
+        void copyToClipboard(
+          `URL: ${url}\nHeader: Authorization: Bearer ${apiKey ?? "YOUR_API_KEY"}`,
+          toast,
+        ).catch(() => {})
+      }
     >
       <Copy size={14} /> Copy MCP setup
     </Button>
@@ -32,11 +36,12 @@ Header: Authorization: Bearer ${apiKey ?? "YOUR_API_KEY"}`;
  * for a client that instead takes a scoped API key as a bearer header). */
 export function McpUrlCopyButton() {
   const toast = useToast();
+  const url = useMcpUrl();
   return (
     <Button
       variant="outline"
       size="sm"
-      onClick={() => void copyToClipboard(mcpUrl(), toast).catch(() => {})}
+      onClick={() => void copyToClipboard(url, toast).catch(() => {})}
       className="shrink-0"
     >
       <Copy size={14} /> Copy URL
@@ -53,8 +58,7 @@ export function McpUrlCopyButton() {
 // command (Claude Code's CLI) as an example, then falls back to "find the
 // setting yourself" for everything else, rather than guessing every tool's
 // config file.
-function agentPrompt() {
-  const url = mcpUrl();
+function agentPrompt(url: string) {
   const apiKeysUrl = `${window.location.origin}/api-keys`;
   return `Connect the rdyrct MCP server to this tool.
 
@@ -74,11 +78,12 @@ Confirm once it's connected.`;
  * ("I've added the server") as an alternative path, not a competing one. */
 export function McpAgentPromptButton() {
   const toast = useToast();
+  const url = useMcpUrl();
   return (
     <Button
       variant="outline"
       size="sm"
-      onClick={() => void copyToClipboard(agentPrompt(), toast).catch(() => {})}
+      onClick={() => void copyToClipboard(agentPrompt(url), toast).catch(() => {})}
       className="shrink-0"
     >
       <Copy size={14} /> Copy prompt

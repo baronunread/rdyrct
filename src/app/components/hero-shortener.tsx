@@ -14,7 +14,14 @@
  * localStorage and the app spends it once the new account has an org, so the
  * first dashboard is not empty (#65).
  */
-import { lazy, Suspense, useState, type ComponentProps, type ComponentType } from "react";
+import {
+  lazy,
+  Suspense,
+  useEffect,
+  useState,
+  type ComponentProps,
+  type ComponentType,
+} from "react";
 import { errorMessage } from "@/app/lib/error-message";
 import { ArrowRight } from "@/app/ui/icons";
 import { Button } from "../ui/button";
@@ -78,7 +85,7 @@ function MadeLink({ link }: { link: StoredAnonLink }) {
     // The link arrives rather than appearing: it is the answer to the button
     // that was just pressed, a few hundred milliseconds after it, and a card
     // that pops into the layout reads as a jump rather than as a result.
-    <div className="anon-link-in grid grid-cols-[1fr_auto] items-start gap-3 border-t border-dashed border-border pt-3">
+    <div className="anon-link-in grid grid-cols-shortener items-start gap-3 border-t border-dashed border-border pt-3">
       <div className="flex min-w-0 flex-col gap-1.5">
         <div className="flex min-w-0 items-center gap-2 rounded-lg bg-surface-2 px-3 py-2.5">
           <a
@@ -176,7 +183,8 @@ export function HeroShortener() {
   const [busy, setBusy] = useState(false);
   // Seeded from storage, so a reload keeps what this browser already made
   // rather than presenting an empty form to somebody who has a link.
-  const [made, setMade] = useState<StoredAnonLink[]>(storedAnonLinks);
+  const [made, setMade] = useState<StoredAnonLink[]>([]);
+  useEffect(() => setMade(storedAnonLinks()), []);
   const atCap = made.length >= MAX_ANON_LINKS;
   // One reason the button is dead, so the guard and the disabled state can
   // never disagree about it.
