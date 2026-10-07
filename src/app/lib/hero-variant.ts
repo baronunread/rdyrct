@@ -1,5 +1,5 @@
 /** The landing hero assignment, stored only while analytics consent is valid. */
-import { readConsent } from "./consent";
+import { CONSENT_KEY, readConsent } from "./consent";
 
 export type HeroVariant = "control" | "test";
 
@@ -69,4 +69,10 @@ export function clearHeroVariant() {
     // Nothing to clear when storage is unavailable.
   }
   notify();
+}
+
+if ("window" in globalThis) {
+  globalThis.window.addEventListener("storage", (event) => {
+    if (event.key === CONSENT_KEY && readConsent() !== "accepted") clearHeroVariant();
+  });
 }

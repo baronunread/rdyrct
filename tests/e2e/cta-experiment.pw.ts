@@ -100,6 +100,25 @@ test.describe("landing hero A/B test", () => {
     await expect(page.getByRole("heading", { level: 1 })).toHaveText(controlHeading);
     expect(await page.evaluate((key) => localStorage.getItem(key), HERO_VARIANT_KEY)).toBeNull();
   });
+
+  test("clears the assigned hero when consent is rejected in another tab", async ({ page }) => {
+    await openLandingAs(page, "test");
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText(
+      "Shorten a link. See who clicks it.",
+    );
+
+    const otherTab = await page.context().newPage();
+    await otherTab.goto("/");
+    await otherTab.evaluate((key) => localStorage.setItem(key, "rejected"), CONSENT_KEY);
+
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText(
+      "Short links and QR codes that show which channel earned the click.",
+    );
+    await expect
+      .poll(() => page.evaluate((key) => localStorage.getItem(key), HERO_VARIANT_KEY))
+      .toBeNull();
+    await otherTab.close();
+  });
 });
 
 test.describe("cookie settings", () => {
