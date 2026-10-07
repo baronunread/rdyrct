@@ -238,7 +238,7 @@ const qrFaqs = [
   },
   {
     q: "PNG or SVG?",
-    a: "SVG for anything printed: it stays sharp at any size, which matters on posters, packaging and vehicle livery. PNG for screens, email and slides.",
+    a: "SVG for anything printed: the QR pattern stays sharp at any size, while a raster logo can blur when enlarged beyond its resolution. PNG for screens, email and slides.",
   },
   {
     q: "What is a dynamic QR code, and do I need one?",
