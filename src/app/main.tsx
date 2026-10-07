@@ -1,6 +1,7 @@
 import { StrictMode, Suspense, lazy } from "react";
-import { createRoot } from "react-dom/client";
+import { createRoot, hydrateRoot } from "react-dom/client";
 import {
+  createMemoryHistory,
   createRootRoute,
   createRoute,
   createRouter,
@@ -32,8 +33,7 @@ import { AppShellSkeleton, AdminPlatformSkeleton } from "./components/skeletons"
 import { LandingHeader } from "./components/landing-header";
 import { readAuthHint } from "./lib/user-cache";
 import { resumeAnalyticsIfConsented } from "./lib/posthog";
-
-resumeAnalyticsIfConsented();
+import { PRERENDERED_PUBLIC_PATHS } from "@/shared/page-meta";
 
 // Every route loads lazily so the entry chunk stays small: visitors on the
 // marketing landing never download the app, and the app never downloads the
@@ -402,7 +402,15 @@ const routeTree = rootRoute.addChildren([
   ]),
 ]);
 
-const router = createRouter({ routeTree, defaultPreload: false });
+export const PRERENDER_ROUTES = [...PRERENDERED_PUBLIC_PATHS] as const;
+
+const router = globalThis.window
+  ? createRouter({ routeTree, defaultPreload: false })
+  : createRouter({
+      routeTree,
+      defaultPreload: false,
+      history: createMemoryHistory({ initialEntries: ["/"] }),
+    });
 
 declare module "@tanstack/react-router" {
   interface Register {
@@ -414,17 +422,37 @@ const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: 1, refetchOnWindowFocus: false } },
 });
 
-createRoot(document.getElementById("root")!).render(
-  <StrictMode>
-    <QueryClientProvider client={queryClient}>
-      <ToastProvider>
-        <ErrorBoundary>
-          <RouterProvider router={router} />
-        </ErrorBoundary>
-        {/* Outside the boundary: it stays mounted when a chunk failure crashes
+export function App() {
+  return (
+    <StrictMode>
+      <QueryClientProvider client={queryClient}>
+        <ToastProvider>
+          <ErrorBoundary>
+            <RouterProvider router={router} />
+          </ErrorBoundary>
+          {/* Outside the boundary: it stays mounted when a chunk failure crashes
             the app underneath, so the "new version available" prompt survives. */}
-        <NewVersionBanner />
-      </ToastProvider>
-    </QueryClientProvider>
-  </StrictMode>,
-);
+          <NewVersionBanner />
+        </ToastProvider>
+      </QueryClientProvider>
+    </StrictMode>
+  );
+}
+
+export async function preparePublicPage(path: (typeof PRERENDER_ROUTES)[number]) {
+  if (!router.state.matches.length) await router.load();
+  await router.preloadRoute({ to: path });
+  router.history.push(path);
+  await router.load();
+}
+
+const root = globalThis.document?.getElementById("root") ?? null;
+if (globalThis.document) globalThis.document.documentElement.dataset.motionReady = "true";
+if (root) {
+  resumeAnalyticsIfConsented();
+  if (root.dataset.prerendered === globalThis.window.location.pathname) {
+    hydrateRoot(root, <App />);
+  } else {
+    createRoot(root).render(<App />);
+  }
+}

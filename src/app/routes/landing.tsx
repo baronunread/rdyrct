@@ -12,14 +12,20 @@ import {
   useReducedMotion,
   type Variants,
 } from "motion/react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useSeo } from "../lib/seo";
 import { useMarketingScroll } from "../lib/marketing-scroll";
 import { FaqJsonLd } from "../components/faq-json-ld";
 import { MarketingLink } from "../components/marketing-link";
 import { useAudience } from "../lib/audience";
 import posthog from "../lib/posthog";
-import { heroVariant } from "../lib/hero-variant";
+import {
+  clearHeroVariant,
+  heroVariant,
+  heroVariantSnapshot,
+  subscribeHeroVariant,
+} from "../lib/hero-variant";
+import { readConsent, useAnalyticsConsent } from "../lib/consent";
 import { FUNNEL, landingContext } from "../lib/funnel";
 import { trackCta } from "../lib/track-cta";
 import { PLAN_LIMITS, PLAN_PRICES } from "@/shared/types";
@@ -30,6 +36,7 @@ import { HeroShortener } from "../components/hero-shortener";
 import { HeroSignedIn } from "../components/hero-signed-in";
 import { LandingHeader } from "../components/landing-header";
 import { WebMcpMarketingTools } from "../components/webmcp-marketing-tools";
+import { MarketingGlow } from "../components/marketing-glow";
 import { ProductTour } from "../components/landing-tour";
 import { AnonLinkBar } from "../components/anon-link-bar";
 import { formatNumber } from "../lib/numbers";
@@ -102,7 +109,7 @@ function Section({
       onViewportEnter={onEnter}
       viewport={{ once: true, margin: "-80px" }}
       transition={{ duration: 0.3, ease: "easeOut" }}
-      className={className}
+      className={`marketing-reveal ${className}`}
     >
       {children}
     </m.section>
@@ -516,12 +523,7 @@ function SelfHostSection() {
  */
 function HeroTestVariant() {
   return (
-    <m.div
-      initial={{ opacity: 0, y: 6 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.2, ease: "easeOut" }}
-      className="mx-auto flex max-w-xl flex-col items-center gap-6 py-14 text-center md:py-20"
-    >
+    <div className="first-paint-hero mx-auto flex max-w-xl flex-col items-center gap-6 py-14 text-center md:py-20">
       <h1 className="text-3xl font-bold tracking-tight text-balance sm:text-4xl lg:text-5xl">
         Shorten a link. See who clicks it.
       </h1>
@@ -551,7 +553,7 @@ function HeroTestVariant() {
       >
         Skip the demo, get started free
       </HrefLink>
-    </m.div>
+    </div>
   );
 }
 
@@ -578,12 +580,7 @@ function HeroControlVariant({
     // primary actions in one column. Side by side they are no longer in the
     // same column, so the primary CTA is primary again.
     <section className="grid items-center gap-10 py-14 md:grid-cols-2 md:gap-12 md:py-20">
-      <m.div
-        initial={{ opacity: 0, y: 6 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.2, ease: "easeOut" }}
-        className="flex flex-col items-center gap-6 text-center md:items-start md:text-left"
-      >
+      <div className="first-paint-hero flex flex-col items-center gap-6 text-center md:items-start md:text-left">
         <h1 className="text-3xl font-bold tracking-tight text-balance sm:text-4xl lg:text-5xl">
           Short links and QR codes that show which channel earned the click.
         </h1>
@@ -632,37 +629,63 @@ function HeroControlVariant({
             <Check size={13} className="text-accent-2" /> No IP tracking
           </li>
         </ul>
-      </m.div>
+      </div>
 
       {/* The right half on a wide screen, and directly under the copy on a
           phone, where it has to stay near the fold: it is the one thing on
           this page that turns a stranger into an account. */}
-      <m.div
-        initial={{ opacity: 0, y: 6 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.2, ease: "easeOut" }}
-        className="flex w-full justify-center md:justify-end"
-      >
+      <div className="first-paint-hero flex w-full justify-center md:justify-end">
         {/* The anonymous shortener is an argument aimed at a stranger. A
             signed-in visitor has already been convinced, and offering them a
             link that expires in 24 hours and can be "kept" by signing up for
             the account they are in reads as nobody having tried it. */}
         {authed ? <HeroSignedIn name={name} /> : <HeroShortener />}
-      </m.div>
+      </div>
     </section>
   );
+}
+
+function anonymousHeroIsReady(ready: boolean, authed: boolean) {
+  return ready && !authed;
+}
+
+function syncHeroAssignment(
+  consentReady: boolean,
+  analyticsConsent: boolean,
+  ready: boolean,
+  authed: boolean,
+) {
+  if (!consentReady) return;
+  if (!analyticsConsent) return clearHeroVariant();
+  if (anonymousHeroIsReady(ready, authed)) heroVariant();
+}
+
+function shouldCaptureLandingView(consentReady: boolean, ready: boolean, captured: boolean) {
+  return consentReady && ready && !captured && readConsent() === "accepted";
 }
 
 function HeroSection(props: {
   ctaTo: string;
   ctaLabel: string;
   authed: boolean;
+  ready: boolean;
   /** Empty until the session resolves; the card handles that itself. */
   name: string;
 }) {
+  const landingViewCaptured = useRef(false);
+  const variant = useSyncExternalStore(subscribeHeroVariant, heroVariantSnapshot, () => "control");
+  const { ready: consentReady, accepted: analyticsConsent } = useAnalyticsConsent();
+  useEffect(() => {
+    syncHeroAssignment(consentReady, analyticsConsent, props.ready, props.authed);
+  }, [props.ready, props.authed, consentReady, analyticsConsent]);
+  useEffect(() => {
+    if (!shouldCaptureLandingView(consentReady, props.ready, landingViewCaptured.current)) return;
+    landingViewCaptured.current = true;
+    posthog.capture(FUNNEL.landingViewed, landingContext());
+  }, [props.ready, props.authed, consentReady, analyticsConsent]);
   // A signed-in visitor always gets the control hero and never flips the
   // coin, so they are not counted as shown either arm (see hero-variant.ts).
-  if (!props.authed && heroVariant() === "test") return <HeroTestVariant />;
+  if (!props.authed && variant === "test") return <HeroTestVariant />;
   return <HeroControlVariant {...props} />;
 }
 
@@ -1125,7 +1148,7 @@ function AudienceSection() {
           initial={false}
           animate={a === audience ? { opacity: 1, y: 0 } : { opacity: 0, y: 6 }}
           transition={{ duration: 0.25 }}
-          className="grid items-start gap-8 md:grid-cols-[0.9fr_1.1fr]"
+          className="grid items-start gap-8 md:grid-cols-marketing-copy"
         >
           <div className="flex flex-col gap-5">
             <h3 className="text-xl font-bold text-balance">{AUDIENCES[a].title}</h3>
@@ -1352,19 +1375,12 @@ function PricingTeaser() {
 // static analysis can't follow.
 // fallow-ignore-next-line unused-export
 export function LandingPage() {
-  const { authed, name, ctaTo, ctaLabel } = useAudience();
+  const { authed, ready, name, ctaTo, ctaLabel } = useAudience();
 
   // The words people type when they are looking for this, in the title and
   // the description a result actually shows: "url shortener" and "qr code
   // generator" rather than only the brand and the tagline.
   useSeo("/");
-
-  // Step 1 of the funnel (#64). Once per mount, not per render, and not
-  // gated on the user query settling: a landing view is a view whether or
-  // not the session query has come back.
-  useEffect(() => {
-    posthog.capture(FUNNEL.landingViewed, landingContext());
-  }, []);
 
   useMarketingScroll();
 
@@ -1375,16 +1391,7 @@ export function LandingPage() {
           <FaqJsonLd faqs={faqs} />
           <WebMcpMarketingTools />
           <style>{`@keyframes cursorBlink { 50% { opacity: 0; } }`}</style>
-          {/* soft accent glow behind the hero */}
-          <div
-            aria-hidden="true"
-            className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-120"
-            style={{
-              background:
-                "radial-gradient(55% 60% at 50% 0%, color-mix(in srgb, var(--accent) 9%, transparent), transparent)",
-            }}
-          />
-
+          <MarketingGlow />
           {/* First focusable thing on the page, so a keyboard user can jump
               past the header nav. Hidden until it takes focus. */}
           <a
@@ -1395,7 +1402,13 @@ export function LandingPage() {
           </a>
           <LandingHeader authed={authed} />
           <main id="main">
-            <HeroSection ctaTo={ctaTo} ctaLabel={ctaLabel} authed={authed} name={name} />
+            <HeroSection
+              ctaTo={ctaTo}
+              ctaLabel={ctaLabel}
+              authed={authed}
+              ready={ready}
+              name={name}
+            />
             <TourSection />
             <FactsSection />
             <CustomDomainSection />

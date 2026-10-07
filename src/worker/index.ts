@@ -37,6 +37,7 @@ import { resolveSlug, resolveDomain, domainServing, type KVLink } from "./kv";
 import { notFoundPage } from "./not-found-page";
 import { RESERVED_SLUGS, SLUG_RE } from "./util";
 import { markdownPage, withPageMeta } from "./page-meta";
+import { PRERENDERED_PUBLIC_PATHS } from "../shared/page-meta";
 import { enforcePublicAuthRateLimit, enforceSignedApiRateLimit } from "./rate-limit";
 import { applySecurityHeaders } from "./security-headers";
 import { drizzle } from "drizzle-orm/d1";
@@ -417,6 +418,39 @@ function uncacheable404(body: BodyInit | null, from?: Headers): Response {
  */
 const STATIC_CACHE = "public, max-age=3600, must-revalidate";
 
+async function servePrerenderedPage(c: Context<AppEnv>, url: URL): Promise<Response | null> {
+  if (
+    (c.req.method !== "GET" && c.req.method !== "HEAD") ||
+    !PRERENDERED_PUBLIC_PATHS.has(url.pathname)
+  )
+    return null;
+  const assetPath = url.pathname === "/" ? null : `/_prerendered${url.pathname}.txt${url.search}`;
+  if (!assetPath) return null;
+  const asset = await c.env.ASSETS.fetch(new Request(new URL(assetPath, url.origin), c.req.raw));
+  if (asset.status !== 200 && asset.status !== 304) return null;
+  const headers = new Headers(asset.headers);
+  headers.set("content-type", "text/html; charset=utf-8");
+  return withPageMeta(
+    new Response(asset.body, { status: asset.status, statusText: asset.statusText, headers }),
+    url,
+  );
+}
+
+function cacheStaticAsset(response: Response): Response {
+  const cached = new Response(response.body, response);
+  cached.headers.set("cache-control", STATIC_CACHE);
+  return cached;
+}
+
+function finalizeSpaResponse(response: Response, url: URL, status?: 404): Response {
+  const page = withPageMeta(response, url);
+  if (page.status !== 200) return page;
+  if (!page.headers.get("content-type")?.includes("text/html")) {
+    return import.meta.env.DEV ? page : cacheStaticAsset(page);
+  }
+  return status ? uncacheable404(page.body, page.headers) : page;
+}
+
 /**
  * Order matters here, and both branches have taken the app down once.
  *
@@ -438,21 +472,14 @@ async function serveSpa(c: Context<AppEnv>, status?: 404): Promise<Response> {
     const markdown = markdownPage(url, c.req.header("accept"));
     if (markdown) return markdown;
   }
-  const response = withPageMeta(await c.env.ASSETS.fetch(c.req.raw), url);
-
-  // A conditional request comes back 304 with a null body, and rewriting one
-  // of those into a 404 ships an empty document.
-  if (response.status !== 200) return response;
-
-  if (!response.headers.get("content-type")?.includes("text/html")) {
-    if (import.meta.env.DEV) return response;
-    // ASSETS hands back immutable headers, so this has to be a copy.
-    const cached = new Response(response.body, response);
-    cached.headers.set("cache-control", STATIC_CACHE);
-    return cached;
+  if (!status) {
+    const prerendered = await servePrerenderedPage(c, url);
+    if (prerendered) return prerendered;
   }
-  if (!status) return response;
-  return uncacheable404(response.body, response.headers);
+  const assetResponse = await c.env.ASSETS.fetch(c.req.raw);
+  // A conditional request can be a 304 with no body; only HTML fallback
+  // responses need the soft-404 status conversion.
+  return finalizeSpaResponse(assetResponse, url, status);
 }
 
 /* ---------------- shared-domain slug redirect ---------------- */

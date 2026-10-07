@@ -15,7 +15,7 @@ import {
  * error boundary so it survives the boundary catching the chunk failure.
  */
 export function NewVersionBanner() {
-  const available = useSyncExternalStore(subscribeNewVersion, getNewVersion);
+  const available = useSyncExternalStore(subscribeNewVersion, getNewVersion, () => false);
   if (!available) return null;
 
   return (

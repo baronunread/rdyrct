@@ -30,15 +30,17 @@ if (dsn) {
     },
   });
 
-  window.addEventListener("error", (event) => {
-    captureClientException(event.error instanceof Error ? event.error : new Error(event.message));
-  });
+  if (globalThis.window) {
+    globalThis.window.addEventListener("error", (event) => {
+      captureClientException(event.error instanceof Error ? event.error : new Error(event.message));
+    });
 
-  window.addEventListener("unhandledrejection", (event) => {
-    captureClientException(
-      event.reason instanceof Error ? event.reason : new Error("Unhandled promise rejection"),
-    );
-  });
+    globalThis.window.addEventListener("unhandledrejection", (event) => {
+      captureClientException(
+        event.reason instanceof Error ? event.reason : new Error("Unhandled promise rejection"),
+      );
+    });
+  }
 }
 
 // A failed code-split chunk is almost always a stale build: a visitor has a
@@ -47,9 +49,11 @@ if (dsn) {
 // they choose, rather than crashing or reloading under them. Not reported to
 // Sentry: it is either not a bug (stale tab) or a broken deploy that will
 // already surface real errors elsewhere.
-window.addEventListener("vite:preloadError", () => {
-  signalNewVersionAvailable();
-});
+if (globalThis.window) {
+  globalThis.window.addEventListener("vite:preloadError", () => {
+    signalNewVersionAvailable();
+  });
+}
 
 export function captureClientException(error: Error, componentStack?: string | null) {
   if (!dsn) return;

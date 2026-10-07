@@ -12,7 +12,7 @@ import { cn } from "../ui/cn";
 import { Button } from "../ui/button";
 import { Spinner } from "../ui/spinner";
 import { McpUrlCopyButton, McpAgentPromptButton } from "./mcp-setup-prompt";
-import { mcpUrl } from "../lib/mcp-url";
+import { useMcpUrl } from "../lib/mcp-url";
 
 interface Guide {
   id: string;
@@ -70,6 +70,7 @@ function GuidePicker({ active, onChange }: { active: string; onChange: (id: stri
 
 function ConnectGuide({ onStartWaiting }: { onStartWaiting: () => void }) {
   const [activeId, setActiveId] = useState(GUIDES[0]!.id);
+  const endpoint = useMcpUrl();
   const guide = GUIDES.find((g) => g.id === activeId) ?? GUIDES[0]!;
 
   return (
@@ -94,7 +95,7 @@ function ConnectGuide({ onStartWaiting }: { onStartWaiting: () => void }) {
 
       <div className="flex items-center gap-2">
         <code className="min-w-0 flex-1 truncate rounded-md bg-surface px-3 py-2 font-mono text-xs">
-          {mcpUrl()}
+          {endpoint}
         </code>
         <McpUrlCopyButton />
       </div>

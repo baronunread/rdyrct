@@ -8,7 +8,7 @@
     "dev": "trap 'kill 0' INT TERM; portless rdyrct vite dev & bun run mail & bunx emulate start --service google --portless --port 4001 --seed google.emulate.yaml & wait",
     "mail": "portless mail.rdyrct bunx emulate --service resend",
     "polar:listen": "NODE_EXTRA_CA_CERTS=\"$HOME/.portless/ca.pem\" polar listen https://rdyrct.localhost/api/webhooks/polar",
-    "build": "vite build && bun scripts/prerender-404.tsx",
+    "build": "vite build && bun scripts/prerender-public.tsx && bun scripts/prerender-404.tsx",
     "preview": "vite preview",
     "check": "tsc --noEmit",
     "lint": "oxlint --deny-warnings .",

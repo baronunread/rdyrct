@@ -3,7 +3,7 @@ import type { JsonValue } from "@/shared/types";
 import { bufferBeforeConsent, discardBuffer, drainBuffer } from "./consent-buffer";
 import { CONSENT_KEY, onConsentLapse, readConsent, writeConsent } from "./consent";
 import { isFunnelEvent } from "./funnel";
-import { shownHeroVariant } from "./hero-variant";
+import { clearHeroVariant, shownHeroVariant } from "./hero-variant";
 
 // Nothing here loads posthog-js or contacts PostHog until the user accepts
 // analytics in the consent banner (see consent-banner.tsx): before that,
@@ -97,10 +97,9 @@ export function resumeAnalyticsIfConsented() {
 }
 
 /**
- * The banner renders after the page does, so the landing view and any CTA
- * click that beats it would otherwise be lost, and those are the first two
- * steps of the funnel (#64). See consent-buffer.ts for the rules; this file
- * only decides when to ask it and how to replay it.
+ * A CTA can be clicked before the consent banner is answered. See
+ * consent-buffer.ts for the rules; this file only decides when to ask and how
+ * to replay held events.
  */
 function consentUnanswered(): boolean {
   return readConsent() === null;
@@ -139,6 +138,7 @@ export function revokeAnalyticsConsent() {
 /** Shared by Reject, a Reject in another tab, and the answer lapsing. */
 function stopCapturing() {
   discardBuffer();
+  clearHeroVariant();
   // A later Accept in this page should identify the user again.
   if (identifiedId) pendingIdentity ??= { id: identifiedId, properties: identifiedProperties };
   identifiedId = null;
@@ -180,7 +180,7 @@ function clearPostHogStorage() {
 
 /** Funnel steps from a document that showed the landing hero say which
  *  version it was, so the A/B test is read straight off the funnel. */
-function withHeroVariant(event: string, properties?: EventProperties) {
+export function withHeroVariant(event: string, properties?: EventProperties) {
   const variant = shownHeroVariant();
   if (!variant || !isFunnelEvent(event)) return properties;
   return { ...properties, hero_variant: variant };

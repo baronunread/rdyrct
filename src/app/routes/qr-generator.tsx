@@ -248,6 +248,18 @@ const qrFaqs = [
     q: "Do QR codes expire?",
     a: "The image never does. What can expire is whatever it points at, which is the argument for pointing it at a short link you own rather than at a URL somebody else controls.",
   },
+  {
+    q: "Is there a limit on how many times a QR code can be scanned?",
+    a: "This is a static QR code, so the code itself has no scan limit. It does not report scans. The website or service it points to may have its own limits.",
+  },
+  {
+    q: "Can I use the QR code in print?",
+    a: "Yes. Download SVG when you need to scale the code for print. PNG is a fixed-size image that works well for screens, documents and smaller print. Scan a proof at its final size before printing a large batch.",
+  },
+  {
+    q: "Does the QR code generator upload my link or logo?",
+    a: "No. The code is made in your browser, and the logo is prepared there too. rdyrct does not receive or store the value you enter or the logo you choose.",
+  },
 ];
 
 /**
@@ -379,7 +391,7 @@ export function QrGeneratorPage() {
       <main className="flex flex-col items-center gap-8 py-14 sm:py-20">
         <div className="flex max-w-2xl flex-col items-center gap-4 text-center">
           <h1 className="text-3xl font-bold tracking-tight text-balance sm:text-4xl">
-            Free QR code generator
+            Free QR code generator with logo
           </h1>
           <p className="text-sm text-muted sm:text-base">
             A free QR code maker for links, text, Wi-Fi details or anything else you can put in a
@@ -387,6 +399,24 @@ export function QrGeneratorPage() {
             account, no watermark, no expiry on the image, and nothing about you is stored.
           </p>
         </div>
+
+        <section className="flex w-full max-w-3xl flex-col gap-4">
+          <h2 className="text-xl font-bold text-balance">How to make a QR code</h2>
+          <ol className="flex flex-col gap-3 text-sm text-muted">
+            <li>
+              <strong className="text-text">1. Enter a link or text.</strong> Paste the URL or text
+              you want a phone to open.
+            </li>
+            <li>
+              <strong className="text-text">2. Choose its look.</strong> Pick dot styles and
+              colours, then add an optional logo from your device.
+            </li>
+            <li>
+              <strong className="text-text">3. Download the code.</strong> Save it as PNG for
+              screens and documents, or SVG when you need to scale it for print.
+            </li>
+          </ol>
+        </section>
 
         <div className="grid w-full max-w-3xl gap-6 rounded-2xl border border-border bg-surface p-6 sm:grid-cols-[1fr_auto] sm:p-8">
           <div className="flex flex-col gap-3">
@@ -440,6 +470,26 @@ export function QrGeneratorPage() {
             />
           </div>
         </div>
+
+        <section className="flex w-full max-w-3xl flex-col gap-3 text-sm">
+          <h2 className="text-xl font-bold text-balance">Choose PNG or SVG for your QR code</h2>
+          <p className="text-muted">
+            PNG is a fixed-size image for websites, email, documents and slides. SVG is a vector
+            file that stays sharp when a printer scales it for a poster or package. For print, scan
+            a proof at its intended size before making a large run.
+          </p>
+          <h2 className="pt-3 text-xl font-bold text-balance">Static QR codes and scan tracking</h2>
+          <p className="text-muted">
+            This generator makes static QR codes: the link or text is stored in the pattern itself.
+            The code does not expire and has no scan limit, but changing its destination means
+            making a new code. To measure scans or change the destination later, point the code at a
+            short link you manage. The short link can count visits while the QR code stays the same.
+          </p>
+          <p className="text-muted">
+            The QR code and optional logo are processed in your browser. rdyrct does not receive or
+            store the value you enter or the logo you choose.
+          </p>
+        </section>
 
         <TrackingSection />
 

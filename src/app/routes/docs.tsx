@@ -21,6 +21,7 @@ import { useSeo } from "../lib/seo";
 import { useMarketingScroll } from "../lib/marketing-scroll";
 import { useAudience } from "../lib/audience";
 import { LandingHeader } from "../components/landing-header";
+import { MarketingGlow } from "../components/marketing-glow";
 import { WebMcpMarketingTools } from "../components/webmcp-marketing-tools";
 import { Footer } from "../ui/footer";
 import { MarketingLink } from "../components/marketing-link";
@@ -29,12 +30,20 @@ import { McpAgentPromptButton } from "../components/mcp-setup-prompt";
 import { CopyButton } from "../ui/copy-button";
 import { copyToClipboard } from "../lib/clipboard";
 import { useToast } from "../ui/toast";
-import { mcpUrl } from "../lib/mcp-url";
+import { useMcpUrl } from "../lib/mcp-url";
 
 /** A static, developer-written example, highlighted and copyable. `lang`
  * defaults to plaintext for the HTTP request-line/header lines sugar-high
  * has no grammar for; pass "json" for an actual JSON body. */
-function CodeBlock({ children, lang = "plaintext" }: { children: string; lang?: LanguageName }) {
+function CodeBlock({
+  children,
+  lang = "plaintext",
+  mcpUrl,
+}: {
+  children: string;
+  lang?: LanguageName;
+  mcpUrl?: "endpoint" | "setup";
+}) {
   const toast = useToast();
   const html = highlight(children, { lang });
   return (
@@ -43,7 +52,11 @@ function CodeBlock({ children, lang = "plaintext" }: { children: string; lang?: 
         {/* eslint-disable-next-line react-doctor/dangerous-html-sink -- our
             own literal string above, run through sugar-high, which produces
             markup rather than text; nothing here is user input. */}
-        <code dangerouslySetInnerHTML={{ __html: html }} />
+        {mcpUrl ? (
+          <code data-mcp-url={mcpUrl}>{children}</code>
+        ) : (
+          <code dangerouslySetInnerHTML={{ __html: html }} />
+        )}
       </pre>
       <div className="absolute top-2 right-2 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
         <CopyButton
@@ -146,6 +159,7 @@ const TOOLS: Tool[] = [
 // fallow-ignore-next-line unused-export
 export function DocsPage() {
   const { authed } = useAudience();
+  const endpoint = useMcpUrl();
   useSeo("/docs");
   useMarketingScroll();
 
@@ -153,15 +167,18 @@ export function DocsPage() {
     <MotionConfig reducedMotion="user">
       <LazyMotion features={domAnimation}>
         <div className="relative mx-auto min-h-dvh max-w-5xl px-6">
+          <MarketingGlow />
           <WebMcpMarketingTools />
           <LandingHeader authed={authed} />
 
           <main className="pt-10 pb-4 sm:pt-14">
-            <h1 className="text-2xl font-bold text-balance">Developer docs</h1>
-            <p className="mt-2 max-w-xl text-sm text-muted">
-              The REST API and the MCP server: how to authenticate, and what each one can do. Both
-              are free on every plan.
-            </p>
+            <div className="first-paint-hero">
+              <h1 className="text-2xl font-bold text-balance">Developer docs</h1>
+              <p className="mt-2 max-w-xl text-sm text-muted">
+                The REST API and the MCP server: how to authenticate, and what each one can do. Both
+                are free on every plan.
+              </p>
+            </div>
 
             <div className="mt-8 flex flex-col gap-10 lg:flex-row lg:items-start lg:gap-12">
               <ChapterNav pills className="flex flex-wrap gap-2 lg:hidden" />
@@ -222,7 +239,7 @@ Authorization: Bearer rdyrct_live_...`}</CodeBlock>
                   </p>
 
                   <h3 className="mt-2 font-bold">Endpoint</h3>
-                  <CodeBlock>{mcpUrl()}</CodeBlock>
+                  <CodeBlock mcpUrl="endpoint">{endpoint}</CodeBlock>
                   <p>
                     One address, stateless: nothing to establish before calling a tool, nothing to
                     carry between calls.
@@ -312,7 +329,7 @@ Authorization: Bearer rdyrct_live_...`}</CodeBlock>
                     </a>{" "}
                     the same way the REST API does above:
                   </p>
-                  <CodeBlock>{`URL: ${mcpUrl()}
+                  <CodeBlock mcpUrl="setup">{`URL: ${endpoint}
 Header: Authorization: Bearer YOUR_API_KEY`}</CodeBlock>
                   <CodeBlock>{`POST /api/mcp
 Authorization: Bearer rdyrct_live_...

@@ -32,6 +32,8 @@ jobs:
           key: node_modules-${{ runner.os }}-${{ hashFiles('bun.lock') }}
       - name: Install dependencies
         run: bun install --frozen-lockfile
+      - name: Build Worker and prerender public pages
+        run: bun run build
       - name: Format, lint, typecheck
         run: |
           bun run format:check

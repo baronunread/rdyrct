@@ -41,8 +41,8 @@ async function openLanding(page: import("@playwright/test").Page) {
 test("a visitor who has not answered the banner sends nothing to PostHog", async ({ page }) => {
   const attempts = await openLanding(page);
 
-  // Scroll the whole page: this fires the landing view and the pricing-viewed
-  // step, the two that happen before anyone could plausibly have consented.
+  // Scroll the whole page to fire the pricing-viewed step. The landing-view
+  // event waits until analytics consent so its assigned hero arm is accurate.
   await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
   await page.waitForTimeout(600);
 

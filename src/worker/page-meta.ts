@@ -42,9 +42,25 @@ class Href {
 }
 
 class Html {
-  constructor(private readonly value: string) {}
+  constructor(
+    private readonly value: string,
+    private readonly path: string,
+  ) {}
   element(element: Element) {
+    if (element.getAttribute("data-prerendered") === this.path) return;
     element.setInnerContent(this.value, { html: true });
+  }
+}
+
+class McpUrl {
+  constructor(private readonly endpoint: string) {}
+  element(element: Element) {
+    const format = element.getAttribute("data-mcp-url");
+    const text =
+      format === "setup"
+        ? `URL: ${this.endpoint}\nHeader: Authorization: Bearer YOUR_API_KEY`
+        : this.endpoint;
+    element.setInnerContent(text);
   }
 }
 
@@ -193,7 +209,12 @@ export function withPageMeta(response: Response, url: URL): Response {
   const rewriter = new HTMLRewriter();
   // The homepage keeps index.html's hand-written fallback, which says more
   // than its Markdown does.
-  if (url.pathname !== "/") rewriter.on("#root", new Html(crawlerBody(meta, url)));
+  if (url.pathname !== "/") {
+    rewriter.on("#root", new Html(crawlerBody(meta, url), url.pathname));
+  }
+  if (url.pathname === "/docs") {
+    rewriter.on("code[data-mcp-url]", new McpUrl(canonicalFor(url, "/api/mcp")));
+  }
   const rewritten = rewriter
     .on("title", new Text(meta.title))
     .on('meta[name="description"]', new MetaContent(meta.description))

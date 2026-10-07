@@ -13,13 +13,16 @@ import { useToast } from "../ui/toast";
  * job. */
 export function McpSetupCopyButton({ apiKey }: { apiKey?: string }) {
   const toast = useToast();
-  const text = `URL: ${mcpUrl()}
-Header: Authorization: Bearer ${apiKey ?? "YOUR_API_KEY"}`;
   return (
     <Button
       variant="outline"
       size="sm"
-      onClick={() => void copyToClipboard(text, toast).catch(() => {})}
+      onClick={() =>
+        void copyToClipboard(
+          `URL: ${mcpUrl(window.location.origin)}\nHeader: Authorization: Bearer ${apiKey ?? "YOUR_API_KEY"}`,
+          toast,
+        ).catch(() => {})
+      }
     >
       <Copy size={14} /> Copy MCP setup
     </Button>
@@ -36,7 +39,7 @@ export function McpUrlCopyButton() {
     <Button
       variant="outline"
       size="sm"
-      onClick={() => void copyToClipboard(mcpUrl(), toast).catch(() => {})}
+      onClick={() => void copyToClipboard(mcpUrl(window.location.origin), toast).catch(() => {})}
       className="shrink-0"
     >
       <Copy size={14} /> Copy URL
@@ -54,7 +57,7 @@ export function McpUrlCopyButton() {
 // setting yourself" for everything else, rather than guessing every tool's
 // config file.
 function agentPrompt() {
-  const url = mcpUrl();
+  const url = mcpUrl(window.location.origin);
   const apiKeysUrl = `${window.location.origin}/api-keys`;
   return `Connect the rdyrct MCP server to this tool.
 

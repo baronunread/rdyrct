@@ -46,7 +46,7 @@ function subscribeToOrg(l: () => void) {
  * which is why only the switcher may read the cached list.
  */
 function usePickOrg(orgs: UserOrg[]) {
-  const storedId = useSyncExternalStore(subscribeToOrg, getCurrentOrgId);
+  const storedId = useSyncExternalStore(subscribeToOrg, getCurrentOrgId, () => null);
   const org = orgs.find((o) => o.id === storedId) ?? orgs[0] ?? null;
 
   const orgId = org?.id ?? null;
