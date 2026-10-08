@@ -257,13 +257,23 @@ function PasswordHint({
  * last signed in with Google and we kept the address, it becomes a
  * one-click "continue as you@…" row instead.
  */
-function GoogleEntry({ email, onClick }: { email?: string; onClick: () => void }) {
+function GoogleEntry({
+  email,
+  onClick,
+  disabled,
+}: {
+  email?: string;
+  onClick: () => void;
+  disabled: boolean;
+}) {
+  const off = disabled ? { disabled: true, title: "Google sign-in is not available here" } : {};
   if (!email) {
     return (
       <button
         type="button"
         onClick={onClick}
-        className="flex cursor-pointer items-center justify-center gap-2 rounded-lg border border-border bg-surface py-2.5 text-sm font-medium transition-colors hover:bg-surface-2"
+        {...off}
+        className="flex cursor-pointer items-center justify-center gap-2 rounded-lg border border-border bg-surface py-2.5 text-sm font-medium transition-colors hover:bg-surface-2 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-surface"
       >
         <GoogleG />
         Continue with Google
@@ -274,8 +284,9 @@ function GoogleEntry({ email, onClick }: { email?: string; onClick: () => void }
     <button
       type="button"
       onClick={onClick}
+      {...off}
       aria-label={`Continue as ${email}`}
-      className="flex cursor-pointer items-center gap-3 rounded-lg border border-border bg-surface px-3 py-2.5 text-sm transition-colors hover:bg-surface-2"
+      className="flex cursor-pointer items-center gap-3 rounded-lg border border-border bg-surface px-3 py-2.5 text-sm transition-colors hover:bg-surface-2 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-surface"
     >
       <GoogleG />
       <span className="min-w-0 flex-1 truncate text-left font-medium">{email}</span>
@@ -335,7 +346,10 @@ function AuthFormView({
   const config = useConfig();
   // Read once on mount: a returning visitor who last signed in with Google
   // gets a one-click "continue as you" row.
-  const [lastUsed] = useState(lastAuth);
+  // Read after mount, not in the initializer: the prerendered form has no
+  // storage to read, and a first render that differs from it fails hydration.
+  const [lastUsed, setLastUsed] = useState<ReturnType<typeof lastAuth>>(null);
+  useEffect(() => setLastUsed(lastAuth()), []);
   // Step 3b (#64): what separates "reached the form" from "typed in it".
   // Signup only; the login form is not a funnel.
   const started = useRef(false);
@@ -386,19 +400,20 @@ function AuthFormView({
         <h1 className="font-bold">{copy.title}</h1>
         {mode === "signup" && <SignupSubtitle next={next} />}
         {mode === "signup" && <SignupViewed />}
-        {config.data?.googleEnabled && (
-          <>
-            <GoogleEntry
-              email={lastUsed?.method === "google" ? lastUsed.email : undefined}
-              onClick={startGoogle}
-            />
-            <div className="flex items-center gap-3 text-xs text-muted">
-              <span className="h-px flex-1 bg-border" />
-              or
-              <span className="h-px flex-1 bg-border" />
-            </div>
-          </>
-        )}
+        {/* Always drawn, so the prerendered form carries it and nothing pops
+            in or out when /config arrives. Disabled until the config says this
+            server has Google credentials: the prerender and a self-hosted
+            instance both stay disabled, and a configured one enables on load. */}
+        <GoogleEntry
+          email={lastUsed?.method === "google" ? lastUsed.email : undefined}
+          onClick={startGoogle}
+          disabled={!config.data?.googleEnabled}
+        />
+        <div className="flex items-center gap-3 text-xs text-muted">
+          <span className="h-px flex-1 bg-border" />
+          or
+          <span className="h-px flex-1 bg-border" />
+        </div>
         <Field label="Email">
           <Input type="email" {...register("email")} required autoComplete="email" />
         </Field>

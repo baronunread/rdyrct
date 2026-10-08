@@ -1,6 +1,47 @@
 @import "tailwindcss";
 @import "shadow-plugin";
 
+/* Same files as @fontsource, declared here for one reason: font-display.
+   Fontsource hardcodes swap, which paints the fallback face and then jumps to
+   Figtree when it arrives. The faces above the fold are preloaded, so
+   optional uses them from the first paint and never swaps; a face that is
+   late is skipped for this view and cached for the next. */
+@font-face {
+  font-family: "Figtree Variable";
+  font-display: optional;
+  font-weight: 300 900;
+  src: url("../../node_modules/@fontsource-variable/figtree/files/figtree-latin-wght-normal.woff2")
+    format("woff2-variations");
+  unicode-range:
+    U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329,
+    U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: "Figtree Variable";
+  font-display: optional;
+  font-weight: 300 900;
+  src: url("../../node_modules/@fontsource-variable/figtree/files/figtree-latin-ext-wght-normal.woff2")
+    format("woff2-variations");
+  unicode-range:
+    U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329,
+    U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F,
+    U+A720-A7FF;
+}
+@font-face {
+  font-family: "JetBrains Mono";
+  font-display: optional;
+  font-weight: 400;
+  src: url("../../node_modules/@fontsource/jetbrains-mono/files/jetbrains-mono-latin-400-normal.woff2")
+    format("woff2");
+}
+@font-face {
+  font-family: "JetBrains Mono";
+  font-display: optional;
+  font-weight: 700;
+  src: url("../../node_modules/@fontsource/jetbrains-mono/files/jetbrains-mono-latin-700-normal.woff2")
+    format("woff2");
+}
+
 /* ---------------------------------------------------------------- */
 /* Theme tokens: paper / dark pastel pair                            */
 /*                                                                   */
@@ -152,38 +193,33 @@
   }
 }
 
-@keyframes first-paint-hero {
+/* The prerendered hero carries both experiment arms; index.html's inline script
+   sets data-hero="test" before paint for a browser already given that arm.
+   Once hydrated (data-ssr gone) only the active arm is mounted. */
+[data-hero-arm="test"][data-ssr] {
+  display: none;
+}
+:root[data-hero="test"] [data-hero-arm="test"][data-ssr] {
+  display: block;
+}
+:root[data-hero="test"] [data-hero-arm="control"][data-ssr] {
+  display: none;
+}
+/* Sections fade in as they scroll into view, in CSS: the markup is visible
+   without JavaScript, and a browser without scroll timelines just shows it. */
+@keyframes reveal-in {
   from {
     opacity: 0;
-    transform: translateY(6px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
+    transform: translateY(8px);
   }
 }
-
-@keyframes first-paint-glow {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
-}
-
-.first-paint-hero {
-  animation: first-paint-hero 160ms ease-out both;
-}
-
-.hero-glow {
-  animation: first-paint-glow 160ms ease-out both;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .first-paint-hero,
-  .hero-glow {
-    animation: none;
+@supports (animation-timeline: view()) {
+  @media (prefers-reduced-motion: no-preference) {
+    .marketing-reveal {
+      animation: reveal-in linear both;
+      animation-timeline: view();
+      animation-range: entry 0% entry 40%;
+    }
   }
 }
 

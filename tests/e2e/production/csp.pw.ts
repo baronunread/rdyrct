@@ -34,7 +34,7 @@ test("the built worker serves the production CSP", async ({ page }) => {
   // no 'unsafe-inline', which is the whole point of naming it by hash.
   const scriptSrc = csp?.split(";").find((part) => part.trim().startsWith("script-src"));
   expect(scriptSrc?.trim()).toBe(
-    "script-src 'self' 'sha256-TNM/fq1Z4NFEZtsFlN0od8OC66zTGO+lKXWuYpFqhdg=' 'wasm-unsafe-eval' https://*.posthog.com https://stats.brnr.dev",
+    "script-src 'self' 'sha256-m55YbzEtDAJ6qZbEn3bPfYPIESq5GRUctEfTBs6xtXM=' 'wasm-unsafe-eval' https://*.posthog.com https://stats.brnr.dev",
   );
   const connectSrc = csp?.split(";").find((part) => part.trim().startsWith("connect-src"));
   expect(connectSrc?.trim()).toBe(

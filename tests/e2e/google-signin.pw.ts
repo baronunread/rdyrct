@@ -4,7 +4,7 @@ import { signUpAndVerify } from "./resend";
 
 // Drives the Google button against the local emulate google service (started
 // by the resend webServer, see playwright.config.ts). When Google isn't
-// configured the button doesn't render, so we skip rather than fail.
+// configured the button is disabled, so we skip rather than fail.
 //
 // The emulator always signs in as testuser@gmail.com, so the tests that use
 // the real OAuth round trip share that one identity and run in order: the
@@ -40,7 +40,8 @@ test.describe("Google sign-in", () => {
 
     await page.goto("/login");
     const button = page.getByRole("button", { name: /Continue with Google/i });
-    await expect(button).toBeVisible();
+    // Disabled in the prerendered form, enabled once /config arrives.
+    await expect(button).toBeEnabled();
 
     await button.click();
     await expect.poll(() => socialStarted).toBe(true);
@@ -51,6 +52,27 @@ test.describe("Google sign-in", () => {
 
     await page.goto("/signup");
     await expect(page.getByRole("button", { name: /Continue with Google/i })).toBeVisible();
+  });
+
+  // A self-hosted instance has no Google credentials. The button stays in the
+  // form (it is in the prerendered HTML) but cannot be pressed.
+  test("the Google button is disabled where Google is not configured", async ({ page }) => {
+    await page.route("**/api/config", async (route) => {
+      const response = await route.fetch();
+      const config = await response.json();
+      await route.fulfill({ response, json: { ...config, googleEnabled: false } });
+    });
+
+    for (const path of ["/login", "/signup"]) {
+      // Disabled is also the state before /config arrives, so wait for it.
+      const answered = page.waitForResponse("**/api/config");
+      await page.goto(path);
+      await answered;
+      await expect(
+        page.getByRole("button", { name: /Continue with Google/i }),
+        path,
+      ).toBeDisabled();
+    }
   });
 
   test("linking Google to an existing account keeps the local name", async ({ page }) => {

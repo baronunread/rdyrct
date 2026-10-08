@@ -24,8 +24,11 @@ export const PRERENDERED_PUBLIC_PATHS = new Set<string>([
   "/pricing",
   "/qr-code-generator",
   "/docs",
+  "/roadmap",
   "/privacy",
   "/terms",
+  "/login",
+  "/signup",
 ]);
 
 /**

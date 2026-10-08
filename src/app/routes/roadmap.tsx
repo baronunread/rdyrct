@@ -94,7 +94,8 @@ const SHIPPED = [
   "Organizations, roles, and single-use email invites",
   "Anonymous shortening with no account at all",
   "The whole thing, MIT, running on your own Cloudflare account",
-  "API keys, a scoped REST API, and a remote MCP server for agents",
+  "API keys, a scoped REST API, and a remote MCP server for agents, with OAuth sign-in",
+  "A second short domain, rdyr.cc, for new links",
 ];
 
 function PlannedCard({ issue, title, body }: { issue: number; title: string; body: ReactNode }) {

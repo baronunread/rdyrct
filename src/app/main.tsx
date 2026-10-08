@@ -21,9 +21,6 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 // extra transforms pushed the landing page's first paint past a 5s
 // expectation. `wght.css` carries latin and latin-ext behind unicode-range,
 // so only the subset a page needs is fetched.
-import "@fontsource-variable/figtree/wght.css";
-import "@fontsource/jetbrains-mono/latin-400.css";
-import "@fontsource/jetbrains-mono/latin-700.css";
 import "./styles.css";
 import { ToastProvider } from "./ui/toast";
 import { ErrorBoundary } from "./components/error-boundary";
@@ -451,7 +448,11 @@ if (globalThis.document) globalThis.document.documentElement.dataset.motionReady
 if (root) {
   resumeAnalyticsIfConsented();
   if (root.dataset.prerendered === globalThis.window.location.pathname) {
-    hydrateRoot(root, <App />);
+    // Hydrating before the route's lazy chunk has arrived renders its
+    // pending component over the prerendered page: the text vanishes and
+    // pops back in. Load the route first, so hydration finds what the server
+    // sent and the page stays as painted. A failed load still hydrates.
+    router.load().finally(() => hydrateRoot(root, <App />));
   } else {
     createRoot(root).render(<App />);
   }

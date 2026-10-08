@@ -110,6 +110,19 @@
         const os = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
         document.documentElement.dataset.theme =
           stored === "light" || stored === "dark" ? stored : os;
+        // Hero experiment: show the arm this browser was already given. Reads
+        // only, and only while the analytics answer is "accepted" and has not
+        // lapsed (keys and lifetime mirror lib/consent.ts, lib/hero-variant.ts);
+        // nothing is assigned or sent from here.
+        try {
+          const at = Number(localStorage.getItem("rdyrct:consent:v2:at"));
+          if (
+            localStorage.getItem("rdyrct:consent:v2") === "accepted" &&
+            localStorage.getItem("rdyrct:hero-variant:v1") === "test" &&
+            Date.now() - at <= 183 * 864e5
+          )
+            document.documentElement.dataset.hero = "test";
+        } catch {}
       })();
     </script>
     <script

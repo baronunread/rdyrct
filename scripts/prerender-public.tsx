@@ -4,7 +4,7 @@
  *
  *   bun scripts/prerender-public.tsx   (run by `bun run build`)
  */
-import { mkdir } from "node:fs/promises";
+import { mkdir, rm } from "node:fs/promises";
 import { PassThrough } from "node:stream";
 import { renderToPipeableStream } from "react-dom/server";
 import { App, PRERENDER_ROUTES, preparePublicPage } from "../src/app/main";
@@ -29,15 +29,54 @@ function renderApp() {
   });
 }
 
+type ManifestChunk = { file: string; css?: string[]; imports?: string[] };
+const manifestPath = `${dir}/.vite/manifest.json`;
+const manifest: Record<string, ManifestChunk> = await Bun.file(manifestPath).json();
+// Read once, and gone before anything can fail: dist/ is served as is.
+await rm(manifestPath);
+// Read once, and gone before anything can fail: dist/ is served as is.
+
+/** Preload tags for a route's chunks. Without them the browser learns about
+ *  the route only after the entry runs its import(), one round trip late. */
+function preloadTags(source: string) {
+  const chunk = manifest[source];
+  if (!chunk) throw new Error(`${source} is not in the build manifest`);
+  const files = new Set([chunk.file]);
+  for (const key of chunk.imports ?? []) files.add(manifest[key].file);
+  return [
+    ...[...files].map((f) => `<link rel="modulepreload" crossorigin href="/${f}">`),
+    ...(chunk.css ?? []).map((f) => `<link rel="stylesheet" crossorigin href="/${f}">`),
+  ].join("");
+}
+
+const ROUTE_SOURCES = new Map([
+  ["/", "src/app/routes/landing.tsx"],
+  ["/pricing", "src/app/routes/pricing.tsx"],
+  ["/qr-code-generator", "src/app/routes/qr-generator.tsx"],
+  ["/docs", "src/app/routes/docs.tsx"],
+  ["/roadmap", "src/app/routes/roadmap.tsx"],
+  ["/privacy", "src/app/routes/privacy.tsx"],
+  ["/terms", "src/app/routes/terms.tsx"],
+  ["/login", "src/app/routes/auth.tsx"],
+  ["/signup", "src/app/routes/auth.tsx"],
+]);
+
 for (const path of PRERENDER_ROUTES) {
   await preparePublicPage(path);
   const markup = await renderApp();
+  const source = ROUTE_SOURCES.get(path);
+  if (!source) throw new Error(`${path} has no entry in ROUTE_SOURCES`);
 
   const page = await new HTMLRewriter()
     .on("#root", {
       element(element) {
         element.setAttribute("data-prerendered", path);
         element.setInnerContent(markup, { html: true });
+      },
+    })
+    .on("head", {
+      element(head) {
+        head.append(preloadTags(source), { html: true });
       },
     })
     .transform(new Response(shell))
