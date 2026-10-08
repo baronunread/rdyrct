@@ -1,12 +1,36 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { name } from "@gdp-ts/core";
+import { canDeleteOrg } from "../../src/worker/proofs/can-delete-org";
 import { env } from "cloudflare:workers";
 import { createExecutionContext, reset, waitOnExecutionContext } from "cloudflare:test";
 import { drizzle } from "drizzle-orm/d1";
 import worker from "../../src/worker";
 import * as schema from "../../src/worker/db/schema";
-import type { Env } from "../../src/worker/env";
-import { deleteOrg, sweepStalledOrgDeletions } from "../../src/worker/routes/orgs";
+import type { DB, Env, SessionUser } from "../../src/worker/env";
+import {
+  deleteOrg as deleteWithProof,
+  sweepStalledOrgDeletions,
+} from "../../src/worker/routes/orgs";
 import { adminCookie, applyTestMigrations, authEnv, overrideEnv } from "./support";
+
+const platformAdmin: SessionUser = {
+  id: "test-admin",
+  email: "admin@example.com",
+  name: "Admin",
+  isAdmin: true,
+  emailVerified: true,
+  plan: "free",
+  polarSubscriptionCancelAtPeriodEnd: false,
+  polarSubscriptionCurrentPeriodEnd: null,
+  image: null,
+};
+
+async function deleteOrg(db: DB, callEnv: Env, orgId: string) {
+  return name(platformAdmin, orgId, async (actor, org) => {
+    const proof = await canDeleteOrg(db, actor, org);
+    await deleteWithProof(db, callEnv, actor, org, proof);
+  });
+}
 
 // A workflow instance handle that answers the one question deleteOrg asks of
 // it. Every other member throws, so a test that starts depending on Workflows
