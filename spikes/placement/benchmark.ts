@@ -35,7 +35,24 @@ for (let trial = -3; trial < 30; trial++) {
         method: "POST",
         headers: { authorization: `Bearer ${input.BENCH_KEY}` },
         signal: AbortSignal.timeout(15_000),
-      });
+      }).catch(() => null);
+      if (!response) {
+        records.push({
+          trial,
+          variant,
+          path,
+          status: 0,
+          error: "Transport failure or timeout",
+          clientMs: performance.now() - started,
+          elapsedMs: null,
+          samples: [],
+          loopbackMs: null,
+          placement: null,
+          innerPlacement: null,
+          ray: null,
+        });
+        continue;
+      }
       if (!response.ok) {
         records.push({
           trial,
@@ -54,7 +71,11 @@ for (let trial = -3; trial < 30; trial++) {
         continue;
       }
       const result = v.parse(schema, await response.json());
-      if (result.samples.length !== 10 || result.samples.some((sample, i) => sample.id !== i + 1))
+      if (
+        result.variant !== variant ||
+        result.samples.length !== 10 ||
+        result.samples.some((sample, i) => sample.id !== i + 1)
+      )
         throw new Error("Different query results");
       records.push({
         trial,
@@ -119,3 +140,4 @@ const output = {
 };
 await Bun.write(new URL("results.json", import.meta.url), JSON.stringify(output, null, 2) + "\n");
 console.log(JSON.stringify(summaries, null, 2));
+if (summaries.some((summary) => summary.failures > 0)) process.exitCode = 1;

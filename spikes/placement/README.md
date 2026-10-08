@@ -15,6 +15,9 @@ there is no caller-supplied target. `/loopback` only calls `/query`, which
 cannot recurse. Each request performs ten reads. Redirects are refused, the
 inner request has a ten-second timeout, and the client has a fifteen-second
 timeout. There are no application retries; D1 attempt metadata is recorded.
+Transport failures are recorded with status 0 and excluded from timing
+summaries. The benchmark intentionally runs at concurrency one; the
+react-doctor await-in-loop exception applies only to this script.
 
 ## What this can establish
 

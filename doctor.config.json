@@ -4,6 +4,10 @@
     "files": [".oxlint/anti-slop/**"],
     "overrides": [
       {
+        "files": ["spikes/placement/benchmark.ts"],
+        "rules": ["react-doctor/async-await-in-loop"]
+      },
+      {
         "files": ["package.json"],
         "rules": ["deslop/unused-dev-dependency"]
       }
