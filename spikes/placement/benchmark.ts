@@ -25,41 +25,62 @@ const origins = {
   smart: "https://smart-rdyrct-placement-spike.baronunreadts.workers.dev",
 };
 const records = [];
+function failedTrial(
+  trial: number,
+  variant: string,
+  path: string,
+  started: number,
+  error: string,
+  status = 0,
+  response?: Response,
+) {
+  return {
+    trial,
+    variant,
+    path,
+    status,
+    error,
+    clientMs: performance.now() - started,
+    elapsedMs: null,
+    samples: [],
+    loopbackMs: null,
+    placement: response?.headers.get("cf-placement") ?? null,
+    innerPlacement: null,
+    ray: response?.headers.get("cf-ray") ?? null,
+  };
+}
+function parseResult(body: string) {
+  try {
+    return v.safeParse(schema, JSON.parse(body));
+  } catch {
+    return null;
+  }
+}
 for (let trial = -3; trial < 30; trial++) {
   const variants = trial % 2 === 0 ? ["default", "smart"] : ["smart", "default"];
   for (const variant of variants)
     for (const path of trial % 2 === 0 ? ["direct", "loopback"] : ["loopback", "direct"]) {
       const origin = variant === "default" ? origins.default : origins.smart;
       const started = performance.now();
-      const response = await fetch(`${origin}/${path}`, {
+      const fetched = await fetch(`${origin}/${path}`, {
         method: "POST",
         headers: { authorization: `Bearer ${input.BENCH_KEY}` },
         signal: AbortSignal.timeout(15_000),
-      }).catch(() => null);
-      if (!response) {
-        records.push({
-          trial,
-          variant,
-          path,
-          status: 0,
-          error: "Transport failure or timeout",
-          clientMs: performance.now() - started,
-          elapsedMs: null,
-          samples: [],
-          loopbackMs: null,
-          placement: null,
-          innerPlacement: null,
-          ray: null,
-        });
+      })
+        .then(async (response) => ({ response, body: await response.text() }))
+        .catch(() => null);
+      if (!fetched) {
+        records.push(failedTrial(trial, variant, path, started, "Transport failure or timeout"));
         continue;
       }
+      const { response, body } = fetched;
       if (!response.ok) {
         records.push({
           trial,
           variant,
           path,
           status: response.status,
-          error: response.status === 404 ? await response.text() : "Request failed",
+          error: response.status === 404 ? body : "Request failed",
           clientMs: performance.now() - started,
           elapsedMs: null,
           samples: [],
@@ -70,13 +91,32 @@ for (let trial = -3; trial < 30; trial++) {
         });
         continue;
       }
-      const result = v.parse(schema, await response.json());
+      const parsed = parseResult(body);
+      if (!parsed?.success) {
+        records.push(
+          failedTrial(trial, variant, path, started, "Invalid response JSON", 0, response),
+        );
+        continue;
+      }
+      const result = parsed.output;
       if (
         result.variant !== variant ||
         result.samples.length !== 10 ||
         result.samples.some((sample, i) => sample.id !== i + 1)
-      )
-        throw new Error("Different query results");
+      ) {
+        records.push(
+          failedTrial(
+            trial,
+            variant,
+            path,
+            started,
+            "Different query results or variant",
+            0,
+            response,
+          ),
+        );
+        continue;
+      }
       records.push({
         trial,
         path,
