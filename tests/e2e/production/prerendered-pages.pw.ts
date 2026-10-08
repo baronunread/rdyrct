@@ -174,3 +174,64 @@ test("the auth pages hydrate with query params and stay usable", async ({ page }
   await expect(page.getByLabel("Email")).toHaveValue("someone@example.com");
   expect(hydrationErrors).toEqual([]);
 });
+
+// A signed-in browser always gets the control hero, so the inline script must
+// not show it the test arm it was given before it signed up.
+test("a signed-in visitor with a stored test arm sees the control hero first", async ({
+  browser,
+}) => {
+  const origin = new URL(test.info().project.use.baseURL ?? "").origin;
+  const stored = {
+    "rdyrct:consent:v2": "accepted",
+    "rdyrct:consent:v2:at": String(Date.now()),
+    "rdyrct:hero-variant:v1": "test",
+    "rdyrct:user:v1": "{}",
+  };
+  const context = await browser.newContext({
+    storageState: {
+      cookies: [],
+      origins: [
+        {
+          origin,
+          localStorage: Object.entries(stored).map(([name, value]) => ({ name, value })),
+        },
+      ],
+    },
+  });
+  const page = await context.newPage();
+  await blockScripts(page);
+  await page.goto("/");
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText(
+    "Short links and QR codes that show which channel earned the click.",
+  );
+  await context.close();
+});
+
+// The auth pages are React.lazy. Hydrating before their chunk arrived blanked
+// the form until it did, so a slow chunk must leave the prerendered form up.
+test("a slow auth chunk never blanks the prerendered form", async ({ page }) => {
+  const blank: string[] = [];
+  page.on("console", (message) => {
+    if (message.text() === "auth-heading-gone") blank.push(message.text());
+  });
+  await page.route("**/assets/auth-*.js", async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+    await route.continue();
+  });
+  await page.addInitScript(() => {
+    let seen = false;
+    requestAnimationFrame(function tick() {
+      const there = [...document.querySelectorAll("h1")].some(
+        (h1) => h1.textContent === "Sign in" && h1.getBoundingClientRect().height > 0,
+      );
+      if (there) seen = true;
+      else if (seen) console.info("auth-heading-gone");
+      requestAnimationFrame(tick);
+    });
+  });
+  await page.goto("/login");
+  await expect(page.getByRole("heading", { level: 1, name: "Sign in" })).toBeVisible();
+  await page.waitForTimeout(2000);
+  await expect(page.getByRole("heading", { level: 1, name: "Sign in" })).toBeVisible();
+  expect(blank).toEqual([]);
+});

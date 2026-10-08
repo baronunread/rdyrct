@@ -68,10 +68,11 @@ test.describe("Google sign-in", () => {
       const answered = page.waitForResponse("**/api/config");
       await page.goto(path);
       await answered;
-      await expect(
-        page.getByRole("button", { name: /Continue with Google/i }),
-        path,
-      ).toBeDisabled();
+      const button = page.getByRole("button", { name: /Continue with Google/i });
+      await expect(button, path).toBeDisabled();
+      await expect(button, path).toHaveAccessibleDescription(
+        "Google sign-in is not available here",
+      );
     }
   });
 

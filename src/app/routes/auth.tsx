@@ -257,7 +257,7 @@ function PasswordHint({
  * last signed in with Google and we kept the address, it becomes a
  * one-click "continue as you@…" row instead.
  */
-function GoogleEntry({
+function GoogleButton({
   email,
   onClick,
   disabled,
@@ -266,7 +266,9 @@ function GoogleEntry({
   onClick: () => void;
   disabled: boolean;
 }) {
-  const off = disabled ? { disabled: true, title: "Google sign-in is not available here" } : {};
+  const off = disabled
+    ? { disabled: true, title: GOOGLE_OFF, "aria-describedby": "google-off" }
+    : {};
   if (!email) {
     return (
       <button
@@ -295,6 +297,23 @@ function GoogleEntry({
       </span>
       <ArrowRight size={16} className="shrink-0 text-muted" />
     </button>
+  );
+}
+
+const GOOGLE_OFF = "Google sign-in is not available here";
+
+function GoogleEntry(props: { email?: string; onClick: () => void; disabled: boolean }) {
+  return (
+    <>
+      <GoogleButton {...props} />
+      {/* The reason, for a screen reader: title is not announced, and a
+          disabled button cannot take focus to show anything else. */}
+      {props.disabled && (
+        <span id="google-off" className="sr-only">
+          {GOOGLE_OFF}
+        </span>
+      )}
+    </>
   );
 }
 
@@ -859,3 +878,10 @@ export function AuthPage({ mode }: { mode: "login" | "signup" }) {
     />
   );
 }
+
+// main.tsx names these as strings for lazyRouteComponent, which static
+// analysis cannot follow.
+// fallow-ignore-next-line unused-export
+export const LoginPage = () => <AuthPage mode="login" />;
+// fallow-ignore-next-line unused-export
+export const SignupPage = () => <AuthPage mode="signup" />;

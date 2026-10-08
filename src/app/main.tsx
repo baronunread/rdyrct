@@ -36,7 +36,11 @@ import { PRERENDERED_PUBLIC_PATHS } from "@/shared/page-meta";
 // marketing landing never download the app, and the app never downloads the
 // admin pages unless the user is the platform admin.
 const LandingPage = lazyRouteComponent(() => import("./routes/landing"), "LandingPage");
-const AuthPage = lazy(() => import("./routes/auth").then((m) => ({ default: m.AuthPage })));
+// lazyRouteComponent, not React.lazy: the router can preload it before
+// hydration, and React.lazy cannot be (it suspends once even when cached,
+// which blanked the prerendered form until its next render).
+const LoginPage = lazyRouteComponent(() => import("./routes/auth"), "LoginPage");
+const SignupPage = lazyRouteComponent(() => import("./routes/auth"), "SignupPage");
 const ResetPasswordPage = lazy(() =>
   import("./routes/reset-password").then((m) => ({
     default: m.ResetPasswordPage,
@@ -225,12 +229,12 @@ const termsRoute = createRoute({
 const loginRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/login",
-  component: () => <AuthPage mode="login" />,
+  component: LoginPage,
 });
 const signupRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/signup",
-  component: () => <AuthPage mode="signup" />,
+  component: SignupPage,
 });
 const resetPasswordRoute = createRoute({
   getParentRoute: () => rootRoute,

@@ -38,6 +38,8 @@ function orgCreateErrorMessage(cause: unknown): string {
   return errorMessage(cause);
 }
 
+const AUTH_PAGES = new Set(["/login", "/signup"]);
+
 export function RequireAuth({ children }: { children: ReactNode }) {
   const currentUser = useCurrentUser();
   const shell = useShellUser();
@@ -53,6 +55,10 @@ export function RequireAuth({ children }: { children: ReactNode }) {
   // itself flips, and reads the current path imperatively instead.
   useEffect(() => {
     if (!signedOut) return;
+    // The router can already be on the sign-in page while this is still
+    // mounted (its chunk loads before the old route unmounts), and sending
+    // that page back to itself as ?next= would be a loop in waiting.
+    if (AUTH_PAGES.has(window.location.pathname)) return;
     const from = window.location.pathname + window.location.search;
     void navigate({ href: `/login?next=${encodeURIComponent(from)}`, replace: true });
   }, [signedOut, navigate]);
