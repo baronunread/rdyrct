@@ -13,6 +13,7 @@ import {
   type Variants,
 } from "motion/react";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useHydrated } from "../lib/hydrated";
 import { useSeo } from "../lib/seo";
 import { useMarketingScroll } from "../lib/marketing-scroll";
 import { FaqJsonLd } from "../components/faq-json-ld";
@@ -663,10 +664,6 @@ function shouldCaptureLandingView(consentReady: boolean, ready: boolean, capture
   return consentReady && ready && !captured && readConsent() === "accepted";
 }
 
-const subscribeToNothing = () => () => {};
-const isHydrated = () => true;
-const isNotHydrated = () => false;
-
 function HeroSection(props: HeroProps) {
   const landingViewCaptured = useRef(false);
   const variant = useSyncExternalStore(
@@ -711,7 +708,7 @@ function armsToMount(variant: HeroVariant, authed: boolean, settled: boolean) {
  */
 function HeroArms({ variant, ...props }: HeroProps & { variant: HeroVariant }) {
   // False for the server render and the hydrating render, true after.
-  const settled = useSyncExternalStore(subscribeToNothing, isHydrated, isNotHydrated);
+  const settled = useHydrated();
   const { showControl, showTest } = armsToMount(variant, props.authed, settled);
   const ssr = settled ? undefined : "";
   return (

@@ -33,7 +33,6 @@ type ManifestChunk = { file: string; css?: string[]; imports?: string[] };
 const manifestPath = `${dir}/.vite/manifest.json`;
 const manifest: Record<string, ManifestChunk> = await Bun.file(manifestPath).json();
 // Read once, and gone before anything can fail: dist/ is served as is.
-// Read once, and gone before anything can fail: dist/ is served as is.
 await rm(manifestPath);
 
 /** Preload tags for a route's chunks. Without them the browser learns about

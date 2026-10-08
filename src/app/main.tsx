@@ -447,6 +447,7 @@ export async function preparePublicPage(path: (typeof PRERENDER_ROUTES)[number])
   await router.load();
 }
 
+const HYDRATE_WAIT_MS = 3000;
 const root = globalThis.document?.getElementById("root") ?? null;
 if (globalThis.document) globalThis.document.documentElement.dataset.motionReady = "true";
 if (root) {
@@ -455,8 +456,17 @@ if (root) {
     // Hydrating before the route's lazy chunk has arrived renders its
     // pending component over the prerendered page: the text vanishes and
     // pops back in. Load the route first, so hydration finds what the server
-    // sent and the page stays as painted. A failed load still hydrates.
-    router.load().finally(() => hydrateRoot(root, <App />));
+    // sent and the page stays as painted. A failed or hung load (a stalled
+    // chunk request) still hydrates, after HYDRATE_WAIT_MS.
+    //
+    // And the router must know the HTML came from a server render. It leaves
+    // out the root Suspense boundary for server HTML (as the prerender did);
+    // without this the client adds one, React finds a tree that differs from
+    // the HTML (error #418) and throws the prerendered DOM away.
+    router.ssr = { manifest: undefined };
+    Promise.race([router.load(), new Promise((resolve) => setTimeout(resolve, HYDRATE_WAIT_MS))])
+      .catch(() => {})
+      .then(() => hydrateRoot(root, <App />));
   } else {
     createRoot(root).render(<App />);
   }

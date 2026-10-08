@@ -14,13 +14,18 @@ const PRERENDERED_PAGES = [
 
 const HTML_FALLBACK_PAGES = [] as const;
 
-/** Console errors React prints when hydration does not match the server HTML. */
+/** What React reports when hydration does not match the server HTML. The
+ *  production build reports it as `pageerror` "Minified React error #418"
+ *  (or #423, #425), with none of the words the development message has, so a
+ *  console-only check for "hydration" never sees it. */
 function collectHydrationErrors(page: Page) {
   const errors: string[] = [];
+  const mismatch = /Minified React error #4(18|23|25)|hydration|didn't match|server html/i;
+  page.on("pageerror", (error) => {
+    if (mismatch.test(error.message)) errors.push(error.message);
+  });
   page.on("console", (message) => {
-    if (message.type() === "error" && /hydration|didn't match|server html/i.test(message.text())) {
-      errors.push(message.text());
-    }
+    if (message.type() === "error" && mismatch.test(message.text())) errors.push(message.text());
   });
   return errors;
 }
@@ -164,15 +169,19 @@ test("a visitor given the test hero never sees the control hero first", async ({
 test("the auth pages hydrate with query params and stay usable", async ({ page }) => {
   const hydrationErrors = collectHydrationErrors(page);
 
-  await page.goto("/signup?next=/billing%3Fplan%3Dpro");
-  await expect(page.getByRole("heading", { level: 1, name: "Create an account" })).toBeVisible();
-  await page.getByLabel("Email").fill("someone@example.com");
-  await expect(page.getByLabel("Email")).toHaveValue("someone@example.com");
+  // A keystroke that lands while React is hydrating can be dropped with the
+  // field, so type until the value sticks once hydration has finished.
+  const typeEmail = (path: string, heading: string) =>
+    expect(async () => {
+      await page.goto(path);
+      await expect(page.getByRole("heading", { level: 1, name: heading })).toBeVisible();
+      await page.getByLabel("Email").fill("someone@example.com");
+      await page.waitForTimeout(500);
+      await expect(page.getByLabel("Email")).toHaveValue("someone@example.com");
+    }).toPass({ timeout: 15_000 });
 
-  await page.goto("/login?next=/dashboard");
-  await expect(page.getByRole("heading", { level: 1, name: "Sign in" })).toBeVisible();
-  await page.getByLabel("Email").fill("someone@example.com");
-  await expect(page.getByLabel("Email")).toHaveValue("someone@example.com");
+  await typeEmail("/signup?next=/billing%3Fplan%3Dpro", "Create an account");
+  await typeEmail("/login?next=/dashboard", "Sign in");
   expect(hydrationErrors).toEqual([]);
 });
 

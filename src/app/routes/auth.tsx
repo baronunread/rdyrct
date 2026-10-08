@@ -14,6 +14,7 @@ import { useShake } from "../lib/use-shake";
 import { useCap } from "../lib/cap";
 import { useCurrentUser, useConfig } from "../lib/hooks";
 import { storedAnonLinks } from "../lib/anon-links";
+import { useHydrated } from "../lib/hydrated";
 import { lastAuth, setLastAuth } from "../lib/last-auth";
 import { firstFormError } from "../lib/form-errors";
 import { cn } from "../ui/cn";
@@ -216,6 +217,9 @@ const AUTH_MODE_COPY = {
  * "Sign in": somebody who already has an account does not need a pitch.
  */
 function SignupSubtitle({ next }: { next: string }) {
+  // Storage and the URL differ from the prerendered page, so wait for hydration.
+  const hydrated = useHydrated();
+  if (!hydrated) return null;
   const body = storedAnonLinks().length
     ? "Your link is waiting. Sign up and it becomes permanent, with the clicks it earns."
     : next.startsWith("/billing")
@@ -669,8 +673,14 @@ function useAuthFlow(mode: "login" | "signup") {
   const qc = useQueryClient();
   const toast = useToast();
 
-  const [view, setView] = useState<View>(() => (readPending() ? "verify-otp" : "form"));
-  const [authEmail, setAuthEmail] = useState(() => readPending()?.email ?? "");
+  // A verification left half-done is in storage, which the prerendered form
+  // never saw: start from "form" and let the stored one take over after
+  // hydration, until the visitor moves on.
+  const pending = useHydrated() ? readPending() : null;
+  const [chosenView, setView] = useState<View | null>(null);
+  const view = chosenView ?? (pending ? "verify-otp" : "form");
+  const [chosenEmail, setAuthEmail] = useState<string | null>(null);
+  const authEmail = chosenEmail ?? pending?.email ?? "";
   const authPasswordRef = useRef("");
   const [busy, setBusy] = useState(false);
   const [verifyPhase, setVerifyPhase] = useState<"idle" | "success" | "leaving">("idle");
