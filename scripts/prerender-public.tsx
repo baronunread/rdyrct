@@ -33,18 +33,17 @@ type ManifestChunk = { file: string; css?: string[]; imports?: string[] };
 const manifestPath = `${dir}/.vite/manifest.json`;
 const manifest: Record<string, ManifestChunk> = await Bun.file(manifestPath).json();
 // Read once, and gone before anything can fail: dist/ is served as is.
-await rm(manifestPath);
 // Read once, and gone before anything can fail: dist/ is served as is.
+await rm(manifestPath);
 
 /** Preload tags for a route's chunks. Without them the browser learns about
  *  the route only after the entry runs its import(), one round trip late. */
 function preloadTags(source: string) {
   const chunk = manifest[source];
   if (!chunk) throw new Error(`${source} is not in the build manifest`);
-  const files = new Set([chunk.file]);
-  for (const key of chunk.imports ?? []) files.add(manifest[key].file);
+  const files = [chunk.file, ...(chunk.imports ?? []).map((key) => manifest[key].file)];
   return [
-    ...[...files].map((f) => `<link rel="modulepreload" crossorigin href="/${f}">`),
+    ...files.map((f) => `<link rel="modulepreload" crossorigin href="/${f}">`),
     ...(chunk.css ?? []).map((f) => `<link rel="stylesheet" crossorigin href="/${f}">`),
   ].join("");
 }

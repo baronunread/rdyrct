@@ -831,7 +831,7 @@ function useAuthFlow(mode: "login" | "signup") {
   };
 }
 
-export function AuthPage({ mode }: { mode: "login" | "signup" }) {
+function AuthPage({ mode }: { mode: "login" | "signup" }) {
   const flow = useAuthFlow(mode);
 
   if (flow.view === "verify-otp") {

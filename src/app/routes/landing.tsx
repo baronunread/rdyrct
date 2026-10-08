@@ -21,6 +21,7 @@ import { useAudience } from "../lib/audience";
 import posthog from "../lib/posthog";
 import {
   clearHeroVariant,
+  type HeroVariant,
   heroVariant,
   heroVariantSnapshot,
   subscribeHeroVariant,
@@ -666,16 +667,13 @@ const subscribeToNothing = () => () => {};
 const isHydrated = () => true;
 const isNotHydrated = () => false;
 
-function HeroSection(props: {
-  ctaTo: string;
-  ctaLabel: string;
-  authed: boolean;
-  ready: boolean;
-  /** Empty until the session resolves; the card handles that itself. */
-  name: string;
-}) {
+function HeroSection(props: HeroProps) {
   const landingViewCaptured = useRef(false);
-  const variant = useSyncExternalStore(subscribeHeroVariant, heroVariantSnapshot, () => "control");
+  const variant = useSyncExternalStore(
+    subscribeHeroVariant,
+    heroVariantSnapshot,
+    (): HeroVariant => "control",
+  );
   const { ready: consentReady, accepted: analyticsConsent } = useAnalyticsConsent();
   useEffect(() => {
     syncHeroAssignment(consentReady, analyticsConsent, props.ready, props.authed);
@@ -685,15 +683,36 @@ function HeroSection(props: {
     landingViewCaptured.current = true;
     posthog.capture(FUNNEL.landingViewed, landingContext());
   }, [props.ready, props.authed, consentReady, analyticsConsent]);
-  // A signed-in visitor always gets the control hero and never flips the
-  // coin, so they are not counted as shown either arm (see hero-variant.ts).
-  // The prerendered page carries both arms and the inline script in
-  // index.html shows the one this browser was given, so hydration changes
-  // nothing on screen. Once hydrated, only the active arm stays mounted.
+  return <HeroArms variant={variant} {...props} />;
+}
+
+type HeroProps = {
+  ctaTo: string;
+  ctaLabel: string;
+  authed: boolean;
+  ready: boolean;
+  /** Empty until the session resolves; the card handles that itself. */
+  name: string;
+};
+
+function armsToMount(variant: HeroVariant, authed: boolean, settled: boolean) {
+  const showTest = !authed && (variant === "test" || !settled);
+  return { showTest, showControl: !settled || !showTest };
+}
+
+/**
+ * Which hero arm is drawn. A signed-in visitor always gets the control hero
+ * and never flips the coin, so they are not counted as shown either arm (see
+ * hero-variant.ts).
+ *
+ * The prerendered page carries both arms and the inline script in index.html
+ * shows the one this browser was given, so hydration changes nothing on
+ * screen. Once hydrated, only the active arm stays mounted.
+ */
+function HeroArms({ variant, ...props }: HeroProps & { variant: HeroVariant }) {
   // False for the server render and the hydrating render, true after.
   const settled = useSyncExternalStore(subscribeToNothing, isHydrated, isNotHydrated);
-  const showTest = !props.authed && (variant === "test" || !settled);
-  const showControl = !settled || !showTest;
+  const { showControl, showTest } = armsToMount(variant, props.authed, settled);
   const ssr = settled ? undefined : "";
   return (
     <>

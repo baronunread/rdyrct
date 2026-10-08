@@ -14,6 +14,17 @@ const PRERENDERED_PAGES = [
 
 const HTML_FALLBACK_PAGES = [] as const;
 
+/** Console errors React prints when hydration does not match the server HTML. */
+function collectHydrationErrors(page: Page) {
+  const errors: string[] = [];
+  page.on("console", (message) => {
+    if (message.type() === "error" && /hydration|didn't match|server html/i.test(message.text())) {
+      errors.push(message.text());
+    }
+  });
+  return errors;
+}
+
 async function blockScripts(page: Page) {
   await page.route("**/*", (route) =>
     route.request().resourceType() === "script" ? route.abort() : route.continue(),
@@ -49,12 +60,7 @@ test("public content stays visible and correct before JavaScript runs", async ({
 });
 
 test("all prerendered pages hydrate without mismatch warnings", async ({ page }) => {
-  const hydrationErrors: string[] = [];
-  page.on("console", (message) => {
-    if (message.type() === "error" && /hydration|didn't match|server html/i.test(message.text())) {
-      hydrationErrors.push(message.text());
-    }
-  });
+  const hydrationErrors = collectHydrationErrors(page);
 
   await assertPrerenderedHeadings(page);
 
@@ -156,12 +162,7 @@ test("a visitor given the test hero never sees the control hero first", async ({
 // query params must hydrate onto the plain prerendered form without a
 // mismatch, and leave a form that still takes input.
 test("the auth pages hydrate with query params and stay usable", async ({ page }) => {
-  const hydrationErrors: string[] = [];
-  page.on("console", (message) => {
-    if (message.type() === "error" && /hydration|didn't match|server html/i.test(message.text())) {
-      hydrationErrors.push(message.text());
-    }
-  });
+  const hydrationErrors = collectHydrationErrors(page);
 
   await page.goto("/signup?next=/billing%3Fplan%3Dpro");
   await expect(page.getByRole("heading", { level: 1, name: "Create an account" })).toBeVisible();
