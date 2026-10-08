@@ -96,4 +96,7 @@ export default defineConfig(async () => ({
   // `true as const`: the async config factory widens it to boolean otherwise,
   // and Vite's type only accepts `true | string[]`.
   server: { allowedHosts: true as const },
+  // scripts/prerender-public.tsx reads the manifest to preload the landing
+  // route's chunks, which only the entry's dynamic import() names otherwise.
+  build: { manifest: true },
 }));

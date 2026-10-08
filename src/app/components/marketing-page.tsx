@@ -46,7 +46,7 @@ export function MarketingPage({
           <LandingHeader authed={authed} />
 
           <main>
-            <div className="first-paint-hero pt-14 pb-2 text-center sm:pt-20">
+            <div className="pt-14 pb-2 text-center sm:pt-20">
               <h1 className="text-3xl font-bold tracking-tight text-balance sm:text-4xl">
                 {title}
               </h1>

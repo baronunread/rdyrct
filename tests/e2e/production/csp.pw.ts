@@ -34,7 +34,7 @@ test("the built worker serves the production CSP", async ({ page }) => {
   // no 'unsafe-inline', which is the whole point of naming it by hash.
   const scriptSrc = csp?.split(";").find((part) => part.trim().startsWith("script-src"));
   expect(scriptSrc?.trim()).toBe(
-    "script-src 'self' 'sha256-TNM/fq1Z4NFEZtsFlN0od8OC66zTGO+lKXWuYpFqhdg=' 'wasm-unsafe-eval' https://*.posthog.com https://stats.brnr.dev",
+    "script-src 'self' 'sha256-YEMi/k0FRxbK+EqGSkzXXfhcQ2eW5K3UAQegWsC97Kw=' 'wasm-unsafe-eval' https://*.posthog.com https://stats.brnr.dev",
   );
   const connectSrc = csp?.split(";").find((part) => part.trim().startsWith("connect-src"));
   expect(connectSrc?.trim()).toBe(
@@ -76,8 +76,15 @@ test("Cap solves a challenge under the production CSP", async ({ page }) => {
 
   // The widget only loads once the visitor touches the form, which is the
   // whole point: no cost to anyone who does not sign up.
-  await page.getByRole("textbox").first().fill("csp-probe@example.com");
-  await page.waitForFunction(() => !!customElements.get("cap-widget"), null, { timeout: 15_000 });
+  // /signup is prerendered, so an input typed before hydration finishes never
+  // reaches the handler that starts the widget (the solve then happens at
+  // submit instead). Type again until the handler is there.
+  let attempt = 0;
+  await expect(async () => {
+    attempt += 1;
+    await page.getByRole("textbox").first().fill(`csp-probe-${attempt}@example.com`);
+    await page.waitForFunction(() => !!customElements.get("cap-widget"), null, { timeout: 3_000 });
+  }).toPass({ timeout: 20_000 });
 
   const solved = await page.evaluate(async () => {
     // SAFETY: the line above waited for customElements to define

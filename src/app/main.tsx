@@ -21,9 +21,6 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 // extra transforms pushed the landing page's first paint past a 5s
 // expectation. `wght.css` carries latin and latin-ext behind unicode-range,
 // so only the subset a page needs is fetched.
-import "@fontsource-variable/figtree/wght.css";
-import "@fontsource/jetbrains-mono/latin-400.css";
-import "@fontsource/jetbrains-mono/latin-700.css";
 import "./styles.css";
 import { ToastProvider } from "./ui/toast";
 import { ErrorBoundary } from "./components/error-boundary";
@@ -39,7 +36,11 @@ import { PRERENDERED_PUBLIC_PATHS } from "@/shared/page-meta";
 // marketing landing never download the app, and the app never downloads the
 // admin pages unless the user is the platform admin.
 const LandingPage = lazyRouteComponent(() => import("./routes/landing"), "LandingPage");
-const AuthPage = lazy(() => import("./routes/auth").then((m) => ({ default: m.AuthPage })));
+// lazyRouteComponent, not React.lazy: the router can preload it before
+// hydration, and React.lazy cannot be (it suspends once even when cached,
+// which blanked the prerendered form until its next render).
+const LoginPage = lazyRouteComponent(() => import("./routes/auth"), "LoginPage");
+const SignupPage = lazyRouteComponent(() => import("./routes/auth"), "SignupPage");
 const ResetPasswordPage = lazy(() =>
   import("./routes/reset-password").then((m) => ({
     default: m.ResetPasswordPage,
@@ -228,12 +229,12 @@ const termsRoute = createRoute({
 const loginRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/login",
-  component: () => <AuthPage mode="login" />,
+  component: LoginPage,
 });
 const signupRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/signup",
-  component: () => <AuthPage mode="signup" />,
+  component: SignupPage,
 });
 const resetPasswordRoute = createRoute({
   getParentRoute: () => rootRoute,
@@ -446,12 +447,26 @@ export async function preparePublicPage(path: (typeof PRERENDER_ROUTES)[number])
   await router.load();
 }
 
+const HYDRATE_WAIT_MS = 3000;
 const root = globalThis.document?.getElementById("root") ?? null;
 if (globalThis.document) globalThis.document.documentElement.dataset.motionReady = "true";
 if (root) {
   resumeAnalyticsIfConsented();
   if (root.dataset.prerendered === globalThis.window.location.pathname) {
-    hydrateRoot(root, <App />);
+    // Hydrating before the route's lazy chunk has arrived renders its
+    // pending component over the prerendered page: the text vanishes and
+    // pops back in. Load the route first, so hydration finds what the server
+    // sent and the page stays as painted. A failed or hung load (a stalled
+    // chunk request) still hydrates, after HYDRATE_WAIT_MS.
+    //
+    // And the router must know the HTML came from a server render. It leaves
+    // out the root Suspense boundary for server HTML (as the prerender did);
+    // without this the client adds one, React finds a tree that differs from
+    // the HTML (error #418) and throws the prerendered DOM away.
+    router.ssr = { manifest: undefined };
+    Promise.race([router.load(), new Promise((resolve) => setTimeout(resolve, HYDRATE_WAIT_MS))])
+      .catch(() => {})
+      .then(() => hydrateRoot(root, <App />));
   } else {
     createRoot(root).render(<App />);
   }

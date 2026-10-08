@@ -48,7 +48,7 @@ const STATS = "https://stats.brnr.dev";
  * the Worker on every response, API and redirects included. Adopting one to
  * avoid retyping 44 characters would move the whole policy to fit the tool.
  */
-const THEME_INIT_HASH = "'sha256-TNM/fq1Z4NFEZtsFlN0od8OC66zTGO+lKXWuYpFqhdg='";
+const THEME_INIT_HASH = "'sha256-YEMi/k0FRxbK+EqGSkzXXfhcQ2eW5K3UAQegWsC97Kw='";
 
 // `@vitejs/plugin-react` injects an inline module preamble (the React Refresh
 // runtime) into index.html when Vite serves the app in dev. `script-src

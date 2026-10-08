@@ -16,8 +16,17 @@ export function subscribeHeroVariant(listener: () => void) {
   return () => listeners.delete(listener);
 }
 
+/** The arm to draw: the assigned one, else the one stored for a browser that
+ *  has consented. Read-only, so the hero is already right on the first render
+ *  and does not flip to control until the session resolves and assigns it. */
 export function heroVariantSnapshot(): HeroVariant {
-  return assigned ?? "control";
+  if (assigned) return assigned;
+  try {
+    if (readConsent() === "accepted" && localStorage.getItem(KEY) === "test") return "test";
+  } catch {
+    // Storage can be unavailable; the control hero is the safe default.
+  }
+  return "control";
 }
 
 /** Assign once after consent and keep the same hero across reloads. */

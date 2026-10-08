@@ -14,6 +14,7 @@ import { useShake } from "../lib/use-shake";
 import { useCap } from "../lib/cap";
 import { useCurrentUser, useConfig } from "../lib/hooks";
 import { storedAnonLinks } from "../lib/anon-links";
+import { useHydrated } from "../lib/hydrated";
 import { lastAuth, setLastAuth } from "../lib/last-auth";
 import { firstFormError } from "../lib/form-errors";
 import { cn } from "../ui/cn";
@@ -216,6 +217,9 @@ const AUTH_MODE_COPY = {
  * "Sign in": somebody who already has an account does not need a pitch.
  */
 function SignupSubtitle({ next }: { next: string }) {
+  // Storage and the URL differ from the prerendered page, so wait for hydration.
+  const hydrated = useHydrated();
+  if (!hydrated) return null;
   const body = storedAnonLinks().length
     ? "Your link is waiting. Sign up and it becomes permanent, with the clicks it earns."
     : next.startsWith("/billing")
@@ -257,13 +261,25 @@ function PasswordHint({
  * last signed in with Google and we kept the address, it becomes a
  * one-click "continue as you@…" row instead.
  */
-function GoogleEntry({ email, onClick }: { email?: string; onClick: () => void }) {
+function GoogleButton({
+  email,
+  onClick,
+  disabled,
+}: {
+  email?: string;
+  onClick: () => void;
+  disabled: boolean;
+}) {
+  const off = disabled
+    ? { disabled: true, title: GOOGLE_OFF, "aria-describedby": "google-off" }
+    : {};
   if (!email) {
     return (
       <button
         type="button"
         onClick={onClick}
-        className="flex cursor-pointer items-center justify-center gap-2 rounded-lg border border-border bg-surface py-2.5 text-sm font-medium transition-colors hover:bg-surface-2"
+        {...off}
+        className="flex cursor-pointer items-center justify-center gap-2 rounded-lg border border-border bg-surface py-2.5 text-sm font-medium transition-colors hover:bg-surface-2 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-surface"
       >
         <GoogleG />
         Continue with Google
@@ -274,8 +290,9 @@ function GoogleEntry({ email, onClick }: { email?: string; onClick: () => void }
     <button
       type="button"
       onClick={onClick}
+      {...off}
       aria-label={`Continue as ${email}`}
-      className="flex cursor-pointer items-center gap-3 rounded-lg border border-border bg-surface px-3 py-2.5 text-sm transition-colors hover:bg-surface-2"
+      className="flex cursor-pointer items-center gap-3 rounded-lg border border-border bg-surface px-3 py-2.5 text-sm transition-colors hover:bg-surface-2 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-surface"
     >
       <GoogleG />
       <span className="min-w-0 flex-1 truncate text-left font-medium">{email}</span>
@@ -284,6 +301,23 @@ function GoogleEntry({ email, onClick }: { email?: string; onClick: () => void }
       </span>
       <ArrowRight size={16} className="shrink-0 text-muted" />
     </button>
+  );
+}
+
+const GOOGLE_OFF = "Google sign-in is not available here";
+
+function GoogleEntry(props: { email?: string; onClick: () => void; disabled: boolean }) {
+  return (
+    <>
+      <GoogleButton {...props} />
+      {/* The reason, for a screen reader: title is not announced, and a
+          disabled button cannot take focus to show anything else. */}
+      {props.disabled && (
+        <span id="google-off" className="sr-only">
+          {GOOGLE_OFF}
+        </span>
+      )}
+    </>
   );
 }
 
@@ -335,7 +369,10 @@ function AuthFormView({
   const config = useConfig();
   // Read once on mount: a returning visitor who last signed in with Google
   // gets a one-click "continue as you" row.
-  const [lastUsed] = useState(lastAuth);
+  // Read after mount, not in the initializer: the prerendered form has no
+  // storage to read, and a first render that differs from it fails hydration.
+  const [lastUsed, setLastUsed] = useState<ReturnType<typeof lastAuth>>(null);
+  useEffect(() => setLastUsed(lastAuth()), []);
   // Step 3b (#64): what separates "reached the form" from "typed in it".
   // Signup only; the login form is not a funnel.
   const started = useRef(false);
@@ -386,19 +423,20 @@ function AuthFormView({
         <h1 className="font-bold">{copy.title}</h1>
         {mode === "signup" && <SignupSubtitle next={next} />}
         {mode === "signup" && <SignupViewed />}
-        {config.data?.googleEnabled && (
-          <>
-            <GoogleEntry
-              email={lastUsed?.method === "google" ? lastUsed.email : undefined}
-              onClick={startGoogle}
-            />
-            <div className="flex items-center gap-3 text-xs text-muted">
-              <span className="h-px flex-1 bg-border" />
-              or
-              <span className="h-px flex-1 bg-border" />
-            </div>
-          </>
-        )}
+        {/* Always drawn, so the prerendered form carries it and nothing pops
+            in or out when /config arrives. Disabled until the config says this
+            server has Google credentials: the prerender and a self-hosted
+            instance both stay disabled, and a configured one enables on load. */}
+        <GoogleEntry
+          email={lastUsed?.method === "google" ? lastUsed.email : undefined}
+          onClick={startGoogle}
+          disabled={!config.data?.googleEnabled}
+        />
+        <div className="flex items-center gap-3 text-xs text-muted">
+          <span className="h-px flex-1 bg-border" />
+          or
+          <span className="h-px flex-1 bg-border" />
+        </div>
         <Field label="Email">
           <Input type="email" {...register("email")} required autoComplete="email" />
         </Field>
@@ -635,8 +673,14 @@ function useAuthFlow(mode: "login" | "signup") {
   const qc = useQueryClient();
   const toast = useToast();
 
-  const [view, setView] = useState<View>(() => (readPending() ? "verify-otp" : "form"));
-  const [authEmail, setAuthEmail] = useState(() => readPending()?.email ?? "");
+  // A verification left half-done is in storage, which the prerendered form
+  // never saw: start from "form" and let the stored one take over after
+  // hydration, until the visitor moves on.
+  const pending = useHydrated() ? readPending() : null;
+  const [chosenView, setView] = useState<View | null>(null);
+  const view = chosenView ?? (pending ? "verify-otp" : "form");
+  const [chosenEmail, setAuthEmail] = useState<string | null>(null);
+  const authEmail = chosenEmail ?? pending?.email ?? "";
   const authPasswordRef = useRef("");
   const [busy, setBusy] = useState(false);
   const [verifyPhase, setVerifyPhase] = useState<"idle" | "success" | "leaving">("idle");
@@ -797,7 +841,7 @@ function useAuthFlow(mode: "login" | "signup") {
   };
 }
 
-export function AuthPage({ mode }: { mode: "login" | "signup" }) {
+function AuthPage({ mode }: { mode: "login" | "signup" }) {
   const flow = useAuthFlow(mode);
 
   if (flow.view === "verify-otp") {
@@ -844,3 +888,10 @@ export function AuthPage({ mode }: { mode: "login" | "signup" }) {
     />
   );
 }
+
+// main.tsx names these as strings for lazyRouteComponent, which static
+// analysis cannot follow.
+// fallow-ignore-next-line unused-export
+export const LoginPage = () => <AuthPage mode="login" />;
+// fallow-ignore-next-line unused-export
+export const SignupPage = () => <AuthPage mode="signup" />;

@@ -5,15 +5,30 @@ const PRERENDERED_PAGES = [
   { path: "/pricing", heading: "URL shortener pricing: free, $4 or $9 a month" },
   { path: "/qr-code-generator", heading: "Free QR code generator with logo" },
   { path: "/docs", heading: "Developer docs" },
+  { path: "/roadmap", heading: "What we are building" },
   { path: "/privacy", heading: "Privacy Policy" },
   { path: "/terms", heading: "Terms of Service" },
+  { path: "/login", heading: "Sign in" },
+  { path: "/signup", heading: "Create an account" },
 ] as const;
 
-const HTML_FALLBACK_PAGES = [
-  { path: "/roadmap", text: "URL shortener roadmap - what rdyrct is building next" },
-  { path: "/signup", text: "Sign up - rdyrct URL shortener and QR codes" },
-  { path: "/login", text: "Log in - rdyrct" },
-] as const;
+const HTML_FALLBACK_PAGES = [] as const;
+
+/** What React reports when hydration does not match the server HTML. The
+ *  production build reports it as `pageerror` "Minified React error #418"
+ *  (or #423, #425), with none of the words the development message has, so a
+ *  console-only check for "hydration" never sees it. */
+function collectHydrationErrors(page: Page) {
+  const errors: string[] = [];
+  const mismatch = /Minified React error #4(18|23|25)|hydration|didn't match|server html/i;
+  page.on("pageerror", (error) => {
+    if (mismatch.test(error.message)) errors.push(error.message);
+  });
+  page.on("console", (message) => {
+    if (message.type() === "error" && mismatch.test(message.text())) errors.push(message.text());
+  });
+  return errors;
+}
 
 async function blockScripts(page: Page) {
   await page.route("**/*", (route) =>
@@ -35,6 +50,12 @@ test("public content stays visible and correct before JavaScript runs", async ({
     await page.goto(path);
     await expect(page.locator("#root")).toContainText(text);
   }
+  // The Google button is in the prerendered form, disabled until /config says
+  // it works, so nothing pops in when /config arrives.
+  for (const path of ["/login", "/signup"]) {
+    await page.goto(path);
+    await expect(page.getByRole("button", { name: /Continue with Google/i }), path).toBeDisabled();
+  }
   await page.goto("/");
   await expect(page.getByRole("heading", { name: "Frequently asked questions" })).toBeVisible();
   await expect(page.locator("#faq")).toHaveCSS("opacity", "1");
@@ -44,12 +65,7 @@ test("public content stays visible and correct before JavaScript runs", async ({
 });
 
 test("all prerendered pages hydrate without mismatch warnings", async ({ page }) => {
-  const hydrationErrors: string[] = [];
-  page.on("console", (message) => {
-    if (message.type() === "error" && /hydration|didn't match|server html/i.test(message.text())) {
-      hydrationErrors.push(message.text());
-    }
-  });
+  const hydrationErrors = collectHydrationErrors(page);
 
   await assertPrerenderedHeadings(page);
 
@@ -81,4 +97,151 @@ test("conditional requests keep the prerendered HTML representation", async ({ r
       "Short links and QR codes that show which channel earned the click.",
     );
   }
+});
+
+// The A/B test must not flash the wrong hero. The inline script in index.html
+// picks the stored arm before first paint, so the test arm is on screen with
+// the bundles blocked, and hydration leaves the same one element behind.
+test("a visitor given the test hero never sees the control hero first", async ({ browser }) => {
+  const consent = {
+    "rdyrct:consent:v2": "accepted",
+    "rdyrct:consent:v2:at": String(Date.now()),
+    "rdyrct:hero-variant:v1": "test",
+  };
+  const testHeading = "Shorten a link. See who clicks it.";
+  const controlHeading = "Short links and QR codes that show which channel earned the click.";
+  const storageState = {
+    cookies: [],
+    origins: [
+      {
+        origin: new URL(test.info().project.use.baseURL ?? "").origin,
+        localStorage: Object.entries(consent).map(([name, value]) => ({ name, value })),
+      },
+    ],
+  };
+
+  // Only the bundles are blocked: the inline script still runs, as it does
+  // in the gap before the bundle has loaded and hydrated.
+  const unhydrated = await browser.newContext({ storageState });
+  const before = await unhydrated.newPage();
+  await blockScripts(before);
+  await before.goto("/");
+  await expect(before.getByRole("heading", { level: 1 })).toHaveText(testHeading);
+  await unhydrated.close();
+
+  const context = await browser.newContext({ storageState });
+  const page = await context.newPage();
+  // Reports any painted frame in which the control heading is on screen.
+  // Hydration and the session resolving must not flip this visitor
+  // test -> control -> test. Frames only: before the stylesheet loads, a
+  // layout read would see both arms.
+  // A slow session is what opens the window: the arm is not assigned until
+  // it resolves.
+  await page.route("**/api/user", async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, 800));
+    await route.continue();
+  });
+  const sightings: string[] = [];
+  page.on("console", (message) => {
+    if (message.text() === "control-hero-visible") sightings.push(message.text());
+  });
+  await page.addInitScript((heading) => {
+    requestAnimationFrame(function tick() {
+      const visible = [...document.querySelectorAll("h1")].some(
+        (h1) => h1.textContent === heading && h1.getBoundingClientRect().height > 0,
+      );
+      if (visible) console.info("control-hero-visible");
+      requestAnimationFrame(tick);
+    });
+  }, controlHeading);
+  await page.goto("/");
+  await expect(page.locator("[data-hero-arm]:not([data-ssr])")).toHaveCount(1);
+  await page.waitForTimeout(2000);
+  expect(sightings).toEqual([]);
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText(testHeading);
+  await expect(page.getByText(controlHeading)).toHaveCount(0);
+  await context.close();
+});
+
+// The auth pages read the URL and the session while rendering. Arriving with
+// query params must hydrate onto the plain prerendered form without a
+// mismatch, and leave a form that still takes input.
+test("the auth pages hydrate with query params and stay usable", async ({ page }) => {
+  const hydrationErrors = collectHydrationErrors(page);
+
+  // A keystroke that lands while React is hydrating can be dropped with the
+  // field, so type until the value sticks once hydration has finished.
+  const typeEmail = (path: string, heading: string) =>
+    expect(async () => {
+      await page.goto(path);
+      await expect(page.getByRole("heading", { level: 1, name: heading })).toBeVisible();
+      await page.getByLabel("Email").fill("someone@example.com");
+      await page.waitForTimeout(500);
+      await expect(page.getByLabel("Email")).toHaveValue("someone@example.com");
+    }).toPass({ timeout: 15_000 });
+
+  await typeEmail("/signup?next=/billing%3Fplan%3Dpro", "Create an account");
+  await typeEmail("/login?next=/dashboard", "Sign in");
+  expect(hydrationErrors).toEqual([]);
+});
+
+// A signed-in browser always gets the control hero, so the inline script must
+// not show it the test arm it was given before it signed up.
+test("a signed-in visitor with a stored test arm sees the control hero first", async ({
+  browser,
+}) => {
+  const origin = new URL(test.info().project.use.baseURL ?? "").origin;
+  const stored = {
+    "rdyrct:consent:v2": "accepted",
+    "rdyrct:consent:v2:at": String(Date.now()),
+    "rdyrct:hero-variant:v1": "test",
+    "rdyrct:user:v1": "{}",
+  };
+  const context = await browser.newContext({
+    storageState: {
+      cookies: [],
+      origins: [
+        {
+          origin,
+          localStorage: Object.entries(stored).map(([name, value]) => ({ name, value })),
+        },
+      ],
+    },
+  });
+  const page = await context.newPage();
+  await blockScripts(page);
+  await page.goto("/");
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText(
+    "Short links and QR codes that show which channel earned the click.",
+  );
+  await context.close();
+});
+
+// The auth pages are React.lazy. Hydrating before their chunk arrived blanked
+// the form until it did, so a slow chunk must leave the prerendered form up.
+test("a slow auth chunk never blanks the prerendered form", async ({ page }) => {
+  const blank: string[] = [];
+  page.on("console", (message) => {
+    if (message.text() === "auth-heading-gone") blank.push(message.text());
+  });
+  await page.route("**/assets/auth-*.js", async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+    await route.continue();
+  });
+  await page.addInitScript(() => {
+    let seen = false;
+    requestAnimationFrame(function tick() {
+      const there = [...document.querySelectorAll("h1")].some(
+        (h1) => h1.textContent === "Sign in" && h1.getBoundingClientRect().height > 0,
+      );
+      if (there) seen = true;
+      else if (seen) console.info("auth-heading-gone");
+      requestAnimationFrame(tick);
+    });
+  });
+  await page.goto("/login");
+  await expect(page.getByRole("heading", { level: 1, name: "Sign in" })).toBeVisible();
+  await page.waitForTimeout(2000);
+  await expect(page.getByRole("heading", { level: 1, name: "Sign in" })).toBeVisible();
+  expect(blank).toEqual([]);
 });

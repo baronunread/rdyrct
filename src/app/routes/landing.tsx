@@ -13,6 +13,7 @@ import {
   type Variants,
 } from "motion/react";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useHydrated } from "../lib/hydrated";
 import { useSeo } from "../lib/seo";
 import { useMarketingScroll } from "../lib/marketing-scroll";
 import { FaqJsonLd } from "../components/faq-json-ld";
@@ -21,6 +22,7 @@ import { useAudience } from "../lib/audience";
 import posthog from "../lib/posthog";
 import {
   clearHeroVariant,
+  type HeroVariant,
   heroVariant,
   heroVariantSnapshot,
   subscribeHeroVariant,
@@ -104,11 +106,9 @@ function Section({
   return (
     <m.section
       id={id}
-      initial={{ opacity: 0, y: 8 }}
-      whileInView={{ opacity: 1, y: 0 }}
+      initial={false}
       onViewportEnter={onEnter}
       viewport={{ once: true, margin: "-80px" }}
-      transition={{ duration: 0.3, ease: "easeOut" }}
       className={`marketing-reveal ${className}`}
     >
       {children}
@@ -523,7 +523,7 @@ function SelfHostSection() {
  */
 function HeroTestVariant() {
   return (
-    <div className="first-paint-hero mx-auto flex max-w-xl flex-col items-center gap-6 py-14 text-center md:py-20">
+    <div className="mx-auto flex max-w-xl flex-col items-center gap-6 py-14 text-center md:py-20">
       <h1 className="text-3xl font-bold tracking-tight text-balance sm:text-4xl lg:text-5xl">
         Shorten a link. See who clicks it.
       </h1>
@@ -580,7 +580,7 @@ function HeroControlVariant({
     // primary actions in one column. Side by side they are no longer in the
     // same column, so the primary CTA is primary again.
     <section className="grid items-center gap-10 py-14 md:grid-cols-2 md:gap-12 md:py-20">
-      <div className="first-paint-hero flex flex-col items-center gap-6 text-center md:items-start md:text-left">
+      <div className="flex flex-col items-center gap-6 text-center md:items-start md:text-left">
         <h1 className="text-3xl font-bold tracking-tight text-balance sm:text-4xl lg:text-5xl">
           Short links and QR codes that show which channel earned the click.
         </h1>
@@ -634,7 +634,7 @@ function HeroControlVariant({
       {/* The right half on a wide screen, and directly under the copy on a
           phone, where it has to stay near the fold: it is the one thing on
           this page that turns a stranger into an account. */}
-      <div className="first-paint-hero flex w-full justify-center md:justify-end">
+      <div className="flex w-full justify-center md:justify-end">
         {/* The anonymous shortener is an argument aimed at a stranger. A
             signed-in visitor has already been convinced, and offering them a
             link that expires in 24 hours and can be "kept" by signing up for
@@ -664,16 +664,13 @@ function shouldCaptureLandingView(consentReady: boolean, ready: boolean, capture
   return consentReady && ready && !captured && readConsent() === "accepted";
 }
 
-function HeroSection(props: {
-  ctaTo: string;
-  ctaLabel: string;
-  authed: boolean;
-  ready: boolean;
-  /** Empty until the session resolves; the card handles that itself. */
-  name: string;
-}) {
+function HeroSection(props: HeroProps) {
   const landingViewCaptured = useRef(false);
-  const variant = useSyncExternalStore(subscribeHeroVariant, heroVariantSnapshot, () => "control");
+  const variant = useSyncExternalStore(
+    subscribeHeroVariant,
+    heroVariantSnapshot,
+    (): HeroVariant => "control",
+  );
   const { ready: consentReady, accepted: analyticsConsent } = useAnalyticsConsent();
   useEffect(() => {
     syncHeroAssignment(consentReady, analyticsConsent, props.ready, props.authed);
@@ -683,10 +680,51 @@ function HeroSection(props: {
     landingViewCaptured.current = true;
     posthog.capture(FUNNEL.landingViewed, landingContext());
   }, [props.ready, props.authed, consentReady, analyticsConsent]);
-  // A signed-in visitor always gets the control hero and never flips the
-  // coin, so they are not counted as shown either arm (see hero-variant.ts).
-  if (!props.authed && variant === "test") return <HeroTestVariant />;
-  return <HeroControlVariant {...props} />;
+  return <HeroArms variant={variant} {...props} />;
+}
+
+type HeroProps = {
+  ctaTo: string;
+  ctaLabel: string;
+  authed: boolean;
+  ready: boolean;
+  /** Empty until the session resolves; the card handles that itself. */
+  name: string;
+};
+
+function armsToMount(variant: HeroVariant, authed: boolean, settled: boolean) {
+  const showTest = !authed && (variant === "test" || !settled);
+  return { showTest, showControl: !settled || !showTest };
+}
+
+/**
+ * Which hero arm is drawn. A signed-in visitor always gets the control hero
+ * and never flips the coin, so they are not counted as shown either arm (see
+ * hero-variant.ts).
+ *
+ * The prerendered page carries both arms and the inline script in index.html
+ * shows the one this browser was given, so hydration changes nothing on
+ * screen. Once hydrated, only the active arm stays mounted.
+ */
+function HeroArms({ variant, ...props }: HeroProps & { variant: HeroVariant }) {
+  // False for the server render and the hydrating render, true after.
+  const settled = useHydrated();
+  const { showControl, showTest } = armsToMount(variant, props.authed, settled);
+  const ssr = settled ? undefined : "";
+  return (
+    <>
+      {showControl && (
+        <div data-hero-arm="control" data-ssr={ssr}>
+          <HeroControlVariant {...props} />
+        </div>
+      )}
+      {showTest && (
+        <div data-hero-arm="test" data-ssr={ssr}>
+          <HeroTestVariant />
+        </div>
+      )}
+    </>
+  );
 }
 
 /**
@@ -704,7 +742,7 @@ function HeroSection(props: {
  *  becomes a plain appearance for anyone who asked for less movement. */
 const inboxVariants: Variants = {
   hidden: {},
-  visible: { transition: { delayChildren: 0.15, staggerChildren: 0.55 } },
+  visible: { transition: { delayChildren: 0.1, staggerChildren: 0.3 } },
 };
 
 const mailVariants: Variants = {
@@ -714,7 +752,7 @@ const mailVariants: Variants = {
 
 const verdictVariants: Variants = {
   hidden: { opacity: 0 },
-  visible: { opacity: 1, transition: { delay: 0.5, duration: 0.35 } },
+  visible: { opacity: 1, transition: { delay: 0.25, duration: 0.3 } },
 };
 
 /**

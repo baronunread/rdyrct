@@ -172,7 +172,7 @@ export function DocsPage() {
           <LandingHeader authed={authed} />
 
           <main className="pt-10 pb-4 sm:pt-14">
-            <div className="first-paint-hero">
+            <div>
               <h1 className="text-2xl font-bold text-balance">Developer docs</h1>
               <p className="mt-2 max-w-xl text-sm text-muted">
                 The REST API and the MCP server: how to authenticate, and what each one can do. Both
