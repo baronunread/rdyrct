@@ -23,6 +23,11 @@ const polarFor = (env: Env): BillingProvider =>
     server: env.POLAR_SERVER ?? "sandbox",
   });
 
+// Polar API requests otherwise follow its moving Current version. Keep the
+// SDK's 2026-04 generated contract aligned with the server until we review and
+// deliberately migrate to a later version.
+const POLAR_API_VERSION = "2026-04";
+
 // Mounted at /api/billing: the caller's own subscription (per-user billing).
 // (The Polar webhook itself is mounted separately, outside this router and
 // its body limit — see handlePolarWebhook below and index.ts.)
@@ -65,14 +70,17 @@ billingRoutes.post("/checkout", requireUser, async (c) => {
     throw new HTTPException(400, { message: "plan must be hobby or pro" });
   const productId = plan === "hobby" ? c.env.POLAR_HOBBY_PRODUCT_ID : c.env.POLAR_PRO_PRODUCT_ID;
   if (!productId) throw new HTTPException(503, { message: `No Polar product is set for ${plan}` });
-  const checkout = await polarFor(c.env).checkouts.create({
-    products: [productId],
-    // Polar interpolates {CHECKOUT_ID}; the SPA uses it to confirm the
-    // upgrade before celebrating (webhook is still the entitlement source).
-    successUrl: `${c.env.APP_URL}/billing?checkout_id={CHECKOUT_ID}`,
-    customerEmail: user.email,
-    metadata: { userId: user.id },
-  });
+  const checkout = await polarFor(c.env).checkouts.create(
+    {
+      products: [productId],
+      // Polar interpolates {CHECKOUT_ID}; the SPA uses it to confirm the
+      // upgrade before celebrating (webhook is still the entitlement source).
+      successUrl: `${c.env.APP_URL}/billing?checkout_id={CHECKOUT_ID}`,
+      customerEmail: user.email,
+      metadata: { userId: user.id },
+    },
+    { headers: { "Polar-Version": POLAR_API_VERSION } },
+  );
   log.audit({
     action: "billing.checkout",
     actor: { type: "user", id: user.id },
@@ -93,7 +101,10 @@ billingRoutes.post("/portal", requireUser, async (c) => {
     .where(eq(schema.user.id, c.var.user!.id));
   const customerId = rows[0]?.customerId;
   if (!customerId) throw new HTTPException(400, { message: "No billing account yet" });
-  const session = await polarFor(c.env).customerSessions.create({ customerId });
+  const session = await polarFor(c.env).customerSessions.create(
+    { customerId },
+    { headers: { "Polar-Version": POLAR_API_VERSION } },
+  );
   return c.json({ url: session.customerPortalUrl });
 });
 
