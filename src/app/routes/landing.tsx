@@ -662,6 +662,10 @@ function shouldCaptureLandingView(consentReady: boolean, ready: boolean, capture
   return consentReady && ready && !captured && readConsent() === "accepted";
 }
 
+const subscribeToNothing = () => () => {};
+const isHydrated = () => true;
+const isNotHydrated = () => false;
+
 function HeroSection(props: {
   ctaTo: string;
   ctaLabel: string;
@@ -686,8 +690,8 @@ function HeroSection(props: {
   // The prerendered page carries both arms and the inline script in
   // index.html shows the one this browser was given, so hydration changes
   // nothing on screen. Once hydrated, only the active arm stays mounted.
-  const [settled, setSettled] = useState(false);
-  useEffect(() => setSettled(true), []);
+  // False for the server render and the hydrating render, true after.
+  const settled = useSyncExternalStore(subscribeToNothing, isHydrated, isNotHydrated);
   const showTest = !props.authed && (variant === "test" || !settled);
   const showControl = !settled || !showTest;
   const ssr = settled ? undefined : "";
