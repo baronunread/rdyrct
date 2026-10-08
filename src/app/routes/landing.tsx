@@ -592,7 +592,10 @@ function HeroControlVariant({
             GitHub" used to sit here, spending the highest-intent moment on
             the site sending people to a repository; it now lives in its own
             band under the pricing table. */}
-        <div className="flex flex-wrap items-center justify-center gap-3 md:justify-start">
+        <div
+          data-hero-personalization
+          className="flex flex-wrap items-center justify-center gap-3 md:justify-start"
+        >
           {!authed && (
             <HrefLink
               href={ctaTo}
@@ -614,6 +617,7 @@ function HeroControlVariant({
         {/* Reassurance for somebody deciding. Nothing to reassure once they
             have an account. */}
         <ul
+          data-hero-personalization
           className={cn(
             "flex flex-wrap items-center justify-center gap-x-5 gap-y-1 text-xs text-muted md:justify-start",
             authed && "hidden",
@@ -634,7 +638,7 @@ function HeroControlVariant({
       {/* The right half on a wide screen, and directly under the copy on a
           phone, where it has to stay near the fold: it is the one thing on
           this page that turns a stranger into an account. */}
-      <div className="flex w-full justify-center md:justify-end">
+      <div data-hero-personalization className="flex w-full justify-center md:justify-end">
         {/* The anonymous shortener is an argument aimed at a stranger. A
             signed-in visitor has already been convinced, and offering them a
             link that expires in 24 hours and can be "kept" by signing up for
@@ -697,6 +701,12 @@ function armsToMount(variant: HeroVariant, authed: boolean, settled: boolean) {
   return { showTest, showControl: !settled || !showTest };
 }
 
+function heroIsSettled(hydrated: boolean, props: HeroProps, variant: HeroVariant) {
+  if (!hydrated) return false;
+  if (props.authed) return true;
+  return props.ready && variant === heroVariantSnapshot();
+}
+
 /**
  * Which hero arm is drawn. A signed-in visitor always gets the control hero
  * and never flips the coin, so they are not counted as shown either arm (see
@@ -708,7 +718,10 @@ function armsToMount(variant: HeroVariant, authed: boolean, settled: boolean) {
  */
 function HeroArms({ variant, ...props }: HeroProps & { variant: HeroVariant }) {
   // False for the server render and the hydrating render, true after.
-  const settled = useHydrated();
+  const hydrated = useHydrated();
+  // The hydration signals can update in separate renders. Keep the CSS-selected
+  // arm until the React snapshot and audience have both caught up.
+  const settled = heroIsSettled(hydrated, props, variant);
   const { showControl, showTest } = armsToMount(variant, props.authed, settled);
   const ssr = settled ? undefined : "";
   return (

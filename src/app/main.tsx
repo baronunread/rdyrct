@@ -36,9 +36,7 @@ import { PRERENDERED_PUBLIC_PATHS } from "@/shared/page-meta";
 // marketing landing never download the app, and the app never downloads the
 // admin pages unless the user is the platform admin.
 const LandingPage = lazyRouteComponent(() => import("./routes/landing"), "LandingPage");
-// lazyRouteComponent, not React.lazy: the router can preload it before
-// hydration, and React.lazy cannot be (it suspends once even when cached,
-// which blanked the prerendered form until its next render).
+// Router-managed lazy components can preload before navigation commits.
 const LoginPage = lazyRouteComponent(() => import("./routes/auth"), "LoginPage");
 const SignupPage = lazyRouteComponent(() => import("./routes/auth"), "SignupPage");
 const ResetPasswordPage = lazy(() =>

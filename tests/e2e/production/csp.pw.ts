@@ -34,7 +34,7 @@ test("the built worker serves the production CSP", async ({ page }) => {
   // no 'unsafe-inline', which is the whole point of naming it by hash.
   const scriptSrc = csp?.split(";").find((part) => part.trim().startsWith("script-src"));
   expect(scriptSrc?.trim()).toBe(
-    "script-src 'self' 'sha256-YEMi/k0FRxbK+EqGSkzXXfhcQ2eW5K3UAQegWsC97Kw=' 'wasm-unsafe-eval' https://*.posthog.com https://stats.brnr.dev",
+    "script-src 'self' 'sha256-FWT0zAeXgLYQzK+k6AJ0ya6gTIN/5TC8uQ3OB6H8w6A=' 'wasm-unsafe-eval' https://*.posthog.com https://stats.brnr.dev",
   );
   const connectSrc = csp?.split(";").find((part) => part.trim().startsWith("connect-src"));
   expect(connectSrc?.trim()).toBe(
@@ -123,7 +123,7 @@ test("QR previews render under the production CSP without violations", async ({ 
   // embedded logo, so qr-code-styling's rendering path is exercised here
   // without needing an account. It draws through image and canvas APIs, which
   // is exactly what img-src governs.
-  await expect(page.locator("svg").first()).toBeVisible();
+  await expect(page.locator("svg:visible").first()).toBeVisible();
   await page.waitForTimeout(1500);
 
   const violations = await cspViolations(page);

@@ -106,25 +106,32 @@
     -->
     <script>
       (function () {
-        const stored = localStorage.getItem("theme");
         const os = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
-        document.documentElement.dataset.theme =
-          stored === "light" || stored === "dark" ? stored : os;
-        // Hero experiment: show the arm this browser was already given. Reads
-        // only, and only while the analytics answer is "accepted" and has not
-        // lapsed (keys and lifetime mirror lib/consent.ts, lib/hero-variant.ts);
-        // nothing is assigned or sent from here. A browser holding a cached
-        // user (lib/user-cache.ts) is signed in and always gets the control
-        // hero, so it is left alone.
+        document.documentElement.dataset.theme = os;
         try {
+          const stored = localStorage.getItem("theme");
+          if (stored === "light" || stored === "dark")
+            document.documentElement.dataset.theme = stored;
+        } catch {}
+        // Resolve browser hints before paint. Experiment storage requires valid
+        // analytics consent; cached customers always see the control hero.
+        try {
+          const user = JSON.parse(localStorage.getItem("rdyrct:user:v1") || "null");
+          if (user?.user?.id && Array.isArray(user.orgs))
+            document.documentElement.dataset.auth = "in";
           const at = Number(localStorage.getItem("rdyrct:consent:v2:at"));
           if (
-            localStorage.getItem("rdyrct:user:v1") === null &&
+            document.documentElement.dataset.auth !== "in" &&
             localStorage.getItem("rdyrct:consent:v2") === "accepted" &&
-            localStorage.getItem("rdyrct:hero-variant:v1") === "test" &&
-            Date.now() - at <= 183 * 864e5
-          )
-            document.documentElement.dataset.hero = "test";
+            (!at || Date.now() - at <= 183 * 864e5)
+          ) {
+            let arm = localStorage.getItem("rdyrct:hero-variant:v1");
+            if (arm !== "control" && arm !== "test") {
+              arm = Math.random() < 0.5 ? "control" : "test";
+              localStorage.setItem("rdyrct:hero-variant:v1", arm);
+            }
+            document.documentElement.dataset.hero = arm;
+          }
         } catch {}
       })();
     </script>

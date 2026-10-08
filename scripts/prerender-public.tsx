@@ -55,8 +55,6 @@ const ROUTE_SOURCES = new Map([
   ["/roadmap", "src/app/routes/roadmap.tsx"],
   ["/privacy", "src/app/routes/privacy.tsx"],
   ["/terms", "src/app/routes/terms.tsx"],
-  ["/login", "src/app/routes/auth.tsx"],
-  ["/signup", "src/app/routes/auth.tsx"],
 ]);
 
 for (const path of PRERENDER_ROUTES) {

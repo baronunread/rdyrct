@@ -14,8 +14,8 @@
  * than a new one loading.
  */
 import { Link } from "@tanstack/react-router";
-import { MorphIcon } from "morphicons/react";
-import { moon, sun } from "../ui/icon-nodes";
+import { Moon, Sun } from "../ui/icons";
+import { useHydrated } from "../lib/hydrated";
 import { MarketingLink } from "./marketing-link";
 import { useTheme } from "../lib/theme";
 import { trackCta } from "../lib/track-cta";
@@ -23,7 +23,8 @@ import { IconButton } from "../ui/button";
 import { buttonClass } from "../ui/button-class";
 
 export function LandingHeader({ authed }: { authed: boolean }) {
-  const [theme, toggleTheme] = useTheme();
+  const [, toggleTheme] = useTheme();
+  const hydrated = useHydrated();
   return (
     // Three columns, not space-between: the two 1fr rails keep the nav on the
     // page's centre line however wide the brand or the auth buttons get, so
@@ -33,6 +34,7 @@ export function LandingHeader({ authed }: { authed: boolean }) {
     // width evenly, which is enough to wrap "Log in" onto two lines.
     <header
       data-marketing-header
+      data-auth={hydrated ? (authed ? "in" : "out") : undefined}
       className="sticky top-0 z-20 -mx-6 grid grid-cols-[auto_1fr_auto] items-center gap-3 border-b border-border/50 bg-bg/85 px-6 py-4 backdrop-blur-md sm:grid-cols-[1fr_auto_1fr]"
     >
       <MarketingLink to="/" className="justify-self-start text-lg font-bold tracking-widest">
@@ -65,9 +67,10 @@ export function LandingHeader({ authed }: { authed: boolean }) {
       {/* What the visitor does. */}
       <div className="flex items-center justify-self-end gap-2.5 text-sm sm:gap-4">
         <IconButton label="Toggle theme" className="p-2" onClick={toggleTheme}>
-          <MorphIcon icon={theme === "dark" ? sun : moon} size={15} spring="snappy" />
+          <Sun size={15} className="theme-sun" />
+          <Moon size={15} className="theme-moon" />
         </IconButton>
-        {authed ? (
+        <span data-auth-control="in">
           <Link
             to="/dashboard"
             onClick={() => trackCta("header")}
@@ -75,20 +78,19 @@ export function LandingHeader({ authed }: { authed: boolean }) {
           >
             Dashboard
           </Link>
-        ) : (
-          <>
-            <Link to="/login" className="whitespace-nowrap text-muted hover:text-accent">
-              Log in
-            </Link>
-            <Link
-              to="/signup"
-              onClick={() => trackCta("header")}
-              className={buttonClass({ variant: "primary" })}
-            >
-              Sign up
-            </Link>
-          </>
-        )}
+        </span>
+        <span data-auth-control="out" className="flex items-center gap-2.5 sm:gap-4">
+          <Link to="/login" className="whitespace-nowrap text-muted hover:text-accent">
+            Log in
+          </Link>
+          <Link
+            to="/signup"
+            onClick={() => trackCta("header")}
+            className={buttonClass({ variant: "primary" })}
+          >
+            Sign up
+          </Link>
+        </span>
       </div>
     </header>
   );

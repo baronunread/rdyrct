@@ -14,7 +14,7 @@ import { useShake } from "../lib/use-shake";
 import { useCap } from "../lib/cap";
 import { useCurrentUser, useConfig } from "../lib/hooks";
 import { storedAnonLinks } from "../lib/anon-links";
-import { useHydrated } from "../lib/hydrated";
+import { readAuthHint } from "../lib/user-cache";
 import { lastAuth, setLastAuth } from "../lib/last-auth";
 import { firstFormError } from "../lib/form-errors";
 import { cn } from "../ui/cn";
@@ -217,9 +217,6 @@ const AUTH_MODE_COPY = {
  * "Sign in": somebody who already has an account does not need a pitch.
  */
 function SignupSubtitle({ next }: { next: string }) {
-  // Storage and the URL differ from the prerendered page, so wait for hydration.
-  const hydrated = useHydrated();
-  if (!hydrated) return null;
   const body = storedAnonLinks().length
     ? "Your link is waiting. Sign up and it becomes permanent, with the clicks it earns."
     : next.startsWith("/billing")
@@ -369,10 +366,7 @@ function AuthFormView({
   const config = useConfig();
   // Read once on mount: a returning visitor who last signed in with Google
   // gets a one-click "continue as you" row.
-  // Read after mount, not in the initializer: the prerendered form has no
-  // storage to read, and a first render that differs from it fails hydration.
-  const [lastUsed, setLastUsed] = useState<ReturnType<typeof lastAuth>>(null);
-  useEffect(() => setLastUsed(lastAuth()), []);
+  const [lastUsed] = useState(lastAuth);
   // Step 3b (#64): what separates "reached the form" from "typed in it".
   // Signup only; the login form is not a funnel.
   const started = useRef(false);
@@ -423,10 +417,8 @@ function AuthFormView({
         <h1 className="font-bold">{copy.title}</h1>
         {mode === "signup" && <SignupSubtitle next={next} />}
         {mode === "signup" && <SignupViewed />}
-        {/* Always drawn, so the prerendered form carries it and nothing pops
-            in or out when /config arrives. Disabled until the config says this
-            server has Google credentials: the prerender and a self-hosted
-            instance both stay disabled, and a configured one enables on load. */}
+        {/* Keep the Google row in place while configuration loads. Enable it
+            only when this server has Google credentials. */}
         <GoogleEntry
           email={lastUsed?.method === "google" ? lastUsed.email : undefined}
           onClick={startGoogle}
@@ -652,7 +644,8 @@ function useRedirectWhenSignedIn(deps: {
   verifyPhase: "idle" | "success" | "leaving";
   next: string;
 }) {
-  const { data: user } = useCurrentUser();
+  const { data: user, isPending } = useCurrentUser();
+  const [authHint] = useState(readAuthHint);
   // Taken here rather than passed in: useNavigate returns the same thing
   // wherever it is called, and an effect calling a navigate it was handed
   // reads as a child pushing data back up to its parent.
@@ -663,6 +656,7 @@ function useRedirectWhenSignedIn(deps: {
     clearPending();
     navigate({ href: sanitizeNext(next, user.user.isAdmin), replace: true });
   }, [user, navigate, next, verifyPhase]);
+  return verifyPhase === "idle" && (!!user || (authHint && isPending));
 }
 
 /** Login/signup state machine: view transitions, the OTP/password-reset
@@ -673,10 +667,7 @@ function useAuthFlow(mode: "login" | "signup") {
   const qc = useQueryClient();
   const toast = useToast();
 
-  // A verification left half-done is in storage, which the prerendered form
-  // never saw: start from "form" and let the stored one take over after
-  // hydration, until the visitor moves on.
-  const pending = useHydrated() ? readPending() : null;
+  const pending = readPending();
   const [chosenView, setView] = useState<View | null>(null);
   const view = chosenView ?? (pending ? "verify-otp" : "form");
   const [chosenEmail, setAuthEmail] = useState<string | null>(null);
@@ -709,7 +700,7 @@ function useAuthFlow(mode: "login" | "signup") {
   const next = rawNext.startsWith("/") && !rawNext.startsWith("//") ? rawNext : "/dashboard";
 
   const { forgotBusy, submitForgot } = useForgotPassword(setView, toast);
-  useRedirectWhenSignedIn({ verifyPhase, next });
+  const redirecting = useRedirectWhenSignedIn({ verifyPhase, next });
 
   const goVerify = async (email: string) => {
     const { error } = await authClient.emailOtp.sendVerificationOtp({
@@ -818,6 +809,7 @@ function useAuthFlow(mode: "login" | "signup") {
   };
 
   return {
+    redirecting,
     view,
     setView,
     authEmail,
@@ -843,6 +835,7 @@ function useAuthFlow(mode: "login" | "signup") {
 
 function AuthPage({ mode }: { mode: "login" | "signup" }) {
   const flow = useAuthFlow(mode);
+  if (flow.redirecting) return <div className="min-h-dvh bg-bg" />;
 
   if (flow.view === "verify-otp") {
     return (

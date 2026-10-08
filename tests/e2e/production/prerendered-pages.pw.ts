@@ -8,8 +8,6 @@ const PRERENDERED_PAGES = [
   { path: "/roadmap", heading: "What we are building" },
   { path: "/privacy", heading: "Privacy Policy" },
   { path: "/terms", heading: "Terms of Service" },
-  { path: "/login", heading: "Sign in" },
-  { path: "/signup", heading: "Create an account" },
 ] as const;
 
 const HTML_FALLBACK_PAGES = [] as const;
@@ -50,11 +48,10 @@ test("public content stays visible and correct before JavaScript runs", async ({
     await page.goto(path);
     await expect(page.locator("#root")).toContainText(text);
   }
-  // The Google button is in the prerendered form, disabled until /config says
-  // it works, so nothing pops in when /config arrives.
+  // Auth routes render in the browser and carry no static form.
   for (const path of ["/login", "/signup"]) {
     await page.goto(path);
-    await expect(page.getByRole("button", { name: /Continue with Google/i }), path).toBeDisabled();
+    await expect(page.getByRole("button", { name: /Continue with Google/i }), path).toHaveCount(0);
   }
   await page.goto("/");
   await expect(page.getByRole("heading", { name: "Frequently asked questions" })).toBeVisible();
@@ -163,14 +160,11 @@ test("a visitor given the test hero never sees the control hero first", async ({
   await context.close();
 });
 
-// The auth pages read the URL and the session while rendering. Arriving with
-// query params must hydrate onto the plain prerendered form without a
-// mismatch, and leave a form that still takes input.
-test("the auth pages hydrate with query params and stay usable", async ({ page }) => {
+// Auth routes read browser state on their first render, including query params.
+test("the auth pages render with query params and stay usable", async ({ page }) => {
   const hydrationErrors = collectHydrationErrors(page);
 
-  // A keystroke that lands while React is hydrating can be dropped with the
-  // field, so type until the value sticks once hydration has finished.
+  // The loaded form must retain input after its initial queries resolve.
   const typeEmail = (path: string, heading: string) =>
     expect(async () => {
       await page.goto(path);
@@ -185,11 +179,8 @@ test("the auth pages hydrate with query params and stay usable", async ({ page }
   expect(hydrationErrors).toEqual([]);
 });
 
-// A signed-in browser always gets the control hero, so the inline script must
-// not show it the test arm it was given before it signed up.
-test("a signed-in visitor with a stored test arm sees the control hero first", async ({
-  browser,
-}) => {
+// An invalid cached user must not override a valid experiment assignment.
+test("an invalid cached user does not override the stored test arm", async ({ browser }) => {
   const origin = new URL(test.info().project.use.baseURL ?? "").origin;
   const stored = {
     "rdyrct:consent:v2": "accepted",
@@ -212,14 +203,13 @@ test("a signed-in visitor with a stored test arm sees the control hero first", a
   await blockScripts(page);
   await page.goto("/");
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(
-    "Short links and QR codes that show which channel earned the click.",
+    "Shorten a link. See who clicks it.",
   );
   await context.close();
 });
 
-// The auth pages are React.lazy. Hydrating before their chunk arrived blanked
-// the form until it did, so a slow chunk must leave the prerendered form up.
-test("a slow auth chunk never blanks the prerendered form", async ({ page }) => {
+// Once the client-rendered form appears, it must stay visible.
+test("a slow auth chunk leaves the loaded form visible", async ({ page }) => {
   const blank: string[] = [];
   page.on("console", (message) => {
     if (message.text() === "auth-heading-gone") blank.push(message.text());

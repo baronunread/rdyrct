@@ -27,8 +27,6 @@ export const PRERENDERED_PUBLIC_PATHS = new Set<string>([
   "/roadmap",
   "/privacy",
   "/terms",
-  "/login",
-  "/signup",
 ]);
 
 /**
