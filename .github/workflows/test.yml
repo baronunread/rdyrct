@@ -141,22 +141,21 @@ jobs:
 
   observability:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      checks: write
+      pull-requests: write
     steps:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version-file: package.json
-      - uses: actions/cache@v6
-        with:
-          path: node_modules
-          key: node_modules-${{ runner.os }}-${{ hashFiles('bun.lock') }}
-      - name: Install dependencies
-        run: bun install --frozen-lockfile
-      # Gate the worker's wide-event coverage (see #94, PR #199). Fails the
-      # pipeline if `evlog map` drops below 100/100, so a new route without
-      # logging can't slip through unreviewed. @evlog/cli is pinned in
-      # devDependencies to keep the score stable across CLI releases.
+      # Gate worker wide-event coverage, annotate regressions, and keep one
+      # up-to-date PR report. Match the locally pinned CLI so score changes
+      # only when this repository updates @evlog/cli.
       - name: evlog map score gate
-        run: bun run check:observability
+        uses: evloghq/action@9e0020fc8f3e60bb63121ee0008b41229d77f809
+        with:
+          version: 0.6.3
+          min-score: "100"
+          comment: on-failure
+          telemetry: false

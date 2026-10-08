@@ -156,6 +156,7 @@ describe("POST /api/billing/checkout", () => {
         customerEmail: "admin@example.com",
         metadata: { userId: "admin-1" },
       }),
+      { headers: { "Polar-Version": "2026-04" } },
     );
   });
 
@@ -164,6 +165,7 @@ describe("POST /api/billing/checkout", () => {
     await checkout(cookie, { plan: "hobby" });
     expect(checkoutsCreate).toHaveBeenCalledWith(
       expect.objectContaining({ products: [POLAR_HOBBY_PRODUCT_ID] }),
+      { headers: { "Polar-Version": "2026-04" } },
     );
   });
 
@@ -204,6 +206,7 @@ describe("POST /api/billing/portal", () => {
     expect(await res.json()).toEqual({ url: "https://sandbox.polar.sh/portal/test" });
     expect(customerSessionsCreate).toHaveBeenCalledWith(
       expect.objectContaining({ customerId: "cus_123" }),
+      { headers: { "Polar-Version": "2026-04" } },
     );
   });
 });
