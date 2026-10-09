@@ -39,6 +39,7 @@ it("has no caps and no billing without Polar", async () => {
   const headers = { cookie, "content-type": "application/json" };
 
   const me = await call("/api/user", { headers });
+  // SAFETY: /api/user answers { user } with the plan string, and the test fails on any other shape.
   expect(((await me.json()) as { user: { plan: string } }).user.plan).toBe("unlimited");
 
   // A free user owns one org, and sign-in already made it. Two more is Pro-only.
