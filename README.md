@@ -17,7 +17,7 @@
 
 [![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/baronunread/rdyrct)
 
-This provisions the Worker from the Cloudflare dashboard and may prompt you to create or select the KV namespace and D1 database. You'll still need to paste their ids into `wrangler.jsonc`, set the secrets below, configure Polar, and point a domain at the Worker; see [Deploy to Cloudflare Workers](#deploy-to-cloudflare-workers).
+This provisions the Worker from the Cloudflare dashboard. It is not yet a complete install on its own: you still need to set `APP_URL`, `APP_HOST` and the secrets, apply the migrations, and attach a domain. Follow [Deploy to Cloudflare Workers](#deploy-to-cloudflare-workers) (tracked in #280).
 
 ---
 
@@ -103,12 +103,34 @@ Cloudflare state. Failed browser tests keep a screenshot and trace in
 
 ## Deploy to Cloudflare Workers
 
-Prefer the manual path, or need to redeploy after the button above? Create the resources:
+### Minimum to run
+
+1. A domain on Cloudflare (or the free `*.workers.dev` address, to try it first).
+2. Two secrets: `BETTER_AUTH_SECRET` (any long random string) and `SUPERADMIN_EMAIL` (the account that becomes the platform admin).
+3. The resources below, then `bun run db:migrate:remote && bun run deploy`.
+
+Everything else is optional. Each piece says what it adds:
+
+| Setting                                    | Adds                                                                                                                     |
+| ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------ |
+| `RESEND_API_KEY`, `MAIL_FROM`              | Email: sign-up verification codes, password reset, invites, notices. Without it, sign-up skips verification (see below). |
+| `POLAR_*`                                  | Selling Hobby and Pro plans. Without it, nobody is capped and billing is hidden.                                         |
+| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | "Continue with Google".                                                                                                  |
+| `CF_API_TOKEN`, `CF_ZONE_ID`               | Customers' own domains through Cloudflare for SaaS.                                                                      |
+| `SHARED_LINK_HOST`                         | A second, shorter host for new shared-domain links.                                                                      |
+| `CAP_SECRET`                               | Proof-of-work in front of sign-up and password reset.                                                                    |
+| `SENTRY_DSN`                               | Error reports to your Sentry project.                                                                                    |
+
+**With no email provider and no Google sign-in, accounts are not verified and passwords cannot be reset.** That is fine for a private instance and not recommended for a public one. The admin console says so while it is true.
+
+### Create the resources
 
 ```sh
 bunx wrangler kv namespace create LINKS
 bunx wrangler d1 create rdyrct
 bunx wrangler r2 bucket create rdyrct-media
+bunx wrangler queues create rdyrct-storage
+bunx wrangler queues create rdyrct-storage-dlq
 ```
 
 Paste the returned ids into `wrangler.jsonc`:
@@ -116,25 +138,17 @@ Paste the returned ids into `wrangler.jsonc`:
 - `kv_namespaces[0].id`
 - `d1_databases[0].database_id`
 
-Fill in the non-secret vars in `wrangler.jsonc`:
+The R2 bucket name in `wrangler.jsonc` is `rdyrct-qr-logos`. Either create that name, or change `r2_buckets[0].bucket_name` to the one you created.
 
-- `APP_URL=https://rdyrct.com`
-- `APP_HOST=rdyrct.com`
-- `MAIL_FROM=rdyrct <no-reply@mail.rdyrct.com>`
-- `POLAR_SERVER=sandbox` (or `production` when live)
-- `POLAR_PRO_PRODUCT_ID` — create a recurring Pro product in Polar and paste its id
-- `POLAR_HOBBY_PRODUCT_ID` — create a recurring Hobby product in Polar and paste its id
-- `CF_ZONE_ID` — your `rdyrct.com` zone id
+### Set the variables and secrets
+
+In `wrangler.jsonc`, set `APP_URL` (for example `https://links.example.com`, no trailing slash) and `APP_HOST` (`links.example.com`). The file ships with rdyrct.com's values for the rest (`MAIL_FROM`, `POLAR_*`, `CF_ZONE_ID`, `SENTRY_DSN`): clear or replace each one you do not use.
 
 Set the secrets. Either one by one:
 
 ```sh
 bunx wrangler secret put BETTER_AUTH_SECRET
 bunx wrangler secret put SUPERADMIN_EMAIL
-bunx wrangler secret put RESEND_API_KEY
-bunx wrangler secret put POLAR_ACCESS_TOKEN
-bunx wrangler secret put POLAR_WEBHOOK_SECRET
-bunx wrangler secret put CF_API_TOKEN
 ```
 
 or in bulk with `cp prod.secrets.env.example prod.secrets.env`, fill it in, then:
@@ -149,6 +163,18 @@ Then migrate and ship:
 bun run db:migrate:remote
 bun run deploy
 ```
+
+### Attach your domain
+
+Cloudflare dashboard → Workers → your worker → **Settings → Domains & Routes** → **Add → Custom domain**. Short links live at the root (`https://links.example.com/<slug>`); the app is served on every other path. Keep routes out of `wrangler.jsonc`: a `routes` list replaces whatever is attached in the dashboard, and committing yours would hand it to every fork. The `*/*` route is only for customers' own domains (below).
+
+### Email (optional)
+
+Set `RESEND_API_KEY` and `MAIL_FROM` (a sender at a domain you verified in [Resend](https://resend.com)). Without them no mail goes out: sign-up skips the verification code and signs the user in, and the password-reset form says it needs an email provider. Sending lives in one function, `sendEmail()` in `src/worker/email.ts`, so another provider is a change there.
+
+### Selling plans (optional)
+
+Skip this section to run with no caps and no billing. To sell plans, set `POLAR_SERVER=sandbox` (or `production` when live), `POLAR_PRO_PRODUCT_ID` and `POLAR_HOBBY_PRODUCT_ID` (recurring products you create in Polar), and the secrets `POLAR_ACCESS_TOKEN` and `POLAR_WEBHOOK_SECRET`.
 
 **Polar setup:** create an Organization Access Token with scopes `checkouts:write` and `customer_sessions:write`. Add a webhook endpoint at `https://rdyrct.com/api/webhooks/polar` and subscribe to all five events the Worker handles. Miss one and billing state drifts:
 
@@ -166,7 +192,7 @@ Paid access an admin grants by hand is a **comp**, stored apart from the subscri
 
 The admin console reports counts, never money: how many people hold a paid plan, how many pay for it, and how many are comped. Who is cancelling shows on their own row in the user list, where it names someone. Revenue is read in the Polar dashboard, which knows what it charged net of discounts, tax and refunds.
 
-Finally, point `rdyrct.com` at the Worker as a **custom domain**: Cloudflare dashboard → Workers → your worker → **Settings → Domains & Routes**. Short links live at the root (`https://rdyrct.com/<slug>`); the app is served on every other path. Optionally, a second, shorter domain for new shared-domain links (`rdyr.cc` on rdyrct.com). Attach it the same way, check that `https://<it>/` answers with a redirect, and only then turn it on with `bunx wrangler secret put SHARED_LINK_HOST`. It takes effect without a deploy, and `bunx wrangler secret delete SHARED_LINK_HOST` turns it off. In that order because every new link starts using it at once: set before the domain resolves, it hands out links that go nowhere. Old links keep working on both hosts, since a shared-domain slug's KV key has no host in it. Unset, shared links use `APP_HOST`.
+**Second shared-domain host (optional).** Attach a shorter domain the same way, check that `https://<it>/` answers with a redirect, and only then turn it on with `bunx wrangler secret put SHARED_LINK_HOST`. It takes effect without a deploy, and `bunx wrangler secret delete SHARED_LINK_HOST` turns it off. In that order because every new link starts using it at once: set before the domain resolves, it hands out links that go nowhere. Old links keep working on both hosts, since a shared-domain slug's KV key has no host in it. Unset, shared links use `APP_HOST`.
 
 Review the [rate-limiting policies, monitoring, WAF rule, and rollback steps](docs/rate-limiting.md)
 before the first production deploy.
