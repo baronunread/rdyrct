@@ -19,15 +19,18 @@ import { HrefLink } from "../lib/router-search";
 import { trackCta } from "../lib/track-cta";
 import { planFor, NEED_KEYS, type NeedKey, type Needs, type PlanFit } from "../lib/plan-finder";
 import { formatNumber } from "../lib/numbers";
-import { PLAN_LIMITS, PLAN_PRICES, type OrgPlan } from "@/shared/types";
+import { PLAN_LIMITS, PLAN_PRICES, type StoredPlan } from "@/shared/types";
 import { buttonClass } from "../ui/button-class";
 import { Table, Th, Td } from "../ui/misc";
 import { Check } from "../ui/icons";
 import { cn } from "../ui/cn";
 
-const PLAN_NAMES = { free: "Free", hobby: "Hobby", pro: "Pro" } satisfies Record<OrgPlan, string>;
+const PLAN_NAMES = { free: "Free", hobby: "Hobby", pro: "Pro" } satisfies Record<
+  StoredPlan,
+  string
+>;
 const PRICE = { free: "$0", hobby: PLAN_PRICES.hobby, pro: PLAN_PRICES.pro } satisfies Record<
-  OrgPlan,
+  StoredPlan,
   string
 >;
 
@@ -70,7 +73,7 @@ const CARDS = [
   },
 ] as const;
 
-function PlanCards({ match }: { match: OrgPlan | null }) {
+function PlanCards({ match }: { match: StoredPlan | null }) {
   return (
     <div className="grid gap-4 pt-10 md:grid-cols-3">
       {/* One primary button, on the plan the finder picked, so the cards,
@@ -96,7 +99,7 @@ function PlanCard({
   match,
   primary,
 }: {
-  plan: OrgPlan;
+  plan: StoredPlan;
   who: string;
   points: readonly string[];
   plus?: string;
@@ -128,7 +131,7 @@ function PlanCard({
   );
 }
 
-function PlanHead({ plan, match }: { plan: OrgPlan; match: boolean }) {
+function PlanHead({ plan, match }: { plan: StoredPlan; match: boolean }) {
   return (
     <div className="flex items-center justify-between gap-2">
       <p className="font-bold">{PLAN_NAMES[plan]}</p>
@@ -137,7 +140,7 @@ function PlanHead({ plan, match }: { plan: OrgPlan; match: boolean }) {
   );
 }
 
-function PlanPrice({ plan }: { plan: OrgPlan }) {
+function PlanPrice({ plan }: { plan: StoredPlan }) {
   return (
     <p className="tnum text-4xl font-bold tracking-tight">
       {PRICE[plan]}
@@ -146,7 +149,7 @@ function PlanPrice({ plan }: { plan: OrgPlan }) {
   );
 }
 
-function PlanCta({ plan, primary }: { plan: OrgPlan; primary: boolean }) {
+function PlanCta({ plan, primary }: { plan: StoredPlan; primary: boolean }) {
   const paidTo = usePaidPlanTo();
   if (plan === "free")
     return (

@@ -3,6 +3,19 @@ import * as schema from "./db/schema";
 import type { DB, Env } from "./env";
 import { INVITABLE_ROLES, PLAN_LIMITS, type OrgPlan, type PlanLimits } from "@/shared/types";
 
+// Whether this deployment sells plans: Polar is configured. Unset, nobody is
+// capped. Held here, set once per request or job by configureBilling(), because
+// orgPlan() and userPlan() are called from ~20 places that only hold a db.
+// ponytail: module state, stable because bindings are per deployment; thread
+// env through orgPlan() instead if this ever has to differ per request.
+let billingOn = true;
+export function configureBilling(env: Env): void {
+  billingOn = Boolean(env.POLAR_ACCESS_TOKEN || env.BILLING);
+}
+export const billingEnabled = () => billingOn;
+/** The plan a response carries: the stored one, or `unlimited` with no billing. */
+export const planNow = (stored: OrgPlan): OrgPlan => (billingOn ? stored : "unlimited");
+
 /**
  * Runs one raw D1 statement and reports whether it wrote a row. Meant for a
  * conditional INSERT/UPDATE whose WHERE clause re-checks a COUNT(*) subquery:
@@ -420,7 +433,7 @@ export async function orgPlan(
   db: DB,
   orgId: string,
 ): Promise<{ plan: OrgPlan; limits: PlanLimits }> {
-  const plan = (await ownerUser(db, orgId))?.plan ?? "free";
+  const plan = planNow((await ownerUser(db, orgId))?.plan ?? "free");
   return { plan, limits: PLAN_LIMITS[plan] };
 }
 
@@ -460,6 +473,6 @@ export async function userPlan(
     .select({ plan: schema.user.plan })
     .from(schema.user)
     .where(eq(schema.user.id, userId));
-  const plan = rows[0]?.plan ?? "free";
+  const plan = planNow(rows[0]?.plan ?? "free");
   return { plan, limits: PLAN_LIMITS[plan] };
 }

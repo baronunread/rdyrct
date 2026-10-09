@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import { planNow } from "../plan";
 import { emailConfigured } from "../email";
 import { and, eq } from "drizzle-orm";
 import { alias } from "drizzle-orm/sqlite-core";
@@ -68,7 +69,7 @@ async function currentUserFor(
     id: r.id,
     name: r.name,
     role: r.role,
-    plan: orgPlanOf(r.ownerPlan),
+    plan: planNow(orgPlanOf(r.ownerPlan)),
     qrLogo: r.qrLogo,
     qrStyle: r.qrStyle,
     qrColor: r.qrColor,

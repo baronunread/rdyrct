@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { NotFound } from "./not-found";
 import { errorMessage } from "@/app/lib/error-message";
 import confetti from "canvas-confetti";
 import { AnimatePresence, LazyMotion, domAnimation, m, useReducedMotion } from "motion/react";
@@ -91,6 +92,7 @@ const PLAN_LABEL = {
   free: "Free",
   hobby: "Hobby",
   pro: "Pro",
+  unlimited: "Unlimited (Self-hosted instance)",
 } satisfies Record<OrgPlan, string>;
 
 const PLAN_FEATURES = [
@@ -894,6 +896,9 @@ function useBillingPageModel() {
 
 export function BillingPage() {
   const model = useBillingPageModel();
+  const { data: current } = useCurrentUser();
+  // A self-hosted instance sells nothing.
+  if (current?.user.plan === "unlimited") return <NotFound />;
 
   // The shell cache is deliberately not an authority for plan or billing
   // state. Rendering its free defaults here made the paid page flash first.

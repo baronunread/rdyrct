@@ -1,4 +1,5 @@
 import { createMiddleware } from "hono/factory";
+import { configureBilling, planNow } from "./plan";
 import { orgPlanOf } from "../shared/types";
 import { drizzle } from "drizzle-orm/d1";
 import { and, eq, isNull } from "drizzle-orm";
@@ -33,7 +34,7 @@ function sessionUserOfRow(row: typeof schema.user.$inferSelect): SessionUser {
     name: row.name,
     isAdmin: row.isAdmin,
     emailVerified: row.emailVerified,
-    plan: orgPlanOf(row.plan),
+    plan: planNow(orgPlanOf(row.plan)),
     polarSubscriptionCancelAtPeriodEnd: row.polarSubscriptionCancelAtPeriodEnd ?? false,
     polarSubscriptionCurrentPeriodEnd: row.polarSubscriptionCurrentPeriodEnd?.getTime() ?? null,
     image: row.image ?? null,
@@ -132,6 +133,7 @@ async function userFromOAuthToken(
  */
 export function withSession(opts: { oauthTokenPath?: string } = {}) {
   return createMiddleware<AppEnv>(async (c, next) => {
+    configureBilling(c.env);
     const db = drizzle(c.env.DB, { schema });
     c.set("db", db);
     c.set("user", null);
@@ -146,7 +148,7 @@ export function withSession(opts: { oauthTokenPath?: string } = {}) {
         name: session.user.name,
         isAdmin: session.user.isAdmin ?? false,
         emailVerified: session.user.emailVerified,
-        plan: orgPlanOf(session.user.plan),
+        plan: planNow(orgPlanOf(session.user.plan)),
         polarSubscriptionCancelAtPeriodEnd:
           session.user.polarSubscriptionCancelAtPeriodEnd ?? false,
         // better-auth types its extra user fields loosely; the column is an
