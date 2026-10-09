@@ -1,9 +1,10 @@
 import { useMemo } from "react";
 import type { ReactNode } from "react";
-import { scaleLinear, scalePoint } from "d3-scale";
-import { areaY, barY, defineChart, lineY, type ConfiguredScaleLike } from "@tanstack/charts";
+import { areaY, barY, defineChart, lineY } from "@tanstack/charts";
 import { d3Curve } from "@tanstack/charts/d3/shape";
 import { scaleBand } from "@tanstack/charts/scales/band";
+import { scaleLinear } from "@tanstack/charts/scales/linear";
+import { scalePoint } from "@tanstack/charts/scales/point";
 import { curveMonotoneX } from "d3-shape";
 import { crosshair } from "@tanstack/charts/crosshair";
 import { focusNearestX } from "@tanstack/charts/focus";
@@ -15,27 +16,6 @@ import type { SeriesPoint, DeltaValue, HeatmapRow, TopEntry } from "@/shared/typ
 import { formatNumber } from "../lib/numbers";
 import { Card, SlugLink } from "../ui/misc";
 import { CountryMap } from "./country-map";
-
-/**
- * d3's scalePoint has no tick-thinning: without it TanStack Charts falls
- * back to labeling every point, which is unreadable at 30-90 days. `.copy()`
- * (called internally before the scale is used) returns a fresh scalePoint
- * without our patch, so `ticks`/`copy` are re-attached on every copy.
- */
-function thinnedPointScale(domain: readonly string[]): ConfiguredScaleLike<string> {
-  function attach(scale: ReturnType<typeof scalePoint<string>>): ConfiguredScaleLike<string> {
-    const rawCopy = scale.copy.bind(scale);
-    const s = Object.assign(scale, {
-      ticks: (count: number) => {
-        const step = Math.max(1, Math.ceil(domain.length / count));
-        return domain.filter((_, i) => i % step === 0);
-      },
-      copy: () => attach(rawCopy()),
-    });
-    return s;
-  }
-  return attach(scalePoint<string>().domain(domain));
-}
 
 // Monotone rather than a cubic that overshoots: it never draws a peak or a
 // trough the data doesn't have, so the smoothing stays a reading aid.
@@ -109,14 +89,16 @@ export function AreaChart({
       // Charts 0.18 (Alpha) moved the Cartesian scales under `scales`.
       scales: {
         x: {
-          scale: thinnedPointScale(data.map((d) => d.day)),
+          scale: scalePoint<string>().domain(data.map((d) => d.day)),
           grid: false,
           // Charts 0.8 moved the tick formatter under `axis.ticks`. It stayed
           // assignable at the axis root, where nothing reads it, so the axis
           // quietly went back to printing whole ISO strings ("2026-07-17"
           // instead of "07-17", and every timestamp in full on the hourly
           // range).
-          axis: { ticks: { format: tickFormat } },
+          // Stubs off: a point scale offers every day as a candidate, so
+          // 90 days would draw 90 stubs. Labels thin themselves.
+          axis: { ticks: { format: tickFormat, size: 0 } },
         },
         y: {
           scale: scaleLinear().domain([0, max]).nice(),
