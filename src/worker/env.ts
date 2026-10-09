@@ -4,6 +4,7 @@ import type { StorageMessage } from "./storage";
 import type { ClickBuffer } from "./click-buffer";
 import type { BillingProvider } from "./billing-provider";
 import type { AuditableLogger } from "evlog";
+import type { OrgPlan } from "@/shared/types";
 
 export interface Env {
   DB: D1Database;
@@ -38,7 +39,7 @@ export interface Env {
   /* auth + email (secrets unless noted) */
   BETTER_AUTH_SECRET: string;
   SUPERADMIN_EMAIL: string;
-  RESEND_API_KEY: string;
+  RESEND_API_KEY?: string; // unset: no email goes out and sign-up skips verification
   MAIL_FROM: string; // var, e.g. "me <no-reply@mail.rdyrct.com>"
   APP_URL: string; // var, e.g. "https://rdyrct.com"; SPA/API origin
   RESEND_BASE_URL?: string; // var; dev points at the emulate.dev Resend emulator
@@ -50,10 +51,10 @@ export interface Env {
   GOOGLE_EMULATOR_URL?: string;
 
   /* billing (Polar) */
-  POLAR_ACCESS_TOKEN: string;
-  POLAR_WEBHOOK_SECRET: string;
-  POLAR_PRO_PRODUCT_ID: string; // var
-  POLAR_HOBBY_PRODUCT_ID: string; // var
+  POLAR_ACCESS_TOKEN?: string;
+  POLAR_WEBHOOK_SECRET?: string;
+  POLAR_PRO_PRODUCT_ID?: string; // var
+  POLAR_HOBBY_PRODUCT_ID?: string; // var
   POLAR_SERVER?: "sandbox" | "production"; // var, default sandbox
   /* the checkout/portal client, injected by tests; unset everywhere else,
      where the routes build a real Polar client from the token above */
@@ -93,7 +94,7 @@ export interface SessionUser {
   name: string;
   isAdmin: boolean;
   emailVerified: boolean;
-  plan: "free" | "hobby" | "pro";
+  plan: OrgPlan;
   polarSubscriptionCancelAtPeriodEnd: boolean;
   polarSubscriptionCurrentPeriodEnd: number | null;
   /** Same-origin serving URL for the user's avatar, or null (blobatar). */

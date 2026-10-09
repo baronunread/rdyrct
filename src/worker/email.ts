@@ -1,6 +1,11 @@
 import type { Env } from "./env";
 import type { EmailBody } from "./email-layout";
 
+/** Whether this instance can send mail at all. Sign-up verification and
+ * password reset depend on it; the one place that decides, so a second
+ * provider changes this line and the transport below. */
+export const emailConfigured = (env: Env) => Boolean(env.RESEND_API_KEY);
+
 /**
  * Sends via the Resend HTTP API. RESEND_BASE_URL lets local dev point at the
  * emulate.dev Resend emulator instead of the real service.
@@ -17,6 +22,9 @@ export async function sendEmail(
   subject: string,
   body: EmailBody,
 ): Promise<void> {
+  // No provider, no mail. Nothing is logged: a code or reset link in a log is
+  // a secret in the wrong place.
+  if (!emailConfigured(env)) return;
   const base = env.RESEND_BASE_URL || "https://api.resend.com";
   const res = await fetch(`${base}/emails`, {
     method: "POST",

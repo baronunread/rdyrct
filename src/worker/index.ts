@@ -1,4 +1,5 @@
 import * as Sentry from "@sentry/cloudflare";
+import { configureBilling } from "./plan";
 import { Hono } from "hono";
 import type { JsonValue } from "../shared/types";
 import type { Context } from "hono";
@@ -563,6 +564,7 @@ const wrapped = Sentry.withSentry<
   {
     fetch: app.fetch,
     async queue(batch: MessageBatch<StorageMessage>, env: Env, _ctx: ExecutionContext) {
+      configureBilling(env);
       // The dead-letter consumer routes to this same handler (see
       // wrangler.jsonc); a DLQ's messages only get logged, never retried or
       // repaired.
@@ -576,6 +578,7 @@ const wrapped = Sentry.withSentry<
       await drainStorageOutbox(env);
     },
     async scheduled(controller: ScheduledController, env: Env, _ctx: ExecutionContext) {
+      configureBilling(env);
       // The frequent trigger (see wrangler.jsonc crons) runs the two things that
       // must not wait a day: draining the outbox when a frozen queue kept the
       // queue-consume drain from running (#228), and catching an org that is

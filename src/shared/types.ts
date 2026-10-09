@@ -34,7 +34,12 @@ export const ORG_PLANS = ["free", "hobby", "pro"] as const;
 
 /** The plans an admin may comp: the paid ones, since comping free is nothing. */
 export const COMP_PLANS = ["hobby", "pro"] as const;
-export type OrgPlan = (typeof ORG_PLANS)[number];
+/** What a row stores. */
+export type StoredPlan = (typeof ORG_PLANS)[number];
+/** What a response carries: a stored plan, or `unlimited`, which the Worker
+ * resolves to at read time when billing is not set up. Never written to a
+ * row. A self-hosted instance has no caps and nothing to buy. */
+export type OrgPlan = StoredPlan | "unlimited";
 
 /**
  * The plan on a row, which reaches here as a text column or a JSON field.
@@ -43,7 +48,7 @@ export type OrgPlan = (typeof ORG_PLANS)[number];
  * than the free one does, and that decision belongs here rather than at each
  * of the places that read one.
  */
-export function orgPlanOf(value: string | null | undefined): OrgPlan {
+export function orgPlanOf(value: string | null | undefined): StoredPlan {
   return oneOf(ORG_PLANS, value ?? "", "free");
 }
 
@@ -84,6 +89,16 @@ export const PLAN_LIMITS = {
     qrCustom: true,
     analyticsDays: 365,
   },
+  // Self-hosted instance: no billing, so nothing is capped. Large finite
+  // numbers rather than Infinity, which JSON turns into null.
+  unlimited: {
+    orgs: 1_000_000,
+    links: 1_000_000_000,
+    members: 1_000_000,
+    domains: 1_000_000,
+    qrCustom: true,
+    analyticsDays: 36_500,
+  },
 } satisfies Record<OrgPlan, PlanLimits>;
 
 /**
@@ -120,7 +135,7 @@ export function isOverLimit(over: OverLimits): boolean {
 export const PLAN_PRICES = {
   hobby: "$4",
   pro: "$9",
-} satisfies Record<Exclude<OrgPlan, "free">, string>;
+} satisfies Record<Exclude<StoredPlan, "free">, string>;
 
 /** QR dot styles supported by qr-code-styling; "" means inherit/default. */
 export const QR_DOT_STYLES = [
@@ -266,6 +281,9 @@ export interface AppConfig {
   appHost: string;
   /** Host new shared-domain links use for display, copy, and redirects. */
   linkHost: string;
+  /** Whether the instance can send email. Off: sign-up skips the code and
+   * password reset is unavailable. */
+  emailEnabled: boolean;
   /** Whether Google sign-in is configured and the button should show. */
   googleEnabled: boolean;
 }
@@ -599,14 +617,14 @@ export interface AdminUserRow {
   /** Email domain is a known throwaway provider. Display-only, computed on read. */
   disposable: boolean;
   /** Effective plan: what this user may do. A comp counts here (#81). */
-  plan: OrgPlan;
+  plan: StoredPlan;
   /** What Polar says, separately from what the user may do. `null` means no
    * subscription; the status is Polar's own string (`active`, `past_due`, …). */
-  subscriptionPlan: Exclude<OrgPlan, "free"> | null;
+  subscriptionPlan: Exclude<StoredPlan, "free"> | null;
   subscriptionStatus: string | null;
   cancelAtPeriodEnd: boolean;
   /** What an admin granted by hand, and who granted it. */
-  compPlan: Exclude<OrgPlan, "free"> | null;
+  compPlan: Exclude<StoredPlan, "free"> | null;
   compReason: string | null;
   compGrantedAt: number | null;
   compGrantedBy: string | null;

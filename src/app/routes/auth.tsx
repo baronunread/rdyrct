@@ -531,7 +531,7 @@ async function trySignIn(email: string, password: string, deps: SubmitDeps) {
 async function trySignUp(
   email: string,
   password: string,
-  deps: Pick<SubmitDeps, "goVerify" | "failSubmit" | "capGuarded">,
+  deps: SubmitDeps & { emailEnabled: boolean },
 ) {
   // Cap's proof-of-work token (#98). Solved while the visitor was typing,
   // spent here, and required by the Worker before an account exists. Through
@@ -548,7 +548,10 @@ async function trySignUp(
     // was accepted". Before goVerify, so a failure to send the code cannot
     // lose the signup that already happened.
     posthog.capture(FUNNEL.signupSubmitted);
-    await deps.goVerify(email);
+    // No email provider: there is no code to send, so the account is already
+    // usable. Sign in with what was just typed.
+    if (deps.emailEnabled) await deps.goVerify(email);
+    else await trySignIn(email, password, deps);
   }
 }
 
@@ -610,11 +613,19 @@ async function finishVerifiedSignIn(deps: {
 
 /** The password-reset flow, which shares nothing with the rest of the page
  * but the view it switches to and the toast it complains through. */
-function useForgotPassword(setView: (view: View) => void, toast: ReturnType<typeof useToast>) {
+function useForgotPassword(
+  setView: (view: View) => void,
+  toast: ReturnType<typeof useToast>,
+  emailEnabled: boolean,
+) {
   const resetCap = useCap("password-reset");
   const [forgotBusy, setForgotBusy] = useState(false);
 
   const submitForgot = async (email: string) => {
+    if (!emailEnabled) {
+      toast("This instance has no email provider, so passwords cannot be reset by email.", "error");
+      return;
+    }
     setForgotBusy(true);
     try {
       // Cheap to abuse and it sends mail, which is why #50 needed a
@@ -680,6 +691,9 @@ function useAuthFlow(mode: "login" | "signup") {
   // password reset, so Cap binds the scope into the signature. The reset one
   // lives in useForgotPassword, which is the only thing that spends it.
   const signupCap = useCap("signup");
+  // Treated as on until the config answers: the only wrong guess is showing a
+  // code screen, which the server never sends to, and config is cached.
+  const emailEnabled = useConfig().data?.emailEnabled ?? true;
 
   const [prevMode, setPrevMode] = useState(mode);
   if (prevMode !== mode) {
@@ -699,7 +713,7 @@ function useAuthFlow(mode: "login" | "signup") {
   const rawNext = readPending()?.next ?? params.get("next") ?? "/dashboard";
   const next = rawNext.startsWith("/") && !rawNext.startsWith("//") ? rawNext : "/dashboard";
 
-  const { forgotBusy, submitForgot } = useForgotPassword(setView, toast);
+  const { forgotBusy, submitForgot } = useForgotPassword(setView, toast, emailEnabled);
   const redirecting = useRedirectWhenSignedIn({ verifyPhase, next });
 
   const goVerify = async (email: string) => {
@@ -742,7 +756,7 @@ function useAuthFlow(mode: "login" | "signup") {
       const deps = { goVerify, failSubmit, qc, navigate, next, capGuarded: signupCap.guarded };
       await (mode === "login"
         ? trySignIn(email, password, deps)
-        : trySignUp(email, password, deps));
+        : trySignUp(email, password, { ...deps, emailEnabled }));
     } catch (error) {
       failSubmit(error instanceof Error ? error.message : "Something went wrong");
     } finally {

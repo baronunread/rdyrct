@@ -1,4 +1,6 @@
 import { Hono } from "hono";
+import { planNow } from "../plan";
+import { emailConfigured } from "../email";
 import { and, eq } from "drizzle-orm";
 import { alias } from "drizzle-orm/sqlite-core";
 import * as schema from "../db/schema";
@@ -67,7 +69,7 @@ async function currentUserFor(
     id: r.id,
     name: r.name,
     role: r.role,
-    plan: orgPlanOf(r.ownerPlan),
+    plan: planNow(orgPlanOf(r.ownerPlan)),
     qrLogo: r.qrLogo,
     qrStyle: r.qrStyle,
     qrColor: r.qrColor,
@@ -104,6 +106,7 @@ userRoutes.get("/config", (c) => {
   return c.json({
     appHost: c.env.APP_HOST,
     linkHost: sharedLinkHost(c.env),
+    emailEnabled: emailConfigured(c.env),
     googleEnabled: Boolean(c.env.GOOGLE_CLIENT_ID && c.env.GOOGLE_CLIENT_SECRET),
   } satisfies AppConfig);
 });

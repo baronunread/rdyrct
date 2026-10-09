@@ -6,7 +6,13 @@ import { AnimatePresence, LazyMotion, MotionConfig, domAnimation, m } from "moti
 import { Trash2, RefreshCw, Star } from "@/app/ui/icons";
 import { useCurrentUser, useConfig, useDomains, useDomainMutations } from "../lib/hooks";
 import { useCurrentOrg } from "../lib/current-org";
-import { PLAN_LIMITS, type DomainDTO, type OrgRole, type UserOrg } from "@/shared/types";
+import {
+  PLAN_LIMITS,
+  type DomainDTO,
+  type OrgPlan,
+  type OrgRole,
+  type UserOrg,
+} from "@/shared/types";
 import { Button, IconButton } from "../ui/button";
 import { buttonClass } from "../ui/button-class";
 import { Input } from "../ui/field";
@@ -275,7 +281,7 @@ function useDomainActions({
   return { copy, addDomain, recheck, saveRedirect, toggleDefault, confirmDelete };
 }
 
-function useDomainsCardModel(orgId: string, plan: "free" | "hobby" | "pro") {
+function useDomainsCardModel(orgId: string, plan: OrgPlan) {
   const domains = useDomains(orgId);
   const { add, refresh, setRootRedirect, remove, setDefault } = useDomainMutations(orgId);
   const { org } = useCurrentOrg();
@@ -399,7 +405,7 @@ function DomainsCardContent({ model }: { model: DomainsCardModel }) {
   );
 }
 
-function DomainsCard({ orgId, plan }: { orgId: string; plan: "free" | "hobby" | "pro" }) {
+function DomainsCard({ orgId, plan }: { orgId: string; plan: OrgPlan }) {
   const model = useDomainsCardModel(orgId, plan);
   if (model.limits.domains === 0 && !model.hasDomains) return <UpgradeDomainsCard />;
   return <DomainsCardContent model={model} />;

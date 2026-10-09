@@ -12,6 +12,7 @@ import { Suspense } from "react";
 import { Link, Outlet } from "@tanstack/react-router";
 import { Activity, Building2, Link2, ScrollText, UserCog } from "@/app/ui/icons";
 import { RouteSkeleton } from "../../components/skeletons";
+import { useConfig } from "../../lib/hooks";
 
 const TABS = [
   { to: "/admin", end: true, icon: Activity, label: "Usage" },
@@ -22,8 +23,19 @@ const TABS = [
 ] as const;
 
 export function AdminLayout() {
+  const config = useConfig().data;
+  // No email and no Google: nobody proves they own the address they sign up
+  // with. Fine on a private instance, wrong on a public one.
+  const unverified = config && !config.emailEnabled && !config.googleEnabled;
   return (
     <div className="flex flex-col gap-5">
+      {unverified && (
+        <p className="rounded-lg bg-surface-2 p-3 text-xs text-muted">
+          This instance has no email provider and no Google sign-in, so accounts are not verified
+          and passwords cannot be reset. Do not run it open to the public. Set RESEND_API_KEY to
+          turn verification on.
+        </p>
+      )}
       <nav
         aria-label="Platform sections"
         className="-mx-1 flex gap-1 overflow-x-auto border-b border-border px-1 pb-px"

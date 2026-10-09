@@ -4,25 +4,25 @@
  * Pure, and read straight off PLAN_LIMITS, so the answer can never disagree
  * with the limits the Worker enforces.
  */
-import { PLAN_LIMITS, type OrgPlan } from "@/shared/types";
+import { PLAN_LIMITS, type StoredPlan } from "@/shared/types";
 
 export const NEED_KEYS = ["links", "members", "domains", "analyticsDays"] as const;
 export type NeedKey = (typeof NEED_KEYS)[number];
 export type Needs = Record<NeedKey, number>;
 
-const ORDER: readonly OrgPlan[] = ["free", "hobby", "pro"];
+const ORDER: readonly StoredPlan[] = ["free", "hobby", "pro"];
 
 /** One limit of the next plan down that the needs go past. */
 export type Overage = { key: NeedKey; need: number; limit: number };
 
 export type PlanFit =
-  | { plan: OrgPlan; over: Overage[]; below: OrgPlan | null }
+  | { plan: StoredPlan; over: Overage[]; below: StoredPlan | null }
   | { plan: null; over: Overage[]; below: "pro" };
 
-const fits = (plan: OrgPlan, needs: Needs) =>
+const fits = (plan: StoredPlan, needs: Needs) =>
   NEED_KEYS.every((key) => needs[key] <= PLAN_LIMITS[plan][key]);
 
-const overages = (plan: OrgPlan, needs: Needs): Overage[] =>
+const overages = (plan: StoredPlan, needs: Needs): Overage[] =>
   NEED_KEYS.filter((key) => needs[key] > PLAN_LIMITS[plan][key]).map((key) => ({
     key,
     need: needs[key],

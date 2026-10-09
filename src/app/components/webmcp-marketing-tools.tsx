@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import * as v from "valibot";
-import { ORG_PLANS, PLAN_LIMITS, PLAN_PRICES, type OrgPlan } from "@/shared/types";
+import { ORG_PLANS, PLAN_LIMITS, PLAN_PRICES, type StoredPlan } from "@/shared/types";
 import { registerWebMcpTools, type WebMcpTool } from "../lib/webmcp";
 
 /**
@@ -23,7 +23,7 @@ function plural(n: number, word: string): string {
   return `${n} ${word}${n === 1 ? "" : "s"}`;
 }
 
-function planLine(plan: OrgPlan): string {
+function planLine(plan: StoredPlan): string {
   const limits = PLAN_LIMITS[plan];
   const name = plan[0].toUpperCase() + plan.slice(1);
   const price = plan === "free" ? "$0" : `${PLAN_PRICES[plan]}/mo`;
