@@ -266,6 +266,9 @@ export interface AppConfig {
   appHost: string;
   /** Host new shared-domain links use for display, copy, and redirects. */
   linkHost: string;
+  /** Whether the instance can send email. Off: sign-up skips the code and
+   * password reset is unavailable. */
+  emailEnabled: boolean;
   /** Whether Google sign-in is configured and the button should show. */
   googleEnabled: boolean;
 }

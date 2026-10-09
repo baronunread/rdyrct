@@ -16,7 +16,7 @@ import * as schema from "./db/schema";
 import type { DB, Env } from "./env";
 import { captureAlert } from "./sentry";
 import { afterResponse } from "./background";
-import { sendEmail } from "./email";
+import { emailConfigured, sendEmail } from "./email";
 import { renderEmail } from "./email-layout";
 import { hashPassword, verifyPassword } from "./password";
 import { uid } from "./util";
@@ -382,7 +382,7 @@ function buildAuth(env: Env) {
     },
     emailAndPassword: {
       enabled: true,
-      requireEmailVerification: true,
+      requireEmailVerification: emailConfigured(env),
       // PBKDF2 via WebCrypto: native (fast) on Workers, unlike the default
       // scrypt implementation which burns CPU budget.
       password: {

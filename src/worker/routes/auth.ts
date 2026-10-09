@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import { emailConfigured } from "../email";
 import { and, eq } from "drizzle-orm";
 import { alias } from "drizzle-orm/sqlite-core";
 import * as schema from "../db/schema";
@@ -104,6 +105,7 @@ userRoutes.get("/config", (c) => {
   return c.json({
     appHost: c.env.APP_HOST,
     linkHost: sharedLinkHost(c.env),
+    emailEnabled: emailConfigured(c.env),
     googleEnabled: Boolean(c.env.GOOGLE_CLIENT_ID && c.env.GOOGLE_CLIENT_SECRET),
   } satisfies AppConfig);
 });

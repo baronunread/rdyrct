@@ -38,7 +38,7 @@ export interface Env {
   /* auth + email (secrets unless noted) */
   BETTER_AUTH_SECRET: string;
   SUPERADMIN_EMAIL: string;
-  RESEND_API_KEY: string;
+  RESEND_API_KEY?: string; // unset: no email goes out and sign-up skips verification
   MAIL_FROM: string; // var, e.g. "me <no-reply@mail.rdyrct.com>"
   APP_URL: string; // var, e.g. "https://rdyrct.com"; SPA/API origin
   RESEND_BASE_URL?: string; // var; dev points at the emulate.dev Resend emulator
