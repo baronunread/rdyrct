@@ -172,13 +172,16 @@ function useActions(close: () => void, enterLinks: () => void): Action[] {
   const flip =
     theme === "dark" ? { label: "Light theme", icon: Sun } : { label: "Dark theme", icon: Moon };
 
-  const nav: Action[] = appNavItems.map(({ to, icon, label }) => ({
-    value: `go ${label}`,
-    label,
-    icon,
-    group: "Go to",
-    run: goto(to),
-  }));
+  // Nothing to buy on a self-hosted instance, so no billing page to go to.
+  const nav: Action[] = appNavItems
+    .filter(({ to }) => to !== "/billing" || shell?.user.plan !== "unlimited")
+    .map(({ to, icon, label }) => ({
+      value: `go ${label}`,
+      label,
+      icon,
+      group: "Go to",
+      run: goto(to),
+    }));
   if (shell?.user.isAdmin) {
     nav.push({
       value: "go admin platform",

@@ -97,6 +97,7 @@ const planBadgeColor = {
   pro: "mint",
   hobby: "accent",
   free: "muted",
+  unlimited: "mint",
 } satisfies Record<OrgPlan, "mint" | "accent" | "muted">;
 
 /** Where a user's paid access comes from, which is not the same question as

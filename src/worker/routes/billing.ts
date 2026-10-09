@@ -11,13 +11,15 @@ import { requireUser } from "../guards";
 import { captureAlert } from "../sentry";
 import { effectivePlanSql } from "../entitlement";
 import { reconcileUser } from "../reconcile";
+import { billingEnabled } from "../plan";
 import { jsonBodyLimit } from "../body-limit";
 import type { BillingProvider } from "../billing-provider";
 
 const polarFor = (env: Env): BillingProvider =>
   env.BILLING ??
   new Polar({
-    accessToken: env.POLAR_ACCESS_TOKEN,
+    // Unset only when billing is off, and the routes below answer 404 first.
+    accessToken: env.POLAR_ACCESS_TOKEN ?? "",
     server: env.POLAR_SERVER ?? "sandbox",
   });
 
@@ -26,6 +28,11 @@ const polarFor = (env: Env): BillingProvider =>
 // its body limit — see handlePolarWebhook below and index.ts.)
 export const billingRoutes = new Hono<AppEnv>();
 billingRoutes.use("*", jsonBodyLimit());
+// A deployment without Polar sells nothing: there is no billing to reach.
+billingRoutes.use("*", async (c, next) => {
+  if (!billingEnabled()) throw new HTTPException(404, { message: "Billing is not enabled" });
+  await next();
+});
 
 /**
  * Which plan a Polar product grants: an explicit allowlist that fails
@@ -56,8 +63,10 @@ billingRoutes.post("/checkout", requireUser, async (c) => {
   log.set({ userId: user.id, plan });
   if (plan !== "hobby" && plan !== "pro")
     throw new HTTPException(400, { message: "plan must be hobby or pro" });
+  const productId = plan === "hobby" ? c.env.POLAR_HOBBY_PRODUCT_ID : c.env.POLAR_PRO_PRODUCT_ID;
+  if (!productId) throw new HTTPException(503, { message: `No Polar product is set for ${plan}` });
   const checkout = await polarFor(c.env).checkouts.create({
-    products: [plan === "hobby" ? c.env.POLAR_HOBBY_PRODUCT_ID : c.env.POLAR_PRO_PRODUCT_ID],
+    products: [productId],
     // Polar interpolates {CHECKOUT_ID}; the SPA uses it to confirm the
     // upgrade before celebrating (webhook is still the entitlement source).
     successUrl: `${c.env.APP_URL}/billing?checkout_id={CHECKOUT_ID}`,
@@ -334,6 +343,7 @@ async function mutationFor(db: Db, env: Env, event: PolarEvent) {
 }
 
 export async function handlePolarWebhook(req: Request, env: Env): Promise<Response> {
+  if (!env.POLAR_WEBHOOK_SECRET) return Response.json({ message: "Not found" }, { status: 404 });
   const body = await req.text();
   try {
     new Webhook(btoa(env.POLAR_WEBHOOK_SECRET)).verify(

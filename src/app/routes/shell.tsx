@@ -191,11 +191,13 @@ function AppSidebar({
       {/* nav — always visible: org-scoped pages render their own empty state
           when no org exists yet, and billing is per-user */}
       <nav className="flex flex-col gap-0.5 px-3 py-2">
-        {appNavItems.map(({ to, icon: Icon, label }) => (
-          <Link key={to} to={to} {...navLinkProps}>
-            <Icon size={15} /> {label}
-          </Link>
-        ))}
+        {appNavItems
+          .filter(({ to }) => to !== "/billing" || user.plan !== "unlimited")
+          .map(({ to, icon: Icon, label }) => (
+            <Link key={to} to={to} {...navLinkProps}>
+              <Icon size={15} /> {label}
+            </Link>
+          ))}
       </nav>
 
       <PlatformNav visible={user.isAdmin} />

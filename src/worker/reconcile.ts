@@ -2,7 +2,7 @@ import * as v from "valibot";
 import { and, asc, eq, isNotNull, isNull, lte, or, sql } from "drizzle-orm";
 import * as schema from "./db/schema";
 import type { DB, Env } from "./env";
-import { countActiveAddresses, orgOwnerEmail } from "./plan";
+import { billingEnabled, countActiveAddresses, orgOwnerEmail } from "./plan";
 import { enqueueStorage, syncDomainMsg } from "./storage";
 import { sendEmail } from "./email";
 import { renderEmail } from "./email-layout";
@@ -15,6 +15,7 @@ import {
   orgPlanOf,
   type OrgPlan,
   type OverLimits,
+  type StoredPlan,
   type PlanLimits,
   type JsonValue,
 } from "@/shared/types";
@@ -245,7 +246,7 @@ async function reconcileOrg(
   env: Env,
   db: DB,
   org: { id: string; name: string },
-  plan: OrgPlan,
+  plan: StoredPlan,
   limits: PlanLimits,
   now: number,
 ): Promise<OrgEntitlement> {
@@ -353,6 +354,8 @@ export async function reconcileUser(
   userId: string,
   now = Date.now(),
 ): Promise<void> {
+  // No billing, no plans to be over: nothing is ever locked.
+  if (!billingEnabled()) return;
   try {
     const rows = await db
       .select({ plan: schema.user.plan })

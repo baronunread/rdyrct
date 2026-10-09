@@ -34,6 +34,7 @@ const planBadgeColor = {
   pro: "mint",
   hobby: "accent",
   free: "muted",
+  unlimited: "mint",
 } satisfies Record<OrgPlan, "accent" | "mint" | "muted">;
 
 function OrgMembersTable({
