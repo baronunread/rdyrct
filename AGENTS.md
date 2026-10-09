@@ -137,6 +137,13 @@ any new guard, read the review body rather than trusting the green check, get
 a cold review, then merge. This file says what the checks are; that one says
 when to run them and what to do with what they say.
 
+**Deploys** (`bun run deploy`) go out only from a `v*` tag on `origin/main`
+with green CI, clean tree; `FORCE_DEPLOY=1` skips that for a hotfix. It
+applies D1 migrations first, then builds and deploys, so migrations stay
+additive (no `DROP`/`RENAME`; `tests/migrations-additive.test.ts` enforces it).
+Drop in a later release. `wrangler rollback` does not undo schema: export D1
+before risky migrations.
+
 Shell writes to repo files are sandboxed; edit through the editor tools, not
 `sed`/`perl` (or run bash with the sandbox disabled for scripted edits).
 
