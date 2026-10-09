@@ -17,12 +17,6 @@ only two secrets.
 - README covers the minimum setup, the optional settings, queues and the domain.
 - `/admin` warns when neither email nor Google sign-in is set up.
 
-### Deploying
-
-- `bun run deploy` ships only a `v*` tag on `main` with green CI, and applies
-  D1 migrations before the new code.
-- New migrations must be additive (no `DROP`, no `RENAME`).
-
 ### Other
 
 - TanStack Charts 1.0.
