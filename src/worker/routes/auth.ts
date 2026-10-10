@@ -108,5 +108,6 @@ userRoutes.get("/config", (c) => {
     linkHost: sharedLinkHost(c.env),
     emailEnabled: emailConfigured(c.env),
     googleEnabled: Boolean(c.env.GOOGLE_CLIENT_ID && c.env.GOOGLE_CLIENT_SECRET),
+    turnstileSiteKey: c.env.TURNSTILE_SITE_KEY || undefined,
   } satisfies AppConfig);
 });

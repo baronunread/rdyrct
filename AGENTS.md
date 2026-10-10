@@ -210,13 +210,14 @@ analyticsDays }`). Slugs on the **shared** domain are always random (every
   one left ownerless would have no plan, no billing and nobody who could
   delete it. Settings names each org in the confirmation first. Orgs the
   account only belongs to are untouched.
-- **Bot protection**: Cap proof-of-work (`src/worker/cap.ts`, routes at
-  `/api/cap/:scope/{challenge,redeem}`) guards signup and password reset. The
-  token rides in an `x-cap-token` header and is spent in `hooks.before`. No
-  third party sees the visitor: `capjs-core` runs in this Worker, the widget
-  is bundled from npm, and the WASM solver is a same-origin Vite asset. Unset
-  `CAP_SECRET` disables it. See `docs/rate-limiting.md` for all three layers
-  (WAF rules, Workers limiters, Cap) and the dashboard rules to apply by hand.
+- **Bot protection**: Cloudflare Turnstile (`src/worker/turnstile.ts`) guards
+  signup, password reset and the landing shortener. The token rides in an
+  `x-turnstile-token` header and is verified against `siteverify` in
+  `hooks.before`. The one third party that sees the visitor is Cloudflare,
+  via `challenges.cloudflare.com` (allowed in the CSP). `TURNSTILE_SITE_KEY`
+  is a var served by `/api/config`; unset `TURNSTILE_SECRET_KEY` disables the
+  check. See `docs/rate-limiting.md` for all three layers (WAF rules, Workers
+  limiters, Turnstile) and the dashboard rules to apply by hand.
 - **KV keys**: `slug:{slug}` (shared host), `slug:{host}:{slug}` (custom domain),
   `domain:{host}`. D1 is authoritative; KV is the redirect hot path. Clicks are
   recorded via `waitUntil` after the redirect is sent, and store only
@@ -289,7 +290,7 @@ and vars live in `wrangler.jsonc`; local dev reads everything from `.dev.vars`
 `BETTER_AUTH_SECRET`, `SUPERADMIN_EMAIL`, `RESEND_API_KEY`, `MAIL_FROM`,
 `APP_URL`, `APP_HOST`, `POLAR_ACCESS_TOKEN`/`POLAR_WEBHOOK_SECRET`/
 `POLAR_PRO_PRODUCT_ID`/`POLAR_HOBBY_PRODUCT_ID`, `CF_API_TOKEN`/`CF_ZONE_ID`,
-`SENTRY_DSN`.
+`TURNSTILE_SITE_KEY`/`TURNSTILE_SECRET_KEY`, `SENTRY_DSN`.
 
 ## Layout
 
