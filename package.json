@@ -10,7 +10,7 @@
     "polar:listen": "NODE_EXTRA_CA_CERTS=\"$HOME/.portless/ca.pem\" polar listen https://rdyrct.localhost/api/webhooks/polar",
     "build": "vite build && bun scripts/prerender-public.tsx && bun scripts/prerender-404.tsx",
     "preview": "vite preview",
-    "check": "tsc --noEmit",
+    "check": "bun check && bun check -p tsconfig.worker.json && bun check -p tests/worker/tsconfig.json",
     "lint": "oxlint --deny-warnings .",
     "lint:fix": "oxlint --fix .",
     "format": "oxfmt --write .",
@@ -19,7 +19,7 @@
     "test:worker": "vitest run --config vitest.config.ts",
     "e2e:install": "playwright install chromium",
     "e2e:smoke": "playwright test",
-    "verify": "bun run format:check && bun run lint && bun run check && bunx tsc -p tsconfig.worker.json --noEmit && bunx tsc -p tests/worker/tsconfig.json --noEmit && bun run test && bun run test:worker",
+    "verify": "bun run format:check && bun run lint && bun run check && bun run test && bun run test:worker",
     "verify:e2e": "bun run verify && bun run e2e:smoke",
     "deploy": "bun run build && wrangler deploy",
     "db:migrate:local": "wrangler d1 migrations apply rdyrct --local",
@@ -102,7 +102,7 @@
     "@types/topojson-client": "^3.1.5",
     "@types/topojson-specification": "^1.0.5",
     "@vitejs/plugin-react": "^6.1.1",
-    "bun-types": "^1.4.2",
+    "bun-types": "^1.4.3",
     "drizzle-kit": "^0.31.11",
     "fallow": "3.30.0",
     "jsqr": "^1.4.0",
@@ -118,5 +118,5 @@
     "vitest": "^4.1.11",
     "wrangler": "^4.141.0"
   },
-  "packageManager": "bun@1.4.2"
+  "packageManager": "bun@1.4.3"
 }

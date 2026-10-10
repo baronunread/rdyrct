@@ -39,8 +39,6 @@ jobs:
           bun run format:check
           bun run lint
           bun run check
-          bunx tsc -p tsconfig.worker.json --noEmit
-          bunx tsc -p tests/worker/tsconfig.json --noEmit
       # Scoped to what this branch changed, gated against
       # fallow-baselines/health.json: fails only on findings the branch
       # introduced, not inherited debt. See AGENTS.md.

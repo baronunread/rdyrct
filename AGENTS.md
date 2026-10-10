@@ -32,12 +32,10 @@ Durable Objects, and Workflows. Fetch that URL for the OpenAPI schema, then use
 it to list, query, and manage local resources (e.g. inspect D1 rows or KV keys
 without wrangler CLI calls).
 
-**Three TypeScript projects; run ALL THREE after changes:**
+**Three TypeScript projects; one command checks all three:**
 
 ```sh
-bun run check                          # app + shared (tsconfig.json → src/app, src/shared)
-bunx tsc -p tsconfig.worker.json --noEmit   # worker (src/worker)
-bunx tsc -p tests/worker/tsconfig.json --noEmit  # worker tests (tests/worker)
+bun run check                          # app + shared, worker, worker tests (three bun check runs)
 bun run test                           # unit tests (bun test, tests/)
 bun run test:worker                    # worker tests (vitest-pool-workers, tests/worker/)
 bun run e2e:smoke                      # browser tests (playwright, tests/e2e/); needs .dev.vars
@@ -72,7 +70,7 @@ callers) and run only the matching files: `bun test tests/<file>.test.ts`,
 e2e) once, at the end, before calling the work done. CI is what decides
 whether the browser suite passes.
 
-**The worker tests typecheck.** vitest does not, so `verify` runs tsc over
+**The worker tests typecheck.** vitest does not, so `verify` runs `bun check` over
 `tests/worker` as its own project. `tests/worker/env.d.ts` declares
 `Cloudflare.Env` (what `env` from `cloudflare:workers` resolves to) as our
 hand-written `Env`, which is why no generated `worker-configuration.d.ts` is
