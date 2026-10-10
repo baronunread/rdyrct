@@ -1,11 +1,13 @@
 import { Hono } from "hono";
+import { name, type Named } from "@gdp-ts/core";
+import { canDeleteOrg, type OrgDeletion } from "../proofs/can-delete-org";
 import * as v from "valibot";
 import type { JsonValue } from "../../shared/types";
 import { HTTPException } from "hono/http-exception";
 import { eq, and, gte, desc, sql, isNull, isNotNull, lt, inArray } from "drizzle-orm";
 import * as schema from "../db/schema";
 import { captureAlert } from "../sentry";
-import type { AppEnv, DB, Env } from "../env";
+import type { AppEnv, DB, Env, SessionUser } from "../env";
 import { requireUser } from "../guards";
 import { requireOrgRole, orgRole } from "../org-role";
 import {
@@ -290,8 +292,14 @@ async function orgDeleteWorkflowActive(env: Env, orgId: string): Promise<boolean
   }
 }
 
-export async function deleteOrg(db: DB, env: Env, orgId: string): Promise<void> {
-  await deleteOrgs(db, env, [orgId]);
+export async function deleteOrg<U, O>(
+  db: DB,
+  env: Env,
+  user: Named<U, SessionUser>,
+  org: Named<O, string>,
+  _proof: OrgDeletion<U, O>,
+): Promise<void> {
+  await deleteOrgs(db, env, [org.value]);
 }
 
 /**
@@ -445,7 +453,12 @@ orgRoutes.delete(
   "/:orgId",
   requireOrgRole("owner", { allowWhileDeleting: true, allowWhileLocked: true }),
   async (c) => {
-    await deleteOrg(c.var.db, c.env, c.req.param("orgId"));
+    const user = c.var.user;
+    if (!user) throw new HTTPException(401, { message: "Not signed in" });
+    await name(user, c.req.param("orgId"), async (actor, org) => {
+      const proof = await canDeleteOrg(c.var.db, actor, org);
+      await deleteOrg(c.var.db, c.env, actor, org, proof);
+    });
     return c.json({ ok: true });
   },
 );
