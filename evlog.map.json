@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generatedAt": "2026-10-05T12:11:01.432Z",
+  "generatedAt": "2026-10-10T23:59:21.770Z",
   "cliVersion": "0.6.3",
   "ruleSetVersion": 1,
   "framework": "hono",
@@ -14,7 +14,7 @@
       "path": "*",
       "file": "src/worker/index.ts",
       "handler": {
-        "line": 436,
+        "line": 506,
         "column": 0
       },
       "id": "cfc6426d0697",
@@ -25,13 +25,13 @@
         "audit": {
           "status": "n/a"
         },
-        "error-handling": {
-          "status": "n/a"
-        },
         "wide-event": {
           "status": "pass"
         },
         "context": {
+          "status": "pass"
+        },
+        "error-handling": {
           "status": "pass"
         }
       },
@@ -49,7 +49,7 @@
       "path": "/",
       "file": "src/worker/routes/mcp.ts",
       "handler": {
-        "line": 692,
+        "line": 696,
         "column": 0
       },
       "id": "0d9557579aed",
@@ -119,7 +119,7 @@
       "path": "/",
       "file": "src/worker/routes/admin-links.ts",
       "handler": {
-        "line": 162,
+        "line": 163,
         "column": 0
       },
       "id": "4350f835247a",
@@ -146,7 +146,7 @@
           "message": "changes state with no audit record — the project records audit events elsewhere",
           "evidence": {
             "file": "src/worker/routes/admin-links.ts",
-            "line": 210
+            "line": 215
           }
         }
       },
@@ -356,7 +356,7 @@
       "path": "/",
       "file": "src/worker/routes/shorten.ts",
       "handler": {
-        "line": 51,
+        "line": 50,
         "column": 0
       },
       "id": "0554bedfef79",
@@ -383,7 +383,7 @@
           "message": "changes state with no audit record — the project records audit events elsewhere",
           "evidence": {
             "file": "src/worker/routes/shorten.ts",
-            "line": 99
+            "line": 98
           }
         }
       },
@@ -400,15 +400,12 @@
       "path": "/.well-known/oauth-authorization-server",
       "file": "src/worker/index.ts",
       "handler": {
-        "line": 244,
+        "line": 298,
         "column": 0
       },
       "id": "74a5acf06050",
       "checks": {
         "structured-errors": {
-          "status": "n/a"
-        },
-        "error-handling": {
           "status": "n/a"
         },
         "wide-event": {
@@ -418,6 +415,9 @@
           "status": "pass"
         },
         "audit": {
+          "status": "pass"
+        },
+        "error-handling": {
           "status": "pass"
         }
       },
@@ -435,7 +435,7 @@
       "path": "/.well-known/oauth-authorization-server",
       "file": "src/worker/index.ts",
       "handler": {
-        "line": 244,
+        "line": 298,
         "column": 0
       },
       "id": "edeb8346dcd8",
@@ -443,9 +443,6 @@
         "structured-errors": {
           "status": "n/a"
         },
-        "error-handling": {
-          "status": "n/a"
-        },
         "wide-event": {
           "status": "pass"
         },
@@ -453,6 +450,9 @@
           "status": "pass"
         },
         "audit": {
+          "status": "pass"
+        },
+        "error-handling": {
           "status": "pass"
         }
       },
@@ -470,7 +470,7 @@
       "path": "/.well-known/oauth-authorization-server/api/auth",
       "file": "src/worker/index.ts",
       "handler": {
-        "line": 244,
+        "line": 298,
         "column": 0
       },
       "id": "c6931ce216c6",
@@ -478,9 +478,6 @@
         "structured-errors": {
           "status": "n/a"
         },
-        "error-handling": {
-          "status": "n/a"
-        },
         "wide-event": {
           "status": "pass"
         },
@@ -488,6 +485,9 @@
           "status": "pass"
         },
         "audit": {
+          "status": "pass"
+        },
+        "error-handling": {
           "status": "pass"
         }
       },
@@ -505,15 +505,12 @@
       "path": "/.well-known/oauth-authorization-server/api/auth",
       "file": "src/worker/index.ts",
       "handler": {
-        "line": 244,
+        "line": 298,
         "column": 0
       },
       "id": "2120851fa5bc",
       "checks": {
         "structured-errors": {
-          "status": "n/a"
-        },
-        "error-handling": {
           "status": "n/a"
         },
         "wide-event": {
@@ -523,6 +520,9 @@
           "status": "pass"
         },
         "audit": {
+          "status": "pass"
+        },
+        "error-handling": {
           "status": "pass"
         }
       },
@@ -540,15 +540,12 @@
       "path": "/.well-known/oauth-protected-resource",
       "file": "src/worker/index.ts",
       "handler": {
-        "line": 244,
+        "line": 298,
         "column": 0
       },
       "id": "098fd485d307",
       "checks": {
         "structured-errors": {
-          "status": "n/a"
-        },
-        "error-handling": {
           "status": "n/a"
         },
         "wide-event": {
@@ -558,6 +555,9 @@
           "status": "pass"
         },
         "audit": {
+          "status": "pass"
+        },
+        "error-handling": {
           "status": "pass"
         }
       },
@@ -575,15 +575,12 @@
       "path": "/.well-known/oauth-protected-resource",
       "file": "src/worker/index.ts",
       "handler": {
-        "line": 244,
+        "line": 298,
         "column": 0
       },
       "id": "4b628f392fad",
       "checks": {
         "structured-errors": {
-          "status": "n/a"
-        },
-        "error-handling": {
           "status": "n/a"
         },
         "wide-event": {
@@ -593,6 +590,9 @@
           "status": "pass"
         },
         "audit": {
+          "status": "pass"
+        },
+        "error-handling": {
           "status": "pass"
         }
       },
@@ -610,15 +610,12 @@
       "path": "/.well-known/oauth-protected-resource/api/mcp",
       "file": "src/worker/index.ts",
       "handler": {
-        "line": 244,
+        "line": 298,
         "column": 0
       },
       "id": "739186e00a75",
       "checks": {
         "structured-errors": {
-          "status": "n/a"
-        },
-        "error-handling": {
           "status": "n/a"
         },
         "wide-event": {
@@ -628,6 +625,9 @@
           "status": "pass"
         },
         "audit": {
+          "status": "pass"
+        },
+        "error-handling": {
           "status": "pass"
         }
       },
@@ -645,15 +645,12 @@
       "path": "/.well-known/oauth-protected-resource/api/mcp",
       "file": "src/worker/index.ts",
       "handler": {
-        "line": 244,
+        "line": 298,
         "column": 0
       },
       "id": "f77d2f980787",
       "checks": {
         "structured-errors": {
-          "status": "n/a"
-        },
-        "error-handling": {
           "status": "n/a"
         },
         "wide-event": {
@@ -663,6 +660,9 @@
           "status": "pass"
         },
         "audit": {
+          "status": "pass"
+        },
+        "error-handling": {
           "status": "pass"
         }
       },
@@ -680,7 +680,7 @@
       "path": "/.well-known/openid-configuration",
       "file": "src/worker/index.ts",
       "handler": {
-        "line": 244,
+        "line": 298,
         "column": 0
       },
       "id": "6f46cf3a8d4d",
@@ -691,13 +691,13 @@
         "audit": {
           "status": "n/a"
         },
-        "error-handling": {
-          "status": "n/a"
-        },
         "wide-event": {
           "status": "pass"
         },
         "context": {
+          "status": "pass"
+        },
+        "error-handling": {
           "status": "pass"
         }
       },
@@ -715,7 +715,7 @@
       "path": "/.well-known/openid-configuration",
       "file": "src/worker/index.ts",
       "handler": {
-        "line": 244,
+        "line": 298,
         "column": 0
       },
       "id": "b218f10e83af",
@@ -726,13 +726,13 @@
         "audit": {
           "status": "n/a"
         },
-        "error-handling": {
-          "status": "n/a"
-        },
         "wide-event": {
           "status": "pass"
         },
         "context": {
+          "status": "pass"
+        },
+        "error-handling": {
           "status": "pass"
         }
       },
@@ -750,15 +750,12 @@
       "path": "/.well-known/openid-configuration/api/auth",
       "file": "src/worker/index.ts",
       "handler": {
-        "line": 244,
+        "line": 298,
         "column": 0
       },
       "id": "ec47298398d2",
       "checks": {
         "structured-errors": {
-          "status": "n/a"
-        },
-        "error-handling": {
           "status": "n/a"
         },
         "wide-event": {
@@ -768,6 +765,9 @@
           "status": "pass"
         },
         "audit": {
+          "status": "pass"
+        },
+        "error-handling": {
           "status": "pass"
         }
       },
@@ -785,15 +785,12 @@
       "path": "/.well-known/openid-configuration/api/auth",
       "file": "src/worker/index.ts",
       "handler": {
-        "line": 244,
+        "line": 298,
         "column": 0
       },
       "id": "74cb514d40a8",
       "checks": {
         "structured-errors": {
-          "status": "n/a"
-        },
-        "error-handling": {
           "status": "n/a"
         },
         "wide-event": {
@@ -803,6 +800,9 @@
           "status": "pass"
         },
         "audit": {
+          "status": "pass"
+        },
+        "error-handling": {
           "status": "pass"
         }
       },
@@ -1036,7 +1036,7 @@
       "path": "/:linkId",
       "file": "src/worker/routes/admin-links.ts",
       "handler": {
-        "line": 310,
+        "line": 315,
         "column": 0
       },
       "id": "e1ca5e8b260a",
@@ -1063,7 +1063,7 @@
           "message": "changes state with no audit record — the project records audit events elsewhere",
           "evidence": {
             "file": "src/worker/routes/admin-links.ts",
-            "line": 210
+            "line": 215
           }
         }
       },
@@ -1080,7 +1080,7 @@
       "path": "/:linkId",
       "file": "src/worker/routes/admin-links.ts",
       "handler": {
-        "line": 240,
+        "line": 245,
         "column": 0
       },
       "id": "8e8fff5d79b1",
@@ -1107,7 +1107,7 @@
           "message": "changes state with no audit record — the project records audit events elsewhere",
           "evidence": {
             "file": "src/worker/routes/admin-links.ts",
-            "line": 210
+            "line": 215
           }
         }
       },
@@ -1124,7 +1124,7 @@
       "path": "/:linkId/rescore",
       "file": "src/worker/routes/admin-links.ts",
       "handler": {
-        "line": 265,
+        "line": 270,
         "column": 0
       },
       "id": "a60e23e051c8",
@@ -1151,7 +1151,7 @@
           "message": "changes state with no audit record — the project records audit events elsewhere",
           "evidence": {
             "file": "src/worker/routes/admin-links.ts",
-            "line": 210
+            "line": 215
           }
         }
       },
@@ -1164,81 +1164,11 @@
     {
       "framework": "hono",
       "kind": "api",
-      "method": "POST",
-      "path": "/:scope/challenge",
-      "file": "src/worker/routes/cap.ts",
-      "handler": {
-        "line": 33,
-        "column": 0
-      },
-      "id": "a90f76dc45d7",
-      "checks": {
-        "structured-errors": {
-          "status": "n/a"
-        },
-        "audit": {
-          "status": "n/a"
-        },
-        "error-handling": {
-          "status": "n/a"
-        },
-        "wide-event": {
-          "status": "pass"
-        },
-        "context": {
-          "status": "pass"
-        }
-      },
-      "suggestions": {},
-      "sensitivity": {
-        "level": "none",
-        "reasons": []
-      },
-      "score": 100
-    },
-    {
-      "framework": "hono",
-      "kind": "api",
-      "method": "POST",
-      "path": "/:scope/redeem",
-      "file": "src/worker/routes/cap.ts",
-      "handler": {
-        "line": 42,
-        "column": 0
-      },
-      "id": "920145bab597",
-      "checks": {
-        "structured-errors": {
-          "status": "n/a"
-        },
-        "audit": {
-          "status": "n/a"
-        },
-        "error-handling": {
-          "status": "n/a"
-        },
-        "wide-event": {
-          "status": "pass"
-        },
-        "context": {
-          "status": "pass"
-        }
-      },
-      "suggestions": {},
-      "sensitivity": {
-        "level": "none",
-        "reasons": []
-      },
-      "score": 100
-    },
-    {
-      "framework": "hono",
-      "kind": "api",
       "method": "GET",
       "path": "/:slug",
       "file": "src/worker/index.ts",
       "handler": {
-        "line": 421,
+        "line": 491,
         "column": 0
       },
       "id": "4542fd0856a5",
@@ -1249,13 +1179,13 @@
         "audit": {
           "status": "n/a"
         },
-        "error-handling": {
-          "status": "n/a"
-        },
         "wide-event": {
           "status": "pass"
         },
         "context": {
+          "status": "pass"
+        },
+        "error-handling": {
           "status": "pass"
         }
       },
@@ -1273,7 +1203,7 @@
       "path": "/:token",
       "file": "src/worker/routes/orgs.ts",
       "handler": {
-        "line": 1231,
+        "line": 1232,
         "column": 0
       },
       "id": "c8b0bedaf935",
@@ -1308,7 +1238,7 @@
       "path": "/:token/accept",
       "file": "src/worker/routes/orgs.ts",
       "handler": {
-        "line": 1289,
+        "line": 1290,
         "column": 0
       },
       "id": "d4b536c251be",
@@ -1343,7 +1273,7 @@
       "path": "/anonymous",
       "file": "src/worker/routes/admin-links.ts",
       "handler": {
-        "line": 404,
+        "line": 409,
         "column": 0
       },
       "id": "4c455e704c8e",
@@ -1370,7 +1300,7 @@
           "message": "changes state with no audit record — the project records audit events elsewhere",
           "evidence": {
             "file": "src/worker/routes/admin-links.ts",
-            "line": 210
+            "line": 215
           }
         }
       },
@@ -1387,7 +1317,7 @@
       "path": "/anonymous/:id",
       "file": "src/worker/routes/admin-links.ts",
       "handler": {
-        "line": 429,
+        "line": 434,
         "column": 0
       },
       "id": "a8b1ad6c6690",
@@ -1414,7 +1344,7 @@
           "message": "changes state with no audit record — the project records audit events elsewhere",
           "evidence": {
             "file": "src/worker/routes/admin-links.ts",
-            "line": 210
+            "line": 215
           }
         }
       },
@@ -1431,7 +1361,7 @@
       "path": "/api/*",
       "file": "src/worker/index.ts",
       "handler": {
-        "line": 312,
+        "line": 356,
         "column": 0
       },
       "id": "74a1ccacc4b3",
@@ -1442,13 +1372,13 @@
         "audit": {
           "status": "n/a"
         },
-        "error-handling": {
-          "status": "n/a"
-        },
         "wide-event": {
           "status": "pass"
         },
         "context": {
+          "status": "pass"
+        },
+        "error-handling": {
           "status": "pass"
         }
       },
@@ -1466,15 +1396,12 @@
       "path": "/api/auth/*",
       "file": "src/worker/index.ts",
       "handler": {
-        "line": 216,
+        "line": 270,
         "column": 0
       },
       "id": "e75aa52c874e",
       "checks": {
         "structured-errors": {
-          "status": "n/a"
-        },
-        "error-handling": {
           "status": "n/a"
         },
         "wide-event": {
@@ -1484,6 +1411,9 @@
           "status": "pass"
         },
         "audit": {
+          "status": "pass"
+        },
+        "error-handling": {
           "status": "pass"
         }
       },
@@ -1501,15 +1431,12 @@
       "path": "/api/auth/*",
       "file": "src/worker/index.ts",
       "handler": {
-        "line": 216,
+        "line": 270,
         "column": 0
       },
       "id": "2d4af6eb10f7",
       "checks": {
         "structured-errors": {
-          "status": "n/a"
-        },
-        "error-handling": {
           "status": "n/a"
         },
         "wide-event": {
@@ -1519,6 +1446,9 @@
           "status": "pass"
         },
         "audit": {
+          "status": "pass"
+        },
+        "error-handling": {
           "status": "pass"
         }
       },
@@ -1533,45 +1463,10 @@
       "framework": "hono",
       "kind": "api",
       "method": "POST",
-      "path": "/api/cap/*",
-      "file": "src/worker/index.ts",
-      "handler": {
-        "line": 259,
-        "column": 0
-      },
-      "id": "3d9ce45013d9",
-      "checks": {
-        "structured-errors": {
-          "status": "n/a"
-        },
-        "audit": {
-          "status": "n/a"
-        },
-        "error-handling": {
-          "status": "n/a"
-        },
-        "wide-event": {
-          "status": "pass"
-        },
-        "context": {
-          "status": "pass"
-        }
-      },
-      "suggestions": {},
-      "sensitivity": {
-        "level": "none",
-        "reasons": []
-      },
-      "score": 100
-    },
-    {
-      "framework": "hono",
-      "kind": "api",
-      "method": "POST",
       "path": "/api/webhooks/polar",
       "file": "src/worker/index.ts",
       "handler": {
-        "line": 273,
+        "line": 317,
         "column": 0
       },
       "id": "bbed5d59d114",
@@ -1582,13 +1477,13 @@
         "audit": {
           "status": "n/a"
         },
-        "error-handling": {
-          "status": "n/a"
-        },
         "wide-event": {
           "status": "pass"
         },
         "context": {
+          "status": "pass"
+        },
+        "error-handling": {
           "status": "pass"
         }
       },
@@ -1650,7 +1545,7 @@
       "path": "/checkout",
       "file": "src/worker/routes/billing.ts",
       "handler": {
-        "line": 49,
+        "line": 56,
         "column": 0
       },
       "id": "ec65818b4193",
@@ -1685,7 +1580,7 @@
       "path": "/clicks",
       "file": "src/worker/routes/shorten.ts",
       "handler": {
-        "line": 146,
+        "line": 145,
         "column": 0
       },
       "id": "4203806a8f62",
@@ -1712,7 +1607,7 @@
           "message": "changes state with no audit record — the project records audit events elsewhere",
           "evidence": {
             "file": "src/worker/routes/shorten.ts",
-            "line": 99
+            "line": 98
           }
         }
       },
@@ -1729,7 +1624,7 @@
       "path": "/config",
       "file": "src/worker/routes/auth.ts",
       "handler": {
-        "line": 100,
+        "line": 103,
         "column": 0
       },
       "id": "8ef063442579",
@@ -1896,7 +1791,7 @@
       "path": "/orgs/:orgId/suspend",
       "file": "src/worker/routes/admin-links.ts",
       "handler": {
-        "line": 349,
+        "line": 354,
         "column": 0
       },
       "id": "06abb4f07afe",
@@ -1923,7 +1818,7 @@
           "message": "changes state with no audit record — the project records audit events elsewhere",
           "evidence": {
             "file": "src/worker/routes/admin-links.ts",
-            "line": 210
+            "line": 215
           }
         }
       },
@@ -1940,7 +1835,7 @@
       "path": "/portal",
       "file": "src/worker/routes/billing.ts",
       "handler": {
-        "line": 78,
+        "line": 87,
         "column": 0
       },
       "id": "b391b630274c",
@@ -1975,7 +1870,7 @@
       "path": "/pricing.md",
       "file": "src/worker/index.ts",
       "handler": {
-        "line": 409,
+        "line": 479,
         "column": 0
       },
       "id": "c01fb33007bf",
@@ -1986,13 +1881,13 @@
         "audit": {
           "status": "n/a"
         },
-        "error-handling": {
-          "status": "n/a"
-        },
         "wide-event": {
           "status": "pass"
         },
         "context": {
+          "status": "pass"
+        },
+        "error-handling": {
           "status": "pass"
         }
       },
@@ -2054,7 +1949,7 @@
       "path": "/user",
       "file": "src/worker/routes/auth.ts",
       "handler": {
-        "line": 92,
+        "line": 95,
         "column": 0
       },
       "id": "72d6ba945cf1",

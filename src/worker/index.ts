@@ -28,7 +28,6 @@ import { avatarRoutes } from "./routes/avatars";
 import { adminRoutes } from "./routes/admin";
 import { billingRoutes, handlePolarWebhook } from "./routes/billing";
 import { domainRoutes } from "./routes/domains";
-import { capRoutes } from "./routes/cap";
 import { revalidateOnRedirect } from "./risk";
 import { sweepAbusiveOrgs } from "./abuse";
 import { evlogMiddleware } from "./evlog";
@@ -200,7 +199,7 @@ async function resolveLink(
 
 // Redirect-only, same as a custom domain: no API, no SPA. SHARED_LINK_HOST
 // must not fall through to the full app, or it would also serve
-// /api/auth/* and /api/cap/*, unprotected by the WAF rules that are only
+// /api/auth/*, unprotected by the WAF rules that are only
 // ever added to APP_HOST's zone (see docs/rate-limiting.md).
 async function resolveSharedLinkHost(c: Context<AppEnv>): Promise<Response> {
   const path = new URL(c.req.url).pathname;
@@ -309,18 +308,8 @@ app.on(
   (c) => getAuth(c.env).handler(c.req.raw),
 );
 
-// Cap (#98): public, and necessarily so, since it guards signup itself.
-// Same public rate limit as the auth routes it protects.
-app.post("/api/cap/*", async (c, next) => {
-  const log = c.get("log");
-  log.set({ route: c.req.path });
-  const limited = await enforcePublicAuthRateLimit(c);
-  return limited ?? next();
-});
-app.route("/api/cap", capRoutes);
-
 // The landing page's anonymous shortener (Direction A of #96): public by
-// definition, and gated by Cap plus its own rate-limit namespace rather than
+// definition, and gated by Turnstile plus its own rate-limit namespace rather than
 // by a session.
 app.route("/api/shorten", shortenRoutes);
 

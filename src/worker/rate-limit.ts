@@ -9,7 +9,6 @@ const RATE_LIMIT_WINDOW_SECONDS = 60;
 
 export type RateLimitGroup =
   | "auth"
-  | "cap"
   | "email"
   | "write"
   | "qr_upload"
@@ -124,14 +123,8 @@ async function recipientKey(request: Request, secret: string): Promise<string | 
   return keyedDigest(secret, normalized);
 }
 
-export function publicAuthGroup(path: string): "auth" | "cap" | "email" | null {
+export function publicAuthGroup(path: string): "auth" | "email" | null {
   if (EMAIL_AUTH_PATHS.has(path)) return "email";
-  // Cap's own endpoints (#98), on their own budget rather than signup's. They
-  // are spent two at a time (challenge, then redeem) by every person who
-  // fills the form, and when this runs out the widget cannot solve at all:
-  // the browser then sends no token and the form says "could not verify you
-  // are human", which is the worst possible way for a rate limit to show up.
-  if (path.startsWith("/api/cap/")) return "cap";
   if (
     path.startsWith("/api/auth/") &&
     path !== "/api/auth/get-session" &&
@@ -144,9 +137,8 @@ export function publicAuthGroup(path: string): "auth" | "cap" | "email" | null {
 /** Which counter each public group spends. */
 const PUBLIC_LIMIT_BINDINGS = {
   auth: (env) => env.RL_AUTH_PUBLIC,
-  cap: (env) => env.RL_CAP,
   email: (env) => env.RL_EMAIL,
-} satisfies Record<"auth" | "cap" | "email", (env: Env) => RateLimit>;
+} satisfies Record<"auth" | "email", (env: Env) => RateLimit>;
 
 export async function enforcePublicAuthRateLimit(c: Context<AppEnv>): Promise<Response | null> {
   const group = publicAuthGroup(c.req.path);
@@ -185,7 +177,7 @@ export async function enforcePublicAuthRateLimit(c: Context<AppEnv>): Promise<Re
 export function signedApiGroup(
   path: string,
   method: string,
-): Exclude<RateLimitGroup, "auth" | "cap" | "email" | "click" | "anon_link"> | null {
+): Exclude<RateLimitGroup, "auth" | "email" | "click" | "anon_link"> | null {
   if (/^\/api\/billing\/(?:checkout|portal)$/.test(path)) return "checkout";
   if (method === "POST" && /^\/api\/orgs\/[^/]+\/qr-logo\/?$/.test(path)) return "qr_upload";
   if (/^\/api\/orgs\/[^/]+\/domains(?:\/|$)/.test(path)) return "domain";

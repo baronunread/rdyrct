@@ -7,11 +7,11 @@ why all three exist.
 | ----------------------- | ---------------------------------- | ----------------------- | ---------------------- |
 | WAF rate limiting rules | Cloudflare edge, before the Worker | Globally, per zone      | Floods                 |
 | Workers Rate Limiting   | Inside the Worker                  | Per Cloudflare location | Bursts from one caller |
-| Cap proof-of-work       | Visitor's browser                  | Per attempt             | Slow, distributed bots |
+| Cloudflare Turnstile    | Visitor's browser                  | Per attempt             | Slow, distributed bots |
 
-A rate limit is a ceiling. Cap is a price. Neither replaces the other: a bot
-that stays politely under every limit pays nothing to a ceiling, and a flood
-from ten thousand addresses pays little to a price.
+A rate limit is a ceiling. Turnstile is a gate. Neither replaces the other: a bot
+that stays politely under every limit gets through a ceiling, and a flood
+from ten thousand addresses gets through a gate unless each one is challenged.
 
 ## Layer 1: WAF rate limiting rules (dashboard)
 
@@ -24,7 +24,7 @@ no billable invocation. Unlike the Workers limiters below, the counters are
 global rather than per-location.
 
 Add them at **Security → WAF → Rate limiting rules** on the `rdyrct.com` zone.
-All three rules target auth/Cap paths, which only ever get hit on that zone
+Both rules target auth paths, which only ever get hit on that zone
 (the shared redirect host from `SHARED_LINK_HOST`, e.g. `rdyr.cc`, only ever
 serves redirects), so there is nothing to add on its zone for these.
 
@@ -47,23 +47,7 @@ can go well past any single one. This catches that without punishing a person
 whose corporate NAT shares an address: one sign-up costs a handful of
 requests, so 60 is a bot and 20 was a family.
 
-### Rule 2: proof-of-work challenges
-
-| Field           | Value                                          |
-| --------------- | ---------------------------------------------- |
-| Name            | `cap-challenges`                               |
-| Expression      | `(http.request.uri.path contains "/api/cap/")` |
-| Characteristics | IP                                             |
-| Period          | 1 minute                                       |
-| Requests        | 60                                             |
-| Action          | Managed challenge                              |
-| Duration        | 1 minute                                       |
-
-Higher, because issuing a challenge is cheap for us and expensive for the
-caller, which is the whole asymmetry Cap rests on. The point is only to stop
-someone farming challenges to solve offline in bulk.
-
-### Rule 3: password reset
+### Rule 2: password reset
 
 | Field           | Value                                                           |
 | --------------- | --------------------------------------------------------------- |
@@ -96,14 +80,13 @@ enforcement.
 
 These are the production numbers. The dev and test environments in
 `wrangler.jsonc` deliberately run several of them looser (`RL_AUTH_PUBLIC`,
-`RL_CAP`, `RL_EMAIL`, `RL_EMAIL_RECIPIENT`), because the e2e suite signs up
+`RL_EMAIL`, `RL_EMAIL_RECIPIENT`), because the e2e suite signs up
 dozens of times a minute from one address and rate limiting the test run
 proves nothing about the feature.
 
 | Binding              | Limit   | Keyed by          | Guards                        |
 | -------------------- | ------- | ----------------- | ----------------------------- |
 | `RL_AUTH_PUBLIC`     | 30/min  | IP, path          | `/api/auth/*`                 |
-| `RL_CAP`             | 120/min | IP, path          | `/api/cap/*` (#98)            |
 | `RL_EMAIL`           | 10/min  | IP, path          | Anything that sends mail      |
 | `RL_EMAIL_RECIPIENT` | 4/min   | Recipient address | One inbox, many callers (#50) |
 | `RL_WRITE_FREE`      | 90/min  | User              | Writes on a free plan         |
@@ -115,54 +98,49 @@ proves nothing about the feature.
 
 These are set for the person having trouble, not for the bot: someone who
 mistypes a password, retries a signup or pastes six links in a row must never
-meet a wall, because a wall reads as the product being broken. `RL_CAP` is the
-clearest case: one sign-up spends a challenge and a redeem, its retry spends
-two more, and when that budget runs out the browser cannot solve the puzzle at
-all, so the form says "could not verify you are human" instead of "wait a
-minute". It has its own generous counter for that reason. Only
+meet a wall, because a wall reads as the product being broken. Only
 `RL_EMAIL_RECIPIENT` stays tight, because it is the one that bounds what an
 inbox can be made to receive however many callers aim at it. The real
-ceilings are the WAF rules above and the CPU Cap charges per attempt.
+ceilings are the WAF rules above and the Turnstile challenge on each attempt.
 
 `period` accepts only 10 or 60, so every one of these caps a rate, not a
 daily total. Closing that gap needs a durable counter; see the follow-up on
 #50.
 
-## Layer 3: Cap proof-of-work (#98)
+## Layer 3: Cloudflare Turnstile (#304)
 
-Self-hosted, Apache 2.0, and no third party ever sees the visitor. The
-challenge is issued by our Worker, solved in the visitor's browser, and
-verified by our Worker.
+Free, and run by Cloudflare. The visitor's browser loads the Turnstile script
+from `challenges.cloudflare.com` and solves a challenge there, so Cloudflare
+sees the visitor; this is the one third party that does. The Worker never
+sees the challenge: it sends the token to Cloudflare's `siteverify` and
+believes the answer. `siteverify` burns the token, so a replay fails with no
+state of ours.
 
-**Where it applies.** Signup and password-reset requests. Not login: a bot
-with correct credentials is not the threat model, and it would tax every real
-visitor on every visit.
+**Where it applies.** Signup, password reset and the landing page shortener.
+Not login: a bot with correct credentials is not the threat model, and it
+would tax every real visitor on every visit. Each form renders the widget with
+its own `action`, and the Worker refuses a token whose action is not the one
+it expects, so a token earned on one form cannot open another.
 
-**How it looks.** It does not. The widget is created off-screen and driven
-directly, and solving starts on the form's first keystroke, so the work
-overlaps the typing. Nobody ticks a box.
+**How it looks.** Mostly it does not: the widget is `interaction-only`, solved
+on the form's first keystroke. If Cloudflare wants a click, the widget shows
+itself in the corner of the page.
 
-**The secret.** `CAP_SECRET`, from `openssl rand -hex 32`. With it unset the
-check is skipped entirely, which is what keeps local dev quiet. capjs-core
-refuses a secret under 16 bytes by throwing, so a too-short one takes signup
-down rather than running unprotected: fail-closed, which for a security
-control is the right way round, but worth knowing before you paste something
-short.
+**Keys.** Create a widget at dash.cloudflare.com → Turnstile. Set the site key
+as the `TURNSTILE_SITE_KEY` var in `wrangler.jsonc` (it is public; `/api/config`
+hands it to the browser) and the secret as `TURNSTILE_SECRET_KEY`. With the
+secret unset the check is skipped entirely, which is what keeps local dev and
+self-hosting quiet. A secret with no site key refuses every request instead:
+the browser has no widget to render, and that is better than a form that looks
+protected and is not. Cloudflare publishes test keys that always pass; they are
+what `.dev.vars.example` and the e2e run use.
 
-**What it costs a visitor.** 12 challenges at difficulty 3, measured on a
-laptop: about 25ms with the WASM solver, about 130ms without. The WASM path
-needs `'wasm-unsafe-eval'` in `script-src`, which permits WebAssembly
-compilation and nothing else, and the module is a same-origin Vite asset.
-Cap's solver also runs in a Web Worker built from a `blob:` URL, hence
-`worker-src 'self' blob:`. Both are asserted in
-`tests/e2e/production/csp.pw.ts`, because a blocked solver fails silently:
-signup would look fine and be completely unprotected.
+**CSP.** `script-src`, `connect-src` and `frame-src` allow
+`https://challenges.cloudflare.com`, asserted in
+`tests/e2e/production/csp.pw.ts`.
 
-**What it does not do.** KV is eventually consistent, so a redeemed token
-presented to two locations at once has a small replay window. That is an
-acceptable ceiling for a captcha, whose job is to price bulk attempts rather
-than to guarantee exactly-once. Making it airtight would mean a Durable
-Object per nonce, which costs more than the replay is worth.
+**If Cloudflare is unreachable** `siteverify` fails closed: signup and reset
+are refused until it answers.
 
 ## Monitoring
 
@@ -178,8 +156,8 @@ WAF rule activity appears under Security → Events, filtered by the rule name.
 deleting it, so the counters keep running and you can see what it would have
 caught.
 
-**Cap is blocking real people.** Unset `CAP_SECRET`
-(`bunx wrangler secret delete CAP_SECRET`). The check disables itself and
+**Turnstile is blocking real people.** Unset `TURNSTILE_SECRET_KEY`
+(`bunx wrangler secret delete TURNSTILE_SECRET_KEY`). The check disables itself and
 both guarded flows, signup and password reset, return to exactly their
 previous behaviour. No deploy needed.
 

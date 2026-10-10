@@ -7,8 +7,8 @@
  */
 import { useQuery } from "@tanstack/react-query";
 import { api } from "./api";
-import type { CapGuard } from "./cap";
-import { CAP_TOKEN_HEADER } from "@/shared/types";
+import type { TurnstileGuard } from "./turnstile";
+import { TURNSTILE_TOKEN_HEADER } from "@/shared/types";
 
 export type AnonLink = { slug: string; url: string; claimToken: string; expiresAt: number };
 
@@ -21,12 +21,12 @@ export type AnonLink = { slug: string; url: string; claimToken: string; expiresA
  */
 export async function shortenAnonymously(
   destination: string,
-  guarded: CapGuard,
+  guarded: TurnstileGuard,
 ): Promise<AnonLink> {
   return guarded((headers) =>
     api<AnonLink>("/shorten", {
       method: "POST",
-      body: { destination, capToken: headers[CAP_TOKEN_HEADER] ?? "" },
+      body: { destination, turnstileToken: headers[TURNSTILE_TOKEN_HEADER] ?? "" },
     }),
   );
 }

@@ -172,18 +172,18 @@ export async function resetClicks(): Promise<void> {
 // Env with a non-empty auth secret, independent of the ambient .dev.vars, so
 // sign-in's rate-limit key derivation has a key to HMAC with.
 /**
- * The default binding for worker tests: a known BETTER_AUTH_SECRET, and Cap
- * explicitly off.
+ * The default binding for worker tests: a known BETTER_AUTH_SECRET, and
+ * Turnstile explicitly off.
  *
- * Cap has to be cleared rather than merely unmentioned, because the ambient
- * binding is built from .dev.vars, which sets CAP_SECRET so the browser tests
- * exercise the real proof-of-work loop (#98). Inheriting it here would make
- * every signup in every worker test fail the Cap check first and report 400,
- * hiding whatever that test was actually about. Tests that want Cap on say so:
- * see cap.worker.ts.
+ * It has to be cleared rather than merely unmentioned, because the ambient
+ * binding is built from .dev.vars, which sets TURNSTILE_SECRET_KEY so the
+ * browser tests run the real check (#304). Inheriting it here would make
+ * every signup in every worker test fail the check first and report 400,
+ * hiding whatever that test was actually about. Tests that want it on say so:
+ * see turnstile.worker.ts.
  */
 export const authEnv = () =>
-  overrideEnv({ BETTER_AUTH_SECRET: "test-secret", CAP_SECRET: undefined });
+  overrideEnv({ BETTER_AUTH_SECRET: "test-secret", TURNSTILE_SECRET_KEY: undefined });
 
 /**
  * Drive one request through the real worker and wait for anything it
