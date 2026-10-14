@@ -12,6 +12,42 @@ import { pinHeroVariant } from "./pages";
 const POSTHOG_GLOB = "**/*.i.posthog.com/**";
 const CONSENT_KEY = "rdyrct:consent:v2";
 
+for (const variant of ["control", "test"] as const) {
+  test(`${variant} signup CTA navigates in-page and keeps attribution after reload`, async ({
+    page,
+  }) => {
+    await trapPostHog(page);
+    await pinHeroVariant(page, variant);
+    await page.goto("/");
+    await page.getByRole("button", { name: "Accept", exact: true }).click();
+    const hero = page.locator(`[data-hero-arm="${variant}"]`);
+    await expect(hero).toBeVisible();
+    const documentId = await page.evaluate(() => performance.timeOrigin);
+    await hero
+      .getByRole("link", {
+        name: variant === "test" ? "Skip the demo, get started free" : "Get started free",
+        exact: true,
+      })
+      .click();
+    await expect(page).toHaveURL(/\/signup$/);
+    await expect(page.getByRole("heading", { name: "Create an account" })).toBeVisible();
+    expect(await page.evaluate(() => performance.timeOrigin)).toBe(documentId);
+
+    // A fresh signup document is also what an OAuth round trip creates.
+    // Exercise the real attribution helper without sending analytics traffic.
+    await page.reload();
+    await expect(page.getByRole("heading", { name: "Create an account" })).toBeVisible();
+    const attribution = await page.evaluate(async () => {
+      const modulePath = "/src/app/lib/posthog.ts";
+      const { withHeroVariant } = await import(modulePath);
+      return ["funnel_signup_viewed", "user_signed_up", "funnel_link_created"].map((event) =>
+        withHeroVariant(event),
+      );
+    });
+    expect(attribution).toEqual(Array.from({ length: 3 }, () => ({ hero_variant: variant })));
+  });
+}
+
 /** Records every request the page attempts toward PostHog, and blocks them. */
 async function trapPostHog(page: import("@playwright/test").Page) {
   const attempts: string[] = [];

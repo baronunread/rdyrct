@@ -2,7 +2,7 @@ import type { default as PosthogClient } from "posthog-js";
 import type { JsonValue } from "@/shared/types";
 import { bufferBeforeConsent, discardBuffer, drainBuffer } from "./consent-buffer";
 import { CONSENT_KEY, onConsentLapse, readConsent, writeConsent } from "./consent";
-import { isFunnelEvent } from "./funnel";
+import { FUNNEL, isFunnelEvent } from "./funnel";
 import { clearHeroVariant, shownHeroVariant } from "./hero-variant";
 
 // Nothing here loads posthog-js or contacts PostHog until the user accepts
@@ -178,10 +178,10 @@ function clearPostHogStorage() {
   }
 }
 
-/** Funnel steps from a document that showed the landing hero say which
- *  version it was, so the A/B test is read straight off the funnel. */
+/** Downstream steps keep the saved arm across full navigations. A landing
+ * view needs an arm shown now: signed-in visitors always see control. */
 export function withHeroVariant(event: string, properties?: EventProperties) {
-  const variant = shownHeroVariant();
+  const variant = shownHeroVariant(event !== FUNNEL.landingViewed);
   if (!variant || !isFunnelEvent(event)) return properties;
   return { ...properties, hero_variant: variant };
 }

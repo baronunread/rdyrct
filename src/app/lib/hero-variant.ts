@@ -56,9 +56,17 @@ export function heroVariant(): HeroVariant {
   return assigned;
 }
 
-/** The variant this document showed, or null if it showed none. */
-export function shownHeroVariant(): HeroVariant | null {
-  return assigned;
+/** The arm shown on this visit, including before a reload or OAuth return.
+ * Reading attribution must never assign an arm to a direct signup visitor. */
+export function shownHeroVariant(restore = false): HeroVariant | null {
+  if (readConsent() !== "accepted") return null;
+  if (assigned || !restore) return assigned;
+  try {
+    const stored = localStorage.getItem(KEY);
+    return stored === "control" || stored === "test" ? stored : null;
+  } catch {
+    return null;
+  }
 }
 
 /** Remove the assignment when consent is withdrawn or expires. */

@@ -69,6 +69,29 @@ describe("the stored answer", () => {
 });
 
 describe("the hero A/B test", () => {
+  test("restores funnel attribution on a fresh document without assigning a new arm", () => {
+    writeConsent("accepted");
+    store.set("rdyrct:hero-variant:v1", "test");
+
+    for (const event of [FUNNEL.signupViewed, "user_signed_up", FUNNEL.linkCreated]) {
+      expect(withHeroVariant(event)).toEqual({ hero_variant: "test" });
+    }
+    expect(withHeroVariant("user_signed_in")).toBeUndefined();
+    // A signed-in landing visit must not count as a new test exposure just
+    // because that browser saw the test hero before it signed up.
+    expect(withHeroVariant(FUNNEL.landingViewed)).toBeUndefined();
+  });
+
+  test("does not attribute a direct signup or stale assignment without consent", () => {
+    writeConsent("accepted");
+    expect(withHeroVariant(FUNNEL.signupViewed)).toBeUndefined();
+    store.set("rdyrct:hero-variant:v1", "invalid");
+    expect(withHeroVariant(FUNNEL.signupViewed)).toBeUndefined();
+    store.set("rdyrct:hero-variant:v1", "test");
+    writeConsent("rejected");
+    expect(withHeroVariant(FUNNEL.signupViewed)).toBeUndefined();
+  });
+
   test("does not assign or tag a variant before consent", () => {
     const shown = heroVariant();
     posthog.capture(FUNNEL.ctaClicked, { placement: "hero_primary" });
