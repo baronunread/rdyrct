@@ -177,8 +177,8 @@
   // Set for the person who is having trouble, not for the bot. Somebody who
   // mistypes a password, retries a signup, or pastes six links in a row must
   // never meet a wall, because they read it as the product being broken and
-  // they are right. The ceilings that matter for abuse are elsewhere: Cap
-  // charges CPU per attempt (#98), RL_EMAIL_RECIPIENT bounds what one inbox
+  // they are right. The ceilings that matter for abuse are elsewhere: Turnstile
+  // challenges each attempt (#304), RL_EMAIL_RECIPIENT bounds what one inbox
   // can be made to receive, and the WAF rules in docs/rate-limiting.md sit in
   // front of all of it.
   "ratelimits": [
@@ -192,24 +192,11 @@
         "period": 60,
       },
     },
-    // Cap's own endpoints (#98). Separate from RL_AUTH_PUBLIC and much
-    // higher: one sign-up spends a challenge and a redeem, its retry spends
-    // two more, and several people behind one office address are ordinary.
-    // The proof-of-work prices these, not this counter, which is only here so
-    // a script cannot farm challenges to solve offline in bulk.
-    {
-      "name": "RL_CAP",
-      "namespace_id": "14011",
-      "simple": {
-        "limit": 120,
-        "period": 60,
-      },
-    },
     {
       // Per caller, per path. Raised from 3: a signup that goes wrong costs
       // a send each time somebody retries, and three of those inside a minute
-      // is a person having a bad day, not a bot. Cap already prices each
-      // attempt in CPU (#98), so this does not have to be the tight one.
+      // is a person having a bad day, not a bot. Turnstile already challenges each
+      // attempt (#304), so this does not have to be the tight one.
       "name": "RL_EMAIL",
       "namespace_id": "14002",
       "simple": {
@@ -269,7 +256,7 @@
     // own namespace, not RL_AUTH_PUBLIC: a flood at the landing form must not
     // lock anybody out of signing in. Generous enough that a person trying a
     // few links never notices, tight enough that farming short links from one
-    // address is not worth the Cap proof-of-work each one already costs.
+    // address is not worth the Turnstile challenge each one already costs.
     {
       "name": "RL_ANON_LINK",
       "namespace_id": "14010",
@@ -330,6 +317,8 @@
         // env vars aren't inherited from the top-level "vars": left unset
         // (capture no-ops) so e2e never calls out to Sentry.
         "SENTRY_DSN": "",
+        // Cloudflare's published test site key: always passes, no account.
+        "TURNSTILE_SITE_KEY": "1x00000000000000000000AA",
       },
       "kv_namespaces": [
         {
@@ -410,17 +399,6 @@
           "namespace_id": "24001",
           "simple": {
             "limit": 40,
-            "period": 60,
-          },
-        },
-        {
-          // Higher again than production's: local dev and the e2e run have no
-          // cf-connecting-ip, so every caller on the machine shares one key
-          // and one budget.
-          "name": "RL_CAP",
-          "namespace_id": "24011",
-          "simple": {
-            "limit": 600,
             "period": 60,
           },
         },

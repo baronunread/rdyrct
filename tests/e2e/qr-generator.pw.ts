@@ -20,8 +20,7 @@ declare global {
  */
 
 /** Records every POST the page makes, so "nothing leaves the browser" can be
- * asserted rather than asserted about. Cap's own challenge and redeem are the
- * one exception, and only when somebody asks for a trackable link. */
+ * asserted rather than asserted about. */
 function watchPosts(page: Page): string[] {
   const posted: string[] = [];
   page.on("request", (r) => {
@@ -30,17 +29,10 @@ function watchPosts(page: Page): string[] {
   return posted;
 }
 
-/** Application POSTs other than Cap proving the visitor is human. */
+/** POSTs to the app's own origin. */
 function appPosts(page: Page, posted: string[]): string[] {
   const appOrigin = new URL(page.url()).origin;
-  return posted.filter((url) => {
-    const request = new URL(url);
-    return (
-      request.origin === appOrigin &&
-      request.pathname !== "/api/cap/challenge" &&
-      request.pathname !== "/api/cap/redeem"
-    );
-  });
+  return posted.filter((url) => new URL(url).origin === appOrigin);
 }
 
 /**

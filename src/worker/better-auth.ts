@@ -20,20 +20,20 @@ import { emailConfigured, sendEmail } from "./email";
 import { renderEmail } from "./email-layout";
 import { hashPassword, verifyPassword } from "./password";
 import { uid } from "./util";
-import { spendToken, type CapScope } from "./cap";
+import { spendToken, type TurnstileScope } from "./turnstile";
 import { storeUserAvatar, deleteUserAvatar } from "./storage";
 import { createOwnedOrg } from "./plan";
 import { defaultOrgName } from "@/shared/org-name";
-import { CAP_FAILED_CODE, CAP_TOKEN_HEADER } from "@/shared/types";
+import { TURNSTILE_FAILED_CODE, TURNSTILE_TOKEN_HEADER } from "@/shared/types";
 import { mcpResource, fetchClientMetadataResource } from "./mcp-oauth";
 
-/** better-auth paths that must carry a solved Cap token, and the scope the
- * token has to have been minted for. Keyed by `ctx.path`, which is relative
+/** better-auth paths that must carry a Turnstile token, and the scope the
+ * token has to have been rendered for. Keyed by `ctx.path`, which is relative
  * to /api/auth. */
-const CAP_GUARDED_PATHS = {
+const TURNSTILE_GUARDED_PATHS = {
   "/sign-up/email": "signup",
   "/request-password-reset": "password-reset",
-} satisfies Record<string, CapScope>;
+} satisfies Record<string, TurnstileScope>;
 
 /**
  * Gives an account an organization if it has none.
@@ -536,22 +536,22 @@ function buildAuth(env: Env) {
       // response instead of running the endpoint. Both guards use that to
       // answer exactly as the real path would while doing nothing (#53).
       before: createAuthMiddleware(async (ctx) => {
-        // Cap (#98) sits in front of the two paths a bot actually wants:
+        // Turnstile (#304) sits in front of the two paths a bot actually wants:
         // creating accounts, and making us send mail. Not login, where a bot
         // with correct credentials is not the threat and every real visitor
         // would pay the tax.
-        const capScope = lookup(CAP_GUARDED_PATHS, ctx.path);
+        const capScope = lookup(TURNSTILE_GUARDED_PATHS, ctx.path);
         if (capScope) {
           // In a header, not the body: better-auth validates each endpoint's
           // body against its own schema, and an extra key there is at the
           // mercy of that schema.
-          const token = ctx.headers?.get(CAP_TOKEN_HEADER) ?? "";
+          const token = ctx.headers?.get(TURNSTILE_TOKEN_HEADER) ?? "";
           if (!(await spendToken(env, capScope, token)))
             // A code, not just a message: the browser retries this once with
             // a freshly solved token, and matching on prose to decide that
             // would break the first time the wording changed.
             throw new APIError("BAD_REQUEST", {
-              code: CAP_FAILED_CODE,
+              code: TURNSTILE_FAILED_CODE,
               message: "Could not verify you are human. Reload the page and try again.",
             });
         }

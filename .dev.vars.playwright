@@ -24,7 +24,7 @@ CF_DEV_ENV=instant
 # the file the browser suite actually reads: CLOUDFLARE_ENV=playwright makes
 # wrangler prefer it, so a secret only in .dev.vars leaves every e2e signup
 # running the disabled path while looking like it covers the real one.
-CAP_SECRET=playwright-only-cap-secret-32-chars-min
+TURNSTILE_SECRET_KEY=1x0000000000000000000000000000000AA
 
 # Google sign-in. The local emulate google service, started by the resend
 # webServer in playwright.config.ts (resend on 4000, google on 4001).

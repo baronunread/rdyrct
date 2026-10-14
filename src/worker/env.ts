@@ -21,10 +21,6 @@ export interface Env {
      (#225), one instance, flushed to D1 on a ~10 s alarm */
   CLICK_BUFFER: DurableObjectNamespace<ClickBuffer>;
   RL_AUTH_PUBLIC: RateLimit;
-  /* Cap's challenge and redeem endpoints (#98), on their own budget: issuing
-     a challenge is cheap for us and the proof-of-work is what costs the
-     caller, so this must never be the thing a person meets. */
-  RL_CAP: RateLimit;
   RL_EMAIL: RateLimit;
   RL_EMAIL_RECIPIENT: RateLimit;
   RL_WRITE_FREE: RateLimit;
@@ -76,8 +72,10 @@ export interface Env {
   // Any other value (including unset) calls the real API, or fails closed.
   CF_DEV_ENV?: string;
 
-  /* bot protection: Cap proof-of-work (#98). Unset disables the check. */
-  CAP_SECRET?: string; // secret, `openssl rand -hex 32`
+  /* bot protection: Cloudflare Turnstile (#304). Secret unset disables the
+     check. */
+  TURNSTILE_SITE_KEY?: string; // var, public
+  TURNSTILE_SECRET_KEY?: string; // secret
 
   /* click buffer: flush interval in ms, e2e only. Unset means 10 s. */
   CLICK_FLUSH_MS?: string; // var

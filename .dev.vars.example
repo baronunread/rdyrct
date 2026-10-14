@@ -34,13 +34,13 @@ SENTRY_DSN=
 # proxies to it. Leave blank to skip the proxy.
 BLOG_ORIGIN_URL=http://localhost:3000
 
-# Cap proof-of-work (#98). In production this is `openssl rand -hex 32`; the
-# fixed value here is deliberate, so the real challenge/solve/redeem loop runs
-# instead of the disabled path. Note .dev.vars.playwright sets its own: that
-# is the file the browser suite reads, and a value only here would leave every
-# e2e signup on the disabled path. The disabled path has its own worker test,
-# which needs no browser to prove it.
-CAP_SECRET=dev-only-cap-secret-not-a-real-one-0000000000000000
+# Cloudflare Turnstile (#304). These are Cloudflare's published test keys
+# (always pass), so the real widget and verify loop run locally with no
+# account. In production, create a widget in the Cloudflare dashboard and set
+# TURNSTILE_SITE_KEY as a var in wrangler.jsonc and TURNSTILE_SECRET_KEY as a
+# secret. Leave the secret blank to turn the check off.
+TURNSTILE_SITE_KEY=1x00000000000000000000AA
+TURNSTILE_SECRET_KEY=1x0000000000000000000000000000000AA
 
 # Google sign-in. Leave all three blank to hide the "Continue with Google"
 # button. For local dev, `bun run dev` starts the emulate google service

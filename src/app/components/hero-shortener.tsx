@@ -31,7 +31,7 @@ import { CopyButton } from "../ui/copy-button";
 import { BusyContent } from "../ui/spinner";
 import { useToast } from "../ui/toast";
 import { copyToClipboard } from "../lib/clipboard";
-import { useCap } from "../lib/cap";
+import { useTurnstile } from "../lib/turnstile";
 import {
   MAX_ANON_LINKS,
   rememberAnonLink,
@@ -178,7 +178,7 @@ function MadeLinks({ made }: { made: StoredAnonLink[] }) {
 
 export function HeroShortener() {
   const toast = useToast();
-  const cap = useCap("anon-link");
+  const turnstile = useTurnstile("anon-link");
   const [destination, setDestination] = useState("");
   const [busy, setBusy] = useState(false);
   // Seeded from storage, so a reload keeps what this browser already made
@@ -195,7 +195,7 @@ export function HeroShortener() {
     if (!canSubmit) return;
     setBusy(true);
     try {
-      const link = await shortenAnonymously(destination, cap.guarded);
+      const link = await shortenAnonymously(destination, turnstile.guarded);
       // Stored before anything is rendered, and the store decides what the
       // list now is: a visitor who signs up in another tab must still be
       // able to claim it, and the cap is enforced in one place.
@@ -213,7 +213,7 @@ export function HeroShortener() {
       onSubmit={submit}
       // Priming here, not on mount: the proof-of-work runs while they type,
       // and someone who never uses the form never pays for it.
-      onInput={cap.prime}
+      onInput={turnstile.prime}
       // No native validation: errors in this app go to toasts, and a browser
       // validity bubble is neither a toast nor dismissible by us. It also
       // silently refuses to submit, which reads as a dead button. The server

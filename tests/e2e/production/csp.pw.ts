@@ -2,11 +2,6 @@ import { expect, test } from "@playwright/test";
 import { collectCspViolations, cspViolations, scriptIsBlocked } from "../csp";
 import { visitLegalPages } from "../pages";
 
-/** The Cap widget element, once its custom element has been defined. */
-interface CapWidget extends HTMLElement {
-  solve: () => Promise<{ token?: string }>;
-}
-
 /**
  * These run against `vite preview`, i.e. the built worker and built assets,
  * because that is the only place the production Content-Security-Policy is in
@@ -34,7 +29,7 @@ test("the built worker serves the production CSP", async ({ page }) => {
   // no 'unsafe-inline', which is the whole point of naming it by hash.
   const scriptSrc = csp?.split(";").find((part) => part.trim().startsWith("script-src"));
   expect(scriptSrc?.trim()).toBe(
-    "script-src 'self' 'sha256-FWT0zAeXgLYQzK+k6AJ0ya6gTIN/5TC8uQ3OB6H8w6A=' 'wasm-unsafe-eval' https://*.posthog.com https://stats.brnr.dev",
+    "script-src 'self' 'sha256-FWT0zAeXgLYQzK+k6AJ0ya6gTIN/5TC8uQ3OB6H8w6A=' https://*.posthog.com https://stats.brnr.dev https://challenges.cloudflare.com",
   );
   const connectSrc = csp?.split(";").find((part) => part.trim().startsWith("connect-src"));
   expect(connectSrc?.trim()).toBe(
@@ -60,48 +55,44 @@ test("the inlined theme bootstrap survives the production CSP", async ({ browser
 });
 
 /**
- * Cap's proof-of-work (#98) is the part of this app most likely to be
- * strangled by our own policy, and it fails quietly: the widget catches its
- * own errors, so a blocked Worker or a refused WebAssembly.compile() would
- * leave signup apparently fine and completely unprotected.
- *
- * So this asserts the mechanism, not just the absence of complaints. The
- * solver runs in a Worker built from a blob: URL (worker-src) and compiles a
- * same-origin WASM module (script-src 'wasm-unsafe-eval'). Both were blocked
- * by the policy as it stood before this feature; the measured cost of losing
- * the WASM path is roughly 5x on solve time.
+ * Turnstile (#304) is the part of this app most likely to be strangled by our
+ * own policy, and it fails quietly: a blocked script or iframe leaves signup
+ * looking fine with no token to send. So this asserts the mechanism, not just
+ * the absence of complaints: the script loads from challenges.cloudflare.com
+ * and the widget, rendered with Cloudflare's always-pass test key, hands back
+ * a token, with no CSP violation along the way.
  */
-test("Cap solves a challenge under the production CSP", async ({ page }) => {
+test("Turnstile solves a challenge under the production CSP", async ({ page }) => {
   await page.goto("/signup");
 
-  // The widget only loads once the visitor touches the form, which is the
-  // whole point: no cost to anyone who does not sign up.
   // /signup is prerendered, so an input typed before hydration finishes never
-  // reaches the handler that starts the widget (the solve then happens at
-  // submit instead). Type again until the handler is there.
+  // reaches the handler that starts the widget. Type again until it is there.
   let attempt = 0;
   await expect(async () => {
     attempt += 1;
     await page.getByRole("textbox").first().fill(`csp-probe-${attempt}@example.com`);
-    await page.waitForFunction(() => !!customElements.get("cap-widget"), null, { timeout: 3_000 });
+    await page.waitForFunction(() => !!window.turnstile, null, { timeout: 3_000 });
   }).toPass({ timeout: 20_000 });
 
-  const solved = await page.evaluate(async () => {
-    // SAFETY: the line above waited for customElements to define
-    // "cap-widget", so createElement returns an upgraded widget with solve()
-    // on it rather than an unknown element.
-    const el = document.createElement("cap-widget") as CapWidget;
-    el.setAttribute("data-cap-api-endpoint", "/api/cap/signup/");
-    el.style.cssText = "position:absolute;width:1px;height:1px;opacity:0";
-    document.body.appendChild(el);
-    try {
-      return (await el.solve())?.token ?? "";
-    } finally {
-      el.remove();
-    }
-  });
+  const token = await page.evaluate(
+    (siteKey) =>
+      new Promise<string>((resolve) => {
+        const host = document.createElement("div");
+        document.body.appendChild(host);
+        window.turnstile?.render(host, {
+          sitekey: siteKey,
+          action: "signup",
+          appearance: "interaction-only",
+          callback: resolve,
+          "error-callback": () => resolve(""),
+          "timeout-callback": () => resolve(""),
+        });
+        setTimeout(() => resolve(""), 15_000);
+      }),
+    "1x00000000000000000000AA",
+  );
 
-  expect(solved).not.toBe("");
+  expect(token).not.toBe("");
   expect(await cspViolations(page)).toEqual([]);
 });
 

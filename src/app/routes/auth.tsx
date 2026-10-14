@@ -11,7 +11,7 @@ import { friendlyAuthError } from "../lib/auth-errors";
 import posthog from "../lib/posthog";
 import { FUNNEL, SIGNUP_FAILED, USER_SIGNED_UP, googleSignupUrl } from "../lib/funnel";
 import { useShake } from "../lib/use-shake";
-import { useCap } from "../lib/cap";
+import { useTurnstile } from "../lib/turnstile";
 import { useCurrentUser, useConfig } from "../lib/hooks";
 import { storedAnonLinks } from "../lib/anon-links";
 import { readAuthHint } from "../lib/user-cache";
@@ -357,7 +357,7 @@ function AuthFormView({
   next: string;
   onSubmit: (email: string, password: string) => void;
   onForgot: (email: string) => void;
-  /** Starts the Cap proof-of-work (#98). Idempotent, so a per-keystroke
+  /** Starts the Turnstile challenge (#304). Idempotent, so a per-keystroke
    * handler is fine; it fires once and the work overlaps the typing. */
   onFirstInput: () => void;
 }) {
@@ -507,8 +507,8 @@ interface SubmitDeps {
   qc: QueryClient;
   navigate: ReturnType<typeof useNavigate>;
   next: string;
-  /** Runs a Cap-guarded request, re-solving once if the token is refused. */
-  capGuarded: <T>(run: (headers: Record<string, string>) => Promise<T>) => Promise<T>;
+  /** Runs a Turnstile-guarded request, re-solving once if the token is refused. */
+  turnstileGuarded: <T>(run: (headers: Record<string, string>) => Promise<T>) => Promise<T>;
 }
 
 async function trySignIn(email: string, password: string, deps: SubmitDeps) {
@@ -533,11 +533,11 @@ async function trySignUp(
   password: string,
   deps: SubmitDeps & { emailEnabled: boolean },
 ) {
-  // Cap's proof-of-work token (#98). Solved while the visitor was typing,
+  // Turnstile token (#304). Solved while the visitor was typing,
   // spent here, and required by the Worker before an account exists. Through
   // the guard, so a token the server has forgotten is solved again rather
   // than shown to somebody as an error.
-  const { error: signUpError } = await deps.capGuarded((headers) =>
+  const { error: signUpError } = await deps.turnstileGuarded((headers) =>
     authClient.signUp.email({ email, password, name: email.split("@")[0] }, { headers }),
   );
   if (signUpError) {
@@ -618,7 +618,7 @@ function useForgotPassword(
   toast: ReturnType<typeof useToast>,
   emailEnabled: boolean,
 ) {
-  const resetCap = useCap("password-reset");
+  const resetTurnstile = useTurnstile("password-reset");
   const [forgotBusy, setForgotBusy] = useState(false);
 
   const submitForgot = async (email: string) => {
@@ -629,8 +629,8 @@ function useForgotPassword(
     setForgotBusy(true);
     try {
       // Cheap to abuse and it sends mail, which is why #50 needed a
-      // per-recipient cap. Cap prices the attempt instead (#98).
-      const { error: resetError } = await resetCap.guarded((headers) =>
+      // per-recipient cap. Turnstile gates the attempt instead (#304).
+      const { error: resetError } = await resetTurnstile.guarded((headers) =>
         authClient.requestPasswordReset({ email, redirectTo: "/reset-password" }, { headers }),
       );
       if (resetError) {
@@ -688,9 +688,9 @@ function useAuthFlow(mode: "login" | "signup") {
   const [verifyPhase, setVerifyPhase] = useState<"idle" | "success" | "leaving">("idle");
   const shake = useShake();
   // Two scopes, two tokens: one minted for signup must not be spendable on a
-  // password reset, so Cap binds the scope into the signature. The reset one
+  // password reset, so the scope is bound into the token (Turnstile action). The reset one
   // lives in useForgotPassword, which is the only thing that spends it.
-  const signupCap = useCap("signup");
+  const signupTurnstile = useTurnstile("signup");
   // Treated as on until the config answers: the only wrong guess is showing a
   // code screen, which the server never sends to, and config is cached.
   const emailEnabled = useConfig().data?.emailEnabled ?? true;
@@ -753,7 +753,14 @@ function useAuthFlow(mode: "login" | "signup") {
     authPasswordRef.current = password;
     setBusy(true);
     try {
-      const deps = { goVerify, failSubmit, qc, navigate, next, capGuarded: signupCap.guarded };
+      const deps = {
+        goVerify,
+        failSubmit,
+        qc,
+        navigate,
+        next,
+        turnstileGuarded: signupTurnstile.guarded,
+      };
       await (mode === "login"
         ? trySignIn(email, password, deps)
         : trySignUp(email, password, { ...deps, emailEnabled }));
@@ -843,7 +850,7 @@ function useAuthFlow(mode: "login" | "signup") {
      * the visitor types, instead of stalling the submit. Signup only: a
      * password reset is rare enough that a short wait on submit is fine, and
      * priming it would tax everyone who came to log in. */
-    primeSignupCap: signupCap.prime,
+    primeSignupTurnstile: signupTurnstile.prime,
   };
 }
 
@@ -887,7 +894,7 @@ function AuthPage({ mode }: { mode: "login" | "signup" }) {
       shake={flow.shake}
       next={flow.next}
       onSubmit={flow.submit}
-      onFirstInput={flow.primeSignupCap}
+      onFirstInput={flow.primeSignupTurnstile}
       onForgot={(email) => {
         flow.setAuthEmail(email);
         flow.setView("forgot");

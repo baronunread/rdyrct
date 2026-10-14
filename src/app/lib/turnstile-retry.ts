@@ -1,33 +1,32 @@
 /**
- * The one rule that decides whether a Cap-guarded request gets a second go.
+ * The one rule that decides whether a Turnstile-guarded request gets a second go.
  *
- * Its own module so it can be tested: cap.ts imports the WASM solver as a
- * `?url` asset, which bun's test runner cannot resolve.
+ * Its own module so it can be tested without loading the Turnstile script.
  */
-import { CAP_FAILED_CODE } from "@/shared/types";
+import { TURNSTILE_FAILED_CODE } from "@/shared/types";
 
 /** Either shape a refusal arrives in: an ApiError carrying `.code`, or the
  * `{ error }` better-auth resolves with instead of throwing. */
-type CapRefusal = { code?: string; error?: { code?: string } } | null | undefined;
+type TurnstileRefusal = { code?: string; error?: { code?: string } } | null | undefined;
 
 /**
- * Whether a refusal is the Worker turning down a Cap token.
+ * Whether a refusal is the Worker turning down a Turnstile token.
  *
  * Two shapes reach here, and both have to be read. better-auth resolves with
  * `{ error }` on the object rather than throwing; api() rejects with an
  * ApiError carrying `.code`. Reading only the first is what made the retry
  * below dead code for every api() caller.
  */
-export function isCapFailure<T>(result: T): boolean {
+export function isTurnstileFailure<T>(result: T): boolean {
   // SAFETY: this reads two optional fields off whatever arrived. Both shapes
   // are this app's own (an ApiError, and the { error } better-auth resolves
   // with); anything else carries neither field and reads as undefined.
-  const refusal = result as CapRefusal;
-  return refusal?.code === CAP_FAILED_CODE || refusal?.error?.code === CAP_FAILED_CODE;
+  const refusal = result as TurnstileRefusal;
+  return refusal?.code === TURNSTILE_FAILED_CODE || refusal?.error?.code === TURNSTILE_FAILED_CODE;
 }
 
 /**
- * Runs a Cap-guarded request, and if the Worker refuses the token, solves a
+ * Runs a Turnstile-guarded request, and if the Worker refuses the token, solves a
  * fresh one and runs it exactly once more.
  *
  * A token can be refused for reasons the browser cannot see coming: it
@@ -41,15 +40,15 @@ export function isCapFailure<T>(result: T): boolean {
  * human" in front of somebody who had done nothing wrong, on the one path
  * where retrying always would have worked.
  */
-export async function retryOnCapFailure<T>(
+export async function retryOnTurnstileFailure<T>(
   run: (headers: Record<string, string>) => Promise<T>,
   headers: () => Promise<Record<string, string>>,
 ): Promise<T> {
   try {
     const first = await run(await headers());
-    if (!isCapFailure(first)) return first;
+    if (!isTurnstileFailure(first)) return first;
   } catch (error) {
-    if (!isCapFailure(error)) throw error;
+    if (!isTurnstileFailure(error)) throw error;
   }
   return run(await headers());
 }

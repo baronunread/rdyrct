@@ -1,13 +1,13 @@
 import { oneOf } from "./lookup";
 
-/** Carries a solved Cap token (#98) on the requests that need one. A header,
+/** Carries a solved Turnstile token (#304) on the requests that need one. A header,
  * not a body field, because better-auth validates each endpoint's body
  * against its own schema. */
-export const CAP_TOKEN_HEADER = "x-cap-token";
+export const TURNSTILE_TOKEN_HEADER = "x-turnstile-token";
 
-/** What the Worker answers when a Cap token is missing, expired, or already
+/** What the Worker answers when a Turnstile token is missing, expired, or already
  * spent. The browser retries once with a fresh one rather than showing it. */
-export const CAP_FAILED_CODE = "CAP_FAILED";
+export const TURNSTILE_FAILED_CODE = "TURNSTILE_FAILED";
 
 /** Anything that survives a round trip through JSON: what a request or
  * response body is, before anyone has checked it means what it should. */
@@ -286,6 +286,8 @@ export interface AppConfig {
   emailEnabled: boolean;
   /** Whether Google sign-in is configured and the button should show. */
   googleEnabled: boolean;
+  /** Turnstile site key, public by design. Absent: no check on this instance. */
+  turnstileSiteKey?: string;
 }
 
 /** The org's fresh link-quota count, plus when it was read. The timestamp
