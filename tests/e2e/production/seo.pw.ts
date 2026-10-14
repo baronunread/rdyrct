@@ -71,6 +71,29 @@ test("the signed-in app keeps the default head", async ({ request }) => {
   expect(html).toContain("<title>Free URL shortener and QR code generator - rdyrct</title>");
 });
 
+test("the QR generator exposes its instructions and print guides without JavaScript", async ({
+  request,
+  browser,
+}) => {
+  const response = await request.get("/qr-code-generator");
+  expect(response.status()).toBe(200);
+  const context = await browser.newContext({ javaScriptEnabled: false });
+  const page = await context.newPage();
+  try {
+    await page.goto(response.url());
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText(
+      "Free QR code generator with logo",
+    );
+    await expect(page.getByRole("heading", { name: "How to make a QR code" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "QR code questions" })).toBeVisible();
+    for (const path of ["qr-code-logo", "qr-code-size", "qr-code-testing"]) {
+      await expect(page.locator(`main a[href="/blog/${path}"]`)).toBeVisible();
+    }
+  } finally {
+    await context.close();
+  }
+});
+
 test("robots.txt declares both sitemaps", async ({ request }) => {
   // The blog is a separate Worker (rdyrct-blog) with its own sitemap at
   // /blog/sitemap.xml. Naming only the app's own sitemap left posts
