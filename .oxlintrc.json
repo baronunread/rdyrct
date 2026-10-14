@@ -1,7 +1,10 @@
 {
   "$schema": "./node_modules/oxlint/configuration_schema.json",
   "ignorePatterns": ["dist/", ".wrangler/", ".agents/**", ".claude/**", ".oxlint/anti-slop/**"],
-  "jsPlugins": [{ "name": "anti-slop", "specifier": "./.oxlint/anti-slop/index.ts" }],
+  "jsPlugins": [
+    { "name": "anti-slop", "specifier": "./.oxlint/anti-slop/index.ts" },
+    { "name": "gdp-ts", "specifier": "./node_modules/.cache/gdp-ts-lint.mjs" }
+  ],
   "rules": {
     "anti-slop/no-chained-type-assertions": "error",
     "anti-slop/no-conditional-empty-object-spread": "error",
@@ -20,6 +23,24 @@
     "anti-slop/require-safety-comment-for-type-assertion": "error"
   },
   "overrides": [
+    {
+      "files": ["src/worker/**/*.ts", "tests/worker/**/*.ts"],
+      "rules": {
+        "gdp-ts/no-define-proof": "error",
+        "gdp-ts/no-proof-assertion": "error",
+        "gdp-ts/no-null-assertion": "error",
+        "gdp-ts/no-any": "error"
+      }
+    },
+    {
+      "files": ["src/worker/proofs/*.ts"],
+      "rules": {
+        "gdp-ts/no-define-proof": "off",
+        "gdp-ts/no-exported-prover": "error",
+        "gdp-ts/no-type-assertion": "error",
+        "gdp-ts/no-any": "error"
+      }
+    },
     {
       "files": [".oxlint/anti-slop/**"],
       "rules": {

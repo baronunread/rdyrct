@@ -1,4 +1,6 @@
 import { Hono } from "hono";
+import { name } from "@gdp-ts/core";
+import { canDeleteOrg } from "../proofs/can-delete-org";
 import type { JsonValue } from "../../shared/types";
 import { optionalFlag, parseOptionalBody } from "../schemas";
 import * as v from "valibot";
@@ -670,7 +672,12 @@ adminRoutes.delete("/orgs/:orgId", async (c) => {
     .select({ name: schema.orgs.name })
     .from(schema.orgs)
     .where(eq(schema.orgs.id, orgId));
-  await deleteOrg(c.var.db, c.env, orgId);
+  const user = c.var.user;
+  if (!user) throw new HTTPException(401, { message: "Not signed in" });
+  await name(user, orgId, async (actor, org) => {
+    const proof = await canDeleteOrg(c.var.db, actor, org);
+    await deleteOrg(c.var.db, c.env, actor, org, proof);
+  });
   await recordAdminAction(c.env, {
     actorUserId: c.var.user!.id,
     action: "org.delete",
