@@ -496,6 +496,30 @@ export function QrGeneratorPage() {
 
         <QrFaq />
 
+        <section className="flex w-full max-w-3xl flex-col gap-3 text-sm">
+          <h2 className="text-xl font-bold text-balance">Prepare your QR code for print</h2>
+          <p className="text-muted">
+            Check the logo, printed size, and final proof before ordering cards, menus, or posters.
+          </p>
+          <ul className="flex list-disc flex-col gap-2 pl-5">
+            <li>
+              <a href="/blog/qr-code-logo" className="text-accent underline underline-offset-4">
+                How to add a logo to a QR code
+              </a>
+            </li>
+            <li>
+              <a href="/blog/qr-code-size" className="text-accent underline underline-offset-4">
+                Choose a QR code size for print
+              </a>
+            </li>
+            <li>
+              <a href="/blog/qr-code-testing" className="text-accent underline underline-offset-4">
+                Test a QR code before publishing
+              </a>
+            </li>
+          </ul>
+        </section>
+
         <OpenSourceNote />
       </main>
 
