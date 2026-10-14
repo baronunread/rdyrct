@@ -21,7 +21,8 @@
     "e2e:smoke": "playwright test",
     "verify": "bun run format:check && bun run lint && bun run check && bun run test && bun run test:worker",
     "verify:e2e": "bun run verify && bun run e2e:smoke",
-    "deploy": "bun run build && wrangler deploy",
+    "posthog:upload": "POSTHOG_CLI_PROJECT_ID=${POSTHOG_CLI_PROJECT_ID:-240147} posthog-cli --host ${POSTHOG_CLI_HOST:-https://eu.posthog.com} sourcemap process --directory dist/client/assets --release-name rdyrct --delete-after",
+    "deploy": "POSTHOG_SOURCEMAPS=1 bun run build && bun run posthog:upload && wrangler deploy",
     "db:migrate:local": "wrangler d1 migrations apply rdyrct --local",
     "db:reset:local": "rm -rf .wrangler/state/v3/d1 .wrangler/state/v3/kv && wrangler d1 migrations apply rdyrct --local",
     "db:migrate:remote": "wrangler d1 migrations apply rdyrct --remote",
@@ -91,6 +92,7 @@
     "@evlog/cli": "0.6.3",
     "@oxlint/plugins": "1.85.0",
     "@playwright/test": "^1.63.0",
+    "@posthog/cli": "^0.18.10",
     "@tailwindcss/vite": "^4.3.3",
     "@types/canvas-confetti": "^1.9.0",
     "@types/d3-geo": "^3.1.1",
@@ -118,5 +120,8 @@
     "vitest": "^4.1.11",
     "wrangler": "^4.141.0"
   },
-  "packageManager": "bun@1.4.3"
+  "packageManager": "bun@1.4.3",
+  "trustedDependencies": [
+    "@posthog/cli"
+  ]
 }

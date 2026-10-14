@@ -5,7 +5,14 @@
   "ignorePatterns": ["scripts/seed-local.ts", ".oxlint/anti-slop/**"],
   // @oxlint/plugins is imported by the vendored anti-slop plugin, which the
   // ignorePatterns above keep out of the analysis.
-  "ignoreDependencies": ["tailwindcss", "@oxlint/plugins"],
+  // preloadFonts in vite.config.ts resolves these package names dynamically;
+  // the stylesheet also imports them through /node_modules URLs.
+  "ignoreDependencies": [
+    "tailwindcss",
+    "@oxlint/plugins",
+    "@fontsource-variable/figtree",
+    "@fontsource/jetbrains-mono",
+  ],
   // scripts/og-image.html is the source for public/og.png. It is only ever
   // opened through the dev server, which is what resolves these hrefs; there
   // is no bundler step to point at the real files.

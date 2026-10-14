@@ -4,6 +4,7 @@ import { bufferBeforeConsent, discardBuffer, drainBuffer } from "./consent-buffe
 import { CONSENT_KEY, onConsentLapse, readConsent, writeConsent } from "./consent";
 import { FUNNEL, isFunnelEvent } from "./funnel";
 import { clearHeroVariant, shownHeroVariant } from "./hero-variant";
+import { posthogTokenForHost } from "./posthog-project";
 
 // Nothing here loads posthog-js or contacts PostHog until the user accepts
 // analytics in the consent banner (see consent-banner.tsx): before that,
@@ -39,7 +40,22 @@ function loadClient(): Promise<typeof PosthogClient | null> | null {
       // SAFETY: Vite inlines every VITE_-prefixed variable as a string
       // literal at build time, or leaves it undefined when it is unset, which
       // is exactly what the check below is for.
-      const token = import.meta.env.VITE_PUBLIC_POSTHOG_PROJECT_TOKEN as string | undefined;
+      const productionToken = import.meta.env.VITE_PUBLIC_POSTHOG_PROJECT_TOKEN as
+        | string
+        | undefined;
+      // SAFETY: Vite inlines this public project token as a string or undefined too.
+      const developmentToken = import.meta.env.VITE_PUBLIC_POSTHOG_DEV_PROJECT_TOKEN as
+        | string
+        | undefined;
+      const token = posthogTokenForHost(
+        window.location.hostname,
+        productionToken,
+        developmentToken,
+        import.meta.env.DEV,
+      );
+      // An unconfigured local project stays silent rather than falling back
+      // to production. This also covers built previews, where DEV is false.
+      if (!token) return null;
       // SAFETY: as above.
       const host = import.meta.env.VITE_PUBLIC_POSTHOG_HOST as string | undefined;
       const missingVariable = !token

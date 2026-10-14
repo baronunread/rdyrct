@@ -70,6 +70,8 @@ export default defineConfig({
       env: {
         PLAYWRIGHT_TEST: "1",
         CLOUDFLARE_ENV: "playwright",
+        // Browser checks must never write into either real PostHog project.
+        VITE_PUBLIC_POSTHOG_DEV_PROJECT_TOKEN: "phc_e2e",
       },
     },
     {
@@ -87,6 +89,7 @@ export default defineConfig({
       // These tests are about response headers and need no backend state.
       env: {
         PLAYWRIGHT_TEST: "1",
+        VITE_PUBLIC_POSTHOG_DEV_PROJECT_TOKEN: "phc_e2e",
       },
     },
   ],

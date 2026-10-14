@@ -72,6 +72,16 @@ const FUNNEL_EVENTS: ReadonlySet<string> = new Set([
   SIGNUP_FAILED,
 ]);
 
+/** A successful email response may be a pending or duplicate signup. Only a
+ * session token proves the new account is already usable without an OTP. */
+export function captureEmailSignup(
+  capture: (event: string, props: { method: string }) => void,
+  signup: { token?: string | null } | null,
+) {
+  capture(FUNNEL.signupSubmitted, { method: "email" });
+  if (signup?.token) capture(USER_SIGNED_UP, { method: "email" });
+}
+
 /** `next` with `?signup=google` added, for newUserCallbackURL. */
 export function googleSignupUrl(next: string): string {
   const url = new URL(next, window.location.origin);

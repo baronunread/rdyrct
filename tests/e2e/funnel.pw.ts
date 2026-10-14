@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { gunzipSync } from "node:zlib";
 import { pinHeroVariant } from "./pages";
 
 // The funnel (#64) is only worth anything if the consent gate holds, so these
@@ -11,6 +12,21 @@ import { pinHeroVariant } from "./pages";
 
 const POSTHOG_GLOB = "**/*.i.posthog.com/**";
 const CONSENT_KEY = "rdyrct:consent:v2";
+
+test("local browser analytics uses the test project after consent", async ({ page }) => {
+  const tokens: string[] = [];
+  await trapPostHog(page);
+  page.on("request", (request) => {
+    if (!request.url().includes(".i.posthog.com/flags")) return;
+    const payload = request.postDataBuffer();
+    // The SDK compresses its flags request, even before capture starts.
+    if (payload) tokens.push((payload[0] === 0x1f ? gunzipSync(payload) : payload).toString());
+    tokens.push(request.url());
+  });
+  await page.goto("/");
+  await page.getByRole("button", { name: "Accept", exact: true }).click();
+  await expect.poll(() => tokens.join(" ")).toContain("phc_e2e");
+});
 
 for (const variant of ["control", "test"] as const) {
   test(`${variant} signup CTA navigates in-page and keeps attribution after reload`, async ({

@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { defineConfig, type Plugin } from "vite";
+import { defineConfig, type Plugin, type UserConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import { cloudflare } from "@cloudflare/vite-plugin";
@@ -59,7 +59,7 @@ function preloadFonts(): Plugin {
   };
 }
 
-export default defineConfig(async () => ({
+export default defineConfig(async (): Promise<UserConfig> => ({
   plugins: [
     react(),
     tailwindcss(),
@@ -98,5 +98,10 @@ export default defineConfig(async () => ({
   server: { allowedHosts: true as const },
   // scripts/prerender-public.tsx reads the manifest to preload the landing
   // route's chunks, which only the entry's dynamic import() names otherwise.
-  build: { manifest: true },
+  build: {
+    manifest: true,
+    // Only release builds need maps. The upload command removes them before
+    // deployment; ordinary builds and browser checks need no PostHog access.
+    sourcemap: process.env.POSTHOG_SOURCEMAPS === "1" ? "hidden" : false,
+  },
 }));
