@@ -12,8 +12,7 @@
  * which is the whole point of those two pages.
  */
 import type { ReactNode } from "react";
-import { LazyMotion, MotionConfig } from "motion/react";
-import { loadMotionFeatures } from "../lib/load-motion";
+import { LazyMotion, MotionConfig, domAnimation } from "motion/react";
 import { useSeo } from "../lib/seo";
 import { useMarketingScroll } from "../lib/marketing-scroll";
 import { useAudience } from "../lib/audience";
@@ -40,7 +39,7 @@ export function MarketingPage({
 
   return (
     <MotionConfig reducedMotion="user">
-      <LazyMotion features={loadMotionFeatures}>
+      <LazyMotion features={domAnimation}>
         <div className="relative mx-auto min-h-dvh max-w-5xl px-6">
           <MarketingGlow />
           <WebMcpMarketingTools />
