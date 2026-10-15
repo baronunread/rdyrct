@@ -184,7 +184,7 @@ function TourTab({
       aria-controls={`tour-panel-${index}`}
       aria-selected={selected}
       onClick={onSelect}
-      className="flex cursor-pointer flex-col gap-1.5 text-left text-[11px] font-medium sm:text-sm text-muted hover:text-text aria-selected:text-text"
+      className="flex cursor-pointer flex-col gap-1.5 text-left text-[11px] font-medium min-[360px]:text-xs min-[390px]:text-sm text-muted hover:text-text aria-selected:text-text"
     >
       <span className="whitespace-nowrap">
         <span className="hidden sm:inline">{index + 1}. </span>
