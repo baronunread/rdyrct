@@ -36,6 +36,18 @@ test("the tour moves on by itself while it is on screen", async ({ page }) => {
   await expect(page.getByRole("tabpanel", { name: /share it/i })).toBeVisible();
 });
 
+// The three tabs share one row on a phone: a label wrapping to a second line
+// made the third tab taller than the others.
+test("the tour tabs stay on one row on a narrow phone", async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 700 });
+  await page.goto("/");
+  const tabs = page.getByRole("tab");
+  const heights = await tabs.evaluateAll((els) =>
+    els.map((el) => el.getBoundingClientRect().height),
+  );
+  expect(new Set(heights).size).toBe(1);
+});
+
 async function shorten(page: Page, destination: string) {
   await page.goto("/");
   await page.getByLabel("Shorten a link, no account needed").fill(destination);

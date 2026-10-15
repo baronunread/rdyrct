@@ -101,7 +101,11 @@ export function ProductTour({ footer }: { footer?: ReactNode }) {
 
   return (
     <div className="flex flex-col gap-3">
-      <div role="tablist" aria-label="Product tour" className="grid grid-cols-3 gap-2">
+      <div
+        role="tablist"
+        aria-label="Product tour"
+        className="grid grid-cols-[repeat(3,auto)] justify-between gap-2"
+      >
         {STEPS.map((s, i) => (
           <TourTab
             key={s.label}
@@ -184,7 +188,7 @@ function TourTab({
       aria-controls={`tour-panel-${index}`}
       aria-selected={selected}
       onClick={onSelect}
-      className="flex cursor-pointer flex-col gap-1.5 text-left text-sm font-medium text-muted hover:text-text aria-selected:text-text"
+      className="flex cursor-pointer flex-col gap-1.5 text-left text-xs font-medium whitespace-nowrap sm:text-sm text-muted hover:text-text aria-selected:text-text"
     >
       {label}
       <span className="h-0.5 overflow-hidden rounded-full bg-border">
