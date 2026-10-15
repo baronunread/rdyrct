@@ -9,7 +9,7 @@ export function Footer() {
     <footer className="mt-16 border-t border-border pt-6 pb-4 text-xs text-muted">
       <div className="mx-auto flex max-w-5xl flex-col items-start gap-3 px-1 sm:flex-row sm:items-center sm:justify-between">
         <span>© {new Date().getFullYear()} Andrea Bruno</span>
-        <nav className="grid w-full grid-cols-2 gap-x-6 gap-y-3 sm:flex sm:w-auto sm:items-center sm:gap-4">
+        <nav className="grid w-full grid-cols-2 gap-x-6 *:py-2 sm:flex sm:w-auto sm:items-center sm:gap-4 sm:*:py-0">
           {/* A real page people search for, not just a legal link: it is the
               only entry point to the app that needs no account at all. */}
           <MarketingLink to="/qr-code-generator" className="whitespace-nowrap hover:text-accent">

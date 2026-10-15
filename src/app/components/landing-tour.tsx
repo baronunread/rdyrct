@@ -547,7 +547,7 @@ function LinksScene({ playing, still }: { playing: boolean; still: boolean }) {
           {rows.map((r) => (
             <tr key={r.slug} className={r.slug === NEW_LINK.slug ? "tour-row-new" : undefined}>
               <Td>
-                <span className="block font-mono text-2xs text-muted">{r.host}</span>
+                <span className="block font-mono text-xs text-muted">{r.host}</span>
                 <span className="font-mono font-bold text-accent">/{r.slug}</span>
               </Td>
               <Td className="hidden sm:table-cell">{r.title}</Td>

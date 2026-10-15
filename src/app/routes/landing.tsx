@@ -246,7 +246,7 @@ function MobilePlans({ paidTo }: { paidTo: (p: "hobby" | "pro") => string }) {
               <p className={highlight ? "font-bold text-accent" : "font-bold"}>
                 {name}
                 {highlight && (
-                  <span className="ml-2 rounded-full border border-accent/40 px-2 py-0.5 text-2xs text-accent">
+                  <span className="ml-2 rounded-full border border-accent/40 px-2 py-0.5 text-xs text-accent">
                     Best value
                   </span>
                 )}
@@ -326,7 +326,7 @@ export function PricingSection({ phoneCards = true }: { phoneCards?: boolean }) 
                     third of Hobby, which the limits table backs. */}
                 <span className="inline-flex items-center gap-2 text-accent">
                   Pro
-                  <span className="rounded-full border border-accent/40 px-2 py-0.5 text-2xs text-accent">
+                  <span className="rounded-full border border-accent/40 px-2 py-0.5 text-xs text-accent">
                     Best value
                   </span>
                 </span>
@@ -345,7 +345,7 @@ export function PricingSection({ phoneCards = true }: { phoneCards?: boolean }) 
               </Td>
               <Cell tier="pro">
                 <span className="text-base font-bold text-accent">{PLAN_PRICES.pro}/mo</span>
-                <span className="block text-2xs font-normal text-muted">
+                <span className="block text-xs font-normal text-muted">
                   only the org owner pays
                 </span>
               </Cell>
@@ -820,7 +820,7 @@ function InboxMail({
       <div className="flex min-w-0 flex-1 flex-col gap-1">
         <div className="flex items-baseline justify-between gap-2">
           <p className="truncate text-sm font-bold">{from}</p>
-          <span className="shrink-0 text-2xs text-muted">now</span>
+          <span className="shrink-0 text-xs text-muted">now</span>
         </div>
         <p className="truncate text-sm text-muted">{subject}</p>
         <p className={cn("truncate font-mono text-xs", tone.link)}>{link}</p>
@@ -862,7 +862,7 @@ function CustomDomainSection() {
           variants={inboxVariants}
           className="order-2 flex w-full flex-col gap-3 rounded-2xl bg-surface-2/40 p-3 md:order-1"
         >
-          <p className="px-1 text-2xs font-medium text-muted">Inbox</p>
+          <p className="px-1 text-xs font-medium text-muted">Inbox</p>
           <InboxMail
             from="Acme Store"
             subject="Your 20% code ends tonight"
@@ -1394,7 +1394,7 @@ function PricingTeaser() {
               <p className={highlight ? "font-bold text-accent" : "font-bold"}>
                 {name}
                 {highlight && (
-                  <span className="ml-2 rounded-full border border-accent/40 px-2 py-0.5 text-2xs text-accent">
+                  <span className="ml-2 rounded-full border border-accent/40 px-2 py-0.5 text-xs text-accent">
                     Best value
                   </span>
                 )}

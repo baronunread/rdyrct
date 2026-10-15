@@ -80,7 +80,7 @@ export function LandingHeader({ authed }: { authed: boolean }) {
           </Link>
         </span>
         <span data-auth-control="out" className="flex items-center gap-2.5 sm:gap-4">
-          <Link to="/login" className="whitespace-nowrap text-muted hover:text-accent">
+          <Link to="/login" className="-my-2 py-2 whitespace-nowrap text-muted hover:text-accent">
             Log in
           </Link>
           <Link
