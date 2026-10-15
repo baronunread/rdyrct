@@ -230,24 +230,6 @@
 :root[data-hero="test"] [data-hero-arm="control"][data-ssr] {
   display: none;
 }
-/* Sections fade in as they scroll into view, in CSS: the markup is visible
-   without JavaScript, and a browser without scroll timelines just shows it. */
-@keyframes reveal-in {
-  from {
-    opacity: 0;
-    transform: translateY(8px);
-  }
-}
-@supports (animation-timeline: view()) {
-  @media (prefers-reduced-motion: no-preference) {
-    .marketing-reveal {
-      animation: reveal-in linear both;
-      animation-timeline: view();
-      animation-range: entry 0% entry 40%;
-    }
-  }
-}
-
 html {
   background: var(--bg);
   color: var(--text);
