@@ -161,6 +161,17 @@ function TourScreens({ step, inView, still }: { step: number; inView: boolean; s
   );
 }
 
+/** The tab's name, or a shorter one on a phone too narrow for the full name. */
+function TabLabel({ label, short }: { label: string; short?: string }) {
+  if (!short) return label;
+  return (
+    <>
+      <span className="min-[375px]:hidden">{short}</span>
+      <span className="hidden min-[375px]:inline">{label}</span>
+    </>
+  );
+}
+
 /** One step's tab. Its bar fills over the step's time, and pauses with the
  * tour when it leaves the screen. */
 function TourTab({
@@ -192,14 +203,7 @@ function TourTab({
     >
       <span className="whitespace-nowrap">
         <span className="hidden sm:inline">{index + 1}. </span>
-        {short ? (
-          <>
-            <span className="min-[375px]:hidden">{short}</span>
-            <span className="hidden min-[375px]:inline">{label}</span>
-          </>
-        ) : (
-          label
-        )}
+        <TabLabel label={label} short={short} />
       </span>
       <span className="h-0.5 overflow-hidden rounded-full bg-border">
         {selected && (
