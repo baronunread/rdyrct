@@ -47,14 +47,13 @@ test("the tour tabs stay on one row at equal widths on a narrow phone", async ({
     els.map((el) => {
       const { height, width } = el.getBoundingClientRect();
       // The label never wraps (whitespace-nowrap), so a label too long for
-      // its tab shows up as overflow, not as a taller tab. Two pixels of
-      // slack: at 320px the longest label is a pixel wider than its tab.
+      // its tab shows up as overflow, not as a taller tab.
       const label = el.firstElementChild;
-      const clipped = !label || label.scrollWidth > el.clientWidth + 2;
-      return { height: Math.round(height), width: Math.round(width), clipped };
+      const overflow = label ? label.scrollWidth - el.clientWidth : 999;
+      return { height: Math.round(height), width: Math.round(width), overflow };
     }),
   );
-  expect(boxes.every((b) => !b.clipped)).toBe(true);
+  expect(boxes.map((b) => b.overflow)).toEqual([0, 0, 0]);
   expect(new Set(boxes.map((b) => b.height)).size).toBe(1);
   expect(new Set(boxes.map((b) => b.width)).size).toBe(1);
 });
