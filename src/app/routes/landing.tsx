@@ -6,13 +6,13 @@ import { ArrowRight, BarChart3, Check, Code2, ChevronDown } from "@/app/ui/icons
 import {
   LazyMotion,
   MotionConfig,
-  domAnimation,
   m,
   useInView,
   useReducedMotion,
   type Variants,
 } from "motion/react";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { loadMotionFeatures } from "../lib/load-motion";
 import { useHydrated } from "../lib/hydrated";
 import { useSeo } from "../lib/seo";
 import { useMarketingScroll } from "../lib/marketing-scroll";
@@ -1437,7 +1437,7 @@ export function LandingPage() {
 
   return (
     <MotionConfig reducedMotion="user">
-      <LazyMotion features={domAnimation}>
+      <LazyMotion features={loadMotionFeatures}>
         <div className="relative mx-auto min-h-dvh max-w-5xl px-6">
           <FaqJsonLd faqs={faqs} />
           <WebMcpMarketingTools />
