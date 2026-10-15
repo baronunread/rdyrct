@@ -13,7 +13,7 @@
     "binding": "ASSETS",
     "not_found_handling": "single-page-application",
     // Worker first for everything except the hashed bundle under /assets/.
-    // The custom-domain redirect, /:slug, the blog proxy, the per-page head
+    // The custom-domain redirect, /:slug, the per-page head
     // (page-meta.ts) and the security-header baseline all have to see a
     // request before an asset could answer it, and a slug is any
     // single-segment path, so no pattern separates "a short link" from "a
