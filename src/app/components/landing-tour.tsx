@@ -46,7 +46,8 @@ function NoQr() {
 const STEPS = [
   { label: "Create a link", path: "/dashboard", nav: "/dashboard" },
   { label: "Share it", path: "/links", nav: "/links" },
-  { label: "See what worked", path: "/analytics", nav: "/analytics" },
+  // `short` is what fits a third of the row on a phone under 375px.
+  { label: "See what worked", short: "See results", path: "/analytics", nav: "/analytics" },
 ] as const;
 
 /** How long each screen stays up before the tour moves on. */
@@ -107,6 +108,7 @@ export function ProductTour({ footer }: { footer?: ReactNode }) {
             key={s.label}
             index={i}
             label={s.label}
+            short={"short" in s ? s.short : undefined}
             selected={step === i}
             running={running}
             onSelect={() => setStep(i)}
@@ -164,6 +166,7 @@ function TourScreens({ step, inView, still }: { step: number; inView: boolean; s
 function TourTab({
   index,
   label,
+  short,
   selected,
   running,
   onSelect,
@@ -171,6 +174,7 @@ function TourTab({
 }: {
   index: number;
   label: string;
+  short?: string;
   selected: boolean;
   running: boolean;
   onSelect: () => void;
@@ -184,11 +188,18 @@ function TourTab({
       aria-controls={`tour-panel-${index}`}
       aria-selected={selected}
       onClick={onSelect}
-      className="flex cursor-pointer flex-col gap-1.5 text-left text-[11px] font-medium min-[360px]:text-xs min-[390px]:text-sm text-muted hover:text-text aria-selected:text-text"
+      className="flex cursor-pointer flex-col gap-1.5 text-left text-xs font-medium min-[390px]:text-sm text-muted hover:text-text aria-selected:text-text"
     >
       <span className="whitespace-nowrap">
         <span className="hidden sm:inline">{index + 1}. </span>
-        {label}
+        {short ? (
+          <>
+            <span className="min-[375px]:hidden">{short}</span>
+            <span className="hidden min-[375px]:inline">{label}</span>
+          </>
+        ) : (
+          label
+        )}
       </span>
       <span className="h-0.5 overflow-hidden rounded-full bg-border">
         {selected && (
