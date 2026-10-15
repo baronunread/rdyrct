@@ -110,7 +110,7 @@ function MadeLink({ link }: { link: StoredAnonLink }) {
             onCopy={(text) => copyToClipboard(text, toast)}
           />
         </div>
-        <p className="truncate text-2xs text-muted">from {link.source}</p>
+        <p className="truncate text-xs text-muted">from {link.source}</p>
         <Suspense fallback={<div className="mt-0.5 h-8" aria-hidden="true" />}>
           <QrDownloadButtons url={link.url} name={`qr-${link.slug}`} className="mt-0.5" />
         </Suspense>

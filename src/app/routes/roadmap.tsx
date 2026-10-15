@@ -108,7 +108,7 @@ function PlannedCard({ issue, title, body }: { issue: number; title: string; bod
     >
       <div className="flex items-baseline justify-between gap-3">
         <p className="font-bold">{title}</p>
-        <span className="shrink-0 font-mono text-2xs text-muted">#{issue}</span>
+        <span className="shrink-0 font-mono text-xs text-muted">#{issue}</span>
       </div>
       <p className="text-sm text-muted">{body}</p>
     </a>

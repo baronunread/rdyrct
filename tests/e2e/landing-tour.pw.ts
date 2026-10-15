@@ -36,6 +36,28 @@ test("the tour moves on by itself while it is on screen", async ({ page }) => {
   await expect(page.getByRole("tabpanel", { name: /share it/i })).toBeVisible();
 });
 
+// The three tabs share one row, at equal widths, on a phone: a label wrapping
+// to a second line made the third tab taller than the others.
+test("the tour tabs stay on one row at equal widths on a narrow phone", async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 700 });
+  await page.goto("/");
+  const tabs = page.getByRole("tablist", { name: "Product tour" }).getByRole("tab");
+  await expect(tabs).toHaveCount(3);
+  const boxes = await tabs.evaluateAll((els) =>
+    els.map((el) => {
+      const { height, width } = el.getBoundingClientRect();
+      // The label never wraps (whitespace-nowrap), so a label too long for
+      // its tab shows up as overflow, not as a taller tab.
+      const label = el.firstElementChild;
+      const overflow = label ? label.scrollWidth - el.clientWidth : 999;
+      return { height: Math.round(height), width: Math.round(width), overflow };
+    }),
+  );
+  expect(boxes.map((b) => b.overflow)).toEqual([0, 0, 0]);
+  expect(new Set(boxes.map((b) => b.height)).size).toBe(1);
+  expect(new Set(boxes.map((b) => b.width)).size).toBe(1);
+});
+
 async function shorten(page: Page, destination: string) {
   await page.goto("/");
   await page.getByLabel("Shorten a link, no account needed").fill(destination);
