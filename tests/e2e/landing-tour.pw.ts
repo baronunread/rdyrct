@@ -41,7 +41,9 @@ test("the tour moves on by itself while it is on screen", async ({ page }) => {
 test("the tour tabs stay on one row at equal widths on a narrow phone", async ({ page }) => {
   await page.setViewportSize({ width: 320, height: 700 });
   await page.goto("/");
-  const boxes = await page.getByRole("tab").evaluateAll((els) =>
+  const tabs = page.getByRole("tab");
+  await expect(tabs).toHaveCount(3);
+  const boxes = await tabs.evaluateAll((els) =>
     els.map((el) => {
       const { height, width } = el.getBoundingClientRect();
       return { height: Math.round(height), width: Math.round(width) };
