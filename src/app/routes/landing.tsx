@@ -109,7 +109,7 @@ function Section({
       initial={false}
       onViewportEnter={onEnter}
       viewport={{ once: true, margin: "-80px" }}
-      className={`marketing-reveal ${className}`}
+      className={className}
     >
       {children}
     </m.section>
