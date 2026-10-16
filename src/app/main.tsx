@@ -57,6 +57,7 @@ const QrGeneratorPage = lazyRouteComponent(
 const PricingPage = lazyRouteComponent(() => import("./routes/pricing"), "PricingPage");
 const RoadmapPage = lazyRouteComponent(() => import("./routes/roadmap"), "RoadmapPage");
 const DocsPage = lazyRouteComponent(() => import("./routes/docs"), "DocsPage");
+const ComparePage = lazyRouteComponent(() => import("./routes/alternatives"), "ComparePage");
 const BitlyAlternativePage = lazyRouteComponent(
   () => import("./routes/alternatives"),
   "BitlyAlternativePage",
@@ -64,6 +65,10 @@ const BitlyAlternativePage = lazyRouteComponent(
 const RebrandlyAlternativePage = lazyRouteComponent(
   () => import("./routes/alternatives"),
   "RebrandlyAlternativePage",
+);
+const DubAlternativePage = lazyRouteComponent(
+  () => import("./routes/alternatives"),
+  "DubAlternativePage",
 );
 const ShortIoAlternativePage = lazyRouteComponent(
   () => import("./routes/alternatives"),
@@ -217,6 +222,12 @@ const roadmapRoute = createRoute({
   component: RoadmapPage,
   ...marketingPending,
 });
+const compareRoute = createRoute({
+  getParentRoute: () => publicLayoutRoute,
+  path: "/compare",
+  component: ComparePage,
+  ...marketingPending,
+});
 const bitlyAlternativeRoute = createRoute({
   getParentRoute: () => publicLayoutRoute,
   path: "/bitly-alternative",
@@ -227,6 +238,12 @@ const rebrandlyAlternativeRoute = createRoute({
   getParentRoute: () => publicLayoutRoute,
   path: "/rebrandly-alternative",
   component: RebrandlyAlternativePage,
+  ...marketingPending,
+});
+const dubAlternativeRoute = createRoute({
+  getParentRoute: () => publicLayoutRoute,
+  path: "/dub-alternative",
+  component: DubAlternativePage,
   ...marketingPending,
 });
 const shortIoAlternativeRoute = createRoute({
@@ -400,8 +417,10 @@ const routeTree = rootRoute.addChildren([
     qrGeneratorRoute,
     pricingRoute,
     roadmapRoute,
+    compareRoute,
     bitlyAlternativeRoute,
     rebrandlyAlternativeRoute,
+    dubAlternativeRoute,
     shortIoAlternativeRoute,
     docsRoute,
     privacyRoute,

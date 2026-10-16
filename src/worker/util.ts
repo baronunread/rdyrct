@@ -40,8 +40,10 @@ export const RESERVED_SLUGS = new Set([
   "qr-code-generator",
   "pricing",
   "roadmap",
+  "compare",
   "bitly-alternative",
   "rebrandly-alternative",
+  "dub-alternative",
   "short-io-alternative",
   "docs",
   // authenticated app tabs

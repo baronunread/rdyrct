@@ -387,10 +387,22 @@ test("the footer groups its links and the compare links lead to the comparison p
     "href",
     "/bitly-alternative",
   );
-  await expect(footer.getByRole("link", { name: "Rebrandly vs Bitly" })).toHaveAttribute(
+  await expect(footer.getByRole("link", { name: "Dub alternative" })).toHaveAttribute(
     "href",
-    "/blog/rebrandly-vs-bitly",
+    "/dub-alternative",
   );
+});
+
+// The index behind "All comparisons" lists every tool and links to its page.
+test("the compare index lists each tool and opens its comparison", async ({ page }) => {
+  await page.goto("/");
+  await page.locator("footer").getByRole("link", { name: "All comparisons" }).click();
+  await expect(page).toHaveURL(/\/compare$/);
+  for (const name of ["Bitly", "Rebrandly", "Dub", "Short.io"]) {
+    await expect(page.getByRole("heading", { name: `vs ${name}` })).toBeVisible();
+  }
+  await page.getByRole("link", { name: /vs Dub/ }).click();
+  await expect(page).toHaveURL(/\/dub-alternative$/);
 });
 
 // Each comparison page names the other tool, shows both columns of the
@@ -399,6 +411,7 @@ test("the footer groups its links and the compare links lead to the comparison p
 for (const { path, name } of [
   { path: "/bitly-alternative", name: "Bitly" },
   { path: "/rebrandly-alternative", name: "Rebrandly" },
+  { path: "/dub-alternative", name: "Dub" },
   { path: "/short-io-alternative", name: "Short.io" },
 ]) {
   test(`${path} compares rdyrct with ${name}, including where ${name} wins`, async ({ page }) => {
