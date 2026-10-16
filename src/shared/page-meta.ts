@@ -25,8 +25,10 @@ export const PRERENDERED_PUBLIC_PATHS = new Set<string>([
   "/qr-code-generator",
   "/docs",
   "/roadmap",
+  "/compare",
   "/bitly-alternative",
   "/rebrandly-alternative",
+  "/dub-alternative",
   "/short-io-alternative",
   "/privacy",
   "/terms",
@@ -193,6 +195,19 @@ Accept: application/json, text/event-stream
 }
 \`\`\``,
   },
+  "/compare": {
+    title: "Compare rdyrct with Bitly, Rebrandly, Dub and Short.io",
+    description:
+      "How rdyrct compares with Bitly, Rebrandly, Dub and Short.io on price, custom domains, link limits and analytics, and when each other tool is the better pick.",
+    markdown: `# Compare rdyrct with other link shorteners
+
+- [rdyrct vs Bitly](/bitly-alternative)
+- [rdyrct vs Rebrandly](/rebrandly-alternative)
+- [rdyrct vs Dub](/dub-alternative)
+- [rdyrct vs Short.io](/short-io-alternative)
+
+Each page compares price, custom domains, link limits and analytics history, and says where the other tool is the better choice.`,
+  },
   "/bitly-alternative": {
     title: "Bitly alternative: rdyrct vs Bitly pricing and limits",
     description:
@@ -212,6 +227,16 @@ Bitly's first plan with a custom domain is Growth at $29 a month on annual billi
 Rebrandly's free plan includes a custom domain and rdyrct's does not. Past the free plans, rdyrct costs less: a custom domain from $4 a month.
 
 [Compare in full](/rebrandly-alternative) or [see rdyrct pricing](/pricing).`,
+  },
+  "/dub-alternative": {
+    title: "Dub alternative: rdyrct vs Dub pricing and limits",
+    description:
+      "rdyrct against Dub: plan prices, custom domains, link and event limits, and when Dub's volume is worth $90 a month. Start free, no card.",
+    markdown: `# Dub alternative: rdyrct vs Dub
+
+Dub's pricing page lists no free plan, and its plans start at $90 a month. rdyrct includes a custom domain from $4 a month. If you create thousands of links a month, Dub is built for that.
+
+[Compare in full](/dub-alternative) or [see rdyrct pricing](/pricing).`,
   },
   "/short-io-alternative": {
     title: "Short.io alternative: rdyrct vs Short.io pricing and limits",
