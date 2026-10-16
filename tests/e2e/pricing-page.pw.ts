@@ -51,7 +51,7 @@ test("a paid plan card leads to sign-up, then checkout", async ({ page }) => {
 test("the pricing page's raw HTML carries its own copy, not the homepage's", async ({ page }) => {
   const html = await (await page.request.get("/pricing")).text();
   expect(html).toContain("<h1>rdyrct pricing</h1>");
-  expect(html).not.toContain("show which channel earned the click");
+  expect(html).not.toContain("Know which channel earned the click");
 });
 
 // One primary button, on the plan the finder picked, so the cards and the
