@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import { and, eq, isNull, lte, or } from "drizzle-orm";
-import { Polar } from "@polar-sh/sdk";
+import { createPolar } from "@polar-sh/sdk/2026-04";
 import { Webhook } from "standardwebhooks";
 import { drizzle } from "drizzle-orm/d1";
 import * as schema from "../db/schema";
@@ -17,10 +17,10 @@ import type { BillingProvider } from "../billing-provider";
 
 const polarFor = (env: Env): BillingProvider =>
   env.BILLING ??
-  new Polar({
+  createPolar({
     // Unset only when billing is off, and the routes below answer 404 first.
     accessToken: env.POLAR_ACCESS_TOKEN ?? "",
-    server: env.POLAR_SERVER ?? "sandbox",
+    environment: env.POLAR_SERVER ?? "sandbox",
   });
 
 // Mounted at /api/billing: the caller's own subscription (per-user billing).
@@ -69,8 +69,8 @@ billingRoutes.post("/checkout", requireUser, async (c) => {
     products: [productId],
     // Polar interpolates {CHECKOUT_ID}; the SPA uses it to confirm the
     // upgrade before celebrating (webhook is still the entitlement source).
-    successUrl: `${c.env.APP_URL}/billing?checkout_id={CHECKOUT_ID}`,
-    customerEmail: user.email,
+    success_url: `${c.env.APP_URL}/billing?checkout_id={CHECKOUT_ID}`,
+    customer_email: user.email,
     metadata: { userId: user.id },
   });
   log.audit({
@@ -93,8 +93,8 @@ billingRoutes.post("/portal", requireUser, async (c) => {
     .where(eq(schema.user.id, c.var.user!.id));
   const customerId = rows[0]?.customerId;
   if (!customerId) throw new HTTPException(400, { message: "No billing account yet" });
-  const session = await polarFor(c.env).customerSessions.create({ customerId });
-  return c.json({ url: session.customerPortalUrl });
+  const session = await polarFor(c.env).customerSessions.create({ customer_id: customerId });
+  return c.json({ url: session.customer_portal_url });
 });
 
 /**
