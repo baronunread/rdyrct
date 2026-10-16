@@ -243,14 +243,16 @@ function planPrice(plan: "hobby" | "pro", interval: "month" | "year") {
   return interval === "year" ? `${PLAN_PRICES_YEARLY[plan]}/mo` : `${PLAN_PRICES[plan]}/mo`;
 }
 
-/** A tier's name, with the "Most popular" pill on the highlighted one. */
+/** A tier's name, with the "Best value" pill on the highlighted one. Never
+ * "Most popular": nothing backs that, and per link Pro costs about a third of
+ * Hobby, which the limits do. */
 function PlanName({ name, highlight }: { name: string; highlight?: boolean }) {
   return (
     <p className={highlight ? "font-bold text-accent" : "font-bold"}>
       {name}
       {highlight && (
-        <span className="ml-2 rounded-full border border-accent/40 px-2 py-0.5 text-2xs text-accent">
-          Most popular
+        <span className="ml-2 rounded-full border border-accent/40 px-2 py-0.5 text-xs text-accent">
+          Best value
         </span>
       )}
     </p>
@@ -423,7 +425,6 @@ function MobilePlans({
 export function PricingSection({ phoneCards = true }: { phoneCards?: boolean }) {
   const paidTo = usePaidPlanTo();
   const [interval, setInterval] = useState<"month" | "year">("month");
-  const yearly = interval === "year";
   return (
     <Section
       id="pricing"
@@ -434,144 +435,160 @@ export function PricingSection({ phoneCards = true }: { phoneCards?: boolean }) 
 
       {phoneCards && <MobilePlans paidTo={paidTo} interval={interval} />}
 
-      <div className={phoneCards ? "hidden sm:block" : undefined}>
-        <Table minWidth={phoneCards ? undefined : "min-w-2xl"}>
-          <thead>
-            <tr>
-              <Th></Th>
-              <Th>
-                Free
-                <span className="mt-0.5 block normal-case tracking-normal text-muted">
-                  For side projects
-                </span>
-              </Th>
-              <Th>
-                Hobby
-                <span className="mt-0.5 block normal-case tracking-normal text-muted">
-                  For creators & solo brands
-                </span>
-              </Th>
-              <Th className="border-x border-x-accent/25 bg-accent/10">
-                {/* "Best value", not "Most popular": per link Pro costs about a
-                    third of Hobby, which the limits table backs. */}
-                <span className="inline-flex items-center gap-2 text-accent">
-                  Pro
-                  <span className="rounded-full border border-accent/40 px-2 py-0.5 text-xs text-accent">
-                    Best value
-                  </span>
-                </span>
-                <span className="mt-0.5 block normal-case tracking-normal text-accent">
-                  For brands & growing teams
-                </span>
-              </Th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <Td className="font-bold">Price</Td>
-              <Td>$0</Td>
-              <Td>
-                <span className="text-base font-bold">{planPrice("hobby", interval)}</span>
-                {yearly && <span className="ml-1 text-2xs font-normal text-muted">yearly</span>}
-              </Td>
-              <Cell tier="pro">
-                <span className="text-base font-bold text-accent">
-                  {planPrice("pro", interval)}
-                </span>
-                {yearly && <span className="ml-1 text-2xs font-normal text-muted">yearly</span>}
-                <span className="block text-xs font-normal text-muted">
-                  only the org owner pays
-                </span>
-              </Cell>
-            </tr>
-            <tr>
-              <Td className="font-bold">Organizations</Td>
-              <Td>{PLAN_LIMITS.free.orgs}</Td>
-              <Td>{PLAN_LIMITS.hobby.orgs}</Td>
-              <Cell tier="pro">{PLAN_LIMITS.pro.orgs}</Cell>
-            </tr>
-            <tr>
-              <Td className="font-bold">Links</Td>
-              <Td>{PLAN_LIMITS.free.links}</Td>
-              <Td>{PLAN_LIMITS.hobby.links}</Td>
-              <Cell tier="pro">{formatNumber(PLAN_LIMITS.pro.links)}</Cell>
-            </tr>
-            <tr>
-              <Td className="font-bold">Custom slugs</Td>
-              <Td className="text-muted">Random only</Td>
-              <Td>On your domain</Td>
-              <Cell tier="pro">On your domains</Cell>
-            </tr>
-            <tr>
-              <Td className="font-bold">Team members</Td>
-              <Td>{PLAN_LIMITS.free.members}</Td>
-              <Td>{PLAN_LIMITS.hobby.members}</Td>
-              <Cell tier="pro">{PLAN_LIMITS.pro.members}</Cell>
-            </tr>
-            <tr>
-              <Td className="font-bold">QR codes</Td>
-              <YesCell />
-              <YesCell />
-              <YesCell tier="pro" />
-            </tr>
-            <tr>
-              <Td className="font-bold">QR logo, colors, and shapes</Td>
-              <NoCell />
-              <YesCell />
-              <YesCell tier="pro" />
-            </tr>
-            <tr>
-              <Td className="font-bold">Custom domains</Td>
-              <Td className="text-muted">No</Td>
-              <Td>{PLAN_LIMITS.hobby.domains}</Td>
-              <Cell tier="pro">{PLAN_LIMITS.pro.domains}</Cell>
-            </tr>
-            <tr>
-              <Td className="font-bold">Analytics history</Td>
-              <Td>{PLAN_LIMITS.free.analyticsDays} days</Td>
-              <Td>{PLAN_LIMITS.hobby.analyticsDays} days</Td>
-              <Cell tier="pro">{PLAN_LIMITS.pro.analyticsDays} days</Cell>
-            </tr>
-            <tr>
-              <Td className="font-bold">Support</Td>
-              <Td>GitHub issues</Td>
-              <Td>GitHub issues</Td>
-              <Cell tier="pro">Direct email support</Cell>
-            </tr>
-            <tr>
-              <Td />
-              <Td>
-                <Link
-                  to="/signup"
-                  onClick={() => trackCta("pricing_free")}
-                  className={buttonClass({ variant: "outline", size: "sm", className: "w-full" })}
-                >
-                  Sign up free
-                </Link>
-              </Td>
-              <Td>
-                <HrefLink
-                  href={paidTo("hobby", interval)}
-                  onClick={() => trackCta("pricing_hobby")}
-                  className={buttonClass({ variant: "outline", size: "sm", className: "w-full" })}
-                >
-                  Start Hobby
-                </HrefLink>
-              </Td>
-              <Cell tier="pro">
-                <HrefLink
-                  href={paidTo("pro", interval)}
-                  onClick={() => trackCta("pricing_pro")}
-                  className={buttonClass({ variant: "primary", size: "sm", className: "w-full" })}
-                >
-                  Start Pro
-                </HrefLink>
-              </Cell>
-            </tr>
-          </tbody>
-        </Table>
-      </div>
+      <PricingTable phoneCards={phoneCards} paidTo={paidTo} interval={interval} />
     </Section>
+  );
+}
+
+/** The full plan table, shown from the `sm` breakpoint up (always, when there
+ * are no phone cards to stand in for it on a narrow screen). */
+function PricingTable({
+  phoneCards,
+  paidTo,
+  interval,
+}: {
+  phoneCards: boolean;
+  paidTo: ReturnType<typeof usePaidPlanTo>;
+  interval: "month" | "year";
+}) {
+  const yearlyTag =
+    interval === "year" ? (
+      <span className="ml-1 text-2xs font-normal text-muted">yearly</span>
+    ) : null;
+  return (
+    <div className={phoneCards ? "hidden sm:block" : undefined}>
+      <Table minWidth={phoneCards ? undefined : "min-w-2xl"}>
+        <thead>
+          <tr>
+            <Th></Th>
+            <Th>
+              Free
+              <span className="mt-0.5 block normal-case tracking-normal text-muted">
+                For side projects
+              </span>
+            </Th>
+            <Th>
+              Hobby
+              <span className="mt-0.5 block normal-case tracking-normal text-muted">
+                For creators & solo brands
+              </span>
+            </Th>
+            <Th className="border-x border-x-accent/25 bg-accent/10">
+              {/* "Best value", not "Most popular": per link Pro costs about a
+                third of Hobby, which the limits table backs. */}
+              <span className="inline-flex items-center gap-2 text-accent">
+                Pro
+                <span className="rounded-full border border-accent/40 px-2 py-0.5 text-xs text-accent">
+                  Best value
+                </span>
+              </span>
+              <span className="mt-0.5 block normal-case tracking-normal text-accent">
+                For brands & growing teams
+              </span>
+            </Th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <Td className="font-bold">Price</Td>
+            <Td>$0</Td>
+            <Td>
+              <span className="text-base font-bold">{planPrice("hobby", interval)}</span>
+              {yearlyTag}
+            </Td>
+            <Cell tier="pro">
+              <span className="text-base font-bold text-accent">{planPrice("pro", interval)}</span>
+              {yearlyTag}
+              <span className="block text-xs font-normal text-muted">only the org owner pays</span>
+            </Cell>
+          </tr>
+          <tr>
+            <Td className="font-bold">Organizations</Td>
+            <Td>{PLAN_LIMITS.free.orgs}</Td>
+            <Td>{PLAN_LIMITS.hobby.orgs}</Td>
+            <Cell tier="pro">{PLAN_LIMITS.pro.orgs}</Cell>
+          </tr>
+          <tr>
+            <Td className="font-bold">Links</Td>
+            <Td>{PLAN_LIMITS.free.links}</Td>
+            <Td>{PLAN_LIMITS.hobby.links}</Td>
+            <Cell tier="pro">{formatNumber(PLAN_LIMITS.pro.links)}</Cell>
+          </tr>
+          <tr>
+            <Td className="font-bold">Custom slugs</Td>
+            <Td className="text-muted">Random only</Td>
+            <Td>On your domain</Td>
+            <Cell tier="pro">On your domains</Cell>
+          </tr>
+          <tr>
+            <Td className="font-bold">Team members</Td>
+            <Td>{PLAN_LIMITS.free.members}</Td>
+            <Td>{PLAN_LIMITS.hobby.members}</Td>
+            <Cell tier="pro">{PLAN_LIMITS.pro.members}</Cell>
+          </tr>
+          <tr>
+            <Td className="font-bold">QR codes</Td>
+            <YesCell />
+            <YesCell />
+            <YesCell tier="pro" />
+          </tr>
+          <tr>
+            <Td className="font-bold">QR logo, colors, and shapes</Td>
+            <NoCell />
+            <YesCell />
+            <YesCell tier="pro" />
+          </tr>
+          <tr>
+            <Td className="font-bold">Custom domains</Td>
+            <Td className="text-muted">No</Td>
+            <Td>{PLAN_LIMITS.hobby.domains}</Td>
+            <Cell tier="pro">{PLAN_LIMITS.pro.domains}</Cell>
+          </tr>
+          <tr>
+            <Td className="font-bold">Analytics history</Td>
+            <Td>{PLAN_LIMITS.free.analyticsDays} days</Td>
+            <Td>{PLAN_LIMITS.hobby.analyticsDays} days</Td>
+            <Cell tier="pro">{PLAN_LIMITS.pro.analyticsDays} days</Cell>
+          </tr>
+          <tr>
+            <Td className="font-bold">Support</Td>
+            <Td>GitHub issues</Td>
+            <Td>GitHub issues</Td>
+            <Cell tier="pro">Direct email support</Cell>
+          </tr>
+          <tr>
+            <Td />
+            <Td>
+              <Link
+                to="/signup"
+                onClick={() => trackCta("pricing_free")}
+                className={buttonClass({ variant: "outline", size: "sm", className: "w-full" })}
+              >
+                Sign up free
+              </Link>
+            </Td>
+            <Td>
+              <HrefLink
+                href={paidTo("hobby", interval)}
+                onClick={() => trackCta("pricing_hobby")}
+                className={buttonClass({ variant: "outline", size: "sm", className: "w-full" })}
+              >
+                Start Hobby
+              </HrefLink>
+            </Td>
+            <Cell tier="pro">
+              <HrefLink
+                href={paidTo("pro", interval)}
+                onClick={() => trackCta("pricing_pro")}
+                className={buttonClass({ variant: "primary", size: "sm", className: "w-full" })}
+              >
+                Start Pro
+              </HrefLink>
+            </Cell>
+          </tr>
+        </tbody>
+      </Table>
+    </div>
   );
 }
 

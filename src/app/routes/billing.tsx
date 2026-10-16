@@ -92,16 +92,16 @@ const PORTAL_SNAPSHOT_KEY = "billing:portal-snapshot";
  * to tell "the webhook has landed" from "it has not landed yet". */
 function portalState(user?: {
   plan: OrgPlan;
-  polarSubscriptionCancelAtPeriodEnd?: boolean;
-  polarSubscriptionCurrentPeriodEnd?: number | null;
-  polarSubscriptionInterval?: "month" | "year" | null;
+  polarSubscriptionCancelAtPeriodEnd: boolean;
+  polarSubscriptionCurrentPeriodEnd: number | null;
+  polarSubscriptionInterval: "month" | "year" | null;
 }): PortalState {
   if (!user) return { plan: "free", cancelAtPeriodEnd: false, periodEnd: null, interval: null };
   return {
     plan: user.plan,
-    cancelAtPeriodEnd: user.polarSubscriptionCancelAtPeriodEnd ?? false,
-    periodEnd: user.polarSubscriptionCurrentPeriodEnd ?? null,
-    interval: user.polarSubscriptionInterval ?? null,
+    cancelAtPeriodEnd: user.polarSubscriptionCancelAtPeriodEnd,
+    periodEnd: user.polarSubscriptionCurrentPeriodEnd,
+    interval: user.polarSubscriptionInterval,
   };
 }
 
@@ -737,15 +737,30 @@ function useAutoUpgradeFromUrl(
   useEffect(() => {
     if (!user || done.current) return;
     done.current = true;
-    const url = new URL(window.location.href);
-    const target = url.searchParams.get("plan");
-    const interval = url.searchParams.get("interval") === "year" ? "year" : "month";
-    if (target !== "hobby" && target !== "pro") return;
-    url.searchParams.delete("plan");
-    url.searchParams.delete("interval");
-    window.history.replaceState({}, "", url.toString());
-    if (user.plan === "free") upgrade.current(target, interval);
+    upgradeIfFree(user.plan, takeUpgradeRequest(), upgrade.current);
   }, [user]);
+}
+
+function upgradeIfFree(
+  plan: OrgPlan,
+  request: ReturnType<typeof takeUpgradeRequest>,
+  onUpgrade: (target: "hobby" | "pro", interval: BillingInterval) => void,
+) {
+  if (request && plan === "free") onUpgrade(request.target, request.interval);
+}
+
+/** The plan and cycle a landing CTA asked for, read off the URL and then
+ * removed from it, so a reload is an ordinary visit. Null when the URL asks
+ * for nothing. */
+function takeUpgradeRequest(): { target: "hobby" | "pro"; interval: BillingInterval } | null {
+  const url = new URL(window.location.href);
+  const target = url.searchParams.get("plan");
+  const interval = url.searchParams.get("interval") === "year" ? "year" : "month";
+  if (target !== "hobby" && target !== "pro") return null;
+  url.searchParams.delete("plan");
+  url.searchParams.delete("interval");
+  window.history.replaceState({}, "", url.toString());
+  return { target, interval };
 }
 
 function useCheckoutFlow() {
