@@ -54,6 +54,9 @@
 - [Self-hosted deployment instructions](https://github.com/baronunread/rdyrct)
 - [Pricing](https://rdyrct.com/pricing) (request `Accept: text/markdown` for Markdown)
 - [Development roadmap](https://rdyrct.com/roadmap)
+- [rdyrct vs Bitly](https://rdyrct.com/bitly-alternative)
+- [rdyrct vs Rebrandly](https://rdyrct.com/rebrandly-alternative)
+- [rdyrct vs Short.io](https://rdyrct.com/short-io-alternative)
 - [Privacy policy and cookie details](https://rdyrct.com/privacy)
 - [FAQs and feature explanations](https://rdyrct.com/#faq)
 

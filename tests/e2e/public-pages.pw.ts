@@ -375,7 +375,9 @@ test("the footer has a cookie policy that lands on the cookie section", async ({
 // The footer groups its links under Product, Compare and Company. The Compare
 // links point into the blog, which is a separate Worker, so they have to be
 // real addresses rather than SPA routes.
-test("the footer groups its links and the compare links lead into the blog", async ({ page }) => {
+test("the footer groups its links and the compare links lead to the comparison pages", async ({
+  page,
+}) => {
   await page.goto("/");
   const footer = page.locator("footer");
   for (const heading of ["Product", "Compare", "Company"]) {
@@ -383,17 +385,36 @@ test("the footer groups its links and the compare links lead into the blog", asy
   }
   await expect(footer.getByRole("link", { name: "Bitly alternative" })).toHaveAttribute(
     "href",
-    "/blog/migrate-from-bitly",
+    "/bitly-alternative",
   );
-  await expect(footer.getByRole("link", { name: "Rebrandly alternative" })).toHaveAttribute(
+  await expect(footer.getByRole("link", { name: "Rebrandly vs Bitly" })).toHaveAttribute(
     "href",
-    "/blog/rebrandly-alternatives",
-  );
-  await expect(footer.getByRole("link", { name: "Short.io alternative" })).toHaveAttribute(
-    "href",
-    "/blog/short-io-alternatives",
+    "/blog/rebrandly-vs-bitly",
   );
 });
+
+// Each comparison page names the other tool, shows both columns of the
+// table, and says where the other tool wins: a page that only flatters
+// rdyrct is the page nobody believes.
+for (const { path, name } of [
+  { path: "/bitly-alternative", name: "Bitly" },
+  { path: "/rebrandly-alternative", name: "Rebrandly" },
+  { path: "/short-io-alternative", name: "Short.io" },
+]) {
+  test(`${path} compares rdyrct with ${name}, including where ${name} wins`, async ({ page }) => {
+    await page.goto(path);
+    await expect(page.getByRole("heading", { level: 1 })).toContainText(name);
+    await expect(page.getByRole("columnheader", { name, exact: true }).first()).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: `Where ${name} is the better choice` }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: "Where rdyrct is the better choice" }),
+    ).toBeVisible();
+    await page.getByRole("link", { name: "Sign up free" }).click();
+    await expect(page).toHaveURL(/\/signup/);
+  });
+}
 
 // serveSpa gives the unhashed static files an hour-long cache. This same
 // fallback is what the Vite dev server answers /@vite/client and every source

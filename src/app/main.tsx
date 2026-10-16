@@ -57,6 +57,18 @@ const QrGeneratorPage = lazyRouteComponent(
 const PricingPage = lazyRouteComponent(() => import("./routes/pricing"), "PricingPage");
 const RoadmapPage = lazyRouteComponent(() => import("./routes/roadmap"), "RoadmapPage");
 const DocsPage = lazyRouteComponent(() => import("./routes/docs"), "DocsPage");
+const BitlyAlternativePage = lazyRouteComponent(
+  () => import("./routes/alternatives"),
+  "BitlyAlternativePage",
+);
+const RebrandlyAlternativePage = lazyRouteComponent(
+  () => import("./routes/alternatives"),
+  "RebrandlyAlternativePage",
+);
+const ShortIoAlternativePage = lazyRouteComponent(
+  () => import("./routes/alternatives"),
+  "ShortIoAlternativePage",
+);
 const AppShell = lazy(() => import("./routes/shell").then((m) => ({ default: m.AppShell })));
 const RequireAuth = lazy(() => import("./routes/shell").then((m) => ({ default: m.RequireAuth })));
 const RequireAdmin = lazy(() =>
@@ -203,6 +215,24 @@ const roadmapRoute = createRoute({
   getParentRoute: () => publicLayoutRoute,
   path: "/roadmap",
   component: RoadmapPage,
+  ...marketingPending,
+});
+const bitlyAlternativeRoute = createRoute({
+  getParentRoute: () => publicLayoutRoute,
+  path: "/bitly-alternative",
+  component: BitlyAlternativePage,
+  ...marketingPending,
+});
+const rebrandlyAlternativeRoute = createRoute({
+  getParentRoute: () => publicLayoutRoute,
+  path: "/rebrandly-alternative",
+  component: RebrandlyAlternativePage,
+  ...marketingPending,
+});
+const shortIoAlternativeRoute = createRoute({
+  getParentRoute: () => publicLayoutRoute,
+  path: "/short-io-alternative",
+  component: ShortIoAlternativePage,
   ...marketingPending,
 });
 const docsRoute = createRoute({
@@ -370,6 +400,9 @@ const routeTree = rootRoute.addChildren([
     qrGeneratorRoute,
     pricingRoute,
     roadmapRoute,
+    bitlyAlternativeRoute,
+    rebrandlyAlternativeRoute,
+    shortIoAlternativeRoute,
     docsRoute,
     privacyRoute,
     termsRoute,
