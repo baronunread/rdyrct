@@ -53,6 +53,11 @@ const ROUTE_SOURCES = new Map([
   ["/qr-code-generator", "src/app/routes/qr-generator.tsx"],
   ["/docs", "src/app/routes/docs.tsx"],
   ["/roadmap", "src/app/routes/roadmap.tsx"],
+  ["/compare", "src/app/routes/alternatives.tsx"],
+  ["/bitly-alternative", "src/app/routes/alternatives.tsx"],
+  ["/rebrandly-alternative", "src/app/routes/alternatives.tsx"],
+  ["/dub-alternative", "src/app/routes/alternatives.tsx"],
+  ["/short-io-alternative", "src/app/routes/alternatives.tsx"],
   ["/privacy", "src/app/routes/privacy.tsx"],
   ["/terms", "src/app/routes/terms.tsx"],
 ]);

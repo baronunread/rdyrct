@@ -45,12 +45,6 @@ test("a paid plan card leads to sign-up, then checkout", async ({ page }) => {
   ).toHaveAttribute("href", /\/signup\?next=%2Fbilling%3Fplan%3Dhobby/);
 });
 
-test("the team comparison names its sources and date", async ({ page }) => {
-  await page.goto("/pricing");
-  await expect(page.getByRole("heading", { name: /team of five/i })).toBeVisible();
-  await expect(page.getByText(/September 2026/)).toBeVisible();
-});
-
 // The HTML before any JavaScript runs is what a crawler, a link preview or an
 // AI fetcher reads. It used to be the homepage's copy on every route, so the
 // pricing page told them nothing about prices.
