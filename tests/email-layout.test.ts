@@ -26,6 +26,13 @@ describe("renderEmail (#73)", () => {
     expect(preheaderAt).toBeLessThan(headingAt);
   });
 
+  test("pads the preheader with zero-width characters only, never a visible space", () => {
+    const { html } = renderEmail(base, APP_URL, TO);
+    const hidden = html.html.match(/width:0[^>]*>([^<]*)<\/div>/)?.[1] ?? "";
+    expect(hidden.startsWith(base.preheader)).toBe(true);
+    expect(hidden.slice(base.preheader.length)).toMatch(/^[͏‌]{100,}$/);
+  });
+
   test("hides the preheader from the rendered message", () => {
     // It belongs in the inbox preview line, not at the top of the email.
     expect(renderEmail(base, APP_URL, TO).html.html).toContain("display:none");
@@ -120,7 +127,9 @@ describe("renderEmail (#73)", () => {
     };
     const { html, text } = renderEmail({ ...base, hero, footer: false }, APP_URL, TO);
     expect(html.html).toContain("Welcome to rdyrct");
-    expect(html.html).toContain("rdyr.cc/hello");
+    // Gmail linkifies a bare host; a zero-width space after each dot stops it.
+    expect(html.html).toContain("rdyr.​cc/hello");
+    expect(html.html).not.toContain("rdyr.cc/hello");
     expect(html.html).toContain('class="band"');
     expect(text).toContain("WELCOME TO RDYRCT");
     expect(text).toContain("https://example.com/long -> rdyr.cc/hello");

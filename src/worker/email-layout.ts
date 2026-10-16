@@ -71,11 +71,18 @@ export interface EmailBody {
 }
 
 /**
- * Hidden preview text. The zero-width joiners after it stop the client from
- * filling the rest of the preview line with the top of the message body.
+ * Hidden preview text. The invisible characters after it stop the client from
+ * filling the rest of the preview line with the top of the message body. They
+ * must be zero-width: a no-break space shows as a visible gap in Gmail's list.
  */
 function preheaderBlock(preheader: string): SafeHtml {
-  return emailHtml`<div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent;height:0;width:0">${preheader}${"‌ ".repeat(60)}</div>`;
+  return emailHtml`<div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent;height:0;width:0;mso-hide:all">${preheader}${"\u034f\u200c".repeat(100)}</div>`;
+}
+
+/** A zero-width space after each dot and colon keeps Gmail from turning the
+ * sample links into blue underlined ones. They are decoration, not links. */
+function noAutolink(text: string): string {
+  return text.replace(/[.:]/g, (mark) => `${mark}\u200b`);
 }
 
 /**
@@ -149,9 +156,9 @@ function heroRows(
           <td class="text" style="padding:0 26px 12px">
             ${content.paragraphs.map(centred)}
             <div class="code" style="margin:22px 0;padding:16px;border:1px solid ${LIGHT.border};border-radius:10px;background:${LIGHT.surface2};text-align:center;font-family:${CODE_FONT};color:${LIGHT.text}">
-              <div class="muted" style="font-size:13px;line-height:1.5;color:${LIGHT.muted};word-break:break-all">${hero.sample.long}</div>
+              <div class="muted" style="font-size:13px;line-height:1.5;color:${LIGHT.muted};word-break:break-all">${noAutolink(hero.sample.long)}</div>
               <div class="muted" style="font-size:16px;line-height:1.6;color:${LIGHT.muted}">&darr;</div>
-              <div class="eyebrow" style="font-size:20px;font-weight:700;color:${LIGHT.accent}">${hero.sample.short}</div>
+              <div class="eyebrow" style="font-size:20px;font-weight:700;color:${LIGHT.accent}">${noAutolink(hero.sample.short)}</div>
             </div>
             ${content.cta ? centredCta(content.cta) : null}
             ${
