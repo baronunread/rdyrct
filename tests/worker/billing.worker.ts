@@ -29,7 +29,7 @@ import type { BillingProvider } from "../../src/worker/billing-provider";
 // logic.
 const checkoutsCreate = vi.fn(async () => ({ url: "https://sandbox.polar.sh/checkout/test" }));
 const customerSessionsCreate = vi.fn(async () => ({
-  customerPortalUrl: "https://sandbox.polar.sh/portal/test",
+  customer_portal_url: "https://sandbox.polar.sh/portal/test",
 }));
 const billingProvider: BillingProvider = {
   checkouts: { create: checkoutsCreate },
@@ -152,8 +152,8 @@ describe("POST /api/billing/checkout", () => {
     expect(checkoutsCreate).toHaveBeenCalledWith(
       expect.objectContaining({
         products: [POLAR_PRO_PRODUCT_ID],
-        successUrl: "http://localhost/billing?checkout_id={CHECKOUT_ID}",
-        customerEmail: "admin@example.com",
+        success_url: "http://localhost/billing?checkout_id={CHECKOUT_ID}",
+        customer_email: "admin@example.com",
         metadata: { userId: "admin-1" },
       }),
     );
@@ -203,7 +203,7 @@ describe("POST /api/billing/portal", () => {
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ url: "https://sandbox.polar.sh/portal/test" });
     expect(customerSessionsCreate).toHaveBeenCalledWith(
-      expect.objectContaining({ customerId: "cus_123" }),
+      expect.objectContaining({ customer_id: "cus_123" }),
     );
   });
 });

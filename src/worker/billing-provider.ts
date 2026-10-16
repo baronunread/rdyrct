@@ -10,12 +10,12 @@ export interface BillingProvider {
   checkouts: {
     create(options: {
       products: string[];
-      successUrl: string;
-      customerEmail: string;
+      success_url: string;
+      customer_email: string;
       metadata: { userId: string };
     }): Promise<{ url: string }>;
   };
   customerSessions: {
-    create(options: { customerId: string }): Promise<{ customerPortalUrl: string }>;
+    create(options: { customer_id: string }): Promise<{ customer_portal_url: string }>;
   };
 }
