@@ -138,6 +138,9 @@ export type CtaPlacement =
   | "qr_page_signup"
   | "qr_page_pricing"
   | "header"
+  // The three /...-alternative comparison pages: one placement, since the
+  // pageview already says which competitor the visitor was reading about.
+  | "alternative_page_signup"
   | "pricing_free"
   | "pricing_hobby"
   | "pricing_pro"

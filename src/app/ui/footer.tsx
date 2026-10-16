@@ -62,24 +62,25 @@ export function Footer() {
             </li>
           </Column>
 
-          {/* The blog is a separate Worker behind the /blog* route, so these
-              are plain anchors: a client-side Link would try to render a path
-              the SPA does not have. */}
+          {/* The comparison pages are SPA routes. The blog is a separate Worker
+              behind the /blog* route, so its link is a plain anchor: a
+              client-side Link would try to render a path the SPA does not
+              have. */}
           <Column title="Compare">
             <li>
-              <a href="/blog/migrate-from-bitly" className={linkClass}>
+              <MarketingLink to="/bitly-alternative" className={linkClass}>
                 Bitly alternative
-              </a>
+              </MarketingLink>
             </li>
             <li>
-              <a href="/blog/rebrandly-alternatives" className={linkClass}>
+              <MarketingLink to="/rebrandly-alternative" className={linkClass}>
                 Rebrandly alternative
-              </a>
+              </MarketingLink>
             </li>
             <li>
-              <a href="/blog/short-io-alternatives" className={linkClass}>
+              <MarketingLink to="/short-io-alternative" className={linkClass}>
                 Short.io alternative
-              </a>
+              </MarketingLink>
             </li>
             <li>
               <a href="/blog/rebrandly-vs-bitly" className={linkClass}>
