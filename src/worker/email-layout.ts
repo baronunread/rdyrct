@@ -120,12 +120,17 @@ function plainRows(content: EmailContent, paragraphs: SafeHtml[]): SafeHtml {
 
 /** The hero layout's card rows. Centred, with a brand band that stays dark in
  * both themes. The sample pill is decoration, not a code to retype. */
-function heroRows(content: EmailContent, hero: NonNullable<EmailContent["hero"]>): SafeHtml {
+function heroRows(
+  content: EmailContent,
+  hero: NonNullable<EmailContent["hero"]>,
+  appUrl: string,
+): SafeHtml {
   const centred = (child: SafeHtml | string) =>
     emailHtml`<p class="text" style="margin:0 0 14px;font-family:${FONT};font-size:16px;line-height:1.6;text-align:center;color:${LIGHT.text}">${child}</p>`;
   return emailHtml`<tr>
           <td class="band" align="center" bgcolor="${DARK.bg}" style="padding:22px 26px;background:${DARK.bg};border-radius:12px 12px 0 0">
-            <span style="font-family:${FONT};font-size:22px;font-weight:700;letter-spacing:2px;color:${DARK.accent}">rdyrct</span>
+            <img src="${`${appUrl}/email-logo.png`}" width="40" height="40" alt="" style="vertical-align:middle;margin-right:12px;border:0;border-radius:9px">
+            <span style="vertical-align:middle;font-family:${FONT};font-size:22px;font-weight:700;letter-spacing:2px;color:${DARK.accent}">rdyrct</span>
           </td>
         </tr>
         <tr>
@@ -206,7 +211,7 @@ ${preheaderBlock(content.preheader)}
   <tr>
     <td align="center" style="padding:28px 16px">
       <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" class="card" style="max-width:520px;background:${LIGHT.surface};border:1px solid ${LIGHT.border};border-radius:12px">
-        ${content.hero ? heroRows(content, content.hero) : plainRows(content, paragraphs)}
+        ${content.hero ? heroRows(content, content.hero, appUrl) : plainRows(content, paragraphs)}
         ${
           content.footer === false
             ? null
