@@ -548,7 +548,29 @@ describe("POST /api/webhooks/polar", () => {
         metadata: { userId: "user-1" },
       },
     });
-    expect((await getUser()).plan).toBe("pro");
+    const user = await getUser();
+    expect(user.plan).toBe("pro");
+    expect(user.polarSubscriptionInterval).toBe("year");
+  });
+
+  it("records the billing cycle on each event, and clears it on revoke", async () => {
+    await seedUser();
+    const event = (type: string, product_id = "") => ({
+      type,
+      data: {
+        id: "sub_1",
+        status: "active",
+        product_id,
+        metadata: { userId: "user-1" },
+        modified_at: new Date().toISOString(),
+      },
+    });
+    await postWebhook(event("subscription.active", POLAR_PRO_PRODUCT_ID));
+    expect((await getUser()).polarSubscriptionInterval).toBe("month");
+    await postWebhook(event("subscription.updated", POLAR_HOBBY_YEARLY_PRODUCT_ID));
+    expect((await getUser()).polarSubscriptionInterval).toBe("year");
+    await postWebhook(event("subscription.revoked"));
+    expect((await getUser()).polarSubscriptionInterval).toBeNull();
   });
 
   it("subscription.active is a no-op without a userId in metadata", async () => {

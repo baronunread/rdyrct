@@ -316,8 +316,20 @@ function customerIdOf(event: PolarEvent): { polarCustomerId?: string } {
   return event.data.customer_id ? { polarCustomerId: event.data.customer_id } : {};
 }
 
-function subscriptionFacts(plan: "hobby" | "pro" | null, status: string) {
+function intervalForProduct(env: Env, productId: string | undefined): "month" | "year" | null {
+  if (!productId) return null;
+  if (productId === env.POLAR_HOBBY_YEARLY_PRODUCT_ID) return "year";
+  if (productId === env.POLAR_PRO_YEARLY_PRODUCT_ID) return "year";
+  return "month";
+}
+
+function subscriptionFacts(
+  plan: "hobby" | "pro" | null,
+  status: string,
+  interval: "month" | "year" | null,
+) {
   return {
+    polarSubscriptionInterval: interval,
     subscriptionPlan: plan,
     subscriptionStatus: status,
     plan: effectivePlanSql({ subscriptionPlan: plan, subscriptionStatus: status }),
@@ -350,7 +362,11 @@ async function subscriptionActiveMutation(db: Db, env: Env, event: PolarEvent) {
   return db
     .update(schema.user)
     .set({
-      ...subscriptionFacts(plan, event.data.status ?? "active"),
+      ...subscriptionFacts(
+        plan,
+        event.data.status ?? "active",
+        intervalForProduct(env, event.data.product_id),
+      ),
       polarCustomerId: event.data.customer_id ?? null,
       polarSubscriptionId: event.data.id,
       polarSubscriptionCancelAtPeriodEnd: false,
@@ -367,7 +383,7 @@ function subscriptionRevokedMutation(db: Db, event: PolarEvent) {
     .set({
       // The subscription is over, so its facts go with it. A comped user
       // keeps their comp, and `effectivePlanSql` keeps returning it.
-      ...subscriptionFacts(null, event.data.status ?? "canceled"),
+      ...subscriptionFacts(null, event.data.status ?? "canceled", null),
       polarSubscriptionId: null,
       polarSubscriptionCancelAtPeriodEnd: false,
       polarSubscriptionCurrentPeriodEnd: null,
@@ -413,7 +429,7 @@ async function subscriptionUpdatedMutation(db: Db, env: Env, event: PolarEvent) 
   return db
     .update(schema.user)
     .set({
-      ...subscriptionFacts(plan, status),
+      ...subscriptionFacts(plan, status, intervalForProduct(env, event.data.product_id)),
       // Identity moves with the facts. The row holds one subscription, the
       // most recently changed one, so writing another subscription's plan,
       // status and price while leaving the old id in place would describe a

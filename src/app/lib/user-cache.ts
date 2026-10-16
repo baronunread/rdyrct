@@ -33,6 +33,7 @@ const userSchema = v.object({
   plan: planField,
   polarSubscriptionCancelAtPeriodEnd: v.boolean(),
   polarSubscriptionCurrentPeriodEnd: v.nullable(v.number()),
+  polarSubscriptionInterval: v.nullable(v.picklist(["month", "year"])),
   hasBillingAccount: v.boolean(),
   comped: v.boolean(),
   image: v.nullable(v.string()),

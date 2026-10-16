@@ -103,6 +103,7 @@ export interface SessionUser {
   plan: OrgPlan;
   polarSubscriptionCancelAtPeriodEnd: boolean;
   polarSubscriptionCurrentPeriodEnd: number | null;
+  polarSubscriptionInterval: "month" | "year" | null;
   /** Same-origin serving URL for the user's avatar, or null (blobatar). */
   image: string | null;
 }

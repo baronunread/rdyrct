@@ -24,6 +24,7 @@ import {
   type OrgPlan,
   type PlanLimits,
 } from "@/shared/types";
+import { lookup } from "@/shared/lookup";
 import { Button } from "../ui/button";
 import { Badge, Card, PageHeader, Table, Th, Td } from "../ui/misc";
 import { BusyContent } from "../ui/spinner";
@@ -58,6 +59,7 @@ type PlanActionSnapshot = {
   confirmTimedOut: boolean;
   cancelAtPeriodEnd: boolean;
   periodEnd: number | null;
+  interval: "month" | "year" | null;
 };
 
 type PlanActionCommands = {
@@ -80,6 +82,7 @@ type PortalState = {
   plan: OrgPlan;
   cancelAtPeriodEnd: boolean;
   periodEnd: number | null;
+  interval: "month" | "year" | null;
 };
 
 const PORTAL_SNAPSHOT_KEY = "billing:portal-snapshot";
@@ -91,12 +94,14 @@ function portalState(user?: {
   plan: OrgPlan;
   polarSubscriptionCancelAtPeriodEnd?: boolean;
   polarSubscriptionCurrentPeriodEnd?: number | null;
+  polarSubscriptionInterval?: "month" | "year" | null;
 }): PortalState {
-  if (!user) return { plan: "free", cancelAtPeriodEnd: false, periodEnd: null };
+  if (!user) return { plan: "free", cancelAtPeriodEnd: false, periodEnd: null, interval: null };
   return {
     plan: user.plan,
     cancelAtPeriodEnd: user.polarSubscriptionCancelAtPeriodEnd ?? false,
     periodEnd: user.polarSubscriptionCurrentPeriodEnd ?? null,
+    interval: user.polarSubscriptionInterval ?? null,
   };
 }
 
@@ -104,7 +109,7 @@ function billingSnapshot(state: PortalState) {
   // JSON, not join: a join renders null as an empty string, so "no period
   // end" and "period end of ''" would compare equal and the wait would end
   // on a change that never happened.
-  return JSON.stringify([state.plan, state.cancelAtPeriodEnd, state.periodEnd]);
+  return JSON.stringify([state.plan, state.cancelAtPeriodEnd, state.periodEnd, state.interval]);
 }
 
 const PLAN_LABEL = {
@@ -432,11 +437,24 @@ function PlanComparison({ plan }: { plan: OrgPlan }) {
   return plan === "free" ? <PlanFeatureComparison /> : null;
 }
 
-function HobbyUpgradeHint({ snapshot }: { snapshot: PlanActionSnapshot }) {
-  if (snapshot.plan !== "hobby" || !snapshot.hasBillingAccount || snapshot.comped) return null;
-  return (
-    <p className="mt-2 text-xs text-muted">Want Pro? Switch plans from the subscription portal.</p>
-  );
+const PLAN_CHANGE_HINT = {
+  hobby:
+    "Want Pro? Change your plan, or switch between monthly and yearly, in the subscription portal.",
+  pro: "Switch between monthly and yearly in the subscription portal.",
+};
+
+function PlanChangeHint({ snapshot }: { snapshot: PlanActionSnapshot }) {
+  const hint =
+    snapshot.hasBillingAccount && !snapshot.comped && lookup(PLAN_CHANGE_HINT, snapshot.plan);
+  return hint ? <p className="mt-2 text-xs text-muted">{hint}</p> : null;
+}
+
+const INTERVAL_LABEL = { month: "Monthly", year: "Yearly" } as const;
+
+/** The plan badge: "Pro · Yearly" for a subscriber, just the plan for free or comped. */
+function planBadgeLabel({ plan, comped, interval }: PlanActionSnapshot): string {
+  const cycle = comped || !interval ? "" : ` · ${INTERVAL_LABEL[interval]}`;
+  return PLAN_LABEL[plan] + (plan === "free" ? "" : cycle);
 }
 
 function PlanActions({
@@ -452,7 +470,7 @@ function PlanActions({
         <div className="flex items-center justify-between">
           <p className="text-xs font-medium text-muted">Plan</p>
           <Badge color={snapshot.plan === "free" ? "muted" : "mint"}>
-            {PLAN_LABEL[snapshot.plan]}
+            {planBadgeLabel(snapshot)}
           </Badge>
         </div>
         <p className="text-sm text-muted">
@@ -470,7 +488,7 @@ function PlanActions({
           <PlanActionControl snapshot={snapshot} commands={commands} />
           {/* Not for a comped Hobby: the portal changes the subscription, and
               the comp would still outrank whatever it changed to. */}
-          <HobbyUpgradeHint snapshot={snapshot} />
+          <PlanChangeHint snapshot={snapshot} />
         </div>
       </div>
     </Card>
@@ -925,6 +943,7 @@ const NO_ACCOUNT_YET = {
   comped: false,
   polarSubscriptionCancelAtPeriodEnd: false,
   polarSubscriptionCurrentPeriodEnd: null,
+  polarSubscriptionInterval: null,
 };
 
 function useBillingAccount() {
@@ -939,6 +958,7 @@ function useBillingAccount() {
     comped,
     cancelAtPeriodEnd: subscription.polarSubscriptionCancelAtPeriodEnd,
     periodEnd: subscription.polarSubscriptionCurrentPeriodEnd,
+    interval: subscription.polarSubscriptionInterval,
     ownedOrgs: ownedOrgCount(currentUser.data?.orgs),
   };
 }
@@ -999,6 +1019,7 @@ function useBillingPageModel() {
         confirmTimedOut: flow.confirmTimedOut,
         cancelAtPeriodEnd: account.cancelAtPeriodEnd,
         periodEnd: account.periodEnd,
+        interval: account.interval,
       },
       commands: {
         shake: flow.shake,

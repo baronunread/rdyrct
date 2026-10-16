@@ -93,20 +93,20 @@ export async function setPlan(
   page: Page,
   email: string,
   plan: "hobby" | "pro" = "hobby",
-  opts: { status?: string } = {},
+  opts: { status?: string; interval?: "month" | "year" } = {},
 ) {
-  const { status = "active" } = opts;
+  const { status = "active", interval = null } = opts;
   await expectOneRowChanged(
     page,
     `UPDATE user
      SET subscription_plan = ?, subscription_status = ?,
          polar_subscription_id = 'sub_e2e_' || id, polar_customer_id = 'cus_e2e_' || id,
-         plan = ?
+         plan = ?, polar_subscription_interval = ?
      WHERE email = ?`,
     // The same rule the Worker applies, from the same table: `trialing` and
     // `past_due` also entitle, so deciding on `active` alone would build a
     // fixture no webhook can produce.
-    [plan, status, subscriptionGrantsAccess(status) ? plan : "free", email],
+    [plan, status, subscriptionGrantsAccess(status) ? plan : "free", interval, email],
     `no user with email ${email}`,
   );
 }

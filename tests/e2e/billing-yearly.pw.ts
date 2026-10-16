@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { setPlan } from "./db";
 import { signUpAndVerify } from "./resend";
 
 const password = "test-password-123";
@@ -30,4 +31,18 @@ test("the yearly toggle drives the checkout interval and the button price", asyn
 
   await proButton.click();
   await expect.poll(() => checkoutBody).toEqual({ plan: "pro", interval: "year" });
+});
+
+/** Somebody on a paid plan has to be able to tell which cycle they are on,
+ * and where to change it: the badge says it, the note under the button says
+ * where. */
+test("a subscriber sees their billing cycle and where to change it", async ({ page }) => {
+  const email = `billing-cycle-${Date.now()}@gmail.com`;
+  await signUpAndVerify(page, email, password);
+  await setPlan(page, email, "pro", { interval: "year" });
+
+  await page.goto("/billing");
+
+  await expect(page.getByText("Pro · Yearly")).toBeVisible();
+  await expect(page.getByText("Switch between monthly and yearly")).toBeVisible();
 });

@@ -241,6 +241,7 @@ function pendingSignUpResponse(email: string, name: string) {
       plan: "free",
       polarSubscriptionCancelAtPeriodEnd: false,
       polarSubscriptionCurrentPeriodEnd: null,
+      polarSubscriptionInterval: null,
       // Never the existing row's id: this account is not the caller's to
       // learn anything about. Same alphabet and length as better-auth's.
       id: uid(32),
@@ -522,6 +523,7 @@ function buildAuth(env: Env) {
           defaultValue: null,
           input: false,
         },
+        polarSubscriptionInterval: { type: "string", required: false, input: false },
       },
       // Self-service account deletion. Authored links/invites keep working
       // (ON DELETE SET NULL) and memberships cascade. Owned organizations are

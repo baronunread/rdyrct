@@ -182,6 +182,8 @@ export interface User {
   plan: OrgPlan;
   polarSubscriptionCancelAtPeriodEnd: boolean;
   polarSubscriptionCurrentPeriodEnd: number | null;
+  /** The billing cycle of the subscription, or null with none (or before its next event). */
+  polarSubscriptionInterval: "month" | "year" | null;
   /**
    * Whether a Polar customer exists for this user, which is what the
    * subscription portal needs. A paid plan does not imply one: an admin can

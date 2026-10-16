@@ -23,6 +23,11 @@ function periodEndOf(value: number | string | null | undefined): number | null {
   return Number.isFinite(ms) ? ms : null;
 }
 
+/** The stored billing cycle, or null for anything that is not one. */
+function intervalOf(value: string | null | undefined): "month" | "year" | null {
+  return value === "month" || value === "year" ? value : null;
+}
+
 /** A `user` row (as Drizzle reads it back, real Date columns) to the shape
  * every auth path ends up with. Shared by the API-key and OAuth-token
  * branches below; the cookie branch reads a differently-shaped object
@@ -37,6 +42,7 @@ function sessionUserOfRow(row: typeof schema.user.$inferSelect): SessionUser {
     plan: planNow(orgPlanOf(row.plan)),
     polarSubscriptionCancelAtPeriodEnd: row.polarSubscriptionCancelAtPeriodEnd ?? false,
     polarSubscriptionCurrentPeriodEnd: row.polarSubscriptionCurrentPeriodEnd?.getTime() ?? null,
+    polarSubscriptionInterval: intervalOf(row.polarSubscriptionInterval),
     image: row.image ?? null,
   };
 }
@@ -156,6 +162,7 @@ export function withSession(opts: { oauthTokenPath?: string } = {}) {
         polarSubscriptionCurrentPeriodEnd: periodEndOf(
           session.user.polarSubscriptionCurrentPeriodEnd,
         ),
+        polarSubscriptionInterval: intervalOf(session.user.polarSubscriptionInterval),
         image: session.user.image ?? null,
       } satisfies SessionUser);
     } else {
