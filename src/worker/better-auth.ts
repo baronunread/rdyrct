@@ -16,6 +16,7 @@ import * as schema from "./db/schema";
 import type { DB, Env } from "./env";
 import { captureAlert } from "./sentry";
 import { afterResponse } from "./background";
+import { sendWelcomeOnce } from "./welcome";
 import { emailConfigured, sendEmail } from "./email";
 import { renderEmail } from "./email-layout";
 import { hashPassword, verifyPassword } from "./password";
@@ -578,6 +579,17 @@ function buildAuth(env: Env) {
                 plan: isSuper ? "pro" : "free",
               },
             };
+          },
+          // Google accounts arrive verified, so the welcome goes out here.
+          after: async (user) => {
+            afterResponse(sendWelcomeOnce(env, db, user));
+          },
+        },
+        // A password account is verified by an update, not at creation. The
+        // claim inside sendWelcomeOnce makes every later update a no-op.
+        update: {
+          after: async (user) => {
+            afterResponse(sendWelcomeOnce(env, db, user));
           },
         },
       },
