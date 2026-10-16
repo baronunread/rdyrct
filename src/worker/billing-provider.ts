@@ -8,20 +8,14 @@
  */
 export interface BillingProvider {
   checkouts: {
-    create(
-      options: {
-        products: string[];
-        successUrl: string;
-        customerEmail: string;
-        metadata: { userId: string };
-      },
-      requestOptions?: { headers: HeadersInit },
-    ): Promise<{ url: string }>;
+    create(options: {
+      products: string[];
+      successUrl: string;
+      customerEmail: string;
+      metadata: { userId: string };
+    }): Promise<{ url: string }>;
   };
   customerSessions: {
-    create(
-      options: { customerId: string },
-      requestOptions?: { headers: HeadersInit },
-    ): Promise<{ customerPortalUrl: string }>;
+    create(options: { customerId: string }): Promise<{ customerPortalUrl: string }>;
   };
 }
