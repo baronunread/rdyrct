@@ -15,6 +15,7 @@ const PAGES = [
   { path: "/qr-code-generator", title: /Free QR code generator with logo/ },
   { path: "/pricing", title: /pricing - rdyrct/ },
   { path: "/roadmap", title: /URL shortener roadmap/ },
+  { path: "/changelog", title: /rdyrct changelog/ },
   { path: "/compare", title: /Compare rdyrct/ },
   { path: "/bitly-alternative", title: /Bitly alternative/ },
   { path: "/rebrandly-alternative", title: /Rebrandly alternative/ },

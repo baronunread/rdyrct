@@ -100,6 +100,11 @@ export function Footer() {
               </a>
             </li>
             <li>
+              <MarketingLink to="/changelog" className={linkClass}>
+                Changelog
+              </MarketingLink>
+            </li>
+            <li>
               <a href={`mailto:${SUPPORT_EMAIL}`} className={linkClass}>
                 Support
               </a>

@@ -393,6 +393,19 @@ test("the footer groups its links and the compare links lead to the comparison p
   );
 });
 
+// The changelog is CHANGELOG.md rendered, so the release in the file has to be
+// the release on the page, and the pricing page has to lead to the comparisons.
+test("the changelog shows the latest release and pricing links to the comparisons", async ({
+  page,
+}) => {
+  await page.goto("/changelog");
+  await expect(page.getByRole("heading", { level: 1, name: "Changelog" })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 2, name: "1.0.0" })).toBeVisible();
+  await page.goto("/pricing");
+  await page.getByRole("link", { name: "See how rdyrct compares" }).click();
+  await expect(page).toHaveURL(/\/compare$/);
+});
+
 // The index behind "All comparisons" lists every tool and links to its page.
 test("the compare index lists each tool and opens its comparison", async ({ page }) => {
   await page.goto("/");
