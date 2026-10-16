@@ -39,18 +39,20 @@ export async function sendWelcomeOnce(
       "Welcome to rdyrct",
       renderEmail(
         {
-          preheader: "I built rdyrct. Write to me if anything is unclear.",
-          heading: "Hi, I'm Andrea",
+          preheader: "No onboarding call, no webinar. Just a box for your first link.",
+          heading: "Welcome. Nobody will call you.",
           paragraphs: [
-            "I built rdyrct, and I'm glad you signed up.",
-            `If something is unclear, missing or broken, write to me at ${FOUNDER_EMAIL}. I read every message.`,
-            "Andrea",
+            "I'm Andrea, and I built rdyrct. There is no onboarding call, no webinar and no sales team. There is a box on your dashboard: paste a long link, get a short one.",
+            "Your link statistics show country, referrer and device. Never an IP address.",
+            "Questions, bugs, or something missing? Reply to this email. It comes to me.",
           ],
+          cta: { label: "Shorten your first link", url: `${env.APP_URL}/dashboard` },
           footer: false,
         },
         env.APP_URL,
         user.email,
       ),
+      { fromName: "Andrea at rdyrct", replyTo: FOUNDER_EMAIL },
     );
   } catch (cause) {
     // No address: this log would otherwise be a list of registered emails.
