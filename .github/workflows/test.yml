@@ -153,7 +153,7 @@ jobs:
       - name: evlog map score gate
         uses: evloghq/action@9e0020fc8f3e60bb63121ee0008b41229d77f809
         with:
-          version: 0.6.3
+          version: 0.9.0
           min-score: "100"
           comment: on-failure
           telemetry: false
