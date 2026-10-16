@@ -512,27 +512,33 @@ describe("POST /api/webhooks/polar", () => {
     expect((await getUser()).plan).toBe("free");
   });
 
-  it("accepts both secret formats Polar hands out, and nothing signed with another", async () => {
+  it("accepts both kinds of secret Polar hands out, and nothing signed with another", async () => {
     const payload = subscriptionActivePayload();
-    // An endpoint made or reset from 8 Sep 2026: a whsec_ secret, used as it is.
-    const reset = `whsec_${btoa("a-reset-secret-of-thirty-two-bytes!!")}`;
-    await seedUser({ plan: "free" });
-    const resetEnv: Env = { ...polarEnv(), POLAR_WEBHOOK_SECRET: reset };
+    // Made or reset from 8 Sep 2026: Standard Webhooks, used as it is.
+    const standard = `whsec_${btoa("a-reset-secret-of-thirty-two-bytes!!")}`;
+    // Made before then: Polar HMAC, whose key is the whole string. It also
+    // starts with whsec_, so the prefix cannot tell the two apart.
+    const legacy = "whsec_legacy-secret.with/characters+base64-would-not-decode";
 
-    const res = await postWebhook(
-      JSON.parse(payload),
-      signPayloadWithId(payload, "reset-1", reset),
-      resetEnv,
-    );
-    expect(res.status).toBe(200);
-    expect((await getUser()).plan).toBe("pro");
+    for (const [secret, key] of [
+      [standard, standard],
+      [legacy, btoa(legacy)],
+    ]) {
+      await env.DB.prepare("delete from user").run();
+      await seedUser({ plan: "free" });
+      const res = await postWebhook(
+        JSON.parse(payload),
+        signPayloadWithId(payload, `kind-${secret.length}`, key),
+        { ...polarEnv(), POLAR_WEBHOOK_SECRET: secret },
+      );
+      expect(res.status).toBe(200);
+      expect((await getUser()).plan).toBe("pro");
+    }
 
-    // A plain legacy secret (the default env) is covered by every other test
-    // here. What must hold for both: a signature from a different key fails.
     const wrong = await postWebhook(
       JSON.parse(payload),
-      signPayloadWithId(payload, "reset-2", btoa("not-the-secret")),
-      resetEnv,
+      signPayloadWithId(payload, "kind-wrong", btoa("not-the-secret")),
+      { ...polarEnv(), POLAR_WEBHOOK_SECRET: standard },
     );
     expect(wrong.status).toBe(403);
   });
