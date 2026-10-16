@@ -100,6 +100,15 @@ test("conditional requests keep the prerendered HTML representation", async ({ r
   }
 });
 
+// The build bakes the landing page into index.html, the shell every app route
+// gets. A signed-in reload of /dashboard painted it until the bundle replaced
+// it. App routes must ship an empty root.
+test("an app route's raw HTML carries no landing page", async ({ request }) => {
+  const body = await (await request.get("/dashboard")).text();
+  expect(body).toContain('id="root"');
+  expect(body).not.toContain("Know which channel earned the click.");
+});
+
 // The A/B test must not flash the wrong hero. The inline script in index.html
 // picks the stored arm before first paint, so the test arm is on screen with
 // the bundles blocked, and hydration leaves the same one element behind.

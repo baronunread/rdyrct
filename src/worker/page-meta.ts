@@ -52,6 +52,12 @@ class Html {
   }
 }
 
+class EmptyRoot {
+  element(element: Element) {
+    element.setInnerContent("");
+  }
+}
+
 class McpUrl {
   constructor(private readonly endpoint: string) {}
   element(element: Element) {
@@ -200,8 +206,15 @@ function crawlerBody(meta: PageMeta, url: URL): string {
  */
 export function withPageMeta(response: Response, url: URL): Response {
   const meta = lookup(PUBLIC_PAGE_META, url.pathname);
-  if (!meta) return response;
   if (!response.headers.get("content-type")?.includes("text/html")) return response;
+  // The build bakes the landing page into index.html, which is also the shell
+  // every app route gets. Left in, a signed-in reload of /dashboard paints the
+  // marketing page until the bundle replaces it. Pages that are not prerendered
+  // ship an empty root instead.
+  if (!meta) {
+    if (url.pathname === "/") return response;
+    return new HTMLRewriter().on("#root", new EmptyRoot()).transform(response);
+  }
 
   const canonical = canonicalFor(url, url.pathname);
   const described = new Response(response.body, response);

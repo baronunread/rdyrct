@@ -74,6 +74,21 @@ describe("the head a public page ships", () => {
     expect(html).toContain("<title>rdyrct - branded short links for your team</title>");
   });
 
+  it("sends app routes an empty root, not the landing page the build baked into the shell", async () => {
+    const baked = `<!doctype html><html><head><title>rdyrct</title></head><body><div id="root" data-prerendered="/"><h1>Know which channel earned the click.</h1></div></body></html>`;
+    const page = (path: string) =>
+      withPageMeta(
+        new Response(baked, { headers: { "content-type": "text/html" } }),
+        new URL(`https://rdyrct.com${path}`),
+      ).text();
+
+    const dashboard = await page("/dashboard");
+    expect(dashboard).not.toContain("Know which channel");
+    expect(dashboard).toContain('<div id="root" data-prerendered="/"></div>');
+    // The homepage keeps what it was built with.
+    expect(await page("/")).toContain("Know which channel earned the click.");
+  });
+
   it("does not touch anything that is not HTML", async () => {
     const asset = new Response("body{}", { headers: { "content-type": "text/css" } });
     const out = withPageMeta(asset, new URL("https://rdyrct.com/"));

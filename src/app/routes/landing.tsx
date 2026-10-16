@@ -198,7 +198,14 @@ function BillingCycleToggle({
     if (!btn || !container) return;
     const b = btn.getBoundingClientRect();
     const c = container.getBoundingClientRect();
-    setPillRect({ left: b.left - c.left, top: b.top - c.top, width: b.width, height: b.height });
+    // clientLeft/Top: an absolute child is placed from the padding box, so the
+    // container's 1px border has to come off or the pill sits 1px low.
+    setPillRect({
+      left: b.left - c.left - container.clientLeft,
+      top: b.top - c.top - container.clientTop,
+      width: b.width,
+      height: b.height,
+    });
   }, [interval]);
 
   return (
