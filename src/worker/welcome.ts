@@ -5,6 +5,8 @@ import { renderEmail } from "./email-layout";
 import type { DB, Env } from "./env";
 import { captureAlert } from "./sentry";
 
+const FOUNDER_EMAIL = "andrea@mail.rdyrct.com";
+
 /**
  * The welcome email: one message, sent once, when an address is verified.
  *
@@ -37,12 +39,14 @@ export async function sendWelcomeOnce(
       "Welcome to rdyrct",
       renderEmail(
         {
-          preheader: "Your account is ready. Make your first link in a minute.",
-          heading: "Your account is ready",
+          preheader: "I built rdyrct. Write to me if anything is unclear.",
+          heading: "Hi, I'm Andrea",
           paragraphs: [
-            "Paste a long address into the dashboard to get a short link. Open any link to get a QR code for it.",
+            "I built rdyrct, and I'm glad you signed up.",
+            `If something is unclear, missing or broken, write to me at ${FOUNDER_EMAIL}. I read every message.`,
+            "Andrea",
           ],
-          cta: { label: "Open your dashboard", url: `${env.APP_URL}/dashboard` },
+          footer: false,
         },
         env.APP_URL,
         user.email,

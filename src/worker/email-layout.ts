@@ -51,6 +51,10 @@ export interface EmailContent {
   cta?: { label: string; url: string };
   /** Small print under the body, e.g. how long a link lasts. */
   note?: string;
+  /** Leave out the sender and "Not you?" footer. It exists for mail someone
+   * may not have asked for (codes, resets, notices); a letter to a person who
+   * just signed up has no use for it. Defaults to shown. */
+  footer?: boolean;
 }
 
 export interface EmailBody {
@@ -136,7 +140,7 @@ ${preheaderBlock(content.preheader)}
           </td>
         </tr>
         <tr>
-          <td class="text" style="padding:0 26px">
+          <td class="text" style="padding:0 26px ${content.footer === false ? "12px" : "0"}">
             ${paragraphs}
             ${content.code ? codeBlock(content.code) : null}
             ${content.cta ? ctaBlock(content.cta) : null}
@@ -147,12 +151,16 @@ ${preheaderBlock(content.preheader)}
             }
           </td>
         </tr>
-        <tr>
+        ${
+          content.footer === false
+            ? null
+            : emailHtml`<tr>
           <td style="padding:24px 26px 26px">
             <hr style="border:none;border-top:1px solid ${LIGHT.border};margin:0 0 14px">
             <p class="muted" style="margin:0;font-family:${FONT};font-size:12px;line-height:1.6;color:${LIGHT.muted}">rdyrct, link shortening and QR codes. Sent to ${to}. ${NOT_YOU}</p>
           </td>
-        </tr>
+        </tr>`
+        }
       </table>
     </td>
   </tr>
@@ -175,6 +183,8 @@ function renderText(content: EmailContent, appUrl: string, to: string): string {
   if (content.code) lines.push(content.code, "");
   if (content.cta) lines.push(`${content.cta.label}: ${safeUrl(content.cta.url)}`, "");
   if (content.note) lines.push(content.note, "");
-  lines.push("--", "rdyrct, link shortening and QR codes.", `Sent to ${to}.`, NOT_YOU, appUrl);
-  return lines.join("\n");
+  if (content.footer !== false) {
+    lines.push("--", "rdyrct, link shortening and QR codes.", `Sent to ${to}.`, NOT_YOU, appUrl);
+  }
+  return lines.join("\n").trimEnd();
 }

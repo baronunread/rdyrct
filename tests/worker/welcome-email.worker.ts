@@ -51,7 +51,9 @@ describe("welcome email", () => {
 
     const [welcome] = welcomes(mail.sent);
     expect(welcome?.to).toBe(email);
-    expect(welcome?.text).toContain("/dashboard");
+    expect(welcome?.text).toContain("andrea@mail.rdyrct.com");
+    // A letter to someone who just signed up: no "Not you?" boilerplate.
+    expect(welcome?.text).not.toContain("Not you?");
     mail.restore();
   });
 

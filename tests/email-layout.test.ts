@@ -102,6 +102,17 @@ describe("renderEmail (#73)", () => {
     expect(text).toContain("rdyrct, link shortening and QR codes.");
   });
 
+  test("leaves the footer out of both parts when asked, and nothing else", () => {
+    const { html, text } = renderEmail({ ...base, footer: false }, APP_URL, TO);
+    for (const part of [html.html, text]) {
+      expect(part).not.toContain("rdyrct, link shortening and QR codes");
+      expect(part).not.toContain("Not you?");
+      expect(part).not.toContain(`Sent to ${TO}`);
+    }
+    expect(text).toContain(base.heading);
+    expect(text.endsWith("\n")).toBe(false);
+  });
+
   test("states the recipient as a plain fact, not a guessed reason", () => {
     const { html, text } = renderEmail(base, APP_URL, TO);
     expect(html.html).toContain(`Sent to ${TO}.`);
