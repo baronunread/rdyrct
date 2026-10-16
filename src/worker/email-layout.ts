@@ -55,6 +55,10 @@ export interface EmailContent {
    * may not have asked for (codes, resets, notices); a letter to a person who
    * just signed up has no use for it. Defaults to shown. */
   footer?: boolean;
+  /** A welcome-style layout: brand band, eyebrow, big centred heading, and a
+   * sample (a long link and its short form) in a pill. For the one email that
+   * should feel like a greeting; every other email keeps the plain layout. */
+  hero?: { eyebrow: string; sample: { long: string; short: string } };
 }
 
 export interface EmailBody {
@@ -86,6 +90,77 @@ function ctaBlock(cta: { label: string; url: string }): SafeHtml {
 
 function codeBlock(code: string): SafeHtml {
   return emailHtml`<div class="code" style="margin:24px 0;padding:16px;border:1px solid ${LIGHT.border};border-radius:8px;background:${LIGHT.surface2};font-family:${CODE_FONT};font-size:30px;font-weight:700;letter-spacing:6px;text-align:center;color:${LIGHT.text}">${code}</div>`;
+}
+
+/** The plain layout's card rows: wordmark, heading, then the body. */
+function plainRows(content: EmailContent, paragraphs: SafeHtml[]): SafeHtml {
+  return emailHtml`        <tr>
+          <td style="padding:26px 26px 0">
+            <span class="wordmark" style="font-family:${FONT};font-size:15px;font-weight:700;letter-spacing:1px;color:${LIGHT.accent}">rdyrct</span>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:18px 26px 0">
+            <h1 class="text" style="margin:0 0 16px;font-family:${FONT};font-size:20px;line-height:1.35;font-weight:700;color:${LIGHT.text}">${content.heading}</h1>
+          </td>
+        </tr>
+        <tr>
+          <td class="text" style="padding:0 26px ${content.footer === false ? "12px" : "0"}">
+            ${paragraphs}
+            ${content.code ? codeBlock(content.code) : null}
+            ${content.cta ? ctaBlock(content.cta) : null}
+            ${
+              content.note
+                ? emailHtml`<p class="muted" style="margin:0;font-family:${FONT};font-size:13px;line-height:1.6;color:${LIGHT.muted}">${content.note}</p>`
+                : null
+            }
+          </td>
+        </tr>`;
+}
+
+/** The hero layout's card rows. Centred, with a brand band that stays dark in
+ * both themes. The sample pill is decoration, not a code to retype. */
+function heroRows(content: EmailContent, hero: NonNullable<EmailContent["hero"]>): SafeHtml {
+  const centred = (child: SafeHtml | string) =>
+    emailHtml`<p class="text" style="margin:0 0 14px;font-family:${FONT};font-size:16px;line-height:1.6;text-align:center;color:${LIGHT.text}">${child}</p>`;
+  return emailHtml`<tr>
+          <td class="band" align="center" bgcolor="${DARK.bg}" style="padding:22px 26px;background:${DARK.bg};border-radius:12px 12px 0 0">
+            <span style="font-family:${FONT};font-size:22px;font-weight:700;letter-spacing:2px;color:${DARK.accent}">rdyrct</span>
+          </td>
+        </tr>
+        <tr>
+          <td align="center" style="padding:30px 26px 0">
+            <p class="eyebrow" style="margin:0 0 12px;font-family:${FONT};font-size:12px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:${LIGHT.accent}">${hero.eyebrow}</p>
+            <h1 class="text" style="margin:0 0 16px;font-family:${FONT};font-size:28px;line-height:1.25;font-weight:800;color:${LIGHT.text}">${content.heading}</h1>
+          </td>
+        </tr>
+        <tr>
+          <td class="text" style="padding:0 26px 12px">
+            ${content.paragraphs.map(centred)}
+            <div class="code" style="margin:22px 0;padding:16px;border:1px solid ${LIGHT.border};border-radius:10px;background:${LIGHT.surface2};text-align:center;font-family:${CODE_FONT};color:${LIGHT.text}">
+              <div class="muted" style="font-size:13px;line-height:1.5;color:${LIGHT.muted};word-break:break-all">${hero.sample.long}</div>
+              <div class="muted" style="font-size:16px;line-height:1.6;color:${LIGHT.muted}">&darr;</div>
+              <div class="eyebrow" style="font-size:20px;font-weight:700;color:${LIGHT.accent}">${hero.sample.short}</div>
+            </div>
+            ${content.cta ? centredCta(content.cta) : null}
+            ${
+              content.note
+                ? emailHtml`<div class="soft" style="margin:8px 0 12px;padding:16px 18px;border-radius:10px;background:${LIGHT.surface2}"><p class="text" style="margin:0;font-family:${FONT};font-size:14px;line-height:1.6;color:${LIGHT.text}">${content.note}</p></div>`
+                : null
+            }
+          </td>
+        </tr>`;
+}
+
+/** The button, centred for the hero layout. */
+function centredCta(cta: { label: string; url: string }): SafeHtml {
+  return emailHtml`<table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" style="margin:24px auto">
+        <tr>
+          <td class="cta" align="center" bgcolor="${LIGHT.accent}" style="border-radius:8px;background:${LIGHT.accent}">
+            <a class="cta-link" href="${safeUrl(cta.url)}" style="display:inline-block;padding:14px 28px;font-family:${FONT};font-size:16px;font-weight:700;color:#ffffff;text-decoration:none">${cta.label}</a>
+          </td>
+        </tr>
+      </table>`;
 }
 
 /** Renders the HTML and plain-text parts of one email from the same content.
@@ -120,6 +195,8 @@ export function renderEmail(content: EmailContent, appUrl: string, to: string): 
     .cta { background: ${DARK.accent} !important; }
     .cta-link { color: ${DARK.bg} !important; }
     .wordmark { color: ${DARK.accent} !important; }
+    .eyebrow { color: ${DARK.accent} !important; }
+    .soft { background: ${DARK.surface2} !important; }
   }
 </style>
 </head>
@@ -129,28 +206,7 @@ ${preheaderBlock(content.preheader)}
   <tr>
     <td align="center" style="padding:28px 16px">
       <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" class="card" style="max-width:520px;background:${LIGHT.surface};border:1px solid ${LIGHT.border};border-radius:12px">
-        <tr>
-          <td style="padding:26px 26px 0">
-            <span class="wordmark" style="font-family:${FONT};font-size:15px;font-weight:700;letter-spacing:1px;color:${LIGHT.accent}">rdyrct</span>
-          </td>
-        </tr>
-        <tr>
-          <td style="padding:18px 26px 0">
-            <h1 class="text" style="margin:0 0 16px;font-family:${FONT};font-size:20px;line-height:1.35;font-weight:700;color:${LIGHT.text}">${content.heading}</h1>
-          </td>
-        </tr>
-        <tr>
-          <td class="text" style="padding:0 26px ${content.footer === false ? "12px" : "0"}">
-            ${paragraphs}
-            ${content.code ? codeBlock(content.code) : null}
-            ${content.cta ? ctaBlock(content.cta) : null}
-            ${
-              content.note
-                ? emailHtml`<p class="muted" style="margin:0;font-family:${FONT};font-size:13px;line-height:1.6;color:${LIGHT.muted}">${content.note}</p>`
-                : null
-            }
-          </td>
-        </tr>
+        ${content.hero ? heroRows(content, content.hero) : plainRows(content, paragraphs)}
         ${
           content.footer === false
             ? null
@@ -180,6 +236,10 @@ const NOT_YOU = "Not you? Ignore it, or write to support@mail.rdyrct.com.";
  */
 function renderText(content: EmailContent, appUrl: string, to: string): string {
   const lines = [content.heading, "", ...content.paragraphs.flatMap((p) => [p, ""])];
+  if (content.hero) {
+    lines.unshift(content.hero.eyebrow.toUpperCase(), "");
+    lines.push(`${content.hero.sample.long} -> ${content.hero.sample.short}`, "");
+  }
   if (content.code) lines.push(content.code, "");
   if (content.cta) lines.push(`${content.cta.label}: ${safeUrl(content.cta.url)}`, "");
   if (content.note) lines.push(content.note, "");

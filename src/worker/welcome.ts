@@ -40,12 +40,17 @@ export async function sendWelcomeOnce(
       renderEmail(
         {
           preheader: "Go shorten a link right away.",
-          heading: "Welcome to rdyrct",
-          paragraphs: [
-            "I'm Andrea, and I built rdyrct. Go shorten a link right away.",
-            "Questions or problems? Reply to this email. It comes to me.",
-          ],
+          heading: "Go shorten a link right away",
+          paragraphs: ["I'm Andrea, and I built rdyrct. Paste a long link, get a short one."],
+          hero: {
+            eyebrow: "Welcome to rdyrct",
+            sample: {
+              long: "https://example.com/a/very/long/link?utm_source=news",
+              short: `${env.SHARED_LINK_HOST || new URL(env.APP_URL).host}/hello`,
+            },
+          },
           cta: { label: "Shorten a link", url: `${env.APP_URL}/dashboard` },
+          note: "Questions or problems? Reply to this email. It comes to me.",
           footer: false,
         },
         env.APP_URL,

@@ -113,6 +113,20 @@ describe("renderEmail (#73)", () => {
     expect(text.endsWith("\n")).toBe(false);
   });
 
+  test("renders the hero layout in both parts, and leaves the plain layout alone", () => {
+    const hero = {
+      eyebrow: "Welcome to rdyrct",
+      sample: { long: "https://example.com/long", short: "rdyr.cc/hello" },
+    };
+    const { html, text } = renderEmail({ ...base, hero, footer: false }, APP_URL, TO);
+    expect(html.html).toContain("Welcome to rdyrct");
+    expect(html.html).toContain("rdyr.cc/hello");
+    expect(html.html).toContain('class="band"');
+    expect(text).toContain("WELCOME TO RDYRCT");
+    expect(text).toContain("https://example.com/long -> rdyr.cc/hello");
+    expect(renderEmail(base, APP_URL, TO).html.html).not.toContain('class="band"');
+  });
+
   test("states the recipient as a plain fact, not a guessed reason", () => {
     const { html, text } = renderEmail(base, APP_URL, TO);
     expect(html.html).toContain(`Sent to ${TO}.`);
