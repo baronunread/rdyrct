@@ -576,8 +576,9 @@ async function resolveRenamedSlug(
 linkRoutes.get("/", requireOrgRole("viewer"), async (c) => {
   const params = readLinkPageParams(new URL(c.req.url));
   const query = linkPageQuery(c.req.param("orgId")!, params);
+  // Absent when mcp.ts dispatches here: that inner app has no evlog middleware.
   const log = c.get("log");
-  log.set({ orgId: c.req.param("orgId"), linkList: { sort: params.sort } });
+  log?.set({ orgId: c.req.param("orgId"), linkList: { sort: params.sort } });
 
   const rows = await c.var.db
     .select({
@@ -625,15 +626,17 @@ linkRoutes.post("/claim", requireOrgRole("member"), async (c) => {
 
   const link = await claimAnonLink(c.env, c.req.param("orgId")!, c.var.user!.id, claimToken);
   if (!link) throw new HTTPException(404, { message: "That link is no longer available" });
+  // Absent when mcp.ts dispatches here: that inner app has no evlog middleware.
   const log = c.get("log");
-  log.set({ orgId: c.req.param("orgId"), linkId: link.id });
+  log?.set({ orgId: c.req.param("orgId"), linkId: link.id });
   return c.json(await linkToDTO(c.env, c.var.db, c.req.param("orgId")!, link), 201);
 });
 
 linkRoutes.get("/quota-usage", requireOrgRole("viewer"), async (c) => {
   const { quotaUsage, quotaUsageAt } = await quotaUsageFields(c.var.db, c.req.param("orgId")!);
+  // Absent when mcp.ts dispatches here: that inner app has no evlog middleware.
   const log = c.get("log");
-  log.set({ orgId: c.req.param("orgId"), quotaUsage });
+  log?.set({ orgId: c.req.param("orgId"), quotaUsage });
   return c.json({ count: quotaUsage, at: quotaUsageAt });
 });
 
