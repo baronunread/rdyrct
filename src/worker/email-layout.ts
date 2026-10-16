@@ -164,7 +164,7 @@ ${preheaderBlock(content.preheader)}
 }
 
 /** What to do with mail you did not expect, in both parts of every email. */
-const NOT_YOU = "Not you? Ignore it, or write to support@rdyrct.com.";
+const NOT_YOU = "Not you? Ignore it, or write to support@mail.rdyrct.com.";
 
 /**
  * The plain-text part. Not a fallback nobody reads: HTML-only mail is a
