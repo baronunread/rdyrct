@@ -4,7 +4,7 @@ import { HTTPException } from "hono/http-exception";
 import * as schema from "./db/schema";
 import type { DB, Env } from "./env";
 import { sendEmail } from "./email";
-import { renderEmail } from "./email-layout";
+import { NOTICE_FOOTER, renderEmail, SUPPORT_EMAIL } from "./email-layout";
 import { orgOwnerEmail, orgPlan } from "./plan";
 import { recordAdminAction } from "./audit";
 import { captureAlert } from "./sentry";
@@ -218,9 +218,10 @@ async function notifyAutoSuspend(
     paragraphs: [
       `We recorded about ${redirects.toLocaleString()} redirects on your links today, well past what a free organization is expected to send.`,
       "Its links are suspended and no longer redirect. Nothing was deleted.",
-      "If this is real traffic, reply to this email or upgrade and we will restore it.",
+      `If this is real traffic, write to ${SUPPORT_EMAIL} or upgrade and we will restore it.`,
     ],
     cta: { label: "See your plan", url: `${env.APP_URL}/billing` },
+    footerLine: NOTICE_FOOTER,
   };
 
   const to = [owner, env.SUPERADMIN_EMAIL].filter((addr): addr is string => !!addr);

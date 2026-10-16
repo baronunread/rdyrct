@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { renderEmail } from "../src/worker/email-layout";
+import { NOTICE_FOOTER, renderEmail } from "../src/worker/email-layout";
 
 const APP_URL = "https://rdyrct.example";
 const TO = "person@example.com";
@@ -124,7 +124,8 @@ describe("renderEmail (#73)", () => {
     expect(html.html).toContain('class="band"');
     expect(text).toContain("WELCOME TO RDYRCT");
     expect(text).toContain("https://example.com/long -> rdyr.cc/hello");
-    expect(renderEmail(base, APP_URL, TO).html.html).not.toContain('class="band"');
+    // Both layouts open with the same brand band.
+    expect(renderEmail(base, APP_URL, TO).html.html).toContain('class="band"');
 
     const bare = renderEmail(
       { ...base, hero: { sample: hero.sample }, footer: false },
@@ -133,6 +134,21 @@ describe("renderEmail (#73)", () => {
     );
     expect(bare.html.html).not.toContain("text-transform:uppercase");
     expect(bare.text.startsWith(base.heading)).toBe(true);
+  });
+
+  test("puts the brand image first in every layout, with the word as its alt text", () => {
+    const { html } = renderEmail(base, APP_URL, TO);
+    expect(html.html).toContain(`src="${APP_URL}/email-logo.png"`);
+    expect(html.html).toContain('alt="rdyrct"');
+  });
+
+  test("swaps the footer advice for mail about the reader's own account", () => {
+    const { html, text } = renderEmail({ ...base, footerLine: NOTICE_FOOTER }, APP_URL, TO);
+    for (const part of [html.html, text]) {
+      expect(part).toContain(NOTICE_FOOTER);
+      expect(part).not.toContain("Not you?");
+      expect(part).toContain(`Sent to ${TO}`);
+    }
   });
 
   test("states the recipient as a plain fact, not a guessed reason", () => {

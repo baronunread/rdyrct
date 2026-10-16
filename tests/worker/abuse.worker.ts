@@ -13,6 +13,7 @@ import {
 } from "../../src/worker/abuse";
 import {
   applyTestMigrations,
+  captureEmails,
   fetchWorker,
   freeOwnerCookie,
   sampleLink,
@@ -166,6 +167,27 @@ describe("sweepAbusiveOrgs", () => {
       expect.objectContaining({ level: "error" }),
     );
     alert.mockRestore();
+  });
+
+  it("tells the owner to write to support, not to reply to a no-reply address", async () => {
+    await seedLink();
+    await seedFreeOwner();
+    await seedNewOrg();
+    await seedClicksToday(REDIRECT_CEILING_PER_DAY + 1);
+    const mail = captureEmails();
+    const alert = vi.spyOn(Sentry, "captureMessage").mockReturnValue("");
+
+    await sweepAbusiveOrgs(testEnv);
+
+    const [owner] = mail.sent.filter((m) => m.to === "owner@example.com");
+    expect(owner?.subject).toBe("Your organization is suspended");
+    expect(owner?.text).toContain("write to support@mail.rdyrct.com");
+    expect(owner?.text).not.toContain("reply to this email");
+    // About their own account, so no "Not you? Ignore it".
+    expect(owner?.text).toContain("Questions? Write to support@mail.rdyrct.com.");
+    expect(owner?.text).not.toContain("Not you?");
+    alert.mockRestore();
+    mail.restore();
   });
 
   it("leaves an org under the ceiling alone", async () => {

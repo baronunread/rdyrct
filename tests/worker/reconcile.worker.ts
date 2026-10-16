@@ -281,6 +281,9 @@ describe("entitlement reconciliation", () => {
       const { env: e } = await downgrade({ plan: "hobby", domains: 2 }, "free");
       expect(mail.sent.map((m) => m.to)).toEqual(["owner@example.com"]);
       expect(mail.sent[0].subject).toContain("over its plan");
+      // About their own account: "Not you? Ignore it" would be bad advice.
+      expect(mail.sent[0].text).toContain("Questions? Write to support@mail.rdyrct.com.");
+      expect(mail.sent[0].text).not.toContain("Not you?");
 
       // A second pass on the same plan sends nothing more.
       await reconcileUser(e, testDb(), "owner-1", NOW + 1000);

@@ -55,6 +55,10 @@ export interface EmailContent {
    * may not have asked for (codes, resets, notices); a letter to a person who
    * just signed up has no use for it. Defaults to shown. */
   footer?: boolean;
+  /** What the footer says after "Sent to you." Defaults to the advice for mail
+   * you may not have asked for (ignore it). Mail about the reader's own
+   * account, where ignoring it is bad advice, passes NOTICE_FOOTER. */
+  footerLine?: string;
   /** A welcome-style layout: brand band, eyebrow, big centred heading, and a
    * sample (a long link and its short form) in a pill. For the one email that
    * should feel like a greeting; every other email keeps the plain layout. */
@@ -92,15 +96,22 @@ function codeBlock(code: string): SafeHtml {
   return emailHtml`<div class="code" style="margin:24px 0;padding:16px;border:1px solid ${LIGHT.border};border-radius:8px;background:${LIGHT.surface2};font-family:${CODE_FONT};font-size:30px;font-weight:700;letter-spacing:6px;text-align:center;color:${LIGHT.text}">${code}</div>`;
 }
 
-/** The plain layout's card rows: wordmark, heading, then the body. */
-function plainRows(content: EmailContent, paragraphs: SafeHtml[]): SafeHtml {
-  return emailHtml`        <tr>
-          <td style="padding:26px 26px 0">
-            <span class="wordmark" style="font-family:${FONT};font-size:15px;font-weight:700;letter-spacing:1px;color:${LIGHT.accent}">rdyrct</span>
+/** The brand band across the top of every email: the wordmark, outlined from
+ * Figtree Bold, on a band that stays dark in both themes. The image's alt text
+ * carries the word in the same colour if a client blocks images. */
+function bandRow(appUrl: string): SafeHtml {
+  return emailHtml`<tr>
+          <td class="band" align="center" bgcolor="${DARK.bg}" style="padding:22px 26px;background:${DARK.bg};border-radius:12px 12px 0 0">
+            <img src="${`${appUrl}/email-logo.png`}" width="110" height="30" alt="rdyrct" style="display:inline-block;border:0;font-family:${FONT};font-size:22px;font-weight:700;letter-spacing:2px;color:${DARK.text}">
           </td>
-        </tr>
+        </tr>`;
+}
+
+/** The plain layout's card rows: band, heading, then the body. */
+function plainRows(content: EmailContent, paragraphs: SafeHtml[], appUrl: string): SafeHtml {
+  return emailHtml`        ${bandRow(appUrl)}
         <tr>
-          <td style="padding:18px 26px 0">
+          <td style="padding:24px 26px 0">
             <h1 class="text" style="margin:0 0 16px;font-family:${FONT};font-size:20px;line-height:1.35;font-weight:700;color:${LIGHT.text}">${content.heading}</h1>
           </td>
         </tr>
@@ -127,11 +138,7 @@ function heroRows(
 ): SafeHtml {
   const centred = (child: SafeHtml | string) =>
     emailHtml`<p class="text" style="margin:0 0 14px;font-family:${FONT};font-size:16px;line-height:1.6;text-align:center;color:${LIGHT.text}">${child}</p>`;
-  return emailHtml`<tr>
-          <td class="band" align="center" bgcolor="${DARK.bg}" style="padding:22px 26px;background:${DARK.bg};border-radius:12px 12px 0 0">
-            <img src="${`${appUrl}/email-logo.png`}" width="110" height="30" alt="rdyrct" style="display:inline-block;border:0;font-family:${FONT};font-size:22px;font-weight:700;letter-spacing:2px;color:${DARK.text}">
-          </td>
-        </tr>
+  return emailHtml`${bandRow(appUrl)}
         <tr>
           <td align="center" style="padding:${hero.eyebrow ? "30px" : "28px"} 26px 0">
             ${hero.eyebrow ? emailHtml`<p class="eyebrow" style="margin:0 0 12px;font-family:${FONT};font-size:12px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:${LIGHT.accent}">${hero.eyebrow}</p>` : null}
@@ -198,7 +205,6 @@ export function renderEmail(content: EmailContent, appUrl: string, to: string): 
     .code { background: ${DARK.surface2} !important; border-color: ${DARK.border} !important; color: ${DARK.text} !important; }
     .cta { background: ${DARK.accent} !important; }
     .cta-link { color: ${DARK.bg} !important; }
-    .wordmark { color: ${DARK.accent} !important; }
     .eyebrow { color: ${DARK.accent} !important; }
     .soft { background: ${DARK.surface2} !important; }
   }
@@ -210,14 +216,14 @@ ${preheaderBlock(content.preheader)}
   <tr>
     <td align="center" style="padding:28px 16px">
       <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" class="card" style="max-width:520px;background:${LIGHT.surface};border:1px solid ${LIGHT.border};border-radius:12px">
-        ${content.hero ? heroRows(content, content.hero, appUrl) : plainRows(content, paragraphs)}
+        ${content.hero ? heroRows(content, content.hero, appUrl) : plainRows(content, paragraphs, appUrl)}
         ${
           content.footer === false
             ? null
             : emailHtml`<tr>
           <td style="padding:24px 26px 26px">
             <hr style="border:none;border-top:1px solid ${LIGHT.border};margin:0 0 14px">
-            <p class="muted" style="margin:0;font-family:${FONT};font-size:12px;line-height:1.6;color:${LIGHT.muted}">rdyrct, link shortening and QR codes. Sent to ${to}. ${NOT_YOU}</p>
+            <p class="muted" style="margin:0;font-family:${FONT};font-size:12px;line-height:1.6;color:${LIGHT.muted}">rdyrct, link shortening and QR codes. Sent to ${to}. ${content.footerLine ?? NOT_YOU}</p>
           </td>
         </tr>`
         }
@@ -231,8 +237,15 @@ ${preheaderBlock(content.preheader)}
   return { html, text: renderText(content, appUrl, to) };
 }
 
+/** Where to write. The support address is a mailbox people can reach; the
+ * sender of most mail (no-reply@) is not. */
+export const SUPPORT_EMAIL = "support@mail.rdyrct.com";
+
 /** What to do with mail you did not expect, in both parts of every email. */
-const NOT_YOU = "Not you? Ignore it, or write to support@mail.rdyrct.com.";
+const NOT_YOU = `Not you? Ignore it, or write to ${SUPPORT_EMAIL}.`;
+
+/** The footer line for mail about the reader's own account. */
+export const NOTICE_FOOTER = `Questions? Write to ${SUPPORT_EMAIL}.`;
 
 /**
  * The plain-text part. Not a fallback nobody reads: HTML-only mail is a
@@ -248,7 +261,13 @@ function renderText(content: EmailContent, appUrl: string, to: string): string {
   if (content.cta) lines.push(`${content.cta.label}: ${safeUrl(content.cta.url)}`, "");
   if (content.note) lines.push(content.note, "");
   if (content.footer !== false) {
-    lines.push("--", "rdyrct, link shortening and QR codes.", `Sent to ${to}.`, NOT_YOU, appUrl);
+    lines.push(
+      "--",
+      "rdyrct, link shortening and QR codes.",
+      `Sent to ${to}.`,
+      content.footerLine ?? NOT_YOU,
+      appUrl,
+    );
   }
   return lines.join("\n").trimEnd();
 }
