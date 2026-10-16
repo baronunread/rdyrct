@@ -733,11 +733,10 @@ function HeroControlVariant({
     <section className="grid items-center gap-10 py-14 md:grid-cols-2 md:gap-12 md:py-20">
       <div className="flex flex-col items-center gap-6 text-center md:items-start md:text-left">
         <h1 className="text-3xl font-bold tracking-tight text-balance sm:text-4xl lg:text-5xl">
-          Short links and QR codes that show which channel earned the click.
+          Know which channel earned the click.
         </h1>
         <p className="max-w-xl text-sm text-muted sm:text-base">
-          Each one reports back: country, referrer, device, and campaign, measured against the
-          period before. On your own domain, and without a single IP address in the database.
+          Short links and QR codes with click tracking, on your own domain. No IP addresses stored.
         </p>
         {/* The second CTA points down the page, not off it. "Self-host from
             GitHub" used to sit here, spending the highest-intent moment on

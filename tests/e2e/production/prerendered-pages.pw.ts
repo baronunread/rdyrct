@@ -1,7 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 
 const PRERENDERED_PAGES = [
-  { path: "/", heading: "Short links and QR codes that show which channel earned the click." },
+  { path: "/", heading: "Know which channel earned the click." },
   { path: "/pricing", heading: "URL shortener pricing: free, $4 or $9 a month" },
   { path: "/qr-code-generator", heading: "Free QR code generator with logo" },
   { path: "/docs", heading: "Developer docs" },
@@ -96,9 +96,7 @@ test("conditional requests keep the prerendered HTML representation", async ({ r
     expect(second.status()).toBe(200);
     const body = await second.text();
     expect(body).toContain("URL shortener pricing: free, $4 or $9 a month");
-    expect(body).not.toContain(
-      "Short links and QR codes that show which channel earned the click.",
-    );
+    expect(body).not.toContain("Know which channel earned the click.");
   }
 });
 
@@ -112,7 +110,7 @@ test("a visitor given the test hero never sees the control hero first", async ({
     "rdyrct:hero-variant:v1": "test",
   };
   const testHeading = "Shorten a link. See who clicks it.";
-  const controlHeading = "Short links and QR codes that show which channel earned the click.";
+  const controlHeading = "Know which channel earned the click.";
   const storageState = {
     cookies: [],
     origins: [

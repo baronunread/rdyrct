@@ -47,7 +47,7 @@ test.describe("landing hero A/B test", () => {
   test("the control arm shows the copy-first hero", async ({ page }) => {
     await openLandingAs(page, "control");
     await expect(page.getByRole("heading", { level: 1 })).toHaveText(
-      "Short links and QR codes that show which channel earned the click.",
+      "Know which channel earned the click.",
     );
     await expect(page.getByRole("link", { name: "See how it works" })).toBeVisible();
   });
@@ -81,7 +81,7 @@ test.describe("landing hero A/B test", () => {
     });
     await page.goto("/");
 
-    const controlHeading = "Short links and QR codes that show which channel earned the click.";
+    const controlHeading = "Know which channel earned the click.";
     const testHeading = "Shorten a link. See who clicks it.";
     await expect(page.getByRole("heading", { level: 1 })).toHaveText(controlHeading);
     expect(await page.evaluate((key) => localStorage.getItem(key), HERO_VARIANT_KEY)).toBeNull();
@@ -112,7 +112,7 @@ test.describe("landing hero A/B test", () => {
     await otherTab.evaluate((key) => localStorage.setItem(key, "rejected"), CONSENT_KEY);
 
     await expect(page.getByRole("heading", { level: 1 })).toHaveText(
-      "Short links and QR codes that show which channel earned the click.",
+      "Know which channel earned the click.",
     );
     await expect
       .poll(() => page.evaluate((key) => localStorage.getItem(key), HERO_VARIANT_KEY))
