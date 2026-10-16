@@ -167,7 +167,7 @@ Shell writes to repo files are sandboxed; edit through the editor tools, not
   owner's plan**: `orgPlan()` in `src/worker/plan.ts` resolves the owner. Only
   Pro raises the owned-org cap above 1. Caps: `PLAN_LIMITS` in
   `src/shared/types.ts` (`{ orgs, links, members, domains, qr,
-analyticsDays }`). Slugs on the **shared** domain are always random (every
+  analyticsDays }`). Slugs on the **shared** domain are always random (every
   plan); chosen slugs exist only on custom domains, so the shared namespace
   can't be squatted. Every account gets an org at
   sign-up (#65), named from the email domain (`src/shared/org-name.ts`) and

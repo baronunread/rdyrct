@@ -33,11 +33,13 @@ function dtoOf(row: typeof schema.apiKeys.$inferSelect): ApiKeyDTO {
 }
 
 apiKeyRoutes.get("/", requireOrgRole("owner"), async (c) => {
+  const log = c.get("log");
   const rows = await c.var.db
     .select()
     .from(schema.apiKeys)
     .where(and(eq(schema.apiKeys.userId, c.var.user!.id), isNull(schema.apiKeys.revokedAt)))
     .orderBy(desc(schema.apiKeys.createdAt));
+  log.set({ apiKeys: { listed: rows.length } });
   return c.json(rows.map(dtoOf));
 });
 
@@ -56,6 +58,7 @@ apiKeyRoutes.post("/", requireOrgRole("owner"), async (c) => {
     revokedAt: null,
   } satisfies typeof schema.apiKeys.$inferInsert;
   await c.var.db.insert(schema.apiKeys).values(row);
+  log.set({ apiKey: { id: row.id } });
 
   log.audit({
     action: "api_key.create",
@@ -71,6 +74,7 @@ apiKeyRoutes.post("/", requireOrgRole("owner"), async (c) => {
 apiKeyRoutes.delete("/:keyId", requireOrgRole("owner"), async (c) => {
   const log = c.get("log");
   const keyId = c.req.param("keyId");
+  log.set({ apiKey: { id: keyId } });
   const result = await c.var.db
     .update(schema.apiKeys)
     .set({ revokedAt: Date.now() })
