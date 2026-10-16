@@ -42,7 +42,7 @@ export async function sendWelcomeOnce(
           preheader: "Go shorten any link for free right now.",
           heading: "Thanks for signing up",
           paragraphs: [
-            "I'm Andrea, the founder of rdyrct. I wanted to thank you for signing up, and to tell you that I don't want to sell you anything more than what you need.",
+            "I'm Andrea, the founder of rdyrct, and I'm glad you're here.",
             "Go shorten any link for free right now!",
           ],
           hero: {
