@@ -372,6 +372,29 @@ test("the footer has a cookie policy that lands on the cookie section", async ({
   await expect(page.locator("#cookies")).toBeInViewport();
 });
 
+// The footer groups its links under Product, Compare and Company. The Compare
+// links point into the blog, which is a separate Worker, so they have to be
+// real addresses rather than SPA routes.
+test("the footer groups its links and the compare links lead into the blog", async ({ page }) => {
+  await page.goto("/");
+  const footer = page.locator("footer");
+  for (const heading of ["Product", "Compare", "Company"]) {
+    await expect(footer.getByText(heading, { exact: true })).toBeVisible();
+  }
+  await expect(footer.getByRole("link", { name: "Bitly alternative" })).toHaveAttribute(
+    "href",
+    "/blog/migrate-from-bitly",
+  );
+  await expect(footer.getByRole("link", { name: "Rebrandly alternative" })).toHaveAttribute(
+    "href",
+    "/blog/rebrandly-alternatives",
+  );
+  await expect(footer.getByRole("link", { name: "Short.io alternative" })).toHaveAttribute(
+    "href",
+    "/blog/short-io-alternatives",
+  );
+});
+
 // serveSpa gives the unhashed static files an hour-long cache. This same
 // fallback is what the Vite dev server answers /@vite/client and every source
 // module through, and caching those means the browser keeps running the code
