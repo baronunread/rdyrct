@@ -39,14 +39,13 @@ export async function sendWelcomeOnce(
       "Welcome to rdyrct",
       renderEmail(
         {
-          preheader: "No onboarding call, no webinar. Just a box for your first link.",
-          heading: "Welcome. Nobody will call you.",
+          preheader: "Go shorten a link right away.",
+          heading: "Welcome to rdyrct",
           paragraphs: [
-            "I'm Andrea, and I built rdyrct. There is no onboarding call, no webinar and no sales team. There is a box on your dashboard: paste a long link, get a short one.",
-            "Your link statistics show country, referrer and device. Never an IP address.",
-            "Questions, bugs, or something missing? Reply to this email. It comes to me.",
+            "I'm Andrea, and I built rdyrct. Go shorten a link right away.",
+            "Questions or problems? Reply to this email. It comes to me.",
           ],
-          cta: { label: "Shorten your first link", url: `${env.APP_URL}/dashboard` },
+          cta: { label: "Shorten a link", url: `${env.APP_URL}/dashboard` },
           footer: false,
         },
         env.APP_URL,
