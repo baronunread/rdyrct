@@ -29,7 +29,7 @@ export function Footer() {
               Short links and QR codes for teams, on your own domain. Visitor IP addresses are never
               stored.
             </p>
-            <a href={GITHUB_URL} target="_blank" rel="noreferrer" className={linkClass}>
+            <a href={GITHUB_URL} target="_blank" rel="noreferrer" className={`${linkClass} py-1`}>
               Open source on GitHub
             </a>
           </div>

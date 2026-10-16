@@ -24,8 +24,11 @@ import { PLAN_LIMITS, PLAN_PRICES } from "@/shared/types";
 import { buttonClass } from "../ui/button-class";
 import { SUPPORT_EMAIL } from "../ui/footer";
 import { Table, Th, Td } from "../ui/misc";
+import { ArrowRight } from "../ui/icons";
 
 const CHECKED = "October 2026";
+
+const RDYRCT_PRICE_LINE = `Free, or ${PLAN_PRICES.hobby} a month with a custom domain`;
 
 const RDYRCT_ROWS = {
   entry: `Hobby, ${PLAN_PRICES.hobby} a month`,
@@ -431,23 +434,26 @@ function CompareIndex() {
           <Link
             key={tool.path}
             to={tool.path}
-            className="flex flex-col gap-3 rounded-lg border border-border bg-surface p-5 hover:border-accent/40"
+            className="group flex flex-col gap-5 rounded-lg border border-border bg-surface p-6 transition-colors hover:border-accent/40"
           >
             <div>
-              <h2 className="text-xl font-bold tracking-tight">vs {tool.name}</h2>
-              <p className="mt-1 text-sm text-muted">{tool.blurb}</p>
+              <h2 className="text-2xl font-bold tracking-tight">vs {tool.name}</h2>
+              <p className="mt-1 text-muted">{tool.blurb}</p>
             </div>
-            <dl className="flex flex-col gap-1 text-sm">
-              <div className="flex justify-between gap-4">
-                <dt className="text-muted">{tool.name}</dt>
-                <dd className="text-right">{tool.theirPrice}</dd>
+            <dl className="grid grid-cols-2 gap-3">
+              <div className="flex flex-col gap-1 rounded-md bg-surface-2 p-3">
+                <dt className="text-sm text-muted">{tool.name}</dt>
+                <dd className="font-medium text-balance">{tool.theirPrice}</dd>
               </div>
-              <div className="flex justify-between gap-4">
-                <dt className="text-muted">rdyrct</dt>
-                <dd className="text-right">{`Free, or ${PLAN_PRICES.hobby} a month with a custom domain`}</dd>
+              <div className="flex flex-col gap-1 rounded-md border border-accent/30 bg-accent/5 p-3">
+                <dt className="text-sm text-muted">rdyrct</dt>
+                <dd className="font-medium text-balance">{RDYRCT_PRICE_LINE}</dd>
               </div>
             </dl>
-            <span className="text-sm text-accent">View comparison</span>
+            <span className="mt-auto inline-flex items-center gap-1.5 font-medium text-accent">
+              View comparison
+              <ArrowRight size={16} className="transition-transform group-hover:translate-x-0.5" />
+            </span>
           </Link>
         ))}
       </section>

@@ -8,6 +8,12 @@ const PRERENDERED_PAGES = [
   { path: "/roadmap", heading: "What we are building" },
   { path: "/privacy", heading: "Privacy Policy" },
   { path: "/terms", heading: "Terms of Service" },
+  { path: "/changelog", heading: "Changelog" },
+  { path: "/compare", heading: "Compare rdyrct with other link shorteners" },
+  { path: "/bitly-alternative", heading: "Bitly alternative: rdyrct vs Bitly" },
+  { path: "/rebrandly-alternative", heading: "Rebrandly alternative: rdyrct vs Rebrandly" },
+  { path: "/dub-alternative", heading: "Dub alternative: rdyrct vs Dub" },
+  { path: "/short-io-alternative", heading: "Short.io alternative: rdyrct vs Short.io" },
 ] as const;
 
 const HTML_FALLBACK_PAGES = [] as const;
