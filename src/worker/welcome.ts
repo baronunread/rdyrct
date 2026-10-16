@@ -5,8 +5,6 @@ import { renderEmail } from "./email-layout";
 import type { DB, Env } from "./env";
 import { captureAlert } from "./sentry";
 
-const FOUNDER_EMAIL = "andrea@mail.rdyrct.com";
-
 /**
  * The welcome email: one message, sent once, when an address is verified.
  *
@@ -25,7 +23,7 @@ export async function sendWelcomeOnce(
   db: DB,
   user: { id: string; email: string; emailVerified: boolean },
 ): Promise<void> {
-  if (!user.emailVerified || !emailConfigured(env)) return;
+  if (!user.emailVerified || !emailConfigured(env) || !env.WELCOME_FROM) return;
   const claimed = await db
     .update(schema.user)
     .set({ welcomeSentAt: new Date() })
@@ -58,7 +56,7 @@ export async function sendWelcomeOnce(
         env.APP_URL,
         user.email,
       ),
-      { fromName: "Andrea at rdyrct", replyTo: FOUNDER_EMAIL },
+      { from: env.WELCOME_FROM },
     );
   } catch (cause) {
     // No address: this log would otherwise be a list of registered emails.

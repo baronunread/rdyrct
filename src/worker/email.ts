@@ -6,11 +6,6 @@ import type { EmailBody } from "./email-layout";
  * provider changes this line and the transport below. */
 export const emailConfigured = (env: Env) => Boolean(env.RESEND_API_KEY);
 
-/** The bare address in `Name <address>`, or the whole value when it has no name. */
-function addressOf(from: string): string {
-  return from.match(/<([^>]+)>/)?.[1] ?? from;
-}
-
 /**
  * Sends via the Resend HTTP API. RESEND_BASE_URL lets local dev point at the
  * emulate.dev Resend emulator instead of the real service.
@@ -26,7 +21,7 @@ export async function sendEmail(
   to: string,
   subject: string,
   body: EmailBody,
-  options: { fromName?: string; replyTo?: string } = {},
+  options: { from?: string } = {},
 ): Promise<void> {
   // No provider, no mail. Nothing is logged: a code or reset link in a log is
   // a secret in the wrong place.
@@ -39,9 +34,7 @@ export async function sendEmail(
       "content-type": "application/json",
     },
     body: JSON.stringify({
-      from: options.fromName ? `${options.fromName} <${addressOf(env.MAIL_FROM)}>` : env.MAIL_FROM,
-      // Undefined drops out of the JSON, so most mail carries no Reply-To.
-      reply_to: options.replyTo,
+      from: options.from ?? env.MAIL_FROM,
       to,
       subject,
       html: body.html.html,

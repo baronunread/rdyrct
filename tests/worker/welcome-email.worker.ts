@@ -4,12 +4,16 @@ import { reset } from "cloudflare:test";
 import {
   applyTestMigrations,
   authEnv,
+  overrideEnv,
   captureEmails,
   type CapturedEmail,
   fetchWorker,
   signInCookie,
   TEST_PASSWORD,
 } from "./support";
+import { drizzle } from "drizzle-orm/d1";
+import * as schema from "../../src/worker/db/schema";
+import { sendWelcomeOnce } from "../../src/worker/welcome";
 import { hashPassword } from "../../src/worker/password";
 import type { JsonValue } from "../../src/shared/types";
 
@@ -51,9 +55,8 @@ describe("welcome email", () => {
 
     const [welcome] = welcomes(mail.sent);
     expect(welcome?.to).toBe(email);
-    // From a person, and a reply reaches that person.
-    expect(welcome?.from).toMatch(/^Andrea at rdyrct <.+>$/);
-    expect(welcome?.reply_to).toBe("andrea@mail.rdyrct.com");
+    // From a person, so a reply reaches that person.
+    expect(welcome?.from).toBe("Andrea at rdyrct <andrea@mail.rdyrct.com>");
     expect(welcome?.text).toContain("/dashboard");
     // A letter to someone who just signed up: no "Not you?" boilerplate.
     expect(welcome?.text).not.toContain("Not you?");
@@ -96,6 +99,24 @@ describe("welcome email", () => {
     await post("update-user", { name: "Renamed" }, cookie);
 
     expect(welcomes(mail.sent)).toHaveLength(0);
+    mail.restore();
+  });
+
+  it("sends nothing, and claims nothing, where no founder sender is configured", async () => {
+    await env.DB.prepare(
+      "insert into user (id, name, email, email_verified, is_admin, plan, created_at, updated_at) values ('u3','Fork','fork@example.com',1,0,'free',0,0)",
+    ).run();
+    const mail = captureEmails();
+
+    await sendWelcomeOnce(overrideEnv({ WELCOME_FROM: undefined }), drizzle(env.DB, { schema }), {
+      id: "u3",
+      email: "fork@example.com",
+      emailVerified: true,
+    });
+
+    expect(mail.sent).toEqual([]);
+    const row = await env.DB.prepare("select welcome_sent_at from user where id = 'u3'").first();
+    expect(row?.welcome_sent_at).toBeNull();
     mail.restore();
   });
 });
