@@ -57,6 +57,7 @@ const QrGeneratorPage = lazyRouteComponent(
 const PricingPage = lazyRouteComponent(() => import("./routes/pricing"), "PricingPage");
 const RoadmapPage = lazyRouteComponent(() => import("./routes/roadmap"), "RoadmapPage");
 const DocsPage = lazyRouteComponent(() => import("./routes/docs"), "DocsPage");
+const ChangelogPage = lazyRouteComponent(() => import("./routes/changelog"), "ChangelogPage");
 const ComparePage = lazyRouteComponent(() => import("./routes/alternatives"), "ComparePage");
 const BitlyAlternativePage = lazyRouteComponent(
   () => import("./routes/alternatives"),
@@ -220,6 +221,12 @@ const roadmapRoute = createRoute({
   getParentRoute: () => publicLayoutRoute,
   path: "/roadmap",
   component: RoadmapPage,
+  ...marketingPending,
+});
+const changelogRoute = createRoute({
+  getParentRoute: () => publicLayoutRoute,
+  path: "/changelog",
+  component: ChangelogPage,
   ...marketingPending,
 });
 const compareRoute = createRoute({
@@ -417,6 +424,7 @@ const routeTree = rootRoute.addChildren([
     qrGeneratorRoute,
     pricingRoute,
     roadmapRoute,
+    changelogRoute,
     compareRoute,
     bitlyAlternativeRoute,
     rebrandlyAlternativeRoute,

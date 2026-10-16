@@ -350,6 +350,13 @@ export function PricingPage() {
         <p className="text-xs text-muted">
           No credit card. Picking a paid plan goes straight to checkout after sign-up.
         </p>
+        <p className="text-sm text-muted">
+          Comparing tools?{" "}
+          <Link to="/compare" className="text-accent hover:underline">
+            See how rdyrct compares
+          </Link>{" "}
+          with Bitly, Rebrandly, Dub and Short.io.
+        </p>
       </section>
     </MarketingPage>
   );

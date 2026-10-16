@@ -25,6 +25,7 @@ export const PRERENDERED_PUBLIC_PATHS = new Set<string>([
   "/qr-code-generator",
   "/docs",
   "/roadmap",
+  "/changelog",
   "/compare",
   "/bitly-alternative",
   "/rebrandly-alternative",
@@ -194,6 +195,14 @@ Accept: application/json, text/event-stream
   }
 }
 \`\`\``,
+  },
+  "/changelog": {
+    title: "rdyrct changelog - what changed in each release",
+    description:
+      "What changed in each release of rdyrct, the open-source URL shortener and QR code generator: new features, fixes, and anything an upgrade changes for self-hosters.",
+    markdown: `# rdyrct changelog
+
+What changed in each release. The full text is [CHANGELOG.md](https://github.com/baronunread/rdyrct/blob/main/CHANGELOG.md) in the repository, and every change is a [merged pull request](https://github.com/baronunread/rdyrct/pulls?q=is%3Apr+is%3Amerged).`,
   },
   "/compare": {
     title: "Compare rdyrct with Bitly, Rebrandly, Dub and Short.io",
