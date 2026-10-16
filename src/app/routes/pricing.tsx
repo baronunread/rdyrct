@@ -2,7 +2,8 @@
  * Standalone pricing page (#261). "rdyrct pricing" is a real search, and this
  * is where somebody decides to pay, so it answers the question in the order
  * a buyer asks it: what the plans are, which one covers me, every limit, what
- * happens if I stop paying, and what the same thing costs elsewhere.
+ * happens if I stop paying. What the same thing costs elsewhere lives on the
+ * /compare pages, where each tool gets a page of its own and a chance to win.
  *
  * The full table still lives in one place (PricingSection in landing.tsx),
  * and so does the downgrade timeline (PlanChangeSection).
@@ -21,7 +22,6 @@ import { planFor, NEED_KEYS, type NeedKey, type Needs, type PlanFit } from "../l
 import { formatNumber } from "../lib/numbers";
 import { PLAN_LIMITS, PLAN_PRICES, type StoredPlan } from "@/shared/types";
 import { buttonClass } from "../ui/button-class";
-import { Table, Th, Td } from "../ui/misc";
 import { Check } from "../ui/icons";
 import { cn } from "../ui/cn";
 
@@ -312,53 +312,6 @@ function PlanFinder({
   );
 }
 
-/** One realistic case instead of a limit-by-limit table: on raw link and
- * domain counts some competitors beat us, on a team they do not. Prices and
- * seats as each vendor's pricing page stated them in September 2026; recheck
- * before changing a number. */
-const TEAM_COSTS = [
-  ["rdyrct Hobby", `${PLAN_PRICES.hobby} a month`, "5 members and 1 domain. Only the owner pays."],
-  ["Short.io Team", "$48 a month", "Its Free, Hobby and Pro plans are one user each."],
-  ["Rebrandly Growth", "$99 a month", "Essentials has no teammates; Professional starts at 2."],
-  ["Dub Business", "$90 a month", "No free plan, a 14-day trial."],
-  ["Bitly Enterprise", "Custom price", "The only Bitly plan that lists multiple users."],
-] as const;
-
-function TeamCostSection() {
-  return (
-    <section className="flex flex-col gap-6 py-16">
-      <div className="max-w-xl">
-        <h2 className="text-2xl font-bold tracking-tight text-balance sm:text-3xl">
-          A team of five with its own domain
-        </h2>
-        <p className="mt-2 text-muted">What that costs here, and at the best-known shorteners.</p>
-      </div>
-      <Table minWidth="min-w-xl">
-        <thead>
-          <tr>
-            <Th>Plan</Th>
-            <Th>Price</Th>
-            <Th>Why that plan</Th>
-          </tr>
-        </thead>
-        <tbody>
-          {TEAM_COSTS.map(([plan, price, why], i) => (
-            <tr key={plan} className={i === 0 ? "bg-accent/5" : undefined}>
-              <Td className="font-bold">{plan}</Td>
-              <Td className="tnum whitespace-nowrap">{price}</Td>
-              <Td className="text-muted">{why}</Td>
-            </tr>
-          ))}
-        </tbody>
-      </Table>
-      <p className="text-xs text-muted">
-        From dub.co/pricing, short.io/pricing, rebrandly.com/pricing and bitly.com/pages/pricing,
-        September 2026, monthly billing.
-      </p>
-    </section>
-  );
-}
-
 // main.tsx names this export as a string, for lazyRouteComponent, which
 // static analysis can't follow.
 // fallow-ignore-next-line unused-export
@@ -383,7 +336,6 @@ export function PricingPage() {
       </div>
       <PricingSection phoneCards={false} />
       <PlanChangeSection />
-      <TeamCostSection />
       <section className="flex flex-col items-start gap-4 border-t border-border py-16">
         <h2 className="text-2xl font-bold tracking-tight sm:text-3xl">
           Start free. Upgrade when you need your domain.
