@@ -14,7 +14,12 @@ export interface Release {
 
 type LineKind = "release" | "section" | "bullet" | "indented" | "blank" | "title" | "text";
 
-function classify(line: string): { kind: LineKind; text: string } {
+interface ClassifiedLine {
+  kind: LineKind;
+  text: string;
+}
+
+function classify(line: string): ClassifiedLine {
   if (line.startsWith("## ")) return { kind: "release", text: line.slice(3).trim() };
   if (line.startsWith("### ")) return { kind: "section", text: line.slice(4).trim() };
   if (line.startsWith("# ")) return { kind: "title", text: "" };
