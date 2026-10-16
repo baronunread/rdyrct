@@ -46,7 +46,6 @@ export async function sendWelcomeOnce(
             "Go shorten any link for free right now!",
           ],
           hero: {
-            eyebrow: "Welcome to rdyrct",
             sample: {
               long: "https://example.com/a/very/long/link?utm_source=news",
               short: `${env.SHARED_LINK_HOST || new URL(env.APP_URL).host}/hello`,

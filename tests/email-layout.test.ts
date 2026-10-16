@@ -125,6 +125,14 @@ describe("renderEmail (#73)", () => {
     expect(text).toContain("WELCOME TO RDYRCT");
     expect(text).toContain("https://example.com/long -> rdyr.cc/hello");
     expect(renderEmail(base, APP_URL, TO).html.html).not.toContain('class="band"');
+
+    const bare = renderEmail(
+      { ...base, hero: { sample: hero.sample }, footer: false },
+      APP_URL,
+      TO,
+    );
+    expect(bare.html.html).not.toContain("text-transform:uppercase");
+    expect(bare.text.startsWith(base.heading)).toBe(true);
   });
 
   test("states the recipient as a plain fact, not a guessed reason", () => {

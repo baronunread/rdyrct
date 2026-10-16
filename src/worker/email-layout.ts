@@ -58,7 +58,7 @@ export interface EmailContent {
   /** A welcome-style layout: brand band, eyebrow, big centred heading, and a
    * sample (a long link and its short form) in a pill. For the one email that
    * should feel like a greeting; every other email keeps the plain layout. */
-  hero?: { eyebrow: string; sample: { long: string; short: string } };
+  hero?: { eyebrow?: string; sample: { long: string; short: string } };
 }
 
 export interface EmailBody {
@@ -133,8 +133,8 @@ function heroRows(
           </td>
         </tr>
         <tr>
-          <td align="center" style="padding:30px 26px 0">
-            <p class="eyebrow" style="margin:0 0 12px;font-family:${FONT};font-size:12px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:${LIGHT.accent}">${hero.eyebrow}</p>
+          <td align="center" style="padding:${hero.eyebrow ? "30px" : "28px"} 26px 0">
+            ${hero.eyebrow ? emailHtml`<p class="eyebrow" style="margin:0 0 12px;font-family:${FONT};font-size:12px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:${LIGHT.accent}">${hero.eyebrow}</p>` : null}
             <h1 class="text" style="margin:0 0 16px;font-family:${FONT};font-size:28px;line-height:1.25;font-weight:800;color:${LIGHT.text}">${content.heading}</h1>
           </td>
         </tr>
@@ -241,7 +241,7 @@ const NOT_YOU = "Not you? Ignore it, or write to support@mail.rdyrct.com.";
 function renderText(content: EmailContent, appUrl: string, to: string): string {
   const lines = [content.heading, "", ...content.paragraphs.flatMap((p) => [p, ""])];
   if (content.hero) {
-    lines.unshift(content.hero.eyebrow.toUpperCase(), "");
+    if (content.hero.eyebrow) lines.unshift(content.hero.eyebrow.toUpperCase(), "");
     lines.push(`${content.hero.sample.long} -> ${content.hero.sample.short}`, "");
   }
   if (content.code) lines.push(content.code, "");
