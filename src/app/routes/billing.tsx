@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { NotFound } from "./not-found";
 import { errorMessage } from "@/app/lib/error-message";
 import confetti from "canvas-confetti";
@@ -12,10 +12,19 @@ import {
   useDomains,
   useCheckout,
   usePortal,
+  useConfirmCheckout,
 } from "../lib/hooks";
 import { shortDate } from "../lib/dates";
 import { useCurrentOrg } from "../lib/current-org";
-import { PLAN_LIMITS, PLAN_PRICES, type OrgPlan, type PlanLimits } from "@/shared/types";
+import {
+  PLAN_LIMITS,
+  PLAN_PRICES,
+  PLAN_PRICES_YEARLY,
+  YEARLY_DISCOUNT_LABEL,
+  type OrgPlan,
+  type PlanLimits,
+} from "@/shared/types";
+import { lookup } from "@/shared/lookup";
 import { Button } from "../ui/button";
 import { Badge, Card, PageHeader, Table, Th, Td } from "../ui/misc";
 import { BusyContent } from "../ui/spinner";
@@ -30,6 +39,17 @@ import { shouldOfferFirstLink } from "../lib/billing-page";
 /** The three shake handles the page owns, one per button it can bounce. */
 type Shake = Record<"hobby" | "pro" | "portal", ReturnType<typeof useShake>>;
 
+/** How a subscription is billed. Yearly is 10% cheaper per month. */
+type BillingInterval = "month" | "year";
+
+/** The upgrade-button label's price suffix for a plan at an interval. No
+ * "billed yearly" here: the toggle right above the buttons already says
+ * that, and the fixed button height (h-9) has no room for a wrapped third
+ * line on the narrow two-up mobile layout. */
+function priceSuffix(plan: "hobby" | "pro", interval: BillingInterval): string {
+  return interval === "year" ? `${PLAN_PRICES_YEARLY[plan]}/mo` : `${PLAN_PRICES[plan]}/mo`;
+}
+
 type PlanActionSnapshot = {
   plan: OrgPlan;
   hasBillingAccount: boolean;
@@ -39,11 +59,12 @@ type PlanActionSnapshot = {
   confirmTimedOut: boolean;
   cancelAtPeriodEnd: boolean;
   periodEnd: number | null;
+  interval: "month" | "year" | null;
 };
 
 type PlanActionCommands = {
   shake: Shake;
-  onUpgrade: (target: "hobby" | "pro") => void;
+  onUpgrade: (target: "hobby" | "pro", interval: BillingInterval) => void;
   onPortal: () => void;
 };
 
@@ -61,6 +82,7 @@ type PortalState = {
   plan: OrgPlan;
   cancelAtPeriodEnd: boolean;
   periodEnd: number | null;
+  interval: "month" | "year" | null;
 };
 
 const PORTAL_SNAPSHOT_KEY = "billing:portal-snapshot";
@@ -70,14 +92,16 @@ const PORTAL_SNAPSHOT_KEY = "billing:portal-snapshot";
  * to tell "the webhook has landed" from "it has not landed yet". */
 function portalState(user?: {
   plan: OrgPlan;
-  polarSubscriptionCancelAtPeriodEnd?: boolean;
-  polarSubscriptionCurrentPeriodEnd?: number | null;
+  polarSubscriptionCancelAtPeriodEnd: boolean;
+  polarSubscriptionCurrentPeriodEnd: number | null;
+  polarSubscriptionInterval: "month" | "year" | null;
 }): PortalState {
-  if (!user) return { plan: "free", cancelAtPeriodEnd: false, periodEnd: null };
+  if (!user) return { plan: "free", cancelAtPeriodEnd: false, periodEnd: null, interval: null };
   return {
     plan: user.plan,
-    cancelAtPeriodEnd: user.polarSubscriptionCancelAtPeriodEnd ?? false,
-    periodEnd: user.polarSubscriptionCurrentPeriodEnd ?? null,
+    cancelAtPeriodEnd: user.polarSubscriptionCancelAtPeriodEnd,
+    periodEnd: user.polarSubscriptionCurrentPeriodEnd,
+    interval: user.polarSubscriptionInterval,
   };
 }
 
@@ -85,7 +109,7 @@ function billingSnapshot(state: PortalState) {
   // JSON, not join: a join renders null as an empty string, so "no period
   // end" and "period end of ''" would compare equal and the wait would end
   // on a change that never happened.
-  return JSON.stringify([state.plan, state.cancelAtPeriodEnd, state.periodEnd]);
+  return JSON.stringify([state.plan, state.cancelAtPeriodEnd, state.periodEnd, state.interval]);
 }
 
 const PLAN_LABEL = {
@@ -223,6 +247,81 @@ function PlanStatusNotes({
   );
 }
 
+/** Monthly / yearly switch. Yearly carries the discount label so the saving
+ * is visible before a plan is picked. The active option's fill is one pill
+ * that never unmounts: `layoutId` alone does not animate here, because a
+ * plain conditional render swaps the old and new pill in the same commit
+ * with no exit phase for Framer to measure a "from" rect (that needs
+ * AnimatePresence, overkill for two buttons). Measuring the target button's
+ * own rect and tweening one persistent element to it sidesteps that. */
+function BillingCycleToggle({
+  interval,
+  onChange,
+  disabled,
+}: {
+  interval: BillingInterval;
+  onChange: (next: BillingInterval) => void;
+  disabled: boolean;
+}) {
+  const reduced = useReducedMotion();
+  const containerRef = useRef<HTMLDivElement>(null);
+  const buttonRefs = useRef<Record<BillingInterval, HTMLButtonElement | null>>({
+    month: null,
+    year: null,
+  });
+  const [pillRect, setPillRect] = useState<{
+    left: number;
+    top: number;
+    width: number;
+    height: number;
+  } | null>(null);
+
+  useLayoutEffect(() => {
+    const btn = buttonRefs.current[interval];
+    const container = containerRef.current;
+    if (!btn || !container) return;
+    const b = btn.getBoundingClientRect();
+    const c = container.getBoundingClientRect();
+    setPillRect({ left: b.left - c.left, top: b.top - c.top, width: b.width, height: b.height });
+  }, [interval]);
+
+  return (
+    <LazyMotion features={domAnimation}>
+      <div
+        ref={containerRef}
+        className="relative flex w-fit items-center gap-1 rounded-md border border-border bg-surface p-1 text-xs"
+      >
+        {pillRect && (
+          <m.span
+            className="absolute rounded bg-accent"
+            initial={false}
+            animate={pillRect}
+            transition={reduced ? { duration: 0 } : { type: "spring", stiffness: 500, damping: 35 }}
+          />
+        )}
+        {(["month", "year"] as const).map((value) => (
+          <button
+            key={value}
+            ref={(el) => {
+              buttonRefs.current[value] = el;
+            }}
+            type="button"
+            disabled={disabled}
+            aria-pressed={interval === value}
+            onClick={() => onChange(value)}
+            className={
+              "relative rounded px-2 py-1 font-medium transition-colors disabled:opacity-50 " +
+              (interval === value ? "text-bg" : "text-muted hover:text-text")
+            }
+          >
+            {value === "month" ? "Monthly" : `Yearly · ${YEARLY_DISCOUNT_LABEL}`}
+          </button>
+        ))}
+      </div>
+    </LazyMotion>
+  );
+}
+
 function FreeUpgradeButtons({
   checkoutPlan,
   shake,
@@ -230,32 +329,37 @@ function FreeUpgradeButtons({
 }: {
   checkoutPlan: "hobby" | "pro" | null;
   shake: Shake;
-  onUpgrade: (target: "hobby" | "pro") => void;
+  onUpgrade: (target: "hobby" | "pro", interval: BillingInterval) => void;
 }) {
+  const [interval, setInterval] = useState<BillingInterval>("month");
+  const busy = checkoutPlan !== null;
   return (
-    <div className="grid grid-cols-2 gap-3">
-      <Button
-        variant="primary"
-        disabled={checkoutPlan !== null}
-        className={shake.hobby.className}
-        onAnimationEnd={shake.hobby.end}
-        onClick={() => onUpgrade("hobby")}
-      >
-        <BusyContent busy={checkoutPlan === "hobby"}>
-          Upgrade to Hobby · {PLAN_PRICES.hobby}/mo
-        </BusyContent>
-      </Button>
-      <Button
-        variant="primary"
-        disabled={checkoutPlan !== null}
-        className={shake.pro.className}
-        onAnimationEnd={shake.pro.end}
-        onClick={() => onUpgrade("pro")}
-      >
-        <BusyContent busy={checkoutPlan === "pro"}>
-          Upgrade to Pro · {PLAN_PRICES.pro}/mo
-        </BusyContent>
-      </Button>
+    <div className="flex flex-col gap-3">
+      <BillingCycleToggle interval={interval} onChange={setInterval} disabled={busy} />
+      <div className="grid grid-cols-2 gap-3">
+        <Button
+          variant="primary"
+          disabled={busy}
+          className={shake.hobby.className}
+          onAnimationEnd={shake.hobby.end}
+          onClick={() => onUpgrade("hobby", interval)}
+        >
+          <BusyContent busy={checkoutPlan === "hobby"}>
+            Upgrade to Hobby · {priceSuffix("hobby", interval)}
+          </BusyContent>
+        </Button>
+        <Button
+          variant="primary"
+          disabled={busy}
+          className={shake.pro.className}
+          onAnimationEnd={shake.pro.end}
+          onClick={() => onUpgrade("pro", interval)}
+        >
+          <BusyContent busy={checkoutPlan === "pro"}>
+            Upgrade to Pro · {priceSuffix("pro", interval)}
+          </BusyContent>
+        </Button>
+      </div>
     </div>
   );
 }
@@ -333,11 +437,24 @@ function PlanComparison({ plan }: { plan: OrgPlan }) {
   return plan === "free" ? <PlanFeatureComparison /> : null;
 }
 
-function HobbyUpgradeHint({ snapshot }: { snapshot: PlanActionSnapshot }) {
-  if (snapshot.plan !== "hobby" || !snapshot.hasBillingAccount || snapshot.comped) return null;
-  return (
-    <p className="mt-2 text-xs text-muted">Want Pro? Switch plans from the subscription portal.</p>
-  );
+const PLAN_CHANGE_HINT = {
+  hobby:
+    "Want Pro? Change your plan, or switch between monthly and yearly, in the subscription portal.",
+  pro: "Switch between monthly and yearly in the subscription portal.",
+};
+
+function PlanChangeHint({ snapshot }: { snapshot: PlanActionSnapshot }) {
+  const hint =
+    snapshot.hasBillingAccount && !snapshot.comped && lookup(PLAN_CHANGE_HINT, snapshot.plan);
+  return hint ? <p className="mt-2 text-xs text-muted">{hint}</p> : null;
+}
+
+const INTERVAL_LABEL = { month: "Monthly", year: "Yearly" } as const;
+
+/** The plan badge: "Pro · Yearly" for a subscriber, just the plan for free or comped. */
+function planBadgeLabel({ plan, comped, interval }: PlanActionSnapshot): string {
+  const cycle = comped || !interval ? "" : ` · ${INTERVAL_LABEL[interval]}`;
+  return PLAN_LABEL[plan] + (plan === "free" ? "" : cycle);
 }
 
 function PlanActions({
@@ -353,7 +470,7 @@ function PlanActions({
         <div className="flex items-center justify-between">
           <p className="text-xs font-medium text-muted">Plan</p>
           <Badge color={snapshot.plan === "free" ? "muted" : "mint"}>
-            {PLAN_LABEL[snapshot.plan]}
+            {planBadgeLabel(snapshot)}
           </Badge>
         </div>
         <p className="text-sm text-muted">
@@ -371,7 +488,7 @@ function PlanActions({
           <PlanActionControl snapshot={snapshot} commands={commands} />
           {/* Not for a comped Hobby: the portal changes the subscription, and
               the comp would still outrank whatever it changed to. */}
-          <HobbyUpgradeHint snapshot={snapshot} />
+          <PlanChangeHint snapshot={snapshot} />
         </div>
       </div>
     </Card>
@@ -527,7 +644,7 @@ function CelebrationOverlay({
 }
 
 const WEBHOOK_POLL_MS = 2000;
-const WEBHOOK_POLL_TRIES = 10;
+const WEBHOOK_POLL_TRIES = 5;
 
 /**
  * Waits for a Polar webhook to land, by asking the server again.
@@ -600,8 +717,9 @@ function useCelebration() {
 }
 
 /**
- * `?plan=hobby` on the landing CTAs sends someone straight to checkout, so a
- * visitor who picked a plan before signing up does not have to pick it twice.
+ * `?plan=hobby` (with an optional `&interval=year`) on the landing CTAs sends
+ * someone straight to checkout, so a visitor who picked a plan before signing
+ * up does not have to pick it twice.
  *
  * Once only, and only for a free account: re-running it would open checkout
  * again behind the person's back. The URL is cleaned either way, so a reload
@@ -609,7 +727,7 @@ function useCelebration() {
  */
 function useAutoUpgradeFromUrl(
   user: { plan: OrgPlan } | undefined,
-  onUpgrade: (target: "hobby" | "pro") => void,
+  onUpgrade: (target: "hobby" | "pro", interval: BillingInterval) => void,
 ) {
   const done = useRef(false);
   const upgrade = useRef(onUpgrade);
@@ -619,19 +737,37 @@ function useAutoUpgradeFromUrl(
   useEffect(() => {
     if (!user || done.current) return;
     done.current = true;
-    const url = new URL(window.location.href);
-    const target = url.searchParams.get("plan");
-    if (target !== "hobby" && target !== "pro") return;
-    url.searchParams.delete("plan");
-    window.history.replaceState({}, "", url.toString());
-    if (user.plan === "free") upgrade.current(target);
+    upgradeIfFree(user.plan, takeUpgradeRequest(), upgrade.current);
   }, [user]);
+}
+
+function upgradeIfFree(
+  plan: OrgPlan,
+  request: ReturnType<typeof takeUpgradeRequest>,
+  onUpgrade: (target: "hobby" | "pro", interval: BillingInterval) => void,
+) {
+  if (request && plan === "free") onUpgrade(request.target, request.interval);
+}
+
+/** The plan and cycle a landing CTA asked for, read off the URL and then
+ * removed from it, so a reload is an ordinary visit. Null when the URL asks
+ * for nothing. */
+function takeUpgradeRequest(): { target: "hobby" | "pro"; interval: BillingInterval } | null {
+  const url = new URL(window.location.href);
+  const target = url.searchParams.get("plan");
+  const interval = url.searchParams.get("interval") === "year" ? "year" : "month";
+  if (target !== "hobby" && target !== "pro") return null;
+  url.searchParams.delete("plan");
+  url.searchParams.delete("interval");
+  window.history.replaceState({}, "", url.toString());
+  return { target, interval };
 }
 
 function useCheckoutFlow() {
   const currentUser = useCurrentUser();
   const checkout = useCheckout();
   const portal = usePortal();
+  const confirmCheckout = useConfirmCheckout();
   const toast = useToast();
   // One handle per button, kept here because the mutation error handlers
   // below are what call `start()`. Grouped so the three travel as one prop,
@@ -649,16 +785,19 @@ function useCheckoutFlow() {
   const [showPortalOverlay, setShowPortalOverlay] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const [confirmTimedOut, setConfirmTimedOut] = useState(false);
+  // The checkout id from the return URL, kept around so onGaveUp below can
+  // ask Polar about this exact checkout if the webhook never shows up.
+  const [checkoutId, setCheckoutId] = useState<string | null>(null);
   // The billing state as it was before a trip to the portal, while we wait
   // for the webhook to move it. Null when we are not waiting.
   const [portalSnapshot, setPortalSnapshot] = useState<string | null>(null);
   const { showCelebration, setShowCelebration, celebrate } = useCelebration();
 
-  const handleUpgrade = async (target: "hobby" | "pro") => {
-    posthog.capture("checkout_started", { target_plan: target });
+  const handleUpgrade = async (target: "hobby" | "pro", interval: BillingInterval = "month") => {
+    posthog.capture("checkout_started", { target_plan: target, interval });
     setCheckoutPlan(target);
     try {
-      const data = await checkout.mutateAsync(target);
+      const data = await checkout.mutateAsync({ plan: target, interval });
       setTimeout(() => window.location.assign(data.url), 300);
     } catch (e) {
       setCheckoutPlan(null);
@@ -694,6 +833,7 @@ function useCheckoutFlow() {
       setShowPortalOverlay(false);
       setConfirming(false);
       setConfirmTimedOut(false);
+      setCheckoutId(null);
       setShowCelebration(false);
       // The portal is where a plan changes, a cancel is scheduled, and a
       // cancel is undone, and none of the three sends the browser back here
@@ -733,16 +873,21 @@ function useCheckoutFlow() {
   // Detect the checkout return once on mount.
   useEffect(() => {
     const url = new URL(window.location.href);
-    if (url.searchParams.has("checkout_id")) {
+    const id = url.searchParams.get("checkout_id");
+    if (id) {
       setCheckoutPlan(null);
       setShowPortalOverlay(false);
       setConfirming(true);
+      setCheckoutId(id);
       url.searchParams.delete("checkout_id");
       window.history.replaceState({}, "", url.toString());
     }
   }, []);
 
   // The checkout return: the plan flipping to paid is the webhook landing.
+  // If it hasn't landed by the time the poll gives up, ask Polar directly
+  // rather than leaving someone who already paid looking free on reload
+  // (see POST /billing/checkout/:id/confirm on the worker).
   useAwaitWebhook({
     waiting: confirming,
     arrived: plan !== "free",
@@ -750,13 +895,24 @@ function useCheckoutFlow() {
       setConfirming(false);
       celebrate();
     },
-    onGaveUp: () => {
+    onGaveUp: async () => {
+      const confirmed = checkoutId
+        ? await confirmCheckout.mutateAsync(checkoutId).catch(() => null)
+        : null;
       setConfirming(false);
+      if (confirmed && confirmed.plan !== "free") {
+        await qc.refetchQueries({ queryKey: ["user"] });
+        celebrate();
+        return;
+      }
       setConfirmTimedOut(true);
     },
   });
 
-  useAutoUpgradeFromUrl(currentUser.data?.user, (target) => void handleUpgrade(target));
+  useAutoUpgradeFromUrl(
+    currentUser.data?.user,
+    (target, interval) => void handleUpgrade(target, interval),
+  );
 
   return {
     plan,
@@ -802,6 +958,7 @@ const NO_ACCOUNT_YET = {
   comped: false,
   polarSubscriptionCancelAtPeriodEnd: false,
   polarSubscriptionCurrentPeriodEnd: null,
+  polarSubscriptionInterval: null,
 };
 
 function useBillingAccount() {
@@ -816,6 +973,7 @@ function useBillingAccount() {
     comped,
     cancelAtPeriodEnd: subscription.polarSubscriptionCancelAtPeriodEnd,
     periodEnd: subscription.polarSubscriptionCurrentPeriodEnd,
+    interval: subscription.polarSubscriptionInterval,
     ownedOrgs: ownedOrgCount(currentUser.data?.orgs),
   };
 }
@@ -876,6 +1034,7 @@ function useBillingPageModel() {
         confirmTimedOut: flow.confirmTimedOut,
         cancelAtPeriodEnd: account.cancelAtPeriodEnd,
         periodEnd: account.periodEnd,
+        interval: account.interval,
       },
       commands: {
         shake: flow.shake,

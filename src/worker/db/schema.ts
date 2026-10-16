@@ -57,6 +57,7 @@ export const user = sqliteTable("user", {
   })
     .notNull()
     .default(false),
+  polarSubscriptionInterval: text("polar_subscription_interval", { enum: ["month", "year"] }),
   polarSubscriptionCurrentPeriodEnd: integer("polar_subscription_current_period_end", {
     mode: "timestamp_ms",
   }),
