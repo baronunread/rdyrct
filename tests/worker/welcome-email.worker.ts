@@ -56,7 +56,9 @@ describe("welcome email", () => {
     const [welcome] = welcomes(mail.sent);
     expect(welcome?.to).toBe(email);
     // From a person, so a reply reaches that person.
-    expect(welcome?.from).toBe("Andrea at rdyrct <andrea@mail.rdyrct.com>");
+    // The address comes from WELCOME_FROM, which differs per environment
+    // (wrangler vars, .dev.vars); the person does not.
+    expect(welcome?.from).toMatch(/^Andrea at rdyrct <andrea@[^>]+>$/);
     expect(welcome?.text).toContain("/dashboard");
     // A letter to someone who just signed up: no "Not you?" boilerplate.
     expect(welcome?.text).not.toContain("Not you?");
