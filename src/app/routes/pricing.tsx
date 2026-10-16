@@ -304,7 +304,7 @@ function PlanFinder({
           <p className="text-sm text-muted">
             {fit.plan
               ? fitReason(fit)
-              : "That is past what Pro covers. Self-host rdyrct on your own Cloudflare account, or write to support@rdyrct.com."}
+              : "That is past what Pro covers. Self-host rdyrct on your own Cloudflare account, or write to support@mail.rdyrct.com."}
           </p>
         </div>
       </div>

@@ -16,8 +16,9 @@ import * as schema from "./db/schema";
 import type { DB, Env } from "./env";
 import { captureAlert } from "./sentry";
 import { afterResponse } from "./background";
+import { sendWelcomeOnce } from "./welcome";
 import { emailConfigured, sendEmail } from "./email";
-import { renderEmail } from "./email-layout";
+import { NOTICE_FOOTER, renderEmail } from "./email-layout";
 import { hashPassword, verifyPassword } from "./password";
 import { uid } from "./util";
 import { spendToken, type CapScope } from "./cap";
@@ -263,6 +264,7 @@ async function sendExistingAccountNotice(env: Env, email: string) {
         ],
         cta: { label: "Sign in", url: `${env.APP_URL}/login` },
         note: "If this was not you, you can ignore this email. Nobody can use your address without reading this inbox.",
+        footerLine: NOTICE_FOOTER,
       },
       env.APP_URL,
       email,
@@ -578,6 +580,17 @@ function buildAuth(env: Env) {
                 plan: isSuper ? "pro" : "free",
               },
             };
+          },
+          // Google accounts arrive verified, so the welcome goes out here.
+          after: async (user) => {
+            afterResponse(sendWelcomeOnce(env, db, user));
+          },
+        },
+        // A password account is verified by an update, not at creation. The
+        // claim inside sendWelcomeOnce makes every later update a no-op.
+        update: {
+          after: async (user) => {
+            afterResponse(sendWelcomeOnce(env, db, user));
           },
         },
       },

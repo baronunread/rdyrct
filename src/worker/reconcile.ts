@@ -5,7 +5,7 @@ import type { DB, Env } from "./env";
 import { billingEnabled, countActiveAddresses, orgOwnerEmail } from "./plan";
 import { enqueueStorage, syncDomainMsg } from "./storage";
 import { sendEmail } from "./email";
-import { renderEmail } from "./email-layout";
+import { NOTICE_FOOTER, renderEmail } from "./email-layout";
 import { captureAlert } from "./sentry";
 import {
   GRACE_PERIOD_MS,
@@ -417,6 +417,7 @@ async function notifyOrgsLocked(
         "Upgrade to unlock all of them, or open one and choose to keep it active instead.",
       ],
       cta: { label: "See your plan", url: `${env.APP_URL}/billing` },
+      footerLine: NOTICE_FOOTER,
     },
     env.APP_URL,
     to,
@@ -475,6 +476,7 @@ async function sendDowngradeEmail(
         "Upgrade to put it all back. If you leave it, you keep what you have and cannot add more.",
       ],
       cta: { label: "See your plan", url: `${env.APP_URL}/billing` },
+      footerLine: NOTICE_FOOTER,
     },
     env.APP_URL,
     to,

@@ -65,6 +65,8 @@ export const user = sqliteTable("user", {
   // webhook mutation refuses to write over a newer value, which is what
   // makes a late or replayed delivery harmless. See routes/billing.ts.
   polarEventAt: integer("polar_event_at", { mode: "timestamp_ms" }),
+  // When the welcome email was claimed for sending. Null means not yet.
+  welcomeSentAt: integer("welcome_sent_at", { mode: "timestamp_ms" }),
   createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
   updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),
 });

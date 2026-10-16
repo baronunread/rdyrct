@@ -1,5 +1,5 @@
 import { expect, type Page, test } from "@playwright/test";
-import { signUpAndVerify, verifySignup, submitSignup } from "./resend";
+import { signUpAndVerify, subjectsSentTo, verifySignup, submitSignup } from "./resend";
 import { rawSql } from "./db";
 import { signOut } from "./pages";
 
@@ -17,6 +17,15 @@ async function submitLogin(page: Page, email: string, password: string) {
   await page.getByLabel("Password").fill(password);
   await page.getByRole("button", { name: "Sign in" }).click();
 }
+
+test("a new account gets one welcome email once its address is verified", async ({ page }) => {
+  const email = `welcome-${Date.now()}@gmail.com`;
+  await signUpAndVerify(page, email, "test-password-123");
+
+  await expect
+    .poll(async () => (await subjectsSentTo(page, email)).filter((s) => s === "Welcome to rdyrct"))
+    .toHaveLength(1);
+});
 
 test.describe("authentication forms", () => {
   for (const token of [null, "fresh-signup-session"]) {

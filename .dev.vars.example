@@ -10,6 +10,8 @@ SHARED_LINK_HOST=rdyrct.localhost
 RESEND_API_KEY=re_local_emulated
 RESEND_BASE_URL=https://mail.rdyrct.localhost
 MAIL_FROM=rdyrct <no-reply@localhost>
+# The founder's welcome email. Leave unset to send none.
+WELCOME_FROM=Andrea at rdyrct <andrea@localhost>
 
 # Polar (sandbox): https://sandbox.polar.sh
 POLAR_ACCESS_TOKEN=polar_oat_replace_me

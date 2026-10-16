@@ -284,7 +284,7 @@ This policy explains what rdyrct collects, why, the legal basis for it, and how 
 
 ## Data controller
 
-Andrea Bruno is the data controller for rdyrct. For a privacy request or question, email [support@rdyrct.com](mailto:support@rdyrct.com).
+Andrea Bruno is the data controller for rdyrct. For a privacy request or question, email [support@mail.rdyrct.com](mailto:support@mail.rdyrct.com).
 
 ## Data we collect
 
@@ -308,7 +308,7 @@ We use Cloudflare for hosting and storage, Resend for transactional email, Polar
 
 We retain account and organization data while your account is active. You can access, correct, export, or erase your data, object to or restrict processing, withdraw consent, or delete your account in Settings. If you are in the EU, you may complain to the Italian data protection authority.
 
-For help, email [support@rdyrct.com](mailto:support@rdyrct.com).`,
+For help, email [support@mail.rdyrct.com](mailto:support@mail.rdyrct.com).`,
   },
   "/terms": {
     title: "Terms of service - rdyrct URL shortener and QR codes",
@@ -336,6 +336,6 @@ rdyrct is provided as is and as available, without warranties. You may stop usin
 
 ## Changes and contact
 
-We may update these terms. Continuing to use rdyrct after a change takes effect accepts the revised terms. Email [support@rdyrct.com](mailto:support@rdyrct.com) with questions.`,
+We may update these terms. Continuing to use rdyrct after a change takes effect accepts the revised terms. Email [support@mail.rdyrct.com](mailto:support@mail.rdyrct.com) with questions.`,
   },
 } satisfies Record<string, PageMeta>;

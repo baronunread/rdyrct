@@ -49,6 +49,17 @@ export function otpForEmail(value: JsonValue, email: string): string {
   return codes[codes.length - 1] ?? "";
 }
 
+/** The subjects of every email the emulator holds for `email`, oldest first. */
+export async function subjectsSentTo(page: Page, email: string): Promise<string[]> {
+  const response = await page.request.get("http://localhost:4000/emails", {
+    headers: { authorization: "Bearer test_token_admin" },
+  });
+  if (!response.ok()) return [];
+  return inboxList(await response.json())
+    .filter((item) => addressedTo(item, email))
+    .map((item) => (isRecord(item) ? String(item.subject ?? "") : ""));
+}
+
 export async function latestOtp(page: Page, email: string) {
   let otp = "";
   await expect

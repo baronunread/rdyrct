@@ -21,6 +21,7 @@ export async function sendEmail(
   to: string,
   subject: string,
   body: EmailBody,
+  options: { from?: string } = {},
 ): Promise<void> {
   // No provider, no mail. Nothing is logged: a code or reset link in a log is
   // a secret in the wrong place.
@@ -33,7 +34,7 @@ export async function sendEmail(
       "content-type": "application/json",
     },
     body: JSON.stringify({
-      from: env.MAIL_FROM,
+      from: options.from ?? env.MAIL_FROM,
       to,
       subject,
       html: body.html.html,

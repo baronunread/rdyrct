@@ -219,6 +219,7 @@ export const billingEnv = () =>
 
 /** One outbound Resend send, as the worker posted it. */
 export interface CapturedEmail {
+  from?: string;
   to: string;
   subject: string;
   html: string;

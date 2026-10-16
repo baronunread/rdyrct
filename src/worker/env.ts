@@ -41,6 +41,10 @@ export interface Env {
   SUPERADMIN_EMAIL: string;
   RESEND_API_KEY?: string; // unset: no email goes out and sign-up skips verification
   MAIL_FROM: string; // var, e.g. "me <no-reply@mail.rdyrct.com>"
+  // var, e.g. "Andrea at rdyrct <andrea@mail.rdyrct.com>". The sender of the
+  // founder's welcome email. Unset, no welcome is sent: its text is written in
+  // one person's voice, which a self-hosted instance has no right to borrow.
+  WELCOME_FROM?: string;
   APP_URL: string; // var, e.g. "https://rdyrct.com"; SPA/API origin
   RESEND_BASE_URL?: string; // var; dev points at the emulate.dev Resend emulator
 
