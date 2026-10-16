@@ -342,15 +342,32 @@ async function mutationFor(db: Db, env: Env, event: PolarEvent) {
   }
 }
 
+/**
+ * Polar has two ways to turn a webhook secret into a signing key, and both
+ * kinds of secret look like `whsec_…`, so the secret itself cannot say which
+ * one it is. Secrets made before 8 September 2026 are Polar HMAC: the key is
+ * the whole string, which `standardwebhooks` reads only once it is base64
+ * encoded. Secrets made or reset from that date are Standard Webhooks: passed
+ * as they are. Polar's own SDKs try both, and so does this. Either key comes
+ * from the same secret, so trying two does not let anyone in who lacks it.
+ */
+function verifiesWith(key: string, body: string, headers: Record<string, string>): boolean {
+  try {
+    new Webhook(key).verify(body, headers);
+    return true;
+  } catch {
+    // A secret that is not valid base64 as given throws before it verifies
+    // anything; that only means this is not the key to use.
+    return false;
+  }
+}
+
 export async function handlePolarWebhook(req: Request, env: Env): Promise<Response> {
   if (!env.POLAR_WEBHOOK_SECRET) return Response.json({ message: "Not found" }, { status: 404 });
   const body = await req.text();
-  try {
-    new Webhook(btoa(env.POLAR_WEBHOOK_SECRET)).verify(
-      body,
-      Object.fromEntries(req.headers.entries()),
-    );
-  } catch {
+  const headers = Object.fromEntries(req.headers.entries());
+  const secret = env.POLAR_WEBHOOK_SECRET;
+  if (!verifiesWith(btoa(secret), body, headers) && !verifiesWith(secret, body, headers)) {
     return Response.json({ message: "Invalid signature" }, { status: 403 });
   }
   // SAFETY: the webhook signature was verified above, so this body is one
