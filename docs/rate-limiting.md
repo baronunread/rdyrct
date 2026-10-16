@@ -23,7 +23,29 @@ They run before the Worker starts, so a blocked request costs no CPU time and
 no billable invocation. Unlike the Workers limiters below, the counters are
 global rather than per-location.
 
-Add them at **Security → WAF → Rate limiting rules** on the `rdyrct.com` zone.
+### What is live on production (set 2026-10-16)
+
+Both zones are on the Cloudflare **Free** plan, which allows one rate limiting
+rule per zone, counts over 10 seconds only, blocks for 10 seconds only, and
+must count by IP and Cloudflare location (so the counters are per-location
+there, not global). The three rules below do not fit, so production runs these
+two instead:
+
+| Zone         | Name             | Expression                                      | Limit              | Action               |
+| ------------ | ---------------- | ----------------------------------------------- | ------------------ | -------------------- |
+| `rdyrct.com` | `auth-endpoints` | `(http.request.uri.path contains "/api/auth/")` | 30 per 10 seconds  | Block for 10 seconds |
+| `rdyr.cc`    | `redirect-flood` | `(http.host eq "rdyr.cc")`                      | 300 per 10 seconds | Block for 10 seconds |
+
+`redirect-flood` is deliberately high. People share an address (mobile
+carriers, offices, an event's Wi-Fi) and link preview bots fetch from a few
+addresses, and a blocked visitor sees an error page instead of the
+destination. It is there to stop a script, not a crowd.
+
+`cap-challenges` and `password-reset` below are **not deployed**: the Free
+plan has no slot for them. The Worker limiters in Layer 2 cover those paths.
+A Pro zone allows two rules and blocks of up to an hour.
+
+Add the full set at **Security → WAF → Rate limiting rules** on the `rdyrct.com` zone.
 All three rules target auth/Cap paths, which only ever get hit on that zone
 (the shared redirect host from `SHARED_LINK_HOST`, e.g. `rdyr.cc`, only ever
 serves redirects), so there is nothing to add on its zone for these.
