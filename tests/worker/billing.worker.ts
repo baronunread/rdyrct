@@ -99,9 +99,9 @@ function signPayload(payload: string) {
 
 /** Same as signPayload, but with an explicit delivery id: for tests that
  * simulate a redelivered (or spoofed-id) webhook. */
-function signPayloadWithId(payload: string, msgId: string) {
+function signPayloadWithId(payload: string, msgId: string, key = btoa(POLAR_WEBHOOK_SECRET)) {
   const timestamp = new Date();
-  const signature = new Webhook(btoa(POLAR_WEBHOOK_SECRET)).sign(msgId, timestamp, payload);
+  const signature = new Webhook(key).sign(msgId, timestamp, payload);
   return {
     "webhook-id": msgId,
     "webhook-timestamp": String(Math.floor(timestamp.getTime() / 1000)),
@@ -510,6 +510,31 @@ describe("POST /api/webhooks/polar", () => {
       },
     });
     expect((await getUser()).plan).toBe("free");
+  });
+
+  it("accepts both secret formats Polar hands out, and nothing signed with another", async () => {
+    const payload = subscriptionActivePayload();
+    // An endpoint made or reset from 8 Sep 2026: a whsec_ secret, used as it is.
+    const reset = `whsec_${btoa("a-reset-secret-of-thirty-two-bytes!!")}`;
+    await seedUser({ plan: "free" });
+    const resetEnv: Env = { ...polarEnv(), POLAR_WEBHOOK_SECRET: reset };
+
+    const res = await postWebhook(
+      JSON.parse(payload),
+      signPayloadWithId(payload, "reset-1", reset),
+      resetEnv,
+    );
+    expect(res.status).toBe(200);
+    expect((await getUser()).plan).toBe("pro");
+
+    // A plain legacy secret (the default env) is covered by every other test
+    // here. What must hold for both: a signature from a different key fails.
+    const wrong = await postWebhook(
+      JSON.parse(payload),
+      signPayloadWithId(payload, "reset-2", btoa("not-the-secret")),
+      resetEnv,
+    );
+    expect(wrong.status).toBe(403);
   });
 
   it("redelivering the same event is a no-op, because applying it twice lands the same state (#17)", async () => {

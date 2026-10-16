@@ -342,11 +342,23 @@ async function mutationFor(db: Db, env: Env, event: PolarEvent) {
   }
 }
 
+/**
+ * The key `standardwebhooks` wants for a Polar webhook secret. Endpoints made
+ * or reset from 8 September 2026 hand out a `whsec_` secret, which is already
+ * in the library's format and is passed as it is. An older endpoint's secret
+ * is a plain string, which the library reads only once it is base64-encoded.
+ * Encoding a `whsec_` secret again would verify nothing, so a reset secret
+ * would answer every event with a 403.
+ */
+function webhookKey(secret: string): string {
+  return secret.startsWith("whsec_") ? secret : btoa(secret);
+}
+
 export async function handlePolarWebhook(req: Request, env: Env): Promise<Response> {
   if (!env.POLAR_WEBHOOK_SECRET) return Response.json({ message: "Not found" }, { status: 404 });
   const body = await req.text();
   try {
-    new Webhook(btoa(env.POLAR_WEBHOOK_SECRET)).verify(
+    new Webhook(webhookKey(env.POLAR_WEBHOOK_SECRET)).verify(
       body,
       Object.fromEntries(req.headers.entries()),
     );
