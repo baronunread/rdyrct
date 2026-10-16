@@ -129,8 +129,7 @@ function heroRows(
     emailHtml`<p class="text" style="margin:0 0 14px;font-family:${FONT};font-size:16px;line-height:1.6;text-align:center;color:${LIGHT.text}">${child}</p>`;
   return emailHtml`<tr>
           <td class="band" align="center" bgcolor="${DARK.bg}" style="padding:22px 26px;background:${DARK.bg};border-radius:12px 12px 0 0">
-            <img src="${`${appUrl}/email-logo.png`}" width="40" height="40" alt="" style="vertical-align:middle;margin-right:12px;border:0;border-radius:9px">
-            <span style="vertical-align:middle;font-family:${FONT};font-size:22px;font-weight:700;letter-spacing:2px;color:${DARK.accent}">rdyrct</span>
+            <img src="${`${appUrl}/email-logo.png`}" width="110" height="30" alt="rdyrct" style="display:inline-block;border:0;font-family:${FONT};font-size:22px;font-weight:700;letter-spacing:2px;color:${DARK.text}">
           </td>
         </tr>
         <tr>
