@@ -1,0 +1,3 @@
+CREATE TABLE IF NOT EXISTS links (id INTEGER PRIMARY KEY, destination TEXT NOT NULL);
+WITH RECURSIVE ids(id) AS (SELECT 1 UNION ALL SELECT id + 1 FROM ids WHERE id < 1000)
+INSERT OR IGNORE INTO links SELECT id, 'https://example.com/' || id FROM ids;
