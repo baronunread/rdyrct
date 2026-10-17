@@ -20,6 +20,21 @@ test("landing page keeps the main sign-up path", async ({ page }) => {
   await expect(page).toHaveURL(/\/signup/);
 });
 
+test("the hero carries the Product Hunt badge, opening in a new tab", async ({ page }) => {
+  await page.route("https://api.producthunt.com/**", (route) =>
+    route.fulfill({
+      contentType: "image/svg+xml",
+      body: "<svg xmlns='http://www.w3.org/2000/svg'/>",
+    }),
+  );
+  await page.goto("/");
+
+  const badge = page.getByRole("link", { name: /Product Hunt/ });
+  await expect(badge).toHaveAttribute("href", /^https:\/\/www\.producthunt\.com\/products\/rdyrct/);
+  await expect(badge).toHaveAttribute("target", "_blank");
+  await expect(badge).toHaveAttribute("rel", /noopener/);
+});
+
 // The hero used to spend its second button sending the warmest visitor on the
 // page to GitHub (#96). Both hero CTAs must now keep the visitor on the site,
 // and the self-host link has to still exist, further down, under pricing.

@@ -26,6 +26,11 @@ const POSTHOG = "https://*.posthog.com";
 const SENTRY =
   "https://*.ingest.sentry.io https://*.ingest.de.sentry.io https://*.ingest.us.sentry.io";
 const STATS = "https://stats.brnr.dev";
+// The Product Hunt badge on the landing page is a live SVG (its upvote count
+// changes), so a copy of it would go stale. img-src only: nothing of theirs
+// runs here. It does mean a landing view sends the visitor's IP to them, so
+// the image is lazy and carries no referrer.
+const PRODUCT_HUNT = "https://api.producthunt.com";
 
 /**
  * The theme bootstrap in index.html, allowed by its own sha256 rather than
@@ -74,7 +79,7 @@ const CSP = [
   "default-src 'self'",
   SCRIPT_SRC,
   "style-src 'self' 'unsafe-inline'",
-  `img-src 'self' data: ${POSTHOG}`,
+  `img-src 'self' data: ${POSTHOG} ${PRODUCT_HUNT}`,
   "font-src 'self'",
   // Cap (#98) solves its proof-of-work in a Web Worker built from a Blob
   // URL, and with no worker-src the browser falls through child-src to

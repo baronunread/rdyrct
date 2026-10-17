@@ -790,6 +790,24 @@ function HeroControlVariant({
             <Check size={13} className="text-accent-2" /> No IP tracking
           </li>
         </ul>
+        {/* Product Hunt's own embed: a live SVG, so the upvote count stays
+            current. Lazy, so a signed-in visitor (whose hero personalisation
+            is display:none) never fetches it. */}
+        <a
+          data-hero-personalization
+          href="https://www.producthunt.com/products/rdyrct-url-shortener-for-teams?embed=true&utm_source=badge-featured&utm_medium=badge&utm_campaign=badge-rdyrct-url-shortener-for-teams"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          <img
+            alt="Rdyrct - URL Shortener for Teams - Shorten a link. See who clicks it. | Product Hunt"
+            width={250}
+            height={54}
+            loading="lazy"
+            referrerPolicy="no-referrer"
+            src="https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=1233546&theme=light&t=1792195782504"
+          />
+        </a>
       </div>
 
       {/* The right half on a wide screen, and directly under the copy on a

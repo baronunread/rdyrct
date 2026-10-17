@@ -68,6 +68,14 @@ describe("security headers (#21)", () => {
   // headers. Only the e2e smoke test exercises the real binding, which is
   // where this first showed up. Response.redirect gives us the same
   // immutable Headers guard here, deterministically and with no bundle.
+  it("lets the Product Hunt badge load as an image and nothing else", () => {
+    const csp = applySecurityHeaders(new Response("ok")).headers.get("content-security-policy");
+    const directive = (name: string) => csp?.split("; ").find((d) => d.startsWith(`${name} `));
+
+    expect(directive("img-src")).toContain("https://api.producthunt.com");
+    expect(csp?.replace(directive("img-src") ?? "", "")).not.toContain("producthunt");
+  });
+
   it("works on a response whose headers are immutable", () => {
     const immutable = Response.redirect("https://example.com/", 302);
     expect(() => immutable.headers.set("x-probe", "1")).toThrow();
