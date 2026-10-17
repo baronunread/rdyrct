@@ -115,7 +115,6 @@ export function isFunnelEvent(event: string): boolean {
  */
 export type CtaPlacement =
   | "hero_primary"
-  | "hero_secondary"
   // The hero's anonymous shortener (Direction A of #96): using it, and then
   // clicking through to keep the link that came out of it. The second is the
   // one worth watching, because it is intent earned by the product rather

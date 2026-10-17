@@ -2,7 +2,7 @@
 import type { ReactNode } from "react";
 import { Link } from "@tanstack/react-router";
 import { HrefLink } from "../lib/router-search";
-import { ArrowRight, BarChart3, Check, Code2, ChevronDown } from "@/app/ui/icons";
+import { ArrowRight, Check, Code2, ChevronDown } from "@/app/ui/icons";
 import {
   LazyMotion,
   MotionConfig,
@@ -749,11 +749,11 @@ function HeroControlVariant({
             GitHub" used to sit here, spending the highest-intent moment on
             the site sending people to a repository; it now lives in its own
             band under the pricing table. */}
-        <div
-          data-hero-personalization
-          className="flex flex-wrap items-center justify-center gap-3 md:justify-start"
-        >
-          {!authed && (
+        {!authed && (
+          <div
+            data-hero-personalization
+            className="flex flex-wrap items-center justify-center gap-3 md:justify-start"
+          >
             <HrefLink
               href={ctaTo}
               onClick={() => trackCta("hero_primary")}
@@ -761,15 +761,8 @@ function HeroControlVariant({
             >
               {ctaLabel}
             </HrefLink>
-          )}
-          <a
-            href="#analytics"
-            onClick={() => trackCta("hero_secondary")}
-            className={buttonClass({ variant: "outline", className: "h-11 px-6 text-base" })}
-          >
-            <BarChart3 size={16} /> See how it works
-          </a>
-        </div>
+          </div>
+        )}
 
         {/* Reassurance for somebody deciding. Nothing to reassure once they
             have an account. */}
@@ -1092,8 +1085,8 @@ function CustomDomainSection() {
 }
 
 /**
- * The product tour, under the id the hero's "See how it works" has always
- * pointed at. It ends on the one ask in the middle of the page, placed where
+ * The product tour, under the id the hero's "See how it works" used to
+ * point at. It ends on the one ask in the middle of the page, placed where
  * somebody has just watched a link get made and clicked.
  */
 function TourSection() {

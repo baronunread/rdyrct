@@ -49,7 +49,8 @@ test.describe("landing hero A/B test", () => {
     await expect(page.getByRole("heading", { level: 1 })).toHaveText(
       "Know which channel earned the click.",
     );
-    await expect(page.getByRole("link", { name: "See how it works" })).toBeVisible();
+    await expect(page.getByRole("link", { name: "Get started free" }).first()).toBeVisible();
+    await expect(page.getByRole("link", { name: "See how it works" })).toHaveCount(0);
   });
 
   test("the test arm shows the demo-first hero after consent", async ({ page }) => {

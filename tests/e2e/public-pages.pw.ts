@@ -36,20 +36,20 @@ test("the hero carries the Product Hunt badge, opening in a new tab", async ({ p
 });
 
 // The hero used to spend its second button sending the warmest visitor on the
-// page to GitHub (#96). Both hero CTAs must now keep the visitor on the site,
-// and the self-host link has to still exist, further down, under pricing.
-test("the hero's second CTA stays on the site and self-hosting sits under pricing", async ({
-  page,
-}) => {
+// page to GitHub (#96), and after that a button that only scrolled a few
+// hundred pixels. It has one CTA now, and the self-host link has to still
+// exist, further down, under pricing.
+test("the hero has one CTA and self-hosting sits under pricing", async ({ page }) => {
   await pinHeroVariant(page, "control");
   await page.goto("/");
 
   const hero = page.locator("section").first();
   await expect(hero.getByRole("link", { name: /self-host/i })).toHaveCount(0);
-
-  await hero.getByRole("link", { name: /see how it works/i }).click();
-  await expect(page).toHaveURL(/#analytics$/);
-  await expect(page.locator("#analytics")).toBeInViewport();
+  await expect(hero.getByRole("link", { name: /see how it works/i })).toHaveCount(0);
+  await expect(hero.getByRole("link", { name: "Get started free" })).toHaveAttribute(
+    "href",
+    /\/signup/,
+  );
 
   // Self-hosting keeps its own section after pricing, never a column inside it.
   // The pill used to end on a star count, which is the wrong number to make

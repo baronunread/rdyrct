@@ -79,11 +79,24 @@ async function trapPostHog(page: import("@playwright/test").Page) {
   return attempts;
 }
 
+/** A CTA click that fires the funnel step and stays on the page. The hero's
+ *  one CTA is a link to /signup; leaving would drop the in-memory buffer these
+ *  tests are about, so the navigation is cancelled and the handler still runs. */
+async function clickHeroCta(page: import("@playwright/test").Page) {
+  await page
+    .getByRole("link", { name: "Get started free" })
+    .first()
+    .evaluate((link) => {
+      link.addEventListener("click", (event) => event.preventDefault(), { once: true });
+      (link as HTMLElement).click();
+    });
+}
+
 /** Trap PostHog, open the landing page, wait for it to render. Every test
  *  here starts this way. */
 async function openLanding(page: import("@playwright/test").Page) {
   const attempts = await trapPostHog(page);
-  // These click "See how it works", which only the control hero has.
+  // These click the hero's CTA, which only the control hero has.
   await pinHeroVariant(page, "control");
   await page.goto("/");
   await expect(page.getByRole("heading", { level: 1 }).first()).toBeVisible();
@@ -125,7 +138,7 @@ test("accepting flushes the steps that happened before the banner was answered",
 
   // A CTA click before answering the banner. It must not be sent yet, and it
   // must not be lost either: this is the buffer's whole reason to exist.
-  await page.getByRole("link", { name: /see how it works/i }).click();
+  await clickHeroCta(page);
   await page.waitForTimeout(300);
   expect(attempts).toEqual([]);
 
@@ -148,7 +161,7 @@ test("browsing on after a rejection stays silent", async ({ page }) => {
   const attempts = await openLanding(page);
 
   await page.getByRole("button", { name: "Reject" }).click();
-  await page.getByRole("link", { name: /see how it works/i }).click();
+  await clickHeroCta(page);
   await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
   await page.waitForTimeout(800);
 
@@ -159,7 +172,7 @@ test("browsing on after a rejection stays silent", async ({ page }) => {
 // visitor who reloads and then rejects would have their earlier steps sent.
 test("the pre-consent buffer does not survive a reload", async ({ page }) => {
   const attempts = await openLanding(page);
-  await page.getByRole("link", { name: /see how it works/i }).click();
+  await clickHeroCta(page);
   await page.reload();
   await page.getByRole("button", { name: "Reject" }).click();
   await page.waitForTimeout(600);
