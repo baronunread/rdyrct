@@ -88,7 +88,7 @@ async function clickHeroCta(page: import("@playwright/test").Page) {
     .first()
     .evaluate((link) => {
       link.addEventListener("click", (event) => event.preventDefault(), { once: true });
-      (link as HTMLElement).click();
+      link.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
     });
 }
 
