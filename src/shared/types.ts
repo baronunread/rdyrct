@@ -658,6 +658,8 @@ export interface AdminUserRow {
   subscriptionPlan: Exclude<StoredPlan, "free"> | null;
   subscriptionStatus: string | null;
   cancelAtPeriodEnd: boolean;
+  /** When the paid period ends (ms epoch), null with no subscription. */
+  currentPeriodEnd: number | null;
   /** What an admin granted by hand, and who granted it. */
   compPlan: Exclude<StoredPlan, "free"> | null;
   compReason: string | null;

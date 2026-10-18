@@ -22,6 +22,7 @@ import { fillSeries, computeDelta, deleteOrg } from "./orgs";
 import { orgPlan } from "../plan";
 import { effectivePlanSql, subscriptionGrantsAccess } from "../entitlement";
 import { reconcileUser } from "../reconcile";
+import { deleteAccountAndOwnedOrgs } from "../better-auth";
 import { jsonBodyLimit } from "../body-limit";
 import { adminLinkRoutes } from "./admin-links";
 import { recordAdminAction } from "../audit";
@@ -698,6 +699,7 @@ adminRoutes.get("/users", async (c) => {
       subscriptionPlan: schema.user.subscriptionPlan,
       subscriptionStatus: schema.user.subscriptionStatus,
       cancelAtPeriodEnd: schema.user.polarSubscriptionCancelAtPeriodEnd,
+      currentPeriodEnd: schema.user.polarSubscriptionCurrentPeriodEnd,
       compPlan: schema.user.compPlan,
       compReason: schema.user.compReason,
       compGrantedAt: schema.user.compGrantedAt,
@@ -725,6 +727,7 @@ adminRoutes.get("/users", async (c) => {
       disposable: isDisposableEmail(r.email),
       createdAt: r.createdAt.getTime(),
       compGrantedAt: r.compGrantedAt?.getTime() ?? null,
+      currentPeriodEnd: r.currentPeriodEnd?.getTime() ?? null,
     })) satisfies AdminUserRow[],
   );
 });
@@ -906,29 +909,29 @@ adminRoutes.delete("/users/:userId", async (c) => {
   log.set({ userId: targetId });
   if (targetId === c.var.user!.id)
     throw new HTTPException(400, { message: "Cannot delete yourself" });
-  const owned = await db
-    .select({ orgId: schema.orgMembers.orgId })
-    .from(schema.orgMembers)
-    .where(and(eq(schema.orgMembers.userId, targetId), eq(schema.orgMembers.role, "owner")));
-  if (owned.length)
-    throw new HTTPException(409, {
-      message: "User owns organizations, delete those orgs first",
-    });
-  // Read the address first: the entry has to say who was deleted, and after
-  // this statement there is nowhere left to look it up (#67).
+  // Read the address, and which orgs go with the account, first: the entry
+  // has to say who was deleted, and afterwards there is nowhere left to look
+  // it up (#67).
   const target = await db
     .select({ email: schema.user.email })
     .from(schema.user)
     .where(eq(schema.user.id, targetId));
-  // sessions/accounts/org memberships cascade; authored links/invites keep
-  // created_by NULL (ON DELETE SET NULL)
-  await db.delete(schema.user).where(eq(schema.user.id, targetId));
+  if (!target[0]) throw new HTTPException(404, { message: "User not found" });
+  const owned = await db
+    .select({ orgId: schema.orgMembers.orgId })
+    .from(schema.orgMembers)
+    .where(and(eq(schema.orgMembers.userId, targetId), eq(schema.orgMembers.role, "owner")));
+  // The same path as a user deleting their own account: an org has no plan of
+  // its own (its owner's), so one left ownerless has no plan, no billing and
+  // nobody who can delete it. Every org the account owns goes with it, through
+  // the teardown workflow.
+  await deleteAccountAndOwnedOrgs(c.env, targetId);
   await recordAdminAction(c.env, {
     actorUserId: c.var.user!.id,
     action: "user.delete",
     targetType: "user",
     targetId: targetId,
-    detail: { email: target[0]?.email ?? null },
+    detail: { email: target[0].email, orgsDeleted: owned.length },
   });
-  return c.json({ ok: true });
+  return c.json({ ok: true, orgsDeleted: owned.length });
 });

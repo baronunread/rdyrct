@@ -70,7 +70,7 @@ test("an admin can find a link by destination and suspend it", async ({ page }) 
   await dialog.getByLabel("Reason").fill("phishing report, ticket 412");
   await dialog.getByRole("button", { name: "Suspend link" }).click();
 
-  await expect(page.getByText("suspended").first()).toBeVisible({ timeout: 10_000 });
+  await expect(row.getByText("suspended")).toBeVisible({ timeout: 10_000 });
 
   // The redirect is gone, and the row and its clicks are not.
   await expect
@@ -175,7 +175,7 @@ test("an admin sees a suspended org and restores its links in bulk", async ({ pa
   await expect(page.getByText("suspended").first()).toBeVisible({ timeout: 10_000 });
 
   await page.goto(`/admin/links?org=${link.org_id}`);
-  await page.getByRole("button", { name: "Suspended", exact: true }).click();
+  await page.getByLabel("Filter by status").selectOption("Suspended");
   await page.getByRole("checkbox", { name: "Select all links on this page" }).check();
   await page.getByRole("button", { name: "Restore selected" }).click();
   await expect(page.getByText(/1 link restored/)).toBeVisible({ timeout: 10_000 });

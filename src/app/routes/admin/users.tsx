@@ -5,7 +5,7 @@ import { MorphIcon } from "morphicons/react";
 import { shieldMinus, shieldPlus } from "@/app/ui/icon-nodes";
 import { useAdminUsers, useCurrentUser } from "../../lib/hooks";
 import { api } from "../../lib/api";
-import type { AdminUserRow, OrgPlan, Sort } from "@/shared/types";
+import type { AdminUserRow, Sort } from "@/shared/types";
 import { Menu, MenuItem, MenuSeparator } from "../../ui/menu";
 import { Badge, PageHeader, Table, Td, Th } from "../../ui/misc";
 import { Tooltip } from "../../ui/tooltip";
@@ -39,10 +39,10 @@ const userActionMeta = {
     danger: true,
     body: (u) => (
       <>
-        Delete <span className="font-bold text-accent">{u.name}</span>? Their sessions, linked
-        accounts, and org memberships are removed. Links and invites they created stay,
-        unattributed. If they own any organization, delete that organization first. This cannot be
-        undone.
+        Delete <span className="font-bold text-accent">{u.name}</span>? Their account, sessions and
+        memberships are removed, and so is every organization they own, with its links, members and
+        click history. Those short links stop working. Links they made in organizations owned by
+        others stay, unattributed. This cannot be undone.
       </>
     ),
   },
@@ -93,28 +93,42 @@ const userActionMeta = {
   },
 } satisfies Record<UserAction, UserActionMeta>;
 
-const planBadgeColor = {
-  pro: "mint",
-  hobby: "accent",
-  free: "muted",
-  unlimited: "mint",
-} satisfies Record<OrgPlan, "mint" | "accent" | "muted">;
-
-/** The one billing fact the plan column keeps: a comp grants the same access
- * as a subscription but is not somebody paying (#81, #82). The reason an admin
- * typed hangs off the badge on hover instead of setting the row's height. */
-function CompBadge({ user }: { user: AdminUserRow }) {
-  if (!user.compPlan) return null;
-  const detail = [user.compReason ?? "No reason recorded.", user.compGrantedBy]
-    .filter(Boolean)
-    .join(" · ");
-  return (
-    <Tooltip content={detail}>
-      <span className="inline-flex">
-        <Badge color="butter">comped</Badge>
-      </span>
-    </Tooltip>
-  );
+/**
+ * What the plan column adds to the plan, when there is something to add: a
+ * comp (not somebody paying, #81 and #82), a payment that is failing, or a
+ * subscription that ends. Each is a state worth finding at a glance, so each
+ * is a badge. The plan itself is an attribute of the row, so it is text.
+ */
+function PlanNote({ user }: { user: AdminUserRow }) {
+  if (user.compPlan) {
+    // The reason an admin typed hangs off the badge on hover instead of
+    // setting the row's height.
+    const detail = [user.compReason ?? "No reason recorded.", user.compGrantedBy]
+      .filter(Boolean)
+      .join(" · ");
+    return (
+      <Tooltip content={detail}>
+        <span className="inline-flex">
+          <Badge color="butter" className="mt-1">
+            comped
+          </Badge>
+        </span>
+      </Tooltip>
+    );
+  }
+  if (user.subscriptionStatus === "past_due")
+    return (
+      <Badge color="pink" className="whitespace-nowrap">
+        past due
+      </Badge>
+    );
+  if (user.cancelAtPeriodEnd && user.plan !== "free")
+    return (
+      <Badge color="butter" className="mt-1 whitespace-nowrap">
+        {user.currentPeriodEnd ? `cancels ${shortDate(user.currentPeriodEnd)}` : "cancels"}
+      </Badge>
+    );
+  return null;
 }
 
 /** Grant, change, or revoke a comp. There is no "set plan": a plan an admin
@@ -222,7 +236,8 @@ function UserRow({
       </Td>
       <Td className="tnum text-right">{user.orgCount}</Td>
       <Td>
-        <Badge color={planBadgeColor[user.plan]}>{user.plan}</Badge> <CompBadge user={user} />
+        <span className="block">{user.plan}</span>
+        <PlanNote user={user} />
       </Td>
       <Td className="text-xs text-muted">{shortDate(user.createdAt)}</Td>
       <Td className="text-xs text-muted">{lastSeenLabel(user.lastSeen)}</Td>
@@ -271,7 +286,7 @@ function UsersTable({
       <thead>
         <tr>
           <SortTh label="Name" sortKey="name" sort={sort} onSort={setSort} className="w-[22%]" />
-          <Th className="w-[26%]">Email</Th>
+          <Th className="w-[22%]">Email</Th>
           <SortTh
             label="Orgs"
             sortKey="orgs"
@@ -279,7 +294,7 @@ function UsersTable({
             onSort={setSort}
             className="w-[8%] text-right"
           />
-          <Th className="w-[10%]">Plan</Th>
+          <Th className="w-[14%]">Plan</Th>
           <SortTh
             label="Joined"
             sortKey="joined"

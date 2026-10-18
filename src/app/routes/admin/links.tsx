@@ -19,7 +19,7 @@ import { linkDisplayTitle } from "../../lib/link-display";
 import type { AdminAnonLinkRow, AdminLinkRow, AdminReportRow, Sort } from "@/shared/types";
 import { Badge, PageHeader, Table, Td, Th } from "../../ui/misc";
 import { Button } from "../../ui/button";
-import { Field, Input } from "../../ui/field";
+import { Field, Input, Select } from "../../ui/field";
 import { Dialog } from "../../ui/dialog";
 import { ConfirmDialog } from "../../ui/confirm-dialog";
 import { Menu, MenuItem, MenuSeparator } from "../../ui/menu";
@@ -42,15 +42,17 @@ import { Spinner } from "../../ui/spinner";
 function SlugAndDestinationHeaders({
   sort,
   onSort,
+  linkWidth = "w-[15%]",
   destinationWidth,
 }: {
   sort: Sort;
   onSort: (s: Sort) => void;
+  linkWidth?: string;
   destinationWidth: string;
 }) {
   return (
     <>
-      <SortTh label="Link" sortKey="slug" sort={sort} onSort={onSort} className="w-[15%]" />
+      <SortTh label="Link" sortKey="slug" sort={sort} onSort={onSort} className={linkWidth} />
       <SortTh
         label="Destination"
         sortKey="destination"
@@ -227,21 +229,10 @@ function SuspendDialog({ link, onClose }: { link: AdminLinkRow | null; onClose: 
 
 /** One row. Its own component because a table row with two conditional
  * actions and a truncating cell is a component, not an expression. */
-/** What an admin needs to see before opening the row: suspended (and why, on
- * hover) and how many people reported it. */
-function LinkBadges({ link }: { link: AdminLinkRow }) {
-  return (
-    <>
-      <SuspendedBadge link={link} />
-      <ReportCountBadge count={link.reportCount} />
-    </>
-  );
-}
-
 function SuspendedBadge({ link }: { link: AdminLinkRow }) {
   if (!link.suspendedAt) return null;
   return (
-    <span className="mt-1 block" title={link.suspendReason ?? undefined}>
+    <span className="shrink-0" title={link.suspendReason ?? undefined}>
       <Badge color="pink">suspended</Badge>
     </span>
   );
@@ -250,7 +241,7 @@ function SuspendedBadge({ link }: { link: AdminLinkRow }) {
 function ReportCountBadge({ count }: { count: number }) {
   if (count === 0) return null;
   return (
-    <span className="mt-1 block">
+    <span className="shrink-0">
       <Badge color="butter">
         {count} {count === 1 ? "report" : "reports"}
       </Badge>
@@ -271,10 +262,11 @@ function LinkRow({ link, ...actions }: { link: AdminLinkRow } & RowActions) {
         />
       </Td>
       <Td>
-        <span className="block truncate font-mono text-xs font-bold">
-          {linkDisplayTitle(link.url)}
+        {/* One line, so a suspended row is as tall as any other. */}
+        <span className="flex items-center gap-2">
+          <span className="truncate font-mono text-xs font-bold">{linkDisplayTitle(link.url)}</span>
+          <SuspendedBadge link={link} />
         </span>
-        <LinkBadges link={link} />
       </Td>
       <Td className="truncate font-mono text-xs text-muted" title={link.destination}>
         {link.destination}
@@ -290,7 +282,10 @@ function LinkRow({ link, ...actions }: { link: AdminLinkRow } & RowActions) {
         </HrefLink>
       </Td>
       <Td>
-        <RiskBadge score={link.riskScore} reasons={link.riskReasons} />
+        <span className="flex flex-wrap items-center gap-1">
+          <RiskBadge score={link.riskScore} reasons={link.riskReasons} />
+          <ReportCountBadge count={link.reportCount} />
+        </span>
       </Td>
       <Td className="tnum">{link.clicks}</Td>
       <Td className="whitespace-nowrap text-muted">{shortDate(link.createdAt)}</Td>
@@ -388,20 +383,25 @@ function LinksTable({
               className="size-4 cursor-pointer accent-accent"
             />
           </Th>
-          <SlugAndDestinationHeaders sort={sort} onSort={onSort} destinationWidth="w-[23%]" />
+          <SlugAndDestinationHeaders
+            sort={sort}
+            onSort={onSort}
+            linkWidth="w-[24%]"
+            destinationWidth="w-[18%]"
+          />
           <SortTh
             label="Organization"
             sortKey="orgName"
             sort={sort}
             onSort={onSort}
-            className="w-[16%]"
+            className="w-[14%]"
           />
           <SortTh
             label="Risk"
             sortKey="riskScore"
             sort={sort}
             onSort={onSort}
-            className="w-[12%]"
+            className="w-[14%]"
           />
           <SortTh label="Clicks" sortKey="clicks" sort={sort} onSort={onSort} className="w-[8%]" />
           <SortTh
@@ -409,9 +409,9 @@ function LinksTable({
             sortKey="createdAt"
             sort={sort}
             onSort={onSort}
-            className="w-[14%]"
+            className="w-[12%]"
           />
-          <Th className="w-[8%]" />
+          <Th className="w-[6%]" />
         </tr>
       </thead>
       <tbody>
@@ -820,7 +820,9 @@ function OwnedLinksToolbar({
   orgFilter,
   orgName,
   onClearOrg,
+  children,
 }: {
+  children?: React.ReactNode;
   query: string;
   onSearch: (value: string) => void;
   status: Status;
@@ -837,8 +839,21 @@ function OwnedLinksToolbar({
         placeholder="Slug or destination"
         label="Search links"
       />
-      <Segmented items={STATUSES} value={status} onChange={onStatus} />
+      <Select
+        aria-label="Filter by status"
+        wrapperClass="w-36"
+        className="h-10"
+        value={status}
+        onChange={(e) => onStatus(STATUSES.find((s) => s.id === e.target.value)?.id ?? "all")}
+      >
+        {STATUSES.map(({ id, label }) => (
+          <option key={id} value={id}>
+            {label}
+          </option>
+        ))}
+      </Select>
       {orgFilter && <ClearOrgFilterButton orgName={orgName} onClear={onClearOrg} />}
+      {children}
     </div>
   );
 }
@@ -891,9 +906,9 @@ function RestoreSelectedBar({
 }) {
   if (count === 0) return null;
   return (
-    <div className="flex items-center gap-3 rounded-lg bg-surface-2 px-4 py-2 text-sm">
-      <span className="flex-1">
-        <span className="font-bold tnum">{count}</span> suspended selected
+    <div className="ml-auto flex items-center gap-2 text-sm">
+      <span className="text-muted">
+        <span className="font-bold tnum text-text">{count}</span> suspended selected
       </span>
       <Button variant="ghost" size="sm" onClick={onClear}>
         Clear
@@ -947,14 +962,14 @@ function OwnedLinks({ onSuspend }: { onSuspend: (l: AdminLinkRow) => void }) {
           params.delete("org");
           setParams(params, { replace: true });
         }}
-      />
-
-      <RestoreSelectedBar
-        count={restorable.length}
-        pending={restoreMany.isPending}
-        onClear={selection.clear}
-        onRestore={() => restoreMany.mutate(restorable, { onSuccess: selection.clear })}
-      />
+      >
+        <RestoreSelectedBar
+          count={restorable.length}
+          pending={restoreMany.isPending}
+          onClear={selection.clear}
+          onRestore={() => restoreMany.mutate(restorable, { onSuccess: selection.clear })}
+        />
+      </OwnedLinksToolbar>
 
       <LinksTable
         selectedIds={selection.ids}

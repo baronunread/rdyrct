@@ -1,7 +1,7 @@
 // fallow-ignore-file code-duplication -- specs repeat their setup so each reads on its own
 import { expect, test } from "@playwright/test";
 import { signUpAndVerify } from "./resend";
-import { makePlatformAdmin, queryRows, rawSql } from "./db";
+import { makePlatformAdmin, queryRows, rawSql, seedSubscriber } from "./db";
 import { createQuickLink } from "./orgs";
 
 /**
@@ -133,4 +133,72 @@ test("the users table keeps one line per user when the name and email are huge",
   // The full value stays reachable.
   await expect(row.getByTitle(email)).toBeVisible();
   await expect(row.getByTitle(longName).first()).toBeVisible();
+});
+
+test("an empty status filter says what it found, not an empty search", async ({ page }) => {
+  const email = `admin-empty-${Date.now()}@gmail.com`;
+  await signUpAndVerify(page, email, password);
+  await makePlatformAdmin(page, email);
+  // Nothing flagged anywhere, whatever earlier runs left behind.
+  await rawSql(page, "update orgs set review_flagged_at = null");
+
+  await page.goto("/admin/orgs");
+  await page.getByRole("button", { name: "Needs review", exact: true }).click();
+  await expect(page.getByText("No organizations need review.")).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByText(/match “”/)).toHaveCount(0);
+});
+
+test("the plan column is the plan, plus a badge only when billing has news", async ({ page }) => {
+  const admin = `admin-plan-${Date.now()}@gmail.com`;
+  const leaver = `leaving-${Date.now()}@gmail.com`;
+  await signUpAndVerify(page, admin, password);
+  await makePlatformAdmin(page, admin);
+  await seedSubscriber(page, leaver, "pro");
+  await rawSql(
+    page,
+    "update user set polar_subscription_cancel_at_period_end = 1, polar_subscription_current_period_end = ? where email = ?",
+    [Date.UTC(2030, 10, 3), leaver],
+  );
+
+  await page.goto("/admin/users");
+  const leaverRow = page.getByRole("row").filter({ hasText: leaver });
+  await expect(leaverRow.getByText("pro", { exact: true })).toBeVisible({ timeout: 10_000 });
+  await expect(leaverRow.getByText(/^cancels .*2030$/)).toBeVisible();
+
+  // Nothing to add for an ordinary row: no badge beside the plan.
+  const adminRow = page.getByRole("row").filter({ hasText: admin });
+  await expect(adminRow.getByText(/cancels|past due|comped/)).toHaveCount(0);
+});
+
+test("deleting a user deletes the organizations they own", async ({ page, browser }) => {
+  const victimEmail = `victim-${Date.now()}@gmail.com`;
+  const destination = `https://victim-${Date.now()}.example/page`;
+  const victim = await (await browser.newContext()).newPage();
+  await signUpAndVerify(victim, victimEmail, password);
+  await createQuickLink(victim, destination);
+
+  const admin = `admin-delete-${Date.now()}@gmail.com`;
+  await signUpAndVerify(page, admin, password);
+  await makePlatformAdmin(page, admin);
+  const slug = (
+    await queryRows<{ slug: string }>(page, "select slug from links where destination = ?", [
+      destination,
+    ])
+  )[0].slug;
+
+  await page.goto("/admin/users");
+  const row = page.getByRole("row").filter({ hasText: victimEmail });
+  await row.getByRole("button", { name: /^Actions for / }).click();
+  await page.getByRole("menuitem", { name: "Delete user" }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "Delete user" }).click();
+
+  // The message used to be "User owns organizations, delete those orgs first".
+  await expect(page.getByText("User deleted")).toBeVisible({ timeout: 10_000 });
+  await expect(row).toHaveCount(0);
+  await expect
+    .poll(async () => (await page.request.get(`/${slug}`, { maxRedirects: 0 })).status(), {
+      timeout: 30_000,
+      message: "the deleted user's link never stopped redirecting",
+    })
+    .not.toBe(302);
 });

@@ -447,6 +447,36 @@ describe("restoring several links at once", () => {
   });
 });
 
+describe("deleting a user as an admin", () => {
+  it("takes the organizations they own with them instead of refusing", async () => {
+    await freeOwnerCookie();
+    const cookie = await adminCookie();
+
+    const res = await admin("/users/free-1", cookie, { method: "DELETE" });
+
+    expect(res.status).toBe(200);
+    expect(await jsonBody<{ orgsDeleted: number }>(res)).toMatchObject({ orgsDeleted: 1 });
+    const user = await env.DB.prepare("select count(*) as n from user where id = 'free-1'").first<{
+      n: number;
+    }>();
+    expect(user?.n).toBe(0);
+    // Flagged for teardown in the same batch that removed the account; the
+    // workflow then deletes the org itself (a row may already be gone).
+    const org = await env.DB.prepare(
+      "select deleting_at as at from orgs where id = 'org-1'",
+    ).first<{
+      at: number | null;
+    }>();
+    expect(org === null || org.at !== null).toBe(true);
+  });
+
+  it("404s for a user that does not exist, and will not delete the caller", async () => {
+    const cookie = await adminCookie();
+    expect((await admin("/users/nobody", cookie, { method: "DELETE" })).status).toBe(404);
+    expect((await admin("/users/admin-1", cookie, { method: "DELETE" })).status).toBe(400);
+  });
+});
+
 describe("who may reach any of this", () => {
   it("404s for a signed-in non-admin, so the route does not announce itself", async () => {
     const owner = await freeOwnerCookie();
