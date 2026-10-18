@@ -11,6 +11,7 @@ import { eq } from "drizzle-orm";
 import worker from "../../src/worker";
 import * as schema from "../../src/worker/db/schema";
 import type { Env } from "../../src/worker/env";
+import type { BillingProvider } from "../../src/worker/billing-provider";
 import type { ClickMessage } from "../../src/worker/clicks";
 import type { ClickBuffer } from "../../src/worker/click-buffer";
 import type { StorageMessage } from "../../src/worker/storage";
@@ -98,6 +99,20 @@ export const testEnv: Env = {
 
 export function overrideEnv(overrides: Partial<Env>): Env {
   return { ...testEnv, ...overrides };
+}
+
+/** A Polar client where every call the test did not supply throws, so each
+ * test states which calls it expects. */
+export function stubBilling(overrides: Partial<BillingProvider>): BillingProvider {
+  const unexpected = async (): Promise<never> => {
+    throw new Error("unexpected Polar call");
+  };
+  return {
+    checkouts: { create: unexpected, get: unexpected },
+    customerSessions: { create: unexpected },
+    subscriptions: { revoke: unexpected },
+    ...overrides,
+  };
 }
 
 // Backlog numbers nothing asserts on: a stub queue has no backlog.

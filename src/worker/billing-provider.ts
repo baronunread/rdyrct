@@ -2,6 +2,7 @@ import { createPolar, errors } from "@polar-sh/sdk/2026-04";
 import { createError } from "evlog";
 import type { JsonValue } from "../shared/types";
 import type { Env } from "./env";
+import { billingConfigured } from "./plan";
 import { captureAlert } from "./sentry";
 
 /**
@@ -57,7 +58,7 @@ export const polarFor = (env: Env): BillingProvider =>
  * account and their subscription both intact.
  */
 export async function revokeSubscriptionOf(env: Env, userId: string): Promise<void> {
-  if (!env.POLAR_ACCESS_TOKEN && !env.BILLING) return;
+  if (!billingConfigured(env)) return;
   const row = await env.DB.prepare(
     "select polar_subscription_id as subscriptionId from user where id = ?",
   )

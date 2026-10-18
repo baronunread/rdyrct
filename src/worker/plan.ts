@@ -9,8 +9,10 @@ import { INVITABLE_ROLES, PLAN_LIMITS, type OrgPlan, type PlanLimits } from "@/s
 // ponytail: module state, stable because bindings are per deployment; thread
 // env through orgPlan() instead if this ever has to differ per request.
 let billingOn = true;
+export const billingConfigured = (env: Env): boolean =>
+  Boolean(env.POLAR_ACCESS_TOKEN || env.BILLING);
 export function configureBilling(env: Env): void {
-  billingOn = Boolean(env.POLAR_ACCESS_TOKEN || env.BILLING);
+  billingOn = billingConfigured(env);
 }
 export const billingEnabled = () => billingOn;
 /** The plan a response carries: the stored one, or `unlimited` with no billing. */

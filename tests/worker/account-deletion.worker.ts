@@ -15,7 +15,7 @@ import * as schema from "../../src/worker/db/schema";
 import { deleteOrgs } from "../../src/worker/routes/orgs";
 import { deleteAccountAndOwnedOrgs } from "../../src/worker/better-auth";
 import type { BillingProvider } from "../../src/worker/billing-provider";
-import { applyTestMigrations, overrideEnv } from "./support";
+import { applyTestMigrations, overrideEnv, stubBilling } from "./support";
 
 const ORG = "org-handover";
 const LEAVING = "user-leaving";
@@ -75,22 +75,22 @@ function fakeTeardown(fail = false) {
   return { binding, started };
 }
 
+async function userExists(): Promise<boolean> {
+  const row = await env.DB.prepare("select count(*) as n from user where id = ?")
+    .bind(LEAVING)
+    .first<{ n: number }>();
+  return row!.n === 1;
+}
+
+const deletingAt = (orgId: string): Promise<{ deleting_at: number | null } | null> =>
+  env.DB.prepare("select deleting_at from orgs where id = ?")
+    .bind(orgId)
+    .first<{ deleting_at: number | null }>();
+
 describe("deleteAccountAndOwnedOrgs", () => {
   /** Deletes the leaving account against a teardown binding the test controls. */
   const removeAccount = (binding: typeof env.ORG_DELETE) =>
     deleteAccountAndOwnedOrgs(overrideEnv({ ORG_DELETE: binding }), LEAVING);
-
-  const userExists = async (): Promise<boolean> => {
-    const row = await env.DB.prepare("select count(*) as n from user where id = ?")
-      .bind(LEAVING)
-      .first<{ n: number }>();
-    return row!.n === 1;
-  };
-
-  const deletingAt = (orgId: string): Promise<{ deleting_at: number | null } | null> =>
-    env.DB.prepare("select deleting_at from orgs where id = ?")
-      .bind(orgId)
-      .first<{ deleting_at: number | null }>();
 
   it("takes every organization the account owns, teammates or not", async () => {
     // The org has no plan of its own: orgPlan reads its owner's. Leaving a
@@ -164,27 +164,11 @@ describe("deleteAccountAndOwnedOrgs", () => {
 describe("deleteAccountAndOwnedOrgs with a Polar subscription", () => {
   const SUBSCRIPTION = "sub_paying";
 
-  /** A billing client whose only real method is revoke, so a test sees each
-   * call and decides how Polar answers it. */
+  /** A billing client whose only method is revoke, so a test sees each call
+   * and decides how Polar answers it. */
   function fakeBilling(answer: () => Promise<{ id: string }>) {
     const revoke = vi.fn(answer);
-    const billing: BillingProvider = {
-      checkouts: {
-        async create() {
-          throw new Error("deletion never checks out");
-        },
-        async get() {
-          throw new Error("deletion never reads a checkout");
-        },
-      },
-      customerSessions: {
-        async create() {
-          throw new Error("deletion never opens the portal");
-        },
-      },
-      subscriptions: { revoke },
-    };
-    return { billing, revoke };
+    return { billing: stubBilling({ subscriptions: { revoke } }), revoke };
   }
 
   const removeAccount = (billing: BillingProvider) =>
@@ -192,9 +176,6 @@ describe("deleteAccountAndOwnedOrgs with a Polar subscription", () => {
       overrideEnv({ ORG_DELETE: fakeTeardown().binding, BILLING: billing }),
       LEAVING,
     );
-
-  const userExists = async (): Promise<boolean> =>
-    (await env.DB.prepare("select id from user where id = ?").bind(LEAVING).first()) !== null;
 
   beforeEach(async () => {
     await env.DB.prepare("update user set plan = 'pro', polar_subscription_id = ? where id = ?")
@@ -221,10 +202,7 @@ describe("deleteAccountAndOwnedOrgs with a Polar subscription", () => {
     await expect(removeAccount(billing)).rejects.toThrow("Could not cancel the subscription");
 
     expect(await userExists()).toBe(true);
-    const org = await env.DB.prepare("select deleting_at from orgs where id = ?")
-      .bind(ORG)
-      .first<{ deleting_at: number | null }>();
-    expect(org!.deleting_at).toBeNull();
+    expect((await deletingAt(ORG))!.deleting_at).toBeNull();
   });
 
   it.each([

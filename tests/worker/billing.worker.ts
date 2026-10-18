@@ -20,10 +20,10 @@ import {
   POLAR_PRO_YEARLY_PRODUCT_ID,
   POLAR_WEBHOOK_SECRET,
   seedBillingUser as seedUser,
+  stubBilling,
 } from "./support";
 import type { Env } from "../../src/worker/env";
 import type { JsonValue } from "../../src/shared/types";
-import type { BillingProvider } from "../../src/worker/billing-provider";
 
 // The real Polar client makes real HTTP calls and expects a large,
 // version-specific response schema back. The routes take their client off the
@@ -48,15 +48,10 @@ const checkoutsGet = vi.fn<() => Promise<CheckoutStatus>>(async () => ({
 const customerSessionsCreate = vi.fn(async () => ({
   customer_portal_url: "https://sandbox.polar.sh/portal/test",
 }));
-const billingProvider: BillingProvider = {
+const billingProvider = stubBilling({
   checkouts: { create: checkoutsCreate, get: checkoutsGet },
   customerSessions: { create: customerSessionsCreate },
-  subscriptions: {
-    async revoke() {
-      throw new Error("the billing routes never revoke");
-    },
-  },
-};
+});
 
 /** billingEnv() with the stand-in checkout/portal client wired in. */
 const polarEnv = (): Env => ({ ...billingEnv(), BILLING: billingProvider });
