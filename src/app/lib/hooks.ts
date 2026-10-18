@@ -513,12 +513,18 @@ export const useAdminOrgDetail = (orgId: string | null) =>
  * than a browser should filter. Ordering does not: the response is capped, so
  * sorting it is a client concern and the column headers can drive it the way
  * every other table here works. */
-export const useAdminLinks = (params: { q: string; suspended: boolean; org?: string }) =>
+const STATUS_PARAM = { all: "", active: "&suspended=0", suspended: "&suspended=1" };
+
+export const useAdminLinks = (params: {
+  q: string;
+  status: "all" | "active" | "suspended";
+  org?: string;
+}) =>
   useQuery<AdminLinkRow[]>({
     queryKey: ["admin", "links", params],
     queryFn: () =>
       api(
-        `/admin/links?q=${encodeURIComponent(params.q)}${params.suspended ? "&suspended=1" : ""}` +
+        `/admin/links?q=${encodeURIComponent(params.q)}${STATUS_PARAM[params.status]}` +
           (params.org ? `&org=${encodeURIComponent(params.org)}` : ""),
       ),
     // The search term is part of the key, so without this every pause in

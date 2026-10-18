@@ -190,6 +190,25 @@ describe("sweepAbusiveOrgs", () => {
     mail.restore();
   });
 
+  it("words the platform admin's copy as a report, not as their own suspension", async () => {
+    await seedLink();
+    await seedFreeOwner();
+    await seedNewOrg();
+    await seedClicksToday(REDIRECT_CEILING_PER_DAY + 1);
+    const mail = captureEmails();
+    const alert = vi.spyOn(Sentry, "captureMessage").mockReturnValue("");
+
+    await sweepAbusiveOrgs({ ...testEnv, SUPERADMIN_EMAIL: "admin@example.com" });
+
+    const [copy] = mail.sent.filter((m) => m.to === "admin@example.com");
+    expect(copy?.subject).toMatch(/^Auto-suspended:/);
+    expect(copy?.subject).not.toContain("Your organization");
+    expect(copy?.text).toContain("Your own organizations are not affected");
+    expect(copy?.text).toContain("owner@example.com");
+    alert.mockRestore();
+    mail.restore();
+  });
+
   it("leaves an org under the ceiling alone", async () => {
     await seedLink();
     await seedFreeOwner();

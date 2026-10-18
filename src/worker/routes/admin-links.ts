@@ -17,7 +17,7 @@
 import { Hono, type Context } from "hono";
 import { oneOf } from "../../shared/lookup";
 import type { JsonValue } from "../../shared/types";
-import { optionalFlag, optionalText, parseOptionalBody } from "../schemas";
+import { optionalFlag, optionalText, parseBody, parseOptionalBody } from "../schemas";
 import * as v from "valibot";
 import { HTTPException } from "hono/http-exception";
 import { and, desc, eq, isNull, isNotNull, like, or, sql } from "drizzle-orm";
@@ -147,6 +147,7 @@ function adminLinkFilters(c: Context<AppEnv>) {
   return [
     q ? or(like(schema.links.slug, `%${q}%`), like(schema.links.destination, `%${q}%`)) : undefined,
     c.req.query("suspended") === "1" ? isNotNull(schema.links.suspendedAt) : undefined,
+    c.req.query("suspended") === "0" ? isNull(schema.links.suspendedAt) : undefined,
     org ? eq(schema.links.orgId, org) : undefined,
   ].filter(Boolean);
 }
@@ -253,6 +254,23 @@ adminLinkRoutes.patch("/:linkId", async (c) => {
     throw new HTTPException(400, { message: "Say whether to suspend or restore this link" });
   const reason = body.suspended ? checkReason(body.reason, true) : null;
   return c.json(await setSuspended(c, c.req.param("linkId")!, body.suspended, reason));
+});
+
+/**
+ * Restore several links at once, for the aftermath of a sweep that suspended
+ * a whole org's worth. Restore only: suspending needs a reason per decision.
+ * Each link goes through setSuspended so it is republished and audited the
+ * same as a single restore.
+ */
+adminLinkRoutes.post("/restore", async (c) => {
+  const log = c.get("log");
+  const { ids } = parseBody(
+    v.object({ ids: v.pipe(v.array(v.string()), v.minLength(1), v.maxLength(MAX_ROWS)) }),
+    await c.req.json<JsonValue>().catch(() => ({})),
+  );
+  log.set({ restoreCount: ids.length });
+  for (const id of ids) await setSuspended(c, id, false, null);
+  return c.json({ count: ids.length });
 });
 
 /**

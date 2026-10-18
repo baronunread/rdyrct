@@ -358,6 +358,49 @@ describe("the cross-org search", () => {
     const rows = await jsonBody<{ id: string }[]>(await admin("/links?suspended=1", cookie));
     expect(rows.map((r) => r.id)).toEqual([link.id]);
   });
+
+  it("can show only what is active", async () => {
+    const owner = await freeOwnerCookie();
+    const link = await createLink(owner);
+    const other = await createLink(owner, "https://example.com/other");
+    const cookie = await adminCookie();
+    await setSuspended(link.id, cookie, true, "spam");
+
+    const rows = await jsonBody<{ id: string }[]>(await admin("/links?suspended=0", cookie));
+    expect(rows.map((r) => r.id)).toEqual([other.id]);
+  });
+});
+
+describe("restoring several links at once", () => {
+  it("restores each selected link and audits each one", async () => {
+    const owner = await freeOwnerCookie();
+    const a = await createLiveLink(owner, "https://example.com/a");
+    const b = await createLiveLink(owner, "https://example.com/b");
+    const cookie = await adminCookie();
+    await setSuspended(a.id, cookie, true, "spam");
+    await setSuspended(b.id, cookie, true, "spam");
+
+    const res = await admin("/links/restore", cookie, {
+      method: "POST",
+      body: JSON.stringify({ ids: [a.id, b.id] }),
+    });
+    expect(await jsonBody<{ count: number }>(res)).toEqual({ count: 2 });
+    await syncKv(a.slug, b.slug);
+    expect(await kvFor(a.slug)).toBeTruthy();
+    expect(await kvFor(b.slug)).toBeTruthy();
+    const { results } = await env.DB.prepare(
+      "select count(*) as n from admin_actions where action = 'link.unsuspend'",
+    ).all<{ n: number }>();
+    expect(results[0].n).toBe(2);
+  });
+
+  it("refuses an empty selection", async () => {
+    const res = await admin("/links/restore", await adminCookie(), {
+      method: "POST",
+      body: JSON.stringify({ ids: [] }),
+    });
+    expect(res.status).toBe(400);
+  });
 });
 
 describe("who may reach any of this", () => {

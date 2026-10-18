@@ -102,9 +102,14 @@ export function AdminAuditPage() {
             {rows.map((entry) => (
               <tr key={entry.id}>
                 <Td className="whitespace-nowrap text-muted">{shortDate(entry.createdAt)}</Td>
-                {/* The address may be gone: the log outlives the account. */}
+                {/* The address may be gone: the log outlives the account. "system"
+                    is the sweep, which has no account to delete. */}
                 <Td className="truncate">
-                  {entry.actorEmail ?? <span className="text-muted">deleted account</span>}
+                  {entry.actorEmail ?? (
+                    <span className="text-muted">
+                      {entry.actorUserId === "system" ? "system" : "deleted account"}
+                    </span>
+                  )}
                 </Td>
                 <Td className="truncate font-mono text-xs">{entry.action}</Td>
                 <Td

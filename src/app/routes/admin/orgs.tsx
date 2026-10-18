@@ -113,6 +113,7 @@ function OrgDetailDialog({ org, onClose }: { org: AdminOrgRow | null; onClose: (
         <div className="flex flex-col gap-4">
           <div className="flex items-center gap-2">
             <Badge color={planBadgeColor[org.plan]}>{org.plan}</Badge>
+            {org.linksSuspendedAt && <Badge color="pink">links suspended</Badge>}
             <span className="text-xs text-muted">Created {shortDate(org.createdAt)}</span>
           </div>
 
@@ -260,7 +261,8 @@ export function AdminOrgsPage() {
                   )}
                 </Td>
                 <Td>
-                  <Badge color={planBadgeColor[org.plan]}>{org.plan}</Badge>
+                  <Badge color={planBadgeColor[org.plan]}>{org.plan}</Badge>{" "}
+                  {org.linksSuspendedAt && <Badge color="pink">suspended</Badge>}
                 </Td>
                 <Td className="tnum text-right">{org.members}</Td>
                 <Td className="tnum text-right">{org.links}</Td>

@@ -224,14 +224,33 @@ async function notifyAutoSuspend(
     footerLine: NOTICE_FOOTER,
   };
 
-  const to = [owner, env.SUPERADMIN_EMAIL].filter((addr): addr is string => !!addr);
   // One failed send must not stop the other, and neither is worth failing the
   // sweep over: the suspension already happened and the alert already fired.
-  // Rendered once per recipient (not shared), so each footer names its own
-  // address rather than the org owner's for both the owner and the CC.
-  await Promise.all(
-    to.map((addr) =>
-      sendEmail(env, addr, heading, renderEmail(content, env.APP_URL, addr)).catch(() => {}),
-    ),
-  );
+  const send = (addr: string, subject: string, body: typeof content) =>
+    sendEmail(env, addr, subject, renderEmail(body, env.APP_URL, addr)).catch(() => {});
+
+  const sends = owner ? [send(owner, heading, content)] : [];
+
+  // The platform admin gets their own mail, worded as a report about somebody
+  // else's org: a copy of the owner's "Your organization is suspended" reads
+  // as if the admin's own links were stopped. Skipped when the admin owns the
+  // org, since the owner mail already reached them.
+  const admin = env.SUPERADMIN_EMAIL;
+  if (admin && admin !== owner) {
+    const adminHeading = `Auto-suspended: ${redirects.toLocaleString()} redirects from a free org`;
+    sends.push(
+      send(admin, adminHeading, {
+        preheader: "Platform admin notice. None of your own links are affected.",
+        heading: adminHeading,
+        paragraphs: [
+          `The abuse sweep suspended the links of organization ${orgId}${owner ? `, owned by ${owner}` : ""}. It recorded about ${redirects.toLocaleString()} redirects today on a new free plan.`,
+          "This is a notice for you as platform admin. Your own organizations are not affected.",
+          "If the traffic is real, restore its links from the admin Links tab.",
+        ],
+        cta: { label: "Open the admin Links tab", url: `${env.APP_URL}/admin/links?org=${orgId}` },
+        footerLine: "Sent to the platform admin.",
+      }),
+    );
+  }
+  await Promise.all(sends);
 }

@@ -550,6 +550,8 @@ export interface AdminOrgRow {
   clicks: number;
   ownerName: string | null;
   ownerEmail: string | null;
+  /** When the org's links were suspended, or null. */
+  linksSuspendedAt: number | null;
 }
 
 export interface AdminOrgDetail {
