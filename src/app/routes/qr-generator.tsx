@@ -140,7 +140,11 @@ function TrackingSection() {
       <p className="text-sm text-muted">
         A static code has its destination baked into the dots, so nothing reports back. Point it at
         a short link instead and rdyrct counts every scan by country, device, and time, without
-        storing an IP address. Start free and upgrade anytime.
+        storing an IP address. Start free and upgrade anytime.{" "}
+        <a href="/blog/qr-code-tracking" className="text-accent underline underline-offset-4">
+          How QR code tracking works
+        </a>
+        .
       </p>
       <div className="flex flex-wrap items-center gap-4 pt-1">
         <Link

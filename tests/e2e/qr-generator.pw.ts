@@ -117,6 +117,10 @@ test("generates a QR code with no account and no network call", async ({ page })
   await expect(page.getByRole("button", { name: /PNG/ })).toBeEnabled();
   await expect(page.getByRole("button", { name: /SVG/ })).toBeEnabled();
   await expect(upsell).toBeVisible();
+  await expect(page.getByRole("link", { name: "How QR code tracking works" })).toHaveAttribute(
+    "href",
+    "/blog/qr-code-tracking",
+  );
 
   expect(appPosts(page, posted)).toEqual([]);
 });
