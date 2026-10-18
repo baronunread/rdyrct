@@ -21,6 +21,7 @@ import type {
   AdminUsage,
   AdminOrgRow,
   AdminReportRow,
+  AdminBlockedHostRow,
   AdminOrgDetail,
   AdminUserRow,
   AdminLinkRow,
@@ -545,6 +546,12 @@ export const useAdminReports = () =>
   useQuery<AdminReportRow[]>({
     queryKey: ["admin", "reports"],
     queryFn: () => api("/admin/links/reports"),
+  });
+
+export const useAdminBlockedHosts = () =>
+  useQuery<AdminBlockedHostRow[]>({
+    queryKey: ["admin", "blocked-hosts"],
+    queryFn: () => api("/admin/links/blocked-hosts"),
   });
 
 export const useAdminAudit = () =>

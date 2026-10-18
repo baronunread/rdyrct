@@ -352,6 +352,9 @@ export interface LinkDTO extends QrOverrides {
   addressCount: number;
   /** User id of the creator, null when that account is gone. */
   createdBy: string | null;
+  /** When the link was paused (by an admin or an automatic hold), or null.
+   * A paused link does not redirect; the owner has to be able to see that. */
+  suspendedAt: number | null;
 }
 
 /** One address (primary or alias) a link answers to. See #38. */
@@ -599,6 +602,13 @@ export interface AdminLinkRow {
   riskCheckedAt: number | null;
   /** Open public reports against this link. */
   reportCount: number;
+}
+
+/** A destination host nobody may link to. */
+export interface AdminBlockedHostRow {
+  host: string;
+  reason: string;
+  createdAt: number;
 }
 
 /** A public abuse report, as the admin list shows it. */

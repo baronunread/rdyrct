@@ -394,6 +394,14 @@ export const linkReports = sqliteTable("link_reports", {
   createdAt: integer("created_at").notNull(),
 });
 
+/** Hosts a link may not point at (migration 0039). */
+export const blockedHosts = sqliteTable("blocked_hosts", {
+  host: text("host").primaryKey(),
+  reason: text("reason").notNull().default(""),
+  createdBy: text("created_by").references(() => user.id, { onDelete: "set null" }),
+  createdAt: integer("created_at").notNull(),
+});
+
 export const clicks = sqliteTable(
   "clicks",
   {

@@ -28,6 +28,13 @@ import * as schema from "../db/schema";
 import type { AppEnv, Env } from "../env";
 import { jsonBodyLimit } from "../body-limit";
 import { assertNotShortener } from "../abuse";
+import {
+  assertNotBlocked,
+  assertNotOwnShortLink,
+  holdIfSuspicious,
+  isBlockedHost,
+} from "../abuse-hold";
+import { holdReasonFor } from "../../shared/abuse-rules";
 import { publishLink, resolveSlug, unpublishLink } from "../kv";
 import { scoreAndRecord } from "../risk";
 import { spendToken } from "../cap";
@@ -82,6 +89,16 @@ shortenRoutes.post("/", async (c) => {
   assertNotShortener(destination);
 
   const db = drizzle(c.env.DB, { schema });
+  await assertNotBlocked(db, destination);
+  assertNotOwnShortLink(c.env, destination);
+  // An anonymous link has no org, no owner and no human review, so a
+  // scam-shaped destination is refused outright rather than held. Signing up
+  // makes it a normal link, which is held for review instead.
+  if (holdReasonFor(destination))
+    throw new HTTPException(422, {
+      message:
+        "That destination looks like a scam page, so it cannot be shortened without an account. Sign up and we will review it.",
+    });
   const now = Date.now();
   const expiresAt = now + ANON_LINK_TTL_MS;
   const row = {
@@ -244,6 +261,11 @@ export async function claimAnonLink(
     .where(eq(schema.anonLinks.claimToken, claimToken));
   const anon = rows[0];
   if (!anon || anon.expiresAt <= Date.now()) return null;
+  // The blocklist may have grown since the link was made, and claiming is
+  // creating a link in an org: it gets the same checks as any other.
+  const { plan, limits } = await orgPlan(db, orgId);
+  if (await isBlockedHost(db, anon.destination)) return null;
+  const hold = await holdIfSuspicious(env, db, orgId, plan, anon.destination);
 
   const link = {
     id: uid(),
@@ -272,10 +294,10 @@ export async function claimAnonLink(
     riskReasons: anon.riskReasons,
     riskCheckedAt: anon.riskCheckedAt,
     riskProvider: anon.riskProvider,
-    // New links are never born suspended; only an admin sets this (#67).
-    suspendedAt: null,
+    // Held, like any new link, when the destination is scam-shaped.
+    suspendedAt: hold?.suspendedAt ?? null,
     suspendedBy: null,
-    suspendReason: null,
+    suspendReason: hold?.suspendReason ?? null,
   };
   const address = {
     id: uid(),
@@ -293,7 +315,6 @@ export async function claimAnonLink(
   // Through the same cap-guarded insert every other link goes through, not a
   // raw one: claiming is still creating a link in somebody's organization,
   // and an org one under its limit must not be able to take ten.
-  const { limits } = await orgPlan(db, orgId);
   if (!(await insertLinkWithinLimit(db, env, link, address, limits.links))) return null;
 
   // Only once the link exists: an anon row deleted alongside a refused

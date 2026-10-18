@@ -25,6 +25,7 @@ import { spendToken } from "../cap";
 import { optionalText, parseBody } from "../schemas";
 import { publicClientKey, rateLimitAllows } from "../rate-limit";
 import { captureAlert } from "../sentry";
+import { notifyAdmin } from "../abuse";
 import { uid } from "../util";
 
 /** Open reports on one link before its org is flagged for review. */
@@ -81,11 +82,20 @@ async function findReportedLink(env: Env, db: DB, raw: string) {
 
 /** Flag the link's org for review once enough open reports name the link.
  * Never suspends: anyone can file a report. */
-async function flagOrgIfReported(db: DB, link: { linkId: string; orgId: string }) {
+async function flagOrgIfReported(env: Env, db: DB, link: { linkId: string; orgId: string }) {
   const [{ n }] = await db
     .select({ n: count() })
     .from(schema.linkReports)
     .where(and(eq(schema.linkReports.linkId, link.linkId), eq(schema.linkReports.status, "open")));
+  // The first report on a link is worth a mail on its own at this volume: a
+  // real scam is reported once and then clicked a thousand times.
+  if (n === 1)
+    await notifyAdmin(
+      env,
+      "A link was reported",
+      [`Organization ${link.orgId}. Open reports on this link: 1.`],
+      `/admin/links?org=${encodeURIComponent(link.orgId)}`,
+    );
   if (n < REPORTS_TO_FLAG) return;
   const flagged = await db
     .update(schema.orgs)
@@ -131,7 +141,7 @@ reportRoutes.post("/", async (c) => {
     createdAt: Date.now(),
   });
 
-  if (link) await flagOrgIfReported(db, link);
+  if (link) await flagOrgIfReported(c.env, db, link);
 
   // The same answer for a real link and a made-up one.
   return c.json({ ok: true }, 201);

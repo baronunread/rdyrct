@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { ArrowRight, Check, Ellipsis, Eye, Trash2, Undo2 } from "@/app/ui/icons";
+import { ArrowRight, Ban, Check, Ellipsis, Eye, Trash2, Undo2 } from "@/app/ui/icons";
 import { HrefLink } from "../../lib/router-search";
 import { Button } from "../../ui/button";
 import { useAdminOrgDetail, useAdminOrgs } from "../../lib/hooks";
@@ -15,6 +15,7 @@ import { TableSkeleton } from "../../ui/skeleton";
 import { useToast } from "../../ui/toast";
 import { ConfirmDialog } from "../../ui/confirm-dialog";
 import { SearchInput } from "./search-input";
+import { AbuseDialog } from "./abuse-dialog";
 import { paginate } from "./util";
 import { SortTh } from "../../ui/sort-th";
 import { sortRows } from "../../lib/sort";
@@ -70,11 +71,13 @@ function OrgMenu({
   onView,
   onDelete,
   onAct,
+  onAbuse,
 }: {
   org: AdminOrgRow;
   onView: () => void;
   onDelete: () => void;
   onAct: (path: string, body?: { reason: string }) => void;
+  onAbuse: () => void;
 }) {
   return (
     <Menu
@@ -102,11 +105,105 @@ function OrgMenu({
         </MenuItem>
       )}
       <MenuSeparator />
+      <MenuItem className="text-danger" onClick={onAbuse}>
+        <Ban size={14} /> Mark as abuse…
+      </MenuItem>
       <MenuItem className="text-danger" onClick={onDelete}>
         <Trash2 size={14} /> Delete organization
       </MenuItem>
     </Menu>
   );
+}
+
+function OrgOwner({ org }: { org: AdminOrgRow }) {
+  if (!org.ownerName) return <span className="text-muted">—</span>;
+  return (
+    <>
+      <span className="block truncate" title={org.ownerName}>
+        {org.ownerName}
+      </span>
+      <span className="block truncate text-xs text-muted" title={org.ownerEmail ?? ""}>
+        {org.ownerEmail}
+      </span>
+    </>
+  );
+}
+
+function OrgRow({
+  org,
+  onView,
+  onDelete,
+  onAbuse,
+  onAct,
+}: {
+  org: AdminOrgRow;
+  onView: () => void;
+  onDelete: () => void;
+  onAbuse: () => void;
+  onAct: (path: string, body?: { reason: string }) => void;
+}) {
+  return (
+    <tr>
+      <Td className="max-w-48 font-bold">
+        <button
+          type="button"
+          onClick={onView}
+          title={org.name}
+          className="block max-w-full cursor-pointer truncate text-accent hover:underline"
+        >
+          {org.name}
+        </button>
+      </Td>
+      <Td className="max-w-48">
+        <OrgOwner org={org} />
+      </Td>
+      <Td>
+        <OrgBadges org={org} suspendedLabel="suspended" />
+      </Td>
+      <Td className="tnum text-right">{org.members}</Td>
+      <Td className="tnum text-right">{org.links}</Td>
+      <Td className="tnum text-right">{org.clicks}</Td>
+      <Td className="text-xs text-muted">{shortDate(org.createdAt)}</Td>
+      <Td>
+        <OrgMenu org={org} onView={onView} onDelete={onDelete} onAct={onAct} onAbuse={onAbuse} />
+      </Td>
+    </tr>
+  );
+}
+
+function OrgRows({
+  rows,
+  emptyText,
+  onView,
+  onDelete,
+  onAbuse,
+  onAct,
+}: {
+  rows: AdminOrgRow[];
+  emptyText: string;
+  onView: (org: AdminOrgRow) => void;
+  onDelete: (org: AdminOrgRow) => void;
+  onAbuse: (org: AdminOrgRow) => void;
+  onAct: (org: AdminOrgRow, path: string, body?: { reason: string }) => void;
+}) {
+  if (rows.length === 0)
+    return (
+      <tr>
+        <Td colSpan={8} className="py-8 text-center text-muted">
+          {emptyText}
+        </Td>
+      </tr>
+    );
+  return rows.map((org) => (
+    <OrgRow
+      key={org.id}
+      org={org}
+      onView={() => onView(org)}
+      onDelete={() => onDelete(org)}
+      onAbuse={() => onAbuse(org)}
+      onAct={(path, body) => onAct(org, path, body)}
+    />
+  ));
 }
 
 function OrgMembersTable({
@@ -217,6 +314,7 @@ export function AdminOrgsPage() {
   const toast = useToast();
   const [deleting, setDeleting] = useState<AdminOrgRow | null>(null);
   const [viewing, setViewing] = useState<AdminOrgRow | null>(null);
+  const [abusing, setAbusing] = useState<AdminOrgRow | null>(null);
   const [q, setQ] = useState("");
   const [status, setStatus] = useState<OrgStatus>("all");
   const [sort, setSort] = useState<Sort>({ key: "created", dir: -1 });
@@ -320,65 +418,21 @@ export function AdminOrgsPage() {
             </tr>
           </thead>
           <tbody>
-            {rows.map((org) => (
-              <tr key={org.id}>
-                <Td className="max-w-48 font-bold">
-                  <button
-                    type="button"
-                    onClick={() => setViewing(org)}
-                    title={org.name}
-                    className="block max-w-full cursor-pointer truncate text-accent hover:underline"
-                  >
-                    {org.name}
-                  </button>
-                </Td>
-                <Td className="max-w-48">
-                  {org.ownerName ? (
-                    <>
-                      <span className="block truncate" title={org.ownerName}>
-                        {org.ownerName}
-                      </span>
-                      <span
-                        className="block truncate text-xs text-muted"
-                        title={org.ownerEmail ?? ""}
-                      >
-                        {org.ownerEmail}
-                      </span>
-                    </>
-                  ) : (
-                    <span className="text-muted">—</span>
-                  )}
-                </Td>
-                <Td>
-                  <OrgBadges org={org} suspendedLabel="suspended" />
-                </Td>
-                <Td className="tnum text-right">{org.members}</Td>
-                <Td className="tnum text-right">{org.links}</Td>
-                <Td className="tnum text-right">{org.clicks}</Td>
-                <Td className="text-xs text-muted">{shortDate(org.createdAt)}</Td>
-                <Td>
-                  <OrgMenu
-                    org={org}
-                    onView={() => setViewing(org)}
-                    onDelete={() => setDeleting(org)}
-                    onAct={(path, body) => act.mutate({ orgId: org.id, path, body })}
-                  />
-                </Td>
-              </tr>
-            ))}
-            {rows.length === 0 && (
-              <tr>
-                <Td colSpan={8} className="py-8 text-center text-muted">
-                  {emptyMessage(status, q.trim())}
-                </Td>
-              </tr>
-            )}
+            <OrgRows
+              rows={rows}
+              emptyText={emptyMessage(status, q.trim())}
+              onView={setViewing}
+              onDelete={setDeleting}
+              onAbuse={setAbusing}
+              onAct={(org, path, body) => act.mutate({ orgId: org.id, path, body })}
+            />
           </tbody>
         </Table>
       )}
       <Pager page={safePage} totalPages={totalPages} onPageChange={setPage} />
 
       <OrgDetailDialog org={viewing} onClose={() => setViewing(null)} />
+      <AbuseDialog org={abusing} onClose={() => setAbusing(null)} />
 
       <ConfirmDialog
         title="Delete organization"

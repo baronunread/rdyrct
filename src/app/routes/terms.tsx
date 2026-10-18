@@ -20,7 +20,7 @@ export function TermsPage() {
         <h1 className="mb-2 text-xl font-bold">Terms of Service</h1>
         <p className="text-muted">
           These terms govern your use of rdyrct. By creating an account or using the service, you
-          agree to them. Last updated 19 July 2026.
+          agree to them. Last updated 18 October 2026.
         </p>
       </div>
 
@@ -36,8 +36,33 @@ export function TermsPage() {
         <h2 className="mb-2 font-bold">Acceptable use</h2>
         <p className="text-muted">
           You may not use rdyrct to create links that are illegal, malicious, or used for phishing,
-          malware distribution, spam, or other abusive purposes. We reserve the right to disable any
-          link or account that violates this policy.
+          malware distribution, spam, or other abusive purposes, or links that imitate another brand
+          to collect payments or credentials. We reserve the right to disable any link or account
+          that violates this policy.
+        </p>
+        <p className="mt-2 text-muted">
+          We may pause links we have reason to think break this rule. A pause is not a verdict: we
+          tell the owner why, and restore the links if we were wrong. We may also block a
+          destination host from being linked, and when we ban an account we suspend the
+          organizations it owns.
+        </p>
+      </section>
+
+      <section>
+        <h2 className="mb-2 font-bold">Reporting abuse and appeals</h2>
+        <p className="text-muted">
+          To report a link, use the{" "}
+          <a href="/report" className="text-accent hover:underline">
+            report form
+          </a>
+          . We review reports and act on the ones that break these terms. A report alone never
+          suspends a link. When we pause or suspend your links we email you the reason. To appeal,
+          write to{" "}
+          <a href={`mailto:${SUPPORT_EMAIL}`} className="text-accent hover:underline">
+            {SUPPORT_EMAIL}
+          </a>{" "}
+          with the name of your organization and what the link is for, and we will look at it as
+          soon as we can.
         </p>
       </section>
 

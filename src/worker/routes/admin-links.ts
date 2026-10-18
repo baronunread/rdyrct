@@ -25,6 +25,8 @@ import * as schema from "../db/schema";
 import type { AppEnv, DB, Env } from "../env";
 import { enqueueStorage, republishOrgLinks, syncLinkMsg } from "../storage";
 import { recordAdminAction } from "../audit";
+import { markOrgAbuse } from "../abuse-hold";
+import { blockHostOf } from "../../shared/abuse-rules";
 import { scoreDestination } from "../risk";
 import { jsonBodyLimit } from "../body-limit";
 import { linkUrl } from "../util";
@@ -34,6 +36,7 @@ import {
   type AdminLinkRow,
   type AdminLinkSort,
   type AdminReportRow,
+  type AdminBlockedHostRow,
 } from "@/shared/types";
 
 export const adminLinkRoutes = new Hono<AppEnv>();
@@ -324,6 +327,77 @@ adminLinkRoutes.post("/reports/:id/dismiss", async (c) => {
     action: "report.dismiss",
     targetType: "report",
     targetId: id,
+    detail: {},
+  });
+  return c.json({ ok: true });
+});
+
+/**
+ * The verdict that an org is abuse: links suspended, owner banned, and every
+ * destination host it used blocked. A reason is required, like any
+ * suspension, and the owner is never emailed here: they are told what the
+ * decision is by the support thread, not by a form letter to a scammer.
+ */
+adminLinkRoutes.post("/orgs/:orgId/abuse", async (c) => {
+  const orgId = c.req.param("orgId")!;
+  c.get("log").set({ orgId });
+  const [reason, exists] = await Promise.all([
+    requiredReason(c, true),
+    c.var.db.select({ id: schema.orgs.id }).from(schema.orgs).where(eq(schema.orgs.id, orgId)),
+  ]);
+  if (exists.length === 0) throw new HTTPException(404, { message: "Organization not found" });
+  return c.json(await markOrgAbuse(c.env, c.var.db, orgId, c.var.user!.id, reason));
+});
+
+const blockedHostBodySchema = v.object({ host: optionalText, reason: optionalText });
+
+/** Hosts nobody may link to. Listed so a mistaken entry can be removed. */
+adminLinkRoutes.get("/blocked-hosts", async (c) => {
+  const rows = await c.var.db
+    .select({
+      host: schema.blockedHosts.host,
+      reason: schema.blockedHosts.reason,
+      createdAt: schema.blockedHosts.createdAt,
+    })
+    .from(schema.blockedHosts)
+    .orderBy(desc(schema.blockedHosts.createdAt))
+    .limit(MAX_ROWS);
+  return c.json(rows satisfies AdminBlockedHostRow[]);
+});
+
+adminLinkRoutes.post("/blocked-hosts", async (c) => {
+  const body = parseBody(blockedHostBodySchema, await c.req.json<JsonValue>().catch(() => ({})));
+  // A pasted URL or a bare host both work; what is stored is the host.
+  const host = blockHostOf(body.host.includes("://") ? body.host : `https://${body.host.trim()}`);
+  if (!host || !host.includes("."))
+    throw new HTTPException(400, { message: "Enter a host such as scam.example.com" });
+  const reason = checkReason(body.reason, true);
+  await c.var.db
+    .insert(schema.blockedHosts)
+    .values({ host, reason, createdBy: c.var.user!.id, createdAt: Date.now() })
+    .onConflictDoNothing();
+  await recordAdminAction(c.env, {
+    actorUserId: c.var.user!.id,
+    action: "host.block",
+    targetType: "host",
+    targetId: host,
+    detail: { reason },
+  });
+  return c.json({ host }, 201);
+});
+
+adminLinkRoutes.delete("/blocked-hosts/:host", async (c) => {
+  const host = c.req.param("host")!;
+  const done = await c.var.db
+    .delete(schema.blockedHosts)
+    .where(eq(schema.blockedHosts.host, host))
+    .returning({ host: schema.blockedHosts.host });
+  if (done.length === 0) throw new HTTPException(404, { message: "Host not found" });
+  await recordAdminAction(c.env, {
+    actorUserId: c.var.user!.id,
+    action: "host.unblock",
+    targetType: "host",
+    targetId: host,
     detail: {},
   });
   return c.json({ ok: true });
