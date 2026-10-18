@@ -28,6 +28,17 @@ function matchesTerm(
   return haystack.toLowerCase().includes(term);
 }
 
+/** The address may be gone: the log outlives the account. "system" is the
+ * sweep, which has no account to delete. */
+function Actor({ entry }: { entry: { actorEmail: string | null; actorUserId: string } }) {
+  if (entry.actorEmail) return <>{entry.actorEmail}</>;
+  return (
+    <span className="text-muted">
+      {entry.actorUserId === "system" ? "system" : "deleted account"}
+    </span>
+  );
+}
+
 export function AdminAuditPage() {
   const { data, isPending } = useAdminAudit();
   const [query, setQuery] = useState("");
@@ -102,14 +113,8 @@ export function AdminAuditPage() {
             {rows.map((entry) => (
               <tr key={entry.id}>
                 <Td className="whitespace-nowrap text-muted">{shortDate(entry.createdAt)}</Td>
-                {/* The address may be gone: the log outlives the account. "system"
-                    is the sweep, which has no account to delete. */}
                 <Td className="truncate">
-                  {entry.actorEmail ?? (
-                    <span className="text-muted">
-                      {entry.actorUserId === "system" ? "system" : "deleted account"}
-                    </span>
-                  )}
+                  <Actor entry={entry} />
                 </Td>
                 <Td className="truncate font-mono text-xs">{entry.action}</Td>
                 <Td

@@ -48,7 +48,7 @@ export function parseReportedLink(raw: string): { slug: string; host: string | n
   try {
     const url = new URL(input.includes("://") ? input : `https://${input}`);
     const slug = url.pathname.split("/").filter(Boolean)[0];
-    return slug ? { slug, host: url.hostname.toLowerCase() } : null;
+    return slug ? { slug, host: url.host.toLowerCase() } : null;
   } catch {
     return null;
   }
@@ -58,8 +58,10 @@ export function parseReportedLink(raw: string): { slug: string; host: string | n
 async function findReportedLink(env: Env, db: DB, raw: string) {
   const parsed = parseReportedLink(raw);
   if (!parsed) return { slug: raw.slice(0, 100), link: null };
-  const shared = env.SHARED_LINK_HOST?.toLowerCase();
-  const onShared = !parsed.host || parsed.host === shared;
+  // Both hosts serve shared-domain slugs: the root /:slug route answers on
+  // the app host even when a separate short host is set. `host` keeps a port.
+  const sharedHosts = [env.SHARED_LINK_HOST, env.APP_HOST].map((h) => h?.toLowerCase());
+  const onShared = !parsed.host || sharedHosts.includes(parsed.host);
   const rows = await db
     .select({ linkId: schema.linkAddresses.linkId, orgId: schema.links.orgId })
     .from(schema.linkAddresses)
@@ -75,6 +77,23 @@ async function findReportedLink(env: Env, db: DB, raw: string) {
       ),
     );
   return { slug: parsed.slug, link: rows[0] ?? null };
+}
+
+/** Flag the link's org for review once enough open reports name the link.
+ * Never suspends: anyone can file a report. */
+async function flagOrgIfReported(db: DB, link: { linkId: string; orgId: string }) {
+  const [{ n }] = await db
+    .select({ n: count() })
+    .from(schema.linkReports)
+    .where(and(eq(schema.linkReports.linkId, link.linkId), eq(schema.linkReports.status, "open")));
+  if (n < REPORTS_TO_FLAG) return;
+  const flagged = await db
+    .update(schema.orgs)
+    .set({ reviewFlaggedAt: Date.now() })
+    .where(and(eq(schema.orgs.id, link.orgId), isNull(schema.orgs.reviewFlaggedAt)))
+    .returning({ id: schema.orgs.id });
+  if (flagged.length > 0)
+    captureAlert([{ event: "org_flagged_by_reports", orgId: link.orgId, reports: n }]);
 }
 
 export const reportRoutes = new Hono<AppEnv>();
@@ -112,23 +131,7 @@ reportRoutes.post("/", async (c) => {
     createdAt: Date.now(),
   });
 
-  if (link) {
-    const [{ n }] = await db
-      .select({ n: count() })
-      .from(schema.linkReports)
-      .where(
-        and(eq(schema.linkReports.linkId, link.linkId), eq(schema.linkReports.status, "open")),
-      );
-    if (n >= REPORTS_TO_FLAG) {
-      const flagged = await db
-        .update(schema.orgs)
-        .set({ reviewFlaggedAt: Date.now() })
-        .where(and(eq(schema.orgs.id, link.orgId), isNull(schema.orgs.reviewFlaggedAt)))
-        .returning({ id: schema.orgs.id });
-      if (flagged.length > 0)
-        captureAlert([{ event: "org_flagged_by_reports", orgId: link.orgId, reports: n }]);
-    }
-  }
+  if (link) await flagOrgIfReported(db, link);
 
   // The same answer for a real link and a made-up one.
   return c.json({ ok: true }, 201);

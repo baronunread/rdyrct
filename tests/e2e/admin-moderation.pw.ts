@@ -1,3 +1,4 @@
+// fallow-ignore-file code-duplication -- specs repeat their setup so each reads on its own
 import { expect, test } from "@playwright/test";
 import { signUpAndVerify } from "./resend";
 import { makePlatformAdmin, queryRows } from "./db";

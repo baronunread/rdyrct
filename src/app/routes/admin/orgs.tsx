@@ -38,12 +38,74 @@ const planBadgeColor = {
   unlimited: "mint",
 } satisfies Record<OrgPlan, "accent" | "mint" | "muted">;
 
+const hasStatus = (o: AdminOrgRow, status: OrgStatus) =>
+  status === "all" || (status === "suspended" ? o.linksSuspendedAt : o.reviewFlaggedAt) != null;
+
+const matchesSearch = (o: AdminOrgRow, needle: string) =>
+  !needle || [o.name, o.ownerName, o.ownerEmail].some((v) => v?.toLowerCase().includes(needle));
+
 const STATUSES = [
   { id: "all", label: "All" },
   { id: "suspended", label: "Suspended" },
   { id: "review", label: "Needs review" },
 ] as const;
 type OrgStatus = (typeof STATUSES)[number]["id"];
+
+/** Plan, plus the two states an admin acts on. `suspendedLabel` differs: the
+ * table is cramped, the dialog has room. */
+function OrgBadges({ org, suspendedLabel }: { org: AdminOrgRow; suspendedLabel: string }) {
+  return (
+    <>
+      <Badge color={planBadgeColor[org.plan]}>{org.plan}</Badge>{" "}
+      {org.linksSuspendedAt && <Badge color="pink">{suspendedLabel}</Badge>}{" "}
+      {org.reviewFlaggedAt && <Badge color="butter">needs review</Badge>}
+    </>
+  );
+}
+
+function OrgMenu({
+  org,
+  onView,
+  onDelete,
+  onAct,
+}: {
+  org: AdminOrgRow;
+  onView: () => void;
+  onDelete: () => void;
+  onAct: (path: string, body?: { reason: string }) => void;
+}) {
+  return (
+    <Menu
+      align="end"
+      label={`Actions for ${org.name}`}
+      trigger={
+        <div className="flex justify-end">
+          <span className="rounded p-1.5 text-muted hover:bg-surface-2 hover:text-text">
+            <Ellipsis size={15} />
+          </span>
+        </div>
+      }
+    >
+      <MenuItem onClick={onView}>
+        <Eye size={14} /> View details
+      </MenuItem>
+      {org.reviewFlaggedAt && (
+        <MenuItem onClick={() => onAct("reviewed")}>
+          <Check size={14} /> Mark reviewed
+        </MenuItem>
+      )}
+      {org.linksSuspendedAt && (
+        <MenuItem onClick={() => onAct("suspend?suspend=0", { reason: "" })}>
+          <Undo2 size={14} /> Restore links
+        </MenuItem>
+      )}
+      <MenuSeparator />
+      <MenuItem className="text-danger" onClick={onDelete}>
+        <Trash2 size={14} /> Delete organization
+      </MenuItem>
+    </Menu>
+  );
+}
 
 function OrgMembersTable({
   members,
@@ -120,9 +182,7 @@ function OrgDetailDialog({ org, onClose }: { org: AdminOrgRow | null; onClose: (
       {org && (
         <div className="flex flex-col gap-4">
           <div className="flex items-center gap-2">
-            <Badge color={planBadgeColor[org.plan]}>{org.plan}</Badge>
-            {org.linksSuspendedAt && <Badge color="pink">links suspended</Badge>}
-            {org.reviewFlaggedAt && <Badge color="butter">needs review</Badge>}
+            <OrgBadges org={org} suspendedLabel="links suspended" />
             <span className="text-xs text-muted">Created {shortDate(org.createdAt)}</span>
           </div>
 
@@ -185,13 +245,7 @@ export function AdminOrgsPage() {
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase();
     const matches = (orgs.data ?? []).filter(
-      (o) =>
-        (status === "all" ||
-          (status === "suspended" ? o.linksSuspendedAt : o.reviewFlaggedAt) != null) &&
-        (!needle ||
-          o.name.toLowerCase().includes(needle) ||
-          (o.ownerName?.toLowerCase().includes(needle) ?? false) ||
-          (o.ownerEmail?.toLowerCase().includes(needle) ?? false)),
+      (o) => hasStatus(o, status) && matchesSearch(o, needle),
     );
     return sortRows(matches, sort, {
       name: (o) => o.name.toLowerCase(),
@@ -294,52 +348,19 @@ export function AdminOrgsPage() {
                   )}
                 </Td>
                 <Td>
-                  <Badge color={planBadgeColor[org.plan]}>{org.plan}</Badge>{" "}
-                  {org.linksSuspendedAt && <Badge color="pink">suspended</Badge>}
-                  {org.reviewFlaggedAt && <Badge color="butter">needs review</Badge>}
+                  <OrgBadges org={org} suspendedLabel="suspended" />
                 </Td>
                 <Td className="tnum text-right">{org.members}</Td>
                 <Td className="tnum text-right">{org.links}</Td>
                 <Td className="tnum text-right">{org.clicks}</Td>
                 <Td className="text-xs text-muted">{shortDate(org.createdAt)}</Td>
                 <Td>
-                  <Menu
-                    align="end"
-                    label={`Actions for ${org.name}`}
-                    trigger={
-                      <div className="flex justify-end">
-                        <span className="rounded p-1.5 text-muted hover:bg-surface-2 hover:text-text">
-                          <Ellipsis size={15} />
-                        </span>
-                      </div>
-                    }
-                  >
-                    <MenuItem onClick={() => setViewing(org)}>
-                      <Eye size={14} /> View details
-                    </MenuItem>
-                    {org.reviewFlaggedAt && (
-                      <MenuItem onClick={() => act.mutate({ orgId: org.id, path: "reviewed" })}>
-                        <Check size={14} /> Mark reviewed
-                      </MenuItem>
-                    )}
-                    {org.linksSuspendedAt && (
-                      <MenuItem
-                        onClick={() =>
-                          act.mutate({
-                            orgId: org.id,
-                            path: "suspend?suspend=0",
-                            body: { reason: "" },
-                          })
-                        }
-                      >
-                        <Undo2 size={14} /> Restore links
-                      </MenuItem>
-                    )}
-                    <MenuSeparator />
-                    <MenuItem className="text-danger" onClick={() => setDeleting(org)}>
-                      <Trash2 size={14} /> Delete organization
-                    </MenuItem>
-                  </Menu>
+                  <OrgMenu
+                    org={org}
+                    onView={() => setViewing(org)}
+                    onDelete={() => setDeleting(org)}
+                    onAct={(path, body) => act.mutate({ orgId: org.id, path, body })}
+                  />
                 </Td>
               </tr>
             ))}

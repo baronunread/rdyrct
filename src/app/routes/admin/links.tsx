@@ -227,6 +227,37 @@ function SuspendDialog({ link, onClose }: { link: AdminLinkRow | null; onClose: 
 
 /** One row. Its own component because a table row with two conditional
  * actions and a truncating cell is a component, not an expression. */
+/** What an admin needs to see before opening the row: suspended (and why, on
+ * hover) and how many people reported it. */
+function LinkBadges({ link }: { link: AdminLinkRow }) {
+  return (
+    <>
+      <SuspendedBadge link={link} />
+      <ReportCountBadge count={link.reportCount} />
+    </>
+  );
+}
+
+function SuspendedBadge({ link }: { link: AdminLinkRow }) {
+  if (!link.suspendedAt) return null;
+  return (
+    <span className="mt-1 block" title={link.suspendReason ?? undefined}>
+      <Badge color="pink">suspended</Badge>
+    </span>
+  );
+}
+
+function ReportCountBadge({ count }: { count: number }) {
+  if (count === 0) return null;
+  return (
+    <span className="mt-1 block">
+      <Badge color="butter">
+        {count} {count === 1 ? "report" : "reports"}
+      </Badge>
+    </span>
+  );
+}
+
 function LinkRow({ link, ...actions }: { link: AdminLinkRow } & RowActions) {
   return (
     <tr className={link.suspendedAt ? "opacity-60" : undefined}>
@@ -243,18 +274,7 @@ function LinkRow({ link, ...actions }: { link: AdminLinkRow } & RowActions) {
         <span className="block truncate font-mono text-xs font-bold">
           {linkDisplayTitle(link.url)}
         </span>
-        {link.suspendedAt && (
-          <span className="mt-1 block" title={link.suspendReason ?? undefined}>
-            <Badge color="pink">suspended</Badge>
-          </span>
-        )}
-        {link.reportCount > 0 && (
-          <span className="mt-1 block">
-            <Badge color="butter">
-              {link.reportCount} {link.reportCount === 1 ? "report" : "reports"}
-            </Badge>
-          </span>
-        )}
+        <LinkBadges link={link} />
       </Td>
       <Td className="truncate font-mono text-xs text-muted" title={link.destination}>
         {link.destination}
@@ -363,7 +383,7 @@ function LinksTable({
             <input
               type="checkbox"
               aria-label="Select all links on this page"
-              checked={rows.every((l) => selectedIds.has(l.id))}
+              checked={rows.length > 0 && rows.every((l) => selectedIds.has(l.id))}
               onChange={(e) => onSelectAll(e.target.checked)}
               className="size-4 cursor-pointer accent-accent"
             />
@@ -570,6 +590,58 @@ function AnonymousLinks() {
   );
 }
 
+/** The org a report landed on, or the fact that the address matched no link. */
+function ReportOrg({ report: r }: { report: AdminReportRow }) {
+  if (!r.orgId)
+    return (
+      <span className="text-muted" title="The address matched no link">
+        no match
+      </span>
+    );
+  return (
+    <HrefLink
+      href={`/admin/links?org=${encodeURIComponent(r.orgId)}`}
+      className="block truncate hover:text-accent hover:underline"
+    >
+      {r.orgName}
+    </HrefLink>
+  );
+}
+
+function ReportRow({
+  report: r,
+  pending,
+  onDismiss,
+}: {
+  report: AdminReportRow;
+  pending: boolean;
+  onDismiss: (id: string) => void;
+}) {
+  return (
+    <tr>
+      <Td className="truncate font-mono text-xs font-bold">/{r.slug}</Td>
+      <Td className="truncate">
+        <ReportOrg report={r} />
+      </Td>
+      <Td>
+        <Badge color={r.reason === "other" ? "muted" : "pink"}>{r.reason}</Badge>
+      </Td>
+      <Td className="truncate text-muted" title={r.note}>
+        {r.note || "none"}
+      </Td>
+      <Td className="truncate text-muted" title={r.contact}>
+        {r.contact || "none"}
+      </Td>
+      <Td className="whitespace-nowrap text-muted">{shortDate(r.createdAt)}</Td>
+      <Td>
+        <Button size="sm" variant="ghost" disabled={pending} onClick={() => onDismiss(r.id)}>
+          Dismiss
+        </Button>
+      </Td>
+    </tr>
+  );
+}
+
 /** Open public reports. Newest first, with the way to the reported org's
  * links and a way to close one that needs nothing. */
 function Reports() {
@@ -604,43 +676,7 @@ function Reports() {
       </thead>
       <tbody>
         {rows.map((r) => (
-          <tr key={r.id}>
-            <Td className="truncate font-mono text-xs font-bold">/{r.slug}</Td>
-            <Td className="truncate">
-              {r.orgId ? (
-                <HrefLink
-                  href={`/admin/links?org=${encodeURIComponent(r.orgId)}`}
-                  className="block truncate hover:text-accent hover:underline"
-                >
-                  {r.orgName}
-                </HrefLink>
-              ) : (
-                <span className="text-muted" title="The address matched no link">
-                  no match
-                </span>
-              )}
-            </Td>
-            <Td>
-              <Badge color={r.reason === "other" ? "muted" : "pink"}>{r.reason}</Badge>
-            </Td>
-            <Td className="truncate text-muted" title={r.note}>
-              {r.note || "none"}
-            </Td>
-            <Td className="truncate text-muted" title={r.contact}>
-              {r.contact || "none"}
-            </Td>
-            <Td className="whitespace-nowrap text-muted">{shortDate(r.createdAt)}</Td>
-            <Td>
-              <Button
-                size="sm"
-                variant="ghost"
-                disabled={dismiss.isPending}
-                onClick={() => dismiss.mutate(r.id)}
-              >
-                Dismiss
-              </Button>
-            </Td>
-          </tr>
+          <ReportRow key={r.id} report={r} pending={dismiss.isPending} onDismiss={dismiss.mutate} />
         ))}
       </tbody>
     </Table>
@@ -823,6 +859,52 @@ function sortOwnedLinks(data: AdminLinkRow[] | undefined, sort: Sort) {
   });
 }
 
+/** Which rows are ticked. A set of ids, so a tick survives the sort or page
+ * changing under it. */
+function useSelection() {
+  const [ids, setIds] = useState<Set<string>>(new Set());
+  return {
+    ids,
+    has: (id: string) => ids.has(id),
+    clear: () => setIds(new Set()),
+    toggle: (id: string, on: boolean) =>
+      setIds((prev) => {
+        const next = new Set(prev);
+        if (on) next.add(id);
+        else next.delete(id);
+        return next;
+      }),
+  };
+}
+
+/** Appears once something restorable is ticked. */
+function RestoreSelectedBar({
+  count,
+  pending,
+  onClear,
+  onRestore,
+}: {
+  count: number;
+  pending: boolean;
+  onClear: () => void;
+  onRestore: () => void;
+}) {
+  if (count === 0) return null;
+  return (
+    <div className="flex items-center gap-3 rounded-lg bg-surface-2 px-4 py-2 text-sm">
+      <span className="flex-1">
+        <span className="font-bold tnum">{count}</span> suspended selected
+      </span>
+      <Button variant="ghost" size="sm" onClick={onClear}>
+        Clear
+      </Button>
+      <Button size="sm" disabled={pending} onClick={onRestore}>
+        {pending && <Spinner />} Restore selected
+      </Button>
+    </div>
+  );
+}
+
 /** The cross-org list with its own controls. Split out so the page itself is
  * just the switch and the two things it switches between. */
 function OwnedLinks({ onSuspend }: { onSuspend: (l: AdminLinkRow) => void }) {
@@ -836,7 +918,7 @@ function OwnedLinks({ onSuspend }: { onSuspend: (l: AdminLinkRow) => void }) {
   const [restoring, setRestoring] = useState<AdminLinkRow | null>(null);
   const [deleting, setDeleting] = useState<AdminLinkRow | null>(null);
   const [status, setStatus] = useState<Status>("all");
-  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const selection = useSelection();
   const { data, isPending } = useAdminLinks({ q: search, status, org: orgFilter });
   const { restore, restoreMany, remove, rescore } = useOwnedLinkActions(
     () => setRestoring(null),
@@ -847,14 +929,7 @@ function OwnedLinks({ onSuspend }: { onSuspend: (l: AdminLinkRow) => void }) {
   const { rows, totalPages, safePage } = paginate(all, page);
   // Only suspended links can be restored; selecting an active one is harmless
   // but must not be counted or sent.
-  const restorable = all.filter((l) => selected.has(l.id) && l.suspendedAt).map((l) => l.id);
-  const toggle = (id: string, on: boolean) =>
-    setSelected((prev) => {
-      const next = new Set(prev);
-      if (on) next.add(id);
-      else next.delete(id);
-      return next;
-    });
+  const restorable = all.filter((l) => selection.has(l.id) && l.suspendedAt).map((l) => l.id);
 
   return (
     <div className="flex flex-col gap-3">
@@ -874,30 +949,17 @@ function OwnedLinks({ onSuspend }: { onSuspend: (l: AdminLinkRow) => void }) {
         }}
       />
 
-      {restorable.length > 0 && (
-        <div className="flex items-center gap-3 rounded-lg bg-surface-2 px-4 py-2 text-sm">
-          <span className="flex-1">
-            <span className="font-bold tnum">{restorable.length}</span> suspended selected
-          </span>
-          <Button variant="ghost" size="sm" onClick={() => setSelected(new Set())}>
-            Clear
-          </Button>
-          <Button
-            size="sm"
-            disabled={restoreMany.isPending}
-            onClick={() =>
-              restoreMany.mutate(restorable, { onSuccess: () => setSelected(new Set()) })
-            }
-          >
-            {restoreMany.isPending && <Spinner />} Restore selected
-          </Button>
-        </div>
-      )}
+      <RestoreSelectedBar
+        count={restorable.length}
+        pending={restoreMany.isPending}
+        onClear={selection.clear}
+        onRestore={() => restoreMany.mutate(restorable, { onSuccess: selection.clear })}
+      />
 
       <LinksTable
-        selectedIds={selected}
-        onSelect={(l) => toggle(l.id, !selected.has(l.id))}
-        onSelectAll={(on) => rows.forEach((l) => toggle(l.id, on))}
+        selectedIds={selection.ids}
+        onSelect={(l) => selection.toggle(l.id, !selection.has(l.id))}
+        onSelectAll={(on) => rows.forEach((l) => selection.toggle(l.id, on))}
         rows={rows}
         isPending={isPending}
         sort={sort}

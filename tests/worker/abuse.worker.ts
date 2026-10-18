@@ -1,3 +1,4 @@
+// fallow-ignore-file code-duplication -- sweep specs repeat their setup so each reads on its own
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import * as Sentry from "@sentry/cloudflare";
 import { env } from "cloudflare:workers";

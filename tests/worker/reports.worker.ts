@@ -40,6 +40,11 @@ describe("parseReportedLink", () => {
       host: "go.example.com",
     });
     expect(parseReportedLink("https://rdyr.cc/")).toBeNull();
+    // Dev and self-hosted app hosts carry a port.
+    expect(parseReportedLink("localhost:5174/sale")).toEqual({
+      slug: "sale",
+      host: "localhost:5174",
+    });
   });
 });
 
@@ -59,6 +64,15 @@ describe("POST /api/reports", () => {
       { slug: "nope1234", link_id: null },
       { slug: "sale", link_id: "link-1" },
     ]);
+  });
+
+  it("matches a full URL on the app host, where shared-domain links also answer", async () => {
+    await seedLink();
+    await report(`https://${env.APP_HOST}/sale`);
+    const row = await env.DB.prepare("select link_id from link_reports").first<{
+      link_id: string | null;
+    }>();
+    expect(row?.link_id).toBe("link-1");
   });
 
   it("flags the org at the threshold and never suspends the link", async () => {

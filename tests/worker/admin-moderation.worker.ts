@@ -398,7 +398,7 @@ describe("restoring several links at once", () => {
     const owner = await freeOwnerCookie();
     const a = await createLiveLink(owner, "https://example.com/a");
     const cookie = await adminCookie();
-    await setSuspended(a.id, cookie, true, "spam");
+    await moderate("/links/orgs/org-1/suspend", cookie, { reason: "sweep" }, [a.id]);
     await admin("/links/restore", cookie, {
       method: "POST",
       body: JSON.stringify({ ids: [a.id] }),
@@ -407,6 +407,35 @@ describe("restoring several links at once", () => {
       at: number | null;
     }>();
     expect(org?.at).not.toBeNull();
+  });
+
+  it("lifts the org's write block once none of its links is suspended", async () => {
+    const owner = await freeOwnerCookie();
+    const a = await createLiveLink(owner, "https://example.com/a");
+    const b = await createLiveLink(owner, "https://example.com/b");
+    const cookie = await adminCookie();
+    await moderate("/links/orgs/org-1/suspend", cookie, { reason: "sweep" }, [a.id, b.id]);
+    const blocked = () =>
+      env.DB.prepare("select links_suspended_at as at from orgs where id = 'org-1'")
+        .first<{ at: number | null }>()
+        .then((r) => r?.at ?? null);
+
+    await setSuspended(a.id, cookie, false);
+    expect(await blocked(), "one link is still suspended").not.toBeNull();
+    await setSuspended(b.id, cookie, false);
+    expect(await blocked()).toBeNull();
+  });
+
+  it("does not switch off the automatic checks for an org that was never suspended whole", async () => {
+    const owner = await freeOwnerCookie();
+    const a = await createLiveLink(owner, "https://example.com/a");
+    const cookie = await adminCookie();
+    await setSuspended(a.id, cookie, true, "one bad link");
+    await setSuspended(a.id, cookie, false);
+    const org = await env.DB.prepare("select cleared_at as at from orgs where id = 'org-1'").first<{
+      at: number | null;
+    }>();
+    expect(org?.at).toBeNull();
   });
 
   it("refuses an empty selection", async () => {
@@ -425,6 +454,10 @@ describe("who may reach any of this", () => {
     for (const [path, init] of [
       ["/links", {}],
       ["/links/anonymous", {}],
+      ["/links/reports", {}],
+      ["/links/restore", { method: "POST", body: JSON.stringify({ ids: [link.id] }) }],
+      ["/links/reports/x/dismiss", { method: "POST" }],
+      ["/links/orgs/org-1/reviewed", { method: "POST" }],
       ["/audit", {}],
       [
         `/links/${link.id}`,

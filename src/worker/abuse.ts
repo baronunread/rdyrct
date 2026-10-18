@@ -175,13 +175,18 @@ export async function sweepAbusiveOrgs(env: Env): Promise<void> {
   await flagSuspiciousOrgs(env, db, since);
 }
 
-async function suspendOverCeiling(env: Env, db: DB, since: number): Promise<void> {
-  const rows = await db
+/** Every org with at least `min` redirects since `since`, and its count. */
+function orgsWithRedirects(db: DB, since: number, min: number) {
+  return db
     .select({ orgId: schema.clicks.orgId, n: sql<number>`count(*)` })
     .from(schema.clicks)
     .where(gte(schema.clicks.ts, since))
     .groupBy(schema.clicks.orgId)
-    .having(sql`count(*) > ${REDIRECT_CEILING_PER_DAY}`);
+    .having(sql`count(*) >= ${min}`);
+}
+
+async function suspendOverCeiling(env: Env, db: DB, since: number): Promise<void> {
+  const rows = await orgsWithRedirects(db, since, REDIRECT_CEILING_PER_DAY + 1);
 
   // Independent per org, and the list is short (an org over the ceiling is
   // rare), so handle them together rather than one round trip at a time.
@@ -228,40 +233,37 @@ const CONCENTRATION_SHARE = 0.9;
  * launch from abuse. Idempotent: an org already flagged or suspended is left
  * alone, so this alerts once per org.
  */
+/** Redirects since `since` on the org's busiest link made in the last 24h. */
+async function newLinkRedirects(db: DB, orgId: string, since: number, now: number) {
+  const [top] = await db
+    .select({ n: sql<number>`count(*)` })
+    .from(schema.clicks)
+    .innerJoin(schema.links, eq(schema.links.id, schema.clicks.linkId))
+    .where(
+      and(
+        eq(schema.clicks.orgId, orgId),
+        gte(schema.clicks.ts, since),
+        gte(schema.links.createdAt, now - DAY_MS),
+      ),
+    )
+    .groupBy(schema.clicks.linkId)
+    .orderBy(sql`count(*) desc`)
+    .limit(1);
+  return top?.n ?? 0;
+}
+
 async function flagSuspiciousOrgs(env: Env, db: DB, since: number): Promise<void> {
   const now = Date.now();
-  const bursts = await db
-    .select({ orgId: schema.clicks.orgId, n: sql<number>`count(*)` })
-    .from(schema.clicks)
-    .where(gte(schema.clicks.ts, now - HOUR_MS))
-    .groupBy(schema.clicks.orgId)
-    .having(sql`count(*) > ${VELOCITY_PER_HOUR}`);
+  const [bursts, busy] = await Promise.all([
+    orgsWithRedirects(db, now - HOUR_MS, VELOCITY_PER_HOUR + 1),
+    orgsWithRedirects(db, since, CONCENTRATION_MIN_CLICKS),
+  ]);
 
-  const busy = await db
-    .select({ orgId: schema.clicks.orgId, n: sql<number>`count(*)` })
-    .from(schema.clicks)
-    .where(gte(schema.clicks.ts, since))
-    .groupBy(schema.clicks.orgId)
-    .having(sql`count(*) >= ${CONCENTRATION_MIN_CLICKS}`);
-
-  const lopsided: { orgId: string; n: number }[] = [];
-  for (const { orgId, n } of busy) {
-    const [top] = await db
-      .select({ linkId: schema.clicks.linkId, n: sql<number>`count(*)` })
-      .from(schema.clicks)
-      .innerJoin(schema.links, eq(schema.links.id, schema.clicks.linkId))
-      .where(
-        and(
-          eq(schema.clicks.orgId, orgId),
-          gte(schema.clicks.ts, since),
-          gte(schema.links.createdAt, now - DAY_MS),
-        ),
-      )
-      .groupBy(schema.clicks.linkId)
-      .orderBy(sql`count(*) desc`)
-      .limit(1);
-    if (top && top.n / n >= CONCENTRATION_SHARE) lopsided.push({ orgId, n });
-  }
+  // The busy list is short, so the per-org lookups run together.
+  const shares = await Promise.all(
+    busy.map(({ orgId }) => newLinkRedirects(db, orgId, since, now)),
+  );
+  const lopsided = busy.filter(({ n }, i) => shares[i] / n >= CONCENTRATION_SHARE);
 
   const seen = new Map<string, { redirects: number; signal: string }>();
   for (const { orgId, n } of bursts) seen.set(orgId, { redirects: n, signal: "burst_last_hour" });

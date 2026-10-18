@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { LegalPageLayout } from "../components/legal-page-layout";
 import { Button } from "../ui/button";
 import { Field, Input, Select } from "../ui/field";
@@ -30,8 +30,9 @@ export function ReportPage() {
   const { authed } = useAudience();
   const toast = useToast();
   const cap = useCap("report");
+  const qc = useQueryClient();
   const [params] = useSearchParams();
-  const [link, setLink] = useState(params.get("link") ?? "");
+  const [link, setLink] = useState(() => params.get("link") ?? "");
   const [reason, setReason] = useState<ReportReason>("phishing");
   const [note, setNote] = useState("");
   const [contact, setContact] = useState("");
@@ -44,6 +45,8 @@ export function ReportPage() {
           body: { link, reason, note, contact, capToken: headers[CAP_TOKEN_HEADER] ?? "" },
         }),
       ),
+    // An admin with the Reports tab open sees the new report on its next read.
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin", "reports"] }),
     onError: withErrorToast(toast),
   });
 

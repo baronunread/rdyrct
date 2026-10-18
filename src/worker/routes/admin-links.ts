@@ -209,6 +209,27 @@ adminLinkRoutes.get("/", async (c) => {
   );
 });
 
+/**
+ * An org whose links were suspended as a whole (the sweep, or an admin) is
+ * still write-blocked and still in the sweep's sights after its links are
+ * restored one by one. Restoring is a human decision, so mark the org
+ * cleared, and lift the block once no suspended link is left.
+ *
+ * Only for such an org: restoring a single link in an otherwise normal org
+ * must not switch off the automatic checks for it.
+ */
+async function clearOrgAfterRestore(db: DB, orgId: string) {
+  await db
+    .update(schema.orgs)
+    .set({
+      clearedAt: Date.now(),
+      linksSuspendedAt: sql`case when exists (
+        select 1 from links where links.org_id = ${orgId} and links.suspended_at is not null
+      ) then links_suspended_at else null end`,
+    })
+    .where(and(eq(schema.orgs.id, orgId), isNotNull(schema.orgs.linksSuspendedAt)));
+}
+
 async function setSuspended(
   c: Context<AppEnv>,
   linkId: string,
@@ -225,13 +246,7 @@ async function setSuspended(
     .set(suspensionPatch(suspend, c.var.user!.id, reason))
     .where(eq(schema.links.id, linkId));
 
-  // Restoring is a human decision, whatever screen it came from: the sweep
-  // must not suspend the org's links again ten minutes later.
-  if (!suspend)
-    await db
-      .update(schema.orgs)
-      .set({ clearedAt: Date.now() })
-      .where(eq(schema.orgs.id, link.orgId));
+  if (!suspend) await clearOrgAfterRestore(db, link.orgId);
 
   const addresses = await republish(c.env, db, linkId);
   await recordAdminAction(c.env, {
@@ -318,10 +333,18 @@ adminLinkRoutes.post("/reports/:id/dismiss", async (c) => {
 adminLinkRoutes.post("/orgs/:orgId/reviewed", async (c) => {
   const orgId = c.req.param("orgId")!;
   c.get("log").set({ orgId });
-  await c.var.db
+  const done = await c.var.db
     .update(schema.orgs)
     .set({ reviewFlaggedAt: null, clearedAt: Date.now() })
-    .where(eq(schema.orgs.id, orgId));
+    .where(eq(schema.orgs.id, orgId))
+    .returning({ id: schema.orgs.id });
+  if (done.length === 0) throw new HTTPException(404, { message: "Organization not found" });
+  // Reviewed means those reports were read. Left open, the next report on the
+  // same link would count past the threshold and flag the org again at once.
+  await c.var.db
+    .update(schema.linkReports)
+    .set({ status: "dismissed" })
+    .where(and(eq(schema.linkReports.orgId, orgId), eq(schema.linkReports.status, "open")));
   await recordAdminAction(c.env, {
     actorUserId: c.var.user!.id,
     action: "org.reviewed",
@@ -345,7 +368,7 @@ adminLinkRoutes.post("/restore", async (c) => {
     await c.req.json<JsonValue>().catch(() => ({})),
   );
   log.set({ restoreCount: ids.length });
-  for (const id of ids) await setSuspended(c, id, false, null);
+  await Promise.all(ids.map((id) => setSuspended(c, id, false, null)));
   return c.json({ count: ids.length });
 });
 
