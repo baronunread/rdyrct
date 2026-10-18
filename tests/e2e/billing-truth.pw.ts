@@ -41,11 +41,12 @@ test("an admin can comp a user, and the comp never counts as a subscriber", asyn
 
   await page.goto("/admin/users");
   const subscriberRow = page.getByRole("row", { name: new RegExp(subscriber) });
-  await expect(subscriberRow).toContainText("paid");
+  await expect(subscriberRow).toContainText("pro");
 
-  // The admin's own row: free, and no subscription behind it.
+  // The admin's own row: free, and not comped.
   const adminRow = page.getByRole("row", { name: new RegExp(admin) });
-  await expect(adminRow).toContainText("no sub");
+  await expect(adminRow).toContainText("free");
+  await expect(adminRow).not.toContainText("comped");
 
   await page.goto("/admin");
   await expect(page.getByText("Subscribers", { exact: true })).toBeVisible();
@@ -96,6 +97,7 @@ test("an admin can comp a user, and the comp never counts as a subscriber", asyn
   await adminRow.getByRole("button", { name: `Actions for` }).click();
   await page.getByRole("menuitem", { name: "Revoke comp" }).click();
   await expect(page.getByText("Comp revoked")).toBeVisible();
-  await expect(adminRow).toContainText("no sub");
-  await expect(subscriberRow).toContainText("paid");
+  await expect(adminRow).toContainText("free");
+  await expect(adminRow).not.toContainText("comped");
+  await expect(subscriberRow).toContainText("pro");
 });

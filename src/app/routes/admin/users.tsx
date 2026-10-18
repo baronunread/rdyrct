@@ -8,6 +8,7 @@ import { api } from "../../lib/api";
 import type { AdminUserRow, OrgPlan, Sort } from "@/shared/types";
 import { Menu, MenuItem, MenuSeparator } from "../../ui/menu";
 import { Badge, PageHeader, Table, Td, Th } from "../../ui/misc";
+import { Tooltip } from "../../ui/tooltip";
 import { useToast } from "../../ui/toast";
 import { ConfirmDialog } from "../../ui/confirm-dialog";
 import { SearchInput } from "./search-input";
@@ -98,6 +99,23 @@ const planBadgeColor = {
   free: "muted",
   unlimited: "mint",
 } satisfies Record<OrgPlan, "mint" | "accent" | "muted">;
+
+/** The one billing fact the plan column keeps: a comp grants the same access
+ * as a subscription but is not somebody paying (#81, #82). The reason an admin
+ * typed hangs off the badge on hover instead of setting the row's height. */
+function CompBadge({ user }: { user: AdminUserRow }) {
+  if (!user.compPlan) return null;
+  const detail = [user.compReason ?? "No reason recorded.", user.compGrantedBy]
+    .filter(Boolean)
+    .join(" · ");
+  return (
+    <Tooltip content={detail}>
+      <span className="inline-flex">
+        <Badge color="butter">comped</Badge>
+      </span>
+    </Tooltip>
+  );
+}
 
 /** Grant, change, or revoke a comp. There is no "set plan": a plan an admin
  * writes by hand is a comp, and it is recorded as one. */
@@ -204,7 +222,7 @@ function UserRow({
       </Td>
       <Td className="tnum text-right">{user.orgCount}</Td>
       <Td>
-        <Badge color={planBadgeColor[user.plan]}>{user.plan}</Badge>
+        <Badge color={planBadgeColor[user.plan]}>{user.plan}</Badge> <CompBadge user={user} />
       </Td>
       <Td className="text-xs text-muted">{shortDate(user.createdAt)}</Td>
       <Td className="text-xs text-muted">{lastSeenLabel(user.lastSeen)}</Td>
