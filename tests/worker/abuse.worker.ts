@@ -225,7 +225,36 @@ describe("sweepAbusiveOrgs", () => {
     mail.restore();
   });
 
-  it("holds a brand-new free org on a burst, tells the owner why, and acts once", async () => {
+  it("holds a brand-new free org on a burst on a free host, tells both people, and acts once", async () => {
+    await seedLink();
+    await env.DB.prepare("update links set destination = 'https://some-app.vercel.app/'").run();
+    await seedFreeOwner();
+    await seedNewOrg();
+    await seedClicksToday(201);
+    const mail = captureEmails();
+    const alert = vi.spyOn(Sentry, "captureMessage").mockReturnValue("");
+    const withAdmin = { ...testEnv, SUPERADMIN_EMAIL: "admin@example.com" };
+
+    await sweepAbusiveOrgs(withAdmin);
+    await sweepAbusiveOrgs(withAdmin);
+
+    expect(await suspendedCount()).toBe(1);
+    expect(alert.mock.calls.filter(([m]) => m === "org_held")).toHaveLength(1);
+    const owner = mail.sent.filter((m) => m.to === "owner@example.com");
+    expect(owner).toHaveLength(1);
+    expect(owner[0]?.subject).toBe("Your links are on hold");
+    expect(owner[0]?.text).toContain("write to support@mail.rdyrct.com");
+    // The owner is told it happened, not which rule fired.
+    expect(owner[0]?.text).not.toMatch(/201|burst|redirects/);
+    const admin = mail.sent.filter((m) => m.to === "admin@example.com");
+    expect(admin).toHaveLength(1);
+    expect(admin[0]?.subject).toMatch(/^Held:/);
+    expect(admin[0]?.text).toContain("burst last hour");
+    alert.mockRestore();
+    mail.restore();
+  });
+
+  it("only flags a brand-new org on traffic alone: a launch looks the same as a campaign", async () => {
     await seedLink();
     await seedFreeOwner();
     await seedNewOrg();
@@ -233,18 +262,34 @@ describe("sweepAbusiveOrgs", () => {
     const mail = captureEmails();
     const alert = vi.spyOn(Sentry, "captureMessage").mockReturnValue("");
 
-    await sweepAbusiveOrgs(testEnv);
+    await sweepAbusiveOrgs({ ...testEnv, SUPERADMIN_EMAIL: "admin@example.com" });
+
+    expect(await suspendedCount()).toBe(0);
+    expect(await reviewFlag()).not.toBeNull();
+    expect(
+      mail.sent.some((m) => m.to === "admin@example.com" && /^Needs review/.test(m.subject)),
+    ).toBe(true);
+    expect(mail.sent.some((m) => m.to === "owner@example.com")).toBe(false);
+    alert.mockRestore();
+    mail.restore();
+  });
+
+  it("holds a brand-new org on a burst when a link of it has an open report", async () => {
+    await seedLink();
+    await seedFreeOwner();
+    await seedNewOrg();
+    await env.DB.prepare(
+      "insert into link_reports (id, slug, link_id, org_id, reason, created_at) values ('r1', 'sale', 'link-1', 'org-1', 'phishing', ?)",
+    )
+      .bind(Date.now())
+      .run();
+    await seedClicksToday(201);
+    const alert = vi.spyOn(Sentry, "captureMessage").mockReturnValue("");
+
     await sweepAbusiveOrgs(testEnv);
 
     expect(await suspendedCount()).toBe(1);
-    expect(alert.mock.calls.filter(([m]) => m === "org_held")).toHaveLength(1);
-    const [owner] = mail.sent.filter((m) => m.to === "owner@example.com");
-    expect(owner?.subject).toBe("Your links are on hold");
-    expect(owner?.text).toContain("Held for review");
-    expect(owner?.text).toContain("write to support@mail.rdyrct.com");
-    expect(mail.sent.filter((m) => m.to === "owner@example.com")).toHaveLength(1);
     alert.mockRestore();
-    mail.restore();
   });
 
   it("only flags an org between three and seven days old, and its links keep redirecting", async () => {

@@ -6,13 +6,16 @@ import { drizzle } from "drizzle-orm/d1";
 import * as schema from "../../src/worker/db/schema";
 import type { JsonValue } from "../../src/shared/types";
 import { applyStorageMessage, syncLinkMsg } from "../../src/worker/storage";
+import { claimAnonLink } from "../../src/worker/routes/shorten";
 import {
   adminCookie,
   applyTestMigrations,
+  authEnv,
   captureEmails,
   fetchWorker,
   freeOwnerCookie,
   jsonBody,
+  overrideEnv,
   testEnv,
 } from "./support";
 
@@ -241,5 +244,137 @@ describe("banning a user", () => {
       (await row("select links_suspended_at as at from orgs"))?.at,
       "org block stays while a link is suspended",
     ).not.toBeNull();
+  });
+});
+
+const launchEnv = () =>
+  overrideEnv({
+    ...authEnv(),
+    SHARED_LINK_HOST: "rdyr.cc",
+    APP_HOST: "rdyrct.com",
+    SUPERADMIN_EMAIL: "admin@example.com",
+  });
+
+const shorten = (destination: string) =>
+  fetchWorker(
+    new Request("http://localhost/api/shorten", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ destination }),
+    }),
+    launchEnv(),
+  );
+
+async function seedAnon(destination: string, token: string) {
+  await env.DB.prepare(
+    `insert into anon_links (id, slug, destination, claim_token, created_at, expires_at)
+     values (?, ?, ?, ?, ?, ?)`,
+  )
+    .bind(`anon-${token}`, `s${token}`, destination, token, Date.now(), Date.now() + 3_600_000)
+    .run();
+}
+
+describe("the anonymous shortener", () => {
+  it("refuses a scam-shaped destination, and a blocked host, with a message", async () => {
+    const refused = await shorten(SCAM);
+    expect(refused.status).toBe(422);
+    expect((await jsonBody<{ message: string }>(refused)).message).toMatch(/Sign up/);
+
+    await env.DB.prepare(
+      "insert into blocked_hosts (host, reason, created_at) values ('bad.example', 'x', 0)",
+    ).run();
+    expect((await shorten("https://bad.example/x")).status).toBe(422);
+    expect((await shorten("https://fine.example/x")).status).toBe(201);
+  });
+
+  it("claiming a scam-shaped anonymous link creates it held, not live", async () => {
+    await freeOwnerCookie();
+    await seedAnon(SCAM, "tok1");
+    const mail = captureEmails();
+
+    const link = await claimAnonLink(testEnv, "org-1", "free-1", "tok1");
+
+    expect(link?.suspendedAt).not.toBeNull();
+    expect(link?.suspendReason).toContain("phonepe");
+    mail.restore();
+  });
+
+  it("claiming refuses a link whose host was blocked after it was made", async () => {
+    await freeOwnerCookie();
+    await seedAnon("https://later-blocked.example/x", "tok2");
+    await env.DB.prepare(
+      "insert into blocked_hosts (host, reason, created_at) values ('later-blocked.example', 'x', 0)",
+    ).run();
+
+    expect(await claimAnonLink(testEnv, "org-1", "free-1", "tok2")).toBeNull();
+    expect((await row("select count(*) as n from links"))?.n).toBe(0);
+  });
+});
+
+describe("chaining through our own short links", () => {
+  it("refuses a destination on the short host or a slug on the app host, but not our pages", async () => {
+    const owner = await freeOwnerCookie();
+    const create = (destination: string) =>
+      fetchWorker(
+        new Request("http://localhost/api/orgs/org-1/links", {
+          method: "POST",
+          headers: { cookie: owner, "content-type": "application/json" },
+          body: JSON.stringify({ destination }),
+        }),
+        launchEnv(),
+      );
+
+    expect((await create("https://rdyr.cc/abc1234")).status).toBe(422);
+    expect((await create("https://rdyrct.com/abc1234")).status).toBe(422);
+    expect((await create("https://rdyrct.com/pricing")).status).toBe(201);
+    expect((await create("https://rdyrct.com/")).status).toBe(201);
+  });
+});
+
+describe("telling the founder", () => {
+  it("emails the admin on the first report, and not again on the second", async () => {
+    const owner = await freeOwnerCookie();
+    await jsonBody<{ id: string; slug: string }>(await createLink(owner, "https://example.com/a"));
+    const slug = (await row("select slug from links"))?.slug as string;
+    const mail = captureEmails();
+    const report = () =>
+      fetchWorker(
+        new Request("http://localhost/api/reports", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ link: slug, reason: "phishing" }),
+        }),
+        launchEnv(),
+      );
+
+    await report();
+    await report();
+
+    const toAdmin = mail.sent.filter((m) => m.to === "admin@example.com");
+    expect(toAdmin).toHaveLength(1);
+    expect(toAdmin[0]?.subject).toBe("A link was reported");
+    mail.restore();
+  });
+
+  it("emails the admin when a link is held at creation, and says only 'imitate' to the owner", async () => {
+    const owner = await freeOwnerCookie();
+    const mail = captureEmails();
+
+    await fetchWorker(
+      new Request("http://localhost/api/orgs/org-1/links", {
+        method: "POST",
+        headers: { cookie: owner, "content-type": "application/json" },
+        body: JSON.stringify({ destination: SCAM }),
+      }),
+      launchEnv(),
+    );
+
+    expect(mail.sent.some((m) => m.to === "admin@example.com" && /held/i.test(m.subject))).toBe(
+      true,
+    );
+    const ownerMail = mail.sent.find((m) => m.to === "free@example.com");
+    expect(ownerMail?.text).toContain("imitate another site");
+    expect(ownerMail?.text).not.toMatch(/phonepe|railway/i);
+    mail.restore();
   });
 });

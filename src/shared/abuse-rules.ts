@@ -74,15 +74,32 @@ const BRAND_WORDS = [
   "roblox",
 ];
 
-/** The reason to hold a link on this destination, or null to leave it alone. */
-export function holdReasonFor(destination: string): string | null {
-  let host: string;
+function hostOf(destination: string): string | null {
   try {
-    host = new URL(destination).hostname.toLowerCase();
+    return new URL(destination).hostname.toLowerCase();
   } catch {
     return null;
   }
-  const freeHost = FREE_HOST_SUFFIXES.find((s) => host === s || host.endsWith(`.${s}`));
+}
+
+/** The free app host a destination sits on, or null. */
+function freeHostOf(host: string): string | null {
+  return FREE_HOST_SUFFIXES.find((s) => host === s || host.endsWith(`.${s}`)) ?? null;
+}
+
+/** Whether a destination is on a host anyone can deploy to for free. On its
+ * own that means nothing; it is the second signal that turns heavy traffic
+ * from "worth a look" into "worth a pause". */
+export function isFreeHost(destination: string): boolean {
+  const host = hostOf(destination);
+  return host !== null && freeHostOf(host) !== null;
+}
+
+/** The reason to hold a link on this destination, or null to leave it alone. */
+export function holdReasonFor(destination: string): string | null {
+  const host = hostOf(destination);
+  if (!host) return null;
+  const freeHost = freeHostOf(host);
   if (!freeHost) return null;
   const brand = BRAND_WORDS.find((w) => host.includes(w));
   if (!brand) return null;

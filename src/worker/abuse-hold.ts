@@ -13,19 +13,24 @@ import type { DB, Env } from "./env";
 import { recordAdminAction } from "./audit";
 import { captureAlert } from "./sentry";
 import { republishOrgLinks } from "./storage";
-import { notifyHold, suspendOrgLinks } from "./abuse";
+import { notifyAdmin, notifyHold, suspendOrgLinks } from "./abuse";
+import { RESERVED_SLUGS } from "./util";
 
 /** Refuse a destination whose host an admin has blocked. Called from every
  * create and edit path, so a scam kit cannot be pointed at again from a new
  * account. 422, and the same words for every blocked host. */
-export async function assertNotBlocked(db: DB, destination: string): Promise<void> {
+export async function isBlockedHost(db: DB, destination: string): Promise<boolean> {
   const host = blockHostOf(destination);
-  if (!host) return;
+  if (!host) return false;
   const rows = await db
     .select({ host: schema.blockedHosts.host })
     .from(schema.blockedHosts)
     .where(eq(schema.blockedHosts.host, host));
-  if (rows.length > 0)
+  return rows.length > 0;
+}
+
+export async function assertNotBlocked(db: DB, destination: string): Promise<void> {
+  if (await isBlockedHost(db, destination))
     throw new HTTPException(422, { message: "That destination is not allowed on rdyrct." });
 }
 
@@ -53,8 +58,45 @@ export async function holdIfSuspicious(
     .set({ reviewFlaggedAt: Date.now() })
     .where(and(eq(schema.orgs.id, orgId), isNull(schema.orgs.reviewFlaggedAt)));
   captureAlert([{ event: "link_held", orgId, reason }]);
-  await notifyHold(env, db, orgId, "A link is on hold", reason);
+  // The owner hears that it was paused and how to answer, not which word did
+  // it; the admin gets the specific reason.
+  await notifyHold(
+    env,
+    db,
+    orgId,
+    "A link is on hold",
+    "One of your links looks like it may imitate another site, so we paused it until somebody has looked.",
+  );
+  await notifyAdmin(
+    env,
+    "A link was held at creation",
+    [reason, `Organization ${orgId}.`],
+    "/admin/orgs",
+  );
   return { suspendedAt: Date.now(), suspendedBy: null, suspendReason: reason };
+}
+
+/**
+ * Refuse a destination that is another rdyrct short link. Chaining through
+ * one launders the real destination past the hold and the risk check: the
+ * first link looks clean, and the second is somebody else's. Our own site and
+ * its pages stay allowed, so a link to /pricing is fine and /abc1234 is not.
+ */
+export function assertNotOwnShortLink(env: Env, destination: string): void {
+  let url: URL;
+  try {
+    url = new URL(destination);
+  } catch {
+    return;
+  }
+  const host = url.host.toLowerCase();
+  const shortHost = env.SHARED_LINK_HOST?.toLowerCase();
+  const segments = url.pathname.split("/").filter(Boolean);
+  const onShortHost = shortHost !== undefined && host === shortHost;
+  const onAppHost = host === env.APP_HOST?.toLowerCase();
+  const looksLikeSlug = segments.length === 1 && !RESERVED_SLUGS.has(segments[0].toLowerCase());
+  if (onShortHost || (onAppHost && looksLikeSlug))
+    throw new HTTPException(422, { message: "A link cannot point at another rdyrct short link." });
 }
 
 /* ---------------- banned users ---------------- */

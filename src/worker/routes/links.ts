@@ -35,7 +35,7 @@ import {
 } from "../util";
 import { jsonBodyLimit } from "../body-limit";
 import { assertNotShortener } from "../abuse";
-import { assertNotBlocked, holdIfSuspicious } from "../abuse-hold";
+import { assertNotBlocked, assertNotOwnShortLink, holdIfSuspicious } from "../abuse-hold";
 import { scoreAndRecord } from "../risk";
 import { claimAnonLink } from "./shorten";
 import { cursorValueOf, linkPageQuery, readLinkPageParams, takePage } from "../links-page";
@@ -776,6 +776,7 @@ linkRoutes.post("/", requireOrgRole("member"), async (c) => {
   validateInput(body, orgId);
   const db = c.var.db;
   await assertNotBlocked(db, body.destination);
+  assertNotOwnShortLink(c.env, body.destination);
 
   const [{ plan, limits }, activeCount] = await Promise.all([
     orgPlan(db, orgId),
@@ -963,6 +964,7 @@ async function guardChangedDestination(
 ) {
   if (destination === existing.destination) return null;
   await assertNotBlocked(db, destination);
+  assertNotOwnShortLink(env, destination);
   return existing.suspendedAt ? null : holdIfSuspicious(env, db, orgId, plan, destination);
 }
 

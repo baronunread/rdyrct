@@ -5,6 +5,7 @@ import * as schema from "./db/schema";
 import type { DB, Env } from "./env";
 import { sendEmail } from "./email";
 import { NOTICE_FOOTER, renderEmail, SUPPORT_EMAIL } from "./email-layout";
+import { isFreeHost } from "../shared/abuse-rules";
 import { orgOwnerEmail, orgPlan } from "./plan";
 import { recordAdminAction } from "./audit";
 import { captureAlert } from "./sentry";
@@ -261,7 +262,12 @@ async function flagSuspiciousOrgs(env: Env, db: DB, since: number): Promise<void
       ]);
       if (plan.plan !== "free" || cleared) return;
       if (createdAt === null || now - createdAt > NEW_ORG_WINDOW_MS) return;
-      if (now - createdAt < HOLD_WINDOW_MS) return holdOrg(env, db, orgId, redirects, signal);
+      // Traffic alone never pauses an org: anyone can drive clicks at somebody
+      // else's public link, and a launch looks the same as a campaign. It is
+      // held only when something else agrees: a link on a free app host, or an
+      // open report. Otherwise it is flagged for a person to look at.
+      if (now - createdAt < HOLD_WINDOW_MS && (await hasSecondSignal(db, orgId)))
+        return holdOrg(env, db, orgId, redirects, signal);
       const flagged = await db
         .update(schema.orgs)
         .set({ reviewFlaggedAt: now })
@@ -273,10 +279,32 @@ async function flagSuspiciousOrgs(env: Env, db: DB, since: number): Promise<void
           ),
         )
         .returning({ id: schema.orgs.id });
-      if (flagged.length > 0)
-        captureAlert([{ event: "org_needs_review", orgId, redirects, signal }]);
+      if (flagged.length === 0) return;
+      captureAlert([{ event: "org_needs_review", orgId, redirects, signal }]);
+      await notifyAdmin(
+        env,
+        `Needs review: ${redirects.toLocaleString()} redirects (${signal.replaceAll("_", " ")})`,
+        [`Organization ${orgId} is a new free org with unusual traffic. Its links still redirect.`],
+        `/admin/orgs`,
+      );
     }),
   );
+}
+
+/** A free-host destination among the org's links, or an open report on one. */
+async function hasSecondSignal(db: DB, orgId: string): Promise<boolean> {
+  const [links, reports] = await Promise.all([
+    db
+      .select({ destination: schema.links.destination })
+      .from(schema.links)
+      .where(eq(schema.links.orgId, orgId)),
+    db
+      .select({ id: schema.linkReports.id })
+      .from(schema.linkReports)
+      .where(and(eq(schema.linkReports.orgId, orgId), eq(schema.linkReports.status, "open")))
+      .limit(1),
+  ]);
+  return reports.length > 0 || links.some((l) => isFreeHost(l.destination));
 }
 
 async function holdOrg(env: Env, db: DB, orgId: string, redirects: number, signal: string) {
@@ -284,7 +312,21 @@ async function holdOrg(env: Env, db: DB, orgId: string, redirects: number, signa
   const held = await suspendOrgLinks(env, db, orgId, null, reason);
   if (held === 0) return;
   captureAlert([{ event: "org_held", orgId, redirects, signal, links: held }]);
-  await notifyHold(env, db, orgId, "Your links are on hold", reason).catch(() => {});
+  await notifyAdmin(
+    env,
+    `Held: ${redirects.toLocaleString()} redirects on a new free org`,
+    [reason, "Restore it from Organizations if it is legitimate."],
+    "/admin/orgs",
+  );
+  // The owner is told it happened and how to answer it, not which rule fired:
+  // a reason that names the threshold is a how-to for the next signup.
+  await notifyHold(
+    env,
+    db,
+    orgId,
+    "Your links are on hold",
+    "Your links got an unusual amount of traffic for a new account, so we paused them until somebody has looked.",
+  ).catch(() => {});
 }
 
 /**
@@ -292,6 +334,29 @@ async function holdOrg(env: Env, db: DB, orgId: string, redirects: number, signa
  * to appeal are in the mail: a pause nobody explains reads as an outage, and
  * an owner who cannot answer it has no way to ask for the pause to be lifted.
  */
+/**
+ * A short mail to the platform admin, because a Sentry alert is not where a
+ * person looks first. One per event, worded as a report about somebody else's
+ * org so it is never mistaken for a problem with the admin's own account.
+ */
+export async function notifyAdmin(
+  env: Env,
+  subject: string,
+  paragraphs: string[],
+  path: string,
+): Promise<void> {
+  const to = env.SUPERADMIN_EMAIL;
+  if (!to) return;
+  const content = {
+    preheader: "Platform admin notice. None of your own links are affected.",
+    heading: subject,
+    paragraphs,
+    cta: { label: "Open it in admin", url: `${env.APP_URL}${path}` },
+    footerLine: "Sent to the platform admin.",
+  };
+  await sendEmail(env, to, subject, renderEmail(content, env.APP_URL, to)).catch(() => {});
+}
+
 export async function notifyHold(
   env: Env,
   db: DB,

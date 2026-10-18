@@ -72,3 +72,11 @@ test("the terms say how to report abuse and how to appeal", async ({ page }) => 
   await expect(page.getByRole("heading", { name: "Reporting abuse and appeals" })).toBeVisible();
   await expect(page.getByRole("link", { name: "report form" })).toHaveAttribute("href", "/report");
 });
+
+test("the landing shortener refuses a scam-shaped destination and says why", async ({ page }) => {
+  await page.goto("/");
+  const field = page.getByLabel("Shorten a link, no account needed");
+  await field.fill(`https://phonepewheel-${Date.now()}.up.railway.app/`);
+  await field.press("Enter");
+  await expect(page.getByText(/looks like a scam page/)).toBeVisible({ timeout: 15_000 });
+});
