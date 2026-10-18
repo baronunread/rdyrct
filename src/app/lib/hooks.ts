@@ -20,6 +20,7 @@ import type {
   RecentClick,
   AdminUsage,
   AdminOrgRow,
+  AdminReportRow,
   AdminOrgDetail,
   AdminUserRow,
   AdminLinkRow,
@@ -538,6 +539,12 @@ export const useAdminAnonLinks = () =>
   useQuery<AdminAnonLinkRow[]>({
     queryKey: ["admin", "anon-links"],
     queryFn: () => api("/admin/links/anonymous"),
+  });
+
+export const useAdminReports = () =>
+  useQuery<AdminReportRow[]>({
+    queryKey: ["admin", "reports"],
+    queryFn: () => api("/admin/links/reports"),
   });
 
 export const useAdminAudit = () =>

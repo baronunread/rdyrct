@@ -13,10 +13,10 @@
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Ban, Ellipsis, ExternalLink, ShieldQuestionMark, Trash2, Undo2 } from "@/app/ui/icons";
-import { useAdminAnonLinks, useAdminLinks } from "../../lib/hooks";
+import { useAdminAnonLinks, useAdminLinks, useAdminReports } from "../../lib/hooks";
 import { api } from "../../lib/api";
 import { linkDisplayTitle } from "../../lib/link-display";
-import type { AdminAnonLinkRow, AdminLinkRow, Sort } from "@/shared/types";
+import type { AdminAnonLinkRow, AdminLinkRow, AdminReportRow, Sort } from "@/shared/types";
 import { Badge, PageHeader, Table, Td, Th } from "../../ui/misc";
 import { Button } from "../../ui/button";
 import { Field, Input } from "../../ui/field";
@@ -34,7 +34,7 @@ import { useDebounced } from "../../lib/use-debounced";
 import { SortTh } from "../../ui/sort-th";
 import { sortRows } from "../../lib/sort";
 import { useSearchParams, HrefLink } from "../../lib/router-search";
-import { cn } from "../../ui/cn";
+import { Segmented } from "../../ui/segmented";
 import { Spinner } from "../../ui/spinner";
 
 /** The two columns both tables open with. Their widths differ because the
@@ -244,8 +244,15 @@ function LinkRow({ link, ...actions }: { link: AdminLinkRow } & RowActions) {
           {linkDisplayTitle(link.url)}
         </span>
         {link.suspendedAt && (
-          <span className="mt-1 block">
+          <span className="mt-1 block" title={link.suspendReason ?? undefined}>
             <Badge color="pink">suspended</Badge>
+          </span>
+        )}
+        {link.reportCount > 0 && (
+          <span className="mt-1 block">
+            <Badge color="butter">
+              {link.reportCount} {link.reportCount === 1 ? "report" : "reports"}
+            </Badge>
           </span>
         )}
       </Td>
@@ -563,43 +570,89 @@ function AnonymousLinks() {
   );
 }
 
+/** Open public reports. Newest first, with the way to the reported org's
+ * links and a way to close one that needs nothing. */
+function Reports() {
+  const { data, isPending } = useAdminReports();
+  const toast = useToast();
+  const qc = useQueryClient();
+  const dismiss = useMutation({
+    mutationFn: (id: string) => api(`/admin/links/reports/${id}/dismiss`, { method: "POST" }),
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: ["admin", "reports"] });
+      await qc.invalidateQueries({ queryKey: ["admin", "links"] });
+      toast("Report dismissed.");
+    },
+    onError: withErrorToast(toast),
+  });
+  if (isPending) return <TableSkeleton rows={4} testId="admin-reports-rows-skeleton" />;
+  const rows: AdminReportRow[] = data ?? [];
+  if (rows.length === 0)
+    return <p className="py-6 text-center text-sm text-muted">No open reports.</p>;
+  return (
+    <Table fixed minWidth="min-w-[56rem]">
+      <thead>
+        <tr>
+          <Th className="w-[14%]">Link</Th>
+          <Th className="w-[16%]">Organization</Th>
+          <Th className="w-[10%]">Reason</Th>
+          <Th className="w-[30%]">Note</Th>
+          <Th className="w-[14%]">Contact</Th>
+          <Th className="w-[10%]">When</Th>
+          <Th className="w-[6%]" />
+        </tr>
+      </thead>
+      <tbody>
+        {rows.map((r) => (
+          <tr key={r.id}>
+            <Td className="truncate font-mono text-xs font-bold">/{r.slug}</Td>
+            <Td className="truncate">
+              {r.orgId ? (
+                <HrefLink
+                  href={`/admin/links?org=${encodeURIComponent(r.orgId)}`}
+                  className="block truncate hover:text-accent hover:underline"
+                >
+                  {r.orgName}
+                </HrefLink>
+              ) : (
+                <span className="text-muted" title="The address matched no link">
+                  no match
+                </span>
+              )}
+            </Td>
+            <Td>
+              <Badge color={r.reason === "other" ? "muted" : "pink"}>{r.reason}</Badge>
+            </Td>
+            <Td className="truncate text-muted" title={r.note}>
+              {r.note || "none"}
+            </Td>
+            <Td className="truncate text-muted" title={r.contact}>
+              {r.contact || "none"}
+            </Td>
+            <Td className="whitespace-nowrap text-muted">{shortDate(r.createdAt)}</Td>
+            <Td>
+              <Button
+                size="sm"
+                variant="ghost"
+                disabled={dismiss.isPending}
+                onClick={() => dismiss.mutate(r.id)}
+              >
+                Dismiss
+              </Button>
+            </Td>
+          </tr>
+        ))}
+      </tbody>
+    </Table>
+  );
+}
+
 const VIEWS = [
   { id: "links", label: "Owned links" },
+  { id: "reports", label: "Reports" },
   { id: "anonymous", label: "Anonymous" },
 ] as const;
 type View = (typeof VIEWS)[number]["id"];
-
-/** A row of mutually exclusive choices. Used for the two sections of the page
- * and for the status filter. */
-function Segmented<Id extends string>({
-  items,
-  value,
-  onChange,
-}: {
-  items: readonly { id: Id; label: string }[];
-  value: Id;
-  onChange: (id: Id) => void;
-}) {
-  return (
-    <div className="flex w-fit gap-1 rounded-lg bg-surface-2 p-1">
-      {items.map(({ id, label }) => (
-        <button
-          key={id}
-          type="button"
-          onClick={() => onChange(id)}
-          className={cn(
-            "cursor-pointer rounded-md px-3 py-1.5 text-xs transition-colors",
-            value === id
-              ? "bg-surface font-bold text-text shadow-sm"
-              : "text-muted hover:text-text",
-          )}
-        >
-          {label}
-        </button>
-      ))}
-    </div>
-  );
-}
 
 /**
  * Restore, delete and re-check, with the toasts they answer with.
@@ -891,6 +944,7 @@ export function AdminLinksPage() {
       <Segmented items={VIEWS} value={view} onChange={setView} />
 
       {view === "links" && <OwnedLinks onSuspend={setSuspending} />}
+      {view === "reports" && <Reports />}
       {view === "anonymous" && <AnonymousLinks />}
 
       <SuspendDialog link={suspending} onClose={() => setSuspending(null)} />

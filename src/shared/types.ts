@@ -7,6 +7,11 @@ export const CAP_TOKEN_HEADER = "x-cap-token";
 
 /** What the Worker answers when a Cap token is missing, expired, or already
  * spent. The browser retries once with a fresh one rather than showing it. */
+/** Why somebody reports a link. The form offers these and the admin list
+ * shows them. */
+export const REPORT_REASONS = ["phishing", "malware", "spam", "other"] as const;
+export type ReportReason = (typeof REPORT_REASONS)[number];
+
 export const CAP_FAILED_CODE = "CAP_FAILED";
 
 /** Anything that survives a round trip through JSON: what a request or
@@ -552,6 +557,8 @@ export interface AdminOrgRow {
   ownerEmail: string | null;
   /** When the org's links were suspended, or null. */
   linksSuspendedAt: number | null;
+  /** When the sweep or enough reports flagged the org for a human look. */
+  reviewFlaggedAt: number | null;
 }
 
 export interface AdminOrgDetail {
@@ -590,6 +597,21 @@ export interface AdminLinkRow {
   riskScore: number | null;
   riskReasons: string[];
   riskCheckedAt: number | null;
+  /** Open public reports against this link. */
+  reportCount: number;
+}
+
+/** A public abuse report, as the admin list shows it. */
+export interface AdminReportRow {
+  id: string;
+  slug: string;
+  linkId: string | null;
+  orgId: string | null;
+  orgName: string | null;
+  reason: ReportReason;
+  note: string;
+  contact: string;
+  createdAt: number;
 }
 
 /** An anonymous link made on the landing page (Direction A of #96). It has no

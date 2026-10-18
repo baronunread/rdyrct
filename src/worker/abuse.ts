@@ -88,7 +88,8 @@ export function assertNotShortener(destination: string): void {
  */
 export const REDIRECT_CEILING_PER_DAY = 2_000;
 
-const DAY_MS = 24 * 60 * 60 * 1000;
+const HOUR_MS = 60 * 60 * 1000;
+const DAY_MS = 24 * HOUR_MS;
 
 /**
  * Only an org this new gets auto-suspended by volume alone; an older one is
@@ -132,7 +133,7 @@ export async function suspendOrgLinks(
   // actually change on a given call.
   await db
     .update(schema.orgs)
-    .set({ linksSuspendedAt: Date.now() })
+    .set({ linksSuspendedAt: Date.now(), reviewFlaggedAt: null })
     .where(eq(schema.orgs.id, orgId));
 
   const live = and(eq(schema.links.orgId, orgId), isNull(schema.links.suspendedAt));
@@ -164,6 +165,11 @@ export async function suspendOrgLinks(
 export async function sweepAbusiveOrgs(env: Env): Promise<void> {
   const db = drizzle(env.DB, { schema });
   const startOfDay = Math.floor(Date.now() / DAY_MS) * DAY_MS;
+  await suspendOverCeiling(env, db, startOfDay);
+  await flagSuspiciousOrgs(env, db, startOfDay);
+}
+
+async function suspendOverCeiling(env: Env, db: DB, startOfDay: number): Promise<void> {
   const rows = await db
     .select({ orgId: schema.clicks.orgId, n: sql<number>`count(*)` })
     .from(schema.clicks)
@@ -191,6 +197,89 @@ export async function sweepAbusiveOrgs(env: Env): Promise<void> {
       if (suspended === 0) return;
       captureAlert([{ event: "org_auto_suspended", orgId, redirects: n, links: suspended }]);
       await notifyAutoSuspend(env, db, orgId, n).catch(() => {});
+    }),
+  );
+}
+
+/* ---------------- earlier, softer signals ---------------- */
+
+/** Redirects in the last hour that look wrong for a new free org. A quarter
+ * of the daily ceiling, so a spike is seen well before the ceiling is. */
+const VELOCITY_PER_HOUR = REDIRECT_CEILING_PER_DAY / 4;
+/** Below this many redirects today, "most of them on one link" means little. */
+const CONCENTRATION_MIN_CLICKS = REDIRECT_CEILING_PER_DAY / 2;
+/** The share of today's redirects on one new link that counts as lopsided. */
+const CONCENTRATION_SHARE = 0.9;
+
+/**
+ * Flag, without suspending, a new free org whose traffic looks wrong: a burst
+ * in the last hour, or nearly all of a day's volume on one link made in the
+ * last 24 hours. Both were true of the 2026-10-18 case, whose links all scored
+ * clean: the destination was not the signal, the shape of the traffic was.
+ *
+ * A flag only puts the org at the top of the admin list and fires one alert.
+ * The links keep redirecting until a human looks, which is what separates a
+ * launch from abuse. Idempotent: an org already flagged or suspended is left
+ * alone, so this alerts once per org.
+ */
+async function flagSuspiciousOrgs(env: Env, db: DB, startOfDay: number): Promise<void> {
+  const now = Date.now();
+  const bursts = await db
+    .select({ orgId: schema.clicks.orgId, n: sql<number>`count(*)` })
+    .from(schema.clicks)
+    .where(gte(schema.clicks.ts, now - HOUR_MS))
+    .groupBy(schema.clicks.orgId)
+    .having(sql`count(*) > ${VELOCITY_PER_HOUR}`);
+
+  const busy = await db
+    .select({ orgId: schema.clicks.orgId, n: sql<number>`count(*)` })
+    .from(schema.clicks)
+    .where(gte(schema.clicks.ts, startOfDay))
+    .groupBy(schema.clicks.orgId)
+    .having(sql`count(*) >= ${CONCENTRATION_MIN_CLICKS}`);
+
+  const lopsided: { orgId: string; n: number }[] = [];
+  for (const { orgId, n } of busy) {
+    const [top] = await db
+      .select({ linkId: schema.clicks.linkId, n: sql<number>`count(*)` })
+      .from(schema.clicks)
+      .innerJoin(schema.links, eq(schema.links.id, schema.clicks.linkId))
+      .where(
+        and(
+          eq(schema.clicks.orgId, orgId),
+          gte(schema.clicks.ts, startOfDay),
+          gte(schema.links.createdAt, now - DAY_MS),
+        ),
+      )
+      .groupBy(schema.clicks.linkId)
+      .orderBy(sql`count(*) desc`)
+      .limit(1);
+    if (top && top.n / n >= CONCENTRATION_SHARE) lopsided.push({ orgId, n });
+  }
+
+  const seen = new Map<string, { redirects: number; signal: string }>();
+  for (const { orgId, n } of bursts) seen.set(orgId, { redirects: n, signal: "burst_last_hour" });
+  for (const { orgId, n } of lopsided)
+    if (!seen.has(orgId)) seen.set(orgId, { redirects: n, signal: "one_new_link" });
+
+  await Promise.all(
+    [...seen].map(async ([orgId, { redirects, signal }]) => {
+      const [plan, createdAt] = await Promise.all([orgPlan(db, orgId), orgCreatedAt(db, orgId)]);
+      if (plan.plan !== "free") return;
+      if (createdAt === null || now - createdAt > NEW_ORG_WINDOW_MS) return;
+      const flagged = await db
+        .update(schema.orgs)
+        .set({ reviewFlaggedAt: now })
+        .where(
+          and(
+            eq(schema.orgs.id, orgId),
+            isNull(schema.orgs.reviewFlaggedAt),
+            isNull(schema.orgs.linksSuspendedAt),
+          ),
+        )
+        .returning({ id: schema.orgs.id });
+      if (flagged.length > 0)
+        captureAlert([{ event: "org_needs_review", orgId, redirects, signal }]);
     }),
   );
 }

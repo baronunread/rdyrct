@@ -33,6 +33,7 @@ import {
   type AdminAnonLinkRow,
   type AdminLinkRow,
   type AdminLinkSort,
+  type AdminReportRow,
 } from "@/shared/types";
 
 export const adminLinkRoutes = new Hono<AppEnv>();
@@ -81,6 +82,11 @@ async function requiredReason(c: Context<AppEnv>, required: boolean): Promise<st
   const body = parseOptionalBody(reasonBodySchema, await c.req.json<JsonValue>().catch(() => ({})));
   return checkReason(body.reason, required);
 }
+
+const reportCount = sql<number>`(
+  select count(*) from link_reports
+  where link_reports.link_id = links.id and link_reports.status = 'open'
+)`;
 
 const clickCount = sql<number>`(
   select count(*) from clicks where clicks.link_id = links.id
@@ -185,6 +191,7 @@ adminLinkRoutes.get("/", async (c) => {
       riskScore: schema.links.riskScore,
       riskReasons: schema.links.riskReasons,
       riskCheckedAt: schema.links.riskCheckedAt,
+      reportCount,
     })
     .from(schema.links)
     .innerJoin(schema.orgs, eq(schema.links.orgId, schema.orgs.id))
@@ -254,6 +261,67 @@ adminLinkRoutes.patch("/:linkId", async (c) => {
     throw new HTTPException(400, { message: "Say whether to suspend or restore this link" });
   const reason = body.suspended ? checkReason(body.reason, true) : null;
   return c.json(await setSuspended(c, c.req.param("linkId")!, body.suspended, reason));
+});
+
+/** Open public reports, newest first. */
+adminLinkRoutes.get("/reports", async (c) => {
+  const rows = await c.var.db
+    .select({
+      id: schema.linkReports.id,
+      slug: schema.linkReports.slug,
+      linkId: schema.linkReports.linkId,
+      orgId: schema.linkReports.orgId,
+      orgName: schema.orgs.name,
+      reason: schema.linkReports.reason,
+      note: schema.linkReports.note,
+      contact: schema.linkReports.contact,
+      createdAt: schema.linkReports.createdAt,
+    })
+    .from(schema.linkReports)
+    .leftJoin(schema.orgs, eq(schema.orgs.id, schema.linkReports.orgId))
+    .where(eq(schema.linkReports.status, "open"))
+    .orderBy(desc(schema.linkReports.createdAt))
+    .limit(MAX_ROWS);
+  return c.json(rows satisfies AdminReportRow[]);
+});
+
+/** Close a report without acting on it. Kept, not deleted: the count of
+ * dismissed reports on a link is evidence too. */
+adminLinkRoutes.post("/reports/:id/dismiss", async (c) => {
+  const id = c.req.param("id")!;
+  c.get("log").set({ reportId: id });
+  const done = await c.var.db
+    .update(schema.linkReports)
+    .set({ status: "dismissed" })
+    .where(eq(schema.linkReports.id, id))
+    .returning({ id: schema.linkReports.id });
+  if (done.length === 0) throw new HTTPException(404, { message: "Report not found" });
+  await recordAdminAction(c.env, {
+    actorUserId: c.var.user!.id,
+    action: "report.dismiss",
+    targetType: "report",
+    targetId: id,
+    detail: {},
+  });
+  return c.json({ ok: true });
+});
+
+/** Clear an org's "needs review" flag: somebody looked and it is fine. */
+adminLinkRoutes.post("/orgs/:orgId/reviewed", async (c) => {
+  const orgId = c.req.param("orgId")!;
+  c.get("log").set({ orgId });
+  await c.var.db
+    .update(schema.orgs)
+    .set({ reviewFlaggedAt: null })
+    .where(eq(schema.orgs.id, orgId));
+  await recordAdminAction(c.env, {
+    actorUserId: c.var.user!.id,
+    action: "org.reviewed",
+    targetType: "org",
+    targetId: orgId,
+    detail: {},
+  });
+  return c.json({ ok: true });
 });
 
 /**
@@ -382,7 +450,8 @@ adminLinkRoutes.post("/orgs/:orgId/suspend", async (c) => {
   // a replacement link before its links are individually caught up below.
   await db
     .update(schema.orgs)
-    .set({ linksSuspendedAt: suspend ? Date.now() : null })
+    // A decision either way answers the review flag.
+    .set({ linksSuspendedAt: suspend ? Date.now() : null, reviewFlaggedAt: null })
     .where(eq(schema.orgs.id, orgId));
 
   // One expression, used to select and then to update: built twice they can

@@ -580,6 +580,7 @@ adminRoutes.get("/orgs", async (c) => {
       plan: ownerPlan,
       createdAt: schema.orgs.createdAt,
       linksSuspendedAt: schema.orgs.linksSuspendedAt,
+      reviewFlaggedAt: schema.orgs.reviewFlaggedAt,
       ownerName,
       ownerEmail,
       // literal orgs.id: interpolated columns render unqualified inside

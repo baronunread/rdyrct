@@ -31,6 +31,7 @@ import { domainRoutes } from "./routes/domains";
 import { capRoutes } from "./routes/cap";
 import { revalidateOnRedirect } from "./risk";
 import { sweepAbusiveOrgs } from "./abuse";
+import { reportRoutes } from "./routes/reports";
 import { evlogMiddleware } from "./evlog";
 import { sweepGraceWarnings } from "./reconcile";
 import { shortenRoutes, sweepExpiredAnonLinks } from "./routes/shorten";
@@ -323,6 +324,9 @@ app.route("/api/cap", capRoutes);
 // definition, and gated by Cap plus its own rate-limit namespace rather than
 // by a session.
 app.route("/api/shorten", shortenRoutes);
+
+// Abuse reports from anyone, gated the same way (Cap plus a rate limit).
+app.route("/api/reports", reportRoutes);
 
 // Polar webhook: public, signature-verified, no session middleware.
 app.post("/api/webhooks/polar", (c) => {

@@ -185,3 +185,30 @@ test("an admin sees a suspended org and restores its links in bulk", async ({ pa
     })
     .toBe(302);
 });
+
+test("a visitor reports a link and an admin sees and dismisses the report", async ({ page }) => {
+  const email = `admin-report-${Date.now()}@gmail.com`;
+  const destination = `https://reported-${Date.now()}.example/page`;
+  await signUpAndVerify(page, email, password);
+  await createQuickLink(page, destination);
+  await makePlatformAdmin(page, email);
+  const slug = (
+    await queryRows<{ slug: string }>(page, "select slug from links where destination = ?", [
+      destination,
+    ])
+  )[0].slug;
+
+  await page.goto(`/report?link=${slug}`);
+  await page.getByLabel("Details (optional)").fill("asks for a card number");
+  await page.getByRole("button", { name: "Send report" }).click();
+  await expect(page.getByText("Thanks. We will look at it.")).toBeVisible({ timeout: 15_000 });
+
+  await page.goto("/admin/links");
+  await page.getByRole("button", { name: "Reports", exact: true }).click();
+  const row = page.getByRole("row").filter({ hasText: slug });
+  await expect(row).toBeVisible({ timeout: 10_000 });
+  await expect(row.getByText("asks for a card number")).toBeVisible();
+
+  await row.getByRole("button", { name: "Dismiss" }).click();
+  await expect(page.getByText("No open reports.")).toBeVisible({ timeout: 10_000 });
+});

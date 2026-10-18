@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { ArrowRight, Ellipsis, Eye, Trash2 } from "@/app/ui/icons";
+import { ArrowRight, Check, Ellipsis, Eye, Trash2, Undo2 } from "@/app/ui/icons";
 import { HrefLink } from "../../lib/router-search";
 import { Button } from "../../ui/button";
 import { useAdminOrgDetail, useAdminOrgs } from "../../lib/hooks";
@@ -22,6 +22,7 @@ import { withErrorToast } from "../../lib/mutation-toast";
 import { shortDate } from "../../lib/dates";
 import { formatNumber } from "../../lib/numbers";
 import { Pager } from "../../ui/pagination";
+import { Segmented } from "../../ui/segmented";
 
 const roleColor = {
   owner: "accent",
@@ -36,6 +37,13 @@ const planBadgeColor = {
   free: "muted",
   unlimited: "mint",
 } satisfies Record<OrgPlan, "accent" | "mint" | "muted">;
+
+const STATUSES = [
+  { id: "all", label: "All" },
+  { id: "suspended", label: "Suspended" },
+  { id: "review", label: "Needs review" },
+] as const;
+type OrgStatus = (typeof STATUSES)[number]["id"];
 
 function OrgMembersTable({
   members,
@@ -114,6 +122,7 @@ function OrgDetailDialog({ org, onClose }: { org: AdminOrgRow | null; onClose: (
           <div className="flex items-center gap-2">
             <Badge color={planBadgeColor[org.plan]}>{org.plan}</Badge>
             {org.linksSuspendedAt && <Badge color="pink">links suspended</Badge>}
+            {org.reviewFlaggedAt && <Badge color="butter">needs review</Badge>}
             <span className="text-xs text-muted">Created {shortDate(org.createdAt)}</span>
           </div>
 
@@ -147,6 +156,7 @@ export function AdminOrgsPage() {
   const [deleting, setDeleting] = useState<AdminOrgRow | null>(null);
   const [viewing, setViewing] = useState<AdminOrgRow | null>(null);
   const [q, setQ] = useState("");
+  const [status, setStatus] = useState<OrgStatus>("all");
   const [sort, setSort] = useState<Sort>({ key: "created", dir: -1 });
   const [page, setPage] = useState(0);
 
@@ -161,14 +171,27 @@ export function AdminOrgsPage() {
     onError: withErrorToast(toast),
   });
 
+  // Both actions answer the same flag, so one mutation with a path.
+  const act = useMutation({
+    mutationFn: (input: { orgId: string; path: string; body?: { reason: string } }) =>
+      api(`/admin/links/orgs/${input.orgId}/${input.path}`, { method: "POST", body: input.body }),
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: ["admin"] });
+      toast("Done.");
+    },
+    onError: withErrorToast(toast),
+  });
+
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase();
     const matches = (orgs.data ?? []).filter(
       (o) =>
-        !needle ||
-        o.name.toLowerCase().includes(needle) ||
-        (o.ownerName?.toLowerCase().includes(needle) ?? false) ||
-        (o.ownerEmail?.toLowerCase().includes(needle) ?? false),
+        (status === "all" ||
+          (status === "suspended" ? o.linksSuspendedAt : o.reviewFlaggedAt) != null) &&
+        (!needle ||
+          o.name.toLowerCase().includes(needle) ||
+          (o.ownerName?.toLowerCase().includes(needle) ?? false) ||
+          (o.ownerEmail?.toLowerCase().includes(needle) ?? false)),
     );
     return sortRows(matches, sort, {
       name: (o) => o.name.toLowerCase(),
@@ -178,7 +201,7 @@ export function AdminOrgsPage() {
       clicks: (o) => o.clicks,
       created: (o) => o.createdAt,
     });
-  }, [orgs.data, q, sort]);
+  }, [orgs.data, q, status, sort]);
 
   const { totalPages, safePage, rows } = paginate(filtered, page);
 
@@ -194,6 +217,16 @@ export function AdminOrgsPage() {
         placeholder="Search by org name or owner…"
         label="Search organizations"
       />
+      <div className="mb-3">
+        <Segmented
+          items={STATUSES}
+          value={status}
+          onChange={(next) => {
+            setStatus(next);
+            setPage(0);
+          }}
+        />
+      </div>
       {/* Rows only: the header and search box above are real, so the
           page-level skeleton would draw a second one of each. */}
       {orgs.isLoading ? (
@@ -263,6 +296,7 @@ export function AdminOrgsPage() {
                 <Td>
                   <Badge color={planBadgeColor[org.plan]}>{org.plan}</Badge>{" "}
                   {org.linksSuspendedAt && <Badge color="pink">suspended</Badge>}
+                  {org.reviewFlaggedAt && <Badge color="butter">needs review</Badge>}
                 </Td>
                 <Td className="tnum text-right">{org.members}</Td>
                 <Td className="tnum text-right">{org.links}</Td>
@@ -283,6 +317,24 @@ export function AdminOrgsPage() {
                     <MenuItem onClick={() => setViewing(org)}>
                       <Eye size={14} /> View details
                     </MenuItem>
+                    {org.reviewFlaggedAt && (
+                      <MenuItem onClick={() => act.mutate({ orgId: org.id, path: "reviewed" })}>
+                        <Check size={14} /> Mark reviewed
+                      </MenuItem>
+                    )}
+                    {org.linksSuspendedAt && (
+                      <MenuItem
+                        onClick={() =>
+                          act.mutate({
+                            orgId: org.id,
+                            path: "suspend?suspend=0",
+                            body: { reason: "" },
+                          })
+                        }
+                      >
+                        <Undo2 size={14} /> Restore links
+                      </MenuItem>
+                    )}
                     <MenuSeparator />
                     <MenuItem className="text-danger" onClick={() => setDeleting(org)}>
                       <Trash2 size={14} /> Delete organization
