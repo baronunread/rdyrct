@@ -280,7 +280,7 @@ Short.io beats rdyrct on price and free-plan size. rdyrct is the better pick whe
       "What rdyrct stores and what it does not: click analytics keep country, referrer, device and time, never an IP address or a precise location.",
     markdown: `# Privacy policy
 
-This policy explains what rdyrct collects, why, the legal basis for it, and how you can exercise your rights. Last updated 24 September 2026.
+This policy explains what rdyrct collects, why, the legal basis for it, and how you can exercise your rights. Last updated 18 October 2026.
 
 ## Data controller
 
@@ -288,7 +288,7 @@ Andrea Bruno is the data controller for rdyrct. For a privacy request or questio
 
 ## Data we collect
 
-We collect your account email address and name, plus the organizations, links, domains, and settings you create. Click analytics keep only an approximate country, referrer host, device type, and timestamp. We do not store an IP address, precise location, or data that enables cross-site tracking.
+We collect your account email address and name, plus the organizations, links, domains, and settings you create. Click analytics keep only an approximate country, referrer host, device type, and timestamp. We do not store an IP address, precise location, or data that enables cross-site tracking. If you report a link, we store the address you report, your reason and note, and the email you choose to give.
 
 If you accept analytics, PostHog records product events tied to your account. It does not autocapture what you type or replay your screen. Until you answer the banner, a few steps on the current page are held in browser memory: accepting sends them, rejecting discards them. The home page starts with the same version for everyone. After you accept analytics, it picks one of two versions at random and keeps that choice in your browser until you withdraw consent or it expires. Events sent after that choice say which version you saw. Sentry receives technical error reports with the error, browser, and page path, after query strings are removed.
 
@@ -316,11 +316,15 @@ For help, email [support@mail.rdyrct.com](mailto:support@mail.rdyrct.com).`,
       "The rules for using rdyrct: acceptable use for links and QR codes, account and organization responsibilities, billing via Polar, and the self-host license.",
     markdown: `# Terms of service
 
-These terms govern your use of rdyrct. By creating an account or using the service, you agree to them. Last updated 19 July 2026.
+These terms govern your use of rdyrct. By creating an account or using the service, you agree to them. Last updated 18 October 2026.
 
 ## Acceptance and acceptable use
 
-Use rdyrct only if you agree to these terms. Do not create links that are illegal, malicious, used for phishing, malware distribution, spam, or other abuse. We may disable a link or account that breaks this rule.
+Use rdyrct only if you agree to these terms. Do not create links that are illegal, malicious, used for phishing, malware distribution, spam, or other abuse, or that imitate another brand to collect payments or credentials. We may pause or disable a link or account that breaks this rule, block a destination host, and suspend the organizations of a banned account. A pause is not a verdict: we tell the owner why and restore the links if we were wrong.
+
+## Reporting abuse and appeals
+
+Report a link with the [report form](/report). A report alone never suspends a link. To appeal a pause or suspension, email [support@mail.rdyrct.com](mailto:support@mail.rdyrct.com) with the name of your organization and what the link is for.
 
 ## Accounts and organizations
 

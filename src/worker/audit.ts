@@ -27,6 +27,9 @@ export type AdminAction =
   | "org.unsuspend_links"
   | "org.delete"
   | "org.reviewed"
+  | "org.abuse"
+  | "host.block"
+  | "host.unblock"
   | "report.dismiss"
   | "user.ban"
   | "user.unban"
@@ -40,7 +43,7 @@ export async function recordAdminAction(
   entry: {
     actorUserId: string;
     action: AdminAction;
-    targetType: "link" | "org" | "user" | "anon_link" | "report";
+    targetType: "link" | "org" | "user" | "anon_link" | "report" | "host";
     targetId: string;
     /** Anything needed to read this entry once its target is gone. */
     detail?: Record<string, JsonValue>;

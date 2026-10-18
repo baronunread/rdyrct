@@ -35,6 +35,7 @@ import {
 } from "../util";
 import { jsonBodyLimit } from "../body-limit";
 import { assertNotShortener } from "../abuse";
+import { assertNotBlocked, holdIfSuspicious } from "../abuse-hold";
 import { scoreAndRecord } from "../risk";
 import { claimAnonLink } from "./shorten";
 import { cursorValueOf, linkPageQuery, readLinkPageParams, takePage } from "../links-page";
@@ -128,6 +129,7 @@ function toDTO(
     clicks,
     addressCount,
     createdBy: row.createdBy,
+    suspendedAt: row.suspendedAt,
   };
 }
 
@@ -773,6 +775,7 @@ linkRoutes.post("/", requireOrgRole("member"), async (c) => {
   const orgId = c.req.param("orgId")!;
   validateInput(body, orgId);
   const db = c.var.db;
+  await assertNotBlocked(db, body.destination);
 
   const [{ plan, limits }, activeCount] = await Promise.all([
     orgPlan(db, orgId),
@@ -833,6 +836,9 @@ linkRoutes.post("/", requireOrgRole("member"), async (c) => {
 
   assertLinkQuota(activeCount, plan, limits);
   const link = newLinkRow(orgId, domainId, slug, body, utm, c.var.user!.id);
+  // A scam-shaped destination is created on hold: it exists, and a human
+  // decides whether it redirects. Applied before the insert so it never serves.
+  Object.assign(link, await holdIfSuspicious(c.env, db, orgId, plan, link.destination));
   const address = newAddressRow(link.id, orgId, domainId, slug, "primary", "created");
   // Atomic: the link insert, the org's links-cap-guarded address insert, and
   // a compensating delete (only if the cap was hit) all run in one D1 batch,
@@ -942,16 +948,35 @@ async function activeAddressesOf(db: DB, linkId: string) {
     .where(and(eq(schema.linkAddresses.linkId, linkId), isNull(schema.linkAddresses.retiredAt)));
 }
 
+/**
+ * What an edit that changes the destination owes the abuse rules: a blocked
+ * host is refused, and a scam-shaped one puts the link on hold. Returns the
+ * suspension columns to write with the edit, or null.
+ */
+async function guardChangedDestination(
+  env: Env,
+  db: DB,
+  orgId: string,
+  plan: OrgPlan,
+  existing: typeof schema.links.$inferSelect,
+  destination: string,
+) {
+  if (destination === existing.destination) return null;
+  await assertNotBlocked(db, destination);
+  return existing.suspendedAt ? null : holdIfSuspicious(env, db, orgId, plan, destination);
+}
+
 linkRoutes.patch("/:linkId", requireOrgRole("member"), async (c) => {
   const body = await c.req.json<LinkInput>();
   const orgId = c.req.param("orgId")!;
   validateInput(body, orgId, true);
   const db = c.var.db;
   // The plan and the row are independent reads, so they go out together.
-  const [{ limits }, existing] = await Promise.all([
+  const [{ plan, limits }, existing] = await Promise.all([
     orgPlan(db, orgId),
     findLink(db, orgId, c.req.param("linkId")!),
   ]);
+
   // After the row is read: what the plan gates is a *change* to the styling,
   // not the styling arriving back unchanged with an edit to some other field.
   assertQrAllowed(body, limits, existing);
@@ -992,12 +1017,18 @@ linkRoutes.patch("/:linkId", requireOrgRole("member"), async (c) => {
   const utm = resolveUtm(destination, body, existing);
   const cleanDestination = stripUtmParams(destination);
 
-  const updated = mergedLinkUpdate(existing, body, {
-    domainId,
-    slug: newSlug,
-    destination: cleanDestination,
-    utm,
-  });
+  // Swapping a clean destination for a scam-shaped one is the standard move,
+  // so a changed destination is held the same way a new link is.
+  const hold = await guardChangedDestination(c.env, db, orgId, plan, existing, cleanDestination);
+  const updated = {
+    ...mergedLinkUpdate(existing, body, {
+      domainId,
+      slug: newSlug,
+      destination: cleanDestination,
+      utm,
+    }),
+    ...hold,
+  };
   const messages = [
     ...renameSyncMessages(existing, updated, body, moved, hostname, oldHostname),
     // KV caches each address's fully-built redirect URL (destination + UTM

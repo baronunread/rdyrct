@@ -23,6 +23,7 @@ import { orgPlan } from "../plan";
 import { effectivePlanSql, subscriptionGrantsAccess } from "../entitlement";
 import { reconcileUser } from "../reconcile";
 import { deleteAccountAndOwnedOrgs } from "../better-auth";
+import { restoreBannedUserOrgs, suspendBannedUserOrgs } from "../abuse-hold";
 import { jsonBodyLimit } from "../body-limit";
 import { adminLinkRoutes } from "./admin-links";
 import { recordAdminAction } from "../audit";
@@ -800,13 +801,19 @@ adminRoutes.patch("/users/:userId", async (c) => {
   // Banning kicks the user out immediately: all their sessions are wiped, and
   // better-auth refuses to create new ones (see better-auth.ts).
   if (patch.banned) await db.delete(schema.session).where(eq(schema.session.userId, targetId));
+  // Their links must stop with them, and come back only with them: the orgs
+  // they own are suspended on a ban and restored on an unban.
+  let orgsAffected = 0;
+  if (patch.banned === true)
+    orgsAffected = await suspendBannedUserOrgs(c.env, db, targetId, self.id);
+  if (patch.banned === false) await restoreBannedUserOrgs(c.env, db, targetId);
   if (patch.banned !== undefined)
     await recordAdminAction(c.env, {
       actorUserId: self.id,
       action: patch.banned ? "user.ban" : "user.unban",
       targetType: "user",
       targetId: targetId,
-      detail: { isAdminChanged: patch.isAdmin !== undefined },
+      detail: { isAdminChanged: patch.isAdmin !== undefined, orgsSuspended: orgsAffected },
     });
   return c.json({ ok: true });
 });

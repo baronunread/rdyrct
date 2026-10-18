@@ -11,7 +11,7 @@ import {
 } from "@/app/ui/icons";
 import { AnimatePresence, LazyMotion, domAnimation } from "motion/react";
 import { type LinkDTO, type Sort } from "@/shared/types";
-import { Slug, Table, Th, Td } from "../ui/misc";
+import { Badge, Slug, Table, Th, Td } from "../ui/misc";
 import { Menu, MenuItem, MenuSeparator } from "../ui/menu";
 import { SortTh } from "../ui/sort-th";
 import { shortDate } from "../lib/dates";
@@ -93,6 +93,14 @@ function LinkCell({
           onCopy={(text) => copyToClipboard(text, toast)}
         />
       </span>
+      {link.suspendedAt && (
+        <span
+          className="shrink-0"
+          title="Paused. It does not redirect until we have looked at it. If this is a mistake, write to support and we will restore it."
+        >
+          <Badge color="pink">paused</Badge>
+        </span>
+      )}
     </div>
   );
 }

@@ -28,6 +28,7 @@ import * as schema from "../db/schema";
 import type { AppEnv, Env } from "../env";
 import { jsonBodyLimit } from "../body-limit";
 import { assertNotShortener } from "../abuse";
+import { assertNotBlocked } from "../abuse-hold";
 import { publishLink, resolveSlug, unpublishLink } from "../kv";
 import { scoreAndRecord } from "../risk";
 import { spendToken } from "../cap";
@@ -82,6 +83,7 @@ shortenRoutes.post("/", async (c) => {
   assertNotShortener(destination);
 
   const db = drizzle(c.env.DB, { schema });
+  await assertNotBlocked(db, destination);
   const now = Date.now();
   const expiresAt = now + ANON_LINK_TTL_MS;
   const row = {

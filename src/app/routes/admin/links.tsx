@@ -35,6 +35,7 @@ import { SortTh } from "../../ui/sort-th";
 import { sortRows } from "../../lib/sort";
 import { useSearchParams, HrefLink } from "../../lib/router-search";
 import { Segmented } from "../../ui/segmented";
+import { BlockedHosts } from "./blocked-hosts";
 import { Spinner } from "../../ui/spinner";
 
 /** The two columns both tables open with. Their widths differ because the
@@ -686,6 +687,7 @@ function Reports() {
 const VIEWS = [
   { id: "links", label: "Owned links" },
   { id: "reports", label: "Reports" },
+  { id: "blocked", label: "Blocked hosts" },
   { id: "anonymous", label: "Anonymous" },
 ] as const;
 type View = (typeof VIEWS)[number]["id"];
@@ -1010,6 +1012,12 @@ function OwnedLinks({ onSuspend }: { onSuspend: (l: AdminLinkRow) => void }) {
 export function AdminLinksPage() {
   const [view, setView] = useState<View>("links");
   const [suspending, setSuspending] = useState<AdminLinkRow | null>(null);
+  const panels = {
+    links: <OwnedLinks onSuspend={setSuspending} />,
+    reports: <Reports />,
+    blocked: <BlockedHosts />,
+    anonymous: <AnonymousLinks />,
+  } satisfies Record<View, React.ReactNode>;
 
   return (
     <div className="flex flex-col gap-4">
@@ -1020,9 +1028,7 @@ export function AdminLinksPage() {
 
       <Segmented items={VIEWS} value={view} onChange={setView} />
 
-      {view === "links" && <OwnedLinks onSuspend={setSuspending} />}
-      {view === "reports" && <Reports />}
-      {view === "anonymous" && <AnonymousLinks />}
+      {panels[view]}
 
       <SuspendDialog link={suspending} onClose={() => setSuspending(null)} />
     </div>

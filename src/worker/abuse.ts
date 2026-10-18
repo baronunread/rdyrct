@@ -212,62 +212,45 @@ async function suspendOverCeiling(env: Env, db: DB, since: number): Promise<void
   );
 }
 
-/* ---------------- earlier, softer signals ---------------- */
+/* ---------------- earlier signals: hold, or flag ---------------- */
 
-/** Redirects in the last hour that look wrong for a new free org. A quarter
- * of the daily ceiling, so a spike is seen well before the ceiling is. */
-const VELOCITY_PER_HOUR = REDIRECT_CEILING_PER_DAY / 4;
-/** Below this many redirects today, "most of them on one link" means little. */
-const CONCENTRATION_MIN_CLICKS = REDIRECT_CEILING_PER_DAY / 2;
-/** The share of today's redirects on one new link that counts as lopsided. */
-const CONCENTRATION_SHARE = 0.9;
+/** Redirects in the last hour that look wrong for a new free org. */
+const VELOCITY_PER_HOUR = 200;
+/** Redirects in 24 hours on a link made in the same 24 hours. A new link that
+ * somebody is already pushing hard is the shape of a scam campaign. */
+const NEW_LINK_REDIRECTS = 300;
+/** An org this new is held, not just flagged. Real launches are rare in the
+ * first three days and scams are common, so the cheap mistake is a pause an
+ * admin lifts in one click; the expensive one is thousands of victims. */
+const HOLD_WINDOW_MS = 3 * DAY_MS;
 
 /**
- * Flag, without suspending, a new free org whose traffic looks wrong: a burst
- * in the last hour, or nearly all of a day's volume on one link made in the
- * last 24 hours. Both were true of the 2026-10-18 case, whose links all scored
- * clean: the destination was not the signal, the shape of the traffic was.
+ * Act on a new free org whose traffic looks wrong: a burst in the last hour,
+ * or a link made in the last 24 hours that is already past NEW_LINK_REDIRECTS.
+ * Both were true of the 2026-10-18 case, whose links all scored clean: the
+ * destination was not the signal, the shape of the traffic was.
  *
- * A flag only puts the org at the top of the admin list and fires one alert.
- * The links keep redirecting until a human looks, which is what separates a
- * launch from abuse. Idempotent: an org already flagged or suspended is left
- * alone, so this alerts once per org.
+ * Under three days old the org's links are held (suspended, reversible, the
+ * owner told why and how to appeal). Up to seven days it is only flagged, with
+ * its links still redirecting, for an admin to look at. Idempotent: an org
+ * already flagged or suspended is left alone, so this acts once per org.
  */
-/** Redirects since `since` on the org's busiest link made in the last 24h. */
-async function newLinkRedirects(db: DB, orgId: string, since: number, now: number) {
-  const [top] = await db
-    .select({ n: sql<number>`count(*)` })
-    .from(schema.clicks)
-    .innerJoin(schema.links, eq(schema.links.id, schema.clicks.linkId))
-    .where(
-      and(
-        eq(schema.clicks.orgId, orgId),
-        gte(schema.clicks.ts, since),
-        gte(schema.links.createdAt, now - DAY_MS),
-      ),
-    )
-    .groupBy(schema.clicks.linkId)
-    .orderBy(sql`count(*) desc`)
-    .limit(1);
-  return top?.n ?? 0;
-}
-
 async function flagSuspiciousOrgs(env: Env, db: DB, since: number): Promise<void> {
   const now = Date.now();
-  const [bursts, busy] = await Promise.all([
+  const [bursts, fresh] = await Promise.all([
     orgsWithRedirects(db, now - HOUR_MS, VELOCITY_PER_HOUR + 1),
-    orgsWithRedirects(db, since, CONCENTRATION_MIN_CLICKS),
+    db
+      .select({ orgId: schema.clicks.orgId, n: sql<number>`count(*)` })
+      .from(schema.clicks)
+      .innerJoin(schema.links, eq(schema.links.id, schema.clicks.linkId))
+      .where(and(gte(schema.clicks.ts, since), gte(schema.links.createdAt, now - DAY_MS)))
+      .groupBy(schema.clicks.orgId, schema.clicks.linkId)
+      .having(sql`count(*) >= ${NEW_LINK_REDIRECTS}`),
   ]);
-
-  // The busy list is short, so the per-org lookups run together.
-  const shares = await Promise.all(
-    busy.map(({ orgId }) => newLinkRedirects(db, orgId, since, now)),
-  );
-  const lopsided = busy.filter(({ n }, i) => shares[i] / n >= CONCENTRATION_SHARE);
 
   const seen = new Map<string, { redirects: number; signal: string }>();
   for (const { orgId, n } of bursts) seen.set(orgId, { redirects: n, signal: "burst_last_hour" });
-  for (const { orgId, n } of lopsided)
+  for (const { orgId, n } of fresh)
     if (!seen.has(orgId)) seen.set(orgId, { redirects: n, signal: "one_new_link" });
 
   await Promise.all(
@@ -278,6 +261,7 @@ async function flagSuspiciousOrgs(env: Env, db: DB, since: number): Promise<void
       ]);
       if (plan.plan !== "free" || cleared) return;
       if (createdAt === null || now - createdAt > NEW_ORG_WINDOW_MS) return;
+      if (now - createdAt < HOLD_WINDOW_MS) return holdOrg(env, db, orgId, redirects, signal);
       const flagged = await db
         .update(schema.orgs)
         .set({ reviewFlaggedAt: now })
@@ -293,6 +277,42 @@ async function flagSuspiciousOrgs(env: Env, db: DB, since: number): Promise<void
         captureAlert([{ event: "org_needs_review", orgId, redirects, signal }]);
     }),
   );
+}
+
+async function holdOrg(env: Env, db: DB, orgId: string, redirects: number, signal: string) {
+  const reason = `Held for review: ${redirects} redirects on a brand-new free organization (${signal.replaceAll("_", " ")}).`;
+  const held = await suspendOrgLinks(env, db, orgId, null, reason);
+  if (held === 0) return;
+  captureAlert([{ event: "org_held", orgId, redirects, signal, links: held }]);
+  await notifyHold(env, db, orgId, "Your links are on hold", reason).catch(() => {});
+}
+
+/**
+ * Tell an org's owner that links were paused, and why. The grounds and the way
+ * to appeal are in the mail: a pause nobody explains reads as an outage, and
+ * an owner who cannot answer it has no way to ask for the pause to be lifted.
+ */
+export async function notifyHold(
+  env: Env,
+  db: DB,
+  orgId: string,
+  heading: string,
+  grounds: string,
+): Promise<void> {
+  const owner = await orgOwnerEmail(db, orgId);
+  if (!owner) return;
+  const content = {
+    preheader: "We paused them until somebody has looked.",
+    heading,
+    paragraphs: [
+      grounds,
+      "Nothing was deleted. The links do not redirect until we have looked at them, which we do as soon as we can.",
+      `If this is a mistake, write to ${SUPPORT_EMAIL} with the name of your organization and what the link is for, and we will restore it. Reports of abuse reach us at ${env.APP_URL}/report.`,
+    ],
+    cta: { label: "See your links", url: `${env.APP_URL}/links` },
+    footerLine: NOTICE_FOOTER,
+  };
+  await sendEmail(env, owner, heading, renderEmail(content, env.APP_URL, owner)).catch(() => {});
 }
 
 /**
