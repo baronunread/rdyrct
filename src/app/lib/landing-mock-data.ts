@@ -1,4 +1,4 @@
-import type { HeatmapRow, SeriesPoint } from "@/shared/types";
+import type { SeriesPoint } from "@/shared/types";
 
 // Deterministic pseudo-random generator (LCG): the mock data is identical on
 // every visit, so the demo never looks stale or jumps between renders.
@@ -45,19 +45,4 @@ export function hourlyPoints(): SeriesPoint[] {
       clicks: Math.round(base * (0.6 + rand() * 0.8)),
     };
   });
-}
-
-/** Weekday-business-hours heatmap, like a small B2B audience would produce. */
-export function heatmapData(): HeatmapRow[] {
-  const rand = lcg(99);
-  const rows: HeatmapRow[] = [];
-  for (let d = 0; d < 7; d++) {
-    for (let h = 0; h < 24; h++) {
-      const business = d < 5 && h >= 8 && h <= 18;
-      const evening = h >= 19 && h <= 22;
-      const base = business ? 26 : evening ? 14 : 3;
-      rows.push({ dayOfWeek: d, hour: h, clicks: Math.round(base * (0.5 + rand())) });
-    }
-  }
-  return rows;
 }

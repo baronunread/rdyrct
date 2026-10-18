@@ -266,7 +266,8 @@ test("landing page opens light and the toggle switches and sticks", async ({ bro
   await page.goto("/");
   await expect(html).toHaveAttribute("data-theme", "light");
 
-  await page.getByRole("button", { name: /toggle theme/i }).click();
+  // The control lives in the footer, not the header, so it is below the fold.
+  await page.getByRole("button", { name: "Dark theme" }).click();
   await expect(html).toHaveAttribute("data-theme", "dark");
 
   await page.reload();

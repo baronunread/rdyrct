@@ -1,9 +1,8 @@
 import { useMemo, useState } from "react";
 import type { SeriesPoint } from "@/shared/types";
-import { AreaChart, BarList, ClicksByHour } from "./charts";
-import { clicksByWeekday } from "../lib/click-buckets";
+import { AreaChart, BarList } from "./charts";
 import { formatNumber } from "../lib/numbers";
-import { dailyClicks, toDailyPoints, hourlyPoints, heatmapData } from "../lib/landing-mock-data";
+import { dailyClicks, toDailyPoints, hourlyPoints } from "../lib/landing-mock-data";
 
 const RANGES = [
   { label: "24h", days: 1, bucket: "hour" },
@@ -20,27 +19,22 @@ const SERIES = {
   "365d": toDailyPoints(dailyClicks(365, 60, 2.5, 7)),
 } satisfies Record<(typeof RANGES)[number]["label"], SeriesPoint[]>;
 const CLICKS_7D = DAILY_30.slice(-7).reduce((a, b) => a + b, 0);
-const HEATMAP = heatmapData();
 
 const CAMPAIGNS = [
   { key: "launch", clicks: 486 },
   { key: "spring-sale", clicks: 312 },
   { key: "newsletter", clicks: 208 },
-  { key: "podcast", clicks: 121 },
 ];
 
 const COUNTRIES = [
   { key: "United States", clicks: 412 },
   { key: "Germany", clicks: 231 },
   { key: "United Kingdom", clicks: 187 },
-  { key: "Brazil", clicks: 143 },
-  { key: "Japan", clicks: 98 },
 ];
 
 const DEVICES = [
   { key: "Mobile", clicks: 741 },
   { key: "Desktop", clicks: 512 },
-  { key: "Tablet", clicks: 90 },
 ];
 
 function DeltaBadge({ delta }: { delta: number }) {
@@ -106,7 +100,7 @@ export function LandingAnalyticsMock() {
 
   return (
     // The product tour (landing-tour.tsx) supplies the window around this.
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <p className="text-lg font-bold">Analytics</p>
@@ -129,12 +123,12 @@ export function LandingAnalyticsMock() {
         </p>
         <AreaChart
           data={series}
-          height={160}
+          height={110}
           tickFormat={active.bucket === "hour" ? (day) => day.slice(11, 16) : undefined}
         />
       </div>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+      <div className="hidden grid-cols-3 gap-3 sm:grid">
         <div className="rounded-lg bg-surface smooth-shadow-ring-xs p-4">
           <p className="mb-3 text-xs font-medium text-muted">Campaigns</p>
           <BarList items={CAMPAIGNS} />
@@ -148,19 +142,6 @@ export function LandingAnalyticsMock() {
           <BarList items={DEVICES} />
         </div>
       </div>
-
-      {active.bucket !== "hour" && (
-        <div className="grid gap-4 md:grid-cols-3">
-          <div className="rounded-lg bg-surface smooth-shadow-ring-xs p-4 md:col-span-2">
-            <p className="mb-3 text-xs font-medium text-muted">By hour</p>
-            <ClicksByHour data={HEATMAP} />
-          </div>
-          <div className="rounded-lg bg-surface smooth-shadow-ring-xs p-4">
-            <p className="mb-3 text-xs font-medium text-muted">By weekday</p>
-            <BarList items={clicksByWeekday(HEATMAP)} />
-          </div>
-        </div>
-      )}
     </div>
   );
 }

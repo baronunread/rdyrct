@@ -46,7 +46,7 @@ function NoQr() {
 const STEPS = [
   { label: "Create a link", path: "/dashboard", nav: "/dashboard" },
   { label: "Share it", path: "/links", nav: "/links" },
-  // `short` is what fits a third of the row on a phone under 375px.
+  // `short` is what fits a third of the row on a phone under 420px.
   { label: "See what worked", short: "See results", path: "/analytics", nav: "/analytics" },
 ] as const;
 
@@ -166,8 +166,8 @@ function TabLabel({ label, short }: { label: string; short?: string }) {
   if (!short) return label;
   return (
     <>
-      <span className="min-[375px]:hidden">{short}</span>
-      <span className="hidden min-[375px]:inline">{label}</span>
+      <span className="min-[420px]:hidden">{short}</span>
+      <span className="hidden min-[420px]:inline">{label}</span>
     </>
   );
 }
@@ -199,7 +199,7 @@ function TourTab({
       aria-controls={`tour-panel-${index}`}
       aria-selected={selected}
       onClick={onSelect}
-      className="flex cursor-pointer flex-col gap-1.5 text-left text-xs font-medium min-[390px]:text-sm text-muted hover:text-text aria-selected:text-text"
+      className="flex min-h-11 cursor-pointer flex-col justify-end gap-1.5 text-left text-xs font-medium text-muted min-[420px]:text-sm hover:text-text aria-selected:text-text sm:min-h-0"
     >
       <span className="whitespace-nowrap">
         <span className="hidden sm:inline">{index + 1}. </span>

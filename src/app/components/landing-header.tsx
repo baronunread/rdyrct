@@ -14,16 +14,14 @@
  * than a new one loading.
  */
 import { Link } from "@tanstack/react-router";
-import { Moon, Sun } from "../ui/icons";
+import { Github } from "../ui/icons";
+import { GITHUB_URL } from "../ui/footer";
 import { useHydrated } from "../lib/hydrated";
 import { MarketingLink } from "./marketing-link";
-import { useTheme } from "../lib/theme";
 import { trackCta } from "../lib/track-cta";
-import { IconButton } from "../ui/button";
 import { buttonClass } from "../ui/button-class";
 
 export function LandingHeader({ authed }: { authed: boolean }) {
-  const [, toggleTheme] = useTheme();
   const hydrated = useHydrated();
   return (
     // Three columns, not space-between: the two 1fr rails keep the nav on the
@@ -66,10 +64,22 @@ export function LandingHeader({ authed }: { authed: boolean }) {
 
       {/* What the visitor does. */}
       <div className="flex items-center justify-self-end gap-2.5 text-sm sm:gap-4">
-        <IconButton label="Toggle theme" className="p-2" onClick={toggleTheme}>
-          <Sun size={15} className="theme-sun" />
-          <Moon size={15} className="theme-moon" />
-        </IconButton>
+        {/* The hero never says the product is open source, and it is one of
+            the page's strongest claims. An icon with no star count: a low
+            number reads as a weekend project (see SelfHostSection). */}
+        <a
+          href={GITHUB_URL}
+          target="_blank"
+          rel="noreferrer"
+          aria-label="rdyrct on GitHub"
+          title="rdyrct on GitHub"
+          className="-my-2 inline-flex items-center gap-2 rounded-md py-2 text-muted transition-colors hover:text-accent"
+        >
+          <Github size={20} />
+          {/* Label from lg up, where the right rail has the room. Below it
+              the icon stands alone, at the size of the text beside it. */}
+          <span className="hidden lg:inline">GitHub</span>
+        </a>
         <span data-auth-control="in">
           <Link
             to="/dashboard"

@@ -202,6 +202,22 @@
 :root[data-theme="dark"] .theme-moon {
   display: none;
 }
+.theme-switch button {
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  border-radius: 9999px;
+  padding: 0.375rem;
+  color: var(--muted);
+}
+.theme-switch button:hover {
+  color: var(--text);
+}
+:root:not([data-theme="dark"]) .theme-switch [data-mode="light"],
+:root[data-theme="dark"] .theme-switch [data-mode="dark"] {
+  background: var(--surface-2);
+  color: var(--text);
+}
 [data-auth-control="in"] {
   display: none;
 }
@@ -538,10 +554,11 @@ body {
   max-width: calc(100vw - 2rem);
 }
 .tour-window {
-  height: 640px;
+  height: 448px;
 }
 @media (min-width: 48rem) {
   .tour-window {
+    height: 544px;
     grid-template-columns: 200px 1fr;
   }
 }

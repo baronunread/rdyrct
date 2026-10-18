@@ -1,17 +1,60 @@
 import type { ReactNode } from "react";
 import { MarketingLink } from "../components/marketing-link";
+import { useTheme } from "../lib/theme";
+import { cn } from "./cn";
 import { CookieSettingsButton } from "./consent-banner";
+import { Moon, Sun } from "./icons";
 
 export const GITHUB_URL = "https://github.com/baronunread/rdyrct";
 export const SUPPORT_EMAIL = "support@mail.rdyrct.com";
 
 const linkClass = "hover:text-accent";
 
-function Column({ title, children }: { title: string; children: ReactNode }) {
+function Column({
+  title,
+  children,
+  wide,
+}: {
+  title: string;
+  children: ReactNode;
+  /** On a phone, spans both columns and wraps its links like a line of text,
+   * so an odd count leaves a ragged line end, not an empty cell in a grid. */
+  wide?: boolean;
+}) {
   return (
-    <div>
+    <div className={wide ? "col-span-2 sm:col-span-1" : undefined}>
       <p className="text-sm font-semibold text-text">{title}</p>
-      <ul className="mt-3 flex flex-col gap-1 *:py-1 sm:gap-0.5">{children}</ul>
+      <ul
+        className={cn(
+          "mt-3 flex flex-col gap-1 *:py-1 sm:gap-0.5",
+          wide && "max-sm:flex-row max-sm:flex-wrap max-sm:gap-x-5 max-sm:gap-y-0",
+        )}
+      >
+        {children}
+      </ul>
+    </div>
+  );
+}
+
+/** Light and dark side by side, the chosen one raised. Either button flips
+ * the theme, so a click on the one already raised still does something.
+ * Which one is raised comes from the root's data-theme through CSS
+ * (`.theme-switch` in styles.css), not from state, so the prerendered page
+ * and the hydrated one agree whatever the visitor stored. */
+function ThemeSwitch() {
+  const [, toggleTheme] = useTheme();
+  return (
+    <div
+      role="group"
+      aria-label="Theme"
+      className="theme-switch flex w-fit rounded-full border border-border p-0.5"
+    >
+      <button type="button" aria-label="Light theme" data-mode="light" onClick={toggleTheme}>
+        <Sun size={14} />
+      </button>
+      <button type="button" aria-label="Dark theme" data-mode="dark" onClick={toggleTheme}>
+        <Moon size={14} />
+      </button>
     </div>
   );
 }
@@ -20,7 +63,7 @@ export function Footer() {
   return (
     <footer className="mt-16 border-t border-border pt-10 pb-6 text-sm text-muted">
       <div className="mx-auto max-w-5xl">
-        <div className="grid grid-cols-2 gap-x-6 gap-y-10 sm:grid-cols-[1.6fr_1fr_1fr_1fr]">
+        <div className="grid grid-cols-2 gap-x-6 gap-y-8 sm:grid-cols-[1.6fr_1fr_1fr_1fr] sm:gap-y-10">
           <div className="col-span-2 flex flex-col gap-3 sm:col-span-1">
             <MarketingLink to="/" className="text-lg font-bold tracking-widest text-text">
               rdyrct
@@ -29,7 +72,12 @@ export function Footer() {
               Short links and QR codes for teams, on your own domain. Visitor IP addresses are never
               stored.
             </p>
-            <a href={GITHUB_URL} target="_blank" rel="noreferrer" className={`${linkClass} py-1`}>
+            <a
+              href={GITHUB_URL}
+              target="_blank"
+              rel="noreferrer"
+              className={`${linkClass} py-1 max-sm:hidden`}
+            >
               Open source on GitHub
             </a>
           </div>
@@ -62,7 +110,41 @@ export function Footer() {
             </li>
           </Column>
 
-          <Column title="Compare">
+          {/* The blog is a separate Worker behind the /blog* route, so its link
+              is a plain anchor: a client-side Link would try to render a path
+              the SPA does not have. */}
+          <Column title="Company">
+            <li>
+              <a href="/blog" className={linkClass}>
+                Blog
+              </a>
+            </li>
+            <li>
+              <MarketingLink to="/changelog" className={linkClass}>
+                Changelog
+              </MarketingLink>
+            </li>
+            <li>
+              <a href={`mailto:${SUPPORT_EMAIL}`} className={linkClass}>
+                Support
+              </a>
+            </li>
+            <li>
+              <MarketingLink to="/report" className={linkClass}>
+                Report a link
+              </MarketingLink>
+            </li>
+            {/* Not on a phone: the header carries a GitHub link there, and
+                dropping this one leaves Company the same length as Product,
+                so the two columns end together. */}
+            <li className="max-sm:hidden">
+              <a href={GITHUB_URL} target="_blank" rel="noreferrer" className={linkClass}>
+                GitHub
+              </a>
+            </li>
+          </Column>
+
+          <Column title="Compare" wide>
             <li>
               <MarketingLink to="/bitly-alternative" className={linkClass}>
                 Bitly alternative
@@ -89,53 +171,28 @@ export function Footer() {
               </MarketingLink>
             </li>
           </Column>
-
-          {/* The blog is a separate Worker behind the /blog* route, so its link
-              is a plain anchor: a client-side Link would try to render a path
-              the SPA does not have. */}
-          <Column title="Company">
-            <li>
-              <a href="/blog" className={linkClass}>
-                Blog
-              </a>
-            </li>
-            <li>
-              <MarketingLink to="/changelog" className={linkClass}>
-                Changelog
-              </MarketingLink>
-            </li>
-            <li>
-              <a href={`mailto:${SUPPORT_EMAIL}`} className={linkClass}>
-                Support
-              </a>
-            </li>
-            <li>
-              <MarketingLink to="/report" className={linkClass}>
-                Report a link
-              </MarketingLink>
-            </li>
-            <li>
-              <a href={GITHUB_URL} target="_blank" rel="noreferrer" className={linkClass}>
-                GitHub
-              </a>
-            </li>
-          </Column>
         </div>
 
-        <div className="mt-10 flex flex-col gap-3 border-t border-border pt-6 text-xs sm:flex-row sm:items-center sm:justify-between">
+        {/* On a phone: the legal links on one line, then the copyright and the
+            theme switch sharing the next. `contents` hands nav and switch to
+            this grid there, and from sm up they are one flex group again. */}
+        <div className="mt-8 grid grid-cols-[1fr_auto] items-center gap-y-4 border-t border-border pt-6 text-xs sm:mt-10 sm:flex sm:justify-between sm:gap-3">
           <span>© {new Date().getFullYear()} Andrea Bruno</span>
-          <nav className="grid grid-cols-2 gap-x-6 *:py-2 sm:flex sm:items-center sm:gap-4 sm:*:py-0">
-            <MarketingLink to="/privacy" className={linkClass}>
-              Privacy
-            </MarketingLink>
-            <MarketingLink to="/privacy" hash="cookies" className={linkClass}>
-              Cookies
-            </MarketingLink>
-            <CookieSettingsButton className="text-left whitespace-nowrap hover:text-accent" />
-            <MarketingLink to="/terms" className={linkClass}>
-              Terms
-            </MarketingLink>
-          </nav>
+          <div className="contents sm:flex sm:items-center sm:gap-6">
+            <nav className="flex flex-wrap gap-x-5 gap-y-1 *:py-2 max-sm:order-first max-sm:col-span-2 sm:items-center sm:gap-4 sm:*:py-0">
+              <MarketingLink to="/privacy" className={linkClass}>
+                Privacy
+              </MarketingLink>
+              <MarketingLink to="/privacy" hash="cookies" className={linkClass}>
+                Cookies
+              </MarketingLink>
+              <CookieSettingsButton className="text-left whitespace-nowrap hover:text-accent" />
+              <MarketingLink to="/terms" className={linkClass}>
+                Terms
+              </MarketingLink>
+            </nav>
+            <ThemeSwitch />
+          </div>
         </div>
       </div>
     </footer>

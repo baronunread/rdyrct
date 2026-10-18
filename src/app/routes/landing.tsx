@@ -2,7 +2,7 @@
 import type { ReactNode } from "react";
 import { Link } from "@tanstack/react-router";
 import { HrefLink } from "../lib/router-search";
-import { ArrowRight, Check, Code2, ChevronDown } from "@/app/ui/icons";
+import { ArrowRight, Check, ChevronDown } from "@/app/ui/icons";
 import {
   LazyMotion,
   MotionConfig,
@@ -75,12 +75,12 @@ const faqs = [
   },
   {
     q: "Can I make a QR code with my logo?",
-    a: "Yes, on a paid plan: point the QR at a short link you own, and see how many scans a poster, flyer or packaging insert actually produced. If you just want a QR code that works and looks good, no tracking needed, our QR code generator is free and needs no account: pick the dot and corner style, set the colors, drop in a logo, and download a PNG or an SVG.",
+    a: "Yes, on a paid plan: point the QR at a short link you own, and see how many scans a poster, flyer or packaging insert produced. If you just want a QR code that works and looks good, no tracking needed, our QR code generator is free and needs no account: pick the dot and corner style, set the colors, drop in a logo, and download a PNG or an SVG.",
     aNode: (
       <>
         Yes, on a paid plan: point the QR at a short link you own, and see how many scans a poster,
-        flyer or packaging insert actually produced. If you just want a QR code that works and looks
-        good, no tracking needed, our{" "}
+        flyer or packaging insert produced. If you just want a QR code that works and looks good, no
+        tracking needed, our{" "}
         <MarketingLink to="/qr-code-generator" className="text-accent hover:underline">
           QR code generator
         </MarketingLink>{" "}
@@ -212,11 +212,11 @@ function BillingCycleToggle({
     <LazyMotion features={domAnimation}>
       <div
         ref={containerRef}
-        className="relative mx-auto mb-8 flex w-fit items-center gap-1 rounded-md border border-border bg-surface p-1 text-sm"
+        className="relative mx-auto mb-8 flex w-fit items-center gap-1 rounded-xl bg-surface-2 p-1 text-sm"
       >
         {pillRect && (
           <m.span
-            className="absolute rounded bg-accent"
+            className="smooth-shadow-ring-xs absolute rounded-lg bg-surface"
             initial={false}
             animate={pillRect}
             transition={reduced ? { duration: 0 } : { type: "spring", stiffness: 500, damping: 35 }}
@@ -232,8 +232,8 @@ function BillingCycleToggle({
             aria-pressed={interval === value}
             onClick={() => onChange(value)}
             className={cn(
-              "relative rounded px-3 py-1 font-medium transition-colors",
-              interval === value ? "text-bg" : "text-muted hover:text-text",
+              "relative min-h-11 rounded-lg px-3 py-1 font-medium transition-colors sm:min-h-0",
+              interval === value ? "text-text" : "text-muted hover:text-text",
             )}
           >
             {value === "month" ? "Monthly" : `Yearly · ${YEARLY_DISCOUNT_LABEL}`}
@@ -255,7 +255,7 @@ function planPrice(plan: "hobby" | "pro", interval: "month" | "year") {
  * Hobby, which the limits do. */
 function PlanName({ name, highlight }: { name: string; highlight?: boolean }) {
   return (
-    <p className={highlight ? "font-bold text-accent" : "font-bold"}>
+    <p className="font-bold">
       {name}
       {highlight && (
         <span className="ml-2 rounded-full border border-accent/40 px-2 py-0.5 text-xs text-accent">
@@ -287,12 +287,7 @@ function MobilePlanCard({
   highlight?: boolean;
 }) {
   return (
-    <div
-      className={cn(
-        "rounded-lg border p-4",
-        highlight ? "border-accent/40 bg-accent/5" : "border-border bg-surface",
-      )}
-    >
+    <div className="rounded-lg border border-border bg-surface p-4">
       <div className="flex items-baseline justify-between gap-2">
         <div>
           <PlanName name={name} highlight={highlight} />
@@ -622,44 +617,43 @@ function GithubMark({ size = 17 }: { size?: number }) {
 function SelfHostSection() {
   return (
     <Section id="self-host" className="py-16">
-      <div className="flex flex-col items-center gap-5 text-center">
-        <span className="inline-flex items-center gap-2 rounded-full border border-accent/40 bg-accent/5 px-3 py-1 text-xs text-accent">
-          <Code2 size={13} /> MIT licensed
-        </span>
-
-        <h2 className="max-w-xl text-2xl font-bold tracking-tight text-balance">
-          Yes, you can just run it yourself.
-        </h2>
-
-        <div className="flex w-full flex-col items-center gap-6 rounded-2xl bg-surface px-6 py-10 smooth-shadow-ring-sm">
-          <p className="max-w-xl text-sm text-muted">
+      {/* Split and left-aligned, with no card: the final call to action below
+          is the one centred card on the page, and a second one right above
+          it read as the same block twice. The licence is in the sentence, so
+          it does not need a pill of its own. */}
+      <div className="grid items-center gap-8 md:grid-cols-[1fr_auto] md:gap-16">
+        <div className="flex flex-col gap-4">
+          <h2 className="max-w-xl text-2xl font-bold tracking-tight text-balance sm:text-3xl">
+            Yes, you can run it yourself.
+          </h2>
+          <p className="max-w-lg text-sm text-muted">
             One repository, MIT, no enterprise edition held back. Deploy it to your own Cloudflare
             account and you are the platform admin, which means you set your own plan. We are not
             going to email you about it.
           </p>
-
-          {/* One soft pill: the mark, then the name over the invitation. This
-              used to end on a star count, which is the wrong number to make
-              the largest fact in the section that exists to answer "will this
-              still be here next year": a low count reads as a weekend project
-              to the exact reader the band is for, and it only ages one way,
-              slowly. The mark is 38px inside a 58px pill, so pl-2.5 would put
-              its centre exactly on the 29px corner radius and read as if it
-              were falling out of the curve. Nudged right so it sits inside
-              the arc. */}
-          <a
-            href={GITHUB_URL}
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex items-center gap-3 rounded-full bg-surface-2 py-2.5 pr-7 pl-4.5 text-left transition-colors hover:bg-border"
-          >
-            <GithubMark size={38} />
-            <span className="flex flex-col leading-tight">
-              <span className="text-base font-bold">GitHub</span>
-              <span className="text-sm text-muted">Read the source</span>
-            </span>
-          </a>
         </div>
+
+        {/* One soft pill: the mark, then the name over the invitation. This
+            used to end on a star count, which is the wrong number to make
+            the largest fact in the section that exists to answer "will this
+            still be here next year": a low count reads as a weekend project
+            to the exact reader the band is for, and it only ages one way,
+            slowly. The mark is 38px inside a 58px pill, so pl-2.5 would put
+            its centre exactly on the 29px corner radius and read as if it
+            were falling out of the curve. Nudged right so it sits inside
+            the arc. */}
+        <a
+          href={GITHUB_URL}
+          target="_blank"
+          rel="noreferrer"
+          className="inline-flex items-center gap-3 justify-self-start rounded-full bg-surface-2 py-2.5 pr-7 pl-4.5 text-left transition-colors hover:bg-border"
+        >
+          <GithubMark size={38} />
+          <span className="flex flex-col leading-tight">
+            <span className="text-base font-bold">GitHub</span>
+            <span className="text-sm text-muted">Read the source</span>
+          </span>
+        </a>
       </div>
     </Section>
   );
@@ -1046,7 +1040,7 @@ function CustomDomainSection() {
           />
         </m.div>
 
-        <div className="order-1 flex flex-col items-center gap-5 text-center md:order-2 md:items-start md:text-left">
+        <div className="order-1 flex flex-col items-start gap-5 text-left md:order-2">
           {/* Gain framing, not fear. This used to open on "a random slug is
               what a scam text looks like", which sells by making somebody
               picture being mistaken for a scammer. Every competitor sells the
@@ -1062,7 +1056,7 @@ function CustomDomainSection() {
               quoting a competitor's marketing as evidence for our product
               would be the same dishonesty in a nicer suit. The messages to
               the right are the evidence instead. */}
-          <h2 className="text-xl font-bold text-balance sm:text-2xl">
+          <h2 className="text-2xl font-bold tracking-tight text-balance sm:text-3xl">
             Short links on your own domain get clicked.
           </h2>
           <p className="max-w-xl text-sm text-muted">
@@ -1074,7 +1068,7 @@ function CustomDomainSection() {
           <HrefLink
             href={paidTo("hobby")}
             onClick={() => trackCta("second_screen_domain")}
-            className={buttonClass({ variant: "primary", size: "sm" })}
+            className="inline-flex items-center gap-1 text-sm text-accent hover:underline"
           >
             Connect your domain <ArrowRight size={14} />
           </HrefLink>
@@ -1322,7 +1316,7 @@ function AudiencePanel({ audience }: { audience: Audience }) {
 function AudienceSection() {
   const [audience, setAudience] = useState<Audience>("marketers");
   return (
-    <Section className="flex flex-col gap-8 py-20">
+    <Section className="flex flex-col gap-8 py-12 md:py-20">
       <div className="max-w-xl">
         <h2 className="text-2xl font-bold tracking-tight text-balance sm:text-3xl">
           One link, three kinds of people.
@@ -1346,7 +1340,7 @@ function AudienceSection() {
             aria-selected={audience === a}
             onClick={() => setAudience(a)}
             className={cn(
-              "cursor-pointer rounded-lg px-4 py-1.5 text-sm font-medium capitalize",
+              "min-h-11 cursor-pointer rounded-lg px-4 py-1.5 text-sm font-medium capitalize sm:min-h-0",
               audience === a ? "bg-surface text-text smooth-shadow-ring-xs" : "text-muted",
             )}
           >
@@ -1414,14 +1408,12 @@ const PLAN_CHANGE_STEPS = [
 
 export function PlanChangeSection() {
   return (
-    <Section className="flex flex-col gap-10 py-20">
+    <Section className="flex flex-col gap-10 py-12 md:py-20">
       <div className="max-w-xl">
         <h2 className="text-2xl font-bold tracking-tight text-balance sm:text-3xl">
           Stop paying and nothing gets deleted.
         </h2>
-        <p className="mt-2 text-muted">
-          Downgrading never deletes anything. Here is what happens if you stop paying.
-        </p>
+        <p className="mt-2 text-muted">What happens, in order, after you downgrade.</p>
       </div>
       <ol className="grid gap-8 border-t-2 border-border pt-6 sm:grid-cols-2 lg:grid-cols-4">
         {PLAN_CHANGE_STEPS.map(([when, head, body]) => (
@@ -1442,7 +1434,9 @@ function FaqSection() {
     // questions starts every line in a different place.
     <Section id="faq" className="scroll-mt-16 py-16">
       <div className="mx-auto max-w-3xl">
-        <h2 className="mb-6 text-xl font-bold">Frequently asked questions</h2>
+        <h2 className="mb-6 text-2xl font-bold tracking-tight text-balance sm:text-3xl">
+          Frequently asked questions
+        </h2>
       </div>
       <div className="mx-auto flex max-w-3xl flex-col gap-3">
         {faqs.map(({ q, a, aNode }) => (
@@ -1457,7 +1451,7 @@ function FaqSection() {
                 className="shrink-0 text-muted transition-transform group-open:rotate-180"
               />
             </summary>
-            <p className="pb-4 text-sm text-muted">{aNode ?? a}</p>
+            <p className="max-w-prose pb-4 text-sm text-muted">{aNode ?? a}</p>
           </details>
         ))}
       </div>
@@ -1523,12 +1517,7 @@ function PricingTierCard({
   highlight?: boolean;
 }) {
   return (
-    <div
-      className={cn(
-        "flex flex-col gap-4 rounded-lg border p-5",
-        highlight ? "border-accent/40 bg-accent/5" : "border-border bg-surface",
-      )}
-    >
+    <div className="flex flex-col gap-4 rounded-lg border border-border bg-surface p-5">
       <div>
         {/* Same pill as the full table and the mobile plan cards. The
             homepage is where the steering is worth most, and it was the
@@ -1600,8 +1589,10 @@ function PricingTeaser() {
       onEnter={() => posthog.capture(FUNNEL.pricingViewed)}
     >
       <div className="mb-8 text-center">
-        <h2 className="text-xl font-bold">Simple pricing</h2>
-        <p className="mx-auto mt-2 max-w-xl text-sm text-muted">
+        <h2 className="text-2xl font-bold tracking-tight text-balance sm:text-3xl">
+          Simple pricing
+        </h2>
+        <p className="mx-auto mt-3 max-w-xl text-sm text-muted">
           Start free. Upgrade when you outgrow the plan, or self-host and never pay us a cent.
         </p>
       </div>
