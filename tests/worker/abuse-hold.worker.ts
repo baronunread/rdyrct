@@ -335,7 +335,7 @@ describe("telling the founder", () => {
   it("emails the admin on the first report, and not again on the second", async () => {
     const owner = await freeOwnerCookie();
     await jsonBody<{ id: string; slug: string }>(await createLink(owner, "https://example.com/a"));
-    const slug = (await row("select slug from links"))?.slug as string;
+    const slug = String((await row("select slug from links"))?.slug);
     const mail = captureEmails();
     const report = () =>
       fetchWorker(

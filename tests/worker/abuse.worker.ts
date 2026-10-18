@@ -267,7 +267,7 @@ describe("sweepAbusiveOrgs", () => {
     expect(await suspendedCount()).toBe(0);
     expect(await reviewFlag()).not.toBeNull();
     expect(
-      mail.sent.some((m) => m.to === "admin@example.com" && /^Needs review/.test(m.subject)),
+      mail.sent.some((m) => m.to === "admin@example.com" && m.subject.startsWith("Needs review")),
     ).toBe(true);
     expect(mail.sent.some((m) => m.to === "owner@example.com")).toBe(false);
     alert.mockRestore();
