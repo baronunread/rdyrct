@@ -225,6 +225,14 @@ async function setSuspended(
     .set(suspensionPatch(suspend, c.var.user!.id, reason))
     .where(eq(schema.links.id, linkId));
 
+  // Restoring is a human decision, whatever screen it came from: the sweep
+  // must not suspend the org's links again ten minutes later.
+  if (!suspend)
+    await db
+      .update(schema.orgs)
+      .set({ clearedAt: Date.now() })
+      .where(eq(schema.orgs.id, link.orgId));
+
   const addresses = await republish(c.env, db, linkId);
   await recordAdminAction(c.env, {
     actorUserId: c.var.user!.id,
@@ -312,7 +320,7 @@ adminLinkRoutes.post("/orgs/:orgId/reviewed", async (c) => {
   c.get("log").set({ orgId });
   await c.var.db
     .update(schema.orgs)
-    .set({ reviewFlaggedAt: null })
+    .set({ reviewFlaggedAt: null, clearedAt: Date.now() })
     .where(eq(schema.orgs.id, orgId));
   await recordAdminAction(c.env, {
     actorUserId: c.var.user!.id,
@@ -451,7 +459,13 @@ adminLinkRoutes.post("/orgs/:orgId/suspend", async (c) => {
   await db
     .update(schema.orgs)
     // A decision either way answers the review flag.
-    .set({ linksSuspendedAt: suspend ? Date.now() : null, reviewFlaggedAt: null })
+    // Restoring is a human decision the sweep must not undo; suspending is
+    // the opposite decision and removes any earlier clearance.
+    .set({
+      linksSuspendedAt: suspend ? Date.now() : null,
+      reviewFlaggedAt: null,
+      clearedAt: suspend ? null : Date.now(),
+    })
     .where(eq(schema.orgs.id, orgId));
 
   // One expression, used to select and then to update: built twice they can

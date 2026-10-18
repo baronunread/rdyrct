@@ -271,6 +271,70 @@ describe("sweepAbusiveOrgs", () => {
     alert.mockRestore();
   });
 
+  it("does not suspend again an org an admin restored", async () => {
+    await seedLink();
+    await seedFreeOwner();
+    await seedNewOrg();
+    await seedClicksToday(REDIRECT_CEILING_PER_DAY + 1);
+    const alert = vi.spyOn(Sentry, "captureMessage").mockReturnValue("");
+    await sweepAbusiveOrgs(testEnv);
+    expect(await suspendedCount()).toBe(1);
+
+    // What the admin Restore does: links back, org cleared.
+    await env.DB.prepare("update links set suspended_at = null").run();
+    await env.DB.prepare("update orgs set cleared_at = ?, links_suspended_at = null")
+      .bind(Date.now())
+      .run();
+    await sweepAbusiveOrgs(testEnv);
+
+    expect(await suspendedCount()).toBe(0);
+    alert.mockRestore();
+  });
+
+  it("does not flag again an org an admin marked reviewed", async () => {
+    await seedLink();
+    await seedFreeOwner();
+    await seedNewOrg();
+    await seedClicksToday(REDIRECT_CEILING_PER_DAY / 4 + 1);
+    const alert = vi.spyOn(Sentry, "captureMessage").mockReturnValue("");
+    await sweepAbusiveOrgs(testEnv);
+    expect(await reviewFlag()).not.toBeNull();
+
+    await env.DB.prepare("update orgs set review_flagged_at = null, cleared_at = ?")
+      .bind(Date.now())
+      .run();
+    await sweepAbusiveOrgs(testEnv);
+
+    expect(await reviewFlag()).toBeNull();
+    alert.mockRestore();
+  });
+
+  it("counts a rolling 24 hours, not the UTC day", async () => {
+    await seedLink();
+    await seedFreeOwner();
+    await seedNewOrg();
+    // Yesterday evening, always inside 24h and always before UTC midnight
+    // when this runs shortly after it.
+    await env.DB.prepare(
+      `insert into clicks (link_id, org_id, ts, country, referrer, device)
+       select ?, ?, ?, '', '', ''
+       from (with recursive c(x) as (select 1 union all select x + 1 from c where x < ?) select x from c)`,
+    )
+      .bind(
+        sampleLink.id,
+        sampleLink.orgId,
+        Date.now() - 20 * 60 * 60 * 1000,
+        REDIRECT_CEILING_PER_DAY + 1,
+      )
+      .run();
+    const alert = vi.spyOn(Sentry, "captureMessage").mockReturnValue("");
+
+    await sweepAbusiveOrgs(testEnv);
+
+    expect(await suspendedCount()).toBe(1);
+    alert.mockRestore();
+  });
+
   it("leaves an org under the ceiling alone", async () => {
     await seedLink();
     await seedFreeOwner();

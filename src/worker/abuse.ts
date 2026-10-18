@@ -108,6 +108,10 @@ const DAY_MS = 24 * HOUR_MS;
  */
 const NEW_ORG_WINDOW_MS = 7 * DAY_MS;
 
+/** How long the automatic checks leave an org alone after an admin cleared
+ * it. The same as the new-org window: past it the sweep only alerts anyway. */
+const CLEARED_FOR_MS = NEW_ORG_WINDOW_MS;
+
 /**
  * Suspend every currently-live link in an organization and republish so the
  * redirect path stops serving them. This is the automatic path; the manual
@@ -164,16 +168,18 @@ export async function suspendOrgLinks(
  */
 export async function sweepAbusiveOrgs(env: Env): Promise<void> {
   const db = drizzle(env.DB, { schema });
-  const startOfDay = Math.floor(Date.now() / DAY_MS) * DAY_MS;
-  await suspendOverCeiling(env, db, startOfDay);
-  await flagSuspiciousOrgs(env, db, startOfDay);
+  // A rolling 24 hours, not the UTC day: a day boundary lets 1,900 redirects
+  // at 23:00 and 1,900 more at 00:10 trip nothing.
+  const since = Date.now() - DAY_MS;
+  await suspendOverCeiling(env, db, since);
+  await flagSuspiciousOrgs(env, db, since);
 }
 
-async function suspendOverCeiling(env: Env, db: DB, startOfDay: number): Promise<void> {
+async function suspendOverCeiling(env: Env, db: DB, since: number): Promise<void> {
   const rows = await db
     .select({ orgId: schema.clicks.orgId, n: sql<number>`count(*)` })
     .from(schema.clicks)
-    .where(gte(schema.clicks.ts, startOfDay))
+    .where(gte(schema.clicks.ts, since))
     .groupBy(schema.clicks.orgId)
     .having(sql`count(*) > ${REDIRECT_CEILING_PER_DAY}`);
 
@@ -181,18 +187,18 @@ async function suspendOverCeiling(env: Env, db: DB, startOfDay: number): Promise
   // rare), so handle them together rather than one round trip at a time.
   await Promise.all(
     rows.map(async ({ orgId, n }) => {
-      const [{ plan }, createdAt] = await Promise.all([
+      const [{ plan }, { createdAt, cleared }] = await Promise.all([
         orgPlan(db, orgId),
-        orgCreatedAt(db, orgId),
+        orgState(db, orgId),
       ]);
-      if (plan !== "free") return;
+      if (plan !== "free" || cleared) return;
       if (createdAt === null || Date.now() - createdAt > NEW_ORG_WINDOW_MS) {
         // Established org: worth a human's attention, not worth suspending
         // unattended (see NEW_ORG_WINDOW_MS above).
         captureAlert([{ event: "org_high_redirect_volume", orgId, redirects: n }]);
         return;
       }
-      const reason = `Automatic: ${n} redirects today, over the free-plan ceiling of ${REDIRECT_CEILING_PER_DAY}.`;
+      const reason = `Automatic: ${n} redirects in 24 hours, over the free-plan ceiling of ${REDIRECT_CEILING_PER_DAY}.`;
       const suspended = await suspendOrgLinks(env, db, orgId, null, reason);
       if (suspended === 0) return;
       captureAlert([{ event: "org_auto_suspended", orgId, redirects: n, links: suspended }]);
@@ -222,7 +228,7 @@ const CONCENTRATION_SHARE = 0.9;
  * launch from abuse. Idempotent: an org already flagged or suspended is left
  * alone, so this alerts once per org.
  */
-async function flagSuspiciousOrgs(env: Env, db: DB, startOfDay: number): Promise<void> {
+async function flagSuspiciousOrgs(env: Env, db: DB, since: number): Promise<void> {
   const now = Date.now();
   const bursts = await db
     .select({ orgId: schema.clicks.orgId, n: sql<number>`count(*)` })
@@ -234,7 +240,7 @@ async function flagSuspiciousOrgs(env: Env, db: DB, startOfDay: number): Promise
   const busy = await db
     .select({ orgId: schema.clicks.orgId, n: sql<number>`count(*)` })
     .from(schema.clicks)
-    .where(gte(schema.clicks.ts, startOfDay))
+    .where(gte(schema.clicks.ts, since))
     .groupBy(schema.clicks.orgId)
     .having(sql`count(*) >= ${CONCENTRATION_MIN_CLICKS}`);
 
@@ -247,7 +253,7 @@ async function flagSuspiciousOrgs(env: Env, db: DB, startOfDay: number): Promise
       .where(
         and(
           eq(schema.clicks.orgId, orgId),
-          gte(schema.clicks.ts, startOfDay),
+          gte(schema.clicks.ts, since),
           gte(schema.links.createdAt, now - DAY_MS),
         ),
       )
@@ -264,8 +270,11 @@ async function flagSuspiciousOrgs(env: Env, db: DB, startOfDay: number): Promise
 
   await Promise.all(
     [...seen].map(async ([orgId, { redirects, signal }]) => {
-      const [plan, createdAt] = await Promise.all([orgPlan(db, orgId), orgCreatedAt(db, orgId)]);
-      if (plan.plan !== "free") return;
+      const [plan, { createdAt, cleared }] = await Promise.all([
+        orgPlan(db, orgId),
+        orgState(db, orgId),
+      ]);
+      if (plan.plan !== "free" || cleared) return;
       if (createdAt === null || now - createdAt > NEW_ORG_WINDOW_MS) return;
       const flagged = await db
         .update(schema.orgs)
@@ -284,12 +293,24 @@ async function flagSuspiciousOrgs(env: Env, db: DB, startOfDay: number): Promise
   );
 }
 
-async function orgCreatedAt(db: DB, orgId: string): Promise<number | null> {
+/**
+ * An org's age, and whether an admin cleared it recently.
+ *
+ * Without the second, every restore and every "mark reviewed" is undone by
+ * the next sweep: it recounts the same 24 hours of redirects, finds the same
+ * total, and suspends or flags the org again ten minutes later. Clearing
+ * means a human looked, so the automatic checks stand down for a while.
+ */
+async function orgState(db: DB, orgId: string) {
   const rows = await db
-    .select({ createdAt: schema.orgs.createdAt })
+    .select({ createdAt: schema.orgs.createdAt, clearedAt: schema.orgs.clearedAt })
     .from(schema.orgs)
     .where(eq(schema.orgs.id, orgId));
-  return rows[0]?.createdAt ?? null;
+  const row = rows[0];
+  return {
+    createdAt: row?.createdAt ?? null,
+    cleared: row?.clearedAt != null && Date.now() - row.clearedAt < CLEARED_FOR_MS,
+  };
 }
 
 async function notifyAutoSuspend(

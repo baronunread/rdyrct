@@ -175,6 +175,10 @@ export const orgs = sqliteTable("orgs", {
   // reports. It changes nothing for the owner: the links keep redirecting
   // until an admin looks. Null means nothing is waiting for review.
   reviewFlaggedAt: integer("review_flagged_at"),
+  // Set when an admin restores the org's links or marks it reviewed: a human
+  // looked, so the automatic suspend and flag stand down for a while (see
+  // abuse.ts's orgState). Without it the next sweep undoes the decision.
+  clearedAt: integer("cleared_at"),
 });
 
 /**

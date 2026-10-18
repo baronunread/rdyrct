@@ -20,3 +20,5 @@ CREATE INDEX idx_link_reports_link ON link_reports(link_id);
 CREATE INDEX idx_link_reports_status ON link_reports(status, created_at);
 
 ALTER TABLE orgs ADD COLUMN review_flagged_at INTEGER;
+-- When an admin last cleared the org (restored it or marked it reviewed).
+ALTER TABLE orgs ADD COLUMN cleared_at INTEGER;

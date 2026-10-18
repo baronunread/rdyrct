@@ -394,6 +394,21 @@ describe("restoring several links at once", () => {
     expect(results[0].n).toBe(2);
   });
 
+  it("clears the org so the sweep does not undo the restore", async () => {
+    const owner = await freeOwnerCookie();
+    const a = await createLiveLink(owner, "https://example.com/a");
+    const cookie = await adminCookie();
+    await setSuspended(a.id, cookie, true, "spam");
+    await admin("/links/restore", cookie, {
+      method: "POST",
+      body: JSON.stringify({ ids: [a.id] }),
+    });
+    const org = await env.DB.prepare("select cleared_at as at from orgs where id = 'org-1'").first<{
+      at: number | null;
+    }>();
+    expect(org?.at).not.toBeNull();
+  });
+
   it("refuses an empty selection", async () => {
     const res = await admin("/links/restore", await adminCookie(), {
       method: "POST",
