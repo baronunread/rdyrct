@@ -341,11 +341,10 @@ adminLinkRoutes.post("/reports/:id/dismiss", async (c) => {
 adminLinkRoutes.post("/orgs/:orgId/abuse", async (c) => {
   const orgId = c.req.param("orgId")!;
   c.get("log").set({ orgId });
-  const reason = await requiredReason(c, true);
-  const exists = await c.var.db
-    .select({ id: schema.orgs.id })
-    .from(schema.orgs)
-    .where(eq(schema.orgs.id, orgId));
+  const [reason, exists] = await Promise.all([
+    requiredReason(c, true),
+    c.var.db.select({ id: schema.orgs.id }).from(schema.orgs).where(eq(schema.orgs.id, orgId)),
+  ]);
   if (exists.length === 0) throw new HTTPException(404, { message: "Organization not found" });
   return c.json(await markOrgAbuse(c.env, c.var.db, orgId, c.var.user!.id, reason));
 });

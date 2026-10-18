@@ -55,7 +55,11 @@ beforeEach(async () => {
   await applyTestMigrations();
   globalThis.fetch = async (input, init) => {
     const url = String(input instanceof Request ? input.url : input);
-    if (url.startsWith("https://security.cloudflare-dns.com")) throw new Error("offline");
+    // An answer the scorer reads as "no verdict", not a throw: the scoring
+    // runs after the response, and a rejection landing once the test has
+    // ended is an unhandled error.
+    if (url.startsWith("https://security.cloudflare-dns.com"))
+      return new Response("", { status: 503 });
     return realFetch(input, init);
   };
 });

@@ -122,14 +122,16 @@ export async function markOrgAbuse(
   reason: string,
 ) {
   const grounds = `Abuse: ${reason}`;
-  const [owner] = await db
-    .select({ userId: schema.orgMembers.userId })
-    .from(schema.orgMembers)
-    .where(and(eq(schema.orgMembers.orgId, orgId), eq(schema.orgMembers.role, "owner")));
-  const destinations = await db
-    .select({ destination: schema.links.destination })
-    .from(schema.links)
-    .where(eq(schema.links.orgId, orgId));
+  const [[owner], destinations] = await Promise.all([
+    db
+      .select({ userId: schema.orgMembers.userId })
+      .from(schema.orgMembers)
+      .where(and(eq(schema.orgMembers.orgId, orgId), eq(schema.orgMembers.role, "owner"))),
+    db
+      .select({ destination: schema.links.destination })
+      .from(schema.links)
+      .where(eq(schema.links.orgId, orgId)),
+  ]);
   const hosts = [
     ...new Set(destinations.map((d) => blockHostOf(d.destination)).filter((h) => h !== null)),
   ];
@@ -143,10 +145,12 @@ export async function markOrgAbuse(
     await db.update(schema.user).set({ banned: true }).where(eq(schema.user.id, owner.userId));
     await db.delete(schema.session).where(eq(schema.session.userId, owner.userId));
   }
-  for (const host of hosts)
+  if (hosts.length > 0)
     await db
       .insert(schema.blockedHosts)
-      .values({ host, reason: grounds, createdBy: actorId, createdAt: Date.now() })
+      .values(
+        hosts.map((host) => ({ host, reason: grounds, createdBy: actorId, createdAt: Date.now() })),
+      )
       .onConflictDoNothing();
 
   await recordAdminAction(env, {
