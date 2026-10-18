@@ -1,4 +1,5 @@
 import { betterAuth } from "better-auth";
+import { EvlogError } from "evlog";
 import type { JsonValue } from "../shared/types";
 import { optionalText, parseOptionalBody } from "./schemas";
 import * as v from "valibot";
@@ -23,6 +24,7 @@ import { hashPassword, verifyPassword } from "./password";
 import { uid } from "./util";
 import { spendToken, type CapScope } from "./cap";
 import { storeUserAvatar, deleteUserAvatar } from "./storage";
+import { revokeSubscriptionOf } from "./billing-provider";
 import { createOwnedOrg } from "./plan";
 import { defaultOrgName } from "@/shared/org-name";
 import { CAP_FAILED_CODE, CAP_TOKEN_HEADER } from "@/shared/types";
@@ -92,6 +94,9 @@ async function ensureOrganization(env: Env, db: DB, userId: string): Promise<voi
 /**
  * Deletes an account and flags every organization it owns in one D1 act.
  *
+ * The Polar subscription ends first. If Polar does not confirm, nothing is
+ * deleted: a gone account would keep paying with no row to stop it (#337).
+ *
  * An org has no plan of its own: `orgPlan()` reads its owner's. Leaving one
  * behind with no owner leaves it with no plan, no billing and nobody who can
  * delete it, so every owned org goes too. Settings names them before it asks.
@@ -108,6 +113,7 @@ async function ensureOrganization(env: Env, db: DB, userId: string): Promise<voi
  * flags let the stalled-deletion sweep finish the work.
  */
 export async function deleteAccountAndOwnedOrgs(env: Env, userId: string): Promise<void> {
+  await revokeSubscriptionOf(env, userId);
   await deleteUserAvatar(env, userId);
   const now = Date.now();
   const [owned] = await env.DB.batch<{ orgId: string }>([
@@ -531,7 +537,15 @@ function buildAuth(env: Env) {
       deleteUser: {
         enabled: true,
         beforeDelete: async (user) => {
-          await deleteAccountAndOwnedOrgs(env, user.id);
+          try {
+            await deleteAccountAndOwnedOrgs(env, user.id);
+          } catch (error) {
+            // better-auth answers any error that is not its own with a bare
+            // 500, so the settings toast would never say why.
+            if (EvlogError.isEvlogError(error))
+              throw new APIError("BAD_GATEWAY", { message: error.message });
+            throw error;
+          }
         },
       },
     },

@@ -1,7 +1,6 @@
 import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import { and, eq, isNull, lte, or } from "drizzle-orm";
-import { createPolar } from "@polar-sh/sdk/2026-04";
 import { Webhook } from "standardwebhooks";
 import { drizzle } from "drizzle-orm/d1";
 import * as schema from "../db/schema";
@@ -13,15 +12,7 @@ import { effectivePlanSql } from "../entitlement";
 import { reconcileUser } from "../reconcile";
 import { billingEnabled } from "../plan";
 import { jsonBodyLimit } from "../body-limit";
-import type { BillingProvider } from "../billing-provider";
-
-const polarFor = (env: Env): BillingProvider =>
-  env.BILLING ??
-  createPolar({
-    // Unset only when billing is off, and the routes below answer 404 first.
-    accessToken: env.POLAR_ACCESS_TOKEN ?? "",
-    environment: env.POLAR_SERVER ?? "sandbox",
-  });
+import { polarFor, type BillingProvider } from "../billing-provider";
 
 // Mounted at /api/billing: the caller's own subscription (per-user billing).
 // (The Polar webhook itself is mounted separately, outside this router and

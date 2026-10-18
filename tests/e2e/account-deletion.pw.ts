@@ -9,7 +9,7 @@
  */
 import { expect, test, type Page } from "@playwright/test";
 import { signUpAndVerify } from "./resend";
-import { queryRows, rawSql } from "./db";
+import { queryRows, rawSql, setPlan } from "./db";
 
 const password = "test-password-123";
 
@@ -166,4 +166,31 @@ test("deleting the account takes the organizations it owns, teammates and all", 
   );
   expect(Number(survivors[0].orgs)).toBe(1);
   expect(Number(survivors[0].users)).toBe(1);
+});
+
+test("a paying account stays when its subscription cannot be cancelled", async ({ page }) => {
+  // A deleted account leaves no row for a Polar webhook to match, so the
+  // subscription has to end first (#337). Every e2e environment runs with a
+  // Polar token that cannot revoke this seeded id (the placeholder token
+  // fails auth, a real sandbox token rejects the fake id), which makes this
+  // the path where Polar does not confirm.
+  test.slow();
+  const owner = await ownerWithOrg(page, "delete-paying");
+  await setPlan(page, owner.email, "pro");
+  const dialog = await openDeleteDialog(page);
+
+  await dialog.getByRole("button", { name: "Delete account" }).click();
+
+  await expect(page.getByText("Could not cancel the subscription")).toBeVisible({
+    timeout: 15_000,
+  });
+  const left = await queryRows<{ users: number; flagged: number }>(
+    page,
+    `select
+       (select count(*) from user where id = ?) as users,
+       (select count(*) from orgs where id = ? and deleting_at is not null) as flagged`,
+    [owner.userId, owner.org.id],
+  );
+  expect(Number(left[0].users)).toBe(1);
+  expect(Number(left[0].flagged)).toBe(0);
 });

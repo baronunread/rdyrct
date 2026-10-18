@@ -6,13 +6,15 @@
  * live account whose organizations are already being destroyed, and keeps a
  * membership race from leaving an ownerless org.
  */
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { errors } from "@polar-sh/sdk/2026-04";
 import { env } from "cloudflare:workers";
 import { reset } from "cloudflare:test";
 import { drizzle } from "drizzle-orm/d1";
 import * as schema from "../../src/worker/db/schema";
 import { deleteOrgs } from "../../src/worker/routes/orgs";
 import { deleteAccountAndOwnedOrgs } from "../../src/worker/better-auth";
+import type { BillingProvider } from "../../src/worker/billing-provider";
 import { applyTestMigrations, overrideEnv } from "./support";
 
 const ORG = "org-handover";
@@ -156,6 +158,101 @@ describe("deleteAccountAndOwnedOrgs", () => {
     expect(started).toEqual([]);
     expect(await userExists()).toBe(false);
     expect((await deletingAt(ORG))!.deleting_at).not.toBeNull();
+  });
+});
+
+describe("deleteAccountAndOwnedOrgs with a Polar subscription", () => {
+  const SUBSCRIPTION = "sub_paying";
+
+  /** A billing client whose only real method is revoke, so a test sees each
+   * call and decides how Polar answers it. */
+  function fakeBilling(answer: () => Promise<{ id: string }>) {
+    const revoke = vi.fn(answer);
+    const billing: BillingProvider = {
+      checkouts: {
+        async create() {
+          throw new Error("deletion never checks out");
+        },
+        async get() {
+          throw new Error("deletion never reads a checkout");
+        },
+      },
+      customerSessions: {
+        async create() {
+          throw new Error("deletion never opens the portal");
+        },
+      },
+      subscriptions: { revoke },
+    };
+    return { billing, revoke };
+  }
+
+  const removeAccount = (billing: BillingProvider) =>
+    deleteAccountAndOwnedOrgs(
+      overrideEnv({ ORG_DELETE: fakeTeardown().binding, BILLING: billing }),
+      LEAVING,
+    );
+
+  const userExists = async (): Promise<boolean> =>
+    (await env.DB.prepare("select id from user where id = ?").bind(LEAVING).first()) !== null;
+
+  beforeEach(async () => {
+    await env.DB.prepare("update user set plan = 'pro', polar_subscription_id = ? where id = ?")
+      .bind(SUBSCRIPTION, LEAVING)
+      .run();
+  });
+
+  it("revokes the subscription, then deletes the account", async () => {
+    const { billing, revoke } = fakeBilling(async () => ({ id: SUBSCRIPTION }));
+
+    await removeAccount(billing);
+
+    expect(revoke).toHaveBeenCalledWith(SUBSCRIPTION);
+    expect(await userExists()).toBe(false);
+  });
+
+  it("keeps the account when Polar does not confirm the revoke", async () => {
+    // A deleted account leaves no row for a later webhook to match, so the
+    // only safe answer to an unreachable Polar is to delete nothing.
+    const { billing } = fakeBilling(async () => {
+      throw new Error("injected Polar outage");
+    });
+
+    await expect(removeAccount(billing)).rejects.toThrow("Could not cancel the subscription");
+
+    expect(await userExists()).toBe(true);
+    const org = await env.DB.prepare("select deleting_at from orgs where id = ?")
+      .bind(ORG)
+      .first<{ deleting_at: number | null }>();
+    expect(org!.deleting_at).toBeNull();
+  });
+
+  it.each([
+    new errors.ResourceNotFound(404, { error: "ResourceNotFound", detail: "Not found" }),
+    new errors.AlreadyCanceledSubscription(403, {
+      error: "AlreadyCanceledSubscription",
+      detail: "Already canceled",
+    }),
+  ])("deletes the account when Polar answers $name", async (ended) => {
+    const { billing } = fakeBilling(async () => {
+      throw ended;
+    });
+
+    await removeAccount(billing);
+
+    expect(await userExists()).toBe(false);
+  });
+
+  it("skips Polar for an account with no subscription", async () => {
+    await env.DB.prepare("update user set polar_subscription_id = null where id = ?")
+      .bind(LEAVING)
+      .run();
+    const { billing, revoke } = fakeBilling(async () => ({ id: SUBSCRIPTION }));
+
+    await removeAccount(billing);
+
+    expect(revoke).not.toHaveBeenCalled();
+    expect(await userExists()).toBe(false);
   });
 });
 

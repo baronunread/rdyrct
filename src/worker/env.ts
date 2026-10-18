@@ -62,7 +62,7 @@ export interface Env {
   POLAR_PRO_YEARLY_PRODUCT_ID?: string; // var, yearly (10% off)
   POLAR_HOBBY_YEARLY_PRODUCT_ID?: string; // var, yearly (10% off)
   POLAR_SERVER?: "sandbox" | "production"; // var, default sandbox
-  /* the checkout/portal client, injected by tests; unset everywhere else,
+  /* the checkout/portal/revoke client, injected by tests; unset everywhere else,
      where the routes build a real Polar client from the token above */
   BILLING?: BillingProvider;
 

@@ -51,6 +51,11 @@ const customerSessionsCreate = vi.fn(async () => ({
 const billingProvider: BillingProvider = {
   checkouts: { create: checkoutsCreate, get: checkoutsGet },
   customerSessions: { create: customerSessionsCreate },
+  subscriptions: {
+    async revoke() {
+      throw new Error("the billing routes never revoke");
+    },
+  },
 };
 
 /** billingEnv() with the stand-in checkout/portal client wired in. */
