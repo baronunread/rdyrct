@@ -5,7 +5,7 @@ import { HrefLink } from "../../lib/router-search";
 import { Button } from "../../ui/button";
 import { useAdminOrgDetail, useAdminOrgs } from "../../lib/hooks";
 import { api } from "../../lib/api";
-import type { AdminOrgRow, OrgPlan, OrgRole, Sort } from "@/shared/types";
+import type { AdminOrgRow, OrgRole, Sort } from "@/shared/types";
 import { AreaChart } from "../../components/charts";
 import { Dialog } from "../../ui/dialog";
 import { Menu, MenuItem, MenuSeparator } from "../../ui/menu";
@@ -31,12 +31,14 @@ const roleColor = {
   viewer: "muted",
 } satisfies Record<OrgRole, "accent" | "mint" | "muted">;
 
-const planBadgeColor = {
-  pro: "mint",
-  hobby: "accent",
-  free: "muted",
-  unlimited: "mint",
-} satisfies Record<OrgPlan, "accent" | "mint" | "muted">;
+/** What an empty table says. It names the filter that matched nothing: with
+ * only a status picked there is no search term to quote. */
+function emptyMessage(status: OrgStatus, term: string): string {
+  if (term) return `No organizations match “${term}”.`;
+  if (status === "review") return "No organizations need review.";
+  if (status === "suspended") return "No organizations are suspended.";
+  return "No organizations yet.";
+}
 
 const hasStatus = (o: AdminOrgRow, status: OrgStatus) =>
   status === "all" || (status === "suspended" ? o.linksSuspendedAt : o.reviewFlaggedAt) != null;
@@ -56,7 +58,7 @@ type OrgStatus = (typeof STATUSES)[number]["id"];
 function OrgBadges({ org, suspendedLabel }: { org: AdminOrgRow; suspendedLabel: string }) {
   return (
     <>
-      <Badge color={planBadgeColor[org.plan]}>{org.plan}</Badge>{" "}
+      <span className="mr-1.5">{org.plan}</span>
       {org.linksSuspendedAt && <Badge color="pink">{suspendedLabel}</Badge>}{" "}
       {org.reviewFlaggedAt && <Badge color="butter">needs review</Badge>}
     </>
@@ -367,7 +369,7 @@ export function AdminOrgsPage() {
             {rows.length === 0 && (
               <tr>
                 <Td colSpan={8} className="py-8 text-center text-muted">
-                  No organizations match “{q.trim()}”.
+                  {emptyMessage(status, q.trim())}
                 </Td>
               </tr>
             )}
