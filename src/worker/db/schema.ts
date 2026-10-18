@@ -8,6 +8,7 @@ import {
   index,
   uniqueIndex,
 } from "drizzle-orm/sqlite-core";
+import { REPORT_REASONS } from "../../shared/types";
 
 /* ---------------- BetterAuth-managed tables ---------------- */
 // Shapes follow the BetterAuth core schema (bunx @better-auth/cli generate),
@@ -170,6 +171,14 @@ export const orgs = sqliteTable("orgs", {
   // `lockedAt`, its links do NOT keep redirecting -- suspension means the
   // content itself is the problem, not the plan.
   linksSuspendedAt: integer("links_suspended_at"),
+  // Set by the abuse sweep (traffic that looks wrong) or by enough public
+  // reports. It changes nothing for the owner: the links keep redirecting
+  // until an admin looks. Null means nothing is waiting for review.
+  reviewFlaggedAt: integer("review_flagged_at"),
+  // Set when an admin restores the org's links or marks it reviewed: a human
+  // looked, so the automatic suspend and flag stand down for a while (see
+  // abuse.ts's orgState). Without it the next sweep undoes the decision.
+  clearedAt: integer("cleared_at"),
 });
 
 /**
@@ -367,6 +376,23 @@ export const linkAddresses = sqliteTable(
     index("idx_link_addresses_org").on(t.orgId),
   ],
 );
+
+/**
+ * Public abuse reports (migration 0038). Link and org are null when the
+ * reported address matched nothing: stored anyway so the form answers the
+ * same for every slug.
+ */
+export const linkReports = sqliteTable("link_reports", {
+  id: text("id").primaryKey(),
+  slug: text("slug").notNull(),
+  linkId: text("link_id").references(() => links.id, { onDelete: "set null" }),
+  orgId: text("org_id").references(() => orgs.id, { onDelete: "set null" }),
+  reason: text("reason", { enum: REPORT_REASONS }).notNull(),
+  note: text("note").notNull().default(""),
+  contact: text("contact").notNull().default(""),
+  status: text("status").notNull().default("open"),
+  createdAt: integer("created_at").notNull(),
+});
 
 export const clicks = sqliteTable(
   "clicks",

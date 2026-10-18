@@ -50,6 +50,7 @@ const ConsentPage = lazy(() =>
 );
 const PrivacyPage = lazyRouteComponent(() => import("./routes/privacy"), "PrivacyPage");
 const TermsPage = lazyRouteComponent(() => import("./routes/terms"), "TermsPage");
+const ReportPage = lazyRouteComponent(() => import("./routes/report"), "ReportPage");
 const QrGeneratorPage = lazyRouteComponent(
   () => import("./routes/qr-generator"),
   "QrGeneratorPage",
@@ -271,6 +272,12 @@ const privacyRoute = createRoute({
   component: PrivacyPage,
   ...marketingPending,
 });
+const reportRoute = createRoute({
+  getParentRoute: () => publicLayoutRoute,
+  path: "/report",
+  component: ReportPage,
+  ...marketingPending,
+});
 const termsRoute = createRoute({
   getParentRoute: () => publicLayoutRoute,
   path: "/terms",
@@ -433,6 +440,7 @@ const routeTree = rootRoute.addChildren([
     docsRoute,
     privacyRoute,
     termsRoute,
+    reportRoute,
   ]),
   loginRoute,
   signupRoute,

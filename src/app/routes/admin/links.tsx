@@ -13,10 +13,10 @@
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Ban, Ellipsis, ExternalLink, ShieldQuestionMark, Trash2, Undo2 } from "@/app/ui/icons";
-import { useAdminAnonLinks, useAdminLinks } from "../../lib/hooks";
+import { useAdminAnonLinks, useAdminLinks, useAdminReports } from "../../lib/hooks";
 import { api } from "../../lib/api";
 import { linkDisplayTitle } from "../../lib/link-display";
-import type { AdminAnonLinkRow, AdminLinkRow, Sort } from "@/shared/types";
+import type { AdminAnonLinkRow, AdminLinkRow, AdminReportRow, Sort } from "@/shared/types";
 import { Badge, PageHeader, Table, Td, Th } from "../../ui/misc";
 import { Button } from "../../ui/button";
 import { Field, Input } from "../../ui/field";
@@ -34,7 +34,7 @@ import { useDebounced } from "../../lib/use-debounced";
 import { SortTh } from "../../ui/sort-th";
 import { sortRows } from "../../lib/sort";
 import { useSearchParams, HrefLink } from "../../lib/router-search";
-import { cn } from "../../ui/cn";
+import { Segmented } from "../../ui/segmented";
 import { Spinner } from "../../ui/spinner";
 
 /** The two columns both tables open with. Their widths differ because the
@@ -71,6 +71,8 @@ function pendingId(mutation: { isPending: boolean; variables?: string }): string
 /** What a row can be told to do. One type because the row, its menu, and the
  * table all pass the same five things down. */
 type RowActions = {
+  selected: boolean;
+  onSelect: (l: AdminLinkRow) => void;
   onSuspend: (l: AdminLinkRow) => void;
   onRestore: (l: AdminLinkRow) => void;
   onDelete: (l: AdminLinkRow) => void;
@@ -225,18 +227,54 @@ function SuspendDialog({ link, onClose }: { link: AdminLinkRow | null; onClose: 
 
 /** One row. Its own component because a table row with two conditional
  * actions and a truncating cell is a component, not an expression. */
+/** What an admin needs to see before opening the row: suspended (and why, on
+ * hover) and how many people reported it. */
+function LinkBadges({ link }: { link: AdminLinkRow }) {
+  return (
+    <>
+      <SuspendedBadge link={link} />
+      <ReportCountBadge count={link.reportCount} />
+    </>
+  );
+}
+
+function SuspendedBadge({ link }: { link: AdminLinkRow }) {
+  if (!link.suspendedAt) return null;
+  return (
+    <span className="mt-1 block" title={link.suspendReason ?? undefined}>
+      <Badge color="pink">suspended</Badge>
+    </span>
+  );
+}
+
+function ReportCountBadge({ count }: { count: number }) {
+  if (count === 0) return null;
+  return (
+    <span className="mt-1 block">
+      <Badge color="butter">
+        {count} {count === 1 ? "report" : "reports"}
+      </Badge>
+    </span>
+  );
+}
+
 function LinkRow({ link, ...actions }: { link: AdminLinkRow } & RowActions) {
   return (
     <tr className={link.suspendedAt ? "opacity-60" : undefined}>
       <Td>
+        <input
+          type="checkbox"
+          aria-label={`Select ${link.slug}`}
+          checked={actions.selected}
+          onChange={() => actions.onSelect(link)}
+          className="size-4 cursor-pointer accent-accent"
+        />
+      </Td>
+      <Td>
         <span className="block truncate font-mono text-xs font-bold">
           {linkDisplayTitle(link.url)}
         </span>
-        {link.suspendedAt && (
-          <span className="mt-1 block">
-            <Badge color="pink">suspended</Badge>
-          </span>
-        )}
+        <LinkBadges link={link} />
       </Td>
       <Td className="truncate font-mono text-xs text-muted" title={link.destination}>
         {link.destination}
@@ -275,7 +313,7 @@ function LinkActions({
   onDelete,
   onRescore,
   rescoring,
-}: { link: AdminLinkRow } & RowActions) {
+}: { link: AdminLinkRow } & Omit<RowActions, "selected" | "onSelect">) {
   return (
     <RowMenu slug={link.slug} destination={link.destination}>
       <MenuItem disabled={rescoring} onClick={() => onRescore(link)}>
@@ -308,7 +346,13 @@ function LinksTable({
   onDelete,
   onRescore,
   rescoringId,
+  selectedIds,
+  onSelect,
+  onSelectAll,
 }: {
+  selectedIds: Set<string>;
+  onSelect: (l: AdminLinkRow) => void;
+  onSelectAll: (checked: boolean) => void;
   rows: AdminLinkRow[];
   isPending: boolean;
   sort: Sort;
@@ -335,7 +379,16 @@ function LinksTable({
     <Table fixed minWidth="min-w-[64rem]">
       <thead>
         <tr>
-          <SlugAndDestinationHeaders sort={sort} onSort={onSort} destinationWidth="w-[27%]" />
+          <Th className="w-[4%]">
+            <input
+              type="checkbox"
+              aria-label="Select all links on this page"
+              checked={rows.length > 0 && rows.every((l) => selectedIds.has(l.id))}
+              onChange={(e) => onSelectAll(e.target.checked)}
+              className="size-4 cursor-pointer accent-accent"
+            />
+          </Th>
+          <SlugAndDestinationHeaders sort={sort} onSort={onSort} destinationWidth="w-[23%]" />
           <SortTh
             label="Organization"
             sortKey="orgName"
@@ -371,6 +424,8 @@ function LinksTable({
             onDelete={onDelete}
             onRescore={onRescore}
             rescoring={rescoringId === link.id}
+            selected={selectedIds.has(link.id)}
+            onSelect={onSelect}
           />
         ))}
       </tbody>
@@ -535,33 +590,105 @@ function AnonymousLinks() {
   );
 }
 
+/** The org a report landed on, or the fact that the address matched no link. */
+function ReportOrg({ report: r }: { report: AdminReportRow }) {
+  if (!r.orgId)
+    return (
+      <span className="text-muted" title="The address matched no link">
+        no match
+      </span>
+    );
+  return (
+    <HrefLink
+      href={`/admin/links?org=${encodeURIComponent(r.orgId)}`}
+      className="block truncate hover:text-accent hover:underline"
+    >
+      {r.orgName}
+    </HrefLink>
+  );
+}
+
+function ReportRow({
+  report: r,
+  pending,
+  onDismiss,
+}: {
+  report: AdminReportRow;
+  pending: boolean;
+  onDismiss: (id: string) => void;
+}) {
+  return (
+    <tr>
+      <Td className="truncate font-mono text-xs font-bold">/{r.slug}</Td>
+      <Td className="truncate">
+        <ReportOrg report={r} />
+      </Td>
+      <Td>
+        <Badge color={r.reason === "other" ? "muted" : "pink"}>{r.reason}</Badge>
+      </Td>
+      <Td className="truncate text-muted" title={r.note}>
+        {r.note || "none"}
+      </Td>
+      <Td className="truncate text-muted" title={r.contact}>
+        {r.contact || "none"}
+      </Td>
+      <Td className="whitespace-nowrap text-muted">{shortDate(r.createdAt)}</Td>
+      <Td>
+        <Button size="sm" variant="ghost" disabled={pending} onClick={() => onDismiss(r.id)}>
+          Dismiss
+        </Button>
+      </Td>
+    </tr>
+  );
+}
+
+/** Open public reports. Newest first, with the way to the reported org's
+ * links and a way to close one that needs nothing. */
+function Reports() {
+  const { data, isPending } = useAdminReports();
+  const toast = useToast();
+  const qc = useQueryClient();
+  const dismiss = useMutation({
+    mutationFn: (id: string) => api(`/admin/links/reports/${id}/dismiss`, { method: "POST" }),
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: ["admin", "reports"] });
+      await qc.invalidateQueries({ queryKey: ["admin", "links"] });
+      toast("Report dismissed.");
+    },
+    onError: withErrorToast(toast),
+  });
+  if (isPending) return <TableSkeleton rows={4} testId="admin-reports-rows-skeleton" />;
+  const rows: AdminReportRow[] = data ?? [];
+  if (rows.length === 0)
+    return <p className="py-6 text-center text-sm text-muted">No open reports.</p>;
+  return (
+    <Table fixed minWidth="min-w-[56rem]">
+      <thead>
+        <tr>
+          <Th className="w-[14%]">Link</Th>
+          <Th className="w-[16%]">Organization</Th>
+          <Th className="w-[10%]">Reason</Th>
+          <Th className="w-[30%]">Note</Th>
+          <Th className="w-[14%]">Contact</Th>
+          <Th className="w-[10%]">When</Th>
+          <Th className="w-[6%]" />
+        </tr>
+      </thead>
+      <tbody>
+        {rows.map((r) => (
+          <ReportRow key={r.id} report={r} pending={dismiss.isPending} onDismiss={dismiss.mutate} />
+        ))}
+      </tbody>
+    </Table>
+  );
+}
+
 const VIEWS = [
   { id: "links", label: "Owned links" },
+  { id: "reports", label: "Reports" },
   { id: "anonymous", label: "Anonymous" },
 ] as const;
 type View = (typeof VIEWS)[number]["id"];
-
-/** Two sections, switched rather than stacked. Stacked, the anonymous list
- * sat below up to 200 link rows, which is the same as not being there. */
-function ViewSwitch({ view, onChange }: { view: View; onChange: (v: View) => void }) {
-  return (
-    <div className="flex w-fit gap-1 rounded-lg bg-surface-2 p-1">
-      {VIEWS.map(({ id, label }) => (
-        <button
-          key={id}
-          type="button"
-          onClick={() => onChange(id)}
-          className={cn(
-            "cursor-pointer rounded-md px-3 py-1.5 text-xs transition-colors",
-            view === id ? "bg-surface font-bold text-text shadow-sm" : "text-muted hover:text-text",
-          )}
-        >
-          {label}
-        </button>
-      ))}
-    </div>
-  );
-}
 
 /**
  * Restore, delete and re-check, with the toasts they answer with.
@@ -600,6 +727,16 @@ function useOwnedLinkActions(onRestored: () => void, onDeleted: () => void) {
     onError: withErrorToast(toast),
   });
 
+  const restoreMany = useMutation({
+    mutationFn: (ids: string[]) =>
+      api<{ count: number }>("/admin/links/restore", { method: "POST", body: { ids } }),
+    onSuccess: async ({ count }) => {
+      await refresh();
+      toast(`${count} ${count === 1 ? "link" : "links"} restored.`);
+    },
+    onError: withErrorToast(toast),
+  });
+
   /** No confirmation: it reads a destination and writes a score, and the
    * worst it can do is tell you something you did not want to hear. */
   const rescore = useMutation({
@@ -614,7 +751,7 @@ function useOwnedLinkActions(onRestored: () => void, onDeleted: () => void) {
     onError: withErrorToast(toast),
   });
 
-  return { restore, remove, rescore };
+  return { restore, restoreMany, remove, rescore };
 }
 
 /** What a re-check has to say. "Unscored" is reported as such, never as
@@ -668,15 +805,26 @@ function ClearOrgFilterButton({ orgName, onClear }: { orgName?: string; onClear:
 
 /** The search box, plus the "you are looking at one organization" escape
  * hatch that a click on an owner's name puts you behind. */
+const STATUSES = [
+  { id: "all", label: "All" },
+  { id: "active", label: "Active" },
+  { id: "suspended", label: "Suspended" },
+] as const;
+type Status = (typeof STATUSES)[number]["id"];
+
 function OwnedLinksToolbar({
   query,
   onSearch,
+  status,
+  onStatus,
   orgFilter,
   orgName,
   onClearOrg,
 }: {
   query: string;
   onSearch: (value: string) => void;
+  status: Status;
+  onStatus: (value: Status) => void;
   orgFilter: string;
   orgName?: string;
   onClearOrg: () => void;
@@ -689,6 +837,7 @@ function OwnedLinksToolbar({
         placeholder="Slug or destination"
         label="Search links"
       />
+      <Segmented items={STATUSES} value={status} onChange={onStatus} />
       {orgFilter && <ClearOrgFilterButton orgName={orgName} onClear={onClearOrg} />}
     </div>
   );
@@ -710,6 +859,52 @@ function sortOwnedLinks(data: AdminLinkRow[] | undefined, sort: Sort) {
   });
 }
 
+/** Which rows are ticked. A set of ids, so a tick survives the sort or page
+ * changing under it. */
+function useSelection() {
+  const [ids, setIds] = useState<Set<string>>(new Set());
+  return {
+    ids,
+    has: (id: string) => ids.has(id),
+    clear: () => setIds(new Set()),
+    toggle: (id: string, on: boolean) =>
+      setIds((prev) => {
+        const next = new Set(prev);
+        if (on) next.add(id);
+        else next.delete(id);
+        return next;
+      }),
+  };
+}
+
+/** Appears once something restorable is ticked. */
+function RestoreSelectedBar({
+  count,
+  pending,
+  onClear,
+  onRestore,
+}: {
+  count: number;
+  pending: boolean;
+  onClear: () => void;
+  onRestore: () => void;
+}) {
+  if (count === 0) return null;
+  return (
+    <div className="flex items-center gap-3 rounded-lg bg-surface-2 px-4 py-2 text-sm">
+      <span className="flex-1">
+        <span className="font-bold tnum">{count}</span> suspended selected
+      </span>
+      <Button variant="ghost" size="sm" onClick={onClear}>
+        Clear
+      </Button>
+      <Button size="sm" disabled={pending} onClick={onRestore}>
+        {pending && <Spinner />} Restore selected
+      </Button>
+    </div>
+  );
+}
+
 /** The cross-org list with its own controls. Split out so the page itself is
  * just the switch and the two things it switches between. */
 function OwnedLinks({ onSuspend }: { onSuspend: (l: AdminLinkRow) => void }) {
@@ -722,20 +917,30 @@ function OwnedLinks({ onSuspend }: { onSuspend: (l: AdminLinkRow) => void }) {
   const [sort, setSort] = useState<Sort>({ key: "createdAt", dir: -1 });
   const [restoring, setRestoring] = useState<AdminLinkRow | null>(null);
   const [deleting, setDeleting] = useState<AdminLinkRow | null>(null);
-  const { data, isPending } = useAdminLinks({ q: search, suspended: false, org: orgFilter });
-  const { restore, remove, rescore } = useOwnedLinkActions(
+  const [status, setStatus] = useState<Status>("all");
+  const selection = useSelection();
+  const { data, isPending } = useAdminLinks({ q: search, status, org: orgFilter });
+  const { restore, restoreMany, remove, rescore } = useOwnedLinkActions(
     () => setRestoring(null),
     () => setDeleting(null),
   );
 
   const all = sortOwnedLinks(data, sort);
   const { rows, totalPages, safePage } = paginate(all, page);
+  // Only suspended links can be restored; selecting an active one is harmless
+  // but must not be counted or sent.
+  const restorable = all.filter((l) => selection.has(l.id) && l.suspendedAt).map((l) => l.id);
 
   return (
     <div className="flex flex-col gap-3">
       <OwnedLinksToolbar
         query={query}
         onSearch={onSearch}
+        status={status}
+        onStatus={(next) => {
+          setStatus(next);
+          setPage(0);
+        }}
         orgFilter={orgFilter}
         orgName={all[0]?.orgName}
         onClearOrg={() => {
@@ -744,7 +949,17 @@ function OwnedLinks({ onSuspend }: { onSuspend: (l: AdminLinkRow) => void }) {
         }}
       />
 
+      <RestoreSelectedBar
+        count={restorable.length}
+        pending={restoreMany.isPending}
+        onClear={selection.clear}
+        onRestore={() => restoreMany.mutate(restorable, { onSuccess: selection.clear })}
+      />
+
       <LinksTable
+        selectedIds={selection.ids}
+        onSelect={(l) => selection.toggle(l.id, !selection.has(l.id))}
+        onSelectAll={(on) => rows.forEach((l) => selection.toggle(l.id, on))}
         rows={rows}
         isPending={isPending}
         sort={sort}
@@ -788,9 +1003,10 @@ export function AdminLinksPage() {
         sub="Every link across every organization. Search by slug or destination."
       />
 
-      <ViewSwitch view={view} onChange={setView} />
+      <Segmented items={VIEWS} value={view} onChange={setView} />
 
       {view === "links" && <OwnedLinks onSuspend={setSuspending} />}
+      {view === "reports" && <Reports />}
       {view === "anonymous" && <AnonymousLinks />}
 
       <SuspendDialog link={suspending} onClose={() => setSuspending(null)} />

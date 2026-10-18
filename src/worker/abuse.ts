@@ -88,7 +88,8 @@ export function assertNotShortener(destination: string): void {
  */
 export const REDIRECT_CEILING_PER_DAY = 2_000;
 
-const DAY_MS = 24 * 60 * 60 * 1000;
+const HOUR_MS = 60 * 60 * 1000;
+const DAY_MS = 24 * HOUR_MS;
 
 /**
  * Only an org this new gets auto-suspended by volume alone; an older one is
@@ -106,6 +107,10 @@ const DAY_MS = 24 * 60 * 60 * 1000;
  * either way is a case for a human, not an unattended suspension.
  */
 const NEW_ORG_WINDOW_MS = 7 * DAY_MS;
+
+/** How long the automatic checks leave an org alone after an admin cleared
+ * it. The same as the new-org window: past it the sweep only alerts anyway. */
+const CLEARED_FOR_MS = NEW_ORG_WINDOW_MS;
 
 /**
  * Suspend every currently-live link in an organization and republish so the
@@ -132,7 +137,7 @@ export async function suspendOrgLinks(
   // actually change on a given call.
   await db
     .update(schema.orgs)
-    .set({ linksSuspendedAt: Date.now() })
+    .set({ linksSuspendedAt: Date.now(), reviewFlaggedAt: null })
     .where(eq(schema.orgs.id, orgId));
 
   const live = and(eq(schema.links.orgId, orgId), isNull(schema.links.suspendedAt));
@@ -163,30 +168,42 @@ export async function suspendOrgLinks(
  */
 export async function sweepAbusiveOrgs(env: Env): Promise<void> {
   const db = drizzle(env.DB, { schema });
-  const startOfDay = Math.floor(Date.now() / DAY_MS) * DAY_MS;
-  const rows = await db
+  // A rolling 24 hours, not the UTC day: a day boundary lets 1,900 redirects
+  // at 23:00 and 1,900 more at 00:10 trip nothing.
+  const since = Date.now() - DAY_MS;
+  await suspendOverCeiling(env, db, since);
+  await flagSuspiciousOrgs(env, db, since);
+}
+
+/** Every org with at least `min` redirects since `since`, and its count. */
+function orgsWithRedirects(db: DB, since: number, min: number) {
+  return db
     .select({ orgId: schema.clicks.orgId, n: sql<number>`count(*)` })
     .from(schema.clicks)
-    .where(gte(schema.clicks.ts, startOfDay))
+    .where(gte(schema.clicks.ts, since))
     .groupBy(schema.clicks.orgId)
-    .having(sql`count(*) > ${REDIRECT_CEILING_PER_DAY}`);
+    .having(sql`count(*) >= ${min}`);
+}
+
+async function suspendOverCeiling(env: Env, db: DB, since: number): Promise<void> {
+  const rows = await orgsWithRedirects(db, since, REDIRECT_CEILING_PER_DAY + 1);
 
   // Independent per org, and the list is short (an org over the ceiling is
   // rare), so handle them together rather than one round trip at a time.
   await Promise.all(
     rows.map(async ({ orgId, n }) => {
-      const [{ plan }, createdAt] = await Promise.all([
+      const [{ plan }, { createdAt, cleared }] = await Promise.all([
         orgPlan(db, orgId),
-        orgCreatedAt(db, orgId),
+        orgState(db, orgId),
       ]);
-      if (plan !== "free") return;
+      if (plan !== "free" || cleared) return;
       if (createdAt === null || Date.now() - createdAt > NEW_ORG_WINDOW_MS) {
         // Established org: worth a human's attention, not worth suspending
         // unattended (see NEW_ORG_WINDOW_MS above).
         captureAlert([{ event: "org_high_redirect_volume", orgId, redirects: n }]);
         return;
       }
-      const reason = `Automatic: ${n} redirects today, over the free-plan ceiling of ${REDIRECT_CEILING_PER_DAY}.`;
+      const reason = `Automatic: ${n} redirects in 24 hours, over the free-plan ceiling of ${REDIRECT_CEILING_PER_DAY}.`;
       const suspended = await suspendOrgLinks(env, db, orgId, null, reason);
       if (suspended === 0) return;
       captureAlert([{ event: "org_auto_suspended", orgId, redirects: n, links: suspended }]);
@@ -195,12 +212,107 @@ export async function sweepAbusiveOrgs(env: Env): Promise<void> {
   );
 }
 
-async function orgCreatedAt(db: DB, orgId: string): Promise<number | null> {
+/* ---------------- earlier, softer signals ---------------- */
+
+/** Redirects in the last hour that look wrong for a new free org. A quarter
+ * of the daily ceiling, so a spike is seen well before the ceiling is. */
+const VELOCITY_PER_HOUR = REDIRECT_CEILING_PER_DAY / 4;
+/** Below this many redirects today, "most of them on one link" means little. */
+const CONCENTRATION_MIN_CLICKS = REDIRECT_CEILING_PER_DAY / 2;
+/** The share of today's redirects on one new link that counts as lopsided. */
+const CONCENTRATION_SHARE = 0.9;
+
+/**
+ * Flag, without suspending, a new free org whose traffic looks wrong: a burst
+ * in the last hour, or nearly all of a day's volume on one link made in the
+ * last 24 hours. Both were true of the 2026-10-18 case, whose links all scored
+ * clean: the destination was not the signal, the shape of the traffic was.
+ *
+ * A flag only puts the org at the top of the admin list and fires one alert.
+ * The links keep redirecting until a human looks, which is what separates a
+ * launch from abuse. Idempotent: an org already flagged or suspended is left
+ * alone, so this alerts once per org.
+ */
+/** Redirects since `since` on the org's busiest link made in the last 24h. */
+async function newLinkRedirects(db: DB, orgId: string, since: number, now: number) {
+  const [top] = await db
+    .select({ n: sql<number>`count(*)` })
+    .from(schema.clicks)
+    .innerJoin(schema.links, eq(schema.links.id, schema.clicks.linkId))
+    .where(
+      and(
+        eq(schema.clicks.orgId, orgId),
+        gte(schema.clicks.ts, since),
+        gte(schema.links.createdAt, now - DAY_MS),
+      ),
+    )
+    .groupBy(schema.clicks.linkId)
+    .orderBy(sql`count(*) desc`)
+    .limit(1);
+  return top?.n ?? 0;
+}
+
+async function flagSuspiciousOrgs(env: Env, db: DB, since: number): Promise<void> {
+  const now = Date.now();
+  const [bursts, busy] = await Promise.all([
+    orgsWithRedirects(db, now - HOUR_MS, VELOCITY_PER_HOUR + 1),
+    orgsWithRedirects(db, since, CONCENTRATION_MIN_CLICKS),
+  ]);
+
+  // The busy list is short, so the per-org lookups run together.
+  const shares = await Promise.all(
+    busy.map(({ orgId }) => newLinkRedirects(db, orgId, since, now)),
+  );
+  const lopsided = busy.filter(({ n }, i) => shares[i] / n >= CONCENTRATION_SHARE);
+
+  const seen = new Map<string, { redirects: number; signal: string }>();
+  for (const { orgId, n } of bursts) seen.set(orgId, { redirects: n, signal: "burst_last_hour" });
+  for (const { orgId, n } of lopsided)
+    if (!seen.has(orgId)) seen.set(orgId, { redirects: n, signal: "one_new_link" });
+
+  await Promise.all(
+    [...seen].map(async ([orgId, { redirects, signal }]) => {
+      const [plan, { createdAt, cleared }] = await Promise.all([
+        orgPlan(db, orgId),
+        orgState(db, orgId),
+      ]);
+      if (plan.plan !== "free" || cleared) return;
+      if (createdAt === null || now - createdAt > NEW_ORG_WINDOW_MS) return;
+      const flagged = await db
+        .update(schema.orgs)
+        .set({ reviewFlaggedAt: now })
+        .where(
+          and(
+            eq(schema.orgs.id, orgId),
+            isNull(schema.orgs.reviewFlaggedAt),
+            isNull(schema.orgs.linksSuspendedAt),
+          ),
+        )
+        .returning({ id: schema.orgs.id });
+      if (flagged.length > 0)
+        captureAlert([{ event: "org_needs_review", orgId, redirects, signal }]);
+    }),
+  );
+}
+
+/**
+ * An org's age, and whether an admin cleared it recently.
+ *
+ * Without the second, every restore and every "mark reviewed" is undone by
+ * the next sweep: it recounts the same 24 hours of redirects, finds the same
+ * total, and suspends or flags the org again ten minutes later. Clearing
+ * means a human looked, so the automatic checks stand down for a while.
+ */
+async function orgState(db: DB, orgId: string) {
   const rows = await db
-    .select({ createdAt: schema.orgs.createdAt })
+    .select({ createdAt: schema.orgs.createdAt, clearedAt: schema.orgs.clearedAt })
     .from(schema.orgs)
     .where(eq(schema.orgs.id, orgId));
-  return rows[0]?.createdAt ?? null;
+  const row = rows[0];
+  return {
+    createdAt: row?.createdAt ?? null,
+    cleared: row?.clearedAt != null && Date.now() - row.clearedAt < CLEARED_FOR_MS,
+  };
 }
 
 async function notifyAutoSuspend(
@@ -224,14 +336,33 @@ async function notifyAutoSuspend(
     footerLine: NOTICE_FOOTER,
   };
 
-  const to = [owner, env.SUPERADMIN_EMAIL].filter((addr): addr is string => !!addr);
   // One failed send must not stop the other, and neither is worth failing the
   // sweep over: the suspension already happened and the alert already fired.
-  // Rendered once per recipient (not shared), so each footer names its own
-  // address rather than the org owner's for both the owner and the CC.
-  await Promise.all(
-    to.map((addr) =>
-      sendEmail(env, addr, heading, renderEmail(content, env.APP_URL, addr)).catch(() => {}),
-    ),
-  );
+  const send = (addr: string, subject: string, body: typeof content) =>
+    sendEmail(env, addr, subject, renderEmail(body, env.APP_URL, addr)).catch(() => {});
+
+  const sends = owner ? [send(owner, heading, content)] : [];
+
+  // The platform admin gets their own mail, worded as a report about somebody
+  // else's org: a copy of the owner's "Your organization is suspended" reads
+  // as if the admin's own links were stopped. Skipped when the admin owns the
+  // org, since the owner mail already reached them.
+  const admin = env.SUPERADMIN_EMAIL;
+  if (admin && admin !== owner) {
+    const adminHeading = `Auto-suspended: ${redirects.toLocaleString()} redirects from a free org`;
+    sends.push(
+      send(admin, adminHeading, {
+        preheader: "Platform admin notice. None of your own links are affected.",
+        heading: adminHeading,
+        paragraphs: [
+          `The abuse sweep suspended the links of organization ${orgId}${owner ? `, owned by ${owner}` : ""}. It recorded about ${redirects.toLocaleString()} redirects today on a new free plan.`,
+          "This is a notice for you as platform admin. Your own organizations are not affected.",
+          "If the traffic is real, restore its links from the admin Links tab.",
+        ],
+        cta: { label: "Open the admin Links tab", url: `${env.APP_URL}/admin/links?org=${orgId}` },
+        footerLine: "Sent to the platform admin.",
+      }),
+    );
+  }
+  await Promise.all(sends);
 }

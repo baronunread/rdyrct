@@ -110,6 +110,11 @@ export function Footer() {
               </a>
             </li>
             <li>
+              <MarketingLink to="/report" className={linkClass}>
+                Report a link
+              </MarketingLink>
+            </li>
+            <li>
               <a href={GITHUB_URL} target="_blank" rel="noreferrer" className={linkClass}>
                 GitHub
               </a>

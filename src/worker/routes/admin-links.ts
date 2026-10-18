@@ -17,7 +17,7 @@
 import { Hono, type Context } from "hono";
 import { oneOf } from "../../shared/lookup";
 import type { JsonValue } from "../../shared/types";
-import { optionalFlag, optionalText, parseOptionalBody } from "../schemas";
+import { optionalFlag, optionalText, parseBody, parseOptionalBody } from "../schemas";
 import * as v from "valibot";
 import { HTTPException } from "hono/http-exception";
 import { and, desc, eq, isNull, isNotNull, like, or, sql } from "drizzle-orm";
@@ -33,6 +33,7 @@ import {
   type AdminAnonLinkRow,
   type AdminLinkRow,
   type AdminLinkSort,
+  type AdminReportRow,
 } from "@/shared/types";
 
 export const adminLinkRoutes = new Hono<AppEnv>();
@@ -81,6 +82,11 @@ async function requiredReason(c: Context<AppEnv>, required: boolean): Promise<st
   const body = parseOptionalBody(reasonBodySchema, await c.req.json<JsonValue>().catch(() => ({})));
   return checkReason(body.reason, required);
 }
+
+const reportCount = sql<number>`(
+  select count(*) from link_reports
+  where link_reports.link_id = links.id and link_reports.status = 'open'
+)`;
 
 const clickCount = sql<number>`(
   select count(*) from clicks where clicks.link_id = links.id
@@ -147,6 +153,7 @@ function adminLinkFilters(c: Context<AppEnv>) {
   return [
     q ? or(like(schema.links.slug, `%${q}%`), like(schema.links.destination, `%${q}%`)) : undefined,
     c.req.query("suspended") === "1" ? isNotNull(schema.links.suspendedAt) : undefined,
+    c.req.query("suspended") === "0" ? isNull(schema.links.suspendedAt) : undefined,
     org ? eq(schema.links.orgId, org) : undefined,
   ].filter(Boolean);
 }
@@ -184,6 +191,7 @@ adminLinkRoutes.get("/", async (c) => {
       riskScore: schema.links.riskScore,
       riskReasons: schema.links.riskReasons,
       riskCheckedAt: schema.links.riskCheckedAt,
+      reportCount,
     })
     .from(schema.links)
     .innerJoin(schema.orgs, eq(schema.links.orgId, schema.orgs.id))
@@ -201,6 +209,27 @@ adminLinkRoutes.get("/", async (c) => {
   );
 });
 
+/**
+ * An org whose links were suspended as a whole (the sweep, or an admin) is
+ * still write-blocked and still in the sweep's sights after its links are
+ * restored one by one. Restoring is a human decision, so mark the org
+ * cleared, and lift the block once no suspended link is left.
+ *
+ * Only for such an org: restoring a single link in an otherwise normal org
+ * must not switch off the automatic checks for it.
+ */
+async function clearOrgAfterRestore(db: DB, orgId: string) {
+  await db
+    .update(schema.orgs)
+    .set({
+      clearedAt: Date.now(),
+      linksSuspendedAt: sql`case when exists (
+        select 1 from links where links.org_id = ${orgId} and links.suspended_at is not null
+      ) then links_suspended_at else null end`,
+    })
+    .where(and(eq(schema.orgs.id, orgId), isNotNull(schema.orgs.linksSuspendedAt)));
+}
+
 async function setSuspended(
   c: Context<AppEnv>,
   linkId: string,
@@ -216,6 +245,8 @@ async function setSuspended(
     .update(schema.links)
     .set(suspensionPatch(suspend, c.var.user!.id, reason))
     .where(eq(schema.links.id, linkId));
+
+  if (!suspend) await clearOrgAfterRestore(db, link.orgId);
 
   const addresses = await republish(c.env, db, linkId);
   await recordAdminAction(c.env, {
@@ -253,6 +284,92 @@ adminLinkRoutes.patch("/:linkId", async (c) => {
     throw new HTTPException(400, { message: "Say whether to suspend or restore this link" });
   const reason = body.suspended ? checkReason(body.reason, true) : null;
   return c.json(await setSuspended(c, c.req.param("linkId")!, body.suspended, reason));
+});
+
+/** Open public reports, newest first. */
+adminLinkRoutes.get("/reports", async (c) => {
+  const rows = await c.var.db
+    .select({
+      id: schema.linkReports.id,
+      slug: schema.linkReports.slug,
+      linkId: schema.linkReports.linkId,
+      orgId: schema.linkReports.orgId,
+      orgName: schema.orgs.name,
+      reason: schema.linkReports.reason,
+      note: schema.linkReports.note,
+      contact: schema.linkReports.contact,
+      createdAt: schema.linkReports.createdAt,
+    })
+    .from(schema.linkReports)
+    .leftJoin(schema.orgs, eq(schema.orgs.id, schema.linkReports.orgId))
+    .where(eq(schema.linkReports.status, "open"))
+    .orderBy(desc(schema.linkReports.createdAt))
+    .limit(MAX_ROWS);
+  return c.json(rows satisfies AdminReportRow[]);
+});
+
+/** Close a report without acting on it. Kept, not deleted: the count of
+ * dismissed reports on a link is evidence too. */
+adminLinkRoutes.post("/reports/:id/dismiss", async (c) => {
+  const id = c.req.param("id")!;
+  c.get("log").set({ reportId: id });
+  const done = await c.var.db
+    .update(schema.linkReports)
+    .set({ status: "dismissed" })
+    .where(eq(schema.linkReports.id, id))
+    .returning({ id: schema.linkReports.id });
+  if (done.length === 0) throw new HTTPException(404, { message: "Report not found" });
+  await recordAdminAction(c.env, {
+    actorUserId: c.var.user!.id,
+    action: "report.dismiss",
+    targetType: "report",
+    targetId: id,
+    detail: {},
+  });
+  return c.json({ ok: true });
+});
+
+/** Clear an org's "needs review" flag: somebody looked and it is fine. */
+adminLinkRoutes.post("/orgs/:orgId/reviewed", async (c) => {
+  const orgId = c.req.param("orgId")!;
+  c.get("log").set({ orgId });
+  const done = await c.var.db
+    .update(schema.orgs)
+    .set({ reviewFlaggedAt: null, clearedAt: Date.now() })
+    .where(eq(schema.orgs.id, orgId))
+    .returning({ id: schema.orgs.id });
+  if (done.length === 0) throw new HTTPException(404, { message: "Organization not found" });
+  // Reviewed means those reports were read. Left open, the next report on the
+  // same link would count past the threshold and flag the org again at once.
+  await c.var.db
+    .update(schema.linkReports)
+    .set({ status: "dismissed" })
+    .where(and(eq(schema.linkReports.orgId, orgId), eq(schema.linkReports.status, "open")));
+  await recordAdminAction(c.env, {
+    actorUserId: c.var.user!.id,
+    action: "org.reviewed",
+    targetType: "org",
+    targetId: orgId,
+    detail: {},
+  });
+  return c.json({ ok: true });
+});
+
+/**
+ * Restore several links at once, for the aftermath of a sweep that suspended
+ * a whole org's worth. Restore only: suspending needs a reason per decision.
+ * Each link goes through setSuspended so it is republished and audited the
+ * same as a single restore.
+ */
+adminLinkRoutes.post("/restore", async (c) => {
+  const log = c.get("log");
+  const { ids } = parseBody(
+    v.object({ ids: v.pipe(v.array(v.string()), v.minLength(1), v.maxLength(MAX_ROWS)) }),
+    await c.req.json<JsonValue>().catch(() => ({})),
+  );
+  log.set({ restoreCount: ids.length });
+  await Promise.all(ids.map((id) => setSuspended(c, id, false, null)));
+  return c.json({ count: ids.length });
 });
 
 /**
@@ -364,7 +481,14 @@ adminLinkRoutes.post("/orgs/:orgId/suspend", async (c) => {
   // a replacement link before its links are individually caught up below.
   await db
     .update(schema.orgs)
-    .set({ linksSuspendedAt: suspend ? Date.now() : null })
+    // A decision either way answers the review flag.
+    // Restoring is a human decision the sweep must not undo; suspending is
+    // the opposite decision and removes any earlier clearance.
+    .set({
+      linksSuspendedAt: suspend ? Date.now() : null,
+      reviewFlaggedAt: null,
+      clearedAt: suspend ? null : Date.now(),
+    })
     .where(eq(schema.orgs.id, orgId));
 
   // One expression, used to select and then to update: built twice they can

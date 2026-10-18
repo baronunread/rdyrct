@@ -100,77 +100,18 @@ const planBadgeColor = {
   unlimited: "mint",
 } satisfies Record<OrgPlan, "mint" | "accent" | "muted">;
 
-/** Where a user's paid access comes from, which is not the same question as
- * what it unlocks (#81). A comp outranks a subscription, so it is named
- * first. */
-function BillingCell({ user }: { user: AdminUserRow }) {
-  if (user.compPlan)
-    return (
-      <BillingBadge
-        color="butter"
-        label="comped"
-        detail={[user.compReason ?? "No reason recorded.", user.compGrantedBy]
-          .filter(Boolean)
-          .join(" · ")}
-      />
-    );
-  if (!user.subscriptionPlan)
-    return (
-      <BillingBadge color="muted" label="no sub" detail="No subscription: never paid for a plan." />
-    );
-  if (user.subscriptionStatus === "past_due")
-    return (
-      <BillingBadge
-        color="pink"
-        label="past due"
-        detail="A payment is failing. Polar keeps retrying for days, so access stays until it gives up."
-      />
-    );
-  // `subscriptionPlan` is the Polar snapshot, not a grant: `unpaid`,
-  // `canceled` and anything Polar adds later leave the subscription on the row
-  // while it entitles nothing. `plan` is derived from the status (#81), so a
-  // free plan here means exactly that. Name the status instead of "paid".
-  if (user.plan === "free")
-    return (
-      <BillingBadge
-        color="muted"
-        label={user.subscriptionStatus ?? "unknown"}
-        detail="The subscription is on the row, and it grants nothing."
-      />
-    );
-  // "cancels", not "cancelled": the subscription is still paid and still
-  // entitles everything until the period ends. Polar only reports the status
-  // as `canceled` once it is actually over, and that lands on the muted badge
-  // above.
-  if (user.cancelAtPeriodEnd)
-    return (
-      <BillingBadge
-        color="pink"
-        label="cancels"
-        detail="Paid until the current period ends, then it stops. Nothing has been taken away yet."
-      />
-    );
-  return (
-    <BillingBadge color="mint" label="paid" detail="A live subscription pays for this plan." />
-  );
-}
-
-/** One badge, and what it means on hover. The explanations are a sentence
- * each and some are free text an admin typed, so they hang off the badge
- * instead of setting the height of every row in the table. */
-function BillingBadge({
-  color,
-  label,
-  detail,
-}: {
-  color: "muted" | "mint" | "pink" | "butter";
-  label: string;
-  detail: string;
-}) {
+/** The one billing fact the plan column keeps: a comp grants the same access
+ * as a subscription but is not somebody paying (#81, #82). The reason an admin
+ * typed hangs off the badge on hover instead of setting the row's height. */
+function CompBadge({ user }: { user: AdminUserRow }) {
+  if (!user.compPlan) return null;
+  const detail = [user.compReason ?? "No reason recorded.", user.compGrantedBy]
+    .filter(Boolean)
+    .join(" · ");
   return (
     <Tooltip content={detail}>
       <span className="inline-flex">
-        <Badge color={color}>{label}</Badge>
+        <Badge color="butter">comped</Badge>
       </span>
     </Tooltip>
   );
@@ -268,19 +209,20 @@ function UserRow({
   return (
     <tr>
       <Td>
-        <span className="mr-1.5">{user.name}</span>
+        <span className="mr-1.5 block truncate" title={user.name}>
+          {user.name}
+        </span>
         {user.isAdmin && <Badge color="butter">admin</Badge>}{" "}
         {user.banned && <Badge color="pink">banned</Badge>}{" "}
         {!user.emailVerified && <Badge color="muted">unverified</Badge>}{" "}
         {user.disposable && <Badge color="accent">disposable</Badge>}
       </Td>
-      <Td className="font-mono text-xs text-muted">{user.email}</Td>
+      <Td className="truncate font-mono text-xs text-muted" title={user.email}>
+        {user.email}
+      </Td>
       <Td className="tnum text-right">{user.orgCount}</Td>
       <Td>
-        <Badge color={planBadgeColor[user.plan]}>{user.plan}</Badge>
-      </Td>
-      <Td>
-        <BillingCell user={user} />
+        <Badge color={planBadgeColor[user.plan]}>{user.plan}</Badge> <CompBadge user={user} />
       </Td>
       <Td className="text-xs text-muted">{shortDate(user.createdAt)}</Td>
       <Td className="text-xs text-muted">{lastSeenLabel(user.lastSeen)}</Td>
@@ -325,17 +267,34 @@ function UsersTable({
   searchTerm: string;
 }) {
   return (
-    <Table minWidth="min-w-[64rem]">
+    <Table fixed minWidth="min-w-[56rem]">
       <thead>
         <tr>
-          <SortTh label="Name" sortKey="name" sort={sort} onSort={setSort} />
-          <Th>Email</Th>
-          <SortTh label="Orgs" sortKey="orgs" sort={sort} onSort={setSort} className="text-right" />
-          <Th>Plan</Th>
-          <Th>Billing</Th>
-          <SortTh label="Joined" sortKey="joined" sort={sort} onSort={setSort} />
-          <SortTh label="Last seen" sortKey="lastSeen" sort={sort} onSort={setSort} />
-          <Th className="text-right">Actions</Th>
+          <SortTh label="Name" sortKey="name" sort={sort} onSort={setSort} className="w-[22%]" />
+          <Th className="w-[26%]">Email</Th>
+          <SortTh
+            label="Orgs"
+            sortKey="orgs"
+            sort={sort}
+            onSort={setSort}
+            className="w-[8%] text-right"
+          />
+          <Th className="w-[10%]">Plan</Th>
+          <SortTh
+            label="Joined"
+            sortKey="joined"
+            sort={sort}
+            onSort={setSort}
+            className="w-[13%]"
+          />
+          <SortTh
+            label="Last seen"
+            sortKey="lastSeen"
+            sort={sort}
+            onSort={setSort}
+            className="w-[13%]"
+          />
+          <Th className="w-[8%] text-right">Actions</Th>
         </tr>
       </thead>
       <tbody>
@@ -351,7 +310,7 @@ function UsersTable({
         ))}
         {rows.length === 0 && (
           <tr>
-            <Td colSpan={8} className="py-8 text-center text-muted">
+            <Td colSpan={7} className="py-8 text-center text-muted">
               No users match “{searchTerm}”.
             </Td>
           </tr>
