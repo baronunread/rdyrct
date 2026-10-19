@@ -309,3 +309,82 @@ describe("MCP OAuth (#139 follow-up)", () => {
     expect(res.status).toBe(401);
   });
 });
+
+describe("MCP dynamic client registration", () => {
+  beforeEach(applyTestMigrations);
+  afterEach(reset);
+
+  it("advertises open registration and no client_credentials grant", async () => {
+    const res = await fetchWorker(
+      new Request("http://localhost/.well-known/oauth-authorization-server/api/auth"),
+      authEnv(),
+    );
+    expect(res.status).toBe(200);
+    const meta = await jsonBody<{
+      registration_endpoint?: string;
+      grant_types_supported: string[];
+    }>(res);
+    expect(meta.registration_endpoint).toBe("http://localhost/api/auth/oauth2/register");
+    expect(meta.grant_types_supported).toEqual(["authorization_code", "refresh_token"]);
+  });
+
+  // The body the MCP SDK sends (Claude Code, Cursor, VS Code): a loopback
+  // callback and no application_type, which better-auth alone refuses.
+  it("registers an MCP SDK client with no session and links it to the MCP resource", async () => {
+    await env.DB.prepare(
+      `insert or ignore into oauth_resource (id, identifier, name, created_at, updated_at)
+       values ('resource-row', ?, 'rdyrct MCP', 0, 0)`,
+    )
+      .bind(RESOURCE)
+      .run();
+    const res = await fetchWorker(
+      new Request("http://localhost/api/auth/oauth2/register", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          client_name: "Some Client",
+          redirect_uris: ["http://localhost:33418/callback"],
+          token_endpoint_auth_method: "none",
+          grant_types: ["authorization_code", "refresh_token"],
+          response_types: ["code"],
+        }),
+      }),
+      authEnv(),
+    );
+    expect(res.status).toBe(201);
+    const { client_id: clientId } = await jsonBody<{ client_id: string }>(res);
+    const linked = await env.DB.prepare(
+      "select resource_id from oauth_client_resource where client_id = ?",
+    )
+      .bind(clientId)
+      .first<{ resource_id: string }>();
+    expect(linked?.resource_id).toBe(RESOURCE);
+  });
+
+  it("sweeps only anonymous clients older than a day that never got a grant", async () => {
+    const { sweepAbandonedOAuthClients } = await import("../../src/worker/mcp-oauth");
+    await freeOwnerCookie(); // a user for the consent row to belong to
+    const old = Date.now() - 2 * 24 * 60 * 60 * 1000;
+    const insert = (id: string, createdAt: number, discovery: string | null) =>
+      env.DB.prepare(
+        `insert into oauth_client (id, client_id, client_discovery_id, disabled, redirect_uris, created_at)
+         values (?, ?, ?, 0, '[]', ?)`,
+      ).bind(id, id, discovery, createdAt);
+    const user = await env.DB.prepare("select id from user limit 1").first<{ id: string }>();
+    await env.DB.batch([
+      insert("abandoned", old, null),
+      insert("consented", old, null),
+      insert("discovered", old, "https://client.example/meta.json"),
+      insert("fresh", Date.now(), null),
+      env.DB.prepare(
+        `insert into oauth_consent (id, client_id, user_id, scopes) values ('c1', 'consented', ?, '[]')`,
+      ).bind(user!.id),
+    ]);
+
+    expect(await sweepAbandonedOAuthClients(env)).toBe(1);
+    const left = await env.DB.prepare("select client_id from oauth_client order by client_id").all<{
+      client_id: string;
+    }>();
+    expect(left.results.map((r) => r.client_id)).toEqual(["consented", "discovered", "fresh"]);
+  });
+});

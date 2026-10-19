@@ -35,6 +35,7 @@ import { reportRoutes } from "./routes/reports";
 import { evlogMiddleware } from "./evlog";
 import { sweepGraceWarnings } from "./reconcile";
 import { shortenRoutes, sweepExpiredAnonLinks } from "./routes/shorten";
+import { defaultNativeRegistration, sweepAbandonedOAuthClients } from "./mcp-oauth";
 import { resolveSlug, resolveDomain, domainServing, type KVLink } from "./kv";
 import { notFoundPage } from "./not-found-page";
 import { RESERVED_SLUGS, SLUG_RE } from "./util";
@@ -282,7 +283,8 @@ app.on(["GET", "POST"], "/api/auth/*", async (c) => {
   // withBackground so an auth hook can send mail after the response instead
   // of inside it: the signup guard's timing must not depend on whether the
   // address exists (#53).
-  return withBackground(c.executionCtx, () => getAuth(c.env).handler(c.req.raw));
+  const request = await defaultNativeRegistration(c.req.raw);
+  return withBackground(c.executionCtx, () => getAuth(c.env).handler(request));
 });
 
 // RFC 9728 protected-resource metadata for the MCP endpoint, and RFC 8414
@@ -637,6 +639,10 @@ const wrapped = Sentry.withSentry<
       // Daily: drop anonymous links nobody claimed inside their 24 hours, and
       // the KV keys they were resolving through (Direction A of #96).
       await sweepExpiredAnonLinks(env);
+
+      // Daily: drop MCP clients that registered themselves and never got a
+      // user's consent, which open registration would otherwise pile up.
+      await sweepAbandonedOAuthClients(env);
 
       // Daily: the day-23 email for every org whose 30 days are nearly up
       // (#158). Day 0 goes out from the reconciliation pass itself.

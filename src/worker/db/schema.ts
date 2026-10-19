@@ -536,11 +536,11 @@ export const jwks = sqliteTable("jwks", {
   crv: text("crv"),
 });
 
-/** An MCP client, one row per `client_id`: either discovered from a Client ID
- * Metadata Document (cimd, `clientDiscoveryId` set) or created by hand
- * (`auth.api.adminCreateOAuthClient`, none exist yet). `userId` is null for
- * every client here — that column is for a user's own dynamically-registered
- * client, which this app does not offer (MCP deprecated DCR; see cimd()). */
+/** An MCP client, one row per `client_id`: discovered from a Client ID
+ * Metadata Document (cimd, `clientDiscoveryId` set), registered anonymously
+ * at `/oauth2/register` (DCR: `clientDiscoveryId`, `userId` and
+ * `referenceId` all null), or created by a signed-in user (`userId` set).
+ * sweepAbandonedOAuthClients() deletes DCR rows that never got a grant. */
 export const oauthClient = sqliteTable(
   "oauth_client",
   {
