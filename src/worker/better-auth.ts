@@ -492,14 +492,21 @@ function buildAuth(env: Env) {
       // authorization server for MCP clients, so a chatbot connects with a
       // consent screen instead of a pasted API key. jwt() supplies the
       // signing key mcp() uses for access tokens and the /jwks endpoint
-      // session.ts verifies them against; cimd() is how a client identifies
-      // itself (a URL, not a pre-registered id) per the current MCP spec,
-      // which deprecated classic dynamic client registration.
+      // session.ts verifies them against. A client identifies itself one of
+      // two ways: cimd(), a URL to its own metadata (what the MCP spec
+      // prefers), or open dynamic client registration, which Claude, Cursor
+      // and VS Code still expect. Open registration is rate-limited with the
+      // other /api/auth routes, and sweepAbandonedOAuthClients() deletes the
+      // rows nobody ever consented to. Only the grants an MCP client uses:
+      // client_credentials would let a client act with no user behind it.
       jwt(),
       mcp({
         loginPage: "/login",
         consentPage: "/consent",
         resource: mcpResource(env),
+        allowDynamicClientRegistration: true,
+        allowUnauthenticatedClientRegistration: true,
+        grantTypes: ["authorization_code", "refresh_token"],
       }),
       cimd({
         fetchClientMetadataResource,
