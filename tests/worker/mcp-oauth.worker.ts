@@ -373,6 +373,16 @@ describe("MCP dynamic client registration", () => {
     const user = await env.DB.prepare("select id from user limit 1").first<{ id: string }>();
     await env.DB.batch([
       insert("abandoned", old, null),
+      insert("access-tokened", old, null),
+      insert("refresh-tokened", old, null),
+      env.DB.prepare(
+        `insert into oauth_access_token (id, token, client_id, scopes)
+         values ('at1', 'access-token', 'access-tokened', '[]')`,
+      ),
+      env.DB.prepare(
+        `insert into oauth_refresh_token (id, token, client_id, user_id, scopes)
+         values ('rt1', 'refresh-token', 'refresh-tokened', ?, '[]')`,
+      ).bind(user!.id),
       insert("consented", old, null),
       insert("discovered", old, "https://client.example/meta.json"),
       insert("fresh", Date.now(), null),
@@ -385,6 +395,12 @@ describe("MCP dynamic client registration", () => {
     const left = await env.DB.prepare("select client_id from oauth_client order by client_id").all<{
       client_id: string;
     }>();
-    expect(left.results.map((r) => r.client_id)).toEqual(["consented", "discovered", "fresh"]);
+    expect(left.results.map((r) => r.client_id)).toEqual([
+      "access-tokened",
+      "consented",
+      "discovered",
+      "fresh",
+      "refresh-tokened",
+    ]);
   });
 });
