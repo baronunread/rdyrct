@@ -103,7 +103,7 @@ function codeBlock(code: string): SafeHtml {
   return emailHtml`<div class="code" style="margin:24px 0;padding:16px;border:1px solid ${LIGHT.border};border-radius:8px;background:${LIGHT.surface2};font-family:${CODE_FONT};font-size:30px;font-weight:700;letter-spacing:6px;text-align:center;color:${LIGHT.text}">${code}</div>`;
 }
 
-/** The brand band across the top of every email: the Hop mark and the
+/** The brand band across the top of every email: the Loop mark and the
  * wordmark, outlined from Figtree Bold, on a band that stays dark in both
  * themes. The image's alt text carries the word in the same colour if a client
  * blocks images. */

@@ -598,7 +598,7 @@ test("the homepage's first Tab is a skip link into main", async ({ page }) => {
   await expect(page.getByRole("main")).toHaveAttribute("id", "main");
 });
 
-// The Hop mark sits next to the name in the header and the footer. The mark is
+// The Loop mark sits next to the name in the header and the footer. The mark is
 // decoration, so the link still reads as the bare name to a screen reader and
 // to every test that finds it by "rdyrct".
 test("header and footer carry the logo, named by the word alone", async ({ page }) => {

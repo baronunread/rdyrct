@@ -69,12 +69,14 @@ Both themes are equal. Neither is the afterthought. Style through tokens only, s
 
 ## The mark
 
-The Hop: a small dot leaves, an arc carries it, a gap, and a larger dot lands with a flat shadow under it. A click going from a short link to its destination. Keep the dot; an arrowhead in its place turns it into the redo icon.
+The Loop: one stroke rises, ties a single loop, and lets go of the dot. A link sent on its way. It is one path and one circle so it can animate: the stroke draws itself, then the dot lands.
+
+Two things it must never become. A stroke with a round blob at each end (the mark this replaced read as something rude). And an arrowhead in place of the dot, which turns any curve into the redo icon.
 
 - **In the interface, use `Logo`** (`src/app/ui/logo.tsx`): the glyph and the word, sized by the font size it sits in. Never retype the name in bold or tracked caps as a brand.
 - **No tile next to the word.** The lavender tile belongs to places where the mark stands alone: the favicon (`public/favicon.svg`), the app and connector icon (`public/connector-icon.svg`), the OG image.
-- **Colour follows the theme.** In the interface the arc and launch dot take `currentColor`, the landing dot `fill-accent` and the shadow `fill-border`. On the tile the ink is `#140f1f` on `#cdb9f5`, shadow `#9283b1`.
-- **At 24px and below use the small cut**: a thicker arc, bigger dots, no shadow. `favicon.svg` is that cut. The full mark turns to mush at 16px.
+- **Colour follows the theme.** In the interface the stroke takes `currentColor` and the dot `fill-accent`. On the tile both are `#140f1f` on `#cdb9f5`.
+- **At 24px and below use the small cut**: a heavier stroke and dot, so the loop stays open. `favicon.svg` is that cut.
 - **The wordmark** in the static files (`public/logo.svg`, `public/email-logo.png`) is Figtree 700 at −3.5% tracking, converted to outlines so it renders without the font. In the app it is live text in the same face.
 
 ## Components

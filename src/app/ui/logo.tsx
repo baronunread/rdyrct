@@ -1,25 +1,27 @@
 import { cn } from "./cn";
 
 /**
- * The Hop mark without its tile: a click leaves one place, arcs, and lands.
- * The arc takes the text colour and the landing dot the accent, so it follows
- * the theme. The tiled version is the favicon and app icon (public/favicon.svg,
- * public/connector-icon.svg); next to the word, the tile would be a second
- * box around one name.
+ * The Loop mark without its tile: one stroke ties a loop and lets go of the
+ * dot, a link sent on its way. The stroke takes the text colour and the dot
+ * the accent, so it follows the theme. The tiled version is the favicon and
+ * app icon (public/favicon.svg, public/connector-icon.svg); next to the word,
+ * the tile would be a second box around one name.
  */
 function LogoMark({ className }: { className?: string }) {
   return (
-    <svg viewBox="3.6 7 23.6 17.8" aria-hidden="true" className={cn("h-[0.9em] w-auto", className)}>
+    <svg
+      viewBox="2.1 4.6 27.9 21.8"
+      aria-hidden="true"
+      className={cn("h-[0.95em] w-auto", className)}
+    >
       <path
-        d="M6.6 20Q13.4 2.2 19 12.2"
+        d="M4 24.5C9 24 19 18.5 19 11C19 5 9 5 9 11C9 17 14.5 19.6 19 19.4"
         fill="none"
         stroke="currentColor"
-        strokeWidth="3.2"
+        strokeWidth="3.8"
         strokeLinecap="round"
       />
-      <circle cx="6.6" cy="20" r="2.5" fill="currentColor" />
-      <circle cx="22.4" cy="17.4" r="3.6" className="fill-accent" />
-      <ellipse cx="22.4" cy="23.3" rx="4.3" ry="1.05" className="fill-border" />
+      <circle cx="26" cy="18" r="4" className="fill-accent" />
     </svg>
   );
 }
