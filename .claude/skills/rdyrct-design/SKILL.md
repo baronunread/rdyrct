@@ -67,6 +67,16 @@ Semantic colour never carries meaning alone. Pair it with a word or a shape, and
 
 Both themes are equal. Neither is the afterthought. Style through tokens only, so a colour is never defined solely inside a media query or a `[data-theme]` block.
 
+## The mark
+
+The Hop: a small dot leaves, an arc carries it, a gap, and a larger dot lands with a flat shadow under it. A click going from a short link to its destination. Keep the dot; an arrowhead in its place turns it into the redo icon.
+
+- **In the interface, use `Logo`** (`src/app/ui/logo.tsx`): the glyph and the word, sized by the font size it sits in. Never retype the name in bold or tracked caps as a brand.
+- **No tile next to the word.** The lavender tile belongs to places where the mark stands alone: the favicon (`public/favicon.svg`), the app and connector icon (`public/connector-icon.svg`), the OG image.
+- **Colour follows the theme.** In the interface the arc and launch dot take `currentColor`, the landing dot `fill-accent` and the shadow `fill-border`. On the tile the ink is `#140f1f` on `#cdb9f5`, shadow `#9283b1`.
+- **At 24px and below use the small cut**: a thicker arc, bigger dots, no shadow. `favicon.svg` is that cut. The full mark turns to mush at 16px.
+- **The wordmark** in the static files (`public/logo.svg`, `public/email-logo.png`) is Figtree 700 at −3.5% tracking, converted to outlines so it renders without the font. In the app it is live text in the same face.
+
 ## Components
 
 The kit is `src/app/ui/`. Use what is there before adding anything.

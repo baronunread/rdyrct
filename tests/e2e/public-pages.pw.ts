@@ -597,3 +597,16 @@ test("the homepage's first Tab is a skip link into main", async ({ page }) => {
   await expect(page).toHaveURL(/#main$/);
   await expect(page.getByRole("main")).toHaveAttribute("id", "main");
 });
+
+// The Hop mark sits next to the name in the header and the footer. The mark is
+// decoration, so the link still reads as the bare name to a screen reader and
+// to every test that finds it by "rdyrct".
+test("header and footer carry the logo, named by the word alone", async ({ page }) => {
+  await page.goto("/");
+
+  for (const region of [page.getByRole("banner"), page.getByRole("contentinfo")]) {
+    const home = region.getByRole("link", { name: "rdyrct", exact: true });
+    await expect(home).toBeVisible();
+    await expect(home.locator("svg[aria-hidden='true']")).toBeVisible();
+  }
+});

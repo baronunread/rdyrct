@@ -18,6 +18,7 @@ import { useCurrentUser } from "../lib/hooks";
 import { Button } from "../ui/button";
 import { Spinner } from "../ui/spinner";
 import { useToast } from "../ui/toast";
+import { Logo } from "../ui/logo";
 
 interface PublicClient {
   client_id: string;
@@ -176,7 +177,9 @@ export function ConsentPage() {
   return (
     <div className="grid min-h-dvh place-items-center px-4">
       <div className="w-full max-w-sm rounded-xl bg-surface p-6 text-center smooth-shadow-ring-sm">
-        <p className="mb-4 text-xl font-bold tracking-widest">rdyrct</p>
+        <p className="mb-4 text-xl">
+          <Logo />
+        </p>
 
         {loading ? (
           <Spinner className="mx-auto" />

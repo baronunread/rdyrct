@@ -28,6 +28,7 @@ import { NotFound } from "./not-found";
 import { PLAN_LIMITS, type User, type UserOrg } from "@/shared/types";
 import posthog from "../lib/posthog";
 import { FUNNEL } from "../lib/funnel";
+import { Logo } from "../ui/logo";
 
 const ORG_LIMIT_MESSAGE = "Upgrade to Pro to create more organizations";
 
@@ -174,7 +175,7 @@ function AppSidebar({
     <div className="flex h-full flex-col">
       {/* brand — desktop only; on mobile the top bar already shows it */}
       <div className="hidden px-3 pt-4 pb-2 md:block">
-        <span className="px-1.5 text-sm font-bold tracking-widest">rdyrct</span>
+        <Logo className="px-1.5 text-sm" />
       </div>
 
       {/* org switcher */}
@@ -445,7 +446,7 @@ export function AppShell() {
         >
           <MorphIcon icon={mobileOpen ? x : menu2} size={18} spring="snappy" />
         </button>
-        <span className="text-sm font-bold tracking-widest">rdyrct</span>
+        <Logo className="text-sm" />
       </div>
       <MobileDrawer open={mobileOpen} onClose={() => setMobileOpen(false)}>
         {sidebar}

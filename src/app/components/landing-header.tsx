@@ -20,6 +20,7 @@ import { useHydrated } from "../lib/hydrated";
 import { MarketingLink } from "./marketing-link";
 import { trackCta } from "../lib/track-cta";
 import { buttonClass } from "../ui/button-class";
+import { Logo } from "../ui/logo";
 
 export function LandingHeader({ authed }: { authed: boolean }) {
   const hydrated = useHydrated();
@@ -35,8 +36,8 @@ export function LandingHeader({ authed }: { authed: boolean }) {
       data-auth={hydrated ? (authed ? "in" : "out") : undefined}
       className="sticky top-0 z-20 -mx-6 grid grid-cols-[auto_1fr_auto] items-center gap-3 border-b border-border/50 bg-bg/85 px-6 py-4 backdrop-blur-md sm:grid-cols-[1fr_auto_1fr]"
     >
-      <MarketingLink to="/" className="justify-self-start text-lg font-bold tracking-widest">
-        rdyrct
+      <MarketingLink to="/" className="justify-self-start text-lg">
+        <Logo />
       </MarketingLink>
 
       {/* Where the visitor goes to read. Hidden on phones, where three columns

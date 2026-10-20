@@ -24,6 +24,7 @@ import { Card, Table, Th, Td } from "../ui/misc";
 import { Spinner } from "../ui/spinner";
 import { Copy } from "../ui/icons";
 import { cn } from "../ui/cn";
+import { Logo } from "../ui/logo";
 
 // The analytics screen draws with the real chart components, which are the
 // largest thing the homepage can fetch. They load when the tour moves past
@@ -242,7 +243,7 @@ function Scene({ index, on, children }: { index: number; on: boolean; children: 
 function TourSidebar({ active }: { active: string }) {
   return (
     <aside className="hidden flex-col gap-3 border-r border-border px-3 pt-4 md:flex">
-      <span className="px-1.5 font-mono text-sm font-bold">rdyrct</span>
+      <Logo className="px-1.5 text-sm" />
       <span className="rounded-md border border-border bg-surface px-2.5 py-1.5 text-sm">
         Northwind
       </span>

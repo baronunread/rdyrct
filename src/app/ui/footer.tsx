@@ -4,6 +4,7 @@ import { useTheme } from "../lib/theme";
 import { cn } from "./cn";
 import { CookieSettingsButton } from "./consent-banner";
 import { Moon, Sun } from "./icons";
+import { Logo } from "./logo";
 
 export const GITHUB_URL = "https://github.com/baronunread/rdyrct";
 export const SUPPORT_EMAIL = "support@mail.rdyrct.com";
@@ -65,8 +66,8 @@ export function Footer() {
       <div className="mx-auto max-w-5xl">
         <div className="grid grid-cols-2 gap-x-6 gap-y-8 sm:grid-cols-[1.6fr_1fr_1fr_1fr] sm:gap-y-10">
           <div className="col-span-2 flex flex-col gap-3 sm:col-span-1">
-            <MarketingLink to="/" className="text-lg font-bold tracking-widest text-text">
-              rdyrct
+            <MarketingLink to="/" className="w-fit text-lg text-text">
+              <Logo />
             </MarketingLink>
             <p className="max-w-xs">
               Short links and QR codes for teams, on your own domain. Visitor IP addresses are never
