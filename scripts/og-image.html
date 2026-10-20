@@ -66,7 +66,7 @@
         padding: 68px 96px 64px;
       }
 
-      /* The Loop mark without its tile, oversized and bled off the right
+      /* The Hooks mark without its tile, oversized and bled off the right
          edge. Recessive: it frames, it does not compete. */
       .watermark {
         position: absolute;
@@ -142,15 +142,18 @@
     </style>
   </head>
   <body>
-    <svg class="watermark" viewBox="2.1 4.6 27.9 21.8" fill="currentColor" aria-hidden="true">
-      <path
-        d="M4 24.5C9 24 19 18.5 19 11C19 5 9 5 9 11C9 17 14.5 19.6 19 19.4"
+    <svg class="watermark" viewBox="3 3 26 26" aria-hidden="true">
+      <g
+        transform="translate(2.8 0) skewX(-10)"
         fill="none"
         stroke="currentColor"
-        stroke-width="3.8"
+        stroke-width="6"
         stroke-linecap="round"
-      />
-      <circle cx="26" cy="18" r="4" />
+        stroke-linejoin="round"
+      >
+        <path d="M8.6 26V12.6a4.6 4.6 0 0 1 4.6-4.6H16" />
+        <path d="M23.4 6V19.4a4.6 4.6 0 0 1-4.6 4.6H16" />
+      </g>
     </svg>
 
     <div class="brand">
