@@ -20,7 +20,7 @@ export function TermsPage() {
         <h1 className="mb-2 text-xl font-bold">Terms of Service</h1>
         <p className="text-muted">
           These terms govern your use of rdyrct. By creating an account or using the service, you
-          agree to them. Last updated 18 October 2026.
+          agree to them. Last updated 21 October 2026.
         </p>
       </div>
 
@@ -91,6 +91,11 @@ export function TermsPage() {
           </a>
           , in which case these hosted-service terms do not apply and support is provided on a
           best-effort basis through GitHub issues only.
+        </p>
+        <p className="mt-2 text-muted">
+          Links on the free plan keep redirecting however many clicks they get. Past 100,000 clicks
+          in a month across an organization, we may stop recording that month's clicks for
+          analytics; the links themselves keep working.
         </p>
       </section>
 

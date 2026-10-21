@@ -316,7 +316,7 @@ For help, email [support@mail.rdyrct.com](mailto:support@mail.rdyrct.com).`,
       "The rules for using rdyrct: acceptable use for links and QR codes, account and organization responsibilities, billing via Polar, and the self-host license.",
     markdown: `# Terms of service
 
-These terms govern your use of rdyrct. By creating an account or using the service, you agree to them. Last updated 18 October 2026.
+These terms govern your use of rdyrct. By creating an account or using the service, you agree to them. Last updated 21 October 2026.
 
 ## Acceptance and acceptable use
 
@@ -333,6 +333,8 @@ You must keep your account secure and are responsible for activity under organiz
 ## Plans and billing
 
 Polar is rdyrct's merchant of record for paid plans. Subscriptions renew until you cancel them, and you can manage them in Billing. rdyrct is MIT licensed and can be self-hosted from the [public repository](https://github.com/baronunread/rdyrct). Hosted-service terms do not apply to a self-hosted installation.
+
+Links on the free plan keep redirecting however many clicks they get. Past 100,000 clicks in a month across an organization, we may stop recording that month's clicks for analytics; the links themselves keep working.
 
 ## Service, termination, and law
 

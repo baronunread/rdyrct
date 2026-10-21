@@ -103,6 +103,8 @@ Hierarchy comes from typography before surfaces. Do not wrap every section in a 
 
 **Structure is information.** Numbered markers belong on a real sequence and nowhere else.
 
+**The marketing header is a floating pill** (`components/landing-header.tsx`), the one translucent, blurred surface on the public pages. Inside it the nav sits in a recessed `--surface-2` well, and a `--surface` tab slides to the item under the pointer and rests on the current page. "Product" opens a panel of the deeper pages. On a phone the same pill grows down into a card holding every page, Log in and Get started (`components/phone-menu.tsx`); the current page carries the mark's accent dot. Add a page to `components/marketing-nav.ts` and both get it. Do not add a second glass surface on the strength of this one.
+
 ## Data and evidence
 
 The analytics screens are the product's proof, so they get the strictest treatment.

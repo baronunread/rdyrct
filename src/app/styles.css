@@ -233,6 +233,17 @@
 :root[data-auth="in"] [data-hero][data-ssr] [data-hero-personalization] {
   visibility: hidden;
 }
+
+/* The prerendered hero carries both headings of the copy test; index.html's
+   inline script sets data-hero-arm="answers" before paint for a browser given
+   that arm. Once hydrated (data-ssr gone) only the active one is rendered. */
+[data-hero][data-ssr] [data-hero-copy="answers"],
+:root[data-hero-arm="answers"] [data-hero][data-ssr] [data-hero-copy="own"] {
+  display: none;
+}
+:root[data-hero-arm="answers"] [data-hero][data-ssr] [data-hero-copy="answers"] {
+  display: inline;
+}
 html {
   background: var(--bg);
   color: var(--text);

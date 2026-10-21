@@ -164,7 +164,7 @@ function MadeLinks({ made }: { made: StoredAnonLink[] }) {
   if (!link)
     return (
       <p className="text-xs text-muted">
-        No account, no email. The link lasts 24 hours. Sign up to keep it and start counting clicks.
+        No account, no email. This link lasts 24 hours; sign up free and it never expires.
       </p>
     );
   return (

@@ -95,11 +95,22 @@ test("header navigation and sign-up remain usable on desktop and phone", async (
   await page.goto("/");
 
   const header = page.locator("header");
-  const nav = header.locator("nav");
+  const nav = header.getByRole("navigation", { name: "Main" });
   await expect(nav.getByRole("link", { name: "Pricing" })).toBeVisible();
 
-  await header.getByRole("link", { name: "Pricing" }).click();
+  // Product is a disclosure: its panel holds the pages that used to be
+  // reachable only from the footer, and Escape hands focus back.
+  const product = nav.getByRole("button", { name: "Product" });
+  await product.click();
+  await expect(product).toHaveAttribute("aria-expanded", "true");
+  await expect(nav.getByRole("link", { name: /QR code generator/ })).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(product).toHaveAttribute("aria-expanded", "false");
+  await expect(product).toBeFocused();
+
+  await nav.getByRole("link", { name: "Pricing" }).click();
   await expect(page).toHaveURL(/\/pricing$/);
+  await expect(nav.getByRole("link", { name: "Pricing" })).toHaveAttribute("aria-current", "page");
 
   await page.setViewportSize({ width: 390, height: 780 });
   await page.goto("/");
@@ -107,6 +118,36 @@ test("header navigation and sign-up remain usable on desktop and phone", async (
   await expect(header.getByRole("link", { name: "Sign up" })).toBeVisible();
   await header.getByRole("link", { name: "Sign up" }).click();
   await expect(page).toHaveURL(/\/signup/);
+});
+
+// On a phone the pill opens into a card with every page in it; before this
+// the only way to Pricing on a phone was the footer.
+test("the phone menu opens, leads somewhere, and closes", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 780 });
+  await page.goto("/");
+
+  // The header the entry chunk paints first is swapped for the page's own
+  // once the page arrives; wait for that, so the menu is the one that stays.
+  await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+  const header = page.locator("header");
+  const menu = header.getByRole("navigation", { name: "Menu" });
+  await expect(menu).toBeHidden();
+
+  await header.getByRole("button", { name: "Open menu" }).click();
+  await expect(menu).toBeVisible();
+  await expect(header.getByRole("link", { name: "Get started" })).toBeVisible();
+  // The page under the card holds still while it is open.
+  expect(await page.evaluate(() => document.documentElement.style.overflow)).toBe("hidden");
+
+  await page.keyboard.press("Escape");
+  await expect(menu).toBeHidden();
+  await expect(header.getByRole("button", { name: "Open menu" })).toBeFocused();
+
+  await header.getByRole("button", { name: "Open menu" }).click();
+  await menu.getByRole("link", { name: /Pricing/ }).click();
+  await expect(page).toHaveURL(/\/pricing$/);
+  await expect(menu).toBeHidden();
+  expect(await page.evaluate(() => document.documentElement.style.overflow)).toBe("");
 });
 
 // The homepage is a lazy chunk, so there is a moment before it arrives. What

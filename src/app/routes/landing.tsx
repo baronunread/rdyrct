@@ -12,7 +12,15 @@ import {
   useReducedMotion,
   type Variants,
 } from "motion/react";
-import { lazy, Suspense, useEffect, useLayoutEffect, useRef, useState } from "react";
+import {
+  lazy,
+  Suspense,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import { useHydrated } from "../lib/hydrated";
 import { useSeo } from "../lib/seo";
 import { useMarketingScroll } from "../lib/marketing-scroll";
@@ -22,6 +30,12 @@ import { useAudience } from "../lib/audience";
 import posthog from "../lib/posthog";
 import { readConsent, useAnalyticsConsent } from "../lib/consent";
 import { FUNNEL, landingContext } from "../lib/funnel";
+import {
+  heroVariantSnapshot,
+  subscribeHeroVariant,
+  syncHeroVariant,
+  type HeroVariant,
+} from "../lib/hero-variant";
 import { trackCta } from "../lib/track-cta";
 import {
   PLAN_LIMITS,
@@ -654,14 +668,14 @@ function SelfHostSection() {
 }
 
 /**
- * The hero: what this is, in the words people search for, then the working
- * shortener, over a globe of clicks hopping between cities.
+ * The hero: one line on what you get, the words people search for under it,
+ * then the working shortener, over a globe of clicks hopping between cities.
+ * The heading is under a copy test (HeroCopy); the layout is not.
  *
- * It replaced a two-arm A/B test (control: headline and CTA beside the
- * shortener; test: shortener first). Four weeks in, each arm had 4 signups
- * from about 70 visitors, too few to ever separate them at this traffic, so
- * the test ended and this keeps the test arm's one idea: the demo sits
- * centre stage, straight under the pitch.
+ * The layout came out of an earlier test (headline and CTA beside the
+ * shortener, against shortener first): 4 signups each from about 70
+ * visitors, so it ended and kept the second arm's idea, the demo centre
+ * stage, straight under the pitch.
  *
  * Everything a crawler or a link preview reads (the heading, the copy, the
  * links) is plain prerendered HTML. The globe is decoration: it loads after
@@ -673,6 +687,12 @@ function SelfHostSection() {
 function useLandingViewCapture(ready: boolean, authed: boolean) {
   const captured = useRef(false);
   const { ready: consentReady, accepted: analyticsConsent } = useAnalyticsConsent();
+  // The copy test: flip the coin once consent and the session have answered,
+  // and forget the arm if consent goes. Before the view is captured, so the
+  // view carries the arm it was shown.
+  useEffect(() => {
+    syncHeroVariant({ consentReady, consented: analyticsConsent, sessionReady: ready, authed });
+  }, [ready, authed, consentReady, analyticsConsent]);
   useEffect(() => {
     if (!shouldCaptureLandingView(consentReady, ready, captured.current)) return;
     captured.current = true;
@@ -682,6 +702,7 @@ function useLandingViewCapture(ready: boolean, authed: boolean) {
 
 function HeroSection({ ctaTo, ctaLabel, authed, ready, name }: HeroProps) {
   const hydrated = useHydrated();
+  const settled = hydrated && ready;
   useLandingViewCapture(ready, authed);
 
   return (
@@ -689,18 +710,17 @@ function HeroSection({ ctaTo, ctaLabel, authed, ready, name }: HeroProps) {
       data-hero
       // Until the session resolves, a cached customer's browser hides the
       // anonymous pitch (styles.css) instead of flashing it.
-      data-ssr={hydrated && ready ? undefined : ""}
+      data-ssr={settled ? undefined : ""}
       className="relative flex flex-col items-center pt-14 pb-12 text-center md:pt-20 md:pb-16"
     >
       <h1 className="max-w-3xl text-4xl font-bold tracking-tight text-balance sm:text-5xl lg:text-6xl">
-        Short links and QR codes on your own domain
+        <HeroCopy part="title" authed={authed} settled={settled} />
       </h1>
       <p className="mt-5 max-w-xl text-base text-pretty text-muted sm:text-lg">
-        A free URL shortener and QR code generator. See the country, referrer and device of every
-        click, and never store an IP address.
+        <HeroCopy part="sub" authed={authed} settled={settled} />
       </p>
 
-      {!authed && <HeroCta ctaTo={ctaTo} ctaLabel={ctaLabel} />}
+      <HeroCta ctaTo={ctaTo} ctaLabel={ctaLabel} hidden={authed} />
 
       {/* The card overlaps the top of the globe, so the thing you can use sits
           in front of the picture of what it does. */}
@@ -710,6 +730,52 @@ function HeroSection({ ctaTo, ctaLabel, authed, ready, name }: HeroProps) {
 
       <ProductHuntBadge hidden={authed} />
     </section>
+  );
+}
+
+/**
+ * The two arms of the hero copy test (lib/hero-variant.ts). "Free" stays out
+ * of both: it lives by the button, where it helps the click instead of
+ * cheapening the pitch. Both lines carry the words people search for.
+ */
+const HERO_COPY = {
+  own: {
+    title: "Turn long links into your own.",
+    sub: "A URL shortener and QR code generator on your own domain, with every click's country, referrer and device. No ad page, and no IP address stored.",
+  },
+  answers: {
+    title: "The link shortener that answers to you.",
+    sub: "A URL shortener and QR code generator on your own domain. Open source, no ad page, and no IP address stored.",
+  },
+} satisfies Record<HeroVariant, { title: string; sub: string }>;
+
+/**
+ * One line of the hero in the arm this browser was given. Until the page has
+ * hydrated and the session answered, both arms are in the HTML and CSS shows
+ * the one index.html picked before paint (styles.css), so nothing flips.
+ * After that only the active arm is rendered. A signed-in visitor always
+ * reads the control and never flips the coin.
+ */
+function HeroCopy({
+  part,
+  authed,
+  settled,
+}: {
+  part: "title" | "sub";
+  authed: boolean;
+  settled: boolean;
+}) {
+  const variant = useSyncExternalStore(
+    subscribeHeroVariant,
+    heroVariantSnapshot,
+    (): HeroVariant => "own",
+  );
+  if (settled) return HERO_COPY[authed ? "own" : variant][part];
+  return (
+    <>
+      <span data-hero-copy="own">{HERO_COPY.own[part]}</span>
+      <span data-hero-copy="answers">{HERO_COPY.answers[part]}</span>
+    </>
   );
 }
 
@@ -747,7 +813,16 @@ function HeroGlobeStage({ hydrated }: { hydrated: boolean }) {
   );
 }
 
-function HeroCta({ ctaTo, ctaLabel }: { ctaTo: string; ctaLabel: string }) {
+function HeroCta({
+  ctaTo,
+  ctaLabel,
+  hidden,
+}: {
+  ctaTo: string;
+  ctaLabel: string;
+  hidden: boolean;
+}) {
+  if (hidden) return null;
   return (
     <div
       data-hero-personalization
