@@ -24,7 +24,15 @@ bun run db:reset:local      # wipe local D1 + KV, re-apply migrations (start fro
 bun add <pkg>               # dependencies
 bunx agent-browser          # real-browser checks: screenshots, clicking through pages. Use it for any visual verification; do not hand-roll headless Chrome
 bun run db:seed:local       # seed local D1/KV with fake data (run dev server first)
+bun run deploy              # a self-hosted deploy: no rdyrct.com head tags, analytics or PostHog upload
+bun run deploy:rdyrct       # rdyrct.com's own deploy (VITE_RDYRCT_SITE=1, uploads source maps to PostHog)
 ```
+
+**`VITE_RDYRCT_SITE=1` marks rdyrct.com's own build** (`src/shared/site.ts`).
+Without it, `index.html` loses everything between its `rdyrct.com only`
+markers (canonical, share cards, structured data, the stats script) and the
+CSP allows no stats host. `bun run dev` and the browser tests set it; a fork
+running `bun run build` never does.
 
 **Local Cloudflare state**: while `bun run dev` runs, the Explorer API at
 `https://rdyrct.localhost/cdn-cgi/explorer/api` exposes the local KV, R2, D1,

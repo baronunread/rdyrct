@@ -4,6 +4,7 @@ import { defineConfig, type Plugin, type UserConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import { cloudflare } from "@cloudflare/vite-plugin";
+import { siteHead } from "./scripts/site-head";
 
 /**
  * The faces above the fold, as `[package, file]`.
@@ -59,10 +60,24 @@ function preloadFonts(): Plugin {
   };
 }
 
+/** Drops rdyrct.com's own head tags from any build that is not rdyrct.com
+ *  (scripts/site-head.ts, src/shared/site.ts). Runs first, so the font
+ *  preloads land in what is left. */
+function rdyrctSiteHead(): Plugin {
+  return {
+    name: "rdyrct-site-head",
+    transformIndexHtml: {
+      order: "pre",
+      handler: (html) => siteHead(html, process.env.VITE_RDYRCT_SITE === "1"),
+    },
+  };
+}
+
 export default defineConfig(async (): Promise<UserConfig> => ({
   plugins: [
     react(),
     tailwindcss(),
+    rdyrctSiteHead(),
     preloadFonts(),
     cloudflare({
       // Browser tests use short-lived in-memory bindings, never a developer's

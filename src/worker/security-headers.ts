@@ -21,11 +21,20 @@
  *
  * The stats script loads from stats.brnr.dev and sends its page views back to
  * the same host, so it needs both script-src and connect-src too.
+ *
+ * Neither is allowed where it cannot load: the stats script is rdyrct.com's
+ * own (RDYRCT_SITE), and PostHog needs a project token in the build. A
+ * self-hosted copy allows no third-party script at all.
  */
-const POSTHOG = "https://*.posthog.com";
+import { POSTHOG_CONFIGURED, RDYRCT_SITE } from "../shared/site";
+
+const POSTHOG = POSTHOG_CONFIGURED ? "https://*.posthog.com" : "";
 const SENTRY =
   "https://*.ingest.sentry.io https://*.ingest.de.sentry.io https://*.ingest.us.sentry.io";
-const STATS = "https://stats.brnr.dev";
+const STATS = RDYRCT_SITE ? "https://stats.brnr.dev" : "";
+
+/** A directive from its sources, with the ones switched off left out. */
+const directive = (...parts: string[]) => parts.filter(Boolean).join(" ");
 
 /**
  * The theme bootstrap in index.html, allowed by its own sha256 rather than
@@ -67,14 +76,14 @@ const THEME_INIT_HASH = "'sha256-fuh36x3A6QMBTJ4pKpJRUsKVEzUu1LaoQmFkFbh5NoM='";
 // path on the phones that need it most, and grants nothing else. The module
 // itself is a same-origin Vite asset, never a CDN.
 const SCRIPT_SRC = import.meta.env.DEV
-  ? `script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' ${POSTHOG} ${STATS}`
-  : `script-src 'self' ${THEME_INIT_HASH} 'wasm-unsafe-eval' ${POSTHOG} ${STATS}`;
+  ? directive("script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'", POSTHOG, STATS)
+  : directive("script-src 'self'", THEME_INIT_HASH, "'wasm-unsafe-eval'", POSTHOG, STATS);
 
 const CSP = [
   "default-src 'self'",
   SCRIPT_SRC,
   "style-src 'self' 'unsafe-inline'",
-  `img-src 'self' data: ${POSTHOG}`,
+  directive("img-src 'self' data:", POSTHOG),
   "font-src 'self'",
   // Cap (#98) solves its proof-of-work in a Web Worker built from a Blob
   // URL, and with no worker-src the browser falls through child-src to
@@ -84,7 +93,7 @@ const CSP = [
   // that a script which already ran could spawn a worker from a string it
   // built, which script-src 'self' still gates on getting there first.
   "worker-src 'self' blob:",
-  `connect-src 'self' ${POSTHOG} ${SENTRY} ${STATS}`,
+  directive("connect-src 'self'", POSTHOG, SENTRY, STATS),
   "object-src 'none'",
   "base-uri 'self'",
   "form-action 'self'",

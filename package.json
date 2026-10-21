@@ -5,7 +5,7 @@
   "license": "MIT",
   "type": "module",
   "scripts": {
-    "dev": "trap 'kill 0' INT TERM; portless rdyrct vite dev & bun run mail & bunx emulate start --service google --portless --port 4001 --seed google.emulate.yaml & wait",
+    "dev": "trap 'kill 0' INT TERM; VITE_RDYRCT_SITE=1 portless rdyrct vite dev & bun run mail & bunx emulate start --service google --portless --port 4001 --seed google.emulate.yaml & wait",
     "mail": "portless mail.rdyrct bunx emulate --service resend",
     "polar:listen": "NODE_EXTRA_CA_CERTS=\"$HOME/.portless/ca.pem\" polar listen https://rdyrct.localhost/api/webhooks/polar",
     "build": "vite build && bun scripts/prerender-public.tsx && bun scripts/prerender-404.tsx",
@@ -22,7 +22,8 @@
     "verify": "bun run format:check && bun run lint && bun run check && bun run test && bun run test:worker",
     "verify:e2e": "bun run verify && bun run e2e:smoke",
     "posthog:upload": "POSTHOG_CLI_PROJECT_ID=${POSTHOG_CLI_PROJECT_ID:-240147} posthog-cli --host ${POSTHOG_CLI_HOST:-https://eu.posthog.com} sourcemap process --directory dist/client/assets --release-name rdyrct --delete-after",
-    "deploy": "POSTHOG_SOURCEMAPS=1 bun run build && bun run posthog:upload && wrangler deploy",
+    "deploy": "bun run build && wrangler deploy",
+    "deploy:rdyrct": "VITE_RDYRCT_SITE=1 POSTHOG_SOURCEMAPS=1 bun run build && bun run posthog:upload && wrangler deploy",
     "globe:land": "bun scripts/globe-land.ts",
     "db:migrate:local": "wrangler d1 migrations apply rdyrct --local",
     "db:reset:local": "rm -rf .wrangler/state/v3/d1 .wrangler/state/v3/kv && wrangler d1 migrations apply rdyrct --local",

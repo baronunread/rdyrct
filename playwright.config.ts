@@ -72,6 +72,8 @@ export default defineConfig({
         CLOUDFLARE_ENV: "playwright",
         // Browser checks must never write into either real PostHog project.
         VITE_PUBLIC_POSTHOG_DEV_PROJECT_TOKEN: "phc_e2e",
+        // The suite checks rdyrct.com, head tags and analytics included.
+        VITE_RDYRCT_SITE: "1",
       },
     },
     {
@@ -90,6 +92,7 @@ export default defineConfig({
       env: {
         PLAYWRIGHT_TEST: "1",
         VITE_PUBLIC_POSTHOG_DEV_PROJECT_TOKEN: "phc_e2e",
+        VITE_RDYRCT_SITE: "1",
       },
     },
   ],

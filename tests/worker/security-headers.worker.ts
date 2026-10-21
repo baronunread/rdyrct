@@ -68,6 +68,13 @@ describe("security headers (#21)", () => {
   // headers. Only the e2e smoke test exercises the real binding, which is
   // where this first showed up. Response.redirect gives us the same
   // immutable Headers guard here, deterministically and with no bundle.
+  // The tests build without VITE_RDYRCT_SITE, as a fork does.
+  it("a self-hosted build allows no rdyrct.com analytics script", () => {
+    const csp = applySecurityHeaders(new Response("ok")).headers.get("content-security-policy");
+
+    expect(csp).not.toContain("stats.brnr.dev");
+  });
+
   it("loads no images from Product Hunt now the badge is gone", () => {
     const csp = applySecurityHeaders(new Response("ok")).headers.get("content-security-policy");
 
