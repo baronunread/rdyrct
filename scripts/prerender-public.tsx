@@ -2,14 +2,28 @@
  * Render the public entry pages into the built shell. The browser hydrates
  * these exact route trees, while every other route keeps the client shell.
  *
+ * A self-hosted build has no public pages, so it only swaps rdyrct.com's
+ * crawler files for its own (scripts/self-host-files.ts).
+ *
  *   bun scripts/prerender-public.tsx   (run by `bun run build`)
  */
 import { mkdir, rm } from "node:fs/promises";
 import { PassThrough } from "node:stream";
 import { renderToPipeableStream } from "react-dom/server";
-import { App, PRERENDER_ROUTES, preparePublicPage } from "../src/app/main";
+import { isRdyrctSite } from "./site-mode";
+import { writeSelfHostFiles } from "./self-host-files";
 
 const dir = "dist/client";
+if (!isRdyrctSite()) {
+  await writeSelfHostFiles(dir);
+  console.log("self-hosted build: no public pages to prerender");
+  process.exit(0);
+}
+
+// Bun reads import.meta.env from the process, and src/shared/site.ts must
+// agree with the build it is rendering into.
+process.env.VITE_RDYRCT_SITE = "1";
+const { App, PRERENDER_ROUTES, preparePublicPage } = await import("../src/app/main");
 const shell = await Bun.file(`${dir}/index.html`).text();
 
 function renderApp() {

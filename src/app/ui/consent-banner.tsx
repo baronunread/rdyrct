@@ -2,6 +2,11 @@ import { Link } from "@tanstack/react-router";
 import { Button } from "./button";
 import { openConsentBanner, useConsentBannerVisible } from "../lib/consent";
 import { grantAnalyticsConsent, revokeAnalyticsConsent } from "../lib/posthog";
+import { RDYRCT_SITE } from "@/shared/site";
+
+/** A self-hosted copy has no /privacy of its own: it links whatever policy
+ *  its operator names, or none. */
+const OPERATOR_PRIVACY_URL = import.meta.env.VITE_PRIVACY_URL;
 
 // The session cookie is strictly necessary and needs no consent, but
 // PostHog is not: it stays off (nothing loads, nothing is sent) until the
@@ -19,11 +24,8 @@ export function ConsentBanner() {
       <p className="leading-relaxed">
         rdyrct uses a strictly-necessary cookie to keep you signed in. We'd also like to use PostHog
         to understand how the product is used, no advertising. If you accept, what you did on this
-        page so far is sent too. See our{" "}
-        <Link to="/privacy" className="text-accent hover:underline">
-          Privacy Policy
-        </Link>
-        .
+        page so far is sent too.
+        <PrivacyLink />
       </p>
       <div className="mt-3 flex gap-2">
         <Button size="sm" variant="outline" className="flex-1" onClick={revokeAnalyticsConsent}>
@@ -45,5 +47,32 @@ export function CookieSettingsButton({ className }: { className?: string }) {
     <button type="button" onClick={openConsentBanner} className={className}>
       Cookie settings
     </button>
+  );
+}
+
+function PrivacyLink() {
+  const className = "text-accent hover:underline";
+  if (RDYRCT_SITE) {
+    return (
+      <>
+        {" "}
+        See our{" "}
+        <Link to="/privacy" className={className}>
+          Privacy Policy
+        </Link>
+        .
+      </>
+    );
+  }
+  if (!OPERATOR_PRIVACY_URL) return null;
+  return (
+    <>
+      {" "}
+      See our{" "}
+      <a href={OPERATOR_PRIVACY_URL} className={className}>
+        Privacy Policy
+      </a>
+      .
+    </>
   );
 }

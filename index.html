@@ -10,9 +10,8 @@
     />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <!-- rdyrct.com only -->
-    <!-- From here to the closing marker belongs to rdyrct.com alone. A build
-         without VITE_RDYRCT_SITE=1 (any self-hosted one) drops it: see
-         scripts/site-head.ts. -->
+    <!-- From here to the closing marker belongs to rdyrct.com alone. A
+         self-hosted build drops it: see scripts/site-head.ts. -->
     <link rel="canonical" href="https://rdyrct.com" />
     <meta property="og:title" content="Free URL shortener and QR code generator - rdyrct" />
     <meta
@@ -146,6 +145,7 @@
   </head>
   <body>
     <div id="root">
+      <!-- rdyrct.com only -->
       <!--
         What anything reading the HTML gets instead of running the app:
         crawlers, link previews, answer engines. React replaces this div on
@@ -388,6 +388,7 @@
           <a href="mailto:support@mail.rdyrct.com">Support</a>
         </nav>
       </div>
+      <!-- /rdyrct.com only -->
     </div>
     <script type="module" src="/src/app/main.tsx"></script>
   </body>

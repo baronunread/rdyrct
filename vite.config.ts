@@ -5,6 +5,14 @@ import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import { cloudflare } from "@cloudflare/vite-plugin";
 import { siteHead } from "./scripts/site-head";
+import { isRdyrctSite } from "./scripts/site-mode";
+
+/** rdyrct.com, or a self-hosted copy (scripts/site-mode.ts). */
+const SITE = isRdyrctSite();
+
+/** What src/shared/site.ts reads, worked out above rather than left to
+ *  whoever runs the build. A literal, so the bundler drops what it guards. */
+const SITE_DEFINE = { "import.meta.env.VITE_RDYRCT_SITE": JSON.stringify(SITE ? "1" : "0") };
 
 /**
  * The faces above the fold, as `[package, file]`.
@@ -61,15 +69,36 @@ function preloadFonts(): Plugin {
 }
 
 /** Drops rdyrct.com's own head tags from any build that is not rdyrct.com
- *  (scripts/site-head.ts, src/shared/site.ts). Runs first, so the font
- *  preloads land in what is left. */
+ *  (scripts/site-head.ts). Runs first, so the font preloads land in what is
+ *  left. */
 function rdyrctSiteHead(): Plugin {
   return {
     name: "rdyrct-site-head",
     transformIndexHtml: {
       order: "pre",
-      handler: (html) => siteHead(html, process.env.VITE_RDYRCT_SITE === "1"),
+      handler: (html) => siteHead(html, SITE),
     },
+  };
+}
+
+const NO_MARKETING = "\0no-marketing-routes";
+
+/**
+ * Leaves rdyrct.com's pages out of a self-hosted build at the source: the
+ * import of src/app/marketing-routes.tsx resolves to an empty module, so
+ * nothing it reaches (landing, pricing, docs, legal pages, the marketing
+ * header and footer) is bundled. Dropping the call in main.tsx alone is not
+ * enough, because the bundler still emits a chunk for every import() it saw.
+ */
+function selfHostPages(): Plugin {
+  return {
+    name: "self-host-pages",
+    enforce: "pre",
+    resolveId: (id) => (!SITE && id === "./marketing-routes" ? NO_MARKETING : null),
+    load: (id) =>
+      id === NO_MARKETING
+        ? "export function marketingRoutes() { throw new Error('rdyrct.com only'); }"
+        : null,
   };
 }
 
@@ -78,6 +107,7 @@ export default defineConfig(async (): Promise<UserConfig> => ({
     react(),
     tailwindcss(),
     rdyrctSiteHead(),
+    selfHostPages(),
     preloadFonts(),
     cloudflare({
       // Browser tests use short-lived in-memory bindings, never a developer's
@@ -86,6 +116,7 @@ export default defineConfig(async (): Promise<UserConfig> => ({
       inspectorPort: process.env.PLAYWRIGHT_TEST ? false : undefined,
     }),
   ],
+  define: SITE_DEFINE,
   resolve: {
     // mirror the tsconfig "@/*" path for runtime imports (app and worker)
     alias: {

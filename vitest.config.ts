@@ -27,6 +27,13 @@ export default defineConfig({
       },
     })),
   ],
+  // rdyrct.com unless VITE_RDYRCT_SITE=0 says otherwise: `bun run
+  // test:worker:self-host` runs tests/worker/self-host.worker.ts that way.
+  define: {
+    "import.meta.env.VITE_RDYRCT_SITE": JSON.stringify(
+      process.env.VITE_RDYRCT_SITE === "0" ? "0" : "1",
+    ),
+  },
   resolve: {
     alias: {
       "@": fileURLToPath(new URL("./src", import.meta.url)),
