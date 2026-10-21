@@ -993,11 +993,11 @@ function FaqSection() {
   );
 }
 
-/** The page's last word, as wide as the footer under it: a dark band that
- *  steps out of the column so the page ends on something, not on a gap. */
+/** The page's last word: a dark band as wide as the column, so the page
+ *  ends on something, not on a gap. */
 function FinalCtaSection({ ctaTo, ctaLabel }: { ctaTo: string; ctaLabel: string }) {
   return (
-    <Section className="breakout ink-band relative isolate mt-8 overflow-hidden rounded-3xl border border-border px-6 py-20 md:py-32">
+    <Section className="ink-band relative isolate mt-8 overflow-hidden rounded-3xl border border-border px-6 py-20 md:py-32">
       <div
         aria-hidden="true"
         className="absolute inset-0 -z-10 bg-[radial-gradient(var(--border)_1px,transparent_1px)] bg-size-[14px_14px] mask-[radial-gradient(60%_70%_at_50%_45%,#000,transparent)]"
@@ -1179,7 +1179,7 @@ export function LandingPage() {
   return (
     <MotionConfig reducedMotion="user">
       <LazyMotion features={domAnimation}>
-        <div className="relative mx-auto min-h-dvh max-w-5xl px-6">
+        <div className="page-column">
           <FaqJsonLd faqs={faqs} />
           <WebMcpMarketingTools />
           <style>{`@keyframes cursorBlink { 50% { opacity: 0; } }`}</style>

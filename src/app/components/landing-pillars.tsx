@@ -204,7 +204,7 @@ function PillarStage({
       <div
         className={cn(
           "lit relative mx-auto rounded-2xl border border-border/70 bg-surface text-sm mask-[linear-gradient(#000_72%,transparent)]",
-          wide ? "max-w-2xl p-4" : "max-w-md",
+          wide ? "max-w-3xl p-4" : "max-w-xl",
         )}
       >
         {children(near)}

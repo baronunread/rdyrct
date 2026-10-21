@@ -204,18 +204,16 @@
   --surface: #1a1726;
 }
 
-/* Wider than the page's column and centred on it, for what closes a page:
-   the last call to action and the footer. Phones keep the column, where the
-   few pixels it would gain read as a misalignment. The parent must be
-   centred on the page, as every public page's column is. */
-@utility breakout {
-  @media (width >= 40rem) {
-    position: relative;
-    left: 50%;
-    width: min(calc(100vw - 2rem), 78rem);
-    max-width: none;
-    translate: -50% 0;
-  }
+/* The column every public page sits in, the stand-in shown while a page
+   loads included (main.tsx), so the header does not jump when it arrives.
+   Wide, as the best pages in this category are: the frame, the bands and
+   the footer all run to it, and text inside keeps its own measure. */
+@utility page-column {
+  position: relative;
+  margin-inline: auto;
+  min-height: 100dvh;
+  max-width: 84rem;
+  padding-inline: 1.5rem;
 }
 
 /* A product panel on the landing, lit from above. */

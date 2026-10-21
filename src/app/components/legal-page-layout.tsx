@@ -36,7 +36,7 @@ export function LegalPageLayout({
   intro: ReactNode;
 }) {
   return (
-    <div className="relative mx-auto min-h-dvh max-w-5xl px-6">
+    <div className="page-column">
       <LandingHeader authed={authed} />
       <main>
         <PageHero title={title} intro={intro} />

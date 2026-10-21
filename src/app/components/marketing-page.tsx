@@ -40,7 +40,7 @@ export function MarketingPage({
   return (
     <MotionConfig reducedMotion="user">
       <LazyMotion features={domAnimation}>
-        <div className="relative mx-auto min-h-dvh max-w-5xl px-6">
+        <div className="page-column">
           <WebMcpMarketingTools />
           <LandingHeader authed={authed} />
 

@@ -96,8 +96,8 @@ function Wordmark() {
 
 export function Footer() {
   return (
-    <footer className="breakout mt-16 overflow-hidden text-sm text-muted">
-      <div className="border-t border-border pt-10 sm:mx-3">
+    <footer className="mt-16 overflow-hidden text-sm text-muted">
+      <div className="border-t border-border pt-10">
         <div className="grid grid-cols-2 gap-x-6 gap-y-8 sm:grid-cols-[1.6fr_1fr_1fr_1fr] sm:gap-y-10">
           <div className="col-span-2 flex flex-col gap-3 sm:col-span-1">
             <MarketingLink to="/" className="w-fit text-lg text-text">

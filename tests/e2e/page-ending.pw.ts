@@ -1,10 +1,11 @@
 import { expect, test } from "@playwright/test";
 
-// A page ends wider than its column: the last call to action and the footer
-// step out to the same edges, without ever scrolling the page sideways.
+// Public pages run wide, as the best pages in this category do: the frame,
+// the closing band and the footer share one column, much wider than a
+// reading measure, without ever scrolling the page sideways.
 
-test("the final call to action and the footer step out of the column", async ({ page }) => {
-  await page.setViewportSize({ width: 1440, height: 900 });
+test("the landing runs wide, and its closing band and footer share its edges", async ({ page }) => {
+  await page.setViewportSize({ width: 1650, height: 940 });
   await page.goto("/");
   const main = await page.locator("main").boundingBox();
   const cta = page
@@ -14,17 +15,23 @@ test("the final call to action and the footer step out of the column", async ({ 
   const band = await cta.boundingBox();
   const footer = await page.locator("footer").boundingBox();
 
-  expect(band!.width).toBeGreaterThan(main!.width + 100);
-  expect(footer!.x).toBeCloseTo(band!.x, 0);
-  expect(footer!.width).toBeCloseTo(band!.width, 0);
-  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(1440);
+  expect(main!.width).toBeGreaterThan(1200);
+  expect(band!.x).toBeCloseTo(main!.x, 0);
+  expect(band!.width).toBeCloseTo(main!.width, 0);
+  expect(footer!.width).toBeCloseTo(main!.width, 0);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(1650);
 });
 
-test("on a phone they keep to the column", async ({ page }) => {
+test("long text keeps a reading measure in the wide column", async ({ page }) => {
+  await page.setViewportSize({ width: 1650, height: 940 });
+  await page.goto("/docs");
+  const paragraph = page.locator("#api p").first();
+  expect((await paragraph.boundingBox())!.width).toBeLessThanOrEqual(768);
+});
+
+test("on a phone nothing scrolls sideways", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/pricing");
-  const main = await page.locator("main").boundingBox();
-  const footer = await page.locator("footer").boundingBox();
-  expect(footer!.width).toBeCloseTo(main!.width, 0);
+  await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(390);
 });

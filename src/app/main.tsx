@@ -170,7 +170,7 @@ function PublicPages() {
  */
 function PublicPagePending() {
   return (
-    <div className="relative mx-auto min-h-dvh max-w-5xl px-6">
+    <div className="page-column">
       <LandingHeader authed={readAuthHint()} />
     </div>
   );

@@ -12,7 +12,7 @@
  * Stripe's or GitHub's docs rather than a landing page. It still reuses
  * MarketingPage's own pieces (header, footer, SEO, the marketing-scroll
  * ride-up) so it stays the same product outside the content area, and the
- * outer width stays max-w-5xl so the footer-width e2e assertion holds.
+ * outer width stays the shared page-column, like every public page.
  */
 import type { ReactNode } from "react";
 import { LazyMotion, MotionConfig, domAnimation } from "motion/react";
@@ -166,7 +166,7 @@ export function DocsPage() {
   return (
     <MotionConfig reducedMotion="user">
       <LazyMotion features={domAnimation}>
-        <div className="relative mx-auto min-h-dvh max-w-5xl px-6">
+        <div className="page-column">
           <WebMcpMarketingTools />
           <LandingHeader authed={authed} />
 
@@ -183,7 +183,8 @@ export function DocsPage() {
                 <ChapterNav className="sticky top-20 flex flex-col gap-0.5" />
               </aside>
 
-              <div className="min-w-0 flex-1">
+              {/* A reading measure, however wide the page column is. */}
+              <div className="min-w-0 max-w-3xl flex-1">
                 <Chapter id="api" title="REST API">
                   <p>
                     Every organization route under{" "}
