@@ -381,14 +381,18 @@ html {
    auth state, and isolating the group is what keeps it from visibly
    flickering along with the content, which is what makes the navigation
    read as one page rather than a swap. It never needs to animate, on or off
-   reduced motion. */
+   reduced motion.
+
+   It names the pill, not the <header>: named, the header became the
+   backdrop the pill's blur samples, and page text scrolled under the
+   header showed through the pill at full strength. */
 ::view-transition-old(marketing-header),
 ::view-transition-new(marketing-header) {
   animation: none;
   mix-blend-mode: normal;
 }
 
-header[data-marketing-header] {
+[data-marketing-pill] {
   view-transition-name: marketing-header;
 }
 

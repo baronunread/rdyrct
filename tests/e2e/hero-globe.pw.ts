@@ -20,15 +20,14 @@ test("the globe arrives hidden from assistive tech and shifts nothing", async ({
 
   const hero = page.locator("[data-hero]");
   await expect(hero.getByRole("heading", { level: 1, name: HEADING })).toBeVisible();
-  const badge = hero.getByRole("link", { name: /Product Hunt/ });
-  const before = await badge.boundingBox();
+  const before = await hero.boundingBox();
 
   release();
   const canvas = hero.locator("canvas");
   await expect(canvas).toBeVisible();
   await expect(canvas.locator("xpath=..")).toHaveAttribute("aria-hidden", "true");
   expect((await canvas.boundingBox())?.height).toBeGreaterThan(200);
-  expect(await badge.boundingBox()).toEqual(before);
+  expect(await hero.boundingBox()).toEqual(before);
 });
 
 test("the globe turns, unless the visitor asked for less motion", async ({ page }) => {

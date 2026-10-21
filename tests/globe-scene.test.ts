@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { hopPhase, placeLabel, type Hop } from "../src/app/lib/globe-scene";
+import { destinations, hopPhase, placeLabel, vec, type Hop } from "../src/app/lib/globe-scene";
 
 const bounds = { left: 0, top: 0, width: 400, height: 300 };
 const size = { left: 0, top: 0, width: 100, height: 22 };
@@ -56,5 +56,29 @@ describe("hopPhase", () => {
     const own = { ...hop, own: true };
     expect(hopPhase(own, 1000 + 2600 + 500).fade).toBe(1);
     expect(hopPhase(own, 1000 + 7800 + 500).fade).toBe(0);
+  });
+});
+
+describe("destinations", () => {
+  const london = vec(-0.1, 51.5);
+  const paris = vec(2.35, 48.85);
+  const lagos = vec(3.4, 6.5);
+  const cairo = vec(31.2, 30);
+  const inView = [london, paris, lagos, cairo];
+
+  test("never sends a hop back along a pair already on screen", () => {
+    const open = destinations(lagos, inView, []);
+    expect(open).toContain(london);
+    expect(open).toContain(cairo);
+    // London to Lagos is in the air, so Lagos to London has to wait.
+    const back = destinations(lagos, inView, [{ from: london, to: lagos }]);
+    expect(back).not.toContain(london);
+    expect(back).toContain(cairo);
+    expect(destinations(london, inView, [{ from: london, to: lagos }])).not.toContain(lagos);
+  });
+
+  test("skips the city itself and its next-door neighbours", () => {
+    expect(destinations(london, inView, [])).not.toContain(london);
+    expect(destinations(london, inView, [])).not.toContain(paris);
   });
 });

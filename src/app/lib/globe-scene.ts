@@ -9,10 +9,10 @@ import { globeGrid } from "./globe-grid";
  * the mark is drawn: a small dot leaves, an arc carries it, the accent dot
  * lands on a flat shadow, and the short link it followed appears beside it.
  */
-type Vec = [number, number, number];
+export type Vec = [number, number, number];
 
 const RAD = Math.PI / 180;
-const vec = (lon: number, lat: number): Vec => [
+export const vec = (lon: number, lat: number): Vec => [
   Math.cos(lat * RAD) * Math.sin(lon * RAD),
   Math.sin(lat * RAD),
   Math.cos(lat * RAD) * Math.cos(lon * RAD),
@@ -137,6 +137,20 @@ export function placeLabel(x: number, y: number, size: Box, bounds: Box, taken: 
   return null;
 }
 
+/**
+ * Where a hop from `from` may land: a city in view, neither next door nor
+ * across the globe, and never a pair already on screen either way round. A
+ * hop from A to B with B to A drawn over it reads as one glitching arc, not
+ * two clicks.
+ */
+export function destinations(from: Vec, inView: Vec[], hops: Pick<Hop, "from" | "to">[]) {
+  const onScreen = (c: Vec) =>
+    hops.some((hop) => (hop.from === from && hop.to === c) || (hop.from === c && hop.to === from));
+  return inView.filter(
+    (c) => c !== from && angle(c, from) < 1.3 && angle(c, from) > 0.25 && !onScreen(c),
+  );
+}
+
 /** How far through its life a hop is, in the terms drawing needs. */
 export function hopPhase(hop: Hop, now: number) {
   const after = now - hop.start - hop.flight;
@@ -217,9 +231,7 @@ export class GlobeScene {
     const front = this.citiesInView();
     if (front.length < 2) return;
     const from = front[Math.floor(Math.random() * front.length)];
-    const options = front.filter(
-      (c) => c !== from && angle(c, from) < 1.3 && angle(c, from) > 0.25,
-    );
+    const options = destinations(from, front, this.hops);
     if (options.length === 0) return;
     const to = options[Math.floor(Math.random() * options.length)];
     const d = angle(from, to);

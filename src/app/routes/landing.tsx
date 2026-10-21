@@ -49,7 +49,7 @@ import {
   QrPillar,
   TeamsAndCode,
 } from "../components/landing-pillars";
-import { SplitHeading } from "../components/marketing-kit";
+import { FrameRow, SplitHeading } from "../components/marketing-kit";
 import { AnonLinkBar } from "../components/anon-link-bar";
 import { formatNumber } from "../lib/numbers";
 import { cn } from "../ui/cn";
@@ -769,8 +769,6 @@ function HeroSection({ ctaTo, ctaLabel, authed, ready, name }: HeroProps) {
       <HeroCard authed={authed} name={name} />
 
       <HeroGlobeStage hydrated={hydrated} />
-
-      <ProductHuntBadge hidden={authed} />
     </section>
   );
 }
@@ -886,29 +884,6 @@ function HeroCta({
         </li>
       </ul>
     </div>
-  );
-}
-
-/** Product Hunt's own embed: a live SVG, so the upvote count stays current.
- *  Lazy, so a signed-in visitor (who gets it display:none) never fetches it. */
-function ProductHuntBadge({ hidden }: { hidden: boolean }) {
-  return (
-    <a
-      data-hero-personalization
-      className={cn("mt-8", hidden && "hidden")}
-      href="https://www.producthunt.com/products/rdyrct-url-shortener-for-teams?embed=true&utm_source=badge-featured&utm_medium=badge&utm_campaign=badge-rdyrct-url-shortener-for-teams"
-      target="_blank"
-      rel="noopener noreferrer"
-    >
-      <img
-        alt="Rdyrct - URL Shortener for Teams - Shorten a link. See who clicks it. | Product Hunt"
-        width={250}
-        height={54}
-        loading="lazy"
-        referrerPolicy="no-referrer"
-        src="https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=1233546&theme=light&t=1792195782504"
-      />
-    </a>
   );
 }
 
@@ -1217,12 +1192,13 @@ export function LandingPage() {
             />
             {/* Below the hero, everything sits in one hairline frame
                 (rdyrct-design, "Light on the marketing pages"). */}
-            <div className="border-x border-border/70">
+            <div className="mb-16 border-x border-border/70">
               <Manifesto />
               <LinksPillar />
               <QrPillar />
               <AnalyticsPillar ask={<AnalyticsAsk />} />
               <TeamsAndCode />
+              <FrameRow />
             </div>
             <PlanChangeSection />
             <PricingTeaser />

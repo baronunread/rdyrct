@@ -7,30 +7,34 @@ import type { ReactNode } from "react";
 import { cn } from "../ui/cn";
 
 /** A row of the page's hairline frame, with a small cross where its top
- *  rule meets the rails. */
+ *  rule meets the rails. The rails are the parent's 1px side borders. */
 export function FrameRow({
   children,
   className,
   id,
 }: {
-  children: ReactNode;
+  /** None closes the frame: just the rule and its crosses. */
+  children?: ReactNode;
   className?: string;
   id?: string;
 }) {
   return (
     <div id={id} className={cn("relative border-t border-border/70", className)}>
-      <span aria-hidden="true" className={cn(CROSS, "-left-[5px]")}>
-        +
-      </span>
-      <span aria-hidden="true" className={cn(CROSS, "-right-[5px]")}>
-        +
-      </span>
+      <span aria-hidden="true" className={cn(CROSS, "-left-[6px]")} />
+      <span aria-hidden="true" className={cn(CROSS, "-right-[6px]")} />
       {children}
     </div>
   );
 }
 
-const CROSS = "absolute -top-[9px] text-xs leading-none font-light text-muted/50 select-none";
+/**
+ * Two 1px bars in an 11px box, drawn rather than typed: a "+" glyph sits
+ * wherever the font puts it. The box hangs 6px over the row's top-left (or
+ * top-right) corner, so each bar's sixth pixel is the pixel where the top
+ * rule (1px above the row's padding box) crosses the rail (1px outside it).
+ */
+const CROSS =
+  "pointer-events-none absolute -top-[6px] size-[11px] before:absolute before:inset-x-0 before:top-[5px] before:h-px before:bg-muted/70 after:absolute after:inset-y-0 after:left-[5px] after:w-px after:bg-muted/70";
 
 /** Two tones in one heading: the claim in ink, the reason for it muted. */
 export function SplitHeading({
@@ -81,7 +85,7 @@ export function PageHero({
         <p className="mt-4 max-w-2xl text-pretty text-muted sm:text-lg">{intro}</p>
         {children && <div className="mt-6">{children}</div>}
       </FrameRow>
-      <div className="relative border-t border-border/70" />
+      <FrameRow />
     </div>
   );
 }

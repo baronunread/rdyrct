@@ -1,5 +1,8 @@
 /**
- * The header every public page shares: one floating pill.
+ * The header every public page shares. At the top of the page it is part of
+ * the page: no fill, no edge, as wide as the frame under it. Once the page
+ * moves it draws in to a floating pill, so the nav stays in reach without
+ * looking like a second surface sitting over the opening.
  *
  * The pill is the one floating, translucent element on the marketing pages
  * (rdyrct-design, Layout). Inside it the nav sits in a recessed well, and a
@@ -12,15 +15,15 @@
  * works on the page that has that section, and did nothing from any other
  * public page.
  *
- * `data-marketing-header` pairs with the `viewTransition` links: a
+ * `data-marketing-pill` pairs with the `viewTransition` links: a
  * navigation between marketing pages runs as a view transition (see
- * styles.css), and the attribute gives this element its own transition
+ * styles.css), and the attribute gives the pill its own transition
  * group so it stays visually still instead of crossfading with the content,
  * which is what makes the navigation read as one page continuing rather
  * than a new one loading.
  */
 import { Link, useRouterState } from "@tanstack/react-router";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { ChevronDown, Github } from "../ui/icons";
 import { GITHUB_URL } from "../ui/footer";
 import { useHydrated } from "../lib/hydrated";
@@ -39,15 +42,20 @@ export function LandingHeader({ authed }: { authed: boolean }) {
   const menuButtonRef = useRef<HTMLButtonElement>(null);
   const closeMenu = () => setMenuOpen(false);
   useDismiss(menuOpen, pillRef, closeMenu, menuButtonRef);
+  const scrolled = useSyncExternalStore(subscribeScroll, pageMoved, () => false);
+  // Unknown until hydrated: the pre-paint script's guess stands till then.
+  const auth = authed ? "in" : "out";
 
   return (
     <header
       data-marketing-header
-      data-auth={hydrated ? (authed ? "in" : "out") : undefined}
-      className="sticky top-0 z-30 -mx-6 px-3 pt-3 sm:px-6"
+      data-auth={hydrated ? auth : undefined}
+      // The open phone menu needs the pill's fill, wherever the page is.
+      data-floating={flag(scrolled || menuOpen)}
+      className="group/header sticky top-0 z-30 -mx-6 px-3 pt-2 transition-[padding] duration-500 ease-[cubic-bezier(0.32,0.72,0,1)] data-floating:pt-3 motion-reduce:transition-none sm:px-6"
     >
       <MenuScrim open={menuOpen} />
-      <div ref={pillRef} data-open={menuOpen ? "" : undefined} className={PILL}>
+      <div ref={pillRef} data-marketing-pill data-open={flag(menuOpen)} className={PILL}>
         {/* Three columns, not space-between: the two 1fr rails keep the nav
             on the page's centre line however wide the brand or the auth
             buttons get, so "Sign up" turning into "Dashboard" does not
@@ -80,9 +88,33 @@ export function LandingHeader({ authed }: { authed: boolean }) {
   );
 }
 
-/** Opaquer while it holds the phone menu, so the list reads over the page. */
-const PILL =
-  "relative mx-auto max-w-4xl rounded-[1.625rem] border border-border/80 bg-surface/85 py-1.5 pr-1.5 pl-4 shadow-[0_8px_28px_-14px_rgb(30_20_50/0.3)] backdrop-blur-xl transition-colors data-open:bg-surface/95 data-open:pb-2";
+/** A boolean data attribute: present and empty, or absent. */
+const flag = (on: boolean) => (on ? "" : undefined);
+
+/** Past this many pixels the header leaves the page and floats. */
+const FLOAT_AFTER = 8;
+const pageMoved = () => window.scrollY > FLOAT_AFTER;
+function subscribeScroll(onChange: () => void) {
+  addEventListener("scroll", onChange, { passive: true });
+  return () => removeEventListener("scroll", onChange);
+}
+
+/**
+ * The gap above it is the header's padding, not the pill's margin: a margin
+ * would collapse through the header and the pill would sit on the edge.
+ *
+ * Flush at the top: transparent, edge to edge of the frame, its padding
+ * lining the logo up with the rail. Floating (scrolled, or holding the phone
+ * menu): inset from the frame, nearly opaque so the page under it does not
+ * show through the nav, with an edge and a shadow. Every property that
+ * changes is in the transition, so it draws in rather than snaps.
+ */
+const PILL = cn(
+  "relative mx-auto max-w-full rounded-[1.625rem] border border-transparent py-1.5 pr-1.5 pl-1",
+  "transition-[max-width,padding,background-color,border-color,box-shadow] duration-500 ease-[cubic-bezier(0.32,0.72,0,1)] motion-reduce:transition-none",
+  "group-data-floating/header:border-border/80 group-data-floating/header:bg-surface/95 group-data-floating/header:pl-4 group-data-floating/header:shadow-[0_10px_30px_-14px_rgb(30_20_50/0.35)] group-data-floating/header:backdrop-blur-xl md:group-data-floating/header:max-w-[calc(100%-2.5rem)]",
+  "data-open:bg-surface data-open:pb-2",
+);
 
 /** The page behind the open phone menu, blurred. A sibling of the pill, not a
  *  child: the pill's backdrop filter would make "fixed" mean fixed to it. */

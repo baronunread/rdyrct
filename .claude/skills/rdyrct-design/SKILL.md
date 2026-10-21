@@ -103,13 +103,13 @@ Hierarchy comes from typography before surfaces. Do not wrap every section in a 
 
 **Structure is information.** Numbered markers belong on a real sequence and nowhere else.
 
-**The marketing header is a floating pill** (`components/landing-header.tsx`), the one translucent, blurred surface on the public pages. Inside it the nav sits in a recessed `--surface-2` well, and a `--surface` tab slides to the item under the pointer and rests on the current page. "Product" opens a panel of the deeper pages. On a phone the same pill grows down into a card holding every page, Log in and Get started (`components/phone-menu.tsx`); the current page carries the mark's accent dot. Add a page to `components/marketing-nav.ts` and both get it. Do not add a second glass surface on the strength of this one.
+**The marketing header is part of the page at the top and a floating pill once it scrolls** (`components/landing-header.tsx`): flush, unfilled and as wide as the frame at the top; past 8px it draws in to a nearly opaque (`bg-surface/95`), blurred pill, the one such surface on the public pages. The open phone menu forces the pill state. Inside it the nav sits in a recessed `--surface-2` well, and a `--surface` tab slides to the item under the pointer and rests on the current page. "Product" opens a panel of the deeper pages. On a phone the same pill grows down into a card holding every page, Log in and Get started (`components/phone-menu.tsx`); the current page carries the mark's accent dot. Add a page to `components/marketing-nav.ts` and both get it. Do not add a second glass surface on the strength of this one.
 
 ## Light on the marketing pages
 
 The public pages are allowed a small, named set of effects that the app is not. Use these and nothing else; each is a utility in `styles.css` and follows both themes through the tokens.
 
-- **The frame.** Below the hero, sections sit between two hairline rails (`border-x border-border/70`), each row opened by a hairline with a small cross where it meets a rail.
+- **The frame.** Below the hero, sections sit between two hairline rails (`border-x border-border/70`), each row opened by a hairline with a small cross where it meets a rail (`FrameRow` in `components/marketing-kit.tsx`). The crosses are drawn from 1px bars centred on the exact pixel where the lines meet, never a typed `+`, whose position depends on the font. Close every frame with an empty `<FrameRow />` so its bottom corners are crossed too. The 404 (`components/not-found-view.tsx`) wears the same frame, with no brand in it because custom domains show it.
 - **Two-tone headings.** The claim in ink, the reason muted, in one `h2` (`SplitHeading` in `components/landing-pillars.tsx`). This replaces a heading plus a subtitle; it is not an eyebrow.
 - **`lit`**: a panel lit from above, a hairline of light on its top edge and a long soft shadow. For the product shown over sample data, and the cards of the dark band.
 - **`landing-mesh`**: one blurred field of the accent, the mint and the butter behind a product panel. Decoration, `aria-hidden`, never behind text.
