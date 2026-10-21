@@ -351,6 +351,9 @@
 :root[data-hero-arm="answers"] [data-hero][data-ssr] [data-hero-copy="answers"] {
   display: inline;
 }
+[data-hero][data-ssr] [data-hero-copy="answers"]::before {
+  content: attr(data-text);
+}
 html {
   background: var(--bg);
   color: var(--text);

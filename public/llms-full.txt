@@ -1,4 +1,4 @@
-# rdyrct — Short links that carry your brand (full reference)
+# rdyrct: URL shortener and QR code generator for teams (full reference)
 
 > rdyrct is an organization-based link shortener and QR code generator that runs
 > entirely on Cloudflare: branded short links on your own domain, custom QR
@@ -21,7 +21,7 @@ organization can hold, and how far back its click analytics go.
 
 - Short links redirect through Cloudflare KV, so a redirect resolves in
   milliseconds worldwide.
-- On the shared rdyrct.com domain, slugs are always random on every plan;
+- On the shared rdyr.cc domain, slugs are always random on every plan;
   nobody can claim or squat a word there.
 - On a custom domain (Hobby and Pro), the organization chooses its own slugs.
 - A custom domain is verified and activated through Cloudflare for SaaS.
@@ -30,10 +30,10 @@ organization can hold, and how far back its click analytics go.
 
 - Generate a QR code for any short link, free, with no account required for a
   plain code.
-- Paid plans (Hobby and Pro) can add a logo in the center, choose dot styles
-  and colors, and download as PNG or SVG.
+- Paid plans (Hobby and Pro) can add a logo in the center and choose dot
+  styles and colors. Every plan downloads PNG or SVG.
 - QR logos are capped at 256 KB and 512px on a side, and are stored per
-  organization; deleting a link or leaving an organization removes its logos.
+  organization; deleting a link or an organization removes its logos.
 
 ## Analytics
 
@@ -91,6 +91,8 @@ storage along with the link.
 - [Homepage](https://rdyrct.com/)
 - [Pricing](https://rdyrct.com/pricing) (request `Accept: text/markdown` for Markdown)
 - [QR code generator](https://rdyrct.com/qr-code-generator)
+- [API and MCP docs](https://rdyrct.com/docs)
+- [Blog](https://rdyrct.com/blog)
 - [Roadmap](https://rdyrct.com/roadmap)
 - [Changelog](https://rdyrct.com/changelog)
 - [Compare rdyrct with other shorteners](https://rdyrct.com/compare)
@@ -100,5 +102,6 @@ storage along with the link.
 - [rdyrct vs Short.io](https://rdyrct.com/short-io-alternative)
 - [Privacy policy](https://rdyrct.com/privacy)
 - [Terms of service](https://rdyrct.com/terms)
+- [Report a link](https://rdyrct.com/report)
 - [Sign up](https://rdyrct.com/signup)
 - [Source code](https://github.com/baronunread/rdyrct)

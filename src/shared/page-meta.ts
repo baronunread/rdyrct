@@ -33,6 +33,7 @@ export const PRERENDERED_PUBLIC_PATHS = new Set<string>([
   "/short-io-alternative",
   "/privacy",
   "/terms",
+  "/report",
 ]);
 
 /**
@@ -228,7 +229,7 @@ Bitly's first plan with a custom domain is Growth at $29 a month on annual billi
 [Compare in full](/bitly-alternative) or [see rdyrct pricing](/pricing).`,
   },
   "/rebrandly-alternative": {
-    title: "Rebrandly alternative: rdyrct vs Rebrandly pricing and limits",
+    title: "Rebrandly alternative: rdyrct vs Rebrandly pricing, limits",
     description:
       "rdyrct against Rebrandly: plan prices, custom domains, link and QR limits, and the one thing Rebrandly's free plan gives that ours does not. Start free, no card.",
     markdown: `# Rebrandly alternative: rdyrct vs Rebrandly
@@ -260,13 +261,19 @@ Short.io beats rdyrct on price and free-plan size. rdyrct is the better pick whe
   "/roadmap": {
     title: "URL shortener roadmap - what rdyrct is building next",
     description:
-      "What rdyrct is building next, and what already works. Every item is an open issue you can read and comment on.",
+      "What rdyrct is building next, what comes later, and what already works. Every planned item is an open GitHub issue you can read, comment on, or patch.",
     markdown: undefined,
   },
   "/signup": {
     title: "Sign up - rdyrct URL shortener and QR codes",
     description:
       "Create a free rdyrct account: short links with click analytics, QR codes, and UTM tracking for your team. No card required.",
+    markdown: undefined,
+  },
+  "/report": {
+    title: "Report a short link - rdyrct",
+    description:
+      "Report an rdyrct short link used for phishing, malware or spam. We review every report and stop links that break our terms. Your email is optional.",
     markdown: undefined,
   },
   "/login": {

@@ -815,7 +815,9 @@ function HeroCopy({
   return (
     <>
       <span data-hero-copy="own">{HERO_COPY.own[part]}</span>
-      <span data-hero-copy="answers">{HERO_COPY.answers[part]}</span>
+      {/* Drawn from an attribute, not text, so the prerendered heading a
+          crawler reads is one line, not both arms run together. */}
+      <span data-hero-copy="answers" data-text={HERO_COPY.answers[part]} />
     </>
   );
 }

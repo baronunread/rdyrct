@@ -75,6 +75,7 @@ const ROUTE_SOURCES = new Map([
   ["/short-io-alternative", "src/app/routes/alternatives.tsx"],
   ["/privacy", "src/app/routes/privacy.tsx"],
   ["/terms", "src/app/routes/terms.tsx"],
+  ["/report", "src/app/routes/report.tsx"],
 ]);
 
 for (const path of PRERENDER_ROUTES) {

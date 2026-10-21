@@ -7,8 +7,8 @@ export async function signOut(page: Page): Promise<void> {
 }
 
 const LEGAL_PAGES = [
-  { path: "/privacy", heading: "Privacy Policy" },
-  { path: "/terms", heading: "Terms of Service" },
+  { path: "/privacy", heading: "Privacy policy" },
+  { path: "/terms", heading: "Terms of service" },
 ];
 
 /**
