@@ -78,6 +78,11 @@ test("the homepage teases three prices and points at the full comparison", async
 test("header navigation and sign-up remain usable on desktop and phone", async ({ page }) => {
   await page.goto("/");
 
+  // The header the entry chunk paints first is swapped for the page's own
+  // once the homepage chunk arrives, and the new one mounts closed. Opening
+  // Product on the stand-in raced that swap: the panel shut under the test.
+  // The heading comes with the page, so after it the header stays put.
+  await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
   const header = page.locator("header");
   const nav = header.getByRole("navigation", { name: "Main" });
   await expect(nav.getByRole("link", { name: "Pricing" })).toBeVisible();

@@ -14,7 +14,7 @@ interface JsonRpcRequest {
 
 interface JsonRpcResponse {
   result?: {
-    content?: { type: string; text?: string }[];
+    content?: { type: string; text?: string; data?: string }[];
     isError?: boolean;
     tools?: { name: string }[];
   };
@@ -142,6 +142,8 @@ describe("remote MCP server (#139)", () => {
     );
     const body = await jsonBody<JsonRpcResponse>(res);
     expect(body.result?.content?.[0]?.type).toBe("image");
+    // The PNG options are tuned for speed (see QR_PNG_OPTS); still a PNG.
+    expect(atob(body.result?.content?.[0]?.data ?? "").slice(1, 4)).toBe("PNG");
   });
 
   it("a revoked key's tool calls fail the same way the API would", async () => {
