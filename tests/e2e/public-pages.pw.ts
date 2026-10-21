@@ -381,9 +381,17 @@ test("the developer claim is backed by a roadmap of real issues", async ({ page 
     expect(href).toMatch(/^https:\/\/github\.com\/baronunread\/rdyrct\/issues\/(new|\d+)$/);
   }
 
-  // A roadmap made only of things that do not exist reads as a product that
-  // does not exist, so the shipped half has to be there too.
-  await expect(page.getByRole("heading", { name: /already working/i })).toBeVisible();
+  // A board, one column per stage, each saying how much is in it. A roadmap
+  // made only of things that do not exist reads as a product that does not
+  // exist, so the shipped column has to be there too.
+  for (const stage of ["Next", "Later", "Shipped"]) {
+    const column = page.getByRole("region", { name: new RegExp(`^${stage}`) });
+    await expect(column).toBeVisible();
+    const count = Number(
+      await column.getByRole("heading", { level: 2 }).locator("span").innerText(),
+    );
+    await expect(column.getByRole("listitem")).toHaveCount(count);
+  }
 });
 
 // The landing sells an API and MCP server that ship today, so it points at
