@@ -14,7 +14,9 @@ function LinkPreviewContent({ link, orgQr }: { link: LinkDTO; orgQr: OrgQr }) {
     <div className="flex flex-col items-center gap-3">
       <QRPreview url={url} {...resolveQrLook(link, orgQr)} downloadName={`qr-${link.slug}`} />
       <div className="flex min-w-0 max-w-full items-center gap-2">
-        <p className="min-w-0 truncate font-mono text-sm font-bold">{url}</p>
+        {/* The whole address, wrapped if it must: this dialog exists to show
+            it, and a cut-off one is no use to copy by eye. */}
+        <p className="min-w-0 font-mono text-sm font-bold wrap-break-word">{url}</p>
         <CopyButton
           text={url}
           label={`Copy ${url}`}

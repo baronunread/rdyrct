@@ -77,6 +77,10 @@ export function ReportPage() {
               onChange={(e) => setLink(e.target.value)}
               placeholder="https://rdyr.cc/abc1234"
               maxLength={300}
+              inputMode="url"
+              autoComplete="off"
+              autoCapitalize="none"
+              spellCheck={false}
             />
           </Field>
           <Field label="What is wrong with it?">

@@ -33,7 +33,7 @@ export function UserAvatar({
       alt={user.name || user.email || "avatar"}
       width={size}
       height={size}
-      className={cn("shrink-0 rounded-full object-cover", className)}
+      className={cn("shrink-0 rounded-full object-cover image-outline", className)}
     />
   );
 }

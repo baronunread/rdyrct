@@ -491,7 +491,7 @@ function DeleteLinkDialog({
       open={!!deleting}
       onClose={onClose}
       onConfirm={confirmDelete}
-      confirmLabel="Delete"
+      confirmLabel="Delete link"
       danger
       pending={remove.isPending}
     >
@@ -520,6 +520,7 @@ function LinksToolbar({
       <Input
         value={search}
         onChange={(e) => onSearchChange(e.target.value)}
+        aria-label="Search links"
         placeholder="Search links…"
         className="max-w-64"
       />

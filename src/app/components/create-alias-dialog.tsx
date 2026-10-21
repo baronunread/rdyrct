@@ -65,6 +65,9 @@ function CreateAliasForm({
             onChange={(e) => setSlug(e.target.value)}
             placeholder={slugLocked ? "random" : "promo-2026"}
             disabled={slugLocked}
+            autoComplete="off"
+            autoCapitalize="none"
+            spellCheck={false}
           />
         </Field>
       </div>

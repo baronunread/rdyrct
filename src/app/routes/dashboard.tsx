@@ -348,6 +348,10 @@ function QuickCreateCard({
           className="h-11 min-w-0 flex-1 text-base sm:h-9 sm:text-sm"
           placeholder="https://example.com/launch"
           aria-label="Destination URL"
+          inputMode="url"
+          autoComplete="off"
+          autoCapitalize="none"
+          spellCheck={false}
         />
         <QuickCreateDomainSelect
           activeDomains={activeDomains}

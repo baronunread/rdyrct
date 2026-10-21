@@ -41,7 +41,7 @@ function MatchChoice({
   const only = matchedLinks.length <= 1 ? matchedLinks[0] : null;
   if (matchedLinks.length <= 1)
     return (
-      <p className="truncate rounded-lg border border-border bg-surface-2 px-3 py-2 font-mono text-xs">
+      <p className="rounded-lg border border-border bg-surface-2 px-3 py-2 font-mono text-xs wrap-break-word">
         {only?.url}
       </p>
     );
@@ -101,7 +101,7 @@ export function SameDestinationDialog({
             <button
               type="button"
               aria-label="Alias vs. UTM parameters"
-              className="mt-0.5 shrink-0 cursor-help text-muted hover:text-text"
+              className="relative mt-0.5 shrink-0 cursor-help text-muted after:absolute after:-inset-1.5 hover:text-text"
             >
               <Info size={13} />
             </button>

@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { ArrowRight, Ban, Check, Ellipsis, Eye, Trash2, Undo2 } from "@/app/ui/icons";
 import { HrefLink } from "../../lib/router-search";
-import { Button } from "../../ui/button";
+import { buttonClass } from "../../ui/button-class";
 import { useAdminOrgDetail, useAdminOrgs } from "../../lib/hooks";
 import { api } from "../../lib/api";
 import type { AdminOrgRow, OrgRole, Sort } from "@/shared/types";
@@ -116,7 +116,7 @@ function OrgMenu({
 }
 
 function OrgOwner({ org }: { org: AdminOrgRow }) {
-  if (!org.ownerName) return <span className="text-muted">—</span>;
+  if (!org.ownerName) return <span className="text-muted">No owner</span>;
   return (
     <>
       <span className="block truncate" title={org.ownerName}>
@@ -265,10 +265,12 @@ function OrgLinksRecap({
           <span className="font-bold tnum">{formatNumber(clicks)}</span> clicks between them
         </p>
       </div>
-      <HrefLink href={`/admin/links?org=${encodeURIComponent(orgId)}`} onClick={onNavigate}>
-        <Button size="sm" variant="outline">
-          Open in Links <ArrowRight size={13} />
-        </Button>
+      <HrefLink
+        href={`/admin/links?org=${encodeURIComponent(orgId)}`}
+        onClick={onNavigate}
+        className={buttonClass({ size: "sm", variant: "outline" })}
+      >
+        Open in Links <ArrowRight size={13} />
       </HrefLink>
     </div>
   );

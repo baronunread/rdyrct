@@ -68,7 +68,8 @@ export function Field({
               // A label forwards its clicks to the control it names, which
               // would open the select behind the tooltip.
               onClick={(event) => event.preventDefault()}
-              className="cursor-help text-muted normal-case hover:text-text"
+              // The mark is 13px; the inset ::after makes it a 25px target.
+              className="relative cursor-help text-muted normal-case after:absolute after:-inset-1.5 hover:text-text"
             >
               <Info size={13} />
             </button>

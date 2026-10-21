@@ -2,7 +2,7 @@ import { Suspense, useEffect, useRef, useState, type ReactNode } from "react";
 import { errorMessage } from "@/app/lib/error-message";
 import { Link, Outlet, useNavigate } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
-import { AnimatePresence, LazyMotion, domAnimation, m } from "motion/react";
+import { AnimatePresence, LazyMotion, MotionConfig, domAnimation, m } from "motion/react";
 import { Layers, ChevronsUpDown, Plus, Check, LogOut, Settings } from "@/app/ui/icons";
 import { MorphIcon } from "morphicons/react";
 import { menu2, moon, sun, x } from "@/app/ui/icon-nodes";
@@ -244,29 +244,31 @@ function MobileDrawer({
 }) {
   return (
     <LazyMotion features={domAnimation}>
-      <AnimatePresence>
-        {open && (
-          <div className="fixed inset-0 z-20 md:hidden">
-            {/* click-outside backdrop as a real button: keyboard-focusable and
+      <MotionConfig reducedMotion="user">
+        <AnimatePresence>
+          {open && (
+            <div className="fixed inset-0 z-20 md:hidden">
+              {/* click-outside backdrop as a real button: keyboard-focusable and
                 labeled, while drawer clicks (sibling, not child) never reach it */}
-            <button
-              type="button"
-              aria-label="Close menu"
-              className="absolute inset-0 cursor-default"
-              onClick={onClose}
-            />
-            <m.div
-              className="absolute top-[49px] bottom-0 left-0 w-64 border-r border-border bg-bg"
-              initial={{ opacity: 0, x: -24 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: -24 }}
-              transition={{ duration: 0.2 }}
-            >
-              {children}
-            </m.div>
-          </div>
-        )}
-      </AnimatePresence>
+              <button
+                type="button"
+                aria-label="Close menu"
+                className="absolute inset-0 cursor-default"
+                onClick={onClose}
+              />
+              <m.div
+                className="absolute top-[49px] bottom-0 left-0 w-64 border-r border-border bg-bg"
+                initial={{ opacity: 0, x: -24 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -12, transition: { duration: 0.15 } }}
+                transition={{ duration: 0.2 }}
+              >
+                {children}
+              </m.div>
+            </div>
+          )}
+        </AnimatePresence>
+      </MotionConfig>
     </LazyMotion>
   );
 }

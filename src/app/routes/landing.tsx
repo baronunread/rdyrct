@@ -468,7 +468,8 @@ function PricingTable({
     <div className={phoneCards ? "hidden sm:block" : undefined}>
       <Table
         minWidth={phoneCards ? undefined : "min-w-2xl"}
-        className="lit rounded-3xl border border-border"
+        // tnum: the prices change width with the billing toggle otherwise.
+        className="lit tnum rounded-3xl border border-border"
       >
         <thead>
           <tr>

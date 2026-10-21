@@ -26,7 +26,7 @@ export function RemoveMemberDialog({
           onSuccess: onClose,
         });
       }}
-      confirmLabel="Remove"
+      confirmLabel="Remove member"
       danger
       pending={remove.isPending}
     >

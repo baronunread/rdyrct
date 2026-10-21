@@ -98,6 +98,10 @@
   --lit-top: rgb(255 255 255 / 0.9);
   --lit-drop: rgb(80 50 30 / 0.32);
 
+  /* The edge on a picture (image-outline): ink at 8%, so a photo with a
+     pale or a dark border still ends where its frame does. */
+  --image-outline: rgb(0 0 0 / 0.08);
+
   color-scheme: light;
 }
 
@@ -144,6 +148,8 @@
 
   --lit-top: rgb(255 255 255 / 0.07);
   --lit-drop: rgb(0 0 0 / 0.7);
+
+  --image-outline: rgb(255 255 255 / 0.08);
 }
 
 @theme inline {
@@ -258,6 +264,13 @@
   color: transparent;
 }
 
+/* A hairline inside a picture's own edge, drawn as an outline so it takes
+   no room and follows the corner radius. */
+@utility image-outline {
+  outline: 1px solid var(--image-outline);
+  outline-offset: -1px;
+}
+
 @utility grid-cols-shortener {
   grid-template-columns: minmax(0, 1fr) auto;
 }
@@ -328,8 +341,10 @@
   padding: 0.375rem;
   color: var(--muted);
 }
-.theme-switch button:hover {
-  color: var(--text);
+@media (hover: hover) {
+  .theme-switch button:hover {
+    color: var(--text);
+  }
 }
 :root:not([data-theme="dark"]) .theme-switch [data-mode="light"],
 :root[data-theme="dark"] .theme-switch [data-mode="dark"] {
@@ -385,6 +400,14 @@ html {
      ligatures are typically routed through the separate calt (contextual
      alternates) OpenType feature, which needs its own explicit override. */
   font-feature-settings: "calt" 0;
+  /* Light text on the dark theme reads heavier than the same weight on
+     cream under subpixel smoothing; grayscale keeps the two themes alike. */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  /* Underlines sit where the font says they go and break around
+     descenders, so a linked slug's "g" or "y" stays legible. Both inherit. */
+  text-underline-position: from-font;
+  text-decoration-skip-ink: auto;
   /* reserve the scrollbar's width even on pages short enough to not need
      one, so a page that grows past the fold doesn't shift content left */
   scrollbar-gutter: stable;
@@ -436,6 +459,32 @@ html {
 
 body {
   min-height: 100dvh;
+}
+
+/* In the base layer so a utility on the element still wins. Headings
+   balance their lines rather than leaving one word on the last. Anything a
+   link can jump to stops clear of the marketing header's floating pill
+   instead of under it. */
+@layer base {
+  h1,
+  h2,
+  h3,
+  h4 {
+    text-wrap: balance;
+  }
+  [id] {
+    scroll-margin-top: 5.5rem;
+  }
+}
+
+/* Set for the one frame a theme swap takes (lib/theme.ts): every colour
+   changes at once instead of each control easing on its own clock, which
+   reads as the page smearing from one theme into the other. */
+[data-theme-switching],
+[data-theme-switching] *,
+[data-theme-switching] *::before,
+[data-theme-switching] *::after {
+  transition: none !important;
 }
 
 ::selection {
@@ -538,9 +587,21 @@ body {
   pointer-events: auto;
 }
 
-.rdyrct-toast-close:hover,
+/* The ring is 20px; the press target reaches 32 without moving it. */
+.rdyrct-toast-close::after {
+  content: "";
+  position: absolute;
+  inset: -6px;
+}
+
 .rdyrct-toast-close:focus-visible {
   color: var(--text);
+}
+
+@media (hover: hover) {
+  .rdyrct-toast-close:hover {
+    color: var(--text);
+  }
 }
 
 .rdyrct-toast-close:active {

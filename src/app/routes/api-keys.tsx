@@ -203,7 +203,7 @@ function ConnectedAppsSection() {
         open={!!revokeTarget}
         onClose={() => setRevokeTarget(null)}
         onConfirm={revoke}
-        confirmLabel="Disconnect"
+        confirmLabel="Disconnect app"
         danger
         pending={revokeApp.isPending}
       >
