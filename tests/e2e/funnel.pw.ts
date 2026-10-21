@@ -1,6 +1,5 @@
 import { expect, test } from "@playwright/test";
 import { gunzipSync } from "node:zlib";
-import { pinHeroVariant } from "./pages";
 
 // The funnel (#64) is only worth anything if the consent gate holds, so these
 // assert the privacy behaviour first and the instrumentation second.
@@ -28,41 +27,18 @@ test("local browser analytics uses the test project after consent", async ({ pag
   await expect.poll(() => tokens.join(" ")).toContain("phc_e2e");
 });
 
-for (const variant of ["control", "test"] as const) {
-  test(`${variant} signup CTA navigates in-page and keeps attribution after reload`, async ({
-    page,
-  }) => {
-    await trapPostHog(page);
-    await pinHeroVariant(page, variant);
-    await page.goto("/");
-    await page.getByRole("button", { name: "Accept", exact: true }).click();
-    const hero = page.locator(`[data-hero-arm="${variant}"]`);
-    await expect(hero).toBeVisible();
-    const documentId = await page.evaluate(() => performance.timeOrigin);
-    await hero
-      .getByRole("link", {
-        name: variant === "test" ? "Skip the demo, get started free" : "Get started free",
-        exact: true,
-      })
-      .click();
-    await expect(page).toHaveURL(/\/signup$/);
-    await expect(page.getByRole("heading", { name: "Create an account" })).toBeVisible();
-    expect(await page.evaluate(() => performance.timeOrigin)).toBe(documentId);
-
-    // A fresh signup document is also what an OAuth round trip creates.
-    // Exercise the real attribution helper without sending analytics traffic.
-    await page.reload();
-    await expect(page.getByRole("heading", { name: "Create an account" })).toBeVisible();
-    const attribution = await page.evaluate(async () => {
-      const modulePath = "/src/app/lib/posthog.ts";
-      const { withHeroVariant } = await import(modulePath);
-      return ["funnel_signup_viewed", "user_signed_up", "funnel_link_created"].map((event) =>
-        withHeroVariant(event),
-      );
-    });
-    expect(attribution).toEqual(Array.from({ length: 3 }, () => ({ hero_variant: variant })));
-  });
-}
+test("the hero signup CTA navigates in-page", async ({ page }) => {
+  await trapPostHog(page);
+  await page.goto("/");
+  await page.getByRole("button", { name: "Accept", exact: true }).click();
+  const hero = page.locator("[data-hero]");
+  await expect(hero).toBeVisible();
+  const documentId = await page.evaluate(() => performance.timeOrigin);
+  await hero.getByRole("link", { name: "Get started free", exact: true }).click();
+  await expect(page).toHaveURL(/\/signup$/);
+  await expect(page.getByRole("heading", { name: "Create an account" })).toBeVisible();
+  expect(await page.evaluate(() => performance.timeOrigin)).toBe(documentId);
+});
 
 /** Records every request the page attempts toward PostHog, and blocks them. */
 async function trapPostHog(page: import("@playwright/test").Page) {
@@ -96,8 +72,6 @@ async function clickHeroCta(page: import("@playwright/test").Page) {
  *  here starts this way. */
 async function openLanding(page: import("@playwright/test").Page) {
   const attempts = await trapPostHog(page);
-  // These click the hero's CTA, which only the control hero has.
-  await pinHeroVariant(page, "control");
   await page.goto("/");
   await expect(page.getByRole("heading", { level: 1 }).first()).toBeVisible();
   return attempts;
@@ -107,7 +81,7 @@ test("a visitor who has not answered the banner sends nothing to PostHog", async
   const attempts = await openLanding(page);
 
   // Scroll the whole page to fire the pricing-viewed step. The landing-view
-  // event waits until analytics consent so its assigned hero arm is accurate.
+  // event waits until analytics consent.
   await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
   await page.waitForTimeout(600);
 

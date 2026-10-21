@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { pinHeroVariant, visitLegalPages } from "./pages";
+import { visitLegalPages } from "./pages";
 
 /** Scroll to the product tour and open its analytics screen, the one that
  * draws with the lazy charts bundle, then wait for the chart itself. */
@@ -40,7 +40,6 @@ test("the hero carries the Product Hunt badge, opening in a new tab", async ({ p
 // hundred pixels. It has one CTA now, and the self-host link has to still
 // exist, further down, under pricing.
 test("the hero has one CTA and self-hosting sits under pricing", async ({ page }) => {
-  await pinHeroVariant(page, "control");
   await page.goto("/");
 
   const hero = page.locator("section").first();
@@ -161,16 +160,12 @@ test("the standalone pricing page has the full table and no self-host pitch", as
   await expect(page).toHaveURL(/\/signup/);
 });
 
-// The hero is two columns from md up: copy left, the working shortener right.
-// Most products put a screenshot there because you cannot use them logged
-// out; ours works with no account, so the real thing goes in that half. The
-// split is also what lets the primary CTA be primary: stacked, it sat above
-// the card and had to be demoted so the page did not show two primary
-// actions in one column.
+// Most products put a screenshot in the hero because you cannot use them
+// logged out; ours works with no account, so the real shortener sits under the
+// pitch, in front of the globe, with the one primary CTA above it.
 test("the hero keeps its shortener and primary path usable on desktop and phone", async ({
   page,
 }) => {
-  await pinHeroVariant(page, "control");
   await page.goto("/");
   const heading = page.getByRole("heading", { level: 1 });
   const card = page.getByLabel("Shorten a link, no account needed");

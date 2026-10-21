@@ -12,7 +12,7 @@ import {
   useReducedMotion,
   type Variants,
 } from "motion/react";
-import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
+import { lazy, Suspense, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useHydrated } from "../lib/hydrated";
 import { useSeo } from "../lib/seo";
 import { useMarketingScroll } from "../lib/marketing-scroll";
@@ -20,13 +20,6 @@ import { FaqJsonLd } from "../components/faq-json-ld";
 import { MarketingLink } from "../components/marketing-link";
 import { useAudience } from "../lib/audience";
 import posthog from "../lib/posthog";
-import {
-  clearHeroVariant,
-  type HeroVariant,
-  heroVariant,
-  heroVariantSnapshot,
-  subscribeHeroVariant,
-} from "../lib/hero-variant";
 import { readConsent, useAnalyticsConsent } from "../lib/consent";
 import { FUNNEL, landingContext } from "../lib/funnel";
 import { trackCta } from "../lib/track-cta";
@@ -43,11 +36,12 @@ import { HeroShortener } from "../components/hero-shortener";
 import { HeroSignedIn } from "../components/hero-signed-in";
 import { LandingHeader } from "../components/landing-header";
 import { WebMcpMarketingTools } from "../components/webmcp-marketing-tools";
-import { MarketingGlow } from "../components/marketing-glow";
 import { ProductTour } from "../components/landing-tour";
 import { AnonLinkBar } from "../components/anon-link-bar";
 import { formatNumber } from "../lib/numbers";
 import { cn } from "../ui/cn";
+
+const HeroGlobe = lazy(() => import("../components/hero-globe"));
 const faqs = [
   {
     q: "Is the free plan really free?",
@@ -660,193 +654,149 @@ function SelfHostSection() {
 }
 
 /**
- * The `test` arm of the CTA experiment: the notebook's diagnosis was that
- * 64% of visitors leave before clicking anything, which a button-copy or
- * checklist-placement change can't reach because it never gets read that
- * far. This leads with the thing itself instead: one column, the working
- * demo directly under a one-line pitch, no second button competing with it.
- * A visitor who skips the demo still has a plain way to the signup form.
+ * The hero: what this is, in the words people search for, then the working
+ * shortener, over a globe of clicks hopping between cities.
  *
- * Every click the demo already tracks (`hero_shortener`,
- * `hero_shortener_claim` in hero-shortener.tsx) fires the same
- * `funnel_cta_clicked` event this section's control arm does, just with a
- * different `placement`, so the experiment's goal metric counts them without
- * any separate wiring.
+ * It replaced a two-arm A/B test (control: headline and CTA beside the
+ * shortener; test: shortener first). Four weeks in, each arm had 4 signups
+ * from about 70 visitors, too few to ever separate them at this traffic, so
+ * the test ended and this keeps the test arm's one idea: the demo sits
+ * centre stage, straight under the pitch.
+ *
+ * Everything a crawler or a link preview reads (the heading, the copy, the
+ * links) is plain prerendered HTML. The globe is decoration: it loads after
+ * hydration into a box this section reserves, so it never shifts the layout
+ * or competes with the heading for the first paint.
  */
-function HeroTestVariant() {
-  return (
-    <div className="mx-auto flex max-w-xl flex-col items-center gap-6 py-14 text-center md:py-20">
-      <h1 className="text-3xl font-bold tracking-tight text-balance sm:text-4xl lg:text-5xl">
-        Shorten a link. See who clicks it.
-      </h1>
-      <p className="max-w-md text-sm text-muted sm:text-base">
-        Country, referrer and device for every click, without storing IP addresses.
-      </p>
-      <HeroShortener />
-      <ul className="flex flex-wrap items-center justify-center gap-x-5 gap-y-1 text-xs text-muted">
-        <li className="flex items-center gap-1.5">
-          <Check size={13} className="text-accent-2" /> Free plan forever
-        </li>
-        <li className="flex items-center gap-1.5">
-          <Check size={13} className="text-accent-2" /> No credit card required
-        </li>
-        <li className="flex items-center gap-1.5">
-          <Check size={13} className="text-accent-2" /> No IP tracking
-        </li>
-      </ul>
-      {/* A plain link, not a second accent button: the demo's own "Shorten
-          it" already carries the one primary action on this screen. */}
-      {/* A router link, not a plain anchor: a full page load would drop the
-          click before the visitor ever answers the consent banner. */}
-      <HrefLink
-        href="/signup"
-        onClick={() => trackCta("hero_primary")}
-        className="text-sm text-muted underline hover:text-accent"
-      >
-        Skip the demo, get started free
-      </HrefLink>
-    </div>
-  );
+/** One landing view per page load, once consent and the session have both
+ *  answered. */
+function useLandingViewCapture(ready: boolean, authed: boolean) {
+  const captured = useRef(false);
+  const { ready: consentReady, accepted: analyticsConsent } = useAnalyticsConsent();
+  useEffect(() => {
+    if (!shouldCaptureLandingView(consentReady, ready, captured.current)) return;
+    captured.current = true;
+    posthog.capture(FUNNEL.landingViewed, landingContext());
+  }, [ready, authed, consentReady, analyticsConsent]);
 }
 
-function HeroControlVariant({
-  ctaTo,
-  ctaLabel,
-  authed,
-  name,
-}: {
-  ctaTo: string;
-  ctaLabel: string;
-  authed: boolean;
-  /** Empty until the session resolves; the card handles that itself. */
-  name: string;
-}) {
+function HeroSection({ ctaTo, ctaLabel, authed, ready, name }: HeroProps) {
+  const hydrated = useHydrated();
+  useLandingViewCapture(ready, authed);
+
   return (
-    // Two columns from md up, one below it. Most products put a screenshot in
-    // the right half because you cannot use them without an account; the
-    // anonymous shortener works without one, so the real thing goes where
-    // everybody else puts a picture of the thing.
-    //
-    // It also repairs something. Stacked, the card sat under the buttons and
-    // both of them had to be demoted to secondary so as not to read as two
-    // primary actions in one column. Side by side they are no longer in the
-    // same column, so the primary CTA is primary again.
-    <section className="grid items-center gap-10 py-14 md:grid-cols-2 md:gap-12 md:py-20">
-      <div className="flex flex-col items-center gap-6 text-center md:items-start md:text-left">
-        <h1 className="text-3xl font-bold tracking-tight text-balance sm:text-4xl lg:text-5xl">
-          Know which channel earned the click.
-        </h1>
-        <p className="max-w-xl text-sm text-muted sm:text-base">
-          Short links and QR codes with click tracking, on your own domain. No IP addresses stored.
-        </p>
-        {/* The second CTA points down the page, not off it. "Self-host from
-            GitHub" used to sit here, spending the highest-intent moment on
-            the site sending people to a repository; it now lives in its own
-            band under the pricing table. */}
-        {!authed && (
-          <div
-            data-hero-personalization
-            className="flex flex-wrap items-center justify-center gap-3 md:justify-start"
-          >
-            <HrefLink
-              href={ctaTo}
-              onClick={() => trackCta("hero_primary")}
-              className={buttonClass({ variant: "primary", className: "h-11 px-6 text-base" })}
-            >
-              {ctaLabel}
-            </HrefLink>
-          </div>
-        )}
+    <section
+      data-hero
+      // Until the session resolves, a cached customer's browser hides the
+      // anonymous pitch (styles.css) instead of flashing it.
+      data-ssr={hydrated && ready ? undefined : ""}
+      className="relative flex flex-col items-center pt-14 pb-12 text-center md:pt-20 md:pb-16"
+    >
+      <h1 className="max-w-3xl text-4xl font-bold tracking-tight text-balance sm:text-5xl lg:text-6xl">
+        Short links and QR codes on your own domain
+      </h1>
+      <p className="mt-5 max-w-xl text-base text-pretty text-muted sm:text-lg">
+        A free URL shortener and QR code generator. See the country, referrer and device of every
+        click, and never store an IP address.
+      </p>
 
-        {/* Reassurance for somebody deciding. Nothing to reassure once they
-            have an account. */}
-        <ul
-          data-hero-personalization
-          className={cn(
-            "flex flex-wrap items-center justify-center gap-x-5 gap-y-1 text-xs text-muted md:justify-start",
-            authed && "hidden",
-          )}
-        >
-          <li className="flex items-center gap-1.5">
-            <Check size={13} className="text-accent-2" /> Free plan forever
-          </li>
-          <li className="flex items-center gap-1.5">
-            <Check size={13} className="text-accent-2" /> No credit card required
-          </li>
-          <li className="flex items-center gap-1.5">
-            <Check size={13} className="text-accent-2" /> No IP tracking
-          </li>
-        </ul>
-        {/* Product Hunt's own embed: a live SVG, so the upvote count stays
-            current. Lazy, so a signed-in visitor (whose hero personalisation
-            is display:none) never fetches it. */}
-        <a
-          data-hero-personalization
-          href="https://www.producthunt.com/products/rdyrct-url-shortener-for-teams?embed=true&utm_source=badge-featured&utm_medium=badge&utm_campaign=badge-rdyrct-url-shortener-for-teams"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <img
-            alt="Rdyrct - URL Shortener for Teams - Shorten a link. See who clicks it. | Product Hunt"
-            width={250}
-            height={54}
-            loading="lazy"
-            referrerPolicy="no-referrer"
-            src="https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=1233546&theme=light&t=1792195782504"
-          />
-        </a>
-      </div>
+      {!authed && <HeroCta ctaTo={ctaTo} ctaLabel={ctaLabel} />}
 
-      {/* The right half on a wide screen, and directly under the copy on a
-          phone, where it has to stay near the fold: it is the one thing on
-          this page that turns a stranger into an account. */}
-      <div data-hero-personalization className="flex w-full justify-center md:justify-end">
-        {/* The anonymous shortener is an argument aimed at a stranger. A
-            signed-in visitor has already been convinced, and offering them a
-            link that expires in 24 hours and can be "kept" by signing up for
-            the account they are in reads as nobody having tried it. */}
-        {authed ? <HeroSignedIn name={name} /> : <HeroShortener />}
-      </div>
+      {/* The card overlaps the top of the globe, so the thing you can use sits
+          in front of the picture of what it does. */}
+      <HeroCard authed={authed} name={name} />
+
+      <HeroGlobeStage hydrated={hydrated} />
+
+      <ProductHuntBadge hidden={authed} />
     </section>
   );
 }
 
-function anonymousHeroIsReady(ready: boolean, authed: boolean) {
-  return ready && !authed;
+/**
+ * The anonymous shortener is an argument aimed at a stranger. A signed-in
+ * visitor has already been convinced, and offering them a link that expires
+ * in 24 hours and can be "kept" by signing up for the account they are in
+ * reads as nobody having tried it.
+ */
+function HeroCard({ authed, name }: { authed: boolean; name: string }) {
+  return (
+    <div
+      data-hero-personalization
+      className="relative z-10 mt-10 flex w-full justify-center md:mt-12"
+    >
+      {authed ? <HeroSignedIn name={name} /> : <HeroShortener />}
+    </div>
+  );
 }
 
-function syncHeroAssignment(
-  consentReady: boolean,
-  analyticsConsent: boolean,
-  ready: boolean,
-  authed: boolean,
-) {
-  if (!consentReady) return;
-  if (!analyticsConsent) return clearHeroVariant();
-  if (anonymousHeroIsReady(ready, authed)) heroVariant();
+/** The globe's box, reserved in the prerendered HTML so the globe can arrive
+ *  after hydration without moving anything. */
+function HeroGlobeStage({ hydrated }: { hydrated: boolean }) {
+  return (
+    <div
+      aria-hidden="true"
+      className="relative -mt-28 h-80 w-full overflow-hidden border-b border-border sm:h-96 md:-mt-32 md:h-120"
+    >
+      {hydrated && (
+        <Suspense>
+          <HeroGlobe />
+        </Suspense>
+      )}
+    </div>
+  );
+}
+
+function HeroCta({ ctaTo, ctaLabel }: { ctaTo: string; ctaLabel: string }) {
+  return (
+    <div
+      data-hero-personalization
+      className="mt-8 flex flex-col items-center gap-3 sm:flex-row sm:gap-5"
+    >
+      <HrefLink
+        href={ctaTo}
+        onClick={() => trackCta("hero_primary")}
+        className={buttonClass({ variant: "primary", className: "h-11 px-6 text-base" })}
+      >
+        {ctaLabel}
+      </HrefLink>
+      <ul className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-sm text-muted">
+        <li className="flex items-center gap-1.5">
+          <Check size={14} className="text-accent-2" /> Free plan forever
+        </li>
+        <li className="flex items-center gap-1.5">
+          <Check size={14} className="text-accent-2" /> No credit card
+        </li>
+      </ul>
+    </div>
+  );
+}
+
+/** Product Hunt's own embed: a live SVG, so the upvote count stays current.
+ *  Lazy, so a signed-in visitor (who gets it display:none) never fetches it. */
+function ProductHuntBadge({ hidden }: { hidden: boolean }) {
+  return (
+    <a
+      data-hero-personalization
+      className={cn("mt-8", hidden && "hidden")}
+      href="https://www.producthunt.com/products/rdyrct-url-shortener-for-teams?embed=true&utm_source=badge-featured&utm_medium=badge&utm_campaign=badge-rdyrct-url-shortener-for-teams"
+      target="_blank"
+      rel="noopener noreferrer"
+    >
+      <img
+        alt="Rdyrct - URL Shortener for Teams - Shorten a link. See who clicks it. | Product Hunt"
+        width={250}
+        height={54}
+        loading="lazy"
+        referrerPolicy="no-referrer"
+        src="https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=1233546&theme=light&t=1792195782504"
+      />
+    </a>
+  );
 }
 
 function shouldCaptureLandingView(consentReady: boolean, ready: boolean, captured: boolean) {
   return consentReady && ready && !captured && readConsent() === "accepted";
-}
-
-function HeroSection(props: HeroProps) {
-  const landingViewCaptured = useRef(false);
-  const variant = useSyncExternalStore(
-    subscribeHeroVariant,
-    heroVariantSnapshot,
-    (): HeroVariant => "control",
-  );
-  const { ready: consentReady, accepted: analyticsConsent } = useAnalyticsConsent();
-  useEffect(() => {
-    syncHeroAssignment(consentReady, analyticsConsent, props.ready, props.authed);
-  }, [props.ready, props.authed, consentReady, analyticsConsent]);
-  useEffect(() => {
-    if (!shouldCaptureLandingView(consentReady, props.ready, landingViewCaptured.current)) return;
-    landingViewCaptured.current = true;
-    posthog.capture(FUNNEL.landingViewed, landingContext());
-  }, [props.ready, props.authed, consentReady, analyticsConsent]);
-  return <HeroArms variant={variant} {...props} />;
 }
 
 type HeroProps = {
@@ -857,50 +807,6 @@ type HeroProps = {
   /** Empty until the session resolves; the card handles that itself. */
   name: string;
 };
-
-function armsToMount(variant: HeroVariant, authed: boolean, settled: boolean) {
-  const showTest = !authed && (variant === "test" || !settled);
-  return { showTest, showControl: !settled || !showTest };
-}
-
-function heroIsSettled(hydrated: boolean, props: HeroProps, variant: HeroVariant) {
-  if (!hydrated) return false;
-  if (props.authed) return true;
-  return props.ready && variant === heroVariantSnapshot();
-}
-
-/**
- * Which hero arm is drawn. A signed-in visitor always gets the control hero
- * and never flips the coin, so they are not counted as shown either arm (see
- * hero-variant.ts).
- *
- * The prerendered page carries both arms and the inline script in index.html
- * shows the one this browser was given, so hydration changes nothing on
- * screen. Once hydrated, only the active arm stays mounted.
- */
-function HeroArms({ variant, ...props }: HeroProps & { variant: HeroVariant }) {
-  // False for the server render and the hydrating render, true after.
-  const hydrated = useHydrated();
-  // The hydration signals can update in separate renders. Keep the CSS-selected
-  // arm until the React snapshot and audience have both caught up.
-  const settled = heroIsSettled(hydrated, props, variant);
-  const { showControl, showTest } = armsToMount(variant, props.authed, settled);
-  const ssr = settled ? undefined : "";
-  return (
-    <>
-      {showControl && (
-        <div data-hero-arm="control" data-ssr={ssr}>
-          <HeroControlVariant {...props} />
-        </div>
-      )}
-      {showTest && (
-        <div data-hero-arm="test" data-ssr={ssr}>
-          <HeroTestVariant />
-        </div>
-      )}
-    </>
-  );
-}
 
 /**
  * The second screen (Direction C of #96).
@@ -1634,7 +1540,6 @@ export function LandingPage() {
           <FaqJsonLd faqs={faqs} />
           <WebMcpMarketingTools />
           <style>{`@keyframes cursorBlink { 50% { opacity: 0; } }`}</style>
-          <MarketingGlow />
           {/* First focusable thing on the page, so a keyboard user can jump
               past the header nav. Hidden until it takes focus. */}
           <a

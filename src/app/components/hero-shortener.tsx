@@ -40,6 +40,7 @@ import {
 } from "../lib/anon-links";
 import { clicksLabel, shortenAnonymously, useAnonClicks } from "../lib/shorten-anon";
 import { trackCta } from "../lib/track-cta";
+import { launchHeroHop } from "../lib/hero-hop";
 import { HrefLink } from "../lib/router-search";
 
 // A QR code is useful only after this form has made a link. Keeping the renderer
@@ -200,6 +201,7 @@ export function HeroShortener() {
       // list now is: a visitor who signs up in another tab must still be
       // able to claim it, and the cap is enforced in one place.
       setMade(rememberAnonLink(link, destination.trim()));
+      launchHeroHop(link.url.replace(/^https?:\/\//, ""));
       trackCta("hero_shortener");
     } catch (error) {
       toast(shortenErrorMessage(error), "error");

@@ -127,6 +127,13 @@ Default to stillness. Motion explains a state change, preserves continuity, or c
 
 The base experience is complete without motion, and `prefers-reduced-motion` is honoured everywhere (`MotionConfig reducedMotion="user"` is already in place on the landing page).
 
+**The one exception is the landing hero's globe** (`components/hero-globe.tsx`): clicks hopping between cities, drawn the way the mark is drawn (a small dot leaves, an arc, the accent dot lands on a flat shadow). It is allowed to move because it says what the product does, and it keeps these terms. Do not add a second ambient animation on the strength of it.
+
+- Decoration, not evidence: `aria-hidden`, example links, no counters, nothing that claims to be live. A link the visitor makes in the hero's shortener is the only real one, and it is outlined in the accent.
+- Not in the prerendered HTML. It loads after hydration into a box the hero reserves, so the heading is the first paint and nothing shifts.
+- Land is square modules, like a QR code's, in `--muted`. Colours come from the tokens at runtime and follow the theme. No glow, no gradient.
+- Paused off screen and in a background tab; one still frame under reduced motion.
+
 Marketing navigation swaps the content in place and then rides the new page to its top. Use `MarketingLink` for any link between public pages, and call `useMarketingScroll` in any new public page.
 
 ## Copy

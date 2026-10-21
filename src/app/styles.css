@@ -230,21 +230,8 @@
   display: none;
 }
 /* Keep the hero's space while a cached customer waits for browser hydration. */
-:root[data-auth="in"] [data-hero-arm][data-ssr] [data-hero-personalization] {
+:root[data-auth="in"] [data-hero][data-ssr] [data-hero-personalization] {
   visibility: hidden;
-}
-
-/* The prerendered hero carries both experiment arms; index.html's inline script
-   sets data-hero="test" before paint for a browser already given that arm.
-   Once hydrated (data-ssr gone) only the active arm is mounted. */
-[data-hero-arm="test"][data-ssr] {
-  display: none;
-}
-:root[data-hero="test"] [data-hero-arm="test"][data-ssr] {
-  display: block;
-}
-:root[data-hero="test"] [data-hero-arm="control"][data-ssr] {
-  display: none;
 }
 html {
   background: var(--bg);

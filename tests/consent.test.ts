@@ -3,12 +3,10 @@ import { installBrowserGlobals, removeBrowserGlobals } from "./browser-globals";
 import { CONSENT_KEY, onConsentLapse, readConsent, writeConsent } from "../src/app/lib/consent";
 import { discardBuffer, drainBuffer } from "../src/app/lib/consent-buffer";
 import { FUNNEL } from "../src/app/lib/funnel";
-import { clearHeroVariant, heroVariant, shownHeroVariant } from "../src/app/lib/hero-variant";
-import posthog, { withHeroVariant } from "../src/app/lib/posthog";
+import posthog from "../src/app/lib/posthog";
 
 const DAY = 24 * 60 * 60 * 1000;
 let store: Map<string, string>;
-const originalRandom = Math.random;
 
 beforeEach(() => {
   store = new Map();
@@ -19,12 +17,10 @@ beforeEach(() => {
       removeItem: (key) => void store.delete(key),
     },
   });
-  clearHeroVariant();
 });
 afterEach(() => {
   discardBuffer();
   removeBrowserGlobals("localStorage");
-  Math.random = originalRandom;
 });
 
 describe("the stored answer", () => {
@@ -68,75 +64,13 @@ describe("the stored answer", () => {
   });
 });
 
-describe("the hero A/B test", () => {
-  test("restores funnel attribution on a fresh document without assigning a new arm", () => {
-    writeConsent("accepted");
-    store.set("rdyrct:hero-variant:v1", "test");
-
-    for (const event of [FUNNEL.signupViewed, "user_signed_up", FUNNEL.linkCreated]) {
-      expect(withHeroVariant(event)).toEqual({ hero_variant: "test" });
-    }
-    expect(withHeroVariant("user_signed_in")).toBeUndefined();
-    // A signed-in landing visit must not count as a new test exposure just
-    // because that browser saw the test hero before it signed up.
-    expect(withHeroVariant(FUNNEL.landingViewed)).toBeUndefined();
-  });
-
-  test("does not attribute a direct signup or stale assignment without consent", () => {
-    writeConsent("accepted");
-    expect(withHeroVariant(FUNNEL.signupViewed)).toBeUndefined();
-    store.set("rdyrct:hero-variant:v1", "invalid");
-    expect(withHeroVariant(FUNNEL.signupViewed)).toBeUndefined();
-    store.set("rdyrct:hero-variant:v1", "test");
-    writeConsent("rejected");
-    expect(withHeroVariant(FUNNEL.signupViewed)).toBeUndefined();
-  });
-
-  test("does not assign or tag a variant before consent", () => {
-    const shown = heroVariant();
+describe("before consent", () => {
+  test("holds funnel steps and drops everything else", () => {
     posthog.capture(FUNNEL.ctaClicked, { placement: "hero_primary" });
     posthog.capture("qr_downloaded");
 
     const held = drainBuffer();
-    expect(shown).toBe("control");
-    expect(shownHeroVariant()).toBeNull();
     expect(held).toHaveLength(1);
     expect(held[0].properties).toEqual({ placement: "hero_primary" });
-    expect(store.has("rdyrct:hero-variant:v1")).toBe(false);
-  });
-
-  test("assigns once after consent and persists that assignment", () => {
-    writeConsent("accepted");
-    Math.random = () => 0.9;
-
-    expect(heroVariant()).toBe("test");
-    expect(store.get("rdyrct:hero-variant:v1")).toBe("test");
-    Math.random = () => 0.1;
-    expect(heroVariant()).toBe("test");
-  });
-
-  test("tags a landing view with the arm shown after consent", () => {
-    writeConsent("accepted");
-    Math.random = () => 0.9;
-    heroVariant();
-
-    expect(withHeroVariant(FUNNEL.landingViewed, { page: "/" })).toEqual({
-      page: "/",
-      hero_variant: "test",
-    });
-  });
-
-  test("does not assign a later arm to events recorded before consent", () => {
-    posthog.capture(FUNNEL.landingViewed, { page: "/" });
-    writeConsent("accepted");
-    Math.random = () => 0.9;
-    expect(heroVariant()).toBe("test");
-
-    expect(drainBuffer()).toEqual([
-      expect.objectContaining({
-        event: FUNNEL.landingViewed,
-        properties: { page: "/" },
-      }),
-    ]);
   });
 });

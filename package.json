@@ -23,6 +23,7 @@
     "verify:e2e": "bun run verify && bun run e2e:smoke",
     "posthog:upload": "POSTHOG_CLI_PROJECT_ID=${POSTHOG_CLI_PROJECT_ID:-240147} posthog-cli --host ${POSTHOG_CLI_HOST:-https://eu.posthog.com} sourcemap process --directory dist/client/assets --release-name rdyrct --delete-after",
     "deploy": "POSTHOG_SOURCEMAPS=1 bun run build && bun run posthog:upload && wrangler deploy",
+    "globe:land": "bun scripts/globe-land.ts",
     "db:migrate:local": "wrangler d1 migrations apply rdyrct --local",
     "db:reset:local": "rm -rf .wrangler/state/v3/d1 .wrangler/state/v3/kv && wrangler d1 migrations apply rdyrct --local",
     "db:migrate:remote": "wrangler d1 migrations apply rdyrct --remote",
