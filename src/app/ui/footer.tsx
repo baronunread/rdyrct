@@ -60,9 +60,43 @@ function ThemeSwitch() {
   );
 }
 
+/**
+ * The name, set as large as the page is wide and fading into it, cut off by
+ * the bottom edge. The last thing on every public page, and decoration: the
+ * logo at the top of the footer is the one a screen reader meets.
+ */
+function Wordmark() {
+  return (
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 1000 250"
+      className="-mb-[6%] mt-8 block w-full select-none sm:mt-12"
+    >
+      <defs>
+        <linearGradient id="footer-wordmark" x1="0" x2="0" y1="0" y2="1">
+          <stop offset="0" stopColor="var(--border)" />
+          <stop offset="0.85" stopColor="var(--border)" stopOpacity="0" />
+        </linearGradient>
+      </defs>
+      <text
+        x="500"
+        y="232"
+        textAnchor="middle"
+        textLength="980"
+        lengthAdjust="spacingAndGlyphs"
+        fill="url(#footer-wordmark)"
+        className="font-sans font-bold"
+        fontSize="300"
+      >
+        rdyrct
+      </text>
+    </svg>
+  );
+}
+
 export function Footer() {
   return (
-    <footer className="mt-16 border-t border-border pt-10 pb-6 text-sm text-muted">
+    <footer className="mt-16 overflow-hidden border-t border-border pt-10 text-sm text-muted">
       <div className="mx-auto max-w-5xl">
         <div className="grid grid-cols-2 gap-x-6 gap-y-8 sm:grid-cols-[1.6fr_1fr_1fr_1fr] sm:gap-y-10">
           <div className="col-span-2 flex flex-col gap-3 sm:col-span-1">
@@ -195,6 +229,7 @@ export function Footer() {
             <ThemeSwitch />
           </div>
         </div>
+        <Wordmark />
       </div>
     </footer>
   );

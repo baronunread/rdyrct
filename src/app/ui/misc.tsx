@@ -95,9 +95,12 @@ export function Table({
   children,
   fixed,
   minWidth,
+  className,
 }: {
   children: ReactNode;
   fixed?: boolean;
+  /** For the wrapper: a marketing page lights its tables (`lit`). */
+  className?: string;
   /** Tailwind min-width for the table itself, e.g. "min-w-[64rem]". Use it
    * when every column has to stay on screen and the wrapper should scroll
    * rather than the columns shrinking into uselessness. */
@@ -108,7 +111,12 @@ export function Table({
     // chaining to the page; the container still rubber-bands at each end,
     // and that bounce drags the table off its own background so the page
     // shows through beside it. `none` disables the bounce as well.
-    <div className="overflow-x-auto overscroll-x-none rounded-lg bg-surface smooth-shadow-ring-xs">
+    <div
+      className={cn(
+        "overflow-x-auto overscroll-x-none rounded-lg bg-surface smooth-shadow-ring-xs",
+        className,
+      )}
+    >
       <table
         className={cn(
           "w-full text-sm [&_tbody_tr]:transition-colors [&_tbody_tr:hover]:bg-surface-2/40",

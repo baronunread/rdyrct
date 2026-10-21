@@ -14,15 +14,12 @@ export function TermsPage() {
   useSeo("/terms");
   useMarketingScroll();
   return (
-    <LegalPageLayout authed={authed}>
+    <LegalPageLayout
+      authed={authed}
+      title="Terms of Service"
+      intro="These terms govern your use of rdyrct. By creating an account or using the service, you agree to them. Last updated 21 October 2026."
+    >
       <WebMcpMarketingTools />
-      <div>
-        <h1 className="mb-2 text-xl font-bold">Terms of Service</h1>
-        <p className="text-muted">
-          These terms govern your use of rdyrct. By creating an account or using the service, you
-          agree to them. Last updated 21 October 2026.
-        </p>
-      </div>
 
       <section>
         <h2 className="mb-2 font-bold">Acceptance of terms</h2>

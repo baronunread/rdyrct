@@ -15,15 +15,12 @@ export function PrivacyPage() {
   useSeo("/privacy");
   useMarketingScroll();
   return (
-    <LegalPageLayout authed={authed}>
+    <LegalPageLayout
+      authed={authed}
+      title="Privacy Policy"
+      intro="This policy explains what data rdyrct collects, why, the legal basis for it, and how you can exercise your rights. Last updated 18 October 2026."
+    >
       <WebMcpMarketingTools />
-      <div>
-        <h1 className="mb-2 text-xl font-bold">Privacy Policy</h1>
-        <p className="text-muted">
-          This policy explains what data rdyrct collects, why, the legal basis for it, and how you
-          can exercise your rights. Last updated 18 October 2026.
-        </p>
-      </div>
 
       <section>
         <h2 className="mb-2 font-bold">Data controller</h2>

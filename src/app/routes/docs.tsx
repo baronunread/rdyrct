@@ -21,7 +21,7 @@ import { useSeo } from "../lib/seo";
 import { useMarketingScroll } from "../lib/marketing-scroll";
 import { useAudience } from "../lib/audience";
 import { LandingHeader } from "../components/landing-header";
-import { MarketingGlow } from "../components/marketing-glow";
+import { PageHero } from "../components/marketing-kit";
 import { WebMcpMarketingTools } from "../components/webmcp-marketing-tools";
 import { Footer } from "../ui/footer";
 import { MarketingLink } from "../components/marketing-link";
@@ -167,20 +167,16 @@ export function DocsPage() {
     <MotionConfig reducedMotion="user">
       <LazyMotion features={domAnimation}>
         <div className="relative mx-auto min-h-dvh max-w-5xl px-6">
-          <MarketingGlow />
           <WebMcpMarketingTools />
           <LandingHeader authed={authed} />
 
-          <main className="pt-10 pb-4 sm:pt-14">
-            <div>
-              <h1 className="text-2xl font-bold text-balance">Developer docs</h1>
-              <p className="mt-2 max-w-xl text-sm text-muted">
-                The REST API and the MCP server: how to authenticate, and what each one can do. Both
-                are free on every plan.
-              </p>
-            </div>
+          <main className="pb-4">
+            <PageHero
+              title="Developer docs"
+              intro="The REST API and the MCP server: how to authenticate, and what each one can do. Both are free on every plan."
+            />
 
-            <div className="mt-8 flex flex-col gap-10 lg:flex-row lg:items-start lg:gap-12">
+            <div className="mt-12 flex flex-col gap-10 lg:flex-row lg:items-start lg:gap-12">
               <ChapterNav pills className="flex flex-wrap gap-2 lg:hidden" />
 
               <aside className="hidden w-40 shrink-0 lg:block">

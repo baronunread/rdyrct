@@ -23,6 +23,7 @@ import { formatNumber } from "../lib/numbers";
 import { PLAN_LIMITS, PLAN_PRICES, type StoredPlan } from "@/shared/types";
 import { buttonClass } from "../ui/button-class";
 import { Check } from "../ui/icons";
+import { SplitHeading } from "../components/marketing-kit";
 import { cn } from "../ui/cn";
 
 const PLAN_NAMES = { free: "Free", hobby: "Hobby", pro: "Pro" } satisfies Record<
@@ -111,7 +112,7 @@ function PlanCard({
       data-plan={plan}
       data-match={match}
       className={cn(
-        "flex flex-col gap-4 rounded-xl bg-surface p-5 smooth-shadow-ring-xs transition-[box-shadow,transform] duration-300",
+        "lit flex flex-col gap-4 rounded-3xl border border-border bg-surface p-6 transition-[box-shadow,transform] duration-300",
         match && "-translate-y-1 ring-2 ring-accent motion-reduce:translate-y-0",
       )}
     >
@@ -276,14 +277,12 @@ function PlanFinder({
   return (
     <section className="flex flex-col gap-6 py-16">
       <div className="max-w-xl">
-        <h2 className="text-2xl font-bold tracking-tight text-balance sm:text-3xl">
-          Which plan fits?
-        </h2>
-        <p className="mt-2 text-muted">
-          Move the sliders to what you need. The plan that covers it lights up above.
-        </p>
+        <SplitHeading
+          lead="Which plan fits?"
+          rest="Move the sliders to what you need. The plan that covers it lights up above."
+        />
       </div>
-      <div className="grid items-center gap-8 rounded-xl bg-surface p-5 smooth-shadow-ring-xs md:grid-cols-2">
+      <div className="lit grid items-center gap-8 rounded-3xl border border-border bg-surface p-6 md:grid-cols-2">
         <div className="flex flex-col gap-5">
           {NEED_KEYS.map((key) => (
             <NeedSlider
@@ -294,7 +293,7 @@ function PlanFinder({
             />
           ))}
         </div>
-        <div aria-live="polite" className="flex flex-col gap-2 rounded-lg bg-surface-2 p-5">
+        <div aria-live="polite" className="flex flex-col gap-2 rounded-2xl bg-surface-2 p-5">
           <p className="text-xs text-muted">You need</p>
           <p className="text-2xl font-bold tracking-tight">
             {fit.plan

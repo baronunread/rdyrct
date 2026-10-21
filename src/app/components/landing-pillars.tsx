@@ -25,6 +25,7 @@ import {
 } from "react";
 import { useInView } from "motion/react";
 import { MarketingLink } from "./marketing-link";
+import { FrameRow, SplitHeading } from "./marketing-kit";
 import { buttonClass } from "../ui/button-class";
 import { cn } from "../ui/cn";
 
@@ -43,57 +44,6 @@ const QRPreview = lazy(
 );
 function NoQr() {
   return null;
-}
-
-/** A row of the page's hairline frame, with a small cross where its top
- *  rule meets the rails. */
-function FrameRow({
-  children,
-  className,
-  id,
-}: {
-  children: ReactNode;
-  className?: string;
-  id?: string;
-}) {
-  return (
-    <div id={id} className={cn("relative border-t border-border/70", className)}>
-      <span aria-hidden="true" className={cn(CROSS, "-left-[5px]")}>
-        +
-      </span>
-      <span aria-hidden="true" className={cn(CROSS, "-right-[5px]")}>
-        +
-      </span>
-      {children}
-    </div>
-  );
-}
-
-const CROSS = "absolute -top-[9px] text-xs leading-none font-light text-muted/50 select-none";
-
-/** Two tones in one heading: the claim in ink, the reason for it muted. */
-export function SplitHeading({
-  id,
-  lead,
-  rest,
-  className,
-}: {
-  id?: string;
-  lead: string;
-  rest: string;
-  className?: string;
-}) {
-  return (
-    <h2
-      id={id}
-      className={cn(
-        "max-w-3xl text-2xl font-bold tracking-tight text-balance sm:text-4xl",
-        className,
-      )}
-    >
-      {lead} <span className="text-muted">{rest}</span>
-    </h2>
-  );
 }
 
 export function Manifesto() {

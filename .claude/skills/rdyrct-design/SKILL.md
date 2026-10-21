@@ -115,6 +115,8 @@ The public pages are allowed a small, named set of effects that the app is not. 
 - **`landing-mesh`**: one blurred field of the accent, the mint and the butter behind a product panel. Decoration, `aria-hidden`, never behind text.
 - **`ink-band`**: the one dark band on a page. It redefines the tokens inside it, so ordinary components work in it unchanged.
 - **`text-metal`**: the closing line only, ink fading to muted.
+- **`PageHero`** (`components/marketing-kit.tsx`): how every public page but the landing opens, title large and left over a field of dots inside the frame. `MarketingPage` and `LegalPageLayout` use it; a new page uses one of those two.
+- **The footer wordmark**: the name as wide as the page, fading out and cut by the bottom edge, on every public page. Decoration, `aria-hidden`.
 
 The product in a section is the app's own components over sample data (the analytics panel is the real chart), never a screenshot, and the details under it are tabs that change what it shows. Benefits on the landing; redirects, data centres and competitors' prices on the docs and comparison pages.
 

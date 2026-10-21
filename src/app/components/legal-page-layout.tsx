@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { LandingHeader } from "./landing-header";
 import { Footer } from "../ui/footer";
+import { PageHero } from "./marketing-kit";
 
 /**
  * Shared shell for the legal pages (privacy, terms).
@@ -23,12 +24,23 @@ import { Footer } from "../ui/footer";
  * view-transition treatment (see landing-header.tsx) for no reason other
  * than having been built before it existed.
  */
-export function LegalPageLayout({ children, authed }: { children: ReactNode; authed: boolean }) {
+export function LegalPageLayout({
+  children,
+  authed,
+  title,
+  intro,
+}: {
+  children: ReactNode;
+  authed: boolean;
+  title: string;
+  intro: ReactNode;
+}) {
   return (
     <div className="relative mx-auto min-h-dvh max-w-5xl px-6">
       <LandingHeader authed={authed} />
-      <main className="mx-auto max-w-3xl py-12">
-        <div className="flex flex-col gap-8 text-sm">{children}</div>
+      <main>
+        <PageHero title={title} intro={intro} />
+        <div className="mx-auto flex max-w-3xl flex-col gap-8 py-12 text-sm">{children}</div>
       </main>
       <Footer />
     </div>

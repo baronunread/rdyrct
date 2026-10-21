@@ -47,9 +47,9 @@ import {
   LinksPillar,
   Manifesto,
   QrPillar,
-  SplitHeading,
   TeamsAndCode,
 } from "../components/landing-pillars";
+import { SplitHeading } from "../components/marketing-kit";
 import { AnonLinkBar } from "../components/anon-link-bar";
 import { formatNumber } from "../lib/numbers";
 import { cn } from "../ui/cn";
@@ -466,7 +466,10 @@ function PricingTable({
     ) : null;
   return (
     <div className={phoneCards ? "hidden sm:block" : undefined}>
-      <Table minWidth={phoneCards ? undefined : "min-w-2xl"}>
+      <Table
+        minWidth={phoneCards ? undefined : "min-w-2xl"}
+        className="lit rounded-3xl border border-border"
+      >
         <thead>
           <tr>
             <Th></Th>
@@ -621,48 +624,88 @@ function GithubMark({ size = 17 }: { size?: number }) {
   );
 }
 
+/** The self-host steps as they are in the README, not a tidied version:
+ *  somebody deciding whether to trust the open-source claim checks this. */
+const SELF_HOST_STEPS = [
+  ["git clone", "https://github.com/baronunread/rdyrct"],
+  ["bun install", ""],
+  ["bunx wrangler d1 create", "rdyrct"],
+  ["bun run db:migrate:remote && bun run deploy", ""],
+] as const;
+
+const SELF_HOST_FACTS = [
+  "MIT licensed, with no enterprise edition held back.",
+  "Runs on your own Cloudflare account.",
+  "You are the platform admin, so you set your own plan.",
+];
+
 function SelfHostSection() {
   return (
-    <Section id="self-host" className="py-16">
-      {/* Split and left-aligned, with no card: the final call to action below
-          is the one centred card on the page, and a second one right above
-          it read as the same block twice. The licence is in the sentence, so
-          it does not need a pill of its own. */}
-      <div className="grid items-center gap-8 md:grid-cols-[1fr_auto] md:gap-16">
-        <div className="flex flex-col gap-4">
-          <h2 className="max-w-xl text-2xl font-bold tracking-tight text-balance sm:text-3xl">
-            Yes, you can run it yourself.
-          </h2>
-          <p className="max-w-lg text-sm text-muted">
-            One repository, MIT, no enterprise edition held back. Deploy it to your own Cloudflare
-            account and you are the platform admin, which means you set your own plan. We are not
-            going to email you about it.
-          </p>
+    // Its own section after pricing, never a column inside it: it answers
+    // "will this still be here next year", and the answer is the code.
+    <Section id="self-host" className="py-16 md:py-24">
+      <div className="lit grid overflow-hidden rounded-3xl border border-border bg-surface md:grid-cols-[1fr_1.1fr]">
+        <div className="flex flex-col gap-6 p-6 sm:p-10">
+          <SplitHeading lead="Run it yourself." rest="The same code, on your own account." />
+          <ul className="flex flex-col gap-2 text-muted">
+            {SELF_HOST_FACTS.map((fact) => (
+              <li key={fact} className="flex gap-2.5">
+                <Check size={16} className="mt-1 shrink-0 text-accent-2" />
+                {fact}
+              </li>
+            ))}
+          </ul>
+          {/* No star count: a low number reads as a weekend project to the
+              exact reader this section is for. */}
+          <a
+            href={GITHUB_URL}
+            target="_blank"
+            rel="noreferrer"
+            className={buttonClass({
+              variant: "outline",
+              className: "w-fit gap-2 rounded-full px-4",
+            })}
+          >
+            <GithubMark size={16} />
+            Read the source on GitHub
+          </a>
         </div>
-
-        {/* One soft pill: the mark, then the name over the invitation. This
-            used to end on a star count, which is the wrong number to make
-            the largest fact in the section that exists to answer "will this
-            still be here next year": a low count reads as a weekend project
-            to the exact reader the band is for, and it only ages one way,
-            slowly. The mark is 38px inside a 58px pill, so pl-2.5 would put
-            its centre exactly on the 29px corner radius and read as if it
-            were falling out of the curve. Nudged right so it sits inside
-            the arc. */}
-        <a
-          href={GITHUB_URL}
-          target="_blank"
-          rel="noreferrer"
-          className="inline-flex items-center gap-3 justify-self-start rounded-full bg-surface-2 py-2.5 pr-7 pl-4.5 text-left transition-colors hover:bg-border"
-        >
-          <GithubMark size={38} />
-          <span className="flex flex-col leading-tight">
-            <span className="text-base font-bold">GitHub</span>
-            <span className="text-sm text-muted">Read the source</span>
-          </span>
-        </a>
+        <SelfHostTerminal />
       </div>
     </Section>
+  );
+}
+
+function SelfHostTerminal() {
+  return (
+    <div className="ink-band flex flex-col border-t border-border md:border-t-0 md:border-l">
+      <div aria-hidden="true" className="flex gap-1.5 border-b border-border px-4 py-3">
+        <span className="size-2.5 rounded-full bg-border" />
+        <span className="size-2.5 rounded-full bg-border" />
+        <span className="size-2.5 rounded-full bg-border" />
+      </div>
+      <pre className="overflow-x-auto p-5 font-mono text-sm leading-7 sm:p-6">
+        {SELF_HOST_STEPS.map(([command, arg]) => (
+          <code key={command} className="block whitespace-pre">
+            <span className="text-muted select-none">$ </span>
+            {command}
+            {arg && <span className="text-accent"> {arg}</span>}
+          </code>
+        ))}
+      </pre>
+      <p className="mt-auto border-t border-border px-5 py-4 text-sm text-muted sm:px-6">
+        Secrets, a domain and the rest are in the{" "}
+        <a
+          href={`${GITHUB_URL}#deploy-to-cloudflare-workers`}
+          target="_blank"
+          rel="noreferrer"
+          className="text-accent hover:underline"
+        >
+          setup guide
+        </a>
+        .
+      </p>
+    </div>
   );
 }
 
