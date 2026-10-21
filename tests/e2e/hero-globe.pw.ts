@@ -23,16 +23,18 @@ test("the globe arrives hidden from assistive tech and shifts nothing", async ({
   const before = await hero.boundingBox();
 
   release();
-  const canvas = hero.locator("canvas");
+  // cobe draws the sphere in WebGL; the clicks are a 2D canvas over it.
+  const canvas = hero.locator("[data-globe-overlay]");
   await expect(canvas).toBeVisible();
-  await expect(canvas.locator("xpath=..")).toHaveAttribute("aria-hidden", "true");
+  await expect(hero.locator("[aria-hidden=true]:has([data-globe-overlay])")).toHaveCount(1);
+  await expect(hero.locator("canvas")).toHaveCount(2);
   expect((await canvas.boundingBox())?.height).toBeGreaterThan(200);
   expect(await hero.boundingBox()).toEqual(before);
 });
 
 test("the globe turns, unless the visitor asked for less motion", async ({ page }) => {
   const frames = async () => {
-    const canvas = page.locator("[data-hero] canvas");
+    const canvas = page.locator("[data-hero] [data-globe-overlay]");
     await expect(canvas).toBeVisible();
     const first = await canvas.evaluate((c: HTMLCanvasElement) => c.toDataURL());
     await page.waitForTimeout(600);

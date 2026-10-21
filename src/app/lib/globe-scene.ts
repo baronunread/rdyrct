@@ -1,21 +1,27 @@
-import { GLOBE_LAND } from "../data/globe-land";
-import { globeGrid } from "./globe-grid";
+import createGlobe, { type COBEOptions, type Globe } from "cobe";
 
 /**
  * Everything the landing hero's globe draws, with no React and no event
  * wiring: components/hero-globe.tsx owns when it draws.
  *
- * Land is square modules, like a QR code's. Clicks hop between cities the way
- * the mark is drawn: a small dot leaves, an arc carries it, the accent dot
- * lands on a flat shadow, and the short link it followed appears beside it.
+ * Two layers. cobe draws the sphere and its land in WebGL; a 2D canvas over
+ * it draws the clicks, because cobe can only show an arc whole and these
+ * draw in. Clicks hop between cities the way the mark is drawn: a small dot
+ * leaves, an arc carries it, the accent dot lands on a flat shadow, and the
+ * short link it followed appears beside it.
+ *
+ * The overlay projects points exactly as cobe does (its rotation by phi and
+ * theta, the same axes), and cobe's scale and offset are set from the
+ * overlay's centre and radius, so the two never drift apart.
  */
 export type Vec = [number, number, number];
 
 const RAD = Math.PI / 180;
+/** A point on the unit sphere, on cobe's axes. */
 export const vec = (lon: number, lat: number): Vec => [
-  Math.cos(lat * RAD) * Math.sin(lon * RAD),
-  Math.sin(lat * RAD),
   Math.cos(lat * RAD) * Math.cos(lon * RAD),
+  Math.sin(lat * RAD),
+  -Math.cos(lat * RAD) * Math.sin(lon * RAD),
 ];
 
 const dot = (a: Vec, b: Vec) => Math.min(1, a[0] * b[0] + a[1] * b[1] + a[2] * b[2]);
@@ -28,17 +34,6 @@ function slerp(a: Vec, b: Vec, t: number): Vec {
   const sa = Math.sin((1 - t) * d) / Math.sin(d);
   const sb = Math.sin(t * d) / Math.sin(d);
   return [a[0] * sa + b[0] * sb, a[1] * sa + b[1] * sb, a[2] * sa + b[2] * sb];
-}
-
-function landCells(): Vec[] {
-  const bytes = Uint8Array.from(atob(GLOBE_LAND), (c) => c.charCodeAt(0));
-  const cells: Vec[] = [];
-  let i = 0;
-  for (const [lon, lat] of globeGrid()) {
-    if ((bytes[i >> 3] >> (i & 7)) & 1) cells.push(vec(lon, lat));
-    i++;
-  }
-  return cells;
 }
 
 const CITIES: Vec[] = [
@@ -69,7 +64,14 @@ const LINKS = [
   "qr.northwind.shop/sale",
 ];
 
-type Colors = { ink: string; muted: string; accent: string; border: string; surface: string };
+type Colors = {
+  ink: string;
+  muted: string;
+  accent: string;
+  border: string;
+  surface: string;
+  bg: string;
+};
 
 /** The theme tokens, read at runtime so the globe follows light and dark. */
 function readColors(): Colors {
@@ -81,8 +83,42 @@ function readColors(): Colors {
     accent: token("--accent"),
     border: token("--border"),
     surface: token("--surface"),
+    bg: token("--bg"),
   };
 }
+
+type Rgb = [number, number, number];
+
+/** Any CSS colour as the 0 to 1 channels WebGL takes. The tokens are oklch,
+ *  and painting one pixel is the only way to have the browser convert it. */
+function rgb(color: string): Rgb {
+  const pixel = document.createElement("canvas").getContext("2d", { willReadFrequently: true });
+  if (!pixel) return [0.5, 0.5, 0.5];
+  pixel.fillStyle = color;
+  pixel.fillRect(0, 0, 1, 1);
+  const [r, g, b] = pixel.getImageData(0, 0, 1, 1).data;
+  return [r / 255, g / 255, b / 255];
+}
+
+const luminance = ([r, g, b]: Rgb) => 0.2126 * r + 0.7152 * g + 0.0722 * b;
+
+/**
+ * cobe's colours for the current theme. It shades two ways: light mode
+ * darkens land against the base colour, dark mode lights land up out of a
+ * base it darkens. So light takes the surface as its base, and dark the
+ * muted text, whose tenth is close to the page.
+ */
+function baseLook(
+  colors: Colors,
+): Pick<COBEOptions, "dark" | "baseColor" | "mapBrightness" | "glowColor"> {
+  const dark = luminance(rgb(colors.bg)) < 0.5;
+  return dark
+    ? { dark: 1, baseColor: rgb(colors.muted), mapBrightness: 1.1, glowColor: rgb(colors.border) }
+    : { dark: 0, baseColor: rgb(colors.surface), mapBrightness: 0.5, glowColor: rgb(colors.bg) };
+}
+
+/** cobe draws a sphere of radius 0.8 in a 2-unit-tall viewport. */
+const COBE_RADIUS = 0.8;
 
 export type Hop = {
   from: Vec;
@@ -167,24 +203,27 @@ export function hopPhase(hop: Hop, now: number) {
 }
 
 export class GlobeScene {
-  private readonly land = landCells();
   private readonly hops: Hop[] = [];
   private readonly labels: Box[] = [];
   private colors = readColors();
   private width = 0;
   private height = 0;
+  private dpr = 1;
   private radius = 0;
   private cx = 0;
   private cy = 0;
-  // Start over the Atlantic, so Europe, Africa and both Americas face the
-  // visitor, tilted a little so the northern cities sit higher.
-  private spin = 0.35;
-  private readonly tilt = 0.32;
+  // cobe's angles. This phi faces 20°E, so Europe, Africa and both Americas
+  // face the visitor; theta tilts the north toward them, so the northern
+  // cities sit higher.
+  private phi = -Math.PI / 2 - 0.35;
+  private readonly theta = 0.32;
   private linkIndex = 0;
+  private base: Globe | null = null;
 
   constructor(
     private readonly canvas: HTMLCanvasElement,
     private readonly ctx: CanvasRenderingContext2D,
+    private readonly baseCanvas: HTMLCanvasElement,
   ) {}
 
   get hopCount() {
@@ -192,26 +231,60 @@ export class GlobeScene {
   }
 
   resize() {
-    const dpr = Math.min(2, devicePixelRatio || 1);
+    this.dpr = Math.min(2, devicePixelRatio || 1);
     this.width = this.canvas.clientWidth;
     this.height = this.canvas.clientHeight;
-    this.canvas.width = Math.round(this.width * dpr);
-    this.canvas.height = Math.round(this.height * dpr);
-    this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    this.canvas.width = Math.round(this.width * this.dpr);
+    this.canvas.height = Math.round(this.height * this.dpr);
+    this.ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
     // On a phone the globe runs past both edges: at the column's width it is
     // a small disc mostly hidden behind the card.
     this.radius = this.width < 640 ? this.width * 0.66 : Math.min(this.width * 0.46, 470);
     this.cx = this.width / 2;
     this.cy = this.radius + 8;
+    this.layoutBase();
+  }
+
+  /** cobe's sphere, sized and placed to sit exactly under the overlay's. */
+  private layoutBase() {
+    if (this.width === 0 || this.height === 0) return;
+    const scale = this.radius / ((COBE_RADIUS * this.height) / 2);
+    const offset: [number, number] = [
+      ((this.cx - this.width / 2) * 2) / scale,
+      ((this.cy - this.height / 2) * 2) / scale,
+    ];
+    const layout = {
+      width: this.width,
+      height: this.height,
+      devicePixelRatio: this.dpr,
+      scale,
+      offset,
+    };
+    if (this.base) return this.base.update(layout);
+    this.base = createGlobe(this.baseCanvas, {
+      ...layout,
+      ...baseLook(this.colors),
+      phi: this.phi,
+      theta: this.theta,
+      mapSamples: 26000,
+      diffuse: 1.2,
+      markerColor: [0, 0, 0],
+    });
   }
 
   refreshColors() {
     this.colors = readColors();
+    this.base?.update(baseLook(this.colors));
   }
 
   /** Turn by a distance in pixels at the globe's surface, as a drag does. */
   turn(pixels: number) {
-    this.spin -= pixels / this.radius;
+    this.phi += pixels / this.radius;
+  }
+
+  dispose() {
+    this.base?.destroy();
+    this.base = null;
   }
 
   clearHops() {
@@ -248,27 +321,29 @@ export class GlobeScene {
   }
 
   draw(now: number, spin = 0) {
-    this.spin += spin;
+    this.phi -= spin;
+    this.base?.update({ phi: this.phi });
     const { ctx } = this;
     ctx.clearRect(0, 0, this.width, this.height);
     this.labels.length = 0;
-    this.drawSphere();
-    this.drawLand();
+    this.drawRim();
     // Newest first, so the visitor's own link gets first claim on label space.
     for (let i = this.hops.length - 1; i >= 0; i--) {
       if (!this.drawHop(this.hops[i], now)) this.hops.splice(i, 1);
     }
   }
 
+  /** Screen x and y, and how far the point faces the visitor (1 dead
+   *  ahead, below 0 behind). cobe's own rotation, so a point lands on the
+   *  land it names. */
   private project(p: Vec, lift = 1): Vec {
-    const c = Math.cos(this.spin);
-    const s = Math.sin(this.spin);
-    const x = p[0] * c - p[2] * s;
-    const z1 = p[0] * s + p[2] * c;
-    const ct = Math.cos(this.tilt);
-    const st = Math.sin(this.tilt);
-    const y = p[1] * ct - z1 * st;
-    const z = p[1] * st + z1 * ct;
+    const cp = Math.cos(this.phi);
+    const sp = Math.sin(this.phi);
+    const ct = Math.cos(this.theta);
+    const st = Math.sin(this.theta);
+    const x = cp * p[0] + sp * p[2];
+    const y = sp * st * p[0] + ct * p[1] - cp * st * p[2];
+    const z = -sp * ct * p[0] + st * p[1] + cp * ct * p[2];
     return [this.cx + x * this.radius * lift, this.cy - y * this.radius * lift, z];
   }
 
@@ -280,30 +355,14 @@ export class GlobeScene {
     });
   }
 
-  private drawSphere() {
+  /** A hairline round cobe's sphere, the edge every other surface here has. */
+  private drawRim() {
     const { ctx, colors } = this;
     ctx.beginPath();
     ctx.arc(this.cx, this.cy, this.radius, 0, Math.PI * 2);
-    ctx.fillStyle = colors.surface;
-    ctx.fill();
     ctx.lineWidth = 1;
     ctx.strokeStyle = colors.border;
     ctx.stroke();
-  }
-
-  /** One module per land cell, square and axis-aligned like a QR code's,
-   *  fading toward the rim instead of shrinking into noise. */
-  private drawLand() {
-    const { ctx } = this;
-    const size = Math.max(1.4, this.radius * 0.0118);
-    ctx.fillStyle = this.colors.muted;
-    for (const cell of this.land) {
-      const [x, y, z] = this.project(cell);
-      if (z <= 0.02 || y > this.height + size) continue;
-      ctx.globalAlpha = 0.05 + z * z * 0.4;
-      ctx.fillRect(x - size / 2, y - size / 2, size, size);
-    }
-    ctx.globalAlpha = 1;
   }
 
   /** False once the hop has faded out and can be dropped. */

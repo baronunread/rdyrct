@@ -16,20 +16,37 @@ import { onHeroHop } from "../lib/hero-hop";
  * it arrives.
  */
 export default function HeroGlobe() {
+  const baseRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
+    const holder = baseRef.current;
     const canvas = canvasRef.current;
     const ctx = canvas?.getContext("2d");
-    if (!canvas || !ctx) return;
-    return bindGlobe(canvas, new GlobeScene(canvas, ctx));
+    if (!holder || !canvas || !ctx) return;
+    // cobe wraps its canvas in a div of its own, so it gets one React does
+    // not manage: moving React's node would break the unmount.
+    const base = document.createElement("canvas");
+    base.className = "size-full";
+    holder.append(base);
+    const scene = new GlobeScene(canvas, ctx, base);
+    const unbind = bindGlobe(canvas, scene);
+    return () => {
+      unbind();
+      scene.dispose();
+      holder.replaceChildren();
+    };
   }, []);
 
   return (
-    <canvas
-      ref={canvasRef}
-      className="absolute inset-0 size-full cursor-grab touch-pan-y active:cursor-grabbing"
-    />
+    <>
+      <div ref={baseRef} className="absolute inset-0" />
+      <canvas
+        ref={canvasRef}
+        data-globe-overlay
+        className="absolute inset-0 size-full cursor-grab touch-pan-y active:cursor-grabbing"
+      />
+    </>
   );
 }
 

@@ -6,13 +6,10 @@ type Point = { x: number; y: number };
 const side = (p: Point, a: Point, b: Point) =>
   (p.x - b.x) * (a.y - b.y) - (a.x - b.x) * (p.y - b.y);
 
+/** Inside (or on the edge) when p is on the same side of all three edges. */
 function inTriangle(p: Point, a: Point, b: Point, c: Point) {
-  const ab = side(p, a, b);
-  const bc = side(p, b, c);
-  const ca = side(p, c, a);
-  const negative = ab < 0 || bc < 0 || ca < 0;
-  const positive = ab > 0 || bc > 0 || ca > 0;
-  return !(negative && positive);
+  const sides = [side(p, a, b), side(p, b, c), side(p, c, a)];
+  return sides.every((v) => v >= 0) || sides.every((v) => v <= 0);
 }
 
 /** How long the panel waits for a pointer that stopped inside the safe zone. */
