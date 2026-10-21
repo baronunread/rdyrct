@@ -437,13 +437,18 @@ export function QrPillar() {
 function QrPanel({ active, near }: { active: "edit" | "logo" | "free"; near: boolean }) {
   return (
     <div className="flex items-center gap-4 p-4 sm:gap-5 sm:p-5">
-      <div className="size-28 shrink-0 sm:size-32 overflow-hidden rounded-xl border border-border/70 bg-white">
+      {/* Holds the code's place, white, until it loads. The code draws its
+          own frame, so this one has none: two frames the same size put the
+          preview 2px past this box and clipped its edges. */}
+      <div className="size-28 shrink-0 rounded-xl bg-white sm:size-32">
         {near && (
           <Suspense>
             <QRPreview
               url="https://go.acme.com/spring"
               size={128}
-              sizeClass="size-28 sm:size-32"
+              // A light hairline, not the theme's border: on the dark theme
+              // that is a dark ring around a white code.
+              sizeClass="size-28 rounded-xl border-black/10 sm:size-32"
               logo={active === "free" ? undefined : "/favicon.svg"}
             />
           </Suspense>
