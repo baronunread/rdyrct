@@ -993,14 +993,24 @@ function FaqSection() {
   );
 }
 
+/** The page's last word, as wide as the footer under it: a dark band that
+ *  steps out of the column so the page ends on something, not on a gap. */
 function FinalCtaSection({ ctaTo, ctaLabel }: { ctaTo: string; ctaLabel: string }) {
   return (
-    <Section className="py-20 md:py-28">
+    <Section className="breakout ink-band relative isolate mt-8 overflow-hidden rounded-3xl border border-border px-6 py-20 md:py-32">
+      <div
+        aria-hidden="true"
+        className="absolute inset-0 -z-10 bg-[radial-gradient(var(--border)_1px,transparent_1px)] bg-size-[14px_14px] mask-[radial-gradient(60%_70%_at_50%_45%,#000,transparent)]"
+      />
+      <div
+        aria-hidden="true"
+        className="landing-mesh absolute top-1/2 left-1/2 -z-10 h-80 w-160 max-w-full -translate-1/2 opacity-40"
+      />
       <div className="flex flex-col items-center gap-6 text-center">
         <h2 className="text-metal max-w-3xl pb-1 text-4xl font-bold tracking-tight text-balance sm:text-6xl">
           Your next link, one hop away.
         </h2>
-        <p className="max-w-md text-muted">
+        <p className="max-w-lg text-pretty text-muted">
           Your first short link takes a minute on the free plan. No credit card.
         </p>
         <HrefLink

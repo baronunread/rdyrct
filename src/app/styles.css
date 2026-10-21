@@ -204,6 +204,20 @@
   --surface: #1a1726;
 }
 
+/* Wider than the page's column and centred on it, for what closes a page:
+   the last call to action and the footer. Phones keep the column, where the
+   few pixels it would gain read as a misalignment. The parent must be
+   centred on the page, as every public page's column is. */
+@utility breakout {
+  @media (width >= 40rem) {
+    position: relative;
+    left: 50%;
+    width: min(calc(100vw - 2rem), 78rem);
+    max-width: none;
+    translate: -50% 0;
+  }
+}
+
 /* A product panel on the landing, lit from above. */
 @utility lit {
   box-shadow:
