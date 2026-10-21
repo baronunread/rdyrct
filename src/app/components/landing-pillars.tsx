@@ -27,7 +27,19 @@ import { useInView } from "motion/react";
 import { MarketingLink } from "./marketing-link";
 import { FrameRow, SplitHeading } from "./marketing-kit";
 import { buttonClass } from "../ui/button-class";
+import {
+  ChartColumn,
+  Globe,
+  ImagePlus,
+  Link2,
+  Pencil,
+  QrCode,
+  RefreshCw,
+  ShieldCheck,
+  Target,
+} from "../ui/icons";
 import { cn } from "../ui/cn";
+import { lookup } from "@/shared/lookup";
 
 // The charts bundle is the largest thing the homepage can fetch, so the
 // analytics panel asks for it only once it scrolls near the screen.
@@ -59,12 +71,22 @@ export function Manifesto() {
   );
 }
 
-type Detail<K extends string> = { key: K; title: string; body: ReactNode };
+type Detail<K extends string> = {
+  key: K;
+  title: string;
+  body: ReactNode;
+  icon: ComponentType<{ size?: number; className?: string }>;
+};
 
 /**
  * One section: heading and a way in, the product over a soft light, and the
- * details as tabs that change what the product shows. Tabs, not a carousel:
- * nothing moves until the visitor picks something.
+ * details as tabs that change what the product shows.
+ *
+ * The tabs move on by themselves while the section is on screen, each line
+ * filling as its tab's time runs out (the pattern the best pages in this
+ * category use, and the plainest way to show the details can be picked).
+ * Pointing at or focusing the section pauses it; picking a tab stops it for
+ * good; under reduced motion it never starts.
  */
 function Pillar<K extends string>({
   id,
@@ -84,91 +106,185 @@ function Pillar<K extends string>({
   children: (active: K, near: boolean) => ReactNode;
 }) {
   const base = useId();
-  // Nothing picked yet means the first detail.
-  const [picked, setActive] = useState<K | null>(null);
-  const active = picked ?? details[0].key;
-  const stage = useRef<HTMLDivElement>(null);
-  // "Near" a little before it is on screen, so a lazy panel has arrived by
-  // the time anybody looks at it.
-  const near = useInView(stage, { once: true, margin: "200px 0px" });
+  const clock = useDetailClock(details);
 
   return (
-    <section id={id} aria-labelledby={`${base}-h`} className="scroll-mt-24">
+    <section
+      ref={clock.section}
+      id={id}
+      aria-labelledby={`${base}-h`}
+      data-playing={clock.playing ? "" : undefined}
+      className="scroll-mt-24"
+    >
       <FrameRow className="px-6 py-12 sm:px-10 md:py-16">
         <SplitHeading id={`${base}-h`} lead={lead} rest={rest} />
         <div className="mt-6">{action}</div>
       </FrameRow>
+      <PillarStage base={base} active={clock.active} wide={wide}>
+        {(near) => children(clock.active, near)}
+      </PillarStage>
       <div
-        ref={stage}
-        role="tabpanel"
-        id={`${base}-panel`}
-        aria-labelledby={`${base}-tab-${active}`}
-        className="relative h-80 overflow-hidden border-t border-border/70 bg-surface-2 px-4 pt-8 md:h-88"
+        role="tablist"
+        aria-label={lead}
+        // Part of the stage above it, not a band of its own: one surface, so
+        // the frame has no edge here for a corner to sit on.
+        className="grid gap-x-10 gap-y-6 bg-surface-2 px-6 pt-4 pb-10 sm:grid-cols-3 sm:px-10 md:pb-12"
       >
-        <div
-          aria-hidden="true"
-          className="landing-mesh absolute top-6 left-1/2 h-72 w-120 max-w-full -translate-x-1/2"
-        />
-        <div
-          className={cn(
-            "lit relative mx-auto rounded-2xl border border-border/70 bg-surface text-sm mask-[linear-gradient(#000_72%,transparent)]",
-            wide ? "max-w-2xl p-4" : "max-w-md",
-          )}
-        >
-          {children(active, near)}
-        </div>
+        {details.map((detail, index) => (
+          <DetailTab
+            key={detail.key}
+            base={base}
+            detail={detail}
+            selected={detail.key === clock.active}
+            clocked={clock.clocked}
+            onPick={() => clock.pick(detail.key)}
+            onStep={(by) => {
+              const next = details[(index + by + details.length) % details.length];
+              clock.pick(next.key);
+              document.getElementById(`${base}-tab-${next.key}`)?.focus();
+            }}
+            onTimeUp={clock.advance}
+          />
+        ))}
       </div>
-      <DetailTabs base={base} label={lead} details={details} active={active} onPick={setActive} />
     </section>
   );
 }
 
-function DetailTabs<K extends string>({
+/**
+ * Which detail is showing, and the clock that moves it on: the first detail
+ * until the clock or the visitor says otherwise. `playing` is the clock
+ * running, which is only while the section is on screen and nobody has
+ * picked a tab (styles.css, tab-dwell, pauses it under the pointer).
+ */
+function useDetailClock<K extends string>(details: readonly [Detail<K>, ...Detail<K>[]]) {
+  const [picked, pick] = useState<K | null>(null);
+  const [auto, setAuto] = useState<K | null>(null);
+  const active = picked ?? auto ?? details[0].key;
+  const section = useRef<HTMLElement>(null);
+  const watching = useInView(section, { amount: 0.4 });
+  const clocked = picked === null;
+  const advance = () => {
+    const at = details.findIndex((detail) => detail.key === active);
+    setAuto(details[(at + 1) % details.length].key);
+  };
+  return { active, pick, advance, section, clocked, playing: clocked && watching };
+}
+
+/** The product over a soft light, showing whichever detail is active. */
+function PillarStage({
   base,
-  label,
-  details,
   active,
-  onPick,
+  wide,
+  children,
 }: {
   base: string;
-  label: string;
-  details: readonly Detail<K>[];
-  active: K;
-  onPick: (key: K) => void;
+  active: string;
+  wide?: boolean;
+  children: (near: boolean) => ReactNode;
 }) {
-  // Arrow keys move along the row, as tabs do.
-  const step = (event: KeyboardEvent, index: number) => {
-    const by = { ArrowRight: 1, ArrowLeft: -1 }[event.key];
-    if (!by) return;
-    event.preventDefault();
-    const next = details[(index + by + details.length) % details.length];
-    onPick(next.key);
-    document.getElementById(`${base}-tab-${next.key}`)?.focus();
-  };
+  const stage = useRef<HTMLDivElement>(null);
+  // "Near" a little before it is on screen, so a lazy panel has arrived by
+  // the time anybody looks at it.
+  const near = useInView(stage, { once: true, margin: "200px 0px" });
   return (
     <div
-      role="tablist"
-      aria-label={label}
-      className="grid border-t border-border/70 bg-surface-2 sm:grid-cols-3"
+      ref={stage}
+      role="tabpanel"
+      id={`${base}-panel`}
+      aria-labelledby={`${base}-tab-${active}`}
+      // The fade at the foot hands whatever the stage cuts off to the tabs
+      // under it, which share its colour, so no panel ends on a hard edge.
+      className="relative h-72 overflow-hidden border-t border-border/70 bg-surface-2 px-4 pt-8 after:pointer-events-none after:absolute after:inset-x-0 after:bottom-0 after:h-16 after:bg-linear-to-b after:from-transparent after:to-surface-2 md:h-80"
     >
-      {details.map((detail, index) => (
-        <button
-          key={detail.key}
-          type="button"
-          role="tab"
-          id={`${base}-tab-${detail.key}`}
-          aria-selected={detail.key === active}
-          aria-controls={`${base}-panel`}
-          tabIndex={detail.key === active ? 0 : -1}
-          onClick={() => onPick(detail.key)}
-          onKeyDown={(event) => step(event, index)}
-          className="cursor-pointer border-border/70 border-l-2 border-l-transparent px-5 py-5 text-left text-sm text-muted opacity-60 transition-opacity not-first:border-t hover:opacity-100 aria-selected:border-l-accent aria-selected:opacity-100 sm:not-first:border-t-0 sm:not-first:border-l sm:not-first:aria-selected:border-l-2"
-        >
-          <span className="block font-bold text-text">{detail.title}</span>
-          <span className="mt-1 block">{detail.body}</span>
-        </button>
-      ))}
+      <div
+        aria-hidden="true"
+        className="landing-mesh absolute top-6 left-1/2 h-72 w-120 max-w-full -translate-x-1/2"
+      />
+      <div
+        className={cn(
+          "lit relative mx-auto rounded-2xl border border-border/70 bg-surface text-sm mask-[linear-gradient(#000_72%,transparent)]",
+          wide ? "max-w-2xl p-4" : "max-w-md",
+        )}
+      >
+        {children(near)}
+      </div>
     </div>
+  );
+}
+
+/**
+ * A tab's line: a hairline track, filled in the accent when its tab is
+ * showing. While the clock runs the fill grows over the tab's time, and the
+ * tabs move on when it is full (styles.css, tab-dwell).
+ */
+function TabLine({
+  running,
+  filled,
+  onTimeUp,
+}: {
+  running: boolean;
+  filled: boolean;
+  onTimeUp: () => void;
+}) {
+  return (
+    <span aria-hidden="true" className="absolute inset-y-0 left-0 w-px overflow-hidden bg-border">
+      {filled && (
+        <span
+          data-clocked={running ? "" : undefined}
+          onAnimationEnd={running ? onTimeUp : undefined}
+          className="tab-dwell absolute inset-0 origin-top bg-accent"
+        />
+      )}
+    </span>
+  );
+}
+
+/** Arrow keys move along the row, as tabs do. */
+const ARROWS = { ArrowRight: 1, ArrowLeft: -1 } as const;
+
+function DetailTab<K extends string>({
+  base,
+  detail,
+  selected,
+  clocked,
+  onPick,
+  onStep,
+  onTimeUp,
+}: {
+  base: string;
+  detail: Detail<K>;
+  selected: boolean;
+  /** Still moving on by itself: the visitor has not picked a tab yet. */
+  clocked: boolean;
+  onPick: () => void;
+  onStep: (by: 1 | -1) => void;
+  onTimeUp: () => void;
+}) {
+  const Icon = detail.icon;
+  const step = (event: KeyboardEvent) => {
+    const by = lookup(ARROWS, event.key);
+    if (!by) return;
+    event.preventDefault();
+    onStep(by);
+  };
+  return (
+    <button
+      type="button"
+      role="tab"
+      id={`${base}-tab-${detail.key}`}
+      aria-selected={selected}
+      aria-controls={`${base}-panel`}
+      tabIndex={selected ? 0 : -1}
+      onClick={onPick}
+      onKeyDown={step}
+      className="group/tab relative flex cursor-pointer flex-col items-start py-1 pl-5 text-left text-sm opacity-50 transition-opacity duration-300 hover:opacity-80 focus-visible:opacity-100 aria-selected:opacity-100"
+    >
+      <TabLine running={selected && clocked} filled={selected} onTimeUp={onTimeUp} />
+      <Icon size={16} className="text-muted group-aria-selected/tab:text-accent" />
+      <span className="mt-2 block font-bold text-text">{detail.title}</span>
+      <span className="mt-1 block text-muted">{detail.body}</span>
+    </button>
   );
 }
 
@@ -206,16 +322,19 @@ export function LinksPillar() {
       details={[
         {
           key: "domain",
+          icon: Globe,
           title: "Your own domain",
           body: "From $4 a month, with TLS set up for you.",
         },
         {
           key: "words",
+          icon: Pencil,
           title: "Words you choose",
           body: "go.acme.com/spring, not a string nobody trusts.",
         },
         {
           key: "tags",
+          icon: Target,
           title: "Campaign tags",
           body: "Source and campaign on every link, no UTM codes by hand.",
         },
@@ -292,11 +411,22 @@ export function QrPillar() {
       details={[
         {
           key: "edit",
+          icon: RefreshCw,
           title: "Edit after printing",
           body: "Change where a code points. The poster on the wall keeps working.",
         },
-        { key: "logo", title: "Your logo and colours", body: "On every code, as PNG or SVG." },
-        { key: "free", title: "A free generator", body: "Make one without an account." },
+        {
+          key: "logo",
+          icon: ImagePlus,
+          title: "Your logo and colours",
+          body: "On every code, as PNG or SVG.",
+        },
+        {
+          key: "free",
+          icon: QrCode,
+          title: "A free generator",
+          body: "Make one without an account.",
+        },
       ]}
     >
       {(active, near) => <QrPanel active={active} near={near} />}
@@ -368,16 +498,19 @@ export function AnalyticsPillar({ ask }: { ask: ReactNode }) {
       details={[
         {
           key: "trend",
+          icon: ChartColumn,
           title: "Clicks over time",
           body: "From the last 24 hours to the last year.",
         },
         {
           key: "sources",
+          icon: Link2,
           title: "Top sources",
           body: "Which post, email or poster brought people in.",
         },
         {
           key: "personal",
+          icon: ShieldCheck,
           title: "Nothing personal",
           body: "No IP address kept. Country, source and device, and that is all.",
         },

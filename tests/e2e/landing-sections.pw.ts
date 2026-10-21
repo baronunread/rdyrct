@@ -55,3 +55,39 @@ test("the landing sections name no competitor", async ({ page }) => {
     await expect(section).not.toContainText(/bitly|rebrandly|dub|short\.io/i);
   }
 });
+
+// The tabs move on by themselves while the section is on screen, which is
+// what tells a visitor they can be picked, and stop for good once one is.
+test("the details move on by themselves until the visitor picks one", async ({ page }) => {
+  await page.goto("/");
+  // A short dwell, so the test does not wait out six seconds a tab.
+  await page.addStyleTag({ content: ":root { --tab-dwell: 400ms; }" });
+  const links = page.getByRole("tablist", { name: "Links that look like you." });
+  await links.scrollIntoViewIfNeeded();
+  await page.mouse.move(0, 0);
+
+  const words = links.getByRole("tab", { name: /words you choose/i });
+  await expect(words).toHaveAttribute("aria-selected", "true");
+
+  await links.getByRole("tab", { name: /your own domain/i }).click();
+  await page.mouse.move(0, 0);
+  await page.waitForTimeout(1200);
+  await expect(links.getByRole("tab", { name: /your own domain/i })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
+});
+
+test("under reduced motion the details stay where they are", async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.goto("/");
+  await page.addStyleTag({ content: ":root { --tab-dwell: 300ms; }" });
+  const links = page.getByRole("tablist", { name: "Links that look like you." });
+  await links.scrollIntoViewIfNeeded();
+  await page.mouse.move(0, 0);
+  await page.waitForTimeout(1000);
+  await expect(links.getByRole("tab", { name: /your own domain/i })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
+});
