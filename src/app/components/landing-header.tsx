@@ -27,6 +27,7 @@ import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } fro
 import { ChevronDown, Github } from "../ui/icons";
 import { GITHUB_URL } from "../ui/footer";
 import { useHydrated } from "../lib/hydrated";
+import { useSafeHover } from "../lib/safe-hover";
 import { MarketingLink } from "./marketing-link";
 import { trackCta } from "../lib/track-cta";
 import { buttonClass } from "../ui/button-class";
@@ -220,23 +221,36 @@ function ProductMenu({ current }: { current: boolean }) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
-  useDismiss(open, rootRef, () => setOpen(false), buttonRef);
+  const panelRef = useRef<HTMLDivElement>(null);
+  const safe = useSafeHover(panelRef, setOpen);
+  const close = () => {
+    safe.cancel();
+    setOpen(false);
+  };
+  useDismiss(open, rootRef, close, buttonRef);
 
   // The pointer reaches the button before it clicks it, so a click that
   // lands just after hover opened the panel means "open", not "close".
   const hoveredAt = useRef(0);
-  const hover = (next: boolean) => {
-    if (!matchMedia("(hover: hover)").matches) return;
-    hoveredAt.current = next ? performance.now() : 0;
-    setOpen(next);
+  const canHover = () => matchMedia("(hover: hover)").matches;
+  const enter = () => {
+    if (!canHover()) return;
+    hoveredAt.current = performance.now();
+    safe.enter();
+  };
+  const leave = (event: React.PointerEvent) => {
+    if (!canHover()) return;
+    hoveredAt.current = 0;
+    safe.leave({ x: event.clientX, y: event.clientY });
   };
   const toggle = () => {
     if (performance.now() - hoveredAt.current < 600) return;
+    safe.cancel();
     setOpen((was) => !was);
   };
 
   return (
-    <div ref={rootRef} onPointerEnter={() => hover(true)} onPointerLeave={() => hover(false)}>
+    <div ref={rootRef} onPointerEnter={enter} onPointerLeave={leave}>
       <button
         ref={buttonRef}
         type="button"
@@ -256,12 +270,17 @@ function ProductMenu({ current }: { current: boolean }) {
       {/* Rendered closed rather than not at all: the links are in the HTML
           a crawler reads, and opening does not wait on a render. `inert`
           keeps the closed panel out of the tab order. The top padding is
-          part of the panel, so the pointer crosses no gap on the way down. */}
+          part of the panel, so the pointer crosses no gap on the way down,
+          and useSafeHover keeps it open on a diagonal one.
+
+          It grows down out of the pill (origin-top), and leaves quicker and
+          with less travel than it came, blurring as it goes. */}
       <div
+        ref={panelRef}
         id="product-panel"
         inert={!open}
         data-open={open ? "" : undefined}
-        className="invisible absolute top-full left-1/2 w-md -translate-x-1/2 pt-2 opacity-0 transition-[opacity,visibility] duration-150 data-open:visible data-open:opacity-100 motion-reduce:transition-none"
+        className="invisible absolute top-full left-1/2 w-md origin-top -translate-x-1/2 -translate-y-1 scale-[0.97] pt-2 opacity-0 blur-[4px] transition-[opacity,translate,scale,filter,visibility] duration-150 ease-in data-open:visible data-open:translate-y-0 data-open:scale-100 data-open:opacity-100 data-open:blur-none data-open:duration-200 data-open:ease-[cubic-bezier(0.23,1,0.32,1)] motion-reduce:translate-y-0 motion-reduce:scale-100 motion-reduce:blur-none"
       >
         <ul className="grid grid-cols-2 gap-1 rounded-2xl border border-border bg-surface p-2 shadow-[0_16px_40px_-18px_rgb(30_20_50/0.35)]">
           {PRODUCT_LINKS.map((link) => (

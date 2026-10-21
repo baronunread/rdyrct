@@ -109,6 +109,43 @@ test("header navigation and sign-up remain usable on desktop and phone", async (
   await expect(page).toHaveURL(/\/signup/);
 });
 
+// Hovering Product opens its panel, and the panel has to survive the trip to
+// a link in its far corner: that path leaves the button sideways, over the
+// nav's padding, before it reaches the panel. Moving along the nav instead
+// means somebody went for another item, and the panel gets out of the way.
+test("the Product panel stays open on the way to its far corner, not along the nav", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/");
+  await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+  const nav = page.locator("header").getByRole("navigation", { name: "Main" });
+  const product = nav.getByRole("button", { name: "Product" });
+  const button = await product.boundingBox();
+  if (!button) throw new Error("the Product button has no box");
+  const start = { x: button.x + button.width / 2, y: button.y + button.height / 2 };
+
+  await page.mouse.move(start.x, start.y);
+  await expect(product).toHaveAttribute("aria-expanded", "true");
+  const far = nav.locator("#product-panel a").last();
+  await expect(far).toBeVisible();
+  const target = await far.boundingBox();
+  if (!target) throw new Error("the far link has no box");
+  await page.mouse.move(target.x + target.width / 2, target.y + target.height / 2, { steps: 60 });
+  await expect(product).toHaveAttribute("aria-expanded", "true");
+  await far.click();
+  await expect(page).not.toHaveURL(/\/$/);
+
+  await page.goto("/");
+  await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+  await page.mouse.move(start.x, start.y);
+  await expect(product).toHaveAttribute("aria-expanded", "true");
+  const docs = await nav.getByRole("link", { name: "Docs" }).boundingBox();
+  if (!docs) throw new Error("Docs has no box");
+  await page.mouse.move(docs.x + docs.width / 2, start.y, { steps: 8 });
+  await expect(product).toHaveAttribute("aria-expanded", "false");
+});
+
 // On a phone the pill opens into a card with every page in it; before this
 // the only way to Pricing on a phone was the footer.
 test("the phone menu opens, leads somewhere, and closes", async ({ page }) => {
