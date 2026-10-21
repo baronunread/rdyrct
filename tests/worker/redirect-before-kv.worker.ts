@@ -134,7 +134,7 @@ describe("the page a short-link host 404s with", () => {
     expect(res.status).toBe(404);
     expect(res.headers.get("content-type")).toContain("text/html");
     const html = await res.text();
-    expect(html).toContain("This short link does not exist");
+    expect(html).toContain("Nothing lives at this link.");
     expect(html).toContain(`href="${env.APP_URL}"`);
   });
 
@@ -146,7 +146,7 @@ describe("the page a short-link host 404s with", () => {
     const res = await follow("http://go.example.com/nobodys4");
     expect(res.status).toBe(404);
     const html = await res.text();
-    expect(html).toContain("This short link does not exist");
+    expect(html).toContain("Nothing lives at this link.");
     expect(html).not.toContain("Go home");
   });
 

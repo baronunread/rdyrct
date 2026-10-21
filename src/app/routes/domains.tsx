@@ -131,6 +131,10 @@ function AddDomainForm({
               {...register("hostname")}
               placeholder="links.example.com"
               aria-label="Add a domain"
+              inputMode="url"
+              autoComplete="off"
+              autoCapitalize="none"
+              spellCheck={false}
             />
           </div>
           <Button type="submit" variant="primary" size="sm" disabled={pending} className="w-24">
@@ -182,7 +186,7 @@ function DeleteDomainDialog({
       open={!!deleting}
       onClose={onClose}
       onConfirm={onConfirm}
-      confirmLabel="Delete"
+      confirmLabel="Delete domain"
       danger
       pending={pending}
     >
@@ -687,7 +691,9 @@ function DomainRow({
               onToggle={onToggleDefault}
             />
           )}
-          <span className="truncate font-bold">{d.hostname}</span>
+          <span className="truncate font-bold" title={d.hostname}>
+            {d.hostname}
+          </span>
         </div>
         <DomainRowActions
           domain={d}
@@ -784,6 +790,10 @@ function RootRedirectEditor({
             value={redirectDraft}
             onChange={(e) => onRedirectDraft(e.target.value)}
             placeholder="https://example.com"
+            inputMode="url"
+            autoComplete="off"
+            autoCapitalize="none"
+            spellCheck={false}
           />
         </div>
         <Button size="sm" disabled={savingRedirect} onClick={onSaveRedirect}>

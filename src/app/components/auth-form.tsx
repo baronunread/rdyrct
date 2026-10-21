@@ -3,15 +3,16 @@ import { Link } from "@tanstack/react-router";
 import { cn } from "../ui/cn";
 import { Tooltip } from "../ui/tooltip";
 import { passwordScore, passwordTips } from "../lib/password-strength";
+import { Logo } from "../ui/logo";
 
 /** Centered card with the wordmark on top; wraps every auth screen. */
 export function AuthCard({ children, className }: { children: ReactNode; className?: string }) {
   return (
     <div className="grid min-h-dvh place-items-center px-4">
       <div className={cn("w-full max-w-sm", className)}>
-        <p className="mb-6 text-center text-xl font-bold tracking-widest">
+        <p className="mb-6 text-center text-xl">
           <Link to="/" className="hover:text-accent">
-            rdyrct
+            <Logo />
           </Link>
         </p>
         {children}

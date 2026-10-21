@@ -9,7 +9,15 @@ function current(): Theme {
 }
 
 function apply(next: Theme) {
-  document.documentElement.dataset.theme = next;
+  const root = document.documentElement;
+  // Transitions off for the swap (styles.css, [data-theme-switching]), so
+  // the colours change in one frame. Reading a computed style flushes the
+  // new theme's styles before the flag comes off; without it the browser
+  // batches both changes and the transitions run anyway.
+  root.dataset.themeSwitching = "";
+  root.dataset.theme = next;
+  void getComputedStyle(root).color;
+  delete root.dataset.themeSwitching;
   localStorage.setItem("theme", next);
   listeners.forEach((cb) => cb());
 }

@@ -41,6 +41,7 @@ import { notFoundPage } from "./not-found-page";
 import { RESERVED_SLUGS, SLUG_RE } from "./util";
 import { markdownPage, withPageMeta } from "./page-meta";
 import { PRERENDERED_PUBLIC_PATHS } from "../shared/page-meta";
+import { RDYRCT_SITE, SITE_ONLY_PATHS } from "../shared/site";
 import { enforcePublicAuthRateLimit, enforceSignedApiRateLimit } from "./rate-limit";
 import { applySecurityHeaders } from "./security-headers";
 import { drizzle } from "drizzle-orm/d1";
@@ -324,8 +325,9 @@ app.route("/api/cap", capRoutes);
 
 // The landing page's anonymous shortener (Direction A of #96): public by
 // definition, and gated by Cap plus its own rate-limit namespace rather than
-// by a session.
-app.route("/api/shorten", shortenRoutes);
+// by a session. Only rdyrct.com has that landing page, so only rdyrct.com
+// takes links from strangers.
+if (RDYRCT_SITE) app.route("/api/shorten", shortenRoutes);
 
 // Abuse reports from anyone, gated the same way (Cap plus a rate limit).
 app.route("/api/reports", reportRoutes);
@@ -472,6 +474,9 @@ function finalizeSpaResponse(response: Response, url: URL, status?: 404): Respon
  */
 async function serveSpa(c: Context<AppEnv>, status?: 404): Promise<Response> {
   const url = new URL(c.req.url);
+  // A self-hosted build has none of rdyrct.com's pages: say so, rather than
+  // send the shell for the app to say it under a 200.
+  if (!RDYRCT_SITE && SITE_ONLY_PATHS.has(url.pathname)) status = 404;
   // Markdown is a representation of the same public page, not another route.
   // Select it before fetching the SPA shell, which has no useful body for an
   // agent that does not run JavaScript.
@@ -493,7 +498,12 @@ async function serveSpa(c: Context<AppEnv>, status?: 404): Promise<Response> {
 
 // Keep the old agent-facing address working, but generate it from the same
 // source as negotiated /pricing so those two documents cannot drift apart.
+// A self-hosted copy opens on the app. The SPA would get there too, a
+// round trip and a bundle later.
+if (!RDYRCT_SITE) app.get("/", (c) => c.redirect("/dashboard", 302));
+
 app.get("/pricing.md", (c) => {
+  if (!RDYRCT_SITE) return serveSpa(c, 404);
   c.get("log")?.set({ route: c.req.path });
   const canonicalUrl = new URL(c.req.url);
   canonicalUrl.pathname = "/pricing";

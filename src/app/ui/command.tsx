@@ -1,7 +1,7 @@
 import { Dialog as BaseDialog } from "@base-ui/react/dialog";
 import { Command as CommandPrimitive } from "cmdk";
 import type { ComponentProps, ReactNode } from "react";
-import { AnimatePresence, domAnimation, LazyMotion, m } from "motion/react";
+import { AnimatePresence, domAnimation, LazyMotion, m, MotionConfig } from "motion/react";
 import { Search, X } from "@/app/ui/icons";
 import { cn } from "./cn";
 
@@ -29,45 +29,49 @@ export function CommandDialog({
 }) {
   return (
     <LazyMotion features={domAnimation}>
-      <AnimatePresence>
-        {open && (
-          <BaseDialog.Root open onOpenChange={onOpenChange}>
-            <BaseDialog.Portal keepMounted>
-              <BaseDialog.Backdrop
-                className="fixed inset-0 z-40 bg-black/55 backdrop-blur-[2px]"
-                render={
-                  <m.div
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    exit={{ opacity: 0 }}
-                    transition={{ duration: 0.15 }}
-                  />
-                }
-              />
-              <BaseDialog.Popup
-                className="fixed top-[14dvh] left-1/2 z-50 w-[calc(100vw-2rem)] max-w-xl -translate-x-1/2 overflow-hidden rounded-xl bg-surface text-text smooth-shadow-ring-2xl"
-                render={
-                  <m.div
-                    initial={{ opacity: 0, scale: 0.97 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    exit={{ opacity: 0, scale: 0.97 }}
-                    transition={{ duration: 0.15 }}
-                  />
-                }
-              >
-                <BaseDialog.Title className="sr-only">{label}</BaseDialog.Title>
-                <CommandPrimitive
-                  label={label}
-                  shouldFilter={shouldFilter}
-                  className="flex max-h-[60dvh] flex-col"
+      <MotionConfig reducedMotion="user">
+        <AnimatePresence>
+          {open && (
+            <BaseDialog.Root open onOpenChange={onOpenChange}>
+              <BaseDialog.Portal keepMounted>
+                <BaseDialog.Backdrop
+                  className="fixed inset-0 z-40 bg-black/55 backdrop-blur-[2px]"
+                  render={
+                    <m.div
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      exit={{ opacity: 0 }}
+                      transition={{ duration: 0.15 }}
+                    />
+                  }
+                />
+                <BaseDialog.Popup
+                  className="fixed top-[14dvh] left-1/2 z-50 w-[calc(100vw-2rem)] max-w-xl -translate-x-1/2 overflow-hidden rounded-xl bg-surface text-text smooth-shadow-ring-2xl"
+                  render={
+                    <m.div
+                      initial={{ opacity: 0, scale: 0.97 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      // Opened many times a session, so it leaves by fading
+                      // alone, faster than it came.
+                      exit={{ opacity: 0, transition: { duration: 0.1 } }}
+                      transition={{ duration: 0.15 }}
+                    />
+                  }
                 >
-                  {children}
-                </CommandPrimitive>
-              </BaseDialog.Popup>
-            </BaseDialog.Portal>
-          </BaseDialog.Root>
-        )}
-      </AnimatePresence>
+                  <BaseDialog.Title className="sr-only">{label}</BaseDialog.Title>
+                  <CommandPrimitive
+                    label={label}
+                    shouldFilter={shouldFilter}
+                    className="flex max-h-[60dvh] flex-col"
+                  >
+                    {children}
+                  </CommandPrimitive>
+                </BaseDialog.Popup>
+              </BaseDialog.Portal>
+            </BaseDialog.Root>
+          )}
+        </AnimatePresence>
+      </MotionConfig>
     </LazyMotion>
   );
 }

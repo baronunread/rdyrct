@@ -2,7 +2,14 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { NotFound } from "./not-found";
 import { errorMessage } from "@/app/lib/error-message";
 import confetti from "canvas-confetti";
-import { AnimatePresence, LazyMotion, domAnimation, m, useReducedMotion } from "motion/react";
+import {
+  AnimatePresence,
+  LazyMotion,
+  MotionConfig,
+  domAnimation,
+  m,
+  useReducedMotion,
+} from "motion/react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import {
@@ -180,7 +187,9 @@ function PlanFeatureComparison() {
  * actions; either, both, or neither can show depending on account state. */
 function CancelScheduledNotice({ plan, periodEnd }: { plan: OrgPlan; periodEnd: number }) {
   return (
-    <p className="text-sm text-amber-400">
+    // Ink, not a caution colour: the sentence carries the warning, and
+    // --butter is under AA as text on cream.
+    <p className="text-sm text-text">
       Your {PLAN_LABEL[plan]} plan is scheduled to cancel on {shortDate(periodEnd)}. Paid features
       remain available until then.
     </p>
@@ -570,6 +579,7 @@ function BillingOverlay({ show, message }: { show: boolean; message: string }) {
         transition={{ duration: 0.2 }}
       />
       <m.div
+        role="status"
         className="relative z-10 flex flex-col items-center gap-4 rounded-xl bg-surface p-8 text-center smooth-shadow-ring-2xl"
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
@@ -632,7 +642,9 @@ function CelebrationOverlay({
             exit={{ opacity: 0, scale: 0.95 }}
             transition={{ duration: 0.2 }}
           >
-            <span className="text-5xl">🎉</span>
+            <span aria-hidden="true" className="text-5xl">
+              🎉
+            </span>
             <p className="text-xl font-bold text-accent">Welcome to {PLAN_LABEL[plan]}!</p>
             {onFirstLink ? (
               <Button variant="primary" onClick={onFirstLink}>
@@ -716,6 +728,8 @@ function useCelebration() {
         startVelocity: 50,
         origin: { x: angle === 60 ? 0 : 1, y: 0.75 },
         colors,
+        // The overlay still says it; the burst is the part that moves.
+        disableForReducedMotion: true,
       });
     }
     setTimeout(() => setShowCelebration(false), 4000);
@@ -1079,11 +1093,13 @@ export function BillingPage() {
       </div>
 
       <LazyMotion features={domAnimation}>
-        <BillingOverlay {...model.overlay} />
-        {/* No org means no quota query, so the count never arrives: an account
+        <MotionConfig reducedMotion="user">
+          <BillingOverlay {...model.overlay} />
+          {/* No org means no quota query, so the count never arrives: an account
             that checked out from a landing CTA before it had an organization
             is exactly the one this hand-off is for. */}
-        <CelebrationOverlay {...model.celebration} />
+          <CelebrationOverlay {...model.celebration} />
+        </MotionConfig>
       </LazyMotion>
     </div>
   );

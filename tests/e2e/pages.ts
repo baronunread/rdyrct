@@ -34,12 +34,13 @@ export async function visitLegalPages(
   }
 }
 
-/** Pins the landing hero's random assignment before the page loads. */
-export async function pinHeroVariant(page: Page, variant: "control" | "test"): Promise<void> {
+/** Fix the coin the hero copy test flips (index.html and hero-variant.ts
+ *  both use Math.random), so a spec can open the landing page in one arm. */
+export async function pinHeroVariant(page: Page, variant: "own" | "answers"): Promise<void> {
   await page.addInitScript(
     (value) => {
       Math.random = () => value;
     },
-    variant === "control" ? 0.1 : 0.9,
+    variant === "own" ? 0.1 : 0.9,
   );
 }

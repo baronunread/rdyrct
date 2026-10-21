@@ -1,0 +1,48 @@
+/**
+ * The pages the marketing header leads to, shared by the desktop pill and the
+ * phone menu so the two cannot list different places.
+ */
+
+/** What "Product" opens. Each says in a few words why you would go there. */
+export const PRODUCT_LINKS = [
+  { to: "/qr-code-generator", label: "QR code generator", hint: "Free, with your logo" },
+  { to: "/compare", label: "Compare", hint: "Against Bitly, Rebrandly, Dub" },
+  { to: "/roadmap", label: "Roadmap", hint: "What we build next" },
+  { to: "/changelog", label: "Changelog", hint: "What shipped, and when" },
+] as const;
+
+/** The top-level items, after Product. */
+export const MAIN_LINKS = [
+  { key: "pricing", to: "/pricing", label: "Pricing", hint: "$0, $4 or $9 a month" },
+  { key: "docs", to: "/docs", label: "Docs", hint: "API and MCP" },
+] as const;
+
+const NAV_KEYS = ["product", "pricing", "docs", "blog"] as const;
+export type NavKey = (typeof NAV_KEYS)[number];
+const isNavKey = (value: string | undefined): value is NavKey =>
+  NAV_KEYS.some((key) => key === value);
+
+/** Pages that live under "Product" without a row of their own in its panel. */
+const PRODUCT_PATHS = new Set<string>([
+  ...PRODUCT_LINKS.map((link) => link.to),
+  "/bitly-alternative",
+  "/rebrandly-alternative",
+  "/dub-alternative",
+  "/short-io-alternative",
+]);
+
+/** The nav item the tab rests on, or null where none applies (the home page). */
+export function currentNavKey(pathname: string): NavKey | null {
+  if (pathname === "/pricing") return "pricing";
+  if (pathname === "/docs") return "docs";
+  if (PRODUCT_PATHS.has(pathname)) return "product";
+  return null;
+}
+
+/** The nav item an event landed on, found by the data-nav its element (or an
+ *  ancestor) carries, so the items themselves need no handlers. */
+export function navKeyAt(target: EventTarget | null): NavKey | null {
+  const item = target instanceof Element ? target.closest<HTMLElement>("[data-nav]") : null;
+  const key = item?.dataset.nav;
+  return isNavKey(key) ? key : null;
+}

@@ -25,18 +25,24 @@ function LinkDetailHeader({
 }) {
   return (
     <div className="mb-6 flex items-center gap-3">
-      <Link to="/links">
-        <button
-          type="button"
-          aria-label="Back to links"
-          className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-surface-2 hover:text-text"
-        >
-          <ArrowLeft size={16} />
-        </button>
+      {/* One control, the link itself: a button inside it gave Tab two stops. */}
+      <Link
+        to="/links"
+        aria-label="Back to links"
+        title="Back to links"
+        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-muted transition-colors hover:bg-surface-2 hover:text-text"
+      >
+        <ArrowLeft size={16} />
       </Link>
       <div className="min-w-0 flex-1">
-        <h1 className="truncate text-lg font-bold tracking-wide">{title}</h1>
-        {subtitle && <p className="mt-0.5 truncate text-sm text-muted">{subtitle}</p>}
+        <h1 className="truncate text-lg font-bold tracking-wide" title={title}>
+          {title}
+        </h1>
+        {subtitle && (
+          <p className="mt-0.5 truncate text-sm text-muted" title={subtitle}>
+            {subtitle}
+          </p>
+        )}
       </div>
       {action}
       <a
@@ -74,6 +80,7 @@ function LinkInfoCard({
             target="_blank"
             rel="noreferrer"
             className="block truncate text-accent hover:underline"
+            title={destination}
           >
             {destination}
           </a>

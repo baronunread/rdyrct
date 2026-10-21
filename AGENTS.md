@@ -24,7 +24,30 @@ bun run db:reset:local      # wipe local D1 + KV, re-apply migrations (start fro
 bun add <pkg>               # dependencies
 bunx agent-browser          # real-browser checks: screenshots, clicking through pages. Use it for any visual verification; do not hand-roll headless Chrome
 bun run db:seed:local       # seed local D1/KV with fake data (run dev server first)
+bun run deploy              # build and deploy; wrangler.jsonc says whether this is rdyrct.com or a self-hosted copy
 ```
+
+**One repo builds two things: rdyrct.com, and the copy a fork self-hosts.**
+`scripts/site-mode.ts` decides which from `APP_HOST` in `wrangler.jsonc`
+(rdyrct.com or not), and `VITE_RDYRCT_SITE=1` or `=0` overrides it.
+vite.config.ts writes the answer into `RDYRCT_SITE` (`src/shared/site.ts`)
+as a constant. A self-hosted build:
+
+- opens on the app: `/` redirects to `/dashboard`;
+- has none of rdyrct.com's pages (`src/app/marketing-routes.tsx` is not
+  bundled, and the Worker answers `SITE_ONLY_PATHS`, `/pricing.md` and
+  `/api/shorten` with a 404);
+- loses everything between `index.html`'s `rdyrct.com only` markers
+  (canonical, share cards, structured data, the stats script, the crawler
+  text), and the CSP allows no stats host;
+- swaps the sitemap, `llms*.txt`, `ai.txt` and `og.png` for a
+  `robots.txt` that disallows everything (`scripts/self-host-files.ts`);
+- links the privacy policy at `VITE_PRIVACY_URL` from the cookie banner,
+  which only appears when the build has a PostHog token.
+
+A new rdyrct.com-only page goes in `marketing-routes.tsx` and
+`PRERENDERED_PUBLIC_PATHS`. `bun run test:worker:self-host` and
+`bun run e2e:self-host` check a fork's build; CI runs both.
 
 **Local Cloudflare state**: while `bun run dev` runs, the Explorer API at
 `https://rdyrct.localhost/cdn-cgi/explorer/api` exposes the local KV, R2, D1,
@@ -39,6 +62,7 @@ bun run check                          # app + shared, worker, worker tests (thr
 bun run test                           # unit tests (bun test, tests/)
 bun run test:worker                    # worker tests (vitest-pool-workers, tests/worker/)
 bun run e2e:smoke                      # browser tests (playwright, tests/e2e/); needs .dev.vars
+bun run e2e:self-host                  # browser tests against a self-hosted build (own dist/, so not alongside e2e:smoke)
 bun run verify                         # static checks + unit + worker tests, no e2e: the local gate
 bun run verify:e2e                     # verify + the full e2e:smoke suite: what CI runs
 bun run doctor                         # react-doctor audit (React health score; --verbose for details)

@@ -2,12 +2,10 @@ import { StrictMode, Suspense, lazy } from "react";
 import { createRoot, hydrateRoot } from "react-dom/client";
 import {
   createMemoryHistory,
-  createRootRoute,
   createRoute,
   createRouter,
   redirect,
   RouterProvider,
-  Outlet,
   lazyRouteComponent,
 } from "@tanstack/react-router";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -25,17 +23,16 @@ import "./styles.css";
 import { ToastProvider } from "./ui/toast";
 import { ErrorBoundary } from "./components/error-boundary";
 import { NewVersionBanner } from "./components/new-version-banner";
-import { ConsentBanner } from "./ui/consent-banner";
 import { AppShellSkeleton, AdminPlatformSkeleton } from "./components/skeletons";
-import { LandingHeader } from "./components/landing-header";
-import { readAuthHint } from "./lib/user-cache";
+import { marketingRoutes } from "./marketing-routes";
+import { rootRoute } from "./root-route";
 import { resumeAnalyticsIfConsented } from "./lib/posthog";
 import { PRERENDERED_PUBLIC_PATHS } from "@/shared/page-meta";
+import { RDYRCT_SITE } from "@/shared/site";
 
 // Every route loads lazily so the entry chunk stays small: visitors on the
 // marketing landing never download the app, and the app never downloads the
 // admin pages unless the user is the platform admin.
-const LandingPage = lazyRouteComponent(() => import("./routes/landing"), "LandingPage");
 // Router-managed lazy components can preload before navigation commits.
 const LoginPage = lazyRouteComponent(() => import("./routes/auth"), "LoginPage");
 const SignupPage = lazyRouteComponent(() => import("./routes/auth"), "SignupPage");
@@ -47,34 +44,6 @@ const ResetPasswordPage = lazy(() =>
 const InvitePage = lazy(() => import("./routes/invite").then((m) => ({ default: m.InvitePage })));
 const ConsentPage = lazy(() =>
   import("./routes/consent").then((m) => ({ default: m.ConsentPage })),
-);
-const PrivacyPage = lazyRouteComponent(() => import("./routes/privacy"), "PrivacyPage");
-const TermsPage = lazyRouteComponent(() => import("./routes/terms"), "TermsPage");
-const ReportPage = lazyRouteComponent(() => import("./routes/report"), "ReportPage");
-const QrGeneratorPage = lazyRouteComponent(
-  () => import("./routes/qr-generator"),
-  "QrGeneratorPage",
-);
-const PricingPage = lazyRouteComponent(() => import("./routes/pricing"), "PricingPage");
-const RoadmapPage = lazyRouteComponent(() => import("./routes/roadmap"), "RoadmapPage");
-const DocsPage = lazyRouteComponent(() => import("./routes/docs"), "DocsPage");
-const ChangelogPage = lazyRouteComponent(() => import("./routes/changelog"), "ChangelogPage");
-const ComparePage = lazyRouteComponent(() => import("./routes/alternatives"), "ComparePage");
-const BitlyAlternativePage = lazyRouteComponent(
-  () => import("./routes/alternatives"),
-  "BitlyAlternativePage",
-);
-const RebrandlyAlternativePage = lazyRouteComponent(
-  () => import("./routes/alternatives"),
-  "RebrandlyAlternativePage",
-);
-const DubAlternativePage = lazyRouteComponent(
-  () => import("./routes/alternatives"),
-  "DubAlternativePage",
-);
-const ShortIoAlternativePage = lazyRouteComponent(
-  () => import("./routes/alternatives"),
-  "ShortIoAlternativePage",
 );
 const AppShell = lazy(() => import("./routes/shell").then((m) => ({ default: m.AppShell })));
 const RequireAuth = lazy(() => import("./routes/shell").then((m) => ({ default: m.RequireAuth })));
@@ -125,164 +94,15 @@ const AdminOrgsPage = lazy(() =>
 const AdminUsersPage = lazy(() =>
   import("./routes/admin/users").then((m) => ({ default: m.AdminUsersPage })),
 );
-const NotFound = lazy(() => import("./routes/not-found").then((m) => ({ default: m.NotFound })));
 
-/**
- * The marketing pages that carry the landing header, and the header itself
- * while their chunk downloads.
- *
- * It rides in the entry chunk (a few hundred bytes) rather than waiting for
- * the page's, so somebody arriving here sees the site's header on the first
- * frame and the page fills in under it, instead of watching an empty screen
- * with a cookie banner on it. Same wrapper as every page in the group uses,
- * so nothing moves when the real one takes over.
- *
- * The card pages (login, signup, invite) are deliberately not in here: they
- * have no header, and showing one would be a flash of the wrong thing.
- *
- * Nothing here touches the scroll. This component re-renders the moment the
- * router's store changes, which is a long way before the page it points at
- * exists: the next page is a lazy chunk, so for the length of that download
- * React is still showing the OLD page while `useLocation()` here already
- * reads the new path. A scroll reset from this component therefore moved the
- * page the visitor was leaving. Arriving at the top is handled at both ends
- * of the navigation instead, by code that runs when the new page is really
- * on screen: see components/marketing-link.tsx and lib/marketing-scroll.ts.
- */
-function PublicPages() {
-  return <Outlet />;
-}
-
-/**
- * What stands in while a marketing page's chunk is on its way.
- *
- * The router loads that chunk itself now (lazyRouteComponent below), so
- * there is no Suspense boundary left to fall back to. On a navigation the
- * router keeps the page you are on rather than showing this, which is the
- * point; this is for the cold load, where the alternative is an empty screen
- * with a cookie banner on it. Same wrapper the real pages use, so nothing
- * moves when one takes over.
- *
- * `pendingMs: 0` so a cold load paints it on the first frame instead of after
- * the router's one-second grace. That is safe only because a marketing
- * navigation never reaches a pending state: MarketingLink loads the route
- * before it commits, so the page you are on stays until the next one is ready.
- */
-function PublicPagePending() {
-  return (
-    <div className="relative mx-auto min-h-dvh max-w-5xl px-6">
-      <LandingHeader authed={readAuthHint()} />
-    </div>
-  );
-}
-
-const marketingPending = { pendingComponent: PublicPagePending, pendingMs: 0 };
-
-const rootRoute = createRootRoute({
-  component: () => (
-    // The card pages get a blank fallback; the two header pages and the app
-    // shell branch below bring their own. The consent banner sits inside the
-    // boundary so it waits for the page it belongs to: on its own over an
-    // empty screen it read as the whole site.
-    <Suspense fallback={null}>
-      <Outlet />
-      <ConsentBanner />
-    </Suspense>
-  ),
-  notFoundComponent: NotFound,
-});
-
-// Pathless layout: adds the marketing header/scroll-reset wrapper without an
-// extra URL segment.
-const publicLayoutRoute = createRoute({
+// A self-hosted copy has no landing page: its front door is the app, which
+// sends anybody signed out on to /login.
+const appHomeRoute = createRoute({
   getParentRoute: () => rootRoute,
-  id: "public-layout",
-  component: PublicPages,
-});
-
-const landingRoute = createRoute({
-  getParentRoute: () => publicLayoutRoute,
   path: "/",
-  component: LandingPage,
-  ...marketingPending,
-});
-const qrGeneratorRoute = createRoute({
-  getParentRoute: () => publicLayoutRoute,
-  path: "/qr-code-generator",
-  component: QrGeneratorPage,
-  ...marketingPending,
-});
-const pricingRoute = createRoute({
-  getParentRoute: () => publicLayoutRoute,
-  path: "/pricing",
-  component: PricingPage,
-  ...marketingPending,
-});
-const roadmapRoute = createRoute({
-  getParentRoute: () => publicLayoutRoute,
-  path: "/roadmap",
-  component: RoadmapPage,
-  ...marketingPending,
-});
-const changelogRoute = createRoute({
-  getParentRoute: () => publicLayoutRoute,
-  path: "/changelog",
-  component: ChangelogPage,
-  ...marketingPending,
-});
-const compareRoute = createRoute({
-  getParentRoute: () => publicLayoutRoute,
-  path: "/compare",
-  component: ComparePage,
-  ...marketingPending,
-});
-const bitlyAlternativeRoute = createRoute({
-  getParentRoute: () => publicLayoutRoute,
-  path: "/bitly-alternative",
-  component: BitlyAlternativePage,
-  ...marketingPending,
-});
-const rebrandlyAlternativeRoute = createRoute({
-  getParentRoute: () => publicLayoutRoute,
-  path: "/rebrandly-alternative",
-  component: RebrandlyAlternativePage,
-  ...marketingPending,
-});
-const dubAlternativeRoute = createRoute({
-  getParentRoute: () => publicLayoutRoute,
-  path: "/dub-alternative",
-  component: DubAlternativePage,
-  ...marketingPending,
-});
-const shortIoAlternativeRoute = createRoute({
-  getParentRoute: () => publicLayoutRoute,
-  path: "/short-io-alternative",
-  component: ShortIoAlternativePage,
-  ...marketingPending,
-});
-const docsRoute = createRoute({
-  getParentRoute: () => publicLayoutRoute,
-  path: "/docs",
-  component: DocsPage,
-  ...marketingPending,
-});
-const privacyRoute = createRoute({
-  getParentRoute: () => publicLayoutRoute,
-  path: "/privacy",
-  component: PrivacyPage,
-  ...marketingPending,
-});
-const reportRoute = createRoute({
-  getParentRoute: () => publicLayoutRoute,
-  path: "/report",
-  component: ReportPage,
-  ...marketingPending,
-});
-const termsRoute = createRoute({
-  getParentRoute: () => publicLayoutRoute,
-  path: "/terms",
-  component: TermsPage,
-  ...marketingPending,
+  beforeLoad: () => {
+    throw redirect({ to: "/dashboard" });
+  },
 });
 
 const loginRoute = createRoute({
@@ -426,22 +246,7 @@ const adminAuditRoute = createRoute({
 });
 
 const routeTree = rootRoute.addChildren([
-  publicLayoutRoute.addChildren([
-    landingRoute,
-    qrGeneratorRoute,
-    pricingRoute,
-    roadmapRoute,
-    changelogRoute,
-    compareRoute,
-    bitlyAlternativeRoute,
-    rebrandlyAlternativeRoute,
-    dubAlternativeRoute,
-    shortIoAlternativeRoute,
-    docsRoute,
-    privacyRoute,
-    termsRoute,
-    reportRoute,
-  ]),
+  RDYRCT_SITE ? marketingRoutes() : appHomeRoute,
   loginRoute,
   signupRoute,
   resetPasswordRoute,

@@ -10,6 +10,7 @@ import { Button } from "../ui/button";
 import { InviteSkeleton } from "../components/skeletons";
 import { useToast } from "../ui/toast";
 import posthog from "../lib/posthog";
+import { Logo } from "../ui/logo";
 
 function InviteAuthActions({
   signedIn,
@@ -107,7 +108,9 @@ export function InvitePage() {
   return (
     <div className="grid min-h-dvh place-items-center px-4">
       <div className="w-full max-w-sm rounded-xl bg-surface p-6 text-center smooth-shadow-ring-sm">
-        <p className="mb-4 text-xl font-bold tracking-widest">rdyrct</p>
+        <p className="mb-4 text-xl">
+          <Logo />
+        </p>
         {preview.isLoading || currentUser.isLoading ? (
           <InviteSkeleton />
         ) : preview.isError ? (

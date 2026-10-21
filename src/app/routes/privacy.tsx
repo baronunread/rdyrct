@@ -15,15 +15,12 @@ export function PrivacyPage() {
   useSeo("/privacy");
   useMarketingScroll();
   return (
-    <LegalPageLayout authed={authed}>
+    <LegalPageLayout
+      authed={authed}
+      title="Privacy Policy"
+      intro="This policy explains what data rdyrct collects, why, the legal basis for it, and how you can exercise your rights. Last updated 18 October 2026."
+    >
       <WebMcpMarketingTools />
-      <div>
-        <h1 className="mb-2 text-xl font-bold">Privacy Policy</h1>
-        <p className="text-muted">
-          This policy explains what data rdyrct collects, why, the legal basis for it, and how you
-          can exercise your rights. Last updated 18 October 2026.
-        </p>
-      </div>
 
       <section>
         <h2 className="mb-2 font-bold">Data controller</h2>
@@ -84,7 +81,7 @@ export function PrivacyPage() {
           two thirds of the way down a privacy policy. This is that page's
           address; splitting it into a real second page would mean two
           documents saying the same thing and drifting apart. */}
-      <section id="cookies" className="scroll-mt-16">
+      <section id="cookies">
         <h2 className="mb-2 font-bold">Cookies</h2>
         <p className="text-muted">
           rdyrct sets a strictly-necessary session cookie to keep you signed in. If you accept

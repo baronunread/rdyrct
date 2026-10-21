@@ -24,6 +24,9 @@ import { PLAN_LIMITS, PLAN_PRICES } from "@/shared/types";
 import { buttonClass } from "../ui/button-class";
 import { SUPPORT_EMAIL } from "../ui/footer";
 import { Table, Th, Td } from "../ui/misc";
+
+/** The comparison tables, lit like every product panel on these pages. */
+const LIT_TABLE = "lit rounded-3xl border border-border";
 import { ArrowRight } from "../ui/icons";
 
 const CHECKED = "October 2026";
@@ -314,13 +317,17 @@ function AlternativePage({ data }: { data: Alternative }) {
   return (
     <MarketingPage path={data.path} title={data.title} intro={data.intro}>
       <section className="mx-auto flex max-w-3xl flex-col gap-4 py-12">
-        <h2 className="text-2xl font-bold tracking-tight sm:text-3xl">The short answer</h2>
+        <h2 className="text-3xl font-bold tracking-tight text-balance sm:text-4xl">
+          The short answer
+        </h2>
         <p className="text-muted">{data.answer}</p>
       </section>
 
       <section className="flex flex-col gap-6 pb-12">
-        <h2 className="text-2xl font-bold tracking-tight sm:text-3xl">rdyrct and {data.name}</h2>
-        <Table minWidth="min-w-xl">
+        <h2 className="text-3xl font-bold tracking-tight text-balance sm:text-4xl">
+          rdyrct and {data.name}
+        </h2>
+        <Table minWidth="min-w-xl" className={LIT_TABLE}>
           <thead>
             <tr>
               <Th></Th>
@@ -358,8 +365,10 @@ function AlternativePage({ data }: { data: Alternative }) {
       </section>
 
       <section className="flex flex-col gap-6 pb-12">
-        <h2 className="text-2xl font-bold tracking-tight sm:text-3xl">{data.name} plans</h2>
-        <Table minWidth="min-w-xl">
+        <h2 className="text-3xl font-bold tracking-tight text-balance sm:text-4xl">
+          {data.name} plans
+        </h2>
+        <Table minWidth="min-w-xl" className={LIT_TABLE}>
           <thead>
             <tr>
               <Th>Plan</Th>
@@ -381,7 +390,7 @@ function AlternativePage({ data }: { data: Alternative }) {
       </section>
 
       <section className="mx-auto flex max-w-3xl flex-col gap-6 pb-12">
-        <h2 className="text-2xl font-bold tracking-tight sm:text-3xl">Questions</h2>
+        <h2 className="text-3xl font-bold tracking-tight text-balance sm:text-4xl">Questions</h2>
         {data.faq.map(([question, answer]) => (
           <div key={question}>
             <h3 className="font-bold">{question}</h3>
@@ -398,7 +407,7 @@ function AlternativePage({ data }: { data: Alternative }) {
       </section>
 
       <section className="flex flex-col items-start gap-4 border-t border-border py-16">
-        <h2 className="text-2xl font-bold tracking-tight sm:text-3xl">
+        <h2 className="text-3xl font-bold tracking-tight text-balance sm:text-4xl">
           Try it free. Move over when you are ready.
         </h2>
         <Link
@@ -434,7 +443,7 @@ function CompareIndex() {
           <Link
             key={tool.path}
             to={tool.path}
-            className="group flex flex-col gap-5 rounded-lg border border-border bg-surface p-6 transition-colors hover:border-accent/40"
+            className="lit group flex flex-col gap-5 rounded-3xl border border-border bg-surface p-6 transition-colors hover:border-accent/40"
           >
             <div>
               <h2 className="text-2xl font-bold tracking-tight">vs {tool.name}</h2>

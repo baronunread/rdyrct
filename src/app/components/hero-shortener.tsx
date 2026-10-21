@@ -40,6 +40,7 @@ import {
 } from "../lib/anon-links";
 import { clicksLabel, shortenAnonymously, useAnonClicks } from "../lib/shorten-anon";
 import { trackCta } from "../lib/track-cta";
+import { launchHeroHop } from "../lib/hero-hop";
 import { HrefLink } from "../lib/router-search";
 
 // A QR code is useful only after this form has made a link. Keeping the renderer
@@ -163,7 +164,7 @@ function MadeLinks({ made }: { made: StoredAnonLink[] }) {
   if (!link)
     return (
       <p className="text-xs text-muted">
-        No account, no email. The link lasts 24 hours. Sign up to keep it and start counting clicks.
+        No account, no email. This link lasts 24 hours; sign up free and it never expires.
       </p>
     );
   return (
@@ -200,6 +201,7 @@ export function HeroShortener() {
       // list now is: a visitor who signs up in another tab must still be
       // able to claim it, and the cap is enforced in one place.
       setMade(rememberAnonLink(link, destination.trim()));
+      launchHeroHop(link.url.replace(/^https?:\/\//, ""));
       trackCta("hero_shortener");
     } catch (error) {
       toast(shortenErrorMessage(error), "error");

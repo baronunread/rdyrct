@@ -6,6 +6,7 @@ import { appNavItems } from "./nav-items";
 import { cn } from "../ui/cn";
 import { Card } from "../ui/misc";
 import { Skeleton, SkeletonStatus, TableSkeleton } from "../ui/skeleton";
+import { Logo } from "../ui/logo";
 
 /**
  * Page-level loading skeletons, one per route, used both as the lazy chunk's
@@ -350,7 +351,7 @@ function SidebarSkeleton() {
   return (
     <div className="flex h-full flex-col">
       <div className="hidden px-3 pt-4 pb-2 md:block">
-        <span className="px-1.5 text-sm font-bold tracking-widest">rdyrct</span>
+        <Logo className="px-1.5 text-sm" />
       </div>
 
       {/* org switcher: the frame is chrome, the org name is data */}
@@ -405,7 +406,7 @@ export function AppShellSkeleton() {
         <span className="p-1.5 text-muted">
           <MenuIcon size={18} />
         </span>
-        <span className="text-sm font-bold tracking-widest">rdyrct</span>
+        <Logo className="text-sm" />
       </div>
 
       <main className="flex min-w-0 flex-1 flex-col px-5 py-8 pt-16 md:ml-60 md:px-8 md:pt-8">

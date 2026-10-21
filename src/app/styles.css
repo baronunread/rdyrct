@@ -92,6 +92,16 @@
   --sh-sign: var(--muted);
   --sh-comment: var(--muted);
 
+  /* The landing's lit surfaces (rdyrct-design, "Light on the marketing
+     pages"): a hairline of light along a panel's top edge and a long soft
+     shadow under it, warm on cream. */
+  --lit-top: rgb(255 255 255 / 0.9);
+  --lit-drop: rgb(80 50 30 / 0.32);
+
+  /* The edge on a picture (image-outline): ink at 8%, so a photo with a
+     pale or a dark border still ends where its frame does. */
+  --image-outline: rgb(0 0 0 / 0.08);
+
   color-scheme: light;
 }
 
@@ -135,6 +145,11 @@
     color-mix(in srgb, var(--border), white 22%) 30%,
     transparent
   );
+
+  --lit-top: rgb(255 255 255 / 0.07);
+  --lit-drop: rgb(0 0 0 / 0.7);
+
+  --image-outline: rgb(255 255 255 / 0.08);
 }
 
 @theme inline {
@@ -164,6 +179,96 @@
   --animate-shake: shake 300ms ease;
   /* above dialogs (z-50): toasts must stay visible over an open modal */
   --z-index-toast: 60;
+}
+
+/* The one dark band on a marketing page. It redefines the tokens for
+   everything inside it, so the components in it are the ordinary ones: the
+   dark theme's palette on cream, and a step darker than the page on dark. */
+@utility ink-band {
+  --bg: #17151f;
+  --surface: #1f1c2b;
+  --surface-2: #262336;
+  --border: #34304a;
+  --text: #eae7f2;
+  --muted: #c6c2d3;
+  --accent: #cdb9f5;
+  --lavender: #cdb9f5;
+  --lit-top: rgb(255 255 255 / 0.07);
+  --lit-drop: rgb(0 0 0 / 0.7);
+  background:
+    radial-gradient(
+      45% 160px at 50% 0,
+      color-mix(in oklab, var(--accent) 22%, transparent),
+      transparent
+    ),
+    var(--bg);
+  color: var(--text);
+  color-scheme: dark;
+}
+[data-theme="dark"] .ink-band {
+  --bg: #0e0c14;
+  --surface: #1a1726;
+}
+
+/* The column every public page sits in, the stand-in shown while a page
+   loads included (main.tsx), so the header does not jump when it arrives.
+   Wide, as the best pages in this category are: the frame, the bands and
+   the footer all run to it, and text inside keeps its own measure. */
+@utility page-column {
+  position: relative;
+  margin-inline: auto;
+  min-height: 100dvh;
+  max-width: 84rem;
+  padding-inline: 1.5rem;
+}
+
+/* A product panel on the landing, lit from above. */
+@utility lit {
+  box-shadow:
+    inset 0 1px 0 var(--lit-top),
+    0 30px 60px -30px var(--lit-drop);
+}
+
+/* The soft field of brand colour behind a landing panel: the accent, the
+   mint and the butter, blurred into one light. Decoration, so aria-hidden
+   wherever it is used, and it follows the theme through the tokens. */
+@utility landing-mesh {
+  background:
+    radial-gradient(
+      40% 50% at 30% 40%,
+      color-mix(in oklab, var(--accent) 45%, transparent),
+      transparent 70%
+    ),
+    radial-gradient(
+      35% 45% at 70% 60%,
+      color-mix(in oklab, var(--butter) 40%, transparent),
+      transparent 70%
+    ),
+    radial-gradient(
+      35% 40% at 55% 25%,
+      color-mix(in oklab, var(--mint) 35%, transparent),
+      transparent 70%
+    );
+  filter: blur(34px);
+}
+
+/* Large display type that catches the light: full ink at the top, fading
+   to the muted colour at the baseline. */
+@utility text-metal {
+  background: linear-gradient(
+    180deg,
+    var(--text) 30%,
+    color-mix(in oklab, var(--muted) 70%, transparent)
+  );
+  background-clip: text;
+  color: transparent;
+}
+
+/* A hairline inside a picture's own edge, drawn as an outline so it takes
+   no room and follows the corner radius. */
+@utility image-outline {
+  outline: 1px solid var(--image-outline);
+  outline-offset: -1px;
 }
 
 @utility grid-cols-shortener {
@@ -210,8 +315,10 @@
   padding: 0.375rem;
   color: var(--muted);
 }
-.theme-switch button:hover {
-  color: var(--text);
+@media (hover: hover) {
+  .theme-switch button:hover {
+    color: var(--text);
+  }
 }
 :root:not([data-theme="dark"]) .theme-switch [data-mode="light"],
 :root[data-theme="dark"] .theme-switch [data-mode="dark"] {
@@ -230,21 +337,19 @@
   display: none;
 }
 /* Keep the hero's space while a cached customer waits for browser hydration. */
-:root[data-auth="in"] [data-hero-arm][data-ssr] [data-hero-personalization] {
+:root[data-auth="in"] [data-hero][data-ssr] [data-hero-personalization] {
   visibility: hidden;
 }
 
-/* The prerendered hero carries both experiment arms; index.html's inline script
-   sets data-hero="test" before paint for a browser already given that arm.
-   Once hydrated (data-ssr gone) only the active arm is mounted. */
-[data-hero-arm="test"][data-ssr] {
+/* The prerendered hero carries both headings of the copy test; index.html's
+   inline script sets data-hero-arm="answers" before paint for a browser given
+   that arm. Once hydrated (data-ssr gone) only the active one is rendered. */
+[data-hero][data-ssr] [data-hero-copy="answers"],
+:root[data-hero-arm="answers"] [data-hero][data-ssr] [data-hero-copy="own"] {
   display: none;
 }
-:root[data-hero="test"] [data-hero-arm="test"][data-ssr] {
-  display: block;
-}
-:root[data-hero="test"] [data-hero-arm="control"][data-ssr] {
-  display: none;
+:root[data-hero-arm="answers"] [data-hero][data-ssr] [data-hero-copy="answers"] {
+  display: inline;
 }
 html {
   background: var(--bg);
@@ -269,6 +374,14 @@ html {
      ligatures are typically routed through the separate calt (contextual
      alternates) OpenType feature, which needs its own explicit override. */
   font-feature-settings: "calt" 0;
+  /* Light text on the dark theme reads heavier than the same weight on
+     cream under subpixel smoothing; grayscale keeps the two themes alike. */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  /* Underlines sit where the font says they go and break around
+     descenders, so a linked slug's "g" or "y" stays legible. Both inherit. */
+  text-underline-position: from-font;
+  text-decoration-skip-ink: auto;
   /* reserve the scrollbar's width even on pages short enough to not need
      one, so a page that grows past the fold doesn't shift content left */
   scrollbar-gutter: stable;
@@ -303,19 +416,49 @@ html {
    auth state, and isolating the group is what keeps it from visibly
    flickering along with the content, which is what makes the navigation
    read as one page rather than a swap. It never needs to animate, on or off
-   reduced motion. */
+   reduced motion.
+
+   It names the pill, not the <header>: named, the header became the
+   backdrop the pill's blur samples, and page text scrolled under the
+   header showed through the pill at full strength. */
 ::view-transition-old(marketing-header),
 ::view-transition-new(marketing-header) {
   animation: none;
   mix-blend-mode: normal;
 }
 
-header[data-marketing-header] {
+[data-marketing-pill] {
   view-transition-name: marketing-header;
 }
 
 body {
   min-height: 100dvh;
+}
+
+/* In the base layer so a utility on the element still wins. Headings
+   balance their lines rather than leaving one word on the last. Anything a
+   link can jump to stops clear of the marketing header's floating pill
+   instead of under it. */
+@layer base {
+  h1,
+  h2,
+  h3,
+  h4 {
+    text-wrap: balance;
+  }
+  [id] {
+    scroll-margin-top: 5.5rem;
+  }
+}
+
+/* Set for the one frame a theme swap takes (lib/theme.ts): every colour
+   changes at once instead of each control easing on its own clock, which
+   reads as the page smearing from one theme into the other. */
+[data-theme-switching],
+[data-theme-switching] *,
+[data-theme-switching] *::before,
+[data-theme-switching] *::after {
+  transition: none !important;
 }
 
 ::selection {
@@ -418,9 +561,21 @@ body {
   pointer-events: auto;
 }
 
-.rdyrct-toast-close:hover,
+/* The ring is 20px; the press target reaches 32 without moving it. */
+.rdyrct-toast-close::after {
+  content: "";
+  position: absolute;
+  inset: -6px;
+}
+
 .rdyrct-toast-close:focus-visible {
   color: var(--text);
+}
+
+@media (hover: hover) {
+  .rdyrct-toast-close:hover {
+    color: var(--text);
+  }
 }
 
 .rdyrct-toast-close:active {
@@ -545,62 +700,11 @@ body {
   }
 }
 
-/* The landing product tour (landing-tour.tsx). Each one is a state change on
-   a screen of the app: a step's time running out, a row arriving, a dialog
-   opening. */
 /* Clear of a phone's home indicator, and never wider than the screen. */
 .anon-link-bar {
   bottom: calc(1rem + env(safe-area-inset-bottom, 0px));
   max-width: calc(100vw - 2rem);
 }
-.tour-window {
-  height: 448px;
-}
-@media (min-width: 48rem) {
-  .tour-window {
-    height: 544px;
-    grid-template-columns: 200px 1fr;
-  }
-}
-.tour-progress {
-  width: 0;
-  animation: tour-progress linear forwards;
-}
-@keyframes tour-progress {
-  to {
-    width: 100%;
-  }
-}
-.tour-row-in {
-  animation: anon-link-in 300ms ease-out both;
-}
-.tour-row-new > td {
-  animation:
-    anon-link-in 400ms ease-out both,
-    tour-row-highlight 2.4s ease-out 400ms both;
-}
-@keyframes tour-row-highlight {
-  from {
-    background: color-mix(in srgb, var(--accent) 14%, transparent);
-  }
-}
-.tour-fade {
-  animation: tour-fade 200ms ease-out both;
-}
-@keyframes tour-fade {
-  from {
-    opacity: 0;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .tour-row-in,
-  .tour-row-new > td,
-  .tour-fade {
-    animation: none;
-  }
-}
-
 /* skeleton blocks hold a static shade instead of pulsing */
 @media (prefers-reduced-motion: reduce) {
   .animate-pulse {

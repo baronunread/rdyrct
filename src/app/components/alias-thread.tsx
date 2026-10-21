@@ -65,7 +65,8 @@ function AliasRow({
           </span>
         </div>
       </Td>
-      <Td className="hidden py-1.5 text-xs text-muted lg:table-cell">—</Td>
+      {/* An alias has no title of its own. */}
+      <Td className="hidden py-1.5 lg:table-cell" />
       <Td className="hidden py-1.5 text-xs text-muted xl:table-cell">
         {isTemp ? (
           <span className="inline-flex items-center gap-1">
@@ -74,7 +75,7 @@ function AliasRow({
               <button
                 type="button"
                 aria-label="About temporary aliases"
-                className="cursor-help text-muted hover:text-text"
+                className="relative cursor-help text-muted after:absolute after:-inset-1.5 hover:text-text"
               >
                 <Info size={12} />
               </button>
@@ -200,10 +201,7 @@ export function AliasThread({ orgId, link }: { orgId: string; link: LinkDTO }) {
       >
         {removing && (
           <div className="flex flex-col gap-2">
-            <p
-              className="max-w-full truncate rounded-lg border border-border bg-surface-2 px-3 py-2 font-mono text-xs"
-              title={removing.url}
-            >
+            <p className="max-w-full rounded-lg border border-border bg-surface-2 px-3 py-2 font-mono text-xs wrap-break-word">
               {removing.url}
             </p>
             <p>will stop resolving immediately. This can't be undone.</p>

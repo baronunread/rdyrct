@@ -112,7 +112,7 @@ test("connects an MCP client via OAuth consent, then revokes it from Connected a
   await page.goto(`${appUrl}/api-keys?tab=mcp`);
   await expect(page.getByText("Playwright Client")).toBeVisible();
   await page.getByRole("button", { name: "Revoke Playwright Client" }).click();
-  await page.getByRole("button", { name: "Disconnect" }).click();
+  await page.getByRole("button", { name: "Disconnect app" }).click();
   // Back to zero connections: the connect guide, not a bare empty line.
   await expect(page.getByText("Connect an AI assistant", { exact: true })).toBeVisible();
 

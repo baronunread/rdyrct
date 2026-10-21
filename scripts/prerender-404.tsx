@@ -11,12 +11,21 @@
  *   bun scripts/prerender-404.tsx   (run by `bun run build`)
  */
 import { renderToStaticMarkup } from "react-dom/server";
+import { HOME_LINK } from "../src/app/components/not-found-home";
 import { NotFoundView } from "../src/app/components/not-found-view";
 
 const dir = "dist/client";
 const shell = await Bun.file(`${dir}/index.html`).text();
 // The Worker points this at APP_URL, or removes it on a custom domain.
-const markup = renderToStaticMarkup(<NotFoundView back={<a href="/">Go home</a>} />);
+const markup = renderToStaticMarkup(
+  <NotFoundView
+    back={
+      <a href="/" className={HOME_LINK}>
+        Go home
+      </a>
+    }
+  />,
+);
 
 const page = new HTMLRewriter()
   .on("#root", { element: (e) => void e.setInnerContent(markup, { html: true }) })

@@ -12,7 +12,7 @@
  * Stripe's or GitHub's docs rather than a landing page. It still reuses
  * MarketingPage's own pieces (header, footer, SEO, the marketing-scroll
  * ride-up) so it stays the same product outside the content area, and the
- * outer width stays max-w-5xl so the footer-width e2e assertion holds.
+ * outer width stays the shared page-column, like every public page.
  */
 import type { ReactNode } from "react";
 import { LazyMotion, MotionConfig, domAnimation } from "motion/react";
@@ -21,7 +21,7 @@ import { useSeo } from "../lib/seo";
 import { useMarketingScroll } from "../lib/marketing-scroll";
 import { useAudience } from "../lib/audience";
 import { LandingHeader } from "../components/landing-header";
-import { MarketingGlow } from "../components/marketing-glow";
+import { PageHero } from "../components/marketing-kit";
 import { WebMcpMarketingTools } from "../components/webmcp-marketing-tools";
 import { Footer } from "../ui/footer";
 import { MarketingLink } from "../components/marketing-link";
@@ -166,28 +166,25 @@ export function DocsPage() {
   return (
     <MotionConfig reducedMotion="user">
       <LazyMotion features={domAnimation}>
-        <div className="relative mx-auto min-h-dvh max-w-5xl px-6">
-          <MarketingGlow />
+        <div className="page-column">
           <WebMcpMarketingTools />
           <LandingHeader authed={authed} />
 
-          <main className="pt-10 pb-4 sm:pt-14">
-            <div>
-              <h1 className="text-2xl font-bold text-balance">Developer docs</h1>
-              <p className="mt-2 max-w-xl text-sm text-muted">
-                The REST API and the MCP server: how to authenticate, and what each one can do. Both
-                are free on every plan.
-              </p>
-            </div>
+          <main className="pb-4">
+            <PageHero
+              title="Developer docs"
+              intro="The REST API and the MCP server: how to authenticate, and what each one can do. Both are free on every plan."
+            />
 
-            <div className="mt-8 flex flex-col gap-10 lg:flex-row lg:items-start lg:gap-12">
+            <div className="mt-12 flex flex-col gap-10 lg:flex-row lg:items-start lg:gap-12">
               <ChapterNav pills className="flex flex-wrap gap-2 lg:hidden" />
 
               <aside className="hidden w-40 shrink-0 lg:block">
                 <ChapterNav className="sticky top-20 flex flex-col gap-0.5" />
               </aside>
 
-              <div className="min-w-0 flex-1">
+              {/* A reading measure, however wide the page column is. */}
+              <div className="min-w-0 max-w-3xl flex-1">
                 <Chapter id="api" title="REST API">
                   <p>
                     Every organization route under{" "}

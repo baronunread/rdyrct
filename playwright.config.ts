@@ -32,7 +32,7 @@ export default defineConfig({
       name: "chromium",
       // The production suite has its own base URL and server; everything else
       // runs against `vite dev`.
-      testIgnore: "**/production/**",
+      testIgnore: ["**/production/**", "**/self-host/**"],
       use: {
         ...devices["Desktop Chrome"],
         // CI runners ship Google Chrome preinstalled: launch that instead of

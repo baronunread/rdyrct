@@ -157,7 +157,7 @@ or in bulk with `cp prod.secrets.env.example prod.secrets.env`, fill it in, then
 bunx wrangler secret bulk prod.secrets.env && rm prod.secrets.env
 ```
 
-Then migrate and ship:
+Then migrate and ship. The build reads `APP_HOST`: anything but rdyrct.com gets the self-hosted app, which opens on sign-in and carries none of rdyrct.com's marketing pages, analytics or search tags.
 
 ```sh
 bun run db:migrate:remote

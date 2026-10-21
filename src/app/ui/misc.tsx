@@ -23,7 +23,7 @@ export function Badge({
   return (
     <span
       className={cn(
-        "inline-flex items-center rounded-full border px-2 py-0.5 text-2xs tracking-wide",
+        "inline-flex items-center rounded-full border px-2 py-0.5 text-2xs tracking-wide whitespace-nowrap",
         badgeColors[color],
         className,
       )}
@@ -95,9 +95,12 @@ export function Table({
   children,
   fixed,
   minWidth,
+  className,
 }: {
   children: ReactNode;
   fixed?: boolean;
+  /** For the wrapper: a marketing page lights its tables (`lit`). */
+  className?: string;
   /** Tailwind min-width for the table itself, e.g. "min-w-[64rem]". Use it
    * when every column has to stay on screen and the wrapper should scroll
    * rather than the columns shrinking into uselessness. */
@@ -108,10 +111,15 @@ export function Table({
     // chaining to the page; the container still rubber-bands at each end,
     // and that bounce drags the table off its own background so the page
     // shows through beside it. `none` disables the bounce as well.
-    <div className="overflow-x-auto overscroll-x-none rounded-lg bg-surface smooth-shadow-ring-xs">
+    <div
+      className={cn(
+        "overflow-x-auto overscroll-x-none rounded-lg bg-surface smooth-shadow-ring-xs",
+        className,
+      )}
+    >
       <table
         className={cn(
-          "w-full text-sm [&_tbody_tr]:transition-colors [&_tbody_tr:hover]:bg-surface-2/40",
+          "w-full text-sm [&_tbody_tr]:transition-colors [&_tbody_tr]:hover:bg-surface-2/40",
           fixed && "table-fixed",
           minWidth,
         )}
@@ -150,7 +158,7 @@ export function EmptyState({
   return (
     <div className="flex flex-col items-center gap-3 rounded-lg border border-dashed border-border py-14 text-center">
       <p className="font-bold">{title}</p>
-      {hint && <p className="max-w-sm text-sm text-muted">{hint}</p>}
+      {hint && <p className="max-w-sm text-sm text-pretty text-muted">{hint}</p>}
       {action}
     </div>
   );
@@ -169,7 +177,7 @@ export function PageHeader({
     <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
       <div>
         <h1 className="text-lg font-bold tracking-wide">{title}</h1>
-        {sub && <p className="mt-1 text-sm text-muted">{sub}</p>}
+        {sub && <p className="mt-1 text-sm text-pretty text-muted">{sub}</p>}
       </div>
       {action}
     </div>

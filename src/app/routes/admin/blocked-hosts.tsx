@@ -58,6 +58,10 @@ export function BlockedHosts() {
             value={host}
             onChange={(e) => setHost(e.target.value)}
             placeholder="scam.example.com"
+            inputMode="url"
+            autoComplete="off"
+            autoCapitalize="none"
+            spellCheck={false}
           />
         </Field>
         <Field label="Reason" className="w-72">

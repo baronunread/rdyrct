@@ -19,7 +19,14 @@
  */
 import { PUBLIC_PAGE_META, type PageMeta } from "@/shared/page-meta";
 import { lookup } from "../shared/lookup";
+import { RDYRCT_SITE } from "../shared/site";
 import { marked } from "marked";
+
+/** What rdyrct.com says about one of its pages. A self-hosted copy has none
+ *  of them, and must not describe its pages as rdyrct.com's. */
+function pageMeta(url: URL): PageMeta | undefined {
+  return RDYRCT_SITE ? lookup(PUBLIC_PAGE_META, url.pathname) : undefined;
+}
 
 /** The absolute URL a page should call canonical, on whichever host is
  * serving it. */
@@ -144,7 +151,7 @@ const MARKDOWN_CACHE = "public, max-age=3600, must-revalidate";
 
 /** A page representation for agents, only when its source explicitly exists. */
 export function markdownPage(url: URL, accept: string | null | undefined): Response | null {
-  const meta = lookup(PUBLIC_PAGE_META, url.pathname);
+  const meta = pageMeta(url);
   if (!meta?.markdown || !markdownPreferred(accept)) return null;
   const canonical = canonicalFor(url, url.pathname);
   // JSON quoting keeps YAML valid whatever the copy says: descriptions read
@@ -205,7 +212,7 @@ function crawlerBody(meta: PageMeta, url: URL): string {
  * path stays a straight pipe for everything else.
  */
 export function withPageMeta(response: Response, url: URL): Response {
-  const meta = lookup(PUBLIC_PAGE_META, url.pathname);
+  const meta = pageMeta(url);
   if (!response.headers.get("content-type")?.includes("text/html")) return response;
   // The build bakes the landing page into index.html, which is also the shell
   // every app route gets. Left in, a signed-in reload of /dashboard paints the

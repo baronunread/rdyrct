@@ -1,9 +1,23 @@
-/** The landing hero assignment, stored only while analytics consent is valid. */
+/**
+ * The landing hero copy test, stored only while analytics consent is valid.
+ *
+ * Two headings over the same hero: "own" ("Turn long links into your own.")
+ * is the control, "answers" ("The link shortener that answers to you.") the
+ * challenger. Decided on signups. index.html's inline script picks the arm
+ * before paint for a consenting browser, so the prerendered page shows the
+ * right heading with no flash; this module is the same coin for the rest of
+ * the visit.
+ *
+ * v2: the key of the earlier layout test (v1) meant a different experiment,
+ * so an arm stored under it is dropped, never reused.
+ */
 import { CONSENT_KEY, readConsent } from "./consent";
 
-export type HeroVariant = "control" | "test";
+export type HeroVariant = "own" | "answers";
 
-const KEY = "rdyrct:hero-variant:v1";
+const KEY = "rdyrct:hero-variant:v2";
+const isVariant = (value: string | null): value is HeroVariant =>
+  value === "own" || value === "answers";
 let assigned: HeroVariant | null = null;
 const listeners = new Set<() => void>();
 
@@ -22,21 +36,21 @@ export function subscribeHeroVariant(listener: () => void) {
 export function heroVariantSnapshot(): HeroVariant {
   if (assigned) return assigned;
   try {
-    if (readConsent() === "accepted" && localStorage.getItem(KEY) === "test") return "test";
+    if (readConsent() === "accepted" && localStorage.getItem(KEY) === "answers") return "answers";
   } catch {
     // Storage can be unavailable; the control hero is the safe default.
   }
-  return "control";
+  return "own";
 }
 
 /** Assign once after consent and keep the same hero across reloads. */
 export function heroVariant(): HeroVariant {
-  if (readConsent() !== "accepted") return "control";
+  if (readConsent() !== "accepted") return "own";
   if (assigned) return assigned;
 
   try {
     const stored = localStorage.getItem(KEY);
-    if (stored === "control" || stored === "test") {
+    if (isVariant(stored)) {
       assigned = stored;
       notify();
       return assigned;
@@ -46,7 +60,7 @@ export function heroVariant(): HeroVariant {
     // valid assignment, but it cannot be kept for the next one.
   }
 
-  assigned = Math.random() < 0.5 ? "control" : "test";
+  assigned = Math.random() < 0.5 ? "own" : "answers";
   try {
     localStorage.setItem(KEY, assigned);
   } catch {
@@ -63,10 +77,26 @@ export function shownHeroVariant(restore = false): HeroVariant | null {
   if (assigned || !restore) return assigned;
   try {
     const stored = localStorage.getItem(KEY);
-    return stored === "control" || stored === "test" ? stored : null;
+    return isVariant(stored) ? stored : null;
   } catch {
     return null;
   }
+}
+
+/**
+ * Keep the arm in step with consent and the session: forget it when consent
+ * is refused, and flip the coin once an anonymous visitor's consent and
+ * session have both answered. A signed-in visitor never flips it.
+ */
+export function syncHeroVariant(state: {
+  consentReady: boolean;
+  consented: boolean;
+  sessionReady: boolean;
+  authed: boolean;
+}) {
+  if (!state.consentReady) return;
+  if (!state.consented) return clearHeroVariant();
+  if (state.sessionReady && !state.authed) heroVariant();
 }
 
 /** Remove the assignment when consent is withdrawn or expires. */

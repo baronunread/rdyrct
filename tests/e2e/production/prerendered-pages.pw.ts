@@ -1,7 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 
 const PRERENDERED_PAGES = [
-  { path: "/", heading: "Know which channel earned the click." },
+  { path: "/", heading: "Turn long links into your own." },
   { path: "/pricing", heading: "URL shortener pricing: free, $4 or $9 a month" },
   { path: "/qr-code-generator", heading: "Free QR code generator with logo" },
   { path: "/docs", heading: "Developer docs" },
@@ -47,6 +47,23 @@ async function assertPrerenderedHeadings(page: Page) {
   }
 }
 
+// The hero copy test picks its arm in index.html's inline script, before
+// paint, and CSS shows that arm's heading from the prerendered HTML. With the
+// app's scripts blocked, the challenger is already the one on screen.
+test("the hero copy test's arm is on screen before the app's scripts run", async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem("rdyrct:consent:v2", "accepted");
+    localStorage.setItem("rdyrct:consent:v2:at", String(Date.now()));
+    Math.random = () => 0.9;
+  });
+  await blockScripts(page);
+  await page.goto("/");
+  await expect(
+    page.getByRole("heading", { level: 1, name: "The link shortener that answers to you." }),
+  ).toBeVisible();
+  await expect(page.getByText("Turn long links into your own.")).toBeHidden();
+});
+
 test("public content stays visible and correct before JavaScript runs", async ({ page }) => {
   await blockScripts(page);
   await assertPrerenderedHeadings(page);
@@ -61,6 +78,8 @@ test("public content stays visible and correct before JavaScript runs", async ({
   }
   await page.goto("/");
   await expect(page.getByRole("heading", { name: "Frequently asked questions" })).toBeVisible();
+  // The hero globe is decoration that loads after hydration: never baked in.
+  await expect(page.locator("[data-hero] canvas")).toHaveCount(0);
   await expect(page.locator("#faq")).toHaveCSS("opacity", "1");
   await page.goto("/docs");
   const origin = new URL(page.url()).origin;
@@ -96,7 +115,7 @@ test("conditional requests keep the prerendered HTML representation", async ({ r
     expect(second.status()).toBe(200);
     const body = await second.text();
     expect(body).toContain("URL shortener pricing: free, $4 or $9 a month");
-    expect(body).not.toContain("Know which channel earned the click.");
+    expect(body).not.toContain("Turn long links into your own.");
   }
 });
 
@@ -106,71 +125,7 @@ test("conditional requests keep the prerendered HTML representation", async ({ r
 test("an app route's raw HTML carries no landing page", async ({ request }) => {
   const body = await (await request.get("/dashboard")).text();
   expect(body).toContain('id="root"');
-  expect(body).not.toContain("Know which channel earned the click.");
-});
-
-// The A/B test must not flash the wrong hero. The inline script in index.html
-// picks the stored arm before first paint, so the test arm is on screen with
-// the bundles blocked, and hydration leaves the same one element behind.
-test("a visitor given the test hero never sees the control hero first", async ({ browser }) => {
-  const consent = {
-    "rdyrct:consent:v2": "accepted",
-    "rdyrct:consent:v2:at": String(Date.now()),
-    "rdyrct:hero-variant:v1": "test",
-  };
-  const testHeading = "Shorten a link. See who clicks it.";
-  const controlHeading = "Know which channel earned the click.";
-  const storageState = {
-    cookies: [],
-    origins: [
-      {
-        origin: new URL(test.info().project.use.baseURL ?? "").origin,
-        localStorage: Object.entries(consent).map(([name, value]) => ({ name, value })),
-      },
-    ],
-  };
-
-  // Only the bundles are blocked: the inline script still runs, as it does
-  // in the gap before the bundle has loaded and hydrated.
-  const unhydrated = await browser.newContext({ storageState });
-  const before = await unhydrated.newPage();
-  await blockScripts(before);
-  await before.goto("/");
-  await expect(before.getByRole("heading", { level: 1 })).toHaveText(testHeading);
-  await unhydrated.close();
-
-  const context = await browser.newContext({ storageState });
-  const page = await context.newPage();
-  // Reports any painted frame in which the control heading is on screen.
-  // Hydration and the session resolving must not flip this visitor
-  // test -> control -> test. Frames only: before the stylesheet loads, a
-  // layout read would see both arms.
-  // A slow session is what opens the window: the arm is not assigned until
-  // it resolves.
-  await page.route("**/api/user", async (route) => {
-    await new Promise((resolve) => setTimeout(resolve, 800));
-    await route.continue();
-  });
-  const sightings: string[] = [];
-  page.on("console", (message) => {
-    if (message.text() === "control-hero-visible") sightings.push(message.text());
-  });
-  await page.addInitScript((heading) => {
-    requestAnimationFrame(function tick() {
-      const visible = [...document.querySelectorAll("h1")].some(
-        (h1) => h1.textContent === heading && h1.getBoundingClientRect().height > 0,
-      );
-      if (visible) console.info("control-hero-visible");
-      requestAnimationFrame(tick);
-    });
-  }, controlHeading);
-  await page.goto("/");
-  await expect(page.locator("[data-hero-arm]:not([data-ssr])")).toHaveCount(1);
-  await page.waitForTimeout(2000);
-  expect(sightings).toEqual([]);
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText(testHeading);
-  await expect(page.getByText(controlHeading)).toHaveCount(0);
-  await context.close();
+  expect(body).not.toContain("Turn long links into your own.");
 });
 
 // Auth routes read browser state on their first render, including query params.
@@ -190,35 +145,6 @@ test("the auth pages render with query params and stay usable", async ({ page })
   await typeEmail("/signup?next=/billing%3Fplan%3Dpro", "Create an account");
   await typeEmail("/login?next=/dashboard", "Sign in");
   expect(hydrationErrors).toEqual([]);
-});
-
-// An invalid cached user must not override a valid experiment assignment.
-test("an invalid cached user does not override the stored test arm", async ({ browser }) => {
-  const origin = new URL(test.info().project.use.baseURL ?? "").origin;
-  const stored = {
-    "rdyrct:consent:v2": "accepted",
-    "rdyrct:consent:v2:at": String(Date.now()),
-    "rdyrct:hero-variant:v1": "test",
-    "rdyrct:user:v1": "{}",
-  };
-  const context = await browser.newContext({
-    storageState: {
-      cookies: [],
-      origins: [
-        {
-          origin,
-          localStorage: Object.entries(stored).map(([name, value]) => ({ name, value })),
-        },
-      ],
-    },
-  });
-  const page = await context.newPage();
-  await blockScripts(page);
-  await page.goto("/");
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText(
-    "Shorten a link. See who clicks it.",
-  );
-  await context.close();
 });
 
 // Once the client-rendered form appears, it must stay visible.

@@ -51,16 +51,11 @@ export function ReportPage() {
   });
 
   return (
-    <LegalPageLayout authed={authed}>
-      <div>
-        <h1 className="mb-2 text-xl font-bold">Report a link</h1>
-        <p className="text-muted">
-          Tell us about a rdyrct short link used for phishing, malware or spam. We review reports
-          and stop links that break our terms. We do not store your IP address, and your email is
-          optional.
-        </p>
-      </div>
-
+    <LegalPageLayout
+      authed={authed}
+      title="Report a link"
+      intro="Tell us about a rdyrct short link used for phishing, malware or spam. We review reports and stop links that break our terms. We do not store your IP address, and your email is optional."
+    >
       {send.isSuccess ? (
         <p role="status" className="rounded-lg bg-surface-2 p-4">
           Thanks. We will look at it. Nothing more is needed from you.
@@ -82,6 +77,10 @@ export function ReportPage() {
               onChange={(e) => setLink(e.target.value)}
               placeholder="https://rdyr.cc/abc1234"
               maxLength={300}
+              inputMode="url"
+              autoComplete="off"
+              autoCapitalize="none"
+              spellCheck={false}
             />
           </Field>
           <Field label="What is wrong with it?">

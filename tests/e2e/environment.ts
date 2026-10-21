@@ -12,3 +12,8 @@ export const sharedLinkHost = "rdyr.cc";
 // works there proves nothing about the policy that actually ships.
 export const previewPort = 4174;
 export const previewUrl = `http://localhost:${previewPort}`;
+
+// A self-hosted build (VITE_RDYRCT_SITE=0), served the same way as the
+// preview above: see playwright.self-host.config.ts.
+export const selfHostPort = 4184;
+export const selfHostUrl = `http://localhost:${selfHostPort}`;
