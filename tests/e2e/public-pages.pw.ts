@@ -1,11 +1,10 @@
 import { expect, test } from "@playwright/test";
 import { visitLegalPages } from "./pages";
 
-/** Scroll to the product tour and open its analytics screen, the one that
- * draws with the lazy charts bundle, then wait for the chart itself. */
+/** Scroll to the analytics section, whose first panel draws with the lazy
+ * charts bundle, then wait for the chart itself. */
 async function openTourAnalytics(page: import("@playwright/test").Page) {
   await page.locator("#analytics").scrollIntoViewIfNeeded();
-  await page.getByRole("tab", { name: /see what worked/i }).click();
   await expect(page.locator("#analytics").getByLabel("Clicks per day")).toBeVisible();
 }
 
@@ -324,23 +323,6 @@ test("a dark operating system still opens dark by default", async ({ browser }) 
   await context.close();
 });
 
-test("the second screen argues with two messages, not two URLs (#96)", async ({ page }) => {
-  await page.goto("/");
-  // The point is made by showing the link where it is read. If this ever
-  // becomes two URLs side by side again, it is back to asserting instead of
-  // showing.
-  await expect(page.getByText(/on your own domain get clicked/i)).toBeVisible();
-  await expect(page.getByText("Doesn't match the sender")).toBeVisible();
-  await expect(page.getByText("Matches the sender")).toBeVisible();
-  await expect(page.getByRole("link", { name: /Connect your domain/i })).toBeVisible();
-
-  // Sold on recognition, the way every competitor sells it, not by making
-  // somebody picture being taken for a scammer. Bitly sells against a
-  // generic shortener domain and still never says the word.
-  const section = page.locator("section").filter({ hasText: /on your own domain get clicked/i });
-  await expect(section).not.toContainText(/scam|spam|fraud/i);
-});
-
 test("a signed-out visitor still gets the anonymous shortener, not a dashboard card", async ({
   page,
 }) => {
@@ -374,13 +356,10 @@ test("the developer claim is backed by a roadmap of real issues", async ({ page 
   await expect(page.getByRole("heading", { name: /already working/i })).toBeVisible();
 });
 
-// The developers tab sells an API and MCP server that ship today, so it
-// points at their docs, not at the roadmap.
-test("the docs are reachable from the developers tab, the roadmap from the footer", async ({
-  page,
-}) => {
+// The landing sells an API and MCP server that ship today, so it points at
+// their docs, not at the roadmap.
+test("the docs are reachable from the landing, the roadmap from the footer", async ({ page }) => {
   await page.goto("/");
-  await page.getByRole("tab", { name: "developers" }).click();
   await page.getByRole("link", { name: /API and MCP docs/i }).click();
   await expect(page).toHaveURL(/\/docs$/);
 

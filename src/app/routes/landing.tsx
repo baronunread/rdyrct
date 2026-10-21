@@ -2,16 +2,8 @@
 import type { ReactNode } from "react";
 import { Link } from "@tanstack/react-router";
 import { HrefLink } from "../lib/router-search";
-import { ArrowRight, Check, ChevronDown } from "@/app/ui/icons";
-import {
-  LazyMotion,
-  MotionConfig,
-  domAnimation,
-  m,
-  useInView,
-  useReducedMotion,
-  type Variants,
-} from "motion/react";
+import { Check, ChevronDown } from "@/app/ui/icons";
+import { LazyMotion, MotionConfig, domAnimation, m, useReducedMotion } from "motion/react";
 import {
   lazy,
   Suspense,
@@ -50,7 +42,14 @@ import { HeroShortener } from "../components/hero-shortener";
 import { HeroSignedIn } from "../components/hero-signed-in";
 import { LandingHeader } from "../components/landing-header";
 import { WebMcpMarketingTools } from "../components/webmcp-marketing-tools";
-import { ProductTour } from "../components/landing-tour";
+import {
+  AnalyticsPillar,
+  LinksPillar,
+  Manifesto,
+  QrPillar,
+  SplitHeading,
+  TeamsAndCode,
+} from "../components/landing-pillars";
 import { AnonLinkBar } from "../components/anon-link-bar";
 import { formatNumber } from "../lib/numbers";
 import { cn } from "../ui/cn";
@@ -883,487 +882,18 @@ type HeroProps = {
   name: string;
 };
 
-/**
- * The second screen (Direction C of #96).
- *
- * The hero just handed the visitor a link on our domain with a random slug.
- * The obvious next thought is "that URL is not mine", so this answers it
- * immediately instead of three sections later: the same link on their own
- * domain, with a slug they chose. It is also the clearest thing a paid plan
- * buys, put where somebody is still deciding whether to care.
- */
-/** The two mails land one after the other, then each says its verdict a beat
- *  later, so the reader gets to look at the link before being told what to
- *  make of it. MotionConfig reducedMotion="user" wraps the page, so this
- *  becomes a plain appearance for anyone who asked for less movement. */
-const inboxVariants: Variants = {
-  hidden: {},
-  visible: { transition: { delayChildren: 0.1, staggerChildren: 0.3 } },
-};
-
-const mailVariants: Variants = {
-  hidden: { opacity: 0, y: 12 },
-  visible: { opacity: 1, y: 0, transition: { duration: 0.45, ease: "easeOut" } },
-};
-
-const verdictVariants: Variants = {
-  hidden: { opacity: 0 },
-  visible: { opacity: 1, transition: { delay: 0.25, duration: 0.3 } },
-};
-
-/**
- * One mail in the inbox, so the argument is made by the picture rather than
- * asserted by the copy.
- *
- * The verdict is about the link matching the sender, not about the link
- * looking dodgy on its own. In an inbox the display name is the first thing
- * read and the easiest thing to fake, so the link underneath is what settles
- * it. That is the real reason a domain you own matters here.
- */
-function InboxMail({
-  from,
-  subject,
-  link,
-  verdict,
-  mine,
-}: {
-  from: string;
-  subject: string;
-  link: string;
-  verdict: string;
-  mine?: boolean;
-}) {
-  // The two looks side by side, rather than the same question asked four
-  // times down the markup.
-  const tone = mine
-    ? {
-        row: "bg-surface smooth-shadow-ring-sm",
-        badge: "bg-accent/15 text-accent",
-        link: "text-accent",
-        verdict: "text-accent-2",
-      }
-    : {
-        row: "bg-surface-2",
-        badge: "bg-border text-muted",
-        link: "text-muted",
-        verdict: "text-muted",
-      };
-
-  return (
-    <m.div variants={mailVariants} className={cn("flex gap-3 rounded-xl p-4 text-left", tone.row)}>
-      <span
-        className={cn(
-          "mt-0.5 grid size-8 shrink-0 place-items-center rounded-full text-xs font-bold",
-          tone.badge,
-        )}
-        aria-hidden="true"
-      >
-        A
-      </span>
-      <div className="flex min-w-0 flex-1 flex-col gap-1">
-        <div className="flex items-baseline justify-between gap-2">
-          <p className="truncate text-sm font-bold">{from}</p>
-          <span className="shrink-0 text-xs text-muted">now</span>
-        </div>
-        <p className="truncate text-sm text-muted">{subject}</p>
-        <p className={cn("truncate font-mono text-xs", tone.link)}>{link}</p>
-        <m.p variants={verdictVariants} className={cn("mt-0.5 text-xs", tone.verdict)}>
-          {verdict}
-        </m.p>
-      </div>
-    </m.div>
-  );
-}
-
-/**
- * The second screen (Direction C of #96).
- *
- * The hero just handed the visitor a link on our domain with a random slug,
- * so the next thought is "that URL is not mine". This answers it straight
- * away rather than three sections later.
- *
- * It argues by showing the link where it is actually read, in somebody's
- * inbox, next to a decision about whether to open it. An earlier version put
- * the two URLs side by side and asserted the difference, which argued about
- * our branding instead of their result.
- */
-function CustomDomainSection() {
-  const paidTo = usePaidPlanTo();
-  return (
-    // Side by side, because the section already is: it compares two messages
-    // that differ only in the domain. Stacking the argument above its own
-    // evidence was fighting what the section says.
-    <Section className="py-12">
-      <div className="grid items-center gap-8 md:grid-cols-2 md:gap-12">
-        {/* Evidence left, argument right. On a phone the heading still comes
-            first: the inbox is the proof of a claim, and proof before the
-            claim is just two emails nobody asked about. */}
-        <m.div
-          initial="hidden"
-          whileInView="visible"
-          viewport={{ once: true, margin: "-60px" }}
-          variants={inboxVariants}
-          className="order-2 flex w-full flex-col gap-3 rounded-2xl bg-surface-2/40 p-3 md:order-1"
-        >
-          <p className="px-1 text-xs font-medium text-muted">Inbox</p>
-          <InboxMail
-            from="Acme Store"
-            subject="Your 20% code ends tonight"
-            link="rdyr.cc/m22fs5w"
-            verdict="Doesn't match the sender"
-          />
-          <InboxMail
-            mine
-            from="Acme Store"
-            subject="Your 20% code ends tonight"
-            link="go.acme.com/20-off"
-            verdict="Matches the sender"
-          />
-        </m.div>
-
-        <div className="order-1 flex flex-col items-start gap-5 text-left md:order-2">
-          {/* Gain framing, not fear. This used to open on "a random slug is
-              what a scam text looks like", which sells by making somebody
-              picture being mistaken for a scammer. Every competitor sells the
-              same feature the other way round, on recognition and clicks:
-              Dub "boost click-through rates by 30%", Bitly "replace bit.ly
-              with your brand and 2.3x your click-throughs", Rebrandly
-              "branded links build trust and get 39% more clicks". None of
-              them says spam, and Bitly is selling against a generic
-              shortener domain, which is the hardest case for staying
-              positive.
-
-              No number here, because we do not have one of our own and
-              quoting a competitor's marketing as evidence for our product
-              would be the same dishonesty in a nicer suit. The messages to
-              the right are the evidence instead. */}
-          <h2 className="text-2xl font-bold tracking-tight text-balance sm:text-3xl">
-            Short links on your own domain get clicked.
-          </h2>
-          <p className="max-w-xl text-sm text-muted">
-            Connect a domain you own and every short link goes out under it, with TLS issued
-            automatically and every slug yours to choose. The name in the link is the name in the
-            message, so there is nothing to work out before clicking. On the shared domain slugs
-            stay random, so nobody can take the good ones.
-          </p>
-          <HrefLink
-            href={paidTo("hobby")}
-            onClick={() => trackCta("second_screen_domain")}
-            className="inline-flex items-center gap-1 text-sm text-accent hover:underline"
-          >
-            Connect your domain <ArrowRight size={14} />
-          </HrefLink>
-        </div>
-      </div>
-    </Section>
-  );
-}
-
-/**
- * The product tour, under the id the hero's "See how it works" used to
- * point at. It ends on the one ask in the middle of the page, placed where
- * somebody has just watched a link get made and clicked.
- */
-function TourSection() {
+/** The one ask in the long stretch between the hero and pricing, where the
+ *  visitor has just been shown the payoff. */
+function AnalyticsAsk() {
   const { authed } = useAudience();
   return (
-    <Section id="analytics" className="scroll-mt-20 pb-16">
-      <h2 className="mb-6 text-2xl font-bold tracking-tight text-balance sm:text-3xl">
-        Make a short link, share it, see where the clicks came from.
-      </h2>
-      <ProductTour
-        footer={
-          <p className="text-center text-sm">
-            <HrefLink
-              href={authed ? "/analytics" : "/signup"}
-              onClick={() => trackCta("analytics_preview")}
-              className="text-accent hover:underline"
-            >
-              See this on your own links →
-            </HrefLink>
-          </p>
-        }
-      />
-    </Section>
-  );
-}
-
-/** Four facts in place of a logo wall: things a visitor can check, not
- * customers we would be asking them to take on trust. */
-const FACTS = [
-  ["No IP addresses", "A click keeps its country, referrer, device and time. Nothing else."],
-  ["Runs on Cloudflare", "Redirects are served from the data center nearest each visitor."],
-  ["Open source", "Read the code, or deploy it to your own Cloudflare account."],
-  [
-    `Your domain for ${PLAN_PRICES.hobby} a month`,
-    "A custom domain with automatic TLS on the Hobby plan.",
-  ],
-] as const;
-
-function FactsSection() {
-  return (
-    <section className="grid grid-cols-2 border-y border-border md:grid-cols-4">
-      {FACTS.map(([title, body]) => (
-        <div
-          key={title}
-          className="flex flex-col gap-1 py-5 pr-5 md:border-l md:border-border md:pl-5 md:first:border-l-0 md:first:pl-0"
-        >
-          <p className="font-bold">{title}</p>
-          <p className="text-sm text-muted">{body}</p>
-        </div>
-      ))}
-    </section>
-  );
-}
-
-const AUDIENCE_KEYS = ["marketers", "teams", "developers"] as const;
-type Audience = (typeof AUDIENCE_KEYS)[number];
-
-const AUDIENCES = {
-  marketers: {
-    title: "Know which post, email or poster paid off.",
-    points: [
-      [
-        "UTM builder in every link",
-        "Fill in source, medium and campaign, or paste a URL that already has them.",
-      ],
-      [
-        "Compared with the period before",
-        "Every total shows the change, from 24 hours up to a year.",
-      ],
-      [
-        "Busiest hours and quiet links",
-        "When people click, and which links stopped getting clicks.",
-      ],
-    ],
-  },
-  teams: {
-    title: "Share the work without sharing a password.",
-    points: [
-      [
-        "Owner, admin, member and viewer",
-        "Decide who can edit links, connect domains and invite people.",
-      ],
-      ["Invites by email", "Each invite works once and lasts 7 days."],
-      ["Your own domain", "Add a CNAME record. rdyrct finds it and issues TLS by itself."],
-    ],
-  },
-  developers: {
-    title: "Everything in the app is in the API.",
-    points: [
-      [
-        "REST API with scoped keys",
-        "Create links, read stats and manage members with a key per organization.",
-      ],
-      [
-        "MCP server on every plan",
-        "Connect Claude, ChatGPT or any MCP client with OAuth. No key to copy.",
-      ],
-      ["Same limits, same roles", "A key acts as you, so your role and your plan still apply."],
-    ],
-  },
-} satisfies Record<Audience, { title: string; points: [string, string][] }>;
-
-const DOMAIN_STATUSES = ["Checking DNS", "Issuing TLS", "active"] as const;
-
-/** A new domain walking through the app's real statuses once it is on
- * screen: the CNAME found, the certificate issued, live. */
-function useDomainStatus(ref: React.RefObject<HTMLDivElement | null>) {
-  const inView = useInView(ref, { once: true, amount: 0.5 });
-  const still = useReducedMotion() ?? false;
-  const last = DOMAIN_STATUSES.length - 1;
-  const [status, setStatus] = useState(still ? last : 0);
-  const moving = inView && status < last;
-  useEffect(() => {
-    if (!moving) return;
-    const t = setTimeout(() => setStatus((s) => s + 1), 1300);
-    return () => clearTimeout(t);
-  }, [moving, status]);
-  return status;
-}
-
-function TeamsPanel() {
-  const ref = useRef<HTMLDivElement>(null);
-  const status = useDomainStatus(ref);
-  const joined = status === DOMAIN_STATUSES.length - 1;
-  const members = [
-    ["Ana Ruiz", "ana@northwind.co", "owner", "Mar 3, 2026"],
-    ["Marco Bellini", "marco@northwind.co", "admin", "Apr 14, 2026"],
-    ["Dana Park", "dana@northwind.co", "member", "Jun 2, 2026"],
-    ["Sam Okafor", "sam@northwind.co", "viewer", joined ? "Today" : "Invite sent"],
-  ] as const;
-  return (
-    <div ref={ref} className="flex flex-col gap-3">
-      <Table>
-        <thead>
-          <tr>
-            <Th>Name</Th>
-            <Th className="hidden sm:table-cell">Email</Th>
-            <Th>Role</Th>
-            <Th>Joined</Th>
-          </tr>
-        </thead>
-        <tbody>
-          {members.map(([name, email, role, joined]) => (
-            <tr key={name}>
-              <Td>{name}</Td>
-              <Td className="hidden sm:table-cell">{email}</Td>
-              <Td>{role}</Td>
-              <Td className="tnum whitespace-nowrap">{joined}</Td>
-            </tr>
-          ))}
-        </tbody>
-      </Table>
-      <DomainCard status={status} live={joined} />
-    </div>
-  );
-}
-
-function DomainCard({ status, live }: { status: number; live: boolean }) {
-  return (
-    <div className="flex flex-col gap-2 rounded-lg bg-surface p-4 smooth-shadow-ring-xs">
-      <div className="flex items-center justify-between gap-3">
-        <span className="font-bold">links.northwind.co</span>
-        <span
-          className={cn(
-            "rounded-full px-2 py-0.5 text-xs font-medium",
-            live ? "bg-accent-2/15 text-accent-2" : "bg-butter/15 text-butter",
-          )}
-        >
-          {DOMAIN_STATUSES[status]}
-        </span>
-      </div>
-      <code className="overflow-x-auto rounded-md bg-surface-2 px-3 py-2 font-mono text-xs whitespace-nowrap text-muted">
-        links.northwind.co CNAME rdyrct.com
-      </code>
-    </div>
-  );
-}
-
-function AudiencePanel({ audience }: { audience: Audience }) {
-  if (audience === "teams") return <TeamsPanel />;
-  if (audience === "developers")
-    return (
-      <pre className="overflow-x-auto rounded-lg bg-surface-2 p-4 font-mono text-xs leading-relaxed">
-        {`curl -X POST https://rdyrct.com/api/orgs/org_8f2k/links \\
-  -H "Authorization: Bearer rdyrct_live_..." \\
-  -d '{
-    "domainId": "dom_northwind",
-    "slug": "spring",
-    "destination": "https://shop.northwind.co/linen",
-    "utmSource": "newsletter",
-    "utmCampaign": "spring26"
-  }'`}
-      </pre>
-    );
-  return (
-    <Table>
-      <thead>
-        <tr>
-          <Th>Source</Th>
-          <Th>Medium</Th>
-          <Th className="text-right">Clicks</Th>
-          <Th className="text-right">Change</Th>
-        </tr>
-      </thead>
-      <tbody>
-        {(
-          [
-            ["newsletter", "email", 1642, "+24%"],
-            ["instagram", "social", 1391, "+9%"],
-            ["poster", "qr", 1102, "New"],
-            ["podcast", "audio", 783, "-6%"],
-          ] as const
-        ).map(([source, medium, clicks, change]) => (
-          <tr key={source}>
-            <Td>{source}</Td>
-            <Td>{medium}</Td>
-            <Td className="tnum text-right">{formatNumber(clicks)}</Td>
-            <Td
-              className={cn(
-                "tnum text-right",
-                change.startsWith("+") ? "text-accent-2" : "text-muted",
-              )}
-            >
-              {change}
-            </Td>
-          </tr>
-        ))}
-      </tbody>
-    </Table>
-  );
-}
-
-function AudienceSection() {
-  const [audience, setAudience] = useState<Audience>("marketers");
-  return (
-    <Section className="flex flex-col gap-8 py-12 md:py-20">
-      <div className="max-w-xl">
-        <h2 className="text-2xl font-bold tracking-tight text-balance sm:text-3xl">
-          One link, three kinds of people.
-        </h2>
-        <p className="mt-2 text-muted">
-          The marketer who tags it, the team that shares the work, the developer who automates it.
-        </p>
-      </div>
-      <div
-        role="tablist"
-        aria-label="Who it is for"
-        className="flex w-fit gap-1 rounded-xl bg-surface-2 p-1"
-      >
-        {AUDIENCE_KEYS.map((a) => (
-          <button
-            key={a}
-            type="button"
-            role="tab"
-            id={`audience-tab-${a}`}
-            aria-controls={`audience-panel-${a}`}
-            aria-selected={audience === a}
-            onClick={() => setAudience(a)}
-            className={cn(
-              "min-h-11 cursor-pointer rounded-lg px-4 py-1.5 text-sm font-medium capitalize sm:min-h-0",
-              audience === a ? "bg-surface text-text smooth-shadow-ring-xs" : "text-muted",
-            )}
-          >
-            {a}
-          </button>
-        ))}
-      </div>
-      {/* Every panel is in the page, the inactive ones hidden, so a crawler
-          reads the roles, custom domain, API and MCP copy too, not only
-          whichever tab happens to open first. */}
-      {AUDIENCE_KEYS.map((a) => (
-        <m.div
-          key={a}
-          id={`audience-panel-${a}`}
-          role="tabpanel"
-          aria-labelledby={`audience-tab-${a}`}
-          hidden={a !== audience}
-          initial={false}
-          animate={a === audience ? { opacity: 1, y: 0 } : { opacity: 0, y: 6 }}
-          transition={{ duration: 0.25 }}
-          className="grid items-start gap-8 md:grid-cols-marketing-copy"
-        >
-          <div className="flex flex-col gap-5">
-            <h3 className="text-xl font-bold text-balance">{AUDIENCES[a].title}</h3>
-            <ul className="flex flex-col gap-4">
-              {AUDIENCES[a].points.map(([head, body]) => (
-                <li key={head}>
-                  <p className="font-bold">{head}</p>
-                  <p className="text-sm text-muted">{body}</p>
-                </li>
-              ))}
-            </ul>
-            {a === "developers" && (
-              <MarketingLink to="/docs" className="text-sm text-accent hover:underline">
-                Read the API and MCP docs →
-              </MarketingLink>
-            )}
-          </div>
-          <AudiencePanel audience={a} />
-        </m.div>
-      ))}
-    </Section>
+    <HrefLink
+      href={authed ? "/analytics" : "/signup"}
+      onClick={() => trackCta("analytics_preview")}
+      className={buttonClass({ variant: "primary", className: "rounded-full px-4" })}
+    >
+      See this on your own links
+    </HrefLink>
   );
 }
 
@@ -1387,20 +917,27 @@ const PLAN_CHANGE_STEPS = [
   ],
 ] as const;
 
+/** The page's one dark band: the promise that matters most to somebody
+ *  about to print a code. The last step, the one that never changes, is the
+ *  lit one. */
 export function PlanChangeSection() {
   return (
-    <Section className="flex flex-col gap-10 py-12 md:py-20">
-      <div className="max-w-xl">
-        <h2 className="text-2xl font-bold tracking-tight text-balance sm:text-3xl">
-          Stop paying and nothing gets deleted.
-        </h2>
-        <p className="mt-2 text-muted">What happens, in order, after you downgrade.</p>
-      </div>
-      <ol className="grid gap-8 border-t-2 border-border pt-6 sm:grid-cols-2 lg:grid-cols-4">
-        {PLAN_CHANGE_STEPS.map(([when, head, body]) => (
-          <li key={when} className="flex flex-col gap-1">
-            <span className="tnum text-sm text-muted">{when}</span>
-            <p className="font-bold">{head}</p>
+    <Section className="ink-band flex flex-col gap-10 rounded-3xl px-6 py-14 sm:px-10 md:py-20">
+      <SplitHeading
+        lead="Stop paying, and nothing gets deleted."
+        rest="What happens, in order, after you downgrade."
+      />
+      <ol className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        {PLAN_CHANGE_STEPS.map(([when, head, body], index) => (
+          <li
+            key={when}
+            className={cn(
+              "lit flex flex-col gap-1 rounded-2xl border border-border bg-surface p-5",
+              index === PLAN_CHANGE_STEPS.length - 1 && "border-accent/50",
+            )}
+          >
+            <span className="tnum text-sm font-bold text-accent">{when}</span>
+            <p className="mt-1 font-bold">{head}</p>
             <p className="text-sm text-muted">{body}</p>
           </li>
         ))}
@@ -1413,19 +950,17 @@ function FaqSection() {
   return (
     // Left, not centred. Reading is one column, and centring a list of
     // questions starts every line in a different place.
-    <Section id="faq" className="scroll-mt-16 py-16">
-      <div className="mx-auto max-w-3xl">
-        <h2 className="mb-6 text-2xl font-bold tracking-tight text-balance sm:text-3xl">
-          Frequently asked questions
-        </h2>
-      </div>
-      <div className="mx-auto flex max-w-3xl flex-col gap-3">
+    <Section
+      id="faq"
+      className="grid scroll-mt-24 gap-8 py-16 md:grid-cols-[1fr_1.6fr] md:gap-12 md:py-24"
+    >
+      <h2 className="text-3xl font-bold tracking-tight text-balance sm:text-4xl">
+        Frequently asked questions
+      </h2>
+      <div className="flex flex-col border-b border-border">
         {faqs.map(({ q, a, aNode }) => (
-          <details
-            key={q}
-            className="group rounded-lg border border-border bg-surface px-4 open:border-accent/40"
-          >
-            <summary className="flex cursor-pointer list-none items-center justify-between gap-3 py-4 text-sm font-bold [&::-webkit-details-marker]:hidden">
+          <details key={q} className="group border-t border-border">
+            <summary className="flex cursor-pointer list-none items-center justify-between gap-3 py-5 font-bold [&::-webkit-details-marker]:hidden">
               {q}
               <ChevronDown
                 size={16}
@@ -1442,14 +977,13 @@ function FaqSection() {
 
 function FinalCtaSection({ ctaTo, ctaLabel }: { ctaTo: string; ctaLabel: string }) {
   return (
-    <Section>
-      <div className="flex flex-col items-center gap-5 rounded-2xl bg-surface px-6 py-14 text-center smooth-shadow-ring-sm">
-        <h2 className="max-w-xl text-2xl font-bold tracking-tight sm:text-3xl">
-          Start shortening in seconds.
+    <Section className="py-20 md:py-28">
+      <div className="flex flex-col items-center gap-6 text-center">
+        <h2 className="text-metal max-w-3xl pb-1 text-4xl font-bold tracking-tight text-balance sm:text-6xl">
+          Your next link, one hop away.
         </h2>
-        <p className="max-w-md text-sm text-muted">
-          Create your first short link on the free plan. No credit card, no IP addresses, no servers
-          to run.
+        <p className="max-w-md text-muted">
+          Your first short link takes a minute on the free plan. No credit card.
         </p>
         <HrefLink
           href={ctaTo}
@@ -1498,13 +1032,19 @@ function PricingTierCard({
   highlight?: boolean;
 }) {
   return (
-    <div className="flex flex-col gap-4 rounded-lg border border-border bg-surface p-5">
+    <div
+      className={cn(
+        "flex flex-col gap-4 p-6",
+        highlight &&
+          "bg-[radial-gradient(70%_120px_at_50%_0,color-mix(in_oklab,var(--accent)_12%,transparent),transparent)]",
+      )}
+    >
       <div>
         {/* Same pill as the full table and the mobile plan cards. The
             homepage is where the steering is worth most, and it was the
             one of the three missing it. */}
         <PlanName name={name} highlight={highlight} />
-        <p className="tnum mt-1 text-2xl font-bold">
+        <p className="tnum mt-2 text-4xl font-bold tracking-tight">
           {price}
           {sub && <span className="ml-1 text-2xs font-normal text-muted">{sub}</span>}
         </p>
@@ -1570,7 +1110,7 @@ function PricingTeaser() {
       onEnter={() => posthog.capture(FUNNEL.pricingViewed)}
     >
       <div className="mb-8 text-center">
-        <h2 className="text-2xl font-bold tracking-tight text-balance sm:text-3xl">
+        <h2 className="text-3xl font-bold tracking-tight text-balance sm:text-4xl">
           Simple pricing
         </h2>
         <p className="mx-auto mt-3 max-w-xl text-sm text-muted">
@@ -1580,7 +1120,7 @@ function PricingTeaser() {
 
       <BillingCycleToggle interval={interval} onChange={setInterval} />
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+      <div className="lit grid grid-cols-1 divide-y divide-border overflow-hidden rounded-3xl border border-border bg-surface sm:grid-cols-3 sm:divide-x sm:divide-y-0">
         {tiers.map((tier) => (
           <PricingTierCard key={tier.name} {...tier} />
         ))}
@@ -1632,10 +1172,15 @@ export function LandingPage() {
               ready={ready}
               name={name}
             />
-            <TourSection />
-            <FactsSection />
-            <CustomDomainSection />
-            <AudienceSection />
+            {/* Below the hero, everything sits in one hairline frame
+                (rdyrct-design, "Light on the marketing pages"). */}
+            <div className="border-x border-border/70">
+              <Manifesto />
+              <LinksPillar />
+              <QrPillar />
+              <AnalyticsPillar ask={<AnalyticsAsk />} />
+              <TeamsAndCode />
+            </div>
             <PlanChangeSection />
             <PricingTeaser />
             <SelfHostSection />

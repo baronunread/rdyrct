@@ -87,7 +87,7 @@ function RangeTabs({
 }
 
 /**
- * The analytics screen of the landing product tour, built from the app's real chart
+ * The analytics screen on the landing page, built from the app's real chart
  * components (AreaChart + BarList + ClicksByHour) over demo data: theme-aware and
  * CSP-safe like everything else on the page. The range presets really switch
  * the series (hourly buckets for 24h, like the product), and the area chart's
@@ -99,7 +99,7 @@ export function LandingAnalyticsMock() {
   const series = useMemo(() => SERIES[range], [range]);
 
   return (
-    // The product tour (landing-tour.tsx) supplies the window around this.
+    // The analytics section (landing-pillars.tsx) supplies the panel around this.
     <div className="flex flex-col gap-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>

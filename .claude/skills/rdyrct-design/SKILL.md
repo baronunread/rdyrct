@@ -105,6 +105,19 @@ Hierarchy comes from typography before surfaces. Do not wrap every section in a 
 
 **The marketing header is a floating pill** (`components/landing-header.tsx`), the one translucent, blurred surface on the public pages. Inside it the nav sits in a recessed `--surface-2` well, and a `--surface` tab slides to the item under the pointer and rests on the current page. "Product" opens a panel of the deeper pages. On a phone the same pill grows down into a card holding every page, Log in and Get started (`components/phone-menu.tsx`); the current page carries the mark's accent dot. Add a page to `components/marketing-nav.ts` and both get it. Do not add a second glass surface on the strength of this one.
 
+## Light on the marketing pages
+
+The public pages are allowed a small, named set of effects that the app is not. Use these and nothing else; each is a utility in `styles.css` and follows both themes through the tokens.
+
+- **The frame.** Below the hero, sections sit between two hairline rails (`border-x border-border/70`), each row opened by a hairline with a small cross where it meets a rail.
+- **Two-tone headings.** The claim in ink, the reason muted, in one `h2` (`SplitHeading` in `components/landing-pillars.tsx`). This replaces a heading plus a subtitle; it is not an eyebrow.
+- **`lit`**: a panel lit from above, a hairline of light on its top edge and a long soft shadow. For the product shown over sample data, and the cards of the dark band.
+- **`landing-mesh`**: one blurred field of the accent, the mint and the butter behind a product panel. Decoration, `aria-hidden`, never behind text.
+- **`ink-band`**: the one dark band on a page. It redefines the tokens inside it, so ordinary components work in it unchanged.
+- **`text-metal`**: the closing line only, ink fading to muted.
+
+The product in a section is the app's own components over sample data (the analytics panel is the real chart), never a screenshot, and the details under it are tabs that change what it shows. Benefits on the landing; redirects, data centres and competitors' prices on the docs and comparison pages.
+
 ## Data and evidence
 
 The analytics screens are the product's proof, so they get the strictest treatment.
@@ -159,7 +172,7 @@ Do not ship these, whoever asked:
 
 - All-caps or tracked eyebrows, kickers and overlines.
 - Em dashes.
-- Decorative gradients, gradient text, glows, blobs, glass, noise textures or fake depth. A gradient is acceptable only as a labelled continuous data scale.
+- Decorative gradients, gradient text, glows, blobs, glass, noise textures or fake depth, beyond the named set in "Light on the marketing pages". A gradient is otherwise acceptable only as a labelled continuous data scale.
 - A centred hero over a card grid, repeated down the page.
 - A badge or pill for ordinary metadata.
 - Cards inside cards, or a border repairing weak hierarchy.
