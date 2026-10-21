@@ -66,7 +66,7 @@
         padding: 68px 96px 64px;
       }
 
-      /* The Hooks mark without its tile, oversized and bled off the right
+      /* The Hop mark without its tile, oversized and bled off the right
          edge. Recessive: it frames, it does not compete. */
       .watermark {
         position: absolute;
@@ -142,18 +142,17 @@
     </style>
   </head>
   <body>
-    <svg class="watermark" viewBox="3 3 26 26" aria-hidden="true">
-      <g
-        transform="translate(2.8 0) skewX(-10)"
+    <svg class="watermark" viewBox="3.6 7 23.6 17.8" fill="currentColor" aria-hidden="true">
+      <path
+        d="M6.6 20Q13.4 2.2 19 12.2"
         fill="none"
         stroke="currentColor"
-        stroke-width="6"
+        stroke-width="3.2"
         stroke-linecap="round"
-        stroke-linejoin="round"
-      >
-        <path d="M8.6 26V12.6a4.6 4.6 0 0 1 4.6-4.6H16" />
-        <path d="M23.4 6V19.4a4.6 4.6 0 0 1-4.6 4.6H16" />
-      </g>
+      />
+      <circle cx="6.6" cy="20" r="2.5" />
+      <circle cx="22.4" cy="17.4" r="3.6" />
+      <ellipse cx="22.4" cy="23.3" rx="4.3" ry="1.05" />
     </svg>
 
     <div class="brand">

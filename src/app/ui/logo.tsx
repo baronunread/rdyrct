@@ -1,27 +1,25 @@
 import { cn } from "./cn";
 
 /**
- * The Hooks mark without its tile: two rounded corners hooked into each
- * other and leaning forward. The first is the r, the pair is a chain link,
- * and from far away the two strokes read as the // of a URL. The r takes the
- * text colour and its partner the accent, so it follows the theme. The tiled
- * version is the favicon and app icon (public/favicon.svg,
+ * The Hop mark without its tile: a click leaves one place, arcs, and lands.
+ * The arc takes the text colour and the landing dot the accent, so it follows
+ * the theme. The tiled version is the favicon and app icon (public/favicon.svg,
  * public/connector-icon.svg); next to the word, the tile would be a second
  * box around one name.
  */
 function LogoMark({ className }: { className?: string }) {
   return (
-    <svg viewBox="3 3 26 26" aria-hidden="true" className={cn("h-[1em] w-auto", className)}>
-      <g
-        transform="translate(2.8 0) skewX(-10)"
+    <svg viewBox="3.6 7 23.6 17.8" aria-hidden="true" className={cn("h-[0.9em] w-auto", className)}>
+      <path
+        d="M6.6 20Q13.4 2.2 19 12.2"
         fill="none"
-        strokeWidth="6"
+        stroke="currentColor"
+        strokeWidth="3.2"
         strokeLinecap="round"
-        strokeLinejoin="round"
-      >
-        <path d="M8.6 26V12.6a4.6 4.6 0 0 1 4.6-4.6H16" stroke="currentColor" />
-        <path d="M23.4 6V19.4a4.6 4.6 0 0 1-4.6 4.6H16" className="stroke-accent" />
-      </g>
+      />
+      <circle cx="6.6" cy="20" r="2.5" fill="currentColor" />
+      <circle cx="22.4" cy="17.4" r="3.6" className="fill-accent" />
+      <ellipse cx="22.4" cy="23.3" rx="4.3" ry="1.05" className="fill-border" />
     </svg>
   );
 }
