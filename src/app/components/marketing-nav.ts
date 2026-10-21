@@ -17,10 +17,7 @@ export const MAIN_LINKS = [
   { key: "docs", to: "/docs", label: "Docs", hint: "API and MCP" },
 ] as const;
 
-const NAV_KEYS = ["product", "pricing", "docs", "blog"] as const;
-export type NavKey = (typeof NAV_KEYS)[number];
-const isNavKey = (value: string | undefined): value is NavKey =>
-  NAV_KEYS.some((key) => key === value);
+type NavKey = "product" | "pricing" | "docs" | "blog";
 
 /** Pages that live under "Product" without a row of their own in its panel. */
 const PRODUCT_PATHS = new Set<string>([
@@ -31,18 +28,10 @@ const PRODUCT_PATHS = new Set<string>([
   "/short-io-alternative",
 ]);
 
-/** The nav item the tab rests on, or null where none applies (the home page). */
+/** The nav item for the page you are on, or null where none applies (the home page). */
 export function currentNavKey(pathname: string): NavKey | null {
   if (pathname === "/pricing") return "pricing";
   if (pathname === "/docs") return "docs";
   if (PRODUCT_PATHS.has(pathname)) return "product";
   return null;
-}
-
-/** The nav item an event landed on, found by the data-nav its element (or an
- *  ancestor) carries, so the items themselves need no handlers. */
-export function navKeyAt(target: EventTarget | null): NavKey | null {
-  const item = target instanceof Element ? target.closest<HTMLElement>("[data-nav]") : null;
-  const key = item?.dataset.nav;
-  return isNavKey(key) ? key : null;
 }
