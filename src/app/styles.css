@@ -279,32 +279,6 @@
   grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
 }
 
-/* A landing pillar's tab line (landing-pillars.tsx). Full and still unless
-   the tabs are on the clock; then it fills over the tab's time, only while
-   the section is on screen and nobody is pointing at or focused in it, and
-   the tabs move on when it is full. Under reduced motion it stays full and
-   the tabs stay put. */
-@utility tab-dwell {
-  &[data-clocked] {
-    animation: tab-dwell var(--tab-dwell, 6s) linear both;
-    animation-play-state: paused;
-  }
-  [data-playing]:not(:hover, :focus-within) &[data-clocked] {
-    animation-play-state: running;
-  }
-  @media (prefers-reduced-motion: reduce) {
-    &[data-clocked] {
-      animation: none;
-    }
-  }
-}
-
-@keyframes tab-dwell {
-  from {
-    transform: scaleY(0);
-  }
-}
-
 @keyframes shake {
   0%,
   100% {

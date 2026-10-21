@@ -1,42 +1,33 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 
-// The landing below the hero: a section for each thing you get, the product
-// shown over sample data, and details that change what it shows.
+// The landing below the hero: a section for each thing you get, and each
+// detail in a card of its own with a short loop of the product doing it.
 
-test("each detail changes what the section shows, by click and by arrow key", async ({ page }) => {
+const section = (page: Page, name: string) =>
+  page.locator("section").filter({ has: page.getByRole("heading", { name }) });
+
+test("each detail is a card that says what it is, and its loop shows it", async ({ page }) => {
   await page.goto("/");
-  const links = page.getByRole("tablist", { name: "Links that look like you." });
+  const links = section(page, "Links that look like you.");
   await links.scrollIntoViewIfNeeded();
 
-  const domain = links.getByRole("tab", { name: /your own domain/i });
-  await expect(domain).toHaveAttribute("aria-selected", "true");
-  const panel = page.getByRole("tabpanel", { name: /your own domain/i });
-  await expect(panel.getByText("go.acme.com/podcast")).toBeVisible();
-
-  await links.getByRole("tab", { name: /words you choose/i }).click();
-  await expect(page.getByRole("tabpanel", { name: /words you choose/i })).toContainText(
-    "Available on go.acme.com",
-  );
-
-  // Tabs move along the row with the arrow keys, and focus goes with them.
-  await page.keyboard.press("ArrowRight");
-  const tags = links.getByRole("tab", { name: /campaign tags/i });
-  await expect(tags).toHaveAttribute("aria-selected", "true");
-  await expect(tags).toBeFocused();
-  await expect(page.getByRole("tabpanel", { name: /campaign tags/i })).toContainText("spring-sale");
+  for (const title of ["Your own domain", "Words you choose", "Campaign tags"]) {
+    await expect(links.getByRole("heading", { level: 3, name: title })).toBeVisible();
+  }
+  // The loop repeats the words, so assistive tech gets the words alone.
+  const scenes = links.locator("[data-scene]");
+  await expect(scenes).toHaveCount(3);
+  for (const scene of await scenes.all())
+    await expect(scene).toHaveAttribute("aria-hidden", "true");
+  await expect(scenes.nth(2)).toContainText("spring-sale");
 });
 
 test("the QR section draws a real code and leads to the generator", async ({ page }) => {
   await page.goto("/");
-  const qr = page.getByRole("tablist", { name: "Print once. Change it later." });
+  const qr = section(page, "Print once. Change it later.");
   await qr.scrollIntoViewIfNeeded();
-  // The code is the app's own QR component, loaded once the section is near.
-  await expect(
-    page
-      .getByRole("tabpanel", { name: /edit after printing/i })
-      .locator("svg, canvas")
-      .first(),
-  ).toBeVisible();
+  // The code is the app's own QR component, loaded once the card is near.
+  await expect(qr.locator("[data-scene]").first().locator("svg, canvas").first()).toBeVisible();
 
   await page.getByRole("link", { name: "Make a QR code" }).click();
   await expect(page).toHaveURL(/\/qr-code-generator$/);
@@ -56,38 +47,30 @@ test("the landing sections name no competitor", async ({ page }) => {
   }
 });
 
-// The tabs move on by themselves while the section is on screen, which is
-// what tells a visitor they can be picked, and stop for good once one is.
-test("the details move on by themselves until the visitor picks one", async ({ page }) => {
+// A card plays its loop while it is on screen, from the finished state the
+// page arrives in; under reduced motion it stays finished.
+const steps = async (page: Page) => {
+  const scene = section(page, "Links that look like you.").locator("[data-scene]").nth(1);
+  await scene.scrollIntoViewIfNeeded();
+  const seen = new Set<string | null>();
+  for (let i = 0; i < 8; i++) {
+    seen.add(await scene.getAttribute("data-step"));
+    await page.waitForTimeout(250);
+  }
+  return seen;
+};
+
+test("the cards play while they are on screen", async ({ page }) => {
   await page.goto("/");
-  // A short dwell, so the test does not wait out six seconds a tab.
-  await page.addStyleTag({ content: ":root { --tab-dwell: 400ms; }" });
-  const links = page.getByRole("tablist", { name: "Links that look like you." });
-  await links.scrollIntoViewIfNeeded();
-  await page.mouse.move(0, 0);
-
-  const words = links.getByRole("tab", { name: /words you choose/i });
-  await expect(words).toHaveAttribute("aria-selected", "true");
-
-  await links.getByRole("tab", { name: /your own domain/i }).click();
-  await page.mouse.move(0, 0);
-  await page.waitForTimeout(1200);
-  await expect(links.getByRole("tab", { name: /your own domain/i })).toHaveAttribute(
-    "aria-selected",
-    "true",
-  );
+  expect((await steps(page)).size).toBeGreaterThan(1);
 });
 
-test("under reduced motion the details stay where they are", async ({ page }) => {
+test("under reduced motion the cards hold their finished state", async ({ page }) => {
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.goto("/");
-  await page.addStyleTag({ content: ":root { --tab-dwell: 300ms; }" });
-  const links = page.getByRole("tablist", { name: "Links that look like you." });
-  await links.scrollIntoViewIfNeeded();
-  await page.mouse.move(0, 0);
-  await page.waitForTimeout(1000);
-  await expect(links.getByRole("tab", { name: /your own domain/i })).toHaveAttribute(
-    "aria-selected",
-    "true",
-  );
+  const seen = await steps(page);
+  expect([...seen]).toEqual(["9"]);
+  await expect(
+    section(page, "Links that look like you.").locator("[data-scene]").nth(1),
+  ).toContainText("Available on go.acme.com");
 });

@@ -110,7 +110,7 @@ Hierarchy comes from typography before surfaces. Do not wrap every section in a 
 The public pages are allowed a small, named set of effects that the app is not. Use these and nothing else; each is a utility in `styles.css` and follows both themes through the tokens.
 
 - **The frame.** Below the hero, sections sit between two hairline rails (`border-x border-border/70`), each row opened by a hairline with a small cross where it meets a rail (`FrameRow` in `components/marketing-kit.tsx`). The crosses are drawn from 1px bars centred on the exact pixel where the lines meet, never a typed `+`, whose position depends on the font. Close every frame with an empty `<FrameRow />` so its bottom corners are crossed too. The 404 (`components/not-found-view.tsx`) wears the same frame, with no brand in it because custom domains show it.
-- **Detail tabs** (`landing-pillars.tsx`). Under each landing section's product panel, on the same surface (never a band of their own, so no frame corner lands on them): an icon, a bold title and a line, each tab with a 1px left line. The active line fills in the accent and the tabs move on by themselves while the section is on screen, which is what tells a visitor they can be picked. Hover or focus pauses it, a pick stops it for good, reduced motion never starts it. Inactive tabs sit at 50% and rise on hover.
+- **Feature cards** (`landing-pillars.tsx`). Under each landing section's heading, its three details sit in a row of cards of their own (`--surface-2`, a hairline, `rounded-2xl`), one column on a phone. Each card has a short loop of the product doing that one thing over the soft light, then the icon in the accent, a bold title and one line. No tabs and no timers: every detail is on screen at once.
 - **Pages end on a band.** The landing closes on an `ink-band` call to action as wide as the column, with a dot field and the mesh glow; the footer runs to the same edges.
 - **Two-tone headings.** The claim in ink, the reason muted, in one `h2` (`SplitHeading` in `components/landing-pillars.tsx`). This replaces a heading plus a subtitle; it is not an eyebrow.
 - **`lit`**: a panel lit from above, a hairline of light on its top edge and a long soft shadow. For the product shown over sample data, and the cards of the dark band.
@@ -120,7 +120,7 @@ The public pages are allowed a small, named set of effects that the app is not. 
 - **`PageHero`** (`components/marketing-kit.tsx`): how every public page but the landing opens, title large and left over a field of dots inside the frame. `MarketingPage` and `LegalPageLayout` use it; a new page uses one of those two.
 - **The footer wordmark**: the name as wide as the page, fading out and cut by the bottom edge, on every public page. Decoration, `aria-hidden`.
 
-The product in a section is the app's own components over sample data (the analytics panel is the real chart), never a screenshot, and the details under it are tabs that change what it shows. Benefits on the landing; redirects, data centres and competitors' prices on the docs and comparison pages.
+The product in a card is the app's own UI over sample data, never a screenshot. Benefits on the landing; redirects, data centres and competitors' prices on the docs and comparison pages.
 
 ## Data and evidence
 
@@ -142,15 +142,17 @@ The first screen a new account meets. Each one names what will appear and offers
 
 ## Motion
 
-Default to stillness. Motion explains a state change, preserves continuity, or confirms an action. Never gate reading behind an animation, reveal every section on scroll, or add parallax, marquees, typing cursors or pulsing indicators.
+Default to stillness. Motion explains a state change, preserves continuity, or confirms an action. Never gate reading behind an animation, reveal every section on scroll, or add parallax, marquees, blinking cursors or pulsing indicators.
 
 The base experience is complete without motion, and `prefers-reduced-motion` is honoured everywhere (`MotionConfig reducedMotion="user"` is already in place on the landing page).
 
-**The one exception is the landing hero's globe** (`components/hero-globe.tsx`): clicks hopping between cities, drawn the way the mark is drawn (a small dot leaves, an arc, the accent dot lands on a flat shadow). It is allowed to move because it says what the product does, and it keeps these terms. Do not add a second ambient animation on the strength of it.
+**The landing's feature cards loop** (`FeatureCard` in `components/landing-pillars.tsx`): each plays the product doing what its title says, a step every 700ms, with CSS transitions between steps (reversible, opacity, scale, a little blur). They start in their finished state, which is what the prerendered page and reduced motion show, play only while half on screen, and are `aria-hidden` because the title and line say the same thing. A new card is a list of steps whose last one is finished.
+
+**The other exception is the landing hero's globe** (`components/hero-globe.tsx`): clicks hopping between cities, drawn the way the mark is drawn (a small dot leaves, an arc, the accent dot lands on a flat shadow). It is allowed to move because it says what the product does, and it keeps these terms. Do not add a second ambient animation on the strength of it.
 
 - Decoration, not evidence: `aria-hidden`, example links, no counters, nothing that claims to be live. A link the visitor makes in the hero's shortener is the only real one, and it is outlined in the accent.
 - Not in the prerendered HTML. It loads after hydration into a box the hero reserves, so the heading is the first paint and nothing shifts.
-- Land is square modules, like a QR code's, in `--muted`. Colours come from the tokens at runtime and follow the theme. No glow, no gradient.
+- cobe draws the sphere and land in WebGL; the hops, landings and labels are a 2D canvas over it that projects with cobe's own rotation. Colours come from the tokens at runtime and follow the theme.
 - Paused off screen and in a background tab; one still frame under reduced motion.
 
 Marketing navigation swaps the content in place and then rides the new page to its top. Use `MarketingLink` for any link between public pages, and call `useMarketingScroll` in any new public page.
