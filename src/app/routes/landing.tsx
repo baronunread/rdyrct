@@ -800,9 +800,11 @@ function HeroCta({
 }) {
   if (hidden) return null;
   return (
+    // Above the globe, whose stage reaches up behind this row on short
+    // screens and would otherwise take the click.
     <div
       data-hero-personalization
-      className="mt-8 flex flex-col items-center gap-3 sm:flex-row sm:gap-5"
+      className="relative z-10 mt-8 flex flex-col items-center gap-3 sm:flex-row sm:gap-5"
     >
       <HrefLink
         href={ctaTo}
