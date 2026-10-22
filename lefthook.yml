@@ -1,19 +1,13 @@
 pre-commit:
-  parallel: false
   jobs:
     # The only hook job left: it repairs instead of complaining, which is the
     # one thing worth spending commit time on. Everything that only reports
     # (lint, react-doctor) runs in CI, where nobody can pass --no-verify.
+    #
+    # bun fmt picks the staged files itself, skips what .oxfmtrc.json ignores
+    # (so a commit touching only a skill file passes), and stages what it
+    # fixed. A file with both staged and unstaged changes stops the commit
+    # rather than getting its unstaged lines swept in: stage the rest, or
+    # `git stash --keep-index`, and commit again.
     - name: format
-      glob: "*.{cjs,cts,css,html,js,json,jsonc,jsx,md,mjs,mts,ts,tsx}"
-      # Same paths bun fmt ignores (.oxfmtrc.json). Without them a commit that
-      # touches only a skill file hands bun fmt a list it must ignore entirely,
-      # and it exits 2 on "no target files": the one job that repairs instead
-      # of complaining would block a commit it has nothing to do with. Keep
-      # the two lists in step.
-      exclude:
-        - ".agents/skills/**"
-        - ".claude/skills/**"
-        - ".oxlint/anti-slop/**"
-      run: bun fmt {staged_files}
-      stage_fixed: true
+      run: bun fmt --staged
