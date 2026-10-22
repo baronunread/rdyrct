@@ -38,6 +38,11 @@ const RDYRCT_ONLY_VARS = [
 ];
 
 type Target = {
+  /** The worker's name. Every resource the copy creates is named after it
+   *  (`links` gets `links-storage`, `links-qr-logos`, ...), because Wrangler
+   *  finds a resource with no id by its name: a copy that kept ours would bind
+   *  to rdyrct.com's database, bucket and queues on an account that has them. */
+  name: string;
   /** Serve the workers.dev address, which wrangler.jsonc turns off. */
   workersDev: boolean;
   /** Drop rdyrct.com's KV and D1 ids so wrangler creates the copy's own. The
@@ -49,6 +54,7 @@ type Target = {
  *  worker's workers.dev address) instead of rdyrct.com. */
 export function selfHostConfig(source: string, host: string, target: Target): string {
   const changes: [JSONPath, string | boolean | undefined][] = [
+    ...resourceNames(source, target.name),
     [["vars", "APP_URL"], `https://${host}`],
     [["vars", "APP_HOST"], host],
     [["workers_dev"], target.workersDev],
@@ -65,6 +71,59 @@ export function selfHostConfig(source: string, host: string, target: Target): st
       applyEdits(text, modify(text, path, value, { formattingOptions: { insertSpaces: true } })),
     source,
   );
+}
+
+const Named = v.object({
+  name: v.string(),
+  r2_buckets: v.array(v.object({ bucket_name: v.string() })),
+  d1_databases: v.array(v.object({ database_name: v.string() })),
+  queues: v.object({
+    producers: v.array(v.object({ queue: v.string() })),
+    consumers: v.array(v.object({ queue: v.string(), dead_letter_queue: v.optional(v.string()) })),
+  }),
+  workflows: v.array(v.object({ name: v.string() })),
+});
+
+type Edit = [JSONPath, string];
+
+/** Each top-level resource name, with the config's worker name swapped for
+ *  `name` where it leads. The `playwright` environment keeps its own. */
+function resourceNames(source: string, name: string): Edit[] {
+  const config = v.parse(Named, parse(source));
+  const rename = (old: string) =>
+    old.startsWith(config.name) ? name + old.slice(config.name.length) : old;
+  return [
+    [["name"], name],
+    ...config.r2_buckets.map((b, i): Edit => [
+      ["r2_buckets", i, "bucket_name"],
+      rename(b.bucket_name),
+    ]),
+    ...config.d1_databases.map((d, i): Edit => [
+      ["d1_databases", i, "database_name"],
+      rename(d.database_name),
+    ]),
+    ...config.queues.producers.map((q, i): Edit => [
+      ["queues", "producers", i, "queue"],
+      rename(q.queue),
+    ]),
+    ...config.queues.consumers.flatMap((q, i): Edit[] => [
+      [["queues", "consumers", i, "queue"], rename(q.queue)],
+      ...(q.dead_letter_queue
+        ? [
+            [
+              ["queues", "consumers", i, "dead_letter_queue"],
+              rename(q.dead_letter_queue),
+            ] satisfies Edit,
+          ]
+        : []),
+    ]),
+    ...config.workflows.map((w, i): Edit => [["workflows", i, "name"], rename(w.name)]),
+  ];
+}
+
+/** Every queue the config consumes, the dead-letter one included. */
+function queueNames(config: string): string[] {
+  return v.parse(Named, parse(config)).queues.consumers.map((q) => q.queue);
 }
 
 async function writeConfig(text: string) {
@@ -128,17 +187,20 @@ export async function deploySelfHosted(options: {
   source: string;
   domain?: string;
   admin?: string;
+  /** Defaults to the name in `source`. */
+  name?: string;
   dropIds: boolean;
 }): Promise<string> {
   const { source, domain, dropIds } = options;
-  const target = { workersDev: !domain, dropIds };
-  const { name } = v.parse(v.object({ name: v.string() }), parse(source));
+  const name = options.name ?? v.parse(Named, parse(source)).name;
+  const target = { name, workersDev: !domain, dropIds };
   const known = domain || (await workersDevHost(name));
-  await writeConfig(selfHostConfig(source, known ?? PENDING_HOST, target));
+  const config = selfHostConfig(source, known ?? PENDING_HOST, target);
+  await writeConfig(config);
 
   // Wrangler creates a queue a producer names, not one only a consumer reads,
   // so the dead-letter queue has to exist first. Both fail harmlessly if they do.
-  for (const queue of ["rdyrct-storage", "rdyrct-storage-dlq"]) {
+  for (const queue of queueNames(config)) {
     await $`bunx wrangler queues create ${queue}`.nothrow().quiet();
   }
   await $`bun run build`;
@@ -162,6 +224,27 @@ export async function deploySelfHosted(options: {
   return host;
 }
 
+/** Asks for the worker's name and returns it once the account has no worker
+ *  by that name, so setup can never deploy over one, rdyrct.com's included.
+ *  Any answer but "no such worker" (code 10007) stops it. */
+async function freeWorkerName(): Promise<string> {
+  const name = (prompt("Name for the worker and its resources:", "rdyrct") ?? "").trim();
+  if (!/^[a-z0-9][a-z0-9-]{0,40}$/.test(name)) {
+    console.error("Use lowercase letters, digits and dashes.");
+    process.exit(1);
+  }
+  const check = await $`bunx wrangler deployments list --name ${name} --json`.nothrow().quiet();
+  if (check.exitCode === 0) {
+    console.error(`Your account already runs a worker named ${name}. Pick another name.`);
+    process.exit(1);
+  }
+  if (!`${check.stdout}${check.stderr}`.includes("10007")) {
+    console.error(`Could not check for a worker named ${name}:\n${check.stderr}`);
+    process.exit(1);
+  }
+  return name;
+}
+
 if (import.meta.main) {
   const source = readFileSync(WRANGLER, "utf8");
   // pending.workers.dev: an earlier run stopped before it learned the address.
@@ -170,6 +253,8 @@ if (import.meta.main) {
     process.exit(0);
   }
 
+  // A rerun after a stop keeps the name the first run chose and deployed.
+  const name = source.includes(PENDING_HOST) ? undefined : await freeWorkerName();
   const domain = prompt(
     "Domain on your Cloudflare account (links.example.com), or Enter for a workers.dev address:",
   )?.trim();
@@ -179,7 +264,7 @@ if (import.meta.main) {
     process.exit(1);
   }
 
-  const host = await deploySelfHosted({ source, domain, admin, dropIds: true });
+  const host = await deploySelfHosted({ source, domain, admin, name, dropIds: true });
   console.log(`\nDone. Open https://${host}/signup and sign up as ${admin}.`);
   console.log("Commit wrangler.jsonc, then ship updates with `bun run deploy`.");
 }
