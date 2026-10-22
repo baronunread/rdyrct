@@ -5,6 +5,8 @@
   "license": "MIT",
   "type": "module",
   "scripts": {
+    "spike:placement": "bun spikes/placement/benchmark.ts",
+    "spike:placement:e2e": "playwright test --config spikes/placement/playwright.config.ts",
     "dev": "trap 'kill 0' INT TERM; portless rdyrct vite dev & bun run mail & bunx emulate start --service google --portless --port 4001 --seed google.emulate.yaml & wait",
     "mail": "portless mail.rdyrct bunx emulate --service resend",
     "polar:listen": "NODE_EXTRA_CA_CERTS=\"$HOME/.portless/ca.pem\" polar listen https://rdyrct.localhost/api/webhooks/polar",

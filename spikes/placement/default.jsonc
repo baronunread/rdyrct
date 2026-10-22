@@ -1,0 +1,21 @@
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "rdyrct-placement-spike",
+  "main": "worker.ts",
+  "compatibility_date": "2026-10-08",
+  "compatibility_flags": ["global_fetch_strictly_public"],
+  "placement": { "mode": "off" },
+  "previews": {
+    "vars": {
+      "VARIANT": "default",
+      "LOOPBACK_ORIGIN": "https://default-rdyrct-placement-spike.baronunreadts.workers.dev",
+    },
+    "d1_databases": [
+      {
+        "binding": "DB",
+        "database_name": "rdyrct-placement-spike",
+        "database_id": "b5294461-23e2-44b1-9be5-133bd2b943ca",
+      },
+    ],
+  },
+}
