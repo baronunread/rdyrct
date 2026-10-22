@@ -4,6 +4,7 @@ const PRERENDERED_PAGES = [
   { path: "/", heading: "Turn long links into your own." },
   { path: "/pricing", heading: "URL shortener pricing: free, $4 or $9 a month" },
   { path: "/qr-code-generator", heading: "Free QR code generator with logo" },
+  { path: "/utm-builder", heading: "Free UTM builder" },
   { path: "/docs", heading: "Developer docs" },
   { path: "/roadmap", heading: "What we are building" },
   { path: "/privacy", heading: "Privacy policy" },

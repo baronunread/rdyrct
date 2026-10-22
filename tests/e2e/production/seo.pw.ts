@@ -13,6 +13,7 @@ import { expect, test } from "@playwright/test";
 const PAGES = [
   { path: "/", title: /URL shortener and QR code generator/ },
   { path: "/qr-code-generator", title: /Free QR code generator with logo/ },
+  { path: "/utm-builder", title: /Free UTM builder/ },
   { path: "/pricing", title: /URL shortener and QR code generator pricing/ },
   { path: "/roadmap", title: /URL shortener roadmap/ },
   { path: "/changelog", title: /rdyrct changelog/ },

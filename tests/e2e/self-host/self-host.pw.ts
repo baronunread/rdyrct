@@ -10,7 +10,7 @@ test("the front door is the sign-in page", async ({ page }) => {
 });
 
 test("rdyrct.com's pages are not there", async ({ page }) => {
-  for (const path of ["/pricing", "/docs", "/privacy", "/bitly-alternative"]) {
+  for (const path of ["/pricing", "/docs", "/privacy", "/bitly-alternative", "/utm-builder"]) {
     const res = await page.goto(path);
     expect(res?.status(), path).toBe(404);
     await expect(

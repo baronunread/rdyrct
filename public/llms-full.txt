@@ -91,6 +91,7 @@ storage along with the link.
 - [Homepage](https://rdyrct.com/)
 - [Pricing](https://rdyrct.com/pricing) (request `Accept: text/markdown` for Markdown)
 - [QR code generator](https://rdyrct.com/qr-code-generator)
+- [UTM builder](https://rdyrct.com/utm-builder)
 - [API and MCP docs](https://rdyrct.com/docs)
 - [Blog](https://rdyrct.com/blog)
 - [Roadmap](https://rdyrct.com/roadmap)
