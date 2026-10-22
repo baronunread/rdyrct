@@ -175,24 +175,27 @@ test("a slow auth chunk leaves the loaded form visible", async ({ page }) => {
   expect(blank).toEqual([]);
 });
 
-// Twelve Tools, Turbo0 and Dang.ai list rdyrct.com in exchange for a plain, followed
-// link back from the homepage, and their review reads the served HTML. So:
-// in the prerendered bytes, no nofollow, and on the homepage only.
-test("the homepage credits its directories with followed links in the served HTML", async ({
-  request,
-}) => {
-  const home = await (await request.get("/")).text();
-  for (const href of [
-    "https://twelve.tools",
-    "https://turbo0.com/item/rdyrct",
-    "https://dang.ai",
-  ]) {
-    const tag = home.match(new RegExp(`<a[^>]*href="${href}"[^>]*>`))?.[0] ?? "";
-    expect(tag, href).not.toBe("");
-    expect(tag, href).not.toMatch(/nofollow|ugc|sponsored/);
+// Twelve Tools and Fazier list rdyrct.com in exchange for a link back from
+// the homepage, and their checks read the served HTML: a followed text link
+// for Twelve Tools, Fazier's own launch badge for Fazier. On the homepage
+// only, and the dropped directories stay dropped.
+test("the homepage credits its directories in the served HTML, followed", async ({ request }) => {
+  const res = await request.get("/");
+  const home = await res.text();
+  const anchor = (href: string) =>
+    home.match(new RegExp(`<a[^>]*href="${href.replace(/[.?]/g, "\\$&")}"[^>]*>`))?.[0] ?? "";
+  for (const href of ["https://twelve.tools", "https://fazier.com/launches/rdyrct.com"]) {
+    expect(anchor(href), href).not.toBe("");
+    expect(anchor(href), href).not.toMatch(/nofollow|ugc|sponsored/);
   }
+  // The light badge is the one in the default render, and the CSP lets it load.
+  expect(home).toContain(
+    'src="https://fazier.com/api/v1//public/badges/launch_badges.svg?badge_type=launched&amp;theme=light"',
+  );
+  expect(res.headers()["content-security-policy"]).toMatch(/img-src[^;]*https:\/\/fazier\.com/);
+  for (const dropped of ["turbo0.com", "dang.ai"]) expect(home).not.toContain(dropped);
+
   const pricing = await (await request.get("/pricing")).text();
   expect(pricing).not.toContain("https://twelve.tools");
-  // Fazier was dropped: its free route wanted a badge image.
-  expect(home).not.toContain("https://fazier.com");
+  expect(pricing).not.toContain("fazier.com/launches");
 });

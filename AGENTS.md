@@ -275,7 +275,7 @@ Shell writes to repo files are sandboxed; edit through the editor tools, not
 - Data layer: `api()` + `ApiError` (`.status`, `.code`) in `src/app/lib/api.ts`;
   TanStack Query hooks in `src/app/lib/hooks.ts`.
 - **Strict CSP** on published pages, everything self-contained: no remote fonts,
-  images, scripts, or fetches. Icons via `lucide-react`; art via inline CSS/SVG.
+  images, scripts, or fetches. Icons via `lucide-react`; art via inline CSS/SVG. The one remote image is Fazier's launch badge in the landing footer, allowed in img-src for rdyrct.com's build only (their verifier needs their own image).
 - Email: `sendEmail()` (`src/worker/email.ts`) uses the Resend HTTP API via plain
   `fetch`, with `RESEND_BASE_URL` pointing at the emulator in dev. Keep it: the
   Resend SDK can't repoint its base URL, which would break the emulator flow.

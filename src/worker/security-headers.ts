@@ -32,6 +32,9 @@ const POSTHOG = POSTHOG_CONFIGURED ? "https://*.posthog.com" : "";
 const SENTRY =
   "https://*.ingest.sentry.io https://*.ingest.de.sentry.io https://*.ingest.us.sentry.io";
 const STATS = RDYRCT_SITE ? "https://stats.brnr.dev" : "";
+/** Fazier's launch badge in the landing footer, the one remote image:
+ *  their verifier wants their own badge, not a copy. rdyrct.com only. */
+const FAZIER = RDYRCT_SITE ? "https://fazier.com" : "";
 
 /** A directive from its sources, with the ones switched off left out. */
 const directive = (...parts: string[]) => parts.filter(Boolean).join(" ");
@@ -83,7 +86,7 @@ const CSP = [
   "default-src 'self'",
   SCRIPT_SRC,
   "style-src 'self' 'unsafe-inline'",
-  directive("img-src 'self' data:", POSTHOG),
+  directive("img-src 'self' data:", POSTHOG, FAZIER),
   "font-src 'self'",
   // Cap (#98) solves its proof-of-work in a Web Worker built from a Blob
   // URL, and with no worker-src the browser falls through child-src to

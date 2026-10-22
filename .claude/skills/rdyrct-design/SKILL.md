@@ -186,7 +186,7 @@ Do not ship these, whoever asked:
 - Tiny muted prose used to make density fit. Rewrite instead.
 - Arbitrary font sizes or numeric weights outside the scale.
 - Stock imagery, decorative illustration, or a fake product screenshot. The anonymous shortener is a working demo; use the real thing.
-- Remote fonts, images, scripts or fetches. The CSP forbids them and the failure is silent.
+- Remote fonts, images, scripts or fetches. The CSP forbids them and the failure is silent. The one exception is Fazier's launch badge in the landing footer (`FazierBadge` in `ui/footer.tsx`), allowed in img-src for rdyrct.com's build only, because their verifier needs their own image.
 
 Restraint here is precise hierarchy, good typography, clear evidence and strong alignment. It is not merely cream, thin rules and empty margins.
 

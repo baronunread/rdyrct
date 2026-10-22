@@ -94,15 +94,49 @@ function Wordmark() {
   );
 }
 
-/** Directories that list rdyrct.com for free in exchange for a plain link
- * back from the homepage. Followed links on purpose (that is the deal), so
- * no rel=nofollow; only on the landing page, not on every page. */
-const FEATURED_ON = [
-  { name: "Twelve Tools", href: "https://twelve.tools" },
-  // Turbo0's verifier wants the exact item page, not the home page.
-  { name: "Turbo0", href: "https://turbo0.com/item/rdyrct" },
-  { name: "Dang.ai", href: "https://dang.ai" },
-];
+/** Directories that list rdyrct.com for free in exchange for a link back
+ * from the homepage. Followed links on purpose (that is the deal), so no
+ * rel=nofollow; only on the landing page, not on every page. */
+const FEATURED_ON = [{ name: "Twelve Tools", href: "https://twelve.tools" }];
+
+/**
+ * Fazier's launch badge, the one badge image on the site: their verifier
+ * reads the homepage HTML for this exact link and image, so it is theirs and
+ * not a copy (img-src allows fazier.com for rdyrct.com's build alone,
+ * security-headers.ts). Both themes are in the HTML and the page's theme
+ * shows one; the light one is the default. The double slash is Fazier's.
+ */
+const FAZIER_BADGE = (theme: "light" | "dark") =>
+  `https://fazier.com/api/v1//public/badges/launch_badges.svg?badge_type=launched&theme=${theme}`;
+
+function FazierBadge() {
+  const img = "h-[2.375rem] w-auto"; // 103x44 drawn at 89x38, the row's height
+  return (
+    <a
+      href="https://fazier.com/launches/rdyrct.com"
+      target="_blank"
+      rel="noopener"
+      className="inline-flex shrink-0 rounded-md opacity-90 transition-opacity hover:opacity-100"
+    >
+      <img
+        src={FAZIER_BADGE("light")}
+        width={103}
+        height={44}
+        alt="Fazier badge"
+        loading="lazy"
+        className={cn(img, "[:root[data-theme=dark]_&]:hidden")}
+      />
+      <img
+        src={FAZIER_BADGE("dark")}
+        width={103}
+        height={44}
+        alt="Fazier badge"
+        loading="lazy"
+        className={cn(img, "hidden [:root[data-theme=dark]_&]:block")}
+      />
+    </a>
+  );
+}
 
 export function Footer({ featured = false }: { featured?: boolean }) {
   return (
@@ -224,27 +258,33 @@ export function Footer({ featured = false }: { featured?: boolean }) {
         <div className="mt-8 grid grid-cols-[1fr_auto] items-center gap-y-4 border-t border-border pt-6 text-xs sm:mt-10 sm:flex sm:justify-between sm:gap-3">
           {/* On a phone the credit stacks under the copyright, and the dot
               between them goes, so nothing dangles at a line end. */}
-          <p className="flex items-center gap-x-2 max-sm:flex-col max-sm:items-start max-sm:gap-y-1">
+          <div className="flex items-center gap-x-2 max-sm:flex-col max-sm:items-start max-sm:gap-y-2">
             <span>© {new Date().getFullYear()} Andrea Bruno</span>
             {featured && (
               <>
                 <span aria-hidden="true" className="max-sm:hidden">
                   ·
                 </span>
-                <span>
-                  Featured on{" "}
-                  {FEATURED_ON.map((d, i) => (
-                    <span key={d.href}>
-                      {i > 0 && " · "}
-                      <a href={d.href} target="_blank" rel="noopener" className={linkClass}>
+                <span className="flex items-center gap-3">
+                  <span>
+                    Featured on{" "}
+                    {FEATURED_ON.map((d) => (
+                      <a
+                        key={d.href}
+                        href={d.href}
+                        target="_blank"
+                        rel="noopener"
+                        className={linkClass}
+                      >
                         {d.name}
                       </a>
-                    </span>
-                  ))}
+                    ))}
+                  </span>
+                  <FazierBadge />
                 </span>
               </>
             )}
-          </p>
+          </div>
           <div className="contents sm:flex sm:items-center sm:gap-6">
             <nav className="flex flex-wrap gap-x-5 gap-y-1 *:py-2 max-sm:order-first max-sm:col-span-2 sm:items-center sm:gap-4 sm:*:py-0">
               <MarketingLink to="/privacy" className={linkClass}>
