@@ -107,6 +107,21 @@ async function newSecrets(admin: string | undefined): Promise<string> {
   ].join("");
 }
 
+/** `wrangler deploy` with whatever secrets are new, returning what it printed
+ *  (it prints as it runs too, since wrangler may ask you to log in). */
+async function deployWithSecrets(admin?: string, domain?: string): Promise<string> {
+  const secrets = await newSecrets(admin);
+  const file = ".setup-secrets.env";
+  writeFileSync(file, secrets);
+  const flags = [
+    ...(secrets ? ["--secrets-file", file] : []),
+    ...(domain ? ["--domain", domain] : []),
+  ];
+  const deploy = await $`bunx wrangler deploy ${flags}`.nothrow().finally(() => rmSync(file));
+  if (deploy.exitCode !== 0) process.exit(deploy.exitCode);
+  return deploy.stdout.toString();
+}
+
 /** Build, migrate and deploy a copy whose wrangler.jsonc still describes
  *  rdyrct.com, and return the host it now answers on. */
 export async function deploySelfHosted(options: {
@@ -130,21 +145,11 @@ export async function deploySelfHosted(options: {
   // Migrate ahead of an update. Before the first deploy there is no database
   // yet, so this one may fail and the one after the deploy does the work.
   await $`bunx wrangler d1 migrations apply DB --remote`.nothrow();
-
-  const secrets = await newSecrets(options.admin);
-  const file = ".setup-secrets.env";
-  writeFileSync(file, secrets);
-  const flags = [
-    ...(secrets ? ["--secrets-file", file] : []),
-    ...(domain ? ["--domain", domain] : []),
-  ];
-  // Printed as it runs (wrangler may ask you to log in), and kept for the URL.
-  const deploy = await $`bunx wrangler deploy ${flags}`.nothrow().finally(() => rmSync(file));
-  if (deploy.exitCode !== 0) process.exit(deploy.exitCode);
+  const output = await deployWithSecrets(options.admin, domain);
   await $`bunx wrangler d1 migrations apply DB --remote`;
-
   if (known) return known;
-  const host = deploy.stdout.toString().match(/https:\/\/([\w.-]+\.workers\.dev)/)?.[1];
+
+  const host = output.match(/https:\/\/([\w.-]+\.workers\.dev)/)?.[1];
   if (!host) {
     console.error(
       "Deployed, but wrangler printed no workers.dev address. Set APP_URL and APP_HOST in wrangler.jsonc, then run `bun run deploy`.",
