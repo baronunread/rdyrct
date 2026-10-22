@@ -23,6 +23,7 @@ export const PRERENDERED_PUBLIC_PATHS = new Set<string>([
   "/",
   "/pricing",
   "/qr-code-generator",
+  "/utm-builder",
   "/docs",
   "/roadmap",
   "/changelog",
@@ -94,6 +95,30 @@ This generator makes static QR codes: the link or text is stored in the pattern 
 The QR code and optional logo are processed in your browser. rdyrct does not receive or store the value you enter or the logo you choose.
 
 [Open the QR code generator](/qr-code-generator)`,
+  },
+  "/utm-builder": {
+    title: "Free UTM builder - tag links for Google Analytics, no account",
+    description:
+      "Build a UTM link for free: add source, medium, campaign, term and content to any URL, check the values are lowercase, then copy it or shorten it. No sign-up.",
+    markdown: `# Free UTM builder
+
+Add UTM parameters to a link so Google Analytics and other tools can tell which campaign sent each visitor. Fill in the fields, copy the tagged link, or shorten it. No account needed.
+
+## The parameters
+
+- \`utm_source\`: the site, newsletter or app that sent the visitor. Required by Google Analytics.
+- \`utm_medium\`: the channel, such as email, social, cpc, banner or qr. Required by Google Analytics.
+- \`utm_campaign\`: the campaign name, so every link in one campaign reports together.
+- \`utm_term\`: the paid keyword. Most links leave it out.
+- \`utm_content\`: which link of several in one place was clicked. Use it for A/B tests.
+
+## Keep one spelling per value
+
+UTM values are case sensitive. "Spring-Sale" and "spring-sale" show up as two campaigns. Use lowercase with hyphens everywhere; the builder warns when a value strays from it.
+
+The link is built in your browser. Nothing you type is sent anywhere unless you shorten it.
+
+[Open the UTM builder](/utm-builder)`,
   },
   "/pricing": {
     title: "URL shortener and QR code generator pricing - rdyrct",

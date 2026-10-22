@@ -85,6 +85,11 @@ export function marketingRoutes() {
     }),
     createRoute({
       ...child,
+      path: "/utm-builder",
+      component: lazyRouteComponent(() => import("./routes/utm-builder"), "UtmBuilderPage"),
+    }),
+    createRoute({
+      ...child,
       path: "/pricing",
       component: lazyRouteComponent(() => import("./routes/pricing"), "PricingPage"),
     }),
