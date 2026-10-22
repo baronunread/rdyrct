@@ -127,7 +127,7 @@ via `parseBody` in `src/worker/schemas.ts`), name the type it parses to, or
 write a `SAFETY:` comment on the line above saying which invariant makes the
 assertion sound. `JsonValue`, `lookup`, `oneOf`, `nonEmpty` and `orgPlanOf`
 in `src/shared` exist for the cases that come up repeatedly. The plugin is
-someone else's code, so oxlint, oxfmt, fallow and react-doctor all skip it.
+someone else's code, so oxlint, bun fmt, fallow and react-doctor all skip it.
 
 `bun run fallow` is the gate: it scopes to the files this branch changed and
 fails only on findings the branch introduced, counted against

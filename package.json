@@ -13,8 +13,8 @@
     "check": "bun check && bun check -p tsconfig.worker.json && bun check -p tests/worker/tsconfig.json",
     "lint": "oxlint --deny-warnings .",
     "lint:fix": "oxlint --fix .",
-    "format": "oxfmt --write .",
-    "format:check": "oxfmt --check .",
+    "format": "bun fmt",
+    "format:check": "bun fmt --check",
     "test": "bun test",
     "test:worker": "vitest run --config vitest.config.ts",
     "test:worker:self-host": "VITE_RDYRCT_SITE=0 vitest run --config vitest.config.ts tests/worker/self-host.worker.ts",
@@ -107,12 +107,11 @@
     "@types/topojson-client": "^3.1.5",
     "@types/topojson-specification": "^1.0.5",
     "@vitejs/plugin-react": "^6.1.2",
-    "bun-types": "^1.4.3",
+    "bun-types": "^1.4.4",
     "drizzle-kit": "^0.31.11",
     "fallow": "3.33.1",
     "jsqr": "^1.4.0",
     "lefthook": "^2.2.1",
-    "oxfmt": "^0.72.0",
     "oxlint": "1.87.0",
     "portless": "^0.15.7",
     "react-doctor": "^0.9.17",
@@ -123,7 +122,7 @@
     "vitest": "^4.1.11",
     "wrangler": "^4.149.0"
   },
-  "packageManager": "bun@1.4.3",
+  "packageManager": "bun@1.4.4",
   "trustedDependencies": [
     "@posthog/cli"
   ]

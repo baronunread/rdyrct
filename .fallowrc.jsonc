@@ -1,7 +1,7 @@
 {
   "$schema": "https://raw.githubusercontent.com/fallow-rs/fallow/main/schema.json",
   // .oxlint/anti-slop is a vendored copy of the lint plugin, not code
-  // this repo maintains. oxlint and oxfmt skip it for the same reason.
+  // this repo maintains. oxlint and bun fmt skip it for the same reason.
   "ignorePatterns": ["scripts/seed-local.ts", ".oxlint/anti-slop/**"],
   // @oxlint/plugins is imported by the vendored anti-slop plugin, which the
   // ignorePatterns above keep out of the analysis.
