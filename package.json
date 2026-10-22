@@ -124,6 +124,9 @@
     "vitest": "^4.1.11",
     "wrangler": "^4.149.0"
   },
+  "overrides": {
+    "zod": "4.6.5"
+  },
   "packageManager": "bun@1.4.4",
   "cloudflare": {
     "bindings": {

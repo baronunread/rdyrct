@@ -16,7 +16,6 @@
  * script. Proof-of-work needs neither.
  */
 import { HTTPException } from "hono/http-exception";
-import { generateChallenge, validateChallenge } from "capjs-core";
 import type { Env } from "./env";
 import { keyedDigest } from "./rate-limit";
 
@@ -73,6 +72,7 @@ function assertCapUsable(env: Env): void {
 
 export async function issueChallenge(env: Env, scope: CapScope) {
   assertCapUsable(env);
+  const { generateChallenge } = await import("capjs-core");
   return generateChallenge(env.CAP_SECRET!, {
     challengeCount: CHALLENGE_COUNT,
     challengeSize: CHALLENGE_SIZE,
@@ -105,6 +105,7 @@ export async function verifySolution(
   scope: CapScope,
   body: { token: string; solutions: number[] },
 ) {
+  const { validateChallenge } = await import("capjs-core");
   return validateChallenge(env.CAP_SECRET!, body, {
     scope,
     tokenTtlMs: TOKEN_TTL_MS,

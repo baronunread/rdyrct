@@ -8,6 +8,7 @@ import {
   index,
   uniqueIndex,
 } from "drizzle-orm/sqlite-core";
+import { relations } from "drizzle-orm";
 import { REPORT_REASONS } from "../../shared/types";
 
 /* ---------------- BetterAuth-managed tables ---------------- */
@@ -118,6 +119,20 @@ export const account = sqliteTable(
     uniqueIndex("idx_account_provider_account_id").on(t.providerId, t.accountId),
   ],
 );
+
+// What lets BetterAuth read a session and its user in one query
+// (advanced.database.joins in better-auth.ts) instead of two round trips on
+// every signed-in request. It joins session and account to user, nothing else.
+export const userRelations = relations(user, ({ many }) => ({
+  sessions: many(session),
+  accounts: many(account),
+}));
+export const sessionRelations = relations(session, ({ one }) => ({
+  user: one(user, { fields: [session.userId], references: [user.id] }),
+}));
+export const accountRelations = relations(account, ({ one }) => ({
+  user: one(user, { fields: [account.userId], references: [user.id] }),
+}));
 
 export const verification = sqliteTable(
   "verification",

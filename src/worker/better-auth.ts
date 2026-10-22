@@ -368,6 +368,9 @@ function buildAuth(env: Env) {
     // Keeping BetterAuth's per-isolate limiter enabled would create a second,
     // inconsistent 429 shape and would not protect the rest of the app.
     rateLimit: { enabled: false },
+    // One query for a session and its user, not two in a row. Every signed-in
+    // API call starts with that lookup, and each D1 round trip is ~25 ms.
+    advanced: { database: { joins: true } },
     // Link a Google sign-in to an existing email/password account with the
     // same (verified) address instead of creating a duplicate. Google is a
     // trusted provider, so an unverified Google account still links to a
@@ -499,7 +502,9 @@ function buildAuth(env: Env) {
       // other /api/auth routes, and sweepAbandonedOAuthClients() deletes the
       // rows nobody ever consented to. Only the grants an MCP client uses:
       // client_credentials would let a client act with no user behind it.
-      jwt(),
+      // No set-auth-jwt header: nothing reads it, and producing it read the
+      // signing keys from D1 and signed a token on every session lookup.
+      jwt({ disableSettingJwtHeader: true }),
       mcp({
         loginPage: "/login",
         consentPage: "/consent",
