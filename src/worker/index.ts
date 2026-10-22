@@ -41,7 +41,8 @@ import { notFoundPage } from "./not-found-page";
 import { RESERVED_SLUGS, SLUG_RE } from "./util";
 import { markdownPage, withPageMeta } from "./page-meta";
 import { PRERENDERED_PUBLIC_PATHS } from "../shared/page-meta";
-import { RDYRCT_SITE, SITE_ONLY_PATHS } from "../shared/site";
+import { RDYRCT_SITE } from "../shared/site";
+import { canonicalSpaPath } from "../shared/spa-routes";
 import { enforcePublicAuthRateLimit, enforceSignedApiRateLimit } from "./rate-limit";
 import { applySecurityHeaders } from "./security-headers";
 import { drizzle } from "drizzle-orm/d1";
@@ -474,9 +475,6 @@ function finalizeSpaResponse(response: Response, url: URL, status?: 404): Respon
  */
 async function serveSpa(c: Context<AppEnv>, status?: 404): Promise<Response> {
   const url = new URL(c.req.url);
-  // A self-hosted build has none of rdyrct.com's pages: say so, rather than
-  // send the shell for the app to say it under a 200.
-  if (!RDYRCT_SITE && SITE_ONLY_PATHS.has(url.pathname)) status = 404;
   // Markdown is a representation of the same public page, not another route.
   // Select it before fetching the SPA shell, which has no useful body for an
   // agent that does not run JavaScript.
@@ -520,6 +518,8 @@ app.get("/:slug", async (c, next) => {
   c.get("log")?.set({ slug });
   // Root keywords the SPA owns (/dashboard, /links, /login, …) never resolve as
   // slugs; they can't be created as slugs either, this is belt-and-suspenders.
+  // In any case: the fallback below moves /PRICING to /pricing, and 404s the
+  // reserved words that are no page (/audit, /app).
   if (RESERVED_SLUGS.has(slug.toLowerCase())) return next();
   const hit = await resolveLink(c, slug, null);
   if (hit && isLive(hit)) return redirectWithClick(c, hit);
@@ -530,9 +530,28 @@ app.get("/:slug", async (c, next) => {
   return serveSpa(c, 404);
 });
 
-app.all("*", (c) => {
-  c.get("log")?.set({ route: c.req.path });
-  return serveSpa(c);
+// The SPA's own pages, and nothing else. Anything the router has no page for
+// used to get the shell under a 200 with the landing page's head, so
+// /some/deep/path was a soft 404 that canonicalled to the home page. Now it
+// is a 404 carrying the same NotFound screen. Real files that reach this
+// fallback (/@react-refresh and the source modules in dev, any root file not
+// excluded from run_worker_first) are unaffected: serveSpa only turns the
+// HTML shell into a 404. A self-hosted build has none of rdyrct.com's
+// pages, so canonicalSpaPath leaves them out and they 404 here too.
+//
+// A known page asked for in the wrong case (/PRICING) moves to its real
+// address rather than 404ing. Only the fixed segments are lowercased: a
+// slug or invite token in the path keeps its case.
+app.all("*", async (c) => {
+  const url = new URL(c.req.url);
+  c.get("log")?.set({ route: url.pathname });
+  const canonical = canonicalSpaPath(url.pathname);
+  if (canonical === url.pathname) return serveSpa(c);
+  if (canonical && (c.req.method === "GET" || c.req.method === "HEAD")) {
+    url.pathname = canonical;
+    return c.redirect(url.toString(), 301);
+  }
+  return serveSpa(c, 404);
 });
 
 /* ---------------- Queue consumer: KV/R2 follow-up work ---------------- */
