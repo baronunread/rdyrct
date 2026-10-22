@@ -778,7 +778,7 @@ function HeroGlobeStage({ hydrated }: { hydrated: boolean }) {
   return (
     <div
       aria-hidden="true"
-      className="relative -mt-28 h-80 w-full overflow-hidden border-b border-border sm:h-96 md:-mt-32 md:h-120"
+      className="relative -mt-38 h-90 w-full overflow-hidden border-b border-border sm:h-106 md:-mt-42 md:h-130"
     >
       {hydrated && (
         <Suspense>
@@ -800,9 +800,11 @@ function HeroCta({
 }) {
   if (hidden) return null;
   return (
+    // Above the globe, whose stage reaches up behind this row on short
+    // screens and would otherwise take the click.
     <div
       data-hero-personalization
-      className="mt-8 flex flex-col items-center gap-3 sm:flex-row sm:gap-5"
+      className="relative z-10 mt-8 flex flex-col items-center gap-3 sm:flex-row sm:gap-5"
     >
       <HrefLink
         href={ctaTo}
