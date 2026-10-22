@@ -1220,7 +1220,7 @@ export function LandingPage() {
             <FinalCtaSection ctaTo={ctaTo} ctaLabel={ctaLabel} />
           </main>
 
-          <Footer />
+          <Footer featured />
           {!authed && <AnonLinkBar />}
         </div>
       </LazyMotion>

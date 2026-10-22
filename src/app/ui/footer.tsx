@@ -94,7 +94,15 @@ function Wordmark() {
   );
 }
 
-export function Footer() {
+/** Directories that list rdyrct.com for free in exchange for a plain link
+ * back from the homepage. Followed links on purpose (that is the deal), so
+ * no rel=nofollow; only on the landing page, not on every page. */
+const FEATURED_ON = [
+  { name: "Fazier", href: "https://fazier.com" },
+  { name: "Twelve Tools", href: "https://twelve.tools" },
+];
+
+export function Footer({ featured = false }: { featured?: boolean }) {
   return (
     <footer className="mt-16 overflow-hidden text-sm text-muted">
       <div className="border-t border-border pt-10">
@@ -212,7 +220,29 @@ export function Footer() {
             theme switch sharing the next. `contents` hands nav and switch to
             this grid there, and from sm up they are one flex group again. */}
         <div className="mt-8 grid grid-cols-[1fr_auto] items-center gap-y-4 border-t border-border pt-6 text-xs sm:mt-10 sm:flex sm:justify-between sm:gap-3">
-          <span>© {new Date().getFullYear()} Andrea Bruno</span>
+          {/* On a phone the credit stacks under the copyright, and the dot
+              between them goes, so nothing dangles at a line end. */}
+          <p className="flex items-center gap-x-2 max-sm:flex-col max-sm:items-start max-sm:gap-y-1">
+            <span>© {new Date().getFullYear()} Andrea Bruno</span>
+            {featured && (
+              <>
+                <span aria-hidden="true" className="max-sm:hidden">
+                  ·
+                </span>
+                <span>
+                  Featured on{" "}
+                  {FEATURED_ON.map((d, i) => (
+                    <span key={d.href}>
+                      {i > 0 && " · "}
+                      <a href={d.href} target="_blank" rel="noopener" className={linkClass}>
+                        {d.name}
+                      </a>
+                    </span>
+                  ))}
+                </span>
+              </>
+            )}
+          </p>
           <div className="contents sm:flex sm:items-center sm:gap-6">
             <nav className="flex flex-wrap gap-x-5 gap-y-1 *:py-2 max-sm:order-first max-sm:col-span-2 sm:items-center sm:gap-4 sm:*:py-0">
               <MarketingLink to="/privacy" className={linkClass}>
