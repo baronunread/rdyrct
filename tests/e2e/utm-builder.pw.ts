@@ -9,7 +9,7 @@ import { expect, test } from "@playwright/test";
 test("builds a tagged link, tidies its case, and copies it", async ({ page, context }) => {
   await context.grantPermissions(["clipboard-read", "clipboard-write"]);
   await page.goto("/utm-builder");
-  await expect(page.getByRole("heading", { level: 1, name: "Free UTM builder" })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: "UTM builder" })).toBeVisible();
 
   const output = page.getByRole("status", { name: "Tagged link" });
   await expect(output).toHaveText("Enter a website URL to start.");
@@ -80,5 +80,5 @@ test("the footer leads to it", async ({ page }) => {
   await page.goto("/qr-code-generator");
   await page.getByRole("contentinfo").getByRole("link", { name: "UTM builder" }).click();
   await expect(page).toHaveURL(/\/utm-builder$/);
-  await expect(page.getByRole("heading", { level: 1, name: "Free UTM builder" })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: "UTM builder" })).toBeVisible();
 });

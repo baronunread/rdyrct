@@ -7,10 +7,10 @@
  * fetched and the head would otherwise still describe the page somebody
  * arrived on.
  *
- * The wording leads with what people type. "URL shortener" and "QR code
- * generator" are the searches; the brand is not, and a title that opens with
- * it spends the most valuable words in the result on a name nobody is looking
- * for yet.
+ * The homepage opens with the brand, as Dub, Bitly and Short.io do, then
+ * says what it is: "URL shortener" and "QR code generator" are the searches.
+ * The tool pages lead with the search itself. None says "free": a free plan
+ * is a fact for the page to state, not a title.
  */
 export interface PageMeta {
   title: string;
@@ -45,19 +45,19 @@ export const PRERENDERED_PUBLIC_PATHS = new Set<string>([
  * visitor who arrived on the public page itself.
  */
 export const DEFAULT_PAGE_META: PageMeta = {
-  title: "Free URL shortener and QR code generator - rdyrct",
+  title: "rdyrct - URL shortener and QR code generator",
   description:
-    "Free URL shortener and QR code generator for teams: branded short links on your own domain, custom QR codes, and privacy-friendly click analytics.",
+    "URL shortener and QR code generator for teams: branded short links on your own domain, custom QR codes, and privacy-friendly click analytics.",
 };
 
 export const PUBLIC_PAGE_META = {
   "/": {
-    title: "Free URL shortener and QR code generator - rdyrct",
+    title: "rdyrct - URL shortener and QR code generator",
     description:
-      "Free URL shortener and QR code generator for teams: branded short links on your own domain, custom QR codes, and privacy-friendly click analytics.",
+      "URL shortener and QR code generator for teams: branded short links on your own domain, custom QR codes, and privacy-friendly click analytics.",
     markdown: `# rdyrct
 
-rdyrct is a free URL shortener and QR code generator for teams. Create short links on a domain people recognise, make branded QR codes, and see privacy-friendly click analytics.
+rdyrct is a URL shortener and QR code generator for teams. Create short links on a domain people recognise, make branded QR codes, and see privacy-friendly click analytics.
 
 ## What you can do
 
@@ -71,12 +71,12 @@ rdyrct is a free URL shortener and QR code generator for teams. Create short lin
 [Create a free account](/signup) or [compare plans](/pricing). You can also [self-host rdyrct on Cloudflare](https://github.com/baronunread/rdyrct).`,
   },
   "/qr-code-generator": {
-    title: "Free QR code generator with logo - PNG and SVG, no account",
+    title: "QR code generator with logo - PNG and SVG, no account",
     description:
       "Make a custom QR code for free: your logo, your colors, rounded dots, and a PNG or SVG download. No sign-up, no watermark, and the code is made in your browser.",
-    markdown: `# Free QR code generator
+    markdown: `# QR code generator
 
-Make a QR code for a link or any text. Add your logo, choose colours and dot styles, then download a PNG or SVG. This free QR code generator works in your browser, with no account or watermark.
+Make a QR code for a link or any text. Add your logo, choose colours and dot styles, then download a PNG or SVG. This QR code generator works in your browser, with no account or watermark.
 
 ## How to make a QR code
 
@@ -97,10 +97,10 @@ The QR code and optional logo are processed in your browser. rdyrct does not rec
 [Open the QR code generator](/qr-code-generator)`,
   },
   "/utm-builder": {
-    title: "Free UTM builder - tag links for Google Analytics, no account",
+    title: "UTM builder - tag links for Google Analytics, no account",
     description:
       "Build a UTM link for free: add source, medium, campaign, term and content to any URL, check the values are lowercase, then copy it or shorten it. No sign-up.",
-    markdown: `# Free UTM builder
+    markdown: `# UTM builder
 
 Add UTM parameters to a link so Google Analytics and other tools can tell which campaign sent each visitor. Fill in the fields, copy the tagged link, or shorten it. No account needed.
 

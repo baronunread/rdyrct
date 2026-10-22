@@ -443,6 +443,7 @@ async function servePrerenderedPage(c: Context<AppEnv>, url: URL): Promise<Respo
   return withPageMeta(
     new Response(asset.body, { status: asset.status, statusText: asset.statusText, headers }),
     url,
+    c.env.SITE_NAME,
   );
 }
 
@@ -452,8 +453,13 @@ function cacheStaticAsset(response: Response): Response {
   return cached;
 }
 
-function finalizeSpaResponse(response: Response, url: URL, status?: 404): Response {
-  const page = withPageMeta(response, url);
+function finalizeSpaResponse(
+  response: Response,
+  url: URL,
+  siteName: string | undefined,
+  status?: 404,
+): Response {
+  const page = withPageMeta(response, url, siteName);
   if (page.status !== 200) return page;
   if (!page.headers.get("content-type")?.includes("text/html")) {
     return import.meta.env.DEV ? page : cacheStaticAsset(page);
@@ -489,7 +495,7 @@ async function serveSpa(c: Context<AppEnv>, status?: 404): Promise<Response> {
   const assetResponse = await c.env.ASSETS.fetch(c.req.raw);
   // A conditional request can be a 304 with no body; only HTML fallback
   // responses need the soft-404 status conversion.
-  return finalizeSpaResponse(assetResponse, url, status);
+  return finalizeSpaResponse(assetResponse, url, c.env.SITE_NAME, status);
 }
 
 /* ---------------- shared-domain slug redirect ---------------- */

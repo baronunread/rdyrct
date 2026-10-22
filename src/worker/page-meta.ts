@@ -210,10 +210,19 @@ function crawlerBody(meta: PageMeta, url: URL): string {
  *
  * The response is passed through unread when nothing matches, so the asset
  * path stays a straight pipe for everything else.
+ *
+ * A self-hosted copy is its owner's site, not rdyrct.com, so its tabs carry
+ * `siteName` (SITE_NAME, else the host it answers on) instead of our tagline,
+ * the way a self-hosted Shlink or Umami carries its instance's name.
  */
-export function withPageMeta(response: Response, url: URL): Response {
+export function withPageMeta(response: Response, url: URL, siteName?: string): Response {
   const meta = pageMeta(url);
   if (!response.headers.get("content-type")?.includes("text/html")) return response;
+  if (!RDYRCT_SITE) {
+    const rewriter = new HTMLRewriter().on("title", new Text(siteName || url.hostname));
+    if (url.pathname !== "/") rewriter.on("#root", new EmptyRoot());
+    return rewriter.transform(response);
+  }
   // The build bakes the landing page into index.html, which is also the shell
   // every app route gets. Left in, a signed-in reload of /dashboard paints the
   // marketing page until the bundle replaces it. Pages that are not prerendered

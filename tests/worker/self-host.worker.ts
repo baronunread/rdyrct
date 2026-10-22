@@ -67,13 +67,17 @@ describe.runIf(!RDYRCT_SITE)("a self-hosted build", () => {
     expect(res.status).toBe(404);
   });
 
-  it("describes no page as rdyrct.com's", async () => {
+  it("describes no page as rdyrct.com's: every tab carries the copy's own name", async () => {
     const url = new URL("https://links.example.com/pricing");
-    const shell = new Response("<html><head><title>app</title></head><body></body></html>", {
-      headers: { "content-type": "text/html" },
-    });
+    const shell = () =>
+      new Response("<html><head><title>rdyrct - URL shortener</title></head><body></body></html>", {
+        headers: { "content-type": "text/html" },
+      });
 
-    expect(await withPageMeta(shell, url).text()).toContain("<title>app</title>");
+    expect(await withPageMeta(shell(), url).text()).toContain("<title>links.example.com</title>");
+    expect(await withPageMeta(shell(), url, "Acme links").text()).toContain(
+      "<title>Acme links</title>",
+    );
     expect(markdownPage(url, "text/markdown")).toBeNull();
   });
 

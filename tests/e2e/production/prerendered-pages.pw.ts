@@ -3,8 +3,8 @@ import { expect, test, type Page } from "@playwright/test";
 const PRERENDERED_PAGES = [
   { path: "/", heading: "The link shortener that answers to you." },
   { path: "/pricing", heading: "URL shortener pricing: free, $4 or $9 a month" },
-  { path: "/qr-code-generator", heading: "Free QR code generator with logo" },
-  { path: "/utm-builder", heading: "Free UTM builder" },
+  { path: "/qr-code-generator", heading: "QR code generator with logo" },
+  { path: "/utm-builder", heading: "UTM builder" },
   { path: "/docs", heading: "Developer docs" },
   { path: "/roadmap", heading: "What we are building" },
   { path: "/privacy", heading: "Privacy policy" },

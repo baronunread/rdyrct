@@ -131,6 +131,7 @@ Everything else is optional. Each piece says what it adds:
 | `SHARED_LINK_HOST`                         | A second, shorter host for new shared-domain links.                                                                      |
 | `CAP_SECRET`                               | Proof-of-work in front of sign-up and password reset.                                                                    |
 | `SENTRY_DSN`                               | Error reports to your Sentry project.                                                                                    |
+| `SITE_NAME`                                | The name every tab shows, such as "Acme links". Without it, tabs show your copy's host.                                  |
 
 **With no email provider and no Google sign-in, accounts are not verified and passwords cannot be reset.** That is fine for a private instance and not recommended for a public one. The admin console says so while it is true.
 

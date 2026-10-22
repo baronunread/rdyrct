@@ -384,7 +384,7 @@ export function UtmBuilderPage() {
   return (
     <MarketingPage
       path="/utm-builder"
-      title="Free UTM builder"
+      title="UTM builder"
       intro="Add UTM parameters to a link so Google Analytics and other tools can tell which campaign sent each visitor. Fill in the fields, copy the link, or shorten it. No account."
     >
       {/* The hero closes its own frame; this one starts on the same line. */}
