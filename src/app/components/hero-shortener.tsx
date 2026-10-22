@@ -14,24 +14,13 @@
  * localStorage and the app spends it once the new account has an org, so the
  * first dashboard is not empty (#65).
  */
-import {
-  lazy,
-  Suspense,
-  useEffect,
-  useState,
-  type ComponentProps,
-  type ComponentType,
-} from "react";
+import { useEffect, useState } from "react";
 import { errorMessage } from "@/app/lib/error-message";
 import { ArrowRight } from "@/app/ui/icons";
-import { Button } from "../ui/button";
 import { buttonClass } from "../ui/button-class";
-import { Input } from "../ui/field";
-import { CopyButton } from "../ui/copy-button";
-import { BusyContent } from "../ui/spinner";
 import { useToast } from "../ui/toast";
-import { copyToClipboard } from "../lib/clipboard";
 import { useCap } from "../lib/cap";
+import { useConfig } from "../lib/hooks";
 import {
   MAX_ANON_LINKS,
   rememberAnonLink,
@@ -42,89 +31,12 @@ import { clicksLabel, shortenAnonymously, useAnonClicks } from "../lib/shorten-a
 import { trackCta } from "../lib/track-cta";
 import { launchHeroHop } from "../lib/hero-hop";
 import { HrefLink } from "../lib/router-search";
-
-// A QR code is useful only after this form has made a link. Keeping the renderer
-// behind that success state avoids loading its QR encoder for everyone who only
-// reads the landing page or starts filling in the form.
-//
-// A failed load (usually a stale tab after a deploy) shows no QR rather than
-// reaching the app's error boundary, which would reload the page over the link
-// the visitor just made.
-type Qr = typeof import("./qr");
-const loadQr = () => import("./qr").catch(() => null);
-const QRPreview = lazy(
-  async (): Promise<{ default: ComponentType<ComponentProps<Qr["QRPreview"]>> }> => ({
-    default: (await loadQr())?.QRPreview ?? NoQr,
-  }),
-);
-const QrDownloadButtons = lazy(
-  async (): Promise<{ default: ComponentType<ComponentProps<Qr["QrDownloadButtons"]>> }> => ({
-    default: (await loadQr())?.QrDownloadButtons ?? NoQr,
-  }),
-);
-
-function NoQr() {
-  return null;
-}
+import { HERO_CARD, HeroBar, HeroFooter, HostPrefix, MadeLinkPanel } from "./hero-link-bar";
 
 /** The server's own message when it sent one: it says what was wrong with
  * the address, which a generic fallback cannot. */
 function shortenErrorMessage(cause: unknown): string {
   return errorMessage(cause, "Could not shorten that link");
-}
-
-/** One made link: the URL in the wide column because that is what gets
- * copied, the QR beside it at a size a phone can actually read. */
-function MadeLink({ link }: { link: StoredAnonLink }) {
-  const toast = useToast();
-  return (
-    // Top-aligned, and the two columns are built to end at roughly the same
-    // line so there is nothing to align around. The download buttons sit
-    // under the link rather than under the code: attached to the QR they
-    // made that column more than twice the height of this one, and the hole
-    // left beside it wanted filler nobody needed.
-    // The link arrives rather than appearing: it is the answer to the button
-    // that was just pressed, a few hundred milliseconds after it, and a card
-    // that pops into the layout reads as a jump rather than as a result.
-    <div className="anon-link-in grid grid-cols-shortener items-start gap-3 border-t border-dashed border-border pt-3">
-      <div className="flex min-w-0 flex-col gap-1.5">
-        <div className="flex min-w-0 items-center gap-2 rounded-lg bg-surface-2 px-3 py-2.5">
-          <a
-            href={link.url}
-            target="_blank"
-            rel="noreferrer"
-            aria-label="Your short link"
-            className="flex min-w-0 flex-1 font-mono text-xs hover:text-accent sm:text-sm"
-          >
-            {/* The host truncates, never the slug. On a narrow screen, or a
-                long custom domain, the slug is the only part that
-                identifies the link, so it is the last thing to give up
-                width. */}
-            <span className="truncate text-muted">
-              {link.url.replace(/^https?:\/\//, "").slice(0, -link.slug.length)}
-            </span>
-            <span className="shrink-0 font-bold">{link.slug}</span>
-          </a>
-          <CopyButton
-            text={link.url}
-            label={`Copy ${link.url}`}
-            onCopy={(text) => copyToClipboard(text, toast)}
-          />
-        </div>
-        <p className="truncate text-xs text-muted">from {link.source}</p>
-        <Suspense fallback={<div className="mt-0.5 h-8" aria-hidden="true" />}>
-          <QrDownloadButtons url={link.url} name={`qr-${link.slug}`} className="mt-0.5" />
-        </Suspense>
-      </div>
-      {/* Smaller on a phone so the slug keeps its width: truncating
-          "rdyr.cc/m22fs5w" loses exactly the part that identifies it. */}
-      <Suspense
-        fallback={<div className="size-20 shrink-0 sm:size-26" aria-label="Preparing QR code" />}
-      >
-        <QRPreview url={link.url} sizeClass="size-20 sm:size-26" />
-      </Suspense>
-    </div>
-  );
 }
 
 /** The ask, once, under the link it is about. Once the link has been
@@ -133,51 +45,68 @@ function MadeLink({ link }: { link: StoredAnonLink }) {
 function KeepItFooter({ link }: { link: StoredAnonLink }) {
   const clicks = useAnonClicks(link);
   return (
-    // A beat behind the link itself, so the eye lands on the short URL first
-    // and the ask arrives after it.
-    <div className="anon-link-in flex flex-wrap items-center gap-2 border-t border-border pt-3 [animation-delay:70ms]">
+    <HeroFooter
+      ruled
+      action={
+        <HrefLink
+          href="/signup"
+          onClick={() => trackCta("hero_shortener_claim")}
+          className={buttonClass({ variant: "primary", size: "sm" })}
+        >
+          Keep this link <ArrowRight size={14} />
+        </HrefLink>
+      }
+    >
       {clicks ? (
-        <p className="min-w-52 flex-1 text-xs text-muted">
+        <>
           <span className="tnum font-bold text-text">{clicksLabel(clicks)} so far.</span> Sign up to
-          keep this link and see where they came from: country, referrer, device, campaign.
-        </p>
+          keep this link and see where they came from.
+        </>
       ) : (
-        <p className="min-w-52 flex-1 text-xs text-muted">
-          This link works for 24 hours. Share it and its clicks count up here. Sign up to keep it
-          and see where they came from: country, referrer, device, campaign.
-        </p>
+        "Works for 24 hours. Sign up to keep it and see where its clicks come from."
       )}
-      <HrefLink
-        href="/signup"
-        onClick={() => trackCta("hero_shortener_claim")}
-        className={buttonClass({ variant: "primary", size: "sm" })}
-      >
-        Keep this link <ArrowRight size={14} />
-      </HrefLink>
-    </div>
+    </HeroFooter>
   );
 }
 
-/** The link, or the reassurance that stands in for it before there is one. */
+/** The link and the ask under it, or the reassurance that stands in for
+ *  them before there is one. */
 function MadeLinks({ made }: { made: StoredAnonLink[] }) {
   const link = made[0];
   if (!link)
     return (
-      <p className="text-xs text-muted">
-        No account, no email. This link lasts 24 hours; sign up free and it never expires.
-      </p>
+      <HeroFooter
+        action={
+          <HrefLink
+            href="/signup"
+            onClick={() => trackCta("hero_shortener_signup")}
+            className="inline-flex shrink-0 items-center gap-1 hover:text-text"
+          >
+            Sign up free <ArrowRight size={13} />
+          </HrefLink>
+        }
+      >
+        No account needed. The link lasts 24 hours.
+      </HeroFooter>
     );
   return (
     <>
       {/* Keyed by slug so a new link is a new element: the animation runs on
           mount, and a re-render for anything else does not replay it. */}
-      <MadeLink key={link.slug} link={link} />
+      <MadeLinkPanel
+        key={link.slug}
+        url={link.url}
+        slug={link.slug}
+        detail={`from ${link.source}`}
+      />
       <KeepItFooter link={link} />
     </>
   );
 }
 
-export function HeroShortener() {
+/** The form's state and what pressing the button does: make the link,
+ *  remember it for the claim after sign-up, and launch it across the globe. */
+function useAnonShortener() {
   const toast = useToast();
   const cap = useCap("anon-link");
   const [destination, setDestination] = useState("");
@@ -201,6 +130,7 @@ export function HeroShortener() {
       // list now is: a visitor who signs up in another tab must still be
       // able to claim it, and the cap is enforced in one place.
       setMade(rememberAnonLink(link, destination.trim()));
+      setDestination("");
       launchHeroHop(link.url.replace(/^https?:\/\//, ""));
       trackCta("hero_shortener");
     } catch (error) {
@@ -210,46 +140,48 @@ export function HeroShortener() {
     }
   };
 
+  return { destination, setDestination, busy, made, atCap, canSubmit, submit, prime: cap.prime };
+}
+
+export function HeroShortener() {
+  const { destination, setDestination, busy, made, atCap, canSubmit, submit, prime } =
+    useAnonShortener();
+  // The shared domain the slug will follow. This card only exists on
+  // rdyrct.com, whose shared host is rdyr.cc, so that stands in until the
+  // config answers.
+  const linkHost = useConfig().data?.linkHost ?? "rdyr.cc";
+
   return (
     <form
       onSubmit={submit}
       // Priming here, not on mount: the proof-of-work runs while they type,
       // and someone who never uses the form never pays for it.
-      onInput={cap.prime}
+      onInput={prime}
       // No native validation: errors in this app go to toasts, and a browser
       // validity bubble is neither a toast nor dismissible by us. It also
       // silently refuses to submit, which reads as a dead button. The server
       // decides what counts as a web address, and it accepts scheme-less
       // input the same way the signed-in quick-create does.
       noValidate
-      className="flex w-full max-w-xl flex-col gap-3 rounded-xl bg-surface p-5 smooth-shadow-ring-sm"
+      className={HERO_CARD}
     >
-      <label htmlFor="hero-destination" className="text-xs font-medium text-muted">
-        Shorten a link, no account needed
-      </label>
-      <div className="flex flex-col gap-2 sm:flex-row">
-        <Input
-          id="hero-destination"
-          type="text"
-          inputMode="url"
-          autoComplete="off"
-          placeholder="https://example.com/a-very-long-address"
-          value={destination}
-          onChange={(e) => setDestination(e.target.value)}
-          // sm:flex-1, not flex-1: this container is a column on phones, so
-          // an unqualified flex-1 grows along the vertical axis and lets the
-          // field shrink to 20px tall next to a 36px button.
-          className="sm:flex-1"
-        />
-        <Button variant="primary" type="submit" disabled={!canSubmit} className="sm:w-36">
-          <BusyContent busy={busy}>Shorten it</BusyContent>
-        </Button>
-      </div>
+      <HeroBar
+        prefix={<HostPrefix host={linkHost} />}
+        input={{
+          id: "hero-destination",
+          "aria-label": "Shorten a link, no account needed",
+          value: destination,
+          onChange: (e) => setDestination(e.target.value),
+        }}
+        disabled={!canSubmit}
+        busy={busy}
+        again={made.length > 0}
+      />
 
       {/* Says why the button is dead, rather than leaving somebody to work
           it out. The footer below already carries the way forward. */}
       {atCap && (
-        <p className="text-xs text-muted">
+        <p className="px-2 pt-2 text-xs text-muted">
           That is one link, the most this browser can make without an account.
         </p>
       )}

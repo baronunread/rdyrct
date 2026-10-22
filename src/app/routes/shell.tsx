@@ -3,7 +3,7 @@ import { errorMessage } from "@/app/lib/error-message";
 import { Link, Outlet, useNavigate } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, LazyMotion, MotionConfig, domAnimation, m } from "motion/react";
-import { Layers, ChevronsUpDown, Plus, Check, LogOut, Settings } from "@/app/ui/icons";
+import { Layers, ChevronsUpDown, Plus, LogOut, Settings } from "@/app/ui/icons";
 import { MorphIcon } from "morphicons/react";
 import { menu2, moon, sun, x } from "@/app/ui/icon-nodes";
 import { useCurrentUser, useLogout, useShellUser } from "../lib/hooks";
@@ -22,6 +22,7 @@ import { appNavItems } from "../components/nav-items";
 import { OverLimitBanner } from "../components/over-limit";
 import { UserAvatar } from "../components/user-avatar";
 import { CommandMenu } from "../components/command-menu";
+import { OrgMenuItems } from "../components/org-menu-items";
 import { WebMcpLinkTools } from "../components/webmcp-link-tools";
 import { WebMcpAnalyticsTool } from "../components/webmcp-analytics-tool";
 import { NotFound } from "./not-found";
@@ -108,17 +109,7 @@ function OrgSwitcherMenu({
       }
       label="Switch organization"
     >
-      {orgs.map((o) => (
-        <MenuItem key={o.id} onClick={() => onSwitchOrg(o.id)}>
-          <span className="w-4">
-            {o.id === org?.id && <Check size={13} className="text-accent" />}
-          </span>
-          <span className="truncate">{o.name}</span>
-          {/* A locked org stays in the list and says so (#160). Hiding it is
-              how somebody concludes their data is gone. */}
-          <span className="ml-auto text-xs text-muted">{o.locked ? "locked" : o.role}</span>
-        </MenuItem>
-      ))}
+      <OrgMenuItems orgs={orgs} currentId={org?.id} onPick={onSwitchOrg} />
       <MenuSeparator />
       <MenuItem onClick={onNewOrg}>
         <Plus size={14} className="text-muted" /> New organization
