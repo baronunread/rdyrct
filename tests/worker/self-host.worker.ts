@@ -34,6 +34,21 @@ describe.runIf(!RDYRCT_SITE)("a self-hosted build", () => {
     },
   );
 
+  it("moves no wrong-case address to rdyrct.com's pages", async () => {
+    const res = await fetchWorker(new Request("http://localhost/PRICING", { redirect: "manual" }));
+
+    expect(res.status).toBe(404);
+  });
+
+  it.each(["/dashboard", "/links/abc", "/invite/x", "/admin/users"])(
+    "still serves the app's %s",
+    async (path) => {
+      const res = await fetchWorker(new Request(`http://localhost${path}`));
+
+      expect(res.status).toBe(200);
+    },
+  );
+
   it("has no Markdown pricing page", async () => {
     const res = await fetchWorker(new Request("http://localhost/pricing.md"));
 
