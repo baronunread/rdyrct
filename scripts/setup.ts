@@ -211,7 +211,7 @@ export async function deploySelfHosted(options: {
   await $`bunx wrangler d1 migrations apply DB --remote`;
   if (known) return known;
 
-  const host = output.match(/https:\/\/([\w.-]+\.workers\.dev)/)?.[1];
+  const host = deployedHost(output);
   if (!host) {
     console.error(
       "Deployed, but wrangler printed no workers.dev address. Set APP_URL and APP_HOST in wrangler.jsonc, then run `bun run deploy`.",
@@ -222,6 +222,14 @@ export async function deploySelfHosted(options: {
   // Nothing in the build reads the host, so this deploy needs no rebuild.
   await $`bunx wrangler deploy --var APP_URL:https://${host} --var APP_HOST:${host}`;
   return host;
+}
+
+/** The workers.dev address `wrangler deploy` printed. Its output lists the
+ *  vars first, and APP_URL is still the placeholder then, so skip that one. */
+export function deployedHost(output: string): string | undefined {
+  return [...output.matchAll(/https:\/\/([\w.-]+\.workers\.dev)/g)]
+    .map((match) => match[1])
+    .find((host) => host !== PENDING_HOST);
 }
 
 /** Asks for the worker's name and returns it once the account has no worker

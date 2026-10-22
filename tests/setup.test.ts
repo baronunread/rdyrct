@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { parse } from "jsonc-parser";
-import { selfHostConfig } from "../scripts/setup";
+import { deployedHost, selfHostConfig } from "../scripts/setup";
 import { namesRdyrct } from "../scripts/site-mode";
 
 const source = readFileSync(new URL("../wrangler.jsonc", import.meta.url), "utf8");
@@ -70,4 +70,15 @@ test("a copy named links gets resources of its own, never rdyrct.com's", () => {
   const { env: _playwright, ...top } = config;
   expect(JSON.stringify(top)).not.toMatch(/"rdyrct-/);
   expect(config.env.playwright.d1_databases[0].database_name).toBe("rdyrct-playwright");
+});
+
+test("the address setup reads from wrangler is the worker's, not the placeholder var", () => {
+  // Trimmed from a real `wrangler deploy`: the vars come first.
+  const output = `env.APP_URL ("https://pending.workers.dev")     Environment Variable
+env.APP_HOST ("pending.workers.dev")           Environment Variable
+Uploaded rdyrct-livetest (14.16 sec)
+Deployed rdyrct-livetest triggers (7.30 sec)
+  https://rdyrct-livetest.baronunreadts.workers.dev`;
+  expect(deployedHost(output)).toBe("rdyrct-livetest.baronunreadts.workers.dev");
+  expect(deployedHost(`env.APP_URL ("https://pending.workers.dev")`)).toBeUndefined();
 });

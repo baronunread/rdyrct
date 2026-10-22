@@ -112,10 +112,10 @@ cd rdyrct && bun install
 bun run setup
 ```
 
-Setup asks two things: a domain on your Cloudflare account (or Enter, for a free `*.workers.dev` address) and the email of the account that becomes the platform admin. Then it:
+Setup asks three things: a name for the worker (Enter keeps `rdyrct`), a domain on your Cloudflare account (or Enter, for a free `*.workers.dev` address) and the email of the account that becomes the platform admin. It stops if your account already runs a worker by that name, so it never deploys over one. Then it:
 
 - rewrites your copy of `wrangler.jsonc`: your domain in `APP_URL` and `APP_HOST`, and rdyrct.com's own ids and settings (mail sender, Polar products, Cloudflare zone, Sentry) taken out;
-- has Wrangler create the D1 database, KV namespace, R2 bucket and queues on your account, since a binding with no id gets a new resource on the first deploy;
+- has Wrangler create the D1 database, KV namespace, R2 bucket and queues on your account, each named after the worker, since a binding with no id gets a new resource on the first deploy;
 - generates `BETTER_AUTH_SECRET`, sets it and `SUPERADMIN_EMAIL` as secrets, builds, deploys, applies the migrations and attaches your domain.
 
 Commit the rewritten `wrangler.jsonc` to your fork. After that, `bun run deploy` ships each update: it applies new migrations, then deploys. Every build is the self-hosted app, which opens on sign-in and carries none of rdyrct.com's marketing pages, analytics or search tags. Only `VITE_RDYRCT_SITE=1` builds rdyrct.com itself, and `bun run deploy` refuses it for any host but rdyrct.com.
