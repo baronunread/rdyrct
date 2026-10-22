@@ -121,6 +121,8 @@ export type CtaPlacement =
   // than by the copy above it.
   | "hero_shortener"
   | "hero_shortener_claim"
+  // "Sign up free" under the shortener before it has made anything.
+  | "hero_shortener_signup"
   // The custom-domain second screen (Direction C of #96), the first paid
   // ask on the page.
   | "second_screen_domain"
