@@ -738,11 +738,11 @@ function HeroSection({ ctaTo, ctaLabel, authed, ready, name }: HeroProps) {
       className="relative flex flex-col items-center pt-14 pb-12 text-center md:pt-20 md:pb-16"
     >
       <h1 className="max-w-3xl text-4xl font-bold tracking-tight text-balance sm:text-5xl lg:text-6xl">
-        Turn long links into your own.
+        The link shortener that answers to you.
       </h1>
       <p className="mt-5 max-w-xl text-base text-pretty text-muted sm:text-lg">
-        A URL shortener and QR code generator on your own domain, with every click&apos;s country,
-        referrer and device. No ad page, and no IP address stored.
+        A URL shortener and QR code generator on your own domain. Open source, no ad page, and no IP
+        address stored.
       </p>
 
       <HeroCta ctaTo={ctaTo} ctaLabel={ctaLabel} hidden={authed} />

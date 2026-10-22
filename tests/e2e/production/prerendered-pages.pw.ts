@@ -1,7 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 
 const PRERENDERED_PAGES = [
-  { path: "/", heading: "Turn long links into your own." },
+  { path: "/", heading: "The link shortener that answers to you." },
   { path: "/pricing", heading: "URL shortener pricing: free, $4 or $9 a month" },
   { path: "/qr-code-generator", heading: "Free QR code generator with logo" },
   { path: "/docs", heading: "Developer docs" },
@@ -98,7 +98,7 @@ test("conditional requests keep the prerendered HTML representation", async ({ r
     expect(second.status()).toBe(200);
     const body = await second.text();
     expect(body).toContain("URL shortener pricing: free, $4 or $9 a month");
-    expect(body).not.toContain("Turn long links into your own.");
+    expect(body).not.toContain("The link shortener that answers to you.");
   }
 });
 
@@ -108,7 +108,7 @@ test("conditional requests keep the prerendered HTML representation", async ({ r
 test("an app route's raw HTML carries no landing page", async ({ request }) => {
   const body = await (await request.get("/dashboard")).text();
   expect(body).toContain('id="root"');
-  expect(body).not.toContain("Turn long links into your own.");
+  expect(body).not.toContain("The link shortener that answers to you.");
 });
 
 // Auth routes read browser state on their first render, including query params.
