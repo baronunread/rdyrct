@@ -133,8 +133,13 @@ export type Hop = {
 
 type Box = { left: number; top: number; width: number; height: number };
 
-/** Pixels at the top of the globe that the shortener card sits over. */
-const COVERED = 150;
+/** Room above the sphere for cobe's glow, which draws outside the disc and
+ *  was cut flat by the canvas edge when the sphere sat 8px from it. The stage
+ *  in landing.tsx grows upward by the same amount, so the globe stays put. */
+const GLOW_ROOM = 40;
+
+/** Pixels at the top of the canvas that the shortener card sits over. */
+const COVERED = 150 + GLOW_ROOM;
 /** Milliseconds a landed hop stays on screen, label included. A visitor's
  *  own link stays three times as long. */
 const DWELL = 2600;
@@ -241,7 +246,7 @@ export class GlobeScene {
     // a small disc mostly hidden behind the card.
     this.radius = this.width < 640 ? this.width * 0.66 : Math.min(this.width * 0.46, 470);
     this.cx = this.width / 2;
-    this.cy = this.radius + 8;
+    this.cy = this.radius + 8 + GLOW_ROOM;
     this.layoutBase();
   }
 
