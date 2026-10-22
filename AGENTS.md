@@ -309,7 +309,7 @@ House rules on top of Orwell:
 Secrets live on the worker (set all at once with
 `bunx wrangler secret bulk prod.secrets.env`, see `prod.secrets.env.example`)
 and vars live in `wrangler.jsonc`; local dev reads everything from `.dev.vars`
-(see `.dev.vars.example`). Key names:
+(see `.dev.vars.local.example`). Key names:
 `BETTER_AUTH_SECRET`, `SUPERADMIN_EMAIL`, `RESEND_API_KEY`, `MAIL_FROM`,
 `APP_URL`, `APP_HOST`, `POLAR_ACCESS_TOKEN`/`POLAR_WEBHOOK_SECRET`/
 `POLAR_PRO_PRODUCT_ID`/`POLAR_HOBBY_PRODUCT_ID`, `CF_API_TOKEN`/`CF_ZONE_ID`,

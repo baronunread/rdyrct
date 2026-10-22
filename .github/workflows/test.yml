@@ -73,7 +73,7 @@ jobs:
       # behaving: same reason the old single-job workflow copied this before
       # running verify.
       - name: Configure worker test environment
-        run: cp .dev.vars.example .dev.vars
+        run: cp .dev.vars.local.example .dev.vars
       - name: Unit and worker tests
         run: |
           bun run test
@@ -99,7 +99,7 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
       - name: Configure worker environment
-        run: cp .dev.vars.example .dev.vars
+        run: cp .dev.vars.local.example .dev.vars
       - name: Self-hosted build, in a browser
         run: bun run e2e:self-host
 
@@ -138,12 +138,12 @@ jobs:
       # .env therefore ran a different suite from CI, which is how a green
       # local run reached a red pipeline.
       #
-      # The token is the placeholder from .env.example, so nothing lands in
+      # The token is the placeholder from .env.build.example, so nothing lands in
       # a real project, and the funnel test blocks the requests anyway.
       - name: Configure browser test environment
         run: |
-          cp .dev.vars.example .dev.vars
-          cp .env.example .env
+          cp .dev.vars.local.example .dev.vars
+          cp .env.build.example .env
       # On a PR, leanest runs only the specs this diff could affect and hands
       # them to playwright unchanged. It fails open: a judge error or a
       # low-confidence answer runs the full suite, and so does any change to

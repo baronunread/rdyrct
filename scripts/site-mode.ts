@@ -28,5 +28,10 @@ export function isRdyrctSite(
   const flag = env.VITE_RDYRCT_SITE;
   if (flag === "1" || flag === "0") return flag === "1";
   if (env.WORKERS_CI === "1") return false;
+  return namesRdyrct(wrangler);
+}
+
+/** Whether a wrangler.jsonc still describes rdyrct.com's own deployment. */
+export function namesRdyrct(wrangler: string): boolean {
   return /"APP_HOST"\s*:\s*"rdyrct\.com"/.test(wrangler);
 }

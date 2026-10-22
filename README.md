@@ -17,7 +17,9 @@
 
 [![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/baronunread/rdyrct)
 
-This provisions the Worker from the Cloudflare dashboard. It is not yet a complete install on its own: you still need to set `APP_URL`, `APP_HOST` and the secrets, apply the migrations, and attach a domain (tracked in #280). From a terminal, `bun run setup` does all of it: see [Deploy to Cloudflare Workers](#deploy-to-cloudflare-workers).
+Cloudflare copies this repository to your GitHub account, creates the database, storage and queues, and asks for one thing: the email of the account that becomes the platform admin. Leave every other value as it is. The first build serves your copy on its `workers.dev` address, generates the session key and applies the migrations; each push to your copy deploys it again. When you want your own domain, see [Move to your own domain](#move-to-your-own-domain).
+
+Prefer a terminal? `bun run setup` does the same from a clone: see [Deploy to Cloudflare Workers](#deploy-to-cloudflare-workers).
 
 ---
 
@@ -62,7 +64,7 @@ Application layer:
 
 ```sh
 bun install
-cp .dev.vars.example .dev.vars     # then edit; at minimum set SUPERADMIN_EMAIL
+cp .dev.vars.local.example .dev.vars     # then edit; at minimum set SUPERADMIN_EMAIL
 
 bunx emulate --service resend      # local Resend inbox on :4000
 
@@ -80,7 +82,7 @@ bun run dev                        # https://rdyrct.localhost
 
   and copy the 6-digit code out of the latest message.
 
-- Setting `CF_DEV_ENV=simulated` (the `.dev.vars.example` default) stubs the Cloudflare Custom Hostnames API locally: DNS becomes ready after about 3 seconds and TLS after about 12 seconds, so "Check status" shows the same progression without a real zone. `CF_DEV_ENV=instant` reports both ready at once, which is what the e2e run uses so it does not sit through the timer. Without either, missing `CF_API_TOKEN`/`CF_ZONE_ID` fails closed instead of faking a response.
+- Setting `CF_DEV_ENV=simulated` (the `.dev.vars.local.example` default) stubs the Cloudflare Custom Hostnames API locally: DNS becomes ready after about 3 seconds and TLS after about 12 seconds, so "Check status" shows the same progression without a real zone. `CF_DEV_ENV=instant` reports both ready at once, which is what the e2e run uses so it does not sit through the timer. Without either, missing `CF_API_TOKEN`/`CF_ZONE_ID` fails closed instead of faking a response.
 - Billing against a real [Polar sandbox](https://sandbox.polar.sh) account needs a public URL (`wrangler dev --remote` or a tunnel) for webhooks to reach `/api/webhooks/polar`.
 
 ---
@@ -139,7 +141,7 @@ bunx wrangler secret bulk prod.secrets.env && rm prod.secrets.env
 
 ### Move to your own domain
 
-Started on `workers.dev`? Cloudflare dashboard → Workers → your worker → **Settings → Domains & Routes** → **Add → Custom domain**, then set `APP_URL` and `APP_HOST` in `wrangler.jsonc` to it and `bun run deploy`. Short links live at the root (`https://links.example.com/<slug>`); the app is served on every other path. Keep routes out of `wrangler.jsonc`: a `routes` list replaces whatever is attached in the dashboard, and committing yours would hand it to every fork. The `*/*` route is only for customers' own domains (below).
+Started on `workers.dev`, from the button or from setup? Clone your copy, run `bun run setup` and give it the domain (it has to be on your Cloudflare account), then commit `wrangler.jsonc` and push. Setup attaches the domain and keeps your data, your secrets and the session key. By hand instead: Cloudflare dashboard → Workers → your worker → **Settings → Domains & Routes** → **Add → Custom domain**, then set `APP_URL` and `APP_HOST` in `wrangler.jsonc`, remove the vars that are rdyrct.com's (`MAIL_FROM`, `WELCOME_FROM`, `POLAR_*`, `CF_ZONE_ID`, `SENTRY_DSN`) and `bun run deploy`. Short links live at the root (`https://links.example.com/<slug>`); the app is served on every other path. Keep routes out of `wrangler.jsonc`: a `routes` list replaces whatever is attached in the dashboard, and committing yours would hand it to every fork. The `*/*` route is only for customers' own domains (below).
 
 ### Email (optional)
 
@@ -198,7 +200,7 @@ before changing link, domain, logo, or organization delete flows.
 | `CF_ZONE_ID`             | var            | Zone id used for Custom Hostnames                                                   |
 | `CF_DEV_ENV`             | var (dev only) | `simulated` fakes the Custom Hostnames API on a timer, `instant` without one        |
 
-Secrets are set with `wrangler secret put NAME` or `wrangler secret bulk prod.secrets.env` in production; locally they all come from `.dev.vars` (see `.dev.vars.example`).
+Secrets are set with `wrangler secret put NAME` or `wrangler secret bulk prod.secrets.env` in production; locally they all come from `.dev.vars` (see `.dev.vars.local.example`).
 
 ---
 

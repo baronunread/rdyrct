@@ -7,7 +7,20 @@
  * them from dist/, so no map is ever served.
  */
 import { $ } from "bun";
-import { isRdyrctSite } from "./site-mode";
+import { readFileSync } from "node:fs";
+import { deploySelfHosted } from "./setup";
+import { isRdyrctSite, namesRdyrct } from "./site-mode";
+
+const source = readFileSync(new URL("../wrangler.jsonc", import.meta.url), "utf8");
+
+// The Deploy to Cloudflare button, and every later push to the repository it
+// made: Cloudflare builds a copy whose wrangler.jsonc still describes
+// rdyrct.com, so it gets the self-hosted config on the way through.
+if (process.env.WORKERS_CI === "1" && namesRdyrct(source)) {
+  const host = await deploySelfHosted({ source, dropIds: false });
+  console.log(`Deployed a self-hosted copy to https://${host}`);
+  process.exit(0);
+}
 
 const site = isRdyrctSite();
 console.log(site ? "Deploying rdyrct.com" : "Deploying a self-hosted copy");

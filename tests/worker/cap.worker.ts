@@ -21,7 +21,7 @@ interface Redeemed {
  *
  * The browser side (widget, Web Worker, WASM, CSP) is asserted in
  * tests/e2e/production/csp.pw.ts and exercised by every signup scenario,
- * because CAP_SECRET is set in .dev.vars.example. What is left for here is
+ * because CAP_SECRET is set in .dev.vars.local.example. What is left for here is
  * the part a browser cannot show: that a forged, reused, or absent token is
  * refused, and that an unset secret disables the gate instead of breaking
  * the form.
