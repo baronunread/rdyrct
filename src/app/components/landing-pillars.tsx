@@ -303,33 +303,97 @@ const TAGS = [
 
 /* ---- QR codes ------------------------------------------------------- */
 
-/** The code a QR card shows: loaded only once the card is near the screen. */
-function SceneQr({ logo, color }: { logo?: boolean; color?: string }) {
+/** Where a QR card's code goes: white until the QR library loads, which it
+ *  does only once the card is near the screen. The code draws its own frame,
+ *  so this one has none: two frames the same size put it 2px past this box. */
+function QrSlot({ children }: { children: ReactNode }) {
   const box = useRef<HTMLDivElement>(null);
   const near = useInView(box, { once: true, margin: "200px 0px" });
   return (
-    // White until the code loads. The code draws its own frame, so this one
-    // has none: two frames the same size put it 2px past this box.
-    <div ref={box} className="size-24 shrink-0 rounded-lg bg-white">
-      {near && (
-        <Suspense>
-          <QRPreview
-            url="https://go.acme.com/spring"
-            size={96}
-            // A light hairline, not the theme's border: on the dark theme
-            // that is a dark ring around a white code.
-            sizeClass="size-24 rounded-lg border-black/10"
-            logo={logo ? "/favicon.svg" : undefined}
-            color={color}
-          />
-        </Suspense>
-      )}
+    <div ref={box} className="relative grid size-24 shrink-0 rounded-lg bg-white">
+      {near && <Suspense>{children}</Suspense>}
     </div>
+  );
+}
+
+const SCENE_URL = "https://go.acme.com/spring";
+// A light hairline, not the theme's border: on the dark theme that is a dark
+// ring around a white code.
+const SCENE_FRAME = "size-24 rounded-lg border-black/10";
+
+/** The code a QR card shows. */
+function SceneQr({ logo }: { logo?: boolean }) {
+  return (
+    <QrSlot>
+      <QRPreview
+        url={SCENE_URL}
+        size={96}
+        sizeClass={SCENE_FRAME}
+        logo={logo ? "/favicon.svg" : undefined}
+      />
+    </QrSlot>
   );
 }
 
 /** Ink, then two brand colours a customer might pick. */
 const QR_COLOURS = ["#17151f", "#6d4fc4", "#0f766e"];
+
+/**
+ * The colours card's code: a plain code, the logo landing in the middle, then
+ * the ink turning one brand colour and then another.
+ *
+ * Every colour is its own code, drawn once and stacked, and the step only
+ * changes which ones show. Redrawing one code with new options each step
+ * blanked it for a frame every time (qr-code-styling empties its SVG before
+ * it draws again) and cut between colours with no transition. All three are
+ * drawn with room for a logo, so their modules line up, and the logo is
+ * laid over them rather than drawn in, so it can scale in on its own.
+ */
+function BrandedQr({ step }: { step: number }) {
+  // Ink for the first two steps, then one colour a step, holding the last.
+  const colour = Math.min(Math.max(step - 1, 0), QR_COLOURS.length - 1);
+  return (
+    <QrSlot>
+      {QR_COLOURS.map((ink, index) => (
+        <div
+          key={ink}
+          // Each colour covers the ones before it, so a crossfade never shows
+          // the white box through two half-faded codes.
+          className={cn(
+            "col-start-1 row-start-1 transition-opacity duration-300 ease-out",
+            index > colour && "opacity-0",
+          )}
+        >
+          <QRPreview url={SCENE_URL} size={96} sizeClass={SCENE_FRAME} color={ink} roomForLogo />
+        </div>
+      ))}
+      <div className="absolute inset-0 grid place-items-center">
+        <span
+          className={cn(
+            "rounded-[5px] bg-white p-0.5 transition-[opacity,scale,filter] duration-300 ease-out",
+            step < 1 && "scale-50 opacity-0 blur-[2px]",
+          )}
+        >
+          <img src="/favicon.svg" alt="" className="block size-[22px]" />
+        </span>
+      </div>
+    </QrSlot>
+  );
+}
+
+/** A download button in the colours card, pressed for the one step `at`. */
+function SceneDownload({ at, step, children }: { at: number; step: number; children: ReactNode }) {
+  return (
+    <span
+      className={cn(
+        "rounded-md border px-2.5 py-1.5 transition-[scale,border-color,color] duration-200 ease-out",
+        step === at ? "scale-95 border-accent text-accent" : "border-border/70",
+      )}
+    >
+      {children}
+    </span>
+  );
+}
 
 export function QrPillar() {
   return (
@@ -365,20 +429,18 @@ export function QrPillar() {
           icon: ImagePlus,
           title: "Your logo and colours",
           body: "On every code, as PNG or SVG.",
-          steps: 6,
+          // Plain, logo, two colours, then each download pressed in turn.
+          steps: 7,
           scene: (step) => (
             <div className="flex items-center gap-4 p-4">
-              <SceneQr
-                logo={step >= 1}
-                color={QR_COLOURS[Math.floor(step / 2) % QR_COLOURS.length]}
-              />
+              <BrandedQr step={step} />
               <div className="flex flex-col gap-2 text-xs">
-                <span className="rounded-md border border-border/70 px-2.5 py-1.5">
+                <SceneDownload at={4} step={step}>
                   Download SVG
-                </span>
-                <span className="rounded-md border border-border/70 px-2.5 py-1.5">
+                </SceneDownload>
+                <SceneDownload at={5} step={step}>
                   Download PNG
-                </span>
+                </SceneDownload>
               </div>
             </div>
           ),

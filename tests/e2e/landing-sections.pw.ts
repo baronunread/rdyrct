@@ -33,6 +33,35 @@ test("the QR section draws a real code and leads to the generator", async ({ pag
   await expect(page).toHaveURL(/\/qr-code-generator$/);
 });
 
+// The colours card used to redraw its code with new options every step, and
+// the library empties the code before drawing it again: a blank frame every
+// 700ms. Its codes are drawn once now and the loop only fades between them.
+test("the colours card plays through without drawing its code again", async ({ page }) => {
+  await page.goto("/");
+  const scene = section(page, "Print once. Change it later.")
+    .getByRole("listitem")
+    .filter({ has: page.getByRole("heading", { name: "Your logo and colours" }) })
+    .locator("[data-scene]");
+  await scene.scrollIntoViewIfNeeded();
+  // One code per colour, all drawn, before the count starts.
+  await expect(scene.locator("[role=img] svg")).toHaveCount(3);
+  await expect(scene.locator("[role=img] svg path").first()).toBeAttached();
+  await scene.evaluate((el) => {
+    el.dataset.redraws = "0";
+    new MutationObserver((records) => {
+      el.dataset.redraws = String(Number(el.dataset.redraws) + records.length);
+    }).observe(el, { childList: true, subtree: true });
+  });
+
+  const seen = new Set<string | null>();
+  for (let i = 0; i < 24 && seen.size < 7; i++) {
+    seen.add(await scene.getAttribute("data-step"));
+    await page.waitForTimeout(250);
+  }
+  expect(seen.size).toBeGreaterThan(4);
+  await expect(scene).toHaveAttribute("data-redraws", "0");
+});
+
 // Comparisons belong on the comparison pages. The sections sell what you get
 // without naming anybody else.
 test("the landing sections name no competitor", async ({ page }) => {
