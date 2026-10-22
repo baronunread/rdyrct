@@ -140,7 +140,7 @@ const MARGIN_RATIO = 8 / 208;
  */
 const PREVIEW_RENDER_SIZE = 1024;
 
-function makeQR(url: string, size: number, look: QrLook) {
+function makeQR(url: string, size: number, look: QrLook, roomForLogo = false) {
   const qr = new QRCodeStyling({
     width: size,
     height: size,
@@ -148,7 +148,7 @@ function makeQR(url: string, size: number, look: QrLook) {
     data: url,
     image: look.logo,
     margin: Math.round(size * MARGIN_RATIO),
-    qrOptions: { errorCorrectionLevel: eccFor(look) },
+    qrOptions: { errorCorrectionLevel: roomForLogo ? "H" : eccFor(look) },
     imageOptions: imageOptionsFor(look),
     ...looksOptions(look),
   });
@@ -176,8 +176,13 @@ export function QRPreview({
   bg,
   logoSize,
   downloadName,
+  roomForLogo,
 }: {
   url: string;
+  /** Draw the code at the error correction a logo needs even with no logo,
+   * for a caller that lays its own logo over the middle. The modules come out
+   * the same as the code with a logo, so the two can crossfade. */
+  roomForLogo?: boolean;
   logo?: string;
   size?: number;
   /** QrDotStyle; empty/undefined = rounded */
@@ -205,7 +210,7 @@ export function QRPreview({
   useEffect(() => {
     if (!holder.current) return;
     if (!qr.current) {
-      qr.current = makeQR(url, PREVIEW_RENDER_SIZE, look);
+      qr.current = makeQR(url, PREVIEW_RENDER_SIZE, look, roomForLogo);
       qr.current.append(holder.current);
     } else {
       qr.current.update({

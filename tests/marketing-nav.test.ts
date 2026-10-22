@@ -8,7 +8,13 @@ describe("currentNavKey", () => {
   });
 
   test("puts every page under Product on Product, its panel's and the comparisons", () => {
-    for (const path of ["/qr-code-generator", "/compare", "/roadmap", "/bitly-alternative"]) {
+    for (const path of [
+      "/qr-code-generator",
+      "/utm-builder",
+      "/compare",
+      "/roadmap",
+      "/bitly-alternative",
+    ]) {
       expect(currentNavKey(path)).toBe("product");
     }
   });

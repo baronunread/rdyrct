@@ -177,6 +177,8 @@
   --text-3xs: 10px;
   --text-4xs: 9px;
   --animate-shake: shake 300ms ease;
+  /* one letter per step: only even in a monospace font */
+  --animate-type-6: type 540ms steps(6) both;
   /* above dialogs (z-50): toasts must stay visible over an open modal */
   --z-index-toast: 60;
 }
@@ -279,6 +281,15 @@
   grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
 }
 
+@keyframes type {
+  from {
+    clip-path: inset(0 100% 0 0);
+  }
+  to {
+    clip-path: inset(0);
+  }
+}
+
 @keyframes shake {
   0%,
   100% {
@@ -341,19 +352,6 @@
   visibility: hidden;
 }
 
-/* The prerendered hero carries both headings of the copy test; index.html's
-   inline script sets data-hero-arm="answers" before paint for a browser given
-   that arm. Once hydrated (data-ssr gone) only the active one is rendered. */
-[data-hero][data-ssr] [data-hero-copy="answers"],
-:root[data-hero-arm="answers"] [data-hero][data-ssr] [data-hero-copy="own"] {
-  display: none;
-}
-:root[data-hero-arm="answers"] [data-hero][data-ssr] [data-hero-copy="answers"] {
-  display: inline;
-}
-[data-hero][data-ssr] [data-hero-copy="answers"]::before {
-  content: attr(data-text);
-}
 html {
   background: var(--bg);
   color: var(--text);

@@ -170,6 +170,11 @@ export function Footer({ featured = false }: { featured?: boolean }) {
               </MarketingLink>
             </li>
             <li>
+              <MarketingLink to="/utm-builder" className={linkClass}>
+                UTM builder
+              </MarketingLink>
+            </li>
+            <li>
               <MarketingLink to="/pricing" className={linkClass}>
                 Pricing
               </MarketingLink>

@@ -23,6 +23,7 @@ export const PRERENDERED_PUBLIC_PATHS = new Set<string>([
   "/",
   "/pricing",
   "/qr-code-generator",
+  "/utm-builder",
   "/docs",
   "/roadmap",
   "/changelog",
@@ -94,6 +95,30 @@ This generator makes static QR codes: the link or text is stored in the pattern 
 The QR code and optional logo are processed in your browser. rdyrct does not receive or store the value you enter or the logo you choose.
 
 [Open the QR code generator](/qr-code-generator)`,
+  },
+  "/utm-builder": {
+    title: "Free UTM builder - tag links for Google Analytics, no account",
+    description:
+      "Build a UTM link for free: add source, medium, campaign, term and content to any URL, check the values are lowercase, then copy it or shorten it. No sign-up.",
+    markdown: `# Free UTM builder
+
+Add UTM parameters to a link so Google Analytics and other tools can tell which campaign sent each visitor. Fill in the fields, copy the tagged link, or shorten it. No account needed.
+
+## The parameters
+
+- \`utm_source\`: the site, newsletter or app that sent the visitor. Required by Google Analytics.
+- \`utm_medium\`: the channel, such as email, social, cpc, banner or qr. Required by Google Analytics.
+- \`utm_campaign\`: the campaign name, so every link in one campaign reports together.
+- \`utm_term\`: the paid keyword. Most links leave it out.
+- \`utm_content\`: which link of several in one place was clicked. Use it for A/B tests.
+
+## Keep one spelling per value
+
+UTM values are case sensitive. "Spring-Sale" and "spring-sale" show up as two campaigns. Use lowercase with hyphens everywhere; the builder warns when a value strays from it.
+
+The link is built in your browser. Nothing you type is sent anywhere unless you shorten it.
+
+[Open the UTM builder](/utm-builder)`,
   },
   "/pricing": {
     title: "URL shortener and QR code generator pricing - rdyrct",
@@ -287,7 +312,7 @@ Short.io beats rdyrct on price and free-plan size. rdyrct is the better pick whe
       "What rdyrct stores and what it does not: click analytics keep country, referrer, device and time, never an IP address or a precise location.",
     markdown: `# Privacy policy
 
-This policy explains what rdyrct collects, why, the legal basis for it, and how you can exercise your rights. Last updated 18 October 2026.
+This policy explains what rdyrct collects, why, the legal basis for it, and how you can exercise your rights. Last updated 22 October 2026.
 
 ## Data controller
 
@@ -297,7 +322,7 @@ Andrea Bruno is the data controller for rdyrct. For a privacy request or questio
 
 We collect your account email address and name, plus the organizations, links, domains, and settings you create. Click analytics keep only an approximate country, referrer host, device type, and timestamp. We do not store an IP address, precise location, or data that enables cross-site tracking. If you report a link, we store the address you report, your reason and note, and the email you choose to give.
 
-If you accept analytics, PostHog records product events tied to your account. It does not autocapture what you type or replay your screen. Until you answer the banner, a few steps on the current page are held in browser memory: accepting sends them, rejecting discards them. The home page starts with the same version for everyone. After you accept analytics, it picks one of two versions at random and keeps that choice in your browser until you withdraw consent or it expires. Events sent after that choice say which version you saw. Sentry receives technical error reports with the error, browser, and page path, after query strings are removed.
+If you accept analytics, PostHog records product events tied to your account. It does not autocapture what you type or replay your screen. Until you answer the banner, a few steps on the current page are held in browser memory: accepting sends them, rejecting discards them. Sentry receives technical error reports with the error, browser, and page path, after query strings are removed.
 
 ## Why we process it
 

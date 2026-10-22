@@ -98,8 +98,7 @@ jobs:
           key: node_modules-${{ runner.os }}-${{ hashFiles('bun.lock') }}
       - name: Install dependencies
         run: bun install --frozen-lockfile
-      - name: Configure worker environment
-        run: cp .dev.vars.local.example .dev.vars
+      # No .dev.vars step: the config brings its own (.dev.vars.self-host).
       - name: Self-hosted build, in a browser
         run: bun run e2e:self-host
 

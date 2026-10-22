@@ -2,8 +2,6 @@ import type { default as PosthogClient } from "posthog-js";
 import type { JsonValue } from "@/shared/types";
 import { bufferBeforeConsent, discardBuffer, drainBuffer } from "./consent-buffer";
 import { CONSENT_KEY, onConsentLapse, readConsent, writeConsent } from "./consent";
-import { FUNNEL, isFunnelEvent } from "./funnel";
-import { clearHeroVariant, shownHeroVariant } from "./hero-variant";
 import { posthogTokenForHost } from "./posthog-project";
 
 // Nothing here loads posthog-js or contacts PostHog until the user accepts
@@ -154,7 +152,6 @@ export function revokeAnalyticsConsent() {
 /** Shared by Reject, a Reject in another tab, and the answer lapsing. */
 function stopCapturing() {
   discardBuffer();
-  clearHeroVariant();
   // A later Accept in this page should identify the user again.
   if (identifiedId) pendingIdentity ??= { id: identifiedId, properties: identifiedProperties };
   identifiedId = null;
@@ -194,17 +191,8 @@ function clearPostHogStorage() {
   }
 }
 
-/** Downstream steps keep the saved arm across full navigations. A landing
- * view needs an arm shown now: signed-in visitors always see control. */
-export function withHeroVariant(event: string, properties?: EventProperties) {
-  const variant = shownHeroVariant(event !== FUNNEL.landingViewed);
-  if (!variant || !isFunnelEvent(event)) return properties;
-  return { ...properties, hero_variant: variant };
-}
-
 const posthog = {
-  capture(event: string, eventProperties?: EventProperties) {
-    const properties = withHeroVariant(event, eventProperties);
+  capture(event: string, properties?: EventProperties) {
     const client = loadClient();
     // Null means no consent yet. Hold funnel steps so the path survives a
     // later Accept; everything else is dropped, as before.

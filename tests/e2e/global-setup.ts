@@ -1,8 +1,16 @@
 import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
-import { explorerUrl } from "./environment";
+import type { FullConfig } from "@playwright/test";
 
-export default async function globalSetup() {
+/** The Explorer API of the server this config tests: `vite dev` for the main
+ *  suite, the self-hosted `vite preview` for playwright.self-host.config.ts.
+ *  Both start with an empty, in-memory D1 under PLAYWRIGHT_TEST. */
+function explorerFor(config: FullConfig): string {
+  return `${config.projects[0].use.baseURL}/cdn-cgi/explorer/api`;
+}
+
+export default async function globalSetup(config: FullConfig) {
+  const explorerUrl = explorerFor(config);
   const databases = await fetch(`${explorerUrl}/d1/database`).then((response) => response.json());
   const databaseId = databases.result.find(
     (database: { name: string }) => database.name === "DB",

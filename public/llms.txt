@@ -68,5 +68,6 @@
 - [Blog](https://rdyrct.com/blog)
 - [API and MCP docs](https://rdyrct.com/docs)
 - [Free QR code generator](https://rdyrct.com/qr-code-generator)
+- [Free UTM builder](https://rdyrct.com/utm-builder)
 - [Terms](https://rdyrct.com/terms)
 - [Report a link](https://rdyrct.com/report)

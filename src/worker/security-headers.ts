@@ -60,7 +60,7 @@ const directive = (...parts: string[]) => parts.filter(Boolean).join(" ");
  * the Worker on every response, API and redirects included. Adopting one to
  * avoid retyping 44 characters would move the whole policy to fit the tool.
  */
-const THEME_INIT_HASH = "'sha256-fuh36x3A6QMBTJ4pKpJRUsKVEzUu1LaoQmFkFbh5NoM='";
+const THEME_INIT_HASH = "'sha256-2nKA5EXyqoJ3UwqcLiwLWGCwtYg6xDyL/FbNRuFw1c0='";
 
 // `@vitejs/plugin-react` injects an inline module preamble (the React Refresh
 // runtime) into index.html when Vite serves the app in dev. `script-src
