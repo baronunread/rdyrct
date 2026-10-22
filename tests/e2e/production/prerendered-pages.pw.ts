@@ -1,7 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 
 const PRERENDERED_PAGES = [
-  { path: "/", heading: "Turn long links into your own." },
+  { path: "/", heading: "The link shortener that answers to you." },
   { path: "/pricing", heading: "URL shortener pricing: free, $4 or $9 a month" },
   { path: "/qr-code-generator", heading: "Free QR code generator with logo" },
   { path: "/utm-builder", heading: "Free UTM builder" },
@@ -47,23 +47,6 @@ async function assertPrerenderedHeadings(page: Page) {
     await expect(page.getByRole("heading", { level: 1, name: heading }), path).toBeVisible();
   }
 }
-
-// The hero copy test picks its arm in index.html's inline script, before
-// paint, and CSS shows that arm's heading from the prerendered HTML. With the
-// app's scripts blocked, the challenger is already the one on screen.
-test("the hero copy test's arm is on screen before the app's scripts run", async ({ page }) => {
-  await page.addInitScript(() => {
-    localStorage.setItem("rdyrct:consent:v2", "accepted");
-    localStorage.setItem("rdyrct:consent:v2:at", String(Date.now()));
-    Math.random = () => 0.9;
-  });
-  await blockScripts(page);
-  await page.goto("/");
-  await expect(
-    page.getByRole("heading", { level: 1, name: "The link shortener that answers to you." }),
-  ).toBeVisible();
-  await expect(page.getByText("Turn long links into your own.")).toBeHidden();
-});
 
 test("public content stays visible and correct before JavaScript runs", async ({ page }) => {
   await blockScripts(page);
@@ -116,7 +99,7 @@ test("conditional requests keep the prerendered HTML representation", async ({ r
     expect(second.status()).toBe(200);
     const body = await second.text();
     expect(body).toContain("URL shortener pricing: free, $4 or $9 a month");
-    expect(body).not.toContain("Turn long links into your own.");
+    expect(body).not.toContain("The link shortener that answers to you.");
   }
 });
 
@@ -126,7 +109,7 @@ test("conditional requests keep the prerendered HTML representation", async ({ r
 test("an app route's raw HTML carries no landing page", async ({ request }) => {
   const body = await (await request.get("/dashboard")).text();
   expect(body).toContain('id="root"');
-  expect(body).not.toContain("Turn long links into your own.");
+  expect(body).not.toContain("The link shortener that answers to you.");
 });
 
 // Auth routes read browser state on their first render, including query params.

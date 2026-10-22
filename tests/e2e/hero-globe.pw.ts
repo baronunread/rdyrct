@@ -6,7 +6,7 @@ import { expect, test } from "@playwright/test";
 // The third, that it is not in the prerendered HTML, needs a production build:
 // production/prerendered-pages.pw.ts checks it.
 
-const HEADING = "Turn long links into your own.";
+const HEADING = "The link shortener that answers to you.";
 
 test("the globe arrives hidden from assistive tech and shifts nothing", async ({ page }) => {
   // Hold the globe's chunk so the page can be measured before and after it.

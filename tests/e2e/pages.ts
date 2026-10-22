@@ -33,14 +33,3 @@ export async function visitLegalPages(
     await afterEach?.(path);
   }
 }
-
-/** Fix the coin the hero copy test flips (index.html and hero-variant.ts
- *  both use Math.random), so a spec can open the landing page in one arm. */
-export async function pinHeroVariant(page: Page, variant: "own" | "answers"): Promise<void> {
-  await page.addInitScript(
-    (value) => {
-      Math.random = () => value;
-    },
-    variant === "own" ? 0.1 : 0.9,
-  );
-}

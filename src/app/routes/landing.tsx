@@ -4,15 +4,7 @@ import { Link } from "@tanstack/react-router";
 import { HrefLink } from "../lib/router-search";
 import { Check, ChevronDown } from "@/app/ui/icons";
 import { LazyMotion, MotionConfig, domAnimation, m, useReducedMotion } from "motion/react";
-import {
-  lazy,
-  Suspense,
-  useEffect,
-  useLayoutEffect,
-  useRef,
-  useState,
-  useSyncExternalStore,
-} from "react";
+import { lazy, Suspense, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useHydrated } from "../lib/hydrated";
 import { useSeo } from "../lib/seo";
 import { useMarketingScroll } from "../lib/marketing-scroll";
@@ -22,12 +14,6 @@ import { useAudience } from "../lib/audience";
 import posthog from "../lib/posthog";
 import { readConsent, useAnalyticsConsent } from "../lib/consent";
 import { FUNNEL, landingContext } from "../lib/funnel";
-import {
-  heroVariantSnapshot,
-  subscribeHeroVariant,
-  syncHeroVariant,
-  type HeroVariant,
-} from "../lib/hero-variant";
 import { trackCta } from "../lib/track-cta";
 import {
   PLAN_LIMITS,
@@ -713,7 +699,8 @@ function SelfHostTerminal() {
 /**
  * The hero: one line on what you get, the words people search for under it,
  * then the working shortener, over a globe of clicks hopping between cities.
- * The heading is under a copy test (HeroCopy); the layout is not.
+ * "Free" stays out of the heading: it lives by the button, where it helps
+ * the click instead of cheapening the pitch.
  *
  * The layout came out of an earlier test (headline and CTA beside the
  * shortener, against shortener first): 4 signups each from about 70
@@ -730,12 +717,6 @@ function SelfHostTerminal() {
 function useLandingViewCapture(ready: boolean, authed: boolean) {
   const captured = useRef(false);
   const { ready: consentReady, accepted: analyticsConsent } = useAnalyticsConsent();
-  // The copy test: flip the coin once consent and the session have answered,
-  // and forget the arm if consent goes. Before the view is captured, so the
-  // view carries the arm it was shown.
-  useEffect(() => {
-    syncHeroVariant({ consentReady, consented: analyticsConsent, sessionReady: ready, authed });
-  }, [ready, authed, consentReady, analyticsConsent]);
   useEffect(() => {
     if (!shouldCaptureLandingView(consentReady, ready, captured.current)) return;
     captured.current = true;
@@ -757,10 +738,11 @@ function HeroSection({ ctaTo, ctaLabel, authed, ready, name }: HeroProps) {
       className="relative flex flex-col items-center pt-14 pb-12 text-center md:pt-20 md:pb-16"
     >
       <h1 className="max-w-3xl text-4xl font-bold tracking-tight text-balance sm:text-5xl lg:text-6xl">
-        <HeroCopy part="title" authed={authed} settled={settled} />
+        The link shortener that answers to you.
       </h1>
       <p className="mt-5 max-w-xl text-base text-pretty text-muted sm:text-lg">
-        <HeroCopy part="sub" authed={authed} settled={settled} />
+        A URL shortener and QR code generator on your own domain. Open source, no ad page, and no IP
+        address stored.
       </p>
 
       <HeroCta ctaTo={ctaTo} ctaLabel={ctaLabel} hidden={authed} />
@@ -771,54 +753,6 @@ function HeroSection({ ctaTo, ctaLabel, authed, ready, name }: HeroProps) {
 
       <HeroGlobeStage hydrated={hydrated} />
     </section>
-  );
-}
-
-/**
- * The two arms of the hero copy test (lib/hero-variant.ts). "Free" stays out
- * of both: it lives by the button, where it helps the click instead of
- * cheapening the pitch. Both lines carry the words people search for.
- */
-const HERO_COPY = {
-  own: {
-    title: "Turn long links into your own.",
-    sub: "A URL shortener and QR code generator on your own domain, with every click's country, referrer and device. No ad page, and no IP address stored.",
-  },
-  answers: {
-    title: "The link shortener that answers to you.",
-    sub: "A URL shortener and QR code generator on your own domain. Open source, no ad page, and no IP address stored.",
-  },
-} satisfies Record<HeroVariant, { title: string; sub: string }>;
-
-/**
- * One line of the hero in the arm this browser was given. Until the page has
- * hydrated and the session answered, both arms are in the HTML and CSS shows
- * the one index.html picked before paint (styles.css), so nothing flips.
- * After that only the active arm is rendered. A signed-in visitor always
- * reads the control and never flips the coin.
- */
-function HeroCopy({
-  part,
-  authed,
-  settled,
-}: {
-  part: "title" | "sub";
-  authed: boolean;
-  settled: boolean;
-}) {
-  const variant = useSyncExternalStore(
-    subscribeHeroVariant,
-    heroVariantSnapshot,
-    (): HeroVariant => "own",
-  );
-  if (settled) return HERO_COPY[authed ? "own" : variant][part];
-  return (
-    <>
-      <span data-hero-copy="own">{HERO_COPY.own[part]}</span>
-      {/* Drawn from an attribute, not text, so the prerendered heading a
-          crawler reads is one line, not both arms run together. */}
-      <span data-hero-copy="answers" data-text={HERO_COPY.answers[part]} />
-    </>
   );
 }
 
