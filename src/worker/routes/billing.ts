@@ -1,7 +1,6 @@
 import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import { and, eq, isNull, lte, or } from "drizzle-orm";
-import { createPolar } from "@polar-sh/sdk/2026-04";
 import { Webhook } from "standardwebhooks";
 import { drizzle } from "drizzle-orm/d1";
 import * as schema from "../db/schema";
@@ -15,13 +14,17 @@ import { billingEnabled } from "../plan";
 import { jsonBodyLimit } from "../body-limit";
 import type { BillingProvider } from "../billing-provider";
 
-const polarFor = (env: Env): BillingProvider =>
-  env.BILLING ??
-  createPolar({
+// Imported on first use: the SDK is 130 KB that every cold start would
+// otherwise parse, for the three routes below that call it.
+const polarFor = async (env: Env): Promise<BillingProvider> => {
+  if (env.BILLING) return env.BILLING;
+  const { createPolar } = await import("@polar-sh/sdk/2026-04");
+  return createPolar({
     // Unset only when billing is off, and the routes below answer 404 first.
     accessToken: env.POLAR_ACCESS_TOKEN ?? "",
     environment: env.POLAR_SERVER ?? "sandbox",
   });
+};
 
 // Mounted at /api/billing: the caller's own subscription (per-user billing).
 // (The Polar webhook itself is mounted separately, outside this router and
@@ -86,7 +89,9 @@ billingRoutes.post("/checkout", requireUser, async (c) => {
   if (!productId) {
     throw new HTTPException(503, { message: `No Polar product is set for ${plan} (${interval})` });
   }
-  const checkout = await polarFor(c.env).checkouts.create({
+  const checkout = await (
+    await polarFor(c.env)
+  ).checkouts.create({
     products: [productId],
     // Polar interpolates {CHECKOUT_ID}; the SPA uses it to confirm the
     // upgrade before celebrating. The webhook is the primary entitlement
@@ -186,7 +191,7 @@ billingRoutes.post("/checkout/:id/confirm", requireUser, async (c) => {
   const log = c.get("log");
   const user = c.var.user!;
   const checkoutId = c.req.param("id");
-  const checkout = await polarFor(c.env).checkouts.get(checkoutId);
+  const checkout = await (await polarFor(c.env)).checkouts.get(checkoutId);
   // SAFETY: only the checkout this account's own upgrade created may
   // reconcile this account. metadata.userId is set server-side at creation
   // (POST /checkout above) and Polar does not let the client change it, so
@@ -211,7 +216,9 @@ billingRoutes.post("/portal", requireUser, async (c) => {
     .where(eq(schema.user.id, c.var.user!.id));
   const customerId = rows[0]?.customerId;
   if (!customerId) throw new HTTPException(400, { message: "No billing account yet" });
-  const session = await polarFor(c.env).customerSessions.create({ customer_id: customerId });
+  const session = await (
+    await polarFor(c.env)
+  ).customerSessions.create({ customer_id: customerId });
   return c.json({ url: session.customer_portal_url });
 });
 
