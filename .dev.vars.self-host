@@ -1,0 +1,19 @@
+# The worker environment for `bun run e2e:self-host` (playwright.self-host.config.ts).
+#
+# A fork as it first comes up: no email provider, no Polar, no Google
+# sign-in, no Cap. Each of those is a mode the app has to handle on its own
+# (sign-up without a code, no billing, the admin warning), and this is the
+# only place a browser sees them. The config copies this file over the
+# .dev.vars the build emitted, so a developer's own .dev.vars never decides
+# what these tests run against.
+BETTER_AUTH_SECRET=self-host-e2e-only-secret-32-characters
+SUPERADMIN_EMAIL=self-host-admin@example.com
+APP_URL=http://localhost:4184
+APP_HOST=localhost:4184
+SHARED_LINK_HOST=localhost:4184
+CF_API_TOKEN=
+CF_ZONE_ID=
+CF_DEV_ENV=instant
+# wrangler.jsonc carries rdyrct.com's DSN as a var. Blank, so a test run
+# reports nothing to it.
+SENTRY_DSN=
