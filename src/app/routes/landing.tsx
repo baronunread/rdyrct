@@ -615,9 +615,8 @@ function GithubMark({ size = 17 }: { size?: number }) {
  *  somebody deciding whether to trust the open-source claim checks this. */
 const SELF_HOST_STEPS = [
   ["git clone", "https://github.com/baronunread/rdyrct"],
-  ["bun install", ""],
-  ["bunx wrangler d1 create", "rdyrct"],
-  ["bun run db:migrate:remote && bun run deploy", ""],
+  ["cd rdyrct && bun install", ""],
+  ["bun run", "setup"],
 ] as const;
 
 const SELF_HOST_FACTS = [
@@ -681,7 +680,7 @@ function SelfHostTerminal() {
         ))}
       </pre>
       <p className="mt-auto border-t border-border px-5 py-4 text-sm text-muted sm:px-6">
-        Secrets, a domain and the rest are in the{" "}
+        Setup asks for a domain and your email, and creates the rest. Email and billing are in the{" "}
         <a
           href={`${GITHUB_URL}#deploy-to-cloudflare-workers`}
           target="_blank"

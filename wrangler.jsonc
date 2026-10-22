@@ -55,11 +55,9 @@
       "!/ai.txt",
     ],
   },
-  // Create the real resources with:
-  //   wrangler kv namespace create LINKS
-  //   wrangler d1 create rdyrct
-  //   wrangler r2 bucket create rdyrct-media
-  // then paste the ids below. Local dev works with the placeholders.
+  // The ids are rdyrct.com's. A fork's `bun run setup` (scripts/setup.ts)
+  // removes them, and Wrangler creates the fork's own resources on its first
+  // deploy. Local dev works with these.
   "kv_namespaces": [
     {
       "binding": "LINKS",
@@ -76,7 +74,7 @@
   ],
   // Secrets (wrangler secret put …): BETTER_AUTH_SECRET, SUPERADMIN_EMAIL,
   // RESEND_API_KEY, POLAR_ACCESS_TOKEN, POLAR_WEBHOOK_SECRET, CF_API_TOKEN.
-  // Local dev reads everything from .dev.vars (see .dev.vars.example).
+  // Local dev reads everything from .dev.vars (see .dev.vars.local.example).
   "vars": {
     "APP_URL": "https://rdyrct.com",
     "APP_HOST": "rdyrct.com",
@@ -114,9 +112,7 @@
   // send is awaited after committing D1; a producer-side failure is recorded to
   // storage_outbox rather than failing the request (#118, #227). Give-ups land
   // on the DLQ, which this same Worker also consumes (see the `queue()`
-  // handler) to record and alert. Create both queues before first deploy:
-  //   bunx wrangler queues create rdyrct-storage
-  //   bunx wrangler queues create rdyrct-storage-dlq
+  // handler) to record and alert. `bun run setup` creates both queues.
   // Keep max_retries here in sync with STORAGE_MAX_DELIVERIES (storage.ts).
   // Click ingestion is NOT a queue: it buffers in the ClickBuffer Durable
   // Object and flushes to D1 on an alarm (#225, see durable_objects below).

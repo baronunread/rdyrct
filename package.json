@@ -25,6 +25,7 @@
     "verify:e2e": "bun run verify && bun run e2e:smoke",
     "posthog:upload": "POSTHOG_CLI_PROJECT_ID=${POSTHOG_CLI_PROJECT_ID:-240147} posthog-cli --host ${POSTHOG_CLI_HOST:-https://eu.posthog.com} sourcemap process --directory dist/client/assets --release-name rdyrct --delete-after",
     "deploy": "bun scripts/deploy.ts",
+    "setup": "bun scripts/setup.ts",
     "db:migrate:local": "wrangler d1 migrations apply rdyrct --local",
     "db:reset:local": "rm -rf .wrangler/state/v3/d1 .wrangler/state/v3/kv && wrangler d1 migrations apply rdyrct --local",
     "db:migrate:remote": "wrangler d1 migrations apply rdyrct --remote",
@@ -110,6 +111,7 @@
     "bun-types": "^1.4.4",
     "drizzle-kit": "^0.31.11",
     "fallow": "3.33.1",
+    "jsonc-parser": "^3.3.1",
     "jsqr": "^1.4.0",
     "lefthook": "^2.2.1",
     "oxlint": "1.87.0",
@@ -123,6 +125,46 @@
     "wrangler": "^4.149.0"
   },
   "packageManager": "bun@1.4.4",
+  "cloudflare": {
+    "bindings": {
+      "SUPERADMIN_EMAIL": {
+        "description": "The account that signs up with this email becomes the platform admin."
+      },
+      "APP_URL": {
+        "description": "Leave as it is. The first deploy points your copy at its `workers.dev` address. To use your own domain later, see the [README](https://github.com/baronunread/rdyrct#move-to-your-own-domain)."
+      },
+      "APP_HOST": {
+        "description": "Leave as it is, like `APP_URL`."
+      },
+      "MAIL_FROM": {
+        "description": "rdyrct.com's sender. Your copy drops it until you set `APP_HOST` yourself. Email needs a [Resend](https://resend.com) key too."
+      },
+      "WELCOME_FROM": {
+        "description": "rdyrct.com's. Your copy drops it."
+      },
+      "POLAR_SERVER": {
+        "description": "Billing, which is off on your copy unless you set up [Polar](https://polar.sh). Your copy drops rdyrct.com's values."
+      },
+      "POLAR_PRO_PRODUCT_ID": {
+        "description": "rdyrct.com's. Your copy drops it."
+      },
+      "POLAR_HOBBY_PRODUCT_ID": {
+        "description": "rdyrct.com's. Your copy drops it."
+      },
+      "POLAR_PRO_YEARLY_PRODUCT_ID": {
+        "description": "rdyrct.com's. Your copy drops it."
+      },
+      "POLAR_HOBBY_YEARLY_PRODUCT_ID": {
+        "description": "rdyrct.com's. Your copy drops it."
+      },
+      "CF_ZONE_ID": {
+        "description": "rdyrct.com's. Your copy drops it. Customers' own domains need your zone and an API token."
+      },
+      "SENTRY_DSN": {
+        "description": "rdyrct.com's error reports. Your copy drops it, so nothing reaches our Sentry."
+      }
+    }
+  },
   "trustedDependencies": [
     "@posthog/cli"
   ]
