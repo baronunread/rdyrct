@@ -80,7 +80,7 @@ jobs:
           bun run test:worker
           bun run test:worker:self-host
 
-  # The build a fork deploys (VITE_RDYRCT_SITE=0): opens on the app, serves
+  # The build a fork deploys (no VITE_RDYRCT_SITE): opens on the app, serves
   # none of rdyrct.com's pages, and carries none of its head tags or
   # analytics. Its own job because it needs its own build of dist/.
   self-host:

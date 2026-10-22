@@ -73,6 +73,7 @@ bun run dev                        # https://rdyrct.localhost
 ```
 
 - Sign up with the address you set as `SUPERADMIN_EMAIL` to unlock the admin console; any other address is a normal user.
+- The dev server runs the self-hosted app. Add `VITE_RDYRCT_SITE=1` to `.env` to work on rdyrct.com's own landing and marketing pages.
 - New accounts see a create-org prompt on org-scoped pages until they create their first organization.
 - Email verification codes are sent through [emulate.dev](https://emulate.dev)'s Resend emulator instead of a real inbox. Read it with:
 
@@ -117,7 +118,7 @@ Setup asks two things: a domain on your Cloudflare account (or Enter, for a free
 - has Wrangler create the D1 database, KV namespace, R2 bucket and queues on your account, since a binding with no id gets a new resource on the first deploy;
 - generates `BETTER_AUTH_SECRET`, sets it and `SUPERADMIN_EMAIL` as secrets, builds, deploys, applies the migrations and attaches your domain.
 
-Commit the rewritten `wrangler.jsonc` to your fork. After that, `bun run deploy` ships each update: it applies new migrations, then deploys. The build reads `APP_HOST`: anything but rdyrct.com gets the self-hosted app, which opens on sign-in and carries none of rdyrct.com's marketing pages, analytics or search tags.
+Commit the rewritten `wrangler.jsonc` to your fork. After that, `bun run deploy` ships each update: it applies new migrations, then deploys. Every build is the self-hosted app, which opens on sign-in and carries none of rdyrct.com's marketing pages, analytics or search tags. Only `VITE_RDYRCT_SITE=1` builds rdyrct.com itself, and `bun run deploy` refuses it for any host but rdyrct.com.
 
 Everything else is optional. Each piece says what it adds:
 

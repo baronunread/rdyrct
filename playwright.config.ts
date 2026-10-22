@@ -69,6 +69,7 @@ export default defineConfig({
       gracefulShutdown: { signal: "SIGTERM", timeout: 500 },
       env: {
         PLAYWRIGHT_TEST: "1",
+        VITE_RDYRCT_SITE: "1",
         CLOUDFLARE_ENV: "playwright",
         // Browser checks must never write into either real PostHog project.
         VITE_PUBLIC_POSTHOG_DEV_PROJECT_TOKEN: "phc_e2e",
@@ -89,6 +90,7 @@ export default defineConfig({
       // These tests are about response headers and need no backend state.
       env: {
         PLAYWRIGHT_TEST: "1",
+        VITE_RDYRCT_SITE: "1",
         VITE_PUBLIC_POSTHOG_DEV_PROJECT_TOKEN: "phc_e2e",
       },
     },

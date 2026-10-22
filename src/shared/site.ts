@@ -2,8 +2,8 @@ import { PRERENDERED_PUBLIC_PATHS } from "./page-meta";
 
 /**
  * Whether this build is rdyrct.com itself, as opposed to somebody's
- * self-hosted copy. scripts/site-mode.ts decides, from the deploy target in
- * wrangler.jsonc, and vite.config.ts writes the answer in here. A fork must
+ * self-hosted copy. scripts/site-mode.ts decides, from the `VITE_RDYRCT_SITE`
+ * flag, and vite.config.ts writes the answer in here. A fork must
  * not load rdyrct.com's analytics, claim its URLs, or serve its landing,
  * pricing and legal pages as the fork's own.
  *

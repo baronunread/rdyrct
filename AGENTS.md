@@ -24,14 +24,16 @@ bun run db:reset:local      # wipe local D1 + KV, re-apply migrations (start fro
 bun add <pkg>               # dependencies
 bunx agent-browser          # real-browser checks: screenshots, clicking through pages. Use it for any visual verification; do not hand-roll headless Chrome
 bun run db:seed:local       # seed local D1/KV with fake data (run dev server first)
-bun run deploy              # build and deploy; wrangler.jsonc says whether this is rdyrct.com or a self-hosted copy
+bun run deploy              # build and deploy; VITE_RDYRCT_SITE=1 (in .env) for rdyrct.com, otherwise a self-hosted copy
 ```
 
 **One repo builds two things: rdyrct.com, and the copy a fork self-hosts.**
-`scripts/site-mode.ts` decides which from `APP_HOST` in `wrangler.jsonc`
-(rdyrct.com or not), and `VITE_RDYRCT_SITE=1` or `=0` overrides it.
-vite.config.ts writes the answer into `RDYRCT_SITE` (`src/shared/site.ts`)
-as a constant. A self-hosted build:
+`VITE_RDYRCT_SITE=1` builds rdyrct.com; without it every build, dev
+server included, is a self-hosted copy (`scripts/site-mode.ts`). It lives
+in the gitignored `.env`, never in a committed file, because a fork copies
+those. `bun run deploy` refuses when the flag and `APP_HOST` in
+`wrangler.jsonc` disagree. vite.config.ts writes the answer into
+`RDYRCT_SITE` (`src/shared/site.ts`) as a constant. A self-hosted build:
 
 - opens on the app: `/` redirects to `/dashboard`;
 - has none of rdyrct.com's pages (`src/app/marketing-routes.tsx` is not
