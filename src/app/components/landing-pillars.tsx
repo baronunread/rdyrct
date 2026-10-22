@@ -253,15 +253,17 @@ export function LinksPillar() {
           icon: Pencil,
           title: "Words you choose",
           body: "go.acme.com/spring, not a string nobody trusts.",
-          steps: 10,
+          steps: 7,
           scene: (step) => (
             <div className="flex flex-col gap-2 p-4">
               <p className="text-xs text-muted">Short link</p>
               <p className="flex items-center rounded-lg border border-accent px-3 py-2 font-mono">
                 <span className="text-muted">go.acme.com/</span>
-                <span className="text-accent">{"spring".slice(0, Math.max(0, step - 1))}</span>
+                {step >= 1 && (
+                  <span className="text-accent motion-safe:animate-type-6">spring</span>
+                )}
               </p>
-              <Available at={8} step={step}>
+              <Available at={3} step={step}>
                 Available on go.acme.com
               </Available>
             </div>

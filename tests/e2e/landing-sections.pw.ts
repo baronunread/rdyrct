@@ -98,7 +98,7 @@ test("under reduced motion the cards hold their finished state", async ({ page }
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.goto("/");
   const seen = await steps(page);
-  expect([...seen]).toEqual(["9"]);
+  expect([...seen]).toEqual(["6"]);
   await expect(
     section(page, "Links that look like you.").locator("[data-scene]").nth(1),
   ).toContainText("Available on go.acme.com");

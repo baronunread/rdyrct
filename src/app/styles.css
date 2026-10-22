@@ -177,6 +177,8 @@
   --text-3xs: 10px;
   --text-4xs: 9px;
   --animate-shake: shake 300ms ease;
+  /* one letter per step: only even in a monospace font */
+  --animate-type-6: type 540ms steps(6) both;
   /* above dialogs (z-50): toasts must stay visible over an open modal */
   --z-index-toast: 60;
 }
@@ -277,6 +279,15 @@
 
 @utility grid-cols-marketing-copy {
   grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+}
+
+@keyframes type {
+  from {
+    clip-path: inset(0 100% 0 0);
+  }
+  to {
+    clip-path: inset(0);
+  }
 }
 
 @keyframes shake {
