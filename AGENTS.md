@@ -47,7 +47,10 @@ as a constant. A self-hosted build:
 
 A new rdyrct.com-only page goes in `marketing-routes.tsx` and
 `PRERENDERED_PUBLIC_PATHS`. `bun run test:worker:self-host` and
-`bun run e2e:self-host` check a fork's build; CI runs both.
+`bun run e2e:self-host` check a fork's build; CI runs both. The browser
+run uses `.dev.vars.self-host`, not your `.dev.vars`: no email, no Polar,
+no Google, so it also covers sign-up without a code, no billing and the
+`/admin` warning.
 
 **Local Cloudflare state**: while `bun run dev` runs, the Explorer API at
 `https://rdyrct.localhost/cdn-cgi/explorer/api` exposes the local KV, R2, D1,

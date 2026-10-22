@@ -8,10 +8,20 @@ import { selfHostPort, selfHostUrl } from "./tests/e2e/environment";
  * the two never run at once.
  *
  *   bun run e2e:self-host
+ *
+ * The worker runs on .dev.vars.self-host, not the developer's .dev.vars: no
+ * email provider, no Polar and no Google sign-in, which is how a fork first
+ * comes up. The build writes whatever .dev.vars it finds into
+ * dist/rdyrct/.dev.vars, and that copy is the one `vite preview` reads, so
+ * the command replaces it between the two.
  */
 export default defineConfig({
   testDir: "./tests/e2e/self-host",
   testMatch: "**/*.pw.ts",
+  globalSetup: "./tests/e2e/global-setup.ts",
+  // Sign-ups share one in-memory database; two at a time is plenty.
+  workers: 2,
+  timeout: 60_000,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
   reporter: process.env.CI ? [["github"]] : "list",
@@ -21,7 +31,7 @@ export default defineConfig({
     baseURL: selfHostUrl,
   },
   webServer: {
-    command: `bun run build && bunx vite preview --port ${selfHostPort} --strictPort`,
+    command: `bun run build && cp .dev.vars.self-host dist/rdyrct/.dev.vars && bunx vite preview --port ${selfHostPort} --strictPort`,
     url: `${selfHostUrl}/login`,
     reuseExistingServer: false,
     timeout: 180_000,
