@@ -175,18 +175,20 @@ test("a slow auth chunk leaves the loaded form visible", async ({ page }) => {
   expect(blank).toEqual([]);
 });
 
-// Fazier and Twelve Tools list rdyrct.com in exchange for a plain, followed
+// Twelve Tools, Turbo0 and Dang.ai list rdyrct.com in exchange for a plain, followed
 // link back from the homepage, and their review reads the served HTML. So:
 // in the prerendered bytes, no nofollow, and on the homepage only.
 test("the homepage credits its directories with followed links in the served HTML", async ({
   request,
 }) => {
   const home = await (await request.get("/")).text();
-  for (const href of ["https://fazier.com", "https://twelve.tools"]) {
+  for (const href of ["https://twelve.tools", "https://turbo0.com", "https://dang.ai"]) {
     const tag = home.match(new RegExp(`<a[^>]*href="${href}"[^>]*>`))?.[0] ?? "";
     expect(tag, href).not.toBe("");
     expect(tag, href).not.toMatch(/nofollow|ugc|sponsored/);
   }
   const pricing = await (await request.get("/pricing")).text();
-  expect(pricing).not.toContain("https://fazier.com");
+  expect(pricing).not.toContain("https://twelve.tools");
+  // Fazier was dropped: its free route wanted a badge image.
+  expect(home).not.toContain("https://fazier.com");
 });

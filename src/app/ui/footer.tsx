@@ -98,8 +98,9 @@ function Wordmark() {
  * back from the homepage. Followed links on purpose (that is the deal), so
  * no rel=nofollow; only on the landing page, not on every page. */
 const FEATURED_ON = [
-  { name: "Fazier", href: "https://fazier.com" },
   { name: "Twelve Tools", href: "https://twelve.tools" },
+  { name: "Turbo0", href: "https://turbo0.com" },
+  { name: "Dang.ai", href: "https://dang.ai" },
 ];
 
 export function Footer({ featured = false }: { featured?: boolean }) {
