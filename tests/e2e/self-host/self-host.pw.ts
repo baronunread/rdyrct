@@ -7,6 +7,8 @@ test("the front door is the sign-in page", async ({ page }) => {
   await page.goto("/");
   await expect(page).toHaveURL(/\/login/);
   await expect(page.getByRole("button", { name: /sign in|log in/i })).toBeVisible();
+  // The tab names this copy (SITE_NAME, else its host), not rdyrct.com.
+  await expect(page).toHaveTitle("localhost");
 });
 
 test("rdyrct.com's pages are not there", async ({ page }) => {

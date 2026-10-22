@@ -68,6 +68,9 @@ export interface Env {
 
   /* custom domains (Cloudflare for SaaS) */
   APP_HOST: string; // var, e.g. "rdyrct.com"; the app/API origin and CNAME target
+  // var, self-hosted copies only: what every tab of the copy is titled, e.g.
+  // "Acme links". Unset, the tab says the host the copy answers on.
+  SITE_NAME?: string;
   // var, e.g. "rdyr.cc"; the shorter host new shared-domain links use. Requests
   // on either host take the shared-domain path (index.ts); both read the same
   // KV keys, since a shared-domain slug's key has no host in it. Unset means

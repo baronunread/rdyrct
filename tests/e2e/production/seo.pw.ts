@@ -12,8 +12,8 @@ import { expect, test } from "@playwright/test";
 
 const PAGES = [
   { path: "/", title: /URL shortener and QR code generator/ },
-  { path: "/qr-code-generator", title: /Free QR code generator with logo/ },
-  { path: "/utm-builder", title: /Free UTM builder/ },
+  { path: "/qr-code-generator", title: /QR code generator with logo/ },
+  { path: "/utm-builder", title: /UTM builder/ },
   { path: "/pricing", title: /URL shortener and QR code generator pricing/ },
   { path: "/roadmap", title: /URL shortener roadmap/ },
   { path: "/changelog", title: /rdyrct changelog/ },
@@ -66,7 +66,7 @@ test("the QR page describes itself in the share tags, not the landing page", asy
 }) => {
   const html = await (await request.get("/qr-code-generator")).text();
 
-  expect(html).toMatch(/"og:title" content="Free QR code generator/);
+  expect(html).toMatch(/"og:title" content="QR code generator/);
   expect(html).toMatch(/"og:description" content="Make a custom QR code for free/);
   expect(html).toMatch(/"og:url" content="[^"]*\/qr-code-generator"/);
 });
@@ -75,7 +75,7 @@ test("the signed-in app keeps the default head", async ({ request }) => {
   // Nothing behind the login wants search traffic.
   const html = await (await request.get("/dashboard")).text();
 
-  expect(html).toContain("<title>Free URL shortener and QR code generator - rdyrct</title>");
+  expect(html).toContain("<title>rdyrct - URL shortener and QR code generator</title>");
 });
 
 test("the QR generator exposes its instructions and print guides without JavaScript", async ({
@@ -88,9 +88,7 @@ test("the QR generator exposes its instructions and print guides without JavaScr
   const page = await context.newPage();
   try {
     await page.goto(response.url());
-    await expect(page.getByRole("heading", { level: 1 })).toHaveText(
-      "Free QR code generator with logo",
-    );
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText("QR code generator with logo");
     await expect(page.getByRole("heading", { name: "How to make a QR code" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "QR code questions" })).toBeVisible();
     for (const path of ["qr-code-logo", "qr-code-size", "qr-code-testing"]) {

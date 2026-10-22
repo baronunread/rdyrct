@@ -404,7 +404,7 @@ export function QrGeneratorPage() {
       <LandingHeader authed={authed} />
 
       <PageHero
-        title="Free QR code generator with logo"
+        title="QR code generator with logo"
         intro="A free QR code maker for links, text, Wi-Fi details or anything else you can put in a string. Add your logo, pick your colors and dot style, and download a PNG or an SVG. No account, no watermark, no expiry on the image, and nothing about you is stored."
       />
       <main className="flex flex-col items-center gap-12 py-12">
