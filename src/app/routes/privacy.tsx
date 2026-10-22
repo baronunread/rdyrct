@@ -51,13 +51,9 @@ export function PrivacyPage() {
           PostHog cookie is set, unless you accept. Until you answer the banner, a few steps you
           take on the current page (such as viewing it or clicking a button) are held in your
           browser&apos;s memory: accepting sends them, with the time they happened; rejecting or
-          leaving the page discards them. The home page starts with the same version for everyone.
-          After you accept analytics, it picks one of two versions at random, so we can compare
-          which works better, and keeps that choice in your browser until you withdraw consent or it
-          expires. Events sent after that choice say which version you saw. We also use Sentry to
-          receive technical error reports from the app. These reports include technical diagnostic
-          data such as the error, browser, and page path. We remove page query strings before
-          sending them.
+          leaving the page discards them. We also use Sentry to receive technical error reports from
+          the app. These reports include technical diagnostic data such as the error, browser, and
+          page path. We remove page query strings before sending them.
         </p>
       </section>
 
