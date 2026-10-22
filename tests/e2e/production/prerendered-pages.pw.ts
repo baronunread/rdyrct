@@ -182,7 +182,11 @@ test("the homepage credits its directories with followed links in the served HTM
   request,
 }) => {
   const home = await (await request.get("/")).text();
-  for (const href of ["https://twelve.tools", "https://turbo0.com", "https://dang.ai"]) {
+  for (const href of [
+    "https://twelve.tools",
+    "https://turbo0.com/item/rdyrct",
+    "https://dang.ai",
+  ]) {
     const tag = home.match(new RegExp(`<a[^>]*href="${href}"[^>]*>`))?.[0] ?? "";
     expect(tag, href).not.toBe("");
     expect(tag, href).not.toMatch(/nofollow|ugc|sponsored/);

@@ -99,7 +99,8 @@ function Wordmark() {
  * no rel=nofollow; only on the landing page, not on every page. */
 const FEATURED_ON = [
   { name: "Twelve Tools", href: "https://twelve.tools" },
-  { name: "Turbo0", href: "https://turbo0.com" },
+  // Turbo0's verifier wants the exact item page, not the home page.
+  { name: "Turbo0", href: "https://turbo0.com/item/rdyrct" },
   { name: "Dang.ai", href: "https://dang.ai" },
 ];
 
