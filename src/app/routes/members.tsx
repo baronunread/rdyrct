@@ -639,22 +639,25 @@ function InviteByEmailCard({
     <Card className="mb-4">
       <div className="mb-3 flex items-center gap-1.5">
         <p className="text-xs font-medium text-muted">Invite by email</p>
-        <Tooltip
-          content={
-            <>
-              You can invite up to {memberLimit} members on the {org.plan} plan. Pending invites
-              count toward the limit.
-            </>
-          }
-        >
-          <button
-            type="button"
-            aria-label="Member limit info"
-            className="relative cursor-help text-muted after:absolute after:-inset-1.5 hover:text-text"
+        {/* No limit to explain on a self-hosted instance. */}
+        {org.plan !== "unlimited" && (
+          <Tooltip
+            content={
+              <>
+                You can invite up to {memberLimit} members on the {org.plan} plan. Pending invites
+                count toward the limit.
+              </>
+            }
           >
-            <Info size={13} />
-          </button>
-        </Tooltip>
+            <button
+              type="button"
+              aria-label="Member limit info"
+              className="relative cursor-help text-muted after:absolute after:-inset-1.5 hover:text-text"
+            >
+              <Info size={13} />
+            </button>
+          </Tooltip>
+        )}
       </div>
       <form
         onSubmit={handleSubmit(submit, (errors) =>
