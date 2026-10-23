@@ -77,7 +77,7 @@ export async function endSubscriptionBeforeDelete(env: Env, userId: string): Pro
     if (row.subscriptionId && !row.subscriptionId.startsWith("pending:")) {
       ids.add(row.subscriptionId);
     }
-    for (const id of ids) await revoke(polar, id);
+    await Promise.all([...ids].map((id) => revoke(polar, id)));
     return true;
   } catch (error) {
     captureAlert([{ event: "account_delete_subscription_revoke_failed", userId }]);
