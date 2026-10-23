@@ -2,8 +2,25 @@
 
 ## 1.1.0
 
-Your own copy now takes one command or one button, and API calls take about
-half as long.
+Bring your links from Bitly, Short.io, Rebrandly or Dub with their short URLs
+unchanged. Your own copy now takes one command or one button, and API calls
+take about half as long.
+
+### Import from another service
+
+- **Move your links from Short.io, Bitly, Rebrandly or Dub.** At `/import`,
+  choose the service and its CSV export, and each link keeps its domain, its slug and
+  where it goes, with UTM tags split out into the link's UTM fields. A file
+  from any other service works too: you pick which column is which.
+- A domain added from the import is checked by two TXT records, so its
+  certificate is issued while it still points at the old service. Your links
+  keep answering there until you change the CNAME, with no gap.
+- Every row is checked before anything is written: what will import, what is
+  already here, and what will not, with why.
+- The import runs on the server. Once the file is sent you can close the page,
+  and coming back shows how it went, with a retry for the rows that failed.
+- Paid plans, since each link keeps its own slug. Clicks start from zero; the
+  old service keeps their history.
 
 ### Self-hosting
 
@@ -22,8 +39,13 @@ half as long.
 
 ### When you update
 
-- Four new migrations add columns and tables and change no existing data.
+- Six new migrations add columns and tables and change no existing data.
   `bun run deploy` applies them.
+- Imports run in a new workflow. Add it to your `wrangler.jsonc` next to the
+  other two, named after your copy: binding `LINK_IMPORT`, class
+  `LinkImportWorkflow`. `bun run deploy` creates it.
+- A copy built without `VITE_RDYRCT_SITE=1` no longer carries rdyrct.com's
+  landing page: `/` opens the app.
 - If you merge this release's `wrangler.jsonc` into yours, delete
   `WELCOME_FROM` and the two `POLAR_*_YEARLY_PRODUCT_ID` values: they are
   rdyrct.com's. Left in, a copy with email set up sends its welcome email from
