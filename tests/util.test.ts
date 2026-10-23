@@ -151,6 +151,15 @@ describe("buildDestination", () => {
     expect(out.searchParams.get("utm_medium")).toBe("email");
   });
 
+  test("a space in a UTM value is written as +, as it always was", () => {
+    expect(
+      buildDestination("https://example.com/?ref=a%20b", {
+        ...EMPTY_UTM,
+        utmMedium: "Email Blast",
+      }),
+    ).toBe("https://example.com/?ref=a%20b&utm_medium=Email+Blast");
+  });
+
   test("empty UTM fields are skipped", () => {
     const out = buildDestination("https://example.com/", {
       utmSource: "",

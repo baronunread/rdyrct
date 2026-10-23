@@ -118,7 +118,10 @@ export function buildDestination(destination: string, utm: UtmFields): string {
     const present = new Set(pairs.map(pairName));
     for (const [param, field] of UTM_KEYS) {
       const value = utm[field];
-      if (value && !present.has(param)) pairs.push(`${param}=${encodeURIComponent(value)}`);
+      // Encoded the way URLSearchParams always did here (a space is `+`), so
+      // a link's redirect does not change because this moved to raw pairs.
+      if (value && !present.has(param))
+        pairs.push(new URLSearchParams({ [param]: value }).toString());
     }
     return withPairs(url, pairs);
   } catch {
