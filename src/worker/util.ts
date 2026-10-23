@@ -53,6 +53,7 @@ export const RESERVED_SLUGS = new Set([
   "dashboard",
   "analytics",
   "links",
+  "import",
   "members",
   "organization",
   "billing",

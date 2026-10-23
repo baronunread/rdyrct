@@ -17,6 +17,7 @@ export interface Env {
   ORG_DELETE: Workflow<{ orgId: string }>;
   /* custom-domain activation as a durable background workflow */
   DOMAIN_ACTIVATE: Workflow<{ domainId: string; hostname: string }>;
+  LINK_IMPORT: Workflow<{ importId: string }>;
   /* click ingestion: redirects buffer here instead of writing D1 directly
      (#225), one instance, flushed to D1 on a ~10 s alarm */
   CLICK_BUFFER: DurableObjectNamespace<ClickBuffer>;

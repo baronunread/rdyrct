@@ -10,6 +10,7 @@ import {
   orgDeleteGather,
   syncDomainMsg,
 } from "./storage";
+import { finishImport, importNextChunk } from "./routes/link-import";
 import { cfDeleteHostname, ensureHostname, probeDelaySeconds, probeDomain } from "./routes/domains";
 
 interface OrgDeleteParams {
@@ -99,5 +100,25 @@ export class DomainActivateWorkflow extends WorkflowEntrypoint<Env, DomainActiva
       }
       await step.sleep(`wait-${attempt}`, `${probeDelaySeconds(attempt)} seconds`);
     }
+  }
+}
+
+/**
+ * An import from another service (#383), run off the request so closing the
+ * page does not stop it. Each step writes one chunk of pending rows and
+ * records their outcomes (importNextChunk), so a retried or resumed step
+ * picks up exactly where the last one left off and never writes a row twice.
+ */
+export class LinkImportWorkflow extends WorkflowEntrypoint<Env, { importId: string }> {
+  async run(
+    event: Readonly<WorkflowEvent<{ importId: string }>>,
+    step: WorkflowStep,
+  ): Promise<void> {
+    const { importId } = event.payload;
+    for (let chunk = 0; ; chunk++) {
+      const pending = await step.do(`chunk-${chunk}`, () => importNextChunk(this.env, importId));
+      if (pending === 0) break;
+    }
+    await step.do("finish", () => finishImport(this.env, importId));
   }
 }

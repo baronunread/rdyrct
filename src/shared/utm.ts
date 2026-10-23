@@ -63,31 +63,64 @@ export function resolveUtm(
   return out;
 }
 
+const UTM_PARAMS: ReadonlySet<string> = new Set(UTM_KEYS.map(([param]) => param));
+
+/** A query's pairs exactly as written: split on `&`, nothing decoded. */
+function rawPairs(search: string): string[] {
+  return search.replace(/^\?/, "").split("&").filter(Boolean);
+}
+
+/** The decoded name of one raw `name=value` pair. */
+function pairName(pair: string): string {
+  const name = pair.split("=", 1)[0].replaceAll("+", " ");
+  try {
+    return decodeURIComponent(name);
+  } catch {
+    return name;
+  }
+}
+
+/** `url` with its query replaced by `pairs`, joined as they are. Setting
+ * `search` only escapes what a query may not hold, so every pair keeps its
+ * own encoding: `a=b+c` stays `a=b+c`, where URLSearchParams would
+ * rewrite the whole query in its own style. */
+function withPairs(url: URL, pairs: string[]): string {
+  url.search = pairs.length ? `?${pairs.join("&")}` : "";
+  return url.toString();
+}
+
 /**
  * Strip utm_* params out of a destination, leaving every other query param
- * alone. Called right after resolveUtm has already pulled any of them into
- * the UTM columns, so nothing is lost: `destination` stays the bare link,
- * buildDestination re-applies the stored columns at redirect time.
+ * exactly as written. Called right after resolveUtm has already pulled any of
+ * them into the UTM columns, so nothing is lost: `destination` stays the bare
+ * link, buildDestination re-applies the stored columns at redirect time. An
+ * imported link (#383) has to land where it did on the old service, so the
+ * other params are not even re-encoded.
  */
 export function stripUtmParams(destination: string): string {
   try {
     const url = new URL(destination);
-    for (const [param] of UTM_KEYS) url.searchParams.delete(param);
-    return url.toString();
+    return withPairs(
+      url,
+      rawPairs(url.search).filter((pair) => !UTM_PARAMS.has(pairName(pair))),
+    );
   } catch {
     return destination;
   }
 }
 
-/** Destination with the link's UTM params applied (existing params win). */
+/** Destination with the link's UTM params appended (existing params win, and
+ * keep their own encoding). */
 export function buildDestination(destination: string, utm: UtmFields): string {
   try {
     const url = new URL(destination);
+    const pairs = rawPairs(url.search);
+    const present = new Set(pairs.map(pairName));
     for (const [param, field] of UTM_KEYS) {
       const value = utm[field];
-      if (value && !url.searchParams.has(param)) url.searchParams.set(param, value);
+      if (value && !present.has(param)) pairs.push(`${param}=${encodeURIComponent(value)}`);
     }
-    return url.toString();
+    return withPairs(url, pairs);
   } catch {
     return destination;
   }

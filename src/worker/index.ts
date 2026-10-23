@@ -20,6 +20,7 @@ import {
   sweepStalledOrgDeletions,
 } from "./routes/orgs";
 import { linkRoutes } from "./routes/links";
+import { linkImportRoutes } from "./routes/link-import";
 import { apiKeyRoutes } from "./routes/api-keys";
 import { oauthConnectionRoutes } from "./routes/oauth-connections";
 import { mcpRoutes } from "./routes/mcp";
@@ -59,7 +60,7 @@ import {
 
 import { countAnonClick, enqueueClick, sweepDedupeIds } from "./clicks";
 
-export { OrgDeleteWorkflow, DomainActivateWorkflow } from "./workflows";
+export { OrgDeleteWorkflow, DomainActivateWorkflow, LinkImportWorkflow } from "./workflows";
 export { ClickBuffer } from "./click-buffer";
 
 /**
@@ -356,6 +357,7 @@ api.use("*", async (c, next) => {
 api.route("/", userRoutes);
 api.route("/orgs", orgRoutes);
 api.route("/orgs/:orgId/links", linkRoutes);
+api.route("/orgs/:orgId/link-import", linkImportRoutes);
 api.route("/orgs/:orgId/qr-logo", qrLogoRoutes);
 api.route("/user/avatar", avatarRoutes);
 api.route("/billing", billingRoutes);
