@@ -1,5 +1,66 @@
 # Changelog
 
+## 1.1.0
+
+Your own copy now takes one command or one button, and API calls take about
+half as long.
+
+### Self-hosting
+
+- **One command for your own copy.** `bun run setup` puts it on your
+  Cloudflare account. It asks for a name, a domain (or uses a workers.dev
+  address) and the admin's email, then creates the database, link store, file
+  storage and queues, and deploys. It refuses a name a worker on your account
+  already uses.
+- **The Deploy to Cloudflare button** builds a working copy.
+- **Every build is a self-hosted copy** unless `VITE_RDYRCT_SITE=1` is set,
+  which only rdyrct.com does. A copy opens on sign-in and carries none of
+  rdyrct.com's pages, analytics or search tags. `bun run deploy` picks the
+  build, and refuses a flag that does not match `APP_HOST`.
+- **Tabs carry your copy's name.** Set `SITE_NAME`, or they show the host.
+- No seat or link ceiling is shown where there is none.
+
+### When you update
+
+- Four new migrations add columns and tables and change no existing data.
+  `bun run deploy` applies them.
+- If you merge this release's `wrangler.jsonc` into yours, delete
+  `WELCOME_FROM` and the two `POLAR_*_YEARLY_PRODUCT_ID` values: they are
+  rdyrct.com's. Left in, a copy with email set up sends its welcome email from
+  our address.
+- With billing on, the Polar token needs the `subscriptions:write` scope:
+  deleting a paying account now cancels its subscription first, and refuses
+  to delete when it cannot.
+
+### Accounts and billing
+
+- **Deleting a paying account cancels its Polar subscription.** Before, a
+  deleted account went on being billed.
+- Yearly plans, priced 10% below twelve months.
+- If Polar's webhook never arrives, the billing page asks Polar whether the
+  checkout went through.
+- Polar webhook secrets work in both of Polar's formats.
+- A welcome email after sign-up, from `WELCOME_FROM` when it is set.
+
+### Abuse
+
+- Anyone can report a link at `/report`. A free org's scam-shaped links
+  are paused for review and the owner is told how to appeal. Admins can block
+  hosts, and banning an account pauses the links in the orgs it owns.
+- Admin: a toolbar on Links, a plan column, and bulk restore.
+
+### Speed
+
+- A signed-in API call makes one database query to check the session instead
+  of three, and the Worker is 41% smaller. Most calls now take about half as
+  long.
+
+### Other
+
+- MCP clients can register themselves (OAuth dynamic client registration),
+  next to client ID metadata documents.
+- Unknown paths answer 404 instead of the app's page.
+
 ## 1.0.0
 
 First stable release. rdyrct now runs on your own Cloudflare account with
