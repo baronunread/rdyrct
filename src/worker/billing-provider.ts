@@ -29,4 +29,9 @@ export interface BillingProvider {
   customerSessions: {
     create(options: { customer_id: string }): Promise<{ customer_portal_url: string }>;
   };
+  subscriptions: {
+    /** Ends a subscription at once, with no further charge. Account deletion
+     * calls it (#337); it needs the token's `subscriptions:write` scope. */
+    revoke(id: string): Promise<{ id: string }>;
+  };
 }

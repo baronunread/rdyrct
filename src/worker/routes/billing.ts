@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import { and, eq, isNull, lte, or } from "drizzle-orm";
 import { Webhook } from "standardwebhooks";
+import * as v from "valibot";
 import { drizzle } from "drizzle-orm/d1";
 import * as schema from "../db/schema";
 import type { AppEnv, DB, Env } from "../env";
@@ -25,6 +26,47 @@ const polarFor = async (env: Env): Promise<BillingProvider> => {
     environment: env.POLAR_SERVER ?? "sandbox",
   });
 };
+
+/**
+ * What the Polar SDK throws for an HTTP error it knows: the parsed body, whose
+ * `error` names the case. Matched on that name, not the status: the SDK maps
+ * every 403 from this endpoint to "already canceled", and a token missing the
+ * `subscriptions:write` scope is a 403 too. Reading that as "nothing to
+ * revoke" would delete the account and keep billing it.
+ */
+const PolarRefusal = v.object({ error: v.object({ error: v.string() }) });
+
+/** The refusals that mean nothing is left to revoke. */
+const NOTHING_TO_REVOKE = new Set(["AlreadyCanceledSubscription", "ResourceNotFound"]);
+
+/**
+ * Ends a user's Polar subscription before their account is deleted (#337).
+ * Without this a deleted account kept paying: no row was left for the
+ * webhooks to match, and nobody was left to cancel from the portal.
+ *
+ * Returns false when Polar could not be reached or refused for any other
+ * reason, and the caller must then keep the account: deleting it anyway is
+ * the bug this exists to prevent. Revoking also ends the paid plan at once,
+ * which is moot, since the account is about to go.
+ */
+export async function endSubscriptionBeforeDelete(env: Env, userId: string): Promise<boolean> {
+  const row = await env.DB.prepare("select polar_subscription_id as id from user where id = ?")
+    .bind(userId)
+    .first<{ id: string | null }>();
+  // Read off env, not billingEnabled(): that flag only holds once a request
+  // has set it, and this has to be right wherever it is called from.
+  if (!row?.id || !(env.POLAR_ACCESS_TOKEN || env.BILLING)) return true;
+  try {
+    await (await polarFor(env)).subscriptions.revoke(row.id);
+    return true;
+  } catch (error) {
+    const refusal = v.safeParse(PolarRefusal, error);
+    if (refusal.success && NOTHING_TO_REVOKE.has(refusal.output.error.error)) return true;
+    captureAlert([{ event: "account_delete_subscription_revoke_failed", userId }]);
+    console.error("account_delete_subscription_revoke_failed", userId, error);
+    return false;
+  }
+}
 
 // Mounted at /api/billing: the caller's own subscription (per-user billing).
 // (The Polar webhook itself is mounted separately, outside this router and
