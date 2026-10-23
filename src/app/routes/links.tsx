@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { lookup } from "@/shared/lookup";
-import { useNavigate } from "@tanstack/react-router";
+import { Link, useNavigate } from "@tanstack/react-router";
 import { Plus } from "@/app/ui/icons";
 import { useLinks, useLinkMutations, useLinkQuotaUsage } from "../lib/hooks";
 import { useOrgLimits } from "../lib/org-limits";
@@ -13,6 +13,7 @@ import {
   type Sort,
 } from "@/shared/types";
 import { Button } from "../ui/button";
+import { buttonClass } from "../ui/button-class";
 import { Input } from "../ui/field";
 import { MenuSelect } from "../ui/menu";
 import { EmptyState, PageHeader } from "../ui/misc";
@@ -389,6 +390,11 @@ export function LinksPage() {
               {linkCountLabel(linkCount, limits.links, org?.plan)}
               {overLimit && " (over the limit)"}
             </span>
+            {canWrite && (
+              <Link to="/import" className={buttonClass({ variant: "outline" })}>
+                Import
+              </Link>
+            )}
             {canWrite && (
               <Button
                 variant="primary"

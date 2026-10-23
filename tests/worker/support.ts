@@ -94,6 +94,7 @@ export const testEnv: Env = {
   ASSETS: stubAssets,
   ORG_DELETE: stubWorkflow(),
   DOMAIN_ACTIVATE: stubWorkflow(),
+  LINK_IMPORT: stubWorkflow(),
 };
 
 export function overrideEnv(overrides: Partial<Env>): Env {

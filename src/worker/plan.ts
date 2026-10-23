@@ -168,7 +168,7 @@ function addressColumns(address: typeof schema.linkAddresses.$inferInsert) {
  */
 const NOT_DELETING = "and not exists (select 1 from orgs where id = ? and deleting_at is not null)";
 
-function guardedAddressInsertStatement(
+export function guardedAddressInsertStatement(
   env: Env,
   address: typeof schema.linkAddresses.$inferInsert,
   linkLimit: number,
@@ -313,8 +313,8 @@ export async function insertDomainWithinLimit(
   return runGuarded(
     env,
     `insert into domains
-       (id, org_id, hostname, status, status_reason, root_redirect, cf_hostname_id, created_at)
-     select ?, ?, ?, ?, ?, ?, ?, ?
+       (id, org_id, hostname, status, status_reason, root_redirect, cf_hostname_id, validation, created_at)
+     select ?, ?, ?, ?, ?, ?, ?, ?, ?
      where (select count(*) from domains where org_id = ?) < ?
        ${NOT_DELETING}`,
     [
@@ -325,6 +325,7 @@ export async function insertDomainWithinLimit(
       row.statusReason ?? "",
       row.rootRedirect ?? "",
       row.cfHostnameId ?? null,
+      row.validation ?? "http",
       row.createdAt,
       row.orgId,
       domainLimit,

@@ -53,6 +53,9 @@ const RequireAdmin = lazy(() =>
 const Dashboard = lazy(() => import("./routes/dashboard").then((m) => ({ default: m.Dashboard })));
 const Analytics = lazy(() => import("./routes/analytics").then((m) => ({ default: m.Analytics })));
 const LinksPage = lazy(() => import("./routes/links").then((m) => ({ default: m.LinksPage })));
+const LinkImportPage = lazy(() =>
+  import("./routes/link-import").then((m) => ({ default: m.LinkImportPage })),
+);
 const LinkDetailPage = lazy(() =>
   import("./routes/link-detail").then((m) => ({ default: m.LinkDetailPage })),
 );
@@ -174,6 +177,11 @@ const linkDetailRoute = createRoute({
   path: "/links/$slug",
   component: LinkDetailPage,
 });
+const linkImportRoute = createRoute({
+  getParentRoute: () => appShellRoute,
+  path: "/import",
+  component: LinkImportPage,
+});
 const membersRoute = createRoute({
   getParentRoute: () => appShellRoute,
   path: "/members",
@@ -257,6 +265,7 @@ const routeTree = rootRoute.addChildren([
     dashboardRoute,
     analyticsRoute,
     linksRoute,
+    linkImportRoute,
     linkDetailRoute,
     membersRoute,
     billingRoute,

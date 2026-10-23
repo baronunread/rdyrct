@@ -282,6 +282,9 @@ export interface DomainDTO {
   /** Why the domain is in `error`, ready to show. Empty for every other status. */
   statusReason: string;
   rootRedirect: string;
+  /** "txt" for a domain moving from another service (#383): it is checked
+   * through TXT records, so it can be ready before its CNAME switches. */
+  validation: "http" | "txt";
   createdAt: number;
   /**
    * Epoch ms this domain went beyond the org's plan (#159), or null while it

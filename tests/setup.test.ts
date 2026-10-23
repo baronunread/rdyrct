@@ -65,6 +65,7 @@ test("a copy named links gets resources of its own, never rdyrct.com's", () => {
   expect(config.workflows.map((w: { name: string }) => w.name)).toEqual([
     "links-org-delete",
     "links-domain-activate",
+    "links-link-import",
   ]);
   // Nothing at the top level still names an rdyrct resource.
   const { env: _playwright, ...top } = config;

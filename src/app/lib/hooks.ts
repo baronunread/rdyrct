@@ -6,6 +6,7 @@ import { readCachedUser, writeCachedUser } from "./user-cache";
 import { lastAuth, setLastAuth } from "./last-auth";
 import posthog from "./posthog";
 import { FUNNEL, captureGoogleSignup } from "./funnel";
+import type { LinkImportDTO } from "@/shared/link-import";
 import type {
   CurrentUser,
   AppConfig,
@@ -564,4 +565,37 @@ export const useAdminUsers = () =>
   useQuery<AdminUserRow[]>({
     queryKey: ["admin", "users"],
     queryFn: () => api("/admin/users"),
+  });
+
+/** One DNS record a domain needs, as GET /domains/:id/records lists it. */
+interface DnsRecordDTO {
+  type: "TXT" | "CNAME";
+  name: string;
+  value: string;
+}
+
+/**
+ * The records a domain needs (#383). A domain moving from another service
+ * needs two TXT records whose values Cloudflare mints a few seconds after the
+ * domain is added, so this asks again until they are there.
+ */
+export const useDomainRecords = (orgId: string, domainId: string, enabled = true) =>
+  useQuery<{ records: DnsRecordDTO[] }>({
+    queryKey: ["domain-records", orgId, domainId],
+    queryFn: () => api(`/orgs/${orgId}/domains/${domainId}/records`),
+    enabled: enabled && !!orgId && !!domainId,
+    refetchInterval: (query) =>
+      query.state.data?.records.some((record) => record.type === "TXT") === false ? 3_000 : false,
+  });
+
+/**
+ * The org's import from another service (#383) that nobody has put away. It
+ * runs on the server, so this asks again every few seconds while it does.
+ */
+export const useLinkImport = (orgId: string) =>
+  useQuery<{ import: LinkImportDTO | null }>({
+    queryKey: ["link-import", orgId],
+    queryFn: () => api(`/orgs/${orgId}/link-import/current`),
+    enabled: !!orgId,
+    refetchInterval: (query) => (query.state.data?.import?.status === "running" ? 2_000 : false),
   });

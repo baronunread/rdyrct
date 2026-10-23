@@ -279,6 +279,12 @@ export const domains = sqliteTable(
     statusReason: text("status_reason").notNull().default(""),
     rootRedirect: text("root_redirect").notNull().default(""),
     cfHostnameId: text("cf_hostname_id"),
+    // How Cloudflare checks the domain (#383): "http" waits for the CNAME,
+    // "txt" checks TXT records so a domain still pointed at another service
+    // is ready before its CNAME switches.
+    validation: text("validation", { enum: ["http", "txt"] })
+      .notNull()
+      .default("http"),
     // Beyond the org's `domains` cap after a downgrade (#159). It keeps
     // serving until the org's grace period ends, then stops; the row, the KV
     // entry and the Cloudflare hostname all stay, so an upgrade restores it
@@ -416,6 +422,49 @@ export const blockedHosts = sqliteTable("blocked_hosts", {
   createdBy: text("created_by").references(() => user.id, { onDelete: "set null" }),
   createdAt: integer("created_at").notNull(),
 });
+
+/** An import from another service (#383, migration 0041). */
+export const linkImports = sqliteTable(
+  "link_imports",
+  {
+    id: text("id").primaryKey(),
+    orgId: text("org_id")
+      .notNull()
+      .references(() => orgs.id, { onDelete: "cascade" }),
+    createdBy: text("created_by").references(() => user.id, { onDelete: "set null" }),
+    service: text("service").notNull(),
+    status: text("status", { enum: ["uploading", "running", "done", "dismissed"] })
+      .notNull()
+      .default("uploading"),
+    total: integer("total").notNull(),
+    createdAt: integer("created_at").notNull(),
+    finishedAt: integer("finished_at"),
+  },
+  (t) => [index("idx_link_imports_org").on(t.orgId, t.createdAt)],
+);
+
+/** One row of an import's file, and what became of it. */
+export const linkImportRows = sqliteTable(
+  "link_import_rows",
+  {
+    importId: text("import_id")
+      .notNull()
+      .references(() => linkImports.id, { onDelete: "cascade" }),
+    line: integer("line").notNull(),
+    host: text("host").notNull(),
+    slug: text("slug").notNull(),
+    destination: text("destination").notNull(),
+    title: text("title").notNull().default(""),
+    status: text("status", { enum: ["pending", "imported", "exists", "failed"] })
+      .notNull()
+      .default("pending"),
+    reason: text("reason").notNull().default(""),
+  },
+  (t) => [
+    primaryKey({ columns: [t.importId, t.line] }),
+    index("idx_link_import_rows_status").on(t.importId, t.status),
+  ],
+);
 
 export const clicks = sqliteTable(
   "clicks",

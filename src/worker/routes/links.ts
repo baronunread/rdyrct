@@ -301,7 +301,7 @@ async function findLinkAndAddress(c: Context<AppEnv>) {
   return { db, orgId, link, address };
 }
 
-function newAddressRow(
+export function newAddressRow(
   linkId: string,
   orgId: string,
   domainId: string | null,
@@ -644,13 +644,13 @@ linkRoutes.get("/quota-usage", requireOrgRole("viewer"), async (c) => {
 
 /** Builds a new link row: unset appearance/UTM fields fall back to their
  * column default ("" or null), not to an existing row like an update would. */
-function newLinkRow(
+export function newLinkRow(
   orgId: string,
   domainId: string | null,
   slug: string,
   body: LinkInput,
   utm: ReturnType<typeof resolveUtm>,
-  createdBy: string,
+  createdBy: string | null,
 ): typeof schema.links.$inferSelect {
   return {
     id: uid(),
