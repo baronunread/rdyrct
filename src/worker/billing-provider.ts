@@ -33,5 +33,12 @@ export interface BillingProvider {
     /** Ends a subscription at once, with no further charge. Account deletion
      * calls it (#337); it needs the token's `subscriptions:write` scope. */
     revoke(id: string): Promise<{ id: string }>;
+    /** A customer's live subscriptions, so deletion revokes the real ones
+     * and not a stored id that may be a placeholder. */
+    list(query: {
+      customer_id: string;
+      active: boolean;
+      limit: number;
+    }): Promise<{ items: { id: string }[] }>;
   };
 }

@@ -50,21 +50,49 @@ const NOTHING_TO_REVOKE = new Set(["AlreadyCanceledSubscription", "ResourceNotFo
  * which is moot, since the account is about to go.
  */
 export async function endSubscriptionBeforeDelete(env: Env, userId: string): Promise<boolean> {
-  const row = await env.DB.prepare("select polar_subscription_id as id from user where id = ?")
+  const row = await env.DB.prepare(
+    "select polar_customer_id as customerId, polar_subscription_id as subscriptionId from user where id = ?",
+  )
     .bind(userId)
-    .first<{ id: string | null }>();
+    .first<{ customerId: string | null; subscriptionId: string | null }>();
+  if (!row?.customerId && !row?.subscriptionId) return true;
   // Read off env, not billingEnabled(): that flag only holds once a request
-  // has set it, and this has to be right wherever it is called from.
-  if (!row?.id || !(env.POLAR_ACCESS_TOKEN || env.BILLING)) return true;
+  // has set it, and this has to be right wherever it is called from. With no
+  // token there is no way to cancel, and deleting anyway is the bug (#337).
+  if (!(env.POLAR_ACCESS_TOKEN || env.BILLING)) {
+    captureAlert([{ event: "account_delete_billing_unconfigured", userId }]);
+    return false;
+  }
   try {
-    await (await polarFor(env)).subscriptions.revoke(row.id);
+    const polar = await polarFor(env);
+    // Ask Polar rather than trust the stored id: the checkout-confirm
+    // fallback stores `pending:<checkout>` until the webhook brings the real
+    // one, and revoking that would answer "not found" while the real
+    // subscription went on billing.
+    const live = row.customerId
+      ? (await polar.subscriptions.list({ customer_id: row.customerId, active: true, limit: 100 }))
+          .items
+      : [];
+    const ids = new Set(live.map((subscription) => subscription.id));
+    if (row.subscriptionId && !row.subscriptionId.startsWith("pending:")) {
+      ids.add(row.subscriptionId);
+    }
+    for (const id of ids) await revoke(polar, id);
     return true;
   } catch (error) {
-    const refusal = v.safeParse(PolarRefusal, error);
-    if (refusal.success && NOTHING_TO_REVOKE.has(refusal.output.error.error)) return true;
     captureAlert([{ event: "account_delete_subscription_revoke_failed", userId }]);
     console.error("account_delete_subscription_revoke_failed", userId, error);
     return false;
+  }
+}
+
+/** Revokes one subscription; one already canceled or gone is not a failure. */
+async function revoke(polar: BillingProvider, id: string): Promise<void> {
+  try {
+    await polar.subscriptions.revoke(id);
+  } catch (error) {
+    const refusal = v.safeParse(PolarRefusal, error);
+    if (!refusal.success || !NOTHING_TO_REVOKE.has(refusal.output.error.error)) throw error;
   }
 }
 

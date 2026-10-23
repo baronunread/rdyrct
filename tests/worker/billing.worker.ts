@@ -50,10 +50,13 @@ const customerSessionsCreate = vi.fn(async () => ({
   customer_portal_url: "https://sandbox.polar.sh/portal/test",
 }));
 const subscriptionsRevoke = vi.fn(async (id: string) => ({ id }));
+const subscriptionsList = vi.fn<() => Promise<{ items: { id: string }[] }>>(async () => ({
+  items: [],
+}));
 const billingProvider: BillingProvider = {
   checkouts: { create: checkoutsCreate, get: checkoutsGet },
   customerSessions: { create: customerSessionsCreate },
-  subscriptions: { revoke: subscriptionsRevoke },
+  subscriptions: { revoke: subscriptionsRevoke, list: subscriptionsList },
 };
 
 /** billingEnv() with the stand-in checkout/portal client wired in. */
@@ -66,6 +69,8 @@ beforeEach(async () => {
   customerSessionsCreate.mockClear();
   subscriptionsRevoke.mockReset();
   subscriptionsRevoke.mockImplementation(async (id: string) => ({ id }));
+  subscriptionsList.mockReset();
+  subscriptionsList.mockImplementation(async () => ({ items: [] }));
 });
 
 afterEach(async () => {
@@ -1039,6 +1044,46 @@ describe("deleting a paying account ends its Polar subscription (#337)", () => {
     subscriptionsRevoke.mockRejectedValueOnce(new PolarStatusError(403, "insufficient_scope"));
     const captureSpy = vi.spyOn(Sentry, "captureMessage").mockReturnValue("");
     await expect(deleteAccountAndOwnedOrgs(polarEnv(), "user-1")).rejects.toMatchObject({
+      status: 503,
+    });
+    expect(await exists()).toBe(true);
+    captureSpy.mockRestore();
+  });
+
+  it("revokes the live subscription Polar lists, not a placeholder id", async () => {
+    await seedUser({
+      plan: "pro",
+      polarCustomerId: "cus_1",
+      polarSubscriptionId: "pending:checkout_1",
+    });
+    subscriptionsList.mockResolvedValueOnce({ items: [{ id: "sub_real" }] });
+    await deleteAccountAndOwnedOrgs(polarEnv(), "user-1");
+    expect(subscriptionsList).toHaveBeenCalledWith({
+      customer_id: "cus_1",
+      active: true,
+      limit: 100,
+    });
+    expect(subscriptionsRevoke).toHaveBeenCalledTimes(1);
+    expect(subscriptionsRevoke).toHaveBeenCalledWith("sub_real");
+    expect(await exists()).toBe(false);
+  });
+
+  it("keeps the account when Polar cannot list the subscriptions", async () => {
+    await seedUser({ plan: "pro", polarCustomerId: "cus_1" });
+    subscriptionsList.mockRejectedValueOnce(new PolarStatusError(500));
+    const captureSpy = vi.spyOn(Sentry, "captureMessage").mockReturnValue("");
+    await expect(deleteAccountAndOwnedOrgs(polarEnv(), "user-1")).rejects.toMatchObject({
+      status: 503,
+    });
+    expect(await exists()).toBe(true);
+    captureSpy.mockRestore();
+  });
+
+  it("keeps the account when a subscription is on record but billing is off", async () => {
+    await seedUser({ plan: "pro", polarSubscriptionId: "sub_live" });
+    const captureSpy = vi.spyOn(Sentry, "captureMessage").mockReturnValue("");
+    const noBilling = overrideEnv({ POLAR_ACCESS_TOKEN: undefined, BILLING: undefined });
+    await expect(deleteAccountAndOwnedOrgs(noBilling, "user-1")).rejects.toMatchObject({
       status: 503,
     });
     expect(await exists()).toBe(true);
