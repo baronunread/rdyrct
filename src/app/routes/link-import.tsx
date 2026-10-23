@@ -757,7 +757,7 @@ function Problems({
             {shown.map((row) => (
               <tr key={row.line} className="border-t border-border align-top">
                 <td className="tnum px-3 py-2 text-right text-muted">{row.line}</td>
-                <td className="px-3 py-2 font-mono text-xs break-all">{row.address}</td>
+                <td className="px-3 py-2 font-mono text-xs whitespace-nowrap">{row.address}</td>
                 <td className="px-3 py-2 text-pretty">{row.reason}</td>
               </tr>
             ))}
@@ -907,7 +907,7 @@ function Sample({ rows, total }: { rows: ImportRow[]; total: number }) {
               const tags = utmTags(row);
               return (
                 <tr key={row.line} className="border-t border-border align-top">
-                  <td className="px-3 py-2 font-mono text-xs break-all">{shortOf(row)}</td>
+                  <td className="px-3 py-2 font-mono text-xs whitespace-nowrap">{shortOf(row)}</td>
                   <td className="max-w-72 truncate px-3 py-2" title={row.destination}>
                     {stripUtmParams(row.destination)}
                   </td>
