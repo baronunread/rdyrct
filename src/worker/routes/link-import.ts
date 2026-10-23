@@ -346,11 +346,14 @@ linkImportRoutes.post("/:id/start", requireOrgRole("member"), async (c) => {
     throw new HTTPException(409, {
       message: "Some rows did not arrive. Choose the file again to send the rest.",
     });
-  await db
-    .update(schema.linkImports)
-    .set({ status: "running" })
-    .where(eq(schema.linkImports.id, job.id));
-  await c.env.LINK_IMPORT.create({ id: job.id, params: { importId: job.id } });
+  // Conditional, so two /start calls racing each other start one workflow.
+  const moved = await c.env.DB.prepare(
+    "update link_imports set status = 'running' where id = ? and status = 'uploading'",
+  )
+    .bind(job.id)
+    .run();
+  if (!moved.meta.changes) return c.json(await importStatus(db, await findImport(c)));
+  await startWorkflow(c, job.id, job.id);
   log.set({ import: { id: job.id, service: job.service, rows: job.total } });
   log.audit({
     action: "link.import",
@@ -360,6 +363,21 @@ linkImportRoutes.post("/:id/start", requireOrgRole("member"), async (c) => {
   });
   return c.json(await importStatus(db, { ...job, status: "running" }));
 });
+
+/**
+ * Starts the workflow for an import already marked running. If it cannot
+ * start, nothing would ever finish the import and the org could not start
+ * another, so its pending rows fail with a reason and Try again works.
+ */
+async function startWorkflow(c: Context<AppEnv>, importId: string, instanceId: string) {
+  try {
+    await c.env.LINK_IMPORT.create({ id: instanceId, params: { importId } });
+  } catch (err) {
+    c.get("log").error(err instanceof Error ? err : new Error(String(err)));
+    await stopImport(c.env, importId);
+    throw new HTTPException(502, { message: "Could not start the import. Try again." });
+  }
+}
 
 /** The org's latest import that nobody has put away: what the page shows on
  * return, whether it is still running or finished while the tab was closed. */
@@ -382,20 +400,21 @@ linkImportRoutes.get("/current", requireOrgRole("member"), async (c) => {
 linkImportRoutes.post("/:id/retry", requireOrgRole("member"), async (c) => {
   const db = c.var.db;
   const job = await findImport(c);
-  if (job.status !== "done")
-    throw new HTTPException(409, { message: "This import is still running." });
   await paidPlan(db, job.orgId);
+  const moved = await c.env.DB.prepare(
+    "update link_imports set status = 'running', finished_at = null where id = ? and status = 'done'",
+  )
+    .bind(job.id)
+    .run();
+  if (!moved.meta.changes)
+    throw new HTTPException(409, { message: "This import is still running." });
   await db
     .update(schema.linkImportRows)
     .set({ status: "pending", reason: "" })
     .where(
       and(eq(schema.linkImportRows.importId, job.id), eq(schema.linkImportRows.status, "failed")),
     );
-  await db
-    .update(schema.linkImports)
-    .set({ status: "running", finishedAt: null })
-    .where(eq(schema.linkImports.id, job.id));
-  await c.env.LINK_IMPORT.create({ id: `${job.id}-${uid(6)}`, params: { importId: job.id } });
+  await startWorkflow(c, job.id, `${job.id}-${uid(6)}`);
   return c.json(await importStatus(db, { ...job, status: "running" }));
 });
 
@@ -542,6 +561,19 @@ export async function importNextChunk(env: Env, importId: string): Promise<numbe
 }
 
 /** Marks an import done once no row is pending. */
+/** Ends an import that cannot go on: whatever is still pending fails, so the
+ * page shows it and offers to try those rows again. */
+export async function stopImport(env: Env, importId: string): Promise<void> {
+  await env.DB.batch([
+    env.DB.prepare(
+      "update link_import_rows set status = 'failed', reason = ? where import_id = ? and status = 'pending'",
+    ).bind("Something went wrong on our side. Try again.", importId),
+    env.DB.prepare(
+      "update link_imports set status = 'done', finished_at = ? where id = ? and status = 'running'",
+    ).bind(Date.now(), importId),
+  ]);
+}
+
 export async function finishImport(env: Env, importId: string): Promise<void> {
   await env.DB.prepare(
     "update link_imports set status = 'done', finished_at = ? where id = ? and status = 'running'",

@@ -10,7 +10,7 @@ import {
   orgDeleteGather,
   syncDomainMsg,
 } from "./storage";
-import { finishImport, importNextChunk } from "./routes/link-import";
+import { finishImport, importNextChunk, stopImport } from "./routes/link-import";
 import { cfDeleteHostname, ensureHostname, probeDelaySeconds, probeDomain } from "./routes/domains";
 
 interface OrgDeleteParams {
@@ -115,9 +115,16 @@ export class LinkImportWorkflow extends WorkflowEntrypoint<Env, { importId: stri
     step: WorkflowStep,
   ): Promise<void> {
     const { importId } = event.payload;
-    for (let chunk = 0; ; chunk++) {
-      const pending = await step.do(`chunk-${chunk}`, () => importNextChunk(this.env, importId));
-      if (pending === 0) break;
+    try {
+      for (let chunk = 0; ; chunk++) {
+        const pending = await step.do(`chunk-${chunk}`, () => importNextChunk(this.env, importId));
+        if (pending === 0) break;
+      }
+    } catch (err) {
+      // A step that failed every retry: end the import rather than leave it
+      // running for good, which would block the org's next one.
+      await step.do("give up", () => stopImport(this.env, importId));
+      throw err;
     }
     await step.do("finish", () => finishImport(this.env, importId));
   }

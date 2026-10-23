@@ -490,7 +490,9 @@ function DomainsStep({
   const domains = useDomains(orgId, canManage);
   const byHost = new Map((domains.data ?? []).map((domain) => [domain.hostname, domain]));
   const left = new Set(skipped);
-  const waiting = hosts.filter((host) => !byHost.has(host) && !left.has(host));
+  // Members cannot list the org's domains, so they are not held here: the
+  // check in the next step says which hosts the org lacks.
+  const waiting = canManage ? hosts.filter((host) => !byHost.has(host) && !left.has(host)) : [];
   const perHost = new Map<string, number>();
   for (const row of rows) perHost.set(row.host, (perHost.get(row.host) ?? 0) + 1);
   const count = (host: string) => perHost.get(host) ?? 0;
@@ -577,7 +579,8 @@ function DomainRow({
       </div>
       {!domain && !skipped && !canManage && (
         <p className="text-sm text-muted">
-          Only an owner or admin can add a domain. Ask one to add {host}, or leave these links out.
+          Only an owner or admin can add a domain. If {host} is not on rdyrct yet, ask one to add
+          it. The next step shows which links can import.
         </p>
       )}
       {domain && pending && (

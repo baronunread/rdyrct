@@ -10,7 +10,7 @@ import { applyTestMigrations, authEnv, fetchWorker, freeOwnerCookie, jsonBody } 
 import type { ImportVerdict } from "../../src/shared/link-import";
 import { PLAN_LIMITS } from "../../src/shared/types";
 import { enqueueStorage, syncDomainMsg } from "../../src/worker/storage";
-import { finishImport, importNextChunk } from "../../src/worker/routes/link-import";
+import { finishImport, importNextChunk, stopImport } from "../../src/worker/routes/link-import";
 import type { JsonValue } from "../../src/shared/types";
 import type { LinkImportDTO } from "../../src/shared/link-import";
 
@@ -60,13 +60,14 @@ async function verdicts(step: "check" | "run", rows: Row[]) {
   return (await jsonBody<{ verdicts: ImportVerdict[]; room?: number }>(res)).verdicts;
 }
 
-async function call(method: string, path: string, body?: JsonValue) {
+async function call(method: string, path: string, body?: JsonValue, testEnv = authEnv()) {
   return fetchWorker(
     new Request(`http://localhost/api/orgs/org-1/link-import${path}`, {
       method,
       headers: { cookie, "content-type": "application/json" },
       body: body === undefined ? undefined : JSON.stringify(body),
     }),
+    testEnv,
   );
 }
 
@@ -88,6 +89,14 @@ async function runImport(rows: Row[]): Promise<ImportVerdict[]> {
   return result.results.map(({ line, status, reason }) =>
     reason ? { line, status, reason } : { line, status },
   );
+}
+
+/** A one-row import with its row sent, not yet started. */
+async function uploaded() {
+  const created = await call("POST", "", { service: "dub", total: 1 });
+  const { id } = await jsonBody<{ id: string }>(created);
+  await call("POST", `/${id}/rows`, { rows: [row(2, "a", "https://example.com/a")] });
+  return id;
 }
 
 /** What LinkImportWorkflow does, step by step. */
@@ -283,9 +292,7 @@ describe("an import runs on the server", () => {
   });
 
   it("refuses a second import while one is running", async () => {
-    const created = await call("POST", "", { service: "dub", total: 1 });
-    const { id } = await jsonBody<{ id: string }>(created);
-    await call("POST", `/${id}/rows`, { rows: [row(2, "a", "https://example.com/a")] });
+    const id = await uploaded();
     await call("POST", `/${id}/start`);
     expect((await call("POST", "", { service: "dub", total: 1 })).status).toBe(409);
   });
@@ -304,6 +311,42 @@ describe("an import runs on the server", () => {
       await call("GET", "/current"),
     );
     expect(after).toMatchObject({ status: "done", imported: 2, failed: 0 });
+  });
+
+  it("never sticks at running when the workflow cannot start", async () => {
+    const id = await uploaded();
+    const up = authEnv().LINK_IMPORT;
+    const down = {
+      ...authEnv(),
+      LINK_IMPORT: {
+        get: (id: string) => up.get(id),
+        createBatch: (batch: Parameters<typeof up.createBatch>[0]) => up.createBatch(batch),
+        deleteBatch: (ids: Parameters<typeof up.deleteBatch>[0]) => up.deleteBatch(ids),
+        create: async () => {
+          throw new Error("injected workflow start failure");
+        },
+      },
+    };
+    expect((await call("POST", `/${id}/start`, undefined, down)).status).toBe(502);
+    const { import: job } = await jsonBody<{ import: LinkImportDTO }>(
+      await call("GET", "/current"),
+    );
+    expect(job).toMatchObject({ status: "done", pending: 0, failed: 1 });
+    // Its failed row can go again, and the org is free to start another.
+    expect((await call("POST", `/${id}/retry`)).status).toBe(200);
+    await drain(id);
+    expect((await call("POST", "", { service: "dub", total: 1 })).status).toBe(201);
+  });
+
+  it("ends an import whose workflow gave up, so the org can go on", async () => {
+    const id = await uploaded();
+    await call("POST", `/${id}/start`);
+    await stopImport(authEnv(), id);
+    const { import: job } = await jsonBody<{ import: LinkImportDTO }>(
+      await call("GET", "/current"),
+    );
+    expect(job).toMatchObject({ status: "done", failed: 1 });
+    expect((await call("POST", `/${id}/dismiss`)).status).toBe(200);
   });
 
   it("is never shown to another organization", async () => {
