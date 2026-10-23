@@ -44,9 +44,10 @@ describe("parseChangelog", () => {
     expect(releases[1]?.sections).toEqual([{ title: "", items: ["A bullet with no section."] }]);
   });
 
-  test("reads the real file", async () => {
+  test("reads the real file, newest entry first and matching package.json", async () => {
     const real = parseChangelog(await Bun.file("CHANGELOG.md").text());
-    expect(real[0]?.version).toBe("1.0.0");
+    const { version } = await Bun.file("package.json").json();
+    expect(real[0]?.version).toBe(version);
     expect(real[0]?.sections.length).toBeGreaterThan(0);
   });
 });
