@@ -38,8 +38,8 @@ const NEXT: Item[] = [
   {
     issue: 75,
     area: "Links",
-    title: "Bulk link import and export",
-    body: "Move an existing shortener's links in, or take yours out, in one CSV.",
+    title: "Bulk link export",
+    body: "Take every link out in one CSV, ready for a spreadsheet or another service.",
   },
   {
     issue: 77,
@@ -136,6 +136,10 @@ const SHIPPED: Item[] = [
   { area: "Links", title: "Custom domains with automatic TLS, and any slug you like" },
   { area: "Links", title: "A second short domain, rdyr.cc, for new links" },
   { area: "Links", title: "Anonymous shortening with no account at all" },
+  {
+    area: "Links",
+    title: "Import from Bitly, Short.io, Rebrandly or Dub, with the same short URLs",
+  },
   { area: "QR", title: "QR codes on every plan, with your logo and colours on paid ones" },
   { area: "Analytics", title: "Country, referrer, device and campaign, never an IP address" },
   { area: "Teams", title: "Organizations, roles, and single-use email invites" },
