@@ -7,6 +7,9 @@
  * agree with wrangler.jsonc's `APP_HOST`, or nothing ships: a forgotten flag
  * would put rdyrct.com live without its landing page, and a stray one would
  * give a fork rdyrct.com's pages and analytics.
+ *
+ * Both builds apply D1 migrations before the Worker goes out, and stop if
+ * any is still pending afterwards.
  */
 import { $ } from "bun";
 import { readFileSync } from "node:fs";
@@ -43,4 +46,11 @@ if (site) await $`bun run posthog:upload`;
 // (tests/migrations-additive.test.ts): the old code keeps running against the
 // new schema until the deploy below lands, and after any rollback.
 await $`bunx wrangler d1 migrations apply DB --remote`;
+// Answering "n" at Wrangler's prompt exits 0 having applied nothing, so check
+// rather than trust the exit code.
+const pending = await $`bunx wrangler d1 migrations list DB --remote`.text();
+if (!pending.includes("No migrations to apply")) {
+  console.error("Migrations are still pending, so the Worker was not deployed.");
+  process.exit(1);
+}
 await $`bunx wrangler deploy`;

@@ -35,7 +35,9 @@ contract: add the new column or table, move the code over in the next
 release, and drop the old one only once no deployed release reads it. A
 migration that drops or renames carries a `-- contract: <what> unread since
 <version>` line, and `tests/migrations-additive.test.ts` fails without it.
-Before a contract migration, note the Time Travel bookmark
+Dropping a unique index the code relies on (an `onConflictDoNothing` target)
+is a contract change too, though the test cannot tell it from any other
+index. Before a contract migration, note the Time Travel bookmark
 (`bunx wrangler d1 time-travel info rdyrct`) in the PR.
 
 **One repo builds two things: rdyrct.com, and the copy a fork self-hosts.**

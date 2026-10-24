@@ -25,7 +25,10 @@ const DIR = new URL("../migrations/", import.meta.url);
  * 0032 would each have needed the line. */
 const LAST_GRANDFATHERED = 41;
 
-const DESTRUCTIVE = /\bdrop\s+(table|column)\b|\brename\b/i;
+// SQLite takes `ALTER TABLE t DROP b` without COLUMN, so any drop inside an
+// ALTER TABLE counts. A view or trigger the old code relies on counts too.
+const DESTRUCTIVE =
+  /\bdrop\s+(table|column|view|trigger)\b|\balter\s+table\b[^;]*\bdrop\b|\brename\b/i;
 const CONTRACT = /^[ \t]*--[ \t]*contract:[ \t]*\S/im;
 
 /** The SQL with comments removed, so a comment that mentions a drop is not one. */
@@ -42,6 +45,8 @@ describe("needsContractLine", () => {
     expect(needsContractLine("ALTER TABLE links DROP COLUMN destination;")).toBe(true);
     expect(needsContractLine("DROP TABLE invites;")).toBe(true);
     expect(needsContractLine("ALTER TABLE user RENAME COLUMN plan TO plan_legacy;")).toBe(true);
+    expect(needsContractLine("ALTER TABLE links DROP destination;")).toBe(true);
+    expect(needsContractLine("DROP VIEW IF EXISTS v;")).toBe(true);
   });
 
   test("the contract line lets it through", () => {
@@ -64,9 +69,13 @@ describe("needsContractLine", () => {
 });
 
 describe("migrations after the rule", () => {
-  const files = readdirSync(DIR)
-    .filter((f) => f.endsWith(".sql"))
-    .filter((f) => Number.parseInt(f, 10) > LAST_GRANDFATHERED);
+  const all = readdirSync(DIR).filter((f) => f.endsWith(".sql"));
+  const files = all.filter((f) => Number.parseInt(f, 10) > LAST_GRANDFATHERED);
+
+  // Wrangler applies every .sql file; one with no number would skip this check.
+  test("every migration starts with its number", () => {
+    expect(all.filter((f) => Number.isNaN(Number.parseInt(f, 10)))).toEqual([]);
+  });
 
   test.each(files.length ? files : ["(none yet)"])("%s says why it drops or renames", (f) => {
     if (f === "(none yet)") return;
