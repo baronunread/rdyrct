@@ -62,9 +62,15 @@ test("an admin warns a link in one click, and a visitor continues past the warni
   await visitor.route("https://example.com/**", (route) =>
     route.fulfill({ contentType: "text/html", body: "<h1>Landed</h1>" }),
   );
+  // Not followed: until the republish lands, the old KV value still 302s to
+  // example.com, which the route above also answers 200. Only the warning
+  // page itself is a 200 from our host.
   await expect
-    .poll(async () => (await visitor.goto(`/${slug}`))?.status(), { timeout: 15_000 })
+    .poll(async () => (await visitor.request.get(`/${slug}`, { maxRedirects: 0 })).status(), {
+      timeout: 15_000,
+    })
     .toBe(200);
+  await visitor.goto(`/${slug}`);
   await expect(
     visitor.getByRole("heading", { level: 1, name: "Check where this link goes." }),
   ).toBeVisible();

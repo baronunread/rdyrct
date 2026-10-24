@@ -13,7 +13,8 @@
  *    the caller real CPU.
  *  - Its own rate-limit namespace, not the one guarding auth: a flood here
  *    must not lock anybody out of signing in.
- *  - Destination scoring (#68) after the response, same as a real link.
+ *  - Destination scoring (#68) after the response, same as a real link,
+ *    and Google Web Risk (#341) before it: a listed site is refused.
  *  - Random slugs only, and a 24-hour life, so the shared namespace cannot
  *    be squatted or farmed.
  */
@@ -36,8 +37,9 @@ import {
 } from "../abuse-hold";
 import { holdReasonFor } from "../../shared/abuse-rules";
 import { publishLink, resolveSlug, unpublishLink } from "../kv";
-import { scoreAndRecord } from "../risk";
+import { askWebRisk, scoreAndRecord } from "../risk";
 import { checkLinkDestination } from "../destination-check";
+import { orgLinkWarning } from "../link-warning";
 import { spendToken } from "../cap";
 import { CAP_FAILED_CODE } from "@/shared/types";
 import { isValidHttpUrl, linkUrl, normalizeUrl, randomSlug, uid } from "../util";
@@ -99,6 +101,17 @@ shortenRoutes.post("/", async (c) => {
     throw new HTTPException(422, {
       message:
         "That destination looks like a scam page, so it cannot be shortened without an account. Sign up and we will review it.",
+    });
+  // And asked of Web Risk (#341) before anything is published, for the same
+  // reason: there is no org to hold, the redirect path never re-checks an
+  // anonymous link, and nobody can report one, so a hit found after the key
+  // is live would change nothing. Up to three seconds, and a cached answer
+  // costs nothing; no key, or no answer, and the link is made as before.
+  const webRisk = await askWebRisk(c.env, destination);
+  log.set({ webRisk: { outcome: webRisk.outcome } });
+  if (webRisk.outcome === "hit")
+    throw new HTTPException(422, {
+      message: "That site is on a list of harmful sites, so it cannot be shortened.",
     });
   const now = Date.now();
   const expiresAt = now + ANON_LINK_TTL_MS;
@@ -267,6 +280,7 @@ export async function claimAnonLink(
   const { plan, limits } = await orgPlan(db, orgId);
   if (await isBlockedHost(db, anon.destination)) return null;
   const hold = await holdIfSuspicious(env, db, orgId, plan, anon.destination);
+  const warning = hold ? null : await orgLinkWarning(db, orgId);
 
   const link = {
     id: uid(),
@@ -299,8 +313,9 @@ export async function claimAnonLink(
     suspendedAt: hold?.suspendedAt ?? null,
     suspendedBy: null,
     suspendReason: hold?.suspendReason ?? null,
-    warnedAt: null,
-    warnReason: null,
+    // Or warned, while the org is (#344).
+    warnedAt: warning?.warnedAt ?? null,
+    warnReason: warning?.warnReason ?? null,
     // Unknown: the anonymous row has no such column, so the weekly rescan
     // (#341) takes it first.
     webRiskCheckedAt: null,
@@ -341,7 +356,7 @@ export async function claimAnonLink(
   // nothing, because there was no org to hold, and claiming must not be the
   // way round that.
   if (anon.riskCheckedAt === null || anon.riskReasons?.includes("web_risk_"))
-    await checkLinkDestination(env, link.id, link.destination);
+    await checkLinkDestination(env, link);
   return link;
 }
 

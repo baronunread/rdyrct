@@ -9,3 +9,15 @@ ALTER TABLE links ADD COLUMN warn_reason TEXT;
 -- from risk_checked_at, which the redirect path refreshes from the DNS check
 -- every day, so the weekly rescan can tell which links Web Risk has not seen.
 ALTER TABLE links ADD COLUMN web_risk_checked_at INTEGER;
+
+-- #344: an org whose links the abuse sweep warned. New links copy it, so the
+-- org cannot get round the warning by making fresh links. Cleared when an
+-- admin marks the org reviewed. Null means not warned.
+ALTER TABLE orgs ADD COLUMN links_warned_at INTEGER;
+ALTER TABLE orgs ADD COLUMN links_warn_reason TEXT;
+
+-- #341: Google Web Risk lookups the org's link creates and edits spent today
+-- (UTC day number in web_risk_day). Past the daily budget a link is left for
+-- the rescan instead. Null means none yet.
+ALTER TABLE orgs ADD COLUMN web_risk_day INTEGER;
+ALTER TABLE orgs ADD COLUMN web_risk_lookups INTEGER;

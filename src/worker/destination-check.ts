@@ -15,7 +15,7 @@
  * for every live free-plan link, because a kit often goes bad after the link
  * is made. Unset WEB_RISK_API_KEY and none of this runs.
  */
-import { and, asc, eq, isNull, lt, or, sql } from "drizzle-orm";
+import { and, asc, eq, isNull, lt, ne, or, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import { createLogger, type AuditableLogger } from "evlog";
 import * as schema from "./db/schema";
@@ -29,13 +29,7 @@ import {
 } from "./abuse";
 import { recordAdminAction } from "./audit";
 import { billingEnabled, orgPlan } from "./plan";
-import {
-  isWebRiskHit,
-  scoreAndRecord,
-  webRiskThreats,
-  webRiskVerdict,
-  type RiskVerdict,
-} from "./risk";
+import { askWebRisk, isWebRiskHit, scoreAndRecord, webRiskThreats, type RiskVerdict } from "./risk";
 import { captureAlert } from "./sentry";
 import { republishLink } from "./storage";
 
@@ -52,22 +46,24 @@ const DAY_MS = 24 * 60 * 60 * 1000;
  */
 export async function checkLinkDestination(
   env: Env,
-  linkId: string,
-  destination: string,
+  link: { id: string; orgId: string; destination: string },
 ): Promise<void> {
+  const linkId = link.id;
   const log = createLogger({ operation: "link.destination_check", link: { id: linkId } });
+  const db = drizzle(env.DB, { schema });
   try {
-    const { verdict, webRisk } = await scoreAndRecord(env, linkId, destination);
+    const { verdict, webRisk } = await scoreAndRecord(env, linkId, link.destination, "links", () =>
+      spendWebRiskLookup(db, link.orgId),
+    );
     log.set({ webRisk: { outcome: webRisk } });
     if (webRisk === "failed") log.warn("Web Risk did not answer");
     if (!verdict || !isWebRiskHit(verdict)) return;
-    const db = drizzle(env.DB, { schema });
     try {
       await holdForWebRisk(env, db, linkId, verdict);
     } catch (error) {
       log.set({ webRisk: { hold: "failed" } });
       log.error(error instanceof Error ? error : String(error));
-      await forgetWebRiskCheck(db, linkId);
+      await retryWebRiskTomorrow(db, linkId);
     }
   } finally {
     log.emit();
@@ -75,15 +71,59 @@ export async function checkLinkDestination(
 }
 
 /**
- * Unstamp a link whose hold failed, so the next daily rescan asks again
- * instead of waiting out the week the stamp would buy it. A link the hold did
- * reach is left alone: the rescan skips held links anyway. Swallows its own
- * failure: it is already the recovery path.
+ * Web Risk lookups one org's link creates and edits may spend in a UTC day.
+ * Each destination edit is a lookup, so without this, flipping one link
+ * between two URLs at the write rate limit spends more in a day than the
+ * free tier allows in a month, and after that every lookup fails open for
+ * everybody. The cache (risk.ts) makes a repeated URL free; this caps how
+ * many different ones an org can make us ask about. Past it, the link is
+ * left unstamped, so the rescan takes it first.
  */
-async function forgetWebRiskCheck(db: DB, linkId: string): Promise<void> {
+export const WEB_RISK_LOOKUPS_PER_ORG_PER_DAY = 200;
+
+/**
+ * Count one Web Risk lookup against the org's day, or return false when the
+ * day is spent. One conditional write, so two requests racing cannot both
+ * take the last lookup. A new UTC day starts the count again.
+ */
+async function spendWebRiskLookup(db: DB, orgId: string): Promise<boolean> {
+  const day = Math.floor(Date.now() / DAY_MS);
+  const spent = await db
+    .update(schema.orgs)
+    .set({
+      webRiskDay: day,
+      webRiskLookups: sql`case when ${schema.orgs.webRiskDay} = ${day} then coalesce(${schema.orgs.webRiskLookups}, 0) + 1 else 1 end`,
+    })
+    .where(
+      and(
+        eq(schema.orgs.id, orgId),
+        or(
+          isNull(schema.orgs.webRiskDay),
+          ne(schema.orgs.webRiskDay, day),
+          lt(sql`coalesce(${schema.orgs.webRiskLookups}, 0)`, WEB_RISK_LOOKUPS_PER_ORG_PER_DAY),
+        ),
+      ),
+    )
+    .returning({ id: schema.orgs.id });
+  return spent.length > 0;
+}
+
+/** How soon the rescan asks again about a link whose lookup or hold failed. */
+const RETRY_AFTER_MS = DAY_MS;
+
+/**
+ * Stamp a link so the rescan asks again after RETRY_AFTER_MS, not after the
+ * full week. Used when Google did not answer, and when a hold failed after
+ * the stamp landed. Not null, which sorts first: a link that fails every time
+ * (a Google outage, a hold that keeps throwing) would then take a slot every
+ * day ahead of every link that has never been checked. A held link is left
+ * alone: the rescan skips it anyway. Swallows its own failure, since it is
+ * already the recovery path.
+ */
+async function retryWebRiskTomorrow(db: DB, linkId: string): Promise<void> {
   await db
     .update(schema.links)
-    .set({ webRiskCheckedAt: null })
+    .set({ webRiskCheckedAt: Date.now() - RESCAN_EVERY_MS + RETRY_AFTER_MS })
     .where(and(eq(schema.links.id, linkId), isNull(schema.links.suspendedAt)))
     .catch(() => {});
 }
@@ -191,9 +231,8 @@ const RESCAN_CONCURRENCY = 10;
  * Web Risk answered for.
  */
 export async function rescanFreeLinks(env: Env): Promise<number> {
-  const key = env.WEB_RISK_API_KEY;
   // No billing means no free plan: every org is unlimited (plan.ts).
-  if (!key || !billingEnabled()) return 0;
+  if (!env.WEB_RISK_API_KEY || !billingEnabled()) return 0;
   const db = drizzle(env.DB, { schema });
   const due = await db
     .select({ id: schema.links.id, destination: schema.links.destination })
@@ -223,7 +262,7 @@ export async function rescanFreeLinks(env: Env): Promise<number> {
   try {
     for (let i = 0; i < due.length; i += RESCAN_CONCURRENCY) {
       const results = await Promise.all(
-        due.slice(i, i + RESCAN_CONCURRENCY).map((link) => rescanOne(env, db, key, link, log)),
+        due.slice(i, i + RESCAN_CONCURRENCY).map((link) => rescanOne(env, db, link, log)),
       );
       for (const outcome of results) counts[outcome] += 1;
     }
@@ -248,13 +287,17 @@ type RescanOutcome = "hit" | "clean" | "failed" | "error";
 async function rescanOne(
   env: Env,
   db: DB,
-  key: string,
   link: { id: string; destination: string },
   log: AuditableLogger,
 ): Promise<RescanOutcome> {
   try {
-    const verdict = await webRiskVerdict(link.destination, key);
-    if (!verdict) return "failed";
+    const { verdict } = await askWebRisk(env, link.destination);
+    if (!verdict) {
+      // Stamped anyway, so a link Google never answers for cannot keep its
+      // place at the front of the queue and take every daily slot.
+      await retryWebRiskTomorrow(db, link.id);
+      return "failed";
+    }
     const now = Date.now();
     const hit = isWebRiskHit(verdict);
     const written = await db
@@ -276,7 +319,7 @@ async function rescanOne(
   } catch (error) {
     log.error(error instanceof Error ? error : String(error));
     // The stamp above may have landed before the hold threw.
-    await forgetWebRiskCheck(db, link.id);
+    await retryWebRiskTomorrow(db, link.id);
     return "error";
   }
 }

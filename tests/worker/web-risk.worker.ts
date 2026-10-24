@@ -2,7 +2,11 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { env } from "cloudflare:workers";
 import { reset } from "cloudflare:test";
-import { rescanFreeLinks, WEB_RISK_RESCAN_BATCH } from "../../src/worker/destination-check";
+import {
+  rescanFreeLinks,
+  WEB_RISK_LOOKUPS_PER_ORG_PER_DAY,
+  WEB_RISK_RESCAN_BATCH,
+} from "../../src/worker/destination-check";
 import type { Env } from "../../src/worker/env";
 import {
   applyTestMigrations,
@@ -85,6 +89,23 @@ const failHolds = () =>
   ).run();
 const allowHolds = () => env.DB.prepare("drop trigger fail_hold").run();
 
+const DAY_MS = 86_400_000;
+const WEEK_MS = 7 * DAY_MS;
+
+/** Stamped to be asked about again tomorrow: due in a day, not a week, and
+ * not null, which would put it ahead of every link never checked. */
+function expectRetryTomorrow(stamp: number | null | undefined) {
+  expect(stamp).not.toBeNull();
+  expect(stamp!).toBeGreaterThan(Date.now() - WEEK_MS);
+  expect(stamp!).toBeLessThanOrEqual(Date.now() - WEEK_MS + DAY_MS);
+}
+
+/** Move every stamp a day into the past, as if the next daily run came. */
+const aDayLater = () =>
+  env.DB.prepare("update links set web_risk_checked_at = web_risk_checked_at - ?")
+    .bind(DAY_MS)
+    .run();
+
 const makeOrgNew = () =>
   env.DB.prepare("update orgs set created_at = ? where id = 'org-1'").bind(Date.now()).run();
 
@@ -156,7 +177,7 @@ describe("a hit on create", () => {
     expect(row?.risk_score).toBe(0);
   });
 
-  it("leaves a hit it failed to hold unstamped, so the next rescan holds it", async () => {
+  it("asks again tomorrow about a hit it failed to hold, not in a week", async () => {
     stubGoogle();
     const cookie = await freeOwnerCookie();
     await failHolds();
@@ -164,9 +185,10 @@ describe("a hit on create", () => {
 
     const row = await linkRow(id);
     expect(row?.suspended_at).toBeNull();
-    expect(row?.web_risk_checked_at).toBeNull();
+    expectRetryTomorrow(row?.web_risk_checked_at);
 
     await allowHolds();
+    await aDayLater();
     await rescanFreeLinks(withKey());
     expect((await linkRow(id))?.suspended_at).not.toBeNull();
   });
@@ -228,7 +250,7 @@ describe("the weekly rescan", () => {
     expect(clean?.risk_score).toBeNull();
   });
 
-  it("leaves a hit it failed to hold unstamped, so the next run tries again", async () => {
+  it("asks again tomorrow about a hit it failed to hold", async () => {
     await freeOwnerCookie();
     await seedLinks(1, LISTED);
     stubGoogle();
@@ -237,9 +259,10 @@ describe("the weekly rescan", () => {
     await rescanFreeLinks(withKey());
     const row = await linkRow("bulk-1");
     expect(row?.suspended_at).toBeNull();
-    expect(row?.web_risk_checked_at).toBeNull();
+    expectRetryTomorrow(row?.web_risk_checked_at);
 
     await allowHolds();
+    await aDayLater();
     await rescanFreeLinks(withKey());
     expect((await linkRow("bulk-1"))?.suspended_at).not.toBeNull();
   });
@@ -265,13 +288,18 @@ describe("the weekly rescan", () => {
   it("looks at no more than one batch a day", async () => {
     await freeOwnerCookie();
     await seedLinks(WEB_RISK_RESCAN_BATCH + 5);
-    const lookups = stubGoogle();
+    stubGoogle();
 
-    await rescanFreeLinks(withKey());
-    expect(lookups).toHaveLength(WEB_RISK_RESCAN_BATCH);
+    expect(await rescanFreeLinks(withKey())).toBe(WEB_RISK_RESCAN_BATCH);
+    // Counted in rows, not calls: the links share a destination, so the
+    // cache answers most of them.
+    const stamped = await env.DB.prepare(
+      "select count(*) as n from links where web_risk_checked_at is not null",
+    ).first<{ n: number }>();
+    expect(stamped?.n).toBe(WEB_RISK_RESCAN_BATCH);
   });
 
-  it("does nothing without a key, and stamps nothing when Google is down", async () => {
+  it("does nothing without a key, and asks again tomorrow when Google is down", async () => {
     await freeOwnerCookie();
     await seedLinks(1);
     const lookups = stubGoogle({ down: true });
@@ -279,6 +307,104 @@ describe("the weekly rescan", () => {
     expect(await rescanFreeLinks(authEnv())).toBe(0);
     expect(lookups).toHaveLength(0);
     expect(await rescanFreeLinks(withKey())).toBe(0);
-    expect((await linkRow("bulk-1"))?.web_risk_checked_at).toBeNull();
+    expectRetryTomorrow((await linkRow("bulk-1"))?.web_risk_checked_at);
+  });
+
+  it("does not let links Google never answers for take every daily slot", async () => {
+    // Before, a failed lookup left the link null, and nulls go first: a
+    // batch of them took the whole run every day and nothing else was seen.
+    await freeOwnerCookie();
+    await seedLinks(WEB_RISK_RESCAN_BATCH);
+    const lookups = stubGoogle({ down: true });
+    await rescanFreeLinks(withKey());
+    expect(lookups).toHaveLength(WEB_RISK_RESCAN_BATCH);
+
+    await env.DB.prepare(
+      "insert into links (id, org_id, slug, destination, created_at) values ('late', 'org-1', 'late', ?, 0)",
+    )
+      .bind(LISTED)
+      .run();
+    const next = stubGoogle();
+    await rescanFreeLinks(withKey());
+    expect(next).toEqual([LISTED]);
+    expect((await linkRow("late"))?.suspended_at).not.toBeNull();
+  });
+});
+
+describe("what a lookup costs (#341 review)", () => {
+  const patchDestination = (cookie: string, id: string, destination: string) =>
+    fetchWorker(
+      new Request(`http://localhost/api/orgs/org-1/links/${id}`, {
+        method: "PATCH",
+        headers: { cookie, "content-type": "application/json" },
+        body: JSON.stringify({ destination }),
+      }),
+      withKey(),
+    );
+
+  it("asks Google once per URL, however often a link flips between two", async () => {
+    const lookups = stubGoogle();
+    const cookie = await freeOwnerCookie();
+    const id = await createLink(cookie, "https://example.com/a");
+    for (const destination of [
+      "https://example.com/b",
+      "https://example.com/a",
+      "https://example.com/b",
+    ])
+      expect((await patchDestination(cookie, id, destination)).status).toBe(200);
+    expect(lookups).toEqual(["https://example.com/a", "https://example.com/b"]);
+  });
+
+  it("skips the lookup once the org has spent its day, and leaves the link for the rescan", async () => {
+    const lookups = stubGoogle();
+    const cookie = await freeOwnerCookie();
+    await env.DB.prepare(
+      "update orgs set web_risk_day = ?, web_risk_lookups = ? where id = 'org-1'",
+    )
+      .bind(Math.floor(Date.now() / DAY_MS), WEB_RISK_LOOKUPS_PER_ORG_PER_DAY)
+      .run();
+    const id = await createLink(cookie, LISTED);
+    expect(lookups).toHaveLength(0);
+    expect((await linkRow(id))?.web_risk_checked_at).toBeNull();
+
+    // Yesterday's count is no limit today.
+    await env.DB.prepare(
+      "update orgs set web_risk_day = web_risk_day - 1 where id = 'org-1'",
+    ).run();
+    const next = await createLink(cookie, "https://kit.example/other");
+    expect(lookups).toEqual(["https://kit.example/other"]);
+    expect((await linkRow(next))?.suspended_at).not.toBeNull();
+
+    // And the rescan, which has no budget, picks up the one that was skipped.
+    await rescanFreeLinks(withKey());
+    expect((await linkRow(id))?.suspended_at).not.toBeNull();
+  });
+});
+
+describe("an anonymous link (#341 review)", () => {
+  const shorten = (destination: string) =>
+    fetchWorker(
+      new Request("http://localhost/api/shorten", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ destination }),
+      }),
+      withKey(),
+    );
+
+  it("is refused when Google lists the destination, and nothing is published", async () => {
+    stubGoogle();
+    const res = await shorten(LISTED);
+    expect(res.status).toBe(422);
+    const count = await env.DB.prepare("select count(*) as n from anon_links").first<{
+      n: number;
+    }>();
+    expect(count?.n).toBe(0);
+    expect((await env.LINKS.list({ prefix: "slug:" })).keys).toHaveLength(0);
+  });
+
+  it("is still made when Google is down", async () => {
+    stubGoogle({ down: true });
+    expect((await shorten("https://example.com/fine")).status).toBe(201);
   });
 });

@@ -5,9 +5,11 @@ import { reset } from "cloudflare:test";
 import { drizzle } from "drizzle-orm/d1";
 import * as schema from "../../src/worker/db/schema";
 import { applyStorageMessage, desiredLink, syncLinkMsg } from "../../src/worker/storage";
+import { WARN_REASON, warnOrgLinks } from "../../src/worker/link-warning";
 import {
   adminCookie,
   applyTestMigrations,
+  freeOwnerCookie,
   bufferedClicks,
   fetchWorker,
   jsonBody,
@@ -321,5 +323,43 @@ describe("PATCH /api/admin/links/:id/warning", () => {
     );
     const rows = await jsonBody<{ slug: string; warnedAt: number | null }[]>(res);
     expect(rows.map((r) => [r.slug, r.warnedAt])).toEqual([["warned", 5]]);
+  });
+});
+
+describe("an org the sweep warned (#344 review)", () => {
+  const createLink = async (cookie: string, destination: string) => {
+    const res = await fetchWorker(
+      new Request("http://localhost/api/orgs/org-1/links", {
+        method: "POST",
+        headers: { cookie, "content-type": "application/json" },
+        body: JSON.stringify({ destination }),
+      }),
+      testEnv,
+    );
+    expect(res.status).toBe(201);
+    const { id } = await jsonBody<{ id: string }>(res);
+    return env.DB.prepare("select warned_at, warn_reason from links where id = ?")
+      .bind(id)
+      .first<{ warned_at: number | null; warn_reason: string | null }>();
+  };
+
+  it("makes new links warned too, until an admin marks it reviewed", async () => {
+    const owner = await freeOwnerCookie();
+    await warnOrgLinks(testEnv, db(), "org-1", WARN_REASON.traffic);
+
+    // A fresh link is no way round the warning page.
+    const born = await createLink(owner, "https://example.com/fresh");
+    expect(born?.warned_at).not.toBeNull();
+    expect(born?.warn_reason).toBe(WARN_REASON.traffic);
+
+    const admin = await adminCookie();
+    const reviewed = await fetchWorker(
+      new Request("http://localhost/api/admin/links/orgs/org-1/reviewed", {
+        method: "POST",
+        headers: { cookie: admin },
+      }),
+    );
+    expect(reviewed.status).toBe(200);
+    expect((await createLink(owner, "https://example.com/after"))?.warned_at).toBeNull();
   });
 });

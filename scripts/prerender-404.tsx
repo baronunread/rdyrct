@@ -55,6 +55,14 @@ for (const { name, title, view } of pages) {
     .on('link[rel="modulepreload"]', { element: (e) => void e.remove() })
     // Analytics would count a dead or held link on our numbers.
     .on("script[src]", { element: (e) => void e.remove() })
+    // The landing page's description, canonical, share cards and structured
+    // data: on a dead, held or warned link they would describe rdyrct.com,
+    // and on a customer's domain they would claim the page is ours.
+    .on('meta[name="description"]', { element: (e) => void e.remove() })
+    .on('link[rel="canonical"]', { element: (e) => void e.remove() })
+    .on('meta[property^="og:"]', { element: (e) => void e.remove() })
+    .on('meta[name^="twitter:"]', { element: (e) => void e.remove() })
+    .on('script[type="application/ld+json"]', { element: (e) => void e.remove() })
     .transform(shell);
 
   await Bun.write(`${dir}/${name}.html`, page);

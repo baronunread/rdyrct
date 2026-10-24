@@ -33,7 +33,7 @@ import {
 import { recordAdminAction } from "../audit";
 import { markOrgAbuse } from "../abuse-hold";
 import { blockHostOf } from "../../shared/abuse-rules";
-import { scoreDestination, webRiskOutcome } from "../risk";
+import { scoreDestinationWithWebRisk, webRiskAnswered } from "../risk";
 import { jsonBodyLimit } from "../body-limit";
 import { linkUrl } from "../util";
 import {
@@ -513,8 +513,8 @@ adminLinkRoutes.post("/restore", async (c) => {
 adminLinkRoutes.post("/:linkId/rescore", async (c) => {
   const { db, linkId, link } = await routeLink(c);
 
-  const verdict = await scoreDestination(link.destination, c.env);
-  c.get("log").set({ webRisk: { outcome: webRiskOutcome(c.env, verdict) } });
+  const { verdict, webRisk } = await scoreDestinationWithWebRisk(link.destination, c.env);
+  c.get("log").set({ webRisk: { outcome: webRisk } });
   if (verdict)
     await db
       .update(schema.links)
@@ -523,7 +523,7 @@ adminLinkRoutes.post("/:linkId/rescore", async (c) => {
         riskReasons: JSON.stringify(verdict.reasons),
         riskCheckedAt: Date.now(),
         riskProvider: verdict.provider,
-        ...(verdict.webRiskAnswered && { webRiskCheckedAt: Date.now() }),
+        ...(webRiskAnswered(webRisk) && { webRiskCheckedAt: Date.now() }),
       })
       .where(eq(schema.links.id, linkId));
 

@@ -194,6 +194,15 @@ export const orgs = sqliteTable("orgs", {
   // looked, so the automatic suspend and flag stand down for a while (see
   // abuse.ts's orgState). Without it the next sweep undoes the decision.
   clearedAt: integer("cleared_at"),
+  // Set when the abuse sweep warns the org's links (link-warning.ts's
+  // warnOrgLinks), with the reason. A link made while it is set is born
+  // warned, so fresh links are no way round it. "Mark reviewed" clears it.
+  linksWarnedAt: integer("links_warned_at"),
+  linksWarnReason: text("links_warn_reason"),
+  // The Web Risk lookups link creates and edits spent today: `webRiskDay` is
+  // the UTC day number they count for (destination-check.ts's budget).
+  webRiskDay: integer("web_risk_day"),
+  webRiskLookups: integer("web_risk_lookups"),
 });
 
 /**

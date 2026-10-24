@@ -4,8 +4,11 @@ import {
   isWebRiskHit,
   RISK_PROVIDER_DNS,
   RISK_PROVIDER_WEB_RISK,
+  askWebRisk,
   scoreDestination,
-  webRiskOutcome,
+  scoreDestinationWithWebRisk,
+  WEB_RISK_MAX_URI,
+  webRiskUri,
   webRiskVerdict,
 } from "../src/worker/risk";
 
@@ -37,7 +40,6 @@ describe("reading the resolver", () => {
       score: 100,
       reasons: ["dns_blocklist"],
       provider: RISK_PROVIDER_DNS,
-      webRiskAnswered: false,
     });
   });
 
@@ -47,7 +49,6 @@ describe("reading the resolver", () => {
       score: 0,
       reasons: [],
       provider: RISK_PROVIDER_DNS,
-      webRiskAnswered: false,
     });
   });
 
@@ -165,23 +166,24 @@ describe("Google Web Risk", () => {
       score: 100,
       reasons: ["web_risk_malware"],
       provider: `${RISK_PROVIDER_DNS}+${RISK_PROVIDER_WEB_RISK}`,
-      webRiskAnswered: true,
     });
   });
 
   test("is skipped without a key, so a fork with none never calls Google", async () => {
     const calls = providers({ threat: { threatTypes: ["MALWARE"] } });
-    const verdict = await scoreDestination("https://kit.example/", {});
+    const { verdict, webRisk } = await scoreDestinationWithWebRisk("https://kit.example/", {});
     expect(calls).toHaveLength(0);
     expect(verdict?.provider).toBe(RISK_PROVIDER_DNS);
-    expect(verdict?.webRiskAnswered).toBe(false);
+    expect(webRisk).toBe("off");
   });
 
   test("falls back to the DNS answer when Web Risk is down", async () => {
     providers("fail");
-    const verdict = await scoreDestination("https://example.com", { WEB_RISK_API_KEY: KEY });
+    const { verdict, webRisk } = await scoreDestinationWithWebRisk("https://example.com", {
+      WEB_RISK_API_KEY: KEY,
+    });
     expect(verdict?.provider).toBe(RISK_PROVIDER_DNS);
-    expect(verdict?.webRiskAnswered).toBe(false);
+    expect(webRisk).toBe("failed");
   });
 
   test("tells a Google error apart from a DNS-only answer and a clean one", async () => {
@@ -190,16 +192,15 @@ describe("Google Web Risk", () => {
       String(input instanceof Request ? input.url : input).startsWith("https://webrisk.")
         ? new Response("quota", { status: 429 })
         : new Response(JSON.stringify({ Status: 0, Answer: [{ data: "93.184.216.34" }] }));
-    const dnsOnly = await scoreDestination("https://example.com", env);
-    expect(dnsOnly?.score).toBe(0);
-    expect(webRiskOutcome(env, dnsOnly)).toBe("failed");
-    expect(webRiskOutcome(env, null)).toBe("failed");
-    expect(webRiskOutcome({}, dnsOnly)).toBe("off");
+    const dnsOnly = await scoreDestinationWithWebRisk("https://example.com", env);
+    expect(dnsOnly.verdict?.score).toBe(0);
+    expect(dnsOnly.webRisk).toBe("failed");
+    expect((await scoreDestinationWithWebRisk("https://example.com", {})).webRisk).toBe("off");
 
     providers({});
-    expect(webRiskOutcome(env, await scoreDestination("https://example.com", env))).toBe("clean");
+    expect((await scoreDestinationWithWebRisk("https://example.com", env)).webRisk).toBe("clean");
     providers({ threat: { threatTypes: ["MALWARE"] } });
-    expect(webRiskOutcome(env, await scoreDestination("https://kit.example/", env))).toBe("hit");
+    expect((await scoreDestinationWithWebRisk("https://kit.example/", env)).webRisk).toBe("hit");
   });
 
   test("stands on the Web Risk answer alone when the DNS check is down", async () => {
@@ -207,5 +208,103 @@ describe("Google Web Risk", () => {
     const verdict = await scoreDestination("https://example.com", { WEB_RISK_API_KEY: KEY });
     expect(verdict?.provider).toBe(RISK_PROVIDER_WEB_RISK);
     expect(verdict?.score).toBe(0);
+  });
+});
+
+/**
+ * What Google is asked, and how often (#341 review). A destination has no
+ * length cap, so the URI has to have one; and each lookup counts against a
+ * monthly quota, so a repeated URI must not cost a second call.
+ */
+describe("asking Web Risk", () => {
+  const KEY = "test-web-risk-key";
+
+  /** Google answers `answer` and records each URI it was asked about. */
+  function google(answer: JsonValue) {
+    const asked: string[] = [];
+    globalThis.fetch = async (input) => {
+      asked.push(
+        new URL(String(input instanceof Request ? input.url : input)).searchParams.get("uri") ?? "",
+      );
+      return new Response(JSON.stringify(answer));
+    };
+    return asked;
+  }
+
+  /** A KV namespace in a Map, recording each TTL it was given. */
+  function memoryKv() {
+    const store = new Map<string, string>();
+    const ttls: number[] = [];
+    return {
+      store,
+      ttls,
+      async get(key: string) {
+        const raw = store.get(key);
+        return raw === undefined ? null : JSON.parse(raw);
+      },
+      async put(key: string, value: string, options?: { expirationTtl?: number }) {
+        store.set(key, value);
+        ttls.push(options?.expirationTtl ?? 0);
+      },
+    };
+  }
+
+  test("drops the fragment and any user:password, and keeps a short query", () => {
+    expect(webRiskUri("https://me:secret@kit.example/login?x=1#top")).toBe(
+      "https://kit.example/login?x=1",
+    );
+    expect(webRiskUri("mailto:someone@example.com")).toBeNull();
+  });
+
+  test("drops a query too long to send, then the path, so the lookup still runs", () => {
+    const longQuery = `https://kit.example/login?${"a".repeat(20_000)}`;
+    expect(webRiskUri(longQuery)).toBe("https://kit.example/login");
+    const longPath = `https://kit.example/${"p".repeat(20_000)}?x=1`;
+    expect(webRiskUri(longPath)).toBe("https://kit.example/");
+    for (const url of [longQuery, longPath])
+      expect(webRiskUri(url)?.length).toBeLessThanOrEqual(WEB_RISK_MAX_URI);
+  });
+
+  test("asks Google about the shortened form of a long destination", async () => {
+    const asked = google({ threat: { threatTypes: ["SOCIAL_ENGINEERING"] } });
+    const verdict = await webRiskVerdict(`https://kit.example/login?${"a".repeat(20_000)}`, KEY);
+    expect(asked).toEqual(["https://kit.example/login"]);
+    expect(verdict?.score).toBe(100);
+  });
+
+  test("answers a repeated URI from the cache, without a second call", async () => {
+    const asked = google({});
+    const LINKS = memoryKv();
+    const env = { WEB_RISK_API_KEY: KEY, LINKS };
+    expect((await askWebRisk(env, "https://example.com/a")).outcome).toBe("clean");
+    expect((await askWebRisk(env, "https://example.com/a#other")).outcome).toBe("clean");
+    expect(asked).toHaveLength(1);
+    // Hashed: no destination is readable in a key listing.
+    expect([...LINKS.store.keys()].join()).not.toContain("example.com");
+  });
+
+  test("keeps a hit for as long as Google says it holds", async () => {
+    const expireTime = new Date(Date.now() + 10 * 60 * 1000).toISOString();
+    google({ threat: { threatTypes: ["MALWARE"], expireTime } });
+    const LINKS = memoryKv();
+    expect(
+      (await askWebRisk({ WEB_RISK_API_KEY: KEY, LINKS }, "https://kit.example/")).outcome,
+    ).toBe("hit");
+    expect(LINKS.ttls[0]).toBeGreaterThan(9 * 60);
+    expect(LINKS.ttls[0]).toBeLessThanOrEqual(10 * 60);
+  });
+
+  test("spends the budget only on a call to Google, and skips the call past it", async () => {
+    const asked = google({});
+    const LINKS = memoryKv();
+    const env = { WEB_RISK_API_KEY: KEY, LINKS };
+    let spent = 0;
+    const spend = async () => ++spent <= 1;
+    expect((await askWebRisk(env, "https://example.com/a", spend)).outcome).toBe("clean");
+    // Cached: no spend, no call.
+    expect((await askWebRisk(env, "https://example.com/a", spend)).outcome).toBe("clean");
+    expect(spent).toBe(1);
+    expect((await askWebRisk(env, "https://example.com/b", spend)).outcome).toBe("over_budget");
+    expect(asked).toEqual(["https://example.com/a"]);
   });
 });

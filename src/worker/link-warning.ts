@@ -75,14 +75,20 @@ export async function clearLinkWarning(
   return true;
 }
 
-/** Warn every live link in an org. Returns how many it warned: zero means
- * they already were, which is what makes a repeat sweep a no-op. */
+/** Warn every live link in an org, and mark the org so the links it makes
+ * from now on are born warned (orgLinkWarning). Returns how many links it
+ * warned: zero means they already were, which is what makes a repeat sweep a
+ * no-op. */
 export async function warnOrgLinks(
   env: Env,
   db: DB,
   orgId: string,
   reason: string,
 ): Promise<number> {
+  await db
+    .update(schema.orgs)
+    .set({ linksWarnedAt: Date.now(), linksWarnReason: reason })
+    .where(and(eq(schema.orgs.id, orgId), isNull(schema.orgs.linksWarnedAt)));
   const changed = await db
     .update(schema.links)
     .set({ warnedAt: Date.now(), warnReason: reason })
@@ -99,8 +105,12 @@ export async function warnOrgLinks(
 }
 
 /** An admin marked the org reviewed: lift every warning an automatic check
- * put on its links. */
+ * put on its links, and the org mark that warns the links it makes next. */
 export async function clearOrgAutomaticWarnings(env: Env, db: DB, orgId: string): Promise<number> {
+  await db
+    .update(schema.orgs)
+    .set({ linksWarnedAt: null, linksWarnReason: null })
+    .where(eq(schema.orgs.id, orgId));
   const changed = await db
     .update(schema.links)
     .set({ warnedAt: null, warnReason: null })
@@ -108,4 +118,21 @@ export async function clearOrgAutomaticWarnings(env: Env, db: DB, orgId: string)
     .returning({ id: schema.links.id });
   if (changed.length > 0) await republishOrgLinks(env, db, orgId);
   return changed.length;
+}
+
+/**
+ * The warning a link made in this org right now is born with, or null. Set
+ * while the sweep has the org warned: without it, an org whose links show the
+ * warning page could make new ones that redirect straight through.
+ */
+export async function orgLinkWarning(
+  db: DB,
+  orgId: string,
+): Promise<{ warnedAt: number; warnReason: string } | null> {
+  const [org] = await db
+    .select({ at: schema.orgs.linksWarnedAt, reason: schema.orgs.linksWarnReason })
+    .from(schema.orgs)
+    .where(eq(schema.orgs.id, orgId));
+  if (!org?.at) return null;
+  return { warnedAt: Date.now(), warnReason: org.reason ?? WARN_REASON.traffic };
 }

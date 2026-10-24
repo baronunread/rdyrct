@@ -49,9 +49,17 @@ type DnsJson = {
   Answer?: { data?: string }[];
 };
 
-/** A verdict from every provider that answered, and whether Web Risk was
- * one of them, so the row can record when Web Risk last looked. */
-export type ScoredVerdict = RiskVerdict & { webRiskAnswered: boolean };
+/** What Web Risk needs: its key, and the KV namespace its answers are cached
+ * in. Without `LINKS` (unit tests) every lookup goes to Google. */
+export type WebRiskEnv = Pick<Env, "WEB_RISK_API_KEY"> & Partial<Pick<Env, "LINKS">>;
+
+/** Asked before each call to Google that the cache did not answer. False
+ * means the caller is out of lookups for today (destination-check.ts). */
+export type SpendLookup = () => Promise<boolean>;
+
+/** A combined verdict, or null for "still unscored", and what Web Risk said
+ * on its own, which the null can hide. */
+export type ScoredDestination = { verdict: RiskVerdict | null; webRisk: WebRiskOutcome };
 
 /**
  * Scores one destination with every provider configured, or returns null to
@@ -67,20 +75,31 @@ export type ScoredVerdict = RiskVerdict & { webRiskAnswered: boolean };
  */
 export async function scoreDestination(
   destination: string,
-  env: Pick<Env, "WEB_RISK_API_KEY"> = {},
-): Promise<ScoredVerdict | null> {
-  const key = env.WEB_RISK_API_KEY;
+  env: WebRiskEnv = {},
+): Promise<RiskVerdict | null> {
+  return (await scoreDestinationWithWebRisk(destination, env)).verdict;
+}
+
+/** scoreDestination, plus Web Risk's own outcome, for a caller that stamps
+ * `web_risk_checked_at` or logs what Google said. */
+export async function scoreDestinationWithWebRisk(
+  destination: string,
+  env: WebRiskEnv,
+  spendLookup?: SpendLookup,
+): Promise<ScoredDestination> {
   const [dns, webRisk] = await Promise.all([
     dnsVerdict(destination),
-    key ? webRiskVerdict(destination, key) : null,
+    askWebRisk(env, destination, spendLookup),
   ]);
-  const answered = [dns, webRisk].filter((verdict) => verdict !== null);
-  if (answered.length === 0) return null;
+  const answered = [dns, webRisk.verdict].filter((verdict) => verdict !== null);
+  if (answered.length === 0) return { verdict: null, webRisk: webRisk.outcome };
   return {
-    score: Math.max(...answered.map((a) => a.score)),
-    reasons: answered.flatMap((a) => a.reasons),
-    provider: answered.map((a) => a.provider).join("+"),
-    webRiskAnswered: webRisk !== null,
+    verdict: {
+      score: Math.max(...answered.map((a) => a.score)),
+      reasons: answered.flatMap((a) => a.reasons),
+      provider: answered.map((a) => a.provider).join("+"),
+    },
+    webRisk: webRisk.outcome,
   };
 }
 
@@ -127,12 +146,96 @@ const WEB_RISK_REASON_PREFIX = "web_risk_";
 /** The Lookup API answers `{}` for a URL on no list, and `{ threat: {
  * threatTypes, expireTime } }` for one on a list. */
 const webRiskAnswerSchema = v.object({
-  threat: v.optional(v.object({ threatTypes: v.optional(v.array(v.string()), []) })),
+  threat: v.optional(
+    v.object({
+      threatTypes: v.optional(v.array(v.string()), []),
+      expireTime: v.optional(v.string()),
+    }),
+  ),
 });
+
+/**
+ * The longest URI sent to Google. The URI rides in the query string of a GET,
+ * and Google answers 400 to one past about 16 KB. Destinations have no length
+ * cap, so without this a long enough query string was a way past the check.
+ */
+export const WEB_RISK_MAX_URI = 2048;
+
+/**
+ * What Google is asked about for a destination, or null if it is not an
+ * http(s) URL.
+ *
+ * No fragment (the browser never sends it) and no user:password, which is
+ * nobody's business at Google. The query stays when it fits, because Web
+ * Risk also matches a path with its exact query. Past WEB_RISK_MAX_URI the
+ * query goes, which still leaves the host and path expressions Web Risk
+ * matches; past it again, so does the path.
+ */
+export function webRiskUri(destination: string): string | null {
+  if (!hostnameOf(destination)) return null;
+  const url = new URL(destination);
+  url.hash = "";
+  url.username = "";
+  url.password = "";
+  if (url.href.length <= WEB_RISK_MAX_URI) return url.href;
+  url.search = "";
+  if (url.href.length <= WEB_RISK_MAX_URI) return url.href;
+  return `${url.origin}/`;
+}
+
+/** How long a clean answer is reused. Short: a site can be listed any time,
+ * and this only exists so repeating a lookup costs nothing. */
+const WEB_RISK_CLEAN_TTL_SECONDS = 60 * 60;
+/** Bounds on a listed answer's life, which Google sets with `expireTime`.
+ * KV refuses a TTL under 60 seconds. */
+const WEB_RISK_HIT_TTL_SECONDS = { min: 60, max: 24 * 60 * 60, fallback: 60 * 60 };
+
+type WebRiskAnswer = { verdict: RiskVerdict; ttlSeconds: number };
+
+/** How long to keep a listed answer: until Google's expireTime, inside the
+ * bounds, or the fallback when it gave none we can read. */
+function hitTtlSeconds(expireTime: string | undefined): number {
+  const { min, max, fallback } = WEB_RISK_HIT_TTL_SECONDS;
+  const expires = Date.parse(expireTime ?? "");
+  if (Number.isNaN(expires)) return fallback;
+  return Math.min(max, Math.max(min, Math.floor((expires - Date.now()) / 1000)));
+}
+
+/** One call to Google for an already-canonical URI. */
+async function lookupWebRisk(uri: string, key: string): Promise<WebRiskAnswer | null> {
+  const params = new URLSearchParams({ uri });
+  for (const threat of WEB_RISK_THREATS) params.append("threatTypes", threat);
+  try {
+    const res = await fetch(`${WEB_RISK_SEARCH}?${params}`, {
+      headers: { "x-goog-api-key": key },
+      signal: AbortSignal.timeout(LOOKUP_TIMEOUT_MS),
+    });
+    if (!res.ok) return null;
+    const parsed = v.safeParse(webRiskAnswerSchema, await res.json());
+    return parsed.success ? readWebRiskAnswer(parsed.output) : null;
+  } catch {
+    return null;
+  }
+}
+
+/** A verdict from Google's parsed answer, and how long it may be reused. */
+function readWebRiskAnswer({ threat }: v.InferOutput<typeof webRiskAnswerSchema>): WebRiskAnswer {
+  const threats = threat?.threatTypes ?? [];
+  const listed = threats.length > 0;
+  return {
+    verdict: {
+      score: listed ? 100 : 0,
+      reasons: threats.map((t) => `${WEB_RISK_REASON_PREFIX}${t.toLowerCase()}`),
+      provider: RISK_PROVIDER_WEB_RISK,
+    },
+    ttlSeconds: listed ? hitTtlSeconds(threat?.expireTime) : WEB_RISK_CLEAN_TTL_SECONDS,
+  };
+}
 
 /**
  * Asks Google Web Risk whether a URL is on one of its threat lists, or null
  * when it did not answer in time or answered something we do not recognise.
+ * Uncached: askWebRisk is what the app calls.
  *
  * The key goes in a header, not the query string, so it stays out of any log
  * that records URLs. The Lookup API has no "borderline" answer: a URL is on a
@@ -142,42 +245,67 @@ export async function webRiskVerdict(
   destination: string,
   key: string,
 ): Promise<RiskVerdict | null> {
-  if (!hostnameOf(destination)) return null;
-  const params = new URLSearchParams({ uri: destination });
-  for (const threat of WEB_RISK_THREATS) params.append("threatTypes", threat);
-  try {
-    const res = await fetch(`${WEB_RISK_SEARCH}?${params}`, {
-      headers: { "x-goog-api-key": key },
-      signal: AbortSignal.timeout(LOOKUP_TIMEOUT_MS),
-    });
-    if (!res.ok) return null;
-    const parsed = v.safeParse(webRiskAnswerSchema, await res.json());
-    if (!parsed.success) return null;
-    const threats = parsed.output.threat?.threatTypes ?? [];
-    return {
-      score: threats.length > 0 ? 100 : 0,
-      reasons: threats.map((t) => `${WEB_RISK_REASON_PREFIX}${t.toLowerCase()}`),
-      provider: RISK_PROVIDER_WEB_RISK,
-    };
-  } catch {
-    return null;
-  }
+  const uri = webRiskUri(destination);
+  return uri ? ((await lookupWebRisk(uri, key))?.verdict ?? null) : null;
 }
 
 /**
  * What Web Risk said about one lookup, for the wide event. "failed" is the
  * one a null verdict hides: Google errored, timed out or answered a shape we
- * do not read, and the DNS check stood alone. "off" means no key is set.
+ * do not read, and the DNS check stood alone. "over_budget" means the org had
+ * spent its lookups for the day and nobody asked. "off" means no key is set.
  */
-export type WebRiskOutcome = "hit" | "clean" | "failed" | "off";
+export type WebRiskOutcome = "hit" | "clean" | "failed" | "over_budget" | "off";
 
-export function webRiskOutcome(
-  env: Pick<Env, "WEB_RISK_API_KEY">,
-  verdict: ScoredVerdict | null,
-): WebRiskOutcome {
-  if (!env.WEB_RISK_API_KEY) return "off";
-  if (!verdict?.webRiskAnswered) return "failed";
-  return isWebRiskHit(verdict) ? "hit" : "clean";
+/** Whether Google gave an answer, which is what stamps web_risk_checked_at. */
+export function webRiskAnswered(outcome: WebRiskOutcome): boolean {
+  return outcome === "hit" || outcome === "clean";
+}
+
+/** The KV key a URI's answer is cached under: a hash, so a long URL makes a
+ * short key and no destination is readable in a key listing. */
+async function webRiskCacheKey(uri: string): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(uri));
+  const hex = [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
+  return `webrisk:${hex}`;
+}
+
+/**
+ * Web Risk's answer for a destination: from the cache when the same URI was
+ * asked about recently, otherwise from Google, if `spendLookup` (when given)
+ * allows another call today. Never throws.
+ *
+ * The cache is what makes flipping a link between two URLs cheap for us
+ * rather than for Google's quota: each URI costs one call per TTL, however
+ * often it comes back.
+ */
+export async function askWebRisk(
+  env: WebRiskEnv,
+  destination: string,
+  spendLookup?: SpendLookup,
+): Promise<{ verdict: RiskVerdict | null; outcome: WebRiskOutcome }> {
+  const key = env.WEB_RISK_API_KEY;
+  if (!key) return { verdict: null, outcome: "off" };
+  const uri = webRiskUri(destination);
+  if (!uri) return { verdict: null, outcome: "failed" };
+  const answered = (verdict: RiskVerdict) => ({
+    verdict,
+    outcome: isWebRiskHit(verdict) ? ("hit" as const) : ("clean" as const),
+  });
+  try {
+    const cacheKey = await webRiskCacheKey(uri);
+    const cached = await env.LINKS?.get<RiskVerdict>(cacheKey, "json");
+    if (cached) return answered(cached);
+    if (spendLookup && !(await spendLookup())) return { verdict: null, outcome: "over_budget" };
+    const answer = await lookupWebRisk(uri, key);
+    if (!answer) return { verdict: null, outcome: "failed" };
+    await env.LINKS?.put(cacheKey, JSON.stringify(answer.verdict), {
+      expirationTtl: answer.ttlSeconds,
+    });
+    return answered(answer.verdict);
+  } catch {
+    return { verdict: null, outcome: "failed" };
+  }
 }
 
 /** Whether a verdict carries a Web Risk hit, which holds a link. */
@@ -206,22 +334,24 @@ export function webRiskThreats(verdict: RiskVerdict): string[] {
  * `webRisk` is what Google said either way, for the caller's wide event.
  */
 export async function scoreAndRecord(
-  env: Pick<Env, "DB" | "WEB_RISK_API_KEY">,
+  env: Pick<Env, "DB"> & WebRiskEnv,
   linkId: string,
   destination: string,
   /** Which table the row lives in. The anonymous shortener (Direction A of
    * #96) keeps its links in `anon_links`, with the same four columns and the
    * same rules, so it shares this function rather than copying it. */
   table: "links" | "anon_links" = "links",
-): Promise<{ verdict: ScoredVerdict | null; webRisk: WebRiskOutcome }> {
-  let webRisk = webRiskOutcome(env, null);
+  spendLookup?: SpendLookup,
+): Promise<ScoredDestination> {
+  let webRisk: WebRiskOutcome = "failed";
   try {
-    const verdict = await scoreDestination(destination, env);
-    webRisk = webRiskOutcome(env, verdict);
+    const scored = await scoreDestinationWithWebRisk(destination, env, spendLookup);
+    const { verdict } = scored;
+    webRisk = scored.webRisk;
     if (!verdict) return { verdict: null, webRisk };
     // Only `links` has the column: anonymous links expire in a day, so the
     // weekly rescan never looks at them.
-    const stampWebRisk = table === "links" && verdict.webRiskAnswered;
+    const stampWebRisk = table === "links" && webRiskAnswered(webRisk);
     // Only if the row still points where the lookup went. A destination edit
     // clears the verdict and starts its own scan, and the lookup it replaced
     // can still be in flight: without this, the older answer lands afterwards
