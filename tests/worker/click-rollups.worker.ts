@@ -256,6 +256,36 @@ describe("the backfill in migration 0042", () => {
     await backfill();
     expect(await rawVsRollups()).toEqual(once);
   });
+
+  it("runs one day range at a time, as its comment says, to the same rows", async () => {
+    await seedOrgWithLinks();
+    await insertClicks(testEnv, spreadClicks(200));
+    const whole = await expectReconciled();
+    await env.DB.batch([
+      env.DB.prepare("delete from click_daily"),
+      env.DB.prepare("delete from click_daily_dims"),
+      env.DB.prepare("delete from click_hourly"),
+    ]);
+
+    // Two ranges split on a UTC day boundary: the first WHERE true in each
+    // statement is the one that reads clicks.
+    const split = Date.now() - (Date.now() % DAY_MS) - 30 * DAY_MS;
+    for (const [from, to] of [
+      [0, split],
+      [split, Number.MAX_SAFE_INTEGER],
+    ]) {
+      await env.DB.batch(
+        rollupBackfill().map((q) =>
+          env.DB.prepare(q.replace("WHERE true", "WHERE true AND ts >= ? AND ts < ?")).bind(
+            from,
+            to,
+          ),
+        ),
+      );
+    }
+
+    expect(await rawVsRollups()).toEqual(whole);
+  });
 });
 
 describe("the stats routes read the rollups", () => {

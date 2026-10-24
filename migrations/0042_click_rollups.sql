@@ -52,10 +52,11 @@ CREATE INDEX idx_click_hourly_link ON click_hourly(link_id, hour, clicks);
 -- Backfill from the clicks already stored, one INSERT ... SELECT per table:
 -- fine at rdyrct.com's size (under 10k clicks). Each overwrites rather than
 -- adds (excluded.clicks), so running it again gives the same rows, and a copy
--- with a much larger clicks table can run it by hand one range at a time (add
--- AND ts >= ? AND ts < ? to the WHERE, on whole UTC days) to the same result.
--- WHERE true is SQLite's required disambiguation before ON CONFLICT. org_id
--- is not grouped on: a link belongs to one org.
+-- with a much larger clicks table can run it by hand one range at a time to
+-- the same result: in each statement the first WHERE true is the one that
+-- reads clicks, so add AND ts >= ? AND ts < ? there, on whole UTC days.
+-- WHERE true is also SQLite's required disambiguation before ON CONFLICT.
+-- org_id is not grouped on: a link belongs to one org.
 --
 -- Apply this before deploying the worker that writes the rollups, as with
 -- every migration. Clicks the old worker writes after the backfill and before
@@ -67,13 +68,14 @@ FROM clicks WHERE true
 GROUP BY link_id, date(ts / 1000, 'unixepoch')
 ON CONFLICT (org_id, day, link_id) DO UPDATE SET clicks = excluded.clicks;
 
+WITH src AS (SELECT * FROM clicks WHERE true)
 INSERT INTO click_daily_dims (org_id, dim, day, value, link_id, clicks)
 SELECT org_id, dim, day, value, link_id, count(*) FROM (
-  SELECT org_id, 'country' AS dim, date(ts / 1000, 'unixepoch') AS day, country AS value, link_id FROM clicks
+  SELECT org_id, 'country' AS dim, date(ts / 1000, 'unixepoch') AS day, country AS value, link_id FROM src
   UNION ALL
-  SELECT org_id, 'referrer', date(ts / 1000, 'unixepoch'), referrer, link_id FROM clicks
+  SELECT org_id, 'referrer', date(ts / 1000, 'unixepoch'), referrer, link_id FROM src
   UNION ALL
-  SELECT org_id, 'device', date(ts / 1000, 'unixepoch'), device, link_id FROM clicks
+  SELECT org_id, 'device', date(ts / 1000, 'unixepoch'), device, link_id FROM src
 ) WHERE true
 GROUP BY link_id, dim, day, value
 ON CONFLICT (org_id, dim, day, value, link_id) DO UPDATE SET clicks = excluded.clicks;
