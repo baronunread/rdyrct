@@ -60,8 +60,14 @@ CREATE INDEX idx_click_hourly_link ON click_hourly(link_id, hour, clicks);
 --
 -- Apply this before deploying the worker that writes the rollups, as with
 -- every migration. Clicks the old worker writes after the backfill and before
--- the new one is live are missing from the rollups until the backfill is run
--- again for that day.
+-- the new one is live are missing from the rollups. To add them, once the new
+-- worker is live, run the three statements again with AND ts >= ? on the
+-- first WHERE true, bound to the start (00:00 UTC, in ms) of the UTC day this
+-- migration was applied on (applied_at in d1_migrations). Not "today": a
+-- deploy that crosses midnight leaves the gap in the day before. Each
+-- statement recomputes every day and hour from that point on out of the raw
+-- clicks, which hold every click either worker wrote, so overwriting those
+-- whole days is safe: nothing counted is lost and nothing is counted twice.
 INSERT INTO click_daily (org_id, day, link_id, clicks)
 SELECT org_id, date(ts / 1000, 'unixepoch'), link_id, count(*)
 FROM clicks WHERE true

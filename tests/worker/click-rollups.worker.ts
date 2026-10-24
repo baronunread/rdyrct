@@ -4,7 +4,7 @@ import { reset, runDurableObjectAlarm } from "cloudflare:test";
 import { drizzle } from "drizzle-orm/d1";
 import * as schema from "../../src/worker/db/schema";
 import { insertClicks, type ClickMessage } from "../../src/worker/clicks";
-import { computeWindows, sweepOldRollups } from "../../src/worker/rollups";
+import { computeWindows, ROLLUP_SWEEP_SQL, sweepOldRollups } from "../../src/worker/rollups";
 import type { LinkStats, OrgStats } from "../../src/shared/types";
 import {
   applyTestMigrations,
@@ -402,6 +402,75 @@ describe("rollup retention", () => {
 
     expect(await rollupTotal()).toEqual(totals(1));
   });
+
+  it("sweeps every org, in chunks, until nothing old is left", async () => {
+    await seedOrgWithLinks();
+    const db = drizzle(env.DB, { schema });
+    await env.DB.prepare(
+      "insert into orgs (id, name, created_at) values ('org-2', 'Other', 0)",
+    ).run();
+    await db.batch([
+      db.insert(schema.links).values(
+        rawLinkRow({
+          id: "link-z",
+          orgId: "org-2",
+          slug: "link-z",
+          destination: "https://example.com",
+          createdAt: 0,
+        }),
+      ),
+      db.insert(schema.linkAddresses).values(
+        rawAddressRow({
+          id: "addr-link-z",
+          linkId: "link-z",
+          orgId: "org-2",
+          slug: "link-z",
+          kind: "primary",
+          createdAt: 0,
+        }),
+      ),
+    ]);
+    const now = Date.now();
+    const click = (
+      dedupeId: string,
+      linkId: string,
+      orgId: string,
+      ageDays: number,
+    ): ClickMessage => ({
+      ...spreadClicks(1)[0]!,
+      dedupeId,
+      linkId,
+      addressId: `addr-${linkId}`,
+      orgId,
+      ts: now - ageDays * DAY_MS,
+    });
+    // Five old link-days in org-1 and three in org-2, more than one chunk of
+    // two in every table, plus one recent click each that must stay.
+    await insertClicks(testEnv, [
+      ...[401, 402, 403, 404, 405].map((age, i) => click(`old-1-${i}`, "link-a", "org-1", age)),
+      ...[401, 410, 420].map((age, i) => click(`old-2-${i}`, "link-z", "org-2", age)),
+      click("recent-1", "link-b", "org-1", 10),
+      click("recent-2", "link-z", "org-2", 10),
+    ]);
+
+    await sweepOldRollups(testEnv, now, 2);
+
+    const left = await grouped(
+      `select 'daily|' || org_id as key, sum(clicks) as n from click_daily group by org_id
+       union all select 'dims|' || org_id, sum(clicks) from click_daily_dims group by org_id
+       union all select 'hourly|' || org_id, sum(clicks) from click_hourly group by org_id
+       order by key`,
+    );
+    // Three dimension rows per click.
+    expect(left).toEqual([
+      { key: "daily|org-1", n: 1 },
+      { key: "daily|org-2", n: 1 },
+      { key: "dims|org-1", n: 3 },
+      { key: "dims|org-2", n: 3 },
+      { key: "hourly|org-1", n: 1 },
+      { key: "hourly|org-2", n: 1 },
+    ]);
+  });
 });
 
 describe("query plans", () => {
@@ -458,6 +527,23 @@ describe("query plans", () => {
 
   it.each(reads)("%s", async (_name, sql, binds, expected) => {
     const detail = await plan(sql, ...binds);
+    expect(detail).toMatch(expected);
+    expect(detail).not.toMatch(/\bSCAN\b/);
+  });
+
+  // The retention sweep reads only the key range it deletes. A bare
+  // `day < ?` reads every row of the table, since every key starts with
+  // org_id and every other index with link_id.
+  it.each([
+    [0, "2025-01-01", /SEARCH click_daily USING PRIMARY KEY \(org_id=\? AND day<\?\)/],
+    [
+      1,
+      "2025-01-01",
+      /SEARCH click_daily_dims USING PRIMARY KEY \(org_id=\? AND dim=\? AND day<\?\)/,
+    ],
+    [2, 0, /SEARCH click_hourly USING PRIMARY KEY \(org_id=\? AND hour<\?\)/],
+  ] as const)("retention sweep statement %i", async (i, cutoff, expected) => {
+    const detail = await plan(ROLLUP_SWEEP_SQL[i], "org-1", cutoff, 1000);
     expect(detail).toMatch(expected);
     expect(detail).not.toMatch(/\bSCAN\b/);
   });
