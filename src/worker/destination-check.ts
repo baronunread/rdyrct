@@ -17,6 +17,7 @@
  */
 import { and, asc, eq, isNull, lt, or, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
+import { createLogger, type AuditableLogger } from "evlog";
 import * as schema from "./db/schema";
 import type { DB, Env } from "./env";
 import {
@@ -44,19 +45,47 @@ const DAY_MS = 24 * 60 * 60 * 1000;
  * Score a link's destination and hold it on a Web Risk hit. Meant for
  * `waitUntil` on create and edit: nobody waits on it, and every failure is
  * swallowed, because a link must never fail to save over a lookup.
+ *
+ * Its own wide event, not the request's: that one is emitted with the
+ * response, before this runs. It carries the link id and what Web Risk said,
+ * never the destination.
  */
 export async function checkLinkDestination(
   env: Env,
   linkId: string,
   destination: string,
 ): Promise<void> {
-  const verdict = await scoreAndRecord(env, linkId, destination);
-  if (!verdict || !isWebRiskHit(verdict)) return;
+  const log = createLogger({ operation: "link.destination_check", link: { id: linkId } });
   try {
-    await holdForWebRisk(env, drizzle(env.DB, { schema }), linkId, verdict);
-  } catch (error) {
-    console.warn("web_risk_hold_failed", linkId, error);
+    const { verdict, webRisk } = await scoreAndRecord(env, linkId, destination);
+    log.set({ webRisk: { outcome: webRisk } });
+    if (webRisk === "failed") log.warn("Web Risk did not answer");
+    if (!verdict || !isWebRiskHit(verdict)) return;
+    const db = drizzle(env.DB, { schema });
+    try {
+      await holdForWebRisk(env, db, linkId, verdict);
+    } catch (error) {
+      log.set({ webRisk: { hold: "failed" } });
+      log.error(error instanceof Error ? error : String(error));
+      await forgetWebRiskCheck(db, linkId);
+    }
+  } finally {
+    log.emit();
   }
+}
+
+/**
+ * Unstamp a link whose hold failed, so the next daily rescan asks again
+ * instead of waiting out the week the stamp would buy it. A link the hold did
+ * reach is left alone: the rescan skips held links anyway. Swallows its own
+ * failure: it is already the recovery path.
+ */
+async function forgetWebRiskCheck(db: DB, linkId: string): Promise<void> {
+  await db
+    .update(schema.links)
+    .set({ webRiskCheckedAt: null })
+    .where(and(eq(schema.links.id, linkId), isNull(schema.links.suspendedAt)))
+    .catch(() => {});
 }
 
 /** Hold a link Web Risk lists, and its whole org when the org is new and
@@ -187,15 +216,28 @@ export async function rescanFreeLinks(env: Env): Promise<number> {
     .orderBy(sql`${schema.links.webRiskCheckedAt} is not null`, asc(schema.links.webRiskCheckedAt))
     .limit(WEB_RISK_RESCAN_BATCH);
 
-  let answered = 0;
-  for (let i = 0; i < due.length; i += RESCAN_CONCURRENCY) {
-    const results = await Promise.all(
-      due.slice(i, i + RESCAN_CONCURRENCY).map((link) => rescanOne(env, db, key, link)),
-    );
-    answered += results.filter(Boolean).length;
+  // One wide event for the run, with a count per outcome: a Google outage
+  // shows up as one `failed` number, not 150 warnings.
+  const log = createLogger({ operation: "web_risk.rescan" });
+  const counts = { hit: 0, clean: 0, failed: 0, error: 0 } satisfies Record<RescanOutcome, number>;
+  try {
+    for (let i = 0; i < due.length; i += RESCAN_CONCURRENCY) {
+      const results = await Promise.all(
+        due.slice(i, i + RESCAN_CONCURRENCY).map((link) => rescanOne(env, db, key, link, log)),
+      );
+      for (const outcome of results) counts[outcome] += 1;
+    }
+  } finally {
+    log.set({ webRisk: { rescan: { due: due.length, ...counts } } });
+    if (counts.failed > 0) log.warn("Web Risk did not answer for some links");
+    log.emit();
   }
-  return answered;
+  return counts.hit + counts.clean;
 }
+
+/** What one link of the rescan came to: Web Risk's answer, no answer
+ * (`failed`), or a throw on our side after it answered (`error`). */
+type RescanOutcome = "hit" | "clean" | "failed" | "error";
 
 /**
  * One link of the rescan. Web Risk alone: the DNS check already runs on every
@@ -208,10 +250,11 @@ async function rescanOne(
   db: DB,
   key: string,
   link: { id: string; destination: string },
-): Promise<boolean> {
+  log: AuditableLogger,
+): Promise<RescanOutcome> {
   try {
     const verdict = await webRiskVerdict(link.destination, key);
-    if (!verdict) return false;
+    if (!verdict) return "failed";
     const now = Date.now();
     const hit = isWebRiskHit(verdict);
     const written = await db
@@ -229,9 +272,11 @@ async function rescanOne(
       .where(and(eq(schema.links.id, link.id), eq(schema.links.destination, link.destination)))
       .returning({ id: schema.links.id });
     if (hit && written.length > 0) await holdForWebRisk(env, db, link.id, verdict);
-    return true;
+    return hit ? "hit" : "clean";
   } catch (error) {
-    console.warn("web_risk_rescan_failed", link.id, error);
-    return false;
+    log.error(error instanceof Error ? error : String(error));
+    // The stamp above may have landed before the hold threw.
+    await forgetWebRiskCheck(db, link.id);
+    return "error";
   }
 }

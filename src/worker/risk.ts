@@ -164,6 +164,22 @@ export async function webRiskVerdict(
   }
 }
 
+/**
+ * What Web Risk said about one lookup, for the wide event. "failed" is the
+ * one a null verdict hides: Google errored, timed out or answered a shape we
+ * do not read, and the DNS check stood alone. "off" means no key is set.
+ */
+export type WebRiskOutcome = "hit" | "clean" | "failed" | "off";
+
+export function webRiskOutcome(
+  env: Pick<Env, "WEB_RISK_API_KEY">,
+  verdict: ScoredVerdict | null,
+): WebRiskOutcome {
+  if (!env.WEB_RISK_API_KEY) return "off";
+  if (!verdict?.webRiskAnswered) return "failed";
+  return isWebRiskHit(verdict) ? "hit" : "clean";
+}
+
 /** Whether a verdict carries a Web Risk hit, which holds a link. */
 export function isWebRiskHit(verdict: RiskVerdict): boolean {
   return verdict.reasons.some((r) => r.startsWith(WEB_RISK_REASON_PREFIX));
@@ -187,6 +203,7 @@ export function webRiskThreats(verdict: RiskVerdict): string[] {
  * Returns the verdict it wrote, or null when it wrote nothing: no answer, or
  * a destination that changed while the lookup ran. A caller acting on the
  * verdict (destination-check.ts) must not act on one that was not written.
+ * `webRisk` is what Google said either way, for the caller's wide event.
  */
 export async function scoreAndRecord(
   env: Pick<Env, "DB" | "WEB_RISK_API_KEY">,
@@ -196,13 +213,15 @@ export async function scoreAndRecord(
    * #96) keeps its links in `anon_links`, with the same four columns and the
    * same rules, so it shares this function rather than copying it. */
   table: "links" | "anon_links" = "links",
-): Promise<ScoredVerdict | null> {
+): Promise<{ verdict: ScoredVerdict | null; webRisk: WebRiskOutcome }> {
+  let webRisk = webRiskOutcome(env, null);
   try {
     const verdict = await scoreDestination(destination, env);
-    if (!verdict) return null;
+    webRisk = webRiskOutcome(env, verdict);
+    if (!verdict) return { verdict: null, webRisk };
     // Only `links` has the column: anonymous links expire in a day, so the
     // weekly rescan never looks at them.
-    const webRisk = table === "links" && verdict.webRiskAnswered;
+    const stampWebRisk = table === "links" && verdict.webRiskAnswered;
     // Only if the row still points where the lookup went. A destination edit
     // clears the verdict and starts its own scan, and the lookup it replaced
     // can still be in flight: without this, the older answer lands afterwards
@@ -210,7 +229,7 @@ export async function scoreAndRecord(
     // quick succession are the same race with both scans in flight.
     const now = Date.now();
     const result = await env.DB.prepare(
-      `update ${table} set risk_score = ?, risk_reasons = ?, risk_checked_at = ?, risk_provider = ?${webRisk ? ", web_risk_checked_at = ?" : ""}
+      `update ${table} set risk_score = ?, risk_reasons = ?, risk_checked_at = ?, risk_provider = ?${stampWebRisk ? ", web_risk_checked_at = ?" : ""}
          where id = ? and destination = ?`,
     )
       .bind(
@@ -218,15 +237,15 @@ export async function scoreAndRecord(
         JSON.stringify(verdict.reasons),
         now,
         verdict.provider,
-        ...(webRisk ? [now] : []),
+        ...(stampWebRisk ? [now] : []),
         linkId,
         destination,
       )
       .run();
-    return result.meta.changes > 0 ? verdict : null;
+    return { verdict: result.meta.changes > 0 ? verdict : null, webRisk };
   } catch (error) {
     console.warn("risk_score_failed", linkId, error);
-    return null;
+    return { verdict: null, webRisk };
   }
 }
 

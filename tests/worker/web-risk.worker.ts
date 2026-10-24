@@ -77,6 +77,14 @@ const orgRow = () =>
     "select review_flagged_at as flagged, links_suspended_at as suspended from orgs where id = 'org-1'",
   ).first<{ flagged: number | null; suspended: number | null }>();
 
+/** Make every write to `links.suspended_at` throw, the way a hold fails
+ * partway: after the Web Risk stamp, before the link is held. */
+const failHolds = () =>
+  env.DB.prepare(
+    "create trigger fail_hold before update of suspended_at on links begin select raise(abort, 'hold failed'); end",
+  ).run();
+const allowHolds = () => env.DB.prepare("drop trigger fail_hold").run();
+
 const makeOrgNew = () =>
   env.DB.prepare("update orgs set created_at = ? where id = 'org-1'").bind(Date.now()).run();
 
@@ -148,6 +156,21 @@ describe("a hit on create", () => {
     expect(row?.risk_score).toBe(0);
   });
 
+  it("leaves a hit it failed to hold unstamped, so the next rescan holds it", async () => {
+    stubGoogle();
+    const cookie = await freeOwnerCookie();
+    await failHolds();
+    const id = await createLink(cookie, LISTED);
+
+    const row = await linkRow(id);
+    expect(row?.suspended_at).toBeNull();
+    expect(row?.web_risk_checked_at).toBeNull();
+
+    await allowHolds();
+    await rescanFreeLinks(withKey());
+    expect((await linkRow(id))?.suspended_at).not.toBeNull();
+  });
+
   it("never calls Google without a key", async () => {
     const lookups = stubGoogle();
     const cookie = await freeOwnerCookie();
@@ -203,6 +226,22 @@ describe("the weekly rescan", () => {
     expect(clean?.web_risk_checked_at).toBeGreaterThan(0);
     // A clean answer does not write a score over the DNS check's.
     expect(clean?.risk_score).toBeNull();
+  });
+
+  it("leaves a hit it failed to hold unstamped, so the next run tries again", async () => {
+    await freeOwnerCookie();
+    await seedLinks(1, LISTED);
+    stubGoogle();
+    await failHolds();
+
+    await rescanFreeLinks(withKey());
+    const row = await linkRow("bulk-1");
+    expect(row?.suspended_at).toBeNull();
+    expect(row?.web_risk_checked_at).toBeNull();
+
+    await allowHolds();
+    await rescanFreeLinks(withKey());
+    expect((await linkRow("bulk-1"))?.suspended_at).not.toBeNull();
   });
 
   it("skips links checked this week, paid links, and held links", async () => {

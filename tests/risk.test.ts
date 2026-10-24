@@ -5,6 +5,7 @@ import {
   RISK_PROVIDER_DNS,
   RISK_PROVIDER_WEB_RISK,
   scoreDestination,
+  webRiskOutcome,
   webRiskVerdict,
 } from "../src/worker/risk";
 
@@ -181,6 +182,24 @@ describe("Google Web Risk", () => {
     const verdict = await scoreDestination("https://example.com", { WEB_RISK_API_KEY: KEY });
     expect(verdict?.provider).toBe(RISK_PROVIDER_DNS);
     expect(verdict?.webRiskAnswered).toBe(false);
+  });
+
+  test("tells a Google error apart from a DNS-only answer and a clean one", async () => {
+    const env = { WEB_RISK_API_KEY: KEY };
+    globalThis.fetch = async (input) =>
+      String(input instanceof Request ? input.url : input).startsWith("https://webrisk.")
+        ? new Response("quota", { status: 429 })
+        : new Response(JSON.stringify({ Status: 0, Answer: [{ data: "93.184.216.34" }] }));
+    const dnsOnly = await scoreDestination("https://example.com", env);
+    expect(dnsOnly?.score).toBe(0);
+    expect(webRiskOutcome(env, dnsOnly)).toBe("failed");
+    expect(webRiskOutcome(env, null)).toBe("failed");
+    expect(webRiskOutcome({}, dnsOnly)).toBe("off");
+
+    providers({});
+    expect(webRiskOutcome(env, await scoreDestination("https://example.com", env))).toBe("clean");
+    providers({ threat: { threatTypes: ["MALWARE"] } });
+    expect(webRiskOutcome(env, await scoreDestination("https://kit.example/", env))).toBe("hit");
   });
 
   test("stands on the Web Risk answer alone when the DNS check is down", async () => {

@@ -33,7 +33,7 @@ import {
 import { recordAdminAction } from "../audit";
 import { markOrgAbuse } from "../abuse-hold";
 import { blockHostOf } from "../../shared/abuse-rules";
-import { scoreDestination } from "../risk";
+import { scoreDestination, webRiskOutcome } from "../risk";
 import { jsonBodyLimit } from "../body-limit";
 import { linkUrl } from "../util";
 import {
@@ -514,6 +514,7 @@ adminLinkRoutes.post("/:linkId/rescore", async (c) => {
   const { db, linkId, link } = await routeLink(c);
 
   const verdict = await scoreDestination(link.destination, c.env);
+  c.get("log").set({ webRisk: { outcome: webRiskOutcome(c.env, verdict) } });
   if (verdict)
     await db
       .update(schema.links)
