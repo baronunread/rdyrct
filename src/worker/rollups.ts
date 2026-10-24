@@ -354,6 +354,10 @@ export async function sweepOldRollups(
     const again: D1PreparedStatement[] = [];
     for (let i = 0; i < pending.length; i += ROLLUP_SWEEP_BATCH) {
       const group = pending.slice(i, i + ROLLUP_SWEEP_BATCH);
+      // Sequential on purpose: D1 runs one write at a time, so batches sent
+      // at once only queue behind each other, and holding the rest back
+      // leaves room for the click flushes this daily job must not delay.
+      // react-doctor-disable-next-line react-doctor/async-await-in-loop
       const results = await env.DB.batch(group);
       group.forEach((stmt, j) => {
         if ((results[j]?.meta.changes ?? 0) >= chunk) again.push(stmt);
