@@ -15,6 +15,8 @@
  *   over and what to do.
  * - `LockedPanel`: what a frozen thing shows in place of its controls, with
  *   the countdown when there is one.
+ * - `ClickCapBanner`: the month's tracked clicks at 80% and at 100% of the
+ *   plan's cap (#387), on the dashboard and analytics.
  */
 import type { ReactNode } from "react";
 import { Lock } from "@/app/ui/icons";
@@ -27,6 +29,8 @@ import { BusyContent } from "../ui/spinner";
 import { useToast } from "../ui/toast";
 import { buttonClass } from "../ui/button-class";
 import { useCurrentOrg } from "../lib/current-org";
+import { useClickUsage } from "../lib/hooks";
+import { clickCapNotice } from "@/shared/click-usage";
 import { graceLabel, graceRunning } from "../lib/grace";
 import {
   OVER_LIMIT_KEYS,
@@ -162,6 +166,31 @@ function joinPhrases(over: OverLimits, plan: OrgPlan): string {
   const phrases = overPhrases(over, plan);
   if (phrases.length <= 1) return phrases[0] ?? "";
   return `${phrases.slice(0, -1).join("; ")}; and ${phrases[phrases.length - 1]}`;
+}
+
+/**
+ * Tracked clicks this month, once they pass 80% of the plan's cap (#387).
+ *
+ * Not a warning colour either: nothing broke. The first thing it says past
+ * the cap is that the links still work, because that is the first thing
+ * somebody reading "limit reached" worries about.
+ */
+export function ClickCapBanner() {
+  const notice = useClickCapNotice();
+  if (!notice) return null;
+  return (
+    <Notice>
+      <p className="max-w-prose text-sm tnum">{notice.text}</p>
+      {notice.offerUpgrade && <BillingLink />}
+    </Notice>
+  );
+}
+
+/** What the cap banner says for the current org, or null. */
+function useClickCapNotice() {
+  const { org } = useCurrentOrg();
+  const usage = useClickUsage(org?.id ?? "");
+  return clickCapNotice(org, usage.data, Date.now());
 }
 
 function Notice({ children }: { children: ReactNode }) {

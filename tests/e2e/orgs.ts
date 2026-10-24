@@ -58,6 +58,14 @@ export async function createQuickLink(page: Page, destination: string) {
   await expect(page.getByRole("dialog", { name: "Link created" })).toBeVisible();
 }
 
+/** Follows a short link once and checks it answers with a redirect to
+ * `destination`. */
+export async function expectRedirect(page: Page, slug: string, destination: string) {
+  const res = await page.request.get(`/${slug}`, { maxRedirects: 0 });
+  expect(res.status()).toBe(302);
+  expect(res.headers()["location"]).toBe(destination);
+}
+
 /**
  * Signs up an owner, creates a link invite from Members, and returns the
  * owner's address with the token behind it.

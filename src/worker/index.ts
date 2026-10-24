@@ -32,6 +32,7 @@ import { domainRoutes } from "./routes/domains";
 import { capRoutes } from "./routes/cap";
 import { revalidateOnRedirect } from "./risk";
 import { sweepAbusiveOrgs } from "./abuse";
+import { sweepClickUsageEmails } from "./click-caps";
 import { reportRoutes } from "./routes/reports";
 import { evlogMiddleware } from "./evlog";
 import { sweepGraceWarnings } from "./reconcile";
@@ -634,6 +635,8 @@ const wrapped = Sentry.withSentry<
         await runIsolated([
           async () => void (await drainStorageOutbox(env)),
           () => sweepAbusiveOrgs(env),
+          // The 80% and 100% tracked-click emails (#387).
+          async () => void (await sweepClickUsageEmails(env)),
         ]);
         return;
       }
@@ -697,6 +700,8 @@ const wrapped = Sentry.withSentry<
       await runIsolated([
         async () => void (await drainStorageOutbox(env)),
         () => sweepAbusiveOrgs(env),
+        // The 80% and 100% tracked-click emails (#387).
+        async () => void (await sweepClickUsageEmails(env)),
       ]);
     },
   },
