@@ -178,7 +178,7 @@ describe("re-scoring on a destination edit", () => {
     const cookie = await freeOwnerCookie();
     const linkId = await createLink(cookie, CLEAN);
 
-    await scoreAndRecord(env.DB, linkId, BLOCKED);
+    await scoreAndRecord(env, linkId, BLOCKED);
 
     const row = await riskRow(linkId);
     expect(row?.risk_score).toBe(0);

@@ -47,6 +47,12 @@ BLOG_ORIGIN_URL=http://localhost:3000
 # which needs no browser to prove it.
 CAP_SECRET=dev-only-cap-secret-not-a-real-one-0000000000000000
 
+# Google Web Risk (#341): a second check on every destination, on create, on
+# edit and weekly for free links. Leave blank locally: the Cloudflare DNS check
+# still runs, and nothing calls Google. A real key costs lookups against the
+# 100,000-a-month free tier.
+WEB_RISK_API_KEY=
+
 # Google sign-in. Leave all three blank to hide the "Continue with Google"
 # button. For local dev, `bun run dev` starts the emulate google service
 # behind portless at https://google.emulate.localhost, so the values below

@@ -5,7 +5,7 @@ import * as schema from "./db/schema";
 import type { DB, Env } from "./env";
 import { buildDestination, qrLogoKeyFromUrl, uid } from "./util";
 import { captureAlert } from "./sentry";
-import type { KVDomain, KVLink } from "./kv";
+import type { KVDomain, KVSlugValue } from "./kv";
 
 /**
  * Storage recovery. D1 is the source of truth. KV serves redirects and R2
@@ -330,7 +330,7 @@ export async function desiredLink(
   db: DB,
   slug: string,
   hostname: string | null,
-): Promise<KVLink | null> {
+): Promise<KVSlugValue | null> {
   // Resolved through link_addresses, not links directly: a slug key names
   // one active address (primary or alias), which always answers with its
   // parent link's effective destination, never one of its own. An
@@ -350,6 +350,8 @@ export async function desiredLink(
       utmTerm: schema.links.utmTerm,
       utmContent: schema.links.utmContent,
       hostname: schema.domains.hostname,
+      suspendedAt: schema.links.suspendedAt,
+      warnedAt: schema.links.warnedAt,
     })
     .from(schema.linkAddresses)
     .innerJoin(schema.links, eq(schema.linkAddresses.linkId, schema.links.id))
@@ -358,11 +360,6 @@ export async function desiredLink(
       and(
         eq(schema.linkAddresses.slug, slug),
         isNull(schema.linkAddresses.retiredAt),
-        // Suspension is enforced here and nowhere else (#67). Every
-        // republish runs through this function, so a suspended link stays
-        // dark through any later edit, rename, or alias change. A check in
-        // the suspend route alone would be undone by the next save.
-        isNull(schema.links.suspendedAt),
         hostname === null
           ? isNull(schema.linkAddresses.domainId)
           : eq(schema.domains.hostname, hostname),
@@ -371,12 +368,23 @@ export async function desiredLink(
     .limit(1);
   const address = rows[0];
   if (!address) return null;
+  // Suspension is enforced here and nowhere else (#67). Every republish runs
+  // through this function, so a suspended link stays held through any later
+  // edit, rename, or alias change. A check in the suspend route alone would
+  // be undone by the next save. Held, not absent (#344): the key stays, with
+  // no destination in it, so the redirect path can say "under review"
+  // instead of 404 without reading D1.
+  if (address.suspendedAt !== null)
+    return { held: true, linkId: address.linkId, expiresAt: address.expiresAt };
   return {
     linkId: address.linkId,
     addressId: address.addressId,
     orgId: address.orgId,
     url: buildDestination(address.destination, address),
     expiresAt: address.expiresAt,
+    // The same rule for the warning: it rides in the value, so an edit
+    // cannot drop it and the redirect path needs no D1 read to show it.
+    ...(address.warnedAt !== null && { warn: true as const }),
   };
 }
 
@@ -722,7 +730,7 @@ const REPUBLISH_BATCH = 100;
 /**
  * Re-sync every KV key an org's links resolve through, in a fixed number of
  * round trips. Used after a bulk state change on the org's links (suspend from
- * the admin route, auto-suspend from the abuse sweep): the consumer reads the
+ * the admin route, a hold or a warning from the abuse sweep): the consumer reads the
  * current row and writes what the key should be, so this does not need to know
  * which links actually changed.
  *
@@ -746,6 +754,25 @@ export async function republishOrgLinks(env: Env, db: DB, orgId: string): Promis
       addresses.slice(i, i + REPUBLISH_BATCH).map((a) => syncLinkMsg(a.slug, a.hostname)),
     );
   await Promise.all(batches.map((batch) => enqueueStorage(env, batch)));
+}
+
+/**
+ * Re-sync every address one link answers to, after its suspension or warning
+ * changed. A link with three aliases that only republished its primary would
+ * keep its old state on the other two. Returns how many addresses it synced.
+ */
+export async function republishLink(env: Env, db: DB, linkId: string): Promise<number> {
+  const addresses = await db
+    .select({ slug: schema.linkAddresses.slug, hostname: schema.domains.hostname })
+    .from(schema.linkAddresses)
+    .leftJoin(schema.domains, eq(schema.linkAddresses.domainId, schema.domains.id))
+    .where(and(eq(schema.linkAddresses.linkId, linkId), isNull(schema.linkAddresses.retiredAt)));
+  if (addresses.length > 0)
+    await enqueueStorage(
+      env,
+      addresses.map((a) => syncLinkMsg(a.slug, a.hostname)),
+    );
+  return addresses.length;
 }
 
 // Cloudflare Queues caps sendBatch at 100 messages: this sweep enqueues one

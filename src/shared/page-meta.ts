@@ -356,7 +356,7 @@ Use rdyrct only if you agree to these terms. Do not create links that are illega
 
 ## Reporting abuse and appeals
 
-Report a link with the [report form](/report). A report alone never suspends a link. To appeal a pause or suspension, email [support@mail.rdyrct.com](mailto:support@mail.rdyrct.com) with the name of your organization and what the link is for.
+Report a link with the [report form](/report). A report alone never suspends a link: it shows visitors a warning first, and the link keeps working. To appeal a pause or suspension, email [support@mail.rdyrct.com](mailto:support@mail.rdyrct.com) with the name of your organization and what the link is for.
 
 ## Accounts and organizations
 

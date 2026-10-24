@@ -328,11 +328,20 @@ export const links = sqliteTable(
     riskProvider: text("risk_provider"),
     // Admin moderation (#67). Null means active. One flag covers every
     // address the link answers to, and the redirect stops because
-    // desiredKvValue refuses to publish a suspended link's key: put the
-    // check anywhere else and the next edit un-suspends it in silence.
+    // desiredKvValue publishes a suspended link's key as held (#344): put
+    // the check anywhere else and the next edit un-suspends it in silence.
     suspendedAt: integer("suspended_at"),
     suspendedBy: text("suspended_by").references(() => user.id, { onDelete: "set null" }),
     suspendReason: text("suspend_reason"),
+    // A warning in front of the redirect (#344): the link works, after an
+    // interstitial naming the destination host. Null means none. Rides in the
+    // KV value through desiredKvValue, like suspension. The reason is the
+    // admin's; no visitor sees it.
+    warnedAt: integer("warned_at"),
+    warnReason: text("warn_reason"),
+    // When Google Web Risk last answered for this destination (#341), so the
+    // weekly rescan can find the links it has not seen lately.
+    webRiskCheckedAt: integer("web_risk_checked_at"),
   },
   (t) => [index("idx_links_org").on(t.orgId)],
 );

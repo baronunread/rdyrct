@@ -11,6 +11,7 @@ export {
   IconArrowUpRight as ArrowUpRight,
   IconArrowsUpDown as ArrowUpDown,
   IconActivity as Activity,
+  IconAlertTriangle as TriangleAlert,
   IconBan as Ban,
   IconBuilding as Building2,
   IconChartBar as BarChart3,

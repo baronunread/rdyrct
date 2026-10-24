@@ -22,8 +22,14 @@ import * as v from "valibot";
 import { HTTPException } from "hono/http-exception";
 import { and, desc, eq, isNull, isNotNull, like, or, sql } from "drizzle-orm";
 import * as schema from "../db/schema";
-import type { AppEnv, DB, Env } from "../env";
-import { enqueueStorage, republishOrgLinks, syncLinkMsg } from "../storage";
+import type { AppEnv, DB } from "../env";
+import { enqueueStorage, republishLink, republishOrgLinks, syncLinkMsg } from "../storage";
+import {
+  WARN_REASON,
+  clearLinkWarning,
+  clearOrgAutomaticWarnings,
+  warnLink,
+} from "../link-warning";
 import { recordAdminAction } from "../audit";
 import { markOrgAbuse } from "../abuse-hold";
 import { blockHostOf } from "../../shared/abuse-rules";
@@ -51,6 +57,9 @@ const reasonBodySchema = v.object({ reason: optionalText });
 
 /** The same, plus which way the state change goes. */
 const suspensionBodySchema = v.object({ reason: optionalText, suspended: optionalFlag });
+
+/** Which way a warning change goes. No reason: it is one click either way. */
+const warningBodySchema = v.object({ warned: optionalFlag });
 
 const MAX_ROWS = 200;
 
@@ -105,11 +114,15 @@ async function requireLink(db: DB, linkId: string) {
   return link;
 }
 
-/**
- * Every address a link answers to, so suspending or restoring one republishes
- * all of them. A link with three aliases that only republished its primary
- * would keep redirecting on the other two.
- */
+/** The link named by the route's `:linkId`, logged on the request, or a 404. */
+async function routeLink(c: Context<AppEnv>) {
+  const db = c.var.db;
+  const linkId = c.req.param("linkId")!;
+  c.get("log").set({ linkId });
+  return { db, linkId, link: await requireLink(db, linkId) };
+}
+
+/** Every address a link answers to, so deleting one clears all of them. */
 async function addressesOf(db: DB, linkId: string) {
   return db
     .select({
@@ -119,16 +132,6 @@ async function addressesOf(db: DB, linkId: string) {
     .from(schema.linkAddresses)
     .leftJoin(schema.domains, eq(schema.linkAddresses.domainId, schema.domains.id))
     .where(and(eq(schema.linkAddresses.linkId, linkId), isNull(schema.linkAddresses.retiredAt)));
-}
-
-async function republish(env: Env, db: DB, linkId: string): Promise<number> {
-  const addresses = await addressesOf(db, linkId);
-  if (addresses.length > 0)
-    await enqueueStorage(
-      env,
-      addresses.map((a) => syncLinkMsg(a.slug, a.hostname)),
-    );
-  return addresses.length;
 }
 
 /**
@@ -157,6 +160,7 @@ function adminLinkFilters(c: Context<AppEnv>) {
     q ? or(like(schema.links.slug, `%${q}%`), like(schema.links.destination, `%${q}%`)) : undefined,
     c.req.query("suspended") === "1" ? isNotNull(schema.links.suspendedAt) : undefined,
     c.req.query("suspended") === "0" ? isNull(schema.links.suspendedAt) : undefined,
+    c.req.query("warned") === "1" ? isNotNull(schema.links.warnedAt) : undefined,
     org ? eq(schema.links.orgId, org) : undefined,
   ].filter(Boolean);
 }
@@ -191,6 +195,8 @@ adminLinkRoutes.get("/", async (c) => {
       clicks: clickCount,
       suspendedAt: schema.links.suspendedAt,
       suspendReason: schema.links.suspendReason,
+      warnedAt: schema.links.warnedAt,
+      warnReason: schema.links.warnReason,
       riskScore: schema.links.riskScore,
       riskReasons: schema.links.riskReasons,
       riskCheckedAt: schema.links.riskCheckedAt,
@@ -251,7 +257,7 @@ async function setSuspended(
 
   if (!suspend) await clearOrgAfterRestore(db, link.orgId);
 
-  const addresses = await republish(c.env, db, linkId);
+  const addresses = await republishLink(c.env, db, linkId);
   await recordAdminAction(c.env, {
     actorUserId: c.var.user!.id,
     action: suspend ? "link.suspend" : "link.unsuspend",
@@ -289,6 +295,34 @@ adminLinkRoutes.patch("/:linkId", async (c) => {
   return c.json(await setSuspended(c, c.req.param("linkId")!, body.suspended, reason));
 });
 
+/**
+ * Put a warning on one link, or take it off (#344). One click either way and
+ * no reason asked: the link keeps working, so this is a lighter call than a
+ * suspension, and the row records that an admin made it.
+ */
+adminLinkRoutes.patch("/:linkId/warning", async (c) => {
+  const body = parseOptionalBody(
+    warningBodySchema,
+    await c.req.json<JsonValue>().catch(() => ({})),
+  );
+  if (body.warned == null)
+    throw new HTTPException(400, { message: "Say whether to warn or clear this link" });
+  const { db, linkId, link } = await routeLink(c);
+  if (body.warned && link.suspendedAt !== null)
+    throw new HTTPException(409, { message: "This link is suspended. Restore it first." });
+  const changed = body.warned
+    ? await warnLink(c.env, db, linkId, WARN_REASON.admin)
+    : await clearLinkWarning(c.env, db, linkId);
+  await recordAdminAction(c.env, {
+    actorUserId: c.var.user!.id,
+    action: body.warned ? "link.warn" : "link.unwarn",
+    targetType: "link",
+    targetId: linkId,
+    detail: { slug: link.slug, orgId: link.orgId, destination: link.destination, changed },
+  });
+  return c.json({ warned: body.warned });
+});
+
 /** Open public reports, newest first. */
 adminLinkRoutes.get("/reports", async (c) => {
   const rows = await c.var.db
@@ -320,8 +354,13 @@ adminLinkRoutes.post("/reports/:id/dismiss", async (c) => {
     .update(schema.linkReports)
     .set({ status: "dismissed" })
     .where(eq(schema.linkReports.id, id))
-    .returning({ id: schema.linkReports.id });
+    .returning({ linkId: schema.linkReports.linkId });
   if (done.length === 0) throw new HTTPException(404, { message: "Report not found" });
+  // The last open report on a link takes its warning with it, if a report is
+  // what put the warning there. An admin's own warning stays.
+  const linkId = done[0]?.linkId;
+  if (linkId && !(await hasOpenReport(c.var.db, linkId)))
+    await clearLinkWarning(c.env, c.var.db, linkId, WARN_REASON.report);
   await recordAdminAction(c.env, {
     actorUserId: c.var.user!.id,
     action: "report.dismiss",
@@ -331,6 +370,15 @@ adminLinkRoutes.post("/reports/:id/dismiss", async (c) => {
   });
   return c.json({ ok: true });
 });
+
+async function hasOpenReport(db: DB, linkId: string): Promise<boolean> {
+  const rows = await db
+    .select({ id: schema.linkReports.id })
+    .from(schema.linkReports)
+    .where(and(eq(schema.linkReports.linkId, linkId), eq(schema.linkReports.status, "open")))
+    .limit(1);
+  return rows.length > 0;
+}
 
 /**
  * The verdict that an org is abuse: links suspended, owner banned, and every
@@ -419,6 +467,9 @@ adminLinkRoutes.post("/orgs/:orgId/reviewed", async (c) => {
     .update(schema.linkReports)
     .set({ status: "dismissed" })
     .where(and(eq(schema.linkReports.orgId, orgId), eq(schema.linkReports.status, "open")));
+  // And the warnings the reports and the sweep put on its links: somebody
+  // looked and found nothing. A warning an admin set by hand stays.
+  await clearOrgAutomaticWarnings(c.env, c.var.db, orgId);
   await recordAdminAction(c.env, {
     actorUserId: c.var.user!.id,
     action: "org.reviewed",
@@ -451,21 +502,18 @@ adminLinkRoutes.post("/restore", async (c) => {
  *
  * Awaited rather than deferred to waitUntil, unlike the checks on create and
  * edit: an admin who asked for this is looking at the row and wants the
- * answer, not a promise that something will happen shortly. One DNS lookup
- * with a three second ceiling.
+ * answer, not a promise that something will happen shortly. One DNS lookup,
+ * and one Web Risk lookup when the key is set, each with a three second
+ * ceiling. A hit here holds nothing: the admin is the one deciding.
  *
  * Recorded in the audit log because it writes to the row. Reconstructing why
  * a score changed is exactly what that log is for, and "somebody re-checked
  * it at 02:14" is part of the answer.
  */
 adminLinkRoutes.post("/:linkId/rescore", async (c) => {
-  const log = c.get("log");
-  const db = c.var.db;
-  const linkId = c.req.param("linkId")!;
-  log.set({ linkId });
-  const link = await requireLink(db, linkId);
+  const { db, linkId, link } = await routeLink(c);
 
-  const verdict = await scoreDestination(link.destination);
+  const verdict = await scoreDestination(link.destination, c.env);
   if (verdict)
     await db
       .update(schema.links)
@@ -474,6 +522,7 @@ adminLinkRoutes.post("/:linkId/rescore", async (c) => {
         riskReasons: JSON.stringify(verdict.reasons),
         riskCheckedAt: Date.now(),
         riskProvider: verdict.provider,
+        ...(verdict.webRiskAnswered && { webRiskCheckedAt: Date.now() }),
       })
       .where(eq(schema.links.id, linkId));
 
@@ -504,11 +553,7 @@ adminLinkRoutes.post("/:linkId/rescore", async (c) => {
  * the first: clicks cascade with it and nothing here can put it back.
  */
 adminLinkRoutes.delete("/:linkId", async (c) => {
-  const log = c.get("log");
-  const db = c.var.db;
-  const linkId = c.req.param("linkId")!;
-  log.set({ linkId });
-  const link = await requireLink(db, linkId);
+  const { db, linkId, link } = await routeLink(c);
 
   // Addresses first: after the row is gone there is nothing to read them
   // from, and each one is a live KV key until it is swept.
