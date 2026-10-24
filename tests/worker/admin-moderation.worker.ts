@@ -57,6 +57,14 @@ async function syncKv(...slugs: string[]) {
 
 /** What the redirect path would find: KV is the only thing that decides. */
 const kvFor = (slug: string) => env.LINKS.get(`slug:${slug}`);
+/** The key redirects: it carries a destination. */
+const liveKey = async (slug: string) => (await kvFor(slug))?.includes('"url"') ?? false;
+/** The key is held (#344): it answers "under review" and carries no
+ * destination, so nothing on the redirect path can send anyone there. */
+const heldKey = async (slug: string) => {
+  const raw = await kvFor(slug);
+  return raw !== null && raw.includes('"held":true') && !raw.includes('"url"');
+};
 
 /** Every live slug a link answers on. */
 async function slugsOf(linkId: string): Promise<string[]> {
@@ -119,12 +127,12 @@ describe("suspending one link", () => {
   it("stops the redirect and records who did it", async () => {
     const owner = await freeOwnerCookie();
     const link = await createLiveLink(owner);
-    expect(await kvFor(link.slug)).toBeTruthy();
+    expect(await liveKey(link.slug)).toBe(true);
 
     const cookie = await adminCookie();
     const res = await setSuspended(link.id, cookie, true, "phishing report #412");
     expect(res.status).toBe(200);
-    expect(await kvFor(link.slug)).toBeNull();
+    expect(await heldKey(link.slug)).toBe(true);
 
     const audit = await jsonBody<{ action: string; targetId: string; detail: string | null }[]>(
       await admin("/audit", cookie),
@@ -159,10 +167,10 @@ describe("suspending one link", () => {
     const cookie = await adminCookie();
 
     await setSuspended(link.id, cookie, true, "spam");
-    expect(await kvFor(link.slug)).toBeNull();
+    expect(await heldKey(link.slug)).toBe(true);
 
     await setSuspended(link.id, cookie, false);
-    expect(await kvFor(link.slug)).toBeTruthy();
+    expect(await liveKey(link.slug)).toBe(true);
   });
 
   it("refuses a suspension with no reason", async () => {
@@ -194,7 +202,7 @@ describe("suspension survives what would undo it", () => {
     expect(res.status).toBe(200);
     // The edit republished the key. It is still dark.
     await syncKv(...(await slugsOf(link.id)));
-    expect(await kvFor(link.slug)).toBeNull();
+    expect(await heldKey(link.slug)).toBe(true);
   });
 
   it("stays dark on every address, not only the primary", async () => {
@@ -218,7 +226,7 @@ describe("suspension survives what would undo it", () => {
     await syncKv(...aliases.results.map((r) => r.slug));
     await setSuspended(link.id, await adminCookie(), true, "malware");
 
-    for (const row of aliases.results) expect(await kvFor(row.slug)).toBeNull();
+    for (const row of aliases.results) expect(await heldKey(row.slug)).toBe(true);
   });
 });
 
@@ -235,8 +243,8 @@ describe("suspending a whole org", () => {
       [a.id, b.id],
     );
     expect(await res.json()).toEqual({ count: 2 });
-    expect(await kvFor(a.slug)).toBeNull();
-    expect(await kvFor(b.slug)).toBeNull();
+    expect(await heldKey(a.slug)).toBe(true);
+    expect(await heldKey(b.slug)).toBe(true);
 
     const org = await env.DB.prepare("select count(*) as n from orgs where id = 'org-1'").first<{
       n: number;
@@ -289,7 +297,7 @@ describe("suspending a whole org", () => {
     const cookie = await adminCookie();
     await moderate("/links/orgs/org-1/suspend", cookie, { reason: "checking" }, [a.id]);
     await moderate("/links/orgs/org-1/suspend?suspend=0", cookie, {}, [a.id]);
-    expect(await kvFor(a.slug)).toBeTruthy();
+    expect(await liveKey(a.slug)).toBe(true);
   });
 });
 
@@ -386,8 +394,8 @@ describe("restoring several links at once", () => {
     });
     expect(await jsonBody<{ count: number }>(res)).toEqual({ count: 2 });
     await syncKv(a.slug, b.slug);
-    expect(await kvFor(a.slug)).toBeTruthy();
-    expect(await kvFor(b.slug)).toBeTruthy();
+    expect(await liveKey(a.slug)).toBe(true);
+    expect(await liveKey(b.slug)).toBe(true);
     const { results } = await env.DB.prepare(
       "select count(*) as n from admin_actions where action = 'link.unsuspend'",
     ).all<{ n: number }>();
@@ -498,7 +506,7 @@ describe("who may reach any of this", () => {
       expect(res.status, `${path} should 404 for a non-admin`).toBe(404);
     }
     // And nothing happened to the link.
-    expect(await kvFor(link.slug)).toBeTruthy();
+    expect(await liveKey(link.slug)).toBe(true);
   });
 
   it("404s for a signed-out caller", async () => {

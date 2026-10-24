@@ -4,7 +4,7 @@
  * Kept apart from abuse.ts, which owns the sweep: this file imports from it,
  * never the other way round.
  */
-import { and, eq, isNotNull, isNull, sql } from "drizzle-orm";
+import { and, eq, isNotNull, sql } from "drizzle-orm";
 import { HTTPException } from "hono/http-exception";
 import { blockHostOf, holdReasonFor } from "../shared/abuse-rules";
 import type { OrgPlan } from "../shared/types";
@@ -13,7 +13,7 @@ import type { DB, Env } from "./env";
 import { recordAdminAction } from "./audit";
 import { captureAlert } from "./sentry";
 import { republishOrgLinks } from "./storage";
-import { notifyAdmin, notifyHold, suspendOrgLinks } from "./abuse";
+import { flagForReview, notifyAdmin, notifyHold, suspendOrgLinks } from "./abuse";
 import { RESERVED_SLUGS } from "./util";
 
 /** Refuse a destination whose host an admin has blocked. Called from every
@@ -53,10 +53,7 @@ export async function holdIfSuspicious(
   if (plan !== "free") return null;
   const reason = holdReasonFor(destination);
   if (!reason) return null;
-  await db
-    .update(schema.orgs)
-    .set({ reviewFlaggedAt: Date.now() })
-    .where(and(eq(schema.orgs.id, orgId), isNull(schema.orgs.reviewFlaggedAt)));
+  await flagForReview(db, orgId);
   captureAlert([{ event: "link_held", orgId, reason }]);
   // The owner hears that it was paused and how to answer, not which word did
   // it; the admin gets the specific reason.

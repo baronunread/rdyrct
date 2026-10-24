@@ -8,8 +8,10 @@
  * form that said "no such link" would be a slug probe.
  *
  * A report never suspends anything by itself. Anyone can file one, so a
- * single report could be used to take down a stranger's link. A link with
- * REPORTS_TO_FLAG open reports flags its org for review instead, and a human
+ * single report could be used to take down a stranger's link. It puts the
+ * warning page in front of the link instead (#344): the link keeps working,
+ * one click later, until an admin dismisses the report. A link with
+ * REPORTS_TO_FLAG open reports also flags its org for review, and a human
  * decides.
  */
 import { Hono } from "hono";
@@ -26,6 +28,7 @@ import { optionalText, parseBody } from "../schemas";
 import { publicClientKey, rateLimitAllows } from "../rate-limit";
 import { captureAlert } from "../sentry";
 import { notifyAdmin } from "../abuse";
+import { WARN_REASON, warnLink } from "../link-warning";
 import { uid } from "../util";
 
 /** Open reports on one link before its org is flagged for review. */
@@ -141,7 +144,10 @@ reportRoutes.post("/", async (c) => {
     createdAt: Date.now(),
   });
 
-  if (link) await flagOrgIfReported(c.env, db, link);
+  if (link) {
+    await warnLink(c.env, db, link.linkId, WARN_REASON.report);
+    await flagOrgIfReported(c.env, db, link);
+  }
 
   // The same answer for a real link and a made-up one.
   return c.json({ ok: true }, 201);

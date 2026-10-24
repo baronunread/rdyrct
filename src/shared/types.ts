@@ -599,6 +599,9 @@ export interface AdminLinkRow {
   clicks: number;
   suspendedAt: number | null;
   suspendReason: string | null;
+  /** A warning page in front of the redirect (#344). Null means none. */
+  warnedAt: number | null;
+  warnReason: string | null;
   /** Destination scoring (#68). Null means unscored, never clean. */
   riskScore: number | null;
   riskReasons: string[];

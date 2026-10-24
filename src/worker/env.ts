@@ -89,6 +89,10 @@ export interface Env {
   /* bot protection: Cap proof-of-work (#98). Unset disables the check. */
   CAP_SECRET?: string; // secret, `openssl rand -hex 32`
 
+  /* destination check: Google Web Risk Lookup API (#341). Unset skips that
+     provider; the Cloudflare DNS check still runs. */
+  WEB_RISK_API_KEY?: string; // secret, a GCP API key restricted to the Web Risk API
+
   /* click buffer: flush interval in ms, e2e only. Unset means 10 s. */
   CLICK_FLUSH_MS?: string; // var
 

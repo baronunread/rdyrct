@@ -130,6 +130,7 @@ Everything else is optional. Each piece says what it adds:
 | `CF_API_TOKEN`, `CF_ZONE_ID`               | Customers' own domains through Cloudflare for SaaS.                                                                      |
 | `SHARED_LINK_HOST`                         | A second, shorter host for new shared-domain links.                                                                      |
 | `CAP_SECRET`                               | Proof-of-work in front of sign-up and password reset.                                                                    |
+| `WEB_RISK_API_KEY`                         | Google Web Risk as a second destination check. A listed destination puts its link on hold.                               |
 | `SENTRY_DSN`                               | Error reports to your Sentry project.                                                                                    |
 | `SITE_NAME`                                | The name every tab shows, such as "Acme links". Without it, tabs show your copy's host.                                  |
 

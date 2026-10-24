@@ -516,11 +516,16 @@ export const useAdminOrgDetail = (orgId: string | null) =>
  * than a browser should filter. Ordering does not: the response is capped, so
  * sorting it is a client concern and the column headers can drive it the way
  * every other table here works. */
-const STATUS_PARAM = { all: "", active: "&suspended=0", suspended: "&suspended=1" };
+const STATUS_PARAM = {
+  all: "",
+  active: "&suspended=0",
+  suspended: "&suspended=1",
+  warned: "&warned=1",
+};
 
 export const useAdminLinks = (params: {
   q: string;
-  status: "all" | "active" | "suspended";
+  status: keyof typeof STATUS_PARAM;
   org?: string;
 }) =>
   useQuery<AdminLinkRow[]>({

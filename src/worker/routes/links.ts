@@ -36,7 +36,7 @@ import {
 import { jsonBodyLimit } from "../body-limit";
 import { assertNotShortener } from "../abuse";
 import { assertNotBlocked, assertNotOwnShortLink, holdIfSuspicious } from "../abuse-hold";
-import { scoreAndRecord } from "../risk";
+import { checkLinkDestination } from "../destination-check";
 import { claimAnonLink } from "./shorten";
 import { cursorValueOf, linkPageQuery, readLinkPageParams, takePage } from "../links-page";
 import type {
@@ -684,6 +684,10 @@ export function newLinkRow(
     suspendedAt: null,
     suspendedBy: null,
     suspendReason: null,
+    // Nor warned (#344): a report or the sweep sets that later.
+    warnedAt: null,
+    warnReason: null,
+    webRiskCheckedAt: null,
   };
 }
 
@@ -850,8 +854,8 @@ linkRoutes.post("/", requireOrgRole("member"), async (c) => {
   if (!inserted) await refuseAddressInsert(db, orgId);
   await enqueueStorage(c.env, [syncLinkMsg(link.slug, hostname)]);
   // Score the destination after the response (#68), the way clicks are
-  // recorded: it scores, it never blocks, and nobody waits on it.
-  c.executionCtx.waitUntil(scoreAndRecord(c.env.DB, link.id, link.destination));
+  // recorded: nobody waits on it. Only a Web Risk hit acts (#341).
+  c.executionCtx.waitUntil(checkLinkDestination(c.env, link.id, link.destination));
   return c.json(
     { ...toDTO(c.env, link, 0, hostname, 1), ...(await quotaUsageFields(db, orgId)) },
     201,
@@ -1111,7 +1115,7 @@ linkRoutes.patch("/:linkId", requireOrgRole("member"), async (c) => {
   // the link reads as unscored from the moment it changed rather than
   // carrying the previous destination's clean bill until this finishes.
   if (updated.destination !== existing.destination)
-    c.executionCtx.waitUntil(scoreAndRecord(c.env.DB, existing.id, updated.destination));
+    c.executionCtx.waitUntil(checkLinkDestination(c.env, existing.id, updated.destination));
 
   const [dto, quota] = await Promise.all([
     linkToDTO(c.env, db, orgId, updated),

@@ -37,6 +37,7 @@ import {
 import { holdReasonFor } from "../../shared/abuse-rules";
 import { publishLink, resolveSlug, unpublishLink } from "../kv";
 import { scoreAndRecord } from "../risk";
+import { checkLinkDestination } from "../destination-check";
 import { spendToken } from "../cap";
 import { CAP_FAILED_CODE } from "@/shared/types";
 import { isValidHttpUrl, linkUrl, normalizeUrl, randomSlug, uid } from "../util";
@@ -182,7 +183,7 @@ shortenRoutes.get("/clicks", async (c) => {
  * from the same function.
  */
 async function scoreAnonLink(env: Env, id: string, destination: string): Promise<void> {
-  await scoreAndRecord(env.DB, id, destination, "anon_links");
+  await scoreAndRecord(env, id, destination, "anon_links");
 }
 
 /** A random slug that is not already taken, in either table. */
@@ -298,6 +299,11 @@ export async function claimAnonLink(
     suspendedAt: hold?.suspendedAt ?? null,
     suspendedBy: null,
     suspendReason: hold?.suspendReason ?? null,
+    warnedAt: null,
+    warnReason: null,
+    // Unknown: the anonymous row has no such column, so the weekly rescan
+    // (#341) takes it first.
+    webRiskCheckedAt: null,
   };
   const address = {
     id: uid(),
@@ -330,7 +336,12 @@ export async function claimAnonLink(
   // nulls and then deletes the only row that background task knows how to
   // update: the link stayed unscored for good, on the one table moderation
   // reads. Scored here instead, against the row that now exists.
-  if (anon.riskCheckedAt === null) await scoreAndRecord(env.DB, link.id, link.destination);
+  //
+  // A copied Web Risk hit is checked again too: on the anonymous row it held
+  // nothing, because there was no org to hold, and claiming must not be the
+  // way round that.
+  if (anon.riskCheckedAt === null || anon.riskReasons?.includes("web_risk_"))
+    await checkLinkDestination(env, link.id, link.destination);
   return link;
 }
 

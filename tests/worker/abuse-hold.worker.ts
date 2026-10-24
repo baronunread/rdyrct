@@ -81,7 +81,10 @@ describe("a scam-shaped destination", () => {
 
     expect(res.status).toBe(201);
     await syncKv(link.slug);
-    expect(await env.LINKS.get(`slug:${link.slug}`)).toBeNull();
+    // Held (#344): the key answers "under review" and has no destination in it.
+    expect(await env.LINKS.get(`slug:${link.slug}`)).toBe(
+      JSON.stringify({ held: true, linkId: link.id, expiresAt: null }),
+    );
     const held = await row("select suspended_at, suspend_reason from links where id = ?", link.id);
     expect(held?.suspended_at).not.toBeNull();
     expect(held?.suspend_reason).toContain("phonepe");
