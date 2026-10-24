@@ -355,6 +355,38 @@ describe("what a lookup costs (#341 review)", () => {
     expect(lookups).toEqual(["https://example.com/a", "https://example.com/b"]);
   });
 
+  const spendTheDay = () =>
+    env.DB.prepare("update orgs set web_risk_day = ?, web_risk_lookups = ? where id = 'org-1'")
+      .bind(Math.floor(Date.now() / DAY_MS), WEB_RISK_LOOKUPS_PER_ORG_PER_DAY)
+      .run();
+
+  it("drops the old stamp when an edit over budget moves a checked link", async () => {
+    // Over budget, the edit to a listed site is never looked up. The stamp
+    // from the clean destination used to stay, so the rescan skipped the
+    // link for a week while it pointed at the listed site.
+    stubGoogle();
+    const cookie = await freeOwnerCookie();
+    const id = await createLink(cookie, "https://example.com/clean");
+    expect((await linkRow(id))?.web_risk_checked_at).toBeGreaterThan(0);
+    await spendTheDay();
+
+    expect((await patchDestination(cookie, id, LISTED)).status).toBe(200);
+    expect((await linkRow(id))?.web_risk_checked_at).toBeNull();
+    await rescanFreeLinks(withKey());
+    expect((await linkRow(id))?.suspended_at).not.toBeNull();
+  });
+
+  it("does not budget a paid org: the rescan would never reach its links", async () => {
+    const lookups = stubGoogle();
+    const cookie = await freeOwnerCookie();
+    await env.DB.prepare("update user set plan = 'pro' where id = 'free-1'").run();
+    await spendTheDay();
+
+    const id = await createLink(cookie, LISTED);
+    expect(lookups).toEqual([LISTED]);
+    expect((await linkRow(id))?.suspended_at).not.toBeNull();
+  });
+
   it("skips the lookup once the org has spent its day, and leaves the link for the rescan", async () => {
     const lookups = stubGoogle();
     const cookie = await freeOwnerCookie();

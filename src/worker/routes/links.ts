@@ -922,7 +922,16 @@ function riskAfterDestinationChange(
   destination: string,
 ) {
   if (destination === existing.destination) return {};
-  return { riskScore: null, riskReasons: null, riskCheckedAt: null, riskProvider: null };
+  // Web Risk's stamp too: it was for the old destination. Left in place, a
+  // lookup the new one never got (over budget, Google down) would keep the
+  // link out of the rescan for the week the old stamp still buys.
+  return {
+    riskScore: null,
+    riskReasons: null,
+    riskCheckedAt: null,
+    riskProvider: null,
+    webRiskCheckedAt: null,
+  };
 }
 
 /** A moved link leaves a stale key behind: syncing that old key finds no row

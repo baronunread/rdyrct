@@ -76,8 +76,13 @@ export async function checkLinkDestination(
  * between two URLs at the write rate limit spends more in a day than the
  * free tier allows in a month, and after that every lookup fails open for
  * everybody. The cache (risk.ts) makes a repeated URL free; this caps how
- * many different ones an org can make us ask about. Past it, the link is
- * left unstamped, so the rescan takes it first.
+ * many different ones an org can make us ask about. Past it, a free org's
+ * link is left unstamped, so the rescan takes it first.
+ *
+ * Free orgs only. The rescan covers free links alone, so a paid link skipped
+ * here would never be asked about at all. Paid orgs went through billing, so
+ * one burning the quota is somebody we can name and stop; the GCP quota cap
+ * is what bounds the total.
  */
 export const WEB_RISK_LOOKUPS_PER_ORG_PER_DAY = 200;
 
@@ -87,6 +92,7 @@ export const WEB_RISK_LOOKUPS_PER_ORG_PER_DAY = 200;
  * take the last lookup. A new UTC day starts the count again.
  */
 async function spendWebRiskLookup(db: DB, orgId: string): Promise<boolean> {
+  if ((await orgPlan(db, orgId)).plan !== "free") return true;
   const day = Math.floor(Date.now() / DAY_MS);
   const spent = await db
     .update(schema.orgs)

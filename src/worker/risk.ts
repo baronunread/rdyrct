@@ -155,11 +155,15 @@ const webRiskAnswerSchema = v.object({
 });
 
 /**
- * The longest URI sent to Google. The URI rides in the query string of a GET,
- * and Google answers 400 to one past about 16 KB. Destinations have no length
- * cap, so without this a long enough query string was a way past the check.
+ * The longest URI sent to Google. The URI rides in the query string of a GET:
+ * a 9 KB one still reached Google's auth in a probe, and a 17 KB one got a
+ * 400. Destinations have no length cap, so without this a long enough query
+ * string was a way past the check. 8 KB leaves room for the rest of the GET.
  */
-export const WEB_RISK_MAX_URI = 2048;
+export const WEB_RISK_MAX_URI = 8 * 1024;
+/** Web Risk matches the host plus up to four path prefixes ("/", "/a/",
+ * "/a/b/", "/a/b/c/"), so three leading segments keep every prefix check. */
+const WEB_RISK_PATH_SEGMENTS = 3;
 
 /**
  * What Google is asked about for a destination, or null if it is not an
@@ -169,7 +173,7 @@ export const WEB_RISK_MAX_URI = 2048;
  * nobody's business at Google. The query stays when it fits, because Web
  * Risk also matches a path with its exact query. Past WEB_RISK_MAX_URI the
  * query goes, which still leaves the host and path expressions Web Risk
- * matches; past it again, so does the path.
+ * matches; past it again, the path is cut to its leading segments.
  */
 export function webRiskUri(destination: string): string | null {
   if (!hostnameOf(destination)) return null;
@@ -180,6 +184,15 @@ export function webRiskUri(destination: string): string | null {
   if (url.href.length <= WEB_RISK_MAX_URI) return url.href;
   url.search = "";
   if (url.href.length <= WEB_RISK_MAX_URI) return url.href;
+  // Not the bare host: padding a listed path past the cap would then get a
+  // clean answer for the host. The leading segments still carry the listed
+  // prefix, and only padding inside the first one (a path nobody listed)
+  // leaves just the host.
+  const segments = url.pathname.split("/").filter(Boolean).slice(0, WEB_RISK_PATH_SEGMENTS);
+  for (; segments.length > 0; segments.pop()) {
+    const uri = `${url.origin}/${segments.join("/")}/`;
+    if (uri.length <= WEB_RISK_MAX_URI) return uri;
+  }
   return `${url.origin}/`;
 }
 
@@ -299,9 +312,11 @@ export async function askWebRisk(
     if (spendLookup && !(await spendLookup())) return { verdict: null, outcome: "over_budget" };
     const answer = await lookupWebRisk(uri, key);
     if (!answer) return { verdict: null, outcome: "failed" };
+    // Its own catch: KV refuses a second write to one key within a second,
+    // and losing the cache entry must not lose Google's answer with it.
     await env.LINKS?.put(cacheKey, JSON.stringify(answer.verdict), {
       expirationTtl: answer.ttlSeconds,
-    });
+    }).catch(() => {});
     return answered(answer.verdict);
   } catch {
     return { verdict: null, outcome: "failed" };

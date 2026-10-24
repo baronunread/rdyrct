@@ -265,6 +265,36 @@ describe("asking Web Risk", () => {
       expect(webRiskUri(url)?.length).toBeLessThanOrEqual(WEB_RISK_MAX_URI);
   });
 
+  test("keeps a padded listed path's leading segments, never just the host", async () => {
+    // Padding a listed path past the cap used to fall back to the host, which
+    // Google answers clean while the path is what it lists.
+    const pad = "a".repeat(WEB_RISK_MAX_URI);
+    expect(webRiskUri(`https://hacked.example/wp-content/phish/${pad}`)).toBe(
+      "https://hacked.example/wp-content/phish/",
+    );
+    // Three segments: Web Risk checks the host plus four path prefixes.
+    expect(webRiskUri(`https://hacked.example/a/b/c/d/${pad}?q=1`)).toBe(
+      "https://hacked.example/a/b/c/",
+    );
+    // A query up to the cap is still sent whole.
+    const query = `https://kit.example/login?${"q".repeat(6000)}`;
+    expect(webRiskUri(query)).toBe(query);
+  });
+
+  test("keeps Google's answer when the cache write fails", async () => {
+    google({ threat: { threatTypes: ["MALWARE"] } });
+    const LINKS = memoryKv();
+    LINKS.put = async () => {
+      throw new Error("KV PUT failed: 429 Too Many Requests");
+    };
+    const { outcome, verdict } = await askWebRisk(
+      { WEB_RISK_API_KEY: KEY, LINKS },
+      "https://kit.example/",
+    );
+    expect(outcome).toBe("hit");
+    expect(verdict?.score).toBe(100);
+  });
+
   test("asks Google about the shortened form of a long destination", async () => {
     const asked = google({ threat: { threatTypes: ["SOCIAL_ENGINEERING"] } });
     const verdict = await webRiskVerdict(`https://kit.example/login?${"a".repeat(20_000)}`, KEY);
