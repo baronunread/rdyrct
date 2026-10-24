@@ -62,3 +62,24 @@ test("the primary button follows the plan the finder picks", async ({ page }) =>
   await expect(primary).toHaveCount(1);
   await expect(page.locator('[data-match="true"] a.bg-accent')).toHaveCount(1);
 });
+
+// #387: each plan's monthly click count, and what happens past it.
+test("the pricing page names each plan's click count, and says links keep redirecting", async ({
+  page,
+}) => {
+  await page.goto("/pricing");
+  for (const [plan, count] of [
+    ["free", "5k"],
+    ["hobby", "50k"],
+    ["pro", "500k"],
+  ]) {
+    await expect(
+      page.locator(`[data-plan="${plan}"]`).getByText(`${count} clicks counted a month`),
+    ).toBeVisible();
+  }
+  await expect(page.getByText(/links keep redirecting every visitor/)).toBeVisible();
+
+  // And the plan finder weighs it: past Hobby's 50k is Pro.
+  await page.getByLabel("Clicks a month, exact number").fill("60000");
+  await expect(page.locator('[data-plan="pro"]')).toHaveAttribute("data-match", "true");
+});

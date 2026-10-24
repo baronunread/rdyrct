@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import * as v from "valibot";
 import { ORG_PLANS, PLAN_LIMITS, PLAN_PRICES, type StoredPlan } from "@/shared/types";
+import { exactCount } from "@/shared/click-usage";
 import { registerWebMcpTools, type WebMcpTool } from "../lib/webmcp";
 
 /**
@@ -31,6 +32,7 @@ function planLine(plan: StoredPlan): string {
   return (
     `${name} (${price}): ${plural(limits.links, "link")}, ${plural(limits.members, "team member")}, ` +
     `${plural(limits.domains, "custom domain")}, ${limits.analyticsDays}-day click analytics, ` +
+    `${exactCount(limits.trackedClicks)} clicks counted a month, ` +
     `${plural(limits.orgs, "organization")}, ${qr}.`
   );
 }
@@ -38,6 +40,7 @@ function planLine(plan: StoredPlan): string {
 const PRICING = [
   ...ORG_PLANS.map(planLine),
   "Only the organization owner needs a paid plan; one subscription covers every organization they own.",
+  "Clicks are counted per organization per calendar month. Past a plan's count, links keep redirecting and only the counting stops until the next month.",
   "rdyrct is open source and self-hosts on your own Cloudflare account with everything Pro has, minus email support.",
 ].join("\n");
 
@@ -62,7 +65,7 @@ export function WebMcpMarketingTools() {
       {
         name: "get_rdyrct_pricing",
         description:
-          "Get rdyrct's plans, prices, and per-plan limits (links, team members, custom domains, analytics history).",
+          "Get rdyrct's plans, prices, and per-plan limits (links, team members, custom domains, analytics history, clicks counted a month).",
         inputSchema: { type: "object", properties: {} },
         annotations: { readOnlyHint: true },
         execute: async () => marketingResult(PRICING),

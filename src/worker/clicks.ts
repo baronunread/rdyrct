@@ -6,6 +6,7 @@ import type { Env } from "./env";
 import type { AppEnv } from "./env";
 import type { KVLink } from "./kv";
 import { rollupStatements, type ClickPayload } from "./rollups";
+import { usageStatement, withinClickCaps } from "./click-caps";
 import { deviceFromUA, normalizeReferrer } from "./util";
 import { clickAnalyticsAllowed } from "./rate-limit";
 import { captureAlert } from "./sentry";
@@ -88,8 +89,9 @@ export async function enqueueClick(c: Context<AppEnv>, hit: KVLink): Promise<voi
 /* ---------------- writing (called by the buffer's flush) ---------------- */
 
 /**
- * The statements that write one chunk of clicks: the rollup upserts first,
- * then the raw insert, all bound to the same JSON array.
+ * The statements that write one chunk of clicks: the rollup upserts and the
+ * monthly counter (#387) first, then the raw insert, all bound to the same
+ * JSON array.
  *
  * The order is the dedupe guard. The raw insert skips a row whose dedupe id is
  * already stored (ON CONFLICT DO NOTHING), and the rollups count only rows
@@ -113,6 +115,7 @@ function writeChunk(d1: D1Database, rows: ClickMessage[]): D1PreparedStatement[]
   );
   return [
     ...rollupStatements(d1, payload),
+    usageStatement(d1, payload),
     // The dedupe constraint is a partial unique index (swept NULL ids are
     // absent from it). SQLite cannot match a column-only conflict target to
     // that index, so let it handle the one applicable unique conflict without
@@ -135,8 +138,8 @@ function writeChunk(d1: D1Database, rows: ClickMessage[]): D1PreparedStatement[]
  * otherwise healthy backlog never reads as a string of failures. */
 export type InsertResult = { retry: ClickMessage[]; hadFailure: boolean };
 
-// The Workers Free plan allows 50 subrequests per invocation, and the failed
-// db.batch() attempt already spends one. insertClicksPerRow spends one more
+// The Workers Free plan allows 50 subrequests per invocation, and the cap
+// read (withinClickCaps) and the failed db.batch() attempt already spend two. insertClicksPerRow spends one more
 // per row it attempts, so a flush of thousands of rows falling back to
 // per-row writes would blow well past that on its own. Bounding it here means
 // a big backlog is drained over several flushes ~10 s apart instead of in one
@@ -147,9 +150,14 @@ const MAX_PER_ROW_FALLBACK = 40;
 /**
  * Write a batch of buffered clicks.
  *
+ * First the plan caps (#387): an org's clicks past this month's allowance are
+ * dropped here, unwritten (see withinClickCaps). The redirect already went
+ * out, so this only decides what is recorded.
+ *
  * The happy path is one `batch()`: per chunk of rows, the rollup upserts
- * (#26) and the raw insert, deduped on `dedupeId` so a re-run after a
- * partial flush never double-counts either (see writeChunk).
+ * (#26), the monthly counter and the raw insert, deduped on `dedupeId` so a
+ * re-run after a partial flush never double-counts any of them (see
+ * writeChunk).
  *
  * A link deleted between the redirect and the flush turns its row into a
  * foreign-key violation that aborts the whole `db.batch`. Rather than lose a
@@ -158,12 +166,21 @@ const MAX_PER_ROW_FALLBACK = 40;
  * dropped and counted, and anything else is returned for retry.
  */
 export async function insertClicks(env: Env, rows: ClickMessage[]): Promise<InsertResult> {
-  if (rows.length === 0) return { retry: [], hadFailure: false };
+  let counted: ClickMessage[];
   try {
-    await env.DB.batch(chunk(rows, CLICK_CHUNK_SIZE).flatMap((c) => writeChunk(env.DB, c)));
+    counted = await withinClickCaps(env, rows);
+  } catch (error) {
+    // D1 is what failed, so every row comes back for the next flush, and the
+    // pass counts toward the buffer's give-up threshold like a failed write.
+    console.error("click_cap_read_failed", error);
+    return { retry: rows, hadFailure: rows.length > 0 };
+  }
+  if (counted.length === 0) return { retry: [], hadFailure: false };
+  try {
+    await env.DB.batch(chunk(counted, CLICK_CHUNK_SIZE).flatMap((c) => writeChunk(env.DB, c)));
     return { retry: [], hadFailure: false };
   } catch {
-    return insertClicksPerRow(env.DB, rows);
+    return insertClicksPerRow(env.DB, counted);
   }
 }
 

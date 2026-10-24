@@ -559,6 +559,35 @@ export const clickHourly = sqliteTable(
 );
 
 /**
+ * Tracked clicks per org per UTC month (#387): the exact count the plan's cap
+ * is checked against. Migration 0043 owns the table. insertClicks adds to it
+ * in the same batch as the raw rows and the rollups, counting only clicks it
+ * actually stored; the 10-minute cron reads it to send the 80% and 100%
+ * emails.
+ */
+export const orgClickUsage = sqliteTable(
+  "org_click_usage",
+  {
+    orgId: text("org_id")
+      .notNull()
+      .references(() => orgs.id, { onDelete: "cascade" }),
+    /** UTC 'YYYY-MM'. */
+    month: text("month").notNull(),
+    clicks: integer("clicks").notNull(),
+    /** The cap the 80% email went out for, null until it has. A cap rather
+     * than a timestamp, so a mid-month plan change earns the new cap its own
+     * email instead of being silenced by the old one's. */
+    warnedLimit: integer("warned_limit"),
+    /** The same, for the 100% email. */
+    cappedLimit: integer("capped_limit"),
+  },
+  (t) => [
+    primaryKey({ columns: [t.orgId, t.month] }),
+    index("idx_org_click_usage_month").on(t.month, t.clicks),
+  ],
+);
+
+/**
  * Links made on the landing page by someone with no account (Direction A of
  * #96). Deliberately unrelated to `orgs`, `user` and `links`: at the moment a
  * row is written, none of those exist for this visitor.
