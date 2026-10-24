@@ -167,6 +167,14 @@ function ActivityBreakdown({ heatmap, bucket }: { heatmap: HeatmapRow[]; bucket:
 
 type AnalyticsRange = { days?: number; bucket?: "day" | "hour" };
 
+/** The period the breakdown cards name, when it differs from the heading's.
+ * The 24-hour view's chart and totals cover the last 24 hours, but its
+ * breakdowns read the daily rollups, so they cover today's UTC day. The
+ * heatmap is hidden in that view (see ActivityBreakdown). */
+function breakdownPeriod(bucket: "day" | "hour"): string | undefined {
+  return bucket === "hour" ? "Today (UTC)" : undefined;
+}
+
 function AnalyticsReport({
   stats: s,
   maxDays,
@@ -190,10 +198,7 @@ function AnalyticsReport({
     }
   };
 
-  // The 24-hour view's chart and totals cover the last 24 hours, but its
-  // breakdowns read the daily rollups, so they cover today's UTC day. The
-  // heatmap is hidden in that view (see ActivityBreakdown).
-  const breakdownPeriod = s.bucket === "hour" ? "Today (UTC)" : undefined;
+  const period = breakdownPeriod(s.bucket);
 
   return (
     <div>
@@ -225,7 +230,7 @@ function AnalyticsReport({
         campaigns={s.campaigns}
         sources={s.sources}
         mediums={s.mediums}
-        period={breakdownPeriod}
+        period={period}
       />
 
       <div className="mt-4">
@@ -237,7 +242,7 @@ function AnalyticsReport({
           countries={s.countries}
           referrers={s.referrers}
           devices={s.devices}
-          period={breakdownPeriod}
+          period={period}
         />
       </div>
 
