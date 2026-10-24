@@ -24,8 +24,19 @@ bun run db:reset:local      # wipe local D1 + KV, re-apply migrations (start fro
 bun add <pkg>               # dependencies
 bunx agent-browser          # real-browser checks: screenshots, clicking through pages. Use it for any visual verification; do not hand-roll headless Chrome
 bun run db:seed:local       # seed local D1/KV with fake data (run dev server first)
-bun run deploy              # build and deploy; VITE_RDYRCT_SITE=1 (in .env) for rdyrct.com, otherwise a self-hosted copy
+bun run deploy              # build, apply D1 migrations, deploy; VITE_RDYRCT_SITE=1 (in .env) for rdyrct.com, otherwise a self-hosted copy
 ```
+
+**Migrations add; they never take away in the same release.** `bun run
+deploy` migrates before it deploys, and `wrangler rollback` brings old code
+back without touching the schema, so the previous release always runs for a
+while against the new schema. Wrangler has no down migrations. Expand, then
+contract: add the new column or table, move the code over in the next
+release, and drop the old one only once no deployed release reads it. A
+migration that drops or renames carries a `-- contract: <what> unread since
+<version>` line, and `tests/migrations-additive.test.ts` fails without it.
+Before a contract migration, note the Time Travel bookmark
+(`bunx wrangler d1 time-travel info rdyrct`) in the PR.
 
 **One repo builds two things: rdyrct.com, and the copy a fork self-hosts.**
 `VITE_RDYRCT_SITE=1` builds rdyrct.com; without it every build, dev

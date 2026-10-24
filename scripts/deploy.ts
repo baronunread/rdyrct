@@ -38,6 +38,9 @@ console.log(site ? "Deploying rdyrct.com" : "Deploying a self-hosted copy");
 
 await $`bun run build`.env({ ...process.env, POSTHOG_SOURCEMAPS: site ? "1" : "0" });
 if (site) await $`bun run posthog:upload`;
-// A self-hosted copy migrates first, so new code never meets an old schema.
-else await $`bunx wrangler d1 migrations apply DB --remote`;
+// Migrate first, so new code never meets an old schema. That only works
+// because migrations add and never take away
+// (tests/migrations-additive.test.ts): the old code keeps running against the
+// new schema until the deploy below lands, and after any rollback.
+await $`bunx wrangler d1 migrations apply DB --remote`;
 await $`bunx wrangler deploy`;
