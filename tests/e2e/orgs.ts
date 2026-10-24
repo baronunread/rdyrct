@@ -4,6 +4,14 @@ import { signUpAndVerify } from "./resend";
 
 const E2E_PASSWORD = "test-password-123";
 
+/** Follows a short link once, without following the redirect, and checks it
+ * sends the visitor to `destination`. */
+export async function expectRedirect(page: Page, slug: string, destination: string) {
+  const res = await page.request.get(`/${slug}`, { maxRedirects: 0 });
+  expect(res.status()).toBe(302);
+  expect(res.headers()["location"]).toBe(destination);
+}
+
 /** Opens the org switcher and creates another org under the same signed-in
  * account, for tests that share one user (see link-addresses.pw.ts) and so
  * have already left the no-org state behind by the time they need this.

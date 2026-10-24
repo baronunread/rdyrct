@@ -1,7 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import { signUpAndVerify } from "./resend";
 import { queryRows, rawSql } from "./db";
-import { createQuickLink } from "./orgs";
+import { createQuickLink, expectRedirect } from "./orgs";
 
 /**
  * Clicks no longer ride a queue. The redirect hands each one to the ClickBuffer
@@ -28,9 +28,7 @@ async function clickNewLink(page: Page, name: string): Promise<{ id: string; slu
   expect(slug).toBeTruthy();
 
   // KV is written in the create request, so the redirect is live at once.
-  const res = await page.request.get(`/${slug}`, { maxRedirects: 0 });
-  expect(res.status()).toBe(302);
-  expect(res.headers()["location"]).toBe(destination);
+  await expectRedirect(page, slug, destination);
   return { id, slug };
 }
 
@@ -71,6 +69,16 @@ test("a redirect's click shows on /analytics and /links through the rollups (#26
   await page.goto("/analytics");
   const total = page.getByText("Total clicks", { exact: true }).locator("..");
   await expect(total.locator("p.tnum")).toHaveText("1");
+  await expect(page.getByText("Today (UTC)")).toHaveCount(0);
+
+  // The 24-hour view: its chart covers the last 24 hours, its breakdowns
+  // today's UTC day, and each breakdown says so.
+  await page.getByRole("button", { name: "24h", exact: true }).click();
+  await expect(page.getByText("Last 24 hours")).toBeVisible();
+  for (const name of ["Countries", "Referrers", "Devices"]) {
+    const label = page.getByText(name, { exact: true }).locator("..");
+    await expect(label).toHaveText(`${name}Today (UTC)`);
+  }
 
   await page.goto("/links");
   const row = page.getByRole("row").filter({ hasText: slug });

@@ -15,6 +15,7 @@ import {
   StatCard,
   ClicksByHour,
   LinkListCard,
+  CardLabel,
   ClickBreakdown,
   TopLinksCard,
 } from "../components/charts";
@@ -89,10 +90,12 @@ function UtmBreakdownSection({
   campaigns,
   sources,
   mediums,
+  period,
 }: {
   campaigns: { campaign: string; clicks: number }[];
   sources: { source: string; clicks: number }[];
   mediums: { medium: string; clicks: number }[];
+  period?: string;
 }) {
   const groups = [
     { label: "Campaigns", items: campaigns.map((c) => ({ key: c.campaign, clicks: c.clicks })) },
@@ -105,7 +108,7 @@ function UtmBreakdownSection({
     <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
       {groups.map((g) => (
         <Card key={g.label}>
-          <p className="mb-3 text-xs font-medium text-muted">{g.label}</p>
+          <CardLabel period={period}>{g.label}</CardLabel>
           {/* No empty line: the filter above drops a group with no items,
               and the whole section goes when every group is empty. A card
               titled "Campaigns" saying "nothing yet" to an org that does not
@@ -165,6 +168,14 @@ function ActivityBreakdown({ heatmap, bucket }: { heatmap: HeatmapRow[]; bucket:
 
 type AnalyticsRange = { days?: number; bucket?: "day" | "hour" };
 
+/** The period the breakdown cards name, when it differs from the heading's.
+ * The 24-hour view's chart and totals cover the last 24 hours, but its
+ * breakdowns read the daily rollups, so they cover today's UTC day. The
+ * heatmap is hidden in that view (see ActivityBreakdown). */
+function breakdownPeriod(bucket: "day" | "hour"): string | undefined {
+  return bucket === "hour" ? "Today (UTC)" : undefined;
+}
+
 function AnalyticsReport({
   stats: s,
   maxDays,
@@ -187,6 +198,8 @@ function AnalyticsReport({
       onRangeChange({ days, bucket });
     }
   };
+
+  const period = breakdownPeriod(s.bucket);
 
   return (
     <div>
@@ -215,14 +228,24 @@ function AnalyticsReport({
 
       <ClicksChart bucket={s.bucket} series={s.series} hourSeries={s.hourSeries} />
 
-      <UtmBreakdownSection campaigns={s.campaigns} sources={s.sources} mediums={s.mediums} />
+      <UtmBreakdownSection
+        campaigns={s.campaigns}
+        sources={s.sources}
+        mediums={s.mediums}
+        period={period}
+      />
 
       <div className="mt-4">
         <TopLinksCard topLinks={s.topLinks} />
       </div>
 
       <div className="mt-4">
-        <ClickBreakdown countries={s.countries} referrers={s.referrers} devices={s.devices} />
+        <ClickBreakdown
+          countries={s.countries}
+          referrers={s.referrers}
+          devices={s.devices}
+          period={period}
+        />
       </div>
 
       <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
