@@ -14,8 +14,8 @@ import { createQuickLink } from "./orgs";
 const password = "test-password-123";
 
 /** Signs up, makes a link from the dashboard and follows it once. Returns the
- * link's id. */
-async function clickNewLink(page: Page, name: string): Promise<string> {
+ * link's id and slug. */
+async function clickNewLink(page: Page, name: string): Promise<{ id: string; slug: string }> {
   await signUpAndVerify(page, `${name}-${Date.now()}@gmail.com`, password);
   const destination = `https://example.com/${name}-${Date.now()}`;
   await createQuickLink(page, destination);
@@ -31,7 +31,7 @@ async function clickNewLink(page: Page, name: string): Promise<string> {
   const res = await page.request.get(`/${slug}`, { maxRedirects: 0 });
   expect(res.status()).toBe(302);
   expect(res.headers()["location"]).toBe(destination);
-  return id;
+  return { id, slug };
 }
 
 /** Polls a count query until it reaches `atLeast`. */
@@ -45,18 +45,21 @@ async function pollCount(page: Page, sql: string, id: string, atLeast: number) {
 }
 
 test("a redirect's click reaches D1 through the buffer (#225)", async ({ page }) => {
-  const id = await clickNewLink(page, "click-buffer");
+  const { id } = await clickNewLink(page, "click-buffer");
   await pollCount(page, "select count(*) as n from clicks where link_id = ?", id, 1);
 });
 
 /**
- * The stats pages read the click rollups (#26), not raw clicks. The
- * clicks_rollup trigger fills them as the buffer's insert lands. The raw row
- * is deleted before the page loads, so the only place /analytics can find the
- * click is the rollup.
+ * The stats pages and the links list read the click rollups (#26), not raw
+ * clicks. insertClicks fills them through rollupStatements, in the same D1
+ * batch as the buffer's raw insert. The raw row is deleted before either page
+ * loads, so the only place /analytics or /links can find the click is the
+ * rollup.
  */
-test("a redirect's click shows on /analytics through the rollups (#26)", async ({ page }) => {
-  const id = await clickNewLink(page, "click-rollup");
+test("a redirect's click shows on /analytics and /links through the rollups (#26)", async ({
+  page,
+}) => {
+  const { id, slug } = await clickNewLink(page, "click-rollup");
   await pollCount(
     page,
     "select coalesce(sum(clicks), 0) as n from click_daily where link_id = ?",
@@ -68,4 +71,8 @@ test("a redirect's click shows on /analytics through the rollups (#26)", async (
   await page.goto("/analytics");
   const total = page.getByText("Total clicks", { exact: true }).locator("..");
   await expect(total.locator("p.tnum")).toHaveText("1");
+
+  await page.goto("/links");
+  const row = page.getByRole("row").filter({ hasText: slug });
+  await expect(row.locator("td.tnum")).toHaveText("1");
 });

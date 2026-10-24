@@ -304,13 +304,66 @@ export async function clicksForLink(db: DB, linkId: string): Promise<number> {
  */
 const ROLLUP_RETENTION_DAYS = 400;
 
-/** Drop rollup rows older than the retention. Run daily, so each run removes
- * about one day of rows and neither delete is ever large. */
-export async function sweepOldRollups(env: Env, now = Date.now()): Promise<void> {
+/** Rows one sweep statement deletes at most, the same bound as the raw sweep
+ * in scheduled(). */
+const ROLLUP_SWEEP_CHUNK = 1000;
+
+/** Sweep statements per D1 batch: ten orgs' worth. */
+const ROLLUP_SWEEP_BATCH = 30;
+
+/**
+ * One org's rows past the cutoff, at most ?3 of them. Every key starts with
+ * org_id, so a delete on `day < ?` alone would read every row of the table:
+ * these name the org (and, for the dims, every dim) so each reads only the
+ * key range it deletes. The tables are WITHOUT ROWID, so the limit goes
+ * through the key columns. Binds: org id, cutoff, limit.
+ */
+export const ROLLUP_SWEEP_SQL = [
+  `delete from click_daily where (org_id, day, link_id) in (
+     select org_id, day, link_id from click_daily where org_id = ?1 and day < ?2 limit ?3)`,
+  `delete from click_daily_dims where (org_id, dim, day, value, link_id) in (
+     select org_id, dim, day, value, link_id from click_daily_dims
+     where org_id = ?1 and dim in ('country', 'referrer', 'device') and day < ?2 limit ?3)`,
+  `delete from click_hourly where (org_id, hour, link_id) in (
+     select org_id, hour, link_id from click_hourly where org_id = ?1 and hour < ?2 limit ?3)`,
+] as const;
+
+/**
+ * Drop rollup rows older than the retention. Run daily, so each run removes
+ * about one day of rows per org.
+ *
+ * Org by org rather than through a (day) index on each table: an index would
+ * add a row write to every new link-day, dimension value and link-hour a
+ * flush creates, every day, to save a read of the orgs table once a day. An
+ * org with nothing to drop costs a key lookup per table that finds nothing.
+ * A statement that deleted a full chunk runs again until one comes up short.
+ */
+export async function sweepOldRollups(
+  env: Env,
+  now = Date.now(),
+  chunk = ROLLUP_SWEEP_CHUNK,
+): Promise<void> {
   const cutoff = now - ROLLUP_RETENTION_DAYS * DAY_MS;
-  await env.DB.batch([
-    env.DB.prepare("delete from click_daily where day < ?").bind(dayKey(cutoff)),
-    env.DB.prepare("delete from click_daily_dims where day < ?").bind(dayKey(cutoff)),
-    env.DB.prepare("delete from click_hourly where hour < ?").bind(cutoff - (cutoff % DAY_MS)),
-  ]);
+  const cutoffs = [dayKey(cutoff), dayKey(cutoff), cutoff - (cutoff % DAY_MS)];
+  const statements = ROLLUP_SWEEP_SQL.map((query) => env.DB.prepare(query));
+  const { results: orgs } = await env.DB.prepare("select id from orgs").all<{ id: string }>();
+
+  let pending = orgs.flatMap(({ id }) =>
+    statements.map((stmt, i) => stmt.bind(id, cutoffs[i], chunk)),
+  );
+  while (pending.length > 0) {
+    const again: D1PreparedStatement[] = [];
+    for (let i = 0; i < pending.length; i += ROLLUP_SWEEP_BATCH) {
+      const group = pending.slice(i, i + ROLLUP_SWEEP_BATCH);
+      // Sequential on purpose: D1 runs one write at a time, so batches sent
+      // at once only queue behind each other, and holding the rest back
+      // leaves room for the click flushes this daily job must not delay.
+      // react-doctor-disable-next-line react-doctor/async-await-in-loop
+      const results = await env.DB.batch(group);
+      group.forEach((stmt, j) => {
+        if ((results[j]?.meta.changes ?? 0) >= chunk) again.push(stmt);
+      });
+    }
+    pending = again;
+  }
 }
