@@ -294,6 +294,21 @@ export async function applyTestMigrations(): Promise<void> {
   await applyD1Migrations(env.DB, env.TEST_MIGRATIONS);
 }
 
+/** Migration 0042's backfill: the click rollups rebuilt from raw clicks. */
+export function rollupBackfill(): string[] {
+  const migration = env.TEST_MIGRATIONS.find((m) => m.name.startsWith("0042_"));
+  return (migration?.queries ?? []).filter((q) => /INSERT INTO click_\w+.*SELECT/s.test(q));
+}
+
+/**
+ * Rows a test writes straight into `clicks` skip insertClicks, which is what
+ * keeps the rollups (#26) current. This runs the same backfill production
+ * ran, so the stats routes see them.
+ */
+export async function rebuildClickRollups(): Promise<void> {
+  await env.DB.batch(rollupBackfill().map((q) => env.DB.prepare(q)));
+}
+
 // The password every seeded test user shares: fine since each test's DB is
 // wiped between runs and nothing depends on a real secret.
 export const TEST_PASSWORD = "correct-horse-battery";

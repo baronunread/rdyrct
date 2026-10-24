@@ -59,6 +59,7 @@ import {
 } from "./storage";
 
 import { countAnonClick, enqueueClick, sweepDedupeIds } from "./clicks";
+import { sweepOldRollups } from "./rollups";
 
 export { OrgDeleteWorkflow, DomainActivateWorkflow, LinkImportWorkflow } from "./workflows";
 export { ClickBuffer } from "./click-buffer";
@@ -648,6 +649,10 @@ const wrapped = Sentry.withSentry<
       do {
         changes = (await stmt.bind(cutoff).run()).meta.changes;
       } while (changes > 0);
+
+      // Daily: trim rollups past their own retention (#26), kept separate
+      // from the raw cutoff above so that one can shrink on its own.
+      await sweepOldRollups(env);
 
       // Daily: drop dedupe ids the queue can no longer redeliver, so a unique
       // index over 400 days of history stops carrying a guarantee that only
