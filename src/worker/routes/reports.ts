@@ -8,11 +8,15 @@
  * form that said "no such link" would be a slug probe.
  *
  * A report never suspends anything by itself. Anyone can file one, so a
- * single report could be used to take down a stranger's link. It puts the
- * warning page in front of the link instead (#344): the link keeps working,
- * one click later, until an admin dismisses the report. A link with
- * REPORTS_TO_FLAG open reports also flags its org for review, and a human
- * decides.
+ * single report could be used to take down a stranger's link. On a free
+ * org's link it puts the warning page in front instead (#344): the link
+ * keeps working, one click later, until an admin dismisses the report. On a
+ * paid org's link it only goes into the admin queue and the link stays as it
+ * is: a paying customer went through billing, and one anonymous report must
+ * not put an interstitial in front of their link (decided on #390). With no
+ * billing (a self-hosted copy) every org is unlimited, so no report warns.
+ * A link with REPORTS_TO_FLAG open reports also flags its org for review,
+ * and a human decides.
  */
 import { Hono } from "hono";
 import * as v from "valibot";
@@ -29,6 +33,7 @@ import { publicClientKey, rateLimitAllows } from "../rate-limit";
 import { captureAlert } from "../sentry";
 import { notifyAdmin } from "../abuse";
 import { WARN_REASON, warnLink } from "../link-warning";
+import { orgPlan } from "../plan";
 import { uid } from "../util";
 
 /** Open reports on one link before its org is flagged for review. */
@@ -145,7 +150,10 @@ reportRoutes.post("/", async (c) => {
   });
 
   if (link) {
-    await warnLink(c.env, db, link.linkId, WARN_REASON.report);
+    // The plan is the owner's, as everywhere (plan.ts's orgPlan).
+    const { plan } = await orgPlan(db, link.orgId);
+    log.set({ report: { plan, warned: plan === "free" } });
+    if (plan === "free") await warnLink(c.env, db, link.linkId, WARN_REASON.report);
     await flagOrgIfReported(c.env, db, link);
   }
 

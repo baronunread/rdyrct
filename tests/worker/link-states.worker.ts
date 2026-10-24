@@ -185,6 +185,46 @@ describe("reports put a warning on the link", () => {
       .bind(sampleLink.id)
       .first<{ warned_at: number | null; warn_reason: string | null }>();
 
+  /** Give org-1 an owner on `plan`: an org's plan is its owner's. */
+  const ownedBy = (plan: "free" | "hobby" | "pro") =>
+    env.DB.batch([
+      env.DB.prepare(
+        "insert into user (id, name, email, email_verified, plan, created_at, updated_at) values ('owner-1', 'Owner', 'owner@example.com', 1, ?, 0, 0)",
+      ).bind(plan),
+      env.DB.prepare(
+        "insert into org_members (org_id, user_id, role, created_at) values ('org-1', 'owner-1', 'owner', 0)",
+      ),
+    ]);
+
+  it("warns a free org's link at once", async () => {
+    await seedLink();
+    await ownedBy("free");
+    await report();
+    expect((await warnRow())?.warn_reason).toBe("Open report");
+    expect(await env.LINKS.get(`slug:${sampleLink.slug}`, "json")).toMatchObject({ warn: true });
+  });
+
+  it("only queues a report on a paid org's link, which stays as it is", async () => {
+    for (const plan of ["hobby", "pro"] as const) {
+      reset();
+      await applyTestMigrations();
+      await seedLink();
+      await ownedBy(plan);
+      await syncKv();
+      expect((await report()).status).toBe(201);
+      expect((await warnRow())?.warned_at, plan).toBeNull();
+      expect(await env.LINKS.get(`slug:${sampleLink.slug}`, "json"), plan).not.toHaveProperty(
+        "warn",
+      );
+      const queued = await env.DB.prepare(
+        "select count(*) as n from link_reports where link_id = ? and status = 'open'",
+      )
+        .bind(sampleLink.id)
+        .first<{ n: number }>();
+      expect(queued?.n, plan).toBe(1);
+    }
+  });
+
   it("warns on the first report, and the last dismissal lifts it", async () => {
     await seedLink();
     await report();

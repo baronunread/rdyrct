@@ -203,6 +203,17 @@ test("a visitor reports a link and an admin sees and dismisses the report", asyn
   await page.getByLabel("Details (optional)").fill("asks for a card number");
   await page.getByRole("button", { name: "Send report" }).click();
   await expect(page.getByText("Thanks. We will look at it.")).toBeVisible({ timeout: 15_000 });
+  // The owner is on the free plan, so the report warns the link at once.
+  // A paid org's link would only be queued (tests/worker/link-states).
+  const warnReason = async () =>
+    (
+      await queryRows<{ warn_reason: string | null }>(
+        page,
+        "select warn_reason from links where slug = ?",
+        [slug],
+      )
+    )[0].warn_reason;
+  expect(await warnReason()).toBe("Open report");
 
   await page.goto("/admin/links");
   await page.getByRole("button", { name: "Reports", exact: true }).click();
@@ -212,4 +223,6 @@ test("a visitor reports a link and an admin sees and dismisses the report", asyn
 
   await row.getByRole("button", { name: "Dismiss" }).click();
   await expect(page.getByText("No open reports.")).toBeVisible({ timeout: 10_000 });
+  // Dismissing the only report lifts the warning it set.
+  await expect.poll(warnReason).toBeNull();
 });

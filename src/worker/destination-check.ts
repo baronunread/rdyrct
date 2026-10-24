@@ -83,8 +83,11 @@ export async function checkLinkDestination(
  * here would never be asked about at all. Paid orgs went through billing, so
  * one burning the quota is somebody we can name and stop; the GCP quota cap
  * is what bounds the total.
+ *
+ * 50 because a free org has at most 30 links (PLAN_LIMITS.free.links): that
+ * covers making every one of them in a day, plus some edits.
  */
-export const WEB_RISK_LOOKUPS_PER_ORG_PER_DAY = 200;
+export const WEB_RISK_LOOKUPS_PER_ORG_PER_DAY = 50;
 
 /**
  * Count one Web Risk lookup against the org's day, or return false when the
