@@ -29,7 +29,8 @@ const LAST_GRANDFATHERED = 41;
 // ALTER TABLE counts. A view or trigger the old code relies on counts too.
 const DESTRUCTIVE =
   /\bdrop\s+(table|column|view|trigger)\b|\balter\s+table\b[^;]*\bdrop\b|\brename\b/i;
-const CONTRACT = /^[ \t]*--[ \t]*contract:[ \t]*\S/im;
+// "-- contract: <what> unread since <version>", so a bare TODO does not pass.
+const CONTRACT = /^[ \t]*--[ \t]*contract:[ \t]*\S.*\bunread since\b[ \t]*\S/im;
 
 /** The SQL with comments removed, so a comment that mentions a drop is not one. */
 function statements(sql: string): string {
@@ -59,6 +60,7 @@ describe("needsContractLine", () => {
 
   test("an empty contract line does not count", () => {
     expect(needsContractLine("-- contract:\nDROP TABLE invites;")).toBe(true);
+    expect(needsContractLine("-- contract: TODO\nDROP TABLE invites;")).toBe(true);
   });
 
   test("additions, indexes and comments pass", () => {
