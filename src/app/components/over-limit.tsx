@@ -31,6 +31,7 @@ import { buttonClass } from "../ui/button-class";
 import { useCurrentOrg } from "../lib/current-org";
 import { useClickUsage } from "../lib/hooks";
 import { clickCapNotice } from "@/shared/click-usage";
+import { SUPPORT_EMAIL } from "@/shared/support";
 import { graceLabel, graceRunning } from "../lib/grace";
 import {
   OVER_LIMIT_KEYS,
@@ -180,9 +181,27 @@ export function ClickCapBanner() {
   if (!notice) return null;
   return (
     <Notice>
-      <p className="max-w-prose text-sm tnum">{notice.text}</p>
+      <p className="max-w-prose text-sm tnum">
+        <WithSupportLink text={notice.text} />
+      </p>
       {notice.offerUpgrade && <BillingLink />}
     </Notice>
+  );
+}
+
+/** `text` with the support address, where it appears, as a mail link. The
+ * words stay in click-usage.ts, shared with the email. */
+function WithSupportLink({ text }: { text: string }) {
+  const [before, after] = text.split(SUPPORT_EMAIL);
+  if (after === undefined) return text;
+  return (
+    <>
+      {before}
+      <a href={`mailto:${SUPPORT_EMAIL}`} className="font-mono text-accent hover:underline">
+        {SUPPORT_EMAIL}
+      </a>
+      {after}
+    </>
   );
 }
 

@@ -13,6 +13,7 @@ import {
   moreClicksLine,
   nearSentence,
   reachedSentence,
+  writeForMoreLine,
 } from "@/shared/click-usage";
 
 /**
@@ -279,7 +280,8 @@ export function clickUsageEmail(
           // The cap, not the count: a downgrade can leave the count past it.
           `${org.name} has reached the ${limit} clicks its plan counts this month.`,
           preheader,
-          ...(more ? [`${more} Upgrade to count them.`] : []),
+          // The email goes to the owner, who is the one to write.
+          more ? `${more} Upgrade to count them.` : writeForMoreLine(true),
         ]
       : [
           `${org.name} has recorded ${exactCount(org.clicks)} of the ${limit} clicks its plan counts this month.`,

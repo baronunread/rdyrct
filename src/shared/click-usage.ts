@@ -7,6 +7,7 @@
  * link keeps redirecting and its clicks are simply not recorded.
  */
 import { PLAN_LIMITS, type OrgPlan } from "./types";
+import { SUPPORT_EMAIL } from "./support";
 
 /** The share of the cap at which the owner hears about it the first time. */
 export const CLICK_WARN_SHARE = 0.8;
@@ -66,6 +67,14 @@ export function moreClicksLine(plan: OrgPlan): string | null {
   return null;
 }
 
+/** At the cap on a plan with nothing above it (Pro): no upgrade to offer, so
+ * ask us. Only the owner pays, so anybody else is told who can write. */
+export function writeForMoreLine(isOwner: boolean): string {
+  return isOwner
+    ? `For more, write to ${SUPPORT_EMAIL}.`
+    : `The owner can write to ${SUPPORT_EMAIL} for more.`;
+}
+
 /** The sentence the banner and the 100% email share: what keeps working and
  * what stopped. */
 export function reachedSentence(limit: number, now: number): string {
@@ -95,8 +104,9 @@ export function clickCapNotice(
   if (level === "under") return null;
   const more = moreClicksLine(org.plan) !== null;
   const limit = exactCount(usage.limit);
-  const upgrade = !more
-    ? ""
+  // What to do about it: upgrade, or with no plan above, write to us.
+  const next = !more
+    ? ` ${writeForMoreLine(isOwner)}`
     : isOwner
       ? " Upgrade to count them."
       : " The owner can upgrade to count them.";
@@ -104,7 +114,7 @@ export function clickCapNotice(
     level === "reached"
       ? // The cap, not the count: after a downgrade the count can be far past
         // it, and "recorded its 5,000" would then be false.
-        `This organization has reached the ${limit} clicks its plan counts in ${monthName(now)}. ${reachedSentence(usage.limit, now)}${upgrade}`
+        `This organization has reached the ${limit} clicks its plan counts in ${monthName(now)}. ${reachedSentence(usage.limit, now)}${next}`
       : `This organization has recorded ${exactCount(usage.clicks)} of the ${limit} clicks its plan counts this month. ${nearSentence(usage.limit, now)}`;
   return { text, offerUpgrade: more && isOwner };
 }

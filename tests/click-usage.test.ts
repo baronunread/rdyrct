@@ -94,6 +94,26 @@ describe("clickCapNotice", () => {
     expect(notice?.offerUpgrade).toBe(false);
   });
 
+  test("tells a Pro org at its cap to write to us, and who should write", () => {
+    const pro = { ...org, plan: "pro" as const };
+    const usage = { clicks: 500_000, limit: 500_000 };
+    expect(clickCapNotice(pro, usage, OCT_31_LATE)?.text).toMatch(
+      /Your links still work\..* For more, write to support@mail\.rdyrct\.com\.$/,
+    );
+    expect(clickCapNotice({ ...pro, role: "admin" }, usage, OCT_31_LATE)?.text).toMatch(
+      / The owner can write to support@mail\.rdyrct\.com for more\.$/,
+    );
+    // Only at the cap: at 80% there is nothing to ask for yet.
+    expect(
+      clickCapNotice(pro, { clicks: 400_000, limit: 500_000 }, OCT_31_LATE)?.text,
+    ).not.toContain("write to");
+  });
+
+  test("offers Free and Hobby an upgrade, not a mail to us", () => {
+    const notice = clickCapNotice(org, { clicks: 5_000, limit: 5_000 }, OCT_31_LATE);
+    expect(notice?.text).not.toContain("write to");
+  });
+
   test("near the cap, gives the exact count", () => {
     const notice = clickCapNotice(org, { clicks: 4_132, limit: 5_000 }, OCT_31_LATE);
     expect(notice?.text).toContain("4,132 of the 5,000");

@@ -373,6 +373,14 @@ describe("the 80% and 100% emails", () => {
     const pro = clickUsageEmail("reached", { ...base, plan: "pro" }, "https://x.test", "a@b.c");
     expect(pro.body.text).toContain("Your links still work.");
     expect(pro.body.text).not.toContain("Upgrade");
+    expect(pro.body.text).toContain("For more, write to support@mail.rdyrct.com.");
+    const proNear = clickUsageEmail(
+      "near",
+      { ...base, plan: "pro", clicks: 400_000 },
+      "https://x.test",
+      "a@b.c",
+    );
+    expect(proNear.body.text).not.toContain("For more, write to");
 
     const free = clickUsageEmail(
       "near",
