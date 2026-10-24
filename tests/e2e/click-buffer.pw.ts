@@ -1,7 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import { signUpAndVerify } from "./resend";
 import { queryRows, rawSql } from "./db";
-import { createQuickLink } from "./orgs";
+import { createQuickLink, expectRedirect } from "./orgs";
 
 /**
  * Clicks no longer ride a queue. The redirect hands each one to the ClickBuffer
@@ -28,9 +28,7 @@ async function clickNewLink(page: Page, name: string): Promise<{ id: string; slu
   expect(slug).toBeTruthy();
 
   // KV is written in the create request, so the redirect is live at once.
-  const res = await page.request.get(`/${slug}`, { maxRedirects: 0 });
-  expect(res.status()).toBe(302);
-  expect(res.headers()["location"]).toBe(destination);
+  await expectRedirect(page, slug, destination);
   return { id, slug };
 }
 
