@@ -126,6 +126,17 @@ describe("the monthly cap at flush time", () => {
     expect(await usage()).toBe(PLAN_LIMITS.free.trackedClicks);
   });
 
+  it("spends one unit on a click that appears twice in a flush", async () => {
+    await seedOwnedLink("free");
+    await setUsage(PLAN_LIMITS.free.trackedClicks - 2);
+    // dup-0, then dup-0 and dup-1.
+    await insertClicks(testEnv, [...clicks(1, "dup"), ...clicks(2, "dup")]);
+
+    // Stored once, so it spends one unit and the other click still fits.
+    expect((await recorded()).raw).toBe(2);
+    expect(await usage()).toBe(PLAN_LIMITS.free.trackedClicks);
+  });
+
   it("records only what is left of the allowance, the earliest clicks first", async () => {
     await seedOwnedLink("free");
     await setUsage(PLAN_LIMITS.free.trackedClicks - 2);

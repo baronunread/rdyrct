@@ -52,7 +52,8 @@ type Allowance = { orgId: string; month: string; plan: string | null; used: numb
  * Conservative on a redelivered click: it spends allowance here although the
  * write will skip it as already stored. That can only drop a fresh click that
  * would have fit, near the cap, in a flush that is redelivering, never record
- * one past the cap.
+ * one past the cap. Checking `clicks` for every id here would cost a read per
+ * click on every flush to save a few clicks at the cap in a rare one.
  */
 export async function withinClickCaps(
   env: Env,
@@ -84,7 +85,12 @@ export async function withinClickCaps(
   }
   const counted: ClickMessage[] = [];
   const dropped: ClickMessage[] = [];
+  // The same click twice in one flush spends one unit: the write stores it
+  // once (FRESH), so a second unit would be allowance nothing uses.
+  const seen = new Set<string>();
   for (const row of rows) {
+    if (seen.has(row.dedupeId)) continue;
+    seen.add(row.dedupeId);
     const key = `${row.orgId}|${monthKey(row.ts)}`;
     const left = room.get(key) ?? 0;
     if (left <= 0) dropped.push(row);
