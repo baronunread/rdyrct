@@ -39,6 +39,7 @@ import { assertNotBlocked, assertNotOwnShortLink, holdIfSuspicious } from "../ab
 import { scoreAndRecord } from "../risk";
 import { claimAnonLink } from "./shorten";
 import { cursorValueOf, linkPageQuery, readLinkPageParams, takePage } from "../links-page";
+import { clicksForLink, linkClicksTotal } from "../rollups";
 import type {
   AddressDTO,
   LinkDTO,
@@ -86,13 +87,11 @@ function validateInput(body: LinkInput, orgId: string, partial = false) {
   validateQrFields(body, orgId);
 }
 
+// From the rollups (#26), the same expression the clicks sort uses.
+const clickCount = linkClicksTotal.as("clicks");
+
 // NB: literal `links.id`; interpolating the drizzle column renders an
 // unqualified "id" that SQLite resolves against the subquery's own table.
-const clickCount = sql<number>`(
-  select count(*) from clicks where clicks.link_id = links.id
-)`.as("clicks");
-
-// NB: same literal-`links.id` note as clickCount above.
 const addressCount = sql<number>`(
   select count(*) from link_addresses
   where link_addresses.link_id = links.id and link_addresses.retired_at is null
@@ -144,13 +143,10 @@ async function linkToDTO(
 ): Promise<LinkDTO> {
   const [hostname, clicks, addressCount] = await Promise.all([
     domainHostname(db, orgId, row.domainId),
-    db
-      .select({ n: sql<number>`count(*)` })
-      .from(schema.clicks)
-      .where(eq(schema.clicks.linkId, row.id)),
+    clicksForLink(db, row.id),
     countAddressesForLink(db, row.id),
   ]);
-  return toDTO(env, row, clicks[0]?.n ?? 0, hostname, addressCount);
+  return toDTO(env, row, clicks, hostname, addressCount);
 }
 
 /** Inserts a new address row, publishes its KV key, and responds with the

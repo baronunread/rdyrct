@@ -499,6 +499,66 @@ export const clicks = sqliteTable(
 );
 
 /**
+ * Click rollups (#26): what the stats pages and the links list read instead
+ * of raw clicks. Migration 0042 owns the tables (Drizzle cannot express
+ * WITHOUT ROWID) and says why they are shaped this way. insertClicks writes
+ * them; nothing else in the app does.
+ */
+export const clickDaily = sqliteTable(
+  "click_daily",
+  {
+    orgId: text("org_id").notNull(),
+    /** UTC 'YYYY-MM-DD'. */
+    day: text("day").notNull(),
+    linkId: text("link_id")
+      .notNull()
+      .references(() => links.id, { onDelete: "cascade" }),
+    clicks: integer("clicks").notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.orgId, t.day, t.linkId] }),
+    index("idx_click_daily_link").on(t.linkId, t.day, t.clicks),
+  ],
+);
+
+export const CLICK_DIMENSIONS = ["country", "referrer", "device"] as const;
+
+export const clickDailyDims = sqliteTable(
+  "click_daily_dims",
+  {
+    orgId: text("org_id").notNull(),
+    dim: text("dim", { enum: CLICK_DIMENSIONS }).notNull(),
+    day: text("day").notNull(),
+    value: text("value").notNull(),
+    linkId: text("link_id")
+      .notNull()
+      .references(() => links.id, { onDelete: "cascade" }),
+    clicks: integer("clicks").notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.orgId, t.dim, t.day, t.value, t.linkId] }),
+    index("idx_click_daily_dims_link").on(t.linkId, t.dim, t.day, t.value, t.clicks),
+  ],
+);
+
+export const clickHourly = sqliteTable(
+  "click_hourly",
+  {
+    orgId: text("org_id").notNull(),
+    /** Start of the UTC hour, in milliseconds. */
+    hour: integer("hour").notNull(),
+    linkId: text("link_id")
+      .notNull()
+      .references(() => links.id, { onDelete: "cascade" }),
+    clicks: integer("clicks").notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.orgId, t.hour, t.linkId] }),
+    index("idx_click_hourly_link").on(t.linkId, t.hour, t.clicks),
+  ],
+);
+
+/**
  * Links made on the landing page by someone with no account (Direction A of
  * #96). Deliberately unrelated to `orgs`, `user` and `links`: at the moment a
  * row is written, none of those exist for this visitor.

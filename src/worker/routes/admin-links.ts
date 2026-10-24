@@ -24,6 +24,7 @@ import { and, desc, eq, isNull, isNotNull, like, or, sql } from "drizzle-orm";
 import * as schema from "../db/schema";
 import type { AppEnv, DB, Env } from "../env";
 import { enqueueStorage, republishOrgLinks, syncLinkMsg } from "../storage";
+import { linkClicksTotal } from "../rollups";
 import { recordAdminAction } from "../audit";
 import { markOrgAbuse } from "../abuse-hold";
 import { blockHostOf } from "../../shared/abuse-rules";
@@ -91,9 +92,8 @@ const reportCount = sql<number>`(
   where link_reports.link_id = links.id and link_reports.status = 'open'
 )`;
 
-const clickCount = sql<number>`(
-  select count(*) from clicks where clicks.link_id = links.id
-)`;
+// Read from the rollups (#26), like the org's own links list.
+const clickCount = linkClicksTotal;
 
 /** The link this route is about, or a 404. Every route here starts by
  * reading the row it names, and an id that matches nothing is the same

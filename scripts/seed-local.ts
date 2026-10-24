@@ -388,6 +388,9 @@ async function wipe(): Promise<number> {
   // else with it: the domain being freed is a seed domain either way.
   await sqlBatch([
     "DELETE FROM clicks WHERE org_id LIKE 'seed-%'",
+    "DELETE FROM click_daily WHERE org_id LIKE 'seed-%'",
+    "DELETE FROM click_daily_dims WHERE org_id LIKE 'seed-%'",
+    "DELETE FROM click_hourly WHERE org_id LIKE 'seed-%'",
     "DELETE FROM link_addresses WHERE org_id LIKE 'seed-%'",
     "DELETE FROM link_addresses WHERE domain_id IN (SELECT id FROM domains WHERE id LIKE 'seed-%')",
     "DELETE FROM links WHERE id LIKE 'seed-%'",
@@ -402,6 +405,40 @@ async function wipe(): Promise<number> {
     "DELETE FROM user WHERE id LIKE 'seed-%'",
   ]);
   return links.length;
+}
+
+/**
+ * The stats pages read the click rollups (#26). The seed writes raw clicks
+ * straight into D1, past insertClicks, so it builds the rollups the way the
+ * migration backfilled production: migration 0042's own INSERT ... SELECT
+ * statements, limited to seed orgs. Then it checks every rollup adds up to the
+ * raw rows, so a seeded org never shows charts that disagree with its clicks.
+ */
+async function buildRollups(): Promise<void> {
+  const migration = await Bun.file(
+    new URL("../migrations/0042_click_rollups.sql", import.meta.url),
+  ).text();
+  const backfill = migration
+    .replace(/^\s*--.*$/gm, "")
+    .split(";")
+    .filter((q) => /INSERT INTO click_\w+.*SELECT/s.test(q))
+    .map((q) => q.replace("WHERE true", "WHERE org_id LIKE 'seed-%'"));
+  if (backfill.length !== 3) throw new Error("migration 0042 no longer has its three backfills");
+  await sqlBatch(backfill);
+
+  const [row] = await sql<Record<string, number>>(
+    `select (select count(*) from clicks where org_id like 'seed-%') as raw,
+            (select coalesce(sum(clicks), 0) from click_daily where org_id like 'seed-%') as daily,
+            (select coalesce(sum(clicks), 0) from click_hourly where org_id like 'seed-%') as hourly,
+            (select coalesce(sum(clicks), 0) from click_daily_dims
+              where org_id like 'seed-%' and dim = 'country') as dims`,
+  );
+  if (!row || new Set(Object.values(row).map(Number)).size !== 1) {
+    throw new Error(
+      `click rollups disagree with raw clicks: ${JSON.stringify(row)}. Run bun run db:migrate:local and seed again.`,
+    );
+  }
+  console.log(`  rollups built, matching ${row.raw} raw clicks`);
 }
 
 /* ---------------- seed ---------------- */
@@ -825,6 +862,8 @@ async function seed() {
     clicksInserted = Math.min(clickValues.length, (i + slice.length) * CLICK_BATCH);
     console.log(`  clicks inserted: ${clicksInserted}/${clickValues.length}`);
   }
+
+  await buildRollups();
 
   await seedDowngrades(orgs, now, day);
 
