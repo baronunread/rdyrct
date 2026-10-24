@@ -40,8 +40,10 @@ import {
 type Allowance = { orgId: string; month: string; plan: string | null; used: number };
 
 /**
- * The clicks in this flush that still fit their org's cap for their month.
- * Order is kept, so the earliest clicks of a flush are the ones counted.
+ * Split a flush into the clicks that still fit their org's cap for their
+ * month (`counted`) and the ones past it (`dropped`, which the abuse sweep
+ * still counts: see click-overflow.ts). Order is kept, so the earliest clicks
+ * of a flush are the ones counted.
  *
  * One query for every org and month in the flush: the owner's plan (comps
  * included, since `user.plan` is already the comp or the subscription) and
@@ -52,8 +54,11 @@ type Allowance = { orgId: string; month: string; plan: string | null; used: numb
  * would have fit, near the cap, in a flush that is redelivering, never record
  * one past the cap.
  */
-export async function withinClickCaps(env: Env, rows: ClickMessage[]): Promise<ClickMessage[]> {
-  if (rows.length === 0) return rows;
+export async function withinClickCaps(
+  env: Env,
+  rows: ClickMessage[],
+): Promise<{ counted: ClickMessage[]; dropped: ClickMessage[] }> {
+  if (rows.length === 0) return { counted: rows, dropped: [] };
   // The buffer's flush is not a request, so nothing else has said whether
   // this deployment sells plans. Unset, every org is unlimited.
   configureBilling(env);
@@ -77,13 +82,18 @@ export async function withinClickCaps(env: Env, rows: ClickMessage[]): Promise<C
     const limit = PLAN_LIMITS[planNow(orgPlanOf(row.plan))].trackedClicks;
     room.set(`${row.orgId}|${row.month}`, limit - row.used);
   }
-  return rows.filter((row) => {
+  const counted: ClickMessage[] = [];
+  const dropped: ClickMessage[] = [];
+  for (const row of rows) {
     const key = `${row.orgId}|${monthKey(row.ts)}`;
     const left = room.get(key) ?? 0;
-    if (left <= 0) return false;
-    room.set(key, left - 1);
-    return true;
-  });
+    if (left <= 0) dropped.push(row);
+    else {
+      room.set(key, left - 1);
+      counted.push(row);
+    }
+  }
+  return { counted, dropped };
 }
 
 /**
@@ -260,7 +270,8 @@ export function clickUsageEmail(
   const paragraphs =
     kind === "reached"
       ? [
-          `${org.name} has recorded ${limit} clicks this month, all that its plan counts.`,
+          // The cap, not the count: a downgrade can leave the count past it.
+          `${org.name} has reached the ${limit} clicks its plan counts this month.`,
           preheader,
           ...(more ? [`${more} Upgrade to count them.`] : []),
         ]

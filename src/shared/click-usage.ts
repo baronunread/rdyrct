@@ -102,7 +102,9 @@ export function clickCapNotice(
       : " The owner can upgrade to count them.";
   const text =
     level === "reached"
-      ? `This organization has recorded its ${limit} clicks for ${monthName(now)}. ${reachedSentence(usage.limit, now)}${upgrade}`
+      ? // The cap, not the count: after a downgrade the count can be far past
+        // it, and "recorded its 5,000" would then be false.
+        `This organization has reached the ${limit} clicks its plan counts in ${monthName(now)}. ${reachedSentence(usage.limit, now)}${upgrade}`
       : `This organization has recorded ${exactCount(usage.clicks)} of the ${limit} clicks its plan counts this month. ${nearSentence(usage.limit, now)}`;
   return { text, offerUpgrade: more && isOwner };
 }

@@ -3,6 +3,10 @@ import { env } from "cloudflare:workers";
 import { reset, runDurableObjectAlarm } from "cloudflare:test";
 import { insertClicks, type ClickMessage } from "../../src/worker/clicks";
 import { clickUsageEmail, sweepClickUsageEmails } from "../../src/worker/click-caps";
+import { redirectsByOrg, sweepOldOverflow } from "../../src/worker/click-overflow";
+import { sweepAbusiveOrgs } from "../../src/worker/abuse";
+import * as schema from "../../src/worker/db/schema";
+import { drizzle } from "drizzle-orm/d1";
 import { monthKey } from "../../src/shared/click-usage";
 import { PLAN_LIMITS, type ClickUsage, type StoredPlan } from "../../src/shared/types";
 import {
@@ -368,5 +372,117 @@ describe("the 80% and 100% emails", () => {
     expect(free.subject).toContain("80%");
     expect(free.body.text).toContain("4,000 of the 5,000");
     expect(free.body.text).toContain("Hobby counts 50,000");
+  });
+
+  it("names the cap, not a count it never stored, after a downgrade", () => {
+    // A Pro org with 100,000 clicks that moved to Free.
+    const mail = clickUsageEmail(
+      "reached",
+      { name: "Acme", plan: "free", clicks: 100_000, limit: 5_000, now: NOW },
+      "https://x.test",
+      "a@b.c",
+    );
+    expect(mail.body.text).toContain("Acme has reached the 5,000 clicks its plan counts");
+    expect(mail.body.text).not.toContain("recorded 5,000");
+  });
+});
+
+describe("the abuse sweep past the cap", () => {
+  /** org-1 made just now, its free owner already at the cap. */
+  async function seedCappedNewOrg() {
+    await seedOwnedLink("free");
+    await env.DB.prepare("update orgs set created_at = ? where id = 'org-1'").bind(NOW).run();
+    await setUsage(PLAN_LIMITS.free.trackedClicks);
+  }
+
+  const reviewFlag = async () =>
+    (
+      await env.DB.prepare("select review_flagged_at as at from orgs where id = 'org-1'").first<{
+        at: number | null;
+      }>()
+    )?.at ?? null;
+
+  it("counts dropped clicks per link per minute, one row however many clicks", async () => {
+    await seedCappedNewOrg();
+    await insertClicks(testEnv, clicks(250, "drop"));
+
+    expect((await recorded()).raw).toBe(0);
+    const rows = await env.DB.prepare("select minute, clicks from click_overflow").all<{
+      minute: number;
+      clicks: number;
+    }>();
+    expect(rows.results).toEqual([{ minute: NOW - (NOW % 60_000), clicks: 250 }]);
+  });
+
+  it("still sees a burst the org sends after its cap, though none of it is stored", async () => {
+    await seedCappedNewOrg();
+    // Past the 200-an-hour burst check, all of it dropped by the cap.
+    await insertClicks(testEnv, clicks(250, "burst"));
+    expect((await recorded()).raw).toBe(0);
+
+    await sweepAbusiveOrgs(testEnv);
+
+    expect(await reviewFlag()).not.toBeNull();
+  });
+
+  it("still sees a new link pushed past 300 after the cap, outside the last hour", async () => {
+    await seedCappedNewOrg();
+    await env.DB.prepare("update links set created_at = ? where id = 'link-1'").bind(NOW).run();
+    // Two hours ago, so the burst check sees none of it: only the new-link
+    // check can catch this, and only by counting what was dropped.
+    const twoHoursAgo = NOW - 2 * 60 * 60 * 1000;
+    await setUsage(PLAN_LIMITS.free.trackedClicks, monthKey(twoHoursAgo));
+    await insertClicks(testEnv, clicks(320, "fresh", twoHoursAgo));
+    expect((await recorded()).raw).toBe(0);
+
+    await sweepAbusiveOrgs(testEnv);
+
+    expect(await reviewFlag()).not.toBeNull();
+  });
+
+  it("still counts the dropped clicks when the batch fails over a deleted link", async () => {
+    await seedCappedNewOrg();
+    // Another org's click on a link deleted since: its foreign key fails the
+    // whole batch, which rolls back the overflow count with it.
+    const gone: ClickMessage = {
+      ...clicks(1, "gone")[0],
+      orgId: "org-2",
+      linkId: "no-such-link",
+    };
+    expect(await insertClicks(testEnv, [...clicks(4, "drop"), gone])).toEqual({
+      retry: [],
+      hadFailure: false,
+    });
+
+    const left = await env.DB.prepare("select sum(clicks) as n from click_overflow").first<{
+      n: number;
+    }>();
+    expect(left?.n).toBe(4);
+  });
+
+  it("adds what was stored and what was dropped into one count", async () => {
+    await seedOwnedLink("free");
+    await setUsage(PLAN_LIMITS.free.trackedClicks - 100);
+    await insertClicks(testEnv, clicks(150, "mixed"));
+    expect((await recorded()).raw).toBe(100);
+
+    const rows = await redirectsByOrg(drizzle(env.DB, { schema }), NOW - 60_000, 1);
+
+    expect(rows).toEqual([{ orgId: "org-1", n: 150 }]);
+  });
+
+  it("drops counts older than two days, and keeps the rest", async () => {
+    await seedCappedNewOrg();
+    const threeDaysAgo = NOW - 3 * 24 * 60 * 60 * 1000;
+    await setUsage(PLAN_LIMITS.free.trackedClicks, monthKey(threeDaysAgo));
+    await insertClicks(testEnv, clicks(5, "old", threeDaysAgo));
+    await insertClicks(testEnv, clicks(5, "new"));
+
+    await sweepOldOverflow(testEnv, NOW);
+
+    const left = await env.DB.prepare("select sum(clicks) as n from click_overflow").first<{
+      n: number;
+    }>();
+    expect(left?.n).toBe(5);
   });
 });

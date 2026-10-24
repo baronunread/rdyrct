@@ -7,6 +7,7 @@ import type { AppEnv } from "./env";
 import type { KVLink } from "./kv";
 import { rollupStatements, type ClickPayload } from "./rollups";
 import { usageStatement, withinClickCaps } from "./click-caps";
+import { overflowStatement } from "./click-overflow";
 import { deviceFromUA, normalizeReferrer } from "./util";
 import { clickAnalyticsAllowed } from "./rate-limit";
 import { captureAlert } from "./sentry";
@@ -139,7 +140,8 @@ function writeChunk(d1: D1Database, rows: ClickMessage[]): D1PreparedStatement[]
 export type InsertResult = { retry: ClickMessage[]; hadFailure: boolean };
 
 // The Workers Free plan allows 50 subrequests per invocation, and the cap
-// read (withinClickCaps) and the failed db.batch() attempt already spend two. insertClicksPerRow spends one more
+// read (withinClickCaps), the failed db.batch() attempt and the overflow count
+// written on its own after it already spend three. insertClicksPerRow spends one more
 // per row it attempts, so a flush of thousands of rows falling back to
 // per-row writes would blow well past that on its own. Bounding it here means
 // a big backlog is drained over several flushes ~10 s apart instead of in one
@@ -152,7 +154,9 @@ const MAX_PER_ROW_FALLBACK = 40;
  *
  * First the plan caps (#387): an org's clicks past this month's allowance are
  * dropped here, unwritten (see withinClickCaps). The redirect already went
- * out, so this only decides what is recorded.
+ * out, so this only decides what is recorded. What is dropped is still
+ * counted per link-minute for the abuse sweep, in the same batch
+ * (click-overflow.ts).
  *
  * The happy path is one `batch()`: per chunk of rows, the rollup upserts
  * (#26), the monthly counter and the raw insert, deduped on `dedupeId` so a
@@ -166,20 +170,28 @@ const MAX_PER_ROW_FALLBACK = 40;
  * dropped and counted, and anything else is returned for retry.
  */
 export async function insertClicks(env: Env, rows: ClickMessage[]): Promise<InsertResult> {
-  let counted: ClickMessage[];
+  let split: Awaited<ReturnType<typeof withinClickCaps>>;
   try {
-    counted = await withinClickCaps(env, rows);
+    split = await withinClickCaps(env, rows);
   } catch (error) {
     // D1 is what failed, so every row comes back for the next flush, and the
     // pass counts toward the buffer's give-up threshold like a failed write.
     console.error("click_cap_read_failed", error);
     return { retry: rows, hadFailure: rows.length > 0 };
   }
-  if (counted.length === 0) return { retry: [], hadFailure: false };
+  const { counted, dropped } = split;
+  const overflow = overflowStatement(env.DB, dropped);
+  const writes = chunk(counted, CLICK_CHUNK_SIZE).flatMap((c) => writeChunk(env.DB, c));
+  if (overflow) writes.push(overflow);
+  if (writes.length === 0) return { retry: [], hadFailure: false };
   try {
-    await env.DB.batch(chunk(counted, CLICK_CHUNK_SIZE).flatMap((c) => writeChunk(env.DB, c)));
+    await env.DB.batch(writes);
     return { retry: [], hadFailure: false };
   } catch {
+    // The batch rolled back the overflow count with everything else. Write
+    // it on its own: nobody retries a dropped click, so this is its one try.
+    if (overflow)
+      await overflow.run().catch((error) => console.error("click_overflow_failed", error));
     return insertClicksPerRow(env.DB, counted);
   }
 }

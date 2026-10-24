@@ -588,6 +588,24 @@ export const orgClickUsage = sqliteTable(
 );
 
 /**
+ * Clicks dropped past an org's monthly cap, per link per UTC minute
+ * (migration 0044). Only the abuse sweep reads it, so the 24-hour ceiling and
+ * the burst checks still see an org's traffic once it stops being stored. See
+ * click-overflow.ts.
+ */
+export const clickOverflow = sqliteTable(
+  "click_overflow",
+  {
+    /** Start of the UTC minute, ms. */
+    minute: integer("minute").notNull(),
+    orgId: text("org_id").notNull(),
+    linkId: text("link_id").notNull(),
+    clicks: integer("clicks").notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.minute, t.orgId, t.linkId] })],
+);
+
+/**
  * Links made on the landing page by someone with no account (Direction A of
  * #96). Deliberately unrelated to `orgs`, `user` and `links`: at the moment a
  * row is written, none of those exist for this visitor.

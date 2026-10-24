@@ -61,10 +61,17 @@ describe("clickCapNotice", () => {
   test("at the cap, says the links still work before anything else", () => {
     const notice = clickCapNotice(org, { clicks: 5_000, limit: 5_000 }, Date.UTC(2026, 9, 24));
     expect(notice).toEqual({
-      text: "This organization has recorded its 5,000 clicks for October. Your links still work. Clicks past 5,000 this month are not counted until November 1. Upgrade to count them.",
+      text: "This organization has reached the 5,000 clicks its plan counts in October. Your links still work. Clicks past 5,000 this month are not counted until November 1. Upgrade to count them.",
       offerUpgrade: true,
     });
     expect(notice?.text).not.toContain("—");
+  });
+
+  test("after a downgrade, names the cap rather than claiming the org recorded only that many", () => {
+    // A Pro org with 100,000 clicks this month, now on Free.
+    const notice = clickCapNotice(org, { clicks: 100_000, limit: 5_000 }, OCT_31_LATE);
+    expect(notice?.text).toContain("has reached the 5,000 clicks its plan counts in October.");
+    expect(notice?.text).not.toContain("recorded its 5,000");
   });
 
   test("tells somebody who is not the owner who can upgrade, and offers them no button", () => {

@@ -33,6 +33,7 @@ import { capRoutes } from "./routes/cap";
 import { revalidateOnRedirect } from "./risk";
 import { sweepAbusiveOrgs } from "./abuse";
 import { sweepClickUsageEmails } from "./click-caps";
+import { sweepOldOverflow } from "./click-overflow";
 import { reportRoutes } from "./routes/reports";
 import { evlogMiddleware } from "./evlog";
 import { sweepGraceWarnings } from "./reconcile";
@@ -656,6 +657,10 @@ const wrapped = Sentry.withSentry<
       // Daily: trim rollups past their own retention (#26), kept separate
       // from the raw cutoff above so that one can shrink on its own.
       await sweepOldRollups(env);
+
+      // Daily: drop the counts of clicks dropped past a cap once the abuse
+      // sweep's windows have moved past them (#387).
+      await sweepOldOverflow(env);
 
       // Daily: drop dedupe ids the queue can no longer redeliver, so a unique
       // index over 400 days of history stops carrying a guarantee that only
