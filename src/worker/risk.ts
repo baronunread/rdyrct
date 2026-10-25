@@ -159,8 +159,17 @@ const webRiskAnswerSchema = v.object({
  * a 9 KB one still reached Google's auth in a probe, and a 17 KB one got a
  * 400. Destinations have no length cap, so without this a long enough query
  * string was a way past the check. 8 KB leaves room for the rest of the GET.
+ *
+ * Measured encoded, as the URI is sent (webRiskUriLength): each "&" or "%"
+ * grows to three characters or five, so 8,000 of them pass a check on the raw
+ * URL and still make a 24 KB request that Google refuses.
  */
 export const WEB_RISK_MAX_URI = 8 * 1024;
+
+/** How long a URI is once it is a query parameter of the lookup. */
+export function webRiskUriLength(uri: string): number {
+  return new URLSearchParams({ uri }).toString().length - "uri=".length;
+}
 /** Web Risk matches the host plus up to four path prefixes ("/", "/a/",
  * "/a/b/", "/a/b/c/"), so three leading segments keep every prefix check. */
 const WEB_RISK_PATH_SEGMENTS = 3;
@@ -181,9 +190,10 @@ export function webRiskUri(destination: string): string | null {
   url.hash = "";
   url.username = "";
   url.password = "";
-  if (url.href.length <= WEB_RISK_MAX_URI) return url.href;
+  const fits = (uri: string) => webRiskUriLength(uri) <= WEB_RISK_MAX_URI;
+  if (fits(url.href)) return url.href;
   url.search = "";
-  if (url.href.length <= WEB_RISK_MAX_URI) return url.href;
+  if (fits(url.href)) return url.href;
   // Not the bare host: padding a listed path past the cap would then get a
   // clean answer for the host. The leading segments still carry the listed
   // prefix, and only padding inside the first one (a path nobody listed)
@@ -191,7 +201,7 @@ export function webRiskUri(destination: string): string | null {
   const segments = url.pathname.split("/").filter(Boolean).slice(0, WEB_RISK_PATH_SEGMENTS);
   for (; segments.length > 0; segments.pop()) {
     const uri = `${url.origin}/${segments.join("/")}/`;
-    if (uri.length <= WEB_RISK_MAX_URI) return uri;
+    if (fits(uri)) return uri;
   }
   return `${url.origin}/`;
 }
@@ -201,13 +211,19 @@ export function webRiskUri(destination: string): string | null {
 const WEB_RISK_CLEAN_TTL_SECONDS = 60 * 60;
 /**
  * A listed answer's life: Google's `expireTime`, or 30 minutes when it gave
- * none. Google's terms (Service Specific Terms §47) allow a warning based on
- * Web Risk only while the answer is that fresh, and a hold is a warning.
+ * none, since Google's terms (Service Specific Terms §47) allow acting on a
+ * Web Risk answer only while it is that fresh. That bounds when a hit can
+ * start a hold. The hold itself is a human-review state: it stays until an
+ * admin acts, the way Bitly's review does, and nothing asks Google again
+ * about a held link.
  */
 const WEB_RISK_HIT_TTL_SECONDS = { max: 24 * 60 * 60, fallback: 30 * 60 };
 /** KV refuses a TTL under 60 seconds: an answer due to expire sooner is not
  * cached at all, rather than kept past its expiry. */
 const KV_MIN_TTL_SECONDS = 60;
+/** KV's edge cache can serve a value up to about 60 seconds after it expired,
+ * so a hit is cached for that much less than Google's life for it. */
+const KV_EDGE_STALE_SECONDS = 60;
 
 type WebRiskAnswer = { verdict: RiskVerdict; ttlSeconds: number };
 
@@ -216,8 +232,8 @@ type WebRiskAnswer = { verdict: RiskVerdict; ttlSeconds: number };
 function hitTtlSeconds(expireTime: string | undefined): number {
   const { max, fallback } = WEB_RISK_HIT_TTL_SECONDS;
   const expires = Date.parse(expireTime ?? "");
-  if (Number.isNaN(expires)) return fallback;
-  return Math.min(max, Math.floor((expires - Date.now()) / 1000));
+  const life = Number.isNaN(expires) ? fallback : Math.floor((expires - Date.now()) / 1000);
+  return Math.min(max, life) - KV_EDGE_STALE_SECONDS;
 }
 
 /** One call to Google for an already-canonical URI. */

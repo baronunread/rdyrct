@@ -9,6 +9,7 @@ import {
   scoreDestinationWithWebRisk,
   WEB_RISK_MAX_URI,
   webRiskUri,
+  webRiskUriLength,
   webRiskVerdict,
 } from "../src/worker/risk";
 
@@ -262,7 +263,24 @@ describe("asking Web Risk", () => {
     const longPath = `https://kit.example/${"p".repeat(20_000)}?x=1`;
     expect(webRiskUri(longPath)).toBe("https://kit.example/");
     for (const url of [longQuery, longPath])
-      expect(webRiskUri(url)?.length).toBeLessThanOrEqual(WEB_RISK_MAX_URI);
+      expect(webRiskUriLength(webRiskUri(url) ?? "")).toBeLessThanOrEqual(WEB_RISK_MAX_URI);
+  });
+
+  test("measures the URI as it is sent, so characters that encode long cannot pad past the cap", async () => {
+    // 8,000 "&" pass a check on the raw URL and become a 24 KB request, which
+    // Google answers with a 400: the lookup failed and the link went through.
+    const ampersands = `https://kit.example/login?${"&".repeat(8000)}`;
+    expect(ampersands.length).toBeLessThan(WEB_RISK_MAX_URI);
+    expect(webRiskUri(ampersands)).toBe("https://kit.example/login");
+    // "%41" stays three characters in the URL and goes as five.
+    const escapes = `https://hacked.example/wp-content/phish/${"%41".repeat(2500)}`;
+    expect(escapes.length).toBeLessThan(WEB_RISK_MAX_URI);
+    expect(webRiskUri(escapes)).toBe("https://hacked.example/wp-content/phish/");
+
+    const asked = google({ threat: { threatTypes: ["SOCIAL_ENGINEERING"] } });
+    for (const url of [ampersands, escapes])
+      expect((await webRiskVerdict(url, KEY))?.score).toBe(100);
+    for (const uri of asked) expect(webRiskUriLength(uri)).toBeLessThanOrEqual(WEB_RISK_MAX_URI);
   });
 
   test("keeps a padded listed path's leading segments, never just the host", async () => {
@@ -313,15 +331,16 @@ describe("asking Web Risk", () => {
     expect([...LINKS.store.keys()].join()).not.toContain("example.com");
   });
 
-  test("keeps a hit for as long as Google says it holds", async () => {
+  test("keeps a hit until a minute before Google's expireTime", async () => {
     const expireTime = new Date(Date.now() + 10 * 60 * 1000).toISOString();
     google({ threat: { threatTypes: ["MALWARE"], expireTime } });
     const LINKS = memoryKv();
     expect(
       (await askWebRisk({ WEB_RISK_API_KEY: KEY, LINKS }, "https://kit.example/")).outcome,
     ).toBe("hit");
-    expect(LINKS.ttls[0]).toBeGreaterThan(9 * 60);
-    expect(LINKS.ttls[0]).toBeLessThanOrEqual(10 * 60);
+    // A minute short of it: KV's edge can serve a value about that long stale.
+    expect(LINKS.ttls[0]).toBeGreaterThan(8 * 60);
+    expect(LINKS.ttls[0]).toBeLessThanOrEqual(9 * 60);
   });
 
   test("keeps a hit no longer than Google's terms allow", async () => {
@@ -329,10 +348,11 @@ describe("asking Web Risk", () => {
     google({ threat: { threatTypes: ["MALWARE"] } });
     const LINKS = memoryKv();
     await askWebRisk({ WEB_RISK_API_KEY: KEY, LINKS }, "https://kit.example/a");
-    expect(LINKS.ttls).toEqual([30 * 60]);
+    expect(LINKS.ttls).toEqual([29 * 60]);
 
-    // Due to expire in under KV's 60 second minimum: not cached at all.
-    const soon = new Date(Date.now() + 20_000).toISOString();
+    // Due to expire within two minutes: a minute short of that is under KV's
+    // 60 second minimum, so it is not cached at all.
+    const soon = new Date(Date.now() + 100_000).toISOString();
     google({ threat: { threatTypes: ["MALWARE"], expireTime: soon } });
     const short = memoryKv();
     const { outcome } = await askWebRisk(

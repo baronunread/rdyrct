@@ -373,6 +373,12 @@ async function actOnWebRisk(
 export const SPIKE_RECHECKS_PER_RUN = 10;
 /** One forced lookup per link per day, however long its spike lasts. */
 const SPIKE_RECHECK_EVERY_SECONDS = 24 * 60 * 60;
+/** Candidates looked at per run, before the marks and the held filter. Keeps
+ * the id list well inside D1's 100 bound parameters a statement. */
+const SPIKE_CANDIDATES_PER_RUN = 3 * SPIKE_RECHECKS_PER_RUN;
+/** KV marks read per run at most, well inside the Worker's 1,000 KV
+ * operations an invocation. */
+const SPIKE_MARK_READS_PER_RUN = 10 * SPIKE_CANDIDATES_PER_RUN;
 
 type SpikeRechecks = { asked: number; hit: number; failed: number; skipped: number };
 
@@ -383,37 +389,50 @@ type SpikeRechecks = { asked: number; hit: number; failed: number; skipped: numb
  * links all scored clean when they were made.
  *
  * Bounded twice: a KV mark keeps it to one forced lookup per link a day, and
- * SPIKE_RECHECKS_PER_RUN caps a run. A held link is skipped.
+ * SPIKE_RECHECKS_PER_RUN caps a run. A held link is skipped. The mark is set
+ * only once Google answers, so an outage costs a day of nothing: the next
+ * run, ten minutes on, asks again.
  */
-export async function recheckSpikingLinks(env: Env, linkIds: string[]): Promise<SpikeRechecks> {
+export async function recheckSpikingLinks(env: Env, spiking: string[]): Promise<SpikeRechecks> {
   const counts: SpikeRechecks = { asked: 0, hit: 0, failed: 0, skipped: 0 };
   const key = env.WEB_RISK_API_KEY;
-  if (!key) return { ...counts, skipped: linkIds.length };
+  if (!key) return { ...counts, skipped: spiking.length };
   const db = drizzle(env.DB, { schema });
   const mark = (id: string) => `webrisk:spike:${id}`;
   // Which to ask about is settled first, so the lookups can run together.
-  const [marked, live] = await Promise.all([
-    Promise.all(linkIds.map((id) => env.LINKS.get(mark(id)))),
+  // Marked links are dropped before the slice, so the ones already asked
+  // about today cannot crowd the rest out of every run.
+  const linkIds: string[] = [];
+  const scan = spiking.slice(0, SPIKE_MARK_READS_PER_RUN);
+  for (let i = 0; i < scan.length && linkIds.length < SPIKE_CANDIDATES_PER_RUN;) {
+    const chunk = scan.slice(i, (i += SPIKE_CANDIDATES_PER_RUN));
+    const marked = await Promise.all(chunk.map((id) => env.LINKS.get(mark(id))));
+    linkIds.push(...chunk.filter((_, j) => marked[j] === null));
+  }
+  linkIds.splice(SPIKE_CANDIDATES_PER_RUN);
+  const live =
     linkIds.length === 0
       ? []
-      : db
+      : await db
           .select({ id: schema.links.id, destination: schema.links.destination })
           .from(schema.links)
-          .where(and(inArray(schema.links.id, linkIds), isNull(schema.links.suspendedAt))),
-  ]);
+          .where(and(inArray(schema.links.id, linkIds), isNull(schema.links.suspendedAt)));
   const destinations = new Map(live.map((link) => [link.id, link.destination]));
   const due = linkIds
-    .filter((id, i) => marked[i] === null && destinations.has(id))
+    .filter((id) => destinations.has(id))
     .slice(0, SPIKE_RECHECKS_PER_RUN)
     .map((id) => ({ id, destination: destinations.get(id) ?? "" }));
-  counts.skipped = linkIds.length - due.length;
+  counts.skipped = spiking.length - due.length;
 
   const outcomes = await Promise.all(
     due.map(async (link) => {
-      await env.LINKS.put(mark(link.id), "1", { expirationTtl: SPIKE_RECHECK_EVERY_SECONDS });
       // Uncached on purpose: the cache may hold a clean answer from minutes ago.
       const verdict = await webRiskVerdict(link.destination, key);
-      return verdict ? actOnWebRisk(env, db, link, verdict) : "failed";
+      if (!verdict) return "failed";
+      await env.LINKS.put(mark(link.id), "1", {
+        expirationTtl: SPIKE_RECHECK_EVERY_SECONDS,
+      }).catch(() => {});
+      return actOnWebRisk(env, db, link, verdict);
     }),
   );
   counts.asked = due.length;

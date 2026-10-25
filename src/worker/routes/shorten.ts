@@ -111,7 +111,7 @@ shortenRoutes.post("/", async (c) => {
   log.set({ webRisk: { outcome: webRisk.outcome } });
   if (webRisk.outcome === "hit")
     throw new HTTPException(422, {
-      message: "That site is on a list of harmful sites, so it cannot be shortened.",
+      message: "Google Web Risk lists this site as unsafe, so it cannot be shortened.",
     });
   const now = Date.now();
   const expiresAt = now + ANON_LINK_TTL_MS;

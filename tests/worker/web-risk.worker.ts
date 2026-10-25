@@ -444,6 +444,8 @@ describe("an anonymous link (#341 review)", () => {
     stubGoogle();
     const res = await shorten(LISTED);
     expect(res.status).toBe(422);
+    // A warning based on Web Risk names it (Google's terms, §47).
+    expect((await jsonBody<{ message: string }>(res)).message).toContain("Google Web Risk");
     const count = await env.DB.prepare("select count(*) as n from anon_links").first<{
       n: number;
     }>();
@@ -549,5 +551,50 @@ describe("a second look on a traffic spike (#390)", () => {
     const counts = await recheckSpikingLinks(withKey(), ids);
     expect(lookups).toHaveLength(SPIKE_RECHECKS_PER_RUN);
     expect(counts).toMatchObject({ asked: SPIKE_RECHECKS_PER_RUN, skipped: 2 });
+  });
+
+  it("takes more than D1's 100 bound parameters of spiking links without throwing", async () => {
+    const ids = Array.from({ length: 120 }, (_, i) => `crowd-${i}`);
+    await env.DB.prepare(
+      `insert into links (id, org_id, slug, destination, created_at)
+       select 'crowd-' || x, 'org-1', 'crowd' || x, 'https://example.com/' || x, 0
+       from (with recursive c(x) as (select 0 union all select x + 1 from c where x < 119) select x from c)`,
+    ).run();
+    const lookups = stubGoogle();
+
+    const counts = await recheckSpikingLinks(withKey(), ids);
+    expect(lookups).toHaveLength(SPIKE_RECHECKS_PER_RUN);
+    expect(counts).toMatchObject({ asked: SPIKE_RECHECKS_PER_RUN, skipped: 110 });
+  });
+
+  it("reaches past links already asked about today", async () => {
+    const ids = Array.from({ length: 40 }, (_, i) => `seen-${i}`);
+    await env.DB.prepare(
+      `insert into links (id, org_id, slug, destination, created_at)
+       select 'seen-' || x, 'org-1', 'seen' || x, 'https://example.com/' || x, 0
+       from (with recursive c(x) as (select 0 union all select x + 1 from c where x < 39) select x from c)`,
+    ).run();
+    await Promise.all(ids.map((id) => env.LINKS.put(`webrisk:spike:${id}`, "1")));
+    await spikingLink("late", LISTED);
+    const lookups = stubGoogle();
+
+    expect(await recheckSpikingLinks(withKey(), [...ids, "late"])).toMatchObject({
+      asked: 1,
+      hit: 1,
+    });
+    expect(lookups).toEqual([LISTED]);
+  });
+
+  it("asks again on the next run when Google did not answer", async () => {
+    // The day's mark used to go in before the lookup, so one failure turned
+    // the recheck off for that link until tomorrow.
+    await spikingLink("flaky", LISTED);
+    stubGoogle({ down: true });
+    expect(await recheckSpikingLinks(withKey(), ["flaky"])).toMatchObject({ asked: 1, failed: 1 });
+
+    const lookups = stubGoogle();
+    expect(await recheckSpikingLinks(withKey(), ["flaky"])).toMatchObject({ asked: 1, hit: 1 });
+    expect(lookups).toEqual([LISTED]);
+    expect((await linkRow("flaky"))?.suspended_at).not.toBeNull();
   });
 });
