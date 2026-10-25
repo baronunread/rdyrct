@@ -35,6 +35,8 @@ test("banning an org's owner disables its links, blocks only the host picked, an
   const abuser = await (await browser.newContext()).newPage();
   await signUpAndVerify(abuser, abuserEmail, password);
   await createQuickLink(abuser, `https://${host}/spin`);
+  // The "Link created" dialog covers the form; a fresh dashboard does not.
+  await abuser.goto("/dashboard");
   await createQuickLink(abuser, "https://www.google.com/maps");
   const [link] = await queryRows<{ slug: string }>(
     abuser,
