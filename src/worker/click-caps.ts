@@ -13,7 +13,6 @@ import {
   moreClicksLine,
   nearSentence,
   reachedSentence,
-  writeForMoreLine,
 } from "@/shared/click-usage";
 
 /**
@@ -268,7 +267,8 @@ export function clickUsageEmail(
   const more = moreClicksLine(org.plan);
   const subject =
     kind === "reached"
-      ? `${org.name} has used its ${limit} tracked clicks for ${month}`
+      ? // The cap, not the count: a downgrade can leave the count far past it.
+        `${org.name} has reached its plan's ${limit} tracked clicks for ${month}`
       : `${org.name} has used ${Math.round(CLICK_WARN_SHARE * 100)}% of its tracked clicks for ${month}`;
   // What still works comes first in the inbox preview: the reader's first
   // worry is the links, not the numbers.
@@ -276,13 +276,9 @@ export function clickUsageEmail(
     kind === "reached" ? reachedSentence(org.limit, org.now) : nearSentence(org.limit, org.now);
   const paragraphs =
     kind === "reached"
-      ? [
-          // The cap, not the count: a downgrade can leave the count past it.
-          `${org.name} has reached the ${limit} clicks its plan counts this month.`,
-          preheader,
-          // The email goes to the owner, who is the one to write.
-          more ? `${more} Upgrade to count them.` : writeForMoreLine(true),
-        ]
+      ? // The heading already says what happened. A plan with nothing above
+        // it (Pro) gets no extra line: the footer already says where to write.
+        [preheader, ...(more ? [`${more} Upgrade to count them.`] : [])]
       : [
           `${org.name} has recorded ${exactCount(org.clicks)} of the ${limit} clicks its plan counts this month.`,
           preheader,

@@ -7,7 +7,7 @@ import { redirectsByOrg, sweepOldOverflow } from "../../src/worker/click-overflo
 import { sweepAbusiveOrgs } from "../../src/worker/abuse";
 import * as schema from "../../src/worker/db/schema";
 import { drizzle } from "drizzle-orm/d1";
-import { monthKey } from "../../src/shared/click-usage";
+import { monthKey, monthName } from "../../src/shared/click-usage";
 import { PLAN_LIMITS, type ClickUsage, type StoredPlan } from "../../src/shared/types";
 import {
   applyTestMigrations,
@@ -373,7 +373,10 @@ describe("the 80% and 100% emails", () => {
     const pro = clickUsageEmail("reached", { ...base, plan: "pro" }, "https://x.test", "a@b.c");
     expect(pro.body.text).toContain("Your links still work.");
     expect(pro.body.text).not.toContain("Upgrade");
-    expect(pro.body.text).toContain("For more, write to support@mail.rdyrct.com.");
+    // Where to write for more is the footer's "Questions? Write to ...":
+    // said once, not twice.
+    expect(pro.body.text.split("support@mail.rdyrct.com")).toHaveLength(2);
+    expect(pro.body.text).toContain("Questions? Write to support@mail.rdyrct.com.");
     const proNear = clickUsageEmail(
       "near",
       { ...base, plan: "pro", clicks: 400_000 },
@@ -401,8 +404,12 @@ describe("the 80% and 100% emails", () => {
       "https://x.test",
       "a@b.c",
     );
-    expect(mail.body.text).toContain("Acme has reached the 5,000 clicks its plan counts");
-    expect(mail.body.text).not.toContain("recorded 5,000");
+    expect(mail.subject).toBe(
+      `Acme has reached its plan's 5,000 tracked clicks for ${monthName(NOW)}`,
+    );
+    // The heading is the subject; nothing in the mail claims a count of 5,000.
+    expect(mail.body.text).toContain(mail.subject);
+    expect(mail.body.text).not.toMatch(/used its|recorded 5,000/);
   });
 });
 

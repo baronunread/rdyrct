@@ -11,20 +11,7 @@ import { createQuickLink, expectRedirect } from "./orgs";
  */
 test("an org at its click cap still redirects, and /billing shows the cap reached", async ({
   page,
-  browser,
 }) => {
-  // The control: an org under its cap, so the test can tell "capped" from
-  // "nothing was recorded at all".
-  const control = await (await browser.newContext()).newPage();
-  await signUpAndVerify(control, `click-cap-control-${Date.now()}@gmail.com`, "test-password-123");
-  const controlDestination = `https://example.com/click-cap-control-${Date.now()}`;
-  await createQuickLink(control, controlDestination);
-  const [controlLink] = await queryRows<{ id: string; slug: string }>(
-    control,
-    "select id, slug from links where destination = ?",
-    [controlDestination],
-  );
-
   await signUpAndVerify(page, `click-cap-${Date.now()}@gmail.com`, "test-password-123");
   const destination = `https://example.com/click-cap-${Date.now()}`;
   await createQuickLink(page, destination);
@@ -44,18 +31,26 @@ test("an org at its click cap still redirects, and /billing shows the cap reache
   );
 
   await expectRedirect(page, slug, destination);
-  // Followed after the capped one. Every click goes through the one buffer in
-  // order, so once this one is stored, the capped click's flush has run too.
-  await expectRedirect(control, controlLink.slug, controlDestination);
 
-  const clicksOn = async (linkId: string) =>
+  // Wait on the capped click's own trace: the flush counts what it drops in
+  // click_overflow (for the abuse sweep). Once it reads 1, the flush has run
+  // and chosen to drop the click, so the checks below cannot pass merely
+  // because nothing was flushed yet.
+  const dropped = async () =>
     (
-      await queryRows<{ n: number }>(page, "select count(*) as n from clicks where link_id = ?", [
-        linkId,
-      ])
+      await queryRows<{ n: number }>(
+        page,
+        "select coalesce(sum(clicks), 0) as n from click_overflow where link_id = ?",
+        [id],
+      )
     )[0].n;
-  await expect.poll(() => clicksOn(controlLink.id), { timeout: 15_000 }).toBe(1);
-  expect(await clicksOn(id)).toBe(0);
+  await expect.poll(dropped, { timeout: 15_000 }).toBe(1);
+  const [{ n }] = await queryRows<{ n: number }>(
+    page,
+    "select count(*) as n from clicks where link_id = ?",
+    [id],
+  );
+  expect(n).toBe(0);
   const [{ clicks }] = await queryRows<{ clicks: number }>(
     page,
     "select clicks from org_click_usage where org_id = ? and month = ?",
@@ -74,5 +69,4 @@ test("an org at its click cap still redirects, and /billing shows the cap reache
     ),
   ).toBeVisible();
   await expect(page.getByRole("link", { name: "See plans" })).toBeVisible();
-  await control.context().close();
 });

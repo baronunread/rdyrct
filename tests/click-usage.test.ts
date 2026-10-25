@@ -110,8 +110,17 @@ describe("clickCapNotice", () => {
   });
 
   test("offers Free and Hobby an upgrade, not a mail to us", () => {
-    const notice = clickCapNotice(org, { clicks: 5_000, limit: 5_000 }, OCT_31_LATE);
-    expect(notice?.text).not.toContain("write to");
+    const free = clickCapNotice(org, { clicks: 5_000, limit: 5_000 }, OCT_31_LATE);
+    expect(free?.text).not.toContain("write to");
+    expect(free?.offerUpgrade).toBe(true);
+    const hobby = clickCapNotice(
+      { ...org, plan: "hobby" },
+      { clicks: 50_000, limit: 50_000 },
+      OCT_31_LATE,
+    );
+    expect(hobby?.text).not.toContain("write to");
+    expect(hobby?.text).toContain("Upgrade to count them.");
+    expect(hobby?.offerUpgrade).toBe(true);
   });
 
   test("near the cap, gives the exact count", () => {

@@ -69,7 +69,7 @@ export function moreClicksLine(plan: OrgPlan): string | null {
 
 /** At the cap on a plan with nothing above it (Pro): no upgrade to offer, so
  * ask us. Only the owner pays, so anybody else is told who can write. */
-export function writeForMoreLine(isOwner: boolean): string {
+function writeForMoreLine(isOwner: boolean): string {
   return isOwner
     ? `For more, write to ${SUPPORT_EMAIL}.`
     : `The owner can write to ${SUPPORT_EMAIL} for more.`;
