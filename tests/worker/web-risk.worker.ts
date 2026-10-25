@@ -445,7 +445,9 @@ describe("an anonymous link (#341 review)", () => {
     const res = await shorten(LISTED);
     expect(res.status).toBe(422);
     // A warning based on Web Risk names it (Google's terms, §47).
-    expect((await jsonBody<{ message: string }>(res)).message).toContain("Google Web Risk");
+    const { message } = await jsonBody<{ message: string }>(res);
+    expect(message).toContain("Google Web Risk");
+    expect(message).toContain("cannot guarantee");
     const count = await env.DB.prepare("select count(*) as n from anon_links").first<{
       n: number;
     }>();

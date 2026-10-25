@@ -45,6 +45,7 @@ import { CAP_FAILED_CODE } from "@/shared/types";
 import { isValidHttpUrl, linkUrl, normalizeUrl, randomSlug, uid } from "../util";
 import { publicClientKey, rateLimitAllows } from "../rate-limit";
 import { insertLinkWithinLimit, orgPlan } from "../plan";
+import { WEB_RISK_NOTICE } from "../destination-check";
 
 /** How long an unclaimed link keeps working. */
 const ANON_LINK_TTL_MS = 24 * 60 * 60 * 1000;
@@ -111,7 +112,8 @@ shortenRoutes.post("/", async (c) => {
   log.set({ webRisk: { outcome: webRisk.outcome } });
   if (webRisk.outcome === "hit")
     throw new HTTPException(422, {
-      message: "Google Web Risk lists this site as unsafe, so it cannot be shortened.",
+      // Attribution and the advisory notice: Service Specific Terms §47.
+      message: `Google Web Risk lists this site as unsafe, so it cannot be shortened. ${WEB_RISK_NOTICE}`,
     });
   const now = Date.now();
   const expiresAt = now + ANON_LINK_TTL_MS;

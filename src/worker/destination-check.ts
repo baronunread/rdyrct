@@ -151,8 +151,9 @@ async function retryWebRiskTomorrow(db: DB, linkId: string): Promise<void> {
  * Google's wording. Every mail about a Web Risk hold carries it. The held and
  * warning pages do not: they never say why a link stopped.
  */
-export const WEB_RISK_ADVISORY =
-  "This check uses Google Web Risk. Google works to provide the most accurate and up-to-date information about unsafe sites, but cannot guarantee that it is complete and free of errors: some risky sites may not be found, and some safe sites may be listed in error.";
+export const WEB_RISK_NOTICE =
+  "Google works to provide the most accurate and up-to-date information about unsafe sites, but cannot guarantee that it is complete and free of errors: some risky sites may not be found, and some safe sites may be listed in error.";
+export const WEB_RISK_ADVISORY = `This check uses Google Web Risk. ${WEB_RISK_NOTICE}`;
 
 /** Hold a link Web Risk lists, and its whole org when the org is new and
  * free. A link already held is left alone, so a repeat hit is a no-op. */
