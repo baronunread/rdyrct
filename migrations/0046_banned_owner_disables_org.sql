@@ -24,3 +24,13 @@ WHERE id IN (SELECT org_id FROM links WHERE suspend_reason = 'Owner banned')
   );
 UPDATE links SET suspended_at = NULL, suspended_by = NULL, suspend_reason = NULL
 WHERE suspend_reason = 'Owner banned';
+
+-- KV still holds what these orgs had before: links held as "under review",
+-- custom domains still sending their root to the old address. A migration
+-- cannot reach KV, so it asks the storage outbox drain to republish each
+-- org (the org_sync op, which reads the org's keys from D1 when it runs).
+INSERT INTO storage_outbox (id, op, target, reason, created_at, attempts, last_error)
+SELECT lower(hex(randomblob(16))), 'org_sync', id, 'pending',
+  CAST(strftime('%s', 'now') AS INTEGER) * 1000, 0, ''
+FROM orgs WHERE disabled_at IS NOT NULL
+ON CONFLICT (op, target) DO NOTHING;

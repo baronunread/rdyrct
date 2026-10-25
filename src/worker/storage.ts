@@ -51,7 +51,11 @@ import type { KVDomain, KVSlugValue } from "./kv";
 export type StorageMessage =
   | { op: "kv_sync"; key: string }
   | { op: "r2_delete"; key: string }
-  | { op: "r2_delete_prefix"; prefix: string };
+  | { op: "r2_delete_prefix"; prefix: string }
+  // Every KV key an org's links and domains resolve through. Names the org,
+  // not the keys, so it still holds when the request that wanted it died
+  // before it could read them.
+  | { op: "org_sync"; orgId: string };
 
 const R2_LIST_LIMIT = 1_000;
 
@@ -76,6 +80,11 @@ export function syncLinkMsg(slug: string, hostname: string | null): StorageMessa
 /** Sync a domain's KV key. Publishes an active domain, deletes anything else. */
 export function syncDomainMsg(hostname: string): StorageMessage {
   return { op: "kv_sync", key: domainKey(hostname) };
+}
+
+/** Sync every KV key of one org: its links and its custom domains. */
+function orgSyncMsg(orgId: string): StorageMessage {
+  return { op: "org_sync", orgId };
 }
 
 /** Delete one QR logo object by its stored URL. Foreign or empty URLs are skipped. */
@@ -120,7 +129,7 @@ export async function enqueueStorage(
     // be a lie (#227). Alert anyway, so a queue outage is still visible in
     // Sentry without a user meeting an error. Only rethrow when the outbox
     // write failed too, because then the work really is gone.
-    if (recorded) {
+    if (recorded !== null) {
       captureAlert([
         {
           event: "storage_send_failed",
@@ -177,14 +186,18 @@ async function applyKvSyncs(env: Env, messages: StorageMessage[]): Promise<Stora
  * queueing a duplicate drain. That replacement takes a fresh `id`, which is
  * what the drain's delete matches on, so a request arriving mid-drain is
  * never removed unapplied.
+ *
+ * Returns the row ids, in the order of `messages`, or null when the write
+ * failed.
  */
 async function recordOutbox(
   env: Env,
   messages: StorageMessage[],
-  reason: "send_failed" | "gave_up",
+  reason: (typeof schema.storageOutbox.$inferSelect)["reason"],
   detail = "",
-): Promise<boolean> {
+): Promise<string[] | null> {
   const now = Date.now();
+  const ids = messages.map(() => uid());
   try {
     // Neither `created_at` nor `attempts` is reset on conflict. Both are how
     // the drain decides what to read, and a key that fails a send daily and
@@ -192,7 +205,7 @@ async function recordOutbox(
     // sinking behind fresher work, and never accumulating the attempts that
     // make a permanently broken row findable.
     await env.DB.batch(
-      messages.map((message) =>
+      messages.map((message, i) =>
         env.DB.prepare(
           `insert into storage_outbox (id, op, target, reason, created_at, attempts, last_error)
            values (?, ?, ?, ?, ?, 0, ?)
@@ -200,14 +213,14 @@ async function recordOutbox(
              id = excluded.id,
              reason = excluded.reason,
              last_error = excluded.last_error`,
-        ).bind(uid(), message.op, targetOf(message), reason, now, detail),
+        ).bind(ids[i], message.op, targetOf(message), reason, now, detail),
       ),
     );
-    return true;
+    return ids;
   } catch (writeError) {
     captureAlert([{ event: "storage_outbox_write_failed", reason, count: messages.length }]);
     console.error("storage_outbox_write_failed", reason, writeError);
-    return false;
+    return null;
   }
 }
 
@@ -291,9 +304,14 @@ export async function drainStorageOutbox(env: Env): Promise<number> {
 
 /** An outbox row back as the message it stands for. */
 function outboxMessage(row: typeof schema.storageOutbox.$inferSelect): StorageMessage {
-  return row.op === "r2_delete_prefix"
-    ? { op: "r2_delete_prefix", prefix: row.target }
-    : { op: row.op, key: row.target };
+  switch (row.op) {
+    case "r2_delete_prefix":
+      return { op: "r2_delete_prefix", prefix: row.target };
+    case "org_sync":
+      return { op: "org_sync", orgId: row.target };
+    default:
+      return { op: row.op, key: row.target };
+  }
 }
 
 /* ---------------- consuming messages ---------------- */
@@ -632,11 +650,21 @@ export async function applyStorageMessage(
     case "r2_delete_prefix":
       await deleteR2Prefix(env, message.prefix);
       return;
+    case "org_sync":
+      await republishOrg(env, db, message.orgId);
+      return;
   }
 }
 
 function targetOf(message: StorageMessage): string {
-  return message.op === "r2_delete_prefix" ? message.prefix : message.key;
+  switch (message.op) {
+    case "r2_delete_prefix":
+      return message.prefix;
+    case "org_sync":
+      return message.orgId;
+    default:
+      return message.key;
+  }
 }
 
 /**
@@ -702,7 +730,7 @@ export async function logDeadLetterBatch(
   // The outbox row is the only record left of this work, so acknowledging a
   // message whose row did not persist discards it for good. A transient D1
   // failure earns a redelivery instead.
-  if (!recorded) {
+  if (recorded === null) {
     batch.retryAll();
     return;
   }
@@ -783,7 +811,7 @@ export async function republishOrgLinks(env: Env, db: DB, orgId: string): Promis
 
 /** Re-sync an org's links and custom domains, after a change to the org that
  * every one of them carries (its owner's ban). */
-export async function republishOrg(env: Env, db: DB, orgId: string): Promise<void> {
+async function republishOrg(env: Env, db: DB, orgId: string): Promise<void> {
   const domains = await db
     .select({ hostname: schema.domains.hostname })
     .from(schema.domains)
@@ -796,6 +824,30 @@ export async function republishOrg(env: Env, db: DB, orgId: string): Promise<voi
         domains.map((d) => syncDomainMsg(d.hostname)),
       ),
   ]);
+}
+
+/**
+ * republishOrg for each org, after a change D1 has already committed (a ban,
+ * an unban). An org's keys are read inside republishOrg, so a failure there,
+ * or a request that dies partway, would leave no message naming any of them.
+ * An `org_sync` outbox row goes in first and comes out once its org is
+ * done: whatever does not finish, the drain finishes.
+ */
+export async function republishOrgs(env: Env, db: DB, orgIds: string[]): Promise<void> {
+  if (orgIds.length === 0) return;
+  const ids = await recordOutbox(env, orgIds.map(orgSyncMsg), "pending");
+  const results = await Promise.allSettled(orgIds.map((orgId) => republishOrg(env, db, orgId)));
+  const done = ids?.filter((_, i) => results[i]?.status === "fulfilled") ?? [];
+  if (done.length > 0)
+    await db.delete(schema.storageOutbox).where(inArray(schema.storageOutbox.id, done));
+  const failed = results.find((r) => r.status === "rejected");
+  if (!failed) return;
+  // Recorded, so late rather than lost: the request did commit.
+  if (ids !== null) {
+    captureAlert([{ event: "org_republish_failed", count: orgIds.length - done.length }]);
+    return;
+  }
+  throw failed.reason;
 }
 
 /**

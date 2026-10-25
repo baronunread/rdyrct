@@ -4,7 +4,13 @@ import { env } from "cloudflare:workers";
 import { reset } from "cloudflare:test";
 import { drizzle } from "drizzle-orm/d1";
 import * as schema from "../../src/worker/db/schema";
-import { applyStorageMessage, syncDomainMsg, syncLinkMsg } from "../../src/worker/storage";
+import {
+  applyStorageMessage,
+  drainStorageOutbox,
+  republishOrgs,
+  syncDomainMsg,
+  syncLinkMsg,
+} from "../../src/worker/storage";
 import { BAN_PURGE_AFTER_DAYS, purgeBannedOrgs } from "../../src/worker/abuse-hold";
 import {
   adminCookie,
@@ -12,6 +18,8 @@ import {
   fetchWorker,
   freeOwnerCookie,
   jsonBody,
+  overriding,
+  rawLinkRow,
   testEnv,
 } from "./support";
 
@@ -149,6 +157,21 @@ describe("banning a user", () => {
     expect((await row("select disabled_at as at from orgs"))?.at).toBeNull();
   });
 
+  it("still bans when the subscription cannot be ended, and says so", async () => {
+    await freeOwnerCookie();
+    // A subscription on record, and no Polar to end it with.
+    await env.DB.prepare(
+      "update user set polar_subscription_id = 'sub_1' where id = 'free-1'",
+    ).run();
+    const cookie = await adminCookie();
+
+    const res = await ban(cookie, { reason: "phishing" });
+    expect(await jsonBody(res)).toMatchObject({ orgsDisabled: 1, subscriptionEnded: false });
+    expect((await row("select banned from user where id = 'free-1'"))?.banned).toBe(1);
+  });
+});
+
+describe("restoring a banned owner's links", () => {
   it("refuses to restore a disabled org's links: only an unban does that", async () => {
     const owner = await freeOwnerCookie();
     await createLink(owner, "https://example.com/a");
@@ -167,17 +190,102 @@ describe("banning a user", () => {
     expect((await row("select count(*) as n from links where suspended_at is null"))?.n).toBe(0);
   });
 
-  it("still bans when the subscription cannot be ended, and says so", async () => {
-    await freeOwnerCookie();
-    // A subscription on record, and no Polar to end it with.
-    await env.DB.prepare(
-      "update user set polar_subscription_id = 'sub_1' where id = 'free-1'",
-    ).run();
+  it("refuses to restore one link, or a batch, of a disabled org", async () => {
+    const owner = await freeOwnerCookie();
+    const link = await createLink(owner, "https://example.com/a");
     const cookie = await adminCookie();
+    await api(`/admin/links/${link.id}`, cookie, {
+      method: "PATCH",
+      body: JSON.stringify({ suspended: true, reason: "report" }),
+    });
+    await ban(cookie, { reason: "phishing" });
 
-    const res = await ban(cookie, { reason: "phishing" });
-    expect(await jsonBody(res)).toMatchObject({ orgsDisabled: 1, subscriptionEnded: false });
-    expect((await row("select banned from user where id = 'free-1'"))?.banned).toBe(1);
+    const one = await api(`/admin/links/${link.id}`, cookie, {
+      method: "PATCH",
+      body: JSON.stringify({ suspended: false }),
+    });
+    expect(one.status).toBe(409);
+
+    // Another org's suspended link in the same batch: the refusal restores
+    // neither, rather than whichever finished first.
+    await db().insert(schema.orgs).values({ id: "org-2", name: "Other", createdAt: 0 });
+    await db()
+      .insert(schema.links)
+      .values(
+        rawLinkRow({
+          id: "other",
+          orgId: "org-2",
+          slug: "other12",
+          destination: "https://example.com/b",
+          createdAt: 0,
+          suspendedAt: 1,
+          suspendReason: "report",
+        }),
+      );
+    const batch = await api("/admin/links/restore", cookie, {
+      method: "POST",
+      body: JSON.stringify({ ids: ["other", link.id] }),
+    });
+    expect(batch.status).toBe(409);
+    expect((await row("select count(*) as n from links where suspended_at is null"))?.n).toBe(0);
+  });
+});
+
+describe("publishing a ban to KV", () => {
+  it("leaves no outbox row once the org is published", async () => {
+    await freeOwnerCookie();
+    await ban(await adminCookie(), { reason: "phishing" });
+    expect((await row("select count(*) as n from storage_outbox"))?.n).toBe(0);
+  });
+
+  it("keeps an org_sync row when reading the org's keys fails, and the drain finishes it", async () => {
+    const owner = await freeOwnerCookie();
+    const link = await createLink(owner, "https://example.com/a");
+    await syncKv(link.slug);
+    await env.DB.prepare("update orgs set disabled_at = 1 where id = 'org-1'").run();
+
+    const broken = overriding(db(), {
+      select: () => {
+        throw new Error("D1 read failed");
+      },
+    });
+    await republishOrgs(testEnv, broken, ["org-1"]);
+    expect(await row("select op, target from storage_outbox")).toEqual({
+      op: "org_sync",
+      target: "org-1",
+    });
+    expect((await visit("localhost", link.slug)).status, "KV not yet caught up").toBe(302);
+
+    expect(await drainStorageOutbox(testEnv)).toBe(1);
+    expect((await visit("localhost", link.slug)).status).toBe(410);
+  });
+
+  it("migration 0046 republishes the orgs of owners banned before it", async () => {
+    const owner = await freeOwnerCookie({ id: "dom-1", hostname: "go.example.com" });
+    const link = await createLink(owner, "https://example.com/a");
+    // The old ban: owner banned, each link suspended "Owner banned", KV
+    // holding both as they were.
+    await env.DB.batch([
+      env.DB.prepare("update user set banned = 1 where id = 'free-1'"),
+      env.DB.prepare(
+        "update links set suspended_at = 1, suspend_reason = 'Owner banned' where org_id = 'org-1'",
+      ),
+    ]);
+    await syncKv(link.slug);
+    await applyStorageMessage(testEnv, db(), syncDomainMsg("go.example.com"));
+    expect((await visit("localhost", link.slug)).status).toBe(403);
+
+    const migration = env.TEST_MIGRATIONS.find((m) => m.name.startsWith("0046"));
+    expect(migration, "migration 0046 is missing from the test bundle").toBeTruthy();
+    await env.DB.batch(
+      migration!.queries
+        .filter((query) => !query.includes("ALTER TABLE"))
+        .map((query) => env.DB.prepare(query)),
+    );
+    expect(await drainStorageOutbox(testEnv)).toBe(1);
+
+    expect((await visit("localhost", link.slug)).status).toBe(410);
+    expect(await env.LINKS.get("domain:go.example.com", "json")).toMatchObject({ disabled: true });
   });
 });
 
@@ -237,6 +345,18 @@ describe("the purge", () => {
     expect((await row("select deleting_at as at from orgs"))?.at).not.toBeNull();
     // The account stays, banned, so the address cannot sign up again.
     expect((await row("select banned from user where id = 'free-1'"))?.banned).toBe(1);
+  });
+
+  it("leaves an org the purge has started on disabled when its owner is unbanned", async () => {
+    await freeOwnerCookie();
+    const cookie = await adminCookie();
+    await ban(cookie, { reason: "phishing" });
+    await env.DB.prepare("update orgs set deleting_at = 1 where id = 'org-1'").run();
+
+    await unban(cookie);
+    expect((await row("select disabled_at as at from orgs"))?.at).not.toBeNull();
+    const audit = await row("select detail from admin_actions where action = 'user.unban'");
+    expect(JSON.parse(String(audit?.detail))).toEqual({ orgsRestored: 0 });
   });
 
   it("leaves an unbanned org alone", async () => {

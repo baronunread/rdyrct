@@ -556,7 +556,9 @@ export const anonLinks = sqliteTable(
  * The queue is the fast path and stays that way. A row lands here only when
  * `sendBatch` failed outright, or when a message exhausted every delivery, so
  * a change that would otherwise be lost is instead applied late by the daily
- * drain.
+ * drain. The one exception is `pending`: an `org_sync` written before the
+ * work starts and deleted when it ends (`republishOrgs`), because the keys it
+ * stands for are only read once the work is under way.
  *
  * It carries no payload beyond the op and its target. Every storage message
  * is desired-state: the consumer reads D1 and writes what it finds, so
@@ -567,9 +569,9 @@ export const storageOutbox = sqliteTable(
   "storage_outbox",
   {
     id: text("id").primaryKey(),
-    op: text("op", { enum: ["kv_sync", "r2_delete", "r2_delete_prefix"] }).notNull(),
+    op: text("op", { enum: ["kv_sync", "r2_delete", "r2_delete_prefix", "org_sync"] }).notNull(),
     target: text("target").notNull(),
-    reason: text("reason", { enum: ["send_failed", "gave_up"] }).notNull(),
+    reason: text("reason", { enum: ["send_failed", "gave_up", "pending"] }).notNull(),
     createdAt: integer("created_at").notNull(),
     attempts: integer("attempts").notNull().default(0),
     lastError: text("last_error").notNull().default(""),

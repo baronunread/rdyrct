@@ -11,7 +11,7 @@ import type { OrgPlan } from "../shared/types";
 import * as schema from "./db/schema";
 import type { DB, Env } from "./env";
 import { captureAlert } from "./sentry";
-import { republishOrg } from "./storage";
+import { republishOrgs } from "./storage";
 import { endSubscriptionBeforeDelete } from "./routes/billing";
 import { deleteOrgs } from "./routes/orgs";
 import { flagForReview, notifyAdmin, notifyHold } from "./abuse";
@@ -161,7 +161,9 @@ export async function banUser(
       .update(schema.orgs)
       .set({ disabledAt: now, reviewFlaggedAt: null })
       .where(and(inArray(schema.orgs.id, orgIds), isNull(schema.orgs.disabledAt)));
-    await Promise.all(orgIds.map((orgId) => republishOrg(env, db, orgId)));
+    // Every owned org, not only the ones just disabled, so a repeated ban
+    // repairs whatever an earlier one left unpublished.
+    await republishOrgs(env, db, orgIds);
   }
 
   const offered = new Set(
@@ -188,17 +190,31 @@ export async function banUser(
 }
 
 /** Undo banUser for the orgs not yet deleted. Blocked hosts stay blocked
- * (they have their own page) and a revoked subscription stays revoked. */
+ * (they have their own page) and a revoked subscription stays revoked.
+ * Returns how many orgs it brought back. */
 export async function unbanUser(env: Env, db: DB, userId: string): Promise<number> {
   await db.update(schema.user).set({ banned: false }).where(eq(schema.user.id, userId));
   const orgIds = await ownedOrgIds(db, userId);
   if (orgIds.length === 0) return 0;
-  await db
+  // An org the purge has started on stays disabled: teardown is deleting its
+  // KV keys, and a republish racing it could put live ones back.
+  const restored = await db
     .update(schema.orgs)
     .set({ disabledAt: null })
-    .where(and(inArray(schema.orgs.id, orgIds), isNotNull(schema.orgs.disabledAt)));
-  await Promise.all(orgIds.map((orgId) => republishOrg(env, db, orgId)));
-  return orgIds.length;
+    .where(
+      and(
+        inArray(schema.orgs.id, orgIds),
+        isNotNull(schema.orgs.disabledAt),
+        isNull(schema.orgs.deletingAt),
+      ),
+    )
+    .returning({ id: schema.orgs.id });
+  await republishOrgs(
+    env,
+    db,
+    restored.map((org) => org.id),
+  );
+  return restored.length;
 }
 
 /**
