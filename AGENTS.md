@@ -27,18 +27,13 @@ bun run db:seed:local       # seed local D1/KV with fake data (run dev server fi
 bun run deploy              # build, apply D1 migrations, deploy; VITE_RDYRCT_SITE=1 (in .env) for rdyrct.com, otherwise a self-hosted copy
 ```
 
-**Migrations add; they never take away in the same release.** `bun run
-deploy` migrates before it deploys, and `wrangler rollback` brings old code
-back without touching the schema, so the previous release always runs for a
-while against the new schema. Wrangler has no down migrations. Expand, then
-contract: add the new column or table, move the code over in the next
-release, and drop the old one only once no deployed release reads it. A
-migration that drops or renames carries a `-- contract: <what> unread since
-<version>` line, and `tests/migrations-additive.test.ts` fails without it.
-Dropping a unique index the code relies on (an `onConflictDoNothing` target)
-is a contract change too, though the test cannot tell it from any other
-index. Before a contract migration, note the Time Travel bookmark
-(`bunx wrangler d1 time-travel info rdyrct`) in the PR.
+**Rolling back a release.** `bun run deploy` migrates before it deploys.
+Wrangler has no down migrations, so a rollback is two steps:
+`bunx wrangler rollback` for the code, and, if a migration has to be undone
+too, a D1 Time Travel restore to just before the deploy
+(`bunx wrangler d1 time-travel restore rdyrct --timestamp=<deploy time>`).
+The restore puts the whole database back, so every write since that moment
+is lost.
 
 **One repo builds two things: rdyrct.com, and the copy a fork self-hosts.**
 `VITE_RDYRCT_SITE=1` builds rdyrct.com; without it every build, dev
