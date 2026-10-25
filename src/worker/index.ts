@@ -652,7 +652,9 @@ const wrapped = Sentry.withSentry<
 
       // Daily: trim rollups past their own retention (#26), kept separate
       // from the raw cutoff above so that one can shrink on its own.
-      await sweepOldRollups(env);
+      // Isolated: rows it fails to drop today it drops tomorrow, so its
+      // failure must not cost the sweeps below their run.
+      await runIsolated([() => sweepOldRollups(env)]);
 
       // Daily: drop dedupe ids the queue can no longer redeliver, so a unique
       // index over 400 days of history stops carrying a guarantee that only

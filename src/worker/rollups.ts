@@ -307,8 +307,13 @@ const ROLLUP_RETENTION_DAYS = 400;
  * in scheduled(). */
 const ROLLUP_SWEEP_CHUNK = 1000;
 
-/** Sweep statements per D1 batch: ten orgs' worth. */
-const ROLLUP_SWEEP_BATCH = 30;
+/** Sweep statements per D1 batch: a hundred orgs' worth. A batch is one
+ * query against the Worker's per-invocation limit (50 on Free, 1,000 on
+ * Paid) however many statements it holds, so a cron run that spends one per
+ * ten orgs would run out of queries, and take every sweep after this one
+ * with it, at a few thousand orgs. D1's 30-second limit covers the whole
+ * batch: a daily run deletes about one day of rows per org, far inside it. */
+const ROLLUP_SWEEP_BATCH = 300;
 
 /**
  * One org's rows past the cutoff, at most ?3 of them. Every key starts with
@@ -336,6 +341,12 @@ export const ROLLUP_SWEEP_SQL = [
  * flush creates, every day, to save a read of the orgs table once a day. An
  * org with nothing to drop costs a key lookup per table that finds nothing.
  * A statement that deleted a full chunk runs again until one comes up short.
+ *
+ * Only orgs created before the cutoff's UTC day: every row is dated by the
+ * redirect that made it, a link never moves to another org (a claimed
+ * anonymous link is a new row in an org that already exists), so a younger
+ * org has nothing old enough to drop. Queries per run: one for the orgs, then
+ * one per hundred of them old enough to have rows past the retention.
  */
 export async function sweepOldRollups(
   env: Env,
@@ -343,9 +354,12 @@ export async function sweepOldRollups(
   chunk = ROLLUP_SWEEP_CHUNK,
 ): Promise<void> {
   const cutoff = now - ROLLUP_RETENTION_DAYS * DAY_MS;
-  const cutoffs = [dayKey(cutoff), dayKey(cutoff), cutoff - (cutoff % DAY_MS)];
+  const cutoffDay = cutoff - (cutoff % DAY_MS);
+  const cutoffs = [dayKey(cutoff), dayKey(cutoff), cutoffDay];
   const statements = ROLLUP_SWEEP_SQL.map((query) => env.DB.prepare(query));
-  const { results: orgs } = await env.DB.prepare("select id from orgs").all<{ id: string }>();
+  const { results: orgs } = await env.DB.prepare("select id from orgs where created_at < ?")
+    .bind(cutoffDay)
+    .all<{ id: string }>();
 
   let pending = orgs.flatMap(({ id }) =>
     statements.map((stmt, i) => stmt.bind(id, cutoffs[i], chunk)),
