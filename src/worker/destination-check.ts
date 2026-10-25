@@ -15,7 +15,7 @@
  * for every live free-plan link, because a kit often goes bad after the link
  * is made. Unset WEB_RISK_API_KEY and none of this runs.
  */
-import { and, asc, eq, isNull, lt, ne, or, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, lt, ne, or, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import { createLogger, type AuditableLogger } from "evlog";
 import * as schema from "./db/schema";
@@ -390,27 +390,35 @@ export async function recheckSpikingLinks(env: Env, linkIds: string[]): Promise<
   const key = env.WEB_RISK_API_KEY;
   if (!key) return { ...counts, skipped: linkIds.length };
   const db = drizzle(env.DB, { schema });
-  for (const linkId of linkIds) {
-    const mark = `webrisk:spike:${linkId}`;
-    if (counts.asked >= SPIKE_RECHECKS_PER_RUN || (await env.LINKS.get(mark))) {
-      counts.skipped += 1;
-      continue;
-    }
-    const [link] = await db
-      .select({ id: schema.links.id, destination: schema.links.destination })
-      .from(schema.links)
-      .where(and(eq(schema.links.id, linkId), isNull(schema.links.suspendedAt)));
-    if (!link) {
-      counts.skipped += 1;
-      continue;
-    }
-    await env.LINKS.put(mark, "1", { expirationTtl: SPIKE_RECHECK_EVERY_SECONDS });
-    counts.asked += 1;
-    // Uncached on purpose: the cache may hold a clean answer from minutes ago.
-    const verdict = await webRiskVerdict(link.destination, key);
-    if (!verdict) counts.failed += 1;
-    else if ((await actOnWebRisk(env, db, link, verdict)) === "hit") counts.hit += 1;
-  }
+  const mark = (id: string) => `webrisk:spike:${id}`;
+  // Which to ask about is settled first, so the lookups can run together.
+  const [marked, live] = await Promise.all([
+    Promise.all(linkIds.map((id) => env.LINKS.get(mark(id)))),
+    linkIds.length === 0
+      ? []
+      : db
+          .select({ id: schema.links.id, destination: schema.links.destination })
+          .from(schema.links)
+          .where(and(inArray(schema.links.id, linkIds), isNull(schema.links.suspendedAt))),
+  ]);
+  const destinations = new Map(live.map((link) => [link.id, link.destination]));
+  const due = linkIds
+    .filter((id, i) => marked[i] === null && destinations.has(id))
+    .slice(0, SPIKE_RECHECKS_PER_RUN)
+    .map((id) => ({ id, destination: destinations.get(id) ?? "" }));
+  counts.skipped = linkIds.length - due.length;
+
+  const outcomes = await Promise.all(
+    due.map(async (link) => {
+      await env.LINKS.put(mark(link.id), "1", { expirationTtl: SPIKE_RECHECK_EVERY_SECONDS });
+      // Uncached on purpose: the cache may hold a clean answer from minutes ago.
+      const verdict = await webRiskVerdict(link.destination, key);
+      return verdict ? actOnWebRisk(env, db, link, verdict) : "failed";
+    }),
+  );
+  counts.asked = due.length;
+  counts.hit = outcomes.filter((o) => o === "hit").length;
+  counts.failed = outcomes.filter((o) => o === "failed").length;
   return counts;
 }
 
