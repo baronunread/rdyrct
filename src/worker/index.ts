@@ -656,7 +656,9 @@ const wrapped = Sentry.withSentry<
 
       // Daily: trim rollups past their own retention (#26), kept separate
       // from the raw cutoff above so that one can shrink on its own.
-      await sweepOldRollups(env);
+      // Isolated: rows it fails to drop today it drops tomorrow, so its
+      // failure must not cost the sweeps below their run.
+      await runIsolated([() => sweepOldRollups(env)]);
 
       // Daily: drop the counts of clicks dropped past a cap once the abuse
       // sweep's windows have moved past them (#387).

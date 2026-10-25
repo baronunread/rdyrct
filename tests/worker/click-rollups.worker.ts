@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { env } from "cloudflare:workers";
 import { reset, runDurableObjectAlarm } from "cloudflare:test";
 import { drizzle } from "drizzle-orm/d1";
@@ -470,6 +470,78 @@ describe("rollup retention", () => {
       { key: "hourly|org-1", n: 1 },
       { key: "hourly|org-2", n: 1 },
     ]);
+  });
+
+  it("skips an org created after the cutoff", async () => {
+    await seedOrgWithLinks();
+    const now = Date.now();
+    const db = drizzle(env.DB, { schema });
+    await env.DB.prepare("insert into orgs (id, name, created_at) values ('org-new', 'New', ?)")
+      .bind(now)
+      .run();
+    await db.batch([
+      db.insert(schema.links).values(
+        rawLinkRow({
+          id: "link-new",
+          orgId: "org-new",
+          slug: "link-new",
+          destination: "https://example.com",
+          createdAt: now,
+        }),
+      ),
+      db.insert(schema.linkAddresses).values(
+        rawAddressRow({
+          id: "addr-link-new",
+          linkId: "link-new",
+          orgId: "org-new",
+          slug: "link-new",
+          kind: "primary",
+          createdAt: now,
+        }),
+      ),
+    ]);
+    // A row older than its org cannot happen (every row is dated by its
+    // redirect), which is why the sweep does not look. Planting one is how
+    // this test sees that it did not.
+    await insertClicks(testEnv, [
+      {
+        ...spreadClicks(1)[0]!,
+        dedupeId: "planted",
+        linkId: "link-new",
+        addressId: "addr-link-new",
+        orgId: "org-new",
+        ts: now - 402 * DAY_MS,
+      },
+    ]);
+
+    await sweepOldRollups(testEnv, now);
+
+    const left = await grouped(
+      `select 'daily' as key, sum(clicks) as n from click_daily where org_id = 'org-new'
+       union all select 'hourly', sum(clicks) from click_hourly where org_id = 'org-new'`,
+    );
+    expect(left).toEqual([
+      { key: "daily", n: 1 },
+      { key: "hourly", n: 1 },
+    ]);
+  });
+
+  it("spends one D1 query per hundred orgs", async () => {
+    await seedOrgWithLinks();
+    // 250 more old orgs, 251 with org-1: three statements each, 753 in all.
+    await env.DB.prepare(
+      `with recursive n(i) as (select 1 union all select i + 1 from n where i < 250)
+       insert into orgs (id, name, created_at) select 'bulk-' || i, 'Bulk', 0 from n`,
+    ).run();
+    const batch = vi.spyOn(testEnv.DB, "batch");
+
+    await sweepOldRollups(testEnv);
+    const batches = batch.mock.calls.length;
+    batch.mockRestore();
+
+    // A batch counts once against the Worker's query limit however many
+    // statements it holds: 753 statements fit in three.
+    expect(batches).toBe(3);
   });
 });
 
