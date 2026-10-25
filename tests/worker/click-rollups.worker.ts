@@ -4,7 +4,12 @@ import { reset, runDurableObjectAlarm } from "cloudflare:test";
 import { drizzle } from "drizzle-orm/d1";
 import * as schema from "../../src/worker/db/schema";
 import { insertClicks, type ClickMessage } from "../../src/worker/clicks";
-import { computeWindows, ROLLUP_SWEEP_SQL, sweepOldRollups } from "../../src/worker/rollups";
+import {
+  computeWindows,
+  orgsForDay,
+  ROLLUP_SWEEP_SQL,
+  sweepOldRollups,
+} from "../../src/worker/rollups";
 import type { LinkStats, OrgStats } from "../../src/shared/types";
 import {
   applyTestMigrations,
@@ -388,15 +393,68 @@ describe("the stats routes read the rollups", () => {
 });
 
 describe("rollup retention", () => {
-  it("drops rows past 400 days and keeps the rest", async () => {
-    await seedOrgWithLinks();
-    const now = Date.now();
-    const click = (dedupeId: string, ageDays: number): ClickMessage => ({
+  const now = Date.now();
+
+  /** An org created at `createdAt` with one link, for the sweep to find. */
+  async function addOrgWithLink(orgId: string, linkId: string, createdAt: number) {
+    const db = drizzle(env.DB, { schema });
+    await env.DB.prepare("insert into orgs (id, name, created_at) values (?, ?, ?)")
+      .bind(orgId, orgId, createdAt)
+      .run();
+    await db.batch([
+      db.insert(schema.links).values(
+        rawLinkRow({
+          id: linkId,
+          orgId,
+          slug: linkId,
+          destination: "https://example.com",
+          createdAt,
+        }),
+      ),
+      db.insert(schema.linkAddresses).values(
+        rawAddressRow({
+          id: `addr-${linkId}`,
+          linkId,
+          orgId,
+          slug: linkId,
+          kind: "primary",
+          createdAt,
+        }),
+      ),
+    ]);
+  }
+
+  /** One click on `linkId`, `ageDays` before `at`. */
+  function clickOn(
+    dedupeId: string,
+    linkId: string,
+    orgId: string,
+    ageDays: number,
+    at = now,
+  ): ClickMessage {
+    return {
       ...spreadClicks(1)[0]!,
       dedupeId,
-      ts: now - ageDays * DAY_MS,
-    });
-    await insertClicks(testEnv, [click("old", 402), click("recent", 300)]);
+      linkId,
+      addressId: `addr-${linkId}`,
+      orgId,
+      ts: at - ageDays * DAY_MS,
+    };
+  }
+
+  /** Each org's clicks left in click_daily. */
+  async function dailyByOrg() {
+    return grouped(
+      "select org_id as key, sum(clicks) as n from click_daily group by org_id order by key",
+    );
+  }
+
+  it("drops rows past 400 days and keeps the rest", async () => {
+    await seedOrgWithLinks();
+    await insertClicks(testEnv, [
+      clickOn("old", "link-a", "org-1", 402),
+      clickOn("recent", "link-a", "org-1", 300),
+    ]);
 
     await sweepOldRollups(testEnv, now);
 
@@ -405,52 +463,14 @@ describe("rollup retention", () => {
 
   it("sweeps every org, in chunks, until nothing old is left", async () => {
     await seedOrgWithLinks();
-    const db = drizzle(env.DB, { schema });
-    await env.DB.prepare(
-      "insert into orgs (id, name, created_at) values ('org-2', 'Other', 0)",
-    ).run();
-    await db.batch([
-      db.insert(schema.links).values(
-        rawLinkRow({
-          id: "link-z",
-          orgId: "org-2",
-          slug: "link-z",
-          destination: "https://example.com",
-          createdAt: 0,
-        }),
-      ),
-      db.insert(schema.linkAddresses).values(
-        rawAddressRow({
-          id: "addr-link-z",
-          linkId: "link-z",
-          orgId: "org-2",
-          slug: "link-z",
-          kind: "primary",
-          createdAt: 0,
-        }),
-      ),
-    ]);
-    const now = Date.now();
-    const click = (
-      dedupeId: string,
-      linkId: string,
-      orgId: string,
-      ageDays: number,
-    ): ClickMessage => ({
-      ...spreadClicks(1)[0]!,
-      dedupeId,
-      linkId,
-      addressId: `addr-${linkId}`,
-      orgId,
-      ts: now - ageDays * DAY_MS,
-    });
+    await addOrgWithLink("org-2", "link-z", 0);
     // Five old link-days in org-1 and three in org-2, more than one chunk of
     // two in every table, plus one recent click each that must stay.
     await insertClicks(testEnv, [
-      ...[401, 402, 403, 404, 405].map((age, i) => click(`old-1-${i}`, "link-a", "org-1", age)),
-      ...[401, 410, 420].map((age, i) => click(`old-2-${i}`, "link-z", "org-2", age)),
-      click("recent-1", "link-b", "org-1", 10),
-      click("recent-2", "link-z", "org-2", 10),
+      ...[401, 402, 403, 404, 405].map((age, i) => clickOn(`old-1-${i}`, "link-a", "org-1", age)),
+      ...[401, 410, 420].map((age, i) => clickOn(`old-2-${i}`, "link-z", "org-2", age)),
+      clickOn("recent-1", "link-b", "org-1", 10),
+      clickOn("recent-2", "link-z", "org-2", 10),
     ]);
 
     await sweepOldRollups(testEnv, now, 2);
@@ -474,45 +494,11 @@ describe("rollup retention", () => {
 
   it("skips an org created after the cutoff", async () => {
     await seedOrgWithLinks();
-    const now = Date.now();
-    const db = drizzle(env.DB, { schema });
-    await env.DB.prepare("insert into orgs (id, name, created_at) values ('org-new', 'New', ?)")
-      .bind(now)
-      .run();
-    await db.batch([
-      db.insert(schema.links).values(
-        rawLinkRow({
-          id: "link-new",
-          orgId: "org-new",
-          slug: "link-new",
-          destination: "https://example.com",
-          createdAt: now,
-        }),
-      ),
-      db.insert(schema.linkAddresses).values(
-        rawAddressRow({
-          id: "addr-link-new",
-          linkId: "link-new",
-          orgId: "org-new",
-          slug: "link-new",
-          kind: "primary",
-          createdAt: now,
-        }),
-      ),
-    ]);
+    await addOrgWithLink("org-new", "link-new", now);
     // A row older than its org cannot happen (every row is dated by its
     // redirect), which is why the sweep does not look. Planting one is how
     // this test sees that it did not.
-    await insertClicks(testEnv, [
-      {
-        ...spreadClicks(1)[0]!,
-        dedupeId: "planted",
-        linkId: "link-new",
-        addressId: "addr-link-new",
-        orgId: "org-new",
-        ts: now - 402 * DAY_MS,
-      },
-    ]);
+    await insertClicks(testEnv, [clickOn("planted", "link-new", "org-new", 402)]);
 
     await sweepOldRollups(testEnv, now);
 
@@ -542,6 +528,62 @@ describe("rollup retention", () => {
     // A batch counts once against the Worker's query limit however many
     // statements it holds: 753 statements fit in three.
     expect(batches).toBe(3);
+  });
+
+  it("sweeps at most the cap of orgs a day, and the rest the next day", async () => {
+    await seedOrgWithLinks();
+    await addOrgWithLink("org-2", "link-z", 0);
+    await addOrgWithLink("org-3", "link-y", 0);
+    // Old enough for both runs' cutoffs.
+    await insertClicks(testEnv, [
+      clickOn("old-1", "link-a", "org-1", 402),
+      clickOn("old-2", "link-z", "org-2", 402),
+      clickOn("old-3", "link-y", "org-3", 402),
+    ]);
+
+    // Three orgs, two a run: two slices, one per day.
+    await sweepOldRollups(testEnv, now, 1000, 2);
+    const afterOne = await dailyByOrg();
+    await sweepOldRollups(testEnv, now + DAY_MS, 1000, 2);
+
+    expect(afterOne.length).toBeGreaterThanOrEqual(1);
+    expect(afterOne.length).toBeLessThanOrEqual(2);
+    expect(await dailyByOrg()).toEqual([]);
+  });
+
+  it("covers every org within ceil(n / cap) days, never more than the cap a day", () => {
+    const ids = Array.from({ length: 2500 }, (_, i) => `org-${String(i).padStart(4, "0")}`);
+    const day = 20_000;
+    const seen = new Set<string>();
+    for (const d of [day, day + 1, day + 2]) {
+      const slice = orgsForDay(ids, d, 1000);
+      expect(slice.length).toBeLessThanOrEqual(1000);
+      for (const id of slice) seen.add(id);
+    }
+    expect(seen.size).toBe(2500);
+    // Under the cap, every org every day.
+    expect(orgsForDay(ids.slice(0, 10), day, 1000)).toHaveLength(10);
+  });
+
+  it("stops at its batch budget and leaves the rest for the next run", async () => {
+    await seedOrgWithLinks();
+    // Twenty old link-days, one row each in click_daily. With a chunk of one
+    // row, each batch clears one of them: fifteen batches leave five.
+    await insertClicks(
+      testEnv,
+      Array.from({ length: 20 }, (_, i) => clickOn(`old-${i}`, "link-a", "org-1", 401 + i)),
+    );
+    const batch = vi.spyOn(testEnv.DB, "batch");
+
+    await sweepOldRollups(testEnv, now, 1);
+    const batches = batch.mock.calls.length;
+    batch.mockRestore();
+    const left = await dailyByOrg();
+    await sweepOldRollups(testEnv, now + DAY_MS, 1);
+
+    expect(batches).toBe(15);
+    expect(left).toEqual([{ key: "org-1", n: 5 }]);
+    expect(await dailyByOrg()).toEqual([]);
   });
 });
 
