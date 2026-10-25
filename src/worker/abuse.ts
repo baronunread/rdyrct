@@ -171,14 +171,17 @@ export async function suspendOrgLinks(
  * whose traffic looks wrong. Idempotent: an org already flagged, warned or
  * held is skipped, so running this every ten minutes costs a few grouped
  * counts and nothing else.
+ *
+ * Returns the links whose traffic spiked in an org it warned, for the caller
+ * to ask Web Risk about again (destination-check.ts's sweepAbuse).
  */
-export async function sweepAbusiveOrgs(env: Env): Promise<void> {
+export async function sweepAbusiveOrgs(env: Env): Promise<{ spikingLinks: string[] }> {
   const db = drizzle(env.DB, { schema });
   // A rolling 24 hours, not the UTC day: a day boundary lets 1,900 redirects
   // at 23:00 and 1,900 more at 00:10 trip nothing.
   const since = Date.now() - DAY_MS;
   await alertOverCeiling(env, db, since);
-  await flagSuspiciousOrgs(env, db, since);
+  return { spikingLinks: await flagSuspiciousOrgs(env, db, since) };
 }
 
 /** Every org with at least `min` redirects since `since`, and its count. */
@@ -269,13 +272,21 @@ const HOLD_WINDOW_MS = 3 * DAY_MS;
  * up to seven days old, it is flagged for an admin and its links show the
  * warning page (#344) but keep working. Idempotent: an org already flagged
  * or suspended is left alone, so this acts once per org.
+ *
+ * Returns the links behind each warned org's signal: the new link past
+ * NEW_LINK_REDIRECTS, or the busiest link of a burst. A kit often goes live
+ * after the link was checked, so the caller asks Web Risk about them again.
  */
-async function flagSuspiciousOrgs(env: Env, db: DB, since: number): Promise<void> {
+async function flagSuspiciousOrgs(env: Env, db: DB, since: number): Promise<string[]> {
   const now = Date.now();
   const [bursts, fresh] = await Promise.all([
     orgsWithRedirects(db, now - HOUR_MS, VELOCITY_PER_HOUR + 1),
     db
-      .select({ orgId: schema.clicks.orgId, n: sql<number>`count(*)` })
+      .select({
+        orgId: schema.clicks.orgId,
+        linkId: schema.clicks.linkId,
+        n: sql<number>`count(*)`,
+      })
       .from(schema.clicks)
       .innerJoin(schema.links, eq(schema.links.id, schema.clicks.linkId))
       .where(and(gte(schema.clicks.ts, since), gte(schema.links.createdAt, now - DAY_MS)))
@@ -287,6 +298,10 @@ async function flagSuspiciousOrgs(env: Env, db: DB, since: number): Promise<void
   for (const { orgId, n } of bursts) seen.set(orgId, { redirects: n, signal: "burst_last_hour" });
   for (const { orgId, n } of fresh)
     if (!seen.has(orgId)) seen.set(orgId, { redirects: n, signal: "one_new_link" });
+  const freshLinks = new Map<string, string[]>();
+  for (const { orgId, linkId } of fresh)
+    freshLinks.set(orgId, [...(freshLinks.get(orgId) ?? []), linkId]);
+  const spiking: string[] = [];
 
   await Promise.all(
     [...seen].map(async ([orgId, { redirects, signal }]) => {
@@ -303,6 +318,9 @@ async function flagSuspiciousOrgs(env: Env, db: DB, since: number): Promise<void
       // flagged for a person to look at.
       if (now - createdAt < HOLD_WINDOW_MS && (await hasSecondSignal(db, orgId)))
         return holdOrg(env, db, orgId, redirects, signal);
+      // Before the early return below: an org already flagged still spikes.
+      const burst = bursts.some((b) => b.orgId === orgId);
+      spiking.push(...(await linksBehindSignal(db, orgId, freshLinks, burst, now - HOUR_MS)));
       const warned = await warnOrgLinks(env, db, orgId, WARN_REASON.traffic);
       if (!(await flagForReview(db, orgId)) && warned === 0) return;
       captureAlert([{ event: "org_needs_review", orgId, redirects, signal }]);
@@ -316,6 +334,34 @@ async function flagSuspiciousOrgs(env: Env, db: DB, since: number): Promise<void
       );
     }),
   );
+  return spiking;
+}
+
+/** The links behind an org's signal: its new links past NEW_LINK_REDIRECTS,
+ * and on a burst its busiest link of the last hour. */
+async function linksBehindSignal(
+  db: DB,
+  orgId: string,
+  freshLinks: Map<string, string[]>,
+  burst: boolean,
+  hourAgo: number,
+): Promise<string[]> {
+  const links = new Set(freshLinks.get(orgId) ?? []);
+  const busiest = burst ? await busiestLinkSince(db, orgId, hourAgo) : null;
+  if (busiest) links.add(busiest);
+  return [...links];
+}
+
+/** The org's link with the most redirects since `since`, or null. */
+async function busiestLinkSince(db: DB, orgId: string, since: number): Promise<string | null> {
+  const [top] = await db
+    .select({ linkId: schema.clicks.linkId })
+    .from(schema.clicks)
+    .where(and(eq(schema.clicks.orgId, orgId), gte(schema.clicks.ts, since)))
+    .groupBy(schema.clicks.linkId)
+    .orderBy(sql`count(*) desc`)
+    .limit(1);
+  return top?.linkId ?? null;
 }
 
 /** A free-host destination among the org's links, or an open report on one. */
@@ -390,6 +436,9 @@ export async function notifyHold(
   orgId: string,
   heading: string,
   grounds: string,
+  /** Said straight after the grounds, e.g. whose list it was and how far to
+   * trust it (destination-check.ts's WEB_RISK_ADVISORY). */
+  more: string[] = [],
 ): Promise<void> {
   const owner = await orgOwnerEmail(db, orgId);
   if (!owner) return;
@@ -398,6 +447,7 @@ export async function notifyHold(
     heading,
     paragraphs: [
       grounds,
+      ...more,
       "Nothing was deleted. The links do not redirect until we have looked at them, which we do as soon as we can.",
       `If this is a mistake, write to ${SUPPORT_EMAIL} with the name of your organization and what the link is for, and we will restore it. Reports of abuse reach us at ${env.APP_URL}/report.`,
     ],

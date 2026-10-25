@@ -31,8 +31,7 @@ import { billingRoutes, handlePolarWebhook } from "./routes/billing";
 import { domainRoutes } from "./routes/domains";
 import { capRoutes } from "./routes/cap";
 import { revalidateOnRedirect } from "./risk";
-import { rescanFreeLinks } from "./destination-check";
-import { sweepAbusiveOrgs } from "./abuse";
+import { rescanFreeLinks, sweepAbuse } from "./destination-check";
 import { reportRoutes } from "./routes/reports";
 import { evlogMiddleware } from "./evlog";
 import { sweepGraceWarnings } from "./reconcile";
@@ -664,7 +663,7 @@ const wrapped = Sentry.withSentry<
         // and there is no ordering dependency between them to preserve.
         await runIsolated([
           async () => void (await drainStorageOutbox(env)),
-          () => sweepAbusiveOrgs(env),
+          () => sweepAbuse(env),
         ]);
         return;
       }
@@ -724,7 +723,7 @@ const wrapped = Sentry.withSentry<
       // from every sweep above: one throwing must not stop another starting.
       await runIsolated([
         async () => void (await drainStorageOutbox(env)),
-        () => sweepAbusiveOrgs(env),
+        () => sweepAbuse(env),
         async () => void (await rescanFreeLinks(env)),
       ]);
     },

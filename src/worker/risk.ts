@@ -199,19 +199,25 @@ export function webRiskUri(destination: string): string | null {
 /** How long a clean answer is reused. Short: a site can be listed any time,
  * and this only exists so repeating a lookup costs nothing. */
 const WEB_RISK_CLEAN_TTL_SECONDS = 60 * 60;
-/** Bounds on a listed answer's life, which Google sets with `expireTime`.
- * KV refuses a TTL under 60 seconds. */
-const WEB_RISK_HIT_TTL_SECONDS = { min: 60, max: 24 * 60 * 60, fallback: 60 * 60 };
+/**
+ * A listed answer's life: Google's `expireTime`, or 30 minutes when it gave
+ * none. Google's terms (Service Specific Terms §47) allow a warning based on
+ * Web Risk only while the answer is that fresh, and a hold is a warning.
+ */
+const WEB_RISK_HIT_TTL_SECONDS = { max: 24 * 60 * 60, fallback: 30 * 60 };
+/** KV refuses a TTL under 60 seconds: an answer due to expire sooner is not
+ * cached at all, rather than kept past its expiry. */
+const KV_MIN_TTL_SECONDS = 60;
 
 type WebRiskAnswer = { verdict: RiskVerdict; ttlSeconds: number };
 
 /** How long to keep a listed answer: until Google's expireTime, inside the
  * bounds, or the fallback when it gave none we can read. */
 function hitTtlSeconds(expireTime: string | undefined): number {
-  const { min, max, fallback } = WEB_RISK_HIT_TTL_SECONDS;
+  const { max, fallback } = WEB_RISK_HIT_TTL_SECONDS;
   const expires = Date.parse(expireTime ?? "");
   if (Number.isNaN(expires)) return fallback;
-  return Math.min(max, Math.max(min, Math.floor((expires - Date.now()) / 1000)));
+  return Math.min(max, Math.floor((expires - Date.now()) / 1000));
 }
 
 /** One call to Google for an already-canonical URI. */
@@ -314,9 +320,10 @@ export async function askWebRisk(
     if (!answer) return { verdict: null, outcome: "failed" };
     // Its own catch: KV refuses a second write to one key within a second,
     // and losing the cache entry must not lose Google's answer with it.
-    await env.LINKS?.put(cacheKey, JSON.stringify(answer.verdict), {
-      expirationTtl: answer.ttlSeconds,
-    }).catch(() => {});
+    if (answer.ttlSeconds >= KV_MIN_TTL_SECONDS)
+      await env.LINKS?.put(cacheKey, JSON.stringify(answer.verdict), {
+        expirationTtl: answer.ttlSeconds,
+      }).catch(() => {});
     return answered(answer.verdict);
   } catch {
     return { verdict: null, outcome: "failed" };

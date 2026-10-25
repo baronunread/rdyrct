@@ -324,6 +324,25 @@ describe("asking Web Risk", () => {
     expect(LINKS.ttls[0]).toBeLessThanOrEqual(10 * 60);
   });
 
+  test("keeps a hit no longer than Google's terms allow", async () => {
+    // §47: refreshed before expireTime, or within 30 minutes without one.
+    google({ threat: { threatTypes: ["MALWARE"] } });
+    const LINKS = memoryKv();
+    await askWebRisk({ WEB_RISK_API_KEY: KEY, LINKS }, "https://kit.example/a");
+    expect(LINKS.ttls).toEqual([30 * 60]);
+
+    // Due to expire in under KV's 60 second minimum: not cached at all.
+    const soon = new Date(Date.now() + 20_000).toISOString();
+    google({ threat: { threatTypes: ["MALWARE"], expireTime: soon } });
+    const short = memoryKv();
+    const { outcome } = await askWebRisk(
+      { WEB_RISK_API_KEY: KEY, LINKS: short },
+      "https://kit.example/b",
+    );
+    expect(outcome).toBe("hit");
+    expect(short.store.size).toBe(0);
+  });
+
   test("spends the budget only on a call to Google, and skips the call past it", async () => {
     const asked = google({});
     const LINKS = memoryKv();

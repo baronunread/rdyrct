@@ -3,15 +3,21 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { env } from "cloudflare:workers";
 import { reset } from "cloudflare:test";
 import {
+  recheckSpikingLinks,
   rescanFreeLinks,
+  WEB_RISK_ADVISORY,
+  SPIKE_RECHECKS_PER_RUN,
+  sweepAbuse,
   WEB_RISK_LOOKUPS_PER_ORG_PER_DAY,
   WEB_RISK_RESCAN_BATCH,
 } from "../../src/worker/destination-check";
+import { webRiskUri } from "../../src/worker/risk";
 import type { Env } from "../../src/worker/env";
 import {
   applyTestMigrations,
   authEnv,
   captureEmails,
+  type CapturedEmail,
   fetchWorker,
   freeOwnerCookie,
   jsonBody,
@@ -106,6 +112,14 @@ const aDayLater = () =>
     .bind(DAY_MS)
     .run();
 
+/** The owner got one hold mail, and it carries the attribution and notice
+ * Google's terms ask for (Service Specific Terms §47). */
+function expectHoldMail(sent: CapturedEmail[], subject: string) {
+  const owner = sent.filter((m) => m.to === "free@example.com");
+  expect(owner.map((m) => m.subject)).toEqual([subject]);
+  for (const m of owner) expect(m.html).toContain(WEB_RISK_ADVISORY);
+}
+
 const makeOrgNew = () =>
   env.DB.prepare("update orgs set created_at = ? where id = 'org-1'").bind(Date.now()).run();
 
@@ -135,8 +149,7 @@ describe("a hit on create", () => {
     expect((await linkRow(clean))?.suspended_at).toBeNull();
     expect(await orgRow()).toMatchObject({ suspended: null });
     expect((await orgRow())?.flagged).not.toBeNull();
-    const owner = mail.sent.filter((m) => m.to === "free@example.com");
-    expect(owner.map((m) => m.subject)).toEqual(["A link is on hold"]);
+    expectHoldMail(mail.sent, "A link is on hold");
     mail.restore();
   });
 
@@ -145,11 +158,14 @@ describe("a hit on create", () => {
     const cookie = await freeOwnerCookie();
     await makeOrgNew();
     const clean = await createLink(cookie, "https://example.com/fine");
+    const mail = captureEmails();
     const listed = await createLink(cookie, LISTED);
 
     expect((await linkRow(listed))?.suspended_at).not.toBeNull();
     expect((await linkRow(clean))?.suspended_at).not.toBeNull();
     expect((await orgRow())?.suspended).not.toBeNull();
+    expectHoldMail(mail.sent, "Your links are on hold");
+    mail.restore();
   });
 
   it("on a new paid org, holds that link only: the owner went through billing", async () => {
@@ -438,5 +454,100 @@ describe("an anonymous link (#341 review)", () => {
   it("is still made when Google is down", async () => {
     stubGoogle({ down: true });
     expect((await shorten("https://example.com/fine")).status).toBe(201);
+  });
+});
+
+describe("a second look on a traffic spike (#390)", () => {
+  /** A link in a new free org, checked clean today, with 301 redirects two
+   * hours ago: past NEW_LINK_REDIRECTS, and outside the last hour, so only
+   * the new-link signal fires. `at` moves the redirects. */
+  async function spikingLink(
+    id: string,
+    destination: string,
+    redirects = 301,
+    at = Date.now() - 2 * 60 * 60 * 1000,
+  ) {
+    await env.DB.prepare(
+      "insert into links (id, org_id, slug, destination, created_at, web_risk_checked_at) values (?, 'org-1', ?, ?, ?, ?)",
+    )
+      .bind(id, id, destination, Date.now(), Date.now())
+      .run();
+    await env.DB.prepare(
+      `insert into clicks (link_id, org_id, ts, country, referrer, device)
+       select ?, 'org-1', ?, '', '', ''
+       from (with recursive c(x) as (select 1 union all select x + 1 from c where x < ?) select x from c)`,
+    )
+      .bind(id, at, redirects)
+      .run();
+  }
+
+  /** The cache key askWebRisk would use, holding a clean answer. */
+  async function cacheClean(destination: string) {
+    const uri = webRiskUri(destination) ?? "";
+    const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(uri));
+    const hex = [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
+    await env.LINKS.put(
+      `webrisk:${hex}`,
+      JSON.stringify({ score: 0, reasons: [], provider: "google-web-risk" }),
+    );
+  }
+
+  beforeEach(async () => {
+    await freeOwnerCookie();
+    await makeOrgNew();
+  });
+
+  it("asks Google again past the cache and the budget, and holds a link it now lists", async () => {
+    await spikingLink("spike", LISTED);
+    // Clean minutes ago, and the org has spent its day: neither may stop it.
+    await cacheClean(LISTED);
+    await env.DB.prepare(
+      "update orgs set web_risk_day = ?, web_risk_lookups = ? where id = 'org-1'",
+    )
+      .bind(Math.floor(Date.now() / DAY_MS), WEB_RISK_LOOKUPS_PER_ORG_PER_DAY)
+      .run();
+    const lookups = stubGoogle();
+
+    await sweepAbuse(withKey());
+    expect(lookups).toEqual([LISTED]);
+    const row = await linkRow("spike");
+    expect(row?.suspended_at).not.toBeNull();
+    expect(row?.suspend_reason).toContain("Google Web Risk");
+  });
+
+  it("asks once a day per link, however long the spike lasts", async () => {
+    await spikingLink("launch", "https://example.com/launch");
+    const lookups = stubGoogle();
+
+    await sweepAbuse(withKey());
+    await sweepAbuse(withKey());
+    expect(lookups).toEqual(["https://example.com/launch"]);
+    // Still only warned: a clean answer changes nothing.
+    const row = await linkRow("launch");
+    expect(row?.suspended_at).toBeNull();
+  });
+
+  it("asks about the busiest link of a burst, however old the link is", async () => {
+    // Two days old, so not the new-link signal: 201 redirects in the last
+    // hour make it the burst, and it is the org's busiest link.
+    await spikingLink("old", LISTED, 201, Date.now());
+    await env.DB.prepare("update links set created_at = ? where id = 'old'")
+      .bind(Date.now() - 2 * DAY_MS)
+      .run();
+    const lookups = stubGoogle();
+
+    await sweepAbuse(withKey());
+    expect(lookups).toEqual([LISTED]);
+    expect((await linkRow("old"))?.suspended_at).not.toBeNull();
+  });
+
+  it("asks about no more than SPIKE_RECHECKS_PER_RUN links in one run", async () => {
+    const ids = Array.from({ length: SPIKE_RECHECKS_PER_RUN + 2 }, (_, i) => `many-${i}`);
+    for (const id of ids) await spikingLink(id, `https://example.com/${id}`, 0);
+    const lookups = stubGoogle();
+
+    const counts = await recheckSpikingLinks(withKey(), ids);
+    expect(lookups).toHaveLength(SPIKE_RECHECKS_PER_RUN);
+    expect(counts).toMatchObject({ asked: SPIKE_RECHECKS_PER_RUN, skipped: 2 });
   });
 });

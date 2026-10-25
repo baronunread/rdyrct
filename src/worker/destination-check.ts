@@ -22,6 +22,7 @@ import * as schema from "./db/schema";
 import type { DB, Env } from "./env";
 import {
   flagForReview,
+  sweepAbusiveOrgs,
   NEW_ORG_WINDOW_MS,
   notifyAdmin,
   notifyHold,
@@ -29,7 +30,14 @@ import {
 } from "./abuse";
 import { recordAdminAction } from "./audit";
 import { billingEnabled, orgPlan } from "./plan";
-import { askWebRisk, isWebRiskHit, scoreAndRecord, webRiskThreats, type RiskVerdict } from "./risk";
+import {
+  askWebRisk,
+  isWebRiskHit,
+  scoreAndRecord,
+  webRiskThreats,
+  webRiskVerdict,
+  type RiskVerdict,
+} from "./risk";
 import { captureAlert } from "./sentry";
 import { republishLink } from "./storage";
 
@@ -137,6 +145,15 @@ async function retryWebRiskTomorrow(db: DB, linkId: string): Promise<void> {
     .catch(() => {});
 }
 
+/**
+ * The attribution and notice Google's terms ask for wherever a warning rests
+ * on Web Risk (Service Specific Terms §47, "Advisory Notice"), kept close to
+ * Google's wording. Every mail about a Web Risk hold carries it. The held and
+ * warning pages do not: they never say why a link stopped.
+ */
+export const WEB_RISK_ADVISORY =
+  "This check uses Google Web Risk. Google works to provide the most accurate and up-to-date information about unsafe sites, but cannot guarantee that it is complete and free of errors: some risky sites may not be found, and some safe sites may be listed in error.";
+
 /** Hold a link Web Risk lists, and its whole org when the org is new and
  * free. A link already held is left alone, so a repeat hit is a no-op. */
 async function holdForWebRisk(
@@ -178,6 +195,7 @@ async function holdForWebRisk(
       link.orgId,
       "Your links are on hold",
       "One of your links points at a site that Google lists as harmful, so we paused your links until somebody has looked.",
+      [WEB_RISK_ADVISORY],
     ).catch(() => {});
     return;
   }
@@ -212,6 +230,7 @@ async function holdForWebRisk(
     link.orgId,
     "A link is on hold",
     "One of your links points at a site that Google lists as harmful, so we paused it until somebody has looked. If the site is yours, it may have been hacked.",
+    [WEB_RISK_ADVISORY],
   ).catch(() => {});
 }
 
@@ -307,28 +326,109 @@ async function rescanOne(
       await retryWebRiskTomorrow(db, link.id);
       return "failed";
     }
-    const now = Date.now();
-    const hit = isWebRiskHit(verdict);
-    const written = await db
-      .update(schema.links)
-      .set({
-        webRiskCheckedAt: now,
-        ...(hit && {
-          riskScore: verdict.score,
-          riskReasons: JSON.stringify(verdict.reasons),
-          riskCheckedAt: now,
-          riskProvider: verdict.provider,
-        }),
-      })
-      // Only if it still points where the lookup went (see scoreAndRecord).
-      .where(and(eq(schema.links.id, link.id), eq(schema.links.destination, link.destination)))
-      .returning({ id: schema.links.id });
-    if (hit && written.length > 0) await holdForWebRisk(env, db, link.id, verdict);
-    return hit ? "hit" : "clean";
+    return await actOnWebRisk(env, db, link, verdict);
   } catch (error) {
     log.error(error instanceof Error ? error : String(error));
     // The stamp above may have landed before the hold threw.
     await retryWebRiskTomorrow(db, link.id);
     return "error";
+  }
+}
+
+/**
+ * Record what Web Risk said about a link and hold it on a hit, the same way
+ * a hit on create does. A clean answer only stamps the date, so it never
+ * overwrites a DNS block with a zero.
+ */
+async function actOnWebRisk(
+  env: Env,
+  db: DB,
+  link: { id: string; destination: string },
+  verdict: RiskVerdict,
+): Promise<"hit" | "clean"> {
+  const now = Date.now();
+  const hit = isWebRiskHit(verdict);
+  const written = await db
+    .update(schema.links)
+    .set({
+      webRiskCheckedAt: now,
+      ...(hit && {
+        riskScore: verdict.score,
+        riskReasons: JSON.stringify(verdict.reasons),
+        riskCheckedAt: now,
+        riskProvider: verdict.provider,
+      }),
+    })
+    // Only if it still points where the lookup went (see scoreAndRecord).
+    .where(and(eq(schema.links.id, link.id), eq(schema.links.destination, link.destination)))
+    .returning({ id: schema.links.id });
+  if (hit && written.length > 0) await holdForWebRisk(env, db, link.id, verdict);
+  return hit ? "hit" : "clean";
+}
+
+/* ---------------- a second look on a traffic spike ---------------- */
+
+/** Forced lookups per sweep run. The sweep runs every ten minutes and shares
+ * its subrequests with the outbox drain. */
+export const SPIKE_RECHECKS_PER_RUN = 10;
+/** One forced lookup per link per day, however long its spike lasts. */
+const SPIKE_RECHECK_EVERY_SECONDS = 24 * 60 * 60;
+
+type SpikeRechecks = { asked: number; hit: number; failed: number; skipped: number };
+
+/**
+ * Ask Web Risk again about links whose traffic just spiked, past the cache
+ * and the org's daily budget, and hold any it lists. A kit often goes live
+ * after its link was checked, and a spike is when it matters: the 2026-10-18
+ * links all scored clean when they were made.
+ *
+ * Bounded twice: a KV mark keeps it to one forced lookup per link a day, and
+ * SPIKE_RECHECKS_PER_RUN caps a run. A held link is skipped.
+ */
+export async function recheckSpikingLinks(env: Env, linkIds: string[]): Promise<SpikeRechecks> {
+  const counts: SpikeRechecks = { asked: 0, hit: 0, failed: 0, skipped: 0 };
+  const key = env.WEB_RISK_API_KEY;
+  if (!key) return { ...counts, skipped: linkIds.length };
+  const db = drizzle(env.DB, { schema });
+  for (const linkId of linkIds) {
+    const mark = `webrisk:spike:${linkId}`;
+    if (counts.asked >= SPIKE_RECHECKS_PER_RUN || (await env.LINKS.get(mark))) {
+      counts.skipped += 1;
+      continue;
+    }
+    const [link] = await db
+      .select({ id: schema.links.id, destination: schema.links.destination })
+      .from(schema.links)
+      .where(and(eq(schema.links.id, linkId), isNull(schema.links.suspendedAt)));
+    if (!link) {
+      counts.skipped += 1;
+      continue;
+    }
+    await env.LINKS.put(mark, "1", { expirationTtl: SPIKE_RECHECK_EVERY_SECONDS });
+    counts.asked += 1;
+    // Uncached on purpose: the cache may hold a clean answer from minutes ago.
+    const verdict = await webRiskVerdict(link.destination, key);
+    if (!verdict) counts.failed += 1;
+    else if ((await actOnWebRisk(env, db, link, verdict)) === "hit") counts.hit += 1;
+  }
+  return counts;
+}
+
+/**
+ * The abuse sweep (abuse.ts), then a second Web Risk look at the links whose
+ * traffic it flagged. One wide event per run, with the counts.
+ */
+export async function sweepAbuse(env: Env): Promise<void> {
+  const log = createLogger({ operation: "abuse.sweep" });
+  try {
+    const { spikingLinks } = await sweepAbusiveOrgs(env);
+    const rechecks = await recheckSpikingLinks(env, spikingLinks);
+    log.set({ abuse: { spikingLinks: spikingLinks.length }, webRisk: { spikeRechecks: rechecks } });
+    if (rechecks.hit > 0) log.warn("Web Risk lists a link whose traffic spiked");
+  } catch (error) {
+    log.error(error instanceof Error ? error : String(error));
+    throw error;
+  } finally {
+    log.emit();
   }
 }
