@@ -98,6 +98,14 @@ async function oldStyleBan(slugs: string[]) {
   for (const slug of slugs) await syncKv(slug);
 }
 
+/** The orgs with an `org_sync` waiting in the outbox. */
+const queuedOrgSyncs = async () =>
+  (
+    await env.DB.prepare(
+      "select target from storage_outbox where op = 'org_sync' order by target",
+    ).all<{ target: string }>()
+  ).results.map((r) => r.target);
+
 /** Runs migration 0046 again, less the column it adds. */
 async function replay0046() {
   const migration = env.TEST_MIGRATIONS.find((m) => m.name.startsWith("0046"));
@@ -346,6 +354,7 @@ describe("the daily pass after migration 0046", () => {
     await oldStyleBan([]);
     await settleBannedOrgs(db());
     expect((await row("select disabled_at as at from orgs"))?.at).not.toBeNull();
+    expect(await queuedOrgSyncs()).toEqual(["org-1"]);
   });
 
   it("restores the orgs of an owner an old Worker unbanned after the migration", async () => {
@@ -375,6 +384,27 @@ describe("the daily pass after migration 0046", () => {
     await replay0046();
     await settleBannedOrgs(db());
     expect((await row("select links_suspended_at as at from orgs"))?.at).toBeNull();
+    expect(await queuedOrgSyncs()).toEqual(["org-1"]);
+  });
+
+  it("queues an org once, on the run that changes it, and nothing on the next", async () => {
+    const owner = await freeOwnerCookie();
+    const link = await createLink(owner, "https://example.com/a");
+    await oldStyleBan([link.slug]);
+    await replay0046();
+
+    await settleBannedOrgs(db());
+    expect(await queuedOrgSyncs()).toEqual(["org-1"]);
+    await drainStorageOutbox(testEnv);
+    await settleBannedOrgs(db());
+    expect(await queuedOrgSyncs()).toEqual([]);
+  });
+
+  it("queues nothing for an org banned through this Worker", async () => {
+    await freeOwnerCookie();
+    await ban(await adminCookie(), { reason: "phishing" });
+    await settleBannedOrgs(db());
+    expect(await queuedOrgSyncs()).toEqual([]);
   });
 
   it("keeps a suspension with another reason, and changes nothing run again", async () => {
