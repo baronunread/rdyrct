@@ -316,6 +316,30 @@ const ROLLUP_SWEEP_CHUNK = 1000;
  * batch: a daily run deletes about one day of rows per org, far inside it. */
 const ROLLUP_SWEEP_BATCH = 300;
 
+/** Orgs one run sweeps at most: ten batches. A copy on Workers Free has 50
+ * queries for the whole cron run, every sweep in it included, so the number
+ * this one spends has to stop growing with the org count. */
+const ROLLUP_SWEEP_ORGS_PER_RUN = 1000;
+
+/** Batches one run sends at most: the ten above, plus room to re-run the
+ * statements that filled a chunk. Whatever is left waits for tomorrow. */
+const ROLLUP_SWEEP_MAX_BATCHES = 15;
+
+/**
+ * The orgs one UTC day's run sweeps, out of every old enough org, sorted by
+ * id. All of them when they fit in `cap`; otherwise they split into
+ * ceil(n / cap) slices and the day number picks one, so each org comes
+ * round within that many days with nothing stored between runs. Rows past
+ * the retention wait a few days at most, and no analytics window reaches
+ * them (the longest is 365 days, the retention 400).
+ */
+export function orgsForDay(ids: string[], day: number, cap: number): string[] {
+  const slices = Math.ceil(ids.length / cap);
+  if (slices <= 1) return ids;
+  const start = (day % slices) * cap;
+  return ids.slice(start, start + cap);
+}
+
 /**
  * One org's rows past the cutoff, at most ?3 of them. Every key starts with
  * org_id, so a delete on `day < ?` alone would read every row of the table:
@@ -341,43 +365,46 @@ export const ROLLUP_SWEEP_SQL = [
  * add a row write to every new link-day, dimension value and link-hour a
  * flush creates, every day, to save a read of the orgs table once a day. An
  * org with nothing to drop costs a key lookup per table that finds nothing.
- * A statement that deleted a full chunk runs again until one comes up short.
+ * A statement that deleted a full chunk goes to the back of the queue to run
+ * again, until the run's batch budget is spent.
  *
  * Only orgs created before the cutoff's UTC day: every row is dated by the
  * redirect that made it, a link never moves to another org (a claimed
  * anonymous link is a new row in an org that already exists), so a younger
  * org has nothing old enough to drop. Queries per run: one for the orgs, then
- * one per hundred of them old enough to have rows past the retention.
+ * at most ROLLUP_SWEEP_MAX_BATCHES, however many orgs there are.
  */
 export async function sweepOldRollups(
   env: Env,
   now = Date.now(),
   chunk = ROLLUP_SWEEP_CHUNK,
+  orgsPerRun = ROLLUP_SWEEP_ORGS_PER_RUN,
 ): Promise<void> {
   const cutoff = now - ROLLUP_RETENTION_DAYS * DAY_MS;
   const cutoffDay = cutoff - (cutoff % DAY_MS);
   const cutoffs = [dayKey(cutoff), dayKey(cutoff), cutoffDay];
   const statements = ROLLUP_SWEEP_SQL.map((query) => env.DB.prepare(query));
-  const { results: orgs } = await env.DB.prepare("select id from orgs where created_at < ?")
+  const { results: orgs } = await env.DB.prepare(
+    "select id from orgs where created_at < ? order by id",
+  )
     .bind(cutoffDay)
     .all<{ id: string }>();
-
-  let pending = orgs.flatMap(({ id }) =>
-    statements.map((stmt, i) => stmt.bind(id, cutoffs[i], chunk)),
+  const ids = orgsForDay(
+    orgs.map((o) => o.id),
+    Math.floor(now / DAY_MS),
+    orgsPerRun,
   );
-  while (pending.length > 0) {
-    const again: D1PreparedStatement[] = [];
-    for (let i = 0; i < pending.length; i += ROLLUP_SWEEP_BATCH) {
-      const group = pending.slice(i, i + ROLLUP_SWEEP_BATCH);
-      // Sequential on purpose: D1 runs one write at a time, so batches sent
-      // at once only queue behind each other, and holding the rest back
-      // leaves room for the click flushes this daily job must not delay.
-      // react-doctor-disable-next-line react-doctor/async-await-in-loop
-      const results = await env.DB.batch(group);
-      group.forEach((stmt, j) => {
-        if ((results[j]?.meta.changes ?? 0) >= chunk) again.push(stmt);
-      });
-    }
-    pending = again;
+
+  const queue = ids.flatMap((id) => statements.map((stmt, i) => stmt.bind(id, cutoffs[i], chunk)));
+  for (let budget = ROLLUP_SWEEP_MAX_BATCHES; queue.length > 0 && budget > 0; budget--) {
+    const group = queue.splice(0, ROLLUP_SWEEP_BATCH);
+    // Sequential on purpose: D1 runs one write at a time, so batches sent at
+    // once only queue behind each other, and holding the rest back leaves
+    // room for the click flushes this daily job must not delay.
+    // react-doctor-disable-next-line react-doctor/async-await-in-loop
+    const results = await env.DB.batch(group);
+    group.forEach((stmt, j) => {
+      if ((results[j]?.meta.changes ?? 0) >= chunk) queue.push(stmt);
+    });
   }
 }
