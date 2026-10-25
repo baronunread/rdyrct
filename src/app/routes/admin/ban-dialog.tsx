@@ -43,7 +43,7 @@ function BanForm({ user, onClose }: { user: { id: string; name: string }; onClos
   const toast = useToast();
   const qc = useQueryClient();
   const [reason, setReason] = useState("");
-  const [picked, setPicked] = useState<string[]>([]);
+  const [picked, setPicked] = useState<ReadonlySet<string>>(new Set());
   const hosts = useQuery({
     queryKey: ["admin", "user-hosts", user.id],
     queryFn: () => api<{ host: string; blockable: boolean }[]>(`/admin/users/${user.id}/hosts`),
@@ -53,7 +53,7 @@ function BanForm({ user, onClose }: { user: { id: string; name: string }; onClos
     mutationFn: () =>
       api<BanResult>(`/admin/users/${user.id}`, {
         method: "PATCH",
-        body: { banned: true, reason: reason.trim(), blockHosts: picked },
+        body: { banned: true, reason: reason.trim(), blockHosts: [...picked] },
       }),
     onSuccess: async (done) => {
       await qc.invalidateQueries({ queryKey: ["admin"] });
@@ -70,7 +70,12 @@ function BanForm({ user, onClose }: { user: { id: string; name: string }; onClos
   });
 
   const toggle = (host: string, on: boolean) =>
-    setPicked((list) => (on ? [...list, host] : list.filter((h) => h !== host)));
+    setPicked((set) => {
+      const next = new Set(set);
+      if (on) next.add(host);
+      else next.delete(host);
+      return next;
+    });
 
   return (
     <div className="flex flex-col gap-4">
@@ -119,7 +124,7 @@ function HostPicker({
 }: {
   hosts: { host: string; blockable: boolean }[] | undefined;
   loading: boolean;
-  picked: string[];
+  picked: ReadonlySet<string>;
   onToggle: (host: string, on: boolean) => void;
 }) {
   if (loading)
@@ -144,7 +149,7 @@ function HostPicker({
             <input
               type="checkbox"
               disabled={!blockable}
-              checked={picked.includes(host)}
+              checked={picked.has(host)}
               onChange={(event) => onToggle(host, event.target.checked)}
             />
             <span className="min-w-0 font-mono break-words">{breakAtDots(host)}</span>
