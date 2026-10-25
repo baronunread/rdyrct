@@ -203,6 +203,11 @@ export const orgs = sqliteTable("orgs", {
   // the UTC day number they count for (destination-check.ts's budget).
   webRiskDay: integer("web_risk_day"),
   webRiskLookups: integer("web_risk_lookups"),
+  // Set when the owner is banned (abuse-hold.ts's banUser). Every link and
+  // custom domain of the org answers "disabled", nobody can change it, and
+  // the daily cron deletes the org BAN_PURGE_AFTER_DAYS later. An unban
+  // before then clears it. Null means not disabled.
+  disabledAt: integer("disabled_at"),
 });
 
 /**

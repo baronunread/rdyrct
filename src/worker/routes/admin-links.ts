@@ -31,8 +31,7 @@ import {
   warnLink,
 } from "../link-warning";
 import { recordAdminAction } from "../audit";
-import { markOrgAbuse } from "../abuse-hold";
-import { blockHostOf } from "../../shared/abuse-rules";
+import { blockable, blockHostOf } from "../../shared/abuse-rules";
 import { scoreDestinationWithWebRisk, webRiskAnswered } from "../risk";
 import { jsonBodyLimit } from "../body-limit";
 import { linkUrl } from "../util";
@@ -380,23 +379,6 @@ async function hasOpenReport(db: DB, linkId: string): Promise<boolean> {
   return rows.length > 0;
 }
 
-/**
- * The verdict that an org is abuse: links suspended, owner banned, and every
- * destination host it used blocked. A reason is required, like any
- * suspension, and the owner is never emailed here: they are told what the
- * decision is by the support thread, not by a form letter to a scammer.
- */
-adminLinkRoutes.post("/orgs/:orgId/abuse", async (c) => {
-  const orgId = c.req.param("orgId")!;
-  c.get("log").set({ orgId });
-  const [reason, exists] = await Promise.all([
-    requiredReason(c, true),
-    c.var.db.select({ id: schema.orgs.id }).from(schema.orgs).where(eq(schema.orgs.id, orgId)),
-  ]);
-  if (exists.length === 0) throw new HTTPException(404, { message: "Organization not found" });
-  return c.json(await markOrgAbuse(c.env, c.var.db, orgId, c.var.user!.id, reason));
-});
-
 const blockedHostBodySchema = v.object({ host: optionalText, reason: optionalText });
 
 /** Hosts nobody may link to. Listed so a mistaken entry can be removed. */
@@ -419,6 +401,10 @@ adminLinkRoutes.post("/blocked-hosts", async (c) => {
   const host = blockHostOf(body.host.includes("://") ? body.host : `https://${body.host.trim()}`);
   if (!host || !host.includes("."))
     throw new HTTPException(400, { message: "Enter a host such as scam.example.com" });
+  if (!blockable(host))
+    throw new HTTPException(422, {
+      message: `${host} is a site everyone uses, so it cannot be blocked.`,
+    });
   const reason = checkReason(body.reason, true);
   await c.var.db
     .insert(schema.blockedHosts)
@@ -596,6 +582,18 @@ adminLinkRoutes.post("/orgs/:orgId/suspend", async (c) => {
 
   const db = c.var.db;
   const orgId = c.req.param("orgId")!;
+  // A banned owner's org stays disabled whatever its links say, and links
+  // restored here would all come back live on an unban, held ones included.
+  if (!suspend) {
+    const [org] = await db
+      .select({ disabledAt: schema.orgs.disabledAt })
+      .from(schema.orgs)
+      .where(eq(schema.orgs.id, orgId));
+    if (org?.disabledAt != null)
+      throw new HTTPException(409, {
+        message: "Its owner is banned. Unban them to bring the links back.",
+      });
+  }
   // Set (or cleared) unconditionally, same as abuse.ts's suspendOrgLinks:
   // requireOrgRole reads this on every write, so a suspended org cannot mint
   // a replacement link before its links are individually caught up below.

@@ -15,6 +15,14 @@ export const HELD_PAGE = {
   body: "We paused it while we check where it leads. Try again later.",
 } as const;
 
+/** A link whose owner was banned: decided, not under review. It still names
+ * no rule, for the same reason as above. */
+export const DISABLED_PAGE = {
+  title: "Link disabled",
+  heading: "This link has been disabled.",
+  body: "Its owner broke the rules of the service that made it. It no longer leads anywhere.",
+} as const;
+
 export const WARN_PAGE = {
   title: "Check this link",
   heading: "Check where this link goes.",

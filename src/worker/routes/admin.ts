@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import type { JsonValue } from "../../shared/types";
-import { optionalFlag, parseOptionalBody } from "../schemas";
+import { optionalFlag, optionalText, parseOptionalBody } from "../schemas";
 import * as v from "valibot";
 import { HTTPException } from "hono/http-exception";
 import { eq, ne, gte, and, desc, lt, inArray, isNotNull, sql } from "drizzle-orm";
@@ -23,7 +23,7 @@ import { orgPlan } from "../plan";
 import { effectivePlanSql, subscriptionGrantsAccess } from "../entitlement";
 import { reconcileUser } from "../reconcile";
 import { deleteAccountAndOwnedOrgs } from "../better-auth";
-import { restoreBannedUserOrgs, suspendBannedUserOrgs } from "../abuse-hold";
+import { banUser, ownedDestinationHosts, unbanUser } from "../abuse-hold";
 import { jsonBodyLimit } from "../body-limit";
 import { adminLinkRoutes } from "./admin-links";
 import { recordAdminAction } from "../audit";
@@ -41,6 +41,11 @@ const ownerPlan = sql<OrgPlan>`coalesce((
 const ownerName = sql<string | null>`(
   select "user".name from org_members
   join "user" on "user".id = org_members.user_id
+  where org_members.org_id = orgs.id and org_members.role = 'owner'
+  limit 1
+)`;
+const ownerId = sql<string | null>`(
+  select user_id from org_members
   where org_members.org_id = orgs.id and org_members.role = 'owner'
   limit 1
 )`;
@@ -583,6 +588,8 @@ adminRoutes.get("/orgs", async (c) => {
       createdAt: schema.orgs.createdAt,
       linksSuspendedAt: schema.orgs.linksSuspendedAt,
       reviewFlaggedAt: schema.orgs.reviewFlaggedAt,
+      disabledAt: schema.orgs.disabledAt,
+      ownerId,
       ownerName,
       ownerEmail,
       // literal orgs.id: interpolated columns render unqualified inside
@@ -776,7 +783,16 @@ const userPatchSchema = v.object({
   isAdmin: optionalFlag,
   banned: optionalFlag,
   plan: v.optional(v.unknown()),
+  // A ban only: why (required), and which of the hosts the user linked to
+  // to block for everyone (none unless picked).
+  reason: optionalText,
+  blockHosts: v.optional(v.fallback(v.array(v.string()), []), []),
 });
+
+/** Destination hosts in the orgs a user owns, for the ban dialog to offer. */
+adminRoutes.get("/users/:userId/hosts", async (c) =>
+  c.json(await ownedDestinationHosts(c.var.db, c.req.param("userId"))),
+);
 
 adminRoutes.patch("/users/:userId", async (c) => {
   const log = c.get("log");
@@ -796,25 +812,42 @@ adminRoutes.patch("/users/:userId", async (c) => {
   };
   if (patch.isAdmin === undefined && patch.banned === undefined)
     throw new HTTPException(400, { message: "Nothing to update" });
+  // Checked before anything is written.
+  const banReason = body.reason.trim();
+  if (patch.banned === true && !banReason)
+    throw new HTTPException(400, { message: "A reason is required" });
 
-  await db.update(schema.user).set(patch).where(eq(schema.user.id, targetId));
-  // Banning kicks the user out immediately: all their sessions are wiped, and
-  // better-auth refuses to create new ones (see better-auth.ts).
-  if (patch.banned) await db.delete(schema.session).where(eq(schema.session.userId, targetId));
-  // Their links must stop with them, and come back only with them: the orgs
-  // they own are suspended on a ban and restored on an unban.
-  let orgsAffected = 0;
-  if (patch.banned === true)
-    orgsAffected = await suspendBannedUserOrgs(c.env, db, targetId, self.id);
-  if (patch.banned === false) await restoreBannedUserOrgs(c.env, db, targetId);
-  if (patch.banned !== undefined)
+  if (patch.isAdmin !== undefined)
+    await db
+      .update(schema.user)
+      .set({ isAdmin: patch.isAdmin })
+      .where(eq(schema.user.id, targetId));
+  if (patch.banned === true) {
+    const reason = banReason;
+    const done = await banUser(c.env, db, targetId, self.id, {
+      reason,
+      blockHosts: body.blockHosts,
+    });
+    log.set({ ban: done });
     await recordAdminAction(c.env, {
       actorUserId: self.id,
-      action: patch.banned ? "user.ban" : "user.unban",
+      action: "user.ban",
       targetType: "user",
-      targetId: targetId,
-      detail: { isAdminChanged: patch.isAdmin !== undefined, orgsSuspended: orgsAffected },
+      targetId,
+      detail: { reason, ...done },
     });
+    return c.json(done);
+  }
+  if (patch.banned === false) {
+    const orgsRestored = await unbanUser(c.env, db, targetId);
+    await recordAdminAction(c.env, {
+      actorUserId: self.id,
+      action: "user.unban",
+      targetType: "user",
+      targetId,
+      detail: { orgsRestored },
+    });
+  }
   return c.json({ ok: true });
 });
 

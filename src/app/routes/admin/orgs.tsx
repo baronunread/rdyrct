@@ -15,7 +15,7 @@ import { TableSkeleton } from "../../ui/skeleton";
 import { useToast } from "../../ui/toast";
 import { ConfirmDialog } from "../../ui/confirm-dialog";
 import { SearchInput } from "./search-input";
-import { AbuseDialog } from "./abuse-dialog";
+import { BanDialog } from "./ban-dialog";
 import { paginate } from "./util";
 import { SortTh } from "../../ui/sort-th";
 import { sortRows } from "../../lib/sort";
@@ -54,13 +54,35 @@ const STATUSES = [
 ] as const;
 type OrgStatus = (typeof STATUSES)[number]["id"];
 
+/** Whether an org's links are stopped, and how to say it: a ban outranks a
+ * suspension, since it is the decision. */
+function stoppedLabel(org: AdminOrgRow, suspendedLabel: string): string | null {
+  if (org.disabledAt) return "disabled";
+  return org.linksSuspendedAt ? suspendedLabel : null;
+}
+
+/** What an admin can still do to an org: nothing to a banned owner's but
+ * delete it, since only an unban changes it. */
+function orgDecisions(org: AdminOrgRow) {
+  const open = !org.disabledAt;
+  return { canRestore: open && !!org.linksSuspendedAt, canBan: open && !!org.ownerId };
+}
+
+/** The owner a ban from this row is about. */
+function ownerOf(org: AdminOrgRow) {
+  return org.ownerId
+    ? { id: org.ownerId, name: org.ownerName ?? org.ownerEmail ?? "the owner" }
+    : null;
+}
+
 /** Plan, plus the two states an admin acts on. `suspendedLabel` differs: the
  * table is cramped, the dialog has room. */
 function OrgBadges({ org, suspendedLabel }: { org: AdminOrgRow; suspendedLabel: string }) {
+  const stopped = stoppedLabel(org, suspendedLabel);
   return (
     <>
       <span className="mr-1.5">{org.plan}</span>
-      {org.linksSuspendedAt && <Badge color="pink">{suspendedLabel}</Badge>}{" "}
+      {stopped && <Badge color="pink">{stopped}</Badge>}{" "}
       {org.reviewFlaggedAt && <Badge color="butter">needs review</Badge>}
     </>
   );
@@ -71,14 +93,15 @@ function OrgMenu({
   onView,
   onDelete,
   onAct,
-  onAbuse,
+  onBanOwner,
 }: {
   org: AdminOrgRow;
   onView: () => void;
   onDelete: () => void;
   onAct: (path: string, body?: { reason: string }) => void;
-  onAbuse: () => void;
+  onBanOwner: () => void;
 }) {
+  const { canRestore, canBan } = orgDecisions(org);
   return (
     <Menu
       align="end"
@@ -99,15 +122,17 @@ function OrgMenu({
           <Check size={14} /> Mark reviewed
         </MenuItem>
       )}
-      {org.linksSuspendedAt && (
+      {canRestore && (
         <MenuItem onClick={() => onAct("suspend?suspend=0", { reason: "" })}>
           <Undo2 size={14} /> Restore links
         </MenuItem>
       )}
       <MenuSeparator />
-      <MenuItem className="text-danger" onClick={onAbuse}>
-        <Ban size={14} /> Mark as abuse…
-      </MenuItem>
+      {canBan && (
+        <MenuItem className="text-danger" onClick={onBanOwner}>
+          <Ban size={14} /> Ban owner…
+        </MenuItem>
+      )}
       <MenuItem className="text-danger" onClick={onDelete}>
         <Trash2 size={14} /> Delete organization
       </MenuItem>
@@ -133,13 +158,13 @@ function OrgRow({
   org,
   onView,
   onDelete,
-  onAbuse,
+  onBanOwner,
   onAct,
 }: {
   org: AdminOrgRow;
   onView: () => void;
   onDelete: () => void;
-  onAbuse: () => void;
+  onBanOwner: () => void;
   onAct: (path: string, body?: { reason: string }) => void;
 }) {
   return (
@@ -165,7 +190,13 @@ function OrgRow({
       <Td className="tnum text-right">{org.clicks}</Td>
       <Td className="text-xs text-muted">{shortDate(org.createdAt)}</Td>
       <Td>
-        <OrgMenu org={org} onView={onView} onDelete={onDelete} onAct={onAct} onAbuse={onAbuse} />
+        <OrgMenu
+          org={org}
+          onView={onView}
+          onDelete={onDelete}
+          onAct={onAct}
+          onBanOwner={onBanOwner}
+        />
       </Td>
     </tr>
   );
@@ -176,14 +207,14 @@ function OrgRows({
   emptyText,
   onView,
   onDelete,
-  onAbuse,
+  onBanOwner,
   onAct,
 }: {
   rows: AdminOrgRow[];
   emptyText: string;
   onView: (org: AdminOrgRow) => void;
   onDelete: (org: AdminOrgRow) => void;
-  onAbuse: (org: AdminOrgRow) => void;
+  onBanOwner: (org: AdminOrgRow) => void;
   onAct: (org: AdminOrgRow, path: string, body?: { reason: string }) => void;
 }) {
   if (rows.length === 0)
@@ -200,7 +231,7 @@ function OrgRows({
       org={org}
       onView={() => onView(org)}
       onDelete={() => onDelete(org)}
-      onAbuse={() => onAbuse(org)}
+      onBanOwner={() => onBanOwner(org)}
       onAct={(path, body) => onAct(org, path, body)}
     />
   ));
@@ -316,7 +347,7 @@ export function AdminOrgsPage() {
   const toast = useToast();
   const [deleting, setDeleting] = useState<AdminOrgRow | null>(null);
   const [viewing, setViewing] = useState<AdminOrgRow | null>(null);
-  const [abusing, setAbusing] = useState<AdminOrgRow | null>(null);
+  const [banning, setBanning] = useState<{ id: string; name: string } | null>(null);
   const [q, setQ] = useState("");
   const [status, setStatus] = useState<OrgStatus>("all");
   const [sort, setSort] = useState<Sort>({ key: "created", dir: -1 });
@@ -425,7 +456,7 @@ export function AdminOrgsPage() {
               emptyText={emptyMessage(status, q.trim())}
               onView={setViewing}
               onDelete={setDeleting}
-              onAbuse={setAbusing}
+              onBanOwner={(org) => setBanning(ownerOf(org))}
               onAct={(org, path, body) => act.mutate({ orgId: org.id, path, body })}
             />
           </tbody>
@@ -434,7 +465,7 @@ export function AdminOrgsPage() {
       <Pager page={safePage} totalPages={totalPages} onPageChange={setPage} />
 
       <OrgDetailDialog org={viewing} onClose={() => setViewing(null)} />
-      <AbuseDialog org={abusing} onClose={() => setAbusing(null)} />
+      <BanDialog user={banning} onClose={() => setBanning(null)} />
 
       <ConfirmDialog
         title="Delete organization"

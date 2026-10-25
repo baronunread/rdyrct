@@ -233,7 +233,13 @@ Shell writes to repo files are sandboxed; edit through the editor tools, not
   secret is the platform admin; admin routes **404** (not 403) for everyone else.
   Platform admins can **ban** users (`user.banned`): banning wipes their sessions
   and `databaseHooks.session.create.before` (in `better-auth.ts`) refuses new
-  ones, while their orgs/links keep working.
+  ones. A ban (`banUser` in `abuse-hold.ts`) also sets `orgs.disabled_at` on
+  every org the user owns: each link and custom domain answers a "disabled"
+  page (410) from its KV value, nobody can change the org, a Polar
+  subscription is revoked, and the daily cron deletes the org 90 days later
+  (`purgeBannedOrgs`). An unban before then brings it all back. Blocking a
+  destination host is opt-in per host in the ban dialog, and never a site in
+  `NEVER_BLOCKED` (`shared/abuse-rules.ts`).
   Deleting an account takes every org it **owns** with it, teammates
   included: an org has no plan of its own (`orgPlan()` reads its owner's), so
   one left ownerless would have no plan, no billing and nobody who could

@@ -9,7 +9,13 @@
  *
  * Neither page says why. See src/shared/link-pages.ts.
  */
-import { HELD_PAGE, WARN_CONTINUE_SLOT, WARN_HOST_SLOT, WARN_PAGE } from "../shared/link-pages";
+import {
+  DISABLED_PAGE,
+  HELD_PAGE,
+  WARN_CONTINUE_SLOT,
+  WARN_HOST_SLOT,
+  WARN_PAGE,
+} from "../shared/link-pages";
 import { escapeHtml, safeUrl } from "./email-html";
 import { PAGE_HEADERS, prerenderedPage } from "./not-found-page";
 
@@ -20,6 +26,12 @@ const PLAIN_HELD = plainPage(
   "link-held",
   HELD_PAGE.title,
   `<h1>${escapeHtml(HELD_PAGE.heading)}</h1><p>${escapeHtml(HELD_PAGE.body)}</p>`,
+);
+
+const PLAIN_DISABLED = plainPage(
+  "link-disabled",
+  DISABLED_PAGE.title,
+  `<h1>${escapeHtml(DISABLED_PAGE.heading)}</h1><p>${escapeHtml(DISABLED_PAGE.body)}</p>`,
 );
 
 const PLAIN_WARN = plainPage(
@@ -43,6 +55,16 @@ const HEADERS = {
 export async function heldPage(assets: Fetcher, requestUrl: string): Promise<Response> {
   const html = (await prerenderedPage(assets, requestUrl, "link-held")) ?? PLAIN_HELD;
   return new Response(html, { status: 403, headers: HEADERS });
+}
+
+/**
+ * The page for a banned owner's link or custom domain. A 410: the link is
+ * gone for good unless an admin reverses the ban, and the org it belongs to
+ * is deleted 90 days on.
+ */
+export async function disabledPage(assets: Fetcher, requestUrl: string): Promise<Response> {
+  const html = (await prerenderedPage(assets, requestUrl, "link-disabled")) ?? PLAIN_DISABLED;
+  return new Response(html, { status: 410, headers: HEADERS });
 }
 
 /**

@@ -4,16 +4,17 @@
  * Kept apart from abuse.ts, which owns the sweep: this file imports from it,
  * never the other way round.
  */
-import { and, eq, isNotNull, sql } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, isNull, lt } from "drizzle-orm";
 import { HTTPException } from "hono/http-exception";
-import { blockHostOf, holdReasonFor } from "../shared/abuse-rules";
+import { blockable, blockHostOf, holdReasonFor } from "../shared/abuse-rules";
 import type { OrgPlan } from "../shared/types";
 import * as schema from "./db/schema";
 import type { DB, Env } from "./env";
-import { recordAdminAction } from "./audit";
 import { captureAlert } from "./sentry";
-import { republishOrgLinks } from "./storage";
-import { flagForReview, notifyAdmin, notifyHold, suspendOrgLinks } from "./abuse";
+import { republishOrg } from "./storage";
+import { endSubscriptionBeforeDelete } from "./routes/billing";
+import { deleteOrgs } from "./routes/orgs";
+import { flagForReview, notifyAdmin, notifyHold } from "./abuse";
 import { RESERVED_SLUGS } from "./util";
 
 /** Refuse a destination whose host an admin has blocked. Called from every
@@ -98,9 +99,13 @@ export function assertNotOwnShortLink(env: Env, destination: string): void {
 
 /* ---------------- banned users ---------------- */
 
-/** The reason every link of a banned user's orgs carries, so unbanning
- * restores exactly those and not what an admin suspended for another reason. */
-const BAN_REASON = "Owner banned";
+/** How long a banned owner's orgs answer "disabled" before the daily cron
+ * deletes them: long enough for a mistaken ban to be undone, and for the
+ * people who still click an old text or scan an old code to be told. */
+export const BAN_PURGE_AFTER_DAYS = 90;
+const BAN_PURGE_AFTER_MS = BAN_PURGE_AFTER_DAYS * 24 * 60 * 60 * 1000;
+/** Orgs one daily pass sends to teardown. Bounded like every other sweep. */
+const BAN_PURGE_LIMIT = 50;
 
 async function ownedOrgIds(db: DB, userId: string): Promise<string[]> {
   const rows = await db
@@ -110,94 +115,114 @@ async function ownedOrgIds(db: DB, userId: string): Promise<string[]> {
   return rows.map((r) => r.orgId);
 }
 
-/**
- * Banning a user stops their sessions, but their links kept redirecting: the
- * scam went on while the account was shut. Suspend every org they own as well.
- * Reversible (see restoreBannedUserOrgs), and it leaves orgs they only belong
- * to alone: those have another owner who did nothing.
- */
-export async function suspendBannedUserOrgs(env: Env, db: DB, userId: string, actorId: string) {
+/** Every destination host in the orgs a user owns, and whether a ban may
+ * block it. What the ban dialog lists before anything is blocked. */
+export async function ownedDestinationHosts(
+  db: DB,
+  userId: string,
+): Promise<{ host: string; blockable: boolean }[]> {
   const orgIds = await ownedOrgIds(db, userId);
-  await Promise.all(orgIds.map((id) => suspendOrgLinks(env, db, id, actorId, BAN_REASON)));
-  return orgIds.length;
+  if (orgIds.length === 0) return [];
+  const rows = await db
+    .selectDistinct({ destination: schema.links.destination })
+    .from(schema.links)
+    .where(inArray(schema.links.orgId, orgIds));
+  const hosts = new Set(rows.map((r) => blockHostOf(r.destination)).filter((h) => h !== null));
+  return [...hosts].sort().map((host) => ({ host, blockable: blockable(host) }));
 }
 
-/** Undo suspendBannedUserOrgs for links still carrying its reason, and lift an
- * org's block once none of its links is suspended. */
-export async function restoreBannedUserOrgs(env: Env, db: DB, userId: string) {
-  const orgIds = await ownedOrgIds(db, userId);
-  await Promise.all(
-    orgIds.map(async (orgId) => {
-      await db
-        .update(schema.links)
-        .set({ suspendedAt: null, suspendedBy: null, suspendReason: null })
-        .where(and(eq(schema.links.orgId, orgId), eq(schema.links.suspendReason, BAN_REASON)));
-      await db
-        .update(schema.orgs)
-        .set({
-          linksSuspendedAt: sql`case when exists (
-            select 1 from links where links.org_id = ${orgId} and links.suspended_at is not null
-          ) then links_suspended_at else null end`,
-        })
-        .where(and(eq(schema.orgs.id, orgId), isNotNull(schema.orgs.linksSuspendedAt)));
-      await republishOrgLinks(env, db, orgId);
-    }),
-  );
-}
-
-/* ---------------- the "abuse" decision ---------------- */
-
 /**
- * The admin's verdict that an org is abuse: its links stop, its owner is
- * banned, and every destination host it used is blocked so the same site
- * cannot be linked again from another account. One decision, three effects,
- * because doing only the first leaves the second and third for the next signup.
+ * The decision that a user is abuse. Their sessions end and they cannot sign
+ * in. Every org they own is disabled: each link and custom domain answers
+ * "disabled", nobody can change it, and the daily cron deletes the org
+ * BAN_PURGE_AFTER_DAYS later. A subscription is revoked, so a banned account
+ * stops paying. Orgs they only belong to are untouched: those have an owner
+ * who did nothing.
+ *
+ * Hosts are blocked only when the admin picks them, from the ones the user
+ * linked to, and never one on the NEVER_BLOCKED list: most scam kits live on
+ * a throwaway address that will not come back, and a host on the blocklist
+ * is refused for every customer.
  */
-export async function markOrgAbuse(
+export async function banUser(
   env: Env,
   db: DB,
-  orgId: string,
+  userId: string,
   actorId: string,
-  reason: string,
+  opts: { reason: string; blockHosts: string[] },
 ) {
-  const grounds = `Abuse: ${reason}`;
-  const [[owner], destinations] = await Promise.all([
-    db
-      .select({ userId: schema.orgMembers.userId })
-      .from(schema.orgMembers)
-      .where(and(eq(schema.orgMembers.orgId, orgId), eq(schema.orgMembers.role, "owner"))),
-    db
-      .select({ destination: schema.links.destination })
-      .from(schema.links)
-      .where(eq(schema.links.orgId, orgId)),
-  ]);
-  const hosts = [
-    ...new Set(destinations.map((d) => blockHostOf(d.destination)).filter((h) => h !== null)),
-  ];
-
-  const suspended = await suspendOrgLinks(env, db, orgId, actorId, grounds);
-  await db
-    .update(schema.orgs)
-    .set({ reviewFlaggedAt: null, clearedAt: null })
-    .where(eq(schema.orgs.id, orgId));
-  if (owner) {
-    await db.update(schema.user).set({ banned: true }).where(eq(schema.user.id, owner.userId));
-    await db.delete(schema.session).where(eq(schema.session.userId, owner.userId));
+  const now = Date.now();
+  await db.update(schema.user).set({ banned: true }).where(eq(schema.user.id, userId));
+  await db.delete(schema.session).where(eq(schema.session.userId, userId));
+  const orgIds = await ownedOrgIds(db, userId);
+  if (orgIds.length > 0) {
+    // reviewFlaggedAt: the ban answers whatever flag was waiting.
+    await db
+      .update(schema.orgs)
+      .set({ disabledAt: now, reviewFlaggedAt: null })
+      .where(and(inArray(schema.orgs.id, orgIds), isNull(schema.orgs.disabledAt)));
+    await Promise.all(orgIds.map((orgId) => republishOrg(env, db, orgId)));
   }
+
+  const offered = new Set(
+    (await ownedDestinationHosts(db, userId)).filter((h) => h.blockable).map((h) => h.host),
+  );
+  const hosts = [...new Set(opts.blockHosts)].filter((host) => offered.has(host));
   if (hosts.length > 0)
     await db
       .insert(schema.blockedHosts)
       .values(
-        hosts.map((host) => ({ host, reason: grounds, createdBy: actorId, createdAt: Date.now() })),
+        hosts.map((host) => ({
+          host,
+          reason: `Ban: ${opts.reason}`,
+          createdBy: actorId,
+          createdAt: now,
+        })),
       )
       .onConflictDoNothing();
 
-  await recordAdminAction(env, {
-    actorUserId: actorId,
-    action: "org.abuse",
-    targetType: "org",
-    targetId: orgId,
-    detail: { reason, links: suspended, hostsBlocked: hosts.length, ownerBanned: !!owner },
-  });
-  return { links: suspended, hostsBlocked: hosts.length, ownerBanned: !!owner };
+  // After everything above: a Polar outage must not leave a scammer's links
+  // live. It is alerted on, and the admin is told to end it by hand.
+  const subscriptionEnded = await endSubscriptionBeforeDelete(env, userId);
+  return { orgsDisabled: orgIds.length, hostsBlocked: hosts.length, subscriptionEnded };
+}
+
+/** Undo banUser for the orgs not yet deleted. Blocked hosts stay blocked
+ * (they have their own page) and a revoked subscription stays revoked. */
+export async function unbanUser(env: Env, db: DB, userId: string): Promise<number> {
+  await db.update(schema.user).set({ banned: false }).where(eq(schema.user.id, userId));
+  const orgIds = await ownedOrgIds(db, userId);
+  if (orgIds.length === 0) return 0;
+  await db
+    .update(schema.orgs)
+    .set({ disabledAt: null })
+    .where(and(inArray(schema.orgs.id, orgIds), isNotNull(schema.orgs.disabledAt)));
+  await Promise.all(orgIds.map((orgId) => republishOrg(env, db, orgId)));
+  return orgIds.length;
+}
+
+/**
+ * Deletes the orgs of owners banned more than BAN_PURGE_AFTER_DAYS ago:
+ * links, KV keys, clicks, domains and logos, through the same teardown as a
+ * deletion an owner asks for. The user row stays, banned, so the address
+ * cannot sign up again. Returns how many orgs it started on.
+ */
+export async function purgeBannedOrgs(env: Env, db: DB, now = Date.now()): Promise<number> {
+  const due = await db
+    .select({ id: schema.orgs.id })
+    .from(schema.orgs)
+    .where(
+      and(
+        isNotNull(schema.orgs.disabledAt),
+        lt(schema.orgs.disabledAt, now - BAN_PURGE_AFTER_MS),
+        isNull(schema.orgs.deletingAt),
+      ),
+    )
+    .limit(BAN_PURGE_LIMIT);
+  await deleteOrgs(
+    db,
+    env,
+    due.map((org) => org.id),
+  );
+  return due.length;
 }

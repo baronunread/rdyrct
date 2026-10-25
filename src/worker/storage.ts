@@ -352,9 +352,12 @@ export async function desiredLink(
       hostname: schema.domains.hostname,
       suspendedAt: schema.links.suspendedAt,
       warnedAt: schema.links.warnedAt,
+      // Null for an anonymous link, which has no org.
+      orgDisabledAt: schema.orgs.disabledAt,
     })
     .from(schema.linkAddresses)
     .innerJoin(schema.links, eq(schema.linkAddresses.linkId, schema.links.id))
+    .leftJoin(schema.orgs, eq(schema.links.orgId, schema.orgs.id))
     .leftJoin(schema.domains, eq(schema.linkAddresses.domainId, schema.domains.id))
     .where(
       and(
@@ -374,6 +377,10 @@ export async function desiredLink(
   // be undone by the next save. Held, not absent (#344): the key stays, with
   // no destination in it, so the redirect path can say "under review"
   // instead of 404 without reading D1.
+  // A banned owner's org outranks any one link's state: it is a decision,
+  // where a suspension may still be lifted.
+  if (address.orgDisabledAt !== null)
+    return { held: true, disabled: true, linkId: address.linkId, expiresAt: address.expiresAt };
   if (address.suspendedAt !== null)
     return { held: true, linkId: address.linkId, expiresAt: address.expiresAt };
   return {
@@ -388,6 +395,29 @@ export async function desiredLink(
   };
 }
 
+/** What an active domain's KV key holds, from its row and its org's. */
+function domainKvValue({
+  domain,
+  graceEndsAt,
+  orgDisabledAt,
+}: {
+  domain: typeof schema.domains.$inferSelect;
+  graceEndsAt: number | null;
+  orgDisabledAt: number | null;
+}): KVDomain {
+  return {
+    // A banned owner's domain answers "disabled" on every path. Not null,
+    // which would hand the host to the app.
+    ...(orgDisabledAt !== null && { disabled: true as const }),
+    domainId: domain.id,
+    orgId: domain.orgId,
+    rootRedirect: domain.rootRedirect,
+    // A locked domain with no grace on file has already run out: the
+    // absence of a deadline must not read as "serves forever".
+    servesUntil: domain.lockedAt === null ? null : (graceEndsAt ?? domain.lockedAt),
+  };
+}
+
 async function desiredDomainValue(db: DB, key: string): Promise<string | null> {
   if (key.startsWith("domain:")) {
     const hostname = key.slice("domain:".length);
@@ -399,21 +429,16 @@ async function desiredDomainValue(db: DB, key: string): Promise<string | null> {
       .select({
         domain: schema.domains,
         graceEndsAt: schema.orgEntitlements.graceEndsAt,
+        orgDisabledAt: schema.orgs.disabledAt,
       })
       .from(schema.domains)
+      .innerJoin(schema.orgs, eq(schema.orgs.id, schema.domains.orgId))
       .leftJoin(schema.orgEntitlements, eq(schema.orgEntitlements.orgId, schema.domains.orgId))
       .where(eq(schema.domains.hostname, hostname))
       .limit(1);
-    const domain = rows[0]?.domain;
-    if (!domain || domain.status !== "active") return null;
-    return JSON.stringify({
-      domainId: domain.id,
-      orgId: domain.orgId,
-      rootRedirect: domain.rootRedirect,
-      // A locked domain with no grace on file has already run out: the
-      // absence of a deadline must not read as "serves forever".
-      servesUntil: domain.lockedAt === null ? null : (rows[0]?.graceEndsAt ?? domain.lockedAt),
-    } satisfies KVDomain);
+    const row = rows[0];
+    if (!row || row.domain.status !== "active") return null;
+    return JSON.stringify(domainKvValue(row));
   }
 
   // Unknown prefix: never enqueued, so leave it alone.
@@ -754,6 +779,23 @@ export async function republishOrgLinks(env: Env, db: DB, orgId: string): Promis
       addresses.slice(i, i + REPUBLISH_BATCH).map((a) => syncLinkMsg(a.slug, a.hostname)),
     );
   await Promise.all(batches.map((batch) => enqueueStorage(env, batch)));
+}
+
+/** Re-sync an org's links and custom domains, after a change to the org that
+ * every one of them carries (its owner's ban). */
+export async function republishOrg(env: Env, db: DB, orgId: string): Promise<void> {
+  const domains = await db
+    .select({ hostname: schema.domains.hostname })
+    .from(schema.domains)
+    .where(eq(schema.domains.orgId, orgId));
+  await Promise.all([
+    republishOrgLinks(env, db, orgId),
+    domains.length > 0 &&
+      enqueueStorage(
+        env,
+        domains.map((d) => syncDomainMsg(d.hostname)),
+      ),
+  ]);
 }
 
 /**

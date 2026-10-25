@@ -233,7 +233,7 @@ async function alertOverCeiling(env: Env, db: DB, since: number): Promise<void> 
 }
 
 /** Flag an org for an admin to look at. False when it already was, or its
- * links are suspended, so a caller mails about a flag once. */
+ * links are suspended or its owner banned, so a caller mails about a flag once. */
 export async function flagForReview(db: DB, orgId: string): Promise<boolean> {
   const flagged = await db
     .update(schema.orgs)
@@ -243,6 +243,8 @@ export async function flagForReview(db: DB, orgId: string): Promise<boolean> {
         eq(schema.orgs.id, orgId),
         isNull(schema.orgs.reviewFlaggedAt),
         isNull(schema.orgs.linksSuspendedAt),
+        // Already decided: its owner is banned.
+        isNull(schema.orgs.disabledAt),
       ),
     )
     .returning({ id: schema.orgs.id });
