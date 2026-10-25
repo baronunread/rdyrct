@@ -836,6 +836,9 @@ async function republishOrg(env: Env, db: DB, orgId: string): Promise<void> {
 export async function republishOrgs(env: Env, db: DB, orgIds: string[]): Promise<void> {
   if (orgIds.length === 0) return;
   const ids = await recordOutbox(env, orgIds.map(orgSyncMsg), "pending");
+  // In order on purpose: the row has to exist before the work it stands for
+  // can fail.
+  // react-doctor-disable-next-line react-doctor/server-sequential-independent-await
   const results = await Promise.allSettled(orgIds.map((orgId) => republishOrg(env, db, orgId)));
   const done = ids?.filter((_, i) => results[i]?.status === "fulfilled") ?? [];
   if (done.length > 0)
