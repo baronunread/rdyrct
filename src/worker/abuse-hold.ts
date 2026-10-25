@@ -309,6 +309,10 @@ export async function purgeBannedOrgs(env: Env, db: DB, now = Date.now()): Promi
  * nothing once that is gone:
  * - an org whose owner is banned and that has no `disabled_at` (an old
  *   Worker banned them during the deploy) is disabled;
+ * - a disabled org whose owner is no longer banned (an old Worker unbanned
+ *   them during the deploy) is restored and republished, or the purge
+ *   would delete it. Nothing else leaves an org disabled under an unbanned
+ *   owner: this Worker's unban clears `disabled_at`;
  * - the "Owner banned" suspensions in disabled orgs are cleared, since
  *   `disabled_at` does that job and an unban clears it;
  * - a disabled org's `links_suspended_at` goes when no link in it is still
@@ -319,23 +323,24 @@ export async function purgeBannedOrgs(env: Env, db: DB, now = Date.now()): Promi
 export async function settleBannedOrgs(db: DB): Promise<void> {
   const disabled = isNotNull(schema.orgs.disabledAt);
   const disabledOrgIds = db.select({ id: schema.orgs.id }).from(schema.orgs).where(disabled);
+  const ownedByBanned = (banned: boolean) =>
+    inArray(
+      schema.orgs.id,
+      db
+        .select({ id: schema.orgMembers.orgId })
+        .from(schema.orgMembers)
+        .innerJoin(schema.user, eq(schema.user.id, schema.orgMembers.userId))
+        .where(and(eq(schema.orgMembers.role, "owner"), eq(schema.user.banned, banned))),
+    );
+  const unbannedButDisabled = and(disabled, isNull(schema.orgs.deletingAt), ownedByBanned(false));
   await db.batch([
     db
       .update(schema.orgs)
       .set({ disabledAt: Date.now() })
-      .where(
-        and(
-          isNull(schema.orgs.disabledAt),
-          inArray(
-            schema.orgs.id,
-            db
-              .select({ id: schema.orgMembers.orgId })
-              .from(schema.orgMembers)
-              .innerJoin(schema.user, eq(schema.user.id, schema.orgMembers.userId))
-              .where(and(eq(schema.orgMembers.role, "owner"), eq(schema.user.banned, true))),
-          ),
-        ),
-      ),
+      .where(and(isNull(schema.orgs.disabledAt), ownedByBanned(true))),
+    // Queued first, while the condition still matches the orgs it restores.
+    queueOrgSyncs(db, unbannedButDisabled),
+    db.update(schema.orgs).set({ disabledAt: null }).where(unbannedButDisabled),
     db
       .update(schema.links)
       .set({ suspendedAt: null, suspendedBy: null, suspendReason: null })

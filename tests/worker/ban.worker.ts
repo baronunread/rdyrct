@@ -348,6 +348,26 @@ describe("the daily pass after migration 0046", () => {
     expect((await row("select disabled_at as at from orgs"))?.at).not.toBeNull();
   });
 
+  it("restores the orgs of an owner an old Worker unbanned after the migration", async () => {
+    const owner = await freeOwnerCookie();
+    const link = await createLink(owner, "https://example.com/a");
+    await oldStyleBan([link.slug]);
+    await replay0046();
+    // The old unban: owner unbanned, suspensions cleared, disabled_at unknown.
+    await env.DB.batch([
+      env.DB.prepare("update user set banned = 0 where id = 'free-1'"),
+      env.DB.prepare(
+        "update links set suspended_at = null, suspend_reason = null where suspend_reason = 'Owner banned'",
+      ),
+    ]);
+
+    await settleBannedOrgs(db());
+    expect((await row("select disabled_at as at from orgs"))?.at).toBeNull();
+    expect(await purgeBannedOrgs(testEnv, db(), Date.now() + 365 * DAY_MS)).toBe(0);
+    await drainStorageOutbox(testEnv);
+    expect((await visit("localhost", link.slug)).status).toBe(302);
+  });
+
   it("lets an unban open an old banned owner's empty org for writes again", async () => {
     await freeOwnerCookie();
     await env.DB.prepare("update orgs set links_suspended_at = 1 where id = 'org-1'").run();
