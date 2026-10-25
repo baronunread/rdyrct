@@ -1,5 +1,5 @@
 import * as Sentry from "@sentry/cloudflare";
-import { eq, isNull, and, lt, ne, inArray, sql } from "drizzle-orm";
+import { eq, isNull, and, lt, ne, inArray, sql, type SQL } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import * as schema from "./db/schema";
 import type { DB, Env } from "./env";
@@ -80,11 +80,6 @@ export function syncLinkMsg(slug: string, hostname: string | null): StorageMessa
 /** Sync a domain's KV key. Publishes an active domain, deletes anything else. */
 export function syncDomainMsg(hostname: string): StorageMessage {
   return { op: "kv_sync", key: domainKey(hostname) };
-}
-
-/** Sync every KV key of one org: its links and its custom domains. */
-function orgSyncMsg(orgId: string): StorageMessage {
-  return { op: "org_sync", orgId };
 }
 
 /** Delete one QR logo object by its stored URL. Foreign or empty URLs are skipped. */
@@ -827,30 +822,62 @@ async function republishOrg(env: Env, db: DB, orgId: string): Promise<void> {
 }
 
 /**
- * republishOrg for each org, after a change D1 has already committed (a ban,
- * an unban). An org's keys are read inside republishOrg, so a failure there,
- * or a request that dies partway, would leave no message naming any of them.
- * An `org_sync` outbox row goes in first and comes out once its org is
- * done: whatever does not finish, the drain finishes.
+ * An `org_sync` outbox row for every org `orgs` picks, built to go in the
+ * same `db.batch` as the change that makes the org need one (a ban, an
+ * unban). Then the change and the record of its unfinished KV work commit
+ * together, or not at all, and a request that dies after the commit leaves
+ * the drain something to finish. Place it before the change in the batch,
+ * so `orgs` still sees the rows as they were.
+ *
+ * Returns the rows' ids for `publishOrgSyncs`, which deletes each one once
+ * its org is published.
  */
-export async function republishOrgs(env: Env, db: DB, orgIds: string[]): Promise<void> {
-  if (orgIds.length === 0) return;
-  const ids = await recordOutbox(env, orgIds.map(orgSyncMsg), "pending");
-  // In order on purpose: the row has to exist before the work it stands for
-  // can fail.
-  // react-doctor-disable-next-line react-doctor/server-sequential-independent-await
-  const results = await Promise.allSettled(orgIds.map((orgId) => republishOrg(env, db, orgId)));
-  const done = ids?.filter((_, i) => results[i]?.status === "fulfilled") ?? [];
+export function queueOrgSyncs(db: DB, orgs: SQL | undefined) {
+  return db
+    .insert(schema.storageOutbox)
+    .select(
+      db
+        .select({
+          id: sql<string>`lower(hex(randomblob(16)))`.as("id"),
+          op: sql<"org_sync">`'org_sync'`.as("op"),
+          target: schema.orgs.id,
+          reason: sql<"pending">`'pending'`.as("reason"),
+          createdAt: sql<number>`${Date.now()}`.as("created_at"),
+          attempts: sql<number>`0`.as("attempts"),
+          lastError: sql<string>`''`.as("last_error"),
+        })
+        .from(schema.orgs)
+        .where(orgs),
+    )
+    .onConflictDoUpdate({
+      target: [schema.storageOutbox.op, schema.storageOutbox.target],
+      set: { id: sql`excluded.id`, reason: sql`excluded.reason` },
+    })
+    .returning({ id: schema.storageOutbox.id, orgId: schema.storageOutbox.target });
+}
+
+/**
+ * Republish the orgs `queueOrgSyncs` recorded, now, and delete each row once
+ * its org is done. Never throws: a row whose org failed stays for the drain,
+ * and the change it follows has already committed.
+ */
+export async function publishOrgSyncs(
+  env: Env,
+  db: DB,
+  rows: { id: string; orgId: string }[],
+): Promise<void> {
+  if (rows.length === 0) return;
+  const results = await Promise.allSettled(rows.map((row) => republishOrg(env, db, row.orgId)));
+  const done = rows.filter((_, i) => results[i]?.status === "fulfilled").map((row) => row.id);
+  const failed = rows.length - done.length;
+  if (failed > 0) captureAlert([{ event: "org_republish_failed", count: failed }]);
   if (done.length > 0)
-    await db.delete(schema.storageOutbox).where(inArray(schema.storageOutbox.id, done));
-  const failed = results.find((r) => r.status === "rejected");
-  if (!failed) return;
-  // Recorded, so late rather than lost: the request did commit.
-  if (ids !== null) {
-    captureAlert([{ event: "org_republish_failed", count: orgIds.length - done.length }]);
-    return;
-  }
-  throw failed.reason;
+    await db
+      .delete(schema.storageOutbox)
+      .where(inArray(schema.storageOutbox.id, done))
+      .catch(() => {
+        // The drain republishes those orgs again, which changes nothing.
+      });
 }
 
 /**

@@ -4,16 +4,16 @@
  * Kept apart from abuse.ts, which owns the sweep: this file imports from it,
  * never the other way round.
  */
-import { and, eq, inArray, isNotNull, isNull, lt } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, isNull, lt, sql } from "drizzle-orm";
 import { HTTPException } from "hono/http-exception";
 import { blockable, blockHostOf, holdReasonFor } from "../shared/abuse-rules";
 import type { OrgPlan } from "../shared/types";
 import * as schema from "./db/schema";
 import type { DB, Env } from "./env";
 import { captureAlert } from "./sentry";
-import { republishOrgs } from "./storage";
+import { publishOrgSyncs, queueOrgSyncs } from "./storage";
 import { endSubscriptionBeforeDelete } from "./routes/billing";
-import { deleteOrgs } from "./routes/orgs";
+import { startOrgTeardown } from "./routes/orgs";
 import { flagForReview, notifyAdmin, notifyHold } from "./abuse";
 import { RESERVED_SLUGS } from "./util";
 
@@ -152,68 +152,114 @@ export async function banUser(
   opts: { reason: string; blockHosts: string[] },
 ) {
   const now = Date.now();
-  await db.update(schema.user).set({ banned: true }).where(eq(schema.user.id, userId));
-  await db.delete(schema.session).where(eq(schema.session.userId, userId));
   const orgIds = await ownedOrgIds(db, userId);
-  if (orgIds.length > 0) {
-    // reviewFlaggedAt: the ban answers whatever flag was waiting.
-    await db
-      .update(schema.orgs)
-      .set({ disabledAt: now, reviewFlaggedAt: null })
-      .where(and(inArray(schema.orgs.id, orgIds), isNull(schema.orgs.disabledAt)));
-    // Every owned org, not only the ones just disabled, so a repeated ban
-    // repairs whatever an earlier one left unpublished.
-    await republishOrgs(env, db, orgIds);
+  const banned = db.update(schema.user).set({ banned: true }).where(eq(schema.user.id, userId));
+  const signedOut = db.delete(schema.session).where(eq(schema.session.userId, userId));
+  let synced: { id: string; orgId: string }[] = [];
+  if (orgIds.length === 0) await db.batch([banned, signedOut]);
+  else {
+    const owned = inArray(schema.orgs.id, orgIds);
+    // One batch, so the orgs are never disabled without the outbox rows that
+    // publish it. Every owned org is queued, not only the ones this disables,
+    // so a repeated ban repairs whatever an earlier one left unpublished.
+    const [, , rows] = await db.batch([
+      banned,
+      signedOut,
+      queueOrgSyncs(db, and(owned, isNull(schema.orgs.deletingAt))),
+      db
+        .update(schema.orgs)
+        // reviewFlaggedAt: the ban answers whatever flag was waiting.
+        .set({ disabledAt: now, reviewFlaggedAt: null })
+        .where(and(owned, isNull(schema.orgs.disabledAt))),
+    ]);
+    synced = rows;
   }
+  await publishOrgSyncs(env, db, synced);
 
+  // Before the hosts: a Polar outage must not leave a scammer's links live,
+  // and a blocklist failure must not leave them paying. It is alerted on,
+  // and the admin is told to end it by hand.
+  const subscriptionEnded = await endSubscriptionBeforeDelete(env, userId);
+
+  let hostsBlocked = 0;
+  let hostsFailed = false;
+  try {
+    hostsBlocked = await blockBannedHosts(db, userId, actorId, opts, now);
+  } catch (error) {
+    // The ban stands and the admin's audit row still gets written; the
+    // dialog says to add the hosts by hand.
+    hostsFailed = true;
+    captureAlert([
+      {
+        event: "ban_hosts_failed",
+        userId,
+        error: error instanceof Error ? error.message.slice(0, 200) : "",
+      },
+    ]);
+  }
+  return { orgsDisabled: orgIds.length, hostsBlocked, hostsFailed, subscriptionEnded };
+}
+
+/** blocked_hosts binds four values a row, and D1 allows 100 a statement. */
+const BLOCKED_HOSTS_PER_INSERT = 24;
+
+/** Adds the hosts the admin picked, of the ones the user linked to that may
+ * be blocked, in one batch. Returns how many it was asked to add. */
+async function blockBannedHosts(
+  db: DB,
+  userId: string,
+  actorId: string,
+  opts: { reason: string; blockHosts: string[] },
+  now: number,
+): Promise<number> {
   const offered = new Set(
     (await ownedDestinationHosts(db, userId)).filter((h) => h.blockable).map((h) => h.host),
   );
-  const hosts = [...new Set(opts.blockHosts)].filter((host) => offered.has(host));
-  if (hosts.length > 0)
-    await db
-      .insert(schema.blockedHosts)
-      .values(
-        hosts.map((host) => ({
-          host,
-          reason: `Ban: ${opts.reason}`,
-          createdBy: actorId,
-          createdAt: now,
-        })),
-      )
-      .onConflictDoNothing();
-
-  // After everything above: a Polar outage must not leave a scammer's links
-  // live. It is alerted on, and the admin is told to end it by hand.
-  const subscriptionEnded = await endSubscriptionBeforeDelete(env, userId);
-  return { orgsDisabled: orgIds.length, hostsBlocked: hosts.length, subscriptionEnded };
+  const rows = [...new Set(opts.blockHosts)]
+    .filter((host) => offered.has(host))
+    .map((host) => ({ host, reason: `Ban: ${opts.reason}`, createdBy: actorId, createdAt: now }));
+  const inserts = [];
+  for (let i = 0; i < rows.length; i += BLOCKED_HOSTS_PER_INSERT)
+    inserts.push(
+      db
+        .insert(schema.blockedHosts)
+        .values(rows.slice(i, i + BLOCKED_HOSTS_PER_INSERT))
+        .onConflictDoNothing(),
+    );
+  const [first, ...rest] = inserts;
+  if (first) await db.batch([first, ...rest]);
+  return rows.length;
 }
 
 /** Undo banUser for the orgs not yet deleted. Blocked hosts stay blocked
  * (they have their own page) and a revoked subscription stays revoked.
  * Returns how many orgs it brought back. */
 export async function unbanUser(env: Env, db: DB, userId: string): Promise<number> {
-  await db.update(schema.user).set({ banned: false }).where(eq(schema.user.id, userId));
   const orgIds = await ownedOrgIds(db, userId);
-  if (orgIds.length === 0) return 0;
+  const unbanned = db.update(schema.user).set({ banned: false }).where(eq(schema.user.id, userId));
+  if (orgIds.length === 0) {
+    await unbanned;
+    return 0;
+  }
   // An org the purge has started on stays disabled: teardown is deleting its
   // KV keys, and a republish racing it could put live ones back.
-  const restored = await db
-    .update(schema.orgs)
-    .set({ disabledAt: null })
-    .where(
-      and(
-        inArray(schema.orgs.id, orgIds),
-        isNotNull(schema.orgs.disabledAt),
-        isNull(schema.orgs.deletingAt),
-      ),
-    )
-    .returning({ id: schema.orgs.id });
-  await republishOrgs(
-    env,
-    db,
-    restored.map((org) => org.id),
+  const restorable = and(
+    inArray(schema.orgs.id, orgIds),
+    isNotNull(schema.orgs.disabledAt),
+    isNull(schema.orgs.deletingAt),
   );
+  // One batch, for the same reason as banUser's. The outbox rows go first,
+  // while `restorable` still matches the orgs the update is about to change.
+  const [, rows, restored] = await db.batch([
+    unbanned,
+    queueOrgSyncs(db, restorable),
+    db
+      .update(schema.orgs)
+      .set({ disabledAt: null })
+      .where(restorable)
+      .returning({ id: schema.orgs.id }),
+  ]);
+  await publishOrgSyncs(env, db, rows);
   return restored.length;
 }
 
@@ -222,23 +268,96 @@ export async function unbanUser(env: Env, db: DB, userId: string): Promise<numbe
  * links, KV keys, clicks, domains and logos, through the same teardown as a
  * deletion an owner asks for. The user row stays, banned, so the address
  * cannot sign up again. Returns how many orgs it started on.
+ *
+ * Picks and marks the orgs in one statement. Read first and marked after,
+ * an unban landing in between would see an org not yet deleting, restore
+ * it, and then lose it to a teardown nobody wanted.
  */
 export async function purgeBannedOrgs(env: Env, db: DB, now = Date.now()): Promise<number> {
-  const due = await db
-    .select({ id: schema.orgs.id })
-    .from(schema.orgs)
+  const due = and(
+    isNotNull(schema.orgs.disabledAt),
+    lt(schema.orgs.disabledAt, now - BAN_PURGE_AFTER_MS),
+    isNull(schema.orgs.deletingAt),
+  );
+  const marked = await db
+    .update(schema.orgs)
+    .set({ deletingAt: now })
     .where(
       and(
-        isNotNull(schema.orgs.disabledAt),
-        lt(schema.orgs.disabledAt, now - BAN_PURGE_AFTER_MS),
-        isNull(schema.orgs.deletingAt),
+        due,
+        // SQLite on D1 has no UPDATE ... LIMIT; the bound goes on a subquery.
+        inArray(
+          schema.orgs.id,
+          db.select({ id: schema.orgs.id }).from(schema.orgs).where(due).limit(BAN_PURGE_LIMIT),
+        ),
       ),
     )
-    .limit(BAN_PURGE_LIMIT);
-  await deleteOrgs(
-    db,
-    env,
-    due.map((org) => org.id),
-  );
-  return due.length;
+    .returning({ id: schema.orgs.id });
+  const ids = marked.map((org) => org.id);
+  await startOrgTeardown(db, env, ids, ids);
+  return ids.length;
 }
+
+/**
+ * What migration 0046 could not do itself, run by the daily cron. A
+ * migration cannot reach KV, and it runs before the new Worker is deployed:
+ * an old Worker's drain would drop an `org_sync` row it does not know, and
+ * an old Worker's KV sync would publish links live the moment their old
+ * "Owner banned" suspension went. So the suspensions go here, after deploy.
+ *
+ * Every step matches only rows still in the old state, so it changes
+ * nothing once that is gone:
+ * - an org whose owner is banned and that has no `disabled_at` (an old
+ *   Worker banned them during the deploy) is disabled;
+ * - the "Owner banned" suspensions in disabled orgs are cleared, since
+ *   `disabled_at` does that job and an unban clears it;
+ * - a disabled org's `links_suspended_at` goes when no link in it is still
+ *   suspended, or an unban would leave the org read-only;
+ * - every disabled org not being deleted gets an `org_sync`, so KV shows
+ *   the disabled page however it got there.
+ */
+export async function settleBannedOrgs(db: DB): Promise<void> {
+  const disabled = isNotNull(schema.orgs.disabledAt);
+  const disabledOrgIds = db.select({ id: schema.orgs.id }).from(schema.orgs).where(disabled);
+  await db.batch([
+    db
+      .update(schema.orgs)
+      .set({ disabledAt: Date.now() })
+      .where(
+        and(
+          isNull(schema.orgs.disabledAt),
+          inArray(
+            schema.orgs.id,
+            db
+              .select({ id: schema.orgMembers.orgId })
+              .from(schema.orgMembers)
+              .innerJoin(schema.user, eq(schema.user.id, schema.orgMembers.userId))
+              .where(and(eq(schema.orgMembers.role, "owner"), eq(schema.user.banned, true))),
+          ),
+        ),
+      ),
+    db
+      .update(schema.links)
+      .set({ suspendedAt: null, suspendedBy: null, suspendReason: null })
+      .where(
+        and(
+          eq(schema.links.suspendReason, OLD_BAN_REASON),
+          inArray(schema.links.orgId, disabledOrgIds),
+        ),
+      ),
+    db
+      .update(schema.orgs)
+      .set({ linksSuspendedAt: null })
+      .where(
+        and(
+          disabled,
+          isNotNull(schema.orgs.linksSuspendedAt),
+          sql`not exists (select 1 from links where links.org_id = ${schema.orgs.id} and links.suspended_at is not null)`,
+        ),
+      ),
+    queueOrgSyncs(db, and(disabled, isNull(schema.orgs.deletingAt))),
+  ]);
+}
+
+/** The reason the ban wrote on each link before migration 0046. */
+const OLD_BAN_REASON = "Owner banned";

@@ -13,6 +13,7 @@ import { cn } from "../../ui/cn";
 interface BanResult {
   orgsDisabled: number;
   hostsBlocked: number;
+  hostsFailed: boolean;
   subscriptionEnded: boolean;
 }
 
@@ -64,6 +65,8 @@ function BanForm({ user, onClose }: { user: { id: string; name: string }; onClos
       );
       if (!done.subscriptionEnded)
         toast("Polar did not cancel their subscription. Cancel it in Polar.", "error");
+      if (done.hostsFailed)
+        toast("The hosts were not blocked. Add them on the blocklist page.", "error");
       onClose();
     },
     onError: withErrorToast(toast),

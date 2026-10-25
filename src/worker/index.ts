@@ -46,7 +46,7 @@ import {
   type KVSlugValue,
 } from "./kv";
 import { disabledPage, heldPage, warnPage } from "./link-state-page";
-import { purgeBannedOrgs } from "./abuse-hold";
+import { purgeBannedOrgs, settleBannedOrgs } from "./abuse-hold";
 import { notFoundPage } from "./not-found-page";
 import { RESERVED_SLUGS, SLUG_RE } from "./util";
 import { markdownPage, withPageMeta } from "./page-meta";
@@ -698,10 +698,17 @@ const wrapped = Sentry.withSentry<
       // whose only member was the deleted account has nobody to retry it.
       await sweepStalledOrgDeletions(drizzle(env.DB, { schema }), env);
 
-      // Daily: delete the orgs of owners banned more than 90 days ago. Before
-      // it the "disabled" page answers for them; after it they are gone.
-      // Isolated: an org it misses today it reaches tomorrow.
-      await runIsolated([() => purgeBannedOrgs(env, drizzle(env.DB, { schema })).then(() => {})]);
+      // Daily: finish for banned owners' orgs what migration 0046 could not
+      // do before this Worker was deployed, and delete the orgs of owners
+      // banned more than 90 days ago. Before that the "disabled" page answers
+      // for them; after it they are gone. Neither needs the other's result,
+      // so they run side by side, isolated: an org either misses today it
+      // reaches tomorrow. The outbox drain at the end publishes what the
+      // first one queued.
+      await runIsolated([
+        () => settleBannedOrgs(drizzle(env.DB, { schema })),
+        () => purgeBannedOrgs(env, drizzle(env.DB, { schema })).then(() => {}),
+      ]);
 
       // Daily: retire rename aliases past their 48h deadline (see #38). The
       // redirect path already stopped resolving them; this frees their slugs.

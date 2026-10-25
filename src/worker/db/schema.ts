@@ -556,9 +556,10 @@ export const anonLinks = sqliteTable(
  * The queue is the fast path and stays that way. A row lands here only when
  * `sendBatch` failed outright, or when a message exhausted every delivery, so
  * a change that would otherwise be lost is instead applied late by the daily
- * drain. The one exception is `pending`: an `org_sync` written before the
- * work starts and deleted when it ends (`republishOrgs`), because the keys it
- * stands for are only read once the work is under way.
+ * drain. The one exception is `pending`: an `org_sync` written in the same
+ * batch as the change that needs it (`queueOrgSyncs`) and deleted once the
+ * request has published the org (`publishOrgSyncs`), because the keys it
+ * stands for are only read once that work is under way.
  *
  * It carries no payload beyond the op and its target. Every storage message
  * is desired-state: the consumer reads D1 and writes what it finds, so
