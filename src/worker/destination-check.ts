@@ -395,7 +395,14 @@ const SPIKE_CANDIDATES_PER_RUN = 3 * SPIKE_RECHECKS_PER_RUN;
  * operations an invocation. */
 const SPIKE_MARK_READS_PER_RUN = 10 * SPIKE_CANDIDATES_PER_RUN;
 
-type SpikeRechecks = { asked: number; hit: number; failed: number; skipped: number };
+/** `failed`: Google did not answer. `errors`: it answered and the hold threw. */
+type SpikeRechecks = {
+  asked: number;
+  hit: number;
+  failed: number;
+  errors: number;
+  skipped: number;
+};
 
 /**
  * Ask Web Risk again about links whose traffic just spiked, past the cache
@@ -409,7 +416,7 @@ type SpikeRechecks = { asked: number; hit: number; failed: number; skipped: numb
  * run, ten minutes on, asks again.
  */
 export async function recheckSpikingLinks(env: Env, spiking: string[]): Promise<SpikeRechecks> {
-  const counts: SpikeRechecks = { asked: 0, hit: 0, failed: 0, skipped: 0 };
+  const counts: SpikeRechecks = { asked: 0, hit: 0, failed: 0, errors: 0, skipped: 0 };
   const key = env.WEB_RISK_API_KEY;
   if (!key) return { ...counts, skipped: spiking.length };
   const db = drizzle(env.DB, { schema });
@@ -447,12 +454,22 @@ export async function recheckSpikingLinks(env: Env, spiking: string[]): Promise<
       await env.LINKS.put(mark(link.id), "1", {
         expirationTtl: SPIKE_RECHECK_EVERY_SECONDS,
       }).catch(() => {});
-      return actOnWebRisk(env, db, link, verdict);
+      try {
+        return await actOnWebRisk(env, db, link, verdict);
+      } catch {
+        // The hold threw after the mark and the stamp: drop the mark so the
+        // next run asks again, and put the rescan back to tomorrow, so a
+        // listed link is not left live for a day and then a week.
+        await env.LINKS.delete(mark(link.id)).catch(() => {});
+        await retryWebRiskTomorrow(db, link.id).catch(() => {});
+        return "error";
+      }
     }),
   );
   counts.asked = due.length;
   counts.hit = outcomes.filter((o) => o === "hit").length;
   counts.failed = outcomes.filter((o) => o === "failed").length;
+  counts.errors = outcomes.filter((o) => o === "error").length;
   return counts;
 }
 
@@ -467,6 +484,7 @@ export async function sweepAbuse(env: Env): Promise<void> {
     const rechecks = await recheckSpikingLinks(env, spikingLinks);
     log.set({ abuse: { spikingLinks: spikingLinks.length }, webRisk: { spikeRechecks: rechecks } });
     if (rechecks.hit > 0) log.warn("Web Risk lists a link whose traffic spiked");
+    if (rechecks.errors > 0) log.warn("A spike recheck could not hold a link Web Risk lists");
   } catch (error) {
     log.error(error instanceof Error ? error : String(error));
     throw error;

@@ -220,6 +220,8 @@ describe("the anonymous shortener", () => {
 
     expect(link?.suspendedAt).not.toBeNull();
     expect(link?.suspendReason).toContain("phonepe");
+    // And KV serves the hold, not the plain redirect the anonymous link had.
+    expect(await env.LINKS.get("slug:stok1", "json")).toMatchObject({ held: true });
     mail.restore();
   });
 
