@@ -909,9 +909,5 @@ function AuthPage({ mode }: { mode: "login" | "signup" }) {
   );
 }
 
-// main.tsx names these as strings for lazyRouteComponent, which static
-// analysis cannot follow.
-// fallow-ignore-next-line unused-export
 export const LoginPage = () => <AuthPage mode="login" />;
-// fallow-ignore-next-line unused-export
 export const SignupPage = () => <AuthPage mode="signup" />;

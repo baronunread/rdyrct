@@ -23,9 +23,6 @@ const REASON_LABELS = {
 const reasonFrom = (value: string): ReportReason =>
   REPORT_REASONS.find((r) => r === value) ?? "phishing";
 
-// main.tsx names this export as a string, for lazyRouteComponent, which
-// static analysis can't follow.
-// fallow-ignore-next-line unused-export
 export function ReportPage() {
   const { authed } = useAudience();
   const toast = useToast();

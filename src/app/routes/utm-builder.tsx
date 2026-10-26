@@ -376,9 +376,6 @@ function Builder() {
   );
 }
 
-// main.tsx names this export as a string, for lazyRouteComponent, which
-// static analysis can't follow.
-// fallow-ignore-next-line unused-export
 export function UtmBuilderPage() {
   const { ctaTo, ctaLabel } = useAudience();
   return (

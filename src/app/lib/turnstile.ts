@@ -10,8 +10,8 @@
  * server decides: an empty one is rejected when TURNSTILE_SECRET_KEY is set
  * and ignored when it is not.
  */
-import { useCallback, useRef } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { type RefObject, useCallback, useRef } from "react";
+import { type QueryClient, useQueryClient } from "@tanstack/react-query";
 import { TURNSTILE_TOKEN_HEADER } from "@/shared/types";
 import { configQuery, useConfig } from "./hooks";
 import { retryOnTurnstileFailure } from "./turnstile-retry";
@@ -110,6 +110,41 @@ async function solve(siteKey: string, scope: TurnstileScope): Promise<string> {
 }
 
 /**
+ * The site key, waiting for /api/config if it has not answered yet. A form
+ * submitted before then must not go out without a token. A failed fetch is
+ * not cached, so the retry after a refusal asks again instead of failing for
+ * the whole page load.
+ */
+async function siteKeyWhenReady(qc: QueryClient): Promise<string | undefined> {
+  try {
+    return (await qc.ensureQueryData(configQuery)).turnstileSiteKey;
+  } catch {
+    return undefined;
+  }
+}
+
+type Pending = { token: Promise<string>; primedAt: number } | null;
+
+/** Takes the primed token, if any. Single-use, so the slot is cleared: a form
+ * submitted twice solves again rather than replaying a burned token. */
+async function takeToken(pending: RefObject<Pending>): Promise<string> {
+  const token = (await pending.current?.token) ?? "";
+  pending.current = null;
+  return token;
+}
+
+/** The one place that knows "we could not run the check" from "the server
+ * refused it". */
+function warnIfUnsolved(siteKey: string | undefined, token: string, scope: TurnstileScope) {
+  if (siteKey && !token) console.warn("turnstile_solve_failed", scope);
+}
+
+/** The header a guarded request carries, or none without a token. */
+function tokenHeader(token: string): Record<string, string> {
+  return token ? { [TURNSTILE_TOKEN_HEADER]: token } : {};
+}
+
+/**
  * A token for one form.
  *
  * `prime()` is safe to call on every keystroke and starts the work once;
@@ -122,7 +157,7 @@ async function solve(siteKey: string, scope: TurnstileScope): Promise<string> {
 export function useTurnstile(scope: TurnstileScope) {
   const qc = useQueryClient();
   const loadedSiteKey = useConfig().data?.turnstileSiteKey;
-  const pending = useRef<{ token: Promise<string>; primedAt: number } | null>(null);
+  const pending = useRef<Pending>(null);
 
   const startSolve = useCallback(
     (siteKey: string | undefined) => {
@@ -139,21 +174,11 @@ export function useTurnstile(scope: TurnstileScope) {
   const prime = useCallback(() => startSolve(loadedSiteKey), [startSolve, loadedSiteKey]);
 
   const headers = useCallback(async (): Promise<Record<string, string>> => {
-    // A form submitted before /api/config answered must not go out without
-    // a token, so wait for it here. A failed fetch is not cached, so the
-    // retry after a refusal asks again instead of failing for the whole
-    // page load.
-    const siteKey = await qc
-      .ensureQueryData(configQuery)
-      .then((config) => config.turnstileSiteKey)
-      .catch(() => undefined);
+    const siteKey = await siteKeyWhenReady(qc);
     startSolve(siteKey);
-    const token = (await pending.current?.token) ?? "";
-    pending.current = null;
-    // The one place that knows "we could not run the check" from "the server
-    // refused it".
-    if (siteKey && !token) console.warn("turnstile_solve_failed", scope);
-    return token ? { [TURNSTILE_TOKEN_HEADER]: token } : {};
+    const token = await takeToken(pending);
+    warnIfUnsolved(siteKey, token, scope);
+    return tokenHeader(token);
   }, [qc, startSolve, scope]);
 
   const guarded = useCallback<TurnstileGuard>(
