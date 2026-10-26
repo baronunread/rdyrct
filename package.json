@@ -72,7 +72,7 @@
     "iso-3166-1": "^2.1.1",
     "jose": "6.2.12",
     "marked": "^18.1.1",
-    "morphicons": "^1.7.1",
+    "morphicons": "^2.0.0",
     "motion": "^13.4.0",
     "posthog-js": "^1.438.12",
     "qr-code-styling": "^1.9.2",
