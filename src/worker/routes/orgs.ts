@@ -31,8 +31,24 @@ import type {
   SeriesPoint,
   InvitePreview,
   RecentClick,
+  ClickUsage,
 } from "@/shared/types";
+import { monthKey, nextMonthStart } from "@/shared/click-usage";
+import { clicksThisMonth } from "../click-caps";
 import { INVITABLE_ROLES } from "@/shared/types";
+import {
+  computeWindows,
+  deadLinkRows,
+  decayingLinkRows,
+  dimensionRows,
+  headlineTotals,
+  heatmapRows,
+  hourSeriesRows,
+  lastDayByHour,
+  seriesRows,
+  topLinkRows,
+  utmRows,
+} from "../rollups";
 
 export const orgRoutes = new Hono<AppEnv>();
 orgRoutes.use("*", jsonBodyLimit());
@@ -721,9 +737,6 @@ export function fillSeries(rows: { day: string; clicks: number }[], days: number
   return [...map.entries()].map(([day, clicks]) => ({ day, clicks }));
 }
 
-const day = sql<string>`date(ts / 1000, 'unixepoch')`;
-const hour = sql<string>`strftime('%Y-%m-%d %H:00', ts / 1000, 'unixepoch')`;
-
 function emptyHours(): Map<string, number> {
   const map = new Map<string, number>();
   const hourMs = 60 * 60 * 1000;
@@ -765,31 +778,6 @@ function cleanDim(rows: { key: string; clicks: number }[]) {
 function clampDays(requested: number | null, planDays: number): number {
   if (!requested || requested < 1) return planDays;
   return Math.min(requested, planDays);
-}
-
-function computeWindows(days: number) {
-  const since = Date.now() - days * 24 * 60 * 60 * 1000;
-  return {
-    since,
-    prevSince: since - days * 24 * 60 * 60 * 1000,
-    since7: Date.now() - 7 * 24 * 60 * 60 * 1000,
-    prev7Since: Date.now() - 14 * 24 * 60 * 60 * 1000,
-    since24: Date.now() - 24 * 60 * 60 * 1000,
-  };
-}
-
-function clickTotals(
-  totals: { clicks: number }[],
-  totalsPrev: { clicks: number }[],
-  recent: { n: number }[],
-  recentPrev: { n: number }[],
-) {
-  return {
-    totalClicks: totals[0]?.clicks ?? 0,
-    totalClicksPrev: totalsPrev[0]?.clicks ?? 0,
-    clicks7dVal: recent[0]?.n ?? 0,
-    clicks7dPrev: recentPrev[0]?.n ?? 0,
-  };
 }
 
 async function resolveMember(db: DB, orgId: string, targetId: string) {
@@ -844,16 +832,14 @@ orgRoutes.get("/:orgId/stats", requireOrgRole("viewer"), async (c) => {
   const bucket: "day" | "hour" = bucketRaw === "hour" ? "hour" : "day";
   let days = clampDays(queryDays ? parseInt(queryDays, 10) : null, limits.analyticsDays);
   if (bucket === "hour") days = 1;
-  const { since, prevSince, since7, prev7Since, since24 } = computeWindows(days);
-  const inOrg = eq(schema.clicks.orgId, orgId);
+  const w = computeWindows(days);
+  const scope = { orgId };
 
   const [
-    totals,
-    totalsPrev,
-    recent,
-    recentPrev,
-    seriesRows,
-    hourSeriesRows,
+    headline,
+    lastDay,
+    seriesData,
+    hourSeriesData,
     topLinks,
     countries,
     referrers,
@@ -861,177 +847,48 @@ orgRoutes.get("/:orgId/stats", requireOrgRole("viewer"), async (c) => {
     linkCount,
     deadLinks,
     decayingRaw,
-    heatmapRaw,
+    heatmap,
     campaignRows,
     sourceRows,
     mediumRows,
   ] = await Promise.all([
-    db
-      .select({ clicks: sql<number>`count(*)` })
-      .from(schema.clicks)
-      // Bounded to the selected range (matching totalsPrev's equal-length
-      // window below), not an unbounded all-time count: comparing an
-      // ever-growing total against one period's worth of prior clicks used
-      // to produce a meaningless delta (see issue #24).
-      .where(and(inOrg, gte(schema.clicks.ts, since))),
-    db
-      .select({ clicks: sql<number>`count(*)` })
-      .from(schema.clicks)
-      .where(and(inOrg, gte(schema.clicks.ts, prevSince), sql`${schema.clicks.ts} < ${since}`)),
-    db
-      .select({ n: sql<number>`count(*)` })
-      .from(schema.clicks)
-      .where(and(inOrg, gte(schema.clicks.ts, since7))),
-    db
-      .select({ n: sql<number>`count(*)` })
-      .from(schema.clicks)
-      .where(and(inOrg, gte(schema.clicks.ts, prev7Since), sql`${schema.clicks.ts} < ${since7}`)),
-    db
-      .select({ day, clicks: sql<number>`count(*)` })
-      .from(schema.clicks)
-      .where(and(inOrg, gte(schema.clicks.ts, since)))
-      .groupBy(day),
-    db
-      .select({ hour, clicks: sql<number>`count(*)` })
-      .from(schema.clicks)
-      .where(and(inOrg, gte(schema.clicks.ts, since24)))
-      .groupBy(hour),
-    db
-      .select({
-        id: schema.links.id,
-        slug: schema.links.slug,
-        title: schema.links.title,
-        clicks: sql<number>`count(${schema.clicks.id})`,
-      })
-      .from(schema.links)
-      .leftJoin(schema.clicks, eq(schema.clicks.linkId, schema.links.id))
-      .where(eq(schema.links.orgId, orgId))
-      .groupBy(schema.links.id)
-      .having(sql`count(${schema.clicks.id}) > 0`)
-      .orderBy(desc(sql`count(${schema.clicks.id})`))
-      .limit(8),
-    db
-      .select({ key: schema.clicks.country, clicks: sql<number>`count(*)` })
-      .from(schema.clicks)
-      .where(and(inOrg, gte(schema.clicks.ts, since)))
-      .groupBy(schema.clicks.country)
-      .orderBy(desc(sql`count(*)`))
-      .limit(10),
-    db
-      .select({ key: schema.clicks.referrer, clicks: sql<number>`count(*)` })
-      .from(schema.clicks)
-      .where(and(inOrg, gte(schema.clicks.ts, since)))
-      .groupBy(schema.clicks.referrer)
-      .orderBy(desc(sql`count(*)`))
-      .limit(8),
-    db
-      .select({ key: schema.clicks.device, clicks: sql<number>`count(*)` })
-      .from(schema.clicks)
-      .where(and(inOrg, gte(schema.clicks.ts, since)))
-      .groupBy(schema.clicks.device)
-      .orderBy(desc(sql`count(*)`)),
+    // Bounded to the selected range (matching the previous period's
+    // equal-length window), not an all-time count: comparing an ever-growing
+    // total against one period's worth of prior clicks used to produce a
+    // meaningless delta (see issue #24).
+    headlineTotals(db, scope, w),
+    lastDayByHour(db, orgId, w.since24h),
+    seriesRows(db, scope, w.since),
+    hourSeriesRows(db, orgId, w.since24h),
+    topLinkRows(db, orgId),
+    dimensionRows(db, scope, w.since, "country", 10),
+    dimensionRows(db, scope, w.since, "referrer", 8),
+    dimensionRows(db, scope, w.since, "device"),
     db
       .select({ n: sql<number>`count(*)` })
       .from(schema.links)
       .where(eq(schema.links.orgId, orgId)),
-    db
-      .select({ id: schema.links.id, slug: schema.links.slug, title: schema.links.title })
-      .from(schema.links)
-      .where(
-        and(
-          eq(schema.links.orgId, orgId),
-          // Went cold, not stillborn: had clicks at some point, just none in
-          // the last 30 days. A link that never got a single click isn't
-          // "dead", it's just new or unshared.
-          sql`${schema.links.id} in (select distinct link_id from clicks where org_id = ${orgId})`,
-          sql`${schema.links.id} not in (select distinct link_id from clicks where org_id = ${orgId} and ts >= ${Date.now() - 30 * 24 * 60 * 60 * 1000})`,
-        ),
-      )
-      .limit(5),
-    // Complex queries that use D1 directly (CTEs, strftime)
-    c.env.DB.prepare(
-      `with cur as (select link_id, count(*) as n from clicks where org_id = ? and ts >= ? group by link_id),
-            prev as (select link_id, count(*) as n from clicks where org_id = ? and ts >= ? and ts < ? group by link_id),
-            decay as (select cur.link_id, case when prev.n is null or prev.n = 0 then 100 else round((prev.n - cur.n) * 100.0 / prev.n) end as drop_pct from cur left join prev on cur.link_id = prev.link_id where prev.n is not null and prev.n > 0 and cur.n < prev.n * 0.5)
-       select l.id, l.slug, l.title, d.drop_pct from decay d join links l on l.id = d.link_id order by d.drop_pct desc limit 5`,
-    )
-      .bind(orgId, since7, orgId, prev7Since, since7)
-      .all<{ id: string; slug: string; title: string; drop_pct: number }>()
-      .then((r) => r.results),
-    c.env.DB.prepare(
-      `select (cast(strftime('%w', ts / 1000, 'unixepoch') as integer) + 6) % 7 as day_of_week,
-              cast(strftime('%H', ts / 1000, 'unixepoch') as integer) as hour,
-              count(*) as clicks
-       from clicks where org_id = ? and ts >= ?
-       group by day_of_week, hour`,
-    )
-      .bind(orgId, since)
-      .all<{ day_of_week: number; hour: number; clicks: number }>()
-      .then((r) => r.results),
-    db
-      .select({
-        campaign: schema.links.utmCampaign,
-        clicks: sql<number>`count(${schema.clicks.id})`,
-      })
-      .from(schema.links)
-      .innerJoin(schema.clicks, eq(schema.clicks.linkId, schema.links.id))
-      .where(
-        and(
-          eq(schema.links.orgId, orgId),
-          gte(schema.clicks.ts, since),
-          sql`length(${schema.links.utmCampaign}) > 0`,
-        ),
-      )
-      .groupBy(schema.links.utmCampaign)
-      .orderBy(desc(sql`count(${schema.clicks.id})`))
-      .limit(8),
-    db
-      .select({ source: schema.links.utmSource, clicks: sql<number>`count(${schema.clicks.id})` })
-      .from(schema.links)
-      .innerJoin(schema.clicks, eq(schema.clicks.linkId, schema.links.id))
-      .where(
-        and(
-          eq(schema.links.orgId, orgId),
-          gte(schema.clicks.ts, since),
-          sql`length(${schema.links.utmSource}) > 0`,
-        ),
-      )
-      .groupBy(schema.links.utmSource)
-      .orderBy(desc(sql`count(${schema.clicks.id})`))
-      .limit(8),
-    db
-      .select({ medium: schema.links.utmMedium, clicks: sql<number>`count(${schema.clicks.id})` })
-      .from(schema.links)
-      .innerJoin(schema.clicks, eq(schema.clicks.linkId, schema.links.id))
-      .where(
-        and(
-          eq(schema.links.orgId, orgId),
-          gte(schema.clicks.ts, since),
-          sql`length(${schema.links.utmMedium}) > 0`,
-        ),
-      )
-      .groupBy(schema.links.utmMedium)
-      .orderBy(desc(sql`count(${schema.clicks.id})`))
-      .limit(8),
+    deadLinkRows(db, orgId, w.since30),
+    decayingLinkRows(c.env, orgId, w),
+    heatmapRows(db, orgId, w.sinceMs),
+    utmRows(db, orgId, w.since, "utmCampaign"),
+    utmRows(db, orgId, w.since, "utmSource"),
+    utmRows(db, orgId, w.since, "utmMedium"),
   ]);
-
-  const { totalClicks, totalClicksPrev, clicks7dVal, clicks7dPrev } = clickTotals(
-    totals,
-    totalsPrev,
-    recent,
-    recentPrev,
-  );
+  const { clicks7d, clicks7dPrev } = headline;
+  // The 24-hour view counts the 24 hours its chart draws, not today's UTC day.
+  const { totalClicks, totalClicksPrev } = bucket === "hour" ? lastDay : headline;
 
   return c.json({
     totalClicks,
     totalLinks: linkCount[0]?.n ?? 0,
-    clicks7d: clicks7dVal,
+    clicks7d,
     rangeDays: days,
     bucket,
-    series: fillSeries(seriesRows, days),
-    hourSeries: fillHours(hourSeriesRows),
+    series: fillSeries(seriesData, days),
+    hourSeries: fillHours(hourSeriesData),
     totalClicksDelta: computeDelta(totalClicks, totalClicksPrev),
-    clicks7dDelta: computeDelta(clicks7dVal, clicks7dPrev),
+    clicks7dDelta: computeDelta(clicks7d, clicks7dPrev),
     topLinks,
     countries: cleanDim(countries).map((r) => ({
       ...r,
@@ -1049,10 +906,10 @@ orgRoutes.get("/:orgId/stats", requireOrgRole("viewer"), async (c) => {
       title: l.title,
       drop: l.drop_pct,
     })),
-    heatmap: heatmapRaw.map((r) => ({ dayOfWeek: r.day_of_week, hour: r.hour, clicks: r.clicks })),
-    campaigns: campaignRows.map((r) => ({ campaign: r.campaign, clicks: r.clicks })),
-    sources: sourceRows.map((r) => ({ source: r.source, clicks: r.clicks })),
-    mediums: mediumRows.map((r) => ({ medium: r.medium, clicks: r.clicks })),
+    heatmap,
+    campaigns: campaignRows.map((r) => ({ campaign: r.value, clicks: r.clicks })),
+    sources: sourceRows.map((r) => ({ source: r.value, clicks: r.clicks })),
+    mediums: mediumRows.map((r) => ({ medium: r.value, clicks: r.clicks })),
   } satisfies OrgStats);
 });
 
@@ -1085,6 +942,24 @@ orgRoutes.get("/:orgId/clicks", requireOrgRole("viewer"), async (c) => {
   );
 });
 
+/* ---------------- tracked clicks this month (#387) ---------------- */
+
+orgRoutes.get("/:orgId/click-usage", requireOrgRole("viewer"), async (c) => {
+  const orgId = c.req.param("orgId");
+  const now = Date.now();
+  const [{ limits }, clicks] = await Promise.all([
+    orgPlan(c.var.db, orgId),
+    clicksThisMonth(c.env, orgId, now),
+  ]);
+  c.get("log")?.set({ orgId, clickUsage: { clicks, limit: limits.trackedClicks } });
+  return c.json({
+    month: monthKey(now),
+    clicks,
+    limit: limits.trackedClicks,
+    resetsAt: nextMonthStart(now),
+  } satisfies ClickUsage);
+});
+
 /* ---------------- per-link stats ---------------- */
 
 orgRoutes.get("/:orgId/links/stats/:slug", requireOrgRole("viewer"), async (c) => {
@@ -1094,7 +969,6 @@ orgRoutes.get("/:orgId/links/stats/:slug", requireOrgRole("viewer"), async (c) =
   const domain = c.req.query("domain");
   const { limits } = await orgPlan(db, orgId);
   const days = limits.analyticsDays;
-  const { since, prevSince, since7, prev7Since } = computeWindows(days);
 
   // Matched through link_addresses (any active address, not just the link's
   // current primary), so a bookmarked or QR'd URL for an address that has
@@ -1126,85 +1000,36 @@ orgRoutes.get("/:orgId/links/stats/:slug", requireOrgRole("viewer"), async (c) =
   if (!link) throw new HTTPException(404, { message: "Link not found" });
 
   const linkId = link.id;
-  const onLink = and(eq(schema.clicks.orgId, orgId), eq(schema.clicks.linkId, linkId));
+  const w = computeWindows(days);
+  const scope = { linkId };
 
-  const [
-    totals,
-    totalsPrev,
-    recent,
-    recentPrev,
-    seriesRows,
-    countries,
-    referrers,
-    devices,
-    lastClickRow,
-  ] = await Promise.all([
-    db
-      .select({ clicks: sql<number>`count(*)` })
-      .from(schema.clicks)
-      // Bounded to the selected range, same reasoning as the org stats
-      // route's totals query above (see issue #24).
-      .where(and(onLink, gte(schema.clicks.ts, since))),
-    db
-      .select({ clicks: sql<number>`count(*)` })
-      .from(schema.clicks)
-      .where(and(onLink, gte(schema.clicks.ts, prevSince), sql`${schema.clicks.ts} < ${since}`)),
-    db
-      .select({ n: sql<number>`count(*)` })
-      .from(schema.clicks)
-      .where(and(onLink, gte(schema.clicks.ts, since7))),
-    db
-      .select({ n: sql<number>`count(*)` })
-      .from(schema.clicks)
-      .where(and(onLink, gte(schema.clicks.ts, prev7Since), sql`${schema.clicks.ts} < ${since7}`)),
-    db
-      .select({ day, clicks: sql<number>`count(*)` })
-      .from(schema.clicks)
-      .where(and(onLink, gte(schema.clicks.ts, since)))
-      .groupBy(day),
-    db
-      .select({ key: schema.clicks.country, clicks: sql<number>`count(*)` })
-      .from(schema.clicks)
-      .where(and(onLink, gte(schema.clicks.ts, since)))
-      .groupBy(schema.clicks.country)
-      .orderBy(desc(sql`count(*)`))
-      .limit(10),
-    db
-      .select({ key: schema.clicks.referrer, clicks: sql<number>`count(*)` })
-      .from(schema.clicks)
-      .where(and(onLink, gte(schema.clicks.ts, since)))
-      .groupBy(schema.clicks.referrer)
-      .orderBy(desc(sql`count(*)`))
-      .limit(8),
-    db
-      .select({ key: schema.clicks.device, clicks: sql<number>`count(*)` })
-      .from(schema.clicks)
-      .where(and(onLink, gte(schema.clicks.ts, since)))
-      .groupBy(schema.clicks.device)
-      .orderBy(desc(sql`count(*)`)),
+  const [headline, seriesData, countries, referrers, devices, lastClickRow] = await Promise.all([
+    // Bounded to the selected range, same reasoning as the org stats route's
+    // headline figures above (see issue #24).
+    headlineTotals(db, scope, w),
+    seriesRows(db, scope, w.since),
+    dimensionRows(db, scope, w.since, "country", 10),
+    dimensionRows(db, scope, w.since, "referrer", 8),
+    dimensionRows(db, scope, w.since, "device"),
+    // The one raw read left: a single row off the (link_id, ts) index, for a
+    // timestamp the rollups only know to the hour.
     db
       .select({ ts: schema.clicks.ts })
       .from(schema.clicks)
-      .where(onLink)
+      .where(eq(schema.clicks.linkId, linkId))
       .orderBy(desc(schema.clicks.ts))
       .limit(1),
   ]);
-
-  const { totalClicks, totalClicksPrev, clicks7dVal, clicks7dPrev } = clickTotals(
-    totals,
-    totalsPrev,
-    recent,
-    recentPrev,
-  );
+  const { totalClicks, totalClicksPrev, clicks7d, clicks7dPrev } = headline;
 
   return c.json({
     id: link.id,
     totalClicks,
-    clicks7d: clicks7dVal,
+    clicks7d,
     rangeDays: days,
-    series: fillSeries(seriesRows, days),
+    series: fillSeries(seriesData, days),
     totalClicksDelta: computeDelta(totalClicks, totalClicksPrev),
-    clicks7dDelta: computeDelta(clicks7dVal, clicks7dPrev),
+    clicks7dDelta: computeDelta(clicks7d, clicks7dPrev),
     countries: cleanDim(countries).map((r) => ({
       ...r,
       key: r.key === "direct" ? "unknown" : r.key,

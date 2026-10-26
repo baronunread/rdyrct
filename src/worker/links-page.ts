@@ -26,6 +26,7 @@ import { and, eq, gt, lt, or, sql, type SQL } from "drizzle-orm";
 import { oneOf } from "../shared/lookup";
 import * as v from "valibot";
 import * as schema from "./db/schema";
+import { linkClicksTotal } from "./rollups";
 
 const LINK_SORTS = ["created", "slug", "clicks"] as const;
 type LinkSort = (typeof LINK_SORTS)[number];
@@ -100,10 +101,9 @@ function decodeCursor(raw: string | null): { value: CursorValue; id: string } | 
   }
 }
 
-/** Clicks are counted per link, so the sort and its cursor share one
- * expression. Literal `links.id`, because an interpolated column renders
- * unqualified and SQLite resolves it against the subquery's own table. */
-const clicksExpr = sql<number>`(select count(*) from clicks where clicks.link_id = links.id)`;
+/** Clicks are counted per link, from the rollups (#26), so the sort and its
+ * cursor share one expression with the count each row shows. */
+const clicksExpr = linkClicksTotal;
 
 function sortExpr(sort: LinkSort): SQL<unknown> {
   if (sort === "slug") return sql`${schema.links.slug}`;

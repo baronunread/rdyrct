@@ -9,6 +9,7 @@ import {
   fetchWorker,
   jsonBody,
   freeOwnerCookie,
+  rebuildClickRollups,
   sampleAddress,
   sampleLink,
 } from "./support";
@@ -40,6 +41,7 @@ async function seedClicks(db: ReturnType<typeof drizzle>, timestamps: number[]) 
       ts,
     })),
   );
+  await rebuildClickRollups();
 }
 
 beforeEach(applyTestMigrations);

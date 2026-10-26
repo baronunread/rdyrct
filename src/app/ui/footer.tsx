@@ -5,9 +5,10 @@ import { cn } from "./cn";
 import { CookieSettingsButton } from "./consent-banner";
 import { Moon, Sun } from "./icons";
 import { Logo } from "./logo";
+import { SUPPORT_EMAIL } from "@/shared/support";
 
 export const GITHUB_URL = "https://github.com/baronunread/rdyrct";
-export const SUPPORT_EMAIL = "support@mail.rdyrct.com";
+export { SUPPORT_EMAIL };
 
 const linkClass = "hover:text-accent";
 

@@ -1,4 +1,5 @@
 import { type SafeHtml, emailHtml, safeUrl } from "./email-html";
+import { SUPPORT_EMAIL } from "@/shared/support";
 
 /**
  * One layout for every outbound email, rendering both parts from a single
@@ -245,9 +246,7 @@ ${preheaderBlock(content.preheader)}
   return { html, text: renderText(content, appUrl, to) };
 }
 
-/** Where to write. The support address is a mailbox people can reach; the
- * sender of most mail (no-reply@) is not. */
-export const SUPPORT_EMAIL = "support@mail.rdyrct.com";
+export { SUPPORT_EMAIL };
 
 /** What to do with mail you did not expect, in both parts of every email. */
 const NOT_YOU = `Not you? Ignore it, or write to ${SUPPORT_EMAIL}.`;

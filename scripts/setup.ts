@@ -126,6 +126,18 @@ function queueNames(config: string): string[] {
   return v.parse(Named, parse(config)).queues.consumers.map((q) => q.queue);
 }
 
+/** Whether the account already has the config's database. A failed listing
+ *  throws rather than reading as "no database", so an update never skips its
+ *  migration because the API was down. */
+async function databaseExists(config: string): Promise<boolean> {
+  const wanted = v.parse(Named, parse(config)).d1_databases.map((d) => d.database_name);
+  const listed = v.parse(
+    v.array(v.object({ name: v.string() })),
+    JSON.parse(await $`bunx wrangler d1 list --json`.quiet().text()),
+  );
+  return listed.some((d) => wanted.includes(d.name));
+}
+
 async function writeConfig(text: string) {
   writeFileSync(WRANGLER, text);
   // Removing a key leaves its neighbour's indent behind, and a copy commits this.
@@ -204,9 +216,10 @@ export async function deploySelfHosted(options: {
     await $`bunx wrangler queues create ${queue}`.nothrow().quiet();
   }
   await $`bun run build`;
-  // Migrate ahead of an update. Before the first deploy there is no database
-  // yet, so this one may fail and the one after the deploy does the work.
-  await $`bunx wrangler d1 migrations apply DB --remote`.nothrow();
+  // Migrate ahead of an update, and stop if that fails: new code must not
+  // meet an old schema. Before the first deploy there is no database yet, so
+  // there is nothing to migrate and the run after the deploy does the work.
+  if (await databaseExists(config)) await $`bunx wrangler d1 migrations apply DB --remote`;
   const output = await deployWithSecrets(options.admin, domain);
   await $`bunx wrangler d1 migrations apply DB --remote`;
   if (known) return known;

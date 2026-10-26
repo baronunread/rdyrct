@@ -517,6 +517,113 @@ export const clicks = sqliteTable(
 );
 
 /**
+ * Click rollups (#26): what the stats pages and the links list read instead
+ * of raw clicks. Migration 0042 owns the tables (Drizzle cannot express
+ * WITHOUT ROWID) and says why they are shaped this way. insertClicks writes
+ * them; nothing else in the app does.
+ */
+export const clickDaily = sqliteTable(
+  "click_daily",
+  {
+    orgId: text("org_id").notNull(),
+    /** UTC 'YYYY-MM-DD'. */
+    day: text("day").notNull(),
+    linkId: text("link_id")
+      .notNull()
+      .references(() => links.id, { onDelete: "cascade" }),
+    clicks: integer("clicks").notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.orgId, t.day, t.linkId] }),
+    index("idx_click_daily_link").on(t.linkId, t.day, t.clicks),
+  ],
+);
+
+export const CLICK_DIMENSIONS = ["country", "referrer", "device"] as const;
+
+export const clickDailyDims = sqliteTable(
+  "click_daily_dims",
+  {
+    orgId: text("org_id").notNull(),
+    dim: text("dim", { enum: CLICK_DIMENSIONS }).notNull(),
+    day: text("day").notNull(),
+    value: text("value").notNull(),
+    linkId: text("link_id")
+      .notNull()
+      .references(() => links.id, { onDelete: "cascade" }),
+    clicks: integer("clicks").notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.orgId, t.dim, t.day, t.value, t.linkId] }),
+    index("idx_click_daily_dims_link").on(t.linkId, t.dim, t.day, t.value, t.clicks),
+  ],
+);
+
+export const clickHourly = sqliteTable(
+  "click_hourly",
+  {
+    orgId: text("org_id").notNull(),
+    /** Start of the UTC hour, in milliseconds. */
+    hour: integer("hour").notNull(),
+    linkId: text("link_id")
+      .notNull()
+      .references(() => links.id, { onDelete: "cascade" }),
+    clicks: integer("clicks").notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.orgId, t.hour, t.linkId] }),
+    index("idx_click_hourly_link").on(t.linkId, t.hour, t.clicks),
+  ],
+);
+
+/**
+ * Tracked clicks per org per UTC month (#387): the exact count the plan's cap
+ * is checked against. Migration 0043 owns the table. insertClicks adds to it
+ * in the same batch as the raw rows and the rollups, counting only clicks it
+ * actually stored; the 10-minute cron reads it to send the 80% and 100%
+ * emails.
+ */
+export const orgClickUsage = sqliteTable(
+  "org_click_usage",
+  {
+    orgId: text("org_id")
+      .notNull()
+      .references(() => orgs.id, { onDelete: "cascade" }),
+    /** UTC 'YYYY-MM'. */
+    month: text("month").notNull(),
+    clicks: integer("clicks").notNull(),
+    /** The cap the 80% email went out for, null until it has. A cap rather
+     * than a timestamp, so a mid-month plan change earns the new cap its own
+     * email instead of being silenced by the old one's. */
+    warnedLimit: integer("warned_limit"),
+    /** The same, for the 100% email. */
+    cappedLimit: integer("capped_limit"),
+  },
+  (t) => [
+    primaryKey({ columns: [t.orgId, t.month] }),
+    index("idx_org_click_usage_month").on(t.month, t.clicks),
+  ],
+);
+
+/**
+ * Clicks dropped past an org's monthly cap, per link per UTC minute
+ * (migration 0044). Only the abuse sweep reads it, so the 24-hour ceiling and
+ * the burst checks still see an org's traffic once it stops being stored. See
+ * click-overflow.ts.
+ */
+export const clickOverflow = sqliteTable(
+  "click_overflow",
+  {
+    /** Start of the UTC minute, ms. */
+    minute: integer("minute").notNull(),
+    orgId: text("org_id").notNull(),
+    linkId: text("link_id").notNull(),
+    clicks: integer("clicks").notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.minute, t.orgId, t.linkId] })],
+);
+
+/**
  * Links made on the landing page by someone with no account (Direction A of
  * #96). Deliberately unrelated to `orgs`, `user` and `links`: at the moment a
  * row is written, none of those exist for this visitor.

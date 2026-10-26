@@ -24,8 +24,16 @@ bun run db:reset:local      # wipe local D1 + KV, re-apply migrations (start fro
 bun add <pkg>               # dependencies
 bunx agent-browser          # real-browser checks: screenshots, clicking through pages. Use it for any visual verification; do not hand-roll headless Chrome
 bun run db:seed:local       # seed local D1/KV with fake data (run dev server first)
-bun run deploy              # build and deploy; VITE_RDYRCT_SITE=1 (in .env) for rdyrct.com, otherwise a self-hosted copy
+bun run deploy              # build, apply D1 migrations, deploy; VITE_RDYRCT_SITE=1 (in .env) for rdyrct.com, otherwise a self-hosted copy
 ```
+
+**Rolling back a release.** `bun run deploy` migrates before it deploys.
+Wrangler has no down migrations, so a rollback is two steps:
+`bunx wrangler rollback` for the code, and, if a migration has to be undone
+too, a D1 Time Travel restore to just before the deploy
+(`bunx wrangler d1 time-travel restore rdyrct --timestamp=<deploy time>`).
+The restore puts the whole database back, so every write since that moment
+is lost.
 
 **One repo builds two things: rdyrct.com, and the copy a fork self-hosts.**
 `VITE_RDYRCT_SITE=1` builds rdyrct.com; without it every build, dev
