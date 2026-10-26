@@ -19,7 +19,9 @@ export function SearchInput({
   className?: string;
 }) {
   return (
-    <div className={cn("relative w-full max-w-xs", className)}>
+    // Full width on a phone, so its right edge meets the table card's; capped
+    // from `sm` up, where a full-width box would be mostly empty.
+    <div className={cn("relative w-full sm:max-w-xs", className)}>
       <Search
         size={14}
         className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-muted"
