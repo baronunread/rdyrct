@@ -320,7 +320,8 @@ describe("an import runs on the server", () => {
       ...authEnv(),
       LINK_IMPORT: {
         get: (id: string) => up.get(id),
-        createBatch: (batch: Parameters<typeof up.createBatch>[0]) => up.createBatch(batch),
+        // bind, not a wrapper arrow: it keeps both createBatch overloads.
+        createBatch: up.createBatch.bind(up),
         deleteBatch: (ids: Parameters<typeof up.deleteBatch>[0]) => up.deleteBatch(ids),
         create: async () => {
           throw new Error("injected workflow start failure");
