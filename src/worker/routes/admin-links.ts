@@ -24,6 +24,8 @@ import { and, desc, eq, isNull, isNotNull, like, or, sql } from "drizzle-orm";
 import * as schema from "../db/schema";
 import type { AppEnv, DB, Env } from "../env";
 import { enqueueStorage, republishOrgLinks, syncLinkMsg } from "../storage";
+import { linkClicksTotal } from "../rollups";
+import { activeAddressesOf } from "./links";
 import { recordAdminAction } from "../audit";
 import { markOrgAbuse } from "../abuse-hold";
 import { blockHostOf } from "../../shared/abuse-rules";
@@ -91,9 +93,8 @@ const reportCount = sql<number>`(
   where link_reports.link_id = links.id and link_reports.status = 'open'
 )`;
 
-const clickCount = sql<number>`(
-  select count(*) from clicks where clicks.link_id = links.id
-)`;
+// Read from the rollups (#26), like the org's own links list.
+const clickCount = linkClicksTotal;
 
 /** The link this route is about, or a 404. Every route here starts by
  * reading the row it names, and an id that matches nothing is the same
@@ -105,24 +106,25 @@ async function requireLink(db: DB, linkId: string) {
   return link;
 }
 
+/** The link a route's :linkId names, or a 404, with the id already on the
+ * request's log event. */
+async function linkFromParam(c: Context<AppEnv>) {
+  const db = c.var.db;
+  const linkId = c.req.param("linkId")!;
+  c.get("log").set({ linkId });
+  return { db, linkId, link: await requireLink(db, linkId) };
+}
+
 /**
  * Every address a link answers to, so suspending or restoring one republishes
  * all of them. A link with three aliases that only republished its primary
  * would keep redirecting on the other two.
+ *
+ * activeAddressesOf (routes/links.ts) is the same query the org's own link
+ * routes use.
  */
-async function addressesOf(db: DB, linkId: string) {
-  return db
-    .select({
-      slug: schema.linkAddresses.slug,
-      hostname: schema.domains.hostname,
-    })
-    .from(schema.linkAddresses)
-    .leftJoin(schema.domains, eq(schema.linkAddresses.domainId, schema.domains.id))
-    .where(and(eq(schema.linkAddresses.linkId, linkId), isNull(schema.linkAddresses.retiredAt)));
-}
-
 async function republish(env: Env, db: DB, linkId: string): Promise<number> {
-  const addresses = await addressesOf(db, linkId);
+  const addresses = await activeAddressesOf(db, linkId);
   if (addresses.length > 0)
     await enqueueStorage(
       env,
@@ -459,11 +461,7 @@ adminLinkRoutes.post("/restore", async (c) => {
  * it at 02:14" is part of the answer.
  */
 adminLinkRoutes.post("/:linkId/rescore", async (c) => {
-  const log = c.get("log");
-  const db = c.var.db;
-  const linkId = c.req.param("linkId")!;
-  log.set({ linkId });
-  const link = await requireLink(db, linkId);
+  const { db, linkId, link } = await linkFromParam(c);
 
   const verdict = await scoreDestination(link.destination);
   if (verdict)
@@ -504,15 +502,11 @@ adminLinkRoutes.post("/:linkId/rescore", async (c) => {
  * the first: clicks cascade with it and nothing here can put it back.
  */
 adminLinkRoutes.delete("/:linkId", async (c) => {
-  const log = c.get("log");
-  const db = c.var.db;
-  const linkId = c.req.param("linkId")!;
-  log.set({ linkId });
-  const link = await requireLink(db, linkId);
+  const { db, linkId, link } = await linkFromParam(c);
 
   // Addresses first: after the row is gone there is nothing to read them
   // from, and each one is a live KV key until it is swept.
-  const addresses = await addressesOf(db, linkId);
+  const addresses = await activeAddressesOf(db, linkId);
   await db.delete(schema.links).where(eq(schema.links.id, linkId));
   if (addresses.length > 0)
     await enqueueStorage(
