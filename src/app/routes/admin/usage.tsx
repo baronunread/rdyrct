@@ -40,11 +40,22 @@ function BusinessStats({ s }: { s: AdminUsage }) {
 
 function ResourceStats({ s }: { s: AdminUsage }) {
   return (
-    <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-4">
+    <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
       <StatCard label="Orgs" value={s.orgs} />
       <StatCard label="Links" value={s.links} />
       <StatCard label="Clicks" value={s.clicks} />
       <StatCard label="Clicks · 7d" value={s.clicks7d} />
+      {/* Against the cap the Worker enforces, and Google's free 100,000 a month. */}
+      <StatCard
+        label="Google lookups · today"
+        value={s.webRisk.today}
+        suffix={` / ${formatNumber(s.webRisk.perDay)}`}
+      />
+      <StatCard
+        label="Google lookups · month"
+        value={s.webRisk.month}
+        suffix={` / ${formatNumber(100_000)}`}
+      />
     </div>
   );
 }

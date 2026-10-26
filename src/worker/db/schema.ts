@@ -628,6 +628,14 @@ export const clickOverflow = sqliteTable(
   (t) => [primaryKey({ columns: [t.minute, t.orgId, t.linkId] })],
 );
 
+/** Calls to Google Web Risk per UTC day, site-wide (migration 0047). See
+ * takeWebRiskLookup in risk.ts. */
+export const webRiskUsage = sqliteTable("web_risk_usage", {
+  /** Days since the Unix epoch, UTC. */
+  day: integer("day").primaryKey(),
+  lookups: integer("lookups").notNull(),
+});
+
 /**
  * Links made on the landing page by someone with no account (Direction A of
  * #96). Deliberately unrelated to `orgs`, `user` and `links`: at the moment a

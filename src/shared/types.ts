@@ -550,6 +550,8 @@ export interface AdminUsage {
   tableSize: number;
   tableGrowth: SeriesPoint[];
   tableProjectedDays: number | null;
+  /** Calls to Google Web Risk, site-wide, against the daily cap. */
+  webRisk: { today: number; month: number; perDay: number };
 }
 
 export interface AnomalyEntry {

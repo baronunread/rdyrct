@@ -449,7 +449,7 @@ export async function recheckSpikingLinks(env: Env, spiking: string[]): Promise<
   const outcomes = await Promise.all(
     due.map(async (link) => {
       // Uncached on purpose: the cache may hold a clean answer from minutes ago.
-      const verdict = await webRiskVerdict(link.destination, key);
+      const verdict = await webRiskVerdict(link.destination, key, env.DB);
       if (!verdict) return "failed";
       await env.LINKS.put(mark(link.id), "1", {
         expirationTtl: SPIKE_RECHECK_EVERY_SECONDS,
