@@ -260,7 +260,11 @@ export function LinksPillar() {
               <p className="flex items-center rounded-lg border border-accent px-3 py-2 font-mono">
                 <span className="text-muted">go.acme.com/</span>
                 {step >= 1 && (
-                  <span className="text-accent motion-safe:animate-type-6">spring</span>
+                  // Not on the last step: the card mounts there, off screen,
+                  // and typing then would play where nobody sees it.
+                  <span className={cn("text-accent", step < 6 && "motion-safe:animate-type-6")}>
+                    spring
+                  </span>
                 )}
               </p>
               <Available at={3} step={step}>
