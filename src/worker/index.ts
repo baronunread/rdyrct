@@ -29,7 +29,6 @@ import { avatarRoutes } from "./routes/avatars";
 import { adminRoutes } from "./routes/admin";
 import { billingRoutes, handlePolarWebhook } from "./routes/billing";
 import { domainRoutes } from "./routes/domains";
-import { capRoutes } from "./routes/cap";
 import { revalidateOnRedirect } from "./risk";
 import { rescanFreeLinks, sweepAbuse } from "./destination-check";
 import { sweepClickUsageEmails } from "./click-caps";
@@ -56,7 +55,7 @@ import { PRERENDERED_PUBLIC_PATHS } from "../shared/page-meta";
 import { RDYRCT_SITE } from "../shared/site";
 import { canonicalSpaPath } from "../shared/spa-routes";
 import { enforcePublicAuthRateLimit, enforceSignedApiRateLimit } from "./rate-limit";
-import { applySecurityHeaders } from "./security-headers";
+import { applySecurityHeaders, turnstileAllowed } from "./security-headers";
 import { drizzle } from "drizzle-orm/d1";
 import * as schema from "./db/schema";
 import {
@@ -113,7 +112,7 @@ app.onError((err, c) => {
   // more than just a machine-readable `code` (e.g. same_destination_match's
   // matchedLinkId/matchedLink) straight through to the caller.
   const respond = (body: ErrorBody, status: ContentfulStatusCode) =>
-    applySecurityHeaders(c.json(body, status));
+    applySecurityHeaders(c.json(body, status), turnstileAllowed(c.env, c.req.url));
   // Attach the error to the wide event so it reaches Sentry Logs with the
   // request context already accumulated. withSentry still captures the
   // exception as a Sentry Issue for alerting.
@@ -150,7 +149,7 @@ app.onError((err, c) => {
 // while it isn't.
 app.use("*", async (c, next) => {
   await next();
-  c.res = applySecurityHeaders(c.res);
+  c.res = applySecurityHeaders(c.res, turnstileAllowed(c.env, c.req.url));
 });
 
 /* ---------------- redirect hot path ---------------- */
@@ -241,7 +240,7 @@ async function resolveLink(
 
 // Redirect-only, same as a custom domain: no API, no SPA. SHARED_LINK_HOST
 // must not fall through to the full app, or it would also serve
-// /api/auth/* and /api/cap/*, unprotected by the WAF rules that are only
+// /api/auth/*, unprotected by the WAF rules that are only
 // ever added to APP_HOST's zone (see docs/rate-limiting.md).
 async function resolveSharedLinkHost(c: Context<AppEnv>): Promise<Response> {
   const path = new URL(c.req.url).pathname;
@@ -352,23 +351,13 @@ app.on(
   (c) => getAuth(c.env).handler(c.req.raw),
 );
 
-// Cap (#98): public, and necessarily so, since it guards signup itself.
-// Same public rate limit as the auth routes it protects.
-app.post("/api/cap/*", async (c, next) => {
-  const log = c.get("log");
-  log.set({ route: c.req.path });
-  const limited = await enforcePublicAuthRateLimit(c);
-  return limited ?? next();
-});
-app.route("/api/cap", capRoutes);
-
 // The landing page's anonymous shortener (Direction A of #96): public by
-// definition, and gated by Cap plus its own rate-limit namespace rather than
-// by a session. Only rdyrct.com has that landing page, so only rdyrct.com
-// takes links from strangers.
+// definition, and gated by Turnstile plus its own rate-limit namespace rather
+// than by a session. Only rdyrct.com has that landing page, so only
+// rdyrct.com takes links from strangers.
 if (RDYRCT_SITE) app.route("/api/shorten", shortenRoutes);
 
-// Abuse reports from anyone, gated the same way (Cap plus a rate limit).
+// Abuse reports from anyone, gated the same way (Turnstile plus a rate limit).
 app.route("/api/reports", reportRoutes);
 
 // Polar webhook: public, signature-verified, no session middleware.

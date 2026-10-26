@@ -5,7 +5,7 @@ import { applyTestMigrations, fetchWorker, seedLink } from "./support";
 import { parseReportedLink, REPORTS_TO_FLAG } from "../../src/worker/routes/reports";
 
 /**
- * The public report form. The browser test covers sending one (it runs Cap);
+ * The public report form. The browser test covers sending one (it runs Turnstile);
  * these cover what it does with the answer: stored whether or not the slug
  * exists, and flagging the org only at the threshold, never suspending.
  */

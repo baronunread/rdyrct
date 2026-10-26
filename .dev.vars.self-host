@@ -1,7 +1,7 @@
 # The worker environment for `bun run e2e:self-host` (playwright.self-host.config.ts).
 #
 # A fork as it first comes up: no email provider, no Polar, no Google
-# sign-in, no Cap. Each of those is a mode the app has to handle on its own
+# sign-in, no Turnstile. Each of those is a mode the app has to handle on its own
 # (sign-up without a code, no billing, the admin warning), and this is the
 # only place a browser sees them. The config copies this file over the
 # .dev.vars the build emitted, so a developer's own .dev.vars never decides

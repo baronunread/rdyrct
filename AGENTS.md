@@ -255,13 +255,20 @@ Shell writes to repo files are sandboxed; edit through the editor tools, not
   one left ownerless would have no plan, no billing and nobody who could
   delete it. Settings names each org in the confirmation first. Orgs the
   account only belongs to are untouched.
-- **Bot protection**: Cap proof-of-work (`src/worker/cap.ts`, routes at
-  `/api/cap/:scope/{challenge,redeem}`) guards signup and password reset. The
-  token rides in an `x-cap-token` header and is spent in `hooks.before`. No
-  third party sees the visitor: `capjs-core` runs in this Worker, the widget
-  is bundled from npm, and the WASM solver is a same-origin Vite asset. Unset
-  `CAP_SECRET` disables it. See `docs/rate-limiting.md` for all three layers
-  (WAF rules, Workers limiters, Cap) and the dashboard rules to apply by hand.
+- **Bot protection**: Cloudflare Turnstile (`src/worker/turnstile.ts`,
+  client in `src/app/lib/turnstile.ts`) guards signup and password reset
+  (an `x-turnstile-token` header, verified against `siteverify` in
+  `hooks.before`), the landing shortener (`/api/shorten`) and the report
+  form (`/api/reports`), each form with its own `action`. Cloudflare is the
+  one third party that sees the visitor, and only on those forms. Both keys
+  are secrets, set together (`turnstileMode`): with both, `/api/config`
+  serves the site key and the CSP admits `challenges.cloudflare.com` on
+  `APP_HOST`; with neither, the check is off and the browser never loads
+  Cloudflare's script; with one, every guarded form is refused and
+  `turnstile_misconfigured` is logged. Dev, CI and e2e use Cloudflare's
+  always-pass test keys. See `docs/rate-limiting.md` for all three layers
+  (WAF rules, Workers limiters, Turnstile) and the dashboard rules to apply
+  by hand.
 - **KV keys**: `slug:{slug}` (shared host), `slug:{host}:{slug}` (custom domain),
   `domain:{host}`. D1 is authoritative; KV is the redirect hot path. Clicks are
   recorded via `waitUntil` after the redirect is sent, and store only
@@ -296,7 +303,7 @@ Shell writes to repo files are sandboxed; edit through the editor tools, not
 - Data layer: `api()` + `ApiError` (`.status`, `.code`) in `src/app/lib/api.ts`;
   TanStack Query hooks in `src/app/lib/hooks.ts`.
 - **Strict CSP** on published pages, everything self-contained: no remote fonts,
-  images, scripts, or fetches. Icons via `lucide-react`; art via inline CSS/SVG. The one remote image is Fazier's launch badge in the landing footer, allowed in img-src for rdyrct.com's build only (their verifier needs their own image).
+  images, scripts, or fetches. Icons via `lucide-react`; art via inline CSS/SVG. The one remote image is Fazier's launch badge in the landing footer, allowed in img-src for rdyrct.com's build only (their verifier needs their own image). script-src and frame-src admit Cloudflare Turnstile's script and challenge iframe only on `APP_HOST` and only when both Turnstile keys are set.
 - Email: `sendEmail()` (`src/worker/email.ts`) uses the Resend HTTP API via plain
   `fetch`, with `RESEND_BASE_URL` pointing at the emulator in dev. Keep it: the
   Resend SDK can't repoint its base URL, which would break the emulator flow.
@@ -334,7 +341,9 @@ and vars live in `wrangler.jsonc`; local dev reads everything from `.dev.vars`
 `BETTER_AUTH_SECRET`, `SUPERADMIN_EMAIL`, `RESEND_API_KEY`, `MAIL_FROM`,
 `APP_URL`, `APP_HOST`, `POLAR_ACCESS_TOKEN`/`POLAR_WEBHOOK_SECRET`/
 `POLAR_PRO_PRODUCT_ID`/`POLAR_HOBBY_PRODUCT_ID`, `CF_API_TOKEN`/`CF_ZONE_ID`,
-`SENTRY_DSN`, `WEB_RISK_API_KEY` (optional; unset skips Google Web Risk).
+`TURNSTILE_SITE_KEY`/`TURNSTILE_SECRET_KEY` (optional; unset switches the
+check off), `SENTRY_DSN`, `WEB_RISK_API_KEY` (optional; unset skips Google
+Web Risk).
 
 ## Layout
 

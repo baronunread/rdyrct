@@ -2,7 +2,7 @@
  * Public abuse reports against a short link.
  *
  * Unauthenticated, so it carries the same defences as the anonymous
- * shortener: Cap proof-of-work on its own scope and a per-caller rate limit
+ * shortener: Turnstile on its own scope and a per-caller rate limit
  * (the anon-link counter, under a "report:" key so the two never share a
  * count). The answer is the same whether or not the slug exists: a report
  * form that said "no such link" would be a slug probe.
@@ -22,12 +22,12 @@ import { Hono } from "hono";
 import * as v from "valibot";
 import { HTTPException } from "hono/http-exception";
 import { and, count, eq, isNull } from "drizzle-orm";
-import { CAP_FAILED_CODE, REPORT_REASONS, type JsonValue } from "@/shared/types";
+import { TURNSTILE_FAILED_CODE, REPORT_REASONS, type JsonValue } from "@/shared/types";
 import * as schema from "../db/schema";
 import { drizzle } from "drizzle-orm/d1";
 import type { AppEnv, DB, Env } from "../env";
 import { jsonBodyLimit } from "../body-limit";
-import { spendToken } from "../cap";
+import { spendToken } from "../turnstile";
 import { optionalText, parseBody } from "../schemas";
 import { publicClientKey, rateLimitAllows } from "../rate-limit";
 import { captureAlert } from "../sentry";
@@ -44,7 +44,7 @@ const reportBodySchema = v.object({
   reason: v.picklist(REPORT_REASONS, "Pick a reason"),
   note: v.pipe(optionalText, v.maxLength(1000)),
   contact: v.pipe(optionalText, v.maxLength(200)),
-  capToken: optionalText,
+  turnstileToken: optionalText,
 });
 
 /**
@@ -130,10 +130,10 @@ reportRoutes.post("/", async (c) => {
     throw new HTTPException(429, { message: "Too many reports from here. Try again shortly." });
 
   const body = parseBody(reportBodySchema, await c.req.json<JsonValue>().catch(() => ({})));
-  if (!(await spendToken(c.env, "report", body.capToken)))
+  if (!(await spendToken(c.env, "report", body.turnstileToken)))
     throw new HTTPException(400, {
       message: "Could not verify you are human. Reload the page and try again.",
-      cause: { code: CAP_FAILED_CODE },
+      cause: { code: TURNSTILE_FAILED_CODE },
     });
 
   const db = drizzle(c.env.DB, { schema });

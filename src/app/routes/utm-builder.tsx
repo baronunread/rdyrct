@@ -26,7 +26,8 @@ import { Field, Input } from "../ui/field";
 import { BusyContent } from "../ui/spinner";
 import { useToast } from "../ui/toast";
 import { copyToClipboard } from "../lib/clipboard";
-import { useCap } from "../lib/cap";
+import { CHALLENGE_LABEL, guardedButton, useTurnstile } from "../lib/turnstile";
+import { TurnstileSlot } from "../components/turnstile-slot";
 import { MAX_ANON_LINKS, rememberAnonLink, storedAnonLinks } from "../lib/anon-links";
 import { shortenAnonymously, type AnonLink } from "../lib/shorten-anon";
 import { errorMessage } from "../lib/error-message";
@@ -221,12 +222,12 @@ function ShortLinkResult({ link }: { link: AnonLink }) {
   );
 }
 
-/** The anonymous shortener, as the landing's form uses it: the proof of
- *  work solved while the fields are filled in, the link stored for the claim
- *  at sign-up. */
+/** The anonymous shortener, as the landing's form uses it: the Turnstile
+ *  challenge solved while the fields are filled in, the link stored for the
+ *  claim at sign-up. */
 function useShortener(tagged: string | null, onMade: (link: AnonLink) => void) {
   const toast = useToast();
-  const { prime, guarded } = useCap("anon-link");
+  const { prime, guarded, challenge } = useTurnstile("anon-link");
   const { authed } = useAudience();
   const [busy, setBusy] = useState(false);
   // Read after mount: storage is not there in the prerendered page.
@@ -253,17 +254,14 @@ function useShortener(tagged: string | null, onMade: (link: AnonLink) => void) {
     }
   };
 
-  return { busy, blocker, shorten };
+  return { busy, blocker, shorten, challenge };
 }
 
-function ShortenAction({
-  tagged,
-  onMade,
-}: {
-  tagged: string | null;
-  onMade: (link: AnonLink) => void;
-}) {
-  const { busy, blocker, shorten } = useShortener(tagged, onMade);
+type Shortener = ReturnType<typeof useShortener>;
+
+function ShortenAction({ tagged, shortener }: { tagged: string | null; shortener: Shortener }) {
+  const { busy, blocker, shorten, challenge } = shortener;
+  const button = guardedButton(busy, challenge);
   if (blocker) {
     const { href, label } = ELSEWHERE[blocker];
     return (
@@ -280,16 +278,28 @@ function ShortenAction({
     <Button
       variant="outline"
       onClick={() => tagged && void shorten(tagged)}
-      disabled={!tagged || busy}
+      disabled={!tagged || button.disabled}
     >
-      <BusyContent busy={busy}>Shorten it</BusyContent>
+      <BusyContent busy={button.spinning}>
+        {button.waiting ? CHALLENGE_LABEL : "Shorten it"}
+      </BusyContent>
     </Button>
   );
 }
 
 /** The tagged link and its copy button, there before it has anything to
  *  show so the card does not grow on the first keystroke. */
-function TaggedOutput({ tagged, children }: { tagged: string | null; children: ReactNode }) {
+function TaggedOutput({
+  tagged,
+  slot,
+  children,
+}: {
+  tagged: string | null;
+  /** The Turnstile slot, directly above the buttons, shown while there is a
+   * shorten button for it to sit over. */
+  slot?: ReactNode;
+  children: ReactNode;
+}) {
   const toast = useToast();
   return (
     <div className="flex flex-col gap-3">
@@ -300,6 +310,7 @@ function TaggedOutput({ tagged, children }: { tagged: string | null; children: R
       >
         {tagged ?? <span className="font-sans text-muted">Enter a website URL to start.</span>}
       </output>
+      {children && slot}
       <div className="flex flex-col gap-2 sm:flex-row">
         {tagged ? (
           <CopyButton
@@ -326,6 +337,7 @@ function Builder() {
   const [fields, setFields] = useState<UtmFields>(EMPTY_UTM);
   const [made, setMade] = useState<AnonLink | null>(null);
   const tagged = taggedUrl(address, fields);
+  const shortener = useShortener(tagged, setMade);
 
   // A pasted link that is already tagged fills the fields from its own
   // parameters, so editing a tagged link is the same as building one.
@@ -361,9 +373,9 @@ function Builder() {
 
       <CaseNote fields={fields} onTidy={tidyAll} />
 
-      <TaggedOutput tagged={tagged}>
+      <TaggedOutput tagged={tagged} slot={<TurnstileSlot challenge={shortener.challenge} />}>
         {/* Once made, the result below carries the next step. */}
-        {!made && <ShortenAction tagged={tagged} onMade={setMade} />}
+        {!made && <ShortenAction tagged={tagged} shortener={shortener} />}
       </TaggedOutput>
 
       {made && <ShortLinkResult link={made} />}
@@ -376,9 +388,6 @@ function Builder() {
   );
 }
 
-// main.tsx names this export as a string, for lazyRouteComponent, which
-// static analysis can't follow.
-// fallow-ignore-next-line unused-export
 export function UtmBuilderPage() {
   const { ctaTo, ctaLabel } = useAudience();
   return (

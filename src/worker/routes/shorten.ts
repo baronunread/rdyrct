@@ -9,8 +9,7 @@
  *
  * This is an unauthenticated write path, which is the most abused endpoint
  * shape there is, so it does not ship alone:
- *  - Cap proof-of-work (#98) on the "anon-link" scope, so each attempt costs
- *    the caller real CPU.
+ *  - Turnstile (#304) on the "anon-link" scope, so a bot has to pass a challenge.
  *  - Its own rate-limit namespace, not the one guarding auth: a flood here
  *    must not lock anybody out of signing in.
  *  - Destination scoring (#68) after the response, same as a real link,
@@ -41,8 +40,8 @@ import { askWebRisk, scoreAndRecord } from "../risk";
 import { checkLinkDestination } from "../destination-check";
 import { enqueueStorage, syncLinkMsg } from "../storage";
 import { orgLinkWarning } from "../link-warning";
-import { spendToken } from "../cap";
-import { CAP_FAILED_CODE } from "@/shared/types";
+import { spendToken } from "../turnstile";
+import { TURNSTILE_FAILED_CODE } from "@/shared/types";
 import { isValidHttpUrl, linkUrl, normalizeUrl, randomSlug, uid } from "../util";
 import { publicClientKey, rateLimitAllows } from "../rate-limit";
 import { insertLinkWithinLimit, orgPlan } from "../plan";
@@ -54,7 +53,7 @@ const ANON_LINK_TTL_MS = 24 * 60 * 60 * 1000;
 /** What the anonymous shortener reads off its request body. */
 const shortenBodySchema = v.object({
   destination: optionalText,
-  capToken: optionalText,
+  turnstileToken: optionalText,
 });
 
 export const shortenRoutes = new Hono<AppEnv>();
@@ -77,12 +76,12 @@ shortenRoutes.post("/", async (c) => {
     await c.req.json<JsonValue>().catch(() => ({})),
   );
 
-  if (!(await spendToken(c.env, "anon-link", body.capToken)))
+  if (!(await spendToken(c.env, "anon-link", body.turnstileToken)))
     // Coded so the browser can solve again and retry once, rather than
     // showing somebody an error they cannot act on.
     throw new HTTPException(400, {
       message: "Could not verify you are human. Reload the page and try again.",
-      cause: { code: CAP_FAILED_CODE },
+      cause: { code: TURNSTILE_FAILED_CODE },
     });
 
   if (!body.destination.trim())
@@ -336,7 +335,7 @@ export async function claimAnonLink(
     createdAt: Date.now(),
   };
 
-  // Through the same cap-guarded insert every other link goes through, not a
+  // Through the same plan-guarded insert every other link goes through, not a
   // raw one: claiming is still creating a link in somebody's organization,
   // and an org one under its limit must not be able to take ten.
   if (!(await insertLinkWithinLimit(db, env, link, address, limits.links))) return null;

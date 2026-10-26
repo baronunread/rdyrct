@@ -60,7 +60,7 @@ export async function subjectsSentTo(page: Page, email: string): Promise<string[
     .map((item) => (isRecord(item) ? String(item.subject ?? "") : ""));
 }
 
-export async function latestOtp(page: Page, email: string) {
+async function latestOtp(page: Page, email: string) {
   let otp = "";
   await expect
     .poll(async () => {
@@ -94,7 +94,7 @@ export async function verifySignup(page: Page, email: string) {
 export async function signUpAndVerify(page: Page, email: string, password: string) {
   await submitSignup(page, email, password);
 
-  // Not the default 5s: a sign-up here is a Cap proof-of-work solve, an
+  // Not the default 5s: a sign-up here is a Turnstile challenge, an
   // account write and a mail send, and with the suite running in parallel
   // that round trip regularly outlasts five seconds. Every caller of this
   // helper was failing here for that reason and no other.

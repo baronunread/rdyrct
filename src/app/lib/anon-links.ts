@@ -29,8 +29,8 @@ const KEY = "rdyrct:anon-links:v3";
 /**
  * How many links one browser may make without an account.
  *
- * A product limit, not a security one: abuse is already handled by the Cap
- * proof-of-work and RL_ANON_LINK, both of which a browser cannot talk its
+ * A product limit, not a security one: abuse is already handled by Turnstile
+ * and RL_ANON_LINK, both of which a browser cannot talk its
  * way past. One link is enough to show that shortening works, and the second
  * one is where trying it becomes signing up. It frees up as the link expires,
  * and claiming at signup clears it entirely.

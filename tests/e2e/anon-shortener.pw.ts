@@ -8,7 +8,7 @@ import { queryRows } from "./db";
  *
  * This is the one place in the app where an unauthenticated request writes to
  * the database, so what it does and does not allow is worth asserting in a
- * real browser: the Cap proof-of-work runs there, not in a worker test.
+ * real browser: the Turnstile challenge runs there, not in a worker test.
  */
 
 const password = "test-password-123";
@@ -122,9 +122,9 @@ test("a destination that is not a web address is refused, in a toast", async ({ 
   await expect(page.getByRole("link", { name: "Your short link" })).toHaveCount(0);
 });
 
-test("the shortener refuses a request with no proof of work", async ({ page }) => {
+test("the shortener refuses a request with no Turnstile token", async ({ page }) => {
   // Straight to the endpoint, bypassing the widget. This is the request a
-  // script would make, and the whole reason #98 shipped before this did.
+  // script would make.
   const response = await page.request.post("/api/shorten", {
     data: { destination: "https://example.com/scripted" },
   });

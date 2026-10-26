@@ -19,7 +19,8 @@ import { errorMessage } from "@/app/lib/error-message";
 import { ArrowRight } from "@/app/ui/icons";
 import { buttonClass } from "../ui/button-class";
 import { useToast } from "../ui/toast";
-import { useCap } from "../lib/cap";
+import { guardedButton, useTurnstile } from "../lib/turnstile";
+import { TurnstileSlot } from "./turnstile-slot";
 import { useConfig } from "../lib/hooks";
 import {
   MAX_ANON_LINKS,
@@ -108,7 +109,7 @@ function MadeLinks({ made }: { made: StoredAnonLink[] }) {
  *  remember it for the claim after sign-up, and launch it across the globe. */
 function useAnonShortener() {
   const toast = useToast();
-  const cap = useCap("anon-link");
+  const turnstile = useTurnstile("anon-link");
   const [destination, setDestination] = useState("");
   const [busy, setBusy] = useState(false);
   // Seeded from storage, so a reload keeps what this browser already made
@@ -125,7 +126,7 @@ function useAnonShortener() {
     if (!canSubmit) return;
     setBusy(true);
     try {
-      const link = await shortenAnonymously(destination, cap.guarded);
+      const link = await shortenAnonymously(destination, turnstile.guarded);
       // Stored before anything is rendered, and the store decides what the
       // list now is: a visitor who signs up in another tab must still be
       // able to claim it, and the cap is enforced in one place.
@@ -140,11 +141,22 @@ function useAnonShortener() {
     }
   };
 
-  return { destination, setDestination, busy, made, atCap, canSubmit, submit, prime: cap.prime };
+  return {
+    destination,
+    setDestination,
+    busy,
+    made,
+    atCap,
+    canSubmit,
+    submit,
+    prime: turnstile.prime,
+    challenge: turnstile.challenge,
+    button: guardedButton(busy, turnstile.challenge),
+  };
 }
 
 export function HeroShortener() {
-  const { destination, setDestination, busy, made, atCap, canSubmit, submit, prime } =
+  const { destination, setDestination, button, made, atCap, canSubmit, submit, prime, challenge } =
     useAnonShortener();
   // The shared domain the slug will follow. This card only exists on
   // rdyrct.com, whose shared host is rdyr.cc, so that stands in until the
@@ -154,7 +166,7 @@ export function HeroShortener() {
   return (
     <form
       onSubmit={submit}
-      // Priming here, not on mount: the proof-of-work runs while they type,
+      // Priming here, not on mount: the Turnstile challenge runs while they type,
       // and someone who never uses the form never pays for it.
       onInput={prime}
       // No native validation: errors in this app go to toasts, and a browser
@@ -165,6 +177,7 @@ export function HeroShortener() {
       noValidate
       className={HERO_CARD}
     >
+      <TurnstileSlot challenge={challenge} className="mb-2 rounded-xl" />
       <HeroBar
         prefix={<HostPrefix host={linkHost} />}
         input={{
@@ -174,7 +187,8 @@ export function HeroShortener() {
           onChange: (e) => setDestination(e.target.value),
         }}
         disabled={!canSubmit}
-        busy={busy}
+        busy={button.spinning}
+        waiting={button.waiting}
         again={made.length > 0}
       />
 

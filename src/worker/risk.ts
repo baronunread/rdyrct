@@ -20,7 +20,7 @@
  *
  * Google Web Risk (#341) looks at the full URL and names the threat. It needs
  * `WEB_RISK_API_KEY`; unset, it is skipped and the DNS check runs alone,
- * the way an unset CAP_SECRET switches Cap off. It catches reused kits and
+ * the way an unset TURNSTILE_SECRET_KEY switches Turnstile off. It catches reused kits and
  * known bad sites, not a scam subdomain made this morning, which is on no
  * list yet. Unlike the DNS check, a Web Risk hit holds the link
  * (destination-check.ts): Google's list is a documented threat feed.

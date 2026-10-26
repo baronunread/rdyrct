@@ -25,8 +25,17 @@
  * Neither is allowed where it cannot load: the stats script is rdyrct.com's
  * own (RDYRCT_SITE), and PostHog needs a project token in the build. A
  * self-hosted copy allows no third-party script at all.
+ *
+ * Cloudflare Turnstile (#304) is the one source decided per request rather
+ * than per build: its script and the iframe its challenge runs in come from
+ * challenges.cloudflare.com, allowed only on the app's own host (APP_HOST)
+ * and only when Turnstile is on (both keys set), which is the only time the
+ * browser loads it. See turnstileAllowed(). A custom domain, the shared link
+ * host and a self-hosted copy without the keys never allow it.
  */
 import { POSTHOG_CONFIGURED, RDYRCT_SITE } from "../shared/site";
+import type { Env } from "./env";
+import { turnstileMode } from "./turnstile";
 
 const POSTHOG = POSTHOG_CONFIGURED ? "https://*.posthog.com" : "";
 const SENTRY =
@@ -35,6 +44,9 @@ const STATS = RDYRCT_SITE ? "https://stats.brnr.dev" : "";
 /** Fazier's launch badge in the landing footer, the one remote image:
  *  their verifier wants their own badge, not a copy. rdyrct.com only. */
 const FAZIER = RDYRCT_SITE ? "https://fazier.com" : "";
+
+/** Turnstile's script and challenge iframe (#304). */
+const TURNSTILE = "https://challenges.cloudflare.com";
 
 /** A directive from its sources, with the ones switched off left out. */
 const directive = (...parts: string[]) => parts.filter(Boolean).join(" ");
@@ -72,36 +84,29 @@ const THEME_INIT_HASH = "'sha256-2nKA5EXyqoJ3UwqcLiwLWGCwtYg6xDyL/FbNRuFw1c0='";
 // so a deployed Worker cannot ship 'unsafe-inline' through a misread var.
 // The tradeoff is that e2e exercises a marginally looser policy than
 // production; everything except this one directive is identical.
-// 'wasm-unsafe-eval' is for Cap's solver (#98). WebAssembly.compile() counts
-// as script evaluation, so `script-src 'self'` refuses it outright and the
-// widget falls back to a pure-JS solver. This directive exists precisely to
-// allow WASM without allowing eval() or inline script: it buys back the fast
-// path on the phones that need it most, and grants nothing else. The module
-// itself is a same-origin Vite asset, never a CDN.
-const SCRIPT_SRC = import.meta.env.DEV
-  ? directive("script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'", POSTHOG, STATS)
-  : directive("script-src 'self'", THEME_INIT_HASH, "'wasm-unsafe-eval'", POSTHOG, STATS);
+function buildCsp(turnstile: string): string {
+  const scriptSrc = import.meta.env.DEV
+    ? directive("script-src 'self' 'unsafe-inline'", POSTHOG, STATS, turnstile)
+    : directive("script-src 'self'", THEME_INIT_HASH, POSTHOG, STATS, turnstile);
+  return [
+    "default-src 'self'",
+    scriptSrc,
+    "style-src 'self' 'unsafe-inline'",
+    directive("img-src 'self' data:", POSTHOG, FAZIER),
+    "font-src 'self'",
+    directive("connect-src 'self'", POSTHOG, SENTRY, STATS),
+    // Only Turnstile's challenge iframe. With no frame-src at all the
+    // browser falls back to default-src 'self', which is the same rule.
+    ...(turnstile ? [directive("frame-src", turnstile)] : []),
+    "object-src 'none'",
+    "base-uri 'self'",
+    "form-action 'self'",
+    "frame-ancestors 'none'",
+  ].join("; ");
+}
 
-const CSP = [
-  "default-src 'self'",
-  SCRIPT_SRC,
-  "style-src 'self' 'unsafe-inline'",
-  directive("img-src 'self' data:", POSTHOG, FAZIER),
-  "font-src 'self'",
-  // Cap (#98) solves its proof-of-work in a Web Worker built from a Blob
-  // URL, and with no worker-src the browser falls through child-src to
-  // default-src 'self', which refuses blob:. Everything else about Cap is
-  // same-origin: the widget is bundled from npm and its WASM ships as a
-  // Vite asset, so nothing here opens a door to a third party. The cost is
-  // that a script which already ran could spawn a worker from a string it
-  // built, which script-src 'self' still gates on getting there first.
-  "worker-src 'self' blob:",
-  directive("connect-src 'self'", POSTHOG, SENTRY, STATS),
-  "object-src 'none'",
-  "base-uri 'self'",
-  "form-action 'self'",
-  "frame-ancestors 'none'",
-].join("; ");
+const CSP = buildCsp("");
+const CSP_WITH_TURNSTILE = buildCsp(TURNSTILE);
 
 /**
  * Returns a copy carrying the baseline, rather than setting headers on the
@@ -112,10 +117,12 @@ const CSP = [
  * therefore broke every static asset request, not just an exotic edge case.
  *
  * The copy is cheap: the body is handed over by reference, never read.
+ *
+ * `turnstile` adds challenges.cloudflare.com: pass turnstileAllowed().
  */
-export function applySecurityHeaders(res: Response): Response {
+export function applySecurityHeaders(res: Response, turnstile = false): Response {
   const out = new Response(res.body, res);
-  out.headers.set("Content-Security-Policy", CSP);
+  out.headers.set("Content-Security-Policy", turnstile ? CSP_WITH_TURNSTILE : CSP);
   out.headers.set("X-Content-Type-Options", "nosniff");
   out.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
   out.headers.set(
@@ -128,4 +135,13 @@ export function applySecurityHeaders(res: Response): Response {
   out.headers.set("X-Frame-Options", "DENY");
   out.headers.set("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
   return out;
+}
+
+/**
+ * Whether this response may allow Turnstile in its CSP: the check is on, and
+ * the request is for the app itself. Link hosts (custom domains, the shared
+ * link host) serve redirects and the disabled page, which never load it.
+ */
+export function turnstileAllowed(env: Env, url: string): boolean {
+  return turnstileMode(env) === "on" && new URL(url).host === env.APP_HOST.toLowerCase();
 }

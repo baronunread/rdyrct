@@ -16,7 +16,8 @@ it("signs up without verification and sends no email", async () => {
   const mail = captureEmails({ mx: "deliverable" });
   const env = overrideEnv({
     BETTER_AUTH_SECRET: "test-secret",
-    CAP_SECRET: undefined,
+    TURNSTILE_SITE_KEY: undefined,
+    TURNSTILE_SECRET_KEY: undefined,
     RESEND_API_KEY: undefined,
   });
 

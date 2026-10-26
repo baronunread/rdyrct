@@ -115,7 +115,7 @@ describe("redirect hot path", () => {
     // premise that this host serves nothing but redirects. If it ever fell
     // through to the app like APP_HOST does, auth would be reachable there
     // unprotected by that layer.
-    for (const path of ["/api/auth/get-session", "/api/cap/signup/challenge", "/dashboard"]) {
+    for (const path of ["/api/auth/get-session", "/api/reports", "/dashboard"]) {
       const res = await fetchWorker(
         new Request(`http://localhost${path}`, { headers: { host: sharedHost } }),
       );

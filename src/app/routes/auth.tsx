@@ -17,7 +17,13 @@ import {
   googleSignupUrl,
 } from "../lib/funnel";
 import { useShake } from "../lib/use-shake";
-import { useCap } from "../lib/cap";
+import {
+  type TurnstileChallenge,
+  CHALLENGE_LABEL,
+  guardedButton,
+  useTurnstile,
+} from "../lib/turnstile";
+import { TurnstileSlot } from "../components/turnstile-slot";
 import { useCurrentUser, useConfig } from "../lib/hooks";
 import { storedAnonLinks } from "../lib/anon-links";
 import { readAuthHint } from "../lib/user-cache";
@@ -49,15 +55,18 @@ function ForgotView({
   initialEmail,
   sent,
   busy,
+  challenge,
   onSubmit,
   onBack,
 }: {
   initialEmail: string;
   sent: boolean;
   busy: boolean;
+  challenge: TurnstileChallenge;
   onSubmit: (email: string) => void;
   onBack: () => void;
 }) {
+  const button = guardedButton(busy, challenge);
   const toast = useToast();
   const { register, handleSubmit, getValues } = useForm<ForgotForm>({
     resolver: valibotResolver(forgotSchema),
@@ -83,8 +92,11 @@ function ForgotView({
             <Field label="Email">
               <Input type="email" {...register("email")} required autoComplete="email" />
             </Field>
-            <Button type="submit" variant="primary" disabled={busy}>
-              <BusyContent busy={busy}>Send reset link</BusyContent>
+            <TurnstileSlot challenge={challenge} />
+            <Button type="submit" variant="primary" disabled={button.disabled}>
+              <BusyContent busy={button.spinning}>
+                {button.waiting ? CHALLENGE_LABEL : "Send reset link"}
+              </BusyContent>
             </Button>
           </form>
         )}
@@ -356,6 +368,7 @@ function AuthFormView({
   onSubmit,
   onForgot,
   onFirstInput,
+  challenge,
 }: {
   mode: "login" | "signup";
   busy: boolean;
@@ -363,11 +376,14 @@ function AuthFormView({
   next: string;
   onSubmit: (email: string, password: string) => void;
   onForgot: (email: string) => void;
-  /** Starts the Cap proof-of-work (#98). Idempotent, so a per-keystroke
+  /** Starts the Turnstile challenge (#304). Idempotent, so a per-keystroke
    * handler is fine; it fires once and the work overlaps the typing. */
   onFirstInput: () => void;
+  /** Sign-up's Turnstile challenge. Login never starts it, so it never shows. */
+  challenge: TurnstileChallenge;
 }) {
   const copy = AUTH_MODE_COPY[mode];
+  const button = guardedButton(busy, challenge);
   const toast = useToast();
   const config = useConfig();
   // Read once on mount: a returning visitor who last signed in with Google
@@ -455,14 +471,17 @@ function AuthFormView({
             autoComplete={copy.passwordAutoComplete}
           />
         </Field>
+        {mode === "signup" && <TurnstileSlot challenge={challenge} />}
         <Button
           type="submit"
           variant="primary"
-          disabled={busy}
+          disabled={button.disabled}
           className={shake.className}
           onAnimationEnd={shake.end}
         >
-          <BusyContent busy={busy}>{copy.submitLabel}</BusyContent>
+          <BusyContent busy={button.spinning}>
+            {button.waiting ? CHALLENGE_LABEL : copy.submitLabel}
+          </BusyContent>
         </Button>
         <p className="text-center text-xs text-muted">
           {copy.footerPrompt}{" "}
@@ -513,8 +532,8 @@ interface SubmitDeps {
   qc: QueryClient;
   navigate: ReturnType<typeof useNavigate>;
   next: string;
-  /** Runs a Cap-guarded request, re-solving once if the token is refused. */
-  capGuarded: <T>(run: (headers: Record<string, string>) => Promise<T>) => Promise<T>;
+  /** Runs a Turnstile-guarded request, re-solving once if the token is refused. */
+  turnstileGuarded: <T>(run: (headers: Record<string, string>) => Promise<T>) => Promise<T>;
 }
 
 async function trySignIn(email: string, password: string, deps: SubmitDeps) {
@@ -539,11 +558,11 @@ async function trySignUp(
   password: string,
   deps: SubmitDeps & { emailEnabled: boolean },
 ) {
-  // Cap's proof-of-work token (#98). Solved while the visitor was typing,
+  // Turnstile token (#304). Solved while the visitor was typing,
   // spent here, and required by the Worker before an account exists. Through
   // the guard, so a token the server has forgotten is solved again rather
   // than shown to somebody as an error.
-  const { data: signup, error: signUpError } = await deps.capGuarded((headers) =>
+  const { data: signup, error: signUpError } = await deps.turnstileGuarded((headers) =>
     authClient.signUp.email({ email, password, name: email.split("@")[0] }, { headers }),
   );
   if (signUpError) {
@@ -624,7 +643,7 @@ function useForgotPassword(
   toast: ReturnType<typeof useToast>,
   emailEnabled: boolean,
 ) {
-  const resetCap = useCap("password-reset");
+  const resetTurnstile = useTurnstile("password-reset");
   const [forgotBusy, setForgotBusy] = useState(false);
 
   const submitForgot = async (email: string) => {
@@ -635,8 +654,8 @@ function useForgotPassword(
     setForgotBusy(true);
     try {
       // Cheap to abuse and it sends mail, which is why #50 needed a
-      // per-recipient cap. Cap prices the attempt instead (#98).
-      const { error: resetError } = await resetCap.guarded((headers) =>
+      // per-recipient cap. Turnstile gates the attempt instead (#304).
+      const { error: resetError } = await resetTurnstile.guarded((headers) =>
         authClient.requestPasswordReset({ email, redirectTo: "/reset-password" }, { headers }),
       );
       if (resetError) {
@@ -650,7 +669,7 @@ function useForgotPassword(
     }
   };
 
-  return { forgotBusy, submitForgot };
+  return { forgotBusy, submitForgot, resetChallenge: resetTurnstile.challenge };
 }
 
 /** Landing on /login or /signup while already signed in. Only a fallback:
@@ -694,9 +713,9 @@ function useAuthFlow(mode: "login" | "signup") {
   const [verifyPhase, setVerifyPhase] = useState<"idle" | "success" | "leaving">("idle");
   const shake = useShake();
   // Two scopes, two tokens: one minted for signup must not be spendable on a
-  // password reset, so Cap binds the scope into the signature. The reset one
+  // password reset, so the scope is bound into the token (Turnstile action). The reset one
   // lives in useForgotPassword, which is the only thing that spends it.
-  const signupCap = useCap("signup");
+  const signupTurnstile = useTurnstile("signup");
   // Treated as on until the config answers: the only wrong guess is showing a
   // code screen, which the server never sends to, and config is cached.
   const emailEnabled = useConfig().data?.emailEnabled ?? true;
@@ -719,7 +738,11 @@ function useAuthFlow(mode: "login" | "signup") {
   const rawNext = readPending()?.next ?? params.get("next") ?? "/dashboard";
   const next = rawNext.startsWith("/") && !rawNext.startsWith("//") ? rawNext : "/dashboard";
 
-  const { forgotBusy, submitForgot } = useForgotPassword(setView, toast, emailEnabled);
+  const { forgotBusy, submitForgot, resetChallenge } = useForgotPassword(
+    setView,
+    toast,
+    emailEnabled,
+  );
   const redirecting = useRedirectWhenSignedIn({ verifyPhase, next });
 
   const goVerify = async (email: string) => {
@@ -759,7 +782,14 @@ function useAuthFlow(mode: "login" | "signup") {
     authPasswordRef.current = password;
     setBusy(true);
     try {
-      const deps = { goVerify, failSubmit, qc, navigate, next, capGuarded: signupCap.guarded };
+      const deps = {
+        goVerify,
+        failSubmit,
+        qc,
+        navigate,
+        next,
+        turnstileGuarded: signupTurnstile.guarded,
+      };
       await (mode === "login"
         ? trySignIn(email, password, deps)
         : trySignUp(email, password, { ...deps, emailEnabled }));
@@ -845,11 +875,13 @@ function useAuthFlow(mode: "login" | "signup") {
     resendOtp,
     submitForgot,
     backToForm,
-    /** Hung on the forms' first interaction so the proof-of-work runs while
+    /** Hung on the forms' first interaction so the Turnstile challenge runs while
      * the visitor types, instead of stalling the submit. Signup only: a
      * password reset is rare enough that a short wait on submit is fine, and
      * priming it would tax everyone who came to log in. */
-    primeSignupCap: signupCap.prime,
+    primeSignupTurnstile: signupTurnstile.prime,
+    signupChallenge: signupTurnstile.challenge,
+    resetChallenge,
   };
 }
 
@@ -879,6 +911,7 @@ function AuthPage({ mode }: { mode: "login" | "signup" }) {
         initialEmail={flow.authEmail}
         sent={flow.view === "forgot-sent"}
         busy={flow.forgotBusy}
+        challenge={flow.resetChallenge}
         onSubmit={flow.submitForgot}
         onBack={() => flow.setView("form")}
       />
@@ -893,7 +926,8 @@ function AuthPage({ mode }: { mode: "login" | "signup" }) {
       shake={flow.shake}
       next={flow.next}
       onSubmit={flow.submit}
-      onFirstInput={flow.primeSignupCap}
+      onFirstInput={flow.primeSignupTurnstile}
+      challenge={flow.signupChallenge}
       onForgot={(email) => {
         flow.setAuthEmail(email);
         flow.setView("forgot");
@@ -902,9 +936,5 @@ function AuthPage({ mode }: { mode: "login" | "signup" }) {
   );
 }
 
-// main.tsx names these as strings for lazyRouteComponent, which static
-// analysis cannot follow.
-// fallow-ignore-next-line unused-export
 export const LoginPage = () => <AuthPage mode="login" />;
-// fallow-ignore-next-line unused-export
 export const SignupPage = () => <AuthPage mode="signup" />;

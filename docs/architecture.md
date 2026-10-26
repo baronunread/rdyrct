@@ -13,7 +13,7 @@ flowchart TB
   subgraph worker[rdyrct Cloudflare Worker]
     router[Hono request router<br/>headers, errors, and rate checks]
     custom[Custom-domain redirect path]
-    auth[BetterAuth and Cap]
+    auth[BetterAuth and Turnstile]
     api[Signed API routes]
     shared[Shared-domain redirect path]
     assets[React SPA static assets]
@@ -41,7 +41,7 @@ flowchart TB
 
   visitor --> cf --> router
   router -->|known customer host| custom
-  router -->|/api/auth/* and /api/cap/*| auth
+  router -->|/api/auth/*| auth
   router -->|signed /api/*| api
   polar -->|signed /api/webhooks/polar request| router
   router -->|/:slug| shared
@@ -109,7 +109,7 @@ Route order matters because the Worker serves several products from one host:
    is a separate Worker and sets its own headers.
 2. A request on a known customer domain is redirect-only. The Worker reads the
    domain and slug from KV, returns a `302`, and does not expose the API or SPA.
-3. `/api/auth/*`, `/api/cap/*`, and the anonymous shortener are public, with
+3. `/api/auth/*`, the anonymous shortener and abuse reports are public, with
    their own abuse controls. BetterAuth stores auth state in D1.
 4. `/api/webhooks/polar` is public but verifies Polar's signature.
 5. The rest of `/api/*` loads a session, applies the signed API rate limit, and

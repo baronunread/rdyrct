@@ -8,10 +8,11 @@ import { useToast } from "../ui/toast";
 import { SUPPORT_EMAIL } from "../ui/footer";
 import { api } from "../lib/api";
 import { useAudience } from "../lib/audience";
-import { useCap } from "../lib/cap";
+import { CHALLENGE_LABEL, guardedButton, useTurnstile } from "../lib/turnstile";
+import { TurnstileSlot } from "../components/turnstile-slot";
 import { useSearchParams } from "../lib/router-search";
 import { withErrorToast } from "../lib/mutation-toast";
-import { CAP_TOKEN_HEADER, REPORT_REASONS, type ReportReason } from "@/shared/types";
+import { TURNSTILE_TOKEN_HEADER, REPORT_REASONS, type ReportReason } from "@/shared/types";
 
 const REASON_LABELS = {
   phishing: "Phishing or a scam",
@@ -23,13 +24,10 @@ const REASON_LABELS = {
 const reasonFrom = (value: string): ReportReason =>
   REPORT_REASONS.find((r) => r === value) ?? "phishing";
 
-// main.tsx names this export as a string, for lazyRouteComponent, which
-// static analysis can't follow.
-// fallow-ignore-next-line unused-export
 export function ReportPage() {
   const { authed } = useAudience();
   const toast = useToast();
-  const cap = useCap("report");
+  const turnstile = useTurnstile("report");
   const qc = useQueryClient();
   const [params] = useSearchParams();
   const [link, setLink] = useState(() => params.get("link") ?? "");
@@ -39,16 +37,23 @@ export function ReportPage() {
 
   const send = useMutation({
     mutationFn: () =>
-      cap.guarded((headers) =>
+      turnstile.guarded((headers) =>
         api("/reports", {
           method: "POST",
-          body: { link, reason, note, contact, capToken: headers[CAP_TOKEN_HEADER] ?? "" },
+          body: {
+            link,
+            reason,
+            note,
+            contact,
+            turnstileToken: headers[TURNSTILE_TOKEN_HEADER] ?? "",
+          },
         }),
       ),
     // An admin with the Reports tab open sees the new report on its next read.
     onSuccess: () => qc.invalidateQueries({ queryKey: ["admin", "reports"] }),
     onError: withErrorToast(toast),
   });
+  const button = guardedButton(send.isPending, turnstile.challenge);
 
   return (
     <LegalPageLayout
@@ -63,7 +68,7 @@ export function ReportPage() {
       ) : (
         <form
           noValidate
-          onInput={cap.prime}
+          onInput={turnstile.prime}
           onSubmit={(event) => {
             event.preventDefault();
             if (!link.trim()) return toast("Paste the short link", "error");
@@ -108,9 +113,10 @@ export function ReportPage() {
               maxLength={200}
             />
           </Field>
+          <TurnstileSlot challenge={turnstile.challenge} />
           <div>
-            <Button type="submit" disabled={send.isPending}>
-              {send.isPending && <Spinner />} Send report
+            <Button type="submit" disabled={button.disabled}>
+              {button.spinning && <Spinner />} {button.waiting ? CHALLENGE_LABEL : "Send report"}
             </Button>
           </div>
           <p className="text-xs text-muted">

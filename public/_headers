@@ -24,7 +24,7 @@
 
 /assets/*
   Cache-Control: public, max-age=86400, immutable, must-revalidate
-  Content-Security-Policy: default-src 'self'; script-src 'self' 'wasm-unsafe-eval' https://*.posthog.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://*.posthog.com; font-src 'self'; worker-src 'self' blob:; connect-src 'self' https://*.posthog.com; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'
+  Content-Security-Policy: default-src 'self'; script-src 'self' https://*.posthog.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://*.posthog.com; font-src 'self'; connect-src 'self' https://*.posthog.com; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'
   X-Content-Type-Options: nosniff
   Referrer-Policy: strict-origin-when-cross-origin
   Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=(), usb=()
@@ -33,7 +33,7 @@
 
 /favicon.svg
   Cache-Control: public, max-age=3600, must-revalidate
-  Content-Security-Policy: default-src 'self'; script-src 'self' 'wasm-unsafe-eval' https://*.posthog.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://*.posthog.com; font-src 'self'; worker-src 'self' blob:; connect-src 'self' https://*.posthog.com; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'
+  Content-Security-Policy: default-src 'self'; script-src 'self' https://*.posthog.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://*.posthog.com; font-src 'self'; connect-src 'self' https://*.posthog.com; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'
   X-Content-Type-Options: nosniff
   Referrer-Policy: strict-origin-when-cross-origin
   Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=(), usb=()
@@ -42,7 +42,7 @@
 
 /og.png
   Cache-Control: public, max-age=3600, must-revalidate
-  Content-Security-Policy: default-src 'self'; script-src 'self' 'wasm-unsafe-eval' https://*.posthog.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://*.posthog.com; font-src 'self'; worker-src 'self' blob:; connect-src 'self' https://*.posthog.com; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'
+  Content-Security-Policy: default-src 'self'; script-src 'self' https://*.posthog.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://*.posthog.com; font-src 'self'; connect-src 'self' https://*.posthog.com; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'
   X-Content-Type-Options: nosniff
   Referrer-Policy: strict-origin-when-cross-origin
   Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=(), usb=()
@@ -51,7 +51,7 @@
 
 /email-logo.png
   Cache-Control: public, max-age=3600, must-revalidate
-  Content-Security-Policy: default-src 'self'; script-src 'self' 'wasm-unsafe-eval' https://*.posthog.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://*.posthog.com; font-src 'self'; worker-src 'self' blob:; connect-src 'self' https://*.posthog.com; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'
+  Content-Security-Policy: default-src 'self'; script-src 'self' https://*.posthog.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://*.posthog.com; font-src 'self'; connect-src 'self' https://*.posthog.com; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'
   X-Content-Type-Options: nosniff
   Referrer-Policy: strict-origin-when-cross-origin
   Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=(), usb=()
@@ -60,7 +60,7 @@
 
 /robots.txt
   Cache-Control: public, max-age=3600, must-revalidate
-  Content-Security-Policy: default-src 'self'; script-src 'self' 'wasm-unsafe-eval' https://*.posthog.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://*.posthog.com; font-src 'self'; worker-src 'self' blob:; connect-src 'self' https://*.posthog.com; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'
+  Content-Security-Policy: default-src 'self'; script-src 'self' https://*.posthog.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://*.posthog.com; font-src 'self'; connect-src 'self' https://*.posthog.com; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'
   X-Content-Type-Options: nosniff
   Referrer-Policy: strict-origin-when-cross-origin
   Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=(), usb=()
@@ -69,7 +69,7 @@
 
 /sitemap.xml
   Cache-Control: public, max-age=3600, must-revalidate
-  Content-Security-Policy: default-src 'self'; script-src 'self' 'wasm-unsafe-eval' https://*.posthog.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://*.posthog.com; font-src 'self'; worker-src 'self' blob:; connect-src 'self' https://*.posthog.com; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'
+  Content-Security-Policy: default-src 'self'; script-src 'self' https://*.posthog.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://*.posthog.com; font-src 'self'; connect-src 'self' https://*.posthog.com; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'
   X-Content-Type-Options: nosniff
   Referrer-Policy: strict-origin-when-cross-origin
   Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=(), usb=()
@@ -78,7 +78,7 @@
 
 /llms.txt
   Cache-Control: public, max-age=3600, must-revalidate
-  Content-Security-Policy: default-src 'self'; script-src 'self' 'wasm-unsafe-eval' https://*.posthog.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://*.posthog.com; font-src 'self'; worker-src 'self' blob:; connect-src 'self' https://*.posthog.com; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'
+  Content-Security-Policy: default-src 'self'; script-src 'self' https://*.posthog.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://*.posthog.com; font-src 'self'; connect-src 'self' https://*.posthog.com; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'
   X-Content-Type-Options: nosniff
   Referrer-Policy: strict-origin-when-cross-origin
   Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=(), usb=()
@@ -87,7 +87,7 @@
 
 /llms-full.txt
   Cache-Control: public, max-age=3600, must-revalidate
-  Content-Security-Policy: default-src 'self'; script-src 'self' 'wasm-unsafe-eval' https://*.posthog.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://*.posthog.com; font-src 'self'; worker-src 'self' blob:; connect-src 'self' https://*.posthog.com; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'
+  Content-Security-Policy: default-src 'self'; script-src 'self' https://*.posthog.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://*.posthog.com; font-src 'self'; connect-src 'self' https://*.posthog.com; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'
   X-Content-Type-Options: nosniff
   Referrer-Policy: strict-origin-when-cross-origin
   Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=(), usb=()
@@ -96,7 +96,7 @@
 
 /ai.txt
   Cache-Control: public, max-age=3600, must-revalidate
-  Content-Security-Policy: default-src 'self'; script-src 'self' 'wasm-unsafe-eval' https://*.posthog.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://*.posthog.com; font-src 'self'; worker-src 'self' blob:; connect-src 'self' https://*.posthog.com; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'
+  Content-Security-Policy: default-src 'self'; script-src 'self' https://*.posthog.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://*.posthog.com; font-src 'self'; connect-src 'self' https://*.posthog.com; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'
   X-Content-Type-Options: nosniff
   Referrer-Policy: strict-origin-when-cross-origin
   Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=(), usb=()

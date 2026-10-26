@@ -97,12 +97,15 @@ export function useShellUser(): CurrentUser | null {
 }
 
 // Deployment config (e.g. appHost for DNS instructions) — static per deploy.
-export const useConfig = () =>
-  useQuery<AppConfig>({
-    queryKey: ["config"],
-    queryFn: () => api("/config"),
-    staleTime: Infinity,
-  });
+/** Shared by useConfig and anything that must wait for the answer outside
+ * a render, such as the Turnstile guard. */
+export const configQuery = {
+  queryKey: ["config"],
+  queryFn: () => api<AppConfig>("/config"),
+  staleTime: Infinity,
+};
+
+export const useConfig = () => useQuery<AppConfig>(configQuery);
 
 // The host shared-domain links display, copy, and redirect through. Falls
 // back to the current origin's host while config is still loading.

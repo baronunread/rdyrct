@@ -6,6 +6,7 @@ import { alias } from "drizzle-orm/sqlite-core";
 import * as schema from "../db/schema";
 import type { AppEnv } from "../env";
 import { sharedLinkHost } from "../util";
+import { servedSiteKey } from "../turnstile";
 import { requireUser } from "../guards";
 import { jsonBodyLimit } from "../body-limit";
 import type { AppConfig, CurrentUser } from "@/shared/types";
@@ -108,5 +109,8 @@ userRoutes.get("/config", (c) => {
     linkHost: sharedLinkHost(c.env),
     emailEnabled: emailConfigured(c.env),
     googleEnabled: Boolean(c.env.GOOGLE_CLIENT_ID && c.env.GOOGLE_CLIENT_SECRET),
+    // Only when the check is on: a lone site key would render a widget
+    // whose token nobody checks.
+    turnstileSiteKey: servedSiteKey(c.env),
   } satisfies AppConfig);
 });
