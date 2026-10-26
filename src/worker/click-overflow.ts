@@ -88,6 +88,27 @@ export function newLinksWithRedirects(db: DB, since: number, linksSince: number,
     having sum(n) >= ${min}`);
 }
 
+/** The org's link with the most redirects since `since`, stored or dropped,
+ * or null. */
+export async function busiestLinkSince(
+  db: DB,
+  orgId: string,
+  since: number,
+): Promise<string | null> {
+  const [top] = await db.all<{ linkId: string }>(sql`
+    select link_id as linkId from (
+      select link_id, count(*) as n from clicks
+      where org_id = ${orgId} and ts >= ${since} group by link_id
+      union all
+      select link_id, sum(clicks) from click_overflow
+      where org_id = ${orgId} and minute >= ${fromMinute(since)} group by link_id
+    )
+    group by link_id
+    order by sum(n) desc
+    limit 1`);
+  return top?.linkId ?? null;
+}
+
 /** Daily: drop counts older than any window the sweep reads. In bounded
  * batches, like the raw clicks: a flood leaves a row per link per minute. */
 export async function sweepOldOverflow(env: Env, now = Date.now()): Promise<void> {

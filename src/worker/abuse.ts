@@ -1,9 +1,9 @@
-import { and, eq, gte, isNull, sql } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import { HTTPException } from "hono/http-exception";
 import * as schema from "./db/schema";
 import type { DB, Env } from "./env";
-import { newLinksWithRedirects, redirectsByOrg } from "./click-overflow";
+import { busiestLinkSince, newLinksWithRedirects, redirectsByOrg } from "./click-overflow";
 import { sendEmail } from "./email";
 import { NOTICE_FOOTER, renderEmail, SUPPORT_EMAIL } from "./email-layout";
 import { isFreeHost } from "../shared/abuse-rules";
@@ -337,18 +337,6 @@ async function linksBehindSignal(
   const busiest = burst ? await busiestLinkSince(db, orgId, hourAgo) : null;
   if (busiest) links.add(busiest);
   return [...links];
-}
-
-/** The org's link with the most redirects since `since`, or null. */
-async function busiestLinkSince(db: DB, orgId: string, since: number): Promise<string | null> {
-  const [top] = await db
-    .select({ linkId: schema.clicks.linkId })
-    .from(schema.clicks)
-    .where(and(eq(schema.clicks.orgId, orgId), gte(schema.clicks.ts, since)))
-    .groupBy(schema.clicks.linkId)
-    .orderBy(sql`count(*) desc`)
-    .limit(1);
-  return top?.linkId ?? null;
 }
 
 /** A free-host destination among the org's links, or an open report on one. */

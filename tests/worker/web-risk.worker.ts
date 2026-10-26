@@ -560,6 +560,24 @@ describe("a second look on a traffic spike (#390)", () => {
     expect((await linkRow("old"))?.suspended_at).not.toBeNull();
   });
 
+  it("finds the busiest link of a burst the click cap dropped", async () => {
+    // Past the cap nothing reaches `clicks`: the burst lives in click_overflow.
+    await spikingLink("capped", LISTED, 0);
+    await env.DB.prepare("update links set created_at = ? where id = 'capped'")
+      .bind(Date.now() - 2 * DAY_MS)
+      .run();
+    await env.DB.prepare(
+      "insert into click_overflow (minute, org_id, link_id, clicks) values (?, 'org-1', 'capped', 201)",
+    )
+      .bind(Date.now() - (Date.now() % 60_000))
+      .run();
+    const lookups = stubGoogle();
+
+    await sweepAbuse(withKey());
+    expect(lookups).toEqual([LISTED]);
+    expect((await linkRow("capped"))?.suspended_at).not.toBeNull();
+  });
+
   it("asks about no more than SPIKE_RECHECKS_PER_RUN links in one run", async () => {
     const ids = Array.from({ length: SPIKE_RECHECKS_PER_RUN + 2 }, (_, i) => `many-${i}`);
     for (const id of ids) await spikingLink(id, `https://example.com/${id}`, 0);
