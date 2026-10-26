@@ -15,15 +15,12 @@ export function PrivacyPage() {
   useSeo("/privacy");
   useMarketingScroll();
   return (
-    <LegalPageLayout authed={authed}>
+    <LegalPageLayout
+      authed={authed}
+      title="Privacy policy"
+      intro="This policy explains what data rdyrct collects, why, the legal basis for it, and how you can exercise your rights. Last updated 25 October 2026."
+    >
       <WebMcpMarketingTools />
-      <div>
-        <h1 className="mb-2 text-xl font-bold">Privacy Policy</h1>
-        <p className="text-muted">
-          This policy explains what data rdyrct collects, why, the legal basis for it, and how you
-          can exercise your rights. Last updated 24 September 2026.
-        </p>
-      </div>
 
       <section>
         <h2 className="mb-2 font-bold">Data controller</h2>
@@ -44,20 +41,19 @@ export function PrivacyPage() {
           settings you create. For click analytics on your links we store only an approximate
           country, the referrer host, device type, and a timestamp for each click: we explicitly do{" "}
           <span className="text-text">not</span> store the IP address of the people who click your
-          links, their precise location, or any data that would allow cross-site tracking.
-          Separately, if you accept analytics in the cookie banner, we use PostHog to understand how
-          the product itself is used: which features you use and app events such as signing in or
-          creating a link, tied to your account email and name. We turn off autocapture and session
-          recording, so PostHog never records what you type or a replay of your screen. Nothing is
-          sent to PostHog, and no PostHog cookie is set, unless you accept. Until you answer the
-          banner, a few steps you take on the current page (such as viewing it or clicking a button)
-          are held in your browser&apos;s memory: accepting sends them, with the time they happened;
-          rejecting or leaving the page discards them. The home page shows one of two versions,
-          picked at random each time it loads, so we can compare which works better. Picking it
-          stores nothing on your device and sends nothing; if you accept analytics, the events above
-          say which version you saw. We also use Sentry to receive technical error reports from the
-          app. These reports include technical diagnostic data such as the error, browser, and page
-          path. We remove page query strings before sending them.
+          links, their precise location, or any data that would allow cross-site tracking. If you
+          report a link, we store the address you report, your reason and note, and the email you
+          choose to give. We do not store your IP address. Separately, if you accept analytics in
+          the cookie banner, we use PostHog to understand how the product itself is used: which
+          features you use and app events such as signing in or creating a link, tied to your
+          account email and name. We turn off autocapture and session recording, so PostHog never
+          records what you type or a replay of your screen. Nothing is sent to PostHog, and no
+          PostHog cookie is set, unless you accept. Until you answer the banner, a few steps you
+          take on the current page (such as viewing it or clicking a button) are held in your
+          browser&apos;s memory: accepting sends them, with the time they happened; rejecting or
+          leaving the page discards them. We also use Sentry to receive technical error reports from
+          the app. These reports include technical diagnostic data such as the error, browser, and
+          page path. We remove page query strings before sending them.
         </p>
       </section>
 
@@ -73,7 +69,8 @@ export function PrivacyPage() {
           <CookieSettingsButton className="text-accent hover:underline" />, here or at the foot of
           any public page. We ask again after six months. We process technical error reports through
           Sentry for our legitimate interest in keeping the service secure and reliable. Sentry does
-          not set a cookie in rdyrct.
+          not set a cookie in rdyrct. We check where links point against Google&apos;s list of
+          unsafe sites for our legitimate interest in keeping phishing and malware off the service.
         </p>
       </section>
 
@@ -82,7 +79,7 @@ export function PrivacyPage() {
           two thirds of the way down a privacy policy. This is that page's
           address; splitting it into a real second page would mean two
           documents saying the same thing and drifting apart. */}
-      <section id="cookies" className="scroll-mt-16">
+      <section id="cookies">
         <h2 className="mb-2 font-bold">Cookies</h2>
         <p className="text-muted">
           rdyrct sets a strictly-necessary session cookie to keep you signed in. If you accept
@@ -98,9 +95,13 @@ export function PrivacyPage() {
         <p className="text-muted">
           We rely on a small number of sub-processors to run the service: Cloudflare (hosting, the
           D1 database, and KV storage), Resend (transactional email), Polar (billing, acting as
-          merchant of record), PostHog, EU region (product usage analytics), and Sentry (technical
-          error monitoring). Some may process data outside the EU/EEA; where they do, transfers are
-          covered by the appropriate safeguards, such as the EU Standard Contractual Clauses.
+          merchant of record), PostHog, EU region (product usage analytics), Sentry (technical error
+          monitoring), and Google (Web Risk). Google receives the destination address of a link when
+          the link is created or edited, when we check it again each week, and when its traffic
+          jumps, and checks it against Google&apos;s list of unsafe sites. It receives nothing about
+          you or the people who click the link. Some may process data outside the EU/EEA; where they
+          do, transfers are covered by the appropriate safeguards, such as the EU Standard
+          Contractual Clauses.
         </p>
       </section>
 

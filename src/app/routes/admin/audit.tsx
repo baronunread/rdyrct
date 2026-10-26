@@ -28,6 +28,17 @@ function matchesTerm(
   return haystack.toLowerCase().includes(term);
 }
 
+/** The address may be gone: the log outlives the account. "system" is the
+ * sweep, which has no account to delete. */
+function Actor({ entry }: { entry: { actorEmail: string | null; actorUserId: string } }) {
+  if (entry.actorEmail) return <>{entry.actorEmail}</>;
+  return (
+    <span className="text-muted">
+      {entry.actorUserId === "system" ? "system" : "deleted account"}
+    </span>
+  );
+}
+
 export function AdminAuditPage() {
   const { data, isPending } = useAdminAudit();
   const [query, setQuery] = useState("");
@@ -50,76 +61,77 @@ export function AdminAuditPage() {
   const { rows, totalPages, safePage } = paginate(all, page);
 
   return (
-    <div className="flex flex-col gap-3">
+    // The header spaces itself, as on every page; the gap is for what is under it.
+    <div>
       <PageHeader
         title="Audit log"
         sub="Every privileged action, newest first. Append-only: entries are never edited or removed."
       />
+      <div className="flex flex-col gap-3">
+        <SearchInput
+          value={query}
+          onChange={(value) => {
+            setQuery(value);
+            setPage(0);
+          }}
+          placeholder="Action, email, or detail"
+          label="Search the audit log"
+        />
 
-      <SearchInput
-        value={query}
-        onChange={(value) => {
-          setQuery(value);
-          setPage(0);
-        }}
-        placeholder="Action, email, or detail"
-        label="Search the audit log"
-      />
-
-      {isPending ? (
-        <AdminAuditRowsSkeleton />
-      ) : rows.length === 0 ? (
-        <p className="py-6 text-center text-sm text-muted">Nothing recorded yet.</p>
-      ) : (
-        <Table fixed minWidth="min-w-[56rem]">
-          <thead>
-            <tr>
-              <SortTh
-                label="When"
-                sortKey="createdAt"
-                sort={sort}
-                onSort={setSort}
-                className="w-[16%]"
-              />
-              <SortTh
-                label="Who"
-                sortKey="actorEmail"
-                sort={sort}
-                onSort={setSort}
-                className="w-[22%]"
-              />
-              <SortTh
-                label="Action"
-                sortKey="action"
-                sort={sort}
-                onSort={setSort}
-                className="w-[18%]"
-              />
-              <Th className="w-[44%]">Detail</Th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((entry) => (
-              <tr key={entry.id}>
-                <Td className="whitespace-nowrap text-muted">{shortDate(entry.createdAt)}</Td>
-                {/* The address may be gone: the log outlives the account. */}
-                <Td className="truncate">
-                  {entry.actorEmail ?? <span className="text-muted">deleted account</span>}
-                </Td>
-                <Td className="truncate font-mono text-xs">{entry.action}</Td>
-                <Td
-                  className="truncate font-mono text-xs text-muted"
-                  title={entry.detail ?? entry.targetId}
-                >
-                  {entry.detail ?? entry.targetId}
-                </Td>
+        {isPending ? (
+          <AdminAuditRowsSkeleton />
+        ) : rows.length === 0 ? (
+          <p className="py-6 text-center text-sm text-muted">Nothing recorded yet.</p>
+        ) : (
+          <Table fixed minWidth="min-w-[56rem]">
+            <thead>
+              <tr>
+                <SortTh
+                  label="When"
+                  sortKey="createdAt"
+                  sort={sort}
+                  onSort={setSort}
+                  className="w-[16%]"
+                />
+                <SortTh
+                  label="Who"
+                  sortKey="actorEmail"
+                  sort={sort}
+                  onSort={setSort}
+                  className="w-[22%]"
+                />
+                <SortTh
+                  label="Action"
+                  sortKey="action"
+                  sort={sort}
+                  onSort={setSort}
+                  className="w-[18%]"
+                />
+                <Th className="w-[44%]">Detail</Th>
               </tr>
-            ))}
-          </tbody>
-        </Table>
-      )}
+            </thead>
+            <tbody>
+              {rows.map((entry) => (
+                <tr key={entry.id}>
+                  <Td className="whitespace-nowrap text-muted">{shortDate(entry.createdAt)}</Td>
+                  <Td className="truncate">
+                    <Actor entry={entry} />
+                  </Td>
+                  <Td className="truncate font-mono text-xs">{entry.action}</Td>
+                  <Td
+                    className="truncate font-mono text-xs text-muted"
+                    title={entry.detail ?? entry.targetId}
+                  >
+                    {entry.detail ?? entry.targetId}
+                  </Td>
+                </tr>
+              ))}
+            </tbody>
+          </Table>
+        )}
 
-      <Pager page={safePage} totalPages={totalPages} onPageChange={setPage} />
+        <Pager page={safePage} totalPages={totalPages} onPageChange={setPage} />
+      </div>
     </div>
   );
 }

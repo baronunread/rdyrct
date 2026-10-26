@@ -1,5 +1,5 @@
 import { expect, type Page, test } from "@playwright/test";
-import { signUpAndVerify, latestOtp, submitSignup } from "./resend";
+import { signUpAndVerify, subjectsSentTo, verifySignup, submitSignup } from "./resend";
 import { rawSql } from "./db";
 import { signOut } from "./pages";
 
@@ -12,7 +12,56 @@ async function blockAuthRequests(page: Page) {
   return counter;
 }
 
+async function submitLogin(page: Page, email: string, password: string) {
+  await page.getByLabel("Email").fill(email);
+  await page.getByLabel("Password").fill(password);
+  await page.getByRole("button", { name: "Sign in" }).click();
+}
+
+test("a new account gets one welcome email once its address is verified", async ({ page }) => {
+  const email = `welcome-${Date.now()}@gmail.com`;
+  await signUpAndVerify(page, email, "test-password-123");
+
+  await expect
+    .poll(async () => (await subjectsSentTo(page, email)).filter((s) => s === "Welcome to rdyrct"))
+    .toHaveLength(1);
+});
+
 test.describe("authentication forms", () => {
+  for (const token of [null, "fresh-signup-session"]) {
+    test(`no-mail signup counts completion only with a fresh session (${token ? "new" : "duplicate"})`, async ({
+      page,
+    }) => {
+      await page.route("**/api/config", async (route) => {
+        const config = await (await route.fetch()).json();
+        await route.fulfill({ json: { ...config, emailEnabled: false } });
+      });
+      await page.route("**/api/auth/sign-up/email", (route) =>
+        route.fulfill({ json: { token, user: { id: "signup-response", emailVerified: !!token } } }),
+      );
+      await page.route("**/api/auth/sign-in/email", (route) =>
+        route.fulfill({
+          status: 401,
+          json: { code: "INVALID_EMAIL_OR_PASSWORD", message: "Invalid email or password" },
+        }),
+      );
+      await page.goto("/signup");
+      const events: string[] = [];
+      await page.exposeFunction("recordSignupEvent", (event: string) => events.push(event));
+      await page.evaluate(async () => {
+        const modulePath = "/src/app/lib/posthog.ts";
+        const { default: posthog } = await import(modulePath);
+        posthog.capture = (event) => window.recordSignupEvent(event);
+      });
+      await page.getByLabel("Email").fill("duplicate-signup@example.com");
+      await page.getByLabel("Password").fill("test-password-123");
+      const signIn = page.waitForResponse("**/api/auth/sign-in/email");
+      await page.getByRole("button", { name: "Sign up", exact: true }).click();
+      await signIn;
+      expect(events.filter((event) => event === "user_signed_up")).toHaveLength(token ? 1 : 0);
+    });
+  }
+
   test("signs in with a verified account", async ({ page }) => {
     const email = `login-${Date.now()}@gmail.com`;
     const password = "test-password-123";
@@ -22,9 +71,7 @@ test.describe("authentication forms", () => {
     await signOut(page);
     await expect(page).toHaveURL(/\/login$/);
 
-    await page.getByLabel("Email").fill(email);
-    await page.getByLabel("Password").fill(password);
-    await page.getByRole("button", { name: "Sign in" }).click();
+    await submitLogin(page, email, password);
 
     await expect(page).toHaveURL(/\/dashboard$/);
     // Signed in and already able to work: the account was given an
@@ -53,25 +100,27 @@ test.describe("authentication forms", () => {
     // EMAIL_NOT_VERIFIED branch this test means to exercise) entirely.
     await page.evaluate(() => sessionStorage.removeItem("rdyrct:pendingVerify"));
     await page.goto("/login");
-    await page.getByLabel("Email").fill(email);
-    await page.getByLabel("Password").fill(password);
-    await page.getByRole("button", { name: "Sign in" }).click();
+    await submitLogin(page, email, password);
     await expect(page.getByRole("heading", { name: "Enter your code" })).toBeVisible({
       timeout: 30_000,
     });
 
-    const otp = await latestOtp(page, email);
-    await page.locator("input").first().focus();
-    await page.keyboard.insertText(otp);
+    const completed: string[] = [];
+    await page.exposeFunction("recordSignupMethod", (method: string) => completed.push(method));
+    await page.evaluate(async () => {
+      const modulePath = "/src/app/lib/posthog.ts";
+      const { default: posthog } = await import(modulePath);
+      posthog.capture = (event, properties) => {
+        if (event === "user_signed_up") window.recordSignupMethod(properties?.method);
+      };
+    });
     // The functional regression this covers: verifying through /login used
     // to run the exact same code path as verifying through /signup (see
     // runVerify in auth.tsx), just under mode="login". Reaching /dashboard
-    // here, which nothing exercised before this test, is what proves that
-    // path still completes; the analytics side-effect it also fixes
-    // (posthog.capture(USER_SIGNED_UP) no longer gated on mode) isn't
-    // reliably observable from Playwright, since posthog-js's capture
-    // transport isn't consistently interceptable at the network layer.
-    await expect(page).toHaveURL(/\/dashboard$/, { timeout: 30_000 });
+    // here proves the resumed signup completes. Observe the capture call
+    // directly so the assertion does not depend on the SDK's transport.
+    await verifySignup(page, email);
+    expect(completed).toEqual(["email"]);
   });
 
   test("keeps invalid login details in the browser instead of sending an auth request", async ({

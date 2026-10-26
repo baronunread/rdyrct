@@ -8,32 +8,38 @@
  * account they are signed into.
  *
  * Who actually lands here is somebody who typed the bare domain, followed an
- * old bookmark, or came back from the blog. They have one question, which is
- * what happened while they were away, so the slot answers that instead.
+ * old bookmark, or came back from the blog, and the likeliest reason is a
+ * link to make. So the slot is the anonymous card's bar with the
+ * organization as its prefix (hero-link-bar.tsx), making a real link there on
+ * its default domain, with one line of how the week went under it.
  */
+import { useState } from "react";
 import { Link } from "@tanstack/react-router";
-import { ArrowRight, Plus } from "@/app/ui/icons";
+import { useForm } from "react-hook-form";
+import { valibotResolver } from "@hookform/resolvers/valibot";
+import { ArrowRight, ChevronsUpDown } from "@/app/ui/icons";
+import { Menu } from "../ui/menu";
+import { cn } from "../ui/cn";
+import { OrgMenuItems } from "./org-menu-items";
+import { HERO_CARD, HeroBar, HeroFooter, MadeLinkPanel } from "./hero-link-bar";
 import { useCurrentOrg } from "../lib/current-org";
-import { useCurrentUser, useStats } from "../lib/hooks";
+import { useCurrentUser, useLinkMutations, useStats } from "../lib/hooks";
+import { useOrgLimits } from "../lib/org-limits";
+import { ApiError } from "../lib/api";
+import { withErrorToast } from "../lib/mutation-toast";
+import { destinationSchema } from "../lib/schemas";
 import { formatNumber } from "../lib/numbers";
+import { HrefLink } from "../lib/router-search";
 import { buttonClass } from "../ui/button-class";
 import { Skeleton, SkeletonStatus } from "../ui/skeleton";
-import type { OrgStats } from "@/shared/types";
-
-function Stat({ value, label }: { value: string; label: string }) {
-  return (
-    <div className="rounded-lg bg-surface-2 px-3 py-2.5">
-      <p className="text-lg font-bold tnum">{value}</p>
-      <p className="text-xs font-medium text-muted">{label}</p>
-    </div>
-  );
-}
+import { useToast } from "../ui/toast";
+import type { LinkDTO } from "@/shared/types";
 
 /** No organization yet, so there are no numbers to show and exactly one
  * useful thing to do. */
 function NoOrgYet() {
   return (
-    <div className="flex w-full max-w-xl flex-col gap-3 rounded-xl bg-surface p-5 smooth-shadow-ring-sm">
+    <div className={cn(HERO_CARD, "flex flex-col gap-3 p-5")}>
       <p className="text-sm">You are signed in, but you have no organization yet.</p>
       <p className="text-xs text-muted">
         Links live in an organization. Making one takes a name and nothing else.
@@ -48,124 +54,257 @@ function NoOrgYet() {
   );
 }
 
-/** The two busiest links, which is the other half of "what happened while I
- * was away". Absent on a new account, and an empty list is worse than none. */
-function TopLinks({ links }: { links: { id: string; slug: string; clicks: number }[] }) {
-  if (links.length === 0) return null;
+/** The name the card greets: the first word of it, as people say hello. */
+const firstName = (name: string) => name.trim().split(/\s+/)[0] ?? "";
+
+/** The organization as the bar's prefix: its initial on a tinted square,
+ *  its name, and a chevron when there is another to pick. */
+function OrgChipFace({ name, menu }: { name: string; menu: boolean }) {
   return (
-    <div className="flex flex-col gap-1.5">
-      {links.map((link) => (
-        <div
-          key={link.id}
-          className="flex items-center gap-2 rounded-lg bg-surface-2 px-3 py-2 text-xs"
-        >
-          <span className="min-w-0 flex-1 truncate font-mono font-bold">/{link.slug}</span>
-          <span className="shrink-0 text-muted tnum">{formatNumber(link.clicks)} clicks</span>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-/** A quiet week is a real answer, not an error, so it gets a sentence of its
- * own rather than a zero. */
-function Greeting({ name, clicks7d }: { name: string; clicks7d: number }) {
-  return (
-    <div>
-      {/* The name arrives with the /user query, and the card can render
-          before it does: the signed-in hint comes from storage. Without the
-          guard that first paint reads "Welcome back, ." */}
-      <p className="text-sm font-bold">{name ? `Welcome back, ${name}.` : "Welcome back."}</p>
-      <p className="mt-0.5 text-xs text-muted">
-        {clicks7d > 0
-          ? `Your links earned ${formatNumber(clicks7d)} clicks in the last 7 days.`
-          : "No clicks in the last 7 days. Share a link and they will show up here."}
-      </p>
-    </div>
-  );
-}
-
-function CardShell({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="flex w-full max-w-xl flex-col gap-4 rounded-xl bg-surface p-5 smooth-shadow-ring-sm">
-      {children}
-    </div>
-  );
-}
-
-/** The card once there is an organization and its numbers have arrived. */
-function Summary({ name, data }: { name: string; data: OrgStats }) {
-  return (
-    <CardShell>
-      <Greeting name={name} clicks7d={data.clicks7d} />
-
-      <div className="grid grid-cols-3 gap-2">
-        <Stat value={formatNumber(data.clicks7d)} label="Clicks 7d" />
-        <Stat value={formatNumber(data.totalLinks)} label="Links" />
-        <Stat value={formatNumber(data.totalClicks)} label="All time" />
-      </div>
-
-      <TopLinks links={data.topLinks.slice(0, 2)} />
-
-      <div className="flex flex-wrap gap-2">
-        <Link to="/dashboard" className={buttonClass({ variant: "primary", size: "sm" })}>
-          Open dashboard <ArrowRight size={14} />
-        </Link>
-        <Link to="/links" className={buttonClass({ variant: "outline", size: "sm" })}>
-          <Plus size={14} /> New link
-        </Link>
-      </div>
-    </CardShell>
+    <span
+      className={cn(
+        "inline-flex max-w-44 min-w-0 items-center gap-1.5 rounded-md bg-surface-2 py-1 pr-2 pl-1 text-xs font-medium text-text",
+        menu && "transition-colors hover:text-accent",
+      )}
+    >
+      <span
+        aria-hidden="true"
+        className="grid size-5 shrink-0 place-items-center rounded bg-accent/15 text-[0.625rem] font-bold text-accent uppercase"
+      >
+        {name.trim().charAt(0)}
+      </span>
+      <span className="truncate">{name}</span>
+      {menu && <ChevronsUpDown size={12} className="shrink-0 text-muted" />}
+    </span>
   );
 }
 
 /**
- * The same card with its numbers still on the way.
- *
- * Block for block what `Summary` renders: two lines of greeting, three stat
- * tiles, two top links, two buttons. The tiles and rows are already
- * surface-2, so each one is a single pulsing block rather than a box with
- * bars inside it. Nothing moves when the data lands, which is the whole job.
+ * Which organization the link goes into, because a link in the wrong one is
+ * the one mistake this card could make quietly. With more than one, the chip
+ * opens the app's own list, and picking makes that the current organization
+ * everywhere, as the switcher does.
  */
-function SummarySkeleton() {
+function OrgChip() {
+  const { org, orgs, setOrg } = useCurrentOrg();
+  if (!org) return null;
+  if (orgs.length < 2) return <OrgChipFace name={org.name} menu={false} />;
   return (
-    // The status wrapper is the flex item the hero centres, so it carries the
-    // card's width: without it CardShell's w-full measures its own contents.
-    <SkeletonStatus label="Loading your links…" className="w-full max-w-xl">
-      <CardShell>
-        <div>
-          <Skeleton className="h-4 w-44" />
-          <Skeleton className="mt-1.5 h-3 w-64 max-w-full" />
-        </div>
-
-        <div className="grid grid-cols-3 gap-2">
-          <Skeleton className="h-16" />
-          <Skeleton className="h-16" />
-          <Skeleton className="h-16" />
-        </div>
-
-        <div className="flex flex-col gap-1.5">
-          <Skeleton className="h-8" />
-          <Skeleton className="h-8" />
-        </div>
-
-        <div className="flex flex-wrap gap-2">
-          <Skeleton className="h-8 w-40" />
-          <Skeleton className="h-8 w-28" />
-        </div>
-      </CardShell>
-    </SkeletonStatus>
+    // The menu's trigger is a box of its own; rounding it keeps the focus
+    // ring on the chip's shape.
+    <span className="inline-block min-w-0 shrink-0 [&>div]:rounded-md">
+      <Menu
+        label="Choose the organization for new links"
+        trigger={<OrgChipFace name={org.name} menu />}
+      >
+        <OrgMenuItems orgs={orgs} currentId={org.id} onPick={setOrg} />
+      </Menu>
+    </span>
   );
 }
 
-/** Split from the component above so the stats query only exists once there
- * is an organization to query. Keeping it in one component meant passing
- * `org?.id ?? ""` and disabling the query on an empty string, which is a
- * workaround for hooks not being conditional rather than a real state. */
-function OrgSummary({ name, orgId }: { name: string; orgId: string }) {
-  const { data, isPending } = useStats(orgId);
-  if (isPending || !data) return <SummarySkeleton />;
-  return <Summary name={name} data={data} />;
+/** The chip and the slash the slug would follow, as the bar's prefix. */
+function OrgPrefix() {
+  return (
+    <>
+      <OrgChip />
+      <span aria-hidden="true" className="text-border">
+        /
+      </span>
+    </>
+  );
+}
+
+function DashboardLink({ children }: { children: string }) {
+  return (
+    <Link to="/dashboard" className="inline-flex shrink-0 items-center gap-1 hover:text-text">
+      {children} <ArrowRight size={13} />
+    </Link>
+  );
+}
+
+const clicksThisWeek = (n: number) =>
+  `${formatNumber(n)} ${n === 1 ? "click" : "clicks"} this week`;
+
+/** "Welcome back, Mara · 577 clicks this week": the line before a link. */
+function WeekLine({ name, orgId }: { name: string; orgId: string }) {
+  const { data } = useStats(orgId);
+  // The name arrives with the /user query, and the card can render before it
+  // does: the signed-in hint comes from storage. Without the guard that first
+  // paint reads "Welcome back, ."
+  const first = firstName(name);
+  const parts = [first ? `Welcome back, ${first}` : "Welcome back"];
+  if (data) parts.push(clicksThisWeek(data.clicks7d));
+  return <span className="tnum">{parts.join(" · ")}</span>;
+}
+
+/** Where the dashboard keeps a link, for the Edit button under a new one. */
+const linkHref = (link: LinkDTO) =>
+  link.domain
+    ? `/links/${link.slug}?domain=${encodeURIComponent(link.domain)}`
+    : `/links/${link.slug}`;
+
+/** The link just made, or the one that already went there, with its QR,
+ *  and a footer saying it is kept. */
+function Made({ link, existing, orgName }: { link: LinkDTO; existing: boolean; orgName: string }) {
+  return (
+    <>
+      <MadeLinkPanel
+        key={link.id}
+        url={link.url}
+        slug={link.slug}
+        detail={existing ? "Already yours: this address had a link" : `from ${link.destination}`}
+        actions={
+          <HrefLink
+            href={linkHref(link)}
+            className={buttonClass({ variant: "outline", size: "sm" })}
+          >
+            Edit
+          </HrefLink>
+        }
+      />
+      <HeroFooter ruled action={<DashboardLink>Open in dashboard</DashboardLink>}>
+        Saved to {orgName}, kept for good.
+      </HeroFooter>
+    </>
+  );
+}
+
+/** Making the link: the dashboard's quick create, on the org's default
+ *  domain. A destination that already has a link gets that link back rather
+ *  than a second one, said as much. */
+function useQuickCreate(orgId: string, domainId: string | null) {
+  const toast = useToast();
+  const { create } = useLinkMutations(orgId);
+  const [made, setMade] = useState<{ link: LinkDTO; existing: boolean } | null>(null);
+  const form = useForm({
+    resolver: valibotResolver(destinationSchema),
+    defaultValues: { destination: "" },
+  });
+  const show = (link: LinkDTO, existing: boolean) => {
+    form.reset({ destination: "" });
+    setMade({ link, existing });
+  };
+  const sameDestination = (e: Error) => {
+    if (!(e instanceof ApiError) || e.code !== "same_destination_match") return null;
+    // SAFETY: guarded by the same_destination_match code above, and the
+    // route that sets that code attaches matchedLinks with it.
+    return (e.data as { matchedLinks: LinkDTO[] }).matchedLinks[0] ?? null;
+  };
+  const submit = form.handleSubmit(
+    (data) => {
+      if (create.isPending) return;
+      create.mutate(
+        { destination: data.destination.trim(), domainId },
+        {
+          onSuccess: (link) => show(link, false),
+          onError: (e) => {
+            const existing = sameDestination(e);
+            if (existing) show(existing, true);
+            else withErrorToast(toast)(e);
+          },
+        },
+      );
+    },
+    () => toast("Enter a valid URL", "error"),
+  );
+  return { form, submit, made, pending: create.isPending };
+}
+
+const LIMIT_TITLE = "Link limit reached: upgrade for more links";
+const isBlank = (value: string | undefined) => !value?.trim();
+const atLinkLimit = (count: number | undefined, cap: number) => (count ?? 0) >= cap;
+
+/** The bar for an account: the organization as its prefix, dead while the
+ *  field is empty or the plan is full, and saying which. */
+function QuickBar({
+  orgId,
+  form,
+  pending,
+  again,
+}: {
+  orgId: string;
+  form: ReturnType<typeof useQuickCreate>["form"];
+  pending: boolean;
+  again: boolean;
+}) {
+  const { limits } = useOrgLimits();
+  const { data: stats } = useStats(orgId);
+  const atLimit = atLinkLimit(stats?.totalLinks, limits.links);
+  const { ref, ...field } = form.register("destination");
+  return (
+    <HeroBar
+      prefix={<OrgPrefix />}
+      input={{
+        ...field,
+        "aria-label": "Destination URL",
+      }}
+      inputRef={ref}
+      disabled={isBlank(form.watch("destination")) || atLimit}
+      busy={pending}
+      again={again}
+      title={atLimit ? LIMIT_TITLE : undefined}
+    />
+  );
+}
+
+/** The card for somebody who can add links: the bar with the organization
+ *  as its prefix, then either the week or the link it just made. */
+function QuickForm({ name, orgId }: { name: string; orgId: string }) {
+  const { org, defaultDomainId } = useOrgLimits();
+  const { form, submit, made, pending } = useQuickCreate(orgId, defaultDomainId);
+
+  return (
+    <form onSubmit={submit} noValidate className={HERO_CARD}>
+      <QuickBar orgId={orgId} form={form} pending={pending} again={made !== null} />
+      {made ? (
+        <Made {...made} orgName={org?.name ?? "your organization"} />
+      ) : (
+        <HeroFooter action={<DashboardLink>Dashboard</DashboardLink>}>
+          <WeekLine name={name} orgId={orgId} />
+        </HeroFooter>
+      )}
+    </form>
+  );
+}
+
+/** A viewer can read the org but not add to it: the bar's place says so,
+ *  with the chip still there to pick an organization they can add to. */
+function QuickLink({ name, orgId }: { name: string; orgId: string }) {
+  const { canWrite } = useOrgLimits();
+  // Keyed by the org, so a link made for one organization does not linger
+  // under the form once another is picked.
+  if (canWrite) return <QuickForm key={orgId} name={name} orgId={orgId} />;
+  return (
+    <div className={HERO_CARD}>
+      <div className="flex min-h-11 items-center gap-1.5 rounded-xl border border-border bg-bg p-1 pl-2">
+        <OrgPrefix />
+        <span className="truncate px-1 text-sm text-muted">
+          You can view this organization, not add to it.
+        </span>
+      </div>
+      <HeroFooter action={<DashboardLink>Dashboard</DashboardLink>}>
+        <WeekLine name={name} orgId={orgId} />
+      </HeroFooter>
+    </div>
+  );
+}
+
+/** The same card while /user is on its way: the bar and the line under it,
+ *  so nothing moves when it lands. */
+function QuickSkeleton() {
+  return (
+    // The status wrapper is the flex item the hero centres, so it carries the
+    // card's width: without it the card's w-full measures its own contents.
+    <SkeletonStatus label="Loading your account…" className="w-full max-w-xl">
+      <div className={HERO_CARD}>
+        <Skeleton className="h-11 rounded-xl" />
+        <div className="px-2 pt-2.5 pb-1">
+          <Skeleton className="h-4 w-64 max-w-full" />
+        </div>
+      </div>
+    </SkeletonStatus>
+  );
 }
 
 export function HeroSignedIn({ name }: { name: string }) {
@@ -174,7 +313,7 @@ export function HeroSignedIn({ name }: { name: string }) {
   // The card renders before /user answers, because the signed-in hint comes
   // from storage. Until it does, "you have no organization yet" is a guess,
   // and the wrong one for everybody who has one.
-  if (currentUser.isPending) return <SummarySkeleton />;
+  if (currentUser.isPending) return <QuickSkeleton />;
   if (!org) return <NoOrgYet />;
-  return <OrgSummary name={name} orgId={org.id} />;
+  return <QuickLink name={name} orgId={org.id} />;
 }

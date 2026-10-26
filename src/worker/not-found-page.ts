@@ -13,20 +13,35 @@
  * plain 404 rather than booting the app on a redirect-only host.
  */
 
-const HEADERS = {
+export const PAGE_HEADERS = {
   "content-type": "text/html; charset=utf-8",
   // A miss today can be a link tomorrow: never let a cache keep it.
   "cache-control": "no-store",
 };
+
+/**
+ * One of the pages scripts/prerender-404.tsx bakes into the build, or null
+ * when the build has none (dev, the worker tests), where the asset store
+ * answers every path with the app shell. The `data-page` marker is how the
+ * two are told apart.
+ */
+export async function prerenderedPage(
+  assets: Fetcher,
+  requestUrl: string,
+  name: string,
+): Promise<string | null> {
+  const page = await assets.fetch(new Request(new URL(`/${name}`, requestUrl)));
+  const html = page.ok ? await page.text() : "";
+  return html.includes(`data-page="${name}"`) ? html : null;
+}
 
 export async function notFoundPage(
   assets: Fetcher,
   requestUrl: string,
   home: string | null,
 ): Promise<Response> {
-  const page = await assets.fetch(new Request(new URL("/404-short", requestUrl)));
-  const html = page.ok ? await page.text() : "";
-  if (!html.includes('data-page="404-short"')) {
+  const html = await prerenderedPage(assets, requestUrl, "404-short");
+  if (!html) {
     return new Response("Not found", { status: 404, headers: { "cache-control": "no-store" } });
   }
   const link = new HTMLRewriter().on("#root a", {
@@ -35,5 +50,5 @@ export async function notFoundPage(
       else element.remove();
     },
   });
-  return link.transform(new Response(html, { status: 404, headers: HEADERS }));
+  return link.transform(new Response(html, { status: 404, headers: PAGE_HEADERS }));
 }

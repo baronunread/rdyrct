@@ -26,7 +26,12 @@ interface CfHostname {
 
 interface CfHostnameResult {
   status: string;
-  ssl?: { status: string } | null;
+  ssl?: {
+    status: string;
+    validation_records?: { txt_name?: string; txt_value?: string }[] | null;
+  } | null;
+  /** The ownership TXT record, for a hostname not yet pointed at this zone. */
+  ownership_verification?: { name?: string; value?: string } | null;
 }
 
 async function cfRequest<T = Record<string, JsonValue>>(
@@ -80,12 +85,19 @@ function assertCfConfigured(env: Env): void {
     });
 }
 
-async function cfCreateHostname(env: Env, hostname: string): Promise<CfHostname> {
+async function cfCreateHostname(
+  env: Env,
+  hostname: string,
+  validation: DomainDTO["validation"],
+): Promise<CfHostname> {
   if (useFakeCf(env)) return { id: `fake_${uid(8)}`, active: false };
   assertCfConfigured(env);
+  // "txt" issues the certificate from a TXT record (#383). At renewal
+  // Cloudflare validates over HTTP by itself once the hostname points here,
+  // so the customer never has to update the record.
   const data = await cfRequest<{ id: string }>(env, "POST", "/custom_hostnames", {
     hostname,
-    ssl: { method: "http", type: "dv" },
+    ssl: { method: validation, type: "dv" },
   });
   return { id: data!.result.id, active: false };
 }
@@ -149,8 +161,11 @@ export async function cfDeleteHostname(env: Env, cfHostnameId: string): Promise<
 /* ---------------- activation (driven by DomainActivateWorkflow) ---------------- */
 
 // Real DNS propagation plus certificate validation can take hours, so give a
-// domain a full day to reach active before we call it failed.
+// domain a full day to reach active before we call it failed. A domain moving
+// from another service (#383) waits on TXT records someone adds by hand,
+// often days later, so it gets a week.
 const ACTIVATION_TIMEOUT_MS = 24 * 60 * 60 * 1000;
+const TXT_ACTIVATION_TIMEOUT_MS = 7 * ACTIVATION_TIMEOUT_MS;
 
 /** One probe's outcome. `pending` carries the current status for logging/tests. */
 export type DomainProbe =
@@ -190,7 +205,7 @@ export async function ensureHostname(
   if (row.cfHostnameId) return row.cfHostnameId;
 
   const existing = await cfFindHostname(env, hostname);
-  const id = existing ?? (await cfCreateHostname(env, hostname)).id;
+  const id = existing ?? (await cfCreateHostname(env, hostname, row.validation)).id;
 
   // RETURNING is empty when the row was deleted meanwhile: compensate.
   const saved = await db
@@ -218,11 +233,14 @@ export async function probeDomain(env: Env, domainId: string): Promise<DomainPro
   if (row.status === "active") return { state: "active" };
   if (row.status === "error") return { state: "error", reason: row.statusReason };
 
-  if (Date.now() - row.createdAt > ACTIVATION_TIMEOUT_MS) {
+  const deadline = row.validation === "txt" ? TXT_ACTIVATION_TIMEOUT_MS : ACTIVATION_TIMEOUT_MS;
+  if (Date.now() - row.createdAt > deadline) {
     const reason =
-      row.status === "checking_dns"
-        ? "We never saw the CNAME record resolve. Check it at your DNS provider, then delete and re-add the domain."
-        : "The TLS certificate was never issued. Delete and re-add the domain to try again.";
+      row.validation === "txt"
+        ? "We never saw the TXT records. Check them at your DNS provider, then delete and re-add the domain."
+        : row.status === "checking_dns"
+          ? "We never saw the CNAME record resolve. Check it at your DNS provider, then delete and re-add the domain."
+          : "The TLS certificate was never issued. Delete and re-add the domain to try again.";
     await db
       .update(schema.domains)
       .set({ status: "error", statusReason: reason })
@@ -273,6 +291,7 @@ function toDTO(row: typeof schema.domains.$inferSelect): DomainDTO {
     status: row.status,
     statusReason: row.statusReason,
     rootRedirect: row.rootRedirect,
+    validation: row.validation,
     createdAt: row.createdAt,
     lockedAt: row.lockedAt,
   };
@@ -347,8 +366,9 @@ domainRoutes.post("/", async (c) => {
   const { limits } = await orgPlan(db, orgId);
   await assertDomainQuota(db, orgId, limits);
 
-  const body = await c.req.json<{ hostname?: string }>();
+  const body = await c.req.json<{ hostname?: string; validation?: string }>();
   const hostname = await resolveNewHostname(db, body, [c.env.APP_HOST, sharedLinkHost(c.env)]);
+  const validation: DomainDTO["validation"] = body.validation === "txt" ? "txt" : "http";
 
   const id = uid();
   const row = {
@@ -359,6 +379,7 @@ domainRoutes.post("/", async (c) => {
     statusReason: "",
     rootRedirect: "",
     cfHostnameId: null,
+    validation,
     lockedAt: null,
     createdAt: Date.now(),
   };
@@ -400,6 +421,46 @@ domainRoutes.get("/:id", async (c) => {
   const row = await getDomain(c, c.req.param("orgId")!, c.req.param("id"));
   return c.json(toDTO(row));
 });
+
+/**
+ * The DNS records a domain needs (#383): always the CNAME, and for a "txt"
+ * domain the two TXT records that let Cloudflare verify it and issue its
+ * certificate while it still points at another service. Read live from
+ * Cloudflare, which mints the values after the workflow creates the hostname,
+ * so an empty `txt` means "not ready yet, ask again".
+ */
+domainRoutes.get("/:id/records", async (c) => {
+  const row = await getDomain(c, c.req.param("orgId")!, c.req.param("id"));
+  const cname = { type: "CNAME" as const, name: row.hostname, value: c.env.APP_HOST };
+  if (row.validation !== "txt") return c.json({ records: [cname] });
+  return c.json({ records: [...(await txtRecords(c.env, row)), cname] });
+});
+
+type DnsRecord = { type: "TXT" | "CNAME"; name: string; value: string };
+
+async function txtRecords(env: Env, row: typeof schema.domains.$inferSelect): Promise<DnsRecord[]> {
+  if (useFakeCf(env)) {
+    return [
+      { type: "TXT", name: `_cf-custom-hostname.${row.hostname}`, value: `fake-owner-${row.id}` },
+      { type: "TXT", name: `_acme-challenge.${row.hostname}`, value: `fake-cert-${row.id}` },
+    ];
+  }
+  if (!row.cfHostnameId || row.status === "active") return [];
+  const data = await cfRequest<CfHostnameResult>(
+    env,
+    "GET",
+    `/custom_hostnames/${row.cfHostnameId}`,
+  );
+  const owner = data?.result.ownership_verification;
+  const records: DnsRecord[] = [];
+  if (owner?.name && owner.value)
+    records.push({ type: "TXT", name: owner.name, value: owner.value });
+  for (const record of data?.result.ssl?.validation_records ?? []) {
+    if (record.txt_name && record.txt_value)
+      records.push({ type: "TXT", name: record.txt_name, value: record.txt_value });
+  }
+  return records;
+}
 
 domainRoutes.patch("/:id", async (c) => {
   const log = c.get("log");

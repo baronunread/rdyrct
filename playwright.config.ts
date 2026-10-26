@@ -13,8 +13,8 @@ export default defineConfig({
   // (1.6m at 4 workers, 1.3m at 2). Pinned so both match.
   workers: 2,
   // Playwright's default is 30s, which was set for tests that click around a
-  // page. Nearly every test here starts by creating a real account: a Cap
-  // proof-of-work solve, an account write, a mail send and a six-digit code
+  // page. Nearly every test here starts by creating a real account: a Turnstile
+  // challenge, an account write, a mail send and a six-digit code
   // read back out of the emulator. That is most of 30s before the test has
   // begun, and it is why failures kept landing on the first assertion after
   // sign-up rather than on anything the test was written to check.
@@ -32,7 +32,7 @@ export default defineConfig({
       name: "chromium",
       // The production suite has its own base URL and server; everything else
       // runs against `vite dev`.
-      testIgnore: "**/production/**",
+      testIgnore: ["**/production/**", "**/self-host/**"],
       use: {
         ...devices["Desktop Chrome"],
         // CI runners ship Google Chrome preinstalled: launch that instead of
@@ -69,7 +69,10 @@ export default defineConfig({
       gracefulShutdown: { signal: "SIGTERM", timeout: 500 },
       env: {
         PLAYWRIGHT_TEST: "1",
+        VITE_RDYRCT_SITE: "1",
         CLOUDFLARE_ENV: "playwright",
+        // Browser checks must never write into either real PostHog project.
+        VITE_PUBLIC_POSTHOG_DEV_PROJECT_TOKEN: "phc_e2e",
       },
     },
     {
@@ -87,6 +90,8 @@ export default defineConfig({
       // These tests are about response headers and need no backend state.
       env: {
         PLAYWRIGHT_TEST: "1",
+        VITE_RDYRCT_SITE: "1",
+        VITE_PUBLIC_POSTHOG_DEV_PROJECT_TOKEN: "phc_e2e",
       },
     },
   ],

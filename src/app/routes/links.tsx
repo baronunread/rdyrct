@@ -1,12 +1,19 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { lookup } from "@/shared/lookup";
-import { useNavigate } from "@tanstack/react-router";
+import { Link, useNavigate } from "@tanstack/react-router";
 import { Plus } from "@/app/ui/icons";
 import { useLinks, useLinkMutations, useLinkQuotaUsage } from "../lib/hooks";
 import { useOrgLimits } from "../lib/org-limits";
 import { ApiError } from "../lib/api";
-import { type DomainDTO, type LinkDTO, type LinkInput, type Sort } from "@/shared/types";
+import {
+  type DomainDTO,
+  type LinkDTO,
+  type LinkInput,
+  type OrgPlan,
+  type Sort,
+} from "@/shared/types";
 import { Button } from "../ui/button";
+import { buttonClass } from "../ui/button-class";
 import { Input } from "../ui/field";
 import { MenuSelect } from "../ui/menu";
 import { EmptyState, PageHeader } from "../ui/misc";
@@ -243,6 +250,12 @@ function linkLimitHint(count: number, limit: number): string | undefined {
   return undefined;
 }
 
+/** "12 / 30 links", or "12 links" on a self-hosted instance, which has no
+ * cap to count against (its limit is a placeholder of a billion). */
+function linkCountLabel(count: number, limit: number, plan: OrgPlan | undefined): string {
+  return plan === "unlimited" ? `${count} links` : `${count} / ${limit} links`;
+}
+
 function useLinkDialogs(atLimit: boolean) {
   const [editorOpen, setEditorOpen] = useState(false);
   const [editing, setEditing] = useState<LinkDTO | null>(null);
@@ -374,9 +387,14 @@ export function LinksPage() {
         action={
           <div className="flex items-center gap-3">
             <span className="tnum text-xs text-muted" title={limitHint}>
-              {linkCount} / {limits.links} links
+              {linkCountLabel(linkCount, limits.links, org?.plan)}
               {overLimit && " (over the limit)"}
             </span>
+            {canWrite && (
+              <Link to="/import" className={buttonClass({ variant: "outline" })}>
+                Import
+              </Link>
+            )}
             {canWrite && (
               <Button
                 variant="primary"
@@ -491,7 +509,7 @@ function DeleteLinkDialog({
       open={!!deleting}
       onClose={onClose}
       onConfirm={confirmDelete}
-      confirmLabel="Delete"
+      confirmLabel="Delete link"
       danger
       pending={remove.isPending}
     >
@@ -520,6 +538,7 @@ function LinksToolbar({
       <Input
         value={search}
         onChange={(e) => onSearchChange(e.target.value)}
+        aria-label="Search links"
         placeholder="Search links…"
         className="max-w-64"
       />

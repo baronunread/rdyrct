@@ -18,6 +18,7 @@ import { useCurrentUser } from "../lib/hooks";
 import { Button } from "../ui/button";
 import { Spinner } from "../ui/spinner";
 import { useToast } from "../ui/toast";
+import { Logo } from "../ui/logo";
 
 interface PublicClient {
   client_id: string;
@@ -47,7 +48,21 @@ function useOAuthQuery() {
     raw: search.startsWith("?") ? search.slice(1) : search,
     clientId: params.get("client_id") ?? "",
     scopes: (params.get("scope") ?? "").split(" ").filter(Boolean),
+    redirectHost: hostOf(params.get("redirect_uri")),
   };
+}
+
+/** The host a redirect_uri points at. An anonymously registered client
+ * chooses its own name, so "Claude wants access" proves nothing; where the
+ * answer goes does, and the authorize endpoint already checked it against
+ * the client's registered redirect URIs before sending anyone here. */
+function hostOf(uri: string | null): string | null {
+  if (!uri) return null;
+  try {
+    return new URL(uri).host || null;
+  } catch {
+    return null;
+  }
 }
 
 async function respond(oauthQuery: string, accept: boolean): Promise<string> {
@@ -71,12 +86,14 @@ function ConsentDetails({
   clientName,
   email,
   scopes,
+  redirectHost,
   onDecide,
   deciding,
 }: {
   clientName: string;
   email: string | undefined;
   scopes: string[];
+  redirectHost: string | null;
   onDecide: (accept: boolean) => void;
   deciding: boolean;
 }) {
@@ -93,6 +110,11 @@ function ConsentDetails({
         )}
         .
       </p>
+      {redirectHost && (
+        <p className="mt-2 text-xs text-muted">
+          Your answer goes to <span className="font-mono text-text">{redirectHost}</span>.
+        </p>
+      )}
 
       {scopes.length > 0 && (
         <>
@@ -129,7 +151,7 @@ function ConsentDetails({
 export function ConsentPage() {
   const toast = useToast();
   const currentUser = useCurrentUser();
-  const { raw, clientId, scopes } = useOAuthQuery();
+  const { raw, clientId, scopes, redirectHost } = useOAuthQuery();
 
   const client = useQuery<PublicClient>({
     queryKey: ["oauth-client", clientId],
@@ -155,7 +177,9 @@ export function ConsentPage() {
   return (
     <div className="grid min-h-dvh place-items-center px-4">
       <div className="w-full max-w-sm rounded-xl bg-surface p-6 text-center smooth-shadow-ring-sm">
-        <p className="mb-4 text-xl font-bold tracking-widest">rdyrct</p>
+        <p className="mb-4 text-xl">
+          <Logo />
+        </p>
 
         {loading ? (
           <Spinner className="mx-auto" />
@@ -166,6 +190,7 @@ export function ConsentPage() {
             clientName={client.data?.client_name || clientId}
             email={currentUser.data?.user.email}
             scopes={scopes}
+            redirectHost={redirectHost}
             onDecide={(accept) => decide.mutate(accept)}
             deciding={decide.isPending}
           />

@@ -31,6 +31,7 @@ import { Tooltip } from "../ui/tooltip";
 import { useToast } from "../ui/toast";
 import { cn } from "../ui/cn";
 import { copyToClipboard } from "../lib/clipboard";
+import { DnsRecords } from "../components/dns-records";
 import { addDomainMessage, recheckMessage } from "../lib/domain-messages";
 import posthog from "../lib/posthog";
 
@@ -131,6 +132,10 @@ function AddDomainForm({
               {...register("hostname")}
               placeholder="links.example.com"
               aria-label="Add a domain"
+              inputMode="url"
+              autoComplete="off"
+              autoCapitalize="none"
+              spellCheck={false}
             />
           </div>
           <Button type="submit" variant="primary" size="sm" disabled={pending} className="w-24">
@@ -182,7 +187,7 @@ function DeleteDomainDialog({
       open={!!deleting}
       onClose={onClose}
       onConfirm={onConfirm}
-      confirmLabel="Delete"
+      confirmLabel="Delete domain"
       danger
       pending={pending}
     >
@@ -687,7 +692,9 @@ function DomainRow({
               onToggle={onToggleDefault}
             />
           )}
-          <span className="truncate font-bold">{d.hostname}</span>
+          <span className="truncate font-bold" title={d.hostname}>
+            {d.hostname}
+          </span>
         </div>
         <DomainRowActions
           domain={d}
@@ -730,6 +737,7 @@ function TransitionalDomainDetail({
   onCopy: (text: string) => void;
 }) {
   const checkingDns = d.status === "checking_dns";
+  if (d.validation === "txt") return <MovingDomainDetail domain={d} />;
   return (
     <div className="mt-3 flex flex-col gap-1.5 rounded-md bg-surface-2/50 p-3 text-xs text-muted">
       <p>
@@ -751,6 +759,21 @@ function TransitionalDomainDetail({
           : "This usually takes a few minutes. "}
         Hit the refresh button above to check progress manually.
       </p>
+    </div>
+  );
+}
+
+/** A domain added by an import (#383): ready once its TXT records are in,
+ * while it still points at the service the links came from. */
+function MovingDomainDetail({ domain: d }: { domain: DomainDTO }) {
+  const { org } = useCurrentOrg();
+  return (
+    <div className="mt-3 flex flex-col gap-2 rounded-md bg-surface-2/50 p-3 text-xs text-muted">
+      <p>
+        Moving from another service. Add these TXT records at your DNS provider. We issue the
+        certificate while the domain still points at the old service, then you switch the CNAME.
+      </p>
+      <DnsRecords orgId={org?.id ?? ""} domain={d} showCname={false} />
     </div>
   );
 }
@@ -784,6 +807,10 @@ function RootRedirectEditor({
             value={redirectDraft}
             onChange={(e) => onRedirectDraft(e.target.value)}
             placeholder="https://example.com"
+            inputMode="url"
+            autoComplete="off"
+            autoCapitalize="none"
+            spellCheck={false}
           />
         </div>
         <Button size="sm" disabled={savingRedirect} onClick={onSaveRedirect}>

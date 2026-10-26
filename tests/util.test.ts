@@ -1,6 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { SITE_ONLY_PATHS } from "../src/shared/site";
+import { APP_ROUTES } from "../src/shared/spa-routes";
 import {
   buildDestination,
   deviceFromUA,
@@ -109,6 +111,25 @@ describe("SLUG_RE / RESERVED_SLUGS", () => {
     expect(unreserved).toEqual([]);
   });
 
+  // The Worker 404s every path not in APP_ROUTES/SITE_ONLY_PATHS
+  // (src/shared/spa-routes.ts), so a page the router gains without an entry
+  // there would 404 on a reload. Admin's children are the only relative
+  // paths; they hang off /admin.
+  test("the Worker's route list is the router's (drift guard)", () => {
+    const main = readSource("src/app/main.tsx");
+    const absolute = (source: string) =>
+      [...source.matchAll(/path:\s*"(\/[^"]*)"/g)].map((m) => m[1]);
+    const adminChildren = [
+      ...main.matchAll(/getParentRoute:\s*\(\)\s*=>\s*adminRoute,\s*path:\s*"([^"/][^"]*)"/g),
+    ].map((m) => `/admin/${m[1]}`);
+    const appRoutes = [...absolute(main).filter((p) => p !== "/"), ...adminChildren];
+    const marketing = absolute(readSource("src/app/marketing-routes.tsx"));
+
+    expect(appRoutes).toContain("/admin/users");
+    expect(new Set(appRoutes)).toEqual(new Set(APP_ROUTES));
+    expect(new Set(marketing)).toEqual(new Set(SITE_ONLY_PATHS));
+  });
+
   test("a random word is not reserved", () => {
     expect(RESERVED_SLUGS.has("some-random-word")).toBe(false);
   });
@@ -128,6 +149,15 @@ describe("buildDestination", () => {
     const out = new URL(buildDestination("https://example.com/?utm_source=original", UTM));
     expect(out.searchParams.get("utm_source")).toBe("original");
     expect(out.searchParams.get("utm_medium")).toBe("email");
+  });
+
+  test("a space in a UTM value is written as +, as it always was", () => {
+    expect(
+      buildDestination("https://example.com/?ref=a%20b", {
+        ...EMPTY_UTM,
+        utmMedium: "Email Blast",
+      }),
+    ).toBe("https://example.com/?ref=a%20b&utm_medium=Email+Blast");
   });
 
   test("empty UTM fields are skipped", () => {

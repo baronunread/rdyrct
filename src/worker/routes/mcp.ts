@@ -4,16 +4,8 @@ import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { createError, EvlogError } from "evlog";
 import { and, eq } from "drizzle-orm";
 import * as v from "valibot";
-import * as QRCode from "qrcode";
 import type { JsonValue, LinkStats, OrgStats } from "../../shared/types";
-import { Server } from "@modelcontextprotocol/sdk/server/index.js";
-import { StreamableHTTPTransport } from "@hono/mcp";
-import {
-  CallToolRequestSchema,
-  ListToolsRequestSchema,
-  type CallToolResult,
-  type Tool,
-} from "@modelcontextprotocol/sdk/types.js";
+import type { CallToolResult, Tool } from "@modelcontextprotocol/sdk/types.js";
 import { requireMcpAuth } from "@better-auth/mcp";
 import * as schema from "../db/schema";
 import type { AppEnv, DB, Env, SessionUser } from "../env";
@@ -657,12 +649,25 @@ async function inviteMember(t: ToolCtx): Promise<CallToolResult> {
   return textResult(result);
 }
 
+/**
+ * pngjs's defaults cost ~1.7s of CPU per 512px code in workerd: it tries all
+ * five PNG filters on every one of the 512 RGBA scanlines to pick the best,
+ * then deflates with the run-length strategy. A QR code needs no search: its
+ * rows repeat in blocks of one module, so the "Up" filter turns every
+ * repeated row into zeros and plain deflate takes the rest. ~145ms, and the
+ * file comes out smaller (2.8 KB against 3.6 KB for a short URL).
+ */
+const QR_PNG_OPTS = { filterType: 2, deflateStrategy: 0 };
+
 async function generateQrCode(t: ToolCtx): Promise<CallToolResult> {
   const parsed = parseArgs(qrArgs, t.rawArgs);
   if (!parsed.ok) return parsed.result;
   const args = parsed.value;
   if (!isValidHttpUrl(args.url)) return errorResult("That is not a valid http(s) URL.");
-  const png = new Uint8Array(await QRCode.toBuffer(args.url, { width: 512, margin: 2 }));
+  const QRCode = await import("qrcode");
+  const png = new Uint8Array(
+    await QRCode.toBuffer(args.url, { width: 512, margin: 2, rendererOpts: QR_PNG_OPTS }),
+  );
   let binary = "";
   for (let i = 0; i < png.length; i++) binary += String.fromCharCode(png[i]!);
   return { content: [{ type: "image", data: btoa(binary), mimeType: "image/png" }] };
@@ -721,6 +726,17 @@ mcpRoutes.all("/", async (c) => {
     )(c.req.raw);
   }
 
+  // The MCP SDK (and the ajv and zod it brings) loads here, on the one route
+  // that speaks MCP, rather than on every cold start of the Worker.
+  const [
+    { Server },
+    { CallToolRequestSchema, ListToolsRequestSchema },
+    { StreamableHTTPTransport },
+  ] = await Promise.all([
+    import("@modelcontextprotocol/sdk/server/index.js"),
+    import("@modelcontextprotocol/sdk/types.js"),
+    import("@hono/mcp"),
+  ]);
   const server = new Server({ name: "rdyrct", version: "1.0.0" }, { capabilities: { tools: {} } });
   server.setRequestHandler(ListToolsRequestSchema, () => ({ tools: TOOLS }));
   server.setRequestHandler(CallToolRequestSchema, async (request) => {

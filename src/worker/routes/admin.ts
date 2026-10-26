@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import type { JsonValue } from "../../shared/types";
-import { optionalFlag, parseOptionalBody } from "../schemas";
+import { optionalFlag, optionalText, parseOptionalBody } from "../schemas";
 import * as v from "valibot";
 import { HTTPException } from "hono/http-exception";
 import { eq, ne, gte, and, desc, lt, inArray, isNotNull, sql } from "drizzle-orm";
@@ -22,9 +22,12 @@ import { fillSeries, computeDelta, deleteOrg } from "./orgs";
 import { orgPlan } from "../plan";
 import { effectivePlanSql, subscriptionGrantsAccess } from "../entitlement";
 import { reconcileUser } from "../reconcile";
+import { deleteAccountAndOwnedOrgs } from "../better-auth";
+import { banUser, ownedDestinationHosts, unbanUser } from "../abuse-hold";
 import { jsonBodyLimit } from "../body-limit";
 import { adminLinkRoutes } from "./admin-links";
 import { recordAdminAction } from "../audit";
+import { WEB_RISK_LOOKUPS_PER_DAY, webRiskDay } from "../risk";
 
 // An org's effective plan is its owner's plan (billing is per-user). A single
 // correlated subquery pulls it for list views. Note: `user` is a SQL keyword,
@@ -39,6 +42,11 @@ const ownerPlan = sql<OrgPlan>`coalesce((
 const ownerName = sql<string | null>`(
   select "user".name from org_members
   join "user" on "user".id = org_members.user_id
+  where org_members.org_id = orgs.id and org_members.role = 'owner'
+  limit 1
+)`;
+const ownerId = sql<string | null>`(
+  select user_id from org_members
   where org_members.org_id = orgs.id and org_members.role = 'owner'
   limit 1
 )`;
@@ -307,6 +315,22 @@ function projectTableGrowth(seriesRows: { day: string; clicks: number }[], table
 
 /* ─────────── /usage ─────────── */
 
+/** Today's calls to Google Web Risk and this UTC month's, from the counter
+ * the daily cap spends (risk.ts, takeWebRiskLookup). */
+async function webRiskUsage(db: DB) {
+  const today = webRiskDay();
+  const now = new Date();
+  const monthStart = webRiskDay(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+  const [row] = await db
+    .select({
+      today: sql<number>`coalesce(sum(case when ${schema.webRiskUsage.day} = ${today} then ${schema.webRiskUsage.lookups} end), 0)`,
+      month: sql<number>`coalesce(sum(${schema.webRiskUsage.lookups}), 0)`,
+    })
+    .from(schema.webRiskUsage)
+    .where(gte(schema.webRiskUsage.day, monthStart));
+  return { today: row?.today ?? 0, month: row?.month ?? 0, perDay: WEB_RISK_LOOKUPS_PER_DAY };
+}
+
 adminRoutes.get("/usage", async (c) => {
   const log = c.get("log");
   log.set({ route: "usage" });
@@ -566,6 +590,7 @@ adminRoutes.get("/usage", async (c) => {
     tableSize,
     tableGrowth,
     tableProjectedDays,
+    webRisk: await webRiskUsage(db),
   } satisfies AdminUsage);
 });
 
@@ -579,6 +604,10 @@ adminRoutes.get("/orgs", async (c) => {
       name: schema.orgs.name,
       plan: ownerPlan,
       createdAt: schema.orgs.createdAt,
+      linksSuspendedAt: schema.orgs.linksSuspendedAt,
+      reviewFlaggedAt: schema.orgs.reviewFlaggedAt,
+      disabledAt: schema.orgs.disabledAt,
+      ownerId,
       ownerName,
       ownerEmail,
       // literal orgs.id: interpolated columns render unqualified inside
@@ -588,6 +617,14 @@ adminRoutes.get("/orgs", async (c) => {
       )`,
       links: sql<number>`(
         select count(*) from links where links.org_id = orgs.id
+      )`,
+      // The cause rather than the links swept along with it, whose reasons
+      // start "Held with its organization".
+      suspendReason: sql<string | null>`(
+        select suspend_reason from links
+        where links.org_id = orgs.id and links.suspended_at is not null
+        order by suspend_reason like 'Held with its organization%', suspended_at
+        limit 1
       )`,
       clicks: sql<number>`(
         select count(*) from clicks where clicks.org_id = orgs.id
@@ -696,6 +733,7 @@ adminRoutes.get("/users", async (c) => {
       subscriptionPlan: schema.user.subscriptionPlan,
       subscriptionStatus: schema.user.subscriptionStatus,
       cancelAtPeriodEnd: schema.user.polarSubscriptionCancelAtPeriodEnd,
+      currentPeriodEnd: schema.user.polarSubscriptionCurrentPeriodEnd,
       compPlan: schema.user.compPlan,
       compReason: schema.user.compReason,
       compGrantedAt: schema.user.compGrantedAt,
@@ -723,6 +761,7 @@ adminRoutes.get("/users", async (c) => {
       disposable: isDisposableEmail(r.email),
       createdAt: r.createdAt.getTime(),
       compGrantedAt: r.compGrantedAt?.getTime() ?? null,
+      currentPeriodEnd: r.currentPeriodEnd?.getTime() ?? null,
     })) satisfies AdminUserRow[],
   );
 });
@@ -770,7 +809,16 @@ const userPatchSchema = v.object({
   isAdmin: optionalFlag,
   banned: optionalFlag,
   plan: v.optional(v.unknown()),
+  // A ban only: why (required), and which of the hosts the user linked to
+  // to block for everyone (none unless picked).
+  reason: optionalText,
+  blockHosts: v.optional(v.fallback(v.array(v.string()), []), []),
 });
+
+/** Destination hosts in the orgs a user owns, for the ban dialog to offer. */
+adminRoutes.get("/users/:userId/hosts", async (c) =>
+  c.json(await ownedDestinationHosts(c.var.db, c.req.param("userId"))),
+);
 
 adminRoutes.patch("/users/:userId", async (c) => {
   const log = c.get("log");
@@ -790,19 +838,42 @@ adminRoutes.patch("/users/:userId", async (c) => {
   };
   if (patch.isAdmin === undefined && patch.banned === undefined)
     throw new HTTPException(400, { message: "Nothing to update" });
+  // Checked before anything is written.
+  const banReason = body.reason.trim();
+  if (patch.banned === true && !banReason)
+    throw new HTTPException(400, { message: "A reason is required" });
 
-  await db.update(schema.user).set(patch).where(eq(schema.user.id, targetId));
-  // Banning kicks the user out immediately: all their sessions are wiped, and
-  // better-auth refuses to create new ones (see better-auth.ts).
-  if (patch.banned) await db.delete(schema.session).where(eq(schema.session.userId, targetId));
-  if (patch.banned !== undefined)
+  if (patch.isAdmin !== undefined)
+    await db
+      .update(schema.user)
+      .set({ isAdmin: patch.isAdmin })
+      .where(eq(schema.user.id, targetId));
+  if (patch.banned === true) {
+    const reason = banReason;
+    const done = await banUser(c.env, db, targetId, self.id, {
+      reason,
+      blockHosts: body.blockHosts,
+    });
+    log.set({ ban: done });
     await recordAdminAction(c.env, {
       actorUserId: self.id,
-      action: patch.banned ? "user.ban" : "user.unban",
+      action: "user.ban",
       targetType: "user",
-      targetId: targetId,
-      detail: { isAdminChanged: patch.isAdmin !== undefined },
+      targetId,
+      detail: { reason, ...done },
     });
+    return c.json(done);
+  }
+  if (patch.banned === false) {
+    const orgsRestored = await unbanUser(c.env, db, targetId);
+    await recordAdminAction(c.env, {
+      actorUserId: self.id,
+      action: "user.unban",
+      targetType: "user",
+      targetId,
+      detail: { orgsRestored },
+    });
+  }
   return c.json({ ok: true });
 });
 
@@ -904,29 +975,29 @@ adminRoutes.delete("/users/:userId", async (c) => {
   log.set({ userId: targetId });
   if (targetId === c.var.user!.id)
     throw new HTTPException(400, { message: "Cannot delete yourself" });
-  const owned = await db
-    .select({ orgId: schema.orgMembers.orgId })
-    .from(schema.orgMembers)
-    .where(and(eq(schema.orgMembers.userId, targetId), eq(schema.orgMembers.role, "owner")));
-  if (owned.length)
-    throw new HTTPException(409, {
-      message: "User owns organizations, delete those orgs first",
-    });
-  // Read the address first: the entry has to say who was deleted, and after
-  // this statement there is nowhere left to look it up (#67).
+  // Read the address, and which orgs go with the account, first: the entry
+  // has to say who was deleted, and afterwards there is nowhere left to look
+  // it up (#67).
   const target = await db
     .select({ email: schema.user.email })
     .from(schema.user)
     .where(eq(schema.user.id, targetId));
-  // sessions/accounts/org memberships cascade; authored links/invites keep
-  // created_by NULL (ON DELETE SET NULL)
-  await db.delete(schema.user).where(eq(schema.user.id, targetId));
+  if (!target[0]) throw new HTTPException(404, { message: "User not found" });
+  const owned = await db
+    .select({ orgId: schema.orgMembers.orgId })
+    .from(schema.orgMembers)
+    .where(and(eq(schema.orgMembers.userId, targetId), eq(schema.orgMembers.role, "owner")));
+  // The same path as a user deleting their own account: an org has no plan of
+  // its own (its owner's), so one left ownerless has no plan, no billing and
+  // nobody who can delete it. Every org the account owns goes with it, through
+  // the teardown workflow.
+  await deleteAccountAndOwnedOrgs(c.env, targetId);
   await recordAdminAction(c.env, {
     actorUserId: c.var.user!.id,
     action: "user.delete",
     targetType: "user",
     targetId: targetId,
-    detail: { email: target[0]?.email ?? null },
+    detail: { email: target[0].email, orgsDeleted: owned.length },
   });
-  return c.json({ ok: true });
+  return c.json({ ok: true, orgsDeleted: owned.length });
 });

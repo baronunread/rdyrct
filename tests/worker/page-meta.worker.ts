@@ -41,7 +41,7 @@ describe("the head a public page ships", () => {
   it("gives the QR generator its own title, description and canonical", async () => {
     const html = await rewrite("/qr-code-generator");
 
-    expect(html).toContain("<title>Free QR code generator with logo - PNG and SVG, no account");
+    expect(html).toContain("<title>QR code generator with logo - PNG and SVG, no account");
     expect(html).toMatch(/name="description" content="Make a custom QR code for free/);
     expect(html).toContain('href="https://rdyrct.com/qr-code-generator"');
   });
@@ -59,7 +59,7 @@ describe("the head a public page ships", () => {
     const html = await rewrite("/qr-code-generator");
 
     for (const tag of ["og:title", "twitter:title"]) {
-      expect(html).toMatch(new RegExp(`"${tag}" content="Free QR code generator`));
+      expect(html).toMatch(new RegExp(`"${tag}" content="QR code generator`));
     }
     expect(html).toContain('"og:url" content="https://rdyrct.com/qr-code-generator"');
   });
@@ -72,6 +72,21 @@ describe("the head a public page ships", () => {
     // Closing tag included: without it the assertion is a prefix, and a title
     // with something appended to it would pass.
     expect(html).toContain("<title>rdyrct - branded short links for your team</title>");
+  });
+
+  it("sends app routes an empty root, not the landing page the build baked into the shell", async () => {
+    const baked = `<!doctype html><html><head><title>rdyrct</title></head><body><div id="root" data-prerendered="/"><h1>Know which channel earned the click.</h1></div></body></html>`;
+    const page = (path: string) =>
+      withPageMeta(
+        new Response(baked, { headers: { "content-type": "text/html" } }),
+        new URL(`https://rdyrct.com${path}`),
+      ).text();
+
+    const dashboard = await page("/dashboard");
+    expect(dashboard).not.toContain("Know which channel");
+    expect(dashboard).toContain('<div id="root" data-prerendered="/"></div>');
+    // The homepage keeps what it was built with.
+    expect(await page("/")).toContain("Know which channel earned the click.");
   });
 
   it("does not touch anything that is not HTML", async () => {

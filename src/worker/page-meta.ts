@@ -19,7 +19,14 @@
  */
 import { PUBLIC_PAGE_META, type PageMeta } from "@/shared/page-meta";
 import { lookup } from "../shared/lookup";
+import { RDYRCT_SITE } from "../shared/site";
 import { marked } from "marked";
+
+/** What rdyrct.com says about one of its pages. A self-hosted copy has none
+ *  of them, and must not describe its pages as rdyrct.com's. */
+function pageMeta(url: URL): PageMeta | undefined {
+  return RDYRCT_SITE ? lookup(PUBLIC_PAGE_META, url.pathname) : undefined;
+}
 
 /** The absolute URL a page should call canonical, on whichever host is
  * serving it. */
@@ -49,6 +56,12 @@ class Html {
   element(element: Element) {
     if (element.getAttribute("data-prerendered") === this.path) return;
     element.setInnerContent(this.value, { html: true });
+  }
+}
+
+class EmptyRoot {
+  element(element: Element) {
+    element.setInnerContent("");
   }
 }
 
@@ -138,7 +151,7 @@ const MARKDOWN_CACHE = "public, max-age=3600, must-revalidate";
 
 /** A page representation for agents, only when its source explicitly exists. */
 export function markdownPage(url: URL, accept: string | null | undefined): Response | null {
-  const meta = lookup(PUBLIC_PAGE_META, url.pathname);
+  const meta = pageMeta(url);
   if (!meta?.markdown || !markdownPreferred(accept)) return null;
   const canonical = canonicalFor(url, url.pathname);
   // JSON quoting keeps YAML valid whatever the copy says: descriptions read
@@ -158,7 +171,7 @@ export function markdownPage(url: URL, accept: string | null | undefined): Respo
 
 /** The same links index.html's fallback ends on, so every page a crawler
  * reads still leads to the others. */
-const FALLBACK_NAV = `<nav aria-label="Footer"><a href="/">Home</a> <a href="/pricing">Pricing</a> <a href="/docs">API and MCP docs</a> <a href="/qr-code-generator">QR code generator</a> <a href="/roadmap">Roadmap</a> <a href="/privacy">Privacy policy</a> <a href="/terms">Terms of service</a> <a href="/signup">Sign up</a></nav>`;
+const FALLBACK_NAV = `<nav aria-label="Footer"><a href="/">Home</a> <a href="/pricing">Pricing</a> <a href="/docs">API and MCP docs</a> <a href="/qr-code-generator">QR code generator</a> <a href="/utm-builder">UTM builder</a> <a href="/roadmap">Roadmap</a> <a href="/privacy">Privacy policy</a> <a href="/terms">Terms of service</a> <a href="/signup">Sign up</a></nav>`;
 
 /**
  * What a client that never runs JavaScript reads in this page's body.
@@ -197,11 +210,27 @@ function crawlerBody(meta: PageMeta, url: URL): string {
  *
  * The response is passed through unread when nothing matches, so the asset
  * path stays a straight pipe for everything else.
+ *
+ * A self-hosted copy is its owner's site, not rdyrct.com, so its tabs carry
+ * `siteName` (SITE_NAME, else the host it answers on) instead of our tagline,
+ * the way a self-hosted Shlink or Umami carries its instance's name.
  */
-export function withPageMeta(response: Response, url: URL): Response {
-  const meta = lookup(PUBLIC_PAGE_META, url.pathname);
-  if (!meta) return response;
+export function withPageMeta(response: Response, url: URL, siteName?: string): Response {
+  const meta = pageMeta(url);
   if (!response.headers.get("content-type")?.includes("text/html")) return response;
+  if (!RDYRCT_SITE) {
+    const rewriter = new HTMLRewriter().on("title", new Text(siteName || url.hostname));
+    if (url.pathname !== "/") rewriter.on("#root", new EmptyRoot());
+    return rewriter.transform(response);
+  }
+  // The build bakes the landing page into index.html, which is also the shell
+  // every app route gets. Left in, a signed-in reload of /dashboard paints the
+  // marketing page until the bundle replaces it. Pages that are not prerendered
+  // ship an empty root instead.
+  if (!meta) {
+    if (url.pathname === "/") return response;
+    return new HTMLRewriter().on("#root", new EmptyRoot()).transform(response);
+  }
 
   const canonical = canonicalFor(url, url.pathname);
   const described = new Response(response.body, response);

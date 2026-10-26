@@ -10,6 +10,7 @@ import {
   useLinkMutations,
   useRecentClicks,
   useLinkHost,
+  useClickUsage,
 } from "../lib/hooks";
 import { useOrgLimits } from "../lib/org-limits";
 import { ApiError } from "../lib/api";
@@ -17,6 +18,7 @@ import { type DomainDTO, type LinkDTO, type LinkInput, type RecentClick } from "
 import { StatCard, TopLinksCard } from "../components/charts";
 import { DashboardSkeleton } from "../components/skeletons";
 import { NoOrgState } from "../components/no-org";
+import { ClickCapBanner } from "../components/over-limit";
 import { Button } from "../ui/button";
 import { Input } from "../ui/field";
 import { MenuSelect } from "../ui/menu";
@@ -141,6 +143,10 @@ function DashboardBody({
 export function Dashboard() {
   const { org, orgId, currentUser } = useOrgLimits();
   const data = useDashboardData(orgId);
+  // Asked for alongside the stats rather than when the banner mounts, so it
+  // has its (much cheaper) answer by the time the page draws and the banner
+  // does not push the page down after it.
+  useClickUsage(orgId);
   switch (dashboardView(currentUser.isLoading, !!org, data.isLoading, !!data.stats)) {
     case "userLoading":
     case "statsLoading":
@@ -191,6 +197,8 @@ function DashboardScreen({ stats: s }: { stats: NonNullable<DashboardData["stats
   return (
     <div>
       <PageHeader {...(firstRun ? FIRST_RUN_HEADER : DASHBOARD_HEADER)} />
+
+      <ClickCapBanner />
 
       <QuickCreateCard
         create={data.create}
@@ -348,6 +356,10 @@ function QuickCreateCard({
           className="h-11 min-w-0 flex-1 text-base sm:h-9 sm:text-sm"
           placeholder="https://example.com/launch"
           aria-label="Destination URL"
+          inputMode="url"
+          autoComplete="off"
+          autoCapitalize="none"
+          spellCheck={false}
         />
         <QuickCreateDomainSelect
           activeDomains={activeDomains}

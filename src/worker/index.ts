@@ -20,6 +20,7 @@ import {
   sweepStalledOrgDeletions,
 } from "./routes/orgs";
 import { linkRoutes } from "./routes/links";
+import { linkImportRoutes } from "./routes/link-import";
 import { apiKeyRoutes } from "./routes/api-keys";
 import { oauthConnectionRoutes } from "./routes/oauth-connections";
 import { mcpRoutes } from "./routes/mcp";
@@ -29,15 +30,30 @@ import { adminRoutes } from "./routes/admin";
 import { billingRoutes, handlePolarWebhook } from "./routes/billing";
 import { domainRoutes } from "./routes/domains";
 import { revalidateOnRedirect } from "./risk";
-import { sweepAbusiveOrgs } from "./abuse";
+import { rescanFreeLinks, sweepAbuse } from "./destination-check";
+import { sweepClickUsageEmails } from "./click-caps";
+import { sweepOldOverflow } from "./click-overflow";
+import { reportRoutes } from "./routes/reports";
 import { evlogMiddleware } from "./evlog";
 import { sweepGraceWarnings } from "./reconcile";
 import { shortenRoutes, sweepExpiredAnonLinks } from "./routes/shorten";
-import { resolveSlug, resolveDomain, domainServing, type KVLink } from "./kv";
+import { defaultNativeRegistration, sweepAbandonedOAuthClients } from "./mcp-oauth";
+import {
+  resolveSlug,
+  resolveDomain,
+  domainServing,
+  isHeld,
+  type KVLink,
+  type KVSlugValue,
+} from "./kv";
+import { disabledPage, heldPage, warnPage } from "./link-state-page";
+import { purgeBannedOrgs, settleBannedOrgs } from "./abuse-hold";
 import { notFoundPage } from "./not-found-page";
 import { RESERVED_SLUGS, SLUG_RE } from "./util";
 import { markdownPage, withPageMeta } from "./page-meta";
 import { PRERENDERED_PUBLIC_PATHS } from "../shared/page-meta";
+import { RDYRCT_SITE } from "../shared/site";
+import { canonicalSpaPath } from "../shared/spa-routes";
 import { enforcePublicAuthRateLimit, enforceSignedApiRateLimit } from "./rate-limit";
 import { applySecurityHeaders } from "./security-headers";
 import { drizzle } from "drizzle-orm/d1";
@@ -53,8 +69,9 @@ import {
 } from "./storage";
 
 import { countAnonClick, enqueueClick, sweepDedupeIds } from "./clicks";
+import { sweepOldRollups } from "./rollups";
 
-export { OrgDeleteWorkflow, DomainActivateWorkflow } from "./workflows";
+export { OrgDeleteWorkflow, DomainActivateWorkflow, LinkImportWorkflow } from "./workflows";
 export { ClickBuffer } from "./click-buffer";
 
 /**
@@ -95,7 +112,7 @@ app.onError((err, c) => {
   // more than just a machine-readable `code` (e.g. same_destination_match's
   // matchedLinkId/matchedLink) straight through to the caller.
   const respond = (body: ErrorBody, status: ContentfulStatusCode) =>
-    applySecurityHeaders(c.json(body, status));
+    applySecurityHeaders(c.json(body, status), !!c.env.TURNSTILE_SITE_KEY);
   // Attach the error to the wide event so it reaches Sentry Logs with the
   // request context already accumulated. withSentry still captures the
   // exception as a Sentry Issue for alerting.
@@ -132,7 +149,7 @@ app.onError((err, c) => {
 // while it isn't.
 app.use("*", async (c, next) => {
   await next();
-  c.res = applySecurityHeaders(c.res);
+  c.res = applySecurityHeaders(c.res, !!c.env.TURNSTILE_SITE_KEY);
 });
 
 /* ---------------- redirect hot path ---------------- */
@@ -155,12 +172,36 @@ function redirectWithClick(c: Context<AppEnv>, hit: KVLink): Response {
   return c.redirect(hit.url, 302);
 }
 
+/**
+ * What a live slug answers with (#344): the redirect, the warning page in
+ * front of it, or the "under review" page for a held link. Null for a miss
+ * or an expired alias, which each host answers in its own way.
+ *
+ * A warning view records a click, the same as a redirect would. It is a
+ * visit to the link, and the abuse sweep counts clicks: a warned link that
+ * stopped counting would hide exactly the traffic the sweep is there to see.
+ * The Continue button goes straight to the destination, so nothing on this
+ * host can be used to skip the warning.
+ */
+function serveLink(c: Context<AppEnv>, hit: KVSlugValue | null): Promise<Response> | null {
+  if (!hit || !isLive(hit)) return null;
+  if (isHeld(hit))
+    return hit.disabled ? disabledPage(c.env.ASSETS, c.req.url) : heldPage(c.env.ASSETS, c.req.url);
+  if (hit.warn) {
+    c.executionCtx.waitUntil(
+      hit.orgId ? enqueueClick(c, hit) : countAnonClick(c.env, hit.linkId, c.req.method),
+    );
+    return warnPage(c.env.ASSETS, c.req.url, hit.url);
+  }
+  return Promise.resolve(redirectWithClick(c, hit));
+}
+
 // A temporary alias past its expiry stops resolving the instant it's asked
 // for, with no D1 read: the sweep in scheduled() retires the row and clears
 // the KV key later, but this check is what actually enforces the deadline.
 // `== null` (not `===`) on purpose: a KV value written before this field
 // existed has it `undefined`, which must mean "never expires" too.
-function isLive(hit: KVLink): boolean {
+function isLive(hit: KVSlugValue): boolean {
   return hit.expiresAt == null || hit.expiresAt > Date.now();
 }
 
@@ -186,7 +227,7 @@ async function resolveLink(
   c: Context<AppEnv>,
   slug: string,
   hostname: string | null,
-): Promise<KVLink | null> {
+): Promise<KVSlugValue | null> {
   const hit = await resolveSlug(c.env, slug, hostname);
   if (hit || !SLUG_RE.test(slug)) return hit;
   try {
@@ -207,8 +248,8 @@ async function resolveSharedLinkHost(c: Context<AppEnv>): Promise<Response> {
   // Somebody who types the bare host wants to know what it is.
   if (!slug) return c.redirect(c.env.APP_URL, 302);
   if (!slug.includes("/") && !RESERVED_SLUGS.has(slug.toLowerCase())) {
-    const hit = await resolveLink(c, slug, null);
-    if (hit && isLive(hit)) return redirectWithClick(c, hit);
+    const served = serveLink(c, await resolveLink(c, slug, null));
+    if (served) return served;
   }
   return notFoundPage(c.env.ASSETS, c.req.url, c.env.APP_URL);
 }
@@ -227,6 +268,7 @@ app.use("*", async (c, next) => {
   // downgrade, because most of what reaches a dead short link is a machine,
   // and an honest 404 is the answer a machine can act on.
   if (!domainServing(domain)) return notFoundPage(c.env.ASSETS, c.req.url, null);
+  if (domain.disabled) return disabledPage(c.env.ASSETS, c.req.url);
 
   const path = new URL(c.req.url).pathname;
   // This middleware is a dead end for a host it owns: it never calls next(),
@@ -235,8 +277,8 @@ app.use("*", async (c, next) => {
   // a miss and falls all the way through to the domain's root redirect.
   const slug = path.slice(1).replace(/\/+$/, "");
   if (slug && !slug.includes("/")) {
-    const hit = await resolveLink(c, slug, host);
-    if (hit && isLive(hit)) return redirectWithClick(c, hit);
+    const served = serveLink(c, await resolveLink(c, slug, host));
+    if (served) return served;
   }
   // root and misses land on the org's configured root redirect
   if (domain.rootRedirect) return c.redirect(domain.rootRedirect, 302);
@@ -280,7 +322,8 @@ app.on(["GET", "POST"], "/api/auth/*", async (c) => {
   // withBackground so an auth hook can send mail after the response instead
   // of inside it: the signup guard's timing must not depend on whether the
   // address exists (#53).
-  return withBackground(c.executionCtx, () => getAuth(c.env).handler(c.req.raw));
+  const request = await defaultNativeRegistration(c.req.raw);
+  return withBackground(c.executionCtx, () => getAuth(c.env).handler(request));
 });
 
 // RFC 9728 protected-resource metadata for the MCP endpoint, and RFC 8414
@@ -309,9 +352,13 @@ app.on(
 );
 
 // The landing page's anonymous shortener (Direction A of #96): public by
-// definition, and gated by Turnstile plus its own rate-limit namespace rather than
-// by a session.
-app.route("/api/shorten", shortenRoutes);
+// definition, and gated by Turnstile plus its own rate-limit namespace rather
+// than by a session. Only rdyrct.com has that landing page, so only
+// rdyrct.com takes links from strangers.
+if (RDYRCT_SITE) app.route("/api/shorten", shortenRoutes);
+
+// Abuse reports from anyone, gated the same way (Turnstile plus a rate limit).
+app.route("/api/reports", reportRoutes);
 
 // Polar webhook: public, signature-verified, no session middleware.
 app.post("/api/webhooks/polar", (c) => {
@@ -336,6 +383,7 @@ api.use("*", async (c, next) => {
 api.route("/", userRoutes);
 api.route("/orgs", orgRoutes);
 api.route("/orgs/:orgId/links", linkRoutes);
+api.route("/orgs/:orgId/link-import", linkImportRoutes);
 api.route("/orgs/:orgId/qr-logo", qrLogoRoutes);
 api.route("/user/avatar", avatarRoutes);
 api.route("/billing", billingRoutes);
@@ -423,6 +471,7 @@ async function servePrerenderedPage(c: Context<AppEnv>, url: URL): Promise<Respo
   return withPageMeta(
     new Response(asset.body, { status: asset.status, statusText: asset.statusText, headers }),
     url,
+    c.env.SITE_NAME,
   );
 }
 
@@ -432,8 +481,13 @@ function cacheStaticAsset(response: Response): Response {
   return cached;
 }
 
-function finalizeSpaResponse(response: Response, url: URL, status?: 404): Response {
-  const page = withPageMeta(response, url);
+function finalizeSpaResponse(
+  response: Response,
+  url: URL,
+  siteName: string | undefined,
+  status?: 404,
+): Response {
+  const page = withPageMeta(response, url, siteName);
   if (page.status !== 200) return page;
   if (!page.headers.get("content-type")?.includes("text/html")) {
     return import.meta.env.DEV ? page : cacheStaticAsset(page);
@@ -469,14 +523,19 @@ async function serveSpa(c: Context<AppEnv>, status?: 404): Promise<Response> {
   const assetResponse = await c.env.ASSETS.fetch(c.req.raw);
   // A conditional request can be a 304 with no body; only HTML fallback
   // responses need the soft-404 status conversion.
-  return finalizeSpaResponse(assetResponse, url, status);
+  return finalizeSpaResponse(assetResponse, url, c.env.SITE_NAME, status);
 }
 
 /* ---------------- shared-domain slug redirect ---------------- */
 
 // Keep the old agent-facing address working, but generate it from the same
 // source as negotiated /pricing so those two documents cannot drift apart.
+// A self-hosted copy opens on the app. The SPA would get there too, a
+// round trip and a bundle later.
+if (!RDYRCT_SITE) app.get("/", (c) => c.redirect("/dashboard", 302));
+
 app.get("/pricing.md", (c) => {
+  if (!RDYRCT_SITE) return serveSpa(c, 404);
   c.get("log")?.set({ route: c.req.path });
   const canonicalUrl = new URL(c.req.url);
   canonicalUrl.pathname = "/pricing";
@@ -493,9 +552,11 @@ app.get("/:slug", async (c, next) => {
   c.get("log")?.set({ slug });
   // Root keywords the SPA owns (/dashboard, /links, /login, …) never resolve as
   // slugs; they can't be created as slugs either, this is belt-and-suspenders.
+  // In any case: the fallback below moves /PRICING to /pricing, and 404s the
+  // reserved words that are no page (/audit, /app).
   if (RESERVED_SLUGS.has(slug.toLowerCase())) return next();
-  const hit = await resolveLink(c, slug, null);
-  if (hit && isLive(hit)) return redirectWithClick(c, hit);
+  const served = serveLink(c, await resolveLink(c, slug, null));
+  if (served) return served;
   // A slug nobody registered, or one that has expired, is not a page. This
   // used to fall through to the SPA under a 200, so every mistyped or retired
   // short link was a soft 404 that canonicalled to the landing page, and a
@@ -503,9 +564,28 @@ app.get("/:slug", async (c, next) => {
   return serveSpa(c, 404);
 });
 
-app.all("*", (c) => {
-  c.get("log")?.set({ route: c.req.path });
-  return serveSpa(c);
+// The SPA's own pages, and nothing else. Anything the router has no page for
+// used to get the shell under a 200 with the landing page's head, so
+// /some/deep/path was a soft 404 that canonicalled to the home page. Now it
+// is a 404 carrying the same NotFound screen. Real files that reach this
+// fallback (/@react-refresh and the source modules in dev, any root file not
+// excluded from run_worker_first) are unaffected: serveSpa only turns the
+// HTML shell into a 404. A self-hosted build has none of rdyrct.com's
+// pages, so canonicalSpaPath leaves them out and they 404 here too.
+//
+// A known page asked for in the wrong case (/PRICING) moves to its real
+// address rather than 404ing. Only the fixed segments are lowercased: a
+// slug or invite token in the path keeps its case.
+app.all("*", async (c) => {
+  const url = new URL(c.req.url);
+  c.get("log")?.set({ route: url.pathname });
+  const canonical = canonicalSpaPath(url.pathname);
+  if (canonical === url.pathname) return serveSpa(c);
+  if (canonical && (c.req.method === "GET" || c.req.method === "HEAD")) {
+    url.pathname = canonical;
+    return c.redirect(url.toString(), 301);
+  }
+  return serveSpa(c, 404);
 });
 
 /* ---------------- Queue consumer: KV/R2 follow-up work ---------------- */
@@ -578,7 +658,9 @@ const wrapped = Sentry.withSentry<
         // and there is no ordering dependency between them to preserve.
         await runIsolated([
           async () => void (await drainStorageOutbox(env)),
-          () => sweepAbusiveOrgs(env),
+          () => sweepAbuse(env),
+          // The 80% and 100% tracked-click emails (#387).
+          async () => void (await sweepClickUsageEmails(env)),
         ]);
         return;
       }
@@ -595,6 +677,16 @@ const wrapped = Sentry.withSentry<
         changes = (await stmt.bind(cutoff).run()).meta.changes;
       } while (changes > 0);
 
+      // Daily: trim rollups past their own retention (#26), kept separate
+      // from the raw cutoff above so that one can shrink on its own.
+      // Isolated: rows it fails to drop today it drops tomorrow, so its
+      // failure must not cost the sweeps below their run.
+      await runIsolated([() => sweepOldRollups(env)]);
+
+      // Daily: drop the counts of clicks dropped past a cap once the abuse
+      // sweep's windows have moved past them (#387).
+      await sweepOldOverflow(env);
+
       // Daily: drop dedupe ids the queue can no longer redeliver, so a unique
       // index over 400 days of history stops carrying a guarantee that only
       // has to hold for minutes (#70).
@@ -610,6 +702,18 @@ const wrapped = Sentry.withSentry<
       // whose only member was the deleted account has nobody to retry it.
       await sweepStalledOrgDeletions(drizzle(env.DB, { schema }), env);
 
+      // Daily: finish for banned owners' orgs what migration 0046 could not
+      // do before this Worker was deployed, and delete the orgs of owners
+      // banned more than 90 days ago. Before that the "disabled" page answers
+      // for them; after it they are gone. Neither needs the other's result,
+      // so they run side by side, isolated: an org either misses today it
+      // reaches tomorrow. The outbox drain at the end publishes what the
+      // first one queued.
+      await runIsolated([
+        () => settleBannedOrgs(drizzle(env.DB, { schema })),
+        () => purgeBannedOrgs(env, drizzle(env.DB, { schema })).then(() => {}),
+      ]);
+
       // Daily: retire rename aliases past their 48h deadline (see #38). The
       // redirect path already stopped resolving them; this frees their slugs.
       await sweepExpiredAliases(env, drizzle(env.DB, { schema }));
@@ -623,17 +727,25 @@ const wrapped = Sentry.withSentry<
       // the KV keys they were resolving through (Direction A of #96).
       await sweepExpiredAnonLinks(env);
 
+      // Daily: drop MCP clients that registered themselves and never got a
+      // user's consent, which open registration would otherwise pile up.
+      await sweepAbandonedOAuthClients(env);
+
       // Daily: the day-23 email for every org whose 30 days are nearly up
       // (#158). Day 0 goes out from the reconciliation pass itself.
       await sweepGraceWarnings(env, drizzle(env.DB, { schema }));
 
       // Daily as well as every 10 minutes: apply the storage work the queue
       // never took (#118), and check for a free org over the redirect ceiling
-      // (#224). Isolated from each other and from every sweep above: one
-      // throwing must not stop the other from starting.
+      // (#224). Daily only: ask Google Web Risk again about the live free
+      // links it has not seen for a week (#341). Isolated from each other and
+      // from every sweep above: one throwing must not stop another starting.
       await runIsolated([
         async () => void (await drainStorageOutbox(env)),
-        () => sweepAbusiveOrgs(env),
+        () => sweepAbuse(env),
+        async () => void (await rescanFreeLinks(env)),
+        // The 80% and 100% tracked-click emails (#387).
+        async () => void (await sweepClickUsageEmails(env)),
       ]);
     },
   },

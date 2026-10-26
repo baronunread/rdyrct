@@ -15,7 +15,7 @@ import { TURNSTILE_TOKEN_HEADER } from "@/shared/types";
 import { useConfig } from "./hooks";
 import { retryOnTurnstileFailure } from "./turnstile-retry";
 
-export type TurnstileScope = "signup" | "password-reset" | "anon-link";
+export type TurnstileScope = "signup" | "password-reset" | "anon-link" | "report";
 
 /** Runs a Turnstile-guarded request, re-solving once if the token is refused. */
 export type TurnstileGuard = <T>(

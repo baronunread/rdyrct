@@ -9,7 +9,13 @@ import { AuthCard, PasswordMeter } from "../components/auth-form";
 import { authClient } from "../lib/auth-client";
 import { friendlyAuthError } from "../lib/auth-errors";
 import posthog from "../lib/posthog";
-import { FUNNEL, SIGNUP_FAILED, USER_SIGNED_UP, googleSignupUrl } from "../lib/funnel";
+import {
+  FUNNEL,
+  SIGNUP_FAILED,
+  USER_SIGNED_UP,
+  captureEmailSignup,
+  googleSignupUrl,
+} from "../lib/funnel";
 import { useShake } from "../lib/use-shake";
 import { useTurnstile } from "../lib/turnstile";
 import { useCurrentUser, useConfig } from "../lib/hooks";
@@ -537,7 +543,7 @@ async function trySignUp(
   // spent here, and required by the Worker before an account exists. Through
   // the guard, so a token the server has forgotten is solved again rather
   // than shown to somebody as an error.
-  const { error: signUpError } = await deps.turnstileGuarded((headers) =>
+  const { data: signup, error: signUpError } = await deps.turnstileGuarded((headers) =>
     authClient.signUp.email({ email, password, name: email.split("@")[0] }, { headers }),
   );
   if (signUpError) {
@@ -547,7 +553,7 @@ async function trySignUp(
     // Funnel step 4 (#64), at the boundary that actually means "an account
     // was accepted". Before goVerify, so a failure to send the code cannot
     // lose the signup that already happened.
-    posthog.capture(FUNNEL.signupSubmitted);
+    captureEmailSignup(posthog.capture, signup);
     // No email provider: there is no code to send, so the account is already
     // usable. Sign in with what was just typed.
     if (deps.emailEnabled) await deps.goVerify(email);
@@ -797,7 +803,7 @@ function useAuthFlow(mode: "login" | "signup") {
       // one-time activation, whether the visitor is currently on /signup or
       // came back through /login to finish an abandoned signup. Gating on
       // `mode === "signup"` undercounted exactly that second case.
-      posthog.capture(USER_SIGNED_UP);
+      posthog.capture(USER_SIGNED_UP, { method: "email" });
       // Funnel step 5b (#64).
       posthog.capture(FUNNEL.verificationCompleted);
       const established = await establishSessionAfterVerify({
@@ -846,7 +852,7 @@ function useAuthFlow(mode: "login" | "signup") {
     resendOtp,
     submitForgot,
     backToForm,
-    /** Hung on the forms' first interaction so the proof-of-work runs while
+    /** Hung on the forms' first interaction so the Turnstile challenge runs while
      * the visitor types, instead of stalling the submit. Signup only: a
      * password reset is rare enough that a short wait on submit is fine, and
      * priming it would tax everyone who came to log in. */

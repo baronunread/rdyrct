@@ -17,7 +17,9 @@
 
 [![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/baronunread/rdyrct)
 
-This provisions the Worker from the Cloudflare dashboard. It is not yet a complete install on its own: you still need to set `APP_URL`, `APP_HOST` and the secrets, apply the migrations, and attach a domain. Follow [Deploy to Cloudflare Workers](#deploy-to-cloudflare-workers) (tracked in #280).
+Cloudflare copies this repository to your GitHub account, creates the database, storage and queues, and asks for one thing: the email of the account that becomes the platform admin. Leave every other value as it is. The first build serves your copy on its `workers.dev` address, generates the session key and applies the migrations; each push to your copy deploys it again. When you want your own domain, see [Move to your own domain](#move-to-your-own-domain).
+
+Prefer a terminal? `bun run setup` does the same from a clone: see [Deploy to Cloudflare Workers](#deploy-to-cloudflare-workers).
 
 ---
 
@@ -62,7 +64,7 @@ Application layer:
 
 ```sh
 bun install
-cp .dev.vars.example .dev.vars     # then edit; at minimum set SUPERADMIN_EMAIL
+cp .dev.vars.local.example .dev.vars     # then edit; at minimum set SUPERADMIN_EMAIL
 
 bunx emulate --service resend      # local Resend inbox on :4000
 
@@ -71,6 +73,7 @@ bun run dev                        # https://rdyrct.localhost
 ```
 
 - Sign up with the address you set as `SUPERADMIN_EMAIL` to unlock the admin console; any other address is a normal user.
+- The dev server runs the self-hosted app. Add `VITE_RDYRCT_SITE=1` to `.env` to work on rdyrct.com's own landing and marketing pages.
 - New accounts see a create-org prompt on org-scoped pages until they create their first organization.
 - Email verification codes are sent through [emulate.dev](https://emulate.dev)'s Resend emulator instead of a real inbox. Read it with:
 
@@ -80,7 +83,7 @@ bun run dev                        # https://rdyrct.localhost
 
   and copy the 6-digit code out of the latest message.
 
-- Setting `CF_DEV_ENV=simulated` (the `.dev.vars.example` default) stubs the Cloudflare Custom Hostnames API locally: DNS becomes ready after about 3 seconds and TLS after about 12 seconds, so "Check status" shows the same progression without a real zone. `CF_DEV_ENV=instant` reports both ready at once, which is what the e2e run uses so it does not sit through the timer. Without either, missing `CF_API_TOKEN`/`CF_ZONE_ID` fails closed instead of faking a response.
+- Setting `CF_DEV_ENV=simulated` (the `.dev.vars.local.example` default) stubs the Cloudflare Custom Hostnames API locally: DNS becomes ready after about 3 seconds and TLS after about 12 seconds, so "Check status" shows the same progression without a real zone. `CF_DEV_ENV=instant` reports both ready at once, which is what the e2e run uses so it does not sit through the timer. Without either, missing `CF_API_TOKEN`/`CF_ZONE_ID` fails closed instead of faking a response.
 - Billing against a real [Polar sandbox](https://sandbox.polar.sh) account needs a public URL (`wrangler dev --remote` or a tunnel) for webhooks to reach `/api/webhooks/polar`.
 
 ---
@@ -103,70 +106,45 @@ Cloudflare state. Failed browser tests keep a screenshot and trace in
 
 ## Deploy to Cloudflare Workers
 
-### Minimum to run
+```sh
+git clone https://github.com/baronunread/rdyrct
+cd rdyrct && bun install
+bun run setup
+```
 
-1. A domain on Cloudflare (or the free `*.workers.dev` address, to try it first).
-2. Two secrets: `BETTER_AUTH_SECRET` (any long random string) and `SUPERADMIN_EMAIL` (the account that becomes the platform admin).
-3. The resources below, then `bun run db:migrate:remote && bun run deploy`.
+Setup asks three things: a name for the worker (Enter keeps `rdyrct`), a domain on your Cloudflare account (or Enter, for a free `*.workers.dev` address) and the email of the account that becomes the platform admin. It stops if your account already runs a worker by that name, so it never deploys over one. Then it:
+
+- rewrites your copy of `wrangler.jsonc`: your domain in `APP_URL` and `APP_HOST`, and rdyrct.com's own ids and settings (mail sender, Polar products, Cloudflare zone, Sentry) taken out;
+- has Wrangler create the D1 database, KV namespace, R2 bucket and queues on your account, each named after the worker, since a binding with no id gets a new resource on the first deploy;
+- generates `BETTER_AUTH_SECRET`, sets it and `SUPERADMIN_EMAIL` as secrets, builds, deploys, applies the migrations and attaches your domain.
+
+Commit the rewritten `wrangler.jsonc` to your fork. After that, `bun run deploy` ships each update: it applies new migrations, then deploys. Every build is the self-hosted app, which opens on sign-in and carries none of rdyrct.com's marketing pages, analytics or search tags. Only `VITE_RDYRCT_SITE=1` builds rdyrct.com itself, and `bun run deploy` refuses it for any host but rdyrct.com.
 
 Everything else is optional. Each piece says what it adds:
 
-| Setting                                    | Adds                                                                                                                     |
-| ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------ |
-| `RESEND_API_KEY`, `MAIL_FROM`              | Email: sign-up verification codes, password reset, invites, notices. Without it, sign-up skips verification (see below). |
-| `POLAR_*`                                  | Selling Hobby and Pro plans. Without it, nobody is capped and billing is hidden.                                         |
-| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | "Continue with Google".                                                                                                  |
-| `CF_API_TOKEN`, `CF_ZONE_ID`               | Customers' own domains through Cloudflare for SaaS.                                                                      |
-| `SHARED_LINK_HOST`                         | A second, shorter host for new shared-domain links.                                                                      |
-| `CAP_SECRET`                               | Proof-of-work in front of sign-up and password reset.                                                                    |
-| `SENTRY_DSN`                               | Error reports to your Sentry project.                                                                                    |
+| Setting                                      | Adds                                                                                                                     |
+| -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `RESEND_API_KEY`, `MAIL_FROM`                | Email: sign-up verification codes, password reset, invites, notices. Without it, sign-up skips verification (see below). |
+| `POLAR_*`                                    | Selling Hobby and Pro plans. Without it, nobody is capped and billing is hidden.                                         |
+| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`   | "Continue with Google".                                                                                                  |
+| `CF_API_TOKEN`, `CF_ZONE_ID`                 | Customers' own domains through Cloudflare for SaaS.                                                                      |
+| `SHARED_LINK_HOST`                           | A second, shorter host for new shared-domain links.                                                                      |
+| `TURNSTILE_SITE_KEY`, `TURNSTILE_SECRET_KEY` | Cloudflare Turnstile in front of sign-up, password reset and the report form. Cloudflare then sees those visitors.       |
+| `WEB_RISK_API_KEY`                           | Google Web Risk as a second destination check. A listed destination puts its link on hold.                               |
+| `SENTRY_DSN`                                 | Error reports to your Sentry project.                                                                                    |
+| `SITE_NAME`                                  | The name every tab shows, such as "Acme links". Without it, tabs show your copy's host.                                  |
 
 **With no email provider and no Google sign-in, accounts are not verified and passwords cannot be reset.** That is fine for a private instance and not recommended for a public one. The admin console says so while it is true.
 
-### Create the resources
-
-```sh
-bunx wrangler kv namespace create LINKS
-bunx wrangler d1 create rdyrct
-bunx wrangler r2 bucket create rdyrct-media
-bunx wrangler queues create rdyrct-storage
-bunx wrangler queues create rdyrct-storage-dlq
-```
-
-Paste the returned ids into `wrangler.jsonc`:
-
-- `kv_namespaces[0].id`
-- `d1_databases[0].database_id`
-
-The R2 bucket name in `wrangler.jsonc` is `rdyrct-qr-logos`. Either create that name, or change `r2_buckets[0].bucket_name` to the one you created.
-
-### Set the variables and secrets
-
-In `wrangler.jsonc`, set `APP_URL` (for example `https://links.example.com`, no trailing slash) and `APP_HOST` (`links.example.com`). The file ships with rdyrct.com's values for the rest (`MAIL_FROM`, `POLAR_*`, `CF_ZONE_ID`, `SENTRY_DSN`): clear or replace each one you do not use.
-
-Set the secrets. Either one by one:
-
-```sh
-bunx wrangler secret put BETTER_AUTH_SECRET
-bunx wrangler secret put SUPERADMIN_EMAIL
-```
-
-or in bulk with `cp prod.secrets.env.example prod.secrets.env`, fill it in, then:
+Vars go in `wrangler.jsonc`. Set secrets one by one with `bunx wrangler secret put <NAME>`, or in bulk with `cp prod.secrets.env.example prod.secrets.env`, fill it in, then:
 
 ```sh
 bunx wrangler secret bulk prod.secrets.env && rm prod.secrets.env
 ```
 
-Then migrate and ship:
+### Move to your own domain
 
-```sh
-bun run db:migrate:remote
-bun run deploy
-```
-
-### Attach your domain
-
-Cloudflare dashboard → Workers → your worker → **Settings → Domains & Routes** → **Add → Custom domain**. Short links live at the root (`https://links.example.com/<slug>`); the app is served on every other path. Keep routes out of `wrangler.jsonc`: a `routes` list replaces whatever is attached in the dashboard, and committing yours would hand it to every fork. The `*/*` route is only for customers' own domains (below).
+Started on `workers.dev`, from the button or from setup? Clone your copy, run `bun run setup` and give it the domain (it has to be on your Cloudflare account), then commit `wrangler.jsonc` and push. Setup attaches the domain and keeps your data, your secrets and the session key. By hand instead: Cloudflare dashboard → Workers → your worker → **Settings → Domains & Routes** → **Add → Custom domain**, then set `APP_URL` and `APP_HOST` in `wrangler.jsonc`, remove the vars that are rdyrct.com's (`MAIL_FROM`, `WELCOME_FROM`, `POLAR_*`, `CF_ZONE_ID`, `SENTRY_DSN`) and `bun run deploy`. Short links live at the root (`https://links.example.com/<slug>`); the app is served on every other path. Keep routes out of `wrangler.jsonc`: a `routes` list replaces whatever is attached in the dashboard, and committing yours would hand it to every fork. The `*/*` route is only for customers' own domains (below).
 
 ### Email (optional)
 
@@ -225,7 +203,7 @@ before changing link, domain, logo, or organization delete flows.
 | `CF_ZONE_ID`             | var            | Zone id used for Custom Hostnames                                                   |
 | `CF_DEV_ENV`             | var (dev only) | `simulated` fakes the Custom Hostnames API on a timer, `instant` without one        |
 
-Secrets are set with `wrangler secret put NAME` or `wrangler secret bulk prod.secrets.env` in production; locally they all come from `.dev.vars` (see `.dev.vars.example`).
+Secrets are set with `wrangler secret put NAME` or `wrangler secret bulk prod.secrets.env` in production; locally they all come from `.dev.vars` (see `.dev.vars.local.example`).
 
 ---
 

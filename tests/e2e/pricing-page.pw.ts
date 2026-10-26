@@ -45,19 +45,13 @@ test("a paid plan card leads to sign-up, then checkout", async ({ page }) => {
   ).toHaveAttribute("href", /\/signup\?next=%2Fbilling%3Fplan%3Dhobby/);
 });
 
-test("the team comparison names its sources and date", async ({ page }) => {
-  await page.goto("/pricing");
-  await expect(page.getByRole("heading", { name: /team of five/i })).toBeVisible();
-  await expect(page.getByText(/September 2026/)).toBeVisible();
-});
-
 // The HTML before any JavaScript runs is what a crawler, a link preview or an
 // AI fetcher reads. It used to be the homepage's copy on every route, so the
 // pricing page told them nothing about prices.
 test("the pricing page's raw HTML carries its own copy, not the homepage's", async ({ page }) => {
   const html = await (await page.request.get("/pricing")).text();
   expect(html).toContain("<h1>rdyrct pricing</h1>");
-  expect(html).not.toContain("show which channel earned the click");
+  expect(html).not.toContain("The link shortener that answers to you.");
 });
 
 // One primary button, on the plan the finder picked, so the cards and the
@@ -67,4 +61,25 @@ test("the primary button follows the plan the finder picks", async ({ page }) =>
   const primary = page.locator("[data-plan] a.bg-accent");
   await expect(primary).toHaveCount(1);
   await expect(page.locator('[data-match="true"] a.bg-accent')).toHaveCount(1);
+});
+
+// #387: each plan's monthly click count, and what happens past it.
+test("the pricing page names each plan's click count, and says links keep redirecting", async ({
+  page,
+}) => {
+  await page.goto("/pricing");
+  for (const [plan, count] of [
+    ["free", "5k"],
+    ["hobby", "50k"],
+    ["pro", "500k"],
+  ]) {
+    await expect(
+      page.locator(`[data-plan="${plan}"]`).getByText(`${count} clicks counted a month`),
+    ).toBeVisible();
+  }
+  await expect(page.getByText(/links keep redirecting every visitor/)).toBeVisible();
+
+  // And the plan finder weighs it: past Hobby's 50k is Pro.
+  await page.getByLabel("Clicks a month, exact number").fill("60000");
+  await expect(page.locator('[data-plan="pro"]')).toHaveAttribute("data-match", "true");
 });

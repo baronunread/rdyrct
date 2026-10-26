@@ -16,8 +16,9 @@ import * as schema from "./db/schema";
 import type { DB, Env } from "./env";
 import { captureAlert } from "./sentry";
 import { afterResponse } from "./background";
+import { sendWelcomeOnce } from "./welcome";
 import { emailConfigured, sendEmail } from "./email";
-import { renderEmail } from "./email-layout";
+import { NOTICE_FOOTER, renderEmail } from "./email-layout";
 import { hashPassword, verifyPassword } from "./password";
 import { uid } from "./util";
 import { spendToken, type TurnstileScope } from "./turnstile";
@@ -26,6 +27,11 @@ import { createOwnedOrg } from "./plan";
 import { defaultOrgName } from "@/shared/org-name";
 import { TURNSTILE_FAILED_CODE, TURNSTILE_TOKEN_HEADER } from "@/shared/types";
 import { mcpResource, fetchClientMetadataResource } from "./mcp-oauth";
+import { HTTPException } from "hono/http-exception";
+import { endSubscriptionBeforeDelete } from "./routes/billing";
+
+const SUBSCRIPTION_NOT_ENDED =
+  "We could not cancel the subscription, so the account was not deleted. Try again in a few minutes.";
 
 /** better-auth paths that must carry a Turnstile token, and the scope the
  * token has to have been rendered for. Keyed by `ctx.path`, which is relative
@@ -105,8 +111,15 @@ async function ensureOrganization(env: Env, db: DB, userId: string): Promise<voi
  * included; one after it cannot attach to the deleted user. Workflow starts
  * come last. If that call fails, the account is still gone and the durable
  * flags let the stalled-deletion sweep finish the work.
+ *
+ * A paying account ends its Polar subscription first (#337). When Polar cannot
+ * do that, nothing is deleted and this throws a 503, so the person can try
+ * again rather than keep paying for an account that no longer exists.
  */
 export async function deleteAccountAndOwnedOrgs(env: Env, userId: string): Promise<void> {
+  if (!(await endSubscriptionBeforeDelete(env, userId))) {
+    throw new HTTPException(503, { message: SUBSCRIPTION_NOT_ENDED });
+  }
   await deleteUserAvatar(env, userId);
   const now = Date.now();
   const [owned] = await env.DB.batch<{ orgId: string }>([
@@ -240,6 +253,7 @@ function pendingSignUpResponse(email: string, name: string) {
       plan: "free",
       polarSubscriptionCancelAtPeriodEnd: false,
       polarSubscriptionCurrentPeriodEnd: null,
+      polarSubscriptionInterval: null,
       // Never the existing row's id: this account is not the caller's to
       // learn anything about. Same alphabet and length as better-auth's.
       id: uid(32),
@@ -263,6 +277,7 @@ async function sendExistingAccountNotice(env: Env, email: string) {
         ],
         cta: { label: "Sign in", url: `${env.APP_URL}/login` },
         note: "If this was not you, you can ignore this email. Nobody can use your address without reading this inbox.",
+        footerLine: NOTICE_FOOTER,
       },
       env.APP_URL,
       email,
@@ -365,6 +380,9 @@ function buildAuth(env: Env) {
     // Keeping BetterAuth's per-isolate limiter enabled would create a second,
     // inconsistent 429 shape and would not protect the rest of the app.
     rateLimit: { enabled: false },
+    // One query for a session and its user, not two in a row. Every signed-in
+    // API call starts with that lookup, and each D1 round trip is ~25 ms.
+    advanced: { database: { joins: true } },
     // Link a Google sign-in to an existing email/password account with the
     // same (verified) address instead of creating a duplicate. Google is a
     // trusted provider, so an unverified Google account still links to a
@@ -489,14 +507,23 @@ function buildAuth(env: Env) {
       // authorization server for MCP clients, so a chatbot connects with a
       // consent screen instead of a pasted API key. jwt() supplies the
       // signing key mcp() uses for access tokens and the /jwks endpoint
-      // session.ts verifies them against; cimd() is how a client identifies
-      // itself (a URL, not a pre-registered id) per the current MCP spec,
-      // which deprecated classic dynamic client registration.
-      jwt(),
+      // session.ts verifies them against. A client identifies itself one of
+      // two ways: cimd(), a URL to its own metadata (what the MCP spec
+      // prefers), or open dynamic client registration, which Claude, Cursor
+      // and VS Code still expect. Open registration is rate-limited with the
+      // other /api/auth routes, and sweepAbandonedOAuthClients() deletes the
+      // rows nobody ever consented to. Only the grants an MCP client uses:
+      // client_credentials would let a client act with no user behind it.
+      // No set-auth-jwt header: nothing reads it, and producing it read the
+      // signing keys from D1 and signed a token on every session lookup.
+      jwt({ disableSettingJwtHeader: true }),
       mcp({
         loginPage: "/login",
         consentPage: "/consent",
         resource: mcpResource(env),
+        allowDynamicClientRegistration: true,
+        allowUnauthenticatedClientRegistration: true,
+        grantTypes: ["authorization_code", "refresh_token"],
       }),
       cimd({
         fetchClientMetadataResource,
@@ -520,6 +547,7 @@ function buildAuth(env: Env) {
           defaultValue: null,
           input: false,
         },
+        polarSubscriptionInterval: { type: "string", required: false, input: false },
       },
       // Self-service account deletion. Authored links/invites keep working
       // (ON DELETE SET NULL) and memberships cascade. Owned organizations are
@@ -527,7 +555,15 @@ function buildAuth(env: Env) {
       deleteUser: {
         enabled: true,
         beforeDelete: async (user) => {
-          await deleteAccountAndOwnedOrgs(env, user.id);
+          try {
+            await deleteAccountAndOwnedOrgs(env, user.id);
+          } catch (error) {
+            // better-auth answers anything but its own APIError with a bare 500.
+            if (error instanceof HTTPException && error.status === 503) {
+              throw new APIError("SERVICE_UNAVAILABLE", { message: SUBSCRIPTION_NOT_ENDED });
+            }
+            throw error;
+          }
         },
       },
     },
@@ -578,6 +614,17 @@ function buildAuth(env: Env) {
                 plan: isSuper ? "pro" : "free",
               },
             };
+          },
+          // Google accounts arrive verified, so the welcome goes out here.
+          after: async (user) => {
+            afterResponse(sendWelcomeOnce(env, db, user));
+          },
+        },
+        // A password account is verified by an update, not at creation. The
+        // claim inside sendWelcomeOnce makes every later update a no-op.
+        update: {
+          after: async (user) => {
+            afterResponse(sendWelcomeOnce(env, db, user));
           },
         },
       },

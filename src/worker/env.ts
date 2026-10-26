@@ -17,6 +17,7 @@ export interface Env {
   ORG_DELETE: Workflow<{ orgId: string }>;
   /* custom-domain activation as a durable background workflow */
   DOMAIN_ACTIVATE: Workflow<{ domainId: string; hostname: string }>;
+  LINK_IMPORT: Workflow<{ importId: string }>;
   /* click ingestion: redirects buffer here instead of writing D1 directly
      (#225), one instance, flushed to D1 on a ~10 s alarm */
   CLICK_BUFFER: DurableObjectNamespace<ClickBuffer>;
@@ -37,6 +38,10 @@ export interface Env {
   SUPERADMIN_EMAIL: string;
   RESEND_API_KEY?: string; // unset: no email goes out and sign-up skips verification
   MAIL_FROM: string; // var, e.g. "me <no-reply@mail.rdyrct.com>"
+  // var, e.g. "Andrea at rdyrct <andrea@mail.rdyrct.com>". The sender of the
+  // founder's welcome email. Unset, no welcome is sent: its text is written in
+  // one person's voice, which a self-hosted instance has no right to borrow.
+  WELCOME_FROM?: string;
   APP_URL: string; // var, e.g. "https://rdyrct.com"; SPA/API origin
   RESEND_BASE_URL?: string; // var; dev points at the emulate.dev Resend emulator
 
@@ -49,8 +54,10 @@ export interface Env {
   /* billing (Polar) */
   POLAR_ACCESS_TOKEN?: string;
   POLAR_WEBHOOK_SECRET?: string;
-  POLAR_PRO_PRODUCT_ID?: string; // var
-  POLAR_HOBBY_PRODUCT_ID?: string; // var
+  POLAR_PRO_PRODUCT_ID?: string; // var, monthly
+  POLAR_HOBBY_PRODUCT_ID?: string; // var, monthly
+  POLAR_PRO_YEARLY_PRODUCT_ID?: string; // var, yearly (10% off)
+  POLAR_HOBBY_YEARLY_PRODUCT_ID?: string; // var, yearly (10% off)
   POLAR_SERVER?: "sandbox" | "production"; // var, default sandbox
   /* the checkout/portal client, injected by tests; unset everywhere else,
      where the routes build a real Polar client from the token above */
@@ -58,6 +65,9 @@ export interface Env {
 
   /* custom domains (Cloudflare for SaaS) */
   APP_HOST: string; // var, e.g. "rdyrct.com"; the app/API origin and CNAME target
+  // var, self-hosted copies only: what every tab of the copy is titled, e.g.
+  // "Acme links". Unset, the tab says the host the copy answers on.
+  SITE_NAME?: string;
   // var, e.g. "rdyr.cc"; the shorter host new shared-domain links use. Requests
   // on either host take the shared-domain path (index.ts); both read the same
   // KV keys, since a shared-domain slug's key has no host in it. Unset means
@@ -74,8 +84,12 @@ export interface Env {
 
   /* bot protection: Cloudflare Turnstile (#304). Secret unset disables the
      check. */
-  TURNSTILE_SITE_KEY?: string; // var, public
+  TURNSTILE_SITE_KEY?: string; // secret, though public: /api/config serves it
   TURNSTILE_SECRET_KEY?: string; // secret
+
+  /* destination check: Google Web Risk Lookup API (#341). Unset skips that
+     provider; the Cloudflare DNS check still runs. */
+  WEB_RISK_API_KEY?: string; // secret, a GCP API key restricted to the Web Risk API
 
   /* click buffer: flush interval in ms, e2e only. Unset means 10 s. */
   CLICK_FLUSH_MS?: string; // var
@@ -95,6 +109,7 @@ export interface SessionUser {
   plan: OrgPlan;
   polarSubscriptionCancelAtPeriodEnd: boolean;
   polarSubscriptionCurrentPeriodEnd: number | null;
+  polarSubscriptionInterval: "month" | "year" | null;
   /** Same-origin serving URL for the user's avatar, or null (blobatar). */
   image: string | null;
 }

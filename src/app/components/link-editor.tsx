@@ -317,7 +317,7 @@ function QrLogoField({ form, setForm }: { form: LinkInput; setForm: (f: LinkInpu
           <button
             type="button"
             aria-label="About QR logos"
-            className="cursor-help text-muted normal-case hover:text-text"
+            className="relative cursor-help text-muted normal-case after:absolute after:-inset-1.5 hover:text-text"
           >
             <Info size={13} />
           </button>
@@ -472,6 +472,9 @@ function SlugField({
         onChange={onChange}
         placeholder={slugLocked ? "random" : "launch-2026"}
         disabled={slugLocked}
+        autoComplete="off"
+        autoCapitalize="none"
+        spellCheck={false}
       />
     </Field>
   );
@@ -527,6 +530,13 @@ function LinkFormFields({
           value={form.destination}
           onChange={onDestinationChange}
           onPaste={onDestinationPaste}
+          // A URL keyboard on a text field: the form's own check says what
+          // is wrong in a toast, where type="url" would have the browser
+          // refuse first in a bubble of its own.
+          inputMode="url"
+          autoComplete="off"
+          autoCapitalize="none"
+          spellCheck={false}
           placeholder="https://example.com/launch"
           autoFocus={!editing}
         />

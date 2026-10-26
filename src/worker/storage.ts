@@ -1,11 +1,11 @@
 import * as Sentry from "@sentry/cloudflare";
-import { eq, isNull, and, lt, ne, inArray, sql } from "drizzle-orm";
+import { eq, isNull, and, lt, ne, inArray, sql, type SQL } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import * as schema from "./db/schema";
 import type { DB, Env } from "./env";
 import { buildDestination, qrLogoKeyFromUrl, uid } from "./util";
 import { captureAlert } from "./sentry";
-import type { KVDomain, KVLink } from "./kv";
+import type { KVDomain, KVSlugValue } from "./kv";
 
 /**
  * Storage recovery. D1 is the source of truth. KV serves redirects and R2
@@ -51,7 +51,11 @@ import type { KVDomain, KVLink } from "./kv";
 export type StorageMessage =
   | { op: "kv_sync"; key: string }
   | { op: "r2_delete"; key: string }
-  | { op: "r2_delete_prefix"; prefix: string };
+  | { op: "r2_delete_prefix"; prefix: string }
+  // Every KV key an org's links and domains resolve through. Names the org,
+  // not the keys, so it still holds when the request that wanted it died
+  // before it could read them.
+  | { op: "org_sync"; orgId: string };
 
 const R2_LIST_LIMIT = 1_000;
 
@@ -120,7 +124,7 @@ export async function enqueueStorage(
     // be a lie (#227). Alert anyway, so a queue outage is still visible in
     // Sentry without a user meeting an error. Only rethrow when the outbox
     // write failed too, because then the work really is gone.
-    if (recorded) {
+    if (recorded !== null) {
       captureAlert([
         {
           event: "storage_send_failed",
@@ -177,14 +181,18 @@ async function applyKvSyncs(env: Env, messages: StorageMessage[]): Promise<Stora
  * queueing a duplicate drain. That replacement takes a fresh `id`, which is
  * what the drain's delete matches on, so a request arriving mid-drain is
  * never removed unapplied.
+ *
+ * Returns the row ids, in the order of `messages`, or null when the write
+ * failed.
  */
 async function recordOutbox(
   env: Env,
   messages: StorageMessage[],
-  reason: "send_failed" | "gave_up",
+  reason: (typeof schema.storageOutbox.$inferSelect)["reason"],
   detail = "",
-): Promise<boolean> {
+): Promise<string[] | null> {
   const now = Date.now();
+  const ids = messages.map(() => uid());
   try {
     // Neither `created_at` nor `attempts` is reset on conflict. Both are how
     // the drain decides what to read, and a key that fails a send daily and
@@ -192,7 +200,7 @@ async function recordOutbox(
     // sinking behind fresher work, and never accumulating the attempts that
     // make a permanently broken row findable.
     await env.DB.batch(
-      messages.map((message) =>
+      messages.map((message, i) =>
         env.DB.prepare(
           `insert into storage_outbox (id, op, target, reason, created_at, attempts, last_error)
            values (?, ?, ?, ?, ?, 0, ?)
@@ -200,14 +208,14 @@ async function recordOutbox(
              id = excluded.id,
              reason = excluded.reason,
              last_error = excluded.last_error`,
-        ).bind(uid(), message.op, targetOf(message), reason, now, detail),
+        ).bind(ids[i], message.op, targetOf(message), reason, now, detail),
       ),
     );
-    return true;
+    return ids;
   } catch (writeError) {
     captureAlert([{ event: "storage_outbox_write_failed", reason, count: messages.length }]);
     console.error("storage_outbox_write_failed", reason, writeError);
-    return false;
+    return null;
   }
 }
 
@@ -291,9 +299,14 @@ export async function drainStorageOutbox(env: Env): Promise<number> {
 
 /** An outbox row back as the message it stands for. */
 function outboxMessage(row: typeof schema.storageOutbox.$inferSelect): StorageMessage {
-  return row.op === "r2_delete_prefix"
-    ? { op: "r2_delete_prefix", prefix: row.target }
-    : { op: row.op, key: row.target };
+  switch (row.op) {
+    case "r2_delete_prefix":
+      return { op: "r2_delete_prefix", prefix: row.target };
+    case "org_sync":
+      return { op: "org_sync", orgId: row.target };
+    default:
+      return { op: row.op, key: row.target };
+  }
 }
 
 /* ---------------- consuming messages ---------------- */
@@ -330,7 +343,7 @@ export async function desiredLink(
   db: DB,
   slug: string,
   hostname: string | null,
-): Promise<KVLink | null> {
+): Promise<KVSlugValue | null> {
   // Resolved through link_addresses, not links directly: a slug key names
   // one active address (primary or alias), which always answers with its
   // parent link's effective destination, never one of its own. An
@@ -350,19 +363,19 @@ export async function desiredLink(
       utmTerm: schema.links.utmTerm,
       utmContent: schema.links.utmContent,
       hostname: schema.domains.hostname,
+      suspendedAt: schema.links.suspendedAt,
+      warnedAt: schema.links.warnedAt,
+      // Null for an anonymous link, which has no org.
+      orgDisabledAt: schema.orgs.disabledAt,
     })
     .from(schema.linkAddresses)
     .innerJoin(schema.links, eq(schema.linkAddresses.linkId, schema.links.id))
+    .leftJoin(schema.orgs, eq(schema.links.orgId, schema.orgs.id))
     .leftJoin(schema.domains, eq(schema.linkAddresses.domainId, schema.domains.id))
     .where(
       and(
         eq(schema.linkAddresses.slug, slug),
         isNull(schema.linkAddresses.retiredAt),
-        // Suspension is enforced here and nowhere else (#67). Every
-        // republish runs through this function, so a suspended link stays
-        // dark through any later edit, rename, or alias change. A check in
-        // the suspend route alone would be undone by the next save.
-        isNull(schema.links.suspendedAt),
         hostname === null
           ? isNull(schema.linkAddresses.domainId)
           : eq(schema.domains.hostname, hostname),
@@ -371,12 +384,50 @@ export async function desiredLink(
     .limit(1);
   const address = rows[0];
   if (!address) return null;
+  // Suspension is enforced here and nowhere else (#67). Every republish runs
+  // through this function, so a suspended link stays held through any later
+  // edit, rename, or alias change. A check in the suspend route alone would
+  // be undone by the next save. Held, not absent (#344): the key stays, with
+  // no destination in it, so the redirect path can say "under review"
+  // instead of 404 without reading D1.
+  // A banned owner's org outranks any one link's state: it is a decision,
+  // where a suspension may still be lifted.
+  if (address.orgDisabledAt !== null)
+    return { held: true, disabled: true, linkId: address.linkId, expiresAt: address.expiresAt };
+  if (address.suspendedAt !== null)
+    return { held: true, linkId: address.linkId, expiresAt: address.expiresAt };
   return {
     linkId: address.linkId,
     addressId: address.addressId,
     orgId: address.orgId,
     url: buildDestination(address.destination, address),
     expiresAt: address.expiresAt,
+    // The same rule for the warning: it rides in the value, so an edit
+    // cannot drop it and the redirect path needs no D1 read to show it.
+    ...(address.warnedAt !== null && { warn: true as const }),
+  };
+}
+
+/** What an active domain's KV key holds, from its row and its org's. */
+function domainKvValue({
+  domain,
+  graceEndsAt,
+  orgDisabledAt,
+}: {
+  domain: typeof schema.domains.$inferSelect;
+  graceEndsAt: number | null;
+  orgDisabledAt: number | null;
+}): KVDomain {
+  return {
+    // A banned owner's domain answers "disabled" on every path. Not null,
+    // which would hand the host to the app.
+    ...(orgDisabledAt !== null && { disabled: true as const }),
+    domainId: domain.id,
+    orgId: domain.orgId,
+    rootRedirect: domain.rootRedirect,
+    // A locked domain with no grace on file has already run out: the
+    // absence of a deadline must not read as "serves forever".
+    servesUntil: domain.lockedAt === null ? null : (graceEndsAt ?? domain.lockedAt),
   };
 }
 
@@ -391,21 +442,16 @@ async function desiredDomainValue(db: DB, key: string): Promise<string | null> {
       .select({
         domain: schema.domains,
         graceEndsAt: schema.orgEntitlements.graceEndsAt,
+        orgDisabledAt: schema.orgs.disabledAt,
       })
       .from(schema.domains)
+      .innerJoin(schema.orgs, eq(schema.orgs.id, schema.domains.orgId))
       .leftJoin(schema.orgEntitlements, eq(schema.orgEntitlements.orgId, schema.domains.orgId))
       .where(eq(schema.domains.hostname, hostname))
       .limit(1);
-    const domain = rows[0]?.domain;
-    if (!domain || domain.status !== "active") return null;
-    return JSON.stringify({
-      domainId: domain.id,
-      orgId: domain.orgId,
-      rootRedirect: domain.rootRedirect,
-      // A locked domain with no grace on file has already run out: the
-      // absence of a deadline must not read as "serves forever".
-      servesUntil: domain.lockedAt === null ? null : (rows[0]?.graceEndsAt ?? domain.lockedAt),
-    } satisfies KVDomain);
+    const row = rows[0];
+    if (!row || row.domain.status !== "active") return null;
+    return JSON.stringify(domainKvValue(row));
   }
 
   // Unknown prefix: never enqueued, so leave it alone.
@@ -599,11 +645,21 @@ export async function applyStorageMessage(
     case "r2_delete_prefix":
       await deleteR2Prefix(env, message.prefix);
       return;
+    case "org_sync":
+      await republishOrg(env, db, message.orgId);
+      return;
   }
 }
 
 function targetOf(message: StorageMessage): string {
-  return message.op === "r2_delete_prefix" ? message.prefix : message.key;
+  switch (message.op) {
+    case "r2_delete_prefix":
+      return message.prefix;
+    case "org_sync":
+      return message.orgId;
+    default:
+      return message.key;
+  }
 }
 
 /**
@@ -669,7 +725,7 @@ export async function logDeadLetterBatch(
   // The outbox row is the only record left of this work, so acknowledging a
   // message whose row did not persist discards it for good. A transient D1
   // failure earns a redelivery instead.
-  if (!recorded) {
+  if (recorded === null) {
     batch.retryAll();
     return;
   }
@@ -722,7 +778,7 @@ const REPUBLISH_BATCH = 100;
 /**
  * Re-sync every KV key an org's links resolve through, in a fixed number of
  * round trips. Used after a bulk state change on the org's links (suspend from
- * the admin route, auto-suspend from the abuse sweep): the consumer reads the
+ * the admin route, a hold or a warning from the abuse sweep): the consumer reads the
  * current row and writes what the key should be, so this does not need to know
  * which links actually changed.
  *
@@ -746,6 +802,101 @@ export async function republishOrgLinks(env: Env, db: DB, orgId: string): Promis
       addresses.slice(i, i + REPUBLISH_BATCH).map((a) => syncLinkMsg(a.slug, a.hostname)),
     );
   await Promise.all(batches.map((batch) => enqueueStorage(env, batch)));
+}
+
+/** Re-sync an org's links and custom domains, after a change to the org that
+ * every one of them carries (its owner's ban). */
+async function republishOrg(env: Env, db: DB, orgId: string): Promise<void> {
+  const domains = await db
+    .select({ hostname: schema.domains.hostname })
+    .from(schema.domains)
+    .where(eq(schema.domains.orgId, orgId));
+  await Promise.all([
+    republishOrgLinks(env, db, orgId),
+    domains.length > 0 &&
+      enqueueStorage(
+        env,
+        domains.map((d) => syncDomainMsg(d.hostname)),
+      ),
+  ]);
+}
+
+/**
+ * An `org_sync` outbox row for every org `orgs` picks, built to go in the
+ * same `db.batch` as the change that makes the org need one (a ban, an
+ * unban). Then the change and the record of its unfinished KV work commit
+ * together, or not at all, and a request that dies after the commit leaves
+ * the drain something to finish. Place it before the change in the batch,
+ * so `orgs` still sees the rows as they were.
+ *
+ * Returns the rows' ids for `publishOrgSyncs`, which deletes each one once
+ * its org is published.
+ */
+export function queueOrgSyncs(db: DB, orgs: SQL | undefined) {
+  return db
+    .insert(schema.storageOutbox)
+    .select(
+      db
+        .select({
+          id: sql<string>`lower(hex(randomblob(16)))`.as("id"),
+          op: sql<"org_sync">`'org_sync'`.as("op"),
+          target: schema.orgs.id,
+          reason: sql<"pending">`'pending'`.as("reason"),
+          createdAt: sql<number>`${Date.now()}`.as("created_at"),
+          attempts: sql<number>`0`.as("attempts"),
+          lastError: sql<string>`''`.as("last_error"),
+        })
+        .from(schema.orgs)
+        .where(orgs),
+    )
+    .onConflictDoUpdate({
+      target: [schema.storageOutbox.op, schema.storageOutbox.target],
+      set: { id: sql`excluded.id`, reason: sql`excluded.reason` },
+    })
+    .returning({ id: schema.storageOutbox.id, orgId: schema.storageOutbox.target });
+}
+
+/**
+ * Republish the orgs `queueOrgSyncs` recorded, now, and delete each row once
+ * its org is done. Never throws: a row whose org failed stays for the drain,
+ * and the change it follows has already committed.
+ */
+export async function publishOrgSyncs(
+  env: Env,
+  db: DB,
+  rows: { id: string; orgId: string }[],
+): Promise<void> {
+  if (rows.length === 0) return;
+  const results = await Promise.allSettled(rows.map((row) => republishOrg(env, db, row.orgId)));
+  const done = rows.filter((_, i) => results[i]?.status === "fulfilled").map((row) => row.id);
+  const failed = rows.length - done.length;
+  if (failed > 0) captureAlert([{ event: "org_republish_failed", count: failed }]);
+  if (done.length > 0)
+    await db
+      .delete(schema.storageOutbox)
+      .where(inArray(schema.storageOutbox.id, done))
+      .catch(() => {
+        // The drain republishes those orgs again, which changes nothing.
+      });
+}
+
+/**
+ * Re-sync every address one link answers to, after its suspension or warning
+ * changed. A link with three aliases that only republished its primary would
+ * keep its old state on the other two. Returns how many addresses it synced.
+ */
+export async function republishLink(env: Env, db: DB, linkId: string): Promise<number> {
+  const addresses = await db
+    .select({ slug: schema.linkAddresses.slug, hostname: schema.domains.hostname })
+    .from(schema.linkAddresses)
+    .leftJoin(schema.domains, eq(schema.linkAddresses.domainId, schema.domains.id))
+    .where(and(eq(schema.linkAddresses.linkId, linkId), isNull(schema.linkAddresses.retiredAt)));
+  if (addresses.length > 0)
+    await enqueueStorage(
+      env,
+      addresses.map((a) => syncLinkMsg(a.slug, a.hostname)),
+    );
+  return addresses.length;
 }
 
 // Cloudflare Queues caps sendBatch at 100 messages: this sweep enqueues one

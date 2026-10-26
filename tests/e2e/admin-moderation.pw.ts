@@ -1,3 +1,4 @@
+// fallow-ignore-file code-duplication -- specs repeat their setup so each reads on its own
 import { expect, test } from "@playwright/test";
 import { signUpAndVerify } from "./resend";
 import { makePlatformAdmin, queryRows } from "./db";
@@ -69,7 +70,7 @@ test("an admin can find a link by destination and suspend it", async ({ page }) 
   await dialog.getByLabel("Reason").fill("phishing report, ticket 412");
   await dialog.getByRole("button", { name: "Suspend link" }).click();
 
-  await expect(page.getByText("suspended").first()).toBeVisible({ timeout: 10_000 });
+  await expect(row.getByText("suspended")).toBeVisible({ timeout: 10_000 });
 
   // The redirect is gone, and the row and its clicks are not.
   await expect
@@ -148,4 +149,84 @@ test("the platform table fits its card instead of running off the side", async (
     () => document.documentElement.scrollWidth - window.innerWidth,
   );
   expect(overflow).toBeLessThanOrEqual(0);
+});
+
+test("an admin sees a suspended org and restores its links in bulk", async ({ page }) => {
+  const email = `admin-bulk-${Date.now()}@gmail.com`;
+  const destination = `https://bulk-${Date.now()}.example/page`;
+  await signUpAndVerify(page, email, password);
+  await createQuickLink(page, destination);
+  await makePlatformAdmin(page, email);
+
+  const link = (
+    await queryRows<{ slug: string; org_id: string }>(
+      page,
+      "select slug, org_id from links where destination = ?",
+      [destination],
+    )
+  )[0];
+  const suspend = await page.request.post(`/api/admin/links/orgs/${link.org_id}/suspend`, {
+    data: { reason: "bulk spec" },
+  });
+  expect(suspend.ok()).toBe(true);
+
+  // The org list says so: it used to show nothing.
+  await page.goto("/admin/orgs");
+  await expect(page.getByText("suspended").first()).toBeVisible({ timeout: 10_000 });
+
+  await page.goto(`/admin/links?org=${link.org_id}`);
+  await page.getByLabel("Filter by status").selectOption("Suspended");
+  await page.getByRole("checkbox", { name: "Select all links on this page" }).check();
+  await page.getByRole("button", { name: "Restore selected" }).click();
+  await expect(page.getByText(/1 link restored/)).toBeVisible({ timeout: 10_000 });
+
+  await expect
+    .poll(async () => (await page.request.get(`/${link.slug}`, { maxRedirects: 0 })).status(), {
+      timeout: 15_000,
+    })
+    .toBe(302);
+});
+
+test("a visitor reports a link and an admin sees and dismisses the report", async ({ page }) => {
+  const email = `admin-report-${Date.now()}@gmail.com`;
+  const destination = `https://reported-${Date.now()}.example/page`;
+  await signUpAndVerify(page, email, password);
+  await createQuickLink(page, destination);
+  await makePlatformAdmin(page, email);
+  const slug = (
+    await queryRows<{ slug: string }>(page, "select slug from links where destination = ?", [
+      destination,
+    ])
+  )[0].slug;
+
+  await page.goto(`/report?link=${slug}`);
+  await page.getByLabel("Details (optional)").fill("asks for a card number");
+  await page.getByRole("button", { name: "Send report" }).click();
+  await expect(page.getByText("Thanks. We will look at it.")).toBeVisible({ timeout: 15_000 });
+  // The owner is on the free plan, so the report warns the link at once.
+  // A paid org's link would only be queued (tests/worker/link-states).
+  const warnReason = async () =>
+    (
+      await queryRows<{ warn_reason: string | null }>(
+        page,
+        "select warn_reason from links where slug = ?",
+        [slug],
+      )
+    )[0].warn_reason;
+  expect(await warnReason()).toBe("Open report");
+
+  await page.goto("/admin/links");
+  // Scoped to the view switch: the owned table has a Reports column too.
+  await page
+    .getByRole("group", { name: "Link lists" })
+    .getByRole("button", { name: "Reports", exact: true })
+    .click();
+  const row = page.getByRole("row").filter({ hasText: slug });
+  await expect(row).toBeVisible({ timeout: 10_000 });
+  await expect(row.getByText("asks for a card number")).toBeVisible();
+
+  await row.getByRole("button", { name: "Dismiss" }).click();
+  await expect(page.getByText("No open reports.")).toBeVisible({ timeout: 10_000 });
+  // Dismissing the only report lifts the warning it set.
+  await expect.poll(warnReason).toBeNull();
 });

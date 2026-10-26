@@ -1,8 +1,8 @@
 import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import { and, eq, isNull, lte, or } from "drizzle-orm";
-import { Polar } from "@polar-sh/sdk";
 import { Webhook } from "standardwebhooks";
+import * as v from "valibot";
 import { drizzle } from "drizzle-orm/d1";
 import * as schema from "../db/schema";
 import type { AppEnv, DB, Env } from "../env";
@@ -15,13 +15,86 @@ import { billingEnabled } from "../plan";
 import { jsonBodyLimit } from "../body-limit";
 import type { BillingProvider } from "../billing-provider";
 
-const polarFor = (env: Env): BillingProvider =>
-  env.BILLING ??
-  new Polar({
+// Imported on first use: the SDK is 130 KB that every cold start would
+// otherwise parse, for the three routes below that call it.
+const polarFor = async (env: Env): Promise<BillingProvider> => {
+  if (env.BILLING) return env.BILLING;
+  const { createPolar } = await import("@polar-sh/sdk/2026-04");
+  return createPolar({
     // Unset only when billing is off, and the routes below answer 404 first.
     accessToken: env.POLAR_ACCESS_TOKEN ?? "",
-    server: env.POLAR_SERVER ?? "sandbox",
+    environment: env.POLAR_SERVER ?? "sandbox",
   });
+};
+
+/**
+ * What the Polar SDK throws for an HTTP error it knows: the parsed body, whose
+ * `error` names the case. Matched on that name, not the status: the SDK maps
+ * every 403 from this endpoint to "already canceled", and a token missing the
+ * `subscriptions:write` scope is a 403 too. Reading that as "nothing to
+ * revoke" would delete the account and keep billing it.
+ */
+const PolarRefusal = v.object({ error: v.object({ error: v.string() }) });
+
+/** The refusals that mean nothing is left to revoke. */
+const NOTHING_TO_REVOKE = new Set(["AlreadyCanceledSubscription", "ResourceNotFound"]);
+
+/**
+ * Ends a user's Polar subscription before their account is deleted (#337).
+ * Without this a deleted account kept paying: no row was left for the
+ * webhooks to match, and nobody was left to cancel from the portal.
+ *
+ * Returns false when Polar could not be reached or refused for any other
+ * reason, and the caller must then keep the account: deleting it anyway is
+ * the bug this exists to prevent. Revoking also ends the paid plan at once,
+ * which is moot, since the account is about to go.
+ */
+export async function endSubscriptionBeforeDelete(env: Env, userId: string): Promise<boolean> {
+  const row = await env.DB.prepare(
+    "select polar_customer_id as customerId, polar_subscription_id as subscriptionId from user where id = ?",
+  )
+    .bind(userId)
+    .first<{ customerId: string | null; subscriptionId: string | null }>();
+  if (!row?.customerId && !row?.subscriptionId) return true;
+  // Read off env, not billingEnabled(): that flag only holds once a request
+  // has set it, and this has to be right wherever it is called from. With no
+  // token there is no way to cancel, and deleting anyway is the bug (#337).
+  if (!(env.POLAR_ACCESS_TOKEN || env.BILLING)) {
+    captureAlert([{ event: "account_delete_billing_unconfigured", userId }]);
+    return false;
+  }
+  try {
+    const polar = await polarFor(env);
+    // Ask Polar rather than trust the stored id: the checkout-confirm
+    // fallback stores `pending:<checkout>` until the webhook brings the real
+    // one, and revoking that would answer "not found" while the real
+    // subscription went on billing.
+    const live = row.customerId
+      ? (await polar.subscriptions.list({ customer_id: row.customerId, active: true, limit: 100 }))
+          .items
+      : [];
+    const ids = new Set(live.map((subscription) => subscription.id));
+    if (row.subscriptionId && !row.subscriptionId.startsWith("pending:")) {
+      ids.add(row.subscriptionId);
+    }
+    await Promise.all([...ids].map((id) => revoke(polar, id)));
+    return true;
+  } catch (error) {
+    captureAlert([{ event: "account_delete_subscription_revoke_failed", userId }]);
+    console.error("account_delete_subscription_revoke_failed", userId, error);
+    return false;
+  }
+}
+
+/** Revokes one subscription; one already canceled or gone is not a failure. */
+async function revoke(polar: BillingProvider, id: string): Promise<void> {
+  try {
+    await polar.subscriptions.revoke(id);
+  } catch (error) {
+    const refusal = v.safeParse(PolarRefusal, error);
+    if (!refusal.success || !NOTHING_TO_REVOKE.has(refusal.output.error.error)) throw error;
+  }
+}
 
 // Mounted at /api/billing: the caller's own subscription (per-user billing).
 // (The Polar webhook itself is mounted separately, outside this router and
@@ -36,7 +109,8 @@ billingRoutes.use("*", async (c, next) => {
 
 /**
  * Which plan a Polar product grants: an explicit allowlist that fails
- * closed. An unrecognized product id (a misconfigured env var, a new Polar
+ * closed. Both the monthly and yearly product for a plan map to the same
+ * plan. An unrecognized product id (a misconfigured env var, a new Polar
  * product nobody wired up, a stale id from a deleted product) must never
  * grant a plan by falling through to the highest tier — that's how a mapping
  * mistake used to hand out Pro for free (see issue #17).
@@ -45,12 +119,27 @@ function planForProduct(env: Env, productId: string | undefined): "hobby" | "pro
   if (!productId) return null;
   if (productId === env.POLAR_HOBBY_PRODUCT_ID) return "hobby";
   if (productId === env.POLAR_PRO_PRODUCT_ID) return "pro";
+  if (productId === env.POLAR_HOBBY_YEARLY_PRODUCT_ID) return "hobby";
+  if (productId === env.POLAR_PRO_YEARLY_PRODUCT_ID) return "pro";
   return null;
+}
+
+/** The Polar product to check out for a plan at a billing interval. Yearly is
+ * a separate product priced 10% below twelve months. */
+function productIdFor(
+  env: Env,
+  plan: "hobby" | "pro",
+  interval: "month" | "year",
+): string | undefined {
+  if (plan === "hobby")
+    return interval === "year" ? env.POLAR_HOBBY_YEARLY_PRODUCT_ID : env.POLAR_HOBBY_PRODUCT_ID;
+  return interval === "year" ? env.POLAR_PRO_YEARLY_PRODUCT_ID : env.POLAR_PRO_PRODUCT_ID;
 }
 
 /** What the checkout route reads off its request body. */
 interface CheckoutBody {
   plan?: string;
+  interval?: string;
 }
 
 billingRoutes.post("/checkout", requireUser, async (c) => {
@@ -60,17 +149,26 @@ billingRoutes.post("/checkout", requireUser, async (c) => {
   // optional, so reading it finds the same absence.
   const body = await c.req.json<CheckoutBody>().catch(() => ({}) as CheckoutBody);
   const plan = body.plan ?? "pro";
-  log.set({ userId: user.id, plan });
+  const interval = body.interval ?? "month";
+  log.set({ userId: user.id, plan, interval });
   if (plan !== "hobby" && plan !== "pro")
     throw new HTTPException(400, { message: "plan must be hobby or pro" });
-  const productId = plan === "hobby" ? c.env.POLAR_HOBBY_PRODUCT_ID : c.env.POLAR_PRO_PRODUCT_ID;
-  if (!productId) throw new HTTPException(503, { message: `No Polar product is set for ${plan}` });
-  const checkout = await polarFor(c.env).checkouts.create({
+  if (interval !== "month" && interval !== "year")
+    throw new HTTPException(400, { message: "interval must be month or year" });
+  const productId = productIdFor(c.env, plan, interval);
+  if (!productId) {
+    throw new HTTPException(503, { message: `No Polar product is set for ${plan} (${interval})` });
+  }
+  const checkout = await (
+    await polarFor(c.env)
+  ).checkouts.create({
     products: [productId],
     // Polar interpolates {CHECKOUT_ID}; the SPA uses it to confirm the
-    // upgrade before celebrating (webhook is still the entitlement source).
-    successUrl: `${c.env.APP_URL}/billing?checkout_id={CHECKOUT_ID}`,
-    customerEmail: user.email,
+    // upgrade before celebrating. The webhook is the primary entitlement
+    // source; POST /checkout/:id/confirm below is the fallback for when it
+    // never lands.
+    success_url: `${c.env.APP_URL}/billing?checkout_id={CHECKOUT_ID}`,
+    customer_email: user.email,
     metadata: { userId: user.id },
   });
   log.audit({
@@ -80,6 +178,101 @@ billingRoutes.post("/checkout", requireUser, async (c) => {
     outcome: "success",
   });
   return c.json({ url: checkout.url });
+});
+
+/** One user's current plan, read fresh — used both to decide whether the
+ * confirm fallback below needs to write anything and to answer it. */
+async function currentPlan(db: Db, userId: string) {
+  const rows = await db
+    .select({ plan: schema.user.plan })
+    .from(schema.user)
+    .where(eq(schema.user.id, userId));
+  return rows[0]?.plan ?? "free";
+}
+
+/**
+ * Grants the plan a succeeded checkout paid for, unless the row already
+ * shows it. `status` is all a checkouts:write/checkouts:read token can see:
+ * Polar never backfills subscriptionId onto the checkout itself (verified
+ * against the sandbox API, not just undocumented), and reading the order or
+ * subscription that succeeding it created needs orders:read/subscriptions:read,
+ * a scope this integration doesn't carry. Polar's own guidance treats checkout
+ * status as the UX confirmation signal and the webhook as the entitlement
+ * source of truth, so this grants the plan on status alone and stands in a
+ * placeholder id: the real one arrives on whichever webhook (redelivered or
+ * fresh) lands next, matched by metadata.userId same as always, and
+ * overwrites it. Known gap: if that webhook's own timestamp is older than
+ * "now" (a stale redelivery, not a fresh event), notStale drops it entirely
+ * and the placeholder lingers until a genuinely later event (a renewal, a
+ * plan change) corrects it. Cosmetic: nothing reads polarSubscriptionId
+ * except the webhook's own fallback subject match, and hasBillingAccount /
+ * the portal button key off polarCustomerId, which this does set correctly.
+ *
+ * Skips the write entirely once the row already shows the target plan: the
+ * client's poll can race a webhook that landed a moment before this call,
+ * and notStale alone doesn't protect against that, because this route's
+ * synthetic timestamp is always "now" and so always outranks a real,
+ * slightly-earlier webhook write. Without this check that race replaces a
+ * real, freshly-written subscription id with this route's placeholder.
+ */
+async function confirmCheckoutPlan(
+  env: Env,
+  db: Db,
+  userId: string,
+  checkoutId: string,
+  checkout: Pick<
+    Awaited<ReturnType<BillingProvider["checkouts"]["get"]>>,
+    "status" | "product_id" | "customer_id" | "metadata"
+  >,
+) {
+  const before = await currentPlan(db, userId);
+  const targetPlan = planForProduct(env, checkout.product_id ?? undefined);
+  if (checkout.status !== "succeeded" || !targetPlan || before === targetPlan) return before;
+  await applyPolarEvent(env, db, {
+    type: "subscription.active",
+    data: {
+      id: `pending:${checkoutId}`,
+      customer_id: checkout.customer_id ?? undefined,
+      product_id: checkout.product_id ?? undefined,
+      status: "active",
+      metadata: checkout.metadata,
+      // "Now": the freshest fact we have. A later webhook redelivery
+      // carrying the subscription's real (earlier) created_at loses to
+      // this under notStale, which is correct: this row already reflects it.
+      modified_at: new Date().toISOString(),
+    },
+  });
+  return currentPlan(db, userId);
+}
+
+/**
+ * Fallback for when the webhook hasn't landed by the time the client's poll
+ * gives up (see WEBHOOK_POLL_MS/WEBHOOK_POLL_TRIES in billing.tsx): asks
+ * Polar directly whether the checkout succeeded and, if so, grants the plan
+ * itself instead of leaving someone who already paid looking free on every
+ * reload. Idempotent with a webhook that arrives later (or redelivers): both
+ * paths funnel into `applyPolarEvent`, which is timestamp-guarded
+ * (`notStale`), so whichever lands first stands and the other is a no-op.
+ *
+ * POST, not GET: same reasoning as /portal below, and this one actually
+ * writes a plan onto the account, so a GET's cousin (a prefetch) is worse.
+ */
+billingRoutes.post("/checkout/:id/confirm", requireUser, async (c) => {
+  const log = c.get("log");
+  const user = c.var.user!;
+  const checkoutId = c.req.param("id");
+  const checkout = await (await polarFor(c.env)).checkouts.get(checkoutId);
+  // SAFETY: only the checkout this account's own upgrade created may
+  // reconcile this account. metadata.userId is set server-side at creation
+  // (POST /checkout above) and Polar does not let the client change it, so
+  // this rejects both a stranger's checkout id and a stale one from before
+  // an account switch.
+  if (String(checkout.metadata.userId ?? "") !== user.id) {
+    throw new HTTPException(404, { message: "Not found" });
+  }
+  log.set({ userId: user.id, checkoutId, checkoutStatus: checkout.status });
+  const plan = await confirmCheckoutPlan(c.env, c.var.db, user.id, checkoutId, checkout);
+  return c.json({ plan });
 });
 
 // POST, not GET: this creates a Polar customer session. A GET that changes
@@ -93,8 +286,10 @@ billingRoutes.post("/portal", requireUser, async (c) => {
     .where(eq(schema.user.id, c.var.user!.id));
   const customerId = rows[0]?.customerId;
   if (!customerId) throw new HTTPException(400, { message: "No billing account yet" });
-  const session = await polarFor(c.env).customerSessions.create({ customerId });
-  return c.json({ url: session.customerPortalUrl });
+  const session = await (
+    await polarFor(c.env)
+  ).customerSessions.create({ customer_id: customerId });
+  return c.json({ url: session.customer_portal_url });
 });
 
 /**
@@ -198,8 +393,20 @@ function customerIdOf(event: PolarEvent): { polarCustomerId?: string } {
   return event.data.customer_id ? { polarCustomerId: event.data.customer_id } : {};
 }
 
-function subscriptionFacts(plan: "hobby" | "pro" | null, status: string) {
+function intervalForProduct(env: Env, productId: string | undefined): "month" | "year" | null {
+  if (!productId) return null;
+  if (productId === env.POLAR_HOBBY_YEARLY_PRODUCT_ID) return "year";
+  if (productId === env.POLAR_PRO_YEARLY_PRODUCT_ID) return "year";
+  return "month";
+}
+
+function subscriptionFacts(
+  plan: "hobby" | "pro" | null,
+  status: string,
+  interval: "month" | "year" | null,
+) {
   return {
+    polarSubscriptionInterval: interval,
     subscriptionPlan: plan,
     subscriptionStatus: status,
     plan: effectivePlanSql({ subscriptionPlan: plan, subscriptionStatus: status }),
@@ -232,7 +439,11 @@ async function subscriptionActiveMutation(db: Db, env: Env, event: PolarEvent) {
   return db
     .update(schema.user)
     .set({
-      ...subscriptionFacts(plan, event.data.status ?? "active"),
+      ...subscriptionFacts(
+        plan,
+        event.data.status ?? "active",
+        intervalForProduct(env, event.data.product_id),
+      ),
       polarCustomerId: event.data.customer_id ?? null,
       polarSubscriptionId: event.data.id,
       polarSubscriptionCancelAtPeriodEnd: false,
@@ -249,7 +460,7 @@ function subscriptionRevokedMutation(db: Db, event: PolarEvent) {
     .set({
       // The subscription is over, so its facts go with it. A comped user
       // keeps their comp, and `effectivePlanSql` keeps returning it.
-      ...subscriptionFacts(null, event.data.status ?? "canceled"),
+      ...subscriptionFacts(null, event.data.status ?? "canceled", null),
       polarSubscriptionId: null,
       polarSubscriptionCancelAtPeriodEnd: false,
       polarSubscriptionCurrentPeriodEnd: null,
@@ -295,7 +506,7 @@ async function subscriptionUpdatedMutation(db: Db, env: Env, event: PolarEvent) 
   return db
     .update(schema.user)
     .set({
-      ...subscriptionFacts(plan, status),
+      ...subscriptionFacts(plan, status, intervalForProduct(env, event.data.product_id)),
       // Identity moves with the facts. The row holds one subscription, the
       // most recently changed one, so writing another subscription's plan,
       // status and price while leaving the old id in place would describe a
@@ -342,15 +553,59 @@ async function mutationFor(db: Db, env: Env, event: PolarEvent) {
   }
 }
 
+/**
+ * Polar has two ways to turn a webhook secret into a signing key, and both
+ * kinds of secret look like `whsec_…`, so the secret itself cannot say which
+ * one it is. Secrets made before 8 September 2026 are Polar HMAC: the key is
+ * the whole string, which `standardwebhooks` reads only once it is base64
+ * encoded. Secrets made or reset from that date are Standard Webhooks: passed
+ * as they are. Polar's own SDKs try both, and so does this. Either key comes
+ * from the same secret, so trying two does not let anyone in who lacks it.
+ */
+function verifiesWith(key: string, body: string, headers: Record<string, string>): boolean {
+  try {
+    new Webhook(key).verify(body, headers);
+    return true;
+  } catch {
+    // A secret that is not valid base64 as given throws before it verifies
+    // anything; that only means this is not the key to use.
+    return false;
+  }
+}
+
+/**
+ * Applies one event's effect and, if it actually changed the plan, runs the
+ * entitlement reconciliation pass (#158). Shared by the webhook handler and
+ * the checkout-confirm fallback (POST /checkout/:id/confirm above), which
+ * synthesizes a subscription.active event from a checkout when Polar's own
+ * webhook never delivers one.
+ *
+ * One guarded statement, no delivery ledger: see `notStale` for why
+ * out-of-order deliveries are the case worth defending against and
+ * duplicates are not. A stale event matches no row and changes nothing.
+ * Read the subject *before* the mutation, because `subscription.revoked`
+ * clears `polar_subscription_id`, which is the only thing `subjectOf` has to
+ * go on for an event that carries no metadata.userId. Resolving afterwards
+ * matched no row, so the plan dropped to free and no org was ever locked or
+ * demoted: exactly the case #158 exists for.
+ */
+async function applyPolarEvent(env: Env, db: Db, event: PolarEvent): Promise<void> {
+  const subjectId = PLAN_EVENTS.has(event.type) ? await subjectIdOf(db, event) : null;
+  const mutation = await mutationFor(db, env, event);
+  if (!mutation) return;
+  const result = await mutation;
+  if (result.meta.changes === 0) await alertIfNoSuchSubject(db, event);
+  // `reconcileUser` swallows its own failures: a webhook that 500s earns a
+  // retry, and ten of those disable the endpoint.
+  else if (subjectId) await reconcileUser(env, db, subjectId);
+}
+
 export async function handlePolarWebhook(req: Request, env: Env): Promise<Response> {
   if (!env.POLAR_WEBHOOK_SECRET) return Response.json({ message: "Not found" }, { status: 404 });
   const body = await req.text();
-  try {
-    new Webhook(btoa(env.POLAR_WEBHOOK_SECRET)).verify(
-      body,
-      Object.fromEntries(req.headers.entries()),
-    );
-  } catch {
+  const headers = Object.fromEntries(req.headers.entries());
+  const secret = env.POLAR_WEBHOOK_SECRET;
+  if (!verifiesWith(btoa(secret), body, headers) && !verifiesWith(secret, body, headers)) {
     return Response.json({ message: "Invalid signature" }, { status: 403 });
   }
   // SAFETY: the webhook signature was verified above, so this body is one
@@ -358,27 +613,10 @@ export async function handlePolarWebhook(req: Request, env: Env): Promise<Respon
   // and id, which the handlers below branch on before reading anything else.
   const event = JSON.parse(body) as PolarEvent;
   const db = drizzle(env.DB, { schema });
-
-  // One guarded statement, no delivery ledger: see `notStale` for why
-  // out-of-order deliveries are the case worth defending against and
-  // duplicates are not. A stale event matches no row and changes nothing,
-  // which is a success as far as Polar is concerned — anything other than a
-  // 2xx here earns a retry, and ten consecutive non-2xx responses disable
-  // the endpoint outright.
-  // Read *before* the mutation, because `subscription.revoked` clears
-  // `polar_subscription_id`, which is the only thing `subjectOf` has to go on
-  // for an event that carries no metadata.userId. Resolving afterwards
-  // matched no row, so the plan dropped to free and no org was ever locked or
-  // demoted: exactly the case #158 exists for.
-  const subjectId = PLAN_EVENTS.has(event.type) ? await subjectIdOf(db, event) : null;
-  const mutation = await mutationFor(db, env, event);
-  if (mutation) {
-    const result = await mutation;
-    if (result.meta.changes === 0) await alertIfNoSuchSubject(db, event);
-    // `reconcileUser` swallows its own failures: a webhook that 500s earns a
-    // retry, and ten of those disable the endpoint.
-    else if (subjectId) await reconcileUser(env, db, subjectId);
-  }
+  // Anything other than a 2xx here earns a retry, and ten consecutive
+  // non-2xx responses disable the endpoint outright, so applyPolarEvent's
+  // own failures are left to propagate rather than swallowed here.
+  await applyPolarEvent(env, db, event);
   return Response.json({ received: true });
 }
 

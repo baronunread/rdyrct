@@ -2,8 +2,7 @@ import type { default as PosthogClient } from "posthog-js";
 import type { JsonValue } from "@/shared/types";
 import { bufferBeforeConsent, discardBuffer, drainBuffer } from "./consent-buffer";
 import { CONSENT_KEY, onConsentLapse, readConsent, writeConsent } from "./consent";
-import { isFunnelEvent } from "./funnel";
-import { clearHeroVariant, shownHeroVariant } from "./hero-variant";
+import { posthogTokenForHost } from "./posthog-project";
 
 // Nothing here loads posthog-js or contacts PostHog until the user accepts
 // analytics in the consent banner (see consent-banner.tsx): before that,
@@ -39,7 +38,22 @@ function loadClient(): Promise<typeof PosthogClient | null> | null {
       // SAFETY: Vite inlines every VITE_-prefixed variable as a string
       // literal at build time, or leaves it undefined when it is unset, which
       // is exactly what the check below is for.
-      const token = import.meta.env.VITE_PUBLIC_POSTHOG_PROJECT_TOKEN as string | undefined;
+      const productionToken = import.meta.env.VITE_PUBLIC_POSTHOG_PROJECT_TOKEN as
+        | string
+        | undefined;
+      // SAFETY: Vite inlines this public project token as a string or undefined too.
+      const developmentToken = import.meta.env.VITE_PUBLIC_POSTHOG_DEV_PROJECT_TOKEN as
+        | string
+        | undefined;
+      const token = posthogTokenForHost(
+        window.location.hostname,
+        productionToken,
+        developmentToken,
+        import.meta.env.DEV,
+      );
+      // An unconfigured local project stays silent rather than falling back
+      // to production. This also covers built previews, where DEV is false.
+      if (!token) return null;
       // SAFETY: as above.
       const host = import.meta.env.VITE_PUBLIC_POSTHOG_HOST as string | undefined;
       const missingVariable = !token
@@ -138,7 +152,6 @@ export function revokeAnalyticsConsent() {
 /** Shared by Reject, a Reject in another tab, and the answer lapsing. */
 function stopCapturing() {
   discardBuffer();
-  clearHeroVariant();
   // A later Accept in this page should identify the user again.
   if (identifiedId) pendingIdentity ??= { id: identifiedId, properties: identifiedProperties };
   identifiedId = null;
@@ -178,17 +191,8 @@ function clearPostHogStorage() {
   }
 }
 
-/** Funnel steps from a document that showed the landing hero say which
- *  version it was, so the A/B test is read straight off the funnel. */
-export function withHeroVariant(event: string, properties?: EventProperties) {
-  const variant = shownHeroVariant();
-  if (!variant || !isFunnelEvent(event)) return properties;
-  return { ...properties, hero_variant: variant };
-}
-
 const posthog = {
-  capture(event: string, eventProperties?: EventProperties) {
-    const properties = withHeroVariant(event, eventProperties);
+  capture(event: string, properties?: EventProperties) {
     const client = loadClient();
     // Null means no consent yet. Hold funnel steps so the path survives a
     // later Accept; everything else is dropped, as before.

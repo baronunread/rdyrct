@@ -11,7 +11,7 @@ import {
 } from "@/app/ui/icons";
 import { AnimatePresence, LazyMotion, domAnimation } from "motion/react";
 import { type LinkDTO, type Sort } from "@/shared/types";
-import { Slug, Table, Th, Td } from "../ui/misc";
+import { Badge, Slug, Table, Th, Td } from "../ui/misc";
 import { Menu, MenuItem, MenuSeparator } from "../ui/menu";
 import { SortTh } from "../ui/sort-th";
 import { shortDate } from "../lib/dates";
@@ -93,6 +93,14 @@ function LinkCell({
           onCopy={(text) => copyToClipboard(text, toast)}
         />
       </span>
+      {link.suspendedAt && (
+        <span
+          className="shrink-0"
+          title="Paused. It does not redirect until we have looked at it. If this is a mistake, write to support and we will restore it."
+        >
+          <Badge color="pink">paused</Badge>
+        </span>
+      )}
     </div>
   );
 }
@@ -159,8 +167,13 @@ function LinkRow({
             navigate={actions.navigate}
           />
         </Td>
-        <Td className="hidden truncate text-xs text-muted lg:table-cell">
-          {link.title || <span className="text-muted">—</span>}
+        {/* An untitled link leaves the cell empty: a dash read as a title,
+            and a word would be mistaken for one. */}
+        <Td
+          className="hidden truncate text-xs text-muted lg:table-cell"
+          title={link.title || undefined}
+        >
+          {link.title}
         </Td>
         <Td className="hidden max-w-64 xl:table-cell">
           <a
@@ -172,7 +185,9 @@ function LinkRow({
             {/* A destination is a URL somebody pastes and checks character by
                 character, so it keeps the mono face the title beside it does
                 not. */}
-            <span className="truncate font-mono text-xs">{link.destination}</span>
+            <span className="truncate font-mono text-xs" title={link.destination}>
+              {link.destination}
+            </span>
             <ExternalLink size={12} className="shrink-0" />
           </a>
         </Td>

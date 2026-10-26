@@ -1,3 +1,4 @@
+// fallow-ignore-file code-duplication -- sweep specs repeat their setup so each reads on its own
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import * as Sentry from "@sentry/cloudflare";
 import { env } from "cloudflare:workers";
@@ -13,6 +14,7 @@ import {
 } from "../../src/worker/abuse";
 import {
   applyTestMigrations,
+  captureEmails,
   fetchWorker,
   freeOwnerCookie,
   sampleLink,
@@ -47,6 +49,14 @@ async function seedNewOrg() {
   await env.DB.prepare("update orgs set created_at = ? where id = 'org-1'").bind(Date.now()).run();
 }
 
+/** An org past the 72-hour hold window but inside the seven-day new-org one:
+ * it is flagged for review, not held. */
+async function seedFourDayOldOrg() {
+  await env.DB.prepare("update orgs set created_at = ? where id = 'org-1'")
+    .bind(Date.now() - 4 * 86_400_000)
+    .run();
+}
+
 /** `count` click rows for the sample link, all timestamped today. */
 async function seedClicksToday(count: number) {
   await env.DB.prepare(
@@ -58,10 +68,26 @@ async function seedClicksToday(count: number) {
     .run();
 }
 
+const reviewFlag = async () =>
+  (
+    await env.DB.prepare("select review_flagged_at as at from orgs where id = 'org-1'").first<{
+      at: number | null;
+    }>()
+  )?.at ?? null;
+
 const suspendedCount = async () =>
   (
     await env.DB.prepare(
       "select count(*) as n from links where org_id = ? and suspended_at is not null",
+    )
+      .bind(sampleLink.orgId)
+      .first<{ n: number }>()
+  )?.n ?? 0;
+
+const warnedCount = async () =>
+  (
+    await env.DB.prepare(
+      "select count(*) as n from links where org_id = ? and warned_at is not null",
     )
       .bind(sampleLink.orgId)
       .first<{ n: number }>()
@@ -151,7 +177,7 @@ describe("suspendOrgLinks", () => {
 });
 
 describe("sweepAbusiveOrgs", () => {
-  it("suspends a free, brand-new org past the redirect ceiling and alerts", async () => {
+  it("warns, never suspends, a free brand-new org past the redirect ceiling (#387)", async () => {
     await seedLink();
     await seedFreeOwner();
     await seedNewOrg();
@@ -160,19 +186,254 @@ describe("sweepAbusiveOrgs", () => {
 
     await sweepAbusiveOrgs(testEnv);
 
-    expect(await suspendedCount()).toBe(1);
+    expect(await suspendedCount()).toBe(0);
+    expect(await warnedCount()).toBe(1);
+    expect(await reviewFlag()).not.toBeNull();
+    // The warning rides in the KV value, so the redirect path shows it with
+    // no D1 read (#344).
+    const kv = await env.LINKS.get(`slug:${sampleLink.slug}`, "json");
+    expect(kv).toMatchObject({ linkId: sampleLink.id, warn: true });
     expect(alert).toHaveBeenCalledWith(
-      "org_auto_suspended",
+      "org_high_redirect_volume",
       expect.objectContaining({ level: "error" }),
     );
     alert.mockRestore();
   });
 
-  it("leaves an org under the ceiling alone", async () => {
+  it("mails the platform admin once about an org over the ceiling, and its owner not at all", async () => {
     await seedLink();
     await seedFreeOwner();
     await seedNewOrg();
-    await seedClicksToday(REDIRECT_CEILING_PER_DAY - 1);
+    await seedClicksToday(REDIRECT_CEILING_PER_DAY + 1);
+    const mail = captureEmails();
+    const alert = vi.spyOn(Sentry, "captureMessage").mockReturnValue("");
+    const withAdmin = { ...testEnv, SUPERADMIN_EMAIL: "admin@example.com" };
+
+    await sweepAbusiveOrgs(withAdmin);
+    await sweepAbusiveOrgs(withAdmin);
+
+    const admin = mail.sent.filter((m) => m.to === "admin@example.com");
+    expect(admin).toHaveLength(1);
+    expect(admin[0]?.subject).toMatch(/^Over the ceiling:/);
+    expect(admin[0]?.text).toContain("Nothing was suspended");
+    // Nothing happened to the owner's links that they need to answer.
+    expect(mail.sent.some((m) => m.to === "owner@example.com")).toBe(false);
+    alert.mockRestore();
+    mail.restore();
+  });
+
+  it("holds a brand-new free org on a burst on a free host, tells both people, and acts once", async () => {
+    await seedLink();
+    await env.DB.prepare("update links set destination = 'https://some-app.vercel.app/'").run();
+    await seedFreeOwner();
+    await seedNewOrg();
+    await seedClicksToday(201);
+    const mail = captureEmails();
+    const alert = vi.spyOn(Sentry, "captureMessage").mockReturnValue("");
+    const withAdmin = { ...testEnv, SUPERADMIN_EMAIL: "admin@example.com" };
+
+    await sweepAbusiveOrgs(withAdmin);
+    await sweepAbusiveOrgs(withAdmin);
+
+    expect(await suspendedCount()).toBe(1);
+    expect(alert.mock.calls.filter(([m]) => m === "org_held")).toHaveLength(1);
+    const owner = mail.sent.filter((m) => m.to === "owner@example.com");
+    expect(owner).toHaveLength(1);
+    expect(owner[0]?.subject).toBe("Your links are on hold");
+    expect(owner[0]?.text).toContain("write to support@mail.rdyrct.com");
+    // The owner is told it happened, not which rule fired.
+    expect(owner[0]?.text).not.toMatch(/201|burst|redirects/);
+    const admin = mail.sent.filter((m) => m.to === "admin@example.com");
+    expect(admin).toHaveLength(1);
+    expect(admin[0]?.subject).toMatch(/^Held:/);
+    expect(admin[0]?.text).toContain("burst last hour");
+    alert.mockRestore();
+    mail.restore();
+  });
+
+  it("only flags a brand-new org on traffic alone: a launch looks the same as a campaign", async () => {
+    await seedLink();
+    await seedFreeOwner();
+    await seedNewOrg();
+    await seedClicksToday(201);
+    const mail = captureEmails();
+    const alert = vi.spyOn(Sentry, "captureMessage").mockReturnValue("");
+
+    await sweepAbusiveOrgs({ ...testEnv, SUPERADMIN_EMAIL: "admin@example.com" });
+
+    expect(await suspendedCount()).toBe(0);
+    expect(await reviewFlag()).not.toBeNull();
+    // Its links keep working, behind the warning page (#344).
+    expect(await warnedCount()).toBe(1);
+    expect(
+      mail.sent.some((m) => m.to === "admin@example.com" && m.subject.startsWith("Needs review")),
+    ).toBe(true);
+    expect(mail.sent.some((m) => m.to === "owner@example.com")).toBe(false);
+    alert.mockRestore();
+    mail.restore();
+  });
+
+  it("holds a brand-new org on a burst when a link of it has an open report", async () => {
+    await seedLink();
+    await seedFreeOwner();
+    await seedNewOrg();
+    await env.DB.prepare(
+      "insert into link_reports (id, slug, link_id, org_id, reason, created_at) values ('r1', 'sale', 'link-1', 'org-1', 'phishing', ?)",
+    )
+      .bind(Date.now())
+      .run();
+    await seedClicksToday(201);
+    const alert = vi.spyOn(Sentry, "captureMessage").mockReturnValue("");
+
+    await sweepAbusiveOrgs(testEnv);
+
+    expect(await suspendedCount()).toBe(1);
+    alert.mockRestore();
+  });
+
+  it("only flags an org between three and seven days old, and its links keep redirecting", async () => {
+    await seedLink();
+    await seedFreeOwner();
+    await seedNewOrg();
+    await seedFourDayOldOrg();
+    await seedClicksToday(201);
+    const alert = vi.spyOn(Sentry, "captureMessage").mockReturnValue("");
+
+    await sweepAbusiveOrgs(testEnv);
+    await sweepAbusiveOrgs(testEnv);
+
+    expect(await suspendedCount()).toBe(0);
+    expect(await reviewFlag()).not.toBeNull();
+    expect(await warnedCount()).toBe(1);
+    expect(alert.mock.calls.filter(([m]) => m === "org_needs_review")).toHaveLength(1);
+    alert.mockRestore();
+  });
+
+  it("flags a link made today that is already past 300 redirects, under the burst limit", async () => {
+    await seedLink();
+    await seedFreeOwner();
+    await seedNewOrg();
+    await seedFourDayOldOrg();
+    await env.DB.prepare("update links set created_at = ?").bind(Date.now()).run();
+    // Five hours ago, so the last-hour burst rule cannot be what fires.
+    await env.DB.prepare(
+      `insert into clicks (link_id, org_id, ts, country, referrer, device)
+       select ?, ?, ?, '', '', ''
+       from (with recursive c(x) as (select 1 union all select x + 1 from c where x < ?) select x from c)`,
+    )
+      .bind(sampleLink.id, sampleLink.orgId, Date.now() - 5 * 3_600_000, 350)
+      .run();
+    const alert = vi.spyOn(Sentry, "captureMessage").mockReturnValue("");
+
+    await sweepAbusiveOrgs(testEnv);
+
+    expect(await reviewFlag()).not.toBeNull();
+    alert.mockRestore();
+  });
+
+  it("does not hold an old link with the same traffic: only a new link is the signal", async () => {
+    await seedLink();
+    await seedFreeOwner();
+    await seedNewOrg();
+    await seedFourDayOldOrg();
+    await env.DB.prepare(
+      `insert into clicks (link_id, org_id, ts, country, referrer, device)
+       select ?, ?, ?, '', '', ''
+       from (with recursive c(x) as (select 1 union all select x + 1 from c where x < ?) select x from c)`,
+    )
+      .bind(sampleLink.id, sampleLink.orgId, Date.now() - 5 * 3_600_000, 350)
+      .run();
+    const alert = vi.spyOn(Sentry, "captureMessage").mockReturnValue("");
+
+    await sweepAbusiveOrgs(testEnv);
+
+    expect(await reviewFlag()).toBeNull();
+    alert.mockRestore();
+  });
+
+  it("leaves an established org's traffic alone", async () => {
+    await seedLink();
+    await seedFreeOwner();
+    await seedClicksToday(REDIRECT_CEILING_PER_DAY / 4 + 1);
+    const alert = vi.spyOn(Sentry, "captureMessage").mockReturnValue("");
+
+    await sweepAbusiveOrgs(testEnv);
+
+    expect(await reviewFlag()).toBeNull();
+    alert.mockRestore();
+  });
+
+  it("does not warn again an org an admin cleared", async () => {
+    await seedLink();
+    await seedFreeOwner();
+    await seedNewOrg();
+    await seedClicksToday(REDIRECT_CEILING_PER_DAY + 1);
+    const alert = vi.spyOn(Sentry, "captureMessage").mockReturnValue("");
+    await sweepAbusiveOrgs(testEnv);
+    expect(await warnedCount()).toBe(1);
+
+    // What the admin "Mark reviewed" does: flag off, warnings off, cleared.
+    await env.DB.prepare("update links set warned_at = null, warn_reason = null").run();
+    await env.DB.prepare("update orgs set cleared_at = ?, review_flagged_at = null")
+      .bind(Date.now())
+      .run();
+    await sweepAbusiveOrgs(testEnv);
+
+    expect(await warnedCount()).toBe(0);
+    expect(await reviewFlag()).toBeNull();
+    alert.mockRestore();
+  });
+
+  it("does not flag again an org an admin marked reviewed", async () => {
+    await seedLink();
+    await seedFreeOwner();
+    await seedNewOrg();
+    await seedFourDayOldOrg();
+    await seedClicksToday(201);
+    const alert = vi.spyOn(Sentry, "captureMessage").mockReturnValue("");
+    await sweepAbusiveOrgs(testEnv);
+    expect(await reviewFlag()).not.toBeNull();
+
+    await env.DB.prepare("update orgs set review_flagged_at = null, cleared_at = ?")
+      .bind(Date.now())
+      .run();
+    await sweepAbusiveOrgs(testEnv);
+
+    expect(await reviewFlag()).toBeNull();
+    alert.mockRestore();
+  });
+
+  it("counts a rolling 24 hours, not the UTC day", async () => {
+    await seedLink();
+    await seedFreeOwner();
+    await seedNewOrg();
+    // Yesterday evening, always inside 24h and always before UTC midnight
+    // when this runs shortly after it.
+    await env.DB.prepare(
+      `insert into clicks (link_id, org_id, ts, country, referrer, device)
+       select ?, ?, ?, '', '', ''
+       from (with recursive c(x) as (select 1 union all select x + 1 from c where x < ?) select x from c)`,
+    )
+      .bind(
+        sampleLink.id,
+        sampleLink.orgId,
+        Date.now() - 20 * 60 * 60 * 1000,
+        REDIRECT_CEILING_PER_DAY + 1,
+      )
+      .run();
+    const alert = vi.spyOn(Sentry, "captureMessage").mockReturnValue("");
+
+    await sweepAbusiveOrgs(testEnv);
+
+    expect(await warnedCount()).toBe(1);
+    alert.mockRestore();
+  });
+
+  it("leaves an org under every threshold alone", async () => {
+    await seedLink();
+    await seedFreeOwner();
+    await seedNewOrg();
+    await seedClicksToday(150);
 
     await sweepAbusiveOrgs(testEnv);
 
@@ -189,9 +450,10 @@ describe("sweepAbusiveOrgs", () => {
     await sweepAbusiveOrgs(testEnv);
 
     expect(await suspendedCount()).toBe(0);
+    expect(await warnedCount()).toBe(0);
   });
 
-  it("is idempotent: a second pass suspends nothing more", async () => {
+  it("is idempotent: a second pass warns and alerts nothing more", async () => {
     await seedLink();
     await seedFreeOwner();
     await seedNewOrg();
@@ -202,7 +464,7 @@ describe("sweepAbusiveOrgs", () => {
     alert.mockClear();
     await sweepAbusiveOrgs(testEnv);
 
-    expect(alert).not.toHaveBeenCalledWith("org_auto_suspended", expect.anything());
+    expect(alert).not.toHaveBeenCalledWith("org_high_redirect_volume", expect.anything());
     alert.mockRestore();
   });
 
@@ -220,11 +482,13 @@ describe("sweepAbusiveOrgs", () => {
     await sweepAbusiveOrgs(testEnv);
 
     expect(await suspendedCount()).toBe(0);
+    // Nor warns it: an established org's volume is a case for a human.
+    expect(await warnedCount()).toBe(0);
+    expect(await reviewFlag()).not.toBeNull();
     expect(alert).toHaveBeenCalledWith(
       "org_high_redirect_volume",
       expect.objectContaining({ level: "error" }),
     );
-    expect(alert).not.toHaveBeenCalledWith("org_auto_suspended", expect.anything());
     alert.mockRestore();
   });
 });

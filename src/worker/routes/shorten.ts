@@ -12,7 +12,8 @@
  *  - Turnstile (#304) on the "anon-link" scope, so a bot has to pass a challenge.
  *  - Its own rate-limit namespace, not the one guarding auth: a flood here
  *    must not lock anybody out of signing in.
- *  - Destination scoring (#68) after the response, same as a real link.
+ *  - Destination scoring (#68) after the response, same as a real link,
+ *    and Google Web Risk (#341) before it: a listed site is refused.
  *  - Random slugs only, and a 24-hour life, so the shared namespace cannot
  *    be squatted or farmed.
  */
@@ -27,13 +28,24 @@ import * as schema from "../db/schema";
 import type { AppEnv, Env } from "../env";
 import { jsonBodyLimit } from "../body-limit";
 import { assertNotShortener } from "../abuse";
+import {
+  assertNotBlocked,
+  assertNotOwnShortLink,
+  holdIfSuspicious,
+  isBlockedHost,
+} from "../abuse-hold";
+import { holdReasonFor } from "../../shared/abuse-rules";
 import { publishLink, resolveSlug, unpublishLink } from "../kv";
-import { scoreAndRecord } from "../risk";
+import { askWebRisk, scoreAndRecord } from "../risk";
+import { checkLinkDestination } from "../destination-check";
+import { enqueueStorage, syncLinkMsg } from "../storage";
+import { orgLinkWarning } from "../link-warning";
 import { spendToken } from "../turnstile";
 import { TURNSTILE_FAILED_CODE } from "@/shared/types";
 import { isValidHttpUrl, linkUrl, normalizeUrl, randomSlug, uid } from "../util";
 import { publicClientKey, rateLimitAllows } from "../rate-limit";
 import { insertLinkWithinLimit, orgPlan } from "../plan";
+import { WEB_RISK_NOTICE } from "../destination-check";
 
 /** How long an unclaimed link keeps working. */
 const ANON_LINK_TTL_MS = 24 * 60 * 60 * 1000;
@@ -81,6 +93,28 @@ shortenRoutes.post("/", async (c) => {
   assertNotShortener(destination);
 
   const db = drizzle(c.env.DB, { schema });
+  await assertNotBlocked(db, destination);
+  assertNotOwnShortLink(c.env, destination);
+  // An anonymous link has no org, no owner and no human review, so a
+  // scam-shaped destination is refused outright rather than held. Signing up
+  // makes it a normal link, which is held for review instead.
+  if (holdReasonFor(destination))
+    throw new HTTPException(422, {
+      message:
+        "That destination looks like a scam page, so it cannot be shortened without an account. Sign up and we will review it.",
+    });
+  // And asked of Web Risk (#341) before anything is published, for the same
+  // reason: there is no org to hold, the redirect path never re-checks an
+  // anonymous link, and nobody can report one, so a hit found after the key
+  // is live would change nothing. Up to three seconds, and a cached answer
+  // costs nothing; no key, or no answer, and the link is made as before.
+  const webRisk = await askWebRisk(c.env, destination);
+  log.set({ webRisk: { outcome: webRisk.outcome } });
+  if (webRisk.outcome === "hit")
+    throw new HTTPException(422, {
+      // Attribution and the advisory notice: Service Specific Terms §47.
+      message: `Google Web Risk lists this site as unsafe, so it cannot be shortened. ${WEB_RISK_NOTICE}`,
+    });
   const now = Date.now();
   const expiresAt = now + ANON_LINK_TTL_MS;
   const row = {
@@ -164,7 +198,7 @@ shortenRoutes.get("/clicks", async (c) => {
  * from the same function.
  */
 async function scoreAnonLink(env: Env, id: string, destination: string): Promise<void> {
-  await scoreAndRecord(env.DB, id, destination, "anon_links");
+  await scoreAndRecord(env, id, destination, "anon_links");
 }
 
 /** A random slug that is not already taken, in either table. */
@@ -243,6 +277,12 @@ export async function claimAnonLink(
     .where(eq(schema.anonLinks.claimToken, claimToken));
   const anon = rows[0];
   if (!anon || anon.expiresAt <= Date.now()) return null;
+  // The blocklist may have grown since the link was made, and claiming is
+  // creating a link in an org: it gets the same checks as any other.
+  const { plan, limits } = await orgPlan(db, orgId);
+  if (await isBlockedHost(db, anon.destination)) return null;
+  const hold = await holdIfSuspicious(env, db, orgId, plan, anon.destination);
+  const warning = hold ? null : await orgLinkWarning(db, orgId);
 
   const link = {
     id: uid(),
@@ -271,10 +311,16 @@ export async function claimAnonLink(
     riskReasons: anon.riskReasons,
     riskCheckedAt: anon.riskCheckedAt,
     riskProvider: anon.riskProvider,
-    // New links are never born suspended; only an admin sets this (#67).
-    suspendedAt: null,
+    // Held, like any new link, when the destination is scam-shaped.
+    suspendedAt: hold?.suspendedAt ?? null,
     suspendedBy: null,
-    suspendReason: null,
+    suspendReason: hold?.suspendReason ?? null,
+    // Or warned, while the org is (#344).
+    warnedAt: warning?.warnedAt ?? null,
+    warnReason: warning?.warnReason ?? null,
+    // Unknown: the anonymous row has no such column, so the weekly rescan
+    // (#341) takes it first.
+    webRiskCheckedAt: null,
   };
   const address = {
     id: uid(),
@@ -292,7 +338,6 @@ export async function claimAnonLink(
   // Through the same plan-guarded insert every other link goes through, not a
   // raw one: claiming is still creating a link in somebody's organization,
   // and an org one under its limit must not be able to take ten.
-  const { limits } = await orgPlan(db, orgId);
   if (!(await insertLinkWithinLimit(db, env, link, address, limits.links))) return null;
 
   // Only once the link exists: an anon row deleted alongside a refused
@@ -300,15 +345,22 @@ export async function claimAnonLink(
   await db.delete(schema.anonLinks).where(eq(schema.anonLinks.id, anon.id));
 
   // Republish without the expiry, and now carrying the org, so clicks start
-  // being recorded against the link its owner can see.
-  await publishLink(env, { ...link, addressId: address.id, expiresAt: null }, null);
+  // being recorded against the link its owner can see. Through the sync, which
+  // reads the row: a claim that landed held or warned must serve that page,
+  // not the plain redirect publishLink would write.
+  await enqueueStorage(env, [syncLinkMsg(link.slug, null)]);
 
   // The verdict copied above can be empty. Scoring an anonymous link runs
   // after its response, in waitUntil, and a claim landing first copies four
   // nulls and then deletes the only row that background task knows how to
   // update: the link stayed unscored for good, on the one table moderation
   // reads. Scored here instead, against the row that now exists.
-  if (anon.riskCheckedAt === null) await scoreAndRecord(env.DB, link.id, link.destination);
+  //
+  // A copied Web Risk hit is checked again too: on the anonymous row it held
+  // nothing, because there was no org to hold, and claiming must not be the
+  // way round that.
+  if (anon.riskCheckedAt === null || anon.riskReasons?.includes("web_risk_"))
+    await checkLinkDestination(env, link);
   return link;
 }
 

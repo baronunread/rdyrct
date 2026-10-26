@@ -24,7 +24,43 @@ bun run db:reset:local      # wipe local D1 + KV, re-apply migrations (start fro
 bun add <pkg>               # dependencies
 bunx agent-browser          # real-browser checks: screenshots, clicking through pages. Use it for any visual verification; do not hand-roll headless Chrome
 bun run db:seed:local       # seed local D1/KV with fake data (run dev server first)
+bun run deploy              # build, apply D1 migrations, deploy; VITE_RDYRCT_SITE=1 (in .env) for rdyrct.com, otherwise a self-hosted copy
 ```
+
+**Rolling back a release.** `bun run deploy` migrates before it deploys.
+Wrangler has no down migrations, so a rollback is two steps:
+`bunx wrangler rollback` for the code, and, if a migration has to be undone
+too, a D1 Time Travel restore to just before the deploy
+(`bunx wrangler d1 time-travel restore rdyrct --timestamp=<deploy time>`).
+The restore puts the whole database back, so every write since that moment
+is lost.
+
+**One repo builds two things: rdyrct.com, and the copy a fork self-hosts.**
+`VITE_RDYRCT_SITE=1` builds rdyrct.com; without it every build, dev
+server included, is a self-hosted copy (`scripts/site-mode.ts`). It lives
+in the gitignored `.env`, never in a committed file, because a fork copies
+those. `bun run deploy` refuses when the flag and `APP_HOST` in
+`wrangler.jsonc` disagree. vite.config.ts writes the answer into
+`RDYRCT_SITE` (`src/shared/site.ts`) as a constant. A self-hosted build:
+
+- opens on the app: `/` redirects to `/dashboard`;
+- has none of rdyrct.com's pages (`src/app/marketing-routes.tsx` is not
+  bundled, and the Worker answers `SITE_ONLY_PATHS`, `/pricing.md` and
+  `/api/shorten` with a 404);
+- loses everything between `index.html`'s `rdyrct.com only` markers
+  (canonical, share cards, structured data, the stats script, the crawler
+  text), and the CSP allows no stats host;
+- swaps the sitemap, `llms*.txt`, `ai.txt` and `og.png` for a
+  `robots.txt` that disallows everything (`scripts/self-host-files.ts`);
+- links the privacy policy at `VITE_PRIVACY_URL` from the cookie banner,
+  which only appears when the build has a PostHog token.
+
+A new rdyrct.com-only page goes in `marketing-routes.tsx` and
+`PRERENDERED_PUBLIC_PATHS`. `bun run test:worker:self-host` and
+`bun run e2e:self-host` check a fork's build; CI runs both. The browser
+run uses `.dev.vars.self-host`, not your `.dev.vars`: no email, no Polar,
+no Google, so it also covers sign-up without a code, no billing and the
+`/admin` warning.
 
 **Local Cloudflare state**: while `bun run dev` runs, the Explorer API at
 `https://rdyrct.localhost/cdn-cgi/explorer/api` exposes the local KV, R2, D1,
@@ -39,6 +75,7 @@ bun run check                          # app + shared, worker, worker tests (thr
 bun run test                           # unit tests (bun test, tests/)
 bun run test:worker                    # worker tests (vitest-pool-workers, tests/worker/)
 bun run e2e:smoke                      # browser tests (playwright, tests/e2e/); needs .dev.vars
+bun run e2e:self-host                  # browser tests against a self-hosted build (own dist/, so not alongside e2e:smoke)
 bun run verify                         # static checks + unit + worker tests, no e2e: the local gate
 bun run verify:e2e                     # verify + the full e2e:smoke suite: what CI runs
 bun run doctor                         # react-doctor audit (React health score; --verbose for details)
@@ -103,7 +140,7 @@ via `parseBody` in `src/worker/schemas.ts`), name the type it parses to, or
 write a `SAFETY:` comment on the line above saying which invariant makes the
 assertion sound. `JsonValue`, `lookup`, `oneOf`, `nonEmpty` and `orgPlanOf`
 in `src/shared` exist for the cases that come up repeatedly. The plugin is
-someone else's code, so oxlint, oxfmt, fallow and react-doctor all skip it.
+someone else's code, so oxlint, bun fmt, fallow and react-doctor all skip it.
 
 `bun run fallow` is the gate: it scopes to the files this branch changed and
 fails only on findings the branch introduced, counted against
@@ -167,7 +204,7 @@ Shell writes to repo files are sandboxed; edit through the editor tools, not
   owner's plan**: `orgPlan()` in `src/worker/plan.ts` resolves the owner. Only
   Pro raises the owned-org cap above 1. Caps: `PLAN_LIMITS` in
   `src/shared/types.ts` (`{ orgs, links, members, domains, qr,
-analyticsDays }`). Slugs on the **shared** domain are always random (every
+  analyticsDays }`). Slugs on the **shared** domain are always random (every
   plan); chosen slugs exist only on custom domains, so the shared namespace
   can't be squatted. Every account gets an org at
   sign-up (#65), named from the email domain (`src/shared/org-name.ts`) and
@@ -204,20 +241,33 @@ analyticsDays }`). Slugs on the **shared** domain are always random (every
   secret is the platform admin; admin routes **404** (not 403) for everyone else.
   Platform admins can **ban** users (`user.banned`): banning wipes their sessions
   and `databaseHooks.session.create.before` (in `better-auth.ts`) refuses new
-  ones, while their orgs/links keep working.
+  ones. A ban (`banUser` in `abuse-hold.ts`) also sets `orgs.disabled_at` on
+  every org the user owns: each link and custom domain answers a "disabled"
+  page (410) from its KV value, nobody can change the org, the ban revokes
+  the user's Polar subscription, and the daily cron deletes the org 90 days
+  later (`purgeBannedOrgs`). An unban before then turns the orgs back on,
+  each link in the state it had before the ban. It does not unblock hosts
+  or restore the subscription. The ban dialog blocks a destination host only
+  when the admin ticks it, and never a site in `NEVER_BLOCKED`
+  (`shared/abuse-rules.ts`).
   Deleting an account takes every org it **owns** with it, teammates
   included: an org has no plan of its own (`orgPlan()` reads its owner's), so
   one left ownerless would have no plan, no billing and nobody who could
   delete it. Settings names each org in the confirmation first. Orgs the
   account only belongs to are untouched.
-- **Bot protection**: Cloudflare Turnstile (`src/worker/turnstile.ts`) guards
-  signup, password reset and the landing shortener. The token rides in an
-  `x-turnstile-token` header and is verified against `siteverify` in
-  `hooks.before`. The one third party that sees the visitor is Cloudflare,
-  via `challenges.cloudflare.com` (allowed in the CSP). `TURNSTILE_SITE_KEY`
-  is a var served by `/api/config`; unset `TURNSTILE_SECRET_KEY` disables the
-  check. See `docs/rate-limiting.md` for all three layers (WAF rules, Workers
-  limiters, Turnstile) and the dashboard rules to apply by hand.
+- **Bot protection**: Cloudflare Turnstile (`src/worker/turnstile.ts`,
+  client in `src/app/lib/turnstile.ts`) guards signup and password reset
+  (an `x-turnstile-token` header, verified against `siteverify` in
+  `hooks.before`), the landing shortener (`/api/shorten`) and the report
+  form (`/api/reports`), each form with its own `action`. Cloudflare is the
+  one third party that sees the visitor, and only on those forms. Both keys
+  are secrets: `TURNSTILE_SITE_KEY` reaches the browser through
+  `/api/config` and adds `challenges.cloudflare.com` to the CSP; unset
+  `TURNSTILE_SECRET_KEY` switches the check off, and a copy with neither
+  never loads Cloudflare's script. Dev, CI and e2e use Cloudflare's
+  always-pass test keys. See `docs/rate-limiting.md` for all three layers
+  (WAF rules, Workers limiters, Turnstile) and the dashboard rules to apply
+  by hand.
 - **KV keys**: `slug:{slug}` (shared host), `slug:{host}:{slug}` (custom domain),
   `domain:{host}`. D1 is authoritative; KV is the redirect hot path. Clicks are
   recorded via `waitUntil` after the redirect is sent, and store only
@@ -252,7 +302,7 @@ analyticsDays }`). Slugs on the **shared** domain are always random (every
 - Data layer: `api()` + `ApiError` (`.status`, `.code`) in `src/app/lib/api.ts`;
   TanStack Query hooks in `src/app/lib/hooks.ts`.
 - **Strict CSP** on published pages, everything self-contained: no remote fonts,
-  images, scripts, or fetches. Icons via `lucide-react`; art via inline CSS/SVG.
+  images, scripts, or fetches. Icons via `lucide-react`; art via inline CSS/SVG. The one remote image is Fazier's launch badge in the landing footer, allowed in img-src for rdyrct.com's build only (their verifier needs their own image). Cloudflare Turnstile's script and challenge iframe are allowed in script-src and frame-src only when `TURNSTILE_SITE_KEY` is set.
 - Email: `sendEmail()` (`src/worker/email.ts`) uses the Resend HTTP API via plain
   `fetch`, with `RESEND_BASE_URL` pointing at the emulator in dev. Keep it: the
   Resend SDK can't repoint its base URL, which would break the emulator flow.
@@ -286,11 +336,13 @@ House rules on top of Orwell:
 Secrets live on the worker (set all at once with
 `bunx wrangler secret bulk prod.secrets.env`, see `prod.secrets.env.example`)
 and vars live in `wrangler.jsonc`; local dev reads everything from `.dev.vars`
-(see `.dev.vars.example`). Key names:
+(see `.dev.vars.local.example`). Key names:
 `BETTER_AUTH_SECRET`, `SUPERADMIN_EMAIL`, `RESEND_API_KEY`, `MAIL_FROM`,
 `APP_URL`, `APP_HOST`, `POLAR_ACCESS_TOKEN`/`POLAR_WEBHOOK_SECRET`/
 `POLAR_PRO_PRODUCT_ID`/`POLAR_HOBBY_PRODUCT_ID`, `CF_API_TOKEN`/`CF_ZONE_ID`,
-`TURNSTILE_SITE_KEY`/`TURNSTILE_SECRET_KEY`, `SENTRY_DSN`.
+`TURNSTILE_SITE_KEY`/`TURNSTILE_SECRET_KEY` (optional; unset switches the
+check off), `SENTRY_DSN`, `WEB_RISK_API_KEY` (optional; unset skips Google
+Web Risk).
 
 ## Layout
 

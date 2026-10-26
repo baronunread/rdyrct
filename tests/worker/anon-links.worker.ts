@@ -17,8 +17,8 @@ import { publishLink } from "../../src/worker/kv";
 /**
  * Claiming an anonymous link, and letting go of one (Direction A of #96).
  *
- * The browser test covers making one, because that path runs the Cap
- * proof-of-work. These cover the rules a browser cannot show: what a stale,
+ * The browser test covers making one, because that path runs the
+ * Turnstile challenge. These cover the rules a browser cannot show: what a stale,
  * spent or expired claim token does, and that the sweep only ever touches
  * anonymous rows.
  */

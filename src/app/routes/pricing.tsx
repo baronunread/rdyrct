@@ -2,7 +2,8 @@
  * Standalone pricing page (#261). "rdyrct pricing" is a real search, and this
  * is where somebody decides to pay, so it answers the question in the order
  * a buyer asks it: what the plans are, which one covers me, every limit, what
- * happens if I stop paying, and what the same thing costs elsewhere.
+ * happens if I stop paying. What the same thing costs elsewhere lives on the
+ * /compare pages, where each tool gets a page of its own and a chance to win.
  *
  * The full table still lives in one place (PricingSection in landing.tsx),
  * and so does the downgrade timeline (PlanChangeSection).
@@ -21,8 +22,8 @@ import { planFor, NEED_KEYS, type NeedKey, type Needs, type PlanFit } from "../l
 import { formatNumber } from "../lib/numbers";
 import { PLAN_LIMITS, PLAN_PRICES, type StoredPlan } from "@/shared/types";
 import { buttonClass } from "../ui/button-class";
-import { Table, Th, Td } from "../ui/misc";
 import { Check } from "../ui/icons";
+import { SplitHeading } from "../components/marketing-kit";
 import { cn } from "../ui/cn";
 
 const PLAN_NAMES = { free: "Free", hobby: "Hobby", pro: "Pro" } satisfies Record<
@@ -42,6 +43,7 @@ const CARDS = [
       `${PLAN_LIMITS.free.links} links`,
       `${PLAN_LIMITS.free.members} members`,
       `${PLAN_LIMITS.free.analyticsDays} days of analytics`,
+      `${formatNumber(PLAN_LIMITS.free.trackedClicks)} clicks counted a month`,
       "A QR code for every link",
       "API and MCP",
     ],
@@ -56,6 +58,7 @@ const CARDS = [
       `${PLAN_LIMITS.hobby.members} members`,
       "1 custom domain, your own slugs",
       `${PLAN_LIMITS.hobby.analyticsDays} days of analytics`,
+      `${formatNumber(PLAN_LIMITS.hobby.trackedClicks)} clicks counted a month`,
       "QR codes with your logo and colors",
     ],
   },
@@ -68,6 +71,7 @@ const CARDS = [
       `${PLAN_LIMITS.pro.members} members`,
       `${PLAN_LIMITS.pro.domains} custom domains`,
       "A year of analytics",
+      `${formatNumber(PLAN_LIMITS.pro.trackedClicks)} clicks counted a month`,
       "Direct email support",
     ],
   },
@@ -75,18 +79,24 @@ const CARDS = [
 
 function PlanCards({ match }: { match: StoredPlan | null }) {
   return (
-    <div className="grid gap-4 pt-10 md:grid-cols-3">
-      {/* One primary button, on the plan the finder picked, so the cards,
+    <div className="flex flex-col gap-4 pt-10">
+      <div className="grid gap-4 md:grid-cols-3">
+        {/* One primary button, on the plan the finder picked, so the cards,
           the finder and the button all point at the same plan. Pro keeps it
           when nothing fits. */}
-      {CARDS.map((card) => (
-        <PlanCard
-          key={card.plan}
-          {...card}
-          match={match === card.plan}
-          primary={match ? match === card.plan : card.plan === "pro"}
-        />
-      ))}
+        {CARDS.map((card) => (
+          <PlanCard
+            key={card.plan}
+            {...card}
+            match={match === card.plan}
+            primary={match ? match === card.plan : card.plan === "pro"}
+          />
+        ))}
+      </div>
+      <p className="max-w-prose text-sm text-muted">
+        Clicks are counted for each organization over the calendar month. Past your plan's count,
+        links keep redirecting every visitor; only the counting stops, until the 1st.
+      </p>
     </div>
   );
 }
@@ -111,7 +121,7 @@ function PlanCard({
       data-plan={plan}
       data-match={match}
       className={cn(
-        "flex flex-col gap-4 rounded-xl bg-surface p-5 smooth-shadow-ring-xs transition-[box-shadow,transform] duration-300",
+        "lit flex flex-col gap-4 rounded-3xl border border-border bg-surface p-6 transition-[box-shadow,transform] duration-300",
         match && "-translate-y-1 ring-2 ring-accent motion-reduce:translate-y-0",
       )}
     >
@@ -186,6 +196,7 @@ const RANGES = {
   members: { label: "Team members", min: 1, max: 40, log: false },
   domains: { label: "Custom domains", min: 0, max: 10, log: false },
   analyticsDays: { label: "Days of analytics history", min: 1, max: 730, log: true },
+  trackedClicks: { label: "Clicks a month", min: 0, max: 1_000_000, log: true },
 } satisfies Record<NeedKey, { label: string; min: number; max: number; log: boolean }>;
 const STEPS = 1000;
 
@@ -250,6 +261,7 @@ const NEED_WORDS = {
   members: (n) => `${n} members`,
   domains: (n) => (n === 1 ? "a custom domain" : `${n} custom domains`),
   analyticsDays: (n) => `${formatNumber(n)} days of history`,
+  trackedClicks: (n) => `${formatNumber(n)} clicks a month`,
 } satisfies Record<NeedKey, (n: number) => string>;
 
 function fitReason(fit: PlanFit): string {
@@ -276,14 +288,12 @@ function PlanFinder({
   return (
     <section className="flex flex-col gap-6 py-16">
       <div className="max-w-xl">
-        <h2 className="text-2xl font-bold tracking-tight text-balance sm:text-3xl">
-          Which plan fits?
-        </h2>
-        <p className="mt-2 text-muted">
-          Move the sliders to what you need. The plan that covers it lights up above.
-        </p>
+        <SplitHeading
+          lead="Which plan fits?"
+          rest="Move the sliders to what you need. The plan that covers it lights up above."
+        />
       </div>
-      <div className="grid items-center gap-8 rounded-xl bg-surface p-5 smooth-shadow-ring-xs md:grid-cols-2">
+      <div className="lit grid items-center gap-8 rounded-3xl border border-border bg-surface p-6 md:grid-cols-2">
         <div className="flex flex-col gap-5">
           {NEED_KEYS.map((key) => (
             <NeedSlider
@@ -294,7 +304,7 @@ function PlanFinder({
             />
           ))}
         </div>
-        <div aria-live="polite" className="flex flex-col gap-2 rounded-lg bg-surface-2 p-5">
+        <div aria-live="polite" className="flex flex-col gap-2 rounded-2xl bg-surface-2 p-5">
           <p className="text-xs text-muted">You need</p>
           <p className="text-2xl font-bold tracking-tight">
             {fit.plan
@@ -304,57 +314,10 @@ function PlanFinder({
           <p className="text-sm text-muted">
             {fit.plan
               ? fitReason(fit)
-              : "That is past what Pro covers. Self-host rdyrct on your own Cloudflare account, or write to support@rdyrct.com."}
+              : "That is past what Pro covers. Self-host rdyrct on your own Cloudflare account, or write to support@mail.rdyrct.com."}
           </p>
         </div>
       </div>
-    </section>
-  );
-}
-
-/** One realistic case instead of a limit-by-limit table: on raw link and
- * domain counts some competitors beat us, on a team they do not. Prices and
- * seats as each vendor's pricing page stated them in September 2026; recheck
- * before changing a number. */
-const TEAM_COSTS = [
-  ["rdyrct Hobby", `${PLAN_PRICES.hobby} a month`, "5 members and 1 domain. Only the owner pays."],
-  ["Short.io Team", "$48 a month", "Its Free, Hobby and Pro plans are one user each."],
-  ["Rebrandly Growth", "$99 a month", "Essentials has no teammates; Professional starts at 2."],
-  ["Dub Business", "$90 a month", "No free plan, a 14-day trial."],
-  ["Bitly Enterprise", "Custom price", "The only Bitly plan that lists multiple users."],
-] as const;
-
-function TeamCostSection() {
-  return (
-    <section className="flex flex-col gap-6 py-16">
-      <div className="max-w-xl">
-        <h2 className="text-2xl font-bold tracking-tight text-balance sm:text-3xl">
-          A team of five with its own domain
-        </h2>
-        <p className="mt-2 text-muted">What that costs here, and at the best-known shorteners.</p>
-      </div>
-      <Table minWidth="min-w-xl">
-        <thead>
-          <tr>
-            <Th>Plan</Th>
-            <Th>Price</Th>
-            <Th>Why that plan</Th>
-          </tr>
-        </thead>
-        <tbody>
-          {TEAM_COSTS.map(([plan, price, why], i) => (
-            <tr key={plan} className={i === 0 ? "bg-accent/5" : undefined}>
-              <Td className="font-bold">{plan}</Td>
-              <Td className="tnum whitespace-nowrap">{price}</Td>
-              <Td className="text-muted">{why}</Td>
-            </tr>
-          ))}
-        </tbody>
-      </Table>
-      <p className="text-xs text-muted">
-        From dub.co/pricing, short.io/pricing, rebrandly.com/pricing and bitly.com/pages/pricing,
-        September 2026, monthly billing.
-      </p>
     </section>
   );
 }
@@ -368,6 +331,7 @@ export function PricingPage() {
     members: 2,
     domains: 1,
     analyticsDays: 30,
+    trackedClicks: 2_000,
   });
   const fit = planFor(needs);
   return (
@@ -383,7 +347,6 @@ export function PricingPage() {
       </div>
       <PricingSection phoneCards={false} />
       <PlanChangeSection />
-      <TeamCostSection />
       <section className="flex flex-col items-start gap-4 border-t border-border py-16">
         <h2 className="text-2xl font-bold tracking-tight sm:text-3xl">
           Start free. Upgrade when you need your domain.
@@ -397,6 +360,13 @@ export function PricingPage() {
         </Link>
         <p className="text-xs text-muted">
           No credit card. Picking a paid plan goes straight to checkout after sign-up.
+        </p>
+        <p className="text-sm text-muted">
+          Comparing tools?{" "}
+          <Link to="/compare" className="text-accent hover:underline">
+            See how rdyrct compares
+          </Link>{" "}
+          with Bitly, Rebrandly, Dub and Short.io.
         </p>
       </section>
     </MarketingPage>

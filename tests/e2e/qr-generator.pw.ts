@@ -93,7 +93,7 @@ test("generates a QR code with no account and no network call", async ({ page })
   const posted = watchPosts(page);
 
   await page.goto("/qr-code-generator");
-  await expect(page.getByRole("heading", { name: "Free QR code generator" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "QR code generator" })).toBeVisible();
 
   const code = page.getByRole("img", { name: /^QR code for/ });
   const upsell = page.getByRole("heading", { name: "Want to know if anyone scans it?" });
@@ -109,6 +109,10 @@ test("generates a QR code with no account and no network call", async ({ page })
   await expect(page.getByRole("button", { name: /PNG/ })).toBeEnabled();
   await expect(page.getByRole("button", { name: /SVG/ })).toBeEnabled();
   await expect(upsell).toBeVisible();
+  await expect(page.getByRole("link", { name: "How QR code tracking works" })).toHaveAttribute(
+    "href",
+    "/blog/qr-code-tracking",
+  );
 
   expect(appPosts(page, posted)).toEqual([]);
 });
@@ -147,7 +151,7 @@ test("the upsell offers the account rather than making a link", async ({ page })
 test("the page is reachable from the footer of the landing page", async ({ page }) => {
   await page.goto("/");
   await page.getByRole("link", { name: "QR generator" }).click();
-  await expect(page.getByRole("heading", { name: "Free QR code generator" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "QR code generator" })).toBeVisible();
 });
 
 test("styling the code is free here, and stays in the browser", async ({ page }) => {

@@ -1,11 +1,13 @@
 import type { Context } from "hono";
-import { nonEmpty } from "../shared/lookup";
 import { eq, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import * as schema from "./db/schema";
 import type { Env } from "./env";
 import type { AppEnv } from "./env";
 import type { KVLink } from "./kv";
+import { rollupStatements, type ClickPayload } from "./rollups";
+import { usageStatement, withinClickCaps } from "./click-caps";
+import { overflowStatement } from "./click-overflow";
 import { deviceFromUA, normalizeReferrer } from "./util";
 import { clickAnalyticsAllowed } from "./rate-limit";
 import { captureAlert } from "./sentry";
@@ -41,10 +43,11 @@ export type ClickMessage = {
 /** The single ClickBuffer instance every redirect writes to. */
 const BUFFER_NAME = "clicks";
 
-// D1 caps bound parameters at 100 per statement. A click row binds 8 values,
-// so one multi-row insert can hold at most floor(100 / 8) = 12 rows. A flush
-// splits into several such statements run in one db.batch() call.
-const CLICK_INSERT_CHUNK_SIZE = 12;
+// Rows per chunk of a flush. Each chunk binds its rows as one JSON array, so
+// D1's cap of 100 bound parameters per statement does not limit it; this
+// keeps each statement's parameter well under D1's size limits (~150 bytes a
+// row) and the batch to a handful of statements.
+const CLICK_CHUNK_SIZE = 200;
 
 function chunk<T>(items: readonly T[], size: number): T[][] {
   const chunks: T[][] = [];
@@ -86,17 +89,48 @@ export async function enqueueClick(c: Context<AppEnv>, hit: KVLink): Promise<voi
 
 /* ---------------- writing (called by the buffer's flush) ---------------- */
 
-function toRow(m: ClickMessage) {
-  return {
-    linkId: m.linkId,
-    addressId: m.addressId,
-    orgId: m.orgId,
-    ts: m.ts,
-    country: m.country,
-    referrer: m.referrer,
-    device: m.device,
-    dedupeId: m.dedupeId,
-  };
+/**
+ * The statements that write one chunk of clicks: the rollup upserts and the
+ * monthly counter (#387) first, then the raw insert, all bound to the same
+ * JSON array.
+ *
+ * The order is the dedupe guard. The raw insert skips a row whose dedupe id is
+ * already stored (ON CONFLICT DO NOTHING), and the rollups count only rows
+ * whose dedupe id is not stored yet, read before the insert in the same
+ * transaction. So a click is counted exactly when its raw row is written, and
+ * a redelivered one (an alarm that re-ran after a write it did not hear back
+ * from) is neither stored nor counted twice.
+ */
+function writeChunk(d1: D1Database, rows: ClickMessage[]): D1PreparedStatement[] {
+  const payload: ClickPayload = JSON.stringify(
+    rows.map((m) => [
+      m.linkId,
+      m.orgId,
+      m.ts,
+      m.country,
+      m.referrer,
+      m.device,
+      m.dedupeId,
+      m.addressId,
+    ]),
+  );
+  return [
+    ...rollupStatements(d1, payload),
+    usageStatement(d1, payload),
+    // The dedupe constraint is a partial unique index (swept NULL ids are
+    // absent from it). SQLite cannot match a column-only conflict target to
+    // that index, so let it handle the one applicable unique conflict without
+    // naming a target. WHERE true is SQLite's disambiguation before ON
+    // CONFLICT.
+    d1
+      .prepare(
+        `insert into clicks (link_id, org_id, ts, country, referrer, device, dedupe_id, address_id)
+         select value ->> 0, value ->> 1, value ->> 2, value ->> 3, value ->> 4, value ->> 5, value ->> 6, value ->> 7
+         from json_each(?1) where true
+         on conflict do nothing`,
+      )
+      .bind(payload),
+  ];
 }
 
 /** What one insertClicks pass leaves for the caller to do next. `hadFailure`
@@ -105,8 +139,9 @@ function toRow(m: ClickMessage) {
  * otherwise healthy backlog never reads as a string of failures. */
 export type InsertResult = { retry: ClickMessage[]; hadFailure: boolean };
 
-// The Workers Free plan allows 50 subrequests per invocation, and the failed
-// db.batch() attempt already spends one. insertClicksPerRow spends one more
+// The Workers Free plan allows 50 subrequests per invocation, and the cap
+// read (withinClickCaps), the failed db.batch() attempt and the overflow count
+// written on its own after it already spend three. insertClicksPerRow spends one more
 // per row it attempts, so a flush of thousands of rows falling back to
 // per-row writes would blow well past that on its own. Bounding it here means
 // a big backlog is drained over several flushes ~10 s apart instead of in one
@@ -117,8 +152,16 @@ const MAX_PER_ROW_FALLBACK = 40;
 /**
  * Write a batch of buffered clicks.
  *
- * The happy path is one `db.batch()` of multi-row inserts, deduped on
- * `dedupeId` so a re-run after a partial flush never double-counts.
+ * First the plan caps (#387): an org's clicks past this month's allowance are
+ * dropped here, unwritten (see withinClickCaps). The redirect already went
+ * out, so this only decides what is recorded. What is dropped is still
+ * counted per link-minute for the abuse sweep, in the same batch
+ * (click-overflow.ts).
+ *
+ * The happy path is one `batch()`: per chunk of rows, the rollup upserts
+ * (#26), the monthly counter and the raw insert, deduped on `dedupeId` so a
+ * re-run after a partial flush never double-counts any of them (see
+ * writeChunk).
  *
  * A link deleted between the redirect and the flush turns its row into a
  * foreign-key violation that aborts the whole `db.batch`. Rather than lose a
@@ -127,29 +170,33 @@ const MAX_PER_ROW_FALLBACK = 40;
  * dropped and counted, and anything else is returned for retry.
  */
 export async function insertClicks(env: Env, rows: ClickMessage[]): Promise<InsertResult> {
-  if (rows.length === 0) return { retry: [], hadFailure: false };
-  const db = drizzle(env.DB, { schema });
+  let split: Awaited<ReturnType<typeof withinClickCaps>>;
   try {
-    const writes = nonEmpty(
-      chunk(rows, CLICK_INSERT_CHUNK_SIZE).map((c) =>
-        // The dedupe constraint is a partial unique index (swept NULL ids are
-        // absent from it). SQLite cannot match a column-only conflict target
-        // to that index, so let it handle the one applicable unique conflict
-        // without naming a target.
-        db.insert(schema.clicks).values(c.map(toRow)).onConflictDoNothing(),
-      ),
-    );
-    if (writes) await db.batch(writes);
+    split = await withinClickCaps(env, rows);
+  } catch (error) {
+    // D1 is what failed, so every row comes back for the next flush, and the
+    // pass counts toward the buffer's give-up threshold like a failed write.
+    console.error("click_cap_read_failed", error);
+    return { retry: rows, hadFailure: rows.length > 0 };
+  }
+  const { counted, dropped } = split;
+  const overflow = overflowStatement(env.DB, dropped);
+  const writes = chunk(counted, CLICK_CHUNK_SIZE).flatMap((c) => writeChunk(env.DB, c));
+  if (overflow) writes.push(overflow);
+  if (writes.length === 0) return { retry: [], hadFailure: false };
+  try {
+    await env.DB.batch(writes);
     return { retry: [], hadFailure: false };
   } catch {
-    return insertClicksPerRow(db, rows);
+    // The batch rolled back the overflow count with everything else. Write
+    // it on its own: nobody retries a dropped click, so this is its one try.
+    if (overflow)
+      await overflow.run().catch((error) => console.error("click_overflow_failed", error));
+    return insertClicksPerRow(env.DB, counted);
   }
 }
 
-async function insertClicksPerRow(
-  db: ReturnType<typeof drizzle<typeof schema>>,
-  rows: ClickMessage[],
-): Promise<InsertResult> {
+async function insertClicksPerRow(d1: D1Database, rows: ClickMessage[]): Promise<InsertResult> {
   const attempt = rows.slice(0, MAX_PER_ROW_FALLBACK);
   const deferred = rows.slice(MAX_PER_ROW_FALLBACK);
   // Together, not one after another: the rows are independent and order does
@@ -157,7 +204,7 @@ async function insertClicksPerRow(
   const outcomes = await Promise.all(
     attempt.map(async (row) => {
       try {
-        await db.insert(schema.clicks).values(toRow(row)).onConflictDoNothing();
+        await d1.batch(writeChunk(d1, [row]));
         return { row, state: "ok" as const };
       } catch (error) {
         // Narrowed here: only an Error carries a message worth classifying,

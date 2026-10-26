@@ -35,6 +35,17 @@ import { MarketingLink } from "../components/marketing-link";
 import { Footer } from "../ui/footer";
 import { WebMcpMarketingTools } from "../components/webmcp-marketing-tools";
 import { registerWebMcpTools, type WebMcpTool } from "../lib/webmcp";
+import { PageHero } from "../components/marketing-kit";
+
+/** Making a code, in the order the card asks for it. */
+const QR_STEPS = [
+  ["Enter a link or text", "Paste the URL or text you want a phone to open."],
+  ["Choose its look", "Pick dot styles and colours, then add an optional logo from your device."],
+  [
+    "Download the code",
+    "Save it as PNG for screens and documents, or SVG when you need to scale it for print.",
+  ],
+] as const;
 import { QR_CORNER_STYLES, QR_DOT_STYLES, type JsonValue } from "@/shared/types";
 
 const hexColor = v.pipe(v.string(), v.regex(/^#[0-9a-fA-F]{6}$/));
@@ -140,7 +151,11 @@ function TrackingSection() {
       <p className="text-sm text-muted">
         A static code has its destination baked into the dots, so nothing reports back. Point it at
         a short link instead and rdyrct counts every scan by country, device, and time, without
-        storing an IP address. Start free and upgrade anytime.
+        storing an IP address. Start free and upgrade anytime.{" "}
+        <a href="/blog/qr-code-tracking" className="text-accent underline underline-offset-4">
+          How QR code tracking works
+        </a>
+        .
       </p>
       <div className="flex flex-wrap items-center gap-4 pt-1">
         <Link
@@ -384,41 +399,32 @@ export function QrGeneratorPage() {
   const encoded = value.trim();
 
   return (
-    <div className="relative mx-auto min-h-dvh max-w-5xl px-6">
+    <div className="page-column">
       <WebMcpMarketingTools />
       <LandingHeader authed={authed} />
 
-      <main className="flex flex-col items-center gap-8 py-14 sm:py-20">
-        <div className="flex max-w-2xl flex-col items-center gap-4 text-center">
-          <h1 className="text-3xl font-bold tracking-tight text-balance sm:text-4xl">
-            Free QR code generator with logo
-          </h1>
-          <p className="text-sm text-muted sm:text-base">
-            A free QR code maker for links, text, Wi-Fi details or anything else you can put in a
-            string. Add your logo, pick your colors and dot style, and download a PNG or an SVG. No
-            account, no watermark, no expiry on the image, and nothing about you is stored.
-          </p>
-        </div>
-
-        <section className="flex w-full max-w-3xl flex-col gap-4">
-          <h2 className="text-xl font-bold text-balance">How to make a QR code</h2>
-          <ol className="flex flex-col gap-3 text-sm text-muted">
-            <li>
-              <strong className="text-text">1. Enter a link or text.</strong> Paste the URL or text
-              you want a phone to open.
-            </li>
-            <li>
-              <strong className="text-text">2. Choose its look.</strong> Pick dot styles and
-              colours, then add an optional logo from your device.
-            </li>
-            <li>
-              <strong className="text-text">3. Download the code.</strong> Save it as PNG for
-              screens and documents, or SVG when you need to scale it for print.
-            </li>
+      <PageHero
+        title="QR code generator with logo"
+        intro="A free QR code maker for links, text, Wi-Fi details or anything else you can put in a string. Add your logo, pick your colors and dot style, and download a PNG or an SVG. No account, no watermark, no expiry on the image, and nothing about you is stored."
+      />
+      <main className="flex flex-col items-center gap-12 py-12">
+        <section className="w-full">
+          <h2 className="mb-6 text-2xl font-bold tracking-tight sm:text-3xl">
+            How to make a QR code{" "}
+            <span className="text-muted">in three steps, with no account.</span>
+          </h2>
+          <ol className="grid gap-6 border-t border-border sm:grid-cols-3">
+            {QR_STEPS.map(([title, body], index) => (
+              <li key={title} className="pt-5 pr-6">
+                <span className="tnum text-sm font-bold text-accent">{index + 1}</span>
+                <p className="mt-1 font-bold">{title}</p>
+                <p className="mt-1 text-sm text-muted">{body}</p>
+              </li>
+            ))}
           </ol>
         </section>
 
-        <div className="grid w-full max-w-3xl gap-6 rounded-2xl border border-border bg-surface p-6 sm:grid-cols-[1fr_auto] sm:p-8">
+        <div className="lit grid w-full max-w-3xl gap-6 rounded-3xl border border-border bg-surface p-6 sm:grid-cols-[1fr_auto] sm:p-8">
           <div className="flex flex-col gap-3">
             <label htmlFor="qr-value" className="text-xs font-medium text-muted">
               Link or text
@@ -495,6 +501,30 @@ export function QrGeneratorPage() {
         <TrackingSection />
 
         <QrFaq />
+
+        <section className="flex w-full max-w-3xl flex-col gap-3 text-sm">
+          <h2 className="text-xl font-bold text-balance">Prepare your QR code for print</h2>
+          <p className="text-muted">
+            Check the logo, printed size, and final proof before ordering cards, menus, or posters.
+          </p>
+          <ul className="flex list-disc flex-col gap-2 pl-5">
+            <li>
+              <a href="/blog/qr-code-logo" className="text-accent underline underline-offset-4">
+                How to add a logo to a QR code
+              </a>
+            </li>
+            <li>
+              <a href="/blog/qr-code-size" className="text-accent underline underline-offset-4">
+                Choose a QR code size for print
+              </a>
+            </li>
+            <li>
+              <a href="/blog/qr-code-testing" className="text-accent underline underline-offset-4">
+                Test a QR code before publishing
+              </a>
+            </li>
+          </ul>
+        </section>
 
         <OpenSourceNote />
       </main>

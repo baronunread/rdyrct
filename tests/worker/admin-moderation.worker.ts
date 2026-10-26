@@ -57,6 +57,14 @@ async function syncKv(...slugs: string[]) {
 
 /** What the redirect path would find: KV is the only thing that decides. */
 const kvFor = (slug: string) => env.LINKS.get(`slug:${slug}`);
+/** The key redirects: it carries a destination. */
+const liveKey = async (slug: string) => (await kvFor(slug))?.includes('"url"') ?? false;
+/** The key is held (#344): it answers "under review" and carries no
+ * destination, so nothing on the redirect path can send anyone there. */
+const heldKey = async (slug: string) => {
+  const raw = await kvFor(slug);
+  return raw !== null && raw.includes('"held":true') && !raw.includes('"url"');
+};
 
 /** Every live slug a link answers on. */
 async function slugsOf(linkId: string): Promise<string[]> {
@@ -119,12 +127,12 @@ describe("suspending one link", () => {
   it("stops the redirect and records who did it", async () => {
     const owner = await freeOwnerCookie();
     const link = await createLiveLink(owner);
-    expect(await kvFor(link.slug)).toBeTruthy();
+    expect(await liveKey(link.slug)).toBe(true);
 
     const cookie = await adminCookie();
     const res = await setSuspended(link.id, cookie, true, "phishing report #412");
     expect(res.status).toBe(200);
-    expect(await kvFor(link.slug)).toBeNull();
+    expect(await heldKey(link.slug)).toBe(true);
 
     const audit = await jsonBody<{ action: string; targetId: string; detail: string | null }[]>(
       await admin("/audit", cookie),
@@ -159,10 +167,10 @@ describe("suspending one link", () => {
     const cookie = await adminCookie();
 
     await setSuspended(link.id, cookie, true, "spam");
-    expect(await kvFor(link.slug)).toBeNull();
+    expect(await heldKey(link.slug)).toBe(true);
 
     await setSuspended(link.id, cookie, false);
-    expect(await kvFor(link.slug)).toBeTruthy();
+    expect(await liveKey(link.slug)).toBe(true);
   });
 
   it("refuses a suspension with no reason", async () => {
@@ -194,7 +202,7 @@ describe("suspension survives what would undo it", () => {
     expect(res.status).toBe(200);
     // The edit republished the key. It is still dark.
     await syncKv(...(await slugsOf(link.id)));
-    expect(await kvFor(link.slug)).toBeNull();
+    expect(await heldKey(link.slug)).toBe(true);
   });
 
   it("stays dark on every address, not only the primary", async () => {
@@ -218,7 +226,7 @@ describe("suspension survives what would undo it", () => {
     await syncKv(...aliases.results.map((r) => r.slug));
     await setSuspended(link.id, await adminCookie(), true, "malware");
 
-    for (const row of aliases.results) expect(await kvFor(row.slug)).toBeNull();
+    for (const row of aliases.results) expect(await heldKey(row.slug)).toBe(true);
   });
 });
 
@@ -235,8 +243,8 @@ describe("suspending a whole org", () => {
       [a.id, b.id],
     );
     expect(await res.json()).toEqual({ count: 2 });
-    expect(await kvFor(a.slug)).toBeNull();
-    expect(await kvFor(b.slug)).toBeNull();
+    expect(await heldKey(a.slug)).toBe(true);
+    expect(await heldKey(b.slug)).toBe(true);
 
     const org = await env.DB.prepare("select count(*) as n from orgs where id = 'org-1'").first<{
       n: number;
@@ -289,7 +297,7 @@ describe("suspending a whole org", () => {
     const cookie = await adminCookie();
     await moderate("/links/orgs/org-1/suspend", cookie, { reason: "checking" }, [a.id]);
     await moderate("/links/orgs/org-1/suspend?suspend=0", cookie, {}, [a.id]);
-    expect(await kvFor(a.slug)).toBeTruthy();
+    expect(await liveKey(a.slug)).toBe(true);
   });
 });
 
@@ -358,6 +366,123 @@ describe("the cross-org search", () => {
     const rows = await jsonBody<{ id: string }[]>(await admin("/links?suspended=1", cookie));
     expect(rows.map((r) => r.id)).toEqual([link.id]);
   });
+
+  it("can show only what is active", async () => {
+    const owner = await freeOwnerCookie();
+    const link = await createLink(owner);
+    const other = await createLink(owner, "https://example.com/other");
+    const cookie = await adminCookie();
+    await setSuspended(link.id, cookie, true, "spam");
+
+    const rows = await jsonBody<{ id: string }[]>(await admin("/links?suspended=0", cookie));
+    expect(rows.map((r) => r.id)).toEqual([other.id]);
+  });
+});
+
+describe("restoring several links at once", () => {
+  it("restores each selected link and audits each one", async () => {
+    const owner = await freeOwnerCookie();
+    const a = await createLiveLink(owner, "https://example.com/a");
+    const b = await createLiveLink(owner, "https://example.com/b");
+    const cookie = await adminCookie();
+    await setSuspended(a.id, cookie, true, "spam");
+    await setSuspended(b.id, cookie, true, "spam");
+
+    const res = await admin("/links/restore", cookie, {
+      method: "POST",
+      body: JSON.stringify({ ids: [a.id, b.id] }),
+    });
+    expect(await jsonBody<{ count: number }>(res)).toEqual({ count: 2 });
+    await syncKv(a.slug, b.slug);
+    expect(await liveKey(a.slug)).toBe(true);
+    expect(await liveKey(b.slug)).toBe(true);
+    const { results } = await env.DB.prepare(
+      "select count(*) as n from admin_actions where action = 'link.unsuspend'",
+    ).all<{ n: number }>();
+    expect(results[0].n).toBe(2);
+  });
+
+  it("clears the org so the sweep does not undo the restore", async () => {
+    const owner = await freeOwnerCookie();
+    const a = await createLiveLink(owner, "https://example.com/a");
+    const cookie = await adminCookie();
+    await moderate("/links/orgs/org-1/suspend", cookie, { reason: "sweep" }, [a.id]);
+    await admin("/links/restore", cookie, {
+      method: "POST",
+      body: JSON.stringify({ ids: [a.id] }),
+    });
+    const org = await env.DB.prepare("select cleared_at as at from orgs where id = 'org-1'").first<{
+      at: number | null;
+    }>();
+    expect(org?.at).not.toBeNull();
+  });
+
+  it("lifts the org's write block once none of its links is suspended", async () => {
+    const owner = await freeOwnerCookie();
+    const a = await createLiveLink(owner, "https://example.com/a");
+    const b = await createLiveLink(owner, "https://example.com/b");
+    const cookie = await adminCookie();
+    await moderate("/links/orgs/org-1/suspend", cookie, { reason: "sweep" }, [a.id, b.id]);
+    const blocked = () =>
+      env.DB.prepare("select links_suspended_at as at from orgs where id = 'org-1'")
+        .first<{ at: number | null }>()
+        .then((r) => r?.at ?? null);
+
+    await setSuspended(a.id, cookie, false);
+    expect(await blocked(), "one link is still suspended").not.toBeNull();
+    await setSuspended(b.id, cookie, false);
+    expect(await blocked()).toBeNull();
+  });
+
+  it("does not switch off the automatic checks for an org that was never suspended whole", async () => {
+    const owner = await freeOwnerCookie();
+    const a = await createLiveLink(owner, "https://example.com/a");
+    const cookie = await adminCookie();
+    await setSuspended(a.id, cookie, true, "one bad link");
+    await setSuspended(a.id, cookie, false);
+    const org = await env.DB.prepare("select cleared_at as at from orgs where id = 'org-1'").first<{
+      at: number | null;
+    }>();
+    expect(org?.at).toBeNull();
+  });
+
+  it("refuses an empty selection", async () => {
+    const res = await admin("/links/restore", await adminCookie(), {
+      method: "POST",
+      body: JSON.stringify({ ids: [] }),
+    });
+    expect(res.status).toBe(400);
+  });
+});
+
+describe("deleting a user as an admin", () => {
+  it("takes the organizations they own with them instead of refusing", async () => {
+    await freeOwnerCookie();
+    const cookie = await adminCookie();
+
+    const res = await admin("/users/free-1", cookie, { method: "DELETE" });
+
+    expect(res.status).toBe(200);
+    expect(await jsonBody<{ orgsDeleted: number }>(res)).toMatchObject({ orgsDeleted: 1 });
+    const user = await env.DB.prepare("select count(*) as n from user where id = 'free-1'").first<{
+      n: number;
+    }>();
+    expect(user?.n).toBe(0);
+    // Flagged for teardown in the same batch that removed the account; the
+    // workflow then deletes the org itself (a row may already be gone).
+    const org = await env.DB.prepare(
+      "select deleting_at as at from orgs where id = 'org-1'",
+    ).first<{
+      at: number | null;
+    }>();
+    expect(org === null || org.at !== null).toBe(true);
+  });
+
+  it("404s for a user that does not exist, and will not delete the caller", async () => {
+    const cookie = await adminCookie();
+    expect((await admin("/users/nobody", cookie, { method: "DELETE" })).status).toBe(404);
+    expect((await admin("/users/admin-1", cookie, { method: "DELETE" })).status).toBe(400);
+  });
 });
 
 describe("who may reach any of this", () => {
@@ -367,6 +492,10 @@ describe("who may reach any of this", () => {
     for (const [path, init] of [
       ["/links", {}],
       ["/links/anonymous", {}],
+      ["/links/reports", {}],
+      ["/links/restore", { method: "POST", body: JSON.stringify({ ids: [link.id] }) }],
+      ["/links/reports/x/dismiss", { method: "POST" }],
+      ["/links/orgs/org-1/reviewed", { method: "POST" }],
       ["/audit", {}],
       [
         `/links/${link.id}`,
@@ -377,7 +506,7 @@ describe("who may reach any of this", () => {
       expect(res.status, `${path} should 404 for a non-admin`).toBe(404);
     }
     // And nothing happened to the link.
-    expect(await kvFor(link.slug)).toBeTruthy();
+    expect(await liveKey(link.slug)).toBe(true);
   });
 
   it("404s for a signed-out caller", async () => {

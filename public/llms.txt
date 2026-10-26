@@ -1,4 +1,4 @@
-# rdyrct — Short links that carry your brand
+# rdyrct: URL shortener and QR code generator for teams
 
 > rdyrct is an organization-based link shortener and QR code generator that runs
 > entirely on Cloudflare: branded short links on your own domain, custom QR
@@ -13,7 +13,7 @@
 [rdyrct](https://rdyrct.com/)
 
 - Overview of short link creation, branding, and QR codes
-- Explanation of privacy-friendly analytics including real-time click tracking
+- Explanation of privacy-friendly click analytics
 - Details on features like custom domains, slugs, campaigns, and link health
 - Deployment instructions and technical architecture using Cloudflare workers
 - Price plans and self-hosting options
@@ -23,20 +23,21 @@
 
 ## Features and Capabilities
 
-- Short link creation with custom slugs
+- Short links: random slugs on the shared domain, your own slugs on a custom domain
 - Branded QR codes with logo and style customization
 - Privacy-centric analytics: country, referrer, device, no IP tracking
 - Campaign tagging and UTM parameter support
 - Link health monitoring and activity heatmaps
-- Real-time analytics dashboard interface
+- REST API and hosted MCP server, free on every plan
 - Organizational role management and access control
 - Cloudflare edge-based deployment architecture
 
 ## Pricing and Plans
 
-- Free plan: up to 30 links, 7-day analytics, random slugs
-- Hobby plan: $4/month, 500 links, 30-day analytics, custom domain, QR codes
-- Pro plan: $9/month, 3000 links, 365-day analytics, multiple organizations, email support
+- Free plan: up to 30 links, 7-day analytics, 5,000 clicks counted a month, random slugs
+- Hobby plan: $4/month, 500 links, 30-day analytics, 50,000 clicks counted a month, 1 custom domain, QR codes with your logo
+- Pro plan: $9/month, 3000 links, 365-day analytics, 500,000 clicks counted a month, multiple organizations, email support
+- Past a plan's monthly click count, links keep redirecting; only that month's later clicks go unrecorded
 
 [Sign up free](/signup) | [Start Hobby](/signup?next=%2Fbilling%3Fplan%3Dhobby) | [Start Pro](/signup?next=%2Fbilling%3Fplan%3Dpro)
 
@@ -44,7 +45,7 @@
 
 - Built on Cloudflare KV, D1, Workers
 - No servers or database patching required
-- End-to-end privacy and security with Cloudflare primitives
+- Click analytics never store an IP address
 - Open-source codebase for self-hosting
 
 [rdyrct deploy guide](https://github.com/baronunread/rdyrct)
@@ -54,11 +55,20 @@
 - [Self-hosted deployment instructions](https://github.com/baronunread/rdyrct)
 - [Pricing](https://rdyrct.com/pricing) (request `Accept: text/markdown` for Markdown)
 - [Development roadmap](https://rdyrct.com/roadmap)
+- [Changelog](https://rdyrct.com/changelog)
+- [Compare rdyrct with other shorteners](https://rdyrct.com/compare)
+- [rdyrct vs Bitly](https://rdyrct.com/bitly-alternative)
+- [rdyrct vs Rebrandly](https://rdyrct.com/rebrandly-alternative)
+- [rdyrct vs Dub](https://rdyrct.com/dub-alternative)
+- [rdyrct vs Short.io](https://rdyrct.com/short-io-alternative)
 - [Privacy policy and cookie details](https://rdyrct.com/privacy)
 - [FAQs and feature explanations](https://rdyrct.com/#faq)
 
 ## Optional
 
-- Blog posts or tutorials on URL shortening best practices
-- Case studies on branding and analytics effectiveness
-- Additional integrations or API documentation
+- [Blog](https://rdyrct.com/blog)
+- [API and MCP docs](https://rdyrct.com/docs)
+- [QR code generator](https://rdyrct.com/qr-code-generator)
+- [UTM builder](https://rdyrct.com/utm-builder)
+- [Terms](https://rdyrct.com/terms)
+- [Report a link](https://rdyrct.com/report)

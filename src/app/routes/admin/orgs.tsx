@@ -1,11 +1,11 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { ArrowRight, Ellipsis, Eye, Trash2 } from "@/app/ui/icons";
+import { ArrowRight, Ban, Check, Ellipsis, Eye, Trash2, Undo2 } from "@/app/ui/icons";
 import { HrefLink } from "../../lib/router-search";
-import { Button } from "../../ui/button";
+import { buttonClass } from "../../ui/button-class";
 import { useAdminOrgDetail, useAdminOrgs } from "../../lib/hooks";
 import { api } from "../../lib/api";
-import type { AdminOrgRow, OrgPlan, OrgRole, Sort } from "@/shared/types";
+import type { AdminOrgRow, OrgRole, Sort } from "@/shared/types";
 import { AreaChart } from "../../components/charts";
 import { Dialog } from "../../ui/dialog";
 import { Menu, MenuItem, MenuSeparator } from "../../ui/menu";
@@ -15,6 +15,8 @@ import { TableSkeleton } from "../../ui/skeleton";
 import { useToast } from "../../ui/toast";
 import { ConfirmDialog } from "../../ui/confirm-dialog";
 import { SearchInput } from "./search-input";
+import { BanDialog } from "./ban-dialog";
+import { HoldReason } from "./hold-reason";
 import { paginate } from "./util";
 import { SortTh } from "../../ui/sort-th";
 import { sortRows } from "../../lib/sort";
@@ -22,6 +24,7 @@ import { withErrorToast } from "../../lib/mutation-toast";
 import { shortDate } from "../../lib/dates";
 import { formatNumber } from "../../lib/numbers";
 import { Pager } from "../../ui/pagination";
+import { Segmented } from "../../ui/segmented";
 
 const roleColor = {
   owner: "accent",
@@ -30,12 +33,211 @@ const roleColor = {
   viewer: "muted",
 } satisfies Record<OrgRole, "accent" | "mint" | "muted">;
 
-const planBadgeColor = {
-  pro: "mint",
-  hobby: "accent",
-  free: "muted",
-  unlimited: "mint",
-} satisfies Record<OrgPlan, "accent" | "mint" | "muted">;
+/** What an empty table says. It names the filter that matched nothing: with
+ * only a status picked there is no search term to quote. */
+function emptyMessage(status: OrgStatus, term: string): string {
+  if (term) return `No organizations match “${term}”.`;
+  if (status === "review") return "No organizations need review.";
+  if (status === "suspended") return "No organizations are suspended.";
+  return "No organizations yet.";
+}
+
+const hasStatus = (o: AdminOrgRow, status: OrgStatus) =>
+  status === "all" || (status === "suspended" ? o.linksSuspendedAt : o.reviewFlaggedAt) != null;
+
+const matchesSearch = (o: AdminOrgRow, needle: string) =>
+  !needle || [o.name, o.ownerName, o.ownerEmail].some((v) => v?.toLowerCase().includes(needle));
+
+const STATUSES = [
+  { id: "all", label: "All" },
+  { id: "suspended", label: "Suspended" },
+  { id: "review", label: "Needs review" },
+] as const;
+type OrgStatus = (typeof STATUSES)[number]["id"];
+
+/** Whether an org's links are stopped, and how to say it: a ban outranks a
+ * suspension, since it is the decision. */
+function stoppedLabel(org: AdminOrgRow, suspendedLabel: string): string | null {
+  if (org.disabledAt) return "disabled";
+  return org.linksSuspendedAt ? suspendedLabel : null;
+}
+
+/** What an admin can still do to an org: nothing to a banned owner's but
+ * delete it, since only an unban changes it. */
+function orgDecisions(org: AdminOrgRow) {
+  const open = !org.disabledAt;
+  return { canRestore: open && !!org.linksSuspendedAt, canBan: open && !!org.ownerId };
+}
+
+/** The owner a ban from this row is about. */
+function ownerOf(org: AdminOrgRow) {
+  return org.ownerId
+    ? { id: org.ownerId, name: org.ownerName ?? org.ownerEmail ?? "the owner" }
+    : null;
+}
+
+/** Plan, plus the two states an admin acts on. `suspendedLabel` differs: the
+ * table is cramped, the dialog has room. */
+function OrgBadges({ org, suspendedLabel }: { org: AdminOrgRow; suspendedLabel: string }) {
+  const stopped = stoppedLabel(org, suspendedLabel);
+  return (
+    <>
+      <span className="mr-1.5">{org.plan}</span>
+      {stopped && <Badge color="pink">{stopped}</Badge>}{" "}
+      {org.reviewFlaggedAt && <Badge color="butter">needs review</Badge>}
+    </>
+  );
+}
+
+function OrgMenu({
+  org,
+  onView,
+  onDelete,
+  onAct,
+  onBanOwner,
+}: {
+  org: AdminOrgRow;
+  onView: () => void;
+  onDelete: () => void;
+  onAct: (path: string, body?: { reason: string }) => void;
+  onBanOwner: () => void;
+}) {
+  const { canRestore, canBan } = orgDecisions(org);
+  return (
+    <Menu
+      align="end"
+      label={`Actions for ${org.name}`}
+      trigger={
+        <div className="flex justify-end">
+          <span className="rounded p-1.5 text-muted hover:bg-surface-2 hover:text-text">
+            <Ellipsis size={15} />
+          </span>
+        </div>
+      }
+    >
+      <MenuItem onClick={onView}>
+        <Eye size={14} /> View details
+      </MenuItem>
+      {org.reviewFlaggedAt && (
+        <MenuItem onClick={() => onAct("reviewed")}>
+          <Check size={14} /> Mark reviewed
+        </MenuItem>
+      )}
+      {canRestore && (
+        <MenuItem onClick={() => onAct("suspend?suspend=0", { reason: "" })}>
+          <Undo2 size={14} /> Restore links
+        </MenuItem>
+      )}
+      <MenuSeparator />
+      {canBan && (
+        <MenuItem className="text-danger" onClick={onBanOwner}>
+          <Ban size={14} /> Ban owner…
+        </MenuItem>
+      )}
+      <MenuItem className="text-danger" onClick={onDelete}>
+        <Trash2 size={14} /> Delete organization
+      </MenuItem>
+    </Menu>
+  );
+}
+
+function OrgOwner({ org }: { org: AdminOrgRow }) {
+  if (!org.ownerName) return <span className="text-muted">No owner</span>;
+  return (
+    <>
+      <span className="block truncate" title={org.ownerName}>
+        {org.ownerName}
+      </span>
+      <span className="block truncate text-xs text-muted" title={org.ownerEmail ?? ""}>
+        {org.ownerEmail}
+      </span>
+    </>
+  );
+}
+
+function OrgRow({
+  org,
+  onView,
+  onDelete,
+  onBanOwner,
+  onAct,
+}: {
+  org: AdminOrgRow;
+  onView: () => void;
+  onDelete: () => void;
+  onBanOwner: () => void;
+  onAct: (path: string, body?: { reason: string }) => void;
+}) {
+  return (
+    <tr>
+      <Td className="max-w-48 font-bold">
+        <button
+          type="button"
+          onClick={onView}
+          title={org.name}
+          className="block max-w-full cursor-pointer truncate text-accent hover:underline"
+        >
+          {org.name}
+        </button>
+      </Td>
+      <Td className="max-w-48">
+        <OrgOwner org={org} />
+      </Td>
+      <Td>
+        <OrgBadges org={org} suspendedLabel="suspended" />
+        <HoldReason why={org.linksSuspendedAt ? org.suspendReason : null} />
+      </Td>
+      <Td className="tnum text-right">{org.members}</Td>
+      <Td className="tnum text-right">{org.links}</Td>
+      <Td className="tnum text-right">{org.clicks}</Td>
+      <Td className="text-xs text-muted">{shortDate(org.createdAt)}</Td>
+      <Td>
+        <OrgMenu
+          org={org}
+          onView={onView}
+          onDelete={onDelete}
+          onAct={onAct}
+          onBanOwner={onBanOwner}
+        />
+      </Td>
+    </tr>
+  );
+}
+
+function OrgRows({
+  rows,
+  emptyText,
+  onView,
+  onDelete,
+  onBanOwner,
+  onAct,
+}: {
+  rows: AdminOrgRow[];
+  emptyText: string;
+  onView: (org: AdminOrgRow) => void;
+  onDelete: (org: AdminOrgRow) => void;
+  onBanOwner: (org: AdminOrgRow) => void;
+  onAct: (org: AdminOrgRow, path: string, body?: { reason: string }) => void;
+}) {
+  if (rows.length === 0)
+    return (
+      <tr>
+        <Td colSpan={8} className="py-8 text-center text-muted">
+          {emptyText}
+        </Td>
+      </tr>
+    );
+  return rows.map((org) => (
+    <OrgRow
+      key={org.id}
+      org={org}
+      onView={() => onView(org)}
+      onDelete={() => onDelete(org)}
+      onBanOwner={() => onBanOwner(org)}
+      onAct={(path, body) => onAct(org, path, body)}
+    />
+  ));
+}
 
 function OrgMembersTable({
   members,
@@ -96,10 +298,12 @@ function OrgLinksRecap({
           <span className="font-bold tnum">{formatNumber(clicks)}</span> clicks between them
         </p>
       </div>
-      <HrefLink href={`/admin/links?org=${encodeURIComponent(orgId)}`} onClick={onNavigate}>
-        <Button size="sm" variant="outline">
-          Open in Links <ArrowRight size={13} />
-        </Button>
+      <HrefLink
+        href={`/admin/links?org=${encodeURIComponent(orgId)}`}
+        onClick={onNavigate}
+        className={buttonClass({ size: "sm", variant: "outline" })}
+      >
+        Open in Links <ArrowRight size={13} />
       </HrefLink>
     </div>
   );
@@ -112,7 +316,7 @@ function OrgDetailDialog({ org, onClose }: { org: AdminOrgRow | null; onClose: (
       {org && (
         <div className="flex flex-col gap-4">
           <div className="flex items-center gap-2">
-            <Badge color={planBadgeColor[org.plan]}>{org.plan}</Badge>
+            <OrgBadges org={org} suspendedLabel="links suspended" />
             <span className="text-xs text-muted">Created {shortDate(org.createdAt)}</span>
           </div>
 
@@ -145,7 +349,9 @@ export function AdminOrgsPage() {
   const toast = useToast();
   const [deleting, setDeleting] = useState<AdminOrgRow | null>(null);
   const [viewing, setViewing] = useState<AdminOrgRow | null>(null);
+  const [banning, setBanning] = useState<{ id: string; name: string } | null>(null);
   const [q, setQ] = useState("");
+  const [status, setStatus] = useState<OrgStatus>("all");
   const [sort, setSort] = useState<Sort>({ key: "created", dir: -1 });
   const [page, setPage] = useState(0);
 
@@ -160,14 +366,21 @@ export function AdminOrgsPage() {
     onError: withErrorToast(toast),
   });
 
+  // Both actions answer the same flag, so one mutation with a path.
+  const act = useMutation({
+    mutationFn: (input: { orgId: string; path: string; body?: { reason: string } }) =>
+      api(`/admin/links/orgs/${input.orgId}/${input.path}`, { method: "POST", body: input.body }),
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: ["admin"] });
+      toast("Done.");
+    },
+    onError: withErrorToast(toast),
+  });
+
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase();
     const matches = (orgs.data ?? []).filter(
-      (o) =>
-        !needle ||
-        o.name.toLowerCase().includes(needle) ||
-        (o.ownerName?.toLowerCase().includes(needle) ?? false) ||
-        (o.ownerEmail?.toLowerCase().includes(needle) ?? false),
+      (o) => hasStatus(o, status) && matchesSearch(o, needle),
     );
     return sortRows(matches, sort, {
       name: (o) => o.name.toLowerCase(),
@@ -177,7 +390,7 @@ export function AdminOrgsPage() {
       clicks: (o) => o.clicks,
       created: (o) => o.createdAt,
     });
-  }, [orgs.data, q, sort]);
+  }, [orgs.data, q, status, sort]);
 
   const { totalPages, safePage, rows } = paginate(filtered, page);
 
@@ -192,7 +405,18 @@ export function AdminOrgsPage() {
         }}
         placeholder="Search by org name or owner…"
         label="Search organizations"
+        className="mb-4"
       />
+      <div className="mb-3">
+        <Segmented
+          items={STATUSES}
+          value={status}
+          onChange={(next) => {
+            setStatus(next);
+            setPage(0);
+          }}
+        />
+      </div>
       {/* Rows only: the header and search box above are real, so the
           page-level skeleton would draw a second one of each. */}
       {orgs.isLoading ? (
@@ -230,78 +454,21 @@ export function AdminOrgsPage() {
             </tr>
           </thead>
           <tbody>
-            {rows.map((org) => (
-              <tr key={org.id}>
-                <Td className="max-w-48 font-bold">
-                  <button
-                    type="button"
-                    onClick={() => setViewing(org)}
-                    title={org.name}
-                    className="block max-w-full cursor-pointer truncate text-accent hover:underline"
-                  >
-                    {org.name}
-                  </button>
-                </Td>
-                <Td className="max-w-48">
-                  {org.ownerName ? (
-                    <>
-                      <span className="block truncate" title={org.ownerName}>
-                        {org.ownerName}
-                      </span>
-                      <span
-                        className="block truncate text-xs text-muted"
-                        title={org.ownerEmail ?? ""}
-                      >
-                        {org.ownerEmail}
-                      </span>
-                    </>
-                  ) : (
-                    <span className="text-muted">—</span>
-                  )}
-                </Td>
-                <Td>
-                  <Badge color={planBadgeColor[org.plan]}>{org.plan}</Badge>
-                </Td>
-                <Td className="tnum text-right">{org.members}</Td>
-                <Td className="tnum text-right">{org.links}</Td>
-                <Td className="tnum text-right">{org.clicks}</Td>
-                <Td className="text-xs text-muted">{shortDate(org.createdAt)}</Td>
-                <Td>
-                  <Menu
-                    align="end"
-                    label={`Actions for ${org.name}`}
-                    trigger={
-                      <div className="flex justify-end">
-                        <span className="rounded p-1.5 text-muted hover:bg-surface-2 hover:text-text">
-                          <Ellipsis size={15} />
-                        </span>
-                      </div>
-                    }
-                  >
-                    <MenuItem onClick={() => setViewing(org)}>
-                      <Eye size={14} /> View details
-                    </MenuItem>
-                    <MenuSeparator />
-                    <MenuItem className="text-danger" onClick={() => setDeleting(org)}>
-                      <Trash2 size={14} /> Delete organization
-                    </MenuItem>
-                  </Menu>
-                </Td>
-              </tr>
-            ))}
-            {rows.length === 0 && (
-              <tr>
-                <Td colSpan={8} className="py-8 text-center text-muted">
-                  No organizations match “{q.trim()}”.
-                </Td>
-              </tr>
-            )}
+            <OrgRows
+              rows={rows}
+              emptyText={emptyMessage(status, q.trim())}
+              onView={setViewing}
+              onDelete={setDeleting}
+              onBanOwner={(org) => setBanning(ownerOf(org))}
+              onAct={(org, path, body) => act.mutate({ orgId: org.id, path, body })}
+            />
           </tbody>
         </Table>
       )}
       <Pager page={safePage} totalPages={totalPages} onPageChange={setPage} />
 
       <OrgDetailDialog org={viewing} onClose={() => setViewing(null)} />
+      <BanDialog user={banning} onClose={() => setBanning(null)} />
 
       <ConfirmDialog
         title="Delete organization"

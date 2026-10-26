@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { planFor, type Needs } from "../src/app/lib/plan-finder";
 
-const base: Needs = { links: 10, members: 1, domains: 0, analyticsDays: 7 };
+const base: Needs = { links: 10, members: 1, domains: 0, analyticsDays: 7, trackedClicks: 100 };
 
 describe("planFor", () => {
   test("anything inside the free limits is Free, with nothing over", () => {
@@ -18,6 +18,12 @@ describe("planFor", () => {
     expect(planFor({ ...base, members: 4 }).plan).toBe("hobby");
     expect(planFor({ ...base, domains: 1 }).plan).toBe("hobby");
     expect(planFor({ ...base, analyticsDays: 8 }).plan).toBe("hobby");
+    expect(planFor({ ...base, trackedClicks: 5_000 }).plan).toBe("free");
+    expect(planFor({ ...base, trackedClicks: 5_001 })).toEqual({
+      plan: "hobby",
+      below: "free",
+      over: [{ key: "trackedClicks", need: 5_001, limit: 5_000 }],
+    });
   });
 
   test("each Hobby limit, one past it, needs Pro", () => {
@@ -25,6 +31,8 @@ describe("planFor", () => {
     expect(planFor({ ...base, members: 6 }).plan).toBe("pro");
     expect(planFor({ ...base, domains: 2 }).plan).toBe("pro");
     expect(planFor({ ...base, analyticsDays: 31 }).plan).toBe("pro");
+    expect(planFor({ ...base, trackedClicks: 50_001 }).plan).toBe("pro");
+    expect(planFor({ ...base, trackedClicks: 500_001 }).plan).toBe(null);
     expect(
       planFor({ ...base, links: 3000, members: 25, domains: 5, analyticsDays: 365 }).plan,
     ).toBe("pro");

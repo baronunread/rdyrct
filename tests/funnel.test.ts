@@ -2,6 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { installBrowserGlobals, removeBrowserGlobals } from "./browser-globals";
 import {
   captureGoogleSignup,
+  captureEmailSignup,
   FUNNEL,
   googleSignupUrl,
   isFunnelEvent,
@@ -20,6 +21,17 @@ function browser({ search = "", referrer = "", host = "rdyrct.com" } = {}) {
 
 afterEach(() => {
   removeBrowserGlobals("window", "document");
+});
+
+test("only an email signup with a session counts as completed", () => {
+  for (const token of [undefined, null, "fresh-session"]) {
+    const captured: { event: string; method: string }[] = [];
+    captureEmailSignup((event, props) => captured.push({ event, ...props }), { token });
+    expect(captured).toEqual([
+      { event: FUNNEL.signupSubmitted, method: "email" },
+      ...(token ? [{ event: USER_SIGNED_UP, method: "email" }] : []),
+    ]);
+  }
 });
 
 describe("isFunnelEvent", () => {

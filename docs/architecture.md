@@ -13,10 +13,9 @@ flowchart TB
   subgraph worker[rdyrct Cloudflare Worker]
     router[Hono request router<br/>headers, errors, and rate checks]
     custom[Custom-domain redirect path]
-    auth[BetterAuth and Cap]
+    auth[BetterAuth and Turnstile]
     api[Signed API routes]
     shared[Shared-domain redirect path]
-    blog[Blog reverse proxy]
     assets[React SPA static assets]
     cron[Daily maintenance]
     queueConsumer[Queue consumers]
@@ -36,17 +35,15 @@ flowchart TB
     polar[Polar<br/>billing and webhooks]
     resend[Resend<br/>transactional email]
     cfSaas[Cloudflare for SaaS<br/>custom hostnames]
-    blogOrigin[Vercel<br/>blog origin]
     sentry[Sentry<br/>error capture]
     riskProvider[Destination risk provider]
   end
 
   visitor --> cf --> router
   router -->|known customer host| custom
-  router -->|/api/auth/* and /api/cap/*| auth
+  router -->|/api/auth/*| auth
   router -->|signed /api/*| api
   polar -->|signed /api/webhooks/polar request| router
-  router -->|/blog/*| blog
   router -->|/:slug| shared
   router -->|all other paths| assets
 
@@ -57,7 +54,6 @@ flowchart TB
   api --> d1
   api --> r2
   api --> polar
-  blog --> blogOrigin
 
   custom -. click event .-> clickBuffer
   shared -. click event .-> clickBuffer
@@ -88,7 +84,7 @@ flowchart TB
 
 The diagram shows the logical components. The router, API, queue consumers,
 scheduled handler, and Workflow entry points ship from the same Worker code.
-Polar, Resend, the risk provider, and the Vercel blog remain separate services.
+Polar, Resend, the risk provider, and the `rdyrct-blog` Worker remain separate services.
 
 ## Code map
 
@@ -109,18 +105,18 @@ Polar, Resend, the risk provider, and the Vercel blog remain separate services.
 
 Route order matters because the Worker serves several products from one host:
 
-1. The security-header middleware wraps each response except the proxied blog,
-   which controls its own headers.
+1. The security-header middleware wraps each response from this Worker. The blog
+   is a separate Worker and sets its own headers.
 2. A request on a known customer domain is redirect-only. The Worker reads the
    domain and slug from KV, returns a `302`, and does not expose the API or SPA.
-3. `/api/auth/*`, `/api/cap/*`, and the anonymous shortener are public, with
+3. `/api/auth/*`, the anonymous shortener and abuse reports are public, with
    their own abuse controls. BetterAuth stores auth state in D1.
 4. `/api/webhooks/polar` is public but verifies Polar's signature.
 5. The rest of `/api/*` loads a session, applies the signed API rate limit, and
    routes to user, organization, link, QR logo, billing, invite, domain, or
    admin handlers.
-6. `/blog/*` proxies to the separate Vercel blog and strips cookies and
-   authorization headers before the request leaves Cloudflare.
+6. `/blog*` never reaches this Worker: the separate `rdyrct-blog` Worker owns
+   that Workers Route on `rdyrct.com`.
 7. A non-reserved `/:slug` on `rdyrct.com` or `SHARED_LINK_HOST` (e.g. `rdyr.cc`)
    checks KV for a shared-domain link. Both hosts read the same key: a
    shared-domain slug's KV key carries no host, so it resolves identically on
@@ -245,7 +241,6 @@ message. See [Cloudflare Queues dead-letter queues](https://developers.cloudflar
 | Read latency is high for users far from the D1 primary                    | Test D1 read replication                     | Read replication can lower read latency and raise read throughput, but it only works through the D1 Sessions API. The application must also carry bookmarks when it needs read-your-own-write behavior. Measure by region before adding this consistency work. See [D1 global read replication](https://developers.cloudflare.com/d1/best-practices/read-replication/).                                                                                                                                                                                                  |
 | The daily QR sweep approaches memory or execution limits                  | Page references or maintain an object ledger | The sweep currently loads every non-empty logo URL from links and organizations into memory, then lists all R2 objects. This is simple and safe at current scale. Page by organization or track claimed objects only when object and row counts make the full scan costly.                                                                                                                                                                                                                                                                                               |
 | Click volume makes raw D1 storage or aggregate reads the main cost        | Compare rollups with Analytics Engine        | Workers Analytics Engine is built for high-cardinality event data, but it can sample at high volume and would add a second query model. Exact customer analytics and relational joins favor D1 today. Test it for operational telemetry or approximate aggregates before moving product analytics. See [Workers Analytics Engine](https://developers.cloudflare.com/analytics/analytics-engine/).                                                                                                                                                                        |
-| Blog proxy errors or latency become material                              | Move or cache the blog closer to the Worker  | `/blog/*` adds a Vercel dependency and a Worker-to-origin request. If the blog is mostly static, publishing its output with Cloudflare assets would remove a failure boundary. Keep the proxy while independent deploys are worth more than that simplification.                                                                                                                                                                                                                                                                                                         |
 
 ### Keep as designed
 

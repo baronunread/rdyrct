@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { signUpAndVerify } from "./resend";
 import { queryRows } from "./db";
+import { expectRedirect } from "./orgs";
 
 /**
  * A link redirects on the first click after "Create link", with no wait.
@@ -29,7 +30,5 @@ test("a new link redirects on its very first click", async ({ page }) => {
     "select slug from links where destination = ?",
     [destination],
   );
-  const res = await page.request.get(`/${slug}`, { maxRedirects: 0 });
-  expect(res.status()).toBe(302);
-  expect(res.headers()["location"]).toBe(destination);
+  await expectRedirect(page, slug, destination);
 });

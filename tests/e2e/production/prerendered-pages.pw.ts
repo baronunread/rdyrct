@@ -1,13 +1,20 @@
 import { expect, test, type Page } from "@playwright/test";
 
 const PRERENDERED_PAGES = [
-  { path: "/", heading: "Short links and QR codes that show which channel earned the click." },
+  { path: "/", heading: "The link shortener that answers to you." },
   { path: "/pricing", heading: "URL shortener pricing: free, $4 or $9 a month" },
-  { path: "/qr-code-generator", heading: "Free QR code generator with logo" },
+  { path: "/qr-code-generator", heading: "QR code generator with logo" },
+  { path: "/utm-builder", heading: "UTM builder" },
   { path: "/docs", heading: "Developer docs" },
   { path: "/roadmap", heading: "What we are building" },
-  { path: "/privacy", heading: "Privacy Policy" },
-  { path: "/terms", heading: "Terms of Service" },
+  { path: "/privacy", heading: "Privacy policy" },
+  { path: "/terms", heading: "Terms of service" },
+  { path: "/changelog", heading: "Changelog" },
+  { path: "/compare", heading: "Compare rdyrct with other link shorteners" },
+  { path: "/bitly-alternative", heading: "Bitly alternative: rdyrct vs Bitly" },
+  { path: "/rebrandly-alternative", heading: "Rebrandly alternative: rdyrct vs Rebrandly" },
+  { path: "/dub-alternative", heading: "Dub alternative: rdyrct vs Dub" },
+  { path: "/short-io-alternative", heading: "Short.io alternative: rdyrct vs Short.io" },
 ] as const;
 
 const HTML_FALLBACK_PAGES = [] as const;
@@ -55,6 +62,8 @@ test("public content stays visible and correct before JavaScript runs", async ({
   }
   await page.goto("/");
   await expect(page.getByRole("heading", { name: "Frequently asked questions" })).toBeVisible();
+  // The hero globe is decoration that loads after hydration: never baked in.
+  await expect(page.locator("[data-hero] canvas")).toHaveCount(0);
   await expect(page.locator("#faq")).toHaveCSS("opacity", "1");
   await page.goto("/docs");
   const origin = new URL(page.url()).origin;
@@ -90,74 +99,17 @@ test("conditional requests keep the prerendered HTML representation", async ({ r
     expect(second.status()).toBe(200);
     const body = await second.text();
     expect(body).toContain("URL shortener pricing: free, $4 or $9 a month");
-    expect(body).not.toContain(
-      "Short links and QR codes that show which channel earned the click.",
-    );
+    expect(body).not.toContain("The link shortener that answers to you.");
   }
 });
 
-// The A/B test must not flash the wrong hero. The inline script in index.html
-// picks the stored arm before first paint, so the test arm is on screen with
-// the bundles blocked, and hydration leaves the same one element behind.
-test("a visitor given the test hero never sees the control hero first", async ({ browser }) => {
-  const consent = {
-    "rdyrct:consent:v2": "accepted",
-    "rdyrct:consent:v2:at": String(Date.now()),
-    "rdyrct:hero-variant:v1": "test",
-  };
-  const testHeading = "Shorten a link. See who clicks it.";
-  const controlHeading = "Short links and QR codes that show which channel earned the click.";
-  const storageState = {
-    cookies: [],
-    origins: [
-      {
-        origin: new URL(test.info().project.use.baseURL ?? "").origin,
-        localStorage: Object.entries(consent).map(([name, value]) => ({ name, value })),
-      },
-    ],
-  };
-
-  // Only the bundles are blocked: the inline script still runs, as it does
-  // in the gap before the bundle has loaded and hydrated.
-  const unhydrated = await browser.newContext({ storageState });
-  const before = await unhydrated.newPage();
-  await blockScripts(before);
-  await before.goto("/");
-  await expect(before.getByRole("heading", { level: 1 })).toHaveText(testHeading);
-  await unhydrated.close();
-
-  const context = await browser.newContext({ storageState });
-  const page = await context.newPage();
-  // Reports any painted frame in which the control heading is on screen.
-  // Hydration and the session resolving must not flip this visitor
-  // test -> control -> test. Frames only: before the stylesheet loads, a
-  // layout read would see both arms.
-  // A slow session is what opens the window: the arm is not assigned until
-  // it resolves.
-  await page.route("**/api/user", async (route) => {
-    await new Promise((resolve) => setTimeout(resolve, 800));
-    await route.continue();
-  });
-  const sightings: string[] = [];
-  page.on("console", (message) => {
-    if (message.text() === "control-hero-visible") sightings.push(message.text());
-  });
-  await page.addInitScript((heading) => {
-    requestAnimationFrame(function tick() {
-      const visible = [...document.querySelectorAll("h1")].some(
-        (h1) => h1.textContent === heading && h1.getBoundingClientRect().height > 0,
-      );
-      if (visible) console.info("control-hero-visible");
-      requestAnimationFrame(tick);
-    });
-  }, controlHeading);
-  await page.goto("/");
-  await expect(page.locator("[data-hero-arm]:not([data-ssr])")).toHaveCount(1);
-  await page.waitForTimeout(2000);
-  expect(sightings).toEqual([]);
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText(testHeading);
-  await expect(page.getByText(controlHeading)).toHaveCount(0);
-  await context.close();
+// The build bakes the landing page into index.html, the shell every app route
+// gets. A signed-in reload of /dashboard painted it until the bundle replaced
+// it. App routes must ship an empty root.
+test("an app route's raw HTML carries no landing page", async ({ request }) => {
+  const body = await (await request.get("/dashboard")).text();
+  expect(body).toContain('id="root"');
+  expect(body).not.toContain("The link shortener that answers to you.");
 });
 
 // Auth routes read browser state on their first render, including query params.
@@ -177,35 +129,6 @@ test("the auth pages render with query params and stay usable", async ({ page })
   await typeEmail("/signup?next=/billing%3Fplan%3Dpro", "Create an account");
   await typeEmail("/login?next=/dashboard", "Sign in");
   expect(hydrationErrors).toEqual([]);
-});
-
-// An invalid cached user must not override a valid experiment assignment.
-test("an invalid cached user does not override the stored test arm", async ({ browser }) => {
-  const origin = new URL(test.info().project.use.baseURL ?? "").origin;
-  const stored = {
-    "rdyrct:consent:v2": "accepted",
-    "rdyrct:consent:v2:at": String(Date.now()),
-    "rdyrct:hero-variant:v1": "test",
-    "rdyrct:user:v1": "{}",
-  };
-  const context = await browser.newContext({
-    storageState: {
-      cookies: [],
-      origins: [
-        {
-          origin,
-          localStorage: Object.entries(stored).map(([name, value]) => ({ name, value })),
-        },
-      ],
-    },
-  });
-  const page = await context.newPage();
-  await blockScripts(page);
-  await page.goto("/");
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText(
-    "Shorten a link. See who clicks it.",
-  );
-  await context.close();
 });
 
 // Once the client-rendered form appears, it must stay visible.
@@ -234,4 +157,29 @@ test("a slow auth chunk leaves the loaded form visible", async ({ page }) => {
   await page.waitForTimeout(2000);
   await expect(page.getByRole("heading", { level: 1, name: "Sign in" })).toBeVisible();
   expect(blank).toEqual([]);
+});
+
+// Twelve Tools and Fazier list rdyrct.com in exchange for a link back from
+// the homepage, and their checks read the served HTML: a followed text link
+// for Twelve Tools, Fazier's own launch badge for Fazier. On the homepage
+// only, and the dropped directories stay dropped.
+test("the homepage credits its directories in the served HTML, followed", async ({ request }) => {
+  const res = await request.get("/");
+  const home = await res.text();
+  const anchor = (href: string) =>
+    home.match(new RegExp(`<a[^>]*href="${href.replace(/[.?]/g, "\\$&")}"[^>]*>`))?.[0] ?? "";
+  for (const href of ["https://twelve.tools", "https://fazier.com/launches/rdyrct.com"]) {
+    expect(anchor(href), href).not.toBe("");
+    expect(anchor(href), href).not.toMatch(/nofollow|ugc|sponsored/);
+  }
+  // The light badge is the one in the default render, and the CSP lets it load.
+  expect(home).toContain(
+    'src="https://fazier.com/api/v1//public/badges/launch_badges.svg?badge_type=launched&amp;theme=light"',
+  );
+  expect(res.headers()["content-security-policy"]).toMatch(/img-src[^;]*https:\/\/fazier\.com/);
+  for (const dropped of ["turbo0.com", "dang.ai"]) expect(home).not.toContain(dropped);
+
+  const pricing = await (await request.get("/pricing")).text();
+  expect(pricing).not.toContain("https://twelve.tools");
+  expect(pricing).not.toContain("fazier.com/launches");
 });

@@ -3,23 +3,20 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <style>
-      html:not([data-motion-ready]) .marketing-reveal {
-        opacity: 1 !important;
-        transform: none !important;
-      }
-    </style>
-    <title>Free URL shortener and QR code generator - rdyrct</title>
+    <title>rdyrct - URL shortener and QR code generator</title>
     <meta
       name="description"
-      content="Free URL shortener and QR code generator for teams: branded short links on your own domain, custom QR codes, and privacy-friendly click analytics."
+      content="URL shortener and QR code generator for teams: branded short links on your own domain, custom QR codes, and privacy-friendly click analytics."
     />
-    <link rel="canonical" href="https://rdyrct.com" />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
-    <meta property="og:title" content="Free URL shortener and QR code generator - rdyrct" />
+    <!-- rdyrct.com only -->
+    <!-- From here to the closing marker belongs to rdyrct.com alone. A
+         self-hosted build drops it: see scripts/site-head.ts. -->
+    <link rel="canonical" href="https://rdyrct.com" />
+    <meta property="og:title" content="rdyrct - URL shortener and QR code generator" />
     <meta
       property="og:description"
-      content="Free URL shortener and QR code generator for teams: branded short links on your own domain, custom QR codes, and privacy-friendly click analytics."
+      content="URL shortener and QR code generator for teams: branded short links on your own domain, custom QR codes, and privacy-friendly click analytics."
     />
     <meta property="og:image" content="https://rdyrct.com/og.png" />
     <meta property="og:image:type" content="image/png" />
@@ -34,11 +31,14 @@
          og:image: one card, one 1200x630 image, no second thing to regenerate
          when scripts/og-image.html changes. -->
     <meta name="twitter:image" content="https://rdyrct.com/og.png" />
-    <meta name="twitter:image:alt" content="rdyrct - short links that carry your brand" />
-    <meta name="twitter:title" content="Free URL shortener and QR code generator - rdyrct" />
+    <meta
+      name="twitter:image:alt"
+      content="rdyrct, a URL shortener and QR code generator for teams"
+    />
+    <meta name="twitter:title" content="rdyrct - URL shortener and QR code generator" />
     <meta
       name="twitter:description"
-      content="Free URL shortener and QR code generator for teams: branded short links on your own domain, custom QR codes, and privacy-friendly click analytics."
+      content="URL shortener and QR code generator for teams: branded short links on your own domain, custom QR codes, and privacy-friendly click analytics."
     />
     <!-- The SoftwareApplication offer below mirrors PLAN_PRICES in
          src/shared/types.ts; Polar sets what is actually charged. -->
@@ -64,23 +64,14 @@
             "@id": "https://rdyrct.com/#website",
             "name": "rdyrct",
             "url": "https://rdyrct.com",
-            "description": "Free URL shortener and QR code generator for teams: branded short links on your own domain, custom QR codes, and privacy-friendly click analytics.",
+            "description": "URL shortener and QR code generator for teams: branded short links on your own domain, custom QR codes, and privacy-friendly click analytics.",
             "publisher": { "@id": "https://rdyrct.com/#organization" }
-          },
-          {
-            "@type": "WebPage",
-            "@id": "https://rdyrct.com/#webpage",
-            "name": "Free URL shortener and QR code generator - rdyrct",
-            "url": "https://rdyrct.com",
-            "description": "Free URL shortener and QR code generator for teams: branded short links on your own domain, custom QR codes, and privacy-friendly click analytics.",
-            "inLanguage": "en",
-            "isPartOf": { "@id": "https://rdyrct.com/#website" }
           },
           {
             "@type": "SoftwareApplication",
             "name": "rdyrct",
             "url": "https://rdyrct.com",
-            "description": "Free URL shortener and QR code generator for teams: branded short links on your own domain, custom QR codes, and privacy-friendly click analytics.",
+            "description": "URL shortener and QR code generator for teams: branded short links on your own domain, custom QR codes, and privacy-friendly click analytics.",
             "applicationCategory": "BusinessApplication",
             "operatingSystem": "Any web browser",
             "offers": {
@@ -94,6 +85,7 @@
         ]
       }
     </script>
+    <!-- /rdyrct.com only -->
     <!--
       Theme before paint, so inline and blocking: a file costs a round trip
       and defer would defeat the point. A stored choice wins, otherwise the
@@ -113,36 +105,28 @@
           if (stored === "light" || stored === "dark")
             document.documentElement.dataset.theme = stored;
         } catch {}
-        // Resolve browser hints before paint. Experiment storage requires valid
-        // analytics consent; cached customers always see the control hero.
+        // Resolve browser hints before paint. The keys of two ended hero copy
+        // tests are dropped.
         try {
           const user = JSON.parse(localStorage.getItem("rdyrct:user:v1") || "null");
           if (user?.user?.id && Array.isArray(user.orgs))
             document.documentElement.dataset.auth = "in";
-          const at = Number(localStorage.getItem("rdyrct:consent:v2:at"));
-          if (
-            document.documentElement.dataset.auth !== "in" &&
-            localStorage.getItem("rdyrct:consent:v2") === "accepted" &&
-            (!at || Date.now() - at <= 183 * 864e5)
-          ) {
-            let arm = localStorage.getItem("rdyrct:hero-variant:v1");
-            if (arm !== "control" && arm !== "test") {
-              arm = Math.random() < 0.5 ? "control" : "test";
-              localStorage.setItem("rdyrct:hero-variant:v1", arm);
-            }
-            document.documentElement.dataset.hero = arm;
-          }
+          localStorage.removeItem("rdyrct:hero-variant:v1");
+          localStorage.removeItem("rdyrct:hero-variant:v2");
         } catch {}
       })();
     </script>
+    <!-- rdyrct.com only -->
     <script
       defer
       data-domain="rdyrct.com"
       src="https://stats.brnr.dev/js/4c6e73d608dd3a5e7b28ec7a6fd6a53a.js"
     ></script>
+    <!-- /rdyrct.com only -->
   </head>
   <body>
     <div id="root">
+      <!-- rdyrct.com only -->
       <!--
         What anything reading the HTML gets instead of running the app:
         crawlers, link previews, answer engines. React replaces this div on
@@ -155,7 +139,7 @@
       >
         <a href="#main">Skip to content</a>
         <main id="main">
-          <h1>Short links and QR codes that show which channel earned the click.</h1>
+          <h1>Know which channel earned the click.</h1>
           <p>
             rdyrct is an organization-based URL shortener and QR code generator that runs entirely
             on Cloudflare. Create branded short links on your own domain, generate custom QR codes,
@@ -378,6 +362,7 @@
           <a href="/pricing">Pricing</a>
           <a href="/docs">API and MCP docs</a>
           <a href="/qr-code-generator">QR code generator</a>
+          <a href="/utm-builder">UTM builder</a>
           <a href="/roadmap">Roadmap</a>
           <a href="/privacy">Privacy policy and cookie policy</a>
           <a href="/terms">Terms of service</a>
@@ -385,6 +370,7 @@
           <a href="mailto:support@mail.rdyrct.com">Support</a>
         </nav>
       </div>
+      <!-- /rdyrct.com only -->
     </div>
     <script type="module" src="/src/app/main.tsx"></script>
   </body>

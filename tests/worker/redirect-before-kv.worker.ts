@@ -83,13 +83,15 @@ describe("a link KV does not have", () => {
   });
 
   // Read through the same function that writes KV, so a suspended link
-  // stays dark on this path too.
+  // stays held on this path too (#344).
   it("still refuses a suspended link", async () => {
     const slug = await createWithoutKv("https://example.com/suspended");
     await env.DB.prepare("update links set suspended_at = ? where org_id = 'org-1'")
       .bind(Date.now())
       .run();
-    expect((await follow(`http://localhost/${slug}`)).status).toBe(404);
+    const res = await follow(`http://localhost/${slug}`);
+    expect(res.status).toBe(403);
+    expect(await res.text()).toContain("This link is under review.");
   });
 });
 
@@ -134,7 +136,7 @@ describe("the page a short-link host 404s with", () => {
     expect(res.status).toBe(404);
     expect(res.headers.get("content-type")).toContain("text/html");
     const html = await res.text();
-    expect(html).toContain("This short link does not exist");
+    expect(html).toContain("Nothing lives at this link.");
     expect(html).toContain(`href="${env.APP_URL}"`);
   });
 
@@ -146,7 +148,7 @@ describe("the page a short-link host 404s with", () => {
     const res = await follow("http://go.example.com/nobodys4");
     expect(res.status).toBe(404);
     const html = await res.text();
-    expect(html).toContain("This short link does not exist");
+    expect(html).toContain("Nothing lives at this link.");
     expect(html).not.toContain("Go home");
   });
 

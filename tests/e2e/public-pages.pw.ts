@@ -1,12 +1,14 @@
 import { expect, test } from "@playwright/test";
-import { pinHeroVariant, visitLegalPages } from "./pages";
+import { visitLegalPages } from "./pages";
 
-/** Scroll to the product tour and open its analytics screen, the one that
- * draws with the lazy charts bundle, then wait for the chart itself. */
+/** Scroll to the analytics section, whose first panel draws with the lazy
+ * charts bundle, then wait for the chart itself. */
+/** Down to the last landing section, so every section has mounted. */
 async function openTourAnalytics(page: import("@playwright/test").Page) {
   await page.locator("#analytics").scrollIntoViewIfNeeded();
-  await page.getByRole("tab", { name: /see what worked/i }).click();
-  await expect(page.locator("#analytics").getByLabel("Clicks per day")).toBeVisible();
+  await expect(
+    page.locator("#analytics").getByRole("heading", { level: 3, name: "Clicks over time" }),
+  ).toBeVisible();
 }
 
 test("landing page keeps the main sign-up path", async ({ page }) => {
@@ -21,20 +23,19 @@ test("landing page keeps the main sign-up path", async ({ page }) => {
 });
 
 // The hero used to spend its second button sending the warmest visitor on the
-// page to GitHub (#96). Both hero CTAs must now keep the visitor on the site,
-// and the self-host link has to still exist, further down, under pricing.
-test("the hero's second CTA stays on the site and self-hosting sits under pricing", async ({
-  page,
-}) => {
-  await pinHeroVariant(page, "control");
+// page to GitHub (#96), and after that a button that only scrolled a few
+// hundred pixels. It has one CTA now, and the self-host link has to still
+// exist, further down, under pricing.
+test("the hero has one CTA and self-hosting sits under pricing", async ({ page }) => {
   await page.goto("/");
 
   const hero = page.locator("section").first();
   await expect(hero.getByRole("link", { name: /self-host/i })).toHaveCount(0);
-
-  await hero.getByRole("link", { name: /see how it works/i }).click();
-  await expect(page).toHaveURL(/#analytics$/);
-  await expect(page.locator("#analytics")).toBeInViewport();
+  await expect(hero.getByRole("link", { name: /see how it works/i })).toHaveCount(0);
+  await expect(hero.getByRole("link", { name: "Get started free" })).toHaveAttribute(
+    "href",
+    /\/signup/,
+  );
 
   // Self-hosting keeps its own section after pricing, never a column inside it.
   // The pill used to end on a star count, which is the wrong number to make
@@ -80,12 +81,28 @@ test("the homepage teases three prices and points at the full comparison", async
 test("header navigation and sign-up remain usable on desktop and phone", async ({ page }) => {
   await page.goto("/");
 
+  // The header the entry chunk paints first is swapped for the page's own
+  // once the homepage chunk arrives, and the new one mounts closed. Opening
+  // Product on the stand-in raced that swap: the panel shut under the test.
+  // The heading comes with the page, so after it the header stays put.
+  await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
   const header = page.locator("header");
-  const nav = header.locator("nav");
+  const nav = header.getByRole("navigation", { name: "Main" });
   await expect(nav.getByRole("link", { name: "Pricing" })).toBeVisible();
 
-  await header.getByRole("link", { name: "Pricing" }).click();
+  // Product is a disclosure: its panel holds the pages that used to be
+  // reachable only from the footer, and Escape hands focus back.
+  const product = nav.getByRole("button", { name: "Product" });
+  await product.click();
+  await expect(product).toHaveAttribute("aria-expanded", "true");
+  await expect(nav.getByRole("link", { name: /QR code generator/ })).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(product).toHaveAttribute("aria-expanded", "false");
+  await expect(product).toBeFocused();
+
+  await nav.getByRole("link", { name: "Pricing" }).click();
   await expect(page).toHaveURL(/\/pricing$/);
+  await expect(nav.getByRole("link", { name: "Pricing" })).toHaveAttribute("aria-current", "page");
 
   await page.setViewportSize({ width: 390, height: 780 });
   await page.goto("/");
@@ -93,6 +110,73 @@ test("header navigation and sign-up remain usable on desktop and phone", async (
   await expect(header.getByRole("link", { name: "Sign up" })).toBeVisible();
   await header.getByRole("link", { name: "Sign up" }).click();
   await expect(page).toHaveURL(/\/signup/);
+});
+
+// Hovering Product opens its panel, and the panel has to survive the trip to
+// a link in its far corner: that path leaves the button sideways, over the
+// nav's padding, before it reaches the panel. Moving along the nav instead
+// means somebody went for another item, and the panel gets out of the way.
+test("the Product panel stays open on the way to its far corner, not along the nav", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/");
+  await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+  const nav = page.locator("header").getByRole("navigation", { name: "Main" });
+  const product = nav.getByRole("button", { name: "Product" });
+  const button = await product.boundingBox();
+  if (!button) throw new Error("the Product button has no box");
+  const start = { x: button.x + button.width / 2, y: button.y + button.height / 2 };
+
+  await page.mouse.move(start.x, start.y);
+  await expect(product).toHaveAttribute("aria-expanded", "true");
+  const far = nav.locator("#product-panel a").last();
+  await expect(far).toBeVisible();
+  const target = await far.boundingBox();
+  if (!target) throw new Error("the far link has no box");
+  await page.mouse.move(target.x + target.width / 2, target.y + target.height / 2, { steps: 60 });
+  await expect(product).toHaveAttribute("aria-expanded", "true");
+  await far.click();
+  await expect(page).not.toHaveURL(/\/$/);
+
+  await page.goto("/");
+  await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+  await page.mouse.move(start.x, start.y);
+  await expect(product).toHaveAttribute("aria-expanded", "true");
+  const docs = await nav.getByRole("link", { name: "Docs" }).boundingBox();
+  if (!docs) throw new Error("Docs has no box");
+  await page.mouse.move(docs.x + docs.width / 2, start.y, { steps: 8 });
+  await expect(product).toHaveAttribute("aria-expanded", "false");
+});
+
+// On a phone the pill opens into a card with every page in it; before this
+// the only way to Pricing on a phone was the footer.
+test("the phone menu opens, leads somewhere, and closes", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 780 });
+  await page.goto("/");
+
+  // The header the entry chunk paints first is swapped for the page's own
+  // once the page arrives; wait for that, so the menu is the one that stays.
+  await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+  const header = page.locator("header");
+  const menu = header.getByRole("navigation", { name: "Menu" });
+  await expect(menu).toBeHidden();
+
+  await header.getByRole("button", { name: "Open menu" }).click();
+  await expect(menu).toBeVisible();
+  await expect(header.getByRole("link", { name: "Get started" })).toBeVisible();
+  // The page under the card holds still while it is open.
+  expect(await page.evaluate(() => document.documentElement.style.overflow)).toBe("hidden");
+
+  await page.keyboard.press("Escape");
+  await expect(menu).toBeHidden();
+  await expect(header.getByRole("button", { name: "Open menu" })).toBeFocused();
+
+  await header.getByRole("button", { name: "Open menu" }).click();
+  await menu.getByRole("link", { name: /Pricing/ }).click();
+  await expect(page).toHaveURL(/\/pricing$/);
+  await expect(menu).toBeHidden();
+  expect(await page.evaluate(() => document.documentElement.style.overflow)).toBe("");
 });
 
 // The homepage is a lazy chunk, so there is a moment before it arrives. What
@@ -146,16 +230,12 @@ test("the standalone pricing page has the full table and no self-host pitch", as
   await expect(page).toHaveURL(/\/signup/);
 });
 
-// The hero is two columns from md up: copy left, the working shortener right.
-// Most products put a screenshot there because you cannot use them logged
-// out; ours works with no account, so the real thing goes in that half. The
-// split is also what lets the primary CTA be primary: stacked, it sat above
-// the card and had to be demoted so the page did not show two primary
-// actions in one column.
+// Most products put a screenshot in the hero because you cannot use them
+// logged out; ours works with no account, so the real shortener sits under the
+// pitch, in front of the globe, with the one primary CTA above it.
 test("the hero keeps its shortener and primary path usable on desktop and phone", async ({
   page,
 }) => {
-  await pinHeroVariant(page, "control");
   await page.goto("/");
   const heading = page.getByRole("heading", { level: 1 });
   const card = page.getByLabel("Shorten a link, no account needed");
@@ -251,7 +331,8 @@ test("landing page opens light and the toggle switches and sticks", async ({ bro
   await page.goto("/");
   await expect(html).toHaveAttribute("data-theme", "light");
 
-  await page.getByRole("button", { name: /toggle theme/i }).click();
+  // The control lives in the footer, not the header, so it is below the fold.
+  await page.getByRole("button", { name: "Dark theme" }).click();
   await expect(html).toHaveAttribute("data-theme", "dark");
 
   await page.reload();
@@ -270,23 +351,6 @@ test("a dark operating system still opens dark by default", async ({ browser }) 
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
 
   await context.close();
-});
-
-test("the second screen argues with two messages, not two URLs (#96)", async ({ page }) => {
-  await page.goto("/");
-  // The point is made by showing the link where it is read. If this ever
-  // becomes two URLs side by side again, it is back to asserting instead of
-  // showing.
-  await expect(page.getByText(/on your own domain get clicked/i)).toBeVisible();
-  await expect(page.getByText("Doesn't match the sender")).toBeVisible();
-  await expect(page.getByText("Matches the sender")).toBeVisible();
-  await expect(page.getByRole("link", { name: /Connect your domain/i })).toBeVisible();
-
-  // Sold on recognition, the way every competitor sells it, not by making
-  // somebody picture being taken for a scammer. Bitly sells against a
-  // generic shortener domain and still never says the word.
-  const section = page.locator("section").filter({ hasText: /on your own domain get clicked/i });
-  await expect(section).not.toContainText(/scam|spam|fraud/i);
 });
 
 test("a signed-out visitor still gets the anonymous shortener, not a dashboard card", async ({
@@ -317,18 +381,23 @@ test("the developer claim is backed by a roadmap of real issues", async ({ page 
     expect(href).toMatch(/^https:\/\/github\.com\/baronunread\/rdyrct\/issues\/(new|\d+)$/);
   }
 
-  // A roadmap made only of things that do not exist reads as a product that
-  // does not exist, so the shipped half has to be there too.
-  await expect(page.getByRole("heading", { name: /already working/i })).toBeVisible();
+  // A board, one column per stage, each saying how much is in it. A roadmap
+  // made only of things that do not exist reads as a product that does not
+  // exist, so the shipped column has to be there too.
+  for (const stage of ["Next", "Later", "Shipped"]) {
+    const column = page.getByRole("region", { name: new RegExp(`^${stage}`) });
+    await expect(column).toBeVisible();
+    const count = Number(
+      await column.getByRole("heading", { level: 2 }).locator("span").innerText(),
+    );
+    await expect(column.getByRole("listitem")).toHaveCount(count);
+  }
 });
 
-// The developers tab sells an API and MCP server that ship today, so it
-// points at their docs, not at the roadmap.
-test("the docs are reachable from the developers tab, the roadmap from the footer", async ({
-  page,
-}) => {
+// The landing sells an API and MCP server that ship today, so it points at
+// their docs, not at the roadmap.
+test("the docs are reachable from the landing, the roadmap from the footer", async ({ page }) => {
   await page.goto("/");
-  await page.getByRole("tab", { name: "developers" }).click();
   await page.getByRole("link", { name: /API and MCP docs/i }).click();
   await expect(page).toHaveURL(/\/docs$/);
 
@@ -371,6 +440,76 @@ test("the footer has a cookie policy that lands on the cookie section", async ({
   await expect(page).toHaveURL(/\/privacy#cookies$/);
   await expect(page.locator("#cookies")).toBeInViewport();
 });
+
+// The footer groups its links under Product, Compare and Company. The Compare
+// links point into the blog, which is a separate Worker, so they have to be
+// real addresses rather than SPA routes.
+test("the footer groups its links and the compare links lead to the comparison pages", async ({
+  page,
+}) => {
+  await page.goto("/");
+  const footer = page.locator("footer");
+  for (const heading of ["Product", "Compare", "Company"]) {
+    await expect(footer.getByText(heading, { exact: true })).toBeVisible();
+  }
+  await expect(footer.getByRole("link", { name: "Bitly alternative" })).toHaveAttribute(
+    "href",
+    "/bitly-alternative",
+  );
+  await expect(footer.getByRole("link", { name: "Dub alternative" })).toHaveAttribute(
+    "href",
+    "/dub-alternative",
+  );
+});
+
+// The changelog is CHANGELOG.md rendered, so the release in the file has to be
+// the release on the page, and the pricing page has to lead to the comparisons.
+test("the changelog shows the latest release and pricing links to the comparisons", async ({
+  page,
+}) => {
+  await page.goto("/changelog");
+  await expect(page.getByRole("heading", { level: 1, name: "Changelog" })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 2, name: "1.0.0" })).toBeVisible();
+  await page.goto("/pricing");
+  await page.getByRole("link", { name: "See how rdyrct compares" }).click();
+  await expect(page).toHaveURL(/\/compare$/);
+});
+
+// The index behind "All comparisons" lists every tool and links to its page.
+test("the compare index lists each tool and opens its comparison", async ({ page }) => {
+  await page.goto("/");
+  await page.locator("footer").getByRole("link", { name: "All comparisons" }).click();
+  await expect(page).toHaveURL(/\/compare$/);
+  for (const name of ["Bitly", "Rebrandly", "Dub", "Short.io"]) {
+    await expect(page.getByRole("heading", { name: `vs ${name}` })).toBeVisible();
+  }
+  await page.getByRole("link", { name: /vs Dub/ }).click();
+  await expect(page).toHaveURL(/\/dub-alternative$/);
+});
+
+// Each comparison page names the other tool, shows both columns of the
+// table, and says where the other tool wins: a page that only flatters
+// rdyrct is the page nobody believes.
+for (const { path, name } of [
+  { path: "/bitly-alternative", name: "Bitly" },
+  { path: "/rebrandly-alternative", name: "Rebrandly" },
+  { path: "/dub-alternative", name: "Dub" },
+  { path: "/short-io-alternative", name: "Short.io" },
+]) {
+  test(`${path} compares rdyrct with ${name}, including where ${name} wins`, async ({ page }) => {
+    await page.goto(path);
+    await expect(page.getByRole("heading", { level: 1 })).toContainText(name);
+    await expect(page.getByRole("columnheader", { name, exact: true }).first()).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: `Where ${name} is the better choice` }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: "Where rdyrct is the better choice" }),
+    ).toBeVisible();
+    await page.getByRole("link", { name: "Sign up free" }).click();
+    await expect(page).toHaveURL(/\/signup/);
+  });
+}
 
 // serveSpa gives the unhashed static files an hour-long cache. This same
 // fallback is what the Vite dev server answers /@vite/client and every source
@@ -449,34 +588,26 @@ test("a first visit does not ask who it is", async ({ page }) => {
   // The header paints before the rest of the page has even mounted, so
   // asserting here caught nothing: the first version of this test passed
   // against a build that still made the call. Every section has to have
-  // mounted, including the tour's lazy analytics screen. Waiting for network
+  // mounted, down to the analytics cards. Waiting for network
   // idle is wrong here: product analytics can keep an unrelated request open.
   await openTourAnalytics(page);
 
   expect(userCalls, "a browser that was never signed in has nothing to ask").toEqual([]);
 });
 
-// The charts bundle is 117 KB, the largest single thing the homepage can
-// fetch, and it exists to draw one screen of the product tour.
-// Lazy alone was not enough: the chunk still went out to everybody who opened
-// the page, it just stopped blocking the paint. It must not be requested until
-// the visitor is heading for it.
-test("the charts bundle waits until the visitor scrolls toward it", async ({ page }) => {
+// The charts bundle is 117 KB, the largest single thing the app has. The
+// homepage drew one chart with it once; its analytics cards are plain markup
+// now, so a visitor who reads the whole page never downloads it.
+test("the homepage never asks for the charts bundle", async ({ page }) => {
   const charts: string[] = [];
   page.on("request", (r) => {
     if (/\/assets\/charts-|\/components\/charts/.test(r.url())) charts.push(r.url());
   });
 
   await page.goto("/");
-  // The pricing CTA is below the fold, so it proves the page hydrated without
-  // anybody opening the tour's analytics screen, which owns the lazy bundle.
-  await expect(page.getByRole("link", { name: /start pro/i }).first()).toBeVisible();
-  expect(charts, "nothing before that screen needs the charts bundle").toEqual([]);
-
-  // Now go to it: the product tour asks for the bundle once it moves past its
-  // first screen, so wait for the chart the bundle is actually for.
   await openTourAnalytics(page);
-  expect(charts.length, "and it arrives once they do").toBeGreaterThan(0);
+  await page.getByRole("contentinfo").scrollIntoViewIfNeeded();
+  expect(charts).toEqual([]);
 });
 
 // #137: a public page points at what describes it (RFC 8288), so an agent
@@ -510,4 +641,17 @@ test("the homepage's first Tab is a skip link into main", async ({ page }) => {
   await page.keyboard.press("Enter");
   await expect(page).toHaveURL(/#main$/);
   await expect(page.getByRole("main")).toHaveAttribute("id", "main");
+});
+
+// The Hop mark sits next to the name in the header and the footer. The mark is
+// decoration, so the link still reads as the bare name to a screen reader and
+// to every test that finds it by "rdyrct".
+test("header and footer carry the logo, named by the word alone", async ({ page }) => {
+  await page.goto("/");
+
+  for (const region of [page.getByRole("banner"), page.getByRole("contentinfo")]) {
+    const home = region.getByRole("link", { name: "rdyrct", exact: true });
+    await expect(home).toBeVisible();
+    await expect(home.locator("svg[aria-hidden='true']")).toBeVisible();
+  }
 });

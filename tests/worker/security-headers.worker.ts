@@ -68,6 +68,19 @@ describe("security headers (#21)", () => {
   // headers. Only the e2e smoke test exercises the real binding, which is
   // where this first showed up. Response.redirect gives us the same
   // immutable Headers guard here, deterministically and with no bundle.
+  // These tests run as rdyrct.com; self-host.worker.ts checks a fork.
+  it("rdyrct.com allows its own analytics script", () => {
+    const csp = applySecurityHeaders(new Response("ok")).headers.get("content-security-policy");
+
+    expect(csp).toContain("stats.brnr.dev");
+  });
+
+  it("loads no images from Product Hunt now the badge is gone", () => {
+    const csp = applySecurityHeaders(new Response("ok")).headers.get("content-security-policy");
+
+    expect(csp).not.toContain("producthunt");
+  });
+
   it("works on a response whose headers are immutable", () => {
     const immutable = Response.redirect("https://example.com/", 302);
     expect(() => immutable.headers.set("x-probe", "1")).toThrow();

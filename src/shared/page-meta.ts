@@ -7,10 +7,10 @@
  * fetched and the head would otherwise still describe the page somebody
  * arrived on.
  *
- * The wording leads with what people type. "URL shortener" and "QR code
- * generator" are the searches; the brand is not, and a title that opens with
- * it spends the most valuable words in the result on a name nobody is looking
- * for yet.
+ * The homepage opens with the brand, as Dub, Bitly and Short.io do, then
+ * says what it is: "URL shortener" and "QR code generator" are the searches.
+ * The tool pages lead with the search itself. None says "free": a free plan
+ * is a fact for the page to state, not a title.
  */
 export interface PageMeta {
   title: string;
@@ -23,10 +23,18 @@ export const PRERENDERED_PUBLIC_PATHS = new Set<string>([
   "/",
   "/pricing",
   "/qr-code-generator",
+  "/utm-builder",
   "/docs",
   "/roadmap",
+  "/changelog",
+  "/compare",
+  "/bitly-alternative",
+  "/rebrandly-alternative",
+  "/dub-alternative",
+  "/short-io-alternative",
   "/privacy",
   "/terms",
+  "/report",
 ]);
 
 /**
@@ -37,19 +45,19 @@ export const PRERENDERED_PUBLIC_PATHS = new Set<string>([
  * visitor who arrived on the public page itself.
  */
 export const DEFAULT_PAGE_META: PageMeta = {
-  title: "Free URL shortener and QR code generator - rdyrct",
+  title: "rdyrct - URL shortener and QR code generator",
   description:
-    "Free URL shortener and QR code generator for teams: branded short links on your own domain, custom QR codes, and privacy-friendly click analytics.",
+    "URL shortener and QR code generator for teams: branded short links on your own domain, custom QR codes, and privacy-friendly click analytics.",
 };
 
 export const PUBLIC_PAGE_META = {
   "/": {
-    title: "Free URL shortener and QR code generator - rdyrct",
+    title: "rdyrct - URL shortener and QR code generator",
     description:
-      "Free URL shortener and QR code generator for teams: branded short links on your own domain, custom QR codes, and privacy-friendly click analytics.",
+      "URL shortener and QR code generator for teams: branded short links on your own domain, custom QR codes, and privacy-friendly click analytics.",
     markdown: `# rdyrct
 
-rdyrct is a free URL shortener and QR code generator for teams. Create short links on a domain people recognise, make branded QR codes, and see privacy-friendly click analytics.
+rdyrct is a URL shortener and QR code generator for teams. Create short links on a domain people recognise, make branded QR codes, and see privacy-friendly click analytics.
 
 ## What you can do
 
@@ -63,12 +71,12 @@ rdyrct is a free URL shortener and QR code generator for teams. Create short lin
 [Create a free account](/signup) or [compare plans](/pricing). You can also [self-host rdyrct on Cloudflare](https://github.com/baronunread/rdyrct).`,
   },
   "/qr-code-generator": {
-    title: "Free QR code generator with logo - PNG and SVG, no account",
+    title: "QR code generator with logo - PNG and SVG, no account",
     description:
       "Make a custom QR code for free: your logo, your colors, rounded dots, and a PNG or SVG download. No sign-up, no watermark, and the code is made in your browser.",
-    markdown: `# Free QR code generator
+    markdown: `# QR code generator
 
-Make a QR code for a link or any text. Add your logo, choose colours and dot styles, then download a PNG or SVG. This free QR code generator works in your browser, with no account or watermark.
+Make a QR code for a link or any text. Add your logo, choose colours and dot styles, then download a PNG or SVG. This QR code generator works in your browser, with no account or watermark.
 
 ## How to make a QR code
 
@@ -88,6 +96,30 @@ The QR code and optional logo are processed in your browser. rdyrct does not rec
 
 [Open the QR code generator](/qr-code-generator)`,
   },
+  "/utm-builder": {
+    title: "UTM builder - tag links for Google Analytics, no account",
+    description:
+      "Build a UTM link for free: add source, medium, campaign, term and content to any URL, check the values are lowercase, then copy it or shorten it. No sign-up.",
+    markdown: `# UTM builder
+
+Add UTM parameters to a link so Google Analytics and other tools can tell which campaign sent each visitor. Fill in the fields, copy the tagged link, or shorten it. No account needed.
+
+## The parameters
+
+- \`utm_source\`: the site, newsletter or app that sent the visitor. Required by Google Analytics.
+- \`utm_medium\`: the channel, such as email, social, cpc, banner or qr. Required by Google Analytics.
+- \`utm_campaign\`: the campaign name, so every link in one campaign reports together.
+- \`utm_term\`: the paid keyword. Most links leave it out.
+- \`utm_content\`: which link of several in one place was clicked. Use it for A/B tests.
+
+## Keep one spelling per value
+
+UTM values are case sensitive. "Spring-Sale" and "spring-sale" show up as two campaigns. Use lowercase with hyphens everywhere; the builder warns when a value strays from it.
+
+The link is built in your browser. Nothing you type is sent anywhere unless you shorten it.
+
+[Open the UTM builder](/utm-builder)`,
+  },
   "/pricing": {
     title: "URL shortener and QR code generator pricing - rdyrct",
     description:
@@ -101,6 +133,7 @@ rdyrct is an organization-based link shortener and QR code generator that runs e
 - 30 links
 - 3 team members
 - 7-day click analytics
+- 5,000 clicks counted a month
 - Plain QR codes
 - Random slugs on the shared domain
 - 1 organization
@@ -112,6 +145,7 @@ rdyrct is an organization-based link shortener and QR code generator that runs e
 - 500 links
 - 5 team members
 - 30-day click analytics
+- 50,000 clicks counted a month
 - QR codes with a logo, colours, and dot styles
 - 1 custom domain, with any slug you choose
 - 1 organization
@@ -123,6 +157,7 @@ rdyrct is an organization-based link shortener and QR code generator that runs e
 - 3,000 links
 - 25 team members
 - 365-day click analytics
+- 500,000 clicks counted a month
 - QR codes with a logo, colours, and dot styles
 - 5 custom domains, with any slug you choose
 - 3 organizations
@@ -140,6 +175,7 @@ rdyrct is MIT licensed. Deploy it to your own Cloudflare account and set your ow
 
 - Billing is per user, not per organization. An organization's limits come from its owner's plan.
 - Slugs on the shared domain are always random. Choosing a slug needs a custom domain.
+- Clicks are counted per organization per calendar month (UTC). Past the plan's count, links keep redirecting; only that month's later clicks go unrecorded.
 - Click analytics never store an IP address.`,
   },
   "/docs": {
@@ -190,16 +226,83 @@ Accept: application/json, text/event-stream
 }
 \`\`\``,
   },
+  "/changelog": {
+    title: "rdyrct changelog - what changed in each release",
+    description:
+      "What changed in each release of rdyrct, the open-source URL shortener and QR code generator: new features, fixes, and anything an upgrade changes for self-hosters.",
+    markdown: `# rdyrct changelog
+
+What changed in each release. The full text is [CHANGELOG.md](https://github.com/baronunread/rdyrct/blob/main/CHANGELOG.md) in the repository, and every change is a [merged pull request](https://github.com/baronunread/rdyrct/pulls?q=is%3Apr+is%3Amerged).`,
+  },
+  "/compare": {
+    title: "Compare rdyrct with Bitly, Rebrandly, Dub and Short.io",
+    description:
+      "How rdyrct compares with Bitly, Rebrandly, Dub and Short.io on price, custom domains, link limits and analytics, and when each other tool is the better pick.",
+    markdown: `# Compare rdyrct with other link shorteners
+
+- [rdyrct vs Bitly](/bitly-alternative)
+- [rdyrct vs Rebrandly](/rebrandly-alternative)
+- [rdyrct vs Dub](/dub-alternative)
+- [rdyrct vs Short.io](/short-io-alternative)
+
+Each page compares price, custom domains, link limits and analytics history, and says where the other tool is the better choice.`,
+  },
+  "/bitly-alternative": {
+    title: "Bitly alternative: rdyrct vs Bitly pricing and limits",
+    description:
+      "rdyrct against Bitly: what each costs with a custom domain, the link and analytics limits, and when Bitly is still the better choice. Free plan, no card.",
+    markdown: `# Bitly alternative: rdyrct vs Bitly
+
+Bitly's first plan with a custom domain is Growth at $29 a month on annual billing. rdyrct includes one from $4 a month. If you need an enterprise contract, Bitly is the safer pick.
+
+[Compare in full](/bitly-alternative) or [see rdyrct pricing](/pricing).`,
+  },
+  "/rebrandly-alternative": {
+    title: "Rebrandly alternative: rdyrct vs Rebrandly pricing, limits",
+    description:
+      "rdyrct against Rebrandly: plan prices, custom domains, link and QR limits, and the one thing Rebrandly's free plan gives that ours does not. Start free, no card.",
+    markdown: `# Rebrandly alternative: rdyrct vs Rebrandly
+
+Rebrandly's free plan includes a custom domain and rdyrct's does not. Past the free plans, rdyrct costs less: a custom domain from $4 a month.
+
+[Compare in full](/rebrandly-alternative) or [see rdyrct pricing](/pricing).`,
+  },
+  "/dub-alternative": {
+    title: "Dub alternative: rdyrct vs Dub pricing and limits",
+    description:
+      "rdyrct against Dub: plan prices, custom domains, link and event limits, and when Dub's volume is worth $90 a month. Start free, no card.",
+    markdown: `# Dub alternative: rdyrct vs Dub
+
+Dub's pricing page lists no free plan, and its plans start at $90 a month. rdyrct includes a custom domain from $4 a month. If you create thousands of links a month, Dub is built for that.
+
+[Compare in full](/dub-alternative) or [see rdyrct pricing](/pricing).`,
+  },
+  "/short-io-alternative": {
+    title: "Short.io alternative: rdyrct vs Short.io pricing and limits",
+    description:
+      "rdyrct against Short.io: plans, custom domains, link and click limits, and where Short.io's bigger free plan wins. We never store a visitor's IP address.",
+    markdown: `# Short.io alternative: rdyrct vs Short.io
+
+Short.io beats rdyrct on price and free-plan size. rdyrct is the better pick when click analytics must never store an IP address, or when you want to host the code yourself.
+
+[Compare in full](/short-io-alternative) or [see rdyrct pricing](/pricing).`,
+  },
   "/roadmap": {
     title: "URL shortener roadmap - what rdyrct is building next",
     description:
-      "What rdyrct is building next, and what already works. Every item is an open issue you can read and comment on.",
+      "What rdyrct is building next, what comes later, and what already works. Every planned item is an open GitHub issue you can read, comment on, or patch.",
     markdown: undefined,
   },
   "/signup": {
     title: "Sign up - rdyrct URL shortener and QR codes",
     description:
       "Create a free rdyrct account: short links with click analytics, QR codes, and UTM tracking for your team. No card required.",
+    markdown: undefined,
+  },
+  "/report": {
+    title: "Report a short link - rdyrct",
+    description:
+      "Report an rdyrct short link used for phishing, malware or spam. We review every report and stop links that break our terms. Your email is optional.",
     markdown: undefined,
   },
   "/login": {
@@ -213,21 +316,21 @@ Accept: application/json, text/event-stream
       "What rdyrct stores and what it does not: click analytics keep country, referrer, device and time, never an IP address or a precise location.",
     markdown: `# Privacy policy
 
-This policy explains what rdyrct collects, why, the legal basis for it, and how you can exercise your rights. Last updated 24 September 2026.
+This policy explains what rdyrct collects, why, the legal basis for it, and how you can exercise your rights. Last updated 25 October 2026.
 
 ## Data controller
 
-Andrea Bruno is the data controller for rdyrct. For a privacy request or question, email [support@rdyrct.com](mailto:support@rdyrct.com).
+Andrea Bruno is the data controller for rdyrct. For a privacy request or question, email [support@mail.rdyrct.com](mailto:support@mail.rdyrct.com).
 
 ## Data we collect
 
-We collect your account email address and name, plus the organizations, links, domains, and settings you create. Click analytics keep only an approximate country, referrer host, device type, and timestamp. We do not store an IP address, precise location, or data that enables cross-site tracking.
+We collect your account email address and name, plus the organizations, links, domains, and settings you create. Click analytics keep only an approximate country, referrer host, device type, and timestamp. We do not store an IP address, precise location, or data that enables cross-site tracking. If you report a link, we store the address you report, your reason and note, and the email you choose to give.
 
-If you accept analytics, PostHog records product events tied to your account. It does not autocapture what you type or replay your screen. Until you answer the banner, a few steps on the current page are held in browser memory: accepting sends them, rejecting discards them. The home page starts with the same version for everyone. After you accept analytics, it picks one of two versions at random and keeps that choice in your browser until you withdraw consent or it expires. Events sent after that choice say which version you saw. Sentry receives technical error reports with the error, browser, and page path, after query strings are removed.
+If you accept analytics, PostHog records product events tied to your account. It does not autocapture what you type or replay your screen. Until you answer the banner, a few steps on the current page are held in browser memory: accepting sends them, rejecting discards them. Sentry receives technical error reports with the error, browser, and page path, after query strings are removed.
 
 ## Why we process it
 
-We process account and organization data to provide the service, send transactional email, and provide click analytics. The session cookie is necessary to sign you in. PostHog runs only with your consent, which you can withdraw at any time from Cookie settings. We ask again after six months. We process technical error reports to keep the service secure and reliable.
+We process account and organization data to provide the service, send transactional email, and provide click analytics. The session cookie is necessary to sign you in. PostHog runs only with your consent, which you can withdraw at any time from Cookie settings. We ask again after six months. We process technical error reports to keep the service secure and reliable. We check where links point against Google's list of unsafe sites to keep phishing and malware off the service.
 
 ## Cookies
 
@@ -235,13 +338,13 @@ rdyrct sets a necessary session cookie. If you accept analytics, PostHog also se
 
 ## Sub-processors
 
-We use Cloudflare for hosting and storage, Resend for transactional email, Polar for billing, PostHog EU for product analytics, and Sentry for error monitoring.
+We use Cloudflare for hosting and storage, Resend for transactional email, Polar for billing, PostHog EU for product analytics, Sentry for error monitoring, and Google Web Risk to check links. Google receives the destination address of a link when the link is created or edited, when we check it again each week, and when its traffic jumps, and checks it against Google's list of unsafe sites. It receives nothing about you or the people who click the link.
 
 ## Retention and rights
 
 We retain account and organization data while your account is active. You can access, correct, export, or erase your data, object to or restrict processing, withdraw consent, or delete your account in Settings. If you are in the EU, you may complain to the Italian data protection authority.
 
-For help, email [support@rdyrct.com](mailto:support@rdyrct.com).`,
+For help, email [support@mail.rdyrct.com](mailto:support@mail.rdyrct.com).`,
   },
   "/terms": {
     title: "Terms of service - rdyrct URL shortener and QR codes",
@@ -249,11 +352,15 @@ For help, email [support@rdyrct.com](mailto:support@rdyrct.com).`,
       "The rules for using rdyrct: acceptable use for links and QR codes, account and organization responsibilities, billing via Polar, and the self-host license.",
     markdown: `# Terms of service
 
-These terms govern your use of rdyrct. By creating an account or using the service, you agree to them. Last updated 19 July 2026.
+These terms govern your use of rdyrct. By creating an account or using the service, you agree to them. Last updated 25 October 2026.
 
 ## Acceptance and acceptable use
 
-Use rdyrct only if you agree to these terms. Do not create links that are illegal, malicious, used for phishing, malware distribution, spam, or other abuse. We may disable a link or account that breaks this rule.
+Use rdyrct only if you agree to these terms. Do not create links that are illegal, malicious, used for phishing, malware distribution, spam, or other abuse, or that imitate another brand to collect payments or credentials. We may pause or disable a link or account that breaks this rule, block a destination host, and suspend the organizations of a banned account. A pause is not a verdict: we tell the owner why and restore the links if we were wrong.
+
+## Reporting abuse and appeals
+
+Report a link with the [report form](/report). A report alone never suspends a link. On the free plan it shows visitors a warning first, and the link keeps working. To appeal a pause or suspension, email [support@mail.rdyrct.com](mailto:support@mail.rdyrct.com) with the name of your organization and what the link is for.
 
 ## Accounts and organizations
 
@@ -263,12 +370,14 @@ You must keep your account secure and are responsible for activity under organiz
 
 Polar is rdyrct's merchant of record for paid plans. Subscriptions renew until you cancel them, and you can manage them in Billing. rdyrct is MIT licensed and can be self-hosted from the [public repository](https://github.com/baronunread/rdyrct). Hosted-service terms do not apply to a self-hosted installation.
 
+Links keep redirecting however many clicks they get. Each plan records a set number of clicks a month for each organization (5,000 on Free, 50,000 on Hobby, 500,000 on Pro). Past that, the rest of that month's clicks are not recorded for analytics; the links themselves keep working.
+
 ## Service, termination, and law
 
 rdyrct is provided as is and as available, without warranties. You may stop using it and delete your account at any time. We may suspend or terminate accounts that break these terms. Italian law governs these terms, without limiting mandatory consumer rights in your country.
 
 ## Changes and contact
 
-We may update these terms. Continuing to use rdyrct after a change takes effect accepts the revised terms. Email [support@rdyrct.com](mailto:support@rdyrct.com) with questions.`,
+We may update these terms. Continuing to use rdyrct after a change takes effect accepts the revised terms. Email [support@mail.rdyrct.com](mailto:support@mail.rdyrct.com) with questions.`,
   },
 } satisfies Record<string, PageMeta>;

@@ -49,6 +49,17 @@ export function otpForEmail(value: JsonValue, email: string): string {
   return codes[codes.length - 1] ?? "";
 }
 
+/** The subjects of every email the emulator holds for `email`, oldest first. */
+export async function subjectsSentTo(page: Page, email: string): Promise<string[]> {
+  const response = await page.request.get("http://localhost:4000/emails", {
+    headers: { authorization: "Bearer test_token_admin" },
+  });
+  if (!response.ok()) return [];
+  return inboxList(await response.json())
+    .filter((item) => addressedTo(item, email))
+    .map((item) => (isRecord(item) ? String(item.subject ?? "") : ""));
+}
+
 export async function latestOtp(page: Page, email: string) {
   let otp = "";
   await expect
@@ -73,10 +84,17 @@ export async function submitSignup(page: Page, email: string, password: string) 
   await page.getByRole("button", { name: "Sign up" }).click();
 }
 
+export async function verifySignup(page: Page, email: string) {
+  const otp = await latestOtp(page, email);
+  await page.locator("input").first().focus();
+  await page.keyboard.insertText(otp);
+  await expect(page).toHaveURL(/\/dashboard$/, { timeout: 30_000 });
+}
+
 export async function signUpAndVerify(page: Page, email: string, password: string) {
   await submitSignup(page, email, password);
 
-  // Not the default 5s: a sign-up here is a Cap proof-of-work solve, an
+  // Not the default 5s: a sign-up here is a Turnstile challenge, an
   // account write and a mail send, and with the suite running in parallel
   // that round trip regularly outlasts five seconds. Every caller of this
   // helper was failing here for that reason and no other.
@@ -84,10 +102,7 @@ export async function signUpAndVerify(page: Page, email: string, password: strin
   await expect(codeScreen).toBeVisible({ timeout: 30_000 });
   await page.reload();
   await expect(codeScreen).toBeVisible({ timeout: 30_000 });
-  const otp = await latestOtp(page, email);
-  await page.locator("input").first().focus();
-  await page.keyboard.insertText(otp);
-  await expect(page).toHaveURL(/\/dashboard$/);
+  await verifySignup(page, email);
 
   // The URL changes first and the page arrives after it. A fresh account has
   // nothing cached, so the dashboard under the chrome still owes /user, the

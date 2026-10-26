@@ -35,9 +35,12 @@ import {
 } from "../util";
 import { jsonBodyLimit } from "../body-limit";
 import { assertNotShortener } from "../abuse";
-import { scoreAndRecord } from "../risk";
+import { assertNotBlocked, assertNotOwnShortLink, holdIfSuspicious } from "../abuse-hold";
+import { checkLinkDestination } from "../destination-check";
+import { orgLinkWarning } from "../link-warning";
 import { claimAnonLink } from "./shorten";
 import { cursorValueOf, linkPageQuery, readLinkPageParams, takePage } from "../links-page";
+import { clicksForLink, linkClicksTotal } from "../rollups";
 import type {
   AddressDTO,
   LinkDTO,
@@ -85,13 +88,11 @@ function validateInput(body: LinkInput, orgId: string, partial = false) {
   validateQrFields(body, orgId);
 }
 
+// From the rollups (#26), the same expression the clicks sort uses.
+const clickCount = linkClicksTotal.as("clicks");
+
 // NB: literal `links.id`; interpolating the drizzle column renders an
 // unqualified "id" that SQLite resolves against the subquery's own table.
-const clickCount = sql<number>`(
-  select count(*) from clicks where clicks.link_id = links.id
-)`.as("clicks");
-
-// NB: same literal-`links.id` note as clickCount above.
 const addressCount = sql<number>`(
   select count(*) from link_addresses
   where link_addresses.link_id = links.id and link_addresses.retired_at is null
@@ -128,6 +129,7 @@ function toDTO(
     clicks,
     addressCount,
     createdBy: row.createdBy,
+    suspendedAt: row.suspendedAt,
   };
 }
 
@@ -142,13 +144,25 @@ async function linkToDTO(
 ): Promise<LinkDTO> {
   const [hostname, clicks, addressCount] = await Promise.all([
     domainHostname(db, orgId, row.domainId),
-    db
-      .select({ n: sql<number>`count(*)` })
-      .from(schema.clicks)
-      .where(eq(schema.clicks.linkId, row.id)),
+    clicksForLink(db, row.id),
     countAddressesForLink(db, row.id),
   ]);
-  return toDTO(env, row, clicks[0]?.n ?? 0, hostname, addressCount);
+  return toDTO(env, row, clicks, hostname, addressCount);
+}
+
+/** The link's DTO with the org's quota usage beside it: what a write that can
+ * change either answers with, so the app updates both from one response. */
+async function linkWithQuota(
+  env: Env,
+  db: DB,
+  orgId: string,
+  row: typeof schema.links.$inferSelect,
+) {
+  const [dto, quota] = await Promise.all([
+    linkToDTO(env, db, orgId, row),
+    quotaUsageFields(db, orgId),
+  ]);
+  return { ...dto, ...quota };
 }
 
 /** Inserts a new address row, publishes its KV key, and responds with the
@@ -180,11 +194,7 @@ async function insertAddressAndRespond(
   );
   if (!inserted) await refuseAddressInsert(db, orgId);
   await enqueueStorage(env, [syncLinkMsg(address.slug, hostname)]);
-  const [dto, quota] = await Promise.all([
-    linkToDTO(env, db, orgId, link),
-    quotaUsageFields(db, orgId),
-  ]);
-  return { dto: { ...dto, ...quota }, status } as const;
+  return { dto: await linkWithQuota(env, db, orgId, link), status } as const;
 }
 
 /**
@@ -299,7 +309,7 @@ async function findLinkAndAddress(c: Context<AppEnv>) {
   return { db, orgId, link, address };
 }
 
-function newAddressRow(
+export function newAddressRow(
   linkId: string,
   orgId: string,
   domainId: string | null,
@@ -576,6 +586,9 @@ async function resolveRenamedSlug(
 linkRoutes.get("/", requireOrgRole("viewer"), async (c) => {
   const params = readLinkPageParams(new URL(c.req.url));
   const query = linkPageQuery(c.req.param("orgId")!, params);
+  // Absent when mcp.ts dispatches here: that inner app has no evlog middleware.
+  const log = c.get("log");
+  log?.set({ orgId: c.req.param("orgId"), linkList: { sort: params.sort } });
 
   const rows = await c.var.db
     .select({
@@ -623,23 +636,29 @@ linkRoutes.post("/claim", requireOrgRole("member"), async (c) => {
 
   const link = await claimAnonLink(c.env, c.req.param("orgId")!, c.var.user!.id, claimToken);
   if (!link) throw new HTTPException(404, { message: "That link is no longer available" });
+  // Absent when mcp.ts dispatches here: that inner app has no evlog middleware.
+  const log = c.get("log");
+  log?.set({ orgId: c.req.param("orgId"), linkId: link.id });
   return c.json(await linkToDTO(c.env, c.var.db, c.req.param("orgId")!, link), 201);
 });
 
 linkRoutes.get("/quota-usage", requireOrgRole("viewer"), async (c) => {
   const { quotaUsage, quotaUsageAt } = await quotaUsageFields(c.var.db, c.req.param("orgId")!);
+  // Absent when mcp.ts dispatches here: that inner app has no evlog middleware.
+  const log = c.get("log");
+  log?.set({ orgId: c.req.param("orgId"), quotaUsage });
   return c.json({ count: quotaUsage, at: quotaUsageAt });
 });
 
 /** Builds a new link row: unset appearance/UTM fields fall back to their
  * column default ("" or null), not to an existing row like an update would. */
-function newLinkRow(
+export function newLinkRow(
   orgId: string,
   domainId: string | null,
   slug: string,
   body: LinkInput,
   utm: ReturnType<typeof resolveUtm>,
-  createdBy: string,
+  createdBy: string | null,
 ): typeof schema.links.$inferSelect {
   return {
     id: uid(),
@@ -673,6 +692,11 @@ function newLinkRow(
     suspendedAt: null,
     suspendedBy: null,
     suspendReason: null,
+    // Nor warned (#344), unless the caller copies the org's warning in
+    // (orgLinkWarning); a report or the sweep sets it later.
+    warnedAt: null,
+    warnReason: null,
+    webRiskCheckedAt: null,
   };
 }
 
@@ -764,6 +788,8 @@ linkRoutes.post("/", requireOrgRole("member"), async (c) => {
   const orgId = c.req.param("orgId")!;
   validateInput(body, orgId);
   const db = c.var.db;
+  await assertNotBlocked(db, body.destination);
+  assertNotOwnShortLink(c.env, body.destination);
 
   const [{ plan, limits }, activeCount] = await Promise.all([
     orgPlan(db, orgId),
@@ -824,6 +850,15 @@ linkRoutes.post("/", requireOrgRole("member"), async (c) => {
 
   assertLinkQuota(activeCount, plan, limits);
   const link = newLinkRow(orgId, domainId, slug, body, utm, c.var.user!.id);
+  // A scam-shaped destination is created on hold: it exists, and a human
+  // decides whether it redirects. Applied before the insert so it never serves.
+  // Otherwise it is born warned while the org is (#344), so a warned org
+  // cannot get round the warning page by making a fresh link.
+  Object.assign(
+    link,
+    (await holdIfSuspicious(c.env, db, orgId, plan, link.destination)) ??
+      (await orgLinkWarning(db, orgId)),
+  );
   const address = newAddressRow(link.id, orgId, domainId, slug, "primary", "created");
   // Atomic: the link insert, the org's links-cap-guarded address insert, and
   // a compensating delete (only if the cap was hit) all run in one D1 batch,
@@ -834,8 +869,8 @@ linkRoutes.post("/", requireOrgRole("member"), async (c) => {
   if (!inserted) await refuseAddressInsert(db, orgId);
   await enqueueStorage(c.env, [syncLinkMsg(link.slug, hostname)]);
   // Score the destination after the response (#68), the way clicks are
-  // recorded: it scores, it never blocks, and nobody waits on it.
-  c.executionCtx.waitUntil(scoreAndRecord(c.env.DB, link.id, link.destination));
+  // recorded: nobody waits on it. Only a Web Risk hit acts (#341).
+  c.executionCtx.waitUntil(checkLinkDestination(c.env, link));
   return c.json(
     { ...toDTO(c.env, link, 0, hostname, 1), ...(await quotaUsageFields(db, orgId)) },
     201,
@@ -894,7 +929,16 @@ function riskAfterDestinationChange(
   destination: string,
 ) {
   if (destination === existing.destination) return {};
-  return { riskScore: null, riskReasons: null, riskCheckedAt: null, riskProvider: null };
+  // Web Risk's stamp too: it was for the old destination. Left in place, a
+  // lookup the new one never got (over budget, Google down) would keep the
+  // link out of the rescan for the week the old stamp still buys.
+  return {
+    riskScore: null,
+    riskReasons: null,
+    riskCheckedAt: null,
+    riskProvider: null,
+    webRiskCheckedAt: null,
+  };
 }
 
 /** A moved link leaves a stale key behind: syncing that old key finds no row
@@ -921,7 +965,7 @@ function renameSyncMessages(
  * storage queue processes is self-healing (the consumer re-reads current D1
  * truth for that one key), so callers can freely resync this whole set
  * without first figuring out which fields actually changed. */
-async function activeAddressesOf(db: DB, linkId: string) {
+export async function activeAddressesOf(db: DB, linkId: string) {
   return db
     .select({
       slug: schema.linkAddresses.slug,
@@ -933,16 +977,36 @@ async function activeAddressesOf(db: DB, linkId: string) {
     .where(and(eq(schema.linkAddresses.linkId, linkId), isNull(schema.linkAddresses.retiredAt)));
 }
 
+/**
+ * What an edit that changes the destination owes the abuse rules: a blocked
+ * host is refused, and a scam-shaped one puts the link on hold. Returns the
+ * suspension columns to write with the edit, or null.
+ */
+async function guardChangedDestination(
+  env: Env,
+  db: DB,
+  orgId: string,
+  plan: OrgPlan,
+  existing: typeof schema.links.$inferSelect,
+  destination: string,
+) {
+  if (destination === existing.destination) return null;
+  await assertNotBlocked(db, destination);
+  assertNotOwnShortLink(env, destination);
+  return existing.suspendedAt ? null : holdIfSuspicious(env, db, orgId, plan, destination);
+}
+
 linkRoutes.patch("/:linkId", requireOrgRole("member"), async (c) => {
   const body = await c.req.json<LinkInput>();
   const orgId = c.req.param("orgId")!;
   validateInput(body, orgId, true);
   const db = c.var.db;
   // The plan and the row are independent reads, so they go out together.
-  const [{ limits }, existing] = await Promise.all([
+  const [{ plan, limits }, existing] = await Promise.all([
     orgPlan(db, orgId),
     findLink(db, orgId, c.req.param("linkId")!),
   ]);
+
   // After the row is read: what the plan gates is a *change* to the styling,
   // not the styling arriving back unchanged with an edit to some other field.
   assertQrAllowed(body, limits, existing);
@@ -983,12 +1047,18 @@ linkRoutes.patch("/:linkId", requireOrgRole("member"), async (c) => {
   const utm = resolveUtm(destination, body, existing);
   const cleanDestination = stripUtmParams(destination);
 
-  const updated = mergedLinkUpdate(existing, body, {
-    domainId,
-    slug: newSlug,
-    destination: cleanDestination,
-    utm,
-  });
+  // Swapping a clean destination for a scam-shaped one is the standard move,
+  // so a changed destination is held the same way a new link is.
+  const hold = await guardChangedDestination(c.env, db, orgId, plan, existing, cleanDestination);
+  const updated = {
+    ...mergedLinkUpdate(existing, body, {
+      domainId,
+      slug: newSlug,
+      destination: cleanDestination,
+      utm,
+    }),
+    ...hold,
+  };
   const messages = [
     ...renameSyncMessages(existing, updated, body, moved, hostname, oldHostname),
     // KV caches each address's fully-built redirect URL (destination + UTM
@@ -1069,13 +1139,9 @@ linkRoutes.patch("/:linkId", requireOrgRole("member"), async (c) => {
   // the link reads as unscored from the moment it changed rather than
   // carrying the previous destination's clean bill until this finishes.
   if (updated.destination !== existing.destination)
-    c.executionCtx.waitUntil(scoreAndRecord(c.env.DB, existing.id, updated.destination));
+    c.executionCtx.waitUntil(checkLinkDestination(c.env, updated));
 
-  const [dto, quota] = await Promise.all([
-    linkToDTO(c.env, db, orgId, updated),
-    quotaUsageFields(db, orgId),
-  ]);
-  return c.json({ ...dto, ...quota });
+  return c.json(await linkWithQuota(c.env, db, orgId, updated));
 });
 
 linkRoutes.delete("/:linkId", requireOrgRole("member"), async (c) => {
@@ -1233,11 +1299,7 @@ linkRoutes.delete("/:linkId/addresses/:addressId", requireOrgRole("member"), asy
 async function promoteAddress(c: Context<AppEnv>) {
   const { db, orgId, link: existing, address } = await findLinkAndAddress(c);
   if (address.kind === "primary") {
-    const [dto, quota] = await Promise.all([
-      linkToDTO(c.env, db, orgId, existing),
-      quotaUsageFields(db, orgId),
-    ]);
-    return c.json({ ...dto, ...quota });
+    return c.json(await linkWithQuota(c.env, db, orgId, existing));
   }
   if (address.retiredAt !== null)
     throw new HTTPException(409, { message: "This address is no longer active" });
@@ -1306,9 +1368,5 @@ async function promoteAddress(c: Context<AppEnv>) {
     syncLinkMsg(address.slug, hostname),
   ]);
 
-  const [dto, quota] = await Promise.all([
-    linkToDTO(c.env, db, orgId, updated),
-    quotaUsageFields(db, orgId),
-  ]);
-  return c.json({ ...dto, ...quota });
+  return c.json(await linkWithQuota(c.env, db, orgId, updated));
 }

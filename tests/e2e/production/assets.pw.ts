@@ -32,6 +32,14 @@ async function bundledScript(request: APIRequestContext): Promise<string> {
   return src;
 }
 
+test("source maps are not public assets", async ({ request }) => {
+  const script = await bundledScript(request);
+  const response = await request.get(`${script}.map`);
+  // Missing assets use the SPA fallback. They must never return source code.
+  expect(response.headers()["content-type"]).toContain("text/html");
+  expect(await response.text()).not.toContain('"sourcesContent"');
+});
+
 test("a hashed chunk is cached for a day and immutable within it", async ({ request }) => {
   // Served as `max-age=0, must-revalidate` (the default) the browser asked
   // again for every chunk on every page load, and every one of those was a

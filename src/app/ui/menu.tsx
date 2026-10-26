@@ -28,7 +28,10 @@ export function Menu({
       </BaseMenu.Trigger>
       <BaseMenu.Portal>
         <BaseMenu.Positioner sideOffset={6} align={align} className="z-50">
-          <BaseMenu.Popup className="min-w-48 rounded-lg bg-surface p-1 smooth-shadow-ring-xl transition-[opacity,scale] duration-100 data-[starting-style]:scale-95 data-[starting-style]:opacity-0">
+          {/* Grows out of its trigger (--transform-origin is Base UI's
+              anchor side) and leaves by fading alone: a menu opened this
+              often should get out of the way faster than it arrived. */}
+          <BaseMenu.Popup className="min-w-48 origin-[var(--transform-origin)] rounded-lg bg-surface p-1 smooth-shadow-ring-xl transition-[opacity,scale] duration-100 ease-out data-[ending-style]:opacity-0 data-[starting-style]:scale-95 data-[starting-style]:opacity-0 motion-reduce:transition-none">
             {children}
           </BaseMenu.Popup>
         </BaseMenu.Positioner>
@@ -63,6 +66,18 @@ export function MenuItem({
     >
       {children}
     </BaseMenu.Item>
+  );
+}
+
+/** Read-only text at the top of a menu: what a row's badge says on hover,
+ * for a touch screen, which has none. Not an item, so arrow keys skip it. */
+export function MenuNote({ children }: { children: ReactNode }) {
+  return (
+    <BaseMenu.Group>
+      <BaseMenu.GroupLabel className="max-w-72 px-2.5 py-2 text-xs text-pretty text-muted">
+        {children}
+      </BaseMenu.GroupLabel>
+    </BaseMenu.Group>
   );
 }
 

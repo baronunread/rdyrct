@@ -25,7 +25,7 @@ const SPA_SHELL = `<!doctype html><html><head><title>rdyrct - branded short link
 
 /** What `bun run build` writes to 404-short.html (scripts/prerender-404.tsx),
  * cut down to the parts the Worker reads: the marker and the link. */
-const SHORT_404 = `<!doctype html><html><head><title>Not found</title></head><body data-page="404-short"><div id="root"><p>This short link does not exist (or the page moved).</p><p><a href="/">Go home</a></p></div></body></html>`;
+const SHORT_404 = `<!doctype html><html><head><title>Not found</title></head><body data-page="404-short"><div id="root"><h1>Nothing lives at this link.</h1><p><a href="/">Go home</a></p></div></body></html>`;
 
 // The worker reaches this binding through serveSpa's `c.env.ASSETS.fetch`
 // in src/worker/index.ts, and for the short-host 404. `connect` is here because
@@ -94,6 +94,7 @@ export const testEnv: Env = {
   ASSETS: stubAssets,
   ORG_DELETE: stubWorkflow(),
   DOMAIN_ACTIVATE: stubWorkflow(),
+  LINK_IMPORT: stubWorkflow(),
 };
 
 export function overrideEnv(overrides: Partial<Env>): Env {
@@ -183,7 +184,13 @@ export async function resetClicks(): Promise<void> {
  * see turnstile.worker.ts.
  */
 export const authEnv = () =>
-  overrideEnv({ BETTER_AUTH_SECRET: "test-secret", TURNSTILE_SECRET_KEY: undefined });
+  // A Web Risk key in a developer's .dev.vars must not reach the tests.
+  overrideEnv({
+    BETTER_AUTH_SECRET: "test-secret",
+    TURNSTILE_SECRET_KEY: undefined,
+    TURNSTILE_SITE_KEY: undefined,
+    WEB_RISK_API_KEY: undefined,
+  });
 
 /**
  * Drive one request through the real worker and wait for anything it
@@ -208,6 +215,8 @@ export async function fetchWorker(request: Request, testEnv: Env = authEnv()): P
 // validates on requests made with this env.
 export const POLAR_HOBBY_PRODUCT_ID = "prod_hobby";
 export const POLAR_PRO_PRODUCT_ID = "prod_pro";
+export const POLAR_HOBBY_YEARLY_PRODUCT_ID = "prod_hobby_yearly";
+export const POLAR_PRO_YEARLY_PRODUCT_ID = "prod_pro_yearly";
 export const POLAR_WEBHOOK_SECRET = "test-webhook-secret";
 export const billingEnv = () =>
   overrideEnv({
@@ -215,10 +224,13 @@ export const billingEnv = () =>
     POLAR_WEBHOOK_SECRET,
     POLAR_HOBBY_PRODUCT_ID,
     POLAR_PRO_PRODUCT_ID,
+    POLAR_HOBBY_YEARLY_PRODUCT_ID,
+    POLAR_PRO_YEARLY_PRODUCT_ID,
   });
 
 /** One outbound Resend send, as the worker posted it. */
 export interface CapturedEmail {
+  from?: string;
   to: string;
   subject: string;
   html: string;
@@ -286,6 +298,21 @@ export async function seedBillingUser(
 
 export async function applyTestMigrations(): Promise<void> {
   await applyD1Migrations(env.DB, env.TEST_MIGRATIONS);
+}
+
+/** Migration 0042's backfill: the click rollups rebuilt from raw clicks. */
+export function rollupBackfill(): string[] {
+  const migration = env.TEST_MIGRATIONS.find((m) => m.name.startsWith("0042_"));
+  return (migration?.queries ?? []).filter((q) => /INSERT INTO click_\w+.*SELECT/s.test(q));
+}
+
+/**
+ * Rows a test writes straight into `clicks` skip insertClicks, which is what
+ * keeps the rollups (#26) current. This runs the same backfill production
+ * ran, so the stats routes see them.
+ */
+export async function rebuildClickRollups(): Promise<void> {
+  await env.DB.batch(rollupBackfill().map((q) => env.DB.prepare(q)));
 }
 
 // The password every seeded test user shares: fine since each test's DB is

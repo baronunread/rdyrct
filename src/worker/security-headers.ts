@@ -21,13 +21,32 @@
  *
  * The stats script loads from stats.brnr.dev and sends its page views back to
  * the same host, so it needs both script-src and connect-src too.
+ *
+ * Neither is allowed where it cannot load: the stats script is rdyrct.com's
+ * own (RDYRCT_SITE), and PostHog needs a project token in the build. A
+ * self-hosted copy allows no third-party script at all.
+ *
+ * Cloudflare Turnstile (#304) is the one source decided per request rather
+ * than per build: its script and the iframe its challenge runs in come from
+ * challenges.cloudflare.com, allowed only when the deployment serves a
+ * TURNSTILE_SITE_KEY, which is the only time the browser loads it. A
+ * self-hosted copy without the keys never allows it.
  */
-const POSTHOG = "https://*.posthog.com";
+import { POSTHOG_CONFIGURED, RDYRCT_SITE } from "../shared/site";
+
+const POSTHOG = POSTHOG_CONFIGURED ? "https://*.posthog.com" : "";
 const SENTRY =
   "https://*.ingest.sentry.io https://*.ingest.de.sentry.io https://*.ingest.us.sentry.io";
-const STATS = "https://stats.brnr.dev";
-// Turnstile (#304): its script, and the iframe the challenge renders in.
+const STATS = RDYRCT_SITE ? "https://stats.brnr.dev" : "";
+/** Fazier's launch badge in the landing footer, the one remote image:
+ *  their verifier wants their own badge, not a copy. rdyrct.com only. */
+const FAZIER = RDYRCT_SITE ? "https://fazier.com" : "";
+
+/** Turnstile's script and challenge iframe (#304). */
 const TURNSTILE = "https://challenges.cloudflare.com";
+
+/** A directive from its sources, with the ones switched off left out. */
+const directive = (...parts: string[]) => parts.filter(Boolean).join(" ");
 
 /**
  * The theme bootstrap in index.html, allowed by its own sha256 rather than
@@ -50,7 +69,7 @@ const TURNSTILE = "https://challenges.cloudflare.com";
  * the Worker on every response, API and redirects included. Adopting one to
  * avoid retyping 44 characters would move the whole policy to fit the tool.
  */
-const THEME_INIT_HASH = "'sha256-FWT0zAeXgLYQzK+k6AJ0ya6gTIN/5TC8uQ3OB6H8w6A='";
+const THEME_INIT_HASH = "'sha256-2nKA5EXyqoJ3UwqcLiwLWGCwtYg6xDyL/FbNRuFw1c0='";
 
 // `@vitejs/plugin-react` injects an inline module preamble (the React Refresh
 // runtime) into index.html when Vite serves the app in dev. `script-src
@@ -62,23 +81,29 @@ const THEME_INIT_HASH = "'sha256-FWT0zAeXgLYQzK+k6AJ0ya6gTIN/5TC8uQ3OB6H8w6A='";
 // so a deployed Worker cannot ship 'unsafe-inline' through a misread var.
 // The tradeoff is that e2e exercises a marginally looser policy than
 // production; everything except this one directive is identical.
-const SCRIPT_SRC = import.meta.env.DEV
-  ? `script-src 'self' 'unsafe-inline' ${POSTHOG} ${STATS} ${TURNSTILE}`
-  : `script-src 'self' ${THEME_INIT_HASH} ${POSTHOG} ${STATS} ${TURNSTILE}`;
+function buildCsp(turnstile: string): string {
+  const scriptSrc = import.meta.env.DEV
+    ? directive("script-src 'self' 'unsafe-inline'", POSTHOG, STATS, turnstile)
+    : directive("script-src 'self'", THEME_INIT_HASH, POSTHOG, STATS, turnstile);
+  return [
+    "default-src 'self'",
+    scriptSrc,
+    "style-src 'self' 'unsafe-inline'",
+    directive("img-src 'self' data:", POSTHOG, FAZIER),
+    "font-src 'self'",
+    directive("connect-src 'self'", POSTHOG, SENTRY, STATS),
+    // Only Turnstile's challenge iframe. With no frame-src at all the
+    // browser falls back to default-src 'self', which is the same rule.
+    ...(turnstile ? [directive("frame-src", turnstile)] : []),
+    "object-src 'none'",
+    "base-uri 'self'",
+    "form-action 'self'",
+    "frame-ancestors 'none'",
+  ].join("; ");
+}
 
-const CSP = [
-  "default-src 'self'",
-  SCRIPT_SRC,
-  "style-src 'self' 'unsafe-inline'",
-  `img-src 'self' data: ${POSTHOG}`,
-  "font-src 'self'",
-  `connect-src 'self' ${POSTHOG} ${SENTRY} ${STATS} ${TURNSTILE}`,
-  `frame-src ${TURNSTILE}`,
-  "object-src 'none'",
-  "base-uri 'self'",
-  "form-action 'self'",
-  "frame-ancestors 'none'",
-].join("; ");
+const CSP = buildCsp("");
+const CSP_WITH_TURNSTILE = buildCsp(TURNSTILE);
 
 /**
  * Returns a copy carrying the baseline, rather than setting headers on the
@@ -89,10 +114,13 @@ const CSP = [
  * therefore broke every static asset request, not just an exotic edge case.
  *
  * The copy is cheap: the body is handed over by reference, never read.
+ *
+ * `turnstile` adds challenges.cloudflare.com: pass whether TURNSTILE_SITE_KEY
+ * is set.
  */
-export function applySecurityHeaders(res: Response): Response {
+export function applySecurityHeaders(res: Response, turnstile = false): Response {
   const out = new Response(res.body, res);
-  out.headers.set("Content-Security-Policy", CSP);
+  out.headers.set("Content-Security-Policy", turnstile ? CSP_WITH_TURNSTILE : CSP);
   out.headers.set("X-Content-Type-Options", "nosniff");
   out.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
   out.headers.set(

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { renderEmail } from "../src/worker/email-layout";
+import { NOTICE_FOOTER, renderEmail } from "../src/worker/email-layout";
 
 const APP_URL = "https://rdyrct.example";
 const TO = "person@example.com";
@@ -24,6 +24,13 @@ describe("renderEmail (#73)", () => {
     const headingAt = html.html.indexOf("<h1");
     expect(preheaderAt).toBeGreaterThan(-1);
     expect(preheaderAt).toBeLessThan(headingAt);
+  });
+
+  test("pads the preheader with zero-width characters only, never a visible space", () => {
+    const { html } = renderEmail(base, APP_URL, TO);
+    const hidden = html.html.match(/width:0[^>]*>([^<]*)<\/div>/)?.[1] ?? "";
+    expect(hidden.startsWith(base.preheader)).toBe(true);
+    expect(hidden.slice(base.preheader.length)).toMatch(/^[͏‌]{100,}$/);
   });
 
   test("hides the preheader from the rendered message", () => {
@@ -102,6 +109,57 @@ describe("renderEmail (#73)", () => {
     expect(text).toContain("rdyrct, link shortening and QR codes.");
   });
 
+  test("leaves the footer out of both parts when asked, and nothing else", () => {
+    const { html, text } = renderEmail({ ...base, footer: false }, APP_URL, TO);
+    for (const part of [html.html, text]) {
+      expect(part).not.toContain("rdyrct, link shortening and QR codes");
+      expect(part).not.toContain("Not you?");
+      expect(part).not.toContain(`Sent to ${TO}`);
+    }
+    expect(text).toContain(base.heading);
+    expect(text.endsWith("\n")).toBe(false);
+  });
+
+  test("renders the hero layout in both parts, and leaves the plain layout alone", () => {
+    const hero = {
+      eyebrow: "Welcome to rdyrct",
+      sample: { long: "https://example.com/long", short: "rdyr.cc/hello" },
+    };
+    const { html, text } = renderEmail({ ...base, hero, footer: false }, APP_URL, TO);
+    expect(html.html).toContain("Welcome to rdyrct");
+    // Gmail linkifies a bare host; a zero-width space after each dot stops it.
+    expect(html.html).toContain("rdyr.​cc/hello");
+    expect(html.html).not.toContain("rdyr.cc/hello");
+    expect(html.html).toContain('class="band"');
+    expect(text).toContain("WELCOME TO RDYRCT");
+    expect(text).toContain("https://example.com/long -> rdyr.cc/hello");
+    // Both layouts open with the same brand band.
+    expect(renderEmail(base, APP_URL, TO).html.html).toContain('class="band"');
+
+    const bare = renderEmail(
+      { ...base, hero: { sample: hero.sample }, footer: false },
+      APP_URL,
+      TO,
+    );
+    expect(bare.html.html).not.toContain("text-transform:uppercase");
+    expect(bare.text.startsWith(base.heading)).toBe(true);
+  });
+
+  test("puts the brand image first in every layout, with the word as its alt text", () => {
+    const { html } = renderEmail(base, APP_URL, TO);
+    expect(html.html).toContain(`src="${APP_URL}/email-logo.png"`);
+    expect(html.html).toContain('alt="rdyrct"');
+  });
+
+  test("swaps the footer advice for mail about the reader's own account", () => {
+    const { html, text } = renderEmail({ ...base, footerLine: NOTICE_FOOTER }, APP_URL, TO);
+    for (const part of [html.html, text]) {
+      expect(part).toContain(NOTICE_FOOTER);
+      expect(part).not.toContain("Not you?");
+      expect(part).toContain(`Sent to ${TO}`);
+    }
+  });
+
   test("states the recipient as a plain fact, not a guessed reason", () => {
     const { html, text } = renderEmail(base, APP_URL, TO);
     expect(html.html).toContain(`Sent to ${TO}.`);
@@ -110,8 +168,8 @@ describe("renderEmail (#73)", () => {
 
   test("says where to go when the mail was not expected, in both parts", () => {
     const { html, text } = renderEmail(base, APP_URL, TO);
-    expect(html.html).toContain("Not you? Ignore it, or write to support@rdyrct.com.");
-    expect(text).toContain("Not you? Ignore it, or write to support@rdyrct.com.");
+    expect(html.html).toContain("Not you? Ignore it, or write to support@mail.rdyrct.com.");
+    expect(text).toContain("Not you? Ignore it, or write to support@mail.rdyrct.com.");
   });
 
   test("keeps a dark-mode block but styles light without it", () => {

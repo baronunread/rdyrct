@@ -71,6 +71,13 @@ async function assertOrgWritable(
       message: "This organization is locked: upgrade to Pro to use it again",
       cause: { code: "org_locked" },
     });
+  // Before the suspension check: a banned owner's org may be both, and the
+  // ban is the reason nothing will change.
+  if (state.disabledAt != null)
+    throw new HTTPException(403, {
+      message: "This organization is disabled: its owner is banned.",
+      cause: { code: "org_disabled" },
+    });
   if (state.linksSuspendedAt != null)
     throw new HTTPException(403, {
       message: "This organization's links are suspended.",
@@ -85,16 +92,18 @@ async function orgState(
   deletingAt: number | null;
   lockedAt: number | null;
   linksSuspendedAt: number | null;
+  disabledAt: number | null;
 }> {
   const rows = await db
     .select({
       deletingAt: schema.orgs.deletingAt,
       lockedAt: schema.orgs.lockedAt,
       linksSuspendedAt: schema.orgs.linksSuspendedAt,
+      disabledAt: schema.orgs.disabledAt,
     })
     .from(schema.orgs)
     .where(eq(schema.orgs.id, orgId));
-  return rows[0] ?? { deletingAt: null, lockedAt: null, linksSuspendedAt: null };
+  return rows[0] ?? { deletingAt: null, lockedAt: null, linksSuspendedAt: null, disabledAt: null };
 }
 
 /** The statement-level link guards need to distinguish teardown from a cap

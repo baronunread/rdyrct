@@ -13,7 +13,7 @@ import { TURNSTILE_TOKEN_HEADER } from "@/shared/types";
 export type AnonLink = { slug: string; url: string; claimToken: string; expiresAt: number };
 
 /**
- * Carries the proof of work solved while the visitor was typing (#98).
+ * Carries the Turnstile token solved while the visitor was typing (#304).
  *
  * `guarded` re-solves and retries once if the Worker turns the token down.
  * A token can expire, be spent, or be forgotten by the server, and none of

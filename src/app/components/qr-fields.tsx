@@ -125,7 +125,7 @@ export function QrColorAndLogoFields({
             <button
               type="button"
               aria-label="About QR logos"
-              className="cursor-help text-muted normal-case hover:text-text"
+              className="relative cursor-help text-muted normal-case after:absolute after:-inset-1.5 hover:text-text"
             >
               <Info size={13} />
             </button>

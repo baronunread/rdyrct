@@ -1,97 +1,342 @@
 /**
- * The header every public page shares (landing, and the QR generator from
- * Direction D of #96).
+ * The header every public page shares, built the way getopen.so builds
+ * theirs. At the top of the page it is part of the page: no fill, no edge.
+ * Once the page moves it shrinks into a frosted pill a little below the top
+ * edge, narrower and shorter, everything easing together over 700ms, so the
+ * nav stays in reach without looking like a second surface over the opening.
+ *
+ * The logo and the nav sit together on the left, the nav as plain text
+ * links; the actions sit on the right. The pill is the one floating,
+ * translucent element on the marketing pages (rdyrct-design, Layout).
+ * "Product" opens a panel that hangs off the pill, so the pages that used to
+ * be reachable only from the footer (the QR generator, the comparisons, the
+ * roadmap) have a way in from the top.
  *
  * Pricing links to its own page, not a fragment on "/": a bare anchor only
  * works on the page that has that section, and did nothing from any other
  * public page.
  *
- * `data-marketing-header` pairs with the `viewTransition` Links below: a
+ * `data-marketing-pill` pairs with the `viewTransition` links: a
  * navigation between marketing pages runs as a view transition (see
- * styles.css), and the attribute gives this element its own transition
+ * styles.css), and the attribute gives the pill its own transition
  * group so it stays visually still instead of crossfading with the content,
  * which is what makes the navigation read as one page continuing rather
  * than a new one loading.
  */
-import { Link } from "@tanstack/react-router";
-import { Moon, Sun } from "../ui/icons";
+import { Link, useRouterState } from "@tanstack/react-router";
+import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
+import { ChevronDown, Github } from "../ui/icons";
+import { GITHUB_URL } from "../ui/footer";
 import { useHydrated } from "../lib/hydrated";
+import { useSafeHover } from "../lib/safe-hover";
 import { MarketingLink } from "./marketing-link";
-import { useTheme } from "../lib/theme";
 import { trackCta } from "../lib/track-cta";
-import { IconButton } from "../ui/button";
 import { buttonClass } from "../ui/button-class";
+import { cn } from "../ui/cn";
+import { Logo } from "../ui/logo";
+import { currentNavKey, MAIN_LINKS, PRODUCT_LINKS } from "./marketing-nav";
+import { MenuButton, PhoneMenu } from "./phone-menu";
 
 export function LandingHeader({ authed }: { authed: boolean }) {
-  const [, toggleTheme] = useTheme();
   const hydrated = useHydrated();
+  const [menuOpen, setMenuOpen] = useState(false);
+  const pillRef = useRef<HTMLDivElement>(null);
+  const menuButtonRef = useRef<HTMLButtonElement>(null);
+  const closeMenu = () => setMenuOpen(false);
+  useDismiss(menuOpen, pillRef, closeMenu, menuButtonRef);
+  const scrolled = useSyncExternalStore(subscribeScroll, pageMoved, () => false);
+  // Unknown until hydrated: the pre-paint script's guess stands till then.
+  const auth = authed ? "in" : "out";
+
   return (
-    // Three columns, not space-between: the two 1fr rails keep the nav on the
-    // page's centre line however wide the brand or the auth buttons get, so
-    // "Sign up" turning into "Dashboard" does not shift the links.
-    // Equal rails only from sm up, where the centred nav exists to be
-    // centred. On a phone the nav is hidden and two 1fr rails just split the
-    // width evenly, which is enough to wrap "Log in" onto two lines.
     <header
       data-marketing-header
-      data-auth={hydrated ? (authed ? "in" : "out") : undefined}
-      className="sticky top-0 z-20 -mx-6 grid grid-cols-[auto_1fr_auto] items-center gap-3 border-b border-border/50 bg-bg/85 px-6 py-4 backdrop-blur-md sm:grid-cols-[1fr_auto_1fr]"
+      data-auth={hydrated ? auth : undefined}
+      // The open phone menu needs the pill's fill, wherever the page is.
+      data-floating={flag(scrolled || menuOpen)}
+      // flow-root: the pill's top margin stays inside the header rather
+      // than collapsing through it and moving the whole header down.
+      className="group/header sticky top-0 z-30 -mx-6 flow-root px-3 sm:px-6"
     >
-      <MarketingLink to="/" className="justify-self-start text-lg font-bold tracking-widest">
-        rdyrct
-      </MarketingLink>
-
-      {/* Where the visitor goes to read. Hidden on phones, where three columns
-          do not fit: those links still live in the footer. */}
-      <nav className="hidden items-center gap-5 text-sm sm:flex">
-        <MarketingLink to="/pricing" className="text-muted hover:text-accent">
-          Pricing
-        </MarketingLink>
-        {/* A real Link, not a bare anchor: "/#faq" changes the path from
-            anywhere but "/", and a plain <a> to a different path is a full
-            page load, not a navigation, undoing the whole point of the view
-            transition. LandingPage scrolls to the section itself once it's
-            there, since a client-side route change doesn't do that on its
-            own the way a fresh document load would. */}
-        <Link to="/" hash="faq" viewTransition className="text-muted hover:text-accent">
-          FAQ
-        </Link>
-        {/* /blog is served by the Worker's reverse proxy, not the SPA
-            router, so this is a real navigation, not a <Link>. */}
-        <a href="/blog" className="text-muted hover:text-accent">
-          Blog
-        </a>
-      </nav>
-      <span className="sm:hidden" />
-
-      {/* What the visitor does. */}
-      <div className="flex items-center justify-self-end gap-2.5 text-sm sm:gap-4">
-        <IconButton label="Toggle theme" className="p-2" onClick={toggleTheme}>
-          <Sun size={15} className="theme-sun" />
-          <Moon size={15} className="theme-moon" />
-        </IconButton>
-        <span data-auth-control="in">
-          <Link
-            to="/dashboard"
-            onClick={() => trackCta("header")}
-            className={buttonClass({ variant: "primary" })}
-          >
-            Dashboard
-          </Link>
-        </span>
-        <span data-auth-control="out" className="flex items-center gap-2.5 sm:gap-4">
-          <Link to="/login" className="whitespace-nowrap text-muted hover:text-accent">
-            Log in
-          </Link>
-          <Link
-            to="/signup"
-            onClick={() => trackCta("header")}
-            className={buttonClass({ variant: "primary" })}
-          >
-            Sign up
-          </Link>
-        </span>
+      <MenuScrim open={menuOpen} />
+      <div ref={pillRef} data-marketing-pill data-open={flag(menuOpen)} className={PILL}>
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-7 self-stretch">
+            <MarketingLink to="/" onClick={closeMenu} className="rounded-full text-lg">
+              <Logo />
+            </MarketingLink>
+            <MainNav />
+          </div>
+          <div className="flex items-center gap-1.5">
+            {/* The open menu carries its own Get started, so the pill's
+                Sign up steps aside rather than say it twice. */}
+            <div className="in-data-open:max-md:hidden">
+              <AuthActions />
+            </div>
+            <MenuButton
+              open={menuOpen}
+              onToggle={() => setMenuOpen((was) => !was)}
+              buttonRef={menuButtonRef}
+            />
+          </div>
+        </div>
+        <PhoneMenu open={menuOpen} onClose={closeMenu} />
       </div>
     </header>
+  );
+}
+
+/** A boolean data attribute: present and empty, or absent. */
+const flag = (on: boolean) => (on ? "" : undefined);
+
+/** Past this many pixels the header leaves the page and floats. */
+const FLOAT_AFTER = 8;
+const pageMoved = () => window.scrollY > FLOAT_AFTER;
+function subscribeScroll(onChange: () => void) {
+  addEventListener("scroll", onChange, { passive: true });
+  return () => removeEventListener("scroll", onChange);
+}
+
+/**
+ * Transparent at the top, as wide as a reading column and as tall as the
+ * row needs. Floating (scrolled, or holding the phone menu): 12px down from
+ * the edge, narrower, shorter, and frosted: a translucent fill with a strong
+ * blur, a faint edge, a light inset rim and a soft shadow. Size, spacing and
+ * surface all ease on one curve, so the shrink reads as one movement.
+ */
+const PILL = cn(
+  "relative mx-auto max-w-5xl rounded-[1.75rem] border border-transparent px-1 py-3 sm:px-4",
+  "transition-[max-width,margin,padding,background-color,border-color,box-shadow] duration-700 ease-[cubic-bezier(0.32,0.72,0,1)] motion-reduce:transition-none",
+  "group-data-floating/header:mt-3 group-data-floating/header:max-w-[calc(100%-1.5rem)] group-data-floating/header:px-2 group-data-floating/header:py-1.5 md:group-data-floating/header:max-w-3xl sm:group-data-floating/header:px-2.5",
+  "group-data-floating/header:border-border/60 group-data-floating/header:bg-surface/70 group-data-floating/header:backdrop-blur-xl group-data-floating/header:backdrop-saturate-150",
+  "group-data-floating/header:shadow-[inset_0_1px_0_rgb(255_255_255/0.35),inset_0_-1px_0_rgb(255_255_255/0.12),0_1px_1px_rgb(0_0_0/0.06),0_8px_24px_rgb(0_0_0/0.1)]",
+  // The open phone menu keeps the full width: its rows need it.
+  "data-open:bg-surface data-open:pb-2 group-data-floating/header:data-open:max-w-full",
+);
+
+/** The page behind the open phone menu, blurred. A sibling of the pill, not a
+ *  child: the pill's backdrop filter would make "fixed" mean fixed to it. */
+function MenuScrim({ open }: { open: boolean }) {
+  return (
+    <div
+      aria-hidden="true"
+      data-open={open ? "" : undefined}
+      className="pointer-events-none fixed inset-0 bg-bg/60 opacity-0 backdrop-blur-md transition-opacity duration-300 data-open:pointer-events-auto data-open:opacity-100 motion-reduce:transition-none md:hidden"
+    />
+  );
+}
+
+/** The main links, as plain text: muted until pointed at, focused, or the
+ *  page you are on. Hidden on phones, where the menu holds them. */
+function MainNav() {
+  const pathname = useRouterState({ select: (state) => state.location.pathname });
+  const current = currentNavKey(pathname);
+  return (
+    // relative: the Product panel hangs from the nav's foot. self-stretch,
+    // so that foot is the row's and the panel clears the pill's content.
+    <nav
+      aria-label="Main"
+      className="relative hidden items-center gap-6 self-stretch text-sm md:flex"
+    >
+      <ProductMenu current={current === "product"} />
+      {MAIN_LINKS.map((link) => (
+        <MarketingLink
+          key={link.key}
+          to={link.to}
+          className={NAV_ITEM}
+          aria-current={current === link.key ? "page" : undefined}
+        >
+          {link.label}
+        </MarketingLink>
+      ))}
+      {/* /blog is served by the Worker's reverse proxy, not the SPA
+          router, so this is a real navigation, not a <Link>. */}
+      <a href="/blog" className={NAV_ITEM}>
+        Blog
+      </a>
+    </nav>
+  );
+}
+
+const NAV_ITEM =
+  "rounded-sm text-muted transition-colors duration-150 hover:text-text focus-visible:text-text aria-[current=page]:text-text";
+
+/**
+ * A disclosure, not a menu: the panel holds ordinary links, so Tab walks
+ * through them and screen readers read them as links. Opens on click, or on
+ * hover where there is a pointer that can hover; closes on Escape, on a
+ * click or focus outside, and once a link in it is followed.
+ */
+function ProductMenu({ current }: { current: boolean }) {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+  const safe = useSafeHover(panelRef, setOpen);
+  const close = () => {
+    safe.cancel();
+    setOpen(false);
+  };
+  useDismiss(open, rootRef, close, buttonRef);
+
+  // The pointer reaches the button before it clicks it, so a click that
+  // lands just after hover opened the panel means "open", not "close".
+  const hoveredAt = useRef(0);
+  const canHover = () => matchMedia("(hover: hover)").matches;
+  const enter = () => {
+    if (!canHover()) return;
+    hoveredAt.current = performance.now();
+    safe.enter();
+  };
+  const leave = (event: React.PointerEvent) => {
+    if (!canHover()) return;
+    hoveredAt.current = 0;
+    safe.leave({ x: event.clientX, y: event.clientY });
+  };
+  const toggle = () => {
+    if (performance.now() - hoveredAt.current < 600) return;
+    safe.cancel();
+    setOpen((was) => !was);
+  };
+
+  return (
+    <div ref={rootRef} onPointerEnter={enter} onPointerLeave={leave}>
+      <button
+        ref={buttonRef}
+        type="button"
+        aria-expanded={open}
+        aria-controls="product-panel"
+        aria-current={current ? "page" : undefined}
+        onClick={toggle}
+        className={cn(NAV_ITEM, "inline-flex cursor-pointer items-center gap-1")}
+      >
+        Product
+        <ChevronDown
+          size={14}
+          className={cn("transition-transform motion-reduce:transition-none", open && "rotate-180")}
+        />
+      </button>
+      {/* Rendered closed rather than not at all: the links are in the HTML
+          a crawler reads, and opening does not wait on a render. `inert`
+          keeps the closed panel out of the tab order. The top padding is
+          part of the panel, so the pointer crosses no gap on the way down,
+          and useSafeHover keeps it open on a diagonal one.
+
+          It grows down out of the pill (origin-top), and leaves quicker and
+          with less travel than it came, blurring as it goes. */}
+      <div
+        ref={panelRef}
+        id="product-panel"
+        inert={!open}
+        data-open={open ? "" : undefined}
+        className="invisible absolute top-full left-1/2 w-md origin-top -translate-x-1/2 -translate-y-1 scale-[0.97] pt-2 opacity-0 blur-[4px] transition-[opacity,translate,scale,filter,visibility] duration-150 ease-in data-open:visible data-open:translate-y-0 data-open:scale-100 data-open:opacity-100 data-open:blur-none data-open:duration-200 data-open:ease-[cubic-bezier(0.23,1,0.32,1)] motion-reduce:translate-y-0 motion-reduce:scale-100 motion-reduce:blur-none"
+      >
+        <ul className="grid grid-cols-2 gap-1 rounded-2xl border border-border bg-surface p-2 shadow-[0_16px_40px_-18px_rgb(30_20_50/0.35)]">
+          {PRODUCT_LINKS.map((link) => (
+            <PanelLink key={link.to} {...link} onFollow={() => setOpen(false)} />
+          ))}
+        </ul>
+      </div>
+    </div>
+  );
+}
+
+function PanelLink({
+  to,
+  label,
+  hint,
+  onFollow,
+}: {
+  to: (typeof PRODUCT_LINKS)[number]["to"];
+  label: string;
+  hint: string;
+  onFollow: () => void;
+}) {
+  return (
+    <li>
+      <MarketingLink
+        to={to}
+        onClick={onFollow}
+        className="block rounded-xl px-3 py-2.5 transition-colors hover:bg-surface-2 focus-visible:bg-surface-2"
+      >
+        <span className="block text-sm font-bold text-text">{label}</span>
+        <span className="block text-sm text-muted">{hint}</span>
+      </MarketingLink>
+    </li>
+  );
+}
+
+/** Close on Escape (focus back on the button), and on a click or focus that
+ *  lands outside `root`. */
+function useDismiss(
+  open: boolean,
+  root: React.RefObject<HTMLElement | null>,
+  close: () => void,
+  button: React.RefObject<HTMLButtonElement | null>,
+) {
+  useEffect(() => {
+    if (!open) return;
+    const outside = (event: Event) => {
+      if (event.target instanceof Node && !root.current?.contains(event.target)) close();
+    };
+    const escape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      close();
+      button.current?.focus();
+    };
+    document.addEventListener("pointerdown", outside);
+    document.addEventListener("focusin", outside);
+    document.addEventListener("keydown", escape);
+    return () => {
+      document.removeEventListener("pointerdown", outside);
+      document.removeEventListener("focusin", outside);
+      document.removeEventListener("keydown", escape);
+    };
+  }, [open, root, close, button]);
+}
+
+function AuthActions() {
+  return (
+    <div className="flex items-center gap-1 text-sm">
+      {/* The hero never says the product is open source, and it is one of
+          the page's strongest claims. An icon with no star count: a low
+          number reads as a weekend project (see SelfHostSection). */}
+      <a
+        href={GITHUB_URL}
+        target="_blank"
+        rel="noreferrer"
+        aria-label="rdyrct on GitHub"
+        title="rdyrct on GitHub"
+        className="hidden size-9 place-items-center rounded-full text-muted transition-colors hover:text-text sm:grid"
+      >
+        <Github size={18} />
+      </a>
+      <span data-auth-control="in">
+        <PillCta to="/dashboard">Dashboard</PillCta>
+      </span>
+      <span data-auth-control="out" className="flex items-center gap-1">
+        {/* On a phone Log in waits in the menu, which leaves the pill room
+            for the one thing a first visit is for. */}
+        <Link
+          to="/login"
+          className="hidden rounded-full px-3 py-2 whitespace-nowrap text-muted transition-colors hover:text-text sm:block"
+        >
+          Log in
+        </Link>
+        <PillCta to="/signup">Sign up</PillCta>
+      </span>
+    </div>
+  );
+}
+
+function PillCta({ to, children }: { to: "/dashboard" | "/signup"; children: ReactNode }) {
+  return (
+    <Link
+      to={to}
+      onClick={() => trackCta("header")}
+      className={cn(buttonClass({ variant: "primary" }), "rounded-full px-4")}
+    >
+      {children}
+    </Link>
   );
 }

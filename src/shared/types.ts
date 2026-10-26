@@ -5,6 +5,11 @@ import { oneOf } from "./lookup";
  * against its own schema. */
 export const TURNSTILE_TOKEN_HEADER = "x-turnstile-token";
 
+/** Why somebody reports a link. The form offers these and the admin list
+ * shows them. */
+export const REPORT_REASONS = ["phishing", "malware", "spam", "other"] as const;
+export type ReportReason = (typeof REPORT_REASONS)[number];
+
 /** What the Worker answers when a Turnstile token is missing, expired, or already
  * spent. The browser retries once with a fresh one rather than showing it. */
 export const TURNSTILE_FAILED_CODE = "TURNSTILE_FAILED";
@@ -62,6 +67,9 @@ export interface PlanLimits {
    * free on every plan, so this gates the look, never the code itself. */
   qrCustom: boolean;
   analyticsDays: number; // how far back click analytics look
+  /** Clicks recorded per org per UTC calendar month (#387). Past it, links
+   * keep redirecting and the clicks are not recorded. */
+  trackedClicks: number;
 }
 
 export const PLAN_LIMITS = {
@@ -72,6 +80,7 @@ export const PLAN_LIMITS = {
     domains: 0,
     qrCustom: false,
     analyticsDays: 7,
+    trackedClicks: 5_000,
   },
   hobby: {
     orgs: 1,
@@ -80,6 +89,7 @@ export const PLAN_LIMITS = {
     domains: 1,
     qrCustom: true,
     analyticsDays: 30,
+    trackedClicks: 50_000,
   },
   pro: {
     orgs: 3,
@@ -88,6 +98,7 @@ export const PLAN_LIMITS = {
     domains: 5,
     qrCustom: true,
     analyticsDays: 365,
+    trackedClicks: 500_000,
   },
   // Self-hosted instance: no billing, so nothing is capped. Large finite
   // numbers rather than Infinity, which JSON turns into null.
@@ -98,6 +109,7 @@ export const PLAN_LIMITS = {
     domains: 1_000_000,
     qrCustom: true,
     analyticsDays: 36_500,
+    trackedClicks: 1_000_000_000_000,
   },
 } satisfies Record<OrgPlan, PlanLimits>;
 
@@ -123,6 +135,17 @@ export interface OverLimits {
   domains?: number;
 }
 
+/** An org's tracked clicks this UTC month against its plan's cap (#387):
+ * GET /orgs/:orgId/click-usage. */
+export interface ClickUsage {
+  /** `YYYY-MM`, UTC. */
+  month: string;
+  clicks: number;
+  limit: number;
+  /** Epoch ms the count starts again: the first instant of next month. */
+  resetsAt: number;
+}
+
 /** Which resources an over-limit banner can name, in the order it names them. */
 export const OVER_LIMIT_KEYS = ["links", "members", "domains"] as const;
 
@@ -136,6 +159,15 @@ export const PLAN_PRICES = {
   hobby: "$4",
   pro: "$9",
 } satisfies Record<Exclude<StoredPlan, "free">, string>;
+
+/** Monthly-equivalent price when billed yearly: 10% off PLAN_PRICES. The real
+ * charge lives on the yearly product in Polar. */
+export const PLAN_PRICES_YEARLY = {
+  hobby: "$3.60",
+  pro: "$8.10",
+} satisfies Record<Exclude<StoredPlan, "free">, string>;
+
+export const YEARLY_DISCOUNT_LABEL = "Save 10%";
 
 /** QR dot styles supported by qr-code-styling; "" means inherit/default. */
 export const QR_DOT_STYLES = [
@@ -173,6 +205,8 @@ export interface User {
   plan: OrgPlan;
   polarSubscriptionCancelAtPeriodEnd: boolean;
   polarSubscriptionCurrentPeriodEnd: number | null;
+  /** The billing cycle of the subscription, or null with none (or before its next event). */
+  polarSubscriptionInterval: "month" | "year" | null;
   /**
    * Whether a Polar customer exists for this user, which is what the
    * subscription portal needs. A paid plan does not imply one: an admin can
@@ -266,6 +300,9 @@ export interface DomainDTO {
   /** Why the domain is in `error`, ready to show. Empty for every other status. */
   statusReason: string;
   rootRedirect: string;
+  /** "txt" for a domain moving from another service (#383): it is checked
+   * through TXT records, so it can be ready before its CNAME switches. */
+  validation: "http" | "txt";
   createdAt: number;
   /**
    * Epoch ms this domain went beyond the org's plan (#159), or null while it
@@ -338,6 +375,9 @@ export interface LinkDTO extends QrOverrides {
   addressCount: number;
   /** User id of the creator, null when that account is gone. */
   createdBy: string | null;
+  /** When the link was paused (by an admin or an automatic hold), or null.
+   * A paused link does not redirect; the owner has to be able to see that. */
+  suspendedAt: number | null;
 }
 
 /** One address (primary or alias) a link answers to. See #38. */
@@ -512,6 +552,8 @@ export interface AdminUsage {
   tableSize: number;
   tableGrowth: SeriesPoint[];
   tableProjectedDays: number | null;
+  /** Calls to Google Web Risk, site-wide, against the daily cap. */
+  webRisk: { today: number; month: number; perDay: number };
 }
 
 export interface AnomalyEntry {
@@ -539,8 +581,17 @@ export interface AdminOrgRow {
   members: number;
   links: number;
   clicks: number;
+  ownerId: string | null;
   ownerName: string | null;
   ownerEmail: string | null;
+  /** When the owner was banned, which disables every link, or null. */
+  disabledAt: number | null;
+  /** When the org's links were suspended, or null. */
+  linksSuspendedAt: number | null;
+  /** Why, from the held link that caused it, or null when nothing is held. */
+  suspendReason: string | null;
+  /** When the sweep or enough reports flagged the org for a human look. */
+  reviewFlaggedAt: number | null;
 }
 
 export interface AdminOrgDetail {
@@ -575,10 +626,35 @@ export interface AdminLinkRow {
   clicks: number;
   suspendedAt: number | null;
   suspendReason: string | null;
+  /** A warning page in front of the redirect (#344). Null means none. */
+  warnedAt: number | null;
+  warnReason: string | null;
   /** Destination scoring (#68). Null means unscored, never clean. */
   riskScore: number | null;
   riskReasons: string[];
   riskCheckedAt: number | null;
+  /** Open public reports against this link. */
+  reportCount: number;
+}
+
+/** A destination host nobody may link to. */
+export interface AdminBlockedHostRow {
+  host: string;
+  reason: string;
+  createdAt: number;
+}
+
+/** A public abuse report, as the admin list shows it. */
+export interface AdminReportRow {
+  id: string;
+  slug: string;
+  linkId: string | null;
+  orgId: string | null;
+  orgName: string | null;
+  reason: ReportReason;
+  note: string;
+  contact: string;
+  createdAt: number;
 }
 
 /** An anonymous link made on the landing page (Direction A of #96). It has no
@@ -625,6 +701,8 @@ export interface AdminUserRow {
   subscriptionPlan: Exclude<StoredPlan, "free"> | null;
   subscriptionStatus: string | null;
   cancelAtPeriodEnd: boolean;
+  /** When the paid period ends (ms epoch), null with no subscription. */
+  currentPeriodEnd: number | null;
   /** What an admin granted by hand, and who granted it. */
   compPlan: Exclude<StoredPlan, "free"> | null;
   compReason: string | null;

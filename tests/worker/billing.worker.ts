@@ -11,16 +11,20 @@ import {
   adminCookie,
   applyTestMigrations,
   billingEnv,
+  freeOwnerCookie,
   jsonBody,
   overrideEnv,
   POLAR_HOBBY_PRODUCT_ID,
   POLAR_PRO_PRODUCT_ID,
+  POLAR_HOBBY_YEARLY_PRODUCT_ID,
+  POLAR_PRO_YEARLY_PRODUCT_ID,
   POLAR_WEBHOOK_SECRET,
   seedBillingUser as seedUser,
 } from "./support";
 import type { Env } from "../../src/worker/env";
 import type { JsonValue } from "../../src/shared/types";
 import type { BillingProvider } from "../../src/worker/billing-provider";
+import { deleteAccountAndOwnedOrgs } from "../../src/worker/better-auth";
 
 // The real Polar client makes real HTTP calls and expects a large,
 // version-specific response schema back. The routes take their client off the
@@ -28,12 +32,31 @@ import type { BillingProvider } from "../../src/worker/billing-provider";
 // they hand over a queue or a rate limiter, and stay about our own route
 // logic.
 const checkoutsCreate = vi.fn(async () => ({ url: "https://sandbox.polar.sh/checkout/test" }));
+/** The shape `checkouts.get` returns, named so the default mock below states
+ * it once instead of widening each null field with an inline assertion. */
+type CheckoutStatus = {
+  status: string;
+  product_id: string | null;
+  customer_id: string | null;
+  metadata: Record<string, JsonValue>;
+};
+const checkoutsGet = vi.fn<() => Promise<CheckoutStatus>>(async () => ({
+  status: "open",
+  product_id: null,
+  customer_id: null,
+  metadata: {},
+}));
 const customerSessionsCreate = vi.fn(async () => ({
-  customerPortalUrl: "https://sandbox.polar.sh/portal/test",
+  customer_portal_url: "https://sandbox.polar.sh/portal/test",
+}));
+const subscriptionsRevoke = vi.fn(async (id: string) => ({ id }));
+const subscriptionsList = vi.fn<() => Promise<{ items: { id: string }[] }>>(async () => ({
+  items: [],
 }));
 const billingProvider: BillingProvider = {
-  checkouts: { create: checkoutsCreate },
+  checkouts: { create: checkoutsCreate, get: checkoutsGet },
   customerSessions: { create: customerSessionsCreate },
+  subscriptions: { revoke: subscriptionsRevoke, list: subscriptionsList },
 };
 
 /** billingEnv() with the stand-in checkout/portal client wired in. */
@@ -42,7 +65,12 @@ const polarEnv = (): Env => ({ ...billingEnv(), BILLING: billingProvider });
 beforeEach(async () => {
   await applyTestMigrations();
   checkoutsCreate.mockClear();
+  checkoutsGet.mockClear();
   customerSessionsCreate.mockClear();
+  subscriptionsRevoke.mockReset();
+  subscriptionsRevoke.mockImplementation(async (id: string) => ({ id }));
+  subscriptionsList.mockReset();
+  subscriptionsList.mockImplementation(async () => ({ items: [] }));
 });
 
 afterEach(async () => {
@@ -53,8 +81,8 @@ function db() {
   return drizzle(env.DB, { schema });
 }
 
-async function getUser() {
-  const rows = await db().select().from(schema.user).where(eq(schema.user.id, "user-1"));
+async function getUser(id = "user-1") {
+  const rows = await db().select().from(schema.user).where(eq(schema.user.id, id));
   return rows[0];
 }
 
@@ -87,6 +115,20 @@ async function portal(cookie?: string): Promise<Response> {
   return res;
 }
 
+async function confirmCheckout(cookie: string, checkoutId: string): Promise<Response> {
+  const ctx = createExecutionContext();
+  const res = await worker.fetch(
+    new Request(`http://localhost/api/billing/checkout/${checkoutId}/confirm`, {
+      method: "POST",
+      headers: cookie ? { cookie } : {},
+    }),
+    polarEnv(),
+    ctx,
+  );
+  await waitOnExecutionContext(ctx);
+  return res;
+}
+
 let nextMsgId = 0;
 
 /** Signs a Polar webhook payload the same way `standardwebhooks` verifies
@@ -99,9 +141,9 @@ function signPayload(payload: string) {
 
 /** Same as signPayload, but with an explicit delivery id: for tests that
  * simulate a redelivered (or spoofed-id) webhook. */
-function signPayloadWithId(payload: string, msgId: string) {
+function signPayloadWithId(payload: string, msgId: string, key = btoa(POLAR_WEBHOOK_SECRET)) {
   const timestamp = new Date();
-  const signature = new Webhook(btoa(POLAR_WEBHOOK_SECRET)).sign(msgId, timestamp, payload);
+  const signature = new Webhook(key).sign(msgId, timestamp, payload);
   return {
     "webhook-id": msgId,
     "webhook-timestamp": String(Math.floor(timestamp.getTime() / 1000)),
@@ -152,8 +194,8 @@ describe("POST /api/billing/checkout", () => {
     expect(checkoutsCreate).toHaveBeenCalledWith(
       expect.objectContaining({
         products: [POLAR_PRO_PRODUCT_ID],
-        successUrl: "http://localhost/billing?checkout_id={CHECKOUT_ID}",
-        customerEmail: "admin@example.com",
+        success_url: "http://localhost/billing?checkout_id={CHECKOUT_ID}",
+        customer_email: "admin@example.com",
         metadata: { userId: "admin-1" },
       }),
     );
@@ -167,9 +209,36 @@ describe("POST /api/billing/checkout", () => {
     );
   });
 
+  it("defaults to monthly when no interval is given", async () => {
+    const cookie = await adminCookie();
+    await checkout(cookie, { plan: "pro" });
+    expect(checkoutsCreate).toHaveBeenCalledWith(
+      expect.objectContaining({ products: [POLAR_PRO_PRODUCT_ID] }),
+    );
+  });
+
+  it("maps a yearly interval to the yearly product for each plan", async () => {
+    const cookie = await adminCookie();
+    await checkout(cookie, { plan: "pro", interval: "year" });
+    expect(checkoutsCreate).toHaveBeenLastCalledWith(
+      expect.objectContaining({ products: [POLAR_PRO_YEARLY_PRODUCT_ID] }),
+    );
+    await checkout(cookie, { plan: "hobby", interval: "year" });
+    expect(checkoutsCreate).toHaveBeenLastCalledWith(
+      expect.objectContaining({ products: [POLAR_HOBBY_YEARLY_PRODUCT_ID] }),
+    );
+  });
+
   it("rejects a plan that isn't hobby or pro", async () => {
     const cookie = await adminCookie();
     const res = await checkout(cookie, { plan: "diamond" });
+    expect(res.status).toBe(400);
+    expect(checkoutsCreate).not.toHaveBeenCalled();
+  });
+
+  it("rejects an interval that isn't month or year", async () => {
+    const cookie = await adminCookie();
+    const res = await checkout(cookie, { plan: "pro", interval: "decade" });
     expect(res.status).toBe(400);
     expect(checkoutsCreate).not.toHaveBeenCalled();
   });
@@ -203,8 +272,143 @@ describe("POST /api/billing/portal", () => {
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ url: "https://sandbox.polar.sh/portal/test" });
     expect(customerSessionsCreate).toHaveBeenCalledWith(
-      expect.objectContaining({ customerId: "cus_123" }),
+      expect.objectContaining({ customer_id: "cus_123" }),
     );
+  });
+});
+
+/** The checkouts.get() response for "free-1"'s pro checkout, with per-test
+ * overrides — every /confirm test starts from one of these two shapes. */
+function succeededCheckout(overrides: Partial<CheckoutStatus> = {}): CheckoutStatus {
+  return {
+    status: "succeeded",
+    product_id: POLAR_PRO_PRODUCT_ID,
+    customer_id: "cus_1",
+    metadata: { userId: "free-1" },
+    ...overrides,
+  };
+}
+function openCheckout(): CheckoutStatus {
+  return {
+    status: "open",
+    product_id: null,
+    customer_id: null,
+    metadata: { userId: "free-1" },
+  };
+}
+
+/** The subscription.active payload for "free-1"'s sub_1, with per-test
+ * overrides — the /confirm redelivery/renewal tests below only differ by
+ * timestamp. Distinct from subscriptionActivePayload() above, which is
+ * user-1's fixed payload for the older redelivery tests. */
+function confirmRedeliveryPayload(
+  overrides: Partial<{
+    id: string;
+    customer_id: string;
+    product_id: string;
+    metadata: { userId: string };
+    created_at: string;
+    modified_at: string;
+  }> = {},
+) {
+  return {
+    type: "subscription.active",
+    data: {
+      id: "sub_1",
+      customer_id: "cus_1",
+      product_id: POLAR_PRO_PRODUCT_ID,
+      metadata: { userId: "free-1" },
+      ...overrides,
+    },
+  };
+}
+
+describe("POST /api/billing/checkout/:id/confirm", () => {
+  it("requires sign-in", async () => {
+    expect((await confirmCheckout("", "checkout_1")).status).toBe(401);
+  });
+
+  it("grants the plan from status alone, since subscriptionId never populates on a checkout in practice", async () => {
+    const cookie = await freeOwnerCookie();
+    checkoutsGet.mockResolvedValueOnce(succeededCheckout());
+    const res = await confirmCheckout(cookie, "checkout_1");
+    expect(res.status).toBe(200);
+    expect(await jsonBody(res)).toEqual({ plan: "pro" });
+    const user = await getUser("free-1");
+    expect(user?.plan).toBe("pro");
+    expect(user?.polarCustomerId).toBe("cus_1");
+    // A placeholder, not the real subscription id (which Polar never handed
+    // back): see the route's own comment for why, and the redelivery tests
+    // below for what replaces it once a webhook does arrive.
+    expect(user?.polarSubscriptionId).toBe("pending:checkout_1");
+  });
+
+  it("leaves the plan alone when the checkout hasn't succeeded yet", async () => {
+    const cookie = await freeOwnerCookie();
+    checkoutsGet.mockResolvedValueOnce(openCheckout());
+    const res = await confirmCheckout(cookie, "checkout_1");
+    expect(res.status).toBe(200);
+    expect(await jsonBody(res)).toEqual({ plan: "free" });
+  });
+
+  it("rejects a checkout that belongs to someone else", async () => {
+    const cookie = await freeOwnerCookie();
+    checkoutsGet.mockResolvedValueOnce(succeededCheckout({ metadata: { userId: "someone-else" } }));
+    const res = await confirmCheckout(cookie, "checkout_1");
+    expect(res.status).toBe(404);
+    const user = await getUser("free-1");
+    expect(user?.plan).toBe("free");
+  });
+
+  it("ignores a webhook redelivery whose timestamp is older than the fallback's own (still correct, just doesn't fix the placeholder id)", async () => {
+    const cookie = await freeOwnerCookie();
+    checkoutsGet.mockResolvedValueOnce(succeededCheckout());
+    await confirmCheckout(cookie, "checkout_1");
+
+    // A genuinely stale redelivery, carrying the subscription's real
+    // created_at from before the fallback ran. notStale correctly drops the
+    // whole write, id included: this is the design's one known gap, noted on
+    // the route itself, not a bug in this test.
+    await postWebhook(confirmRedeliveryPayload({ created_at: new Date(0).toISOString() }));
+
+    const user = await getUser("free-1");
+    expect(user?.plan).toBe("pro");
+    expect(user?.polarSubscriptionId).toBe("pending:checkout_1");
+  });
+
+  it("a later event (e.g. a renewal) replaces the placeholder id with the real one", async () => {
+    const cookie = await freeOwnerCookie();
+    checkoutsGet.mockResolvedValueOnce(succeededCheckout());
+    await confirmCheckout(cookie, "checkout_1");
+
+    await postWebhook(
+      confirmRedeliveryPayload({ modified_at: new Date(Date.now() + 60_000).toISOString() }),
+    );
+
+    const user = await getUser("free-1");
+    expect(user?.plan).toBe("pro");
+    expect(user?.polarSubscriptionId).toBe("sub_1");
+  });
+
+  it("does not clobber a real subscription id the webhook already wrote, even if the client's poll races it", async () => {
+    const cookie = await freeOwnerCookie();
+
+    // The real webhook lands first, with a realistic (recent) timestamp.
+    await postWebhook(confirmRedeliveryPayload({ modified_at: new Date().toISOString() }));
+    const afterWebhook = await getUser("free-1");
+    expect(afterWebhook?.plan).toBe("pro");
+    expect(afterWebhook?.polarSubscriptionId).toBe("sub_1");
+
+    // The client's poll didn't see it land yet and calls confirm anyway.
+    // Without the already-granted check, this route's synthetic "now"
+    // timestamp always outranks the webhook's, and it would overwrite sub_1
+    // with a placeholder.
+    checkoutsGet.mockResolvedValueOnce(succeededCheckout());
+    await confirmCheckout(cookie, "checkout_1");
+
+    const user = await getUser("free-1");
+    expect(user?.plan).toBe("pro");
+    expect(user?.polarSubscriptionId).toBe("sub_1");
   });
 });
 
@@ -342,6 +546,41 @@ describe("POST /api/webhooks/polar", () => {
       data: { id: "sub_1", product_id: POLAR_HOBBY_PRODUCT_ID, metadata: { userId: "user-1" } },
     });
     expect((await getUser()).plan).toBe("hobby");
+  });
+
+  it("subscription.active maps a yearly product to the same plan", async () => {
+    await seedUser();
+    await postWebhook({
+      type: "subscription.active",
+      data: {
+        id: "sub_1",
+        product_id: POLAR_PRO_YEARLY_PRODUCT_ID,
+        metadata: { userId: "user-1" },
+      },
+    });
+    const user = await getUser();
+    expect(user.plan).toBe("pro");
+    expect(user.polarSubscriptionInterval).toBe("year");
+  });
+
+  it("records the billing cycle on each event, and clears it on revoke", async () => {
+    await seedUser();
+    const event = (type: string, product_id = "") => ({
+      type,
+      data: {
+        id: "sub_1",
+        status: "active",
+        product_id,
+        metadata: { userId: "user-1" },
+        modified_at: new Date().toISOString(),
+      },
+    });
+    await postWebhook(event("subscription.active", POLAR_PRO_PRODUCT_ID));
+    expect((await getUser()).polarSubscriptionInterval).toBe("month");
+    await postWebhook(event("subscription.updated", POLAR_HOBBY_YEARLY_PRODUCT_ID));
+    expect((await getUser()).polarSubscriptionInterval).toBe("year");
+    await postWebhook(event("subscription.revoked"));
+    expect((await getUser()).polarSubscriptionInterval).toBeNull();
   });
 
   it("subscription.active is a no-op without a userId in metadata", async () => {
@@ -510,6 +749,37 @@ describe("POST /api/webhooks/polar", () => {
       },
     });
     expect((await getUser()).plan).toBe("free");
+  });
+
+  it("accepts both kinds of secret Polar hands out, and nothing signed with another", async () => {
+    const payload = subscriptionActivePayload();
+    // Made or reset from 8 Sep 2026: Standard Webhooks, used as it is.
+    const standard = `whsec_${btoa("a-reset-secret-of-thirty-two-bytes!!")}`;
+    // Made before then: Polar HMAC, whose key is the whole string. It also
+    // starts with whsec_, so the prefix cannot tell the two apart.
+    const legacy = "whsec_legacy-secret.with/characters+base64-would-not-decode";
+
+    for (const [secret, key] of [
+      [standard, standard],
+      [legacy, btoa(legacy)],
+    ]) {
+      await env.DB.prepare("delete from user").run();
+      await seedUser({ plan: "free" });
+      const res = await postWebhook(
+        JSON.parse(payload),
+        signPayloadWithId(payload, `kind-${secret.length}`, key),
+        { ...polarEnv(), POLAR_WEBHOOK_SECRET: secret },
+      );
+      expect(res.status).toBe(200);
+      expect((await getUser()).plan).toBe("pro");
+    }
+
+    const wrong = await postWebhook(
+      JSON.parse(payload),
+      signPayloadWithId(payload, "kind-wrong", btoa("not-the-secret")),
+      { ...polarEnv(), POLAR_WEBHOOK_SECRET: standard },
+    );
+    expect(wrong.status).toBe(403);
   });
 
   it("redelivering the same event is a no-op, because applying it twice lands the same state (#17)", async () => {
@@ -723,5 +993,127 @@ describe("POST /api/webhooks/polar", () => {
     });
     expect(stale.status).toBe(200);
     expect((await getUser()).plan).toBe("pro");
+  });
+});
+
+/** What the Polar SDK throws for an HTTP error: its status and parsed body. */
+class PolarStatusError extends Error {
+  readonly error: { error: string };
+  constructor(
+    readonly statusCode: number,
+    name = "Internal",
+  ) {
+    super(`Polar answered ${statusCode}`);
+    this.error = { error: name };
+  }
+}
+
+describe("deleting a paying account ends its Polar subscription (#337)", () => {
+  const exists = async () => (await getUser()) !== undefined;
+
+  it("revokes the subscription, then deletes the account", async () => {
+    await seedUser({ plan: "pro", polarSubscriptionId: "sub_live" });
+    await deleteAccountAndOwnedOrgs(polarEnv(), "user-1");
+    expect(subscriptionsRevoke).toHaveBeenCalledWith("sub_live");
+    expect(await exists()).toBe(false);
+  });
+
+  it("keeps the account when Polar fails, so nobody is billed for a deleted one", async () => {
+    await seedUser({ plan: "pro", polarSubscriptionId: "sub_live" });
+    subscriptionsRevoke.mockRejectedValueOnce(new PolarStatusError(500));
+    const captureSpy = vi.spyOn(Sentry, "captureMessage").mockReturnValue("");
+    await expect(deleteAccountAndOwnedOrgs(polarEnv(), "user-1")).rejects.toMatchObject({
+      status: 503,
+    });
+    expect(await exists()).toBe(true);
+    captureSpy.mockRestore();
+  });
+
+  it.each([
+    [403, "AlreadyCanceledSubscription"],
+    [404, "ResourceNotFound"],
+  ])("deletes when Polar says there is nothing to revoke (%i %s)", async (status, name) => {
+    await seedUser({ plan: "pro", polarSubscriptionId: "sub_gone" });
+    subscriptionsRevoke.mockRejectedValueOnce(new PolarStatusError(status, name));
+    await deleteAccountAndOwnedOrgs(polarEnv(), "user-1");
+    expect(await exists()).toBe(false);
+  });
+
+  it("keeps the account when the token may not revoke (a 403 that is not a cancel)", async () => {
+    await seedUser({ plan: "pro", polarSubscriptionId: "sub_live" });
+    subscriptionsRevoke.mockRejectedValueOnce(new PolarStatusError(403, "insufficient_scope"));
+    const captureSpy = vi.spyOn(Sentry, "captureMessage").mockReturnValue("");
+    await expect(deleteAccountAndOwnedOrgs(polarEnv(), "user-1")).rejects.toMatchObject({
+      status: 503,
+    });
+    expect(await exists()).toBe(true);
+    captureSpy.mockRestore();
+  });
+
+  it("revokes the live subscription Polar lists, not a placeholder id", async () => {
+    await seedUser({
+      plan: "pro",
+      polarCustomerId: "cus_1",
+      polarSubscriptionId: "pending:checkout_1",
+    });
+    subscriptionsList.mockResolvedValueOnce({ items: [{ id: "sub_real" }] });
+    await deleteAccountAndOwnedOrgs(polarEnv(), "user-1");
+    expect(subscriptionsList).toHaveBeenCalledWith({
+      customer_id: "cus_1",
+      active: true,
+      limit: 100,
+    });
+    expect(subscriptionsRevoke).toHaveBeenCalledTimes(1);
+    expect(subscriptionsRevoke).toHaveBeenCalledWith("sub_real");
+    expect(await exists()).toBe(false);
+  });
+
+  it("keeps the account when Polar cannot list the subscriptions", async () => {
+    await seedUser({ plan: "pro", polarCustomerId: "cus_1" });
+    subscriptionsList.mockRejectedValueOnce(new PolarStatusError(500));
+    const captureSpy = vi.spyOn(Sentry, "captureMessage").mockReturnValue("");
+    await expect(deleteAccountAndOwnedOrgs(polarEnv(), "user-1")).rejects.toMatchObject({
+      status: 503,
+    });
+    expect(await exists()).toBe(true);
+    captureSpy.mockRestore();
+  });
+
+  it("keeps the account when a subscription is on record but billing is off", async () => {
+    await seedUser({ plan: "pro", polarSubscriptionId: "sub_live" });
+    const captureSpy = vi.spyOn(Sentry, "captureMessage").mockReturnValue("");
+    const noBilling = overrideEnv({ POLAR_ACCESS_TOKEN: undefined, BILLING: undefined });
+    await expect(deleteAccountAndOwnedOrgs(noBilling, "user-1")).rejects.toMatchObject({
+      status: 503,
+    });
+    expect(await exists()).toBe(true);
+    captureSpy.mockRestore();
+  });
+
+  it("does not call Polar for an account with no subscription", async () => {
+    await seedUser({ plan: "free" });
+    await deleteAccountAndOwnedOrgs(polarEnv(), "user-1");
+    expect(subscriptionsRevoke).not.toHaveBeenCalled();
+    expect(await exists()).toBe(false);
+  });
+
+  it("answers the admin delete with a 503 and keeps the account when Polar fails", async () => {
+    const cookie = await adminCookie();
+    await seedUser({ plan: "pro", polarSubscriptionId: "sub_live" });
+    subscriptionsRevoke.mockRejectedValueOnce(new PolarStatusError(502));
+    const captureSpy = vi.spyOn(Sentry, "captureMessage").mockReturnValue("");
+    const ctx = createExecutionContext();
+    const res = await worker.fetch(
+      new Request("http://localhost/api/admin/users/user-1", {
+        method: "DELETE",
+        headers: { cookie },
+      }),
+      polarEnv(),
+      ctx,
+    );
+    await waitOnExecutionContext(ctx);
+    expect(res.status).toBe(503);
+    expect(await exists()).toBe(true);
+    captureSpy.mockRestore();
   });
 });

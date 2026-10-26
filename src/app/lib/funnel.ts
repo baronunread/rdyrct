@@ -72,6 +72,16 @@ const FUNNEL_EVENTS: ReadonlySet<string> = new Set([
   SIGNUP_FAILED,
 ]);
 
+/** A successful email response may be a pending or duplicate signup. Only a
+ * session token proves the new account is already usable without an OTP. */
+export function captureEmailSignup(
+  capture: (event: string, props: { method: string }) => void,
+  signup: { token?: string | null } | null,
+) {
+  capture(FUNNEL.signupSubmitted, { method: "email" });
+  if (signup?.token) capture(USER_SIGNED_UP, { method: "email" });
+}
+
 /** `next` with `?signup=google` added, for newUserCallbackURL. */
 export function googleSignupUrl(next: string): string {
   const url = new URL(next, window.location.origin);
@@ -105,13 +115,14 @@ export function isFunnelEvent(event: string): boolean {
  */
 export type CtaPlacement =
   | "hero_primary"
-  | "hero_secondary"
   // The hero's anonymous shortener (Direction A of #96): using it, and then
   // clicking through to keep the link that came out of it. The second is the
   // one worth watching, because it is intent earned by the product rather
   // than by the copy above it.
   | "hero_shortener"
   | "hero_shortener_claim"
+  // "Sign up free" under the shortener before it has made anything.
+  | "hero_shortener_signup"
   // The custom-domain second screen (Direction C of #96), the first paid
   // ask on the page.
   | "second_screen_domain"
@@ -128,6 +139,13 @@ export type CtaPlacement =
   | "qr_page_signup"
   | "qr_page_pricing"
   | "header"
+  // The three /...-alternative comparison pages: one placement, since the
+  // pageview already says which competitor the visitor was reading about.
+  | "alternative_page_signup"
+  // The free UTM builder: shortening the tagged link anonymously, and taking
+  // an account (to keep that link, or after this browser has spent its one).
+  | "utm_page_shorten"
+  | "utm_page_signup"
   | "pricing_free"
   | "pricing_hobby"
   | "pricing_pro"

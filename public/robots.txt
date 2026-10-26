@@ -23,6 +23,7 @@ Disallow: /members
 Disallow: /organization
 Disallow: /billing
 Disallow: /domains
+Disallow: /api-keys
 Disallow: /settings
 Disallow: /admin
 Disallow: /onboarding

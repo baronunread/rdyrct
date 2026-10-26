@@ -5,7 +5,7 @@ import { MorphIcon } from "morphicons/react";
 import { shieldMinus, shieldPlus } from "@/app/ui/icon-nodes";
 import { useAdminUsers, useCurrentUser } from "../../lib/hooks";
 import { api } from "../../lib/api";
-import type { AdminUserRow, OrgPlan, Sort } from "@/shared/types";
+import type { AdminUserRow, Sort } from "@/shared/types";
 import { Menu, MenuItem, MenuSeparator } from "../../ui/menu";
 import { Badge, PageHeader, Table, Td, Th } from "../../ui/misc";
 import { Tooltip } from "../../ui/tooltip";
@@ -21,8 +21,11 @@ import { shortDate } from "../../lib/dates";
 import { lastSeenLabel } from "../../lib/last-seen";
 import { Pager } from "../../ui/pagination";
 import { GrantCompDialog, type CompPlan } from "./comp-dialog";
+import { BanDialog } from "./ban-dialog";
 
 type UserAction = "delete" | "ban" | "unban" | "makeAdmin" | "removeAdmin";
+/** Every action but the ban, which has its own dialog (ban-dialog.tsx). */
+type ConfirmedAction = Exclude<UserAction, "ban">;
 
 /** What the confirmation dialog for one user action says. */
 interface UserActionMeta {
@@ -39,22 +42,10 @@ const userActionMeta = {
     danger: true,
     body: (u) => (
       <>
-        Delete <span className="font-bold text-accent">{u.name}</span>? Their sessions, linked
-        accounts, and org memberships are removed. Links and invites they created stay,
-        unattributed. If they own any organization, delete that organization first. This cannot be
-        undone.
-      </>
-    ),
-  },
-  ban: {
-    title: "Ban user",
-    confirmLabel: "Ban user",
-    danger: true,
-    body: (u) => (
-      <>
-        Ban <span className="font-bold text-accent">{u.name}</span>? They are signed out immediately
-        and cannot sign back in. Their organizations, links, and QR codes keep working. You can
-        unban them anytime.
+        Delete <span className="font-bold text-accent">{u.name}</span>? Their account, sessions and
+        memberships are removed, and so is every organization they own, with its links, members and
+        click history. Those short links stop working. Links they made in organizations owned by
+        others stay, unattributed. This cannot be undone.
       </>
     ),
   },
@@ -65,7 +56,8 @@ const userActionMeta = {
     body: (u) => (
       <>
         Unban <span className="font-bold text-accent">{u.name}</span>? They can sign in again right
-        away.
+        away, and the organizations they own that are not deleted yet work again. Hosts blocked with
+        the ban stay blocked.
       </>
     ),
   },
@@ -91,89 +83,44 @@ const userActionMeta = {
       </>
     ),
   },
-} satisfies Record<UserAction, UserActionMeta>;
+} satisfies Record<ConfirmedAction, UserActionMeta>;
 
-const planBadgeColor = {
-  pro: "mint",
-  hobby: "accent",
-  free: "muted",
-  unlimited: "mint",
-} satisfies Record<OrgPlan, "mint" | "accent" | "muted">;
-
-/** Where a user's paid access comes from, which is not the same question as
- * what it unlocks (#81). A comp outranks a subscription, so it is named
- * first. */
-function BillingCell({ user }: { user: AdminUserRow }) {
-  if (user.compPlan)
+/**
+ * What the plan column adds to the plan, when there is something to add: a
+ * comp (not somebody paying, #81 and #82), a payment that is failing, or a
+ * subscription that ends. Each is a state worth finding at a glance, so each
+ * is a badge. The plan itself is an attribute of the row, so it is text.
+ */
+function PlanNote({ user }: { user: AdminUserRow }) {
+  if (user.compPlan) {
+    // The reason an admin typed hangs off the badge on hover instead of
+    // setting the row's height.
+    const detail = [user.compReason ?? "No reason recorded.", user.compGrantedBy]
+      .filter(Boolean)
+      .join(" · ");
     return (
-      <BillingBadge
-        color="butter"
-        label="comped"
-        detail={[user.compReason ?? "No reason recorded.", user.compGrantedBy]
-          .filter(Boolean)
-          .join(" · ")}
-      />
+      <Tooltip content={detail}>
+        <span className="inline-flex">
+          <Badge color="butter" className="mt-1">
+            comped
+          </Badge>
+        </span>
+      </Tooltip>
     );
-  if (!user.subscriptionPlan)
-    return (
-      <BillingBadge color="muted" label="no sub" detail="No subscription: never paid for a plan." />
-    );
+  }
   if (user.subscriptionStatus === "past_due")
     return (
-      <BillingBadge
-        color="pink"
-        label="past due"
-        detail="A payment is failing. Polar keeps retrying for days, so access stays until it gives up."
-      />
+      <Badge color="pink" className="whitespace-nowrap">
+        past due
+      </Badge>
     );
-  // `subscriptionPlan` is the Polar snapshot, not a grant: `unpaid`,
-  // `canceled` and anything Polar adds later leave the subscription on the row
-  // while it entitles nothing. `plan` is derived from the status (#81), so a
-  // free plan here means exactly that. Name the status instead of "paid".
-  if (user.plan === "free")
+  if (user.cancelAtPeriodEnd && user.plan !== "free")
     return (
-      <BillingBadge
-        color="muted"
-        label={user.subscriptionStatus ?? "unknown"}
-        detail="The subscription is on the row, and it grants nothing."
-      />
+      <Badge color="butter" className="mt-1 whitespace-nowrap">
+        {user.currentPeriodEnd ? `cancels ${shortDate(user.currentPeriodEnd)}` : "cancels"}
+      </Badge>
     );
-  // "cancels", not "cancelled": the subscription is still paid and still
-  // entitles everything until the period ends. Polar only reports the status
-  // as `canceled` once it is actually over, and that lands on the muted badge
-  // above.
-  if (user.cancelAtPeriodEnd)
-    return (
-      <BillingBadge
-        color="pink"
-        label="cancels"
-        detail="Paid until the current period ends, then it stops. Nothing has been taken away yet."
-      />
-    );
-  return (
-    <BillingBadge color="mint" label="paid" detail="A live subscription pays for this plan." />
-  );
-}
-
-/** One badge, and what it means on hover. The explanations are a sentence
- * each and some are free text an admin typed, so they hang off the badge
- * instead of setting the height of every row in the table. */
-function BillingBadge({
-  color,
-  label,
-  detail,
-}: {
-  color: "muted" | "mint" | "pink" | "butter";
-  label: string;
-  detail: string;
-}) {
-  return (
-    <Tooltip content={detail}>
-      <span className="inline-flex">
-        <Badge color={color}>{label}</Badge>
-      </span>
-    </Tooltip>
-  );
+  return null;
 }
 
 /** Grant, change, or revoke a comp. There is no "set plan": a plan an admin
@@ -268,19 +215,21 @@ function UserRow({
   return (
     <tr>
       <Td>
-        <span className="mr-1.5">{user.name}</span>
+        <span className="mr-1.5 block truncate" title={user.name}>
+          {user.name}
+        </span>
         {user.isAdmin && <Badge color="butter">admin</Badge>}{" "}
         {user.banned && <Badge color="pink">banned</Badge>}{" "}
         {!user.emailVerified && <Badge color="muted">unverified</Badge>}{" "}
         {user.disposable && <Badge color="accent">disposable</Badge>}
       </Td>
-      <Td className="font-mono text-xs text-muted">{user.email}</Td>
+      <Td className="truncate font-mono text-xs text-muted" title={user.email}>
+        {user.email}
+      </Td>
       <Td className="tnum text-right">{user.orgCount}</Td>
       <Td>
-        <Badge color={planBadgeColor[user.plan]}>{user.plan}</Badge>
-      </Td>
-      <Td>
-        <BillingCell user={user} />
+        <span className="block">{user.plan}</span>
+        <PlanNote user={user} />
       </Td>
       <Td className="text-xs text-muted">{shortDate(user.createdAt)}</Td>
       <Td className="text-xs text-muted">{lastSeenLabel(user.lastSeen)}</Td>
@@ -325,17 +274,34 @@ function UsersTable({
   searchTerm: string;
 }) {
   return (
-    <Table minWidth="min-w-[64rem]">
+    <Table fixed minWidth="min-w-[56rem]">
       <thead>
         <tr>
-          <SortTh label="Name" sortKey="name" sort={sort} onSort={setSort} />
-          <Th>Email</Th>
-          <SortTh label="Orgs" sortKey="orgs" sort={sort} onSort={setSort} className="text-right" />
-          <Th>Plan</Th>
-          <Th>Billing</Th>
-          <SortTh label="Joined" sortKey="joined" sort={sort} onSort={setSort} />
-          <SortTh label="Last seen" sortKey="lastSeen" sort={sort} onSort={setSort} />
-          <Th className="text-right">Actions</Th>
+          <SortTh label="Name" sortKey="name" sort={sort} onSort={setSort} className="w-[22%]" />
+          <Th className="w-[22%]">Email</Th>
+          <SortTh
+            label="Orgs"
+            sortKey="orgs"
+            sort={sort}
+            onSort={setSort}
+            className="w-[8%] text-right"
+          />
+          <Th className="w-[14%]">Plan</Th>
+          <SortTh
+            label="Joined"
+            sortKey="joined"
+            sort={sort}
+            onSort={setSort}
+            className="w-[13%]"
+          />
+          <SortTh
+            label="Last seen"
+            sortKey="lastSeen"
+            sort={sort}
+            onSort={setSort}
+            className="w-[13%]"
+          />
+          <Th className="w-[8%] text-right">Actions</Th>
         </tr>
       </thead>
       <tbody>
@@ -351,7 +317,7 @@ function UsersTable({
         ))}
         {rows.length === 0 && (
           <tr>
-            <Td colSpan={8} className="py-8 text-center text-muted">
+            <Td colSpan={7} className="py-8 text-center text-muted">
               No users match “{searchTerm}”.
             </Td>
           </tr>
@@ -372,7 +338,7 @@ function UserActionConfirmDialog({
   onConfirm: () => void;
   pending: boolean;
 }) {
-  if (!confirm) return null;
+  if (!confirm || confirm.kind === "ban") return null;
   const meta = userActionMeta[confirm.kind];
   return (
     <ConfirmDialog
@@ -462,11 +428,6 @@ function useAdminUserActions() {
     const { kind, user } = confirm;
     const actions = {
       delete: () => remove.mutate(user.id),
-      ban: () =>
-        patchUser.mutate(
-          { userId: user.id, body: { banned: true } },
-          { onSuccess: () => toast("User banned") },
-        ),
       unban: () =>
         patchUser.mutate(
           { userId: user.id, body: { banned: false } },
@@ -482,8 +443,8 @@ function useAdminUserActions() {
           { userId: user.id, body: { isAdmin: false } },
           { onSuccess: () => toast("Platform admin removed") },
         ),
-    } satisfies Record<UserAction, () => void>;
-    actions[kind]();
+    } satisfies Record<ConfirmedAction, () => void>;
+    if (kind !== "ban") actions[kind]();
   };
 
   return {
@@ -542,6 +503,7 @@ export function AdminUsersPage() {
         }}
         placeholder="Search name or email…"
         label="Search users"
+        className="mb-4"
       />
       {/* Rows only: the header and search box above are real, so the
           page-level skeleton would draw a second one of each. */}
@@ -561,6 +523,10 @@ export function AdminUsersPage() {
       )}
       <Pager page={safePage} totalPages={totalPages} onPageChange={setPage} />
 
+      <BanDialog
+        user={confirm?.kind === "ban" ? confirm.user : null}
+        onClose={() => setConfirm(null)}
+      />
       <UserActionConfirmDialog
         confirm={confirm}
         onClose={() => setConfirm(null)}

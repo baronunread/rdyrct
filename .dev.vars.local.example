@@ -10,12 +10,17 @@ SHARED_LINK_HOST=rdyrct.localhost
 RESEND_API_KEY=re_local_emulated
 RESEND_BASE_URL=https://mail.rdyrct.localhost
 MAIL_FROM=rdyrct <no-reply@localhost>
+# The founder's welcome email. Leave unset to send none.
+WELCOME_FROM=Andrea at rdyrct <andrea@localhost>
 
 # Polar (sandbox): https://sandbox.polar.sh
 POLAR_ACCESS_TOKEN=polar_oat_replace_me
 POLAR_WEBHOOK_SECRET=polar_whs_replace_me
 POLAR_PRO_PRODUCT_ID=replace_me
 POLAR_HOBBY_PRODUCT_ID=replace_me
+# Yearly products, priced 10% below twelve months
+POLAR_PRO_YEARLY_PRODUCT_ID=replace_me
+POLAR_HOBBY_YEARLY_PRODUCT_ID=replace_me
 POLAR_SERVER=sandbox
 
 # Custom domains: leave CF_API_TOKEN blank and CF_DEV_ENV=simulated to fake the
@@ -37,10 +42,16 @@ BLOG_ORIGIN_URL=http://localhost:3000
 # Cloudflare Turnstile (#304). These are Cloudflare's published test keys
 # (always pass), so the real widget and verify loop run locally with no
 # account. In production, create a widget in the Cloudflare dashboard and set
-# TURNSTILE_SITE_KEY as a var in wrangler.jsonc and TURNSTILE_SECRET_KEY as a
-# secret. Leave the secret blank to turn the check off.
+# both as secrets (prod.secrets.env.example). Leave both blank to turn the
+# check off.
 TURNSTILE_SITE_KEY=1x00000000000000000000AA
 TURNSTILE_SECRET_KEY=1x0000000000000000000000000000000AA
+
+# Google Web Risk (#341): a second check on every destination, on create, on
+# edit and weekly for free links. Leave blank locally: the Cloudflare DNS check
+# still runs, and nothing calls Google. A real key costs lookups against the
+# 100,000-a-month free tier.
+WEB_RISK_API_KEY=
 
 # Google sign-in. Leave all three blank to hide the "Continue with Google"
 # button. For local dev, `bun run dev` starts the emulate google service

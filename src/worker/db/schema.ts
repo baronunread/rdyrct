@@ -8,6 +8,8 @@ import {
   index,
   uniqueIndex,
 } from "drizzle-orm/sqlite-core";
+import { relations } from "drizzle-orm";
+import { REPORT_REASONS } from "../../shared/types";
 
 /* ---------------- BetterAuth-managed tables ---------------- */
 // Shapes follow the BetterAuth core schema (bunx @better-auth/cli generate),
@@ -57,6 +59,7 @@ export const user = sqliteTable("user", {
   })
     .notNull()
     .default(false),
+  polarSubscriptionInterval: text("polar_subscription_interval", { enum: ["month", "year"] }),
   polarSubscriptionCurrentPeriodEnd: integer("polar_subscription_current_period_end", {
     mode: "timestamp_ms",
   }),
@@ -65,6 +68,8 @@ export const user = sqliteTable("user", {
   // webhook mutation refuses to write over a newer value, which is what
   // makes a late or replayed delivery harmless. See routes/billing.ts.
   polarEventAt: integer("polar_event_at", { mode: "timestamp_ms" }),
+  // When the welcome email was claimed for sending. Null means not yet.
+  welcomeSentAt: integer("welcome_sent_at", { mode: "timestamp_ms" }),
   createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
   updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),
 });
@@ -114,6 +119,20 @@ export const account = sqliteTable(
     uniqueIndex("idx_account_provider_account_id").on(t.providerId, t.accountId),
   ],
 );
+
+// What lets BetterAuth read a session and its user in one query
+// (advanced.database.joins in better-auth.ts) instead of two round trips on
+// every signed-in request. It joins session and account to user, nothing else.
+export const userRelations = relations(user, ({ many }) => ({
+  sessions: many(session),
+  accounts: many(account),
+}));
+export const sessionRelations = relations(session, ({ one }) => ({
+  user: one(user, { fields: [session.userId], references: [user.id] }),
+}));
+export const accountRelations = relations(account, ({ one }) => ({
+  user: one(user, { fields: [account.userId], references: [user.id] }),
+}));
 
 export const verification = sqliteTable(
   "verification",
@@ -167,6 +186,28 @@ export const orgs = sqliteTable("orgs", {
   // `lockedAt`, its links do NOT keep redirecting -- suspension means the
   // content itself is the problem, not the plan.
   linksSuspendedAt: integer("links_suspended_at"),
+  // Set by the abuse sweep (traffic that looks wrong) or by enough public
+  // reports. It changes nothing for the owner: the links keep redirecting
+  // until an admin looks. Null means nothing is waiting for review.
+  reviewFlaggedAt: integer("review_flagged_at"),
+  // Set when an admin restores the org's links or marks it reviewed: a human
+  // looked, so the automatic suspend and flag stand down for a while (see
+  // abuse.ts's orgState). Without it the next sweep undoes the decision.
+  clearedAt: integer("cleared_at"),
+  // Set when the abuse sweep warns the org's links (link-warning.ts's
+  // warnOrgLinks), with the reason. A link made while it is set is born
+  // warned, so fresh links are no way round it. "Mark reviewed" clears it.
+  linksWarnedAt: integer("links_warned_at"),
+  linksWarnReason: text("links_warn_reason"),
+  // The Web Risk lookups link creates and edits spent today: `webRiskDay` is
+  // the UTC day number they count for (destination-check.ts's budget).
+  webRiskDay: integer("web_risk_day"),
+  webRiskLookups: integer("web_risk_lookups"),
+  // Set when the owner is banned (abuse-hold.ts's banUser). Every link and
+  // custom domain of the org answers "disabled", nobody can change it, and
+  // the daily cron deletes the org BAN_PURGE_AFTER_DAYS later. An unban
+  // before then clears it. Null means not disabled.
+  disabledAt: integer("disabled_at"),
 });
 
 /**
@@ -252,6 +293,12 @@ export const domains = sqliteTable(
     statusReason: text("status_reason").notNull().default(""),
     rootRedirect: text("root_redirect").notNull().default(""),
     cfHostnameId: text("cf_hostname_id"),
+    // How Cloudflare checks the domain (#383): "http" waits for the CNAME,
+    // "txt" checks TXT records so a domain still pointed at another service
+    // is ready before its CNAME switches.
+    validation: text("validation", { enum: ["http", "txt"] })
+      .notNull()
+      .default("http"),
     // Beyond the org's `domains` cap after a downgrade (#159). It keeps
     // serving until the org's grace period ends, then stops; the row, the KV
     // entry and the Cloudflare hostname all stay, so an upgrade restores it
@@ -295,11 +342,20 @@ export const links = sqliteTable(
     riskProvider: text("risk_provider"),
     // Admin moderation (#67). Null means active. One flag covers every
     // address the link answers to, and the redirect stops because
-    // desiredKvValue refuses to publish a suspended link's key: put the
-    // check anywhere else and the next edit un-suspends it in silence.
+    // desiredKvValue publishes a suspended link's key as held (#344): put
+    // the check anywhere else and the next edit un-suspends it in silence.
     suspendedAt: integer("suspended_at"),
     suspendedBy: text("suspended_by").references(() => user.id, { onDelete: "set null" }),
     suspendReason: text("suspend_reason"),
+    // A warning in front of the redirect (#344): the link works, after an
+    // interstitial naming the destination host. Null means none. Rides in the
+    // KV value through desiredKvValue, like suspension. The reason is the
+    // admin's; no visitor sees it.
+    warnedAt: integer("warned_at"),
+    warnReason: text("warn_reason"),
+    // When Google Web Risk last answered for this destination (#341), so the
+    // weekly rescan can find the links it has not seen lately.
+    webRiskCheckedAt: integer("web_risk_checked_at"),
   },
   (t) => [index("idx_links_org").on(t.orgId)],
 );
@@ -365,6 +421,74 @@ export const linkAddresses = sqliteTable(
   ],
 );
 
+/**
+ * Public abuse reports (migration 0038). Link and org are null when the
+ * reported address matched nothing: stored anyway so the form answers the
+ * same for every slug.
+ */
+export const linkReports = sqliteTable("link_reports", {
+  id: text("id").primaryKey(),
+  slug: text("slug").notNull(),
+  linkId: text("link_id").references(() => links.id, { onDelete: "set null" }),
+  orgId: text("org_id").references(() => orgs.id, { onDelete: "set null" }),
+  reason: text("reason", { enum: REPORT_REASONS }).notNull(),
+  note: text("note").notNull().default(""),
+  contact: text("contact").notNull().default(""),
+  status: text("status").notNull().default("open"),
+  createdAt: integer("created_at").notNull(),
+});
+
+/** Hosts a link may not point at (migration 0039). */
+export const blockedHosts = sqliteTable("blocked_hosts", {
+  host: text("host").primaryKey(),
+  reason: text("reason").notNull().default(""),
+  createdBy: text("created_by").references(() => user.id, { onDelete: "set null" }),
+  createdAt: integer("created_at").notNull(),
+});
+
+/** An import from another service (#383, migration 0041). */
+export const linkImports = sqliteTable(
+  "link_imports",
+  {
+    id: text("id").primaryKey(),
+    orgId: text("org_id")
+      .notNull()
+      .references(() => orgs.id, { onDelete: "cascade" }),
+    createdBy: text("created_by").references(() => user.id, { onDelete: "set null" }),
+    service: text("service").notNull(),
+    status: text("status", { enum: ["uploading", "running", "done", "dismissed"] })
+      .notNull()
+      .default("uploading"),
+    total: integer("total").notNull(),
+    createdAt: integer("created_at").notNull(),
+    finishedAt: integer("finished_at"),
+  },
+  (t) => [index("idx_link_imports_org").on(t.orgId, t.createdAt)],
+);
+
+/** One row of an import's file, and what became of it. */
+export const linkImportRows = sqliteTable(
+  "link_import_rows",
+  {
+    importId: text("import_id")
+      .notNull()
+      .references(() => linkImports.id, { onDelete: "cascade" }),
+    line: integer("line").notNull(),
+    host: text("host").notNull(),
+    slug: text("slug").notNull(),
+    destination: text("destination").notNull(),
+    title: text("title").notNull().default(""),
+    status: text("status", { enum: ["pending", "imported", "exists", "failed"] })
+      .notNull()
+      .default("pending"),
+    reason: text("reason").notNull().default(""),
+  },
+  (t) => [
+    primaryKey({ columns: [t.importId, t.line] }),
+    index("idx_link_import_rows_status").on(t.importId, t.status),
+  ],
+);
+
 export const clicks = sqliteTable(
   "clicks",
   {
@@ -396,6 +520,121 @@ export const clicks = sqliteTable(
     index("idx_clicks_address_ts").on(t.addressId, t.ts),
   ],
 );
+
+/**
+ * Click rollups (#26): what the stats pages and the links list read instead
+ * of raw clicks. Migration 0042 owns the tables (Drizzle cannot express
+ * WITHOUT ROWID) and says why they are shaped this way. insertClicks writes
+ * them; nothing else in the app does.
+ */
+export const clickDaily = sqliteTable(
+  "click_daily",
+  {
+    orgId: text("org_id").notNull(),
+    /** UTC 'YYYY-MM-DD'. */
+    day: text("day").notNull(),
+    linkId: text("link_id")
+      .notNull()
+      .references(() => links.id, { onDelete: "cascade" }),
+    clicks: integer("clicks").notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.orgId, t.day, t.linkId] }),
+    index("idx_click_daily_link").on(t.linkId, t.day, t.clicks),
+  ],
+);
+
+export const CLICK_DIMENSIONS = ["country", "referrer", "device"] as const;
+
+export const clickDailyDims = sqliteTable(
+  "click_daily_dims",
+  {
+    orgId: text("org_id").notNull(),
+    dim: text("dim", { enum: CLICK_DIMENSIONS }).notNull(),
+    day: text("day").notNull(),
+    value: text("value").notNull(),
+    linkId: text("link_id")
+      .notNull()
+      .references(() => links.id, { onDelete: "cascade" }),
+    clicks: integer("clicks").notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.orgId, t.dim, t.day, t.value, t.linkId] }),
+    index("idx_click_daily_dims_link").on(t.linkId, t.dim, t.day, t.value, t.clicks),
+  ],
+);
+
+export const clickHourly = sqliteTable(
+  "click_hourly",
+  {
+    orgId: text("org_id").notNull(),
+    /** Start of the UTC hour, in milliseconds. */
+    hour: integer("hour").notNull(),
+    linkId: text("link_id")
+      .notNull()
+      .references(() => links.id, { onDelete: "cascade" }),
+    clicks: integer("clicks").notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.orgId, t.hour, t.linkId] }),
+    index("idx_click_hourly_link").on(t.linkId, t.hour, t.clicks),
+  ],
+);
+
+/**
+ * Tracked clicks per org per UTC month (#387): the exact count the plan's cap
+ * is checked against. Migration 0043 owns the table. insertClicks adds to it
+ * in the same batch as the raw rows and the rollups, counting only clicks it
+ * actually stored; the 10-minute cron reads it to send the 80% and 100%
+ * emails.
+ */
+export const orgClickUsage = sqliteTable(
+  "org_click_usage",
+  {
+    orgId: text("org_id")
+      .notNull()
+      .references(() => orgs.id, { onDelete: "cascade" }),
+    /** UTC 'YYYY-MM'. */
+    month: text("month").notNull(),
+    clicks: integer("clicks").notNull(),
+    /** The cap the 80% email went out for, null until it has. A cap rather
+     * than a timestamp, so a mid-month plan change earns the new cap its own
+     * email instead of being silenced by the old one's. */
+    warnedLimit: integer("warned_limit"),
+    /** The same, for the 100% email. */
+    cappedLimit: integer("capped_limit"),
+  },
+  (t) => [
+    primaryKey({ columns: [t.orgId, t.month] }),
+    index("idx_org_click_usage_month").on(t.month, t.clicks),
+  ],
+);
+
+/**
+ * Clicks dropped past an org's monthly cap, per link per UTC minute
+ * (migration 0044). Only the abuse sweep reads it, so the 24-hour ceiling and
+ * the burst checks still see an org's traffic once it stops being stored. See
+ * click-overflow.ts.
+ */
+export const clickOverflow = sqliteTable(
+  "click_overflow",
+  {
+    /** Start of the UTC minute, ms. */
+    minute: integer("minute").notNull(),
+    orgId: text("org_id").notNull(),
+    linkId: text("link_id").notNull(),
+    clicks: integer("clicks").notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.minute, t.orgId, t.linkId] })],
+);
+
+/** Calls to Google Web Risk per UTC day, site-wide (migration 0047). See
+ * takeWebRiskLookup in risk.ts. */
+export const webRiskUsage = sqliteTable("web_risk_usage", {
+  /** Days since the Unix epoch, UTC. */
+  day: integer("day").primaryKey(),
+  lookups: integer("lookups").notNull(),
+});
 
 /**
  * Links made on the landing page by someone with no account (Direction A of
@@ -432,7 +671,10 @@ export const anonLinks = sqliteTable(
  * The queue is the fast path and stays that way. A row lands here only when
  * `sendBatch` failed outright, or when a message exhausted every delivery, so
  * a change that would otherwise be lost is instead applied late by the daily
- * drain.
+ * drain. The one exception is `pending`: an `org_sync` written in the same
+ * batch as the change that needs it (`queueOrgSyncs`) and deleted once the
+ * request has published the org (`publishOrgSyncs`), because the keys it
+ * stands for are only read once that work is under way.
  *
  * It carries no payload beyond the op and its target. Every storage message
  * is desired-state: the consumer reads D1 and writes what it finds, so
@@ -443,9 +685,9 @@ export const storageOutbox = sqliteTable(
   "storage_outbox",
   {
     id: text("id").primaryKey(),
-    op: text("op", { enum: ["kv_sync", "r2_delete", "r2_delete_prefix"] }).notNull(),
+    op: text("op", { enum: ["kv_sync", "r2_delete", "r2_delete_prefix", "org_sync"] }).notNull(),
     target: text("target").notNull(),
-    reason: text("reason", { enum: ["send_failed", "gave_up"] }).notNull(),
+    reason: text("reason", { enum: ["send_failed", "gave_up", "pending"] }).notNull(),
     createdAt: integer("created_at").notNull(),
     attempts: integer("attempts").notNull().default(0),
     lastError: text("last_error").notNull().default(""),
@@ -499,11 +741,11 @@ export const jwks = sqliteTable("jwks", {
   crv: text("crv"),
 });
 
-/** An MCP client, one row per `client_id`: either discovered from a Client ID
- * Metadata Document (cimd, `clientDiscoveryId` set) or created by hand
- * (`auth.api.adminCreateOAuthClient`, none exist yet). `userId` is null for
- * every client here — that column is for a user's own dynamically-registered
- * client, which this app does not offer (MCP deprecated DCR; see cimd()). */
+/** An MCP client, one row per `client_id`: discovered from a Client ID
+ * Metadata Document (cimd, `clientDiscoveryId` set), registered anonymously
+ * at `/oauth2/register` (DCR: `clientDiscoveryId`, `userId` and
+ * `referenceId` all null), or created by a signed-in user (`userId` set).
+ * sweepAbandonedOAuthClients() deletes DCR rows that never got a grant. */
 export const oauthClient = sqliteTable(
   "oauth_client",
   {

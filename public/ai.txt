@@ -1,4 +1,4 @@
-# ai.txt — permissions for AI crawlers and assistants on rdyrct.com
+# ai.txt: permissions for AI crawlers and assistants on rdyrct.com
 # See also /robots.txt (Content-Signal + named training-crawler rules) and
 # /llms.txt and /llms-full.txt (what this site is, for an assistant to cite).
 

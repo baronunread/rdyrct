@@ -66,8 +66,8 @@
         padding: 68px 96px 64px;
       }
 
-      /* The mark, oversized and bled off the right edge, same arrow as the
-         favicon. Recessive: it frames, it does not compete. */
+      /* The Hop mark without its tile, oversized and bled off the right
+         edge. Recessive: it frames, it does not compete. */
       .watermark {
         position: absolute;
         right: -60px;
@@ -85,12 +85,11 @@
         gap: 24px;
       }
 
-      /* The wordmark is an identifier, so it keeps the mono face. */
+      /* Set like the logo: Figtree Bold, tracked in (src/app/ui/logo.tsx). */
       .wordmark {
-        font-family: "JetBrains Mono", ui-monospace, monospace;
-        font-size: 52px;
+        font-size: 56px;
         font-weight: 700;
-        letter-spacing: 0.14em;
+        letter-spacing: -0.035em;
       }
 
       h1 {
@@ -143,29 +142,34 @@
     </style>
   </head>
   <body>
-    <svg class="watermark" viewBox="0 0 32 32" fill="none" aria-hidden="true">
+    <svg class="watermark" viewBox="3.6 7 23.6 17.8" fill="currentColor" aria-hidden="true">
       <path
-        d="M12 20l8-8M13 11h7v7"
+        d="M6.6 20Q13.4 2.2 19 12.2"
+        fill="none"
         stroke="currentColor"
-        stroke-width="2.5"
+        stroke-width="3.2"
         stroke-linecap="round"
-        stroke-linejoin="round"
       />
+      <circle cx="6.6" cy="20" r="2.5" />
+      <circle cx="22.4" cy="17.4" r="3.6" />
+      <ellipse cx="22.4" cy="23.3" rx="4.3" ry="1.05" />
     </svg>
 
     <div class="brand">
-      <img src="/favicon.svg" width="88" height="88" alt="" />
+      <img src="/connector-icon.svg" width="88" height="88" alt="" />
       <span class="wordmark">rdyrct</span>
     </div>
 
     <div class="middle">
-      <h1>Short links and QR codes that show which channel <em>earned the click.</em></h1>
+      <h1>The link shortener<br /><em>that answers to you.</em></h1>
 
       <span class="chip">
         <span><span class="host">go.acme.com/</span><span class="slug">spring</span></span>
       </span>
     </div>
 
-    <p class="foot">Branded short links, QR codes, and analytics that never store an IP.</p>
+    <p class="foot">
+      A URL shortener and QR code generator. Click tracking with no IP addresses stored.
+    </p>
   </body>
 </html>

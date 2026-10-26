@@ -1,5 +1,5 @@
 import { createHash, randomBytes } from "node:crypto";
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type APIRequestContext, type Page } from "@playwright/test";
 import { appUrl } from "./environment";
 import { rawSql } from "./db";
 import { signUpAndVerify } from "./resend";
@@ -22,29 +22,29 @@ function pkcePair() {
   return { verifier, challenge };
 }
 
-/** Registers a test MCP client directly in D1, the way an out-of-band CIMD
- * discovery or admin-created client would end up looking — this test is
- * about the consent screen and revoke flow, not client registration. */
-async function registerTestClient(page: Page, clientId: string) {
+/** Registers a test MCP client the way Claude or Cursor does: anonymous
+ * dynamic client registration, no session cookie. The resource row is
+ * written first because mcp() only creates it lazily, on its own first
+ * request after the dev server boots. */
+async function registerTestClient(page: Page, request: APIRequestContext): Promise<string> {
   await rawSql(
     page,
     `insert or ignore into oauth_resource (id, identifier, name, created_at, updated_at)
      values (?, ?, 'rdyrct MCP', 0, 0)`,
-    [`resource-${clientId}`, RESOURCE],
+    [`resource-${Date.now()}`, RESOURCE],
   );
-  await rawSql(
-    page,
-    `insert into oauth_client (id, client_id, disabled, redirect_uris,
-       token_endpoint_auth_method, grant_types, response_types, created_at, updated_at, name)
-     values (?, ?, 0, ?, 'none', '["authorization_code"]', '["code"]', 0, 0, 'Playwright Client')`,
-    [`client-row-${clientId}`, clientId, JSON.stringify([REDIRECT_URI])],
-  );
-  await rawSql(
-    page,
-    `insert into oauth_client_resource (id, client_id, resource_id, created_at)
-     values (?, ?, ?, 0)`,
-    [`link-${clientId}`, clientId, RESOURCE],
-  );
+  const res = await request.post(`${appUrl}/api/auth/oauth2/register`, {
+    data: {
+      client_name: "Playwright Client",
+      redirect_uris: [REDIRECT_URI],
+      token_endpoint_auth_method: "none",
+      grant_types: ["authorization_code", "refresh_token"],
+      response_types: ["code"],
+    },
+  });
+  expect(res.status()).toBe(201);
+  const { client_id } = await res.json();
+  return client_id;
 }
 
 test("connects an MCP client via OAuth consent, then revokes it from Connected apps", async ({
@@ -53,8 +53,7 @@ test("connects an MCP client via OAuth consent, then revokes it from Connected a
 }) => {
   await signUpAndVerify(page, `mcp-oauth-${Date.now()}@gmail.com`, E2E_PASSWORD);
 
-  const clientId = `e2e-client-${Date.now()}`;
-  await registerTestClient(page, clientId);
+  const clientId = await registerTestClient(page, request);
   const { verifier, challenge } = pkcePair();
 
   const authorizeUrl = new URL(`${appUrl}/api/auth/oauth2/authorize`);
@@ -71,6 +70,7 @@ test("connects an MCP client via OAuth consent, then revokes it from Connected a
 
   await page.goto(authorizeUrl.toString());
   await expect(page.getByText("Playwright Client wants access")).toBeVisible();
+  await expect(page.getByText("Your answer goes to example.com")).toBeVisible();
 
   // The consent page's own success handler does a real
   // window.location.assign to the client's redirect_uri, leaving this app's
@@ -112,7 +112,7 @@ test("connects an MCP client via OAuth consent, then revokes it from Connected a
   await page.goto(`${appUrl}/api-keys?tab=mcp`);
   await expect(page.getByText("Playwright Client")).toBeVisible();
   await page.getByRole("button", { name: "Revoke Playwright Client" }).click();
-  await page.getByRole("button", { name: "Disconnect" }).click();
+  await page.getByRole("button", { name: "Disconnect app" }).click();
   // Back to zero connections: the connect guide, not a bare empty line.
   await expect(page.getByText("Connect an AI assistant", { exact: true })).toBeVisible();
 

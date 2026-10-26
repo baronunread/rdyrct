@@ -9,9 +9,9 @@ why all three exist.
 | Workers Rate Limiting   | Inside the Worker                  | Per Cloudflare location | Bursts from one caller |
 | Cloudflare Turnstile    | Visitor's browser                  | Per attempt             | Slow, distributed bots |
 
-A rate limit is a ceiling. Turnstile is a gate. Neither replaces the other: a bot
-that stays politely under every limit gets through a ceiling, and a flood
-from ten thousand addresses gets through a gate unless each one is challenged.
+A rate limit is a ceiling. Turnstile is a gate. Neither replaces the other: a
+bot that stays politely under every limit gets through a ceiling, and a flood
+from ten thousand addresses meets a gate only if each attempt is challenged.
 
 ## Layer 1: WAF rate limiting rules (dashboard)
 
@@ -23,7 +23,29 @@ They run before the Worker starts, so a blocked request costs no CPU time and
 no billable invocation. Unlike the Workers limiters below, the counters are
 global rather than per-location.
 
-Add them at **Security → WAF → Rate limiting rules** on the `rdyrct.com` zone.
+### What is live on production (set 2026-10-16)
+
+Both zones are on the Cloudflare **Free** plan, which allows one rate limiting
+rule per zone, counts over 10 seconds only, blocks for 10 seconds only, and
+must count by IP and Cloudflare location (so the counters are per-location
+there, not global). The two rules below do not fit, so production runs these
+two instead:
+
+| Zone         | Name             | Expression                                      | Limit              | Action               |
+| ------------ | ---------------- | ----------------------------------------------- | ------------------ | -------------------- |
+| `rdyrct.com` | `auth-endpoints` | `(http.request.uri.path contains "/api/auth/")` | 30 per 10 seconds  | Block for 10 seconds |
+| `rdyr.cc`    | `redirect-flood` | `(http.host eq "rdyr.cc")`                      | 300 per 10 seconds | Block for 10 seconds |
+
+`redirect-flood` is deliberately high. People share an address (mobile
+carriers, offices, an event's Wi-Fi) and link preview bots fetch from a few
+addresses, and a blocked visitor sees an error page instead of the
+destination. It is there to stop a script, not a crowd.
+
+`password-reset` below is **not deployed**: the Free plan has no slot for
+it. The Worker limiters in Layer 2 cover that path. A Pro zone allows two
+rules and blocks of up to an hour.
+
+Add the full set at **Security → WAF → Rate limiting rules** on the `rdyrct.com` zone.
 Both rules target auth paths, which only ever get hit on that zone
 (the shared redirect host from `SHARED_LINK_HOST`, e.g. `rdyr.cc`, only ever
 serves redirects), so there is nothing to add on its zone for these.
@@ -111,36 +133,46 @@ daily total. Closing that gap needs a durable counter; see the follow-up on
 
 Free, and run by Cloudflare. The visitor's browser loads the Turnstile script
 from `challenges.cloudflare.com` and solves a challenge there, so Cloudflare
-sees the visitor; this is the one third party that does. The Worker never
-sees the challenge: it sends the token to Cloudflare's `siteverify` and
-believes the answer. `siteverify` burns the token, so a replay fails with no
-state of ours.
+sees the visitor: this is the one third party that does, and only on the
+forms below. The Worker never sees the challenge. It sends the token to
+Cloudflare's `siteverify` and believes the answer, and `siteverify` burns
+the token, so a replay fails with no state of ours.
 
-**Where it applies.** Signup, password reset and the landing page shortener.
-Not login: a bot with correct credentials is not the threat model, and it
-would tax every real visitor on every visit. Each form renders the widget with
-its own `action`, and the Worker refuses a token whose action is not the one
-it expects, so a token earned on one form cannot open another.
+**Where it applies.** Signup, password reset, the landing page shortener and
+its UTM builder (`/api/shorten`), and the abuse report form
+(`/api/reports`). Not login: a bot with correct credentials is not the
+threat model, and it would tax every real visitor on every visit. Each form
+renders the widget with its own `action`, and the Worker refuses a token
+whose action is not the one it expects, so a token earned on one form cannot
+open another. Cloudflare's test secret never echoes an action, so that one
+check is skipped when `siteverify` says it answered with a testing key.
 
-**How it looks.** Mostly it does not: the widget is `interaction-only`, solved
-on the form's first keystroke. If Cloudflare wants a click, the widget shows
-itself in the corner of the page.
+**How it looks.** Mostly it does not: the widget is `interaction-only`,
+started on the form's first keystroke. If Cloudflare wants a click, the
+widget shows itself in the corner of the page.
 
-**Keys.** Create a widget at dash.cloudflare.com → Turnstile. Set the site key
-as the `TURNSTILE_SITE_KEY` var in `wrangler.jsonc` (it is public; `/api/config`
-hands it to the browser) and the secret as `TURNSTILE_SECRET_KEY`. With the
-secret unset the check is skipped entirely, which is what keeps local dev and
-self-hosting quiet. A secret with no site key refuses every request instead:
-the browser has no widget to render, and that is better than a form that looks
-protected and is not. Cloudflare publishes test keys that always pass; they are
-what `.dev.vars.example` and the e2e run use.
+**Keys.** Create a widget at dash.cloudflare.com → Turnstile, with
+`rdyrct.com` as its hostname. Set both keys as secrets, `TURNSTILE_SITE_KEY`
+and `TURNSTILE_SECRET_KEY` (`prod.secrets.env.example`). The site key is
+public, since `/api/config` hands it to the browser, but it is a secret
+rather than a var in `wrangler.jsonc` so a fork does not inherit ours.
 
-**CSP.** `script-src`, `connect-src` and `frame-src` allow
-`https://challenges.cloudflare.com`, asserted in
-`tests/e2e/production/csp.pw.ts`.
+With the secret unset the Worker skips the check, and with the site key unset
+the browser never loads Cloudflare's script: that is a self-hosted copy that
+leaves both blank. A secret with no site key refuses every guarded request,
+because the browser has no widget to render, and a form that looks protected
+and is not is the worse failure. Cloudflare publishes test keys that always
+pass; `.dev.vars.local.example` and the e2e run use them.
 
-**If Cloudflare is unreachable** `siteverify` fails closed: signup and reset
-are refused until it answers.
+**CSP.** `script-src` and `frame-src` allow
+`https://challenges.cloudflare.com` only on the app host, and only when
+`TURNSTILE_SITE_KEY` is set (`turnstileAllowed` in
+`src/worker/security-headers.ts`). A custom domain, the shared link host and a
+copy without the keys never allow it. Asserted in
+`tests/e2e/production/csp.pw.ts` and `tests/worker/security-headers.worker.ts`.
+
+**If Cloudflare is unreachable** `siteverify` fails closed: the guarded
+forms are refused until it answers.
 
 ## Monitoring
 
@@ -156,10 +188,9 @@ WAF rule activity appears under Security → Events, filtered by the rule name.
 deleting it, so the counters keep running and you can see what it would have
 caught.
 
-**Turnstile is blocking real people.** Unset `TURNSTILE_SECRET_KEY`
-(`bunx wrangler secret delete TURNSTILE_SECRET_KEY`). The check disables itself and
-both guarded flows, signup and password reset, return to exactly their
-previous behaviour. No deploy needed.
+**Turnstile is blocking real people.** Unset `TURNSTILE_SECRET_KEY` and
+`TURNSTILE_SITE_KEY` (`bunx wrangler secret delete`). The check disables
+itself and every guarded form works as it did without it. No deploy needed.
 
 **A Workers limiter is too tight.** Change the `limit` in `wrangler.jsonc`
 and deploy. Keep the `namespace_id`: changing it resets every counter.
