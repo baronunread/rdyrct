@@ -41,6 +41,10 @@ console.log(site ? "Deploying rdyrct.com" : "Deploying a self-hosted copy");
 
 await $`bun run build`.env({ ...process.env, POSTHOG_SOURCEMAPS: site ? "1" : "0" });
 if (site) await $`bun run posthog:upload`;
+// Let Wrangler refresh an expired OAuth token in a command of its own. A D1
+// query sent by the same command that refreshed is often refused with 7403
+// (7 of 10 in a test; 0 of 26 once the refresh ran first). workers-sdk#16402.
+await $`bunx wrangler whoami`.quiet();
 // Migrate first, so new code never meets an old schema. To undo a migration,
 // restore D1 with Time Travel (AGENTS.md, "Rolling back a release").
 await $`bunx wrangler d1 migrations apply DB --remote`;
