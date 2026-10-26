@@ -11,6 +11,7 @@ import { overflowStatement } from "./click-overflow";
 import { deviceFromUA, normalizeReferrer } from "./util";
 import { clickAnalyticsAllowed } from "./rate-limit";
 import { captureAlert } from "./sentry";
+import { logFailure } from "./log-failure";
 
 /**
  * Click ingestion. The redirect hot path never inserts into D1 itself: it
@@ -83,7 +84,7 @@ export async function enqueueClick(c: Context<AppEnv>, hit: KVLink): Promise<voi
     const buffer = c.env.CLICK_BUFFER.get(c.env.CLICK_BUFFER.idFromName(BUFFER_NAME));
     await buffer.add(message);
   } catch (error) {
-    console.error("click enqueue failed", error);
+    logFailure("click_enqueue_failed", error);
   }
 }
 
@@ -176,7 +177,7 @@ export async function insertClicks(env: Env, rows: ClickMessage[]): Promise<Inse
   } catch (error) {
     // D1 is what failed, so every row comes back for the next flush, and the
     // pass counts toward the buffer's give-up threshold like a failed write.
-    console.error("click_cap_read_failed", error);
+    logFailure("click_cap_read_failed", error);
     return { retry: rows, hadFailure: rows.length > 0 };
   }
   const { counted, dropped } = split;
@@ -190,8 +191,7 @@ export async function insertClicks(env: Env, rows: ClickMessage[]): Promise<Inse
   } catch {
     // The batch rolled back the overflow count with everything else. Write
     // it on its own: nobody retries a dropped click, so this is its one try.
-    if (overflow)
-      await overflow.run().catch((error) => console.error("click_overflow_failed", error));
+    if (overflow) await overflow.run().catch((error) => logFailure("click_overflow_failed", error));
     return insertClicksPerRow(env.DB, counted);
   }
 }
@@ -212,7 +212,7 @@ async function insertClicksPerRow(d1: D1Database, rows: ClickMessage[]): Promise
         const gone = error instanceof Error && isDeletedLink(error);
         // Sentry is off wherever SENTRY_DSN is unset (every e2e run), so
         // this is the only trace a row kept back for retry leaves there.
-        if (!gone) console.error("click_insert_failed", error);
+        if (!gone) logFailure("click_insert_failed", error);
         return { row, state: gone ? ("gone" as const) : ("retry" as const) };
       }
     }),
@@ -317,6 +317,6 @@ export async function countAnonClick(env: Env, id: string, method: string): Prom
       .where(eq(schema.anonLinks.id, id));
   } catch (error) {
     // A lost count on a 24-hour link is not worth failing anything over.
-    console.error("anon click count failed", error);
+    logFailure("anon_click_count_failed", error);
   }
 }

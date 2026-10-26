@@ -28,6 +28,7 @@
 import * as v from "valibot";
 import type { Env } from "./env";
 import { stripUtmParams } from "./util";
+import { logFailure } from "./log-failure";
 
 /** 0 = nothing known against it, 100 = a provider refuses to resolve it. */
 export type RiskVerdict = {
@@ -452,7 +453,7 @@ export async function scoreAndRecord(
       .run();
     return { verdict: result.meta.changes > 0 ? verdict : null, webRisk };
   } catch (error) {
-    console.warn("risk_score_failed", linkId, error);
+    logFailure("risk_score_failed", error, { linkId });
     return { verdict: null, webRisk };
   }
 }
@@ -533,7 +534,7 @@ export async function revalidateOnRedirect(
       )
       .run();
   } catch (error) {
-    console.warn("risk_revalidate_failed", hit.linkId, error);
+    logFailure("risk_revalidate_failed", error, { linkId: hit.linkId });
   }
 }
 

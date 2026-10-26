@@ -29,6 +29,7 @@ import { TURNSTILE_FAILED_CODE, TURNSTILE_TOKEN_HEADER } from "@/shared/types";
 import { mcpResource, fetchClientMetadataResource } from "./mcp-oauth";
 import { HTTPException } from "hono/http-exception";
 import { endSubscriptionBeforeDelete } from "./routes/billing";
+import { logFailure } from "./log-failure";
 
 const SUBSCRIPTION_NOT_ENDED =
   "We could not cancel the subscription, so the account was not deleted. Try again in a few minutes.";
@@ -90,7 +91,7 @@ async function ensureOrganization(env: Env, db: DB, userId: string): Promise<voi
       ownedOrgLimit: 1,
     });
   } catch (error) {
-    console.warn("default_org_failed", String(error));
+    logFailure("default_org_failed", error);
   }
 }
 
@@ -140,7 +141,7 @@ export async function deleteAccountAndOwnedOrgs(env: Env, userId: string): Promi
     await env.ORG_DELETE.createBatch(orgIds.map((orgId) => ({ id: orgId, params: { orgId } })));
   } catch (error) {
     captureAlert([{ event: "account_org_delete_start_failed", userId, count: orgIds.length }]);
-    console.error("account_org_delete_start_failed", userId, error);
+    logFailure("account_org_delete_start_failed", error, { userId });
   }
 }
 

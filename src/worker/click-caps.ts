@@ -14,6 +14,7 @@ import {
   nearSentence,
   reachedSentence,
 } from "@/shared/click-usage";
+import { logFailure } from "./log-failure";
 
 /**
  * Tracked clicks per plan (#387).
@@ -242,7 +243,7 @@ async function emailOne(env: Env, row: UsageRow, now: number): Promise<boolean> 
     await sendEmail(env, row.email, subject, body);
     return true;
   } catch (error) {
-    console.error("click_usage_email_failed", kind, error);
+    logFailure("click_usage_email_failed", error, { kind });
     // Put the markers back as they were, so the next run tries again.
     await env.DB.prepare(
       `update org_click_usage set warned_limit = ?1, capped_limit = ?2

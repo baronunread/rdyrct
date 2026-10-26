@@ -14,6 +14,7 @@ import { reconcileUser } from "../reconcile";
 import { billingEnabled } from "../plan";
 import { jsonBodyLimit } from "../body-limit";
 import type { BillingProvider } from "../billing-provider";
+import { logFailure } from "../log-failure";
 
 // Imported on first use: the SDK is 130 KB that every cold start would
 // otherwise parse, for the three routes below that call it.
@@ -81,7 +82,7 @@ export async function endSubscriptionBeforeDelete(env: Env, userId: string): Pro
     return true;
   } catch (error) {
     captureAlert([{ event: "account_delete_subscription_revoke_failed", userId }]);
-    console.error("account_delete_subscription_revoke_failed", userId, error);
+    logFailure("account_delete_subscription_revoke_failed", error, { userId });
     return false;
   }
 }
