@@ -49,6 +49,20 @@ export async function warnLink(env: Env, db: DB, linkId: string, reason: string)
 }
 
 /**
+ * Make an automatic warning an admin's own, so dismissing the report or
+ * reviewing the org no longer lifts it. Nothing to republish: KV carries the
+ * warning, not its reason.
+ */
+export async function adoptWarning(db: DB, linkId: string): Promise<boolean> {
+  const changed = await db
+    .update(schema.links)
+    .set({ warnReason: WARN_REASON.admin })
+    .where(and(eq(schema.links.id, linkId), inArray(schema.links.warnReason, AUTOMATIC_REASONS)))
+    .returning({ id: schema.links.id });
+  return changed.length > 0;
+}
+
+/**
  * Take the warning off one link. With `onlyReason`, only a warning set for
  * that reason: dismissing the last report on a link lifts the warning the
  * report put there, not one an admin chose.

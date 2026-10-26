@@ -614,4 +614,18 @@ describe("a second look on a traffic spike (#390)", () => {
     expect(lookups).toEqual([LISTED]);
     expect((await linkRow("flaky"))?.suspended_at).not.toBeNull();
   });
+
+  it("asks again on the next run when the hold failed, and counts it", async () => {
+    await spikingLink("stuck", LISTED);
+    stubGoogle();
+    await failHolds();
+    expect(await recheckSpikingLinks(withKey(), ["stuck"])).toMatchObject({ asked: 1, errors: 1 });
+    const row = await linkRow("stuck");
+    expect(row?.suspended_at).toBeNull();
+    expectRetryTomorrow(row?.web_risk_checked_at);
+
+    await allowHolds();
+    expect(await recheckSpikingLinks(withKey(), ["stuck"])).toMatchObject({ asked: 1, hit: 1 });
+    expect((await linkRow("stuck"))?.suspended_at).not.toBeNull();
+  });
 });

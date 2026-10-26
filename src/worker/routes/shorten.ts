@@ -39,6 +39,7 @@ import { holdReasonFor } from "../../shared/abuse-rules";
 import { publishLink, resolveSlug, unpublishLink } from "../kv";
 import { askWebRisk, scoreAndRecord } from "../risk";
 import { checkLinkDestination } from "../destination-check";
+import { enqueueStorage, syncLinkMsg } from "../storage";
 import { orgLinkWarning } from "../link-warning";
 import { spendToken } from "../cap";
 import { CAP_FAILED_CODE } from "@/shared/types";
@@ -345,8 +346,10 @@ export async function claimAnonLink(
   await db.delete(schema.anonLinks).where(eq(schema.anonLinks.id, anon.id));
 
   // Republish without the expiry, and now carrying the org, so clicks start
-  // being recorded against the link its owner can see.
-  await publishLink(env, { ...link, addressId: address.id, expiresAt: null }, null);
+  // being recorded against the link its owner can see. Through the sync, which
+  // reads the row: a claim that landed held or warned must serve that page,
+  // not the plain redirect publishLink would write.
+  await enqueueStorage(env, [syncLinkMsg(link.slug, null)]);
 
   // The verdict copied above can be empty. Scoring an anonymous link runs
   // after its response, in waitUntil, and a claim landing first copies four

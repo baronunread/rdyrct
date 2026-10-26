@@ -17,7 +17,7 @@ export function TermsPage() {
     <LegalPageLayout
       authed={authed}
       title="Terms of service"
-      intro="These terms govern your use of rdyrct. By creating an account or using the service, you agree to them. Last updated 21 October 2026."
+      intro="These terms govern your use of rdyrct. By creating an account or using the service, you agree to them. Last updated 25 October 2026."
     >
       <WebMcpMarketingTools />
 

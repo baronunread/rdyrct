@@ -348,7 +348,7 @@ For help, email [support@mail.rdyrct.com](mailto:support@mail.rdyrct.com).`,
       "The rules for using rdyrct: acceptable use for links and QR codes, account and organization responsibilities, billing via Polar, and the self-host license.",
     markdown: `# Terms of service
 
-These terms govern your use of rdyrct. By creating an account or using the service, you agree to them. Last updated 21 October 2026.
+These terms govern your use of rdyrct. By creating an account or using the service, you agree to them. Last updated 25 October 2026.
 
 ## Acceptance and acceptable use
 

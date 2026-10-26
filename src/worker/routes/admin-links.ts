@@ -26,6 +26,7 @@ import type { AppEnv, DB } from "../env";
 import { enqueueStorage, republishLink, republishOrgLinks, syncLinkMsg } from "../storage";
 import {
   WARN_REASON,
+  adoptWarning,
   clearLinkWarning,
   clearOrgAutomaticWarnings,
   warnLink,
@@ -311,7 +312,7 @@ adminLinkRoutes.patch("/:linkId/warning", async (c) => {
   if (body.warned && link.suspendedAt !== null)
     throw new HTTPException(409, { message: "This link is suspended. Restore it first." });
   const changed = body.warned
-    ? await warnLink(c.env, db, linkId, WARN_REASON.admin)
+    ? (await warnLink(c.env, db, linkId, WARN_REASON.admin)) || (await adoptWarning(db, linkId))
     : await clearLinkWarning(c.env, db, linkId);
   await recordAdminAction(c.env, {
     actorUserId: c.var.user!.id,

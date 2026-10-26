@@ -287,6 +287,30 @@ describe("reports put a warning on the link", () => {
     expect((await warnRow())?.warn_reason).toBe("Set by an admin");
   });
 
+  it("makes a report's warning the admin's when they warn it too", async () => {
+    // Warn, then dismiss: a common triage order, and the warning must stay.
+    await seedLink();
+    await report();
+    const cookie = await adminCookie();
+    await fetchWorker(
+      new Request(`http://localhost/api/admin/links/${sampleLink.id}/warning`, {
+        method: "PATCH",
+        headers: { cookie, "content-type": "application/json" },
+        body: JSON.stringify({ warned: true }),
+      }),
+    );
+    const { id } =
+      (await env.DB.prepare("select id from link_reports").first<{ id: string }>()) ?? {};
+    await fetchWorker(
+      new Request(`http://localhost/api/admin/links/reports/${id}/dismiss`, {
+        method: "POST",
+        headers: { cookie },
+      }),
+    );
+    expect((await warnRow())?.warn_reason).toBe("Set by an admin");
+    expect(await env.LINKS.get(`slug:${sampleLink.slug}`, "json")).toMatchObject({ warn: true });
+  });
+
   it("does not warn a held link: it already serves nothing", async () => {
     await seedLink();
     await setLink(`suspended_at = ${Date.now()}`);
