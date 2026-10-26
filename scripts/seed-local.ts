@@ -15,7 +15,9 @@
 import { ALIAS_TTL_MS } from "../src/worker/util";
 import { PLAN_LIMITS, type JsonValue, type OverLimits } from "../src/shared/types";
 
-const API = "https://rdyrct.localhost/cdn-cgi/explorer/api";
+// SEED_URL points it at a second dev server (a worktree on its own port), so
+// seeding that one leaves the main checkout's database alone.
+const API = `${process.env.SEED_URL ?? "https://rdyrct.localhost"}/cdn-cgi/explorer/api`;
 const PASSWORD = "seed-password-123";
 
 const CONFIG = {

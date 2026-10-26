@@ -20,6 +20,7 @@ import {
   Trash2,
   TriangleAlert,
   Undo2,
+  X,
 } from "@/app/ui/icons";
 import { useAdminAnonLinks, useAdminLinks, useAdminReports } from "../../lib/hooks";
 import { api } from "../../lib/api";
@@ -30,7 +31,7 @@ import { Button } from "../../ui/button";
 import { Field, Input, Select } from "../../ui/field";
 import { Dialog } from "../../ui/dialog";
 import { ConfirmDialog } from "../../ui/confirm-dialog";
-import { Menu, MenuItem, MenuSeparator } from "../../ui/menu";
+import { Menu, MenuItem, MenuNote, MenuSeparator } from "../../ui/menu";
 import { TableSkeleton } from "../../ui/skeleton";
 import { useToast } from "../../ui/toast";
 import { withErrorToast } from "../../lib/mutation-toast";
@@ -44,35 +45,35 @@ import { sortRows } from "../../lib/sort";
 import { useSearchParams, HrefLink } from "../../lib/router-search";
 import { Segmented } from "../../ui/segmented";
 import { BlockedHosts } from "./blocked-hosts";
-import { HoldReason } from "./hold-reason";
+import { linkStateDetail, linkStateRank } from "./link-state";
+import { LinkStateBadge } from "./link-state-badge";
 import { Spinner } from "../../ui/spinner";
 
-/** The two columns both tables open with. Their widths differ because the
- * owned table has one fewer column to fit. */
-function SlugAndDestinationHeaders({
-  sort,
-  onSort,
-  linkWidth = "w-[15%]",
-  destinationWidth,
-}: {
-  sort: Sort;
-  onSort: (s: Sort) => void;
-  linkWidth?: string;
-  destinationWidth: string;
-}) {
+/** The two columns both tables open with. Destination has no width of its
+ * own: every other column is sized, so it takes what is left, which is the
+ * most room on the screen for the longest value in the row. */
+function SlugAndDestinationHeaders({ sort, onSort }: { sort: Sort; onSort: (s: Sort) => void }) {
   return (
     <>
-      <SortTh label="Link" sortKey="slug" sort={sort} onSort={onSort} className={linkWidth} />
-      <SortTh
-        label="Destination"
-        sortKey="destination"
-        sort={sort}
-        onSort={onSort}
-        className={destinationWidth}
-      />
+      <SortTh label="Link" sortKey="slug" sort={sort} onSort={onSort} className="w-[16%]" />
+      <SortTh label="Destination" sortKey="destination" sort={sort} onSort={onSort} />
     </>
   );
 }
+
+/** Column widths both link tables share. The short columns are fixed, so a
+ * badge or a date never takes room the destination needs. */
+const COL = {
+  check: "w-11 pr-0",
+  org: "w-[17%]",
+  // pr-2/pl-2: the longest badge ("suspended") and the "Reports" header fit
+  // without another 16px of padding each.
+  state: "w-28 pr-2",
+  reports: "w-[5.25rem] pl-2 text-right",
+  clicks: "w-[4.5rem] pl-2 text-right",
+  date: "w-28",
+  actions: "w-12 px-2",
+} as const;
 
 /** The id a mutation is currently working on, for the row that should show
  * itself as busy. */
@@ -104,10 +105,13 @@ type RowActions = {
 function RowMenu({
   slug,
   destination,
+  note,
   children,
 }: {
   slug: string;
   destination: string;
+  /** The row state in words, for a touch screen that cannot hover the badge. */
+  note: string;
   children: React.ReactNode;
 }) {
   return (
@@ -122,6 +126,16 @@ function RowMenu({
         </div>
       }
     >
+      <MenuNote>
+        {/* One fact a line: the tooltip joins them with " · ", which wraps
+            badly in a menu this narrow. */}
+        {note.split(" · ").map((fact) => (
+          <span key={fact} className="block">
+            {fact}
+          </span>
+        ))}
+      </MenuNote>
+      <MenuSeparator />
       <MenuItem onClick={() => window.open(destination, "_blank", "noopener,noreferrer")}>
         <ExternalLink size={14} /> Open destination
       </MenuItem>
@@ -174,25 +188,6 @@ function DeleteLinkDialog({
     </ConfirmDialog>
   );
 }
-
-/**
- * Null is not zero. An unscored link is one nobody has looked at, and showing
- * it as "clean" is how a provider outage turns into a table of green ticks.
- */
-function RiskBadge({ score, reasons }: { score: number | null; reasons: string[] }) {
-  if (score === null) return <Badge color="muted">unscored</Badge>;
-  if (score >= 100)
-    return <Badge color="pink">{reasons.map(riskLabel).join(", ") || "blocked"}</Badge>;
-  return <Badge color="mint">clean</Badge>;
-}
-
-/** "web_risk_social_engineering" reads "Google: social engineering". */
-const riskLabel = (reason: string) =>
-  reason === "dns_blocklist"
-    ? "DNS blocklist"
-    : reason.startsWith("web_risk_")
-      ? `Google: ${reason.slice("web_risk_".length).replaceAll("_", " ")}`
-      : reason;
 
 function SuspendDialog({ link, onClose }: { link: AdminLinkRow | null; onClose: () => void }) {
   const toast = useToast();
@@ -253,26 +248,6 @@ function SuspendDialog({ link, onClose }: { link: AdminLinkRow | null; onClose: 
   );
 }
 
-/** Suspended, or redirecting behind a warning page (#344), and why. */
-function linkState(link: AdminLinkRow) {
-  if (link.suspendedAt)
-    return { color: "pink" as const, label: "suspended", why: link.suspendReason };
-  if (link.warnedAt) return { color: "butter" as const, label: "warning", why: link.warnReason };
-  return null;
-}
-
-/** The row's state as a pill; HoldReason under it says why. The visitor
- * never sees that. */
-function StateBadge({ link }: { link: AdminLinkRow }) {
-  const state = linkState(link);
-  if (!state) return null;
-  return (
-    <span className="shrink-0">
-      <Badge color={state.color}>{state.label}</Badge>
-    </span>
-  );
-}
-
 /** Put a warning page in front of a link, or take it off (#344). A suspended
  * link serves nothing, so there is nothing to warn about. */
 function WarnMenuItem({
@@ -293,21 +268,22 @@ function WarnMenuItem({
   );
 }
 
-function ReportCountBadge({ count }: { count: number }) {
-  if (count === 0) return null;
-  return (
-    <span className="shrink-0">
-      <Badge color="butter">
-        {count} {count === 1 ? "report" : "reports"}
-      </Badge>
-    </span>
-  );
+/** Open reports, as a count like Clicks. A dash rather than 0, so the rows
+ * that have any stand out down the column. */
+function ReportsCell({ count }: { count: number }) {
+  if (count === 0)
+    return (
+      <Td className="pl-2 text-right text-muted">
+        <span aria-label="No reports">–</span>
+      </Td>
+    );
+  return <Td className="pl-2 text-right tnum">{count}</Td>;
 }
 
 function LinkRow({ link, ...actions }: { link: AdminLinkRow } & RowActions) {
   return (
     <tr className={link.suspendedAt ? "opacity-60" : undefined}>
-      <Td>
+      <Td className="pr-0">
         <input
           type="checkbox"
           aria-label={`Select ${link.slug}`}
@@ -316,12 +292,10 @@ function LinkRow({ link, ...actions }: { link: AdminLinkRow } & RowActions) {
           className="size-4 cursor-pointer accent-accent"
         />
       </Td>
-      <Td>
-        <span className="flex items-center gap-2">
-          <span className="truncate font-mono text-xs font-bold">{linkDisplayTitle(link.url)}</span>
-          <StateBadge link={link} />
-        </span>
-        <HoldReason why={linkState(link)?.why ?? null} />
+      {/* The slug only. Its state and why live in the State column's
+          tooltip and the row menu, so every row stays one line. */}
+      <Td className="truncate font-mono text-xs font-bold" title={linkDisplayTitle(link.url)}>
+        {linkDisplayTitle(link.url)}
       </Td>
       <Td className="truncate font-mono text-xs text-muted" title={link.destination}>
         {link.destination}
@@ -332,19 +306,18 @@ function LinkRow({ link, ...actions }: { link: AdminLinkRow } & RowActions) {
         <HrefLink
           href={`/admin/links?org=${encodeURIComponent(link.orgId)}`}
           className="block truncate hover:text-accent hover:underline"
+          title={link.orgName}
         >
           {link.orgName}
         </HrefLink>
       </Td>
-      <Td>
-        <span className="flex flex-wrap items-center gap-1">
-          <RiskBadge score={link.riskScore} reasons={link.riskReasons} />
-          <ReportCountBadge count={link.reportCount} />
-        </span>
+      <Td className="pr-2">
+        <LinkStateBadge link={link} />
       </Td>
-      <Td className="tnum">{link.clicks}</Td>
+      <ReportsCell count={link.reportCount} />
+      <Td className="pl-2 text-right tnum">{link.clicks}</Td>
       <Td className="whitespace-nowrap text-muted">{shortDate(link.createdAt)}</Td>
-      <Td>
+      <Td className="px-2">
         <LinkActions link={link} {...actions} />
       </Td>
     </tr>
@@ -367,7 +340,7 @@ function LinkActions({
   warning,
 }: { link: AdminLinkRow } & Omit<RowActions, "selected" | "onSelect">) {
   return (
-    <RowMenu slug={link.slug} destination={link.destination}>
+    <RowMenu slug={link.slug} destination={link.destination} note={linkStateDetail(link)}>
       <MenuItem disabled={rescoring} onClick={() => onRescore(link)}>
         {rescoring ? <Spinner /> : <ShieldQuestionMark size={14} />} Re-check destination
       </MenuItem>
@@ -427,16 +400,14 @@ function LinksTable({
     return <p className="py-6 text-center text-sm text-muted">No links match that search.</p>;
 
   return (
-    // Fixed, with widths that add to 100%. In an auto-layout table a long
-    // destination sets the column width and pushes everything past the card,
-    // and `max-w` on the cell is ignored.
-    //
-    // Columns drop one breakpoint at a time rather than all at once, so the
-    // table narrows smoothly instead of jumping between two layouts.
-    <Table fixed minWidth="min-w-[64rem]">
+    // Fixed layout. In an auto-layout table a long destination sets the
+    // column width and pushes everything past the card, and `max-w` on the
+    // cell is ignored. The minimum fits the admin column on a laptop, so the
+    // actions menu is on screen there; narrower than that, the card scrolls.
+    <Table fixed minWidth="min-w-[58rem]">
       <thead>
         <tr>
-          <Th className="w-[4%]">
+          <Th className={COL.check}>
             <input
               type="checkbox"
               aria-label="Select all links on this page"
@@ -445,35 +416,37 @@ function LinksTable({
               className="size-4 cursor-pointer accent-accent"
             />
           </Th>
-          <SlugAndDestinationHeaders
-            sort={sort}
-            onSort={onSort}
-            linkWidth="w-[24%]"
-            destinationWidth="w-[18%]"
-          />
+          <SlugAndDestinationHeaders sort={sort} onSort={onSort} />
           <SortTh
             label="Organization"
             sortKey="orgName"
             sort={sort}
             onSort={onSort}
-            className="w-[14%]"
+            className={COL.org}
           />
+          <SortTh label="State" sortKey="state" sort={sort} onSort={onSort} className={COL.state} />
           <SortTh
-            label="Risk"
-            sortKey="riskScore"
+            label="Reports"
+            sortKey="reportCount"
             sort={sort}
             onSort={onSort}
-            className="w-[14%]"
+            className={COL.reports}
           />
-          <SortTh label="Clicks" sortKey="clicks" sort={sort} onSort={onSort} className="w-[8%]" />
+          <SortTh
+            label="Clicks"
+            sortKey="clicks"
+            sort={sort}
+            onSort={onSort}
+            className={COL.clicks}
+          />
           <SortTh
             label="Created"
             sortKey="createdAt"
             sort={sort}
             onSort={onSort}
-            className="w-[12%]"
+            className={COL.date}
           />
-          <Th className="w-[6%]" />
+          <Th className={COL.actions} />
         </tr>
       </thead>
       <tbody>
@@ -499,10 +472,11 @@ function LinksTable({
 
 /** Links made on the landing page with no account. No org, no owner, and
  * they expire on their own, so deleting is the only action worth having. */
-/** The anonymous list itself. Same columns as the owned table, in the same
- * order, so moving between the two tabs does not mean re-reading the header
- * row. An anonymous link has no organization and records no clicks; those
- * cells say so rather than being left out. */
+/** The anonymous list itself. The owned table's columns in the same order,
+ * so moving between the two tabs does not mean re-reading the header row.
+ * An anonymous link has no organization and records no clicks; those cells
+ * say so rather than being left out. Reports are not kept per anonymous link,
+ * so that column is the one left out. */
 function AnonymousLinksTable({
   rows,
   isPending,
@@ -522,34 +496,30 @@ function AnonymousLinksTable({
   if (rows.length === 0)
     return <p className="py-6 text-center text-sm text-muted">Nothing here.</p>;
   return (
-    <Table fixed minWidth="min-w-[64rem]">
+    <Table fixed minWidth="min-w-[58rem]">
       <thead>
         <tr>
-          <SlugAndDestinationHeaders sort={sort} onSort={onSort} destinationWidth="w-[25%]" />
-          <Th className="w-[12%]">Organization</Th>
-          <SortTh
-            label="Risk"
-            sortKey="riskScore"
-            sort={sort}
-            onSort={onSort}
-            className="w-[12%]"
-          />
-          <Th className="w-[7%]">Clicks</Th>
+          <SlugAndDestinationHeaders sort={sort} onSort={onSort} />
+          {/* Always "none" here, so it gets a short column, not the owned
+              table's wide one. */}
+          <Th className="w-28">Organization</Th>
+          <SortTh label="State" sortKey="state" sort={sort} onSort={onSort} className={COL.state} />
+          <Th className={COL.clicks}>Clicks</Th>
           <SortTh
             label="Created"
             sortKey="createdAt"
             sort={sort}
             onSort={onSort}
-            className="w-[12%]"
+            className={COL.date}
           />
           <SortTh
             label="Expires"
             sortKey="expiresAt"
             sort={sort}
             onSort={onSort}
-            className="w-[12%]"
+            className={COL.date}
           />
-          <Th className="w-[8%]" />
+          <Th className={COL.actions} />
         </tr>
       </thead>
       <tbody>
@@ -562,16 +532,16 @@ function AnonymousLinksTable({
             {/* Nobody owns it, and no click is recorded against it: both
                     are the product boundary, not missing data. */}
             <Td className="text-muted">none</Td>
-            <Td>
-              <RiskBadge score={link.riskScore} reasons={link.riskReasons} />
+            <Td className="pr-2">
+              <LinkStateBadge link={link} />
             </Td>
-            <Td className="text-muted" title="Anonymous links record no clicks">
+            <Td className="pl-2 text-right text-muted" title="Anonymous links record no clicks">
               none
             </Td>
             <Td className="whitespace-nowrap text-muted">{shortDate(link.createdAt)}</Td>
             <Td className="whitespace-nowrap text-muted">{shortDate(link.expiresAt)}</Td>
-            <Td>
-              <RowMenu slug={link.slug} destination={link.destination}>
+            <Td className="px-2">
+              <RowMenu slug={link.slug} destination={link.destination} note={linkStateDetail(link)}>
                 <MenuSeparator />
                 <MenuItem className="text-danger" onClick={() => onDelete(link)}>
                   <Trash2 size={14} /> Delete link
@@ -616,7 +586,7 @@ function AnonymousLinks() {
     {
       slug: (l) => l.slug,
       destination: (l) => l.destination,
-      riskScore: (l) => l.riskScore ?? -1,
+      state: linkStateRank,
       expiresAt: (l) => l.expiresAt,
       createdAt: (l) => l.createdAt,
     },
@@ -666,6 +636,7 @@ function ReportOrg({ report: r }: { report: AdminReportRow }) {
     <HrefLink
       href={`/admin/links?org=${encodeURIComponent(r.orgId)}`}
       className="block truncate hover:text-accent hover:underline"
+      title={r.orgName ?? undefined}
     >
       {r.orgName}
     </HrefLink>
@@ -697,7 +668,7 @@ function ReportRow({
         {r.contact || "none"}
       </Td>
       <Td className="whitespace-nowrap text-muted">{shortDate(r.createdAt)}</Td>
-      <Td>
+      <Td className="px-2 text-right">
         <Button size="sm" variant="ghost" disabled={pending} onClick={() => onDismiss(r.id)}>
           Dismiss
         </Button>
@@ -729,13 +700,16 @@ function Reports() {
     <Table fixed minWidth="min-w-[56rem]">
       <thead>
         <tr>
+          {/* Note has no width: it is the free text, so it takes what the
+              sized columns leave. The last column fits the Dismiss button,
+              which a 6% column clipped behind the card's edge. */}
           <Th className="w-[14%]">Link</Th>
-          <Th className="w-[16%]">Organization</Th>
-          <Th className="w-[10%]">Reason</Th>
-          <Th className="w-[30%]">Note</Th>
-          <Th className="w-[14%]">Contact</Th>
-          <Th className="w-[10%]">When</Th>
-          <Th className="w-[6%]" />
+          <Th className={COL.org}>Organization</Th>
+          <Th className="w-28">Reason</Th>
+          <Th>Note</Th>
+          <Th className="w-[16%]">Contact</Th>
+          <Th className={COL.date}>When</Th>
+          <Th className="w-24 px-2" />
         </tr>
       </thead>
       <tbody>
@@ -879,9 +853,19 @@ function RestoreLinkDialog({
 /** Shown while the list is scoped to one organization, which is where a
  * click on an owner's name lands you. */
 function ClearOrgFilterButton({ orgName, onClear }: { orgName?: string; onClear: () => void }) {
+  const label = `Clear filter: ${orgName ?? "one organization"}`;
   return (
-    <Button size="sm" variant="outline" onClick={onClear}>
-      Clear {orgName ?? "organization"} filter
+    // Names the organization once, as the chip, so the row says what it is
+    // narrowed to. The same height as the search box and the select beside it.
+    <Button
+      variant="outline"
+      onClick={onClear}
+      aria-label={label}
+      title={label}
+      className="max-w-60"
+    >
+      <span className="truncate">{orgName ?? "Organization"}</span>
+      <X size={14} className="shrink-0 text-muted" />
     </Button>
   );
 }
@@ -926,7 +910,6 @@ function OwnedLinksToolbar({
       <Select
         aria-label="Filter by status"
         wrapperClass="w-36"
-        className="h-10"
         value={status}
         onChange={(e) => onStatus(STATUSES.find((s) => s.id === e.target.value)?.id ?? "all")}
       >
@@ -942,9 +925,8 @@ function OwnedLinksToolbar({
   );
 }
 
-/** The org filter and the column sort, applied in that order. Unscored sorts
- * below every score rather than as a zero: nobody has looked at it, which is
- * not the same as clean. */
+/** The column sort. State sorts worst first (linkStateRank), and unscored
+ * ranks below clean: nobody has looked at it, which is not the same as clean. */
 function sortOwnedLinks(data: AdminLinkRow[] | undefined, sort: Sort) {
   // No org filter here: the query applies it, so its 200-row cap counts that
   // organization's links rather than every organization's.
@@ -952,7 +934,8 @@ function sortOwnedLinks(data: AdminLinkRow[] | undefined, sort: Sort) {
     slug: (l) => l.slug,
     destination: (l) => l.destination,
     orgName: (l) => l.orgName,
-    riskScore: (l) => l.riskScore ?? -1,
+    state: linkStateRank,
+    reportCount: (l) => l.reportCount,
     clicks: (l) => l.clicks,
     createdAt: (l) => l.createdAt,
   });
@@ -1104,15 +1087,18 @@ export function AdminLinksPage() {
   } satisfies Record<View, React.ReactNode>;
 
   return (
-    <div className="flex flex-col gap-4">
+    // The header keeps its own bottom margin, the one every page has; the gap
+    // below only spaces the tabs from the panel. Inside one gap container the
+    // two added up, and the tabs sat 40px under the subtitle instead of 24.
+    <div>
       <PageHeader
         title="Links"
         sub="Every link across every organization. Search by slug or destination."
       />
-
-      <Segmented items={VIEWS} value={view} onChange={setView} />
-
-      {panels[view]}
+      <div className="flex flex-col gap-4">
+        <Segmented items={VIEWS} value={view} onChange={setView} label="Link lists" />
+        {panels[view]}
+      </div>
 
       <SuspendDialog link={suspending} onClose={() => setSuspending(null)} />
     </div>

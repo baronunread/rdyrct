@@ -405,6 +405,7 @@ export function AdminOrgsPage() {
         }}
         placeholder="Search by org name or owner…"
         label="Search organizations"
+        className="mb-4"
       />
       <div className="mb-3">
         <Segmented
