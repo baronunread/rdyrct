@@ -4,7 +4,9 @@ type Theme = "dark" | "light";
 
 const listeners = new Set<() => void>();
 
-function current(): Theme {
+/** The theme the page is in now: the visitor's choice if they made one,
+ * else their OS's (index.html decides before paint). */
+export function currentTheme(): Theme {
   return document.documentElement.dataset.theme === "dark" ? "dark" : "light";
 }
 
@@ -23,7 +25,7 @@ function apply(next: Theme) {
 }
 
 function toggle() {
-  const next: Theme = current() === "light" ? "dark" : "light";
+  const next: Theme = currentTheme() === "light" ? "dark" : "light";
 
   // No view transition here: dark and light are near-opposite flat colors,
   // so any crossfade between them (soft or instant-cut) reads as a wrong
@@ -42,7 +44,7 @@ export function useTheme(): [Theme, () => void] {
       listeners.add(cb);
       return () => listeners.delete(cb);
     },
-    current,
+    currentTheme,
     (): Theme => "light",
   );
   return [theme, toggle];

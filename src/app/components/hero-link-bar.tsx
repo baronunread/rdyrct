@@ -20,6 +20,7 @@ import { CopyButton } from "../ui/copy-button";
 import { BusyContent } from "../ui/spinner";
 import { useToast } from "../ui/toast";
 import { copyToClipboard } from "../lib/clipboard";
+import { CHALLENGE_LABEL } from "../lib/turnstile";
 import { cn } from "../ui/cn";
 
 // A QR code is useful only once a link exists. Keeping the renderer behind
@@ -59,6 +60,7 @@ export function HeroBar({
   busy,
   title,
   again = false,
+  waiting = false,
 }: {
   prefix: ReactNode;
   input: InputHTMLAttributes<HTMLInputElement>;
@@ -69,6 +71,9 @@ export function HeroBar({
   title?: string;
   /** A link has been made already, so the field asks for the next one. */
   again?: boolean;
+  /** A submission waits on the Turnstile challenge above the bar; `busy`
+   * is then false, since the button says so instead of spinning. */
+  waiting?: boolean;
 }) {
   return (
     <div className="flex flex-col gap-2 rounded-xl border border-border bg-bg p-1 focus-within:border-accent focus-within:shadow-[0_0_0_3px_color-mix(in_oklab,var(--accent)_22%,transparent)] sm:flex-row sm:items-center sm:gap-1.5">
@@ -96,16 +101,27 @@ export function HeroBar({
         className="h-9 rounded-lg sm:w-auto"
       >
         <BusyContent busy={busy}>
-          Shorten it
-          <kbd
-            aria-hidden="true"
-            className="ml-1 hidden rounded border border-current/30 border-b-2 px-1 font-mono text-[0.6875rem] font-normal opacity-70 sm:inline"
-          >
-            ↵
-          </kbd>
+          <ShortenLabel waiting={waiting} />
         </BusyContent>
       </Button>
     </div>
+  );
+}
+
+/** "Shorten it" with its Enter hint, or what is left to do while a
+ * submission waits on the Turnstile challenge. */
+function ShortenLabel({ waiting }: { waiting: boolean }) {
+  if (waiting) return CHALLENGE_LABEL;
+  return (
+    <>
+      Shorten it
+      <kbd
+        aria-hidden="true"
+        className="ml-1 hidden rounded border border-current/30 border-b-2 px-1 font-mono text-[0.6875rem] font-normal opacity-70 sm:inline"
+      >
+        ↵
+      </kbd>
+    </>
   );
 }
 

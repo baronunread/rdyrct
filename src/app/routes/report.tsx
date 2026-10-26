@@ -8,7 +8,8 @@ import { useToast } from "../ui/toast";
 import { SUPPORT_EMAIL } from "../ui/footer";
 import { api } from "../lib/api";
 import { useAudience } from "../lib/audience";
-import { useTurnstile } from "../lib/turnstile";
+import { CHALLENGE_LABEL, guardedButton, useTurnstile } from "../lib/turnstile";
+import { TurnstileSlot } from "../components/turnstile-slot";
 import { useSearchParams } from "../lib/router-search";
 import { withErrorToast } from "../lib/mutation-toast";
 import { TURNSTILE_TOKEN_HEADER, REPORT_REASONS, type ReportReason } from "@/shared/types";
@@ -52,6 +53,7 @@ export function ReportPage() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["admin", "reports"] }),
     onError: withErrorToast(toast),
   });
+  const button = guardedButton(send.isPending, turnstile.challenge);
 
   return (
     <LegalPageLayout
@@ -111,9 +113,10 @@ export function ReportPage() {
               maxLength={200}
             />
           </Field>
+          <TurnstileSlot challenge={turnstile.challenge} />
           <div>
-            <Button type="submit" disabled={send.isPending}>
-              {send.isPending && <Spinner />} Send report
+            <Button type="submit" disabled={button.disabled}>
+              {button.spinning && <Spinner />} {button.waiting ? CHALLENGE_LABEL : "Send report"}
             </Button>
           </div>
           <p className="text-xs text-muted">

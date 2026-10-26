@@ -17,7 +17,13 @@ import {
   googleSignupUrl,
 } from "../lib/funnel";
 import { useShake } from "../lib/use-shake";
-import { useTurnstile } from "../lib/turnstile";
+import {
+  type TurnstileChallenge,
+  CHALLENGE_LABEL,
+  guardedButton,
+  useTurnstile,
+} from "../lib/turnstile";
+import { TurnstileSlot } from "../components/turnstile-slot";
 import { useCurrentUser, useConfig } from "../lib/hooks";
 import { storedAnonLinks } from "../lib/anon-links";
 import { readAuthHint } from "../lib/user-cache";
@@ -49,15 +55,18 @@ function ForgotView({
   initialEmail,
   sent,
   busy,
+  challenge,
   onSubmit,
   onBack,
 }: {
   initialEmail: string;
   sent: boolean;
   busy: boolean;
+  challenge: TurnstileChallenge;
   onSubmit: (email: string) => void;
   onBack: () => void;
 }) {
+  const button = guardedButton(busy, challenge);
   const toast = useToast();
   const { register, handleSubmit, getValues } = useForm<ForgotForm>({
     resolver: valibotResolver(forgotSchema),
@@ -83,8 +92,11 @@ function ForgotView({
             <Field label="Email">
               <Input type="email" {...register("email")} required autoComplete="email" />
             </Field>
-            <Button type="submit" variant="primary" disabled={busy}>
-              <BusyContent busy={busy}>Send reset link</BusyContent>
+            <TurnstileSlot challenge={challenge} />
+            <Button type="submit" variant="primary" disabled={button.disabled}>
+              <BusyContent busy={button.spinning}>
+                {button.waiting ? CHALLENGE_LABEL : "Send reset link"}
+              </BusyContent>
             </Button>
           </form>
         )}
@@ -356,6 +368,7 @@ function AuthFormView({
   onSubmit,
   onForgot,
   onFirstInput,
+  challenge,
 }: {
   mode: "login" | "signup";
   busy: boolean;
@@ -366,8 +379,11 @@ function AuthFormView({
   /** Starts the Turnstile challenge (#304). Idempotent, so a per-keystroke
    * handler is fine; it fires once and the work overlaps the typing. */
   onFirstInput: () => void;
+  /** Sign-up's Turnstile challenge. Login never starts it, so it never shows. */
+  challenge: TurnstileChallenge;
 }) {
   const copy = AUTH_MODE_COPY[mode];
+  const button = guardedButton(busy, challenge);
   const toast = useToast();
   const config = useConfig();
   // Read once on mount: a returning visitor who last signed in with Google
@@ -455,14 +471,17 @@ function AuthFormView({
             autoComplete={copy.passwordAutoComplete}
           />
         </Field>
+        {mode === "signup" && <TurnstileSlot challenge={challenge} />}
         <Button
           type="submit"
           variant="primary"
-          disabled={busy}
+          disabled={button.disabled}
           className={shake.className}
           onAnimationEnd={shake.end}
         >
-          <BusyContent busy={busy}>{copy.submitLabel}</BusyContent>
+          <BusyContent busy={button.spinning}>
+            {button.waiting ? CHALLENGE_LABEL : copy.submitLabel}
+          </BusyContent>
         </Button>
         <p className="text-center text-xs text-muted">
           {copy.footerPrompt}{" "}
@@ -650,7 +669,7 @@ function useForgotPassword(
     }
   };
 
-  return { forgotBusy, submitForgot };
+  return { forgotBusy, submitForgot, resetChallenge: resetTurnstile.challenge };
 }
 
 /** Landing on /login or /signup while already signed in. Only a fallback:
@@ -719,7 +738,11 @@ function useAuthFlow(mode: "login" | "signup") {
   const rawNext = readPending()?.next ?? params.get("next") ?? "/dashboard";
   const next = rawNext.startsWith("/") && !rawNext.startsWith("//") ? rawNext : "/dashboard";
 
-  const { forgotBusy, submitForgot } = useForgotPassword(setView, toast, emailEnabled);
+  const { forgotBusy, submitForgot, resetChallenge } = useForgotPassword(
+    setView,
+    toast,
+    emailEnabled,
+  );
   const redirecting = useRedirectWhenSignedIn({ verifyPhase, next });
 
   const goVerify = async (email: string) => {
@@ -857,6 +880,8 @@ function useAuthFlow(mode: "login" | "signup") {
      * password reset is rare enough that a short wait on submit is fine, and
      * priming it would tax everyone who came to log in. */
     primeSignupTurnstile: signupTurnstile.prime,
+    signupChallenge: signupTurnstile.challenge,
+    resetChallenge,
   };
 }
 
@@ -886,6 +911,7 @@ function AuthPage({ mode }: { mode: "login" | "signup" }) {
         initialEmail={flow.authEmail}
         sent={flow.view === "forgot-sent"}
         busy={flow.forgotBusy}
+        challenge={flow.resetChallenge}
         onSubmit={flow.submitForgot}
         onBack={() => flow.setView("form")}
       />
@@ -901,6 +927,7 @@ function AuthPage({ mode }: { mode: "login" | "signup" }) {
       next={flow.next}
       onSubmit={flow.submit}
       onFirstInput={flow.primeSignupTurnstile}
+      challenge={flow.signupChallenge}
       onForgot={(email) => {
         flow.setAuthEmail(email);
         flow.setView("forgot");

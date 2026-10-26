@@ -19,7 +19,8 @@ import { errorMessage } from "@/app/lib/error-message";
 import { ArrowRight } from "@/app/ui/icons";
 import { buttonClass } from "../ui/button-class";
 import { useToast } from "../ui/toast";
-import { useTurnstile } from "../lib/turnstile";
+import { guardedButton, useTurnstile } from "../lib/turnstile";
+import { TurnstileSlot } from "./turnstile-slot";
 import { useConfig } from "../lib/hooks";
 import {
   MAX_ANON_LINKS,
@@ -149,11 +150,13 @@ function useAnonShortener() {
     canSubmit,
     submit,
     prime: turnstile.prime,
+    challenge: turnstile.challenge,
+    button: guardedButton(busy, turnstile.challenge),
   };
 }
 
 export function HeroShortener() {
-  const { destination, setDestination, busy, made, atCap, canSubmit, submit, prime } =
+  const { destination, setDestination, button, made, atCap, canSubmit, submit, prime, challenge } =
     useAnonShortener();
   // The shared domain the slug will follow. This card only exists on
   // rdyrct.com, whose shared host is rdyr.cc, so that stands in until the
@@ -174,6 +177,7 @@ export function HeroShortener() {
       noValidate
       className={HERO_CARD}
     >
+      <TurnstileSlot challenge={challenge} className="mb-2 rounded-xl" />
       <HeroBar
         prefix={<HostPrefix host={linkHost} />}
         input={{
@@ -183,7 +187,8 @@ export function HeroShortener() {
           onChange: (e) => setDestination(e.target.value),
         }}
         disabled={!canSubmit}
-        busy={busy}
+        busy={button.spinning}
+        waiting={button.waiting}
         again={made.length > 0}
       />
 
