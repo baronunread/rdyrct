@@ -181,6 +181,9 @@ export function withSession(opts: { oauthTokenPath?: string } = {}) {
         if (viaOAuth) c.set("user", viaOAuth);
       }
     }
+    // Who made the request, on every API event: ids only, never the email.
+    const user = c.var.user;
+    if (user) c.get("log")?.set({ user: { id: user.id, plan: user.plan, admin: user.isAdmin } });
     await next();
   });
 }

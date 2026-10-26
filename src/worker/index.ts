@@ -34,7 +34,7 @@ import { rescanFreeLinks, sweepAbuse } from "./destination-check";
 import { sweepClickUsageEmails } from "./click-caps";
 import { sweepOldOverflow } from "./click-overflow";
 import { reportRoutes } from "./routes/reports";
-import { evlogMiddleware } from "./evlog";
+import { evlogMiddleware, evlogRequestContext } from "./evlog";
 import { sweepGraceWarnings } from "./reconcile";
 import { shortenRoutes, sweepExpiredAnonLinks } from "./routes/shorten";
 import { defaultNativeRegistration, sweepAbandonedOAuthClients } from "./mcp-oauth";
@@ -104,7 +104,7 @@ const app = new Hono<AppEnv>();
 // the root slug redirect are never wrapped/drained. The middleware still runs
 // for every route, attaching `log`; non-API handlers guard with `?.` since
 // evlog skips (and does not attach) filtered-out routes.
-app.use(evlogMiddleware);
+app.use(evlogMiddleware, evlogRequestContext);
 
 app.onError((err, c) => {
   // JSON errors always: the SPA's api() reads res.json().message and spreads
