@@ -19,14 +19,6 @@ const SITEVERIFY_URL = "https://challenges.cloudflare.com/turnstile/v0/siteverif
  * hold the form open. A timeout counts as unreachable, so it refuses. */
 const SITEVERIFY_TIMEOUT_MS = 10_000;
 
-/** Off unless TURNSTILE_SECRET_KEY is set, matching SENTRY_DSN and friends:
- * self-hosters run without it. Keyed on the secret, not the site key: a
- * secret with no site key must refuse every request, never quietly turn the
- * check off. */
-export function turnstileEnabled(env: Env): boolean {
-  return !!env.TURNSTILE_SECRET_KEY;
-}
-
 /** The fields of siteverify's answer this file reads. */
 const siteverifySchema = v.object({
   success: v.boolean(),
@@ -47,6 +39,12 @@ async function siteverify(secret: string, token: string): Promise<SiteverifyAnsw
       body: new URLSearchParams({ secret, response: token }),
       signal: AbortSignal.timeout(SITEVERIFY_TIMEOUT_MS),
     });
+    // siteverify answers 200 for a refusal too; anything else is Cloudflare
+    // having trouble, not a verdict.
+    if (!res.ok) {
+      console.error("turnstile_unreachable", res.status);
+      return null;
+    }
     const parsed = v.safeParse(siteverifySchema, await res.json());
     return parsed.success ? parsed.output : null;
   } catch (cause) {
@@ -67,6 +65,11 @@ function actionMatches(answer: SiteverifyAnswer, scope: TurnstileScope): boolean
 
 /**
  * Checks the token a form submitted.
+ *
+ * Off unless TURNSTILE_SECRET_KEY is set, matching SENTRY_DSN and friends:
+ * self-hosters run without it. Keyed on the secret, not the site key: a
+ * secret with no site key must refuse every request, never quietly turn the
+ * check off.
  *
  * The caller is told nothing beyond "no", because the reason tells a bot
  * which knob to turn; the log is where a support report finds out whether it

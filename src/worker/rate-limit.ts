@@ -77,7 +77,7 @@ function hex(bytes: ArrayBuffer): string {
 /** Keyed HMAC over `value`. The digest is the only form an identifier takes
  * once it leaves the request: what ends up in a rate-limit counter is never
  * the address itself. */
-export async function keyedDigest(secret: string, value: string): Promise<string> {
+async function keyedDigest(secret: string, value: string): Promise<string> {
   const encoder = new TextEncoder();
   const key = await crypto.subtle.importKey(
     "raw",

@@ -147,9 +147,9 @@ whose action is not the one it expects, so a token earned on one form cannot
 open another. Cloudflare's test secret never echoes an action, so that one
 check is skipped when `siteverify` says it answered with a testing key.
 
-**How it looks.** Mostly it does not: the widget is `interaction-only`,
-started on the form's first keystroke. If Cloudflare wants a click, the
-widget shows itself in the corner of the page.
+**How it looks.** It does not, unless Cloudflare wants a click. The widget
+is `interaction-only` and starts on the form's first keystroke; when
+Cloudflare asks for a click, it shows itself in the corner of the page.
 
 **Keys.** Create a widget at dash.cloudflare.com → Turnstile, with
 `rdyrct.com` as its hostname. Set both keys as secrets, `TURNSTILE_SITE_KEY`

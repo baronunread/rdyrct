@@ -61,18 +61,18 @@ test("the inlined theme bootstrap survives the production CSP", async ({ browser
  * the absence of complaints: the script loads from challenges.cloudflare.com
  * and the widget, rendered with Cloudflare's always-pass test key, hands back
  * a token, with no CSP violation along the way.
+ *
+ * The script is added here rather than left to the form: the form only loads
+ * it once /api/config hands over the site key, and this preview has no
+ * migrated database behind /api/config. Added as a <script> element, it is
+ * held to the same script-src as the app's own loader.
  */
 test("Turnstile solves a challenge under the production CSP", async ({ page }) => {
   await page.goto("/signup");
-
-  // /signup is prerendered, so an input typed before hydration finishes never
-  // reaches the handler that starts the widget. Type again until it is there.
-  let attempt = 0;
-  await expect(async () => {
-    attempt += 1;
-    await page.getByRole("textbox").first().fill(`csp-probe-${attempt}@example.com`);
-    await page.waitForFunction(() => !!window.turnstile, null, { timeout: 3_000 });
-  }).toPass({ timeout: 20_000 });
+  await page.addScriptTag({
+    url: "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit",
+  });
+  await page.waitForFunction(() => !!window.turnstile, null, { timeout: 15_000 });
 
   const token = await page.evaluate(
     (siteKey) =>

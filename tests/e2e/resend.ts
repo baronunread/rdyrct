@@ -60,7 +60,7 @@ export async function subjectsSentTo(page: Page, email: string): Promise<string[
     .map((item) => (isRecord(item) ? String(item.subject ?? "") : ""));
 }
 
-export async function latestOtp(page: Page, email: string) {
+async function latestOtp(page: Page, email: string) {
   let otp = "";
   await expect
     .poll(async () => {
