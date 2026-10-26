@@ -20,6 +20,7 @@ import {
   Trash2,
   TriangleAlert,
   Undo2,
+  X,
 } from "@/app/ui/icons";
 import { useAdminAnonLinks, useAdminLinks, useAdminReports } from "../../lib/hooks";
 import { api } from "../../lib/api";
@@ -47,32 +48,28 @@ import { BlockedHosts } from "./blocked-hosts";
 import { HoldReason } from "./hold-reason";
 import { Spinner } from "../../ui/spinner";
 
-/** The two columns both tables open with. Their widths differ because the
- * owned table has one fewer column to fit. */
-function SlugAndDestinationHeaders({
-  sort,
-  onSort,
-  linkWidth = "w-[15%]",
-  destinationWidth,
-}: {
-  sort: Sort;
-  onSort: (s: Sort) => void;
-  linkWidth?: string;
-  destinationWidth: string;
-}) {
+/** The two columns both tables open with. Destination has no width of its
+ * own: every other column is sized, so it takes what is left, which is the
+ * most room on the screen for the longest value in the row. */
+function SlugAndDestinationHeaders({ sort, onSort }: { sort: Sort; onSort: (s: Sort) => void }) {
   return (
     <>
-      <SortTh label="Link" sortKey="slug" sort={sort} onSort={onSort} className={linkWidth} />
-      <SortTh
-        label="Destination"
-        sortKey="destination"
-        sort={sort}
-        onSort={onSort}
-        className={destinationWidth}
-      />
+      <SortTh label="Link" sortKey="slug" sort={sort} onSort={onSort} className="w-[18%]" />
+      <SortTh label="Destination" sortKey="destination" sort={sort} onSort={onSort} />
     </>
   );
 }
+
+/** Column widths both link tables share. The short columns are fixed, so a
+ * badge or a date never takes room the destination needs. */
+const COL = {
+  check: "w-11 pr-0",
+  org: "w-[18%]",
+  risk: "w-28",
+  clicks: "w-20 text-right",
+  date: "w-28",
+  actions: "w-12 px-2",
+} as const;
 
 /** The id a mutation is currently working on, for the row that should show
  * itself as busy. */
@@ -179,11 +176,34 @@ function DeleteLinkDialog({
  * Null is not zero. An unscored link is one nobody has looked at, and showing
  * it as "clean" is how a provider outage turns into a table of green ticks.
  */
-function RiskBadge({ score, reasons }: { score: number | null; reasons: string[] }) {
+function RiskBadge({ score }: { score: number | null }) {
   if (score === null) return <Badge color="muted">unscored</Badge>;
-  if (score >= 100)
-    return <Badge color="pink">{reasons.map(riskLabel).join(", ") || "blocked"}</Badge>;
+  if (score >= 100) return <Badge color="pink">blocked</Badge>;
   return <Badge color="mint">clean</Badge>;
+}
+
+/** The verdict as a badge, and why it is blocked printed under it, the way a
+ * hold reason sits under "suspended". "Google: social engineering" does not
+ * fit in a badge in a narrow column, and truncated it says nothing. */
+function RiskCell({
+  score,
+  reasons,
+  children,
+}: {
+  score: number | null;
+  reasons: string[];
+  children?: React.ReactNode;
+}) {
+  const why = score !== null && score >= 100 ? reasons.map(riskLabel).join(", ") : "";
+  return (
+    <>
+      <span className="flex flex-wrap items-center gap-1">
+        <RiskBadge score={score} />
+        {children}
+      </span>
+      <HoldReason why={why || null} />
+    </>
+  );
 }
 
 /** "web_risk_social_engineering" reads "Google: social engineering". */
@@ -307,7 +327,7 @@ function ReportCountBadge({ count }: { count: number }) {
 function LinkRow({ link, ...actions }: { link: AdminLinkRow } & RowActions) {
   return (
     <tr className={link.suspendedAt ? "opacity-60" : undefined}>
-      <Td>
+      <Td className="pr-0">
         <input
           type="checkbox"
           aria-label={`Select ${link.slug}`}
@@ -317,8 +337,16 @@ function LinkRow({ link, ...actions }: { link: AdminLinkRow } & RowActions) {
         />
       </Td>
       <Td>
-        <span className="flex items-center gap-2">
-          <span className="truncate font-mono text-xs font-bold">{linkDisplayTitle(link.url)}</span>
+        {/* Wraps rather than squeezing: the badge drops under the slug when
+            the column is too narrow for both, instead of truncating the slug
+            to a few characters. */}
+        <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
+          <span
+            className="max-w-full min-w-0 truncate font-mono text-xs font-bold"
+            title={linkDisplayTitle(link.url)}
+          >
+            {linkDisplayTitle(link.url)}
+          </span>
           <StateBadge link={link} />
         </span>
         <HoldReason why={linkState(link)?.why ?? null} />
@@ -332,19 +360,19 @@ function LinkRow({ link, ...actions }: { link: AdminLinkRow } & RowActions) {
         <HrefLink
           href={`/admin/links?org=${encodeURIComponent(link.orgId)}`}
           className="block truncate hover:text-accent hover:underline"
+          title={link.orgName}
         >
           {link.orgName}
         </HrefLink>
       </Td>
       <Td>
-        <span className="flex flex-wrap items-center gap-1">
-          <RiskBadge score={link.riskScore} reasons={link.riskReasons} />
+        <RiskCell score={link.riskScore} reasons={link.riskReasons}>
           <ReportCountBadge count={link.reportCount} />
-        </span>
+        </RiskCell>
       </Td>
-      <Td className="tnum">{link.clicks}</Td>
+      <Td className="text-right tnum">{link.clicks}</Td>
       <Td className="whitespace-nowrap text-muted">{shortDate(link.createdAt)}</Td>
-      <Td>
+      <Td className="px-2">
         <LinkActions link={link} {...actions} />
       </Td>
     </tr>
@@ -427,16 +455,14 @@ function LinksTable({
     return <p className="py-6 text-center text-sm text-muted">No links match that search.</p>;
 
   return (
-    // Fixed, with widths that add to 100%. In an auto-layout table a long
-    // destination sets the column width and pushes everything past the card,
-    // and `max-w` on the cell is ignored.
-    //
-    // Columns drop one breakpoint at a time rather than all at once, so the
-    // table narrows smoothly instead of jumping between two layouts.
-    <Table fixed minWidth="min-w-[64rem]">
+    // Fixed layout. In an auto-layout table a long destination sets the
+    // column width and pushes everything past the card, and `max-w` on the
+    // cell is ignored. The minimum fits the admin column on a laptop, so the
+    // actions menu is on screen there; narrower than that, the card scrolls.
+    <Table fixed minWidth="min-w-[58rem]">
       <thead>
         <tr>
-          <Th className="w-[4%]">
+          <Th className={COL.check}>
             <input
               type="checkbox"
               aria-label="Select all links on this page"
@@ -445,35 +471,36 @@ function LinksTable({
               className="size-4 cursor-pointer accent-accent"
             />
           </Th>
-          <SlugAndDestinationHeaders
-            sort={sort}
-            onSort={onSort}
-            linkWidth="w-[24%]"
-            destinationWidth="w-[18%]"
-          />
+          <SlugAndDestinationHeaders sort={sort} onSort={onSort} />
           <SortTh
             label="Organization"
             sortKey="orgName"
             sort={sort}
             onSort={onSort}
-            className="w-[14%]"
+            className={COL.org}
           />
           <SortTh
             label="Risk"
             sortKey="riskScore"
             sort={sort}
             onSort={onSort}
-            className="w-[14%]"
+            className={COL.risk}
           />
-          <SortTh label="Clicks" sortKey="clicks" sort={sort} onSort={onSort} className="w-[8%]" />
+          <SortTh
+            label="Clicks"
+            sortKey="clicks"
+            sort={sort}
+            onSort={onSort}
+            className={COL.clicks}
+          />
           <SortTh
             label="Created"
             sortKey="createdAt"
             sort={sort}
             onSort={onSort}
-            className="w-[12%]"
+            className={COL.date}
           />
-          <Th className="w-[6%]" />
+          <Th className={COL.actions} />
         </tr>
       </thead>
       <tbody>
@@ -522,34 +549,36 @@ function AnonymousLinksTable({
   if (rows.length === 0)
     return <p className="py-6 text-center text-sm text-muted">Nothing here.</p>;
   return (
-    <Table fixed minWidth="min-w-[64rem]">
+    <Table fixed minWidth="min-w-[58rem]">
       <thead>
         <tr>
-          <SlugAndDestinationHeaders sort={sort} onSort={onSort} destinationWidth="w-[25%]" />
-          <Th className="w-[12%]">Organization</Th>
+          <SlugAndDestinationHeaders sort={sort} onSort={onSort} />
+          {/* Always "none" here, so it gets a short column, not the owned
+              table's wide one. */}
+          <Th className="w-28">Organization</Th>
           <SortTh
             label="Risk"
             sortKey="riskScore"
             sort={sort}
             onSort={onSort}
-            className="w-[12%]"
+            className={COL.risk}
           />
-          <Th className="w-[7%]">Clicks</Th>
+          <Th className={COL.clicks}>Clicks</Th>
           <SortTh
             label="Created"
             sortKey="createdAt"
             sort={sort}
             onSort={onSort}
-            className="w-[12%]"
+            className={COL.date}
           />
           <SortTh
             label="Expires"
             sortKey="expiresAt"
             sort={sort}
             onSort={onSort}
-            className="w-[12%]"
+            className={COL.date}
           />
-          <Th className="w-[8%]" />
+          <Th className={COL.actions} />
         </tr>
       </thead>
       <tbody>
@@ -563,14 +592,14 @@ function AnonymousLinksTable({
                     are the product boundary, not missing data. */}
             <Td className="text-muted">none</Td>
             <Td>
-              <RiskBadge score={link.riskScore} reasons={link.riskReasons} />
+              <RiskCell score={link.riskScore} reasons={link.riskReasons} />
             </Td>
-            <Td className="text-muted" title="Anonymous links record no clicks">
+            <Td className="text-right text-muted" title="Anonymous links record no clicks">
               none
             </Td>
             <Td className="whitespace-nowrap text-muted">{shortDate(link.createdAt)}</Td>
             <Td className="whitespace-nowrap text-muted">{shortDate(link.expiresAt)}</Td>
-            <Td>
+            <Td className="px-2">
               <RowMenu slug={link.slug} destination={link.destination}>
                 <MenuSeparator />
                 <MenuItem className="text-danger" onClick={() => onDelete(link)}>
@@ -666,6 +695,7 @@ function ReportOrg({ report: r }: { report: AdminReportRow }) {
     <HrefLink
       href={`/admin/links?org=${encodeURIComponent(r.orgId)}`}
       className="block truncate hover:text-accent hover:underline"
+      title={r.orgName ?? undefined}
     >
       {r.orgName}
     </HrefLink>
@@ -697,7 +727,7 @@ function ReportRow({
         {r.contact || "none"}
       </Td>
       <Td className="whitespace-nowrap text-muted">{shortDate(r.createdAt)}</Td>
-      <Td>
+      <Td className="px-2 text-right">
         <Button size="sm" variant="ghost" disabled={pending} onClick={() => onDismiss(r.id)}>
           Dismiss
         </Button>
@@ -729,13 +759,16 @@ function Reports() {
     <Table fixed minWidth="min-w-[56rem]">
       <thead>
         <tr>
+          {/* Note has no width: it is the free text, so it takes what the
+              sized columns leave. The last column fits the Dismiss button,
+              which a 6% column clipped behind the card's edge. */}
           <Th className="w-[14%]">Link</Th>
-          <Th className="w-[16%]">Organization</Th>
-          <Th className="w-[10%]">Reason</Th>
-          <Th className="w-[30%]">Note</Th>
-          <Th className="w-[14%]">Contact</Th>
-          <Th className="w-[10%]">When</Th>
-          <Th className="w-[6%]" />
+          <Th className={COL.org}>Organization</Th>
+          <Th className="w-28">Reason</Th>
+          <Th>Note</Th>
+          <Th className="w-[16%]">Contact</Th>
+          <Th className={COL.date}>When</Th>
+          <Th className="w-24 px-2" />
         </tr>
       </thead>
       <tbody>
@@ -879,9 +912,19 @@ function RestoreLinkDialog({
 /** Shown while the list is scoped to one organization, which is where a
  * click on an owner's name lands you. */
 function ClearOrgFilterButton({ orgName, onClear }: { orgName?: string; onClear: () => void }) {
+  const label = `Clear filter: ${orgName ?? "one organization"}`;
   return (
-    <Button size="sm" variant="outline" onClick={onClear}>
-      Clear {orgName ?? "organization"} filter
+    // Names the organization once, as the chip, so the row says what it is
+    // narrowed to. The same height as the search box and the select beside it.
+    <Button
+      variant="outline"
+      onClick={onClear}
+      aria-label={label}
+      title={label}
+      className="max-w-60"
+    >
+      <span className="truncate">{orgName ?? "Organization"}</span>
+      <X size={14} className="shrink-0 text-muted" />
     </Button>
   );
 }
@@ -926,7 +969,6 @@ function OwnedLinksToolbar({
       <Select
         aria-label="Filter by status"
         wrapperClass="w-36"
-        className="h-10"
         value={status}
         onChange={(e) => onStatus(STATUSES.find((s) => s.id === e.target.value)?.id ?? "all")}
       >
@@ -1104,15 +1146,18 @@ export function AdminLinksPage() {
   } satisfies Record<View, React.ReactNode>;
 
   return (
-    <div className="flex flex-col gap-4">
+    // The header keeps its own bottom margin, the one every page has; the gap
+    // below only spaces the tabs from the panel. Inside one gap container the
+    // two added up, and the tabs sat 40px under the subtitle instead of 24.
+    <div>
       <PageHeader
         title="Links"
         sub="Every link across every organization. Search by slug or destination."
       />
-
-      <Segmented items={VIEWS} value={view} onChange={setView} />
-
-      {panels[view]}
+      <div className="flex flex-col gap-4">
+        <Segmented items={VIEWS} value={view} onChange={setView} />
+        {panels[view]}
+      </div>
 
       <SuspendDialog link={suspending} onClose={() => setSuspending(null)} />
     </div>

@@ -98,6 +98,32 @@ test("a link row shows its open report count and why it was suspended", async ({
   await expect(row.getByText("2 reports")).toBeVisible({ timeout: 10_000 });
   // Printed in the row, not only on hover: a phone has no hover.
   await expect(row.getByText("asks for card numbers")).toBeVisible();
+
+  // The filter row lines up: search, status and the org chip were three
+  // heights, with the chip sitting lower than the select beside it.
+  const clear = page.getByRole("button", { name: /^Clear filter: / });
+  const controls = [
+    page.getByRole("textbox", { name: "Search links" }),
+    page.getByLabel("Filter by status"),
+    clear,
+  ];
+  const boxes = await Promise.all(controls.map((c) => c.boundingBox()));
+  for (const box of boxes) {
+    expect(box!.height).toBe(boxes[0]!.height);
+    expect(Math.abs(box!.y - boxes[0]!.y)).toBeLessThanOrEqual(1);
+  }
+  // On a laptop the whole table fits its card, actions menu included: it
+  // used to be wider than the column and hide the last column off the edge.
+  const tableScroll = await page.evaluate(() => {
+    const wrapper = document.querySelector("table")!.parentElement!;
+    return wrapper.scrollWidth - wrapper.clientWidth;
+  });
+  expect(tableScroll).toBeLessThanOrEqual(0);
+  await expect(row.getByRole("button", { name: /^Actions for / })).toBeInViewport();
+
+  await clear.click();
+  await expect(page).not.toHaveURL(/[?&]org=/);
+  await expect(clear).toHaveCount(0);
 });
 
 test("the users table keeps one line per user when the name and email are huge", async ({

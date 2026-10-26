@@ -503,6 +503,7 @@ export function AdminUsersPage() {
         }}
         placeholder="Search name or email…"
         label="Search users"
+        className="mb-4"
       />
       {/* Rows only: the header and search box above are real, so the
           page-level skeleton would draw a second one of each. */}
