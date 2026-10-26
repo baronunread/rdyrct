@@ -31,7 +31,7 @@ import { billingRoutes, handlePolarWebhook } from "./routes/billing";
 import { domainRoutes } from "./routes/domains";
 import { capRoutes } from "./routes/cap";
 import { revalidateOnRedirect } from "./risk";
-import { sweepAbusiveOrgs } from "./abuse";
+import { rescanFreeLinks, sweepAbuse } from "./destination-check";
 import { sweepClickUsageEmails } from "./click-caps";
 import { sweepOldOverflow } from "./click-overflow";
 import { reportRoutes } from "./routes/reports";
@@ -39,7 +39,15 @@ import { evlogMiddleware } from "./evlog";
 import { sweepGraceWarnings } from "./reconcile";
 import { shortenRoutes, sweepExpiredAnonLinks } from "./routes/shorten";
 import { defaultNativeRegistration, sweepAbandonedOAuthClients } from "./mcp-oauth";
-import { resolveSlug, resolveDomain, domainServing, type KVLink } from "./kv";
+import {
+  resolveSlug,
+  resolveDomain,
+  domainServing,
+  isHeld,
+  type KVLink,
+  type KVSlugValue,
+} from "./kv";
+import { heldPage, warnPage } from "./link-state-page";
 import { notFoundPage } from "./not-found-page";
 import { RESERVED_SLUGS, SLUG_RE } from "./util";
 import { markdownPage, withPageMeta } from "./page-meta";
@@ -164,12 +172,35 @@ function redirectWithClick(c: Context<AppEnv>, hit: KVLink): Response {
   return c.redirect(hit.url, 302);
 }
 
+/**
+ * What a live slug answers with (#344): the redirect, the warning page in
+ * front of it, or the "under review" page for a held link. Null for a miss
+ * or an expired alias, which each host answers in its own way.
+ *
+ * A warning view records a click, the same as a redirect would. It is a
+ * visit to the link, and the abuse sweep counts clicks: a warned link that
+ * stopped counting would hide exactly the traffic the sweep is there to see.
+ * The Continue button goes straight to the destination, so nothing on this
+ * host can be used to skip the warning.
+ */
+function serveLink(c: Context<AppEnv>, hit: KVSlugValue | null): Promise<Response> | null {
+  if (!hit || !isLive(hit)) return null;
+  if (isHeld(hit)) return heldPage(c.env.ASSETS, c.req.url);
+  if (hit.warn) {
+    c.executionCtx.waitUntil(
+      hit.orgId ? enqueueClick(c, hit) : countAnonClick(c.env, hit.linkId, c.req.method),
+    );
+    return warnPage(c.env.ASSETS, c.req.url, hit.url);
+  }
+  return Promise.resolve(redirectWithClick(c, hit));
+}
+
 // A temporary alias past its expiry stops resolving the instant it's asked
 // for, with no D1 read: the sweep in scheduled() retires the row and clears
 // the KV key later, but this check is what actually enforces the deadline.
 // `== null` (not `===`) on purpose: a KV value written before this field
 // existed has it `undefined`, which must mean "never expires" too.
-function isLive(hit: KVLink): boolean {
+function isLive(hit: KVSlugValue): boolean {
   return hit.expiresAt == null || hit.expiresAt > Date.now();
 }
 
@@ -195,7 +226,7 @@ async function resolveLink(
   c: Context<AppEnv>,
   slug: string,
   hostname: string | null,
-): Promise<KVLink | null> {
+): Promise<KVSlugValue | null> {
   const hit = await resolveSlug(c.env, slug, hostname);
   if (hit || !SLUG_RE.test(slug)) return hit;
   try {
@@ -216,8 +247,8 @@ async function resolveSharedLinkHost(c: Context<AppEnv>): Promise<Response> {
   // Somebody who types the bare host wants to know what it is.
   if (!slug) return c.redirect(c.env.APP_URL, 302);
   if (!slug.includes("/") && !RESERVED_SLUGS.has(slug.toLowerCase())) {
-    const hit = await resolveLink(c, slug, null);
-    if (hit && isLive(hit)) return redirectWithClick(c, hit);
+    const served = serveLink(c, await resolveLink(c, slug, null));
+    if (served) return served;
   }
   return notFoundPage(c.env.ASSETS, c.req.url, c.env.APP_URL);
 }
@@ -244,8 +275,8 @@ app.use("*", async (c, next) => {
   // a miss and falls all the way through to the domain's root redirect.
   const slug = path.slice(1).replace(/\/+$/, "");
   if (slug && !slug.includes("/")) {
-    const hit = await resolveLink(c, slug, host);
-    if (hit && isLive(hit)) return redirectWithClick(c, hit);
+    const served = serveLink(c, await resolveLink(c, slug, host));
+    if (served) return served;
   }
   // root and misses land on the org's configured root redirect
   if (domain.rootRedirect) return c.redirect(domain.rootRedirect, 302);
@@ -532,8 +563,8 @@ app.get("/:slug", async (c, next) => {
   // In any case: the fallback below moves /PRICING to /pricing, and 404s the
   // reserved words that are no page (/audit, /app).
   if (RESERVED_SLUGS.has(slug.toLowerCase())) return next();
-  const hit = await resolveLink(c, slug, null);
-  if (hit && isLive(hit)) return redirectWithClick(c, hit);
+  const served = serveLink(c, await resolveLink(c, slug, null));
+  if (served) return served;
   // A slug nobody registered, or one that has expired, is not a page. This
   // used to fall through to the SPA under a 200, so every mistyped or retired
   // short link was a soft 404 that canonicalled to the landing page, and a
@@ -635,7 +666,7 @@ const wrapped = Sentry.withSentry<
         // and there is no ordering dependency between them to preserve.
         await runIsolated([
           async () => void (await drainStorageOutbox(env)),
-          () => sweepAbusiveOrgs(env),
+          () => sweepAbuse(env),
           // The 80% and 100% tracked-click emails (#387).
           async () => void (await sweepClickUsageEmails(env)),
         ]);
@@ -702,11 +733,13 @@ const wrapped = Sentry.withSentry<
 
       // Daily as well as every 10 minutes: apply the storage work the queue
       // never took (#118), and check for a free org over the redirect ceiling
-      // (#224). Isolated from each other and from every sweep above: one
-      // throwing must not stop the other from starting.
+      // (#224). Daily only: ask Google Web Risk again about the live free
+      // links it has not seen for a week (#341). Isolated from each other and
+      // from every sweep above: one throwing must not stop another starting.
       await runIsolated([
         async () => void (await drainStorageOutbox(env)),
-        () => sweepAbusiveOrgs(env),
+        () => sweepAbuse(env),
+        async () => void (await rescanFreeLinks(env)),
         // The 80% and 100% tracked-click emails (#387).
         async () => void (await sweepClickUsageEmails(env)),
       ]);

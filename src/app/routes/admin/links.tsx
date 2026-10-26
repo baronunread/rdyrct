@@ -12,7 +12,15 @@
  */
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Ban, Ellipsis, ExternalLink, ShieldQuestionMark, Trash2, Undo2 } from "@/app/ui/icons";
+import {
+  Ban,
+  Ellipsis,
+  ExternalLink,
+  ShieldQuestionMark,
+  Trash2,
+  TriangleAlert,
+  Undo2,
+} from "@/app/ui/icons";
 import { useAdminAnonLinks, useAdminLinks, useAdminReports } from "../../lib/hooks";
 import { api } from "../../lib/api";
 import { linkDisplayTitle } from "../../lib/link-display";
@@ -36,6 +44,7 @@ import { sortRows } from "../../lib/sort";
 import { useSearchParams, HrefLink } from "../../lib/router-search";
 import { Segmented } from "../../ui/segmented";
 import { BlockedHosts } from "./blocked-hosts";
+import { HoldReason } from "./hold-reason";
 import { Spinner } from "../../ui/spinner";
 
 /** The two columns both tables open with. Their widths differ because the
@@ -71,6 +80,11 @@ function pendingId(mutation: { isPending: boolean; variables?: string }): string
   return mutation.isPending ? (mutation.variables ?? null) : null;
 }
 
+/** The same, for a mutation that takes the whole row. */
+function pendingLinkId(mutation: { isPending: boolean; variables?: AdminLinkRow }) {
+  return pendingId({ isPending: mutation.isPending, variables: mutation.variables?.id });
+}
+
 /** What a row can be told to do. One type because the row, its menu, and the
  * table all pass the same five things down. */
 type RowActions = {
@@ -81,6 +95,8 @@ type RowActions = {
   onDelete: (l: AdminLinkRow) => void;
   onRescore: (l: AdminLinkRow) => void;
   rescoring: boolean;
+  onWarn: (l: AdminLinkRow) => void;
+  warning: boolean;
 };
 
 /** The actions menu both tables hang off a row: same trigger, same first
@@ -165,9 +181,18 @@ function DeleteLinkDialog({
  */
 function RiskBadge({ score, reasons }: { score: number | null; reasons: string[] }) {
   if (score === null) return <Badge color="muted">unscored</Badge>;
-  if (score >= 100) return <Badge color="pink">{reasons.join(", ") || "blocked"}</Badge>;
+  if (score >= 100)
+    return <Badge color="pink">{reasons.map(riskLabel).join(", ") || "blocked"}</Badge>;
   return <Badge color="mint">clean</Badge>;
 }
+
+/** "web_risk_social_engineering" reads "Google: social engineering". */
+const riskLabel = (reason: string) =>
+  reason === "dns_blocklist"
+    ? "DNS blocklist"
+    : reason.startsWith("web_risk_")
+      ? `Google: ${reason.slice("web_risk_".length).replaceAll("_", " ")}`
+      : reason;
 
 function SuspendDialog({ link, onClose }: { link: AdminLinkRow | null; onClose: () => void }) {
   const toast = useToast();
@@ -228,14 +253,43 @@ function SuspendDialog({ link, onClose }: { link: AdminLinkRow | null; onClose: 
   );
 }
 
-/** One row. Its own component because a table row with two conditional
- * actions and a truncating cell is a component, not an expression. */
-function SuspendedBadge({ link }: { link: AdminLinkRow }) {
-  if (!link.suspendedAt) return null;
+/** Suspended, or redirecting behind a warning page (#344), and why. */
+function linkState(link: AdminLinkRow) {
+  if (link.suspendedAt)
+    return { color: "pink" as const, label: "suspended", why: link.suspendReason };
+  if (link.warnedAt) return { color: "butter" as const, label: "warning", why: link.warnReason };
+  return null;
+}
+
+/** The row's state as a pill; HoldReason under it says why. The visitor
+ * never sees that. */
+function StateBadge({ link }: { link: AdminLinkRow }) {
+  const state = linkState(link);
+  if (!state) return null;
   return (
-    <span className="shrink-0" title={link.suspendReason ?? undefined}>
-      <Badge color="pink">suspended</Badge>
+    <span className="shrink-0">
+      <Badge color={state.color}>{state.label}</Badge>
     </span>
+  );
+}
+
+/** Put a warning page in front of a link, or take it off (#344). A suspended
+ * link serves nothing, so there is nothing to warn about. */
+function WarnMenuItem({
+  link,
+  warning,
+  onWarn,
+}: {
+  link: AdminLinkRow;
+  warning: boolean;
+  onWarn: (l: AdminLinkRow) => void;
+}) {
+  if (link.suspendedAt) return null;
+  return (
+    <MenuItem disabled={warning} onClick={() => onWarn(link)}>
+      {warning ? <Spinner /> : <TriangleAlert size={14} />}{" "}
+      {link.warnedAt ? "Remove warning" : "Show a warning"}
+    </MenuItem>
   );
 }
 
@@ -263,11 +317,11 @@ function LinkRow({ link, ...actions }: { link: AdminLinkRow } & RowActions) {
         />
       </Td>
       <Td>
-        {/* One line, so a suspended row is as tall as any other. */}
         <span className="flex items-center gap-2">
           <span className="truncate font-mono text-xs font-bold">{linkDisplayTitle(link.url)}</span>
-          <SuspendedBadge link={link} />
+          <StateBadge link={link} />
         </span>
+        <HoldReason why={linkState(link)?.why ?? null} />
       </Td>
       <Td className="truncate font-mono text-xs text-muted" title={link.destination}>
         {link.destination}
@@ -309,12 +363,15 @@ function LinkActions({
   onDelete,
   onRescore,
   rescoring,
+  onWarn,
+  warning,
 }: { link: AdminLinkRow } & Omit<RowActions, "selected" | "onSelect">) {
   return (
     <RowMenu slug={link.slug} destination={link.destination}>
       <MenuItem disabled={rescoring} onClick={() => onRescore(link)}>
         {rescoring ? <Spinner /> : <ShieldQuestionMark size={14} />} Re-check destination
       </MenuItem>
+      <WarnMenuItem link={link} warning={warning} onWarn={onWarn} />
       <MenuSeparator />
       {link.suspendedAt ? (
         <MenuItem onClick={() => onRestore(link)}>
@@ -342,6 +399,8 @@ function LinksTable({
   onDelete,
   onRescore,
   rescoringId,
+  onWarn,
+  warningId,
   selectedIds,
   onSelect,
   onSelectAll,
@@ -358,6 +417,8 @@ function LinksTable({
   onDelete: (l: AdminLinkRow) => void;
   onRescore: (l: AdminLinkRow) => void;
   rescoringId: string | null;
+  onWarn: (l: AdminLinkRow) => void;
+  warningId: string | null;
 }) {
   // Rows only: this sits below the real header and the real search box,
   // and the page-level skeleton would draw a second one of each.
@@ -425,6 +486,8 @@ function LinksTable({
             onDelete={onDelete}
             onRescore={onRescore}
             rescoring={rescoringId === link.id}
+            onWarn={onWarn}
+            warning={warningId === link.id}
             selected={selectedIds.has(link.id)}
             onSelect={onSelect}
           />
@@ -753,7 +816,25 @@ function useOwnedLinkActions(onRestored: () => void, onDeleted: () => void) {
     onError: withErrorToast(toast),
   });
 
-  return { restore, restoreMany, remove, rescore };
+  /** One click either way, no confirmation: the link keeps working. */
+  const warn = useMutation({
+    mutationFn: (link: AdminLinkRow) =>
+      api<{ warned: boolean }>(`/admin/links/${link.id}/warning`, {
+        method: "PATCH",
+        body: { warned: !link.warnedAt },
+      }),
+    onSuccess: async ({ warned }) => {
+      await refresh();
+      toast(
+        warned
+          ? "Warning on. Visitors see where the link goes before they continue."
+          : "Warning removed. The link redirects straight away.",
+      );
+    },
+    onError: withErrorToast(toast),
+  });
+
+  return { restore, restoreMany, remove, rescore, warn };
 }
 
 /** What a re-check has to say. "Unscored" is reported as such, never as
@@ -811,6 +892,7 @@ const STATUSES = [
   { id: "all", label: "All" },
   { id: "active", label: "Active" },
   { id: "suspended", label: "Suspended" },
+  { id: "warned", label: "Warning" },
 ] as const;
 type Status = (typeof STATUSES)[number]["id"];
 
@@ -937,7 +1019,7 @@ function OwnedLinks({ onSuspend }: { onSuspend: (l: AdminLinkRow) => void }) {
   const [status, setStatus] = useState<Status>("all");
   const selection = useSelection();
   const { data, isPending } = useAdminLinks({ q: search, status, org: orgFilter });
-  const { restore, restoreMany, remove, rescore } = useOwnedLinkActions(
+  const { restore, restoreMany, remove, rescore, warn } = useOwnedLinkActions(
     () => setRestoring(null),
     () => setDeleting(null),
   );
@@ -986,6 +1068,8 @@ function OwnedLinks({ onSuspend }: { onSuspend: (l: AdminLinkRow) => void }) {
         onDelete={setDeleting}
         onRescore={(link) => rescore.mutate(link.id)}
         rescoringId={pendingId(rescore)}
+        onWarn={(link) => warn.mutate(link)}
+        warningId={pendingLinkId(warn)}
       />
       <Pager page={safePage} totalPages={totalPages} onPageChange={setPage} />
 

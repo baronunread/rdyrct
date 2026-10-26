@@ -36,7 +36,8 @@ import {
 import { jsonBodyLimit } from "../body-limit";
 import { assertNotShortener } from "../abuse";
 import { assertNotBlocked, assertNotOwnShortLink, holdIfSuspicious } from "../abuse-hold";
-import { scoreAndRecord } from "../risk";
+import { checkLinkDestination } from "../destination-check";
+import { orgLinkWarning } from "../link-warning";
 import { claimAnonLink } from "./shorten";
 import { cursorValueOf, linkPageQuery, readLinkPageParams, takePage } from "../links-page";
 import { clicksForLink, linkClicksTotal } from "../rollups";
@@ -691,6 +692,11 @@ export function newLinkRow(
     suspendedAt: null,
     suspendedBy: null,
     suspendReason: null,
+    // Nor warned (#344), unless the caller copies the org's warning in
+    // (orgLinkWarning); a report or the sweep sets it later.
+    warnedAt: null,
+    warnReason: null,
+    webRiskCheckedAt: null,
   };
 }
 
@@ -846,7 +852,13 @@ linkRoutes.post("/", requireOrgRole("member"), async (c) => {
   const link = newLinkRow(orgId, domainId, slug, body, utm, c.var.user!.id);
   // A scam-shaped destination is created on hold: it exists, and a human
   // decides whether it redirects. Applied before the insert so it never serves.
-  Object.assign(link, await holdIfSuspicious(c.env, db, orgId, plan, link.destination));
+  // Otherwise it is born warned while the org is (#344), so a warned org
+  // cannot get round the warning page by making a fresh link.
+  Object.assign(
+    link,
+    (await holdIfSuspicious(c.env, db, orgId, plan, link.destination)) ??
+      (await orgLinkWarning(db, orgId)),
+  );
   const address = newAddressRow(link.id, orgId, domainId, slug, "primary", "created");
   // Atomic: the link insert, the org's links-cap-guarded address insert, and
   // a compensating delete (only if the cap was hit) all run in one D1 batch,
@@ -857,8 +869,8 @@ linkRoutes.post("/", requireOrgRole("member"), async (c) => {
   if (!inserted) await refuseAddressInsert(db, orgId);
   await enqueueStorage(c.env, [syncLinkMsg(link.slug, hostname)]);
   // Score the destination after the response (#68), the way clicks are
-  // recorded: it scores, it never blocks, and nobody waits on it.
-  c.executionCtx.waitUntil(scoreAndRecord(c.env.DB, link.id, link.destination));
+  // recorded: nobody waits on it. Only a Web Risk hit acts (#341).
+  c.executionCtx.waitUntil(checkLinkDestination(c.env, link));
   return c.json(
     { ...toDTO(c.env, link, 0, hostname, 1), ...(await quotaUsageFields(db, orgId)) },
     201,
@@ -917,7 +929,16 @@ function riskAfterDestinationChange(
   destination: string,
 ) {
   if (destination === existing.destination) return {};
-  return { riskScore: null, riskReasons: null, riskCheckedAt: null, riskProvider: null };
+  // Web Risk's stamp too: it was for the old destination. Left in place, a
+  // lookup the new one never got (over budget, Google down) would keep the
+  // link out of the rescan for the week the old stamp still buys.
+  return {
+    riskScore: null,
+    riskReasons: null,
+    riskCheckedAt: null,
+    riskProvider: null,
+    webRiskCheckedAt: null,
+  };
 }
 
 /** A moved link leaves a stale key behind: syncing that old key finds no row
@@ -1118,7 +1139,7 @@ linkRoutes.patch("/:linkId", requireOrgRole("member"), async (c) => {
   // the link reads as unscored from the moment it changed rather than
   // carrying the previous destination's clean bill until this finishes.
   if (updated.destination !== existing.destination)
-    c.executionCtx.waitUntil(scoreAndRecord(c.env.DB, existing.id, updated.destination));
+    c.executionCtx.waitUntil(checkLinkDestination(c.env, updated));
 
   return c.json(await linkWithQuota(c.env, db, orgId, updated));
 });

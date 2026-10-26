@@ -69,11 +69,11 @@ export function redirectsByOrg(db: DB, since: number, min: number) {
 
 /**
  * Every link made since `linksSince` with at least `min` redirects since
- * `since`, stored or dropped, as its org and its count.
+ * `since`, stored or dropped, with its org and its count.
  */
 export function newLinksWithRedirects(db: DB, since: number, linksSince: number, min: number) {
-  return db.all<{ orgId: string; n: number }>(sql`
-    select org_id as orgId, sum(n) as n from (
+  return db.all<{ orgId: string; linkId: string; n: number }>(sql`
+    select org_id as orgId, link_id as linkId, sum(n) as n from (
       select c.org_id, c.link_id, count(*) as n
       from clicks c join links l on l.id = c.link_id
       where c.ts >= ${since} and l.created_at >= ${linksSince}
@@ -86,6 +86,27 @@ export function newLinksWithRedirects(db: DB, since: number, linksSince: number,
     )
     group by org_id, link_id
     having sum(n) >= ${min}`);
+}
+
+/** The org's link with the most redirects since `since`, stored or dropped,
+ * or null. */
+export async function busiestLinkSince(
+  db: DB,
+  orgId: string,
+  since: number,
+): Promise<string | null> {
+  const [top] = await db.all<{ linkId: string }>(sql`
+    select link_id as linkId from (
+      select link_id, count(*) as n from clicks
+      where org_id = ${orgId} and ts >= ${since} group by link_id
+      union all
+      select link_id, sum(clicks) from click_overflow
+      where org_id = ${orgId} and minute >= ${fromMinute(since)} group by link_id
+    )
+    group by link_id
+    order by sum(n) desc
+    limit 1`);
+  return top?.linkId ?? null;
 }
 
 /** Daily: drop counts older than any window the sweep reads. In bounded

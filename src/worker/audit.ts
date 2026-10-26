@@ -23,6 +23,8 @@ export type AdminAction =
   | "link.unsuspend"
   | "link.delete"
   | "link.rescore"
+  | "link.warn"
+  | "link.unwarn"
   | "org.suspend_links"
   | "org.unsuspend_links"
   | "org.delete"

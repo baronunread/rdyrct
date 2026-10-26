@@ -581,6 +581,8 @@ export interface AdminOrgRow {
   ownerEmail: string | null;
   /** When the org's links were suspended, or null. */
   linksSuspendedAt: number | null;
+  /** Why, from the held link that caused it, or null when nothing is held. */
+  suspendReason: string | null;
   /** When the sweep or enough reports flagged the org for a human look. */
   reviewFlaggedAt: number | null;
 }
@@ -617,6 +619,9 @@ export interface AdminLinkRow {
   clicks: number;
   suspendedAt: number | null;
   suspendReason: string | null;
+  /** A warning page in front of the redirect (#344). Null means none. */
+  warnedAt: number | null;
+  warnReason: string | null;
   /** Destination scoring (#68). Null means unscored, never clean. */
   riskScore: number | null;
   riskReasons: string[];

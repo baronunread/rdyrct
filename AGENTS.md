@@ -326,7 +326,7 @@ and vars live in `wrangler.jsonc`; local dev reads everything from `.dev.vars`
 `BETTER_AUTH_SECRET`, `SUPERADMIN_EMAIL`, `RESEND_API_KEY`, `MAIL_FROM`,
 `APP_URL`, `APP_HOST`, `POLAR_ACCESS_TOKEN`/`POLAR_WEBHOOK_SECRET`/
 `POLAR_PRO_PRODUCT_ID`/`POLAR_HOBBY_PRODUCT_ID`, `CF_API_TOKEN`/`CF_ZONE_ID`,
-`SENTRY_DSN`.
+`SENTRY_DSN`, `WEB_RISK_API_KEY` (optional; unset skips Google Web Risk).
 
 ## Layout
 

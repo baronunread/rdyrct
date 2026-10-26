@@ -316,7 +316,7 @@ Short.io beats rdyrct on price and free-plan size. rdyrct is the better pick whe
       "What rdyrct stores and what it does not: click analytics keep country, referrer, device and time, never an IP address or a precise location.",
     markdown: `# Privacy policy
 
-This policy explains what rdyrct collects, why, the legal basis for it, and how you can exercise your rights. Last updated 22 October 2026.
+This policy explains what rdyrct collects, why, the legal basis for it, and how you can exercise your rights. Last updated 25 October 2026.
 
 ## Data controller
 
@@ -330,7 +330,7 @@ If you accept analytics, PostHog records product events tied to your account. It
 
 ## Why we process it
 
-We process account and organization data to provide the service, send transactional email, and provide click analytics. The session cookie is necessary to sign you in. PostHog runs only with your consent, which you can withdraw at any time from Cookie settings. We ask again after six months. We process technical error reports to keep the service secure and reliable.
+We process account and organization data to provide the service, send transactional email, and provide click analytics. The session cookie is necessary to sign you in. PostHog runs only with your consent, which you can withdraw at any time from Cookie settings. We ask again after six months. We process technical error reports to keep the service secure and reliable. We check where links point against Google's list of unsafe sites to keep phishing and malware off the service.
 
 ## Cookies
 
@@ -338,7 +338,7 @@ rdyrct sets a necessary session cookie. If you accept analytics, PostHog also se
 
 ## Sub-processors
 
-We use Cloudflare for hosting and storage, Resend for transactional email, Polar for billing, PostHog EU for product analytics, and Sentry for error monitoring.
+We use Cloudflare for hosting and storage, Resend for transactional email, Polar for billing, PostHog EU for product analytics, Sentry for error monitoring, and Google Web Risk to check links. Google receives the destination address of a link when the link is created or edited, when we check it again each week, and when its traffic jumps, and checks it against Google's list of unsafe sites. It receives nothing about you or the people who click the link.
 
 ## Retention and rights
 
@@ -352,7 +352,7 @@ For help, email [support@mail.rdyrct.com](mailto:support@mail.rdyrct.com).`,
       "The rules for using rdyrct: acceptable use for links and QR codes, account and organization responsibilities, billing via Polar, and the self-host license.",
     markdown: `# Terms of service
 
-These terms govern your use of rdyrct. By creating an account or using the service, you agree to them. Last updated 24 October 2026.
+These terms govern your use of rdyrct. By creating an account or using the service, you agree to them. Last updated 25 October 2026.
 
 ## Acceptance and acceptable use
 
@@ -360,7 +360,7 @@ Use rdyrct only if you agree to these terms. Do not create links that are illega
 
 ## Reporting abuse and appeals
 
-Report a link with the [report form](/report). A report alone never suspends a link. To appeal a pause or suspension, email [support@mail.rdyrct.com](mailto:support@mail.rdyrct.com) with the name of your organization and what the link is for.
+Report a link with the [report form](/report). A report alone never suspends a link. On the free plan it shows visitors a warning first, and the link keeps working. To appeal a pause or suspension, email [support@mail.rdyrct.com](mailto:support@mail.rdyrct.com) with the name of your organization and what the link is for.
 
 ## Accounts and organizations
 

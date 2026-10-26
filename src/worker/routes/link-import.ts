@@ -35,6 +35,7 @@ import { blockHostOf } from "@/shared/abuse-rules";
 import { isShortenerDestination } from "../abuse";
 import { assertNotOwnShortLink } from "../abuse-hold";
 import { newAddressRow, newLinkRow } from "./links";
+import { orgLinkWarning } from "../link-warning";
 import {
   CHECK_CHUNK_ROWS,
   IMPORT_CHUNK_ROWS,
@@ -598,15 +599,20 @@ async function writeLinks(
   linkLimit: number,
 ): Promise<Map<number, { id: string; destination: string }>> {
   if (!plans.length) return new Map();
+  // Born warned while the org is (#344), the same as a link made by hand.
+  const warning = await orgLinkWarning(db, orgId);
   const created = plans.map((plan) => {
-    const link = newLinkRow(
-      orgId,
-      plan.domainId,
-      plan.row.slug,
-      { destination: plan.destination, title: plan.row.title },
-      plan.utm,
-      userId,
-    );
+    const link = {
+      ...newLinkRow(
+        orgId,
+        plan.domainId,
+        plan.row.slug,
+        { destination: plan.destination, title: plan.row.title },
+        plan.utm,
+        userId,
+      ),
+      ...warning,
+    };
     const address = newAddressRow(
       link.id,
       orgId,

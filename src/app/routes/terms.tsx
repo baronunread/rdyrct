@@ -19,7 +19,7 @@ export function TermsPage() {
     <LegalPageLayout
       authed={authed}
       title="Terms of service"
-      intro="These terms govern your use of rdyrct. By creating an account or using the service, you agree to them. Last updated 24 October 2026."
+      intro="These terms govern your use of rdyrct. By creating an account or using the service, you agree to them. Last updated 25 October 2026."
     >
       <WebMcpMarketingTools />
 
@@ -55,8 +55,8 @@ export function TermsPage() {
             report form
           </a>
           . We review reports and act on the ones that break these terms. A report alone never
-          suspends a link. When we pause or suspend your links we email you the reason. To appeal,
-          write to{" "}
+          suspends a link. On the free plan it shows visitors a warning first, and the link keeps
+          working. When we pause or suspend your links we email you the reason. To appeal, write to{" "}
           <a href={`mailto:${SUPPORT_EMAIL}`} className="text-accent hover:underline">
             {SUPPORT_EMAIL}
           </a>{" "}
