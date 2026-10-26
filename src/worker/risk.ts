@@ -49,9 +49,10 @@ type DnsJson = {
   Answer?: { data?: string }[];
 };
 
-/** What Web Risk needs: its key, and the KV namespace its answers are cached
- * in. Without `LINKS` (unit tests) every lookup goes to Google. */
-export type WebRiskEnv = Pick<Env, "WEB_RISK_API_KEY"> & Partial<Pick<Env, "LINKS">>;
+/** What Web Risk needs: its key, the KV namespace its answers are cached in,
+ * and D1 for the daily cap. Without `LINKS` (unit tests) every lookup goes to
+ * Google; without `DB` none is counted. */
+export type WebRiskEnv = Pick<Env, "WEB_RISK_API_KEY"> & Partial<Pick<Env, "LINKS" | "DB">>;
 
 /** Asked before each call to Google that the cache did not answer. False
  * means the caller is out of lookups for today (destination-check.ts). */
@@ -236,11 +237,46 @@ function hitTtlSeconds(expireTime: string | undefined): number {
   return Math.min(max, life) - KV_EDGE_STALE_SECONDS;
 }
 
-/** One call to Google for an already-canonical URI. */
-async function lookupWebRisk(uri: string, key: string): Promise<WebRiskAnswer | null> {
+/** Calls to Google a day, site-wide. Google lists no per-day quota for the
+ * Lookup API, and the free tier is 100,000 calls a month: 3,000 a day stays
+ * under it in a 31-day month. */
+export const WEB_RISK_LOOKUPS_PER_DAY = 3_000;
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/** Today, as days since the epoch (UTC): the key of `web_risk_usage`. */
+export const webRiskDay = (now = Date.now()) => Math.floor(now / DAY_MS);
+
+/**
+ * Takes one call from today's site-wide allowance. False once the day has
+ * spent WEB_RISK_LOOKUPS_PER_DAY: the upsert's WHERE skips the update, and
+ * RETURNING then gives no row. One statement, so two Workers asking at once
+ * cannot both take the last call.
+ */
+export async function takeWebRiskLookup(d1: D1Database, now = Date.now()): Promise<boolean> {
+  const row = await d1
+    .prepare(
+      `insert into web_risk_usage (day, lookups) values (?1, 1)
+       on conflict (day) do update set lookups = lookups + 1 where lookups < ?2
+       returning lookups`,
+    )
+    .bind(webRiskDay(now), WEB_RISK_LOOKUPS_PER_DAY)
+    .first();
+  return row !== null;
+}
+
+/** One call to Google for an already-canonical URI, counted against the
+ * day's cap when given D1. "capped" when the cap is spent and nobody asked;
+ * null when Google did not answer. */
+async function lookupWebRisk(
+  uri: string,
+  key: string,
+  d1?: D1Database,
+): Promise<WebRiskAnswer | "capped" | null> {
   const params = new URLSearchParams({ uri });
   for (const threat of WEB_RISK_THREATS) params.append("threatTypes", threat);
   try {
+    if (d1 && !(await takeWebRiskLookup(d1))) return "capped";
     const res = await fetch(`${WEB_RISK_SEARCH}?${params}`, {
       headers: { "x-goog-api-key": key },
       signal: AbortSignal.timeout(LOOKUP_TIMEOUT_MS),
@@ -279,18 +315,21 @@ function readWebRiskAnswer({ threat }: v.InferOutput<typeof webRiskAnswerSchema>
 export async function webRiskVerdict(
   destination: string,
   key: string,
+  d1?: D1Database,
 ): Promise<RiskVerdict | null> {
   const uri = webRiskUri(destination);
-  return uri ? ((await lookupWebRisk(uri, key))?.verdict ?? null) : null;
+  const answer = uri ? await lookupWebRisk(uri, key, d1) : null;
+  return answer && answer !== "capped" ? answer.verdict : null;
 }
 
 /**
  * What Web Risk said about one lookup, for the wide event. "failed" is the
  * one a null verdict hides: Google errored, timed out or answered a shape we
  * do not read, and the DNS check stood alone. "over_budget" means the org had
- * spent its lookups for the day and nobody asked. "off" means no key is set.
+ * spent its lookups for the day and nobody asked; "capped" means the same of
+ * the whole site (WEB_RISK_LOOKUPS_PER_DAY). "off" means no key is set.
  */
-export type WebRiskOutcome = "hit" | "clean" | "failed" | "over_budget" | "off";
+export type WebRiskOutcome = "hit" | "clean" | "failed" | "over_budget" | "capped" | "off";
 
 /** Whether Google gave an answer, which is what stamps web_risk_checked_at. */
 export function webRiskAnswered(outcome: WebRiskOutcome): boolean {
@@ -332,7 +371,8 @@ export async function askWebRisk(
     const cached = await env.LINKS?.get<RiskVerdict>(cacheKey, "json");
     if (cached) return answered(cached);
     if (spendLookup && !(await spendLookup())) return { verdict: null, outcome: "over_budget" };
-    const answer = await lookupWebRisk(uri, key);
+    const answer = await lookupWebRisk(uri, key, env.DB);
+    if (answer === "capped") return { verdict: null, outcome: "capped" };
     if (!answer) return { verdict: null, outcome: "failed" };
     // Its own catch: KV refuses a second write to one key within a second,
     // and losing the cache entry must not lose Google's answer with it.

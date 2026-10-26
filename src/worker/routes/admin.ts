@@ -27,6 +27,7 @@ import { banUser, ownedDestinationHosts, unbanUser } from "../abuse-hold";
 import { jsonBodyLimit } from "../body-limit";
 import { adminLinkRoutes } from "./admin-links";
 import { recordAdminAction } from "../audit";
+import { WEB_RISK_LOOKUPS_PER_DAY, webRiskDay } from "../risk";
 
 // An org's effective plan is its owner's plan (billing is per-user). A single
 // correlated subquery pulls it for list views. Note: `user` is a SQL keyword,
@@ -314,6 +315,22 @@ function projectTableGrowth(seriesRows: { day: string; clicks: number }[], table
 
 /* ─────────── /usage ─────────── */
 
+/** Today's calls to Google Web Risk and this UTC month's, from the counter
+ * the daily cap spends (risk.ts, takeWebRiskLookup). */
+async function webRiskUsage(db: DB) {
+  const today = webRiskDay();
+  const now = new Date();
+  const monthStart = webRiskDay(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+  const [row] = await db
+    .select({
+      today: sql<number>`coalesce(sum(case when ${schema.webRiskUsage.day} = ${today} then ${schema.webRiskUsage.lookups} end), 0)`,
+      month: sql<number>`coalesce(sum(${schema.webRiskUsage.lookups}), 0)`,
+    })
+    .from(schema.webRiskUsage)
+    .where(gte(schema.webRiskUsage.day, monthStart));
+  return { today: row?.today ?? 0, month: row?.month ?? 0, perDay: WEB_RISK_LOOKUPS_PER_DAY };
+}
+
 adminRoutes.get("/usage", async (c) => {
   const log = c.get("log");
   log.set({ route: "usage" });
@@ -573,6 +590,7 @@ adminRoutes.get("/usage", async (c) => {
     tableSize,
     tableGrowth,
     tableProjectedDays,
+    webRisk: await webRiskUsage(db),
   } satisfies AdminUsage);
 });
 

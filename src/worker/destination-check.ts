@@ -65,6 +65,7 @@ export async function checkLinkDestination(
     );
     log.set({ webRisk: { outcome: webRisk } });
     if (webRisk === "failed") log.warn("Web Risk did not answer");
+    if (webRisk === "capped") log.warn("Web Risk's daily cap is spent");
     if (!verdict || !isWebRiskHit(verdict)) return;
     try {
       await holdForWebRisk(env, db, linkId, verdict);
@@ -270,8 +271,9 @@ const RESCAN_CONCURRENCY = 10;
 /**
  * Look again at the live free-plan links Web Risk has not seen for a week,
  * oldest first, and hold any it now lists. Paid links are checked when made
- * and edited only: their owners went through billing. Returns how many links
- * Web Risk answered for.
+ * and edited: their owners went through billing. A paid link Google was
+ * never asked about (the site's daily cap was spent when it was made) comes
+ * after every free one. Returns how many links Web Risk answered for.
  */
 export async function rescanFreeLinks(env: Env): Promise<number> {
   // No billing means no free plan: every org is unlimited (plan.ts).
@@ -288,20 +290,29 @@ export async function rescanFreeLinks(env: Env): Promise<number> {
     .where(
       and(
         isNull(schema.links.suspendedAt),
-        eq(schema.user.plan, "free"),
         or(
           isNull(schema.links.webRiskCheckedAt),
-          lt(schema.links.webRiskCheckedAt, Date.now() - RESCAN_EVERY_MS),
+          and(
+            eq(schema.user.plan, "free"),
+            lt(schema.links.webRiskCheckedAt, Date.now() - RESCAN_EVERY_MS),
+          ),
         ),
       ),
     )
-    .orderBy(sql`${schema.links.webRiskCheckedAt} is not null`, asc(schema.links.webRiskCheckedAt))
+    .orderBy(
+      sql`${schema.user.plan} != 'free'`,
+      sql`${schema.links.webRiskCheckedAt} is not null`,
+      asc(schema.links.webRiskCheckedAt),
+    )
     .limit(WEB_RISK_RESCAN_BATCH);
 
   // One wide event for the run, with a count per outcome: a Google outage
   // shows up as one `failed` number, not 150 warnings.
   const log = createLogger({ operation: "web_risk.rescan" });
-  const counts = { hit: 0, clean: 0, failed: 0, error: 0 } satisfies Record<RescanOutcome, number>;
+  const counts = { hit: 0, clean: 0, failed: 0, capped: 0, error: 0 } satisfies Record<
+    RescanOutcome,
+    number
+  >;
   try {
     for (let i = 0; i < due.length; i += RESCAN_CONCURRENCY) {
       const results = await Promise.all(
@@ -312,14 +323,16 @@ export async function rescanFreeLinks(env: Env): Promise<number> {
   } finally {
     log.set({ webRisk: { rescan: { due: due.length, ...counts } } });
     if (counts.failed > 0) log.warn("Web Risk did not answer for some links");
+    if (counts.capped > 0) log.warn("Web Risk's daily cap is spent");
     log.emit();
   }
   return counts.hit + counts.clean;
 }
 
 /** What one link of the rescan came to: Web Risk's answer, no answer
- * (`failed`), or a throw on our side after it answered (`error`). */
-type RescanOutcome = "hit" | "clean" | "failed" | "error";
+ * (`failed`), nobody asked because the site's daily cap is spent (`capped`),
+ * or a throw on our side after it answered (`error`). */
+type RescanOutcome = "hit" | "clean" | "failed" | "capped" | "error";
 
 /**
  * One link of the rescan. Web Risk alone: the DNS check already runs on every
@@ -334,7 +347,10 @@ async function rescanOne(
   log: AuditableLogger,
 ): Promise<RescanOutcome> {
   try {
-    const { verdict } = await askWebRisk(env, link.destination);
+    const { verdict, outcome } = await askWebRisk(env, link.destination);
+    // Our cap, not Google's failure: leave the stamp, so a paid link never
+    // asked about stays due, and tomorrow's run takes it.
+    if (outcome === "capped") return "capped";
     if (!verdict) {
       // Stamped anyway, so a link Google never answers for cannot keep its
       // place at the front of the queue and take every daily slot.
@@ -449,7 +465,7 @@ export async function recheckSpikingLinks(env: Env, spiking: string[]): Promise<
   const outcomes = await Promise.all(
     due.map(async (link) => {
       // Uncached on purpose: the cache may hold a clean answer from minutes ago.
-      const verdict = await webRiskVerdict(link.destination, key);
+      const verdict = await webRiskVerdict(link.destination, key, env.DB);
       if (!verdict) return "failed";
       await env.LINKS.put(mark(link.id), "1", {
         expirationTtl: SPIKE_RECHECK_EVERY_SECONDS,
