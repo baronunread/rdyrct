@@ -316,7 +316,7 @@ Short.io beats rdyrct on price and free-plan size. rdyrct is the better pick whe
       "What rdyrct stores and what it does not: click analytics keep country, referrer, device and time, never an IP address or a precise location.",
     markdown: `# Privacy policy
 
-This policy explains what rdyrct collects, why, the legal basis for it, and how you can exercise your rights. Last updated 25 October 2026.
+This policy explains what rdyrct collects, why, the legal basis for it, and how you can exercise your rights. Last updated 26 October 2026.
 
 ## Data controller
 
@@ -330,7 +330,7 @@ If you accept analytics, PostHog records product events tied to your account. It
 
 ## Why we process it
 
-We process account and organization data to provide the service, send transactional email, and provide click analytics. The session cookie is necessary to sign you in. PostHog runs only with your consent, which you can withdraw at any time from Cookie settings. We ask again after six months. We process technical error reports to keep the service secure and reliable. We check where links point against Google's list of unsafe sites to keep phishing and malware off the service.
+We process account and organization data to provide the service, send transactional email, and provide click analytics. The session cookie is necessary to sign you in. PostHog runs only with your consent, which you can withdraw at any time from Cookie settings. We ask again after six months. We process technical error reports to keep the service secure and reliable. We check where links point against Google's list of unsafe sites to keep phishing and malware off the service. When you sign up, reset a password, shorten a link from the home page, build a UTM link, or report a link, Cloudflare Turnstile reads signals from your browser and connection to check that a person, not a script, sent the form, to keep automated sign-ups and abuse off the service.
 
 ## Cookies
 
@@ -338,7 +338,7 @@ rdyrct sets a necessary session cookie. If you accept analytics, PostHog also se
 
 ## Sub-processors
 
-We use Cloudflare for hosting and storage, Resend for transactional email, Polar for billing, PostHog EU for product analytics, Sentry for error monitoring, and Google Web Risk to check links. Google receives the destination address of a link when the link is created or edited, when we check it again each week, and when its traffic jumps, and checks it against Google's list of unsafe sites. It receives nothing about you or the people who click the link.
+We use Cloudflare for hosting, storage, and the Turnstile check on forms, Resend for transactional email, Polar for billing, PostHog EU for product analytics, Sentry for error monitoring, and Google Web Risk to check links. Google receives the destination address of a link when the link is created or edited, when we check it again each week, and when its traffic jumps, and checks it against Google's list of unsafe sites. It receives nothing about you or the people who click the link.
 
 ## Retention and rights
 

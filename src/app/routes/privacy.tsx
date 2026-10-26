@@ -18,7 +18,7 @@ export function PrivacyPage() {
     <LegalPageLayout
       authed={authed}
       title="Privacy policy"
-      intro="This policy explains what data rdyrct collects, why, the legal basis for it, and how you can exercise your rights. Last updated 25 October 2026."
+      intro="This policy explains what data rdyrct collects, why, the legal basis for it, and how you can exercise your rights. Last updated 26 October 2026."
     >
       <WebMcpMarketingTools />
 
@@ -71,6 +71,10 @@ export function PrivacyPage() {
           Sentry for our legitimate interest in keeping the service secure and reliable. Sentry does
           not set a cookie in rdyrct. We check where links point against Google&apos;s list of
           unsafe sites for our legitimate interest in keeping phishing and malware off the service.
+          When you sign up, reset a password, shorten a link from the home page, build a UTM link,
+          or report a link, Cloudflare Turnstile reads signals from your browser and connection to
+          check that a person, not a script, sent the form. We use it for our legitimate interest in
+          keeping automated sign-ups and abuse off the service.
         </p>
       </section>
 
@@ -94,14 +98,14 @@ export function PrivacyPage() {
         <h2 className="mb-2 font-bold">Sub-processors</h2>
         <p className="text-muted">
           We rely on a small number of sub-processors to run the service: Cloudflare (hosting, the
-          D1 database, and KV storage), Resend (transactional email), Polar (billing, acting as
-          merchant of record), PostHog, EU region (product usage analytics), Sentry (technical error
-          monitoring), and Google (Web Risk). Google receives the destination address of a link when
-          the link is created or edited, when we check it again each week, and when its traffic
-          jumps, and checks it against Google&apos;s list of unsafe sites. It receives nothing about
-          you or the people who click the link. Some may process data outside the EU/EEA; where they
-          do, transfers are covered by the appropriate safeguards, such as the EU Standard
-          Contractual Clauses.
+          D1 database, KV storage, and the Turnstile check on forms), Resend (transactional email),
+          Polar (billing, acting as merchant of record), PostHog, EU region (product usage
+          analytics), Sentry (technical error monitoring), and Google (Web Risk). Google receives
+          the destination address of a link when the link is created or edited, when we check it
+          again each week, and when its traffic jumps, and checks it against Google&apos;s list of
+          unsafe sites. It receives nothing about you or the people who click the link. Some may
+          process data outside the EU/EEA; where they do, transfers are covered by the appropriate
+          safeguards, such as the EU Standard Contractual Clauses.
         </p>
       </section>
 
