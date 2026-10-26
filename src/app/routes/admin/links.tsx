@@ -44,6 +44,7 @@ import { sortRows } from "../../lib/sort";
 import { useSearchParams, HrefLink } from "../../lib/router-search";
 import { Segmented } from "../../ui/segmented";
 import { BlockedHosts } from "./blocked-hosts";
+import { HoldReason } from "./hold-reason";
 import { Spinner } from "../../ui/spinner";
 
 /** The two columns both tables open with. Their widths differ because the
@@ -180,9 +181,18 @@ function DeleteLinkDialog({
  */
 function RiskBadge({ score, reasons }: { score: number | null; reasons: string[] }) {
   if (score === null) return <Badge color="muted">unscored</Badge>;
-  if (score >= 100) return <Badge color="pink">{reasons.join(", ") || "blocked"}</Badge>;
+  if (score >= 100)
+    return <Badge color="pink">{reasons.map(riskLabel).join(", ") || "blocked"}</Badge>;
   return <Badge color="mint">clean</Badge>;
 }
+
+/** "web_risk_social_engineering" reads "Google: social engineering". */
+const riskLabel = (reason: string) =>
+  reason === "dns_blocklist"
+    ? "DNS blocklist"
+    : reason.startsWith("web_risk_")
+      ? `Google: ${reason.slice("web_risk_".length).replaceAll("_", " ")}`
+      : reason;
 
 function SuspendDialog({ link, onClose }: { link: AdminLinkRow | null; onClose: () => void }) {
   const toast = useToast();
@@ -251,12 +261,13 @@ function linkState(link: AdminLinkRow) {
   return null;
 }
 
-/** The row's state as a pill. Hover names why; the visitor never sees that. */
+/** The row's state as a pill; HoldReason under it says why. The visitor
+ * never sees that. */
 function StateBadge({ link }: { link: AdminLinkRow }) {
   const state = linkState(link);
   if (!state) return null;
   return (
-    <span className="shrink-0" title={state.why ?? undefined}>
+    <span className="shrink-0">
       <Badge color={state.color}>{state.label}</Badge>
     </span>
   );
@@ -306,11 +317,11 @@ function LinkRow({ link, ...actions }: { link: AdminLinkRow } & RowActions) {
         />
       </Td>
       <Td>
-        {/* One line, so a suspended row is as tall as any other. */}
         <span className="flex items-center gap-2">
           <span className="truncate font-mono text-xs font-bold">{linkDisplayTitle(link.url)}</span>
           <StateBadge link={link} />
         </span>
+        <HoldReason why={linkState(link)?.why ?? null} />
       </Td>
       <Td className="truncate font-mono text-xs text-muted" title={link.destination}>
         {link.destination}

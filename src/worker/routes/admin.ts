@@ -593,6 +593,14 @@ adminRoutes.get("/orgs", async (c) => {
       links: sql<number>`(
         select count(*) from links where links.org_id = orgs.id
       )`,
+      // The cause rather than the links swept along with it, whose reasons
+      // start "Held with its organization".
+      suspendReason: sql<string | null>`(
+        select suspend_reason from links
+        where links.org_id = orgs.id and links.suspended_at is not null
+        order by suspend_reason like 'Held with its organization%', suspended_at
+        limit 1
+      )`,
       clicks: sql<number>`(
         select count(*) from clicks where clicks.org_id = orgs.id
       )`,

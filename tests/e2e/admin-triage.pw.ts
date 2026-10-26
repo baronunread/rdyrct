@@ -96,7 +96,8 @@ test("a link row shows its open report count and why it was suspended", async ({
   await page.goto(`/admin/links?org=${link.org_id}`);
   const row = page.getByRole("row").filter({ hasText: link.slug });
   await expect(row.getByText("2 reports")).toBeVisible({ timeout: 10_000 });
-  await expect(row.getByTitle("asks for card numbers")).toBeVisible();
+  // Printed in the row, not only on hover: a phone has no hover.
+  await expect(row.getByText("asks for card numbers")).toBeVisible();
 });
 
 test("the users table keeps one line per user when the name and email are huge", async ({

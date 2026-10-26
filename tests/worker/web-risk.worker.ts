@@ -13,7 +13,9 @@ import {
 } from "../../src/worker/destination-check";
 import { webRiskUri } from "../../src/worker/risk";
 import type { Env } from "../../src/worker/env";
+import type { AdminOrgRow } from "../../src/shared/types";
 import {
+  adminCookie,
   applyTestMigrations,
   authEnv,
   captureEmails,
@@ -164,8 +166,21 @@ describe("a hit on create", () => {
     expect((await linkRow(listed))?.suspended_at).not.toBeNull();
     expect((await linkRow(clean))?.suspended_at).not.toBeNull();
     expect((await orgRow())?.suspended).not.toBeNull();
+    // Google's verdict names the listed link only; the clean one says why it went too.
+    expect((await linkRow(listed))?.suspend_reason).toMatch(/^Google Web Risk lists/);
+    expect((await linkRow(clean))?.suspend_reason).toMatch(/^Held with its organization/);
     expectHoldMail(mail.sent, "Your links are on hold");
     mail.restore();
+
+    // The admin list names the cause, not a link swept along with it.
+    const orgs = await jsonBody<AdminOrgRow[]>(
+      await fetchWorker(
+        new Request("http://localhost/api/admin/orgs", {
+          headers: { cookie: await adminCookie() },
+        }),
+      ),
+    );
+    expect(orgs.find((o) => o.id === "org-1")?.suspendReason).toMatch(/^Google Web Risk lists/);
   });
 
   it("on a new paid org, holds that link only: the owner went through billing", async () => {

@@ -174,19 +174,46 @@ async function holdForWebRisk(
     .where(eq(schema.links.id, linkId));
   if (!link || link.suspendedAt !== null) return;
   const { plan } = await orgPlan(db, link.orgId);
-  const reason = `Google Web Risk lists the destination (${webRiskThreats(verdict).join(", ")}).`;
+  const threats = webRiskThreats(verdict).join(", ");
+  const reason = `Google Web Risk lists the destination (${threats}).`;
   const adminPath = `/admin/links?org=${encodeURIComponent(link.orgId)}`;
 
+  // The listed link first, with its own reason, so an org-wide hold below
+  // does not stamp Google's verdict on links whose destinations are clean.
+  const held = await db
+    .update(schema.links)
+    .set({ suspendedAt: Date.now(), suspendedBy: null, suspendReason: reason })
+    .where(and(eq(schema.links.id, linkId), isNull(schema.links.suspendedAt)))
+    .returning({ id: schema.links.id });
+  if (held.length === 0) return;
+  await recordAdminAction(env, {
+    actorUserId: "system",
+    action: "link.suspend",
+    targetType: "link",
+    targetId: linkId,
+    detail: { orgId: link.orgId, reason },
+  });
+
   if (plan === "free" && Date.now() - link.orgCreatedAt < NEW_ORG_WINDOW_MS) {
-    const held = await suspendOrgLinks(env, db, link.orgId, null, reason);
-    if (held === 0) return;
-    captureAlert([{ event: "web_risk_hit", orgId: link.orgId, linkId, scope: "org", links: held }]);
+    const others = await suspendOrgLinks(
+      env,
+      db,
+      link.orgId,
+      null,
+      `Held with its organization: another of its links points at a site Google lists (${threats}).`,
+    );
+    // suspendOrgLinks republishes the whole org, but only when it held something.
+    if (others === 0) await republishLink(env, db, linkId);
+    const total = others + 1;
+    captureAlert([
+      { event: "web_risk_hit", orgId: link.orgId, linkId, scope: "org", links: total },
+    ]);
     await notifyAdmin(
       env,
       "Held: a new free org links to a site Google lists",
       [
         reason,
-        `Organization ${link.orgId} is under seven days old, so all ${held} of its links are held.`,
+        `Organization ${link.orgId} is under seven days old, so all ${total} of its links are held.`,
       ],
       adminPath,
     );
@@ -201,23 +228,10 @@ async function holdForWebRisk(
     return;
   }
 
-  const held = await db
-    .update(schema.links)
-    .set({ suspendedAt: Date.now(), suspendedBy: null, suspendReason: reason })
-    .where(and(eq(schema.links.id, linkId), isNull(schema.links.suspendedAt)))
-    .returning({ id: schema.links.id });
-  if (held.length === 0) return;
   // After the flag is written, so a sync consumed early cannot read the old
   // value: the hold is enforced in storage.ts's desiredLink.
   await republishLink(env, db, linkId);
   await flagForReview(db, link.orgId);
-  await recordAdminAction(env, {
-    actorUserId: "system",
-    action: "link.suspend",
-    targetType: "link",
-    targetId: linkId,
-    detail: { orgId: link.orgId, reason },
-  });
   captureAlert([{ event: "web_risk_hit", orgId: link.orgId, linkId, scope: "link", links: 1 }]);
   await notifyAdmin(
     env,

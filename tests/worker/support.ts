@@ -184,7 +184,12 @@ export async function resetClicks(): Promise<void> {
  * see cap.worker.ts.
  */
 export const authEnv = () =>
-  overrideEnv({ BETTER_AUTH_SECRET: "test-secret", CAP_SECRET: undefined });
+  // A Web Risk key in a developer's .dev.vars must not reach the tests.
+  overrideEnv({
+    BETTER_AUTH_SECRET: "test-secret",
+    CAP_SECRET: undefined,
+    WEB_RISK_API_KEY: undefined,
+  });
 
 /**
  * Drive one request through the real worker and wait for anything it
