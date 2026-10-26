@@ -11,7 +11,12 @@ import {
   WEB_RISK_LOOKUPS_PER_ORG_PER_DAY,
   WEB_RISK_RESCAN_BATCH,
 } from "../../src/worker/destination-check";
-import { takeWebRiskLookup, WEB_RISK_LOOKUPS_PER_DAY, webRiskUri } from "../../src/worker/risk";
+import {
+  askWebRisk,
+  takeWebRiskLookup,
+  WEB_RISK_LOOKUPS_PER_DAY,
+  webRiskUri,
+} from "../../src/worker/risk";
 import type { Env } from "../../src/worker/env";
 import type { AdminOrgRow, AdminUsage } from "../../src/shared/types";
 import {
@@ -693,8 +698,8 @@ describe("the site-wide daily cap", () => {
     await recheckSpikingLinks(withKey(), [id]);
     expect(lookups).toHaveLength(0);
     expect(await counted()).toBe(WEB_RISK_LOOKUPS_PER_DAY);
-    // Not answered, so the rescan asks again tomorrow.
-    expectRetryTomorrow((await linkRow(id))?.web_risk_checked_at);
+    // Nobody asked, so nothing is stamped: the link stays first in line.
+    expect((await linkRow(id))?.web_risk_checked_at).toBeNull();
 
     // Tomorrow: yesterday's count is no limit.
     await env.DB.prepare("update web_risk_usage set day = day - 1").run();
@@ -702,6 +707,32 @@ describe("the site-wide daily cap", () => {
     await rescanFreeLinks(withKey());
     expect(lookups).toEqual([LISTED]);
     expect((await linkRow(id))?.suspended_at).not.toBeNull();
+  });
+
+  it("logs a spent cap as its own outcome, not as Google failing", async () => {
+    stubGoogle();
+    await spendTheSite();
+    const asked = await askWebRisk({ ...withKey(), DB: env.DB }, "https://example.com/c");
+    expect(asked.outcome).toBe("capped");
+  });
+
+  it("catches up a paid link made while the cap was spent, and only that one", async () => {
+    const lookups = stubGoogle();
+    const cookie = await freeOwnerCookie();
+    await env.DB.prepare("update user set plan = 'pro' where id = 'free-1'").run();
+    await spendTheSite();
+    const missed = await createLink(cookie, LISTED);
+    const checked = await createLink(cookie, "https://example.com/checked");
+    // Google answered for this one a month ago: paid, so not due again.
+    await env.DB.prepare("update links set web_risk_checked_at = ? where id = ?")
+      .bind(Date.now() - 30 * DAY_MS, checked)
+      .run();
+    expect(lookups).toHaveLength(0);
+
+    await env.DB.prepare("delete from web_risk_usage").run();
+    await rescanFreeLinks(withKey());
+    expect(lookups).toEqual([LISTED]);
+    expect((await linkRow(missed))?.suspended_at).not.toBeNull();
   });
 
   it("gives out exactly the cap when many Workers ask at once", async () => {

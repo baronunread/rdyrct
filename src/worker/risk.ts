@@ -266,17 +266,17 @@ export async function takeWebRiskLookup(d1: D1Database, now = Date.now()): Promi
 }
 
 /** One call to Google for an already-canonical URI, counted against the
- * day's cap when given D1. Null when the cap is spent, as when Google does
- * not answer: every caller already has a path for that. */
+ * day's cap when given D1. "capped" when the cap is spent and nobody asked;
+ * null when Google did not answer. */
 async function lookupWebRisk(
   uri: string,
   key: string,
   d1?: D1Database,
-): Promise<WebRiskAnswer | null> {
+): Promise<WebRiskAnswer | "capped" | null> {
   const params = new URLSearchParams({ uri });
   for (const threat of WEB_RISK_THREATS) params.append("threatTypes", threat);
   try {
-    if (d1 && !(await takeWebRiskLookup(d1))) return null;
+    if (d1 && !(await takeWebRiskLookup(d1))) return "capped";
     const res = await fetch(`${WEB_RISK_SEARCH}?${params}`, {
       headers: { "x-goog-api-key": key },
       signal: AbortSignal.timeout(LOOKUP_TIMEOUT_MS),
@@ -318,16 +318,18 @@ export async function webRiskVerdict(
   d1?: D1Database,
 ): Promise<RiskVerdict | null> {
   const uri = webRiskUri(destination);
-  return uri ? ((await lookupWebRisk(uri, key, d1))?.verdict ?? null) : null;
+  const answer = uri ? await lookupWebRisk(uri, key, d1) : null;
+  return answer && answer !== "capped" ? answer.verdict : null;
 }
 
 /**
  * What Web Risk said about one lookup, for the wide event. "failed" is the
  * one a null verdict hides: Google errored, timed out or answered a shape we
  * do not read, and the DNS check stood alone. "over_budget" means the org had
- * spent its lookups for the day and nobody asked. "off" means no key is set.
+ * spent its lookups for the day and nobody asked; "capped" means the same of
+ * the whole site (WEB_RISK_LOOKUPS_PER_DAY). "off" means no key is set.
  */
-export type WebRiskOutcome = "hit" | "clean" | "failed" | "over_budget" | "off";
+export type WebRiskOutcome = "hit" | "clean" | "failed" | "over_budget" | "capped" | "off";
 
 /** Whether Google gave an answer, which is what stamps web_risk_checked_at. */
 export function webRiskAnswered(outcome: WebRiskOutcome): boolean {
@@ -370,6 +372,7 @@ export async function askWebRisk(
     if (cached) return answered(cached);
     if (spendLookup && !(await spendLookup())) return { verdict: null, outcome: "over_budget" };
     const answer = await lookupWebRisk(uri, key, env.DB);
+    if (answer === "capped") return { verdict: null, outcome: "capped" };
     if (!answer) return { verdict: null, outcome: "failed" };
     // Its own catch: KV refuses a second write to one key within a second,
     // and losing the cache entry must not lose Google's answer with it.
