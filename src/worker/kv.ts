@@ -3,9 +3,9 @@ import { buildDestination, type UtmFields } from "./util";
 
 /**
  * KV holds the hot path. D1 stays the source of truth.
- *   slug:{slug}            -> KVLink   (shared default domain)
- *   slug:{hostname}:{slug} -> KVLink   (custom domain)
- *   domain:{hostname}      -> KVDomain (active custom domains)
+ *   slug:{slug}            -> KVSlugValue (shared default domain)
+ *   slug:{hostname}:{slug} -> KVSlugValue (custom domain)
+ *   domain:{hostname}      -> KVDomain    (active custom domains)
  */
 export interface KVLink {
   linkId: string;
@@ -18,6 +18,31 @@ export interface KVLink {
   // Date.now() to lazily stop resolving an expired temporary alias without a
   // D1 read (see index.ts's redirect middleware).
   expiresAt: number | null;
+  // #344: show the destination host and a Continue button before sending the
+  // visitor on. Absent on every value written before it existed, and on every
+  // link without a warning, which both mean "redirect straight away".
+  warn?: true;
+}
+
+/**
+ * A held (suspended) link's key (#344). The key stays in KV so the redirect
+ * path can answer "under review" with no D1 read, where it used to delete the
+ * key and answer 404. It carries no destination: nothing on the redirect path
+ * may send anyone to a held link's URL, and a value with no URL in it cannot.
+ */
+export interface KVHeldLink {
+  held: true;
+  linkId: string;
+  expiresAt: number | null;
+  // The owner was banned: the decision is made, so the page says "disabled"
+  // rather than "under review". Absent means held for review.
+  disabled?: true;
+}
+
+export type KVSlugValue = KVLink | KVHeldLink;
+
+export function isHeld(value: KVSlugValue): value is KVHeldLink {
+  return "held" in value && value.held;
 }
 
 export interface KVDomain {
@@ -35,6 +60,9 @@ export interface KVDomain {
    * deadline needs no cron to expire.
    */
   servesUntil?: number | null;
+  // The org's owner was banned: every path on the host answers "disabled",
+  // root redirect included. Absent means serving.
+  disabled?: true;
 }
 
 /** Whether a custom domain still resolves. A value written before
@@ -80,8 +108,8 @@ export async function resolveSlug(
   env: Env,
   slug: string,
   hostname: string | null,
-): Promise<KVLink | null> {
-  return env.LINKS.get<KVLink>(slugKey(hostname, slug), "json");
+): Promise<KVSlugValue | null> {
+  return env.LINKS.get<KVSlugValue>(slugKey(hostname, slug), "json");
 }
 
 export async function publishDomain(

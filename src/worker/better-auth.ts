@@ -27,6 +27,11 @@ import { createOwnedOrg } from "./plan";
 import { defaultOrgName } from "@/shared/org-name";
 import { CAP_FAILED_CODE, CAP_TOKEN_HEADER } from "@/shared/types";
 import { mcpResource, fetchClientMetadataResource } from "./mcp-oauth";
+import { HTTPException } from "hono/http-exception";
+import { endSubscriptionBeforeDelete } from "./routes/billing";
+
+const SUBSCRIPTION_NOT_ENDED =
+  "We could not cancel the subscription, so the account was not deleted. Try again in a few minutes.";
 
 /** better-auth paths that must carry a solved Cap token, and the scope the
  * token has to have been minted for. Keyed by `ctx.path`, which is relative
@@ -106,8 +111,15 @@ async function ensureOrganization(env: Env, db: DB, userId: string): Promise<voi
  * included; one after it cannot attach to the deleted user. Workflow starts
  * come last. If that call fails, the account is still gone and the durable
  * flags let the stalled-deletion sweep finish the work.
+ *
+ * A paying account ends its Polar subscription first (#337). When Polar cannot
+ * do that, nothing is deleted and this throws a 503, so the person can try
+ * again rather than keep paying for an account that no longer exists.
  */
 export async function deleteAccountAndOwnedOrgs(env: Env, userId: string): Promise<void> {
+  if (!(await endSubscriptionBeforeDelete(env, userId))) {
+    throw new HTTPException(503, { message: SUBSCRIPTION_NOT_ENDED });
+  }
   await deleteUserAvatar(env, userId);
   const now = Date.now();
   const [owned] = await env.DB.batch<{ orgId: string }>([
@@ -543,7 +555,15 @@ function buildAuth(env: Env) {
       deleteUser: {
         enabled: true,
         beforeDelete: async (user) => {
-          await deleteAccountAndOwnedOrgs(env, user.id);
+          try {
+            await deleteAccountAndOwnedOrgs(env, user.id);
+          } catch (error) {
+            // better-auth answers anything but its own APIError with a bare 500.
+            if (error instanceof HTTPException && error.status === 503) {
+              throw new APIError("SERVICE_UNAVAILABLE", { message: SUBSCRIPTION_NOT_ENDED });
+            }
+            throw error;
+          }
         },
       },
     },

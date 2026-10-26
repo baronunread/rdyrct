@@ -94,6 +94,7 @@ export const testEnv: Env = {
   ASSETS: stubAssets,
   ORG_DELETE: stubWorkflow(),
   DOMAIN_ACTIVATE: stubWorkflow(),
+  LINK_IMPORT: stubWorkflow(),
 };
 
 export function overrideEnv(overrides: Partial<Env>): Env {
@@ -183,7 +184,12 @@ export async function resetClicks(): Promise<void> {
  * see cap.worker.ts.
  */
 export const authEnv = () =>
-  overrideEnv({ BETTER_AUTH_SECRET: "test-secret", CAP_SECRET: undefined });
+  // A Web Risk key in a developer's .dev.vars must not reach the tests.
+  overrideEnv({
+    BETTER_AUTH_SECRET: "test-secret",
+    CAP_SECRET: undefined,
+    WEB_RISK_API_KEY: undefined,
+  });
 
 /**
  * Drive one request through the real worker and wait for anything it
@@ -291,6 +297,21 @@ export async function seedBillingUser(
 
 export async function applyTestMigrations(): Promise<void> {
   await applyD1Migrations(env.DB, env.TEST_MIGRATIONS);
+}
+
+/** Migration 0042's backfill: the click rollups rebuilt from raw clicks. */
+export function rollupBackfill(): string[] {
+  const migration = env.TEST_MIGRATIONS.find((m) => m.name.startsWith("0042_"));
+  return (migration?.queries ?? []).filter((q) => /INSERT INTO click_\w+.*SELECT/s.test(q));
+}
+
+/**
+ * Rows a test writes straight into `clicks` skip insertClicks, which is what
+ * keeps the rollups (#26) current. This runs the same backfill production
+ * ran, so the stats routes see them.
+ */
+export async function rebuildClickRollups(): Promise<void> {
+  await env.DB.batch(rollupBackfill().map((q) => env.DB.prepare(q)));
 }
 
 // The password every seeded test user shares: fine since each test's DB is

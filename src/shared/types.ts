@@ -67,6 +67,9 @@ export interface PlanLimits {
    * free on every plan, so this gates the look, never the code itself. */
   qrCustom: boolean;
   analyticsDays: number; // how far back click analytics look
+  /** Clicks recorded per org per UTC calendar month (#387). Past it, links
+   * keep redirecting and the clicks are not recorded. */
+  trackedClicks: number;
 }
 
 export const PLAN_LIMITS = {
@@ -77,6 +80,7 @@ export const PLAN_LIMITS = {
     domains: 0,
     qrCustom: false,
     analyticsDays: 7,
+    trackedClicks: 5_000,
   },
   hobby: {
     orgs: 1,
@@ -85,6 +89,7 @@ export const PLAN_LIMITS = {
     domains: 1,
     qrCustom: true,
     analyticsDays: 30,
+    trackedClicks: 50_000,
   },
   pro: {
     orgs: 3,
@@ -93,6 +98,7 @@ export const PLAN_LIMITS = {
     domains: 5,
     qrCustom: true,
     analyticsDays: 365,
+    trackedClicks: 500_000,
   },
   // Self-hosted instance: no billing, so nothing is capped. Large finite
   // numbers rather than Infinity, which JSON turns into null.
@@ -103,6 +109,7 @@ export const PLAN_LIMITS = {
     domains: 1_000_000,
     qrCustom: true,
     analyticsDays: 36_500,
+    trackedClicks: 1_000_000_000_000,
   },
 } satisfies Record<OrgPlan, PlanLimits>;
 
@@ -126,6 +133,17 @@ export interface OverLimits {
   links?: number;
   members?: number;
   domains?: number;
+}
+
+/** An org's tracked clicks this UTC month against its plan's cap (#387):
+ * GET /orgs/:orgId/click-usage. */
+export interface ClickUsage {
+  /** `YYYY-MM`, UTC. */
+  month: string;
+  clicks: number;
+  limit: number;
+  /** Epoch ms the count starts again: the first instant of next month. */
+  resetsAt: number;
 }
 
 /** Which resources an over-limit banner can name, in the order it names them. */
@@ -282,6 +300,9 @@ export interface DomainDTO {
   /** Why the domain is in `error`, ready to show. Empty for every other status. */
   statusReason: string;
   rootRedirect: string;
+  /** "txt" for a domain moving from another service (#383): it is checked
+   * through TXT records, so it can be ready before its CNAME switches. */
+  validation: "http" | "txt";
   createdAt: number;
   /**
    * Epoch ms this domain went beyond the org's plan (#159), or null while it
@@ -529,6 +550,8 @@ export interface AdminUsage {
   tableSize: number;
   tableGrowth: SeriesPoint[];
   tableProjectedDays: number | null;
+  /** Calls to Google Web Risk, site-wide, against the daily cap. */
+  webRisk: { today: number; month: number; perDay: number };
 }
 
 export interface AnomalyEntry {
@@ -556,10 +579,15 @@ export interface AdminOrgRow {
   members: number;
   links: number;
   clicks: number;
+  ownerId: string | null;
   ownerName: string | null;
   ownerEmail: string | null;
+  /** When the owner was banned, which disables every link, or null. */
+  disabledAt: number | null;
   /** When the org's links were suspended, or null. */
   linksSuspendedAt: number | null;
+  /** Why, from the held link that caused it, or null when nothing is held. */
+  suspendReason: string | null;
   /** When the sweep or enough reports flagged the org for a human look. */
   reviewFlaggedAt: number | null;
 }
@@ -596,6 +624,9 @@ export interface AdminLinkRow {
   clicks: number;
   suspendedAt: number | null;
   suspendReason: string | null;
+  /** A warning page in front of the redirect (#344). Null means none. */
+  warnedAt: number | null;
+  warnReason: string | null;
   /** Destination scoring (#68). Null means unscored, never clean. */
   riskScore: number | null;
   riskReasons: string[];

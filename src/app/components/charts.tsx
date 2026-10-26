@@ -353,19 +353,36 @@ const fmtCountry = (key: string) => {
   }
 };
 
+/**
+ * A card's label. `period` names the stretch of time the card counts, set
+ * only where it differs from the range the page heading names: the 24-hour
+ * view's breakdowns count today's UTC day, since they are kept per day.
+ */
+export function CardLabel({ children, period }: { children: ReactNode; period?: string }) {
+  return (
+    <p className="mb-3 flex items-baseline justify-between gap-3 text-xs font-medium text-muted">
+      <span>{children}</span>
+      {period && <span className="shrink-0">{period}</span>}
+    </p>
+  );
+}
+
 export function ClickBreakdown({
   countries,
   referrers,
   devices,
+  period,
 }: {
   countries: TopEntry[];
   referrers: TopEntry[];
   devices: TopEntry[];
+  /** See CardLabel. */
+  period?: string;
 }) {
   return (
     <div className="flex flex-col gap-4">
       <Card>
-        <p className="mb-3 text-xs font-medium text-muted">Countries</p>
+        <CardLabel period={period}>Countries</CardLabel>
         {/* The map holds a 960:500 frame whatever width it gets, while the
             list grows a row per country, so side by side the map's column
             runs out of map long before the list runs out of rows. It only
@@ -383,14 +400,14 @@ export function ClickBreakdown({
       </Card>
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <Card>
-          <p className="mb-3 text-xs font-medium text-muted">Referrers</p>
+          <CardLabel period={period}>Referrers</CardLabel>
           <BarList
             items={referrers}
             empty="Where people were when they followed a link appears here."
           />
         </Card>
         <Card>
-          <p className="mb-3 text-xs font-medium text-muted">Devices</p>
+          <CardLabel period={period}>Devices</CardLabel>
           <BarList
             items={devices}
             empty="Phone, desktop or tablet, counted here once clicks arrive."

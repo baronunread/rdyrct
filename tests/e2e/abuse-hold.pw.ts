@@ -26,45 +26,81 @@ test("a scam-shaped destination is created paused, and the owner can see that", 
   await expect(page.getByText("paused")).toBeVisible({ timeout: 10_000 });
 });
 
-test("marking an org as abuse stops it, bans the owner and blocks its hosts, until unblocked", async ({
+test("banning an org's owner disables its links, blocks only the host picked, and an unban undoes it", async ({
   page,
   browser,
 }) => {
-  const victimEmail = `abuser-${Date.now()}@gmail.com`;
+  const abuserEmail = `abuser-${Date.now()}@gmail.com`;
   const host = `scam-${Date.now()}.example`;
-  const victim = await (await browser.newContext()).newPage();
-  await signUpAndVerify(victim, victimEmail, password);
-  await createQuickLink(victim, `https://${host}/spin`);
+  const abuser = await (await browser.newContext()).newPage();
+  await signUpAndVerify(abuser, abuserEmail, password);
+  await createQuickLink(abuser, `https://${host}/spin`);
+  // The "Link created" dialog covers the form; a fresh dashboard does not.
+  await abuser.goto("/dashboard");
+  await createQuickLink(abuser, "https://www.google.com/maps");
+  const [link] = await queryRows<{ slug: string }>(
+    abuser,
+    "select slug from links where destination = ?",
+    [`https://${host}/spin`],
+  );
 
-  const admin = `abuse-admin-${Date.now()}@gmail.com`;
+  const admin = `ban-admin-${Date.now()}@gmail.com`;
   await signUpAndVerify(page, admin, password);
   await makePlatformAdmin(page, admin);
 
   await page.goto("/admin/orgs");
-  const row = page.getByRole("row").filter({ hasText: victimEmail });
+  const row = page.getByRole("row").filter({ hasText: abuserEmail });
   await row.getByRole("button", { name: /^Actions for / }).click();
-  await page.getByRole("menuitem", { name: /Mark as abuse/ }).click();
-  const dialog = page.getByRole("dialog", { name: "Mark as abuse" });
+  await page.getByRole("menuitem", { name: /Ban owner/ }).click();
+  const dialog = page.getByRole("dialog", { name: "Ban user" });
   // Says what it will do before it does it, and needs a reason.
-  await expect(dialog.getByText(/ban its owner/)).toBeVisible();
-  await expect(dialog.getByRole("button", { name: "Mark as abuse" })).toBeDisabled();
+  await expect(dialog.getByText(/deleted in 90 days/)).toBeVisible();
+  await expect(dialog.getByRole("button", { name: "Ban user" })).toBeDisabled();
+  // Nothing is blocked unless picked, and a site everyone uses cannot be.
+  const scamBox = dialog.getByRole("checkbox", { name: host });
+  await expect(scamBox).not.toBeChecked();
+  await expect(dialog.getByRole("checkbox", { name: "google.com" })).toBeDisabled();
+  await scamBox.check();
   await dialog.getByLabel("Reason").fill("spin-to-win scam");
-  await dialog.getByRole("button", { name: "Mark as abuse" }).click();
-  await expect(page.getByText(/Marked as abuse\. 1 links stopped, 1 hosts blocked/)).toBeVisible({
+  await dialog.getByRole("button", { name: "Ban user" }).click();
+  await expect(
+    page.getByText(/is banned\. 1 organization disabled\. 1 host blocked\./),
+  ).toBeVisible({
     timeout: 10_000,
   });
-  await expect(row.getByText("suspended")).toBeVisible();
+  await expect(row.getByText("disabled")).toBeVisible();
 
-  // The host is on the list, with the reason.
+  // The short link answers the disabled page, not the scam.
+  await expect
+    .poll(async () => (await page.request.get(`/${link.slug}`, { maxRedirects: 0 })).status(), {
+      timeout: 15_000,
+    })
+    .toBe(410);
+  const disabled = await page.request.get(`/${link.slug}`, { maxRedirects: 0 });
+  expect(await disabled.text()).toContain("This link has been disabled.");
+
+  // The picked host is on the list, with the reason; google.com is not.
   await page.goto("/admin/links");
   await page.getByRole("button", { name: "Blocked hosts", exact: true }).click();
   const blocked = page.getByRole("row").filter({ hasText: host });
   await expect(blocked).toBeVisible({ timeout: 10_000 });
   await expect(blocked.getByText(/spin-to-win scam/)).toBeVisible();
+  await expect(page.getByRole("row").filter({ hasText: "google.com" })).toHaveCount(0);
 
-  // And a mistake can be undone.
-  await blocked.getByRole("button", { name: `Unblock ${host}` }).click();
-  await expect(blocked).toHaveCount(0, { timeout: 10_000 });
+  // An unban brings the link back.
+  await page.goto("/admin/users");
+  const userRow = page.getByRole("row").filter({ hasText: abuserEmail });
+  await userRow.getByRole("button", { name: /^Actions for / }).click();
+  await page.getByRole("menuitem", { name: "Unban user" }).click();
+  await page
+    .getByRole("dialog", { name: "Unban user" })
+    .getByRole("button", { name: "Unban user" })
+    .click();
+  await expect
+    .poll(async () => (await page.request.get(`/${link.slug}`, { maxRedirects: 0 })).status(), {
+      timeout: 15_000,
+    })
+    .toBe(302);
 });
 
 test("the terms say how to report abuse and how to appeal", async ({ page }) => {

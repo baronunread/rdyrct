@@ -38,6 +38,7 @@ import {
 import { FrameRow, SplitHeading } from "../components/marketing-kit";
 import { AnonLinkBar } from "../components/anon-link-bar";
 import { formatNumber } from "../lib/numbers";
+import { exactCount } from "@/shared/click-usage";
 import { cn } from "../ui/cn";
 
 const HeroGlobe = lazy(() => import("../components/hero-globe"));
@@ -49,6 +50,10 @@ const faqs = [
   {
     q: "What's the difference between Hobby and Pro?",
     a: `Hobby (${PLAN_PRICES.hobby}/mo) puts your logo and colors on QR codes (plain ones are free), and adds a custom domain with your own slugs, ${PLAN_LIMITS.hobby.links} links, ${PLAN_LIMITS.hobby.members} team members, and ${PLAN_LIMITS.hobby.analyticsDays}-day analytics for one organization. Pro (${PLAN_PRICES.pro}/mo) raises everything: ${PLAN_LIMITS.pro.orgs} organizations, ${formatNumber(PLAN_LIMITS.pro.links)} links, ${PLAN_LIMITS.pro.members} team members, ${PLAN_LIMITS.pro.domains} custom domains each, ${PLAN_LIMITS.pro.analyticsDays}-day analytics, and direct email support. Only the organization owner needs a paid plan: one subscription covers every organization they own. Yearly billing saves 10%.`,
+  },
+  {
+    q: "What happens when my links get more clicks than my plan counts?",
+    a: `They keep redirecting, every one. Each plan counts a set number of clicks a month for each organization: ${exactCount(PLAN_LIMITS.free.trackedClicks)} on Free, ${exactCount(PLAN_LIMITS.hobby.trackedClicks)} on Hobby and ${exactCount(PLAN_LIMITS.pro.trackedClicks)} on Pro. Past that, the rest of the month's clicks are not recorded in your analytics, and the count starts again on the 1st. The owner gets an email at 80% and at 100%.`,
   },
   {
     q: "How is rdyrct privacy-friendly?",
@@ -323,6 +328,7 @@ function MobilePlans({
         `${PLAN_LIMITS.free.links} links`,
         `${PLAN_LIMITS.free.members} team members`,
         `${PLAN_LIMITS.free.analyticsDays}-day click analytics`,
+        `${formatNumber(PLAN_LIMITS.free.trackedClicks)} clicks counted a month`,
         "QR codes",
         "Random slugs on the shared domain",
       ],
@@ -347,6 +353,7 @@ function MobilePlans({
         `${PLAN_LIMITS.hobby.domains} custom domain with your own slugs`,
         "QR codes with your logo and colors",
         `${PLAN_LIMITS.hobby.analyticsDays}-day click analytics`,
+        `${formatNumber(PLAN_LIMITS.hobby.trackedClicks)} clicks counted a month`,
       ],
       cta: (
         <HrefLink
@@ -370,6 +377,7 @@ function MobilePlans({
         `${PLAN_LIMITS.pro.members} team members`,
         `${PLAN_LIMITS.pro.domains} custom domains each`,
         `${PLAN_LIMITS.pro.analyticsDays}-day click analytics`,
+        `${formatNumber(PLAN_LIMITS.pro.trackedClicks)} clicks counted a month`,
         "Direct email support",
       ],
       cta: (
@@ -548,6 +556,17 @@ function PricingTable({
             <Td>{PLAN_LIMITS.free.analyticsDays} days</Td>
             <Td>{PLAN_LIMITS.hobby.analyticsDays} days</Td>
             <Cell tier="pro">{PLAN_LIMITS.pro.analyticsDays} days</Cell>
+          </tr>
+          <tr>
+            <Td className="font-bold">
+              Clicks counted a month
+              <span className="block text-xs font-normal text-muted">
+                links keep redirecting past it
+              </span>
+            </Td>
+            <Td>{formatNumber(PLAN_LIMITS.free.trackedClicks)}</Td>
+            <Td>{formatNumber(PLAN_LIMITS.hobby.trackedClicks)}</Td>
+            <Cell tier="pro">{formatNumber(PLAN_LIMITS.pro.trackedClicks)}</Cell>
           </tr>
           <tr>
             <Td className="font-bold">Support</Td>

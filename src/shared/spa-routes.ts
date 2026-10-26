@@ -24,6 +24,7 @@ export const APP_ROUTES: readonly string[] = [
   "/analytics",
   "/links",
   "/links/$slug",
+  "/import",
   "/members",
   "/billing",
   "/domains",

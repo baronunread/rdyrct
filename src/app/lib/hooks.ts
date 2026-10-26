@@ -6,6 +6,7 @@ import { readCachedUser, writeCachedUser } from "./user-cache";
 import { lastAuth, setLastAuth } from "./last-auth";
 import posthog from "./posthog";
 import { FUNNEL, captureGoogleSignup } from "./funnel";
+import type { LinkImportDTO } from "@/shared/link-import";
 import type {
   CurrentUser,
   AppConfig,
@@ -31,6 +32,7 @@ import type {
   WithQuotaUsage,
   ApiKeyDTO,
   OrgPlan,
+  ClickUsage,
 } from "@/shared/types";
 
 /**
@@ -181,6 +183,16 @@ export const useLinkQuotaUsage = (orgId: string) =>
     queryKey: ["linkQuotaUsage", orgId],
     queryFn: () => api(`/orgs/${orgId}/links/quota-usage`),
     enabled: !!orgId,
+  });
+
+/** Tracked clicks this month against the plan's cap (#387). A minute stale
+ * at most: the count moves with every flush, and nothing decides on it. */
+export const useClickUsage = (orgId: string) =>
+  useQuery<ClickUsage>({
+    queryKey: ["clickUsage", orgId],
+    queryFn: () => api(`/orgs/${orgId}/click-usage`),
+    enabled: !!orgId,
+    staleTime: 60_000,
   });
 
 /** Seeds the quota cache from a mutation response instead of a follow-up GET
@@ -515,11 +527,16 @@ export const useAdminOrgDetail = (orgId: string | null) =>
  * than a browser should filter. Ordering does not: the response is capped, so
  * sorting it is a client concern and the column headers can drive it the way
  * every other table here works. */
-const STATUS_PARAM = { all: "", active: "&suspended=0", suspended: "&suspended=1" };
+const STATUS_PARAM = {
+  all: "",
+  active: "&suspended=0",
+  suspended: "&suspended=1",
+  warned: "&warned=1",
+};
 
 export const useAdminLinks = (params: {
   q: string;
-  status: "all" | "active" | "suspended";
+  status: keyof typeof STATUS_PARAM;
   org?: string;
 }) =>
   useQuery<AdminLinkRow[]>({
@@ -564,4 +581,37 @@ export const useAdminUsers = () =>
   useQuery<AdminUserRow[]>({
     queryKey: ["admin", "users"],
     queryFn: () => api("/admin/users"),
+  });
+
+/** One DNS record a domain needs, as GET /domains/:id/records lists it. */
+interface DnsRecordDTO {
+  type: "TXT" | "CNAME";
+  name: string;
+  value: string;
+}
+
+/**
+ * The records a domain needs (#383). A domain moving from another service
+ * needs two TXT records whose values Cloudflare mints a few seconds after the
+ * domain is added, so this asks again until they are there.
+ */
+export const useDomainRecords = (orgId: string, domainId: string, enabled = true) =>
+  useQuery<{ records: DnsRecordDTO[] }>({
+    queryKey: ["domain-records", orgId, domainId],
+    queryFn: () => api(`/orgs/${orgId}/domains/${domainId}/records`),
+    enabled: enabled && !!orgId && !!domainId,
+    refetchInterval: (query) =>
+      query.state.data?.records.some((record) => record.type === "TXT") === false ? 3_000 : false,
+  });
+
+/**
+ * The org's import from another service (#383) that nobody has put away. It
+ * runs on the server, so this asks again every few seconds while it does.
+ */
+export const useLinkImport = (orgId: string) =>
+  useQuery<{ import: LinkImportDTO | null }>({
+    queryKey: ["link-import", orgId],
+    queryFn: () => api(`/orgs/${orgId}/link-import/current`),
+    enabled: !!orgId,
+    refetchInterval: (query) => (query.state.data?.import?.status === "running" ? 2_000 : false),
   });

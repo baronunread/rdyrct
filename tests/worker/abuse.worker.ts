@@ -84,6 +84,15 @@ const suspendedCount = async () =>
       .first<{ n: number }>()
   )?.n ?? 0;
 
+const warnedCount = async () =>
+  (
+    await env.DB.prepare(
+      "select count(*) as n from links where org_id = ? and warned_at is not null",
+    )
+      .bind(sampleLink.orgId)
+      .first<{ n: number }>()
+  )?.n ?? 0;
+
 describe("assertNotShortener", () => {
   it("flags known shorteners, including the ones from the incident", () => {
     for (const url of [
@@ -168,7 +177,7 @@ describe("suspendOrgLinks", () => {
 });
 
 describe("sweepAbusiveOrgs", () => {
-  it("suspends a free, brand-new org past the redirect ceiling and alerts", async () => {
+  it("warns, never suspends, a free brand-new org past the redirect ceiling (#387)", async () => {
     await seedLink();
     await seedFreeOwner();
     await seedNewOrg();
@@ -177,50 +186,38 @@ describe("sweepAbusiveOrgs", () => {
 
     await sweepAbusiveOrgs(testEnv);
 
-    expect(await suspendedCount()).toBe(1);
+    expect(await suspendedCount()).toBe(0);
+    expect(await warnedCount()).toBe(1);
+    expect(await reviewFlag()).not.toBeNull();
+    // The warning rides in the KV value, so the redirect path shows it with
+    // no D1 read (#344).
+    const kv = await env.LINKS.get(`slug:${sampleLink.slug}`, "json");
+    expect(kv).toMatchObject({ linkId: sampleLink.id, warn: true });
     expect(alert).toHaveBeenCalledWith(
-      "org_auto_suspended",
+      "org_high_redirect_volume",
       expect.objectContaining({ level: "error" }),
     );
     alert.mockRestore();
   });
 
-  it("tells the owner to write to support, not to reply to a no-reply address", async () => {
+  it("mails the platform admin once about an org over the ceiling, and its owner not at all", async () => {
     await seedLink();
     await seedFreeOwner();
     await seedNewOrg();
     await seedClicksToday(REDIRECT_CEILING_PER_DAY + 1);
     const mail = captureEmails();
     const alert = vi.spyOn(Sentry, "captureMessage").mockReturnValue("");
+    const withAdmin = { ...testEnv, SUPERADMIN_EMAIL: "admin@example.com" };
 
-    await sweepAbusiveOrgs(testEnv);
+    await sweepAbusiveOrgs(withAdmin);
+    await sweepAbusiveOrgs(withAdmin);
 
-    const [owner] = mail.sent.filter((m) => m.to === "owner@example.com");
-    expect(owner?.subject).toBe("Your organization is suspended");
-    expect(owner?.text).toContain("write to support@mail.rdyrct.com");
-    expect(owner?.text).not.toContain("reply to this email");
-    // About their own account, so no "Not you? Ignore it".
-    expect(owner?.text).toContain("Questions? Write to support@mail.rdyrct.com.");
-    expect(owner?.text).not.toContain("Not you?");
-    alert.mockRestore();
-    mail.restore();
-  });
-
-  it("words the platform admin's copy as a report, not as their own suspension", async () => {
-    await seedLink();
-    await seedFreeOwner();
-    await seedNewOrg();
-    await seedClicksToday(REDIRECT_CEILING_PER_DAY + 1);
-    const mail = captureEmails();
-    const alert = vi.spyOn(Sentry, "captureMessage").mockReturnValue("");
-
-    await sweepAbusiveOrgs({ ...testEnv, SUPERADMIN_EMAIL: "admin@example.com" });
-
-    const [copy] = mail.sent.filter((m) => m.to === "admin@example.com");
-    expect(copy?.subject).toMatch(/^Auto-suspended:/);
-    expect(copy?.subject).not.toContain("Your organization");
-    expect(copy?.text).toContain("Your own organizations are not affected");
-    expect(copy?.text).toContain("owner@example.com");
+    const admin = mail.sent.filter((m) => m.to === "admin@example.com");
+    expect(admin).toHaveLength(1);
+    expect(admin[0]?.subject).toMatch(/^Over the ceiling:/);
+    expect(admin[0]?.text).toContain("Nothing was suspended");
+    // Nothing happened to the owner's links that they need to answer.
+    expect(mail.sent.some((m) => m.to === "owner@example.com")).toBe(false);
     alert.mockRestore();
     mail.restore();
   });
@@ -266,6 +263,8 @@ describe("sweepAbusiveOrgs", () => {
 
     expect(await suspendedCount()).toBe(0);
     expect(await reviewFlag()).not.toBeNull();
+    // Its links keep working, behind the warning page (#344).
+    expect(await warnedCount()).toBe(1);
     expect(
       mail.sent.some((m) => m.to === "admin@example.com" && m.subject.startsWith("Needs review")),
     ).toBe(true);
@@ -305,6 +304,7 @@ describe("sweepAbusiveOrgs", () => {
 
     expect(await suspendedCount()).toBe(0);
     expect(await reviewFlag()).not.toBeNull();
+    expect(await warnedCount()).toBe(1);
     expect(alert.mock.calls.filter(([m]) => m === "org_needs_review")).toHaveLength(1);
     alert.mockRestore();
   });
@@ -363,23 +363,24 @@ describe("sweepAbusiveOrgs", () => {
     alert.mockRestore();
   });
 
-  it("does not suspend again an org an admin restored", async () => {
+  it("does not warn again an org an admin cleared", async () => {
     await seedLink();
     await seedFreeOwner();
     await seedNewOrg();
     await seedClicksToday(REDIRECT_CEILING_PER_DAY + 1);
     const alert = vi.spyOn(Sentry, "captureMessage").mockReturnValue("");
     await sweepAbusiveOrgs(testEnv);
-    expect(await suspendedCount()).toBe(1);
+    expect(await warnedCount()).toBe(1);
 
-    // What the admin Restore does: links back, org cleared.
-    await env.DB.prepare("update links set suspended_at = null").run();
-    await env.DB.prepare("update orgs set cleared_at = ?, links_suspended_at = null")
+    // What the admin "Mark reviewed" does: flag off, warnings off, cleared.
+    await env.DB.prepare("update links set warned_at = null, warn_reason = null").run();
+    await env.DB.prepare("update orgs set cleared_at = ?, review_flagged_at = null")
       .bind(Date.now())
       .run();
     await sweepAbusiveOrgs(testEnv);
 
-    expect(await suspendedCount()).toBe(0);
+    expect(await warnedCount()).toBe(0);
+    expect(await reviewFlag()).toBeNull();
     alert.mockRestore();
   });
 
@@ -424,7 +425,7 @@ describe("sweepAbusiveOrgs", () => {
 
     await sweepAbusiveOrgs(testEnv);
 
-    expect(await suspendedCount()).toBe(1);
+    expect(await warnedCount()).toBe(1);
     alert.mockRestore();
   });
 
@@ -449,9 +450,10 @@ describe("sweepAbusiveOrgs", () => {
     await sweepAbusiveOrgs(testEnv);
 
     expect(await suspendedCount()).toBe(0);
+    expect(await warnedCount()).toBe(0);
   });
 
-  it("is idempotent: a second pass suspends nothing more", async () => {
+  it("is idempotent: a second pass warns and alerts nothing more", async () => {
     await seedLink();
     await seedFreeOwner();
     await seedNewOrg();
@@ -462,7 +464,7 @@ describe("sweepAbusiveOrgs", () => {
     alert.mockClear();
     await sweepAbusiveOrgs(testEnv);
 
-    expect(alert).not.toHaveBeenCalledWith("org_auto_suspended", expect.anything());
+    expect(alert).not.toHaveBeenCalledWith("org_high_redirect_volume", expect.anything());
     alert.mockRestore();
   });
 
@@ -480,11 +482,13 @@ describe("sweepAbusiveOrgs", () => {
     await sweepAbusiveOrgs(testEnv);
 
     expect(await suspendedCount()).toBe(0);
+    // Nor warns it: an established org's volume is a case for a human.
+    expect(await warnedCount()).toBe(0);
+    expect(await reviewFlag()).not.toBeNull();
     expect(alert).toHaveBeenCalledWith(
       "org_high_redirect_volume",
       expect.objectContaining({ level: "error" }),
     );
-    expect(alert).not.toHaveBeenCalledWith("org_auto_suspended", expect.anything());
     alert.mockRestore();
   });
 });

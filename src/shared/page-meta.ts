@@ -133,6 +133,7 @@ rdyrct is an organization-based link shortener and QR code generator that runs e
 - 30 links
 - 3 team members
 - 7-day click analytics
+- 5,000 clicks counted a month
 - Plain QR codes
 - Random slugs on the shared domain
 - 1 organization
@@ -144,6 +145,7 @@ rdyrct is an organization-based link shortener and QR code generator that runs e
 - 500 links
 - 5 team members
 - 30-day click analytics
+- 50,000 clicks counted a month
 - QR codes with a logo, colours, and dot styles
 - 1 custom domain, with any slug you choose
 - 1 organization
@@ -155,6 +157,7 @@ rdyrct is an organization-based link shortener and QR code generator that runs e
 - 3,000 links
 - 25 team members
 - 365-day click analytics
+- 500,000 clicks counted a month
 - QR codes with a logo, colours, and dot styles
 - 5 custom domains, with any slug you choose
 - 3 organizations
@@ -172,6 +175,7 @@ rdyrct is MIT licensed. Deploy it to your own Cloudflare account and set your ow
 
 - Billing is per user, not per organization. An organization's limits come from its owner's plan.
 - Slugs on the shared domain are always random. Choosing a slug needs a custom domain.
+- Clicks are counted per organization per calendar month (UTC). Past the plan's count, links keep redirecting; only that month's later clicks go unrecorded.
 - Click analytics never store an IP address.`,
   },
   "/docs": {
@@ -312,7 +316,7 @@ Short.io beats rdyrct on price and free-plan size. rdyrct is the better pick whe
       "What rdyrct stores and what it does not: click analytics keep country, referrer, device and time, never an IP address or a precise location.",
     markdown: `# Privacy policy
 
-This policy explains what rdyrct collects, why, the legal basis for it, and how you can exercise your rights. Last updated 22 October 2026.
+This policy explains what rdyrct collects, why, the legal basis for it, and how you can exercise your rights. Last updated 25 October 2026.
 
 ## Data controller
 
@@ -326,7 +330,7 @@ If you accept analytics, PostHog records product events tied to your account. It
 
 ## Why we process it
 
-We process account and organization data to provide the service, send transactional email, and provide click analytics. The session cookie is necessary to sign you in. PostHog runs only with your consent, which you can withdraw at any time from Cookie settings. We ask again after six months. We process technical error reports to keep the service secure and reliable.
+We process account and organization data to provide the service, send transactional email, and provide click analytics. The session cookie is necessary to sign you in. PostHog runs only with your consent, which you can withdraw at any time from Cookie settings. We ask again after six months. We process technical error reports to keep the service secure and reliable. We check where links point against Google's list of unsafe sites to keep phishing and malware off the service.
 
 ## Cookies
 
@@ -334,7 +338,7 @@ rdyrct sets a necessary session cookie. If you accept analytics, PostHog also se
 
 ## Sub-processors
 
-We use Cloudflare for hosting and storage, Resend for transactional email, Polar for billing, PostHog EU for product analytics, and Sentry for error monitoring.
+We use Cloudflare for hosting and storage, Resend for transactional email, Polar for billing, PostHog EU for product analytics, Sentry for error monitoring, and Google Web Risk to check links. Google receives the destination address of a link when the link is created or edited, when we check it again each week, and when its traffic jumps, and checks it against Google's list of unsafe sites. It receives nothing about you or the people who click the link.
 
 ## Retention and rights
 
@@ -348,7 +352,7 @@ For help, email [support@mail.rdyrct.com](mailto:support@mail.rdyrct.com).`,
       "The rules for using rdyrct: acceptable use for links and QR codes, account and organization responsibilities, billing via Polar, and the self-host license.",
     markdown: `# Terms of service
 
-These terms govern your use of rdyrct. By creating an account or using the service, you agree to them. Last updated 21 October 2026.
+These terms govern your use of rdyrct. By creating an account or using the service, you agree to them. Last updated 25 October 2026.
 
 ## Acceptance and acceptable use
 
@@ -356,7 +360,7 @@ Use rdyrct only if you agree to these terms. Do not create links that are illega
 
 ## Reporting abuse and appeals
 
-Report a link with the [report form](/report). A report alone never suspends a link. To appeal a pause or suspension, email [support@mail.rdyrct.com](mailto:support@mail.rdyrct.com) with the name of your organization and what the link is for.
+Report a link with the [report form](/report). A report alone never suspends a link. On the free plan it shows visitors a warning first, and the link keeps working. To appeal a pause or suspension, email [support@mail.rdyrct.com](mailto:support@mail.rdyrct.com) with the name of your organization and what the link is for.
 
 ## Accounts and organizations
 
@@ -366,7 +370,7 @@ You must keep your account secure and are responsible for activity under organiz
 
 Polar is rdyrct's merchant of record for paid plans. Subscriptions renew until you cancel them, and you can manage them in Billing. rdyrct is MIT licensed and can be self-hosted from the [public repository](https://github.com/baronunread/rdyrct). Hosted-service terms do not apply to a self-hosted installation.
 
-Links on the free plan keep redirecting however many clicks they get. Past 100,000 clicks in a month across an organization, we may stop recording that month's clicks for analytics; the links themselves keep working.
+Links keep redirecting however many clicks they get. Each plan records a set number of clicks a month for each organization (5,000 on Free, 50,000 on Hobby, 500,000 on Pro). Past that, the rest of that month's clicks are not recorded for analytics; the links themselves keep working.
 
 ## Service, termination, and law
 

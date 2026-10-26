@@ -17,6 +17,7 @@ export interface Env {
   ORG_DELETE: Workflow<{ orgId: string }>;
   /* custom-domain activation as a durable background workflow */
   DOMAIN_ACTIVATE: Workflow<{ domainId: string; hostname: string }>;
+  LINK_IMPORT: Workflow<{ importId: string }>;
   /* click ingestion: redirects buffer here instead of writing D1 directly
      (#225), one instance, flushed to D1 on a ~10 s alarm */
   CLICK_BUFFER: DurableObjectNamespace<ClickBuffer>;
@@ -87,6 +88,10 @@ export interface Env {
 
   /* bot protection: Cap proof-of-work (#98). Unset disables the check. */
   CAP_SECRET?: string; // secret, `openssl rand -hex 32`
+
+  /* destination check: Google Web Risk Lookup API (#341). Unset skips that
+     provider; the Cloudflare DNS check still runs. */
+  WEB_RISK_API_KEY?: string; // secret, a GCP API key restricted to the Web Risk API
 
   /* click buffer: flush interval in ms, e2e only. Unset means 10 s. */
   CLICK_FLUSH_MS?: string; // var

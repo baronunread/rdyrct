@@ -38,7 +38,7 @@ const RDYRCT_ROWS = {
   links: `${formatNumber(PLAN_LIMITS.hobby.links)} links held at one time (delete one to free a slot)`,
   domains: `${PLAN_LIMITS.hobby.domains} custom domain`,
   history: `${PLAN_LIMITS.hobby.analyticsDays} days (${PLAN_LIMITS.pro.analyticsDays} on Pro, ${PLAN_PRICES.pro} a month)`,
-  free: `${PLAN_LIMITS.free.links} links, ${PLAN_LIMITS.free.analyticsDays} days of analytics, no custom domain`,
+  free: `${PLAN_LIMITS.free.links} links, ${PLAN_LIMITS.free.analyticsDays} days of analytics, ${formatNumber(PLAN_LIMITS.free.trackedClicks)} clicks counted a month, no custom domain`,
 };
 
 interface Alternative {

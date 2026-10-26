@@ -210,5 +210,8 @@ test("Admin routes show their own skeletons while their data is delayed", async 
     release();
     await expect(page.getByRole("heading", { name: route.heading })).toBeVisible();
     await expect(page.getByRole("status")).toHaveCount(0);
+    // Calls to Google Web Risk, against the site-wide daily cap.
+    if (route.path === "/admin")
+      await expect(page.getByText("Google lookups · today")).toBeVisible();
   }
 });

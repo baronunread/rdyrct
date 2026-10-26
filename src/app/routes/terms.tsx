@@ -5,6 +5,8 @@ import { WebMcpMarketingTools } from "../components/webmcp-marketing-tools";
 import { useSeo } from "../lib/seo";
 import { useMarketingScroll } from "../lib/marketing-scroll";
 import { useAudience } from "../lib/audience";
+import { PLAN_LIMITS } from "@/shared/types";
+import { exactCount } from "@/shared/click-usage";
 
 // main.tsx names this export as a string, for lazyRouteComponent, which
 // static analysis can't follow.
@@ -17,7 +19,7 @@ export function TermsPage() {
     <LegalPageLayout
       authed={authed}
       title="Terms of service"
-      intro="These terms govern your use of rdyrct. By creating an account or using the service, you agree to them. Last updated 21 October 2026."
+      intro="These terms govern your use of rdyrct. By creating an account or using the service, you agree to them. Last updated 25 October 2026."
     >
       <WebMcpMarketingTools />
 
@@ -53,8 +55,8 @@ export function TermsPage() {
             report form
           </a>
           . We review reports and act on the ones that break these terms. A report alone never
-          suspends a link. When we pause or suspend your links we email you the reason. To appeal,
-          write to{" "}
+          suspends a link. On the free plan it shows visitors a warning first, and the link keeps
+          working. When we pause or suspend your links we email you the reason. To appeal, write to{" "}
           <a href={`mailto:${SUPPORT_EMAIL}`} className="text-accent hover:underline">
             {SUPPORT_EMAIL}
           </a>{" "}
@@ -90,9 +92,11 @@ export function TermsPage() {
           best-effort basis through GitHub issues only.
         </p>
         <p className="mt-2 text-muted">
-          Links on the free plan keep redirecting however many clicks they get. Past 100,000 clicks
-          in a month across an organization, we may stop recording that month's clicks for
-          analytics; the links themselves keep working.
+          Links keep redirecting however many clicks they get. Each plan records a set number of
+          clicks a month for each organization ({exactCount(PLAN_LIMITS.free.trackedClicks)} on
+          Free, {exactCount(PLAN_LIMITS.hobby.trackedClicks)} on Hobby,{" "}
+          {exactCount(PLAN_LIMITS.pro.trackedClicks)} on Pro). Past that, the rest of that month's
+          clicks are not recorded for analytics; the links themselves keep working.
         </p>
       </section>
 

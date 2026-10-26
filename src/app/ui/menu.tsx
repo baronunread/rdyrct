@@ -69,6 +69,18 @@ export function MenuItem({
   );
 }
 
+/** Read-only text at the top of a menu: what a row's badge says on hover,
+ * for a touch screen, which has none. Not an item, so arrow keys skip it. */
+export function MenuNote({ children }: { children: ReactNode }) {
+  return (
+    <BaseMenu.Group>
+      <BaseMenu.GroupLabel className="max-w-72 px-2.5 py-2 text-xs text-pretty text-muted">
+        {children}
+      </BaseMenu.GroupLabel>
+    </BaseMenu.Group>
+  );
+}
+
 export function MenuSeparator() {
   return <BaseMenu.Separator className="my-1 h-px bg-border" />;
 }

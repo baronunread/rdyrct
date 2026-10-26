@@ -24,8 +24,16 @@ bun run db:reset:local      # wipe local D1 + KV, re-apply migrations (start fro
 bun add <pkg>               # dependencies
 bunx agent-browser          # real-browser checks: screenshots, clicking through pages. Use it for any visual verification; do not hand-roll headless Chrome
 bun run db:seed:local       # seed local D1/KV with fake data (run dev server first)
-bun run deploy              # build and deploy; VITE_RDYRCT_SITE=1 (in .env) for rdyrct.com, otherwise a self-hosted copy
+bun run deploy              # build, apply D1 migrations, deploy; VITE_RDYRCT_SITE=1 (in .env) for rdyrct.com, otherwise a self-hosted copy
 ```
+
+**Rolling back a release.** `bun run deploy` migrates before it deploys.
+Wrangler has no down migrations, so a rollback is two steps:
+`bunx wrangler rollback` for the code, and, if a migration has to be undone
+too, a D1 Time Travel restore to just before the deploy
+(`bunx wrangler d1 time-travel restore rdyrct --timestamp=<deploy time>`).
+The restore puts the whole database back, so every write since that moment
+is lost.
 
 **One repo builds two things: rdyrct.com, and the copy a fork self-hosts.**
 `VITE_RDYRCT_SITE=1` builds rdyrct.com; without it every build, dev
@@ -233,7 +241,15 @@ Shell writes to repo files are sandboxed; edit through the editor tools, not
   secret is the platform admin; admin routes **404** (not 403) for everyone else.
   Platform admins can **ban** users (`user.banned`): banning wipes their sessions
   and `databaseHooks.session.create.before` (in `better-auth.ts`) refuses new
-  ones, while their orgs/links keep working.
+  ones. A ban (`banUser` in `abuse-hold.ts`) also sets `orgs.disabled_at` on
+  every org the user owns: each link and custom domain answers a "disabled"
+  page (410) from its KV value, nobody can change the org, the ban revokes
+  the user's Polar subscription, and the daily cron deletes the org 90 days
+  later (`purgeBannedOrgs`). An unban before then turns the orgs back on,
+  each link in the state it had before the ban. It does not unblock hosts
+  or restore the subscription. The ban dialog blocks a destination host only
+  when the admin ticks it, and never a site in `NEVER_BLOCKED`
+  (`shared/abuse-rules.ts`).
   Deleting an account takes every org it **owns** with it, teammates
   included: an org has no plan of its own (`orgPlan()` reads its owner's), so
   one left ownerless would have no plan, no billing and nobody who could
@@ -318,7 +334,7 @@ and vars live in `wrangler.jsonc`; local dev reads everything from `.dev.vars`
 `BETTER_AUTH_SECRET`, `SUPERADMIN_EMAIL`, `RESEND_API_KEY`, `MAIL_FROM`,
 `APP_URL`, `APP_HOST`, `POLAR_ACCESS_TOKEN`/`POLAR_WEBHOOK_SECRET`/
 `POLAR_PRO_PRODUCT_ID`/`POLAR_HOBBY_PRODUCT_ID`, `CF_API_TOKEN`/`CF_ZONE_ID`,
-`SENTRY_DSN`.
+`SENTRY_DSN`, `WEB_RISK_API_KEY` (optional; unset skips Google Web Risk).
 
 ## Layout
 

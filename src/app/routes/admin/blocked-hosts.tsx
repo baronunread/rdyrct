@@ -13,8 +13,8 @@ import { Spinner } from "../../ui/spinner";
 import { TableSkeleton } from "../../ui/skeleton";
 import { useToast } from "../../ui/toast";
 
-/** Destination hosts nobody may link to. Fed by the abuse decision, and by
- * hand here. Listed with a way to remove an entry, because a blocklist with no
+/** Destination hosts nobody may link to. Fed by a ban (only the hosts the
+ * admin picks), and by hand here. Listed with a way to remove an entry, because a blocklist with no
  * way out turns one mistake into a permanent outage for a legitimate site. */
 export function BlockedHosts() {
   const { data, isPending } = useAdminBlockedHosts();
@@ -101,7 +101,7 @@ function BlockedTable({
   if (!rows || rows.length === 0)
     return (
       <p className="py-6 text-center text-sm text-muted">
-        No blocked hosts. Marking an organization as abuse adds the hosts its links used.
+        No blocked hosts. Banning a user can add the hosts their links used.
       </p>
     );
   return (

@@ -1,5 +1,26 @@
 import { describe, expect, test } from "bun:test";
-import { blockHostOf, holdReasonFor } from "../src/shared/abuse-rules";
+import { blockable, blockHostOf, holdReasonFor } from "../src/shared/abuse-rules";
+
+describe("blockable", () => {
+  test("never a site everyone uses, nor a host under one", () => {
+    for (const host of ["google.com", "docs.google.com", "youtu.be", "github.com", "wa.me"])
+      expect(blockable(host), host).toBe(false);
+  });
+
+  test("never a free app host itself, but one app on it, yes", () => {
+    expect(blockable("up.railway.app")).toBe(false);
+    expect(blockable("vercel.app")).toBe(false);
+    expect(blockable("flipkart-production-7ae5.up.railway.app")).toBe(true);
+    expect(blockable("scam.github.io")).toBe(true);
+  });
+
+  test("any other host", () => {
+    expect(blockable("phish.example")).toBe(true);
+    // A look-alike is not the real site.
+    expect(blockable("google.com.evil.example")).toBe(true);
+    expect(blockable("notgoogle.com")).toBe(true);
+  });
+});
 
 describe("holdReasonFor", () => {
   test("holds a brand name on a free host, the 2026-10-18 shape", () => {

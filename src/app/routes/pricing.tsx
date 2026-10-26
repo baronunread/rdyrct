@@ -43,6 +43,7 @@ const CARDS = [
       `${PLAN_LIMITS.free.links} links`,
       `${PLAN_LIMITS.free.members} members`,
       `${PLAN_LIMITS.free.analyticsDays} days of analytics`,
+      `${formatNumber(PLAN_LIMITS.free.trackedClicks)} clicks counted a month`,
       "A QR code for every link",
       "API and MCP",
     ],
@@ -57,6 +58,7 @@ const CARDS = [
       `${PLAN_LIMITS.hobby.members} members`,
       "1 custom domain, your own slugs",
       `${PLAN_LIMITS.hobby.analyticsDays} days of analytics`,
+      `${formatNumber(PLAN_LIMITS.hobby.trackedClicks)} clicks counted a month`,
       "QR codes with your logo and colors",
     ],
   },
@@ -69,6 +71,7 @@ const CARDS = [
       `${PLAN_LIMITS.pro.members} members`,
       `${PLAN_LIMITS.pro.domains} custom domains`,
       "A year of analytics",
+      `${formatNumber(PLAN_LIMITS.pro.trackedClicks)} clicks counted a month`,
       "Direct email support",
     ],
   },
@@ -76,18 +79,24 @@ const CARDS = [
 
 function PlanCards({ match }: { match: StoredPlan | null }) {
   return (
-    <div className="grid gap-4 pt-10 md:grid-cols-3">
-      {/* One primary button, on the plan the finder picked, so the cards,
+    <div className="flex flex-col gap-4 pt-10">
+      <div className="grid gap-4 md:grid-cols-3">
+        {/* One primary button, on the plan the finder picked, so the cards,
           the finder and the button all point at the same plan. Pro keeps it
           when nothing fits. */}
-      {CARDS.map((card) => (
-        <PlanCard
-          key={card.plan}
-          {...card}
-          match={match === card.plan}
-          primary={match ? match === card.plan : card.plan === "pro"}
-        />
-      ))}
+        {CARDS.map((card) => (
+          <PlanCard
+            key={card.plan}
+            {...card}
+            match={match === card.plan}
+            primary={match ? match === card.plan : card.plan === "pro"}
+          />
+        ))}
+      </div>
+      <p className="max-w-prose text-sm text-muted">
+        Clicks are counted for each organization over the calendar month. Past your plan's count,
+        links keep redirecting every visitor; only the counting stops, until the 1st.
+      </p>
     </div>
   );
 }
@@ -187,6 +196,7 @@ const RANGES = {
   members: { label: "Team members", min: 1, max: 40, log: false },
   domains: { label: "Custom domains", min: 0, max: 10, log: false },
   analyticsDays: { label: "Days of analytics history", min: 1, max: 730, log: true },
+  trackedClicks: { label: "Clicks a month", min: 0, max: 1_000_000, log: true },
 } satisfies Record<NeedKey, { label: string; min: number; max: number; log: boolean }>;
 const STEPS = 1000;
 
@@ -251,6 +261,7 @@ const NEED_WORDS = {
   members: (n) => `${n} members`,
   domains: (n) => (n === 1 ? "a custom domain" : `${n} custom domains`),
   analyticsDays: (n) => `${formatNumber(n)} days of history`,
+  trackedClicks: (n) => `${formatNumber(n)} clicks a month`,
 } satisfies Record<NeedKey, (n: number) => string>;
 
 function fitReason(fit: PlanFit): string {
@@ -320,6 +331,7 @@ export function PricingPage() {
     members: 2,
     domains: 1,
     analyticsDays: 30,
+    trackedClicks: 2_000,
   });
   const fit = planFor(needs);
   return (
