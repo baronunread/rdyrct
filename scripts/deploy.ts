@@ -8,8 +8,7 @@
  * would put rdyrct.com live without its landing page, and a stray one would
  * give a fork rdyrct.com's pages and analytics.
  *
- * Both builds apply D1 migrations before the Worker goes out, and stop if
- * any is still pending afterwards.
+ * Both builds apply D1 migrations before the Worker goes out.
  */
 import { $ } from "bun";
 import { readFileSync } from "node:fs";
@@ -41,14 +40,13 @@ console.log(site ? "Deploying rdyrct.com" : "Deploying a self-hosted copy");
 
 await $`bun run build`.env({ ...process.env, POSTHOG_SOURCEMAPS: site ? "1" : "0" });
 if (site) await $`bun run posthog:upload`;
+// Let Wrangler refresh an expired OAuth token in a command of its own. A D1
+// query sent by the same command that refreshed is often refused with 7403
+// (7 of 10 in a test; 0 of 26 once the refresh ran first). workers-sdk#16402.
+await $`bunx wrangler whoami`.quiet();
 // Migrate first, so new code never meets an old schema. To undo a migration,
-// restore D1 with Time Travel (AGENTS.md, "Rolling back a release").
-await $`bunx wrangler d1 migrations apply DB --remote`;
-// Answering "n" at Wrangler's prompt exits 0 having applied nothing, so check
-// rather than trust the exit code.
-const pending = await $`bunx wrangler d1 migrations list DB --remote`.text();
-if (!pending.includes("No migrations to apply")) {
-  console.error("Migrations are still pending, so the Worker was not deployed.");
-  process.exit(1);
-}
+// restore D1 with Time Travel (AGENTS.md, "Rolling back a release"). CI=true
+// skips Wrangler's "continue?" prompt: answering "n" there exits 0 having
+// applied nothing, and the deploy below would then ship anyway.
+await $`bunx wrangler d1 migrations apply DB --remote`.env({ ...process.env, CI: "true" });
 await $`bunx wrangler deploy`;
