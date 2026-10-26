@@ -16,6 +16,7 @@ import { useToast } from "../../ui/toast";
 import { ConfirmDialog } from "../../ui/confirm-dialog";
 import { SearchInput } from "./search-input";
 import { BanDialog } from "./ban-dialog";
+import { HoldReason } from "./hold-reason";
 import { paginate } from "./util";
 import { SortTh } from "../../ui/sort-th";
 import { sortRows } from "../../lib/sort";
@@ -184,6 +185,7 @@ function OrgRow({
       </Td>
       <Td>
         <OrgBadges org={org} suspendedLabel="suspended" />
+        <HoldReason why={org.linksSuspendedAt ? org.suspendReason : null} />
       </Td>
       <Td className="tnum text-right">{org.members}</Td>
       <Td className="tnum text-right">{org.links}</Td>

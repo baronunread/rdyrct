@@ -566,6 +566,8 @@ export interface AdminOrgRow {
   disabledAt: number | null;
   /** When the org's links were suspended, or null. */
   linksSuspendedAt: number | null;
+  /** Why, from the held link that caused it, or null when nothing is held. */
+  suspendReason: string | null;
   /** When the sweep or enough reports flagged the org for a human look. */
   reviewFlaggedAt: number | null;
 }
