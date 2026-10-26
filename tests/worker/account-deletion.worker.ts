@@ -13,7 +13,7 @@ import { drizzle } from "drizzle-orm/d1";
 import * as schema from "../../src/worker/db/schema";
 import { deleteOrgs } from "../../src/worker/routes/orgs";
 import { deleteAccountAndOwnedOrgs } from "../../src/worker/better-auth";
-import { applyTestMigrations, overrideEnv } from "./support";
+import { applyTestMigrations, arrayFormCreateBatch, overrideEnv } from "./support";
 
 const ORG = "org-handover";
 const LEAVING = "user-leaving";
@@ -61,11 +61,11 @@ function fakeTeardown(fail = false) {
     async get() {
       throw new Error("instance not found");
     },
-    async createBatch(batch) {
+    createBatch: arrayFormCreateBatch(async (batch) => {
       if (fail) throw new Error("injected workflow start failure");
       started.push(...batch.map((entry) => entry.id ?? ""));
       return [];
-    },
+    }),
     async deleteBatch() {
       throw new Error("teardown never deletes a batch");
     },

@@ -6,7 +6,13 @@ import worker from "../../src/worker";
 import * as schema from "../../src/worker/db/schema";
 import type { Env } from "../../src/worker/env";
 import { deleteOrg, sweepStalledOrgDeletions } from "../../src/worker/routes/orgs";
-import { adminCookie, applyTestMigrations, authEnv, overrideEnv } from "./support";
+import {
+  adminCookie,
+  applyTestMigrations,
+  arrayFormCreateBatch,
+  authEnv,
+  overrideEnv,
+} from "./support";
 
 // A workflow instance handle that answers the one question deleteOrg asks of
 // it. Every other member throws, so a test that starts depending on Workflows
@@ -44,11 +50,11 @@ function fakeOrgDeleteWorkflow() {
     async get() {
       throw new Error("instance not found");
     },
-    async createBatch(batch) {
+    createBatch: arrayFormCreateBatch(async (batch) => {
       const fresh = batch.filter((entry) => !started.includes(entry.id ?? ""));
       started.push(...fresh.map((entry) => entry.id ?? ""));
       return fresh.map(() => instanceReporting("running"));
-    },
+    }),
     async deleteBatch() {
       throw new Error("deleteOrg never deletes a batch");
     },
@@ -69,9 +75,9 @@ function failingStartWorkflow(existingStatus?: InstanceStatus["status"]): Env["O
       if (!existingStatus) throw new Error("instance not found");
       return instanceReporting(existingStatus);
     },
-    async createBatch() {
+    createBatch: arrayFormCreateBatch(async () => {
       throw new Error("injected workflow start failure");
-    },
+    }),
     async deleteBatch() {
       throw new Error("deleteOrg never deletes a batch");
     },
@@ -261,14 +267,14 @@ describe("sweepStalledOrgDeletions", () => {
           },
         });
       },
-      async createBatch(batch) {
+      createBatch: arrayFormCreateBatch(async (batch) => {
         // Modelling the documented contract: an id already in use is skipped
         // and left out of what comes back. `skipCreate` is what an instance
         // that exists but could not be read looks like from here.
         if (skipCreate) return [];
         created.push(...batch.map((entry) => entry.id ?? ""));
         return batch.map(() => instanceReporting("running"));
-      },
+      }),
       async deleteBatch() {
         throw new Error("the sweep never deletes a batch");
       },
@@ -335,10 +341,10 @@ describe("sweepStalledOrgDeletions", () => {
         if (id === missingId) throw new Error("instance not found");
         return instanceReporting("running");
       },
-      async createBatch(batch) {
+      createBatch: arrayFormCreateBatch(async (batch) => {
         created.push(...batch.map((entry) => entry.id ?? ""));
         return batch.map(() => instanceReporting("running"));
-      },
+      }),
       async deleteBatch() {
         throw new Error("the sweep never deletes a batch");
       },
@@ -399,9 +405,7 @@ describe("sweepStalledOrgDeletions: reporting", () => {
       async get() {
         throw new Error("lookup failed");
       },
-      async createBatch() {
-        return [];
-      },
+      createBatch: arrayFormCreateBatch(async () => []),
       async deleteBatch() {
         throw new Error("the sweep never deletes a batch");
       },
