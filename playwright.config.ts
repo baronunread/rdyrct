@@ -80,7 +80,10 @@ export default defineConfig({
       // Vite's inline React Refresh preamble, so only this one serves the
       // policy that actually ships. The build is part of the command so the
       // suite can never assert against a stale dist/.
-      command: `bun run build && bunx vite preview --port ${previewPort} --strictPort`,
+      // APP_HOST is pinned to the preview's own host (a later line in a
+      // .dev.vars wins): the CSP only allows Turnstile on APP_HOST, and the
+      // copied .dev.vars names the dev server's host instead.
+      command: `bun run build && printf '\\nAPP_HOST=localhost:${previewPort}\\nAPP_URL=${previewUrl}\\n' >> dist/rdyrct/.dev.vars && bunx vite preview --port ${previewPort} --strictPort`,
       url: previewUrl,
       reuseExistingServer: false,
       timeout: 180_000,

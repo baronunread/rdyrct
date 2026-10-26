@@ -144,8 +144,9 @@ its UTM builder (`/api/shorten`), and the abuse report form
 threat model, and it would tax every real visitor on every visit. Each form
 renders the widget with its own `action`, and the Worker refuses a token
 whose action is not the one it expects, so a token earned on one form cannot
-open another. Cloudflare's test secret never echoes an action, so that one
-check is skipped when `siteverify` says it answered with a testing key.
+open another. Cloudflare's test secrets never echo an action, so that one
+check is skipped when our own configured secret is one of Cloudflare's
+published test secrets. `siteverify`'s own say-so is never trusted for this.
 
 **How it looks.** It does not, unless Cloudflare wants a click. The widget
 is `interaction-only` and starts on the form's first keystroke; when
@@ -157,19 +158,25 @@ and `TURNSTILE_SECRET_KEY` (`prod.secrets.env.example`). The site key is
 public, since `/api/config` hands it to the browser, but it is a secret
 rather than a var in `wrangler.jsonc` so a fork does not inherit ours.
 
-With the secret unset the Worker skips the check, and with the site key unset
-the browser never loads Cloudflare's script: that is a self-hosted copy that
-leaves both blank. A secret with no site key refuses every guarded request,
-because the browser has no widget to render, and a form that looks protected
-and is not is the worse failure. Cloudflare publishes test keys that always
-pass; `.dev.vars.local.example` and the e2e run use them.
+**Set both or neither, in one call.** Put both keys in `prod.secrets.env` and
+run `bunx wrangler secret bulk prod.secrets.env` once, so no deploy ever sees
+one without the other. With neither set the check is off and the browser
+never loads Cloudflare's script: that is a self-hosted copy that leaves both
+blank. With only one set the Worker treats Turnstile as misconfigured: it
+serves no site key, refuses every guarded form, and logs
+`turnstile_misconfigured`. A lone site key would render a widget whose token
+nobody checks, and a lone secret would have no widget to produce a token;
+either way a form that looks protected and is not is the worse failure.
+Cloudflare publishes test keys that always pass; `.dev.vars.local.example`
+and the e2e run use them.
 
 **CSP.** `script-src` and `frame-src` allow
-`https://challenges.cloudflare.com` only on the app host, and only when
-`TURNSTILE_SITE_KEY` is set (`turnstileAllowed` in
+`https://challenges.cloudflare.com` only when the request host is `APP_HOST`
+and both keys are set (`turnstileAllowed` in
 `src/worker/security-headers.ts`). A custom domain, the shared link host and a
 copy without the keys never allow it. Asserted in
-`tests/e2e/production/csp.pw.ts` and `tests/worker/security-headers.worker.ts`.
+`tests/e2e/production/csp.pw.ts`, `tests/worker/security-headers.worker.ts`
+and `tests/worker/turnstile.worker.ts`.
 
 **If Cloudflare is unreachable** `siteverify` fails closed: the guarded
 forms are refused until it answers.

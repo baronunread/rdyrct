@@ -27,6 +27,23 @@ test("a new account gets one welcome email once its address is verified", async 
     .toHaveLength(1);
 });
 
+test("a sign-up sent before /api/config answers still carries a Turnstile token", async ({
+  page,
+}) => {
+  // The site key arrives with /api/config. A form submitted before that used
+  // to go out with no token, be refused, retry with no token again, and fail.
+  await page.route("**/api/config", async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, 6_000));
+    await route.continue();
+  });
+  const email = `slow-config-${Date.now()}@gmail.com`;
+  await submitSignup(page, email, "test-password-123");
+
+  await expect(page.getByRole("heading", { name: "Enter your code" })).toBeVisible({
+    timeout: 40_000,
+  });
+});
+
 test.describe("authentication forms", () => {
   for (const token of [null, "fresh-signup-session"]) {
     test(`no-mail signup counts completion only with a fresh session (${token ? "new" : "duplicate"})`, async ({

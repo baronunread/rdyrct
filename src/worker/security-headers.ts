@@ -28,11 +28,14 @@
  *
  * Cloudflare Turnstile (#304) is the one source decided per request rather
  * than per build: its script and the iframe its challenge runs in come from
- * challenges.cloudflare.com, allowed only when the deployment serves a
- * TURNSTILE_SITE_KEY, which is the only time the browser loads it. A
- * self-hosted copy without the keys never allows it.
+ * challenges.cloudflare.com, allowed only on the app's own host (APP_HOST)
+ * and only when Turnstile is on (both keys set), which is the only time the
+ * browser loads it. See turnstileAllowed(). A custom domain, the shared link
+ * host and a self-hosted copy without the keys never allow it.
  */
 import { POSTHOG_CONFIGURED, RDYRCT_SITE } from "../shared/site";
+import type { Env } from "./env";
+import { turnstileMode } from "./turnstile";
 
 const POSTHOG = POSTHOG_CONFIGURED ? "https://*.posthog.com" : "";
 const SENTRY =
@@ -115,8 +118,7 @@ const CSP_WITH_TURNSTILE = buildCsp(TURNSTILE);
  *
  * The copy is cheap: the body is handed over by reference, never read.
  *
- * `turnstile` adds challenges.cloudflare.com: pass whether TURNSTILE_SITE_KEY
- * is set.
+ * `turnstile` adds challenges.cloudflare.com: pass turnstileAllowed().
  */
 export function applySecurityHeaders(res: Response, turnstile = false): Response {
   const out = new Response(res.body, res);
@@ -133,4 +135,13 @@ export function applySecurityHeaders(res: Response, turnstile = false): Response
   out.headers.set("X-Frame-Options", "DENY");
   out.headers.set("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
   return out;
+}
+
+/**
+ * Whether this response may allow Turnstile in its CSP: the check is on, and
+ * the request is for the app itself. Link hosts (custom domains, the shared
+ * link host) serve redirects and the disabled page, which never load it.
+ */
+export function turnstileAllowed(env: Env, url: string): boolean {
+  return turnstileMode(env) === "on" && new URL(url).host === env.APP_HOST.toLowerCase();
 }

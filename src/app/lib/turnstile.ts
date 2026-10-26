@@ -11,8 +11,9 @@
  * and ignored when it is not.
  */
 import { useCallback, useRef } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { TURNSTILE_TOKEN_HEADER } from "@/shared/types";
-import { useConfig } from "./hooks";
+import { configQuery, useConfig } from "./hooks";
 import { retryOnTurnstileFailure } from "./turnstile-retry";
 
 export type TurnstileScope = "signup" | "password-reset" | "anon-link" | "report";
@@ -119,25 +120,41 @@ async function solve(siteKey: string, scope: TurnstileScope): Promise<string> {
  * submitted twice solves again rather than replaying a burned token.
  */
 export function useTurnstile(scope: TurnstileScope) {
-  const siteKey = useConfig().data?.turnstileSiteKey;
+  const qc = useQueryClient();
+  const loadedSiteKey = useConfig().data?.turnstileSiteKey;
   const pending = useRef<{ token: Promise<string>; primedAt: number } | null>(null);
 
-  const prime = useCallback(() => {
-    if (!siteKey) return;
-    const held = pending.current;
-    if (held && Date.now() - held.primedAt < TOKEN_FRESH_MS) return;
-    pending.current = { token: solve(siteKey, scope), primedAt: Date.now() };
-  }, [scope, siteKey]);
+  const startSolve = useCallback(
+    (siteKey: string | undefined) => {
+      if (!siteKey) return;
+      const held = pending.current;
+      if (held && Date.now() - held.primedAt < TOKEN_FRESH_MS) return;
+      pending.current = { token: solve(siteKey, scope), primedAt: Date.now() };
+    },
+    [scope],
+  );
+
+  /** Starts early when the config is already here; headers() catches up
+   * when it is not. */
+  const prime = useCallback(() => startSolve(loadedSiteKey), [startSolve, loadedSiteKey]);
 
   const headers = useCallback(async (): Promise<Record<string, string>> => {
-    prime();
+    // A form submitted before /api/config answered must not go out without
+    // a token, so wait for it here. A failed fetch is not cached, so the
+    // retry after a refusal asks again instead of failing for the whole
+    // page load.
+    const siteKey = await qc
+      .ensureQueryData(configQuery)
+      .then((config) => config.turnstileSiteKey)
+      .catch(() => undefined);
+    startSolve(siteKey);
     const token = (await pending.current?.token) ?? "";
     pending.current = null;
     // The one place that knows "we could not run the check" from "the server
     // refused it".
     if (siteKey && !token) console.warn("turnstile_solve_failed", scope);
     return token ? { [TURNSTILE_TOKEN_HEADER]: token } : {};
-  }, [prime, scope, siteKey]);
+  }, [qc, startSolve, scope]);
 
   const guarded = useCallback<TurnstileGuard>(
     (run) => retryOnTurnstileFailure(run, headers),

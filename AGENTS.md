@@ -261,10 +261,11 @@ Shell writes to repo files are sandboxed; edit through the editor tools, not
   `hooks.before`), the landing shortener (`/api/shorten`) and the report
   form (`/api/reports`), each form with its own `action`. Cloudflare is the
   one third party that sees the visitor, and only on those forms. Both keys
-  are secrets: `TURNSTILE_SITE_KEY` reaches the browser through
-  `/api/config` and adds `challenges.cloudflare.com` to the CSP; unset
-  `TURNSTILE_SECRET_KEY` switches the check off, and a copy with neither
-  never loads Cloudflare's script. Dev, CI and e2e use Cloudflare's
+  are secrets, set together (`turnstileMode`): with both, `/api/config`
+  serves the site key and the CSP admits `challenges.cloudflare.com` on
+  `APP_HOST`; with neither, the check is off and the browser never loads
+  Cloudflare's script; with one, every guarded form is refused and
+  `turnstile_misconfigured` is logged. Dev, CI and e2e use Cloudflare's
   always-pass test keys. See `docs/rate-limiting.md` for all three layers
   (WAF rules, Workers limiters, Turnstile) and the dashboard rules to apply
   by hand.
@@ -302,7 +303,7 @@ Shell writes to repo files are sandboxed; edit through the editor tools, not
 - Data layer: `api()` + `ApiError` (`.status`, `.code`) in `src/app/lib/api.ts`;
   TanStack Query hooks in `src/app/lib/hooks.ts`.
 - **Strict CSP** on published pages, everything self-contained: no remote fonts,
-  images, scripts, or fetches. Icons via `lucide-react`; art via inline CSS/SVG. The one remote image is Fazier's launch badge in the landing footer, allowed in img-src for rdyrct.com's build only (their verifier needs their own image). script-src and frame-src admit Cloudflare Turnstile's script and challenge iframe only when `TURNSTILE_SITE_KEY` is set.
+  images, scripts, or fetches. Icons via `lucide-react`; art via inline CSS/SVG. The one remote image is Fazier's launch badge in the landing footer, allowed in img-src for rdyrct.com's build only (their verifier needs their own image). script-src and frame-src admit Cloudflare Turnstile's script and challenge iframe only on `APP_HOST` and only when both Turnstile keys are set.
 - Email: `sendEmail()` (`src/worker/email.ts`) uses the Resend HTTP API via plain
   `fetch`, with `RESEND_BASE_URL` pointing at the emulator in dev. Keep it: the
   Resend SDK can't repoint its base URL, which would break the emulator flow.

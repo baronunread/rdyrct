@@ -122,17 +122,17 @@ Commit the rewritten `wrangler.jsonc` to your fork. After that, `bun run deploy`
 
 Everything else is optional. Each piece says what it adds:
 
-| Setting                                      | Adds                                                                                                                     |
-| -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| `RESEND_API_KEY`, `MAIL_FROM`                | Email: sign-up verification codes, password reset, invites, notices. Without it, sign-up skips verification (see below). |
-| `POLAR_*`                                    | Selling Hobby and Pro plans. Without it, nobody is capped and billing is hidden.                                         |
-| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`   | "Continue with Google".                                                                                                  |
-| `CF_API_TOKEN`, `CF_ZONE_ID`                 | Customers' own domains through Cloudflare for SaaS.                                                                      |
-| `SHARED_LINK_HOST`                           | A second, shorter host for new shared-domain links.                                                                      |
-| `TURNSTILE_SITE_KEY`, `TURNSTILE_SECRET_KEY` | Cloudflare Turnstile in front of sign-up, password reset and the report form. Cloudflare then sees those visitors.       |
-| `WEB_RISK_API_KEY`                           | Google Web Risk as a second destination check. A listed destination puts its link on hold.                               |
-| `SENTRY_DSN`                                 | Error reports to your Sentry project.                                                                                    |
-| `SITE_NAME`                                  | The name every tab shows, such as "Acme links". Without it, tabs show your copy's host.                                  |
+| Setting                                      | Adds                                                                                                                                                                                                       |
+| -------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `RESEND_API_KEY`, `MAIL_FROM`                | Email: sign-up verification codes, password reset, invites, notices. Without it, sign-up skips verification (see below).                                                                                   |
+| `POLAR_*`                                    | Selling Hobby and Pro plans. Without it, nobody is capped and billing is hidden.                                                                                                                           |
+| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`   | "Continue with Google".                                                                                                                                                                                    |
+| `CF_API_TOKEN`, `CF_ZONE_ID`                 | Customers' own domains through Cloudflare for SaaS.                                                                                                                                                        |
+| `SHARED_LINK_HOST`                           | A second, shorter host for new shared-domain links.                                                                                                                                                        |
+| `TURNSTILE_SITE_KEY`, `TURNSTILE_SECRET_KEY` | Cloudflare Turnstile in front of sign-up, password reset and the report form. Set both in one `wrangler secret bulk` call: one without the other refuses those forms. Cloudflare then sees those visitors. |
+| `WEB_RISK_API_KEY`                           | Google Web Risk as a second destination check. A listed destination puts its link on hold.                                                                                                                 |
+| `SENTRY_DSN`                                 | Error reports to your Sentry project.                                                                                                                                                                      |
+| `SITE_NAME`                                  | The name every tab shows, such as "Acme links". Without it, tabs show your copy's host.                                                                                                                    |
 
 **With no email provider and no Google sign-in, accounts are not verified and passwords cannot be reset.** That is fine for a private instance and not recommended for a public one. The admin console says so while it is true.
 

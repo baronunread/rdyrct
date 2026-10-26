@@ -55,7 +55,7 @@ import { PRERENDERED_PUBLIC_PATHS } from "../shared/page-meta";
 import { RDYRCT_SITE } from "../shared/site";
 import { canonicalSpaPath } from "../shared/spa-routes";
 import { enforcePublicAuthRateLimit, enforceSignedApiRateLimit } from "./rate-limit";
-import { applySecurityHeaders } from "./security-headers";
+import { applySecurityHeaders, turnstileAllowed } from "./security-headers";
 import { drizzle } from "drizzle-orm/d1";
 import * as schema from "./db/schema";
 import {
@@ -112,7 +112,7 @@ app.onError((err, c) => {
   // more than just a machine-readable `code` (e.g. same_destination_match's
   // matchedLinkId/matchedLink) straight through to the caller.
   const respond = (body: ErrorBody, status: ContentfulStatusCode) =>
-    applySecurityHeaders(c.json(body, status), !!c.env.TURNSTILE_SITE_KEY);
+    applySecurityHeaders(c.json(body, status), turnstileAllowed(c.env, c.req.url));
   // Attach the error to the wide event so it reaches Sentry Logs with the
   // request context already accumulated. withSentry still captures the
   // exception as a Sentry Issue for alerting.
@@ -149,7 +149,7 @@ app.onError((err, c) => {
 // while it isn't.
 app.use("*", async (c, next) => {
   await next();
-  c.res = applySecurityHeaders(c.res, !!c.env.TURNSTILE_SITE_KEY);
+  c.res = applySecurityHeaders(c.res, turnstileAllowed(c.env, c.req.url));
 });
 
 /* ---------------- redirect hot path ---------------- */

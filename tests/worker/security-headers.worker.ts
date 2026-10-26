@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { env } from "cloudflare:workers";
 import { reset } from "cloudflare:test";
-import { applySecurityHeaders } from "../../src/worker/security-headers";
-import { applyTestMigrations, fetchWorker } from "./support";
+import { applySecurityHeaders, turnstileAllowed } from "../../src/worker/security-headers";
+import { applyTestMigrations, fetchWorker, overrideEnv } from "./support";
 
 const HEADER_NAMES = [
   "content-security-policy",
@@ -90,5 +90,26 @@ describe("security headers (#21)", () => {
     expect(res.status).toBe(302);
     expect(res.headers.get("location")).toBe("https://example.com/");
     expectSecurityHeaders(res);
+  });
+});
+
+describe("Turnstile in the CSP (#304)", () => {
+  const keys = { TURNSTILE_SITE_KEY: "site", TURNSTILE_SECRET_KEY: "secret" };
+  const at = (overrides: Parameters<typeof overrideEnv>[0]) =>
+    overrideEnv({ APP_HOST: "rdyrct.com", ...overrides });
+
+  it("is allowed on the app host when both keys are set", () => {
+    expect(turnstileAllowed(at(keys), "https://rdyrct.com/signup")).toBe(true);
+  });
+
+  it("is never allowed on a link host", () => {
+    expect(turnstileAllowed(at(keys), "https://rdyr.cc/abc")).toBe(false);
+    expect(turnstileAllowed(at(keys), "https://go.example.com/abc")).toBe(false);
+  });
+
+  it("is not allowed with either key missing", () => {
+    const url = "https://rdyrct.com/signup";
+    expect(turnstileAllowed(at({ ...keys, TURNSTILE_SECRET_KEY: undefined }), url)).toBe(false);
+    expect(turnstileAllowed(at({ ...keys, TURNSTILE_SITE_KEY: undefined }), url)).toBe(false);
   });
 });
