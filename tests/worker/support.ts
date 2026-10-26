@@ -45,6 +45,39 @@ const stubAssets: Fetcher = {
 };
 
 /**
+ * A `createBatch` for a stub Workflow binding, from an implementation of the
+ * array form.
+ *
+ * workers-types 5.20261019 overloads `createBatch`: the object form
+ * (`{ instances }` or `{ count }`, resolving to `{ created, errors }`) and
+ * the deprecated array form (resolving to the instances it created). A stub
+ * written as one method cannot satisfy both, so it goes through here. The
+ * app only calls the array form, because it relies on that form leaving an
+ * id already in use out of the result rather than reporting it as an error
+ * (`deleteOrg` in src/worker/routes/orgs.ts), so the object form throws.
+ */
+export function arrayFormCreateBatch<T>(
+  impl: (batch: WorkflowInstanceCreateOptions<T>[]) => Promise<WorkflowInstance[]>,
+): Workflow<T>["createBatch"] {
+  function createBatch(options: WorkflowBatchCreateOptions<T>): Promise<WorkflowBatchCreateResult>;
+  function createBatch(batch: WorkflowInstanceCreateOptions<T>[]): Promise<WorkflowInstance[]>;
+  // Not async: `impl`'s promise goes back as it is. Wrapping it in a second
+  // promise leaves a rejected one without a handler for a tick, which workerd
+  // reports as an unhandled rejection in the tests that inject a failure.
+  function createBatch(
+    input: WorkflowBatchCreateOptions<T> | WorkflowInstanceCreateOptions<T>[],
+  ): Promise<WorkflowBatchCreateResult | WorkflowInstance[]> {
+    if (!Array.isArray(input)) {
+      return Promise.reject(
+        new Error("the app calls the array form of createBatch; this stub models only that"),
+      );
+    }
+    return impl(input);
+  }
+  return createBatch;
+}
+
+/**
  * Workflow tests inject their own binding when they need to assert scheduling
  * or instance state. Every other worker test gets a completed no-op instead,
  * so a real workflow cannot outlive the test and query D1 after its reset.
@@ -71,9 +104,7 @@ function stubWorkflow<T>(): Workflow<T> {
     async get() {
       return instance;
     },
-    async createBatch(batch) {
-      return batch.map(() => instance);
-    },
+    createBatch: arrayFormCreateBatch(async (batch) => batch.map(() => instance)),
     async deleteBatch(instanceIds) {
       return { deleted: instanceIds.map((id) => ({ id })), errors: [] };
     },
