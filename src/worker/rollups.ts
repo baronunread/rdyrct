@@ -34,8 +34,9 @@ export type ClickPayload = string;
 // The clicks in ?1 that are not stored yet, once each. Read before the raw
 // insert that follows these statements in the same batch, so a dedupe id
 // already in `clicks` (a redelivered click) adds nothing here, and neither
-// does the same id twice in one chunk.
-const FRESH = `incoming as (
+// does the same id twice in one chunk. Exported for the monthly counter
+// (click-caps.ts), which has to count exactly what the rollups count.
+export const FRESH = `incoming as (
     select value ->> 0 as link_id, value ->> 1 as org_id, value ->> 2 as ts,
            value ->> 3 as country, value ->> 4 as referrer, value ->> 5 as device,
            value ->> 6 as dedupe_id

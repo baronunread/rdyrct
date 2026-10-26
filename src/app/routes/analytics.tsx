@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useStats, useCurrentUser } from "../lib/hooks";
+import { useStats, useCurrentUser, useClickUsage } from "../lib/hooks";
 import { useCurrentOrg } from "../lib/current-org";
 import { clicksByWeekday } from "../lib/click-buckets";
 import {
@@ -21,6 +21,7 @@ import {
 } from "../components/charts";
 import { AnalyticsSkeleton } from "../components/skeletons";
 import { NoOrgState } from "../components/no-org";
+import { ClickCapBanner } from "../components/over-limit";
 import { ExportCsvButton } from "../components/export-csv-button";
 import { Card, PageHeader } from "../ui/misc";
 import { Tooltip } from "../ui/tooltip";
@@ -218,6 +219,7 @@ function AnalyticsReport({
           </div>
         }
       />
+      <ClickCapBanner />
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <StatCard label="Total clicks" value={s.totalClicks} delta={s.totalClicksDelta} />
         <StatCard label="Clicks · 7d" value={s.clicks7d} delta={s.clicks7dDelta} />
@@ -265,6 +267,8 @@ function AnalyticsReport({
 function AnalyticsForOrg({ org }: { org: UserOrg }) {
   const [range, setRange] = useState<AnalyticsRange>({});
   const stats = useStats(org.id, range.days, range.bucket);
+  // Fetched with the stats so the cap banner is there when the page draws.
+  useClickUsage(org.id);
 
   if (stats.isLoading) return <AnalyticsSkeleton />;
   if (!stats.data) return <p className="text-sm text-danger">Could not load stats.</p>;

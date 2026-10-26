@@ -31,7 +31,10 @@ import type {
   SeriesPoint,
   InvitePreview,
   RecentClick,
+  ClickUsage,
 } from "@/shared/types";
+import { monthKey, nextMonthStart } from "@/shared/click-usage";
+import { clicksThisMonth } from "../click-caps";
 import { INVITABLE_ROLES } from "@/shared/types";
 import {
   computeWindows,
@@ -937,6 +940,24 @@ orgRoutes.get("/:orgId/clicks", requireOrgRole("viewer"), async (c) => {
       referrer: r.referrer ? referrerHost(r.referrer) || r.referrer : "",
     })) satisfies RecentClick[],
   );
+});
+
+/* ---------------- tracked clicks this month (#387) ---------------- */
+
+orgRoutes.get("/:orgId/click-usage", requireOrgRole("viewer"), async (c) => {
+  const orgId = c.req.param("orgId");
+  const now = Date.now();
+  const [{ limits }, clicks] = await Promise.all([
+    orgPlan(c.var.db, orgId),
+    clicksThisMonth(c.env, orgId, now),
+  ]);
+  c.get("log")?.set({ orgId, clickUsage: { clicks, limit: limits.trackedClicks } });
+  return c.json({
+    month: monthKey(now),
+    clicks,
+    limit: limits.trackedClicks,
+    resetsAt: nextMonthStart(now),
+  } satisfies ClickUsage);
 });
 
 /* ---------------- per-link stats ---------------- */

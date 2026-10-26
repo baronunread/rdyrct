@@ -6,7 +6,7 @@
  */
 import { PLAN_LIMITS, type StoredPlan } from "@/shared/types";
 
-export const NEED_KEYS = ["links", "members", "domains", "analyticsDays"] as const;
+export const NEED_KEYS = ["links", "members", "domains", "analyticsDays", "trackedClicks"] as const;
 export type NeedKey = (typeof NEED_KEYS)[number];
 export type Needs = Record<NeedKey, number>;
 
