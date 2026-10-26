@@ -47,7 +47,8 @@ import {
   type KVLink,
   type KVSlugValue,
 } from "./kv";
-import { heldPage, warnPage } from "./link-state-page";
+import { disabledPage, heldPage, warnPage } from "./link-state-page";
+import { purgeBannedOrgs, settleBannedOrgs } from "./abuse-hold";
 import { notFoundPage } from "./not-found-page";
 import { RESERVED_SLUGS, SLUG_RE } from "./util";
 import { markdownPage, withPageMeta } from "./page-meta";
@@ -185,7 +186,8 @@ function redirectWithClick(c: Context<AppEnv>, hit: KVLink): Response {
  */
 function serveLink(c: Context<AppEnv>, hit: KVSlugValue | null): Promise<Response> | null {
   if (!hit || !isLive(hit)) return null;
-  if (isHeld(hit)) return heldPage(c.env.ASSETS, c.req.url);
+  if (isHeld(hit))
+    return hit.disabled ? disabledPage(c.env.ASSETS, c.req.url) : heldPage(c.env.ASSETS, c.req.url);
   if (hit.warn) {
     c.executionCtx.waitUntil(
       hit.orgId ? enqueueClick(c, hit) : countAnonClick(c.env, hit.linkId, c.req.method),
@@ -267,6 +269,7 @@ app.use("*", async (c, next) => {
   // downgrade, because most of what reaches a dead short link is a machine,
   // and an honest 404 is the answer a machine can act on.
   if (!domainServing(domain)) return notFoundPage(c.env.ASSETS, c.req.url, null);
+  if (domain.disabled) return disabledPage(c.env.ASSETS, c.req.url);
 
   const path = new URL(c.req.url).pathname;
   // This middleware is a dead end for a host it owns: it never calls next(),
@@ -709,6 +712,18 @@ const wrapped = Sentry.withSentry<
       // workflow that errored is never replaced by a later DELETE, and an org
       // whose only member was the deleted account has nobody to retry it.
       await sweepStalledOrgDeletions(drizzle(env.DB, { schema }), env);
+
+      // Daily: finish for banned owners' orgs what migration 0046 could not
+      // do before this Worker was deployed, and delete the orgs of owners
+      // banned more than 90 days ago. Before that the "disabled" page answers
+      // for them; after it they are gone. Neither needs the other's result,
+      // so they run side by side, isolated: an org either misses today it
+      // reaches tomorrow. The outbox drain at the end publishes what the
+      // first one queued.
+      await runIsolated([
+        () => settleBannedOrgs(drizzle(env.DB, { schema })),
+        () => purgeBannedOrgs(env, drizzle(env.DB, { schema })).then(() => {}),
+      ]);
 
       // Daily: retire rename aliases past their 48h deadline (see #38). The
       // redirect path already stopped resolving them; this frees their slugs.

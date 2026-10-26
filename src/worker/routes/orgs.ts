@@ -425,6 +425,26 @@ export async function deleteOrgs(db: DB, env: Env, orgIds: string[]): Promise<vo
     .set({ deletingAt: now })
     .where(and(inArray(schema.orgs.id, orgIds), isNull(schema.orgs.deletingAt)))
     .returning({ id: schema.orgs.id });
+  await startOrgTeardown(
+    db,
+    env,
+    orgIds,
+    marked.map((row) => row.id),
+  );
+}
+
+/**
+ * Starts the teardown workflow for orgs already marked `deleting_at`.
+ * `marked` is the ones this caller marked itself, the only flags it may
+ * undo if the start fails.
+ */
+export async function startOrgTeardown(
+  db: DB,
+  env: Env,
+  orgIds: string[],
+  marked: string[],
+): Promise<void> {
+  if (orgIds.length === 0) return;
   try {
     // `createBatch` rather than `create`, because it is documented idempotent:
     // an id already in use is skipped instead of throwing. That is what makes
@@ -440,10 +460,7 @@ export async function deleteOrgs(db: DB, env: Env, orgIds: string[]): Promise<vo
     // is supposed to be gone. Only the flags this call set are candidates:
     // one it found already set belongs to somebody else's teardown.
     const statuses = await Promise.all(
-      marked.map(async (row) => ({
-        id: row.id,
-        active: await orgDeleteWorkflowActive(env, row.id),
-      })),
+      marked.map(async (id) => ({ id, active: await orgDeleteWorkflowActive(env, id) })),
     );
     const clearable = statuses.flatMap((s) => (s.active === false ? [s.id] : []));
     if (clearable.length > 0)

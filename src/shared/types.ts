@@ -577,8 +577,11 @@ export interface AdminOrgRow {
   members: number;
   links: number;
   clicks: number;
+  ownerId: string | null;
   ownerName: string | null;
   ownerEmail: string | null;
+  /** When the owner was banned, which disables every link, or null. */
+  disabledAt: number | null;
   /** When the org's links were suspended, or null. */
   linksSuspendedAt: number | null;
   /** Why, from the held link that caused it, or null when nothing is held. */

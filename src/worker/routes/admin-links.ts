@@ -20,7 +20,7 @@ import type { JsonValue } from "../../shared/types";
 import { optionalFlag, optionalText, parseBody, parseOptionalBody } from "../schemas";
 import * as v from "valibot";
 import { HTTPException } from "hono/http-exception";
-import { and, desc, eq, isNull, isNotNull, like, or, sql } from "drizzle-orm";
+import { and, desc, eq, isNull, isNotNull, like, or, sql, type SQL } from "drizzle-orm";
 import * as schema from "../db/schema";
 import type { AppEnv, DB } from "../env";
 import { enqueueStorage, republishLink, republishOrgLinks, syncLinkMsg } from "../storage";
@@ -34,8 +34,7 @@ import {
 import { linkClicksTotal } from "../rollups";
 import { activeAddressesOf } from "./links";
 import { recordAdminAction } from "../audit";
-import { markOrgAbuse } from "../abuse-hold";
-import { blockHostOf } from "../../shared/abuse-rules";
+import { blockable, blockHostOf } from "../../shared/abuse-rules";
 import { scoreDestinationWithWebRisk, webRiskAnswered } from "../risk";
 import { jsonBodyLimit } from "../body-limit";
 import { linkUrl } from "../util";
@@ -229,6 +228,25 @@ async function clearOrgAfterRestore(db: DB, orgId: string) {
     .where(and(eq(schema.orgs.id, orgId), isNotNull(schema.orgs.linksSuspendedAt)));
 }
 
+/**
+ * Refuse to restore links in an org whose owner is banned. The org stays
+ * disabled whatever its links say, so a restore would change nothing now,
+ * and an unban would then bring those links back live without a review,
+ * held ones included. Every restore path calls this: one link, several, a
+ * whole org. `orgs` picks the org rows to check.
+ */
+async function assertOrgsNotDisabled(db: DB, orgs: SQL): Promise<void> {
+  const disabled = await db
+    .select({ id: schema.orgs.id })
+    .from(schema.orgs)
+    .where(and(orgs, isNotNull(schema.orgs.disabledAt)))
+    .limit(1);
+  if (disabled.length > 0)
+    throw new HTTPException(409, {
+      message: "Its owner is banned. Unban them to bring the links back.",
+    });
+}
+
 async function setSuspended(
   c: Context<AppEnv>,
   linkId: string,
@@ -239,6 +257,7 @@ async function setSuspended(
   const rows = await db.select().from(schema.links).where(eq(schema.links.id, linkId));
   const link = rows[0];
   if (!link) throw new HTTPException(404, { message: "Link not found" });
+  if (!suspend) await assertOrgsNotDisabled(db, eq(schema.orgs.id, link.orgId));
 
   await db
     .update(schema.links)
@@ -370,23 +389,6 @@ async function hasOpenReport(db: DB, linkId: string): Promise<boolean> {
   return rows.length > 0;
 }
 
-/**
- * The verdict that an org is abuse: links suspended, owner banned, and every
- * destination host it used blocked. A reason is required, like any
- * suspension, and the owner is never emailed here: they are told what the
- * decision is by the support thread, not by a form letter to a scammer.
- */
-adminLinkRoutes.post("/orgs/:orgId/abuse", async (c) => {
-  const orgId = c.req.param("orgId")!;
-  c.get("log").set({ orgId });
-  const [reason, exists] = await Promise.all([
-    requiredReason(c, true),
-    c.var.db.select({ id: schema.orgs.id }).from(schema.orgs).where(eq(schema.orgs.id, orgId)),
-  ]);
-  if (exists.length === 0) throw new HTTPException(404, { message: "Organization not found" });
-  return c.json(await markOrgAbuse(c.env, c.var.db, orgId, c.var.user!.id, reason));
-});
-
 const blockedHostBodySchema = v.object({ host: optionalText, reason: optionalText });
 
 /** Hosts nobody may link to. Listed so a mistaken entry can be removed. */
@@ -409,6 +411,10 @@ adminLinkRoutes.post("/blocked-hosts", async (c) => {
   const host = blockHostOf(body.host.includes("://") ? body.host : `https://${body.host.trim()}`);
   if (!host || !host.includes("."))
     throw new HTTPException(400, { message: "Enter a host such as scam.example.com" });
+  if (!blockable(host))
+    throw new HTTPException(422, {
+      message: `${host} is a site everyone uses, so it cannot be blocked.`,
+    });
   const reason = checkReason(body.reason, true);
   await c.var.db
     .insert(schema.blockedHosts)
@@ -483,6 +489,14 @@ adminLinkRoutes.post("/restore", async (c) => {
     await c.req.json<JsonValue>().catch(() => ({})),
   );
   log.set({ restoreCount: ids.length });
+  // Checked for the whole batch first, so a refusal restores none of them
+  // rather than whichever links happened to finish before it. The ids go in
+  // as one bound parameter: D1 allows 100 a query, and a batch holds up to
+  // MAX_ROWS.
+  await assertOrgsNotDisabled(
+    c.var.db,
+    sql`${schema.orgs.id} in (select org_id from links where id in (select value from json_each(${JSON.stringify(ids)})))`,
+  );
   await Promise.all(ids.map((id) => setSuspended(c, id, false, null)));
   return c.json({ count: ids.length });
 });
@@ -586,6 +600,7 @@ adminLinkRoutes.post("/orgs/:orgId/suspend", async (c) => {
 
   const db = c.var.db;
   const orgId = c.req.param("orgId")!;
+  if (!suspend) await assertOrgsNotDisabled(db, eq(schema.orgs.id, orgId));
   // Set (or cleared) unconditionally, same as abuse.ts's suspendOrgLinks:
   // requireOrgRole reads this on every write, so a suspended org cannot mint
   // a replacement link before its links are individually caught up below.

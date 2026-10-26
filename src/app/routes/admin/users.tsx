@@ -21,8 +21,11 @@ import { shortDate } from "../../lib/dates";
 import { lastSeenLabel } from "../../lib/last-seen";
 import { Pager } from "../../ui/pagination";
 import { GrantCompDialog, type CompPlan } from "./comp-dialog";
+import { BanDialog } from "./ban-dialog";
 
 type UserAction = "delete" | "ban" | "unban" | "makeAdmin" | "removeAdmin";
+/** Every action but the ban, which has its own dialog (ban-dialog.tsx). */
+type ConfirmedAction = Exclude<UserAction, "ban">;
 
 /** What the confirmation dialog for one user action says. */
 interface UserActionMeta {
@@ -46,18 +49,6 @@ const userActionMeta = {
       </>
     ),
   },
-  ban: {
-    title: "Ban user",
-    confirmLabel: "Ban user",
-    danger: true,
-    body: (u) => (
-      <>
-        Ban <span className="font-bold text-accent">{u.name}</span>? They are signed out immediately
-        and cannot sign back in. Their organizations, links, and QR codes keep working. You can
-        unban them anytime.
-      </>
-    ),
-  },
   unban: {
     title: "Unban user",
     confirmLabel: "Unban user",
@@ -65,7 +56,8 @@ const userActionMeta = {
     body: (u) => (
       <>
         Unban <span className="font-bold text-accent">{u.name}</span>? They can sign in again right
-        away.
+        away, and the organizations they own that are not deleted yet work again. Hosts blocked with
+        the ban stay blocked.
       </>
     ),
   },
@@ -91,7 +83,7 @@ const userActionMeta = {
       </>
     ),
   },
-} satisfies Record<UserAction, UserActionMeta>;
+} satisfies Record<ConfirmedAction, UserActionMeta>;
 
 /**
  * What the plan column adds to the plan, when there is something to add: a
@@ -346,7 +338,7 @@ function UserActionConfirmDialog({
   onConfirm: () => void;
   pending: boolean;
 }) {
-  if (!confirm) return null;
+  if (!confirm || confirm.kind === "ban") return null;
   const meta = userActionMeta[confirm.kind];
   return (
     <ConfirmDialog
@@ -436,11 +428,6 @@ function useAdminUserActions() {
     const { kind, user } = confirm;
     const actions = {
       delete: () => remove.mutate(user.id),
-      ban: () =>
-        patchUser.mutate(
-          { userId: user.id, body: { banned: true } },
-          { onSuccess: () => toast("User banned") },
-        ),
       unban: () =>
         patchUser.mutate(
           { userId: user.id, body: { banned: false } },
@@ -456,8 +443,8 @@ function useAdminUserActions() {
           { userId: user.id, body: { isAdmin: false } },
           { onSuccess: () => toast("Platform admin removed") },
         ),
-    } satisfies Record<UserAction, () => void>;
-    actions[kind]();
+    } satisfies Record<ConfirmedAction, () => void>;
+    if (kind !== "ban") actions[kind]();
   };
 
   return {
@@ -535,6 +522,10 @@ export function AdminUsersPage() {
       )}
       <Pager page={safePage} totalPages={totalPages} onPageChange={setPage} />
 
+      <BanDialog
+        user={confirm?.kind === "ban" ? confirm.user : null}
+        onClose={() => setConfirm(null)}
+      />
       <UserActionConfirmDialog
         confirm={confirm}
         onClose={() => setConfirm(null)}

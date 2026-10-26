@@ -4,7 +4,6 @@ import { env } from "cloudflare:workers";
 import { reset } from "cloudflare:test";
 import { drizzle } from "drizzle-orm/d1";
 import * as schema from "../../src/worker/db/schema";
-import type { JsonValue } from "../../src/shared/types";
 import { applyStorageMessage, syncLinkMsg } from "../../src/worker/storage";
 import { claimAnonLink } from "../../src/worker/routes/shorten";
 import {
@@ -22,8 +21,7 @@ import {
 /**
  * What puts links on hold, and what an admin's abuse decision does (the
  * 2026-10-18 follow-up): a scam-shaped destination is created on hold, a
- * blocked host cannot be linked, a ban takes the owner's links with it, and
- * "abuse" does all of that at once.
+ * blocked host cannot be linked. Bans have their own spec (ban.worker.ts).
  */
 
 const SCAM = "https://phonepewheel-production.up.railway.app/";
@@ -170,83 +168,6 @@ describe("the blocklist", () => {
     });
     expect(junk.status).toBe(400);
     expect((await admin("/links/blocked-hosts", owner)).status).toBe(404);
-  });
-});
-
-describe("the abuse decision", () => {
-  it("suspends the links, bans the owner, and blocks every destination host", async () => {
-    const owner = await freeOwnerCookie();
-    await createLink(owner, "https://one.scam.example/a");
-    await createLink(owner, "https://two.scam.example/b");
-    const cookie = await adminCookie();
-
-    const res = await admin("/links/orgs/org-1/abuse", cookie, {
-      method: "POST",
-      body: JSON.stringify({ reason: "spin-to-win scam" }),
-    });
-
-    expect(await jsonBody<JsonValue>(res)).toMatchObject({
-      links: 2,
-      hostsBlocked: 2,
-      ownerBanned: true,
-    });
-    expect((await row("select count(*) as n from links where suspended_at is not null"))?.n).toBe(
-      2,
-    );
-    expect((await row("select banned from user where id = 'free-1'"))?.banned).toBe(1);
-    expect((await row("select count(*) as n from session where user_id = 'free-1'"))?.n).toBe(0);
-    expect((await row("select count(*) as n from blocked_hosts"))?.n).toBe(2);
-    const audit = await row("select detail from admin_actions where action = 'org.abuse'");
-    expect(audit?.detail).toContain("spin-to-win scam");
-  });
-
-  it("needs a reason, and 404s for an unknown org", async () => {
-    await freeOwnerCookie();
-    const cookie = await adminCookie();
-    const none = await admin("/links/orgs/org-1/abuse", cookie, { method: "POST", body: "{}" });
-    expect(none.status).toBe(400);
-    const missing = await admin("/links/orgs/nope/abuse", cookie, {
-      method: "POST",
-      body: JSON.stringify({ reason: "x" }),
-    });
-    expect(missing.status).toBe(404);
-  });
-});
-
-describe("banning a user", () => {
-  it("suspends the orgs they own, and unbanning restores only those links", async () => {
-    const owner = await freeOwnerCookie();
-    const a = await jsonBody<{ id: string }>(await createLink(owner, "https://example.com/a"));
-    const b = await jsonBody<{ id: string }>(await createLink(owner, "https://example.com/b"));
-    const cookie = await adminCookie();
-    // One link an admin suspended for a different reason before the ban.
-    await admin(`/links/${a.id}`, cookie, {
-      method: "PATCH",
-      body: JSON.stringify({ suspended: true, reason: "separate report" }),
-    });
-
-    await admin("/users/free-1", cookie, {
-      method: "PATCH",
-      body: JSON.stringify({ banned: true }),
-    });
-    expect(
-      (await row("select count(*) as n from links where suspended_at is not null"))?.n,
-      "both links are down while the owner is banned",
-    ).toBe(2);
-    expect((await row("select links_suspended_at as at from orgs"))?.at).not.toBeNull();
-
-    await admin("/users/free-1", cookie, {
-      method: "PATCH",
-      body: JSON.stringify({ banned: false }),
-    });
-    const after = await row("select suspended_at as at from links where id = ?", b.id);
-    const kept = await row("select suspend_reason as r from links where id = ?", a.id);
-    expect(after?.at, "the link the ban suspended is back").toBeNull();
-    expect(kept?.r, "the link suspended for another reason stays down").toBe("separate report");
-    expect(
-      (await row("select links_suspended_at as at from orgs"))?.at,
-      "org block stays while a link is suspended",
-    ).not.toBeNull();
   });
 });
 

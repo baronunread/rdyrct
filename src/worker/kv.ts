@@ -34,6 +34,9 @@ export interface KVHeldLink {
   held: true;
   linkId: string;
   expiresAt: number | null;
+  // The owner was banned: the decision is made, so the page says "disabled"
+  // rather than "under review". Absent means held for review.
+  disabled?: true;
 }
 
 export type KVSlugValue = KVLink | KVHeldLink;
@@ -57,6 +60,9 @@ export interface KVDomain {
    * deadline needs no cron to expire.
    */
   servesUntil?: number | null;
+  // The org's owner was banned: every path on the host answers "disabled",
+  // root redirect included. Absent means serving.
+  disabled?: true;
 }
 
 /** Whether a custom domain still resolves. A value written before

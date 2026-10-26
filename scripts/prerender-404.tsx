@@ -4,10 +4,11 @@
  *
  *   dist/client/404-short.html   the app's 404 (NotFoundView), for a dead link
  *   dist/client/link-held.html   "under review" (HeldView), for a held link
+ *   dist/client/link-disabled.html  "disabled" (DisabledView), for a banned owner's link
  *   dist/client/link-warn.html   the warning before a redirect (WarnView)
  *
  * rdyr.cc and custom domains answer with them (src/worker/not-found-page.ts,
- * src/worker/link-state-page.ts), and the app host does for the last two.
+ * src/worker/link-state-page.ts), and the app host does for all but the 404.
  *
  * Done here rather than in the Worker so React's server renderer stays out
  * of the Worker bundle and no page renders anything at request time. Each
@@ -18,10 +19,10 @@
  */
 import type { ReactElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { HELD_PAGE, WARN_PAGE } from "../src/shared/link-pages";
+import { DISABLED_PAGE, HELD_PAGE, WARN_PAGE } from "../src/shared/link-pages";
 import { HOME_LINK } from "../src/app/components/not-found-home";
 import { NotFoundView } from "../src/app/components/not-found-view";
-import { HeldView, WarnView } from "../src/app/components/link-state-views";
+import { DisabledView, HeldView, WarnView } from "../src/app/components/link-state-views";
 
 const dir = "dist/client";
 const shell = await Bun.file(`${dir}/index.html`).text();
@@ -42,6 +43,7 @@ const pages: { name: string; title: string; view: ReactElement }[] = [
     ),
   },
   { name: "link-held", title: HELD_PAGE.title, view: <HeldView /> },
+  { name: "link-disabled", title: DISABLED_PAGE.title, view: <DisabledView /> },
   { name: "link-warn", title: WARN_PAGE.title, view: <WarnView /> },
 ];
 

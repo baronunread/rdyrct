@@ -203,6 +203,11 @@ export const orgs = sqliteTable("orgs", {
   // the UTC day number they count for (destination-check.ts's budget).
   webRiskDay: integer("web_risk_day"),
   webRiskLookups: integer("web_risk_lookups"),
+  // Set when the owner is banned (abuse-hold.ts's banUser). Every link and
+  // custom domain of the org answers "disabled", nobody can change it, and
+  // the daily cron deletes the org BAN_PURGE_AFTER_DAYS later. An unban
+  // before then clears it. Null means not disabled.
+  disabledAt: integer("disabled_at"),
 });
 
 /**
@@ -658,7 +663,10 @@ export const anonLinks = sqliteTable(
  * The queue is the fast path and stays that way. A row lands here only when
  * `sendBatch` failed outright, or when a message exhausted every delivery, so
  * a change that would otherwise be lost is instead applied late by the daily
- * drain.
+ * drain. The one exception is `pending`: an `org_sync` written in the same
+ * batch as the change that needs it (`queueOrgSyncs`) and deleted once the
+ * request has published the org (`publishOrgSyncs`), because the keys it
+ * stands for are only read once that work is under way.
  *
  * It carries no payload beyond the op and its target. Every storage message
  * is desired-state: the consumer reads D1 and writes what it finds, so
@@ -669,9 +677,9 @@ export const storageOutbox = sqliteTable(
   "storage_outbox",
   {
     id: text("id").primaryKey(),
-    op: text("op", { enum: ["kv_sync", "r2_delete", "r2_delete_prefix"] }).notNull(),
+    op: text("op", { enum: ["kv_sync", "r2_delete", "r2_delete_prefix", "org_sync"] }).notNull(),
     target: text("target").notNull(),
-    reason: text("reason", { enum: ["send_failed", "gave_up"] }).notNull(),
+    reason: text("reason", { enum: ["send_failed", "gave_up", "pending"] }).notNull(),
     createdAt: integer("created_at").notNull(),
     attempts: integer("attempts").notNull().default(0),
     lastError: text("last_error").notNull().default(""),

@@ -107,6 +107,40 @@ export function holdReasonFor(destination: string): string | null {
 }
 
 /** The host a blocklist entry is matched on. Lower case, no port, no "www.". */
+/** Sites a ban can never block, nor any host under them: an abuser who also
+ * linked to one would otherwise take it away from every customer. A free app
+ * host's own name is here, while one app on it ("x.up.railway.app") is not. */
+const NEVER_BLOCKED = [
+  "google.com",
+  "youtube.com",
+  "youtu.be",
+  "facebook.com",
+  "instagram.com",
+  "whatsapp.com",
+  "wa.me",
+  "x.com",
+  "twitter.com",
+  "t.me",
+  "telegram.org",
+  "linkedin.com",
+  "tiktok.com",
+  "reddit.com",
+  "github.com",
+  "apple.com",
+  "microsoft.com",
+  "amazon.com",
+  "wikipedia.org",
+  "bit.ly",
+  ...FREE_HOST_SUFFIXES,
+];
+
+/** Whether a ban may put this host on the blocklist. */
+export function blockable(host: string): boolean {
+  // One app on a free host is its maker's own site.
+  if (FREE_HOST_SUFFIXES.some((suffix) => host.endsWith(`.${suffix}`))) return true;
+  return !NEVER_BLOCKED.some((site) => host === site || host.endsWith(`.${site}`));
+}
+
 export function blockHostOf(destination: string): string | null {
   try {
     return new URL(destination).hostname.toLowerCase().replace(/^www\./, "") || null;
