@@ -31,7 +31,7 @@ import { Button } from "../../ui/button";
 import { Field, Input, Select } from "../../ui/field";
 import { Dialog } from "../../ui/dialog";
 import { ConfirmDialog } from "../../ui/confirm-dialog";
-import { Menu, MenuItem, MenuSeparator } from "../../ui/menu";
+import { Menu, MenuItem, MenuNote, MenuSeparator } from "../../ui/menu";
 import { TableSkeleton } from "../../ui/skeleton";
 import { useToast } from "../../ui/toast";
 import { withErrorToast } from "../../lib/mutation-toast";
@@ -45,7 +45,8 @@ import { sortRows } from "../../lib/sort";
 import { useSearchParams, HrefLink } from "../../lib/router-search";
 import { Segmented } from "../../ui/segmented";
 import { BlockedHosts } from "./blocked-hosts";
-import { HoldReason } from "./hold-reason";
+import { linkStateDetail, linkStateRank } from "./link-state";
+import { LinkStateBadge } from "./link-state-badge";
 import { Spinner } from "../../ui/spinner";
 
 /** The two columns both tables open with. Destination has no width of its
@@ -54,7 +55,7 @@ import { Spinner } from "../../ui/spinner";
 function SlugAndDestinationHeaders({ sort, onSort }: { sort: Sort; onSort: (s: Sort) => void }) {
   return (
     <>
-      <SortTh label="Link" sortKey="slug" sort={sort} onSort={onSort} className="w-[18%]" />
+      <SortTh label="Link" sortKey="slug" sort={sort} onSort={onSort} className="w-[16%]" />
       <SortTh label="Destination" sortKey="destination" sort={sort} onSort={onSort} />
     </>
   );
@@ -64,9 +65,12 @@ function SlugAndDestinationHeaders({ sort, onSort }: { sort: Sort; onSort: (s: S
  * badge or a date never takes room the destination needs. */
 const COL = {
   check: "w-11 pr-0",
-  org: "w-[18%]",
-  risk: "w-28",
-  clicks: "w-20 text-right",
+  org: "w-[17%]",
+  // pr-2/pl-2: the longest badge ("suspended") and the "Reports" header fit
+  // without another 16px of padding each.
+  state: "w-28 pr-2",
+  reports: "w-[5.25rem] pl-2 text-right",
+  clicks: "w-[4.5rem] pl-2 text-right",
   date: "w-28",
   actions: "w-12 px-2",
 } as const;
@@ -101,10 +105,13 @@ type RowActions = {
 function RowMenu({
   slug,
   destination,
+  note,
   children,
 }: {
   slug: string;
   destination: string;
+  /** The row state in words, for a touch screen that cannot hover the badge. */
+  note: string;
   children: React.ReactNode;
 }) {
   return (
@@ -119,6 +126,16 @@ function RowMenu({
         </div>
       }
     >
+      <MenuNote>
+        {/* One fact a line: the tooltip joins them with " · ", which wraps
+            badly in a menu this narrow. */}
+        {note.split(" · ").map((fact) => (
+          <span key={fact} className="block">
+            {fact}
+          </span>
+        ))}
+      </MenuNote>
+      <MenuSeparator />
       <MenuItem onClick={() => window.open(destination, "_blank", "noopener,noreferrer")}>
         <ExternalLink size={14} /> Open destination
       </MenuItem>
@@ -171,48 +188,6 @@ function DeleteLinkDialog({
     </ConfirmDialog>
   );
 }
-
-/**
- * Null is not zero. An unscored link is one nobody has looked at, and showing
- * it as "clean" is how a provider outage turns into a table of green ticks.
- */
-function RiskBadge({ score }: { score: number | null }) {
-  if (score === null) return <Badge color="muted">unscored</Badge>;
-  if (score >= 100) return <Badge color="pink">blocked</Badge>;
-  return <Badge color="mint">clean</Badge>;
-}
-
-/** The verdict as a badge, and why it is blocked printed under it, the way a
- * hold reason sits under "suspended". "Google: social engineering" does not
- * fit in a badge in a narrow column, and truncated it says nothing. */
-function RiskCell({
-  score,
-  reasons,
-  children,
-}: {
-  score: number | null;
-  reasons: string[];
-  children?: React.ReactNode;
-}) {
-  const why = score !== null && score >= 100 ? reasons.map(riskLabel).join(", ") : "";
-  return (
-    <>
-      <span className="flex flex-wrap items-center gap-1">
-        <RiskBadge score={score} />
-        {children}
-      </span>
-      <HoldReason why={why || null} />
-    </>
-  );
-}
-
-/** "web_risk_social_engineering" reads "Google: social engineering". */
-const riskLabel = (reason: string) =>
-  reason === "dns_blocklist"
-    ? "DNS blocklist"
-    : reason.startsWith("web_risk_")
-      ? `Google: ${reason.slice("web_risk_".length).replaceAll("_", " ")}`
-      : reason;
 
 function SuspendDialog({ link, onClose }: { link: AdminLinkRow | null; onClose: () => void }) {
   const toast = useToast();
@@ -273,26 +248,6 @@ function SuspendDialog({ link, onClose }: { link: AdminLinkRow | null; onClose: 
   );
 }
 
-/** Suspended, or redirecting behind a warning page (#344), and why. */
-function linkState(link: AdminLinkRow) {
-  if (link.suspendedAt)
-    return { color: "pink" as const, label: "suspended", why: link.suspendReason };
-  if (link.warnedAt) return { color: "butter" as const, label: "warning", why: link.warnReason };
-  return null;
-}
-
-/** The row's state as a pill; HoldReason under it says why. The visitor
- * never sees that. */
-function StateBadge({ link }: { link: AdminLinkRow }) {
-  const state = linkState(link);
-  if (!state) return null;
-  return (
-    <span className="shrink-0">
-      <Badge color={state.color}>{state.label}</Badge>
-    </span>
-  );
-}
-
 /** Put a warning page in front of a link, or take it off (#344). A suspended
  * link serves nothing, so there is nothing to warn about. */
 function WarnMenuItem({
@@ -313,15 +268,16 @@ function WarnMenuItem({
   );
 }
 
-function ReportCountBadge({ count }: { count: number }) {
-  if (count === 0) return null;
-  return (
-    <span className="shrink-0">
-      <Badge color="butter">
-        {count} {count === 1 ? "report" : "reports"}
-      </Badge>
-    </span>
-  );
+/** Open reports, as a count like Clicks. A dash rather than 0, so the rows
+ * that have any stand out down the column. */
+function ReportsCell({ count }: { count: number }) {
+  if (count === 0)
+    return (
+      <Td className="pl-2 text-right text-muted">
+        <span aria-label="No reports">–</span>
+      </Td>
+    );
+  return <Td className="pl-2 text-right tnum">{count}</Td>;
 }
 
 function LinkRow({ link, ...actions }: { link: AdminLinkRow } & RowActions) {
@@ -336,20 +292,10 @@ function LinkRow({ link, ...actions }: { link: AdminLinkRow } & RowActions) {
           className="size-4 cursor-pointer accent-accent"
         />
       </Td>
-      <Td>
-        {/* Wraps rather than squeezing: the badge drops under the slug when
-            the column is too narrow for both, instead of truncating the slug
-            to a few characters. */}
-        <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
-          <span
-            className="max-w-full min-w-0 truncate font-mono text-xs font-bold"
-            title={linkDisplayTitle(link.url)}
-          >
-            {linkDisplayTitle(link.url)}
-          </span>
-          <StateBadge link={link} />
-        </span>
-        <HoldReason why={linkState(link)?.why ?? null} />
+      {/* The slug only. Its state and why live in the State column's
+          tooltip and the row menu, so every row stays one line. */}
+      <Td className="truncate font-mono text-xs font-bold" title={linkDisplayTitle(link.url)}>
+        {linkDisplayTitle(link.url)}
       </Td>
       <Td className="truncate font-mono text-xs text-muted" title={link.destination}>
         {link.destination}
@@ -365,12 +311,11 @@ function LinkRow({ link, ...actions }: { link: AdminLinkRow } & RowActions) {
           {link.orgName}
         </HrefLink>
       </Td>
-      <Td>
-        <RiskCell score={link.riskScore} reasons={link.riskReasons}>
-          <ReportCountBadge count={link.reportCount} />
-        </RiskCell>
+      <Td className="pr-2">
+        <LinkStateBadge link={link} />
       </Td>
-      <Td className="text-right tnum">{link.clicks}</Td>
+      <ReportsCell count={link.reportCount} />
+      <Td className="pl-2 text-right tnum">{link.clicks}</Td>
       <Td className="whitespace-nowrap text-muted">{shortDate(link.createdAt)}</Td>
       <Td className="px-2">
         <LinkActions link={link} {...actions} />
@@ -395,7 +340,7 @@ function LinkActions({
   warning,
 }: { link: AdminLinkRow } & Omit<RowActions, "selected" | "onSelect">) {
   return (
-    <RowMenu slug={link.slug} destination={link.destination}>
+    <RowMenu slug={link.slug} destination={link.destination} note={linkStateDetail(link)}>
       <MenuItem disabled={rescoring} onClick={() => onRescore(link)}>
         {rescoring ? <Spinner /> : <ShieldQuestionMark size={14} />} Re-check destination
       </MenuItem>
@@ -479,12 +424,13 @@ function LinksTable({
             onSort={onSort}
             className={COL.org}
           />
+          <SortTh label="State" sortKey="state" sort={sort} onSort={onSort} className={COL.state} />
           <SortTh
-            label="Risk"
-            sortKey="riskScore"
+            label="Reports"
+            sortKey="reportCount"
             sort={sort}
             onSort={onSort}
-            className={COL.risk}
+            className={COL.reports}
           />
           <SortTh
             label="Clicks"
@@ -526,10 +472,11 @@ function LinksTable({
 
 /** Links made on the landing page with no account. No org, no owner, and
  * they expire on their own, so deleting is the only action worth having. */
-/** The anonymous list itself. Same columns as the owned table, in the same
- * order, so moving between the two tabs does not mean re-reading the header
- * row. An anonymous link has no organization and records no clicks; those
- * cells say so rather than being left out. */
+/** The anonymous list itself. The owned table's columns in the same order,
+ * so moving between the two tabs does not mean re-reading the header row.
+ * An anonymous link has no organization and records no clicks; those cells
+ * say so rather than being left out. Reports are not kept per anonymous link,
+ * so that column is the one left out. */
 function AnonymousLinksTable({
   rows,
   isPending,
@@ -556,13 +503,7 @@ function AnonymousLinksTable({
           {/* Always "none" here, so it gets a short column, not the owned
               table's wide one. */}
           <Th className="w-28">Organization</Th>
-          <SortTh
-            label="Risk"
-            sortKey="riskScore"
-            sort={sort}
-            onSort={onSort}
-            className={COL.risk}
-          />
+          <SortTh label="State" sortKey="state" sort={sort} onSort={onSort} className={COL.state} />
           <Th className={COL.clicks}>Clicks</Th>
           <SortTh
             label="Created"
@@ -591,16 +532,16 @@ function AnonymousLinksTable({
             {/* Nobody owns it, and no click is recorded against it: both
                     are the product boundary, not missing data. */}
             <Td className="text-muted">none</Td>
-            <Td>
-              <RiskCell score={link.riskScore} reasons={link.riskReasons} />
+            <Td className="pr-2">
+              <LinkStateBadge link={link} />
             </Td>
-            <Td className="text-right text-muted" title="Anonymous links record no clicks">
+            <Td className="pl-2 text-right text-muted" title="Anonymous links record no clicks">
               none
             </Td>
             <Td className="whitespace-nowrap text-muted">{shortDate(link.createdAt)}</Td>
             <Td className="whitespace-nowrap text-muted">{shortDate(link.expiresAt)}</Td>
             <Td className="px-2">
-              <RowMenu slug={link.slug} destination={link.destination}>
+              <RowMenu slug={link.slug} destination={link.destination} note={linkStateDetail(link)}>
                 <MenuSeparator />
                 <MenuItem className="text-danger" onClick={() => onDelete(link)}>
                   <Trash2 size={14} /> Delete link
@@ -645,7 +586,7 @@ function AnonymousLinks() {
     {
       slug: (l) => l.slug,
       destination: (l) => l.destination,
-      riskScore: (l) => l.riskScore ?? -1,
+      state: linkStateRank,
       expiresAt: (l) => l.expiresAt,
       createdAt: (l) => l.createdAt,
     },
@@ -984,9 +925,8 @@ function OwnedLinksToolbar({
   );
 }
 
-/** The org filter and the column sort, applied in that order. Unscored sorts
- * below every score rather than as a zero: nobody has looked at it, which is
- * not the same as clean. */
+/** The column sort. State sorts worst first (linkStateRank), and unscored
+ * ranks below clean: nobody has looked at it, which is not the same as clean. */
 function sortOwnedLinks(data: AdminLinkRow[] | undefined, sort: Sort) {
   // No org filter here: the query applies it, so its 200-row cap counts that
   // organization's links rather than every organization's.
@@ -994,7 +934,8 @@ function sortOwnedLinks(data: AdminLinkRow[] | undefined, sort: Sort) {
     slug: (l) => l.slug,
     destination: (l) => l.destination,
     orgName: (l) => l.orgName,
-    riskScore: (l) => l.riskScore ?? -1,
+    state: linkStateRank,
+    reportCount: (l) => l.reportCount,
     clicks: (l) => l.clicks,
     createdAt: (l) => l.createdAt,
   });
@@ -1155,7 +1096,7 @@ export function AdminLinksPage() {
         sub="Every link across every organization. Search by slug or destination."
       />
       <div className="flex flex-col gap-4">
-        <Segmented items={VIEWS} value={view} onChange={setView} />
+        <Segmented items={VIEWS} value={view} onChange={setView} label="Link lists" />
         {panels[view]}
       </div>
 

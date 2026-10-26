@@ -216,7 +216,11 @@ test("a visitor reports a link and an admin sees and dismisses the report", asyn
   expect(await warnReason()).toBe("Open report");
 
   await page.goto("/admin/links");
-  await page.getByRole("button", { name: "Reports", exact: true }).click();
+  // Scoped to the view switch: the owned table has a Reports column too.
+  await page
+    .getByRole("group", { name: "Link lists" })
+    .getByRole("button", { name: "Reports", exact: true })
+    .click();
   const row = page.getByRole("row").filter({ hasText: slug });
   await expect(row).toBeVisible({ timeout: 10_000 });
   await expect(row.getByText("asks for a card number")).toBeVisible();
