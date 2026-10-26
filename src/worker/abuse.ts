@@ -3,6 +3,7 @@ import { drizzle } from "drizzle-orm/d1";
 import { HTTPException } from "hono/http-exception";
 import * as schema from "./db/schema";
 import type { DB, Env } from "./env";
+import { newLinksWithRedirects, redirectsByOrg } from "./click-overflow";
 import { sendEmail } from "./email";
 import { NOTICE_FOOTER, renderEmail, SUPPORT_EMAIL } from "./email-layout";
 import { isFreeHost } from "../shared/abuse-rules";
@@ -186,12 +187,8 @@ export async function sweepAbusiveOrgs(env: Env): Promise<{ spikingLinks: string
 
 /** Every org with at least `min` redirects since `since`, and its count. */
 function orgsWithRedirects(db: DB, since: number, min: number) {
-  return db
-    .select({ orgId: schema.clicks.orgId, n: sql<number>`count(*)` })
-    .from(schema.clicks)
-    .where(gte(schema.clicks.ts, since))
-    .groupBy(schema.clicks.orgId)
-    .having(sql`count(*) >= ${min}`);
+  // Stored and dropped past a plan's cap both count (click-overflow.ts).
+  return redirectsByOrg(db, since, min);
 }
 
 /**
@@ -283,17 +280,7 @@ async function flagSuspiciousOrgs(env: Env, db: DB, since: number): Promise<stri
   const now = Date.now();
   const [bursts, fresh] = await Promise.all([
     orgsWithRedirects(db, now - HOUR_MS, VELOCITY_PER_HOUR + 1),
-    db
-      .select({
-        orgId: schema.clicks.orgId,
-        linkId: schema.clicks.linkId,
-        n: sql<number>`count(*)`,
-      })
-      .from(schema.clicks)
-      .innerJoin(schema.links, eq(schema.links.id, schema.clicks.linkId))
-      .where(and(gte(schema.clicks.ts, since), gte(schema.links.createdAt, now - DAY_MS)))
-      .groupBy(schema.clicks.orgId, schema.clicks.linkId)
-      .having(sql`count(*) >= ${NEW_LINK_REDIRECTS}`),
+    newLinksWithRedirects(db, since, now - DAY_MS, NEW_LINK_REDIRECTS),
   ]);
 
   const seen = new Map<string, { redirects: number; signal: string }>();

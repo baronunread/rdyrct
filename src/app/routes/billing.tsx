@@ -15,6 +15,7 @@ import { useNavigate } from "@tanstack/react-router";
 import {
   useCurrentUser,
   useLinkQuotaUsage,
+  useClickUsage,
   useMembers,
   useDomains,
   useCheckout,
@@ -28,9 +29,11 @@ import {
   PLAN_PRICES,
   PLAN_PRICES_YEARLY,
   YEARLY_DISCOUNT_LABEL,
+  type ClickUsage,
   type OrgPlan,
   type PlanLimits,
 } from "@/shared/types";
+import { clickUsageLevel, exactCount, nearSentence, reachedSentence } from "@/shared/click-usage";
 import { lookup } from "@/shared/lookup";
 import { Button } from "../ui/button";
 import { Badge, Card, PageHeader, Table, Th, Td } from "../ui/misc";
@@ -79,6 +82,7 @@ type UsageSnapshot = {
   plan: OrgPlan;
   org: { id: string; name: string; plan: OrgPlan } | null;
   linkQuotaCount: number | undefined;
+  clickUsage: ClickUsage | undefined;
   memberCount: number;
   domainCount: number;
   ownedOrgs: number;
@@ -153,6 +157,12 @@ const PLAN_FEATURES = [
     `${PLAN_LIMITS.free.analyticsDays}d`,
     `${PLAN_LIMITS.hobby.analyticsDays}d`,
     `${PLAN_LIMITS.pro.analyticsDays}d`,
+  ],
+  [
+    "Clicks counted a month",
+    exactCount(PLAN_LIMITS.free.trackedClicks),
+    exactCount(PLAN_LIMITS.hobby.trackedClicks),
+    exactCount(PLAN_LIMITS.pro.trackedClicks),
   ],
 ] as const;
 
@@ -514,8 +524,30 @@ function PlanActions({
 function UsageLine({ label, count, limit }: { label: string; count: number; limit: number }) {
   return (
     <p className="text-sm text-muted tnum">
-      {label} {count} / {limit}
+      {label} {exactCount(count)} / {exactCount(limit)}
     </p>
+  );
+}
+
+/**
+ * This month's tracked clicks (#387), and from 80% on, what happens at the
+ * cap. The links keep working either way, and the line says so before it
+ * says anything else.
+ */
+function ClickUsageLine({ usage }: { usage: ClickUsage }) {
+  const level = clickUsageLevel(usage.clicks, usage.limit);
+  return (
+    <>
+      <UsageLine label="Clicks counted this month" count={usage.clicks} limit={usage.limit} />
+      {level !== "under" && (
+        <p className="max-w-prose text-sm">
+          {level === "reached" && <span className="font-semibold">Limit reached. </span>}
+          {level === "reached"
+            ? reachedSentence(usage.limit, Date.now())
+            : nearSentence(usage.limit, Date.now())}
+        </p>
+      )}
+    </>
   );
 }
 
@@ -530,7 +562,7 @@ function UsageLine({ label, count, limit }: { label: string; count: number; limi
 function UsageMeterSkeleton() {
   return (
     <>
-      {[32, 36, 28].map((w) => (
+      {[32, 36, 28, 52].map((w) => (
         <span key={w} className="flex h-5 items-center">
           <Skeleton className="h-3.5" style={{ width: `${w * 0.25}rem` }} />
         </span>
@@ -546,6 +578,7 @@ function UsageRows({ snapshot, limits }: { snapshot: UsageSnapshot; limits: Plan
       <UsageLine label="Links" count={snapshot.linkQuotaCount ?? 0} limit={limits.links} />
       <UsageLine label="Members" count={snapshot.memberCount} limit={limits.members} />
       <UsageLine label="Domains" count={snapshot.domainCount} limit={limits.domains} />
+      {snapshot.clickUsage && <ClickUsageLine usage={snapshot.clickUsage} />}
     </>
   );
 }
@@ -1013,14 +1046,16 @@ function useBillingUsageSnapshot(plan: OrgPlan, ownedOrgs: number): UsageSnapsho
   const { data: linkQuota, isPending: linksPending } = useLinkQuotaUsage(orgId);
   const { data: memberData, isPending: membersPending } = useMembers(orgId);
   const { data: domainData, isPending: domainsPending } = useDomains(orgId);
+  const { data: clickUsage, isPending: clicksPending } = useClickUsage(orgId);
   return {
     plan,
     org,
     linkQuotaCount: quotaCount(linkQuota),
+    clickUsage,
     memberCount: itemCount(memberData),
     domainCount: itemCount(domainData),
     ownedOrgs,
-    loading: [linksPending, membersPending, domainsPending].includes(true),
+    loading: [linksPending, membersPending, domainsPending, clicksPending].includes(true),
   };
 }
 

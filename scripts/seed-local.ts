@@ -388,6 +388,10 @@ async function wipe(): Promise<number> {
   // else with it: the domain being freed is a seed domain either way.
   await sqlBatch([
     "DELETE FROM clicks WHERE org_id LIKE 'seed-%'",
+    "DELETE FROM click_daily WHERE org_id LIKE 'seed-%'",
+    "DELETE FROM click_daily_dims WHERE org_id LIKE 'seed-%'",
+    "DELETE FROM click_hourly WHERE org_id LIKE 'seed-%'",
+    "DELETE FROM org_click_usage WHERE org_id LIKE 'seed-%'",
     "DELETE FROM link_addresses WHERE org_id LIKE 'seed-%'",
     "DELETE FROM link_addresses WHERE domain_id IN (SELECT id FROM domains WHERE id LIKE 'seed-%')",
     "DELETE FROM links WHERE id LIKE 'seed-%'",
@@ -402,6 +406,40 @@ async function wipe(): Promise<number> {
     "DELETE FROM user WHERE id LIKE 'seed-%'",
   ]);
   return links.length;
+}
+
+/**
+ * The stats pages read the click rollups (#26). The seed writes raw clicks
+ * straight into D1, past insertClicks, so it builds the rollups the way the
+ * migration backfilled production: migration 0042's own INSERT ... SELECT
+ * statements, limited to seed orgs. Then it checks every rollup adds up to the
+ * raw rows, so a seeded org never shows charts that disagree with its clicks.
+ */
+async function buildRollups(): Promise<void> {
+  const migration = await Bun.file(
+    new URL("../migrations/0042_click_rollups.sql", import.meta.url),
+  ).text();
+  const backfill = migration
+    .replace(/^\s*--.*$/gm, "")
+    .split(";")
+    .filter((q) => /INSERT INTO click_\w+.*SELECT/s.test(q))
+    .map((q) => q.replace("WHERE true", "WHERE org_id LIKE 'seed-%'"));
+  if (backfill.length !== 3) throw new Error("migration 0042 no longer has its three backfills");
+  await sqlBatch(backfill);
+
+  const [row] = await sql<Record<string, number>>(
+    `select (select count(*) from clicks where org_id like 'seed-%') as raw,
+            (select coalesce(sum(clicks), 0) from click_daily where org_id like 'seed-%') as daily,
+            (select coalesce(sum(clicks), 0) from click_hourly where org_id like 'seed-%') as hourly,
+            (select coalesce(sum(clicks), 0) from click_daily_dims
+              where org_id like 'seed-%' and dim = 'country') as dims`,
+  );
+  if (!row || new Set(Object.values(row).map(Number)).size !== 1) {
+    throw new Error(
+      `click rollups disagree with raw clicks: ${JSON.stringify(row)}. Run bun run db:migrate:local and seed again.`,
+    );
+  }
+  console.log(`  rollups built, matching ${row.raw} raw clicks`);
 }
 
 /* ---------------- seed ---------------- */
@@ -826,7 +864,11 @@ async function seed() {
     console.log(`  clicks inserted: ${clicksInserted}/${clickValues.length}`);
   }
 
+  await buildRollups();
+
   await seedDowngrades(orgs, now, day);
+
+  await seedClickUsage();
 
   /* summary */
   console.log("\nSeeded:");
@@ -941,6 +983,57 @@ async function seedDowngrades(orgs: SeedOrg[], now: number, day: number): Promis
 
   await sqlBatch(statements);
   console.log(`  downgraded: ${candidates.length} orgs, 1 locked org`);
+}
+
+/**
+ * The monthly tracked-click counter (#387): this month's seeded clicks,
+ * counted by migration 0043's own backfill, then one free org at its cap and
+ * one Hobby org past 80%, so the billing meter, the banner and both emails
+ * have a seeded org to show them.
+ *
+ * Those two counts are written directly and run ahead of the raw rows: the
+ * seeder fabricates the end state rather than replaying 5,000 clicks, as
+ * seedDowngrades does for its marks.
+ */
+async function seedClickUsage(): Promise<void> {
+  const migration = await Bun.file(
+    new URL("../migrations/0043_org_click_usage.sql", import.meta.url),
+  ).text();
+  const backfill = migration
+    .replace(/^\s*--.*$/gm, "")
+    .split(";")
+    .filter((q) => /INSERT INTO org_click_usage.*SELECT/s.test(q))
+    .map((q) => q.replace("WHERE ts >=", "WHERE org_id LIKE 'seed-%' AND ts >="));
+  if (backfill.length !== 1) throw new Error("migration 0043 no longer has its backfill");
+  await sqlBatch(backfill);
+
+  // Orgs nothing else here changed: no downgrade marks, no lock, and read
+  // after seedDowngrades, so the plan is the one the owner has now.
+  const ordinary = await sql<{ id: string; name: string; email: string; plan: string }>(
+    `SELECT o.id, o.name, u.email, u.plan FROM orgs o
+     JOIN org_members m ON m.org_id = o.id AND m.role = 'owner'
+     JOIN user u ON u.id = m.user_id
+     WHERE o.id LIKE 'seed-%' AND o.locked_at IS NULL
+       AND o.id NOT IN (SELECT org_id FROM org_entitlements)
+     ORDER BY o.created_at, o.id`,
+  );
+  const [capped, near] = (["free", "hobby"] as const).map((plan) =>
+    ordinary.find((o) => o.plan === plan),
+  );
+  const month = new Date().toISOString().slice(0, 7);
+  const set = (org: { id: string }, clicks: number) =>
+    `INSERT INTO org_click_usage (org_id, month, clicks) VALUES (${q(org.id)}, ${q(month)}, ${clicks})
+     ON CONFLICT (org_id, month) DO UPDATE SET clicks = excluded.clicks`;
+  const statements: string[] = [];
+  if (capped) statements.push(set(capped, PLAN_LIMITS.free.trackedClicks));
+  if (near) statements.push(set(near, Math.ceil(PLAN_LIMITS.hobby.trackedClicks * 0.85)));
+  await sqlBatch(statements);
+  for (const [label, org] of [
+    ["at its click cap", capped],
+    ["past 80% of its click cap", near],
+  ] as const) {
+    if (org) console.log(`  ${label}: ${org.name} (${org.email})`);
+  }
 }
 
 /* ---------------- main ---------------- */

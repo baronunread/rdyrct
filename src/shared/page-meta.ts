@@ -133,6 +133,7 @@ rdyrct is an organization-based link shortener and QR code generator that runs e
 - 30 links
 - 3 team members
 - 7-day click analytics
+- 5,000 clicks counted a month
 - Plain QR codes
 - Random slugs on the shared domain
 - 1 organization
@@ -144,6 +145,7 @@ rdyrct is an organization-based link shortener and QR code generator that runs e
 - 500 links
 - 5 team members
 - 30-day click analytics
+- 50,000 clicks counted a month
 - QR codes with a logo, colours, and dot styles
 - 1 custom domain, with any slug you choose
 - 1 organization
@@ -155,6 +157,7 @@ rdyrct is an organization-based link shortener and QR code generator that runs e
 - 3,000 links
 - 25 team members
 - 365-day click analytics
+- 500,000 clicks counted a month
 - QR codes with a logo, colours, and dot styles
 - 5 custom domains, with any slug you choose
 - 3 organizations
@@ -172,6 +175,7 @@ rdyrct is MIT licensed. Deploy it to your own Cloudflare account and set your ow
 
 - Billing is per user, not per organization. An organization's limits come from its owner's plan.
 - Slugs on the shared domain are always random. Choosing a slug needs a custom domain.
+- Clicks are counted per organization per calendar month (UTC). Past the plan's count, links keep redirecting; only that month's later clicks go unrecorded.
 - Click analytics never store an IP address.`,
   },
   "/docs": {
@@ -366,7 +370,7 @@ You must keep your account secure and are responsible for activity under organiz
 
 Polar is rdyrct's merchant of record for paid plans. Subscriptions renew until you cancel them, and you can manage them in Billing. rdyrct is MIT licensed and can be self-hosted from the [public repository](https://github.com/baronunread/rdyrct). Hosted-service terms do not apply to a self-hosted installation.
 
-Links on the free plan keep redirecting however many clicks they get. Past 100,000 clicks in a month across an organization, we may stop recording that month's clicks for analytics; the links themselves keep working.
+Links keep redirecting however many clicks they get. Each plan records a set number of clicks a month for each organization (5,000 on Free, 50,000 on Hobby, 500,000 on Pro). Past that, the rest of that month's clicks are not recorded for analytics; the links themselves keep working.
 
 ## Service, termination, and law
 

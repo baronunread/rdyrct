@@ -1,7 +1,13 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { env } from "cloudflare:workers";
 import { reset } from "cloudflare:test";
-import { applyTestMigrations, fetchWorker, freeOwnerCookie, jsonBody } from "./support";
+import {
+  applyTestMigrations,
+  fetchWorker,
+  freeOwnerCookie,
+  jsonBody,
+  rebuildClickRollups,
+} from "./support";
 
 /**
  * Paging an organization's links against a real database (#19).
@@ -141,6 +147,7 @@ describe("paging an organization's links", () => {
       await env.DB.prepare("insert into clicks (link_id, org_id, ts) values ('link-2', 'org-1', ?)")
         .bind(2000 + i)
         .run();
+    await rebuildClickRollups();
 
     const byClicks = await walk(cookie, "limit=2&sort=clicks");
     expect(byClicks[0]).toBe("link-2");

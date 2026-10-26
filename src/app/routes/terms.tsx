@@ -5,6 +5,8 @@ import { WebMcpMarketingTools } from "../components/webmcp-marketing-tools";
 import { useSeo } from "../lib/seo";
 import { useMarketingScroll } from "../lib/marketing-scroll";
 import { useAudience } from "../lib/audience";
+import { PLAN_LIMITS } from "@/shared/types";
+import { exactCount } from "@/shared/click-usage";
 
 // main.tsx names this export as a string, for lazyRouteComponent, which
 // static analysis can't follow.
@@ -90,9 +92,11 @@ export function TermsPage() {
           best-effort basis through GitHub issues only.
         </p>
         <p className="mt-2 text-muted">
-          Links on the free plan keep redirecting however many clicks they get. Past 100,000 clicks
-          in a month across an organization, we may stop recording that month's clicks for
-          analytics; the links themselves keep working.
+          Links keep redirecting however many clicks they get. Each plan records a set number of
+          clicks a month for each organization ({exactCount(PLAN_LIMITS.free.trackedClicks)} on
+          Free, {exactCount(PLAN_LIMITS.hobby.trackedClicks)} on Hobby,{" "}
+          {exactCount(PLAN_LIMITS.pro.trackedClicks)} on Pro). Past that, the rest of that month's
+          clicks are not recorded for analytics; the links themselves keep working.
         </p>
       </section>
 

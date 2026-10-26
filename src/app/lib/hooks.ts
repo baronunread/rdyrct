@@ -32,6 +32,7 @@ import type {
   WithQuotaUsage,
   ApiKeyDTO,
   OrgPlan,
+  ClickUsage,
 } from "@/shared/types";
 
 /**
@@ -182,6 +183,16 @@ export const useLinkQuotaUsage = (orgId: string) =>
     queryKey: ["linkQuotaUsage", orgId],
     queryFn: () => api(`/orgs/${orgId}/links/quota-usage`),
     enabled: !!orgId,
+  });
+
+/** Tracked clicks this month against the plan's cap (#387). A minute stale
+ * at most: the count moves with every flush, and nothing decides on it. */
+export const useClickUsage = (orgId: string) =>
+  useQuery<ClickUsage>({
+    queryKey: ["clickUsage", orgId],
+    queryFn: () => api(`/orgs/${orgId}/click-usage`),
+    enabled: !!orgId,
+    staleTime: 60_000,
   });
 
 /** Seeds the quota cache from a mutation response instead of a follow-up GET

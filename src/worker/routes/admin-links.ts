@@ -31,6 +31,8 @@ import {
   clearOrgAutomaticWarnings,
   warnLink,
 } from "../link-warning";
+import { linkClicksTotal } from "../rollups";
+import { activeAddressesOf } from "./links";
 import { recordAdminAction } from "../audit";
 import { blockable, blockHostOf } from "../../shared/abuse-rules";
 import { scoreDestinationWithWebRisk, webRiskAnswered } from "../risk";
@@ -100,9 +102,8 @@ const reportCount = sql<number>`(
   where link_reports.link_id = links.id and link_reports.status = 'open'
 )`;
 
-const clickCount = sql<number>`(
-  select count(*) from clicks where clicks.link_id = links.id
-)`;
+// Read from the rollups (#26), like the org's own links list.
+const clickCount = linkClicksTotal;
 
 /** The link this route is about, or a 404. Every route here starts by
  * reading the row it names, and an id that matches nothing is the same
@@ -120,18 +121,6 @@ async function routeLink(c: Context<AppEnv>) {
   const linkId = c.req.param("linkId")!;
   c.get("log").set({ linkId });
   return { db, linkId, link: await requireLink(db, linkId) };
-}
-
-/** Every address a link answers to, so deleting one clears all of them. */
-async function addressesOf(db: DB, linkId: string) {
-  return db
-    .select({
-      slug: schema.linkAddresses.slug,
-      hostname: schema.domains.hostname,
-    })
-    .from(schema.linkAddresses)
-    .leftJoin(schema.domains, eq(schema.linkAddresses.domainId, schema.domains.id))
-    .where(and(eq(schema.linkAddresses.linkId, linkId), isNull(schema.linkAddresses.retiredAt)));
 }
 
 /**
@@ -573,7 +562,7 @@ adminLinkRoutes.delete("/:linkId", async (c) => {
 
   // Addresses first: after the row is gone there is nothing to read them
   // from, and each one is a live KV key until it is swept.
-  const addresses = await addressesOf(db, linkId);
+  const addresses = await activeAddressesOf(db, linkId);
   await db.delete(schema.links).where(eq(schema.links.id, linkId));
   if (addresses.length > 0)
     await enqueueStorage(
