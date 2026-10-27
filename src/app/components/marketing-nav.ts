@@ -5,6 +5,7 @@
 
 /** What "Product" opens. Each says in a few words why you would go there. */
 export const PRODUCT_LINKS = [
+  { to: "/branded-link-shortener", label: "Branded links", hint: "On your own domain" },
   { to: "/qr-code-generator", label: "QR code generator", hint: "Free, with your logo" },
   { to: "/utm-builder", label: "UTM builder", hint: "Tag a link for analytics" },
   { to: "/compare", label: "Compare", hint: "Against Bitly, Rebrandly, Dub" },

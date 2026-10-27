@@ -41,6 +41,7 @@ export const RESERVED_SLUGS = new Set([
   "blog",
   "qr-code-generator",
   "utm-builder",
+  "branded-link-shortener",
   "pricing",
   "roadmap",
   "changelog",

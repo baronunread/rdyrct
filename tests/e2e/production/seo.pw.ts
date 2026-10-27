@@ -14,6 +14,7 @@ const PAGES = [
   { path: "/", title: /URL shortener and QR code generator/ },
   { path: "/qr-code-generator", title: /QR code generator with logo/ },
   { path: "/utm-builder", title: /UTM builder/ },
+  { path: "/branded-link-shortener", title: /Branded link shortener/ },
   { path: "/pricing", title: /URL shortener and QR code generator pricing/ },
   { path: "/roadmap", title: /URL shortener roadmap/ },
   { path: "/changelog", title: /rdyrct changelog/ },

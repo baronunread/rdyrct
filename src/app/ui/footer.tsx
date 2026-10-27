@@ -176,6 +176,11 @@ export function Footer({ featured = false }: { featured?: boolean }) {
               </MarketingLink>
             </li>
             <li>
+              <MarketingLink to="/branded-link-shortener" className={linkClass}>
+                Branded links
+              </MarketingLink>
+            </li>
+            <li>
               <MarketingLink to="/pricing" className={linkClass}>
                 Pricing
               </MarketingLink>

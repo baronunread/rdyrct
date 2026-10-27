@@ -66,6 +66,7 @@ const ROUTE_SOURCES = new Map([
   ["/pricing", "src/app/routes/pricing.tsx"],
   ["/qr-code-generator", "src/app/routes/qr-generator.tsx"],
   ["/utm-builder", "src/app/routes/utm-builder.tsx"],
+  ["/branded-link-shortener", "src/app/routes/branded-link-shortener.tsx"],
   ["/docs", "src/app/routes/docs.tsx"],
   ["/roadmap", "src/app/routes/roadmap.tsx"],
   ["/changelog", "src/app/routes/changelog.tsx"],

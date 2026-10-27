@@ -11,6 +11,7 @@ describe("currentNavKey", () => {
     for (const path of [
       "/qr-code-generator",
       "/utm-builder",
+      "/branded-link-shortener",
       "/compare",
       "/roadmap",
       "/bitly-alternative",

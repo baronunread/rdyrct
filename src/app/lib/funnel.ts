@@ -146,6 +146,8 @@ export type CtaPlacement =
   // an account (to keep that link, or after this browser has spent its one).
   | "utm_page_shorten"
   | "utm_page_signup"
+  // The /branded-link-shortener page's one sign-up.
+  | "branded_page_signup"
   | "pricing_free"
   | "pricing_hobby"
   | "pricing_pro"

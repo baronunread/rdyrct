@@ -24,6 +24,7 @@ export const PRERENDERED_PUBLIC_PATHS = new Set<string>([
   "/pricing",
   "/qr-code-generator",
   "/utm-builder",
+  "/branded-link-shortener",
   "/docs",
   "/roadmap",
   "/changelog",
@@ -95,6 +96,30 @@ This generator makes static QR codes: the link or text is stored in the pattern 
 The QR code and optional logo are processed in your browser. rdyrct does not receive or store the value you enter or the logo you choose.
 
 [Open the QR code generator](/qr-code-generator)`,
+  },
+  "/branded-link-shortener": {
+    title: "Branded link shortener - short links on your own domain",
+    description:
+      "A branded link shortener for your own domain: chosen slugs, TLS set up for you, QR codes and click analytics. From $4 a month, with a free plan.",
+    markdown: `# Branded link shortener
+
+Put short links on your own domain, such as go.yourcompany.com/spring, instead of a generic shortener's. People see who sent the link before they tap it.
+
+## Set up in three steps
+
+1. At your DNS provider, add a CNAME record for a hostname you own.
+2. Add the hostname in rdyrct. We see the record and issue a TLS certificate for it.
+3. Make links with words you choose. Each gets a QR code and click analytics by country, referrer and device.
+
+## What it costs
+
+- Free: rdyrct's shared domain with random slugs. No custom domain.
+- Hobby, $4 a month: 1 custom domain, slugs you choose, 500 links.
+- Pro, $9 a month: 5 custom domains, 3,000 links, 25 members.
+
+Moving from Bitly, Rebrandly, Short.io or Dub? Import your links and keep the same short URLs on your own domain. Links printed on the old service's own domain, like bit.ly, stay with it.
+
+[See rdyrct and Rebrandly compared](/rebrandly-alternative) or [sign up free](/signup).`,
   },
   "/utm-builder": {
     title: "UTM builder - tag links for Google Analytics, no account",
