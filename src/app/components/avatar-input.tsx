@@ -13,8 +13,11 @@ export function AvatarInput({
   pendingRemove,
   onPick,
   onRemove,
+  size = 128,
 }: {
   user: User;
+  /** 40 in a settings row. */
+  size?: number;
   /** Data URL of a not-yet-saved crop. */
   pendingUrl?: string;
   /** The saved picture is marked for deletion. */
@@ -30,8 +33,8 @@ export function AvatarInput({
       <div className="group relative">
         <UserAvatar
           user={{ ...user, image: shownImage }}
-          size={128}
-          className="border-2 border-border"
+          size={size}
+          className={size > 64 ? "border-2 border-border" : undefined}
         />
         <button
           type="button"
@@ -40,7 +43,7 @@ export function AvatarInput({
           onClick={() => setOpen(true)}
           className="absolute inset-0 flex cursor-pointer items-center justify-center rounded-full bg-bg/55 text-text opacity-0 transition-opacity duration-150 group-hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none"
         >
-          <Pencil size={22} />
+          <Pencil size={size > 64 ? 22 : 14} />
         </button>
       </div>
 
