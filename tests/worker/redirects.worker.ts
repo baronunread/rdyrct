@@ -189,7 +189,7 @@ describe("redirect hot path", () => {
 
     expect(response.status).toBe(302);
     expect(response.headers.get("location")).toBe("https://example.com/sale");
-    expect(errors).toHaveBeenCalledWith("click enqueue failed", expect.any(Error));
+    expect(errors.mock.calls.some(([message]) => message === "click_enqueue_failed")).toBe(true);
     errors.mockRestore();
   });
 

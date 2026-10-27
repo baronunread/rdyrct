@@ -254,7 +254,10 @@ describe("a site key with no secret", () => {
 
   it("refuses the guarded forms and logs why", async () => {
     siteverify({ success: true, action: "report" });
-    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+    // On the request's wide event, which evlog prints outside production.
+    const printed = (["log", "info", "warn", "error"] as const).map((m) =>
+      vi.spyOn(console, m).mockImplementation(() => {}),
+    );
     const res = await fetchWorker(
       new Request("http://localhost/api/reports", {
         method: "POST",
@@ -264,7 +267,8 @@ describe("a site key with no secret", () => {
       SITE_ONLY(),
     );
     expect(res.status).toBe(400);
-    expect(logged).toHaveBeenCalledWith("turnstile_misconfigured", expect.any(String));
+    const out = printed.flatMap((spy) => spy.mock.calls.flat().map(String)).join("\n");
+    expect(out).toContain("turnstile_misconfigured");
   });
 
   it("allows nothing from Cloudflare in the CSP", async () => {

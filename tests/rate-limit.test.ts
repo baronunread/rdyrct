@@ -138,7 +138,7 @@ describe("Cloudflare rate limiting", () => {
   });
 
   it("limits free writes and allows the same request through the paid binding", async () => {
-    const warn = spyOn(console, "warn").mockImplementation(() => {});
+    const logged = spyOn(console, "error").mockImplementation(() => {});
     const free = limiter(false);
     const paid = limiter(true);
     const env = partialEnv({
@@ -162,11 +162,11 @@ describe("Cloudflare rate limiting", () => {
     );
     expect(allowed.status).toBe(200);
     expect(paid.limit).toHaveBeenCalledTimes(1);
-    warn.mockRestore();
+    logged.mockRestore();
   });
 
   it("fails open for API availability but closed for click analytics", async () => {
-    const warn = spyOn(console, "warn").mockImplementation(() => {});
+    const logged = spyOn(console, "error").mockImplementation(() => {});
     const broken: RateLimit = {
       limit: mock(async () => {
         throw new Error("binding unavailable");
@@ -181,7 +181,7 @@ describe("Cloudflare rate limiting", () => {
 
     const env = partialEnv({ RL_CLICK_RECORDING: broken });
     expect(await clickAnalyticsAllowed(env, "org-1")).toBe(false);
-    expect(warn).toHaveBeenCalledTimes(2);
-    warn.mockRestore();
+    expect(logged).toHaveBeenCalledTimes(2);
+    logged.mockRestore();
   });
 });

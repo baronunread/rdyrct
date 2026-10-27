@@ -4,6 +4,7 @@ import type { JsonValue } from "../shared/types";
 import { optionalText, parseOptionalBody } from "./schemas";
 import * as v from "valibot";
 import type { AppEnv, Env, SessionUser } from "./env";
+import { logFailure } from "./log-failure";
 
 const RATE_LIMIT_WINDOW_SECONDS = 60;
 
@@ -31,7 +32,7 @@ function rateLimitLog(
   group: RateLimitGroup,
   details: { method: string; plan?: SessionUser["plan"]; error?: unknown },
 ) {
-  console.warn(event, group, details.method, details.plan ?? "", details.error ?? "");
+  logFailure(event, details.error, { group, method: details.method, plan: details.plan ?? null });
 }
 
 export async function rateLimitAllows(

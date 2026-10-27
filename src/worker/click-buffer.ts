@@ -3,6 +3,7 @@ import { DurableObject } from "cloudflare:workers";
 import type { Env } from "./env";
 import { type ClickMessage, insertClicks } from "./clicks";
 import { captureAlert } from "./sentry";
+import { logFailure } from "./log-failure";
 
 /**
  * The click buffer (#225).
@@ -109,7 +110,7 @@ export class ClickBuffer extends DurableObject<Env> {
       this.#failedFlushes++;
       // Also to the console: Sentry is off wherever SENTRY_DSN is unset
       // (every e2e run), and this is the only trace a lost flush leaves.
-      console.error("click_flush_failed", rows.length, error);
+      logFailure("click_flush_failed", error, { rows: rows.length });
       Sentry.captureException(error, { extra: { pending: this.#buf.length } });
     } finally {
       this.#flushing = false;

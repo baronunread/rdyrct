@@ -8,6 +8,7 @@
  */
 import * as v from "valibot";
 import type { Env } from "./env";
+import { logFailure } from "./log-failure";
 
 /** Binds the widget to the form it was rendered for: siteverify echoes the
  * `action` back, so a token earned on one form cannot open another. */
@@ -68,13 +69,13 @@ async function siteverify(secret: string, token: string): Promise<SiteverifyAnsw
     // siteverify answers 200 for a refusal too; anything else is Cloudflare
     // having trouble, not a verdict.
     if (!res.ok) {
-      console.error("turnstile_unreachable", res.status);
+      logFailure("turnstile_unreachable", undefined, { status: res.status });
       return null;
     }
     const parsed = v.safeParse(siteverifySchema, await res.json());
     return parsed.success ? parsed.output : null;
   } catch (cause) {
-    console.error("turnstile_unreachable", cause);
+    logFailure("turnstile_unreachable", cause);
     return null;
   }
 }
@@ -102,14 +103,14 @@ export async function spendToken(env: Env, scope: TurnstileScope, token: string)
   const mode = turnstileMode(env);
   if (mode === "off") return true;
   if (mode === "misconfigured") {
-    console.error(
+    logFailure(
       "turnstile_misconfigured",
       "set both TURNSTILE_SITE_KEY and TURNSTILE_SECRET_KEY, or neither",
     );
     return false;
   }
   if (!token) {
-    console.warn("turnstile_refused", scope, "missing");
+    logFailure("turnstile_refused", undefined, { scope, reason: "missing" });
     return false;
   }
 
@@ -119,6 +120,10 @@ export async function spendToken(env: Env, scope: TurnstileScope, token: string)
   if (!answer) return false;
 
   const ok = answer.success && actionMatches(answer, scope, secret);
-  if (!ok) console.warn("turnstile_refused", scope, answer["error-codes"].join(",") || "action");
+  if (!ok)
+    logFailure("turnstile_refused", undefined, {
+      scope,
+      reason: answer["error-codes"].join(",") || "action",
+    });
   return ok;
 }

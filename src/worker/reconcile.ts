@@ -19,6 +19,7 @@ import {
   type PlanLimits,
   type JsonValue,
 } from "@/shared/types";
+import { logFailure } from "./log-failure";
 
 /**
  * What a plan change means for the orgs a user owns (#158).
@@ -382,7 +383,7 @@ export async function reconcileUser(
     await notifyOrgsLocked(env, db, userId, plan, newlyLocked);
   } catch (error) {
     captureAlert([{ event: "reconcile_failed", userId }]);
-    console.error("reconcile_failed", userId, error);
+    logFailure("reconcile_failed", error, { userId });
   }
 }
 

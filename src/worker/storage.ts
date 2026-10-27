@@ -6,6 +6,7 @@ import type { DB, Env } from "./env";
 import { buildDestination, qrLogoKeyFromUrl, uid } from "./util";
 import { captureAlert } from "./sentry";
 import type { KVDomain, KVSlugValue } from "./kv";
+import { logFailure } from "./log-failure";
 
 /**
  * Storage recovery. D1 is the source of truth. KV serves redirects and R2
@@ -221,7 +222,7 @@ async function recordOutbox(
     return ids;
   } catch (writeError) {
     captureAlert([{ event: "storage_outbox_write_failed", reason, count: messages.length }]);
-    console.error("storage_outbox_write_failed", reason, writeError);
+    logFailure("storage_outbox_write_failed", writeError, { reason });
     return null;
   }
 }
@@ -696,7 +697,10 @@ export async function consumeStorageBatch(
           extra: { op: message.body.op, target: targetOf(message.body) },
         });
         if (message.attempts >= STORAGE_MAX_DELIVERIES) {
-          console.error("storage_message_dead_letter", message.body.op, targetOf(message.body));
+          logFailure("storage_message_dead_letter", undefined, {
+            op: message.body.op,
+            target: targetOf(message.body),
+          });
         }
         message.retry();
       }
