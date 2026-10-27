@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Trash2 } from "@/app/ui/icons";
 import type { AdminBlockedHostRow } from "@/shared/types";
@@ -6,10 +6,10 @@ import { api } from "../../lib/api";
 import { shortDate } from "../../lib/dates";
 import { useAdminBlockedHosts } from "../../lib/hooks";
 import { withErrorToast } from "../../lib/mutation-toast";
-import { Button } from "../../ui/button";
+import { Button, IconButton } from "../../ui/button";
 import { Field, Input } from "../../ui/field";
 import { Table, Td, Th } from "../../ui/misc";
-import { Spinner } from "../../ui/spinner";
+import { BusyContent } from "../../ui/spinner";
 import { TableSkeleton } from "../../ui/skeleton";
 import { useToast } from "../../ui/toast";
 
@@ -22,6 +22,11 @@ export function BlockedHosts() {
   const qc = useQueryClient();
   const [host, setHost] = useState("");
   const [reason, setReason] = useState("");
+  // Which fields the last submit found empty. Cleared field by field as
+  // each gets a value.
+  const [missing, setMissing] = useState({ host: false, reason: false });
+  const hostRef = useRef<HTMLInputElement>(null);
+  const reasonRef = useRef<HTMLInputElement>(null);
   const refresh = () => qc.invalidateQueries({ queryKey: ["admin", "blocked-hosts"] });
 
   const add = useMutation({
@@ -48,15 +53,26 @@ export function BlockedHosts() {
     <div className="flex flex-col gap-3">
       <form
         className="flex flex-wrap items-end gap-2"
+        noValidate
         onSubmit={(event) => {
           event.preventDefault();
+          // Both are required. The button stays live and says which one is
+          // missing, rather than greying out with no word as to why.
+          const next = { host: !host.trim(), reason: !reason.trim() };
+          setMissing(next);
+          if (next.host) return hostRef.current?.focus();
+          if (next.reason) return reasonRef.current?.focus();
           add.mutate();
         }}
       >
-        <Field label="Host" className="w-64">
+        <Field label="Host" className="w-64" error={missing.host ? "Required" : undefined}>
           <Input
+            ref={hostRef}
             value={host}
-            onChange={(e) => setHost(e.target.value)}
+            onChange={(e) => {
+              setHost(e.target.value);
+              if (e.target.value.trim()) setMissing((m) => ({ ...m, host: false }));
+            }}
             placeholder="scam.example.com"
             inputMode="url"
             autoComplete="off"
@@ -64,15 +80,19 @@ export function BlockedHosts() {
             spellCheck={false}
           />
         </Field>
-        <Field label="Reason" className="w-72">
+        <Field label="Reason" className="w-72" error={missing.reason ? "Required" : undefined}>
           <Input
+            ref={reasonRef}
             value={reason}
-            onChange={(e) => setReason(e.target.value)}
+            onChange={(e) => {
+              setReason(e.target.value);
+              if (e.target.value.trim()) setMissing((m) => ({ ...m, reason: false }));
+            }}
             placeholder="Phishing kit, report #412"
           />
         </Field>
-        <Button type="submit" disabled={!host.trim() || !reason.trim() || add.isPending}>
-          {add.isPending && <Spinner />} Block host
+        <Button type="submit" variant="primary" disabled={add.isPending}>
+          <BusyContent busy={add.isPending}>Block host</BusyContent>
         </Button>
       </form>
 
@@ -111,27 +131,31 @@ function BlockedTable({
           <Th className="w-[34%]">Host</Th>
           <Th className="w-[40%]">Reason</Th>
           <Th className="w-[16%]">Blocked</Th>
-          <Th className="w-[10%]" />
+          <Th className="w-14 px-2">
+            <span className="sr-only">Actions</span>
+          </Th>
         </tr>
       </thead>
       <tbody>
         {rows.map((h) => (
           <tr key={h.host}>
-            <Td className="truncate font-mono text-xs font-bold">{h.host}</Td>
-            <Td className="truncate text-muted" title={h.reason}>
-              {h.reason || "none"}
+            <Td className="truncate font-mono text-sm font-semibold" title={h.host}>
+              {h.host}
             </Td>
-            <Td className="whitespace-nowrap text-muted">{shortDate(h.createdAt)}</Td>
-            <Td>
-              <Button
-                size="sm"
-                variant="ghost"
-                aria-label={`Unblock ${h.host}`}
+            <Td className="truncate text-muted" title={h.reason}>
+              {h.reason || "None given"}
+            </Td>
+            <Td className="tnum text-xs whitespace-nowrap text-muted">{shortDate(h.createdAt)}</Td>
+            <Td className="px-2 text-right">
+              <IconButton
+                label={`Unblock ${h.host}`}
+                danger
                 disabled={pending}
                 onClick={() => onRemove(h.host)}
+                className="size-8"
               >
-                <Trash2 size={14} />
-              </Button>
+                <Trash2 size={15} />
+              </IconButton>
             </Td>
           </tr>
         ))}

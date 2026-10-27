@@ -2,17 +2,19 @@ import {
   useMemo,
   useEffect,
   useRef,
+  useState,
   type ChangeEvent,
   type ClipboardEvent,
+  type ReactNode,
   type RefObject,
 } from "react";
 import { useForm, type SubmitErrorHandler } from "react-hook-form";
 import { valibotResolver } from "@hookform/resolvers/valibot";
 import { Link as RouterLink } from "@tanstack/react-router";
-import { Lock, Info } from "@/app/ui/icons";
+import { ArrowLeft, Lock, Plus, QrCode } from "@/app/ui/icons";
 import { shortUrl } from "../lib/api";
 import { useLinkHost } from "../lib/hooks";
-import { QR_CORNER_STYLES, QR_DOT_STYLES, type DomainDTO, type LinkInput } from "@/shared/types";
+import type { DomainDTO, LinkInput } from "@/shared/types";
 import { Button } from "../ui/button";
 import { buttonClass } from "../ui/button-class";
 import { cn } from "../ui/cn";
@@ -21,13 +23,10 @@ import { Field, Input } from "../ui/field";
 import { MenuSelect } from "../ui/menu";
 import { BusyContent } from "../ui/spinner";
 import { useToast } from "../ui/toast";
-import { Tooltip } from "../ui/tooltip";
 import { QRPreview } from "./qr";
-import { QrLogoInput } from "./qr-logo-input";
-import { QrColorField } from "./qr-color-field";
+import { LinkQrEditor, withoutQrOverrides } from "./link-qr-editor";
 import { linkInputSchema } from "../lib/schemas";
-import { qrFallbacks, resolveQrLook, type OrgQr } from "../lib/org-qr";
-import { firstFormError } from "../lib/form-errors";
+import { resolveQrLook, type OrgQr } from "../lib/org-qr";
 import { resolveDefaultDomainId } from "../lib/default-domain";
 import { useShake } from "../lib/use-shake";
 
@@ -73,10 +72,14 @@ function hasQrOverrides(data: LinkInput): boolean {
   );
 }
 
-const UTM_FIELDS: { key: UtmKey; label: string; placeholder: string }[] = [
+/** The three tags people set on almost every link, shown at once; term and
+ * content sit behind one line until somebody wants them. */
+const UTM_MAIN: { key: UtmKey; label: string; placeholder: string }[] = [
   { key: "utmSource", label: "Source", placeholder: "newsletter" },
   { key: "utmMedium", label: "Medium", placeholder: "email" },
-  { key: "utmCampaign", label: "Campaign", placeholder: "spring-launch" },
+  { key: "utmCampaign", label: "Campaign", placeholder: "spring-sale" },
+];
+const UTM_MORE: { key: UtmKey; label: string; placeholder: string }[] = [
   { key: "utmTerm", label: "Term", placeholder: "running-shoes" },
   { key: "utmContent", label: "Content", placeholder: "ad-variant-a" },
 ];
@@ -152,213 +155,129 @@ function mergePastedText(input: HTMLInputElement, pasted: string): string {
   return input.value.slice(0, start) + pasted + input.value.slice(end);
 }
 
+/** Where the link will send people, split so the tags it adds can be told
+ * from the address that was typed. Mirrors the save: the destination with
+ * its own utm_* params dropped, then the fields' values added. */
+function openedUrl(form: LinkInput): { base: string; tags: string } | null {
+  const raw = form.destination.trim();
+  if (!raw) return null;
+  let url: URL;
+  try {
+    url = new URL(/^[a-z][a-z0-9+.-]*:/i.test(raw) ? raw : `https://${raw}`);
+  } catch {
+    return { base: raw, tags: "" };
+  }
+  for (const { param } of UTM_PARAMS) url.searchParams.delete(param);
+  const hash = url.hash;
+  url.hash = "";
+  const tags = new URLSearchParams();
+  for (const { param, key } of UTM_PARAMS) {
+    const value = form[key]?.trim();
+    if (value) tags.set(param, value);
+  }
+  const base = url.toString().replace(/^https?:\/\//, "");
+  const query = tags.toString();
+  return { base, tags: (query ? (url.search ? "&" : "?") + query : "") + hash };
+}
+
+type SetForm = (f: LinkInput) => void;
+
+function UtmInput({
+  field,
+  form,
+  setForm,
+}: {
+  field: { key: UtmKey; label: string; placeholder: string };
+  form: LinkInput;
+  setForm: SetForm;
+}) {
+  const { key, label, placeholder } = field;
+  return (
+    <Field label={label}>
+      <Input
+        value={form[key] ?? ""}
+        onChange={(e) =>
+          setForm({
+            ...form,
+            [key]: e.target.value,
+            destination: withoutUtmParam(form.destination, UTM_PARAM_BY_KEY[key]),
+          })
+        }
+        placeholder={placeholder}
+        autoComplete="off"
+        autoCapitalize="none"
+        spellCheck={false}
+        className="px-2.5 font-mono text-xs"
+      />
+    </Field>
+  );
+}
+
+/** UTM tags inline, because people change them more than anything else on
+ * a link. Term and content open on request, and stay open once either has a
+ * value, so nothing set is ever out of sight. */
 function UtmFields({
   form,
   setForm,
-  className,
+  showMore,
+  onShowMore,
 }: {
   form: LinkInput;
-  setForm: (f: LinkInput) => void;
-  className?: string;
+  setForm: SetForm;
+  showMore: boolean;
+  onShowMore: () => void;
 }) {
-  const set = (key: UtmKey) => (e: ChangeEvent<HTMLInputElement>) => {
-    setForm({
-      ...form,
-      [key]: e.target.value,
-      destination: withoutUtmParam(form.destination, UTM_PARAM_BY_KEY[key]),
-    });
-  };
+  const open = showMore || !!form.utmTerm || !!form.utmContent;
   return (
-    <fieldset className={cn("rounded-lg border border-border p-3", className)}>
-      <legend className="px-1 text-xs font-medium text-muted">UTM parameters</legend>
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-        {UTM_FIELDS.map(({ key, label, placeholder }) => (
-          <Field key={key} label={label}>
-            <Input
-              // SAFETY: UTM_FIELDS names only the five utm* fields, and each
-              // of those is a string on the form.
-              value={(form[key] as string) ?? ""}
-              onChange={set(key)}
-              placeholder={placeholder}
-            />
-          </Field>
+    <fieldset className="flex min-w-0 flex-col gap-2">
+      <legend className="mb-2 flex w-full items-baseline justify-between gap-3">
+        <span className="text-sm font-semibold">UTM tags</span>
+        <span className="text-xs text-muted">Added to the destination</span>
+      </legend>
+      <div className="grid grid-cols-1 gap-2 min-[420px]:grid-cols-3">
+        {UTM_MAIN.map((f) => (
+          <UtmInput key={f.key} field={f} form={form} setForm={setForm} />
         ))}
       </div>
+      {open ? (
+        <div className="grid grid-cols-1 gap-2 min-[420px]:grid-cols-2">
+          {UTM_MORE.map((f) => (
+            <UtmInput key={f.key} field={f} form={form} setForm={setForm} />
+          ))}
+        </div>
+      ) : (
+        <button
+          type="button"
+          onClick={onShowMore}
+          aria-expanded={false}
+          className="-ml-1 flex h-8 w-fit cursor-pointer items-center gap-1 rounded-md px-1 text-xs text-muted transition-colors [@media(hover:hover)]:hover:text-text"
+        >
+          <Plus size={13} aria-hidden /> Term and content
+        </button>
+      )}
     </fieldset>
   );
 }
 
-function QrPreviewSidebar({
-  form,
-  orgQr,
-  previewUrl,
-}: {
-  form: LinkInput;
-  orgQr: OrgQr;
-  previewUrl: string;
-}) {
-  const look = resolveQrLook(form, orgQr);
-  return (
-    <div className="flex flex-col gap-2 sm:w-60">
-      <p className="text-xs font-medium text-muted">QR code</p>
-      <QRPreview
-        url={previewUrl}
-        logo={look.logo}
-        dotStyle={look.dotStyle}
-        color={look.color}
-        corner={look.corner}
-        eyeColor={look.eyeColor}
-        bg={look.bg}
-        logoSize={look.logoSize}
-        size={192}
-      />
-    </div>
-  );
-}
-
-function QrPatternFields({
-  form,
-  setForm,
-  fallbacks,
-}: {
-  form: LinkInput;
-  setForm: (f: LinkInput) => void;
-  fallbacks: ReturnType<typeof qrFallbacks>;
-}) {
-  return (
-    <div className="flex flex-col gap-3">
-      <div className="grid grid-cols-2 gap-3">
-        <Field label="Dots">
-          <MenuSelect
-            label="Dots"
-            value={form.qrStyle ?? ""}
-            onChange={(v) => setForm({ ...form, qrStyle: v })}
-            options={[
-              { value: "", label: "Org default" },
-              ...QR_DOT_STYLES.map((s) => ({ value: s, label: s })),
-            ]}
-          />
-        </Field>
-        <Field label="Corners">
-          <MenuSelect
-            label="Corners"
-            value={form.qrCorner ?? ""}
-            onChange={(v) => setForm({ ...form, qrCorner: v })}
-            options={[
-              { value: "", label: "Org default" },
-              ...QR_CORNER_STYLES.map((s) => ({ value: s, label: s })),
-            ]}
-          />
-        </Field>
-      </div>
-      <div className="grid grid-cols-2 gap-3">
-        <QrColorField
-          label="Dot color"
-          value={form.qrColor ?? ""}
-          fallback={fallbacks.dotColor}
-          onChange={(v) => setForm({ ...form, qrColor: v })}
-        />
-        <QrColorField
-          label="Eye color"
-          value={form.qrEyeColor ?? ""}
-          fallback={fallbacks.eyeColor}
-          onChange={(v) => setForm({ ...form, qrEyeColor: v })}
-        />
-      </div>
-    </div>
-  );
-}
-
-function QrBackgroundFields({
-  form,
-  setForm,
-  fallbacks,
-}: {
-  form: LinkInput;
-  setForm: (f: LinkInput) => void;
-  fallbacks: ReturnType<typeof qrFallbacks>;
-}) {
-  return (
-    <div className="grid grid-cols-2 gap-3">
-      <QrColorField
-        label="Background"
-        value={form.qrBg ?? ""}
-        fallback={fallbacks.bg}
-        onChange={(v) => setForm({ ...form, qrBg: v })}
-        alpha
-      />
-      <Field
-        label="Logo size"
-        tip="How much of the QR code the logo covers. A bigger logo hides more of the dots, and past a point a scanner cannot fill in what is missing."
-      >
-        <MenuSelect
-          label="Logo size"
-          value={form.qrLogoSize == null ? "" : String(form.qrLogoSize)}
-          onChange={(v) => setForm({ ...form, qrLogoSize: v === "" ? null : Number(v) })}
-          options={[
-            { value: "", label: "Org default" },
-            { value: "0.25", label: "Small" },
-            { value: "0.35", label: "Medium" },
-            { value: "0.5", label: "Large" },
-            { value: "0.65", label: "Extra large" },
-          ]}
-        />
-      </Field>
-    </div>
-  );
-}
-
-function QrLogoField({ form, setForm }: { form: LinkInput; setForm: (f: LinkInput) => void }) {
-  return (
-    <div>
-      <span className="mb-1.5 flex items-center gap-1.5 text-xs font-medium text-muted">
-        Logo
-        <Tooltip content="Embedded in the center of the QR code. Use a small, square image with some breathing room so the code stays easy to scan. Leave empty to use your organization's default logo from Settings.">
-          <button
-            type="button"
-            aria-label="About QR logos"
-            className="relative cursor-help text-muted normal-case after:absolute after:-inset-1.5 hover:text-text"
-          >
-            <Info size={13} />
-          </button>
-        </Tooltip>
-      </span>
-      <QrLogoInput
-        value={form.qrLogo ?? ""}
-        onLoad={(url) => setForm({ ...form, qrLogo: url })}
-        onClear={() => setForm({ ...form, qrLogo: "" })}
-      />
-    </div>
-  );
-}
-
-/** Stands where the customization controls would be on a paid plan. The QR
- * itself is already on screen beside it, so this asks for the upgrade the
- * visitor can see the point of, rather than blocking the feature. */
 /**
- * What sits where the QR controls would be on a plan without `qrCustom`.
+ * What sits under the QR on a plan without `qrCustom`.
  *
  * Two different sentences, because they are two different situations. A link
  * with no styling is being offered a feature. A link that already has some,
  * on an org that downgraded, is keeping it: saying "add your logo on a paid
  * plan" to somebody whose logo is right there in the preview reads as a bug.
  */
-function QrCustomizationUpsell({ locked, className }: { locked?: boolean; className?: string }) {
+function QrCustomizationUpsell({ locked }: { locked: boolean }) {
   return (
-    <div
-      className={cn(
-        "flex flex-wrap items-center justify-between gap-3 rounded-lg border border-dashed border-border p-3",
-        className,
-      )}
-    >
-      <div className="flex items-start gap-2">
-        <Lock size={14} className="mt-0.5 shrink-0 text-muted" />
-        <p className="max-w-prose text-xs text-muted">
+    <div className="flex flex-col items-center gap-2 text-center">
+      <p className="flex items-start gap-1.5 text-xs text-pretty text-muted">
+        <Lock size={13} className="mt-px shrink-0" aria-hidden />
+        <span>
           {locked
             ? "This QR keeps the look it already has, and still downloads that way. Changing it needs a paid plan."
             : "Add your logo, colors, and dot shapes to this QR on a paid plan."}
-        </p>
-      </div>
+        </span>
+      </p>
       <RouterLink to="/billing" className={buttonClass({ variant: "outline", size: "sm" })}>
         See plans
       </RouterLink>
@@ -366,117 +285,97 @@ function QrCustomizationUpsell({ locked, className }: { locked?: boolean; classN
   );
 }
 
-function QrCustomization({
-  form,
-  setForm,
-  orgQr,
-  className,
-}: {
-  form: LinkInput;
-  setForm: (f: LinkInput) => void;
-  orgQr: OrgQr;
-  className?: string;
-}) {
-  const fallbacks = qrFallbacks(form, orgQr);
-  return (
-    <fieldset className={cn("flex flex-col gap-4 rounded-lg border border-border p-3", className)}>
-      <legend className="px-1 text-xs font-medium text-muted">QR customization</legend>
-      <QrPatternFields form={form} setForm={setForm} fallbacks={fallbacks} />
-      <QrBackgroundFields form={form} setForm={setForm} fallbacks={fallbacks} />
-      <QrLogoField form={form} setForm={setForm} />
-    </fieldset>
-  );
-}
-
-function DomainField({
+/** The short link as a domain and a slug joined by a slash. Chosen slugs
+ * only exist on custom domains, so on the shared one the slug is locked. */
+function ShortLinkField({
   form,
   setForm,
   editing,
   activeDomains,
+  domainsAllowed,
 }: {
   form: LinkInput;
-  setForm: (f: LinkInput) => void;
+  setForm: SetForm;
   editing: boolean;
   activeDomains: DomainDTO[];
+  domainsAllowed: boolean;
 }) {
   const linkHost = useLinkHost();
-  if (!activeDomains.length) return null;
-  const onDomainChange = (v: string) => setForm({ ...form, domainId: v || null, slug: "" });
-  return (
-    <Field
-      label="Domain"
-      hint={
-        editing
-          ? "A link's domain can't change: create a new link on the other domain instead."
-          : undefined
-      }
-    >
-      <MenuSelect
-        label="Domain"
-        value={form.domainId ?? ""}
-        onChange={onDomainChange}
-        disabled={editing}
-        options={[
-          { value: "", label: `shared: ${linkHost}` },
-          ...activeDomains.map((d) => ({ value: d.id, label: d.hostname })),
-        ]}
-      />
-    </Field>
-  );
-}
+  const slugLocked = !form.domainId;
+  const hasDomains = activeDomains.length > 0;
+  const hints: ReactNode[] = [];
+  if (slugLocked) {
+    hints.push(
+      hasDomains ? (
+        "Use a custom domain for custom slugs."
+      ) : domainsAllowed ? (
+        <>
+          <RouterLink to="/domains" className="text-accent hover:underline">
+            Connect a domain
+          </RouterLink>{" "}
+          for custom slugs.
+        </>
+      ) : (
+        <>
+          <RouterLink to="/billing" className="text-accent hover:underline">
+            Upgrade
+          </RouterLink>{" "}
+          for custom slugs.
+        </>
+      ),
+    );
+  } else if (!editing) {
+    hints.push("Leave the slug empty for a random one.");
+  }
+  if (editing && hasDomains) {
+    hints.push("A link's domain can't change: create a new link on the other domain instead.");
+  }
 
-function SlugField({
-  value,
-  onChange,
-  slugLocked,
-  domainsAllowed,
-  hasDomains,
-}: {
-  value: string;
-  onChange: (e: ChangeEvent<HTMLInputElement>) => void;
-  slugLocked: boolean;
-  domainsAllowed: boolean;
-  /** A domain is already connected: picking it (above) unlocks the slug, so
-   * the hint just names that instead of pointing at /domains or /billing. */
-  hasDomains: boolean;
-}) {
   return (
-    <Field
-      label="Slug"
-      hint={
-        slugLocked ? (
-          hasDomains ? (
-            "Use a custom domain for custom slugs."
-          ) : domainsAllowed ? (
-            <>
-              <RouterLink to="/domains" className="text-accent hover:underline">
-                Connect a domain
-              </RouterLink>{" "}
-              for custom slugs.
-            </>
-          ) : (
-            <>
-              <RouterLink to="/billing" className="text-accent hover:underline">
-                Upgrade
-              </RouterLink>{" "}
-              for custom slugs.
-            </>
-          )
+    <div className="min-w-0">
+      <span className="mb-1.5 block text-xs text-muted">Short link</span>
+      <div className="flex min-w-0 items-stretch">
+        {hasDomains ? (
+          <MenuSelect
+            label="Domain"
+            value={form.domainId ?? ""}
+            onChange={(v) => setForm({ ...form, domainId: v || null, slug: "" })}
+            disabled={editing}
+            className="w-auto max-w-[60%] min-w-0 rounded-r-none font-mono text-[13px]"
+            options={[
+              { value: "", label: linkHost },
+              ...activeDomains.map((d) => ({ value: d.id, label: d.hostname })),
+            ]}
+          />
         ) : (
-          "Leave empty for a random one"
-        )
-      }
-    >
-      <Input
-        value={value}
-        onChange={onChange}
-        placeholder={slugLocked ? "random" : "launch-2026"}
-        disabled={slugLocked}
-        autoComplete="off"
-        autoCapitalize="none"
-        spellCheck={false}
-      />
-    </Field>
+          <span className="flex h-9 max-w-[60%] min-w-0 items-center truncate rounded-l-lg bg-surface-2 px-3 font-mono text-[13px] text-muted">
+            {linkHost}
+          </span>
+        )}
+        <span
+          aria-hidden
+          className="grid w-5 shrink-0 place-items-center bg-surface-2 text-sm text-muted"
+        >
+          /
+        </span>
+        <Input
+          aria-label="Slug"
+          value={form.slug ?? ""}
+          onChange={(e) => setForm({ ...form, slug: e.target.value })}
+          placeholder={slugLocked ? "random" : "launch-2026"}
+          disabled={slugLocked}
+          autoComplete="off"
+          autoCapitalize="none"
+          spellCheck={false}
+          className="min-w-0 flex-1 rounded-l-none font-mono text-[13px]"
+        />
+      </div>
+      {hints.map((hint, i) => (
+        <span key={i} className="mt-1.5 block text-xs text-muted">
+          {hint}
+        </span>
+      ))}
+    </div>
   );
 }
 
@@ -485,21 +384,23 @@ function LinkFormFields({
   setForm,
   editing,
   activeDomains,
-  slugLocked,
   domainsAllowed,
   destinationRef,
+  destinationError,
+  showMoreUtm,
+  onShowMoreUtm,
 }: {
   form: LinkInput;
-  setForm: (f: LinkInput) => void;
+  setForm: SetForm;
   editing: boolean;
   activeDomains: DomainDTO[];
-  slugLocked: boolean;
   domainsAllowed: boolean;
   destinationRef: RefObject<HTMLInputElement | null>;
+  destinationError?: string;
+  showMoreUtm: boolean;
+  onShowMoreUtm: () => void;
 }) {
   const toast = useToast();
-  const set = (key: keyof LinkInput) => (e: ChangeEvent<HTMLInputElement>) =>
-    setForm({ ...form, [key]: e.target.value });
 
   const onDestinationChange = (e: ChangeEvent<HTMLInputElement>) => {
     const destination = e.target.value;
@@ -523,40 +424,107 @@ function LinkFormFields({
   };
 
   return (
-    <div className="flex min-w-0 flex-col gap-4">
-      <Field label="Destination URL">
+    <div className="flex min-w-0 flex-col gap-5">
+      <Field label="Destination" error={destinationError}>
         <Input
           ref={destinationRef}
           value={form.destination}
           onChange={onDestinationChange}
           onPaste={onDestinationPaste}
-          // A URL keyboard on a text field: the form's own check says what
-          // is wrong in a toast, where type="url" would have the browser
-          // refuse first in a bubble of its own.
+          // A URL keyboard on a text field: the form's own check marks the
+          // field, where type="url" would have the browser refuse first in
+          // a bubble of its own.
           inputMode="url"
           autoComplete="off"
           autoCapitalize="none"
           spellCheck={false}
           placeholder="https://example.com/launch"
           autoFocus={!editing}
+          className="h-10 font-mono text-[13px]"
         />
       </Field>
 
-      <DomainField form={form} setForm={setForm} editing={editing} activeDomains={activeDomains} />
+      <ShortLinkField
+        form={form}
+        setForm={setForm}
+        editing={editing}
+        activeDomains={activeDomains}
+        domainsAllowed={domainsAllowed}
+      />
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <SlugField
-          value={form.slug ?? ""}
-          onChange={set("slug")}
-          slugLocked={slugLocked}
-          domainsAllowed={domainsAllowed}
-          hasDomains={activeDomains.length > 0}
+      <Field label="Title">
+        <Input
+          value={form.title ?? ""}
+          onChange={(e) => setForm({ ...form, title: e.target.value })}
+          placeholder="Spring launch"
         />
-        <Field label="Title">
-          <Input value={form.title ?? ""} onChange={set("title")} placeholder="Spring launch" />
-        </Field>
-      </div>
+      </Field>
+
+      <UtmFields form={form} setForm={setForm} showMore={showMoreUtm} onShowMore={onShowMoreUtm} />
     </div>
+  );
+}
+
+function LinkQrPreview({
+  form,
+  orgQr,
+  previewUrl,
+  size,
+}: {
+  form: LinkInput;
+  orgQr: OrgQr;
+  previewUrl: string;
+  size: number;
+}) {
+  const look = resolveQrLook(form, orgQr);
+  return (
+    <QRPreview
+      url={previewUrl}
+      logo={look.logo}
+      dotStyle={look.dotStyle}
+      color={look.color}
+      corner={look.corner}
+      eyeColor={look.eyeColor}
+      bg={look.bg}
+      logoSize={look.logoSize}
+      size={size}
+    />
+  );
+}
+
+/** The side column: the code, the short link, and where it opens. */
+function LinkSummary({
+  form,
+  host,
+  opened,
+}: {
+  form: LinkInput;
+  host: string;
+  opened: ReturnType<typeof openedUrl>;
+}) {
+  const slug = form.slug?.trim();
+  return (
+    <dl className="flex min-w-0 flex-col gap-3">
+      <div className="flex min-w-0 flex-col gap-0.5">
+        <dt className="text-xs text-muted">Short link</dt>
+        <dd className="font-mono text-[13px] font-bold [overflow-wrap:anywhere]">
+          {host}/{slug || <span className="font-sans font-normal text-muted">(random)</span>}
+        </dd>
+      </div>
+      <div className="flex min-w-0 flex-col gap-0.5">
+        <dt className="text-xs text-muted">Opens</dt>
+        <dd className="font-mono text-xs leading-relaxed text-muted [overflow-wrap:anywhere]">
+          {opened ? (
+            <>
+              {opened.base}
+              <span className="text-text">{opened.tags}</span>
+            </>
+          ) : (
+            "Nothing yet"
+          )}
+        </dd>
+      </div>
+    </dl>
   );
 }
 
@@ -594,11 +562,21 @@ export function LinkEditor({
   // was how a title edit silently destroyed a link's logo and colours (#162);
   // the server now only refuses a save that *changes* them.
   const save = (data: LinkInput) => onSave(data);
-  const toast = useToast();
   const shake = useShake();
   const destinationRef = useRef<HTMLInputElement>(null);
+  const customizeRef = useRef<HTMLButtonElement>(null);
+  const backRef = useRef<HTMLButtonElement>(null);
+  // The QR editor replaces the form in the same dialog, with a way back.
+  const [view, setView] = useState<"form" | "qr">("form");
+  const [showMoreUtm, setShowMoreUtm] = useState(false);
 
-  const { handleSubmit, watch, reset, setValue } = useForm<LinkInput>({
+  const {
+    handleSubmit,
+    watch,
+    reset,
+    setValue,
+    formState: { errors, isSubmitted },
+  } = useForm<LinkInput>({
     resolver: valibotResolver(linkInputSchema),
     defaultValues: defaultForm,
   });
@@ -606,7 +584,6 @@ export function LinkEditor({
   // A new link starts on the org's default domain, which also unlocks the
   // slug field: chosen slugs only exist on custom domains, so the customer
   // who set a default is exactly the one who wants to name their links.
-  //
   const newDomainId = resolveDefaultDomainId(defaultDomainId, activeDomains);
 
   // Deliberately not a dependency: the default is read when the dialog opens
@@ -615,9 +592,24 @@ export function LinkEditor({
   useEffect(() => {
     if (open) {
       reset(editingLink ?? { ...defaultForm, domainId: newDomainId });
+      setView("form");
+      setShowMoreUtm(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, editingLink, reset]);
+
+  // Focus follows the view switch: into the QR editor's back button, and
+  // home to the button that opened it on the way back.
+  const switched = useRef(false);
+  useEffect(() => {
+    if (!switched.current) return;
+    switched.current = false;
+    (view === "qr" ? backRef : customizeRef).current?.focus();
+  }, [view]);
+  const showView = (next: "form" | "qr") => {
+    switched.current = true;
+    setView(next);
+  };
 
   // shakeKey bumps on every save failure (client validation or server
   // error): the button shakes either way, without the parent needing to
@@ -640,78 +632,138 @@ export function LinkEditor({
   // wrong tool, so a fast typist hitting it 5+ times a second (typing
   // "https://" is exactly that, back-to-back identical characters) can
   // outrun it and land a keystroke against a stale re-render. setValue
-  // updates just the fields that actually changed.
+  // updates just the fields that actually changed. After a failed submit it
+  // also re-checks them, so a fixed field drops its mark as it is fixed.
   const setForm = (next: LinkInput) => {
     // SAFETY: `next` is typed LinkInput, a fully-defined object type, so
     // Object.keys(next) can only return its own declared keys.
     (Object.keys(next) as (keyof LinkInput)[]).forEach((key) => {
-      if (next[key] !== form[key]) setValue(key, next[key], { shouldDirty: true });
+      if (next[key] !== form[key])
+        setValue(key, next[key], { shouldDirty: true, shouldValidate: isSubmitted });
     });
   };
+
+  // A form error marks its field (rdyrct-design): the reason in the label
+  // row, focus on the field, and the button shakes. No toast.
   const onInvalid: SubmitErrorHandler<LinkInput> = (errors) => {
-    toast(firstFormError(errors, "Check the link details"), "error");
     shake.start();
     // destination is the only field this schema can reject, so it's always
-    // the culprit; scroll it into view since QR customization can push it
-    // off-screen above a long, scrolled dialog.
+    // the culprit.
     if (errors.destination) {
-      destinationRef.current?.scrollIntoView({ block: "center", behavior: "smooth" });
-      destinationRef.current?.focus();
+      setView("form");
+      // After the view has rendered, so the field exists to take focus.
+      requestAnimationFrame(() => {
+        destinationRef.current?.scrollIntoView({ block: "center", behavior: "smooth" });
+        destinationRef.current?.focus();
+      });
     }
   };
+  const destinationError = errors.destination
+    ? form.destination.trim()
+      ? (errors.destination.message ?? "Enter a valid URL")
+      : "Required"
+    : undefined;
 
   const selectedDomain = activeDomains.find((d) => d.id === form.domainId)?.hostname ?? null;
-  const slugLocked = !form.domainId;
   const linkHost = useLinkHost();
 
   const previewUrl = useMemo(
     () => shortUrl(form.slug?.trim() || "preview", selectedDomain, linkHost),
     [form.slug, selectedDomain, linkHost],
   );
+  const opened = openedUrl(form);
+
+  const actions = (
+    <div className="flex justify-end gap-2">
+      <Button variant="ghost" onClick={() => onOpenChange(false)}>
+        Cancel
+      </Button>
+      <Button
+        variant="primary"
+        type="submit"
+        disabled={busy}
+        className={cn("whitespace-nowrap", shake.className)}
+        onAnimationEnd={shake.end}
+      >
+        <BusyContent busy={busy}>{editing ? "Save changes" : "Create link"}</BusyContent>
+      </Button>
+    </div>
+  );
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange} title={editing ? "Edit link" : "New link"} wide>
-      <form onSubmit={handleSubmit(save, onInvalid)} className="grid gap-6 sm:grid-cols-[1fr_auto]">
-        <LinkFormFields
-          form={form}
-          setForm={setForm}
-          editing={editing}
-          activeDomains={activeDomains}
-          slugLocked={slugLocked}
-          domainsAllowed={domainsAllowed}
-          destinationRef={destinationRef}
-        />
-        {/* QR preview sits beside the core fields on sm+; on mobile it's more useful
-            after QR customization (the controls it's actually previewing) than
-            wedged above UTM parameters, so it's last in source order there. */}
-        <div className="order-last sm:order-none">
-          <QrPreviewSidebar form={form} orgQr={orgQr} previewUrl={previewUrl} />
-        </div>
-
-        <UtmFields form={form} setForm={setForm} className="sm:col-span-2" />
-
-        {qrCustomEnabled ? (
-          <QrCustomization form={form} setForm={setForm} orgQr={orgQr} className="sm:col-span-2" />
+      <form
+        onSubmit={handleSubmit(save, onInvalid)}
+        noValidate
+        className="grid gap-6 sm:grid-cols-[minmax(0,1fr)_15rem]"
+      >
+        {view === "form" ? (
+          <>
+            <LinkFormFields
+              form={form}
+              setForm={setForm}
+              editing={editing}
+              activeDomains={activeDomains}
+              domainsAllowed={domainsAllowed}
+              destinationRef={destinationRef}
+              destinationError={destinationError}
+              showMoreUtm={showMoreUtm}
+              onShowMoreUtm={() => setShowMoreUtm(true)}
+            />
+            <aside className="flex min-w-0 flex-col gap-5 rounded-xl bg-bg p-4">
+              <div className="flex flex-col items-center gap-3">
+                <p className="self-start text-xs text-muted">QR code</p>
+                <LinkQrPreview form={form} orgQr={orgQr} previewUrl={previewUrl} size={152} />
+                {qrCustomEnabled ? (
+                  <Button ref={customizeRef} size="sm" onClick={() => showView("qr")}>
+                    <QrCode size={14} aria-hidden /> Customize QR
+                  </Button>
+                ) : (
+                  <QrCustomizationUpsell locked={hasQrOverrides(form)} />
+                )}
+              </div>
+              <LinkSummary form={form} host={selectedDomain ?? linkHost} opened={opened} />
+              <div className="mt-auto pt-1">{actions}</div>
+            </aside>
+          </>
         ) : (
-          <QrCustomizationUpsell locked={hasQrOverrides(form)} className="sm:col-span-2" />
+          <>
+            <div className="flex min-w-0 flex-col gap-2">
+              <div className="flex items-center gap-1">
+                <button
+                  ref={backRef}
+                  type="button"
+                  onClick={() => showView("form")}
+                  aria-label="Back to the link"
+                  className="-ml-2 grid size-9 cursor-pointer place-items-center rounded-md text-muted transition-colors [@media(hover:hover)]:hover:bg-surface-2 [@media(hover:hover)]:hover:text-text"
+                >
+                  <ArrowLeft size={16} />
+                </button>
+                <h3 className="text-sm font-semibold">QR code</h3>
+              </div>
+              <LinkQrEditor form={form} setForm={setForm} orgQr={orgQr} />
+            </div>
+            {/* On a phone the preview leads, so a change shows where it is
+                made rather than a long scroll below. */}
+            <aside className="order-first flex min-w-0 flex-col items-center gap-4 rounded-xl bg-bg p-4 sm:sticky sm:top-0 sm:order-none sm:self-start">
+              <LinkQrPreview form={form} orgQr={orgQr} previewUrl={previewUrl} size={168} />
+              <div className="flex w-full items-center justify-between gap-2">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setForm(withoutQrOverrides(form))}
+                  disabled={!hasQrOverrides(form)}
+                >
+                  Reset
+                </Button>
+                <Button variant="primary" onClick={() => showView("form")}>
+                  Done
+                </Button>
+              </div>
+            </aside>
+          </>
         )}
       </form>
-
-      <div className="mt-6 flex justify-end gap-2">
-        <Button variant="ghost" onClick={() => onOpenChange(false)}>
-          Cancel
-        </Button>
-        <Button
-          variant="primary"
-          type="submit"
-          disabled={busy}
-          onClick={handleSubmit(save, onInvalid)}
-          className={shake.className}
-          onAnimationEnd={shake.end}
-        >
-          <BusyContent busy={busy}>{editing ? "Save changes" : "Create link"}</BusyContent>
-        </Button>
-      </div>
     </Dialog>
   );
 }

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../../lib/api";
 import { withErrorToast } from "../../lib/mutation-toast";
@@ -44,6 +44,8 @@ function BanForm({ user, onClose }: { user: { id: string; name: string }; onClos
   const toast = useToast();
   const qc = useQueryClient();
   const [reason, setReason] = useState("");
+  const [missing, setMissing] = useState(false);
+  const reasonRef = useRef<HTMLInputElement>(null);
   const [picked, setPicked] = useState<ReadonlySet<string>>(new Set());
   const hosts = useQuery({
     queryKey: ["admin", "user-hosts", user.id],
@@ -81,12 +83,26 @@ function BanForm({ user, onClose }: { user: { id: string; name: string }; onClos
     });
 
   return (
-    <div className="flex flex-col gap-4">
-      <p className="text-sm">
-        Ban <span className="font-bold text-accent">{user.name}</span>? They are signed out now and
-        cannot sign back in.
+    // The reason is required, and the button still works without one: pressing
+    // it marks the field instead of greying out with no word as to why.
+    <form
+      className="flex flex-col gap-4"
+      noValidate
+      onSubmit={(event) => {
+        event.preventDefault();
+        if (!reason.trim()) {
+          setMissing(true);
+          reasonRef.current?.focus();
+          return;
+        }
+        ban.mutate();
+      }}
+    >
+      <p className="text-sm text-pretty">
+        Ban <span className="font-semibold">{user.name}</span>? They are signed out now and cannot
+        sign back in.
       </p>
-      <ul className="list-disc pl-5 text-sm text-muted">
+      <ul className="flex list-disc flex-col gap-1 pl-5 text-sm text-pretty text-muted">
         <li>Every link in the organizations they own shows a page saying it is disabled.</li>
         <li>
           Those organizations are deleted in 90 days, with their links and clicks. Unbanning before
@@ -94,10 +110,14 @@ function BanForm({ user, onClose }: { user: { id: string; name: string }; onClos
         </li>
         <li>A paid subscription is cancelled.</li>
       </ul>
-      <Field label="Reason">
+      <Field label="Reason" hint="Goes in the audit log." error={missing ? "Required" : undefined}>
         <Input
+          ref={reasonRef}
           value={reason}
-          onChange={(event) => setReason(event.target.value)}
+          onChange={(event) => {
+            setReason(event.target.value);
+            if (event.target.value.trim()) setMissing(false);
+          }}
           placeholder="Phishing pages posing as PhonePe"
           autoFocus
         />
@@ -107,15 +127,11 @@ function BanForm({ user, onClose }: { user: { id: string; name: string }; onClos
         <Button variant="ghost" onClick={onClose}>
           Cancel
         </Button>
-        <Button
-          variant="danger"
-          disabled={!reason.trim() || ban.isPending}
-          onClick={() => ban.mutate()}
-        >
+        <Button type="submit" variant="danger" disabled={ban.isPending}>
           <BusyContent busy={ban.isPending}>Ban user</BusyContent>
         </Button>
       </div>
-    </div>
+    </form>
   );
 }
 
@@ -140,23 +156,29 @@ function HostPicker({
   if (!hosts || hosts.length === 0) return null;
   return (
     <fieldset className="flex flex-col gap-2">
-      <legend className="mb-1 text-xs text-muted">
+      <legend className="mb-1.5 text-xs text-muted">
         Also block for everyone (only if the site will come back)
       </legend>
-      <div className="flex max-h-48 flex-col gap-2 overflow-y-auto">
+      <div className="flex max-h-48 flex-col overflow-y-auto rounded-lg bg-surface-2 px-3 py-1">
         {hosts.map(({ host, blockable }) => (
           <label
             key={host}
-            className={cn("flex items-baseline gap-2 text-sm", !blockable && "text-muted")}
+            className={cn(
+              "flex min-h-9 items-center gap-2.5 py-1.5 text-sm [&+&]:shadow-[inset_0_1px_0_var(--border)]",
+              blockable ? "cursor-pointer" : "text-muted",
+            )}
           >
             <input
               type="checkbox"
               disabled={!blockable}
               checked={picked.has(host)}
               onChange={(event) => onToggle(host, event.target.checked)}
+              className="size-4 shrink-0 cursor-pointer accent-accent disabled:cursor-default"
             />
             <span className="min-w-0 font-mono break-words">{breakAtDots(host)}</span>
-            {!blockable && <span className="shrink-0 text-xs text-muted">never blocked</span>}
+            {!blockable && (
+              <span className="ml-auto shrink-0 text-xs text-muted">Never blocked</span>
+            )}
           </label>
         ))}
       </div>
