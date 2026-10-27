@@ -60,7 +60,7 @@ const FAQ = [
   ],
   [
     "Can I keep the short links I already printed?",
-    "Yes. Import from Bitly, Rebrandly, Short.io or Dub, keep the same short URLs, and the domain is checked through a TXT record so it works before you move its CNAME.",
+    "Yes, if they are on a domain you own. Import from Bitly, Rebrandly, Short.io or Dub and the same short URLs keep working on that domain, checked through a TXT record so it works before you move its CNAME. A link printed on the shortener's own domain, like bit.ly, stays with that service.",
   ],
   [
     "What happens on the domain's homepage?",
@@ -77,7 +77,7 @@ export function BrandedLinkShortenerPage() {
     <MarketingPage
       path={PATH}
       title="Branded link shortener"
-      intro="Short links on your own domain, with words you choose. People can see where a link goes before they tap it."
+      intro="Short links on your own domain, with words you choose. People can see who sent a link before they tap it."
     >
       <section className="mx-auto flex max-w-3xl flex-col gap-4 py-12">
         <h2 className="text-3xl font-bold tracking-tight text-balance sm:text-4xl">

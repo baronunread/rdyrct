@@ -103,7 +103,7 @@ The QR code and optional logo are processed in your browser. rdyrct does not rec
       "A branded link shortener for your own domain: chosen slugs, TLS set up for you, QR codes and click analytics. From $4 a month, with a free plan.",
     markdown: `# Branded link shortener
 
-Put short links on your own domain, such as go.yourcompany.com/spring, instead of a generic shortener's. People see who sent the link and what is behind it before they tap it.
+Put short links on your own domain, such as go.yourcompany.com/spring, instead of a generic shortener's. People see who sent the link before they tap it.
 
 ## Set up in three steps
 
@@ -117,7 +117,7 @@ Put short links on your own domain, such as go.yourcompany.com/spring, instead o
 - Hobby, $4 a month: 1 custom domain, slugs you choose, 500 links.
 - Pro, $9 a month: 5 custom domains, 3,000 links, 25 members.
 
-Moving from Bitly, Rebrandly, Short.io or Dub? Import your links and keep the same short URLs.
+Moving from Bitly, Rebrandly, Short.io or Dub? Import your links and keep the same short URLs on your own domain. Links printed on the old service's own domain, like bit.ly, stay with it.
 
 [See rdyrct and Rebrandly compared](/rebrandly-alternative) or [sign up free](/signup).`,
   },
