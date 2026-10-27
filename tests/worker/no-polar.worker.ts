@@ -19,7 +19,13 @@ async function call(path: string, init: RequestInit = {}): Promise<Response> {
   const ctx = createExecutionContext();
   const res = await worker.fetch(
     new Request(`http://localhost${path}`, init),
-    { ...authEnv(), POLAR_ACCESS_TOKEN: undefined, POLAR_WEBHOOK_SECRET: undefined },
+    {
+      ...authEnv(),
+      POLAR_ACCESS_TOKEN: undefined,
+      POLAR_WEBHOOK_SECRET: undefined,
+      // The test env's refusing Polar stub would count as billing being on.
+      BILLING: undefined,
+    },
     ctx,
   );
   await waitOnExecutionContext(ctx);

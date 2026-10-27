@@ -1,5 +1,5 @@
 // fallow-ignore-file code-duplication -- worker specs repeat their setup so each reads on its own
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { env } from "cloudflare:workers";
 import { reset } from "cloudflare:test";
 import { drizzle } from "drizzle-orm/d1";
@@ -27,6 +27,7 @@ import {
   overriding,
   rawLinkRow,
   testEnv,
+  unreachableBilling,
 } from "./support";
 
 /**
@@ -128,6 +129,10 @@ beforeEach(async () => {
     const url = String(input instanceof Request ? input.url : input);
     if (url.startsWith("https://security.cloudflare-dns.com"))
       return new Response("", { status: 503 });
+    // A ban ends the owner's subscription. That goes to the BILLING stub in
+    // support.ts, never out to Polar (#412).
+    if (/(^|\.)polar\.sh\//.test(new URL(url).hostname + "/"))
+      throw new Error(`A test reached Polar: ${url}`);
     return realFetch(input, init);
   };
 });
@@ -203,7 +208,8 @@ describe("banning a user", () => {
 
   it("still bans when the subscription cannot be ended, and says so", async () => {
     await freeOwnerCookie();
-    // A subscription on record, and no Polar to end it with.
+    // A subscription on record, and a Polar that refuses to end it (the
+    // test env's BILLING stub).
     await env.DB.prepare(
       "update user set polar_subscription_id = 'sub_1' where id = 'free-1'",
     ).run();
@@ -497,12 +503,8 @@ describe("blocking hosts with a ban", () => {
     await createLink(owner, "https://kit.up.railway.app/");
     const cookie = await adminCookie();
     await failInserts("blocked_hosts");
-    const ended: string[] = [];
-    globalThis.fetch = async (input) => {
-      const url = String(input instanceof Request ? input.url : input);
-      ended.push(url);
-      return new Response("", { status: 503 });
-    };
+    // Polar is the test env's BILLING stub: record what it was asked to end.
+    const ended = vi.spyOn(unreachableBilling.subscriptions, "revoke");
     await env.DB.prepare(
       "update user set polar_subscription_id = 'sub_1' where id = 'free-1'",
     ).run();
@@ -510,10 +512,8 @@ describe("blocking hosts with a ban", () => {
     const res = await ban(cookie, { reason: "phishing", blockHosts: ["kit.up.railway.app"] });
     expect(res.status).toBe(200);
     expect(await jsonBody(res)).toMatchObject({ orgsDisabled: 1, hostsFailed: true });
-    expect(
-      ended.some((url) => url.includes("sub_1")),
-      "Polar was asked",
-    ).toBe(true);
+    expect(ended, "Polar was asked").toHaveBeenCalledWith("sub_1");
+    ended.mockRestore();
     expect(await row("select action from admin_actions where action = 'user.ban'")).toBeTruthy();
   });
 
