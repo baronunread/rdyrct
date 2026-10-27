@@ -18,11 +18,19 @@ import { cn } from "./cn";
 export type Variant = "primary" | "outline" | "ghost" | "danger";
 export type Size = "sm" | "md";
 
+// Depth from shadows, not borders (rdyrct-design, "The app's surfaces"):
+// the outline variant is lifted by a ring shadow, and the primary carries a
+// hairline of light along its top edge. Hover styles only where there is
+// hover, so a tap on a phone does not leave a button stuck highlighted.
 const variants = {
-  primary: "bg-accent text-bg font-bold hover:brightness-110 active:brightness-95",
-  outline: "border border-border bg-surface hover:border-accent hover:text-accent",
-  ghost: "text-muted hover:text-text hover:bg-surface-2",
-  danger: "border border-border text-danger hover:border-danger hover:bg-danger/10",
+  primary:
+    "bg-accent text-bg font-semibold shadow-[inset_0_1px_0_rgb(255_255_255/0.18),0_1px_2px_rgb(0_0_0/0.18)] [@media(hover:hover)]:hover:brightness-110 active:brightness-95",
+  outline:
+    "bg-surface text-text font-medium smooth-shadow-ring-xs [@media(hover:hover)]:hover:bg-surface-2",
+  ghost:
+    "text-muted [@media(hover:hover)]:hover:text-text [@media(hover:hover)]:hover:bg-surface-2",
+  danger:
+    "bg-surface text-danger font-medium shadow-[0_0_0_1px_color-mix(in_oklab,var(--danger)_40%,transparent)] [@media(hover:hover)]:hover:bg-danger/10",
 } satisfies Record<Variant, string>;
 
 const sizes = {
@@ -43,8 +51,8 @@ export function buttonClass({
   className?: string;
 } = {}): string {
   return cn(
-    "inline-flex cursor-pointer items-center justify-center rounded-md transition-[background,border-color,color,filter,scale] duration-150 ease-out disabled:pointer-events-none disabled:opacity-50",
-    !staticProp && "active:scale-[0.96]",
+    "inline-flex cursor-pointer items-center justify-center rounded-lg transition-[background-color,color,filter,scale] duration-200 ease-out disabled:pointer-events-none disabled:opacity-50 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent/30",
+    !staticProp && "active:scale-[0.97]",
     variants[variant],
     sizes[size],
     className,

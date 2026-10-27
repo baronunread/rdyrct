@@ -85,7 +85,7 @@ export function SlugLink({
 
 export function Card({ className, children }: { className?: string; children: ReactNode }) {
   return (
-    <div className={cn("rounded-lg bg-surface p-4 smooth-shadow-ring-xs", className)}>
+    <div className={cn("rounded-xl bg-surface p-4 smooth-shadow-ring-xs", className)}>
       {children}
     </div>
   );
@@ -113,13 +113,13 @@ export function Table({
     // shows through beside it. `none` disables the bounce as well.
     <div
       className={cn(
-        "overflow-x-auto overscroll-x-none rounded-lg bg-surface smooth-shadow-ring-xs",
+        "overflow-x-auto overscroll-x-none rounded-xl bg-surface smooth-shadow-ring-xs",
         className,
       )}
     >
       <table
         className={cn(
-          "w-full text-sm [&_tbody_tr]:transition-colors [&_tbody_tr]:hover:bg-surface-2/40",
+          "w-full text-sm [&_tbody_tr]:transition-colors [@media(hover:hover)]:[&_tbody_tr]:hover:bg-surface-2/40",
           fixed && "table-fixed",
           minWidth,
         )}
@@ -156,8 +156,8 @@ export function EmptyState({
   action?: ReactNode;
 }) {
   return (
-    <div className="flex flex-col items-center gap-3 rounded-lg border border-dashed border-border py-14 text-center">
-      <p className="font-bold">{title}</p>
+    <div className="flex flex-col items-center gap-3 rounded-xl py-14 text-center smooth-shadow-ring-xs">
+      <p className="font-semibold">{title}</p>
       {hint && <p className="max-w-sm text-sm text-pretty text-muted">{hint}</p>}
       {action}
     </div>
@@ -176,7 +176,7 @@ export function PageHeader({
   return (
     <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
       <div>
-        <h1 className="text-lg font-bold tracking-wide">{title}</h1>
+        <h1 className="text-xl font-semibold tracking-tight text-balance">{title}</h1>
         {sub && <p className="mt-1 text-sm text-pretty text-muted">{sub}</p>}
       </div>
       {action}

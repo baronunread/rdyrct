@@ -28,10 +28,12 @@ export function Menu({
       </BaseMenu.Trigger>
       <BaseMenu.Portal>
         <BaseMenu.Positioner sideOffset={6} align={align} className="z-50">
-          {/* Grows out of its trigger (--transform-origin is Base UI's
-              anchor side) and leaves by fading alone: a menu opened this
-              often should get out of the way faster than it arrived. */}
-          <BaseMenu.Popup className="min-w-48 origin-[var(--transform-origin)] rounded-lg bg-surface p-1 smooth-shadow-ring-xl transition-[opacity,scale] duration-100 ease-out data-[ending-style]:opacity-0 data-[starting-style]:scale-95 data-[starting-style]:opacity-0 motion-reduce:transition-none">
+          {/* Opens at once: a menu used this often should not make anybody
+              wait for it. Only the close animates, a short fade with a
+              little blur from the trigger's side (--transform-origin is
+              Base UI's anchor side). Radii nest: 12px popup, 4px padding,
+              8px items. */}
+          <BaseMenu.Popup className="min-w-48 origin-[var(--transform-origin)] rounded-xl bg-surface p-1 smooth-shadow-ring-xl transition-[opacity,scale,filter] duration-150 ease-out data-[ending-style]:scale-[0.98] data-[ending-style]:opacity-0 data-[ending-style]:blur-[4px] data-[starting-style]:transition-none motion-reduce:transition-none">
             {children}
           </BaseMenu.Popup>
         </BaseMenu.Positioner>
