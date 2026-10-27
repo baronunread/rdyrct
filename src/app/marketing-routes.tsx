@@ -90,6 +90,14 @@ export function marketingRoutes() {
     }),
     createRoute({
       ...child,
+      path: "/branded-link-shortener",
+      component: lazyRouteComponent(
+        () => import("./routes/branded-link-shortener"),
+        "BrandedLinkShortenerPage",
+      ),
+    }),
+    createRoute({
+      ...child,
       path: "/pricing",
       component: lazyRouteComponent(() => import("./routes/pricing"), "PricingPage"),
     }),

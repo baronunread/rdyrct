@@ -70,5 +70,6 @@
 - [API and MCP docs](https://rdyrct.com/docs)
 - [QR code generator](https://rdyrct.com/qr-code-generator)
 - [UTM builder](https://rdyrct.com/utm-builder)
+- [Branded link shortener](https://rdyrct.com/branded-link-shortener)
 - [Terms](https://rdyrct.com/terms)
 - [Report a link](https://rdyrct.com/report)
