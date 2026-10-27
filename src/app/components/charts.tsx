@@ -12,7 +12,9 @@ import { motion } from "@tanstack/charts/motion";
 import { RendererChart } from "@tanstack/react-charts/tooltip";
 import { followSpring, pointerTooltip } from "./chart-tooltip";
 import { clicksByHour, HOURS } from "../lib/click-buckets";
-import type { SeriesPoint, DeltaValue, HeatmapRow } from "@/shared/types";
+import type { SeriesPoint, DeltaValue, HeatmapRow, TopEntry } from "@/shared/types";
+import { CountryMap } from "./country-map";
+import { PanelTabs } from "../ui/tabs";
 import { formatNumber } from "../lib/numbers";
 
 // Monotone rather than a cubic that overshoots: it never draws a peak or a
@@ -300,6 +302,51 @@ export function ClicksByHour({ data, height = 260 }: { data: HeatmapRow[]; heigh
           </>
         );
       }}
+    />
+  );
+}
+
+/** "Oct 5" from "2026-10-05" (or the date part of an hourly bucket). */
+export const dayTick = (day: string) =>
+  new Date(`${day.slice(0, 10)}T00:00:00Z`).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    timeZone: "UTC",
+  });
+
+/** "14:00" from an hourly bucket. */
+export const hourTick = (day: string) => day.slice(11, 16);
+
+const COUNTRY_NAMES = new Intl.DisplayNames("en", { type: "region" });
+
+/** "Italy" from "IT", or the code itself when the runtime has no name. */
+export function countryName(code: string): string {
+  try {
+    return COUNTRY_NAMES.of(code) ?? code;
+  } catch {
+    return code;
+  }
+}
+
+/** Countries as bars, with the map one tab away. */
+export function PlacesPanel({ countries, period }: { countries: TopEntry[]; period?: string }) {
+  return (
+    <PanelTabs
+      end={period}
+      tabs={[
+        {
+          value: "countries",
+          label: "Countries",
+          panel: (
+            <BarList
+              head={["Country", "Clicks"]}
+              items={countries.map((c) => ({ ...c, key: countryName(c.key) }))}
+              empty="The country each click came from appears here. Never the address it came from."
+            />
+          ),
+        },
+        { value: "map", label: "Map", panel: <CountryMap countries={countries} /> },
+      ]}
     />
   );
 }

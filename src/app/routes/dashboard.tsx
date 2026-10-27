@@ -15,7 +15,7 @@ import {
 import { useOrgLimits } from "../lib/org-limits";
 import { ApiError } from "../lib/api";
 import { type DomainDTO, type LinkDTO, type LinkInput, type RecentClick } from "@/shared/types";
-import { AreaChart, BarList, StatsChart } from "../components/charts";
+import { AreaChart, BarList, StatsChart, dayTick } from "../components/charts";
 import { useNewLink, NewLinkButton } from "../components/new-link-host";
 import { PanelTabs } from "../ui/tabs";
 import { formatNumber } from "../lib/numbers";
@@ -116,7 +116,7 @@ function DashboardBody({
           { label: "Members", value: formatNumber(data.memberCount) },
         ]}
       >
-        {s.bucket === "day" && <AreaChart data={s.series.slice(-7)} tickFormat={shortDay} />}
+        {s.bucket === "day" && <AreaChart data={s.series.slice(-7)} tickFormat={dayTick} />}
       </StatsChart>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
@@ -170,15 +170,6 @@ function DashboardBody({
       </div>
     </div>
   );
-}
-
-/** "Oct 5" from "2026-10-05". */
-function shortDay(day: string): string {
-  return new Date(`${day}T00:00:00Z`).toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    timeZone: "UTC",
-  });
 }
 
 /** A top link's row label: its title, else its slug. */

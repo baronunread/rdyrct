@@ -185,7 +185,16 @@
       }
     },
     "src/app/routes/link-detail.tsx": {
+      "complexity_critical": {
+        "count": 1
+      },
+      "crap_critical": {
+        "count": 1
+      },
       "crap_high": {
+        "count": 1
+      },
+      "crap_moderate": {
         "count": 1
       }
     },
@@ -292,6 +301,7 @@
     "src/app/lib/current-org.ts:high impact",
     "src/app/routes/admin/orgs.tsx:hidden coupling",
     "src/worker/abuse.ts:hidden coupling",
+    "src/app/lib/clipboard.ts:high impact",
     "src/app/lib/posthog.ts:hidden coupling",
     "src/worker/routes/orgs.ts:hidden coupling",
     "src/app/lib/use-shake.ts:high impact",
@@ -301,9 +311,9 @@
     "src/worker/routes/links.ts:hidden coupling",
     "src/app/routes/dashboard.tsx:hidden coupling",
     "src/app/routes/admin/users.tsx:hidden coupling",
+    "src/app/components/link-editor.tsx:complexity",
     "src/app/routes/domains.tsx:hidden coupling",
     "src/worker/routes/billing.ts:hidden coupling",
-    "src/app/components/link-editor.tsx:complexity",
     "src/app/routes/links.tsx:hidden coupling",
     "src/app/routes/members.tsx:hidden coupling",
     "src/app/routes/admin/links.tsx:hidden coupling",
