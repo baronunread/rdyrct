@@ -23,9 +23,8 @@ import { withErrorToast } from "../lib/mutation-toast";
 import { hostnameSchema } from "../lib/schemas";
 import { Badge, PageHeader } from "../ui/misc";
 import { SettingsGroup, SettingsRow } from "../ui/settings-rows";
-import { Skeleton, SkeletonStatus } from "../ui/skeleton";
 import { BusyContent } from "../ui/spinner";
-import { DomainsPageSkeleton, HeaderSkeleton } from "../components/skeletons";
+import { DomainsPageSkeleton, DomainsSkeleton, HeaderSkeleton } from "../components/skeletons";
 import { NoOrgState } from "../components/no-org";
 import { LockedPanel } from "../components/over-limit";
 import { domainsBlockedBy } from "../lib/org-limits";
@@ -480,28 +479,10 @@ function DomainsSection({ orgId, plan }: { orgId: string; plan: OrgPlan }) {
   );
 }
 
-function DomainRowsSkeleton() {
-  return (
-    <SkeletonStatus>
-      <SettingsGroup>
-        {[40, 55].map((w) => (
-          <div key={w} className="flex min-h-16 items-center justify-between gap-3 px-4 py-3">
-            <div className="flex min-w-0 flex-1 flex-col gap-2">
-              <Skeleton className="h-3.5" style={{ width: `${w}%` }} />
-              <Skeleton className="h-3 w-1/3" />
-            </div>
-            <Skeleton className="h-5 w-16 shrink-0 rounded-full" />
-          </div>
-        ))}
-      </SettingsGroup>
-    </SkeletonStatus>
-  );
-}
-
 /** The list, or the line that stands in for it before the first domain. */
 function DomainsBody({ model, canAdd }: { model: DomainsModel; canAdd: boolean }) {
   const { domains, org, appHost, actions, pending } = model;
-  if (domains.isLoading) return <DomainRowsSkeleton />;
+  if (domains.isLoading) return <DomainsSkeleton />;
   if (!model.hasDomains)
     return canAdd ? (
       <SettingsGroup>

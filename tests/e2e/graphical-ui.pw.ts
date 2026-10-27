@@ -43,6 +43,8 @@ test("the country map is not a keyboard focus target (#175)", async ({ page }) =
   });
 
   await page.goto("/analytics");
+  // The map shares a card with the countries list, one tab over.
+  await page.getByRole("tab", { name: "Map", exact: true }).click();
   const map = page.getByLabel("Clicks by country");
   await expect(map).toBeVisible();
   await expect(map).toHaveAttribute("tabindex", "-1");

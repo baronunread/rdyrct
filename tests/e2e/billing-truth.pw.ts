@@ -80,13 +80,18 @@ test("an admin can comp a user, and the comp never counts as a subscriber", asyn
 
   await expectCountsMatchRows(page);
 
-  // Comp the admin's own account. The reason is required, so the button
-  // stays disabled until it is filled in.
+  // Comp the admin's own account. The reason is required: pressing the
+  // button without one marks the field and grants nothing.
   await page.goto("/admin/users");
   await adminRow.getByRole("button", { name: `Actions for` }).click();
   await page.getByRole("menuitem", { name: "Comp a paid plan" }).click();
   const dialog = page.getByRole("dialog", { name: /^Comp / });
-  await expect(dialog.getByRole("button", { name: "Grant comp" })).toBeDisabled();
+  const reasonField = dialog.getByRole("textbox", { name: "Reason" });
+  await dialog.getByRole("button", { name: "Grant comp" }).click();
+  await expect(reasonField).toHaveAttribute("aria-invalid", "true");
+  await expect(dialog.getByText("Required", { exact: true })).toBeVisible();
+  await expect(dialog).toBeVisible();
+  await expect(page.getByText("Comp granted")).toHaveCount(0);
   await dialog.getByLabel("Reason").fill("Design partner");
   await dialog.getByRole("button", { name: "Grant comp" }).click();
 

@@ -575,6 +575,7 @@ export function LinkEditor({
     watch,
     reset,
     setValue,
+    getFieldState,
     formState: { errors, isSubmitted },
   } = useForm<LinkInput>({
     resolver: valibotResolver(linkInputSchema),
@@ -597,6 +598,15 @@ export function LinkEditor({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, editingLink, reset]);
+
+  // The org's domains can arrive after the dialog opened (New link pressed
+  // straight after a reload). Until somebody picks a domain, follow the
+  // default as it resolves; once they pick, leave their choice alone.
+  useEffect(() => {
+    if (!open || editingLink || getFieldState("domainId").isDirty) return;
+    setValue("domainId", newDomainId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [newDomainId]);
 
   // Focus follows the view switch: into the QR editor's back button, and
   // home to the button that opened it on the way back.

@@ -45,7 +45,9 @@ test("new links start on the org's default domain, with the slug field unlocked 
   await editor.getByPlaceholder("https://example.com/launch").fill("https://example.com/launch");
   await slug.fill("chosen-by-default");
   await editor.getByRole("button", { name: "Create link" }).click();
-  await expect(page.getByText(`${hostname}/chosen-by-default`)).toBeVisible();
+  await expect(page.getByRole("dialog", { name: "Link created" })).toContainText(
+    `${hostname}/chosen-by-default`,
+  );
 
   // Giving the default up sends new links back to the shared domain.
   await page.goto("/domains");

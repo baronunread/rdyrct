@@ -12,6 +12,7 @@ test("mint a key from its own nav tab, use it, then revoke it", async ({ page, r
   await expect(page.getByRole("heading", { name: "API" })).toBeVisible();
   // "API keys" is the default tab, so no click needed to land on it.
 
+  await page.getByRole("button", { name: "New key" }).click();
   await page.getByPlaceholder("Key name, e.g. Claude").fill("Playwright key");
   await page.getByRole("button", { name: "Create key" }).click();
 

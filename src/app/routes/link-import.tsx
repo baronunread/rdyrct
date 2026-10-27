@@ -38,10 +38,10 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "../ui/button";
 import { buttonClass } from "../ui/button-class";
 import { Select } from "../ui/field";
-import { Badge, PageHeader } from "../ui/misc";
+import { Badge, PageHeader, Table, Td, Th } from "../ui/misc";
 import { BusyContent } from "../ui/spinner";
 import { useToast } from "../ui/toast";
-import { Check, ChevronRight } from "../ui/icons";
+import { Check, ChevronRight, Upload } from "../ui/icons";
 import { cn } from "../ui/cn";
 import { LockedPanel } from "../components/over-limit";
 import { NoOrgState } from "../components/no-org";
@@ -101,20 +101,18 @@ function ImportFlow({ orgId, role }: { orgId: string; role: OrgRole }) {
         sub="Your short URLs stay the same. Each link keeps its domain, its slug and where it goes."
       />
       {live ? (
-        <>
+        <div className="flex max-w-[760px] flex-col gap-6">
           <Stepper current={switching ? "switch" : "import"} />
-          <div className="mt-6">
-            {switching ? (
-              <SwitchStep
-                orgId={orgId}
-                hosts={live.hosts}
-                serviceName={serviceNameOf(live.service)}
-              />
-            ) : (
-              <JobView orgId={orgId} job={live} onNext={() => setSwitching(true)} />
-            )}
-          </div>
-        </>
+          {switching ? (
+            <SwitchStep
+              orgId={orgId}
+              hosts={live.hosts}
+              serviceName={serviceNameOf(live.service)}
+            />
+          ) : (
+            <JobView orgId={orgId} job={live} onNext={() => setSwitching(true)} />
+          )}
+        </div>
       ) : (
         !current.isPending && <Wizard orgId={orgId} role={role} />
       )}
@@ -151,9 +149,9 @@ function Wizard({ orgId, role }: { orgId: string; role: OrgRole }) {
   }, []);
 
   return (
-    <>
+    <div className="flex max-w-[760px] flex-col gap-6">
       <Stepper current={step} />
-      <div className="mt-6">
+      <div>
         {step === "service" && (
           <ServiceStep
             value={service}
@@ -202,7 +200,7 @@ function Wizard({ orgId, role }: { orgId: string; role: OrgRole }) {
           <UploadStep orgId={orgId} service={service} rows={ready} />
         )}
       </div>
-    </>
+    </div>
   );
 }
 
@@ -237,10 +235,10 @@ function Stepper({ current }: { current: Step }) {
             >
               <span
                 className={cn(
-                  "tnum flex size-6 items-center justify-center rounded-full border text-xs",
-                  index < at && "border-accent bg-accent text-bg",
-                  index === at && "border-accent text-accent",
-                  index > at && "border-border",
+                  "tnum flex size-6 items-center justify-center rounded-full text-xs",
+                  index < at && "bg-accent-2/15 text-accent-2",
+                  index === at && "bg-surface font-semibold text-text smooth-shadow-ring-xs",
+                  index > at && "bg-surface-2 text-muted",
                 )}
               >
                 {index < at ? <Check size={13} aria-label="Done" /> : index + 1}
@@ -248,7 +246,7 @@ function Stepper({ current }: { current: Step }) {
               {step.label}
             </span>
             {index < STEPS.length - 1 && (
-              <ChevronRight size={14} className="text-border" aria-hidden />
+              <ChevronRight size={14} className="text-muted/50" aria-hidden />
             )}
           </li>
         ))}
@@ -256,6 +254,11 @@ function Stepper({ current }: { current: Step }) {
     </>
   );
 }
+
+/** One raised card holding a list, its rows split by inset hairlines
+ * (rdyrct-design: shadows, not borders). */
+const LIST_CARD =
+  "flex flex-col overflow-hidden rounded-xl bg-surface smooth-shadow-ring-xs [&>*+*]:shadow-[inset_0_1px_0_var(--border)]";
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
@@ -268,7 +271,7 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
 
 function Nav({ onBack, next }: { onBack?: () => void; next: ReactNode }) {
   return (
-    <div className="flex items-center justify-between gap-3 border-t border-border pt-4">
+    <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
       {onBack ? (
         <Button variant="ghost" onClick={onBack}>
           Back
@@ -290,19 +293,23 @@ function ServiceStep({
 }) {
   return (
     <Section title="Where are your links now?">
-      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+      <div className={LIST_CARD}>
         {IMPORT_SERVICES.map((service) => (
           <button
             key={service.id}
             type="button"
             onClick={() => onPick(service.id)}
             className={cn(
-              "flex items-center justify-between rounded-lg border bg-surface px-4 py-3 text-left transition-colors hover:bg-surface-2 focus-visible:outline-2 focus-visible:outline-accent",
-              value === service.id ? "border-accent" : "border-border",
+              "flex min-h-12 w-full cursor-pointer items-center justify-between gap-3 px-4 py-2.5 text-left text-sm transition-colors focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent [@media(hover:hover)]:hover:bg-surface-2/60",
+              value === service.id && "bg-surface-2/60",
             )}
           >
             <span className="font-medium">{service.name}</span>
-            <ChevronRight size={16} className="text-muted" aria-hidden />
+            {value === service.id ? (
+              <Check size={16} className="text-accent-2" aria-hidden />
+            ) : (
+              <ChevronRight size={16} className="text-muted" aria-hidden />
+            )}
           </button>
         ))}
       </div>
@@ -344,7 +351,7 @@ function FileStep({
         ))}
       </ol>
       <label
-        className="flex cursor-pointer flex-col items-center gap-1 rounded-lg border border-dashed border-border bg-surface px-4 py-8 text-center hover:bg-surface-2 focus-within:outline-2 focus-within:outline-accent"
+        className="flex cursor-pointer flex-col items-center gap-2 rounded-xl bg-surface px-4 py-8 text-center outline-[1.5px] -outline-offset-[1.5px] outline-border outline-dashed transition-colors focus-within:outline-2 focus-within:outline-accent focus-within:outline-solid [@media(hover:hover)]:hover:bg-surface-2/40"
         onDragOver={(event) => event.preventDefault()}
         onDrop={(event) => {
           event.preventDefault();
@@ -360,15 +367,17 @@ function FileStep({
         />
         {file ? (
           <>
-            <span className="font-mono text-sm">{file.name}</span>
-            <span className="tnum text-sm text-muted">
+            <Check size={20} className="text-accent-2" aria-hidden />
+            <span className="font-mono text-sm break-all">{file.name}</span>
+            <span className="tnum text-xs text-muted">
               {read.rows.length.toLocaleString()} links found. Choose another file to replace it.
             </span>
           </>
         ) : (
           <>
-            <span className="font-medium">Choose the CSV file</span>
-            <span className="text-sm text-muted">or drop it here</span>
+            <Upload size={20} className="text-muted" aria-hidden />
+            <span className="text-sm font-semibold">Choose the CSV file</span>
+            <span className="text-xs text-muted">or drop it here</span>
           </>
         )}
       </label>
@@ -427,18 +436,18 @@ function ColumnPicker({
     </Select>
   );
   return (
-    <div className="flex flex-col gap-3 rounded-lg border border-border bg-surface p-4">
-      <p className="text-sm">We could not tell which column is which. Pick them:</p>
+    <div className="flex flex-col gap-4 rounded-xl bg-surface p-4 smooth-shadow-ring-xs">
+      <p className="text-sm font-medium">We could not tell which column is which. Pick them:</p>
       <div className="grid gap-3 sm:grid-cols-3">
-        <label className="flex flex-col gap-1.5 text-xs text-muted">
+        <label className="flex flex-col gap-1.5 text-xs font-medium text-muted">
           Short URL
           {pick("shortUrl")}
         </label>
-        <label className="flex flex-col gap-1.5 text-xs text-muted">
+        <label className="flex flex-col gap-1.5 text-xs font-medium text-muted">
           Where it goes
           {pick("destination")}
         </label>
-        <label className="flex flex-col gap-1.5 text-xs text-muted">
+        <label className="flex flex-col gap-1.5 text-xs font-medium text-muted">
           Title (optional)
           {pick("title")}
         </label>
@@ -446,6 +455,7 @@ function ColumnPicker({
       <label className="flex items-center gap-2 text-sm">
         <input
           type="checkbox"
+          className="size-4 accent-accent"
           checked={file.hasHeader}
           onChange={(event) => onChange({ ...file, hasHeader: event.target.checked })}
         />
@@ -503,7 +513,7 @@ function DomainsStep({
         Each link keeps its domain, so the domain has to be on rdyrct first. Your links keep working
         on {serviceName} until the very last step, when you switch the DNS.
       </p>
-      <ul className="flex flex-col gap-3">
+      <ul className={LIST_CARD}>
         {hosts.map((host) => (
           <li key={host}>
             <DomainRow
@@ -555,10 +565,10 @@ function DomainRow({
 }) {
   const pending = domain?.validation === "txt" && domain.status !== "active";
   return (
-    <div className="flex flex-col gap-3 rounded-lg border border-border bg-surface p-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-col gap-0.5">
-          <span className="font-mono text-sm">{host}</span>
+    <div className="flex flex-col gap-3 px-4 py-3">
+      <div className="flex min-h-9 flex-wrap items-center justify-between gap-3">
+        <div className="flex min-w-0 flex-col gap-0.5">
+          <span className="font-mono text-sm break-all">{host}</span>
           <span className="tnum text-xs text-muted">
             {links.toLocaleString()} {links === 1 ? "link" : "links"}
           </span>
@@ -650,7 +660,7 @@ function HostActions({
   return (
     <div className="flex items-center gap-2">
       {leaveOut}
-      <Button variant="primary" size="sm" disabled={adding} onClick={add}>
+      <Button variant="outline" size="sm" disabled={adding} onClick={add}>
         <BusyContent busy={adding}>Add {host}</BusyContent>
       </Button>
     </div>
@@ -688,31 +698,47 @@ async function sendChunks(
 function Progress({ done, total, label }: { done: number; total: number; label: string }) {
   const share = total ? Math.round((done / total) * 100) : 0;
   return (
-    <div className="flex flex-col gap-2">
+    <div className="flex flex-col gap-3 rounded-xl bg-surface p-4 smooth-shadow-ring-xs">
+      <div className="flex items-baseline justify-between gap-3 text-sm">
+        <p className="tnum">
+          <span className="font-medium">{label}:</span>{" "}
+          <span className="text-muted">
+            {done.toLocaleString()} of {total.toLocaleString()}
+          </span>
+        </p>
+        <span className="tnum text-xs text-muted" aria-hidden>
+          {share}%
+        </span>
+      </div>
       <div
         role="progressbar"
         aria-label={label}
         aria-valuenow={share}
         aria-valuemin={0}
         aria-valuemax={100}
-        className="h-2 overflow-hidden rounded-full bg-surface-2"
+        className="h-1.5 overflow-hidden rounded-full bg-surface-2"
       >
-        <div className="h-full bg-accent transition-[width]" style={{ width: `${share}%` }} />
+        <div
+          className="h-full rounded-full bg-accent transition-[width] duration-300 ease-out"
+          style={{ width: `${share}%` }}
+        />
       </div>
-      <p className="tnum text-sm text-muted">
-        {label}: {done.toLocaleString()} of {total.toLocaleString()}
-      </p>
     </div>
   );
 }
 
 function Totals({ items }: { items: { label: string; value: number }[] }) {
   return (
-    <dl className="flex flex-wrap gap-x-10 gap-y-3">
+    <dl
+      className="grid overflow-hidden rounded-xl bg-surface smooth-shadow-ring-xs [&>*+*]:shadow-[inset_1px_0_0_var(--border)]"
+      style={{ gridTemplateColumns: `repeat(${items.length}, minmax(0, 1fr))` }}
+    >
       {items.map((item) => (
-        <div key={item.label} className="flex flex-col">
-          <dt className="text-xs text-muted">{item.label}</dt>
-          <dd className="tnum text-2xl font-semibold">{item.value.toLocaleString()}</dd>
+        <div key={item.label} className="flex flex-col justify-between gap-0.5 px-3 py-3 sm:px-4">
+          <dt className="text-xs text-pretty text-muted">{item.label}</dt>
+          <dd className="tnum text-xl font-semibold tracking-tight sm:text-2xl">
+            {item.value.toLocaleString()}
+          </dd>
         </div>
       ))}
     </dl>
@@ -734,36 +760,34 @@ function Problems({
   const shown = rows.slice(0, 50);
   return (
     <div className="flex flex-col gap-2">
-      <h3 className="text-sm font-semibold">Won't import</h3>
-      <ul className="flex flex-col divide-y divide-border rounded-md border border-border sm:hidden">
+      <h3 className="text-sm font-medium text-muted">Won't import</h3>
+      <ul className={cn(LIST_CARD, "sm:hidden")}>
         {shown.map((row) => (
-          <li key={row.line} className="flex flex-col gap-1 px-3 py-2.5 text-sm">
+          <li key={row.line} className="flex flex-col gap-1 px-4 py-2.5 text-sm">
             <span className="tnum text-xs text-muted">Line {row.line}</span>
             {row.address && <span className="font-mono text-xs break-all">{row.address}</span>}
             <span className="text-pretty">{row.reason}</span>
           </li>
         ))}
       </ul>
-      <div className="hidden overflow-x-auto rounded-md border border-border sm:block">
-        <table className="w-full min-w-[36rem] text-left text-sm">
-          <thead className="bg-surface-2 text-xs text-muted">
-            <tr>
-              <th className="px-3 py-2 text-right font-normal">Line</th>
-              <th className="px-3 py-2 font-normal">Short URL</th>
-              <th className="px-3 py-2 font-normal">Why</th>
+      <Table className="max-sm:hidden" minWidth="min-w-[36rem]">
+        <thead>
+          <tr>
+            <Th className="w-16 text-right">Line</Th>
+            <Th>Short URL</Th>
+            <Th>Why</Th>
+          </tr>
+        </thead>
+        <tbody>
+          {shown.map((row) => (
+            <tr key={row.line} className="align-top">
+              <Td className="tnum text-right text-muted">{row.line}</Td>
+              <Td className="font-mono text-xs whitespace-nowrap">{row.address}</Td>
+              <Td className="text-pretty">{row.reason}</Td>
             </tr>
-          </thead>
-          <tbody>
-            {shown.map((row) => (
-              <tr key={row.line} className="border-t border-border align-top">
-                <td className="tnum px-3 py-2 text-right text-muted">{row.line}</td>
-                <td className="px-3 py-2 font-mono text-xs whitespace-nowrap">{row.address}</td>
-                <td className="px-3 py-2 text-pretty">{row.reason}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+          ))}
+        </tbody>
+      </Table>
       {total > shown.length && (
         <p className="tnum text-sm text-muted">
           And {(total - shown.length).toLocaleString()} more like these.
@@ -881,43 +905,45 @@ function CheckStep({
 function Sample({ rows, total }: { rows: ImportRow[]; total: number }) {
   return (
     <div className="flex flex-col gap-2">
-      <h3 className="text-sm font-semibold">
+      <h3 className="text-sm font-medium text-muted">
         {total > rows.length ? `The first ${rows.length}` : "The links"}
       </h3>
-      <ul className="flex flex-col divide-y divide-border rounded-md border border-border sm:hidden">
+      <ul className={cn(LIST_CARD, "sm:hidden")}>
         {rows.map((row) => (
-          <li key={row.line} className="flex flex-col gap-1 px-3 py-2.5 text-sm">
+          <li key={row.line} className="flex flex-col gap-1 px-4 py-2.5 text-sm">
             <span className="font-mono text-xs break-all">{shortOf(row)}</span>
             <span className="break-all">{stripUtmParams(row.destination)}</span>
-            <span className="text-muted">{utmTags(row).join(", ") || "No UTM tags"}</span>
+            <span className="text-xs text-muted">{utmTags(row).join(", ") || "No UTM tags"}</span>
           </li>
         ))}
       </ul>
-      <div className="hidden overflow-x-auto rounded-md border border-border sm:block">
-        <table className="w-full min-w-[40rem] text-left text-sm">
-          <thead className="bg-surface-2 text-xs text-muted">
-            <tr>
-              <th className="px-3 py-2 font-normal">Short URL</th>
-              <th className="px-3 py-2 font-normal">Goes to</th>
-              <th className="px-3 py-2 font-normal">UTM tags</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((row) => {
-              const tags = utmTags(row);
-              return (
-                <tr key={row.line} className="border-t border-border align-top">
-                  <td className="px-3 py-2 font-mono text-xs whitespace-nowrap">{shortOf(row)}</td>
-                  <td className="max-w-72 truncate px-3 py-2" title={row.destination}>
-                    {stripUtmParams(row.destination)}
-                  </td>
-                  <td className="px-3 py-2 text-muted">{tags.join(", ") || "None"}</td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
+      <Table className="max-sm:hidden" minWidth="min-w-[40rem]">
+        <thead>
+          <tr>
+            <Th>Link</Th>
+            <Th>UTM tags</Th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row) => {
+            const tags = utmTags(row);
+            return (
+              <tr key={row.line} className="align-top">
+                {/* Two lines: the short URL over where it goes. */}
+                <Td className="max-w-0 w-2/3">
+                  <div className="flex min-w-0 flex-col gap-0.5">
+                    <span className="font-mono text-xs font-semibold">{shortOf(row)}</span>
+                    <span className="truncate text-muted" title={row.destination}>
+                      {stripUtmParams(row.destination)}
+                    </span>
+                  </div>
+                </Td>
+                <Td className="text-muted">{tags.join(", ") || "None"}</Td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </Table>
     </div>
   );
 }
@@ -1106,18 +1132,15 @@ function SwitchStep({
         Your links are on rdyrct and wait for their domain. Until you change the DNS, people still
         reach them through {serviceName}.
       </p>
-      <ul className="flex flex-col gap-3">
+      <ul className={LIST_CARD}>
         {hosts.map((host) => {
           const domain = byHost.get(host);
           if (!domain) return null;
           const ready = domain.status === "active";
           return (
-            <li
-              key={host}
-              className="flex flex-col gap-3 rounded-lg border border-border bg-surface p-4"
-            >
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <span className="font-mono text-sm">{host}</span>
+            <li key={host} className="flex flex-col gap-3 px-4 py-3">
+              <div className="flex min-h-9 flex-wrap items-center justify-between gap-3">
+                <span className="font-mono text-sm break-all">{host}</span>
                 <Badge color={ready ? "mint" : "butter"}>
                   {ready ? "Ready to switch" : "Waiting for the TXT records"}
                 </Badge>
@@ -1129,8 +1152,8 @@ function SwitchStep({
                     the value below. Your links answer from rdyrct as soon as it takes effect, with
                     no gap.
                   </p>
-                  <div className="flex flex-wrap items-center gap-2 rounded-md bg-surface-2 px-3 py-2 text-sm">
-                    <code className="font-mono text-xs">
+                  <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-surface-2 py-1.5 pr-1.5 pl-3 text-sm">
+                    <code className="font-mono text-xs break-all">
                       {host} CNAME {appHost}
                     </code>
                     <CopyButton

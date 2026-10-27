@@ -107,6 +107,11 @@ test("renaming a custom-domain link leaves a temporary alias, which can be kept 
   await page.getByRole("menuitem", { name: hostname }).click();
   await editor.getByPlaceholder("launch-2026").fill("old-slug");
   await editor.getByRole("button", { name: "Create link" }).click();
+  // Creating answers with the "Link created" dialog; close it to reach the table.
+  const created = page.getByRole("dialog", { name: "Link created" });
+  await expect(created).toContainText(`${hostname}/old-slug`);
+  await page.keyboard.press("Escape");
+  await expect(created).toBeHidden();
   await expect(page.getByText(`${hostname}/old-slug`)).toBeVisible();
 
   // Rename the slug from the row's actions menu.
@@ -159,7 +164,8 @@ test("choosing to add to the existing link merges the address instead of forking
 
   const conflict = await createLinkExpectingConflict(page, "https://example.com/merge-page");
   await conflict.getByRole("button", { name: "Add" }).click();
-  await expect(page.getByText("Address added to the existing link")).toBeVisible();
+  // A merge is not a new link, and the dialog says so.
+  await expect(page.getByRole("dialog", { name: "Address added" })).toBeVisible();
 
   // Still one link: the second address became an alias on it, not a fork.
   await page.goto("/links");

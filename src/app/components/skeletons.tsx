@@ -117,8 +117,10 @@ function PanelSkeleton({
   return (
     <div className="rounded-xl bg-surface px-4 pt-3 pb-3.5 smooth-shadow-ring-xs">
       <div className="mb-3 flex items-center gap-4 shadow-[inset_0_-1px_0_var(--border)]">
-        {tabs.map((w) => (
-          <span key={w} className="flex h-5 box-content items-center pb-2.5">
+        {/* Index keys: two tabs can share a width. The list never reorders. */}
+        {tabs.map((w, i) => (
+          // oxlint-disable-next-line react/no-array-index-key
+          <span key={i} className="flex h-5 box-content items-center pb-2.5">
             <Skeleton className={cn("h-3", w)} />
           </span>
         ))}

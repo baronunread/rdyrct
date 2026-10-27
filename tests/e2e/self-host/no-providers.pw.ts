@@ -65,7 +65,10 @@ test("without Polar there is nothing to buy and nothing capped", async ({ page }
 
   // Nor does Members explain a seat limit there is not.
   await page.goto("/members");
-  await expect(page.getByText("Invite by email")).toBeVisible();
+  await page.getByRole("button", { name: "Invite people" }).click();
+  const invite = page.getByRole("dialog", { name: "Invite people" });
+  await expect(invite.getByRole("button", { name: "Send invite" })).toBeVisible();
+  await expect(invite.getByText(/seats free/)).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Member limit info" })).toHaveCount(0);
 
   // /billing is not a page here.

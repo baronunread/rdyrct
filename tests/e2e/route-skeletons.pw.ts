@@ -119,7 +119,7 @@ test("Members keeps invite controls out until the current user arrives", async (
     page,
     "/members",
     "members-page-skeleton",
-    page.getByRole("button", { name: "Invite link" }),
+    page.getByRole("button", { name: "Invite people" }),
   );
 });
 
