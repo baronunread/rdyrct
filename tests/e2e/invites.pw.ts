@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { queryRows } from "./db";
 import { guestAccount, ownerWithInviteLink } from "./orgs";
+import { signUpAndVerify } from "./resend";
 
 /**
  * An accepted invite leaves no row behind (#103).
@@ -69,4 +70,43 @@ test("a single-use invite link admits one person, not everybody who has it", asy
 
   await first.context.close();
   await second.context.close();
+});
+
+/**
+ * Signing in from an invite comes back to the invite.
+ *
+ * "Sign in to accept" sends a signed-out visitor to /login?next=/invite/…, and
+ * sign-in navigated there. But the login page rendered once more before it
+ * unmounted, read the now-empty query string, and replaced the invite with
+ * /dashboard, so the person never joined. Every `next` was lost the same way.
+ */
+test("signing in from an invite lands back on the invite", async ({ page, browser }) => {
+  const { token } = await ownerWithInviteLink(page, "next-owner");
+
+  const context = await browser.newContext();
+  const guest = await context.newPage();
+  const email = `next-guest-${Date.now()}@gmail.com`;
+  await signUpAndVerify(guest, email, "test-password-123");
+  await context.clearCookies();
+
+  await guest.goto(`/invite/${token}`);
+  await guest.getByRole("button", { name: "Sign in to accept" }).click();
+  await expect(guest).toHaveURL(/\/login\?next=/);
+  await guest.getByLabel("Email").fill(email);
+  await guest.getByLabel("Password").fill("test-password-123");
+  await guest.getByRole("button", { name: "Sign in", exact: true }).click();
+
+  await expect(guest).toHaveURL(new RegExp(`/invite/${token}$`));
+  await guest.getByRole("button", { name: "Accept invite" }).click();
+  await expect(guest).toHaveURL(/\/dashboard$/);
+
+  const rows = await queryRows<{ n: number }>(
+    page,
+    "select count(*) as n from org_members m join user u on u.id = m.user_id where u.email = ?",
+    [email],
+  );
+  // Their own org from sign-up, plus the one they were invited to.
+  expect(rows[0].n).toBe(2);
+
+  await context.close();
 });
