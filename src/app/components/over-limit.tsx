@@ -28,6 +28,7 @@ import { Button } from "../ui/button";
 import { BusyContent } from "../ui/spinner";
 import { useToast } from "../ui/toast";
 import { buttonClass } from "../ui/button-class";
+import { cn } from "../ui/cn";
 import { useCurrentOrg } from "../lib/current-org";
 import { useClickUsage } from "../lib/hooks";
 import { clickCapNotice } from "@/shared/click-usage";
@@ -37,38 +38,16 @@ import {
   OVER_LIMIT_KEYS,
   PLAN_LIMITS,
   isOverLimit,
-  type OverLimits,
   type OrgPlan,
   type UserOrg,
 } from "@/shared/types";
 
-/**
- * How each resource reads when an org holds more of it than the plan allows.
- *
- * Both halves of each phrase are here on purpose: "500 links, and this plan
- * allows 30" reads correctly whether you are one over or four hundred and
- * seventy over, which the old "upgrade for more" copy did not.
- */
-const OVER_COPY = {
-  links: (count: number, limit: number) => `${count} links, and this plan allows ${limit}`,
-  members: (count: number, limit: number) => `${count} members, and this plan allows ${limit}`,
-  domains: (count: number, limit: number) =>
-    limit === 0
-      ? `${count} custom ${count === 1 ? "domain" : "domains"}, and this plan has none`
-      : `${count} custom domains, and this plan allows ${limit}`,
-} satisfies Record<(typeof OVER_LIMIT_KEYS)[number], (count: number, limit: number) => string>;
-
-function overPhrases(over: OverLimits, plan: OrgPlan): string[] {
-  const limits = PLAN_LIMITS[plan];
-  return OVER_LIMIT_KEYS.flatMap((key) => {
-    const count = over[key];
-    return count === undefined ? [] : [OVER_COPY[key](count, limits[key])];
-  });
-}
-
-function BillingLink({ label = "See plans" }: { label?: string }) {
+function BillingLink({ label = "See plans", primary }: { label?: string; primary?: boolean }) {
   return (
-    <HrefLink href="/billing" className={buttonClass({ variant: "outline", size: "sm" })}>
+    <HrefLink
+      href="/billing"
+      className={buttonClass({ variant: primary ? "primary" : "outline", size: "sm" })}
+    >
       {label}
     </HrefLink>
   );
@@ -84,19 +63,54 @@ function BillingLink({ label = "See plans" }: { label?: string }) {
  */
 export function OverLimitBanner() {
   const { org } = useCurrentOrg();
+  const clicks = useClickCapNotice();
   if (!org) return null;
   if (org.locked) return <LockedOrgNotice org={org} />;
   if (!isOverLimit(org.over)) return null;
+  const facts = overFacts(org);
+  // The month's clicks join the same line rather than a second banner.
+  if (clicks?.reached) facts.push({ label: "Clicks counted", value: clicks.figure, over: true });
   return (
-    <Notice>
-      <p className="text-sm">
-        <strong className="font-semibold">{org.name}</strong> has {joinPhrases(org.over, org.plan)}.
-        Nothing was deleted. {overLimitAdvice(org)}
-      </p>
-      <BillingLink />
-    </Notice>
+    <Notice
+      title={`Over the ${PLAN_NAMES[org.plan]} plan`}
+      facts={facts}
+      action={<BillingLink />}
+      note={`Nothing was deleted. ${overLimitAdvice(org)}`}
+    />
   );
 }
+
+const PLAN_NAMES = {
+  free: "Free",
+  hobby: "Hobby",
+  pro: "Pro",
+  unlimited: "Unlimited",
+} satisfies Record<OrgPlan, string>;
+
+/** "Links 184 of 30", one per resource over its cap, then the domains'
+ * deadline when there is one. */
+function overFacts(org: UserOrg): Fact[] {
+  const limits = PLAN_LIMITS[org.plan];
+  const facts: Fact[] = OVER_LIMIT_KEYS.flatMap((key) => {
+    const count = org.over[key];
+    if (count === undefined) return [];
+    return [{ label: FACT_LABELS[key], value: `${count} of ${limits[key]}`, over: true }];
+  });
+  if (org.over.domains !== undefined && org.graceEndsAt)
+    facts.push({
+      label: "Domains",
+      value: graceRunning(org.graceEndsAt)
+        ? `stop ${new Date(org.graceEndsAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}`
+        : "stopped",
+    });
+  return facts;
+}
+
+const FACT_LABELS = {
+  links: "Links",
+  members: "Members",
+  domains: "Custom domains",
+} satisfies Record<(typeof OVER_LIMIT_KEYS)[number], string>;
 
 /**
  * A locked org, with the two ways out (#160): upgrade, or keep this one
@@ -120,31 +134,39 @@ function LockedOrgNotice({ org }: { org: UserOrg }) {
   });
   const onlyOne = PLAN_LIMITS[org.plan].orgs === 1;
   return (
-    <Notice>
-      <p className="max-w-prose text-sm">
-        <strong className="font-semibold">{org.name}</strong> is locked, because your plan covers{" "}
-        {onlyOne ? "one organization" : `${PLAN_LIMITS[org.plan].orgs} organizations`} and you own
-        more. Nothing was deleted and its links keep working.
-        {org.role === "owner"
-          ? " Upgrade to unlock every organization, or use this one instead of the one that is active now."
-          : " Its owner can upgrade, or make this the organization they keep active."}
-      </p>
-      <div className="flex items-center gap-2">
-        {/* The route is owner-only, so anybody else gets a button whose one
+    <Notice
+      tone="bad"
+      title="Read-only"
+      facts={[
+        {
+          label: "Why",
+          value: `your plan covers ${onlyOne ? "one organization" : `${PLAN_LIMITS[org.plan].orgs} organizations`}`,
+        },
+        { label: "Links", value: "keep working" },
+      ]}
+      note={
+        org.role === "owner"
+          ? "Nothing was deleted. Upgrade to unlock every organization, or use this one instead of the one that is active now."
+          : "Nothing was deleted. Its owner can upgrade, or make this the organization they keep active."
+      }
+      action={
+        <div className="flex items-center gap-2">
+          {/* The route is owner-only, so anybody else gets a button whose one
             outcome is a 403 toast. Everyone still sees the explanation. */}
-        {org.role === "owner" && (
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={keepActive.isPending}
-            onClick={() => keepActive.mutate()}
-          >
-            <BusyContent busy={keepActive.isPending}>Use this one</BusyContent>
-          </Button>
-        )}
-        <BillingLink label="Upgrade to Pro" />
-      </div>
-    </Notice>
+          {org.role === "owner" && (
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={keepActive.isPending}
+              onClick={() => keepActive.mutate()}
+            >
+              <BusyContent busy={keepActive.isPending}>Use this one</BusyContent>
+            </Button>
+          )}
+          <BillingLink label="Upgrade to Pro" primary />
+        </div>
+      }
+    />
   );
 }
 
@@ -163,12 +185,6 @@ function overLimitAdvice(org: UserOrg): string {
   return "Everything you have keeps working. You can delete what you no longer need, or upgrade to keep it all.";
 }
 
-function joinPhrases(over: OverLimits, plan: OrgPlan): string {
-  const phrases = overPhrases(over, plan);
-  if (phrases.length <= 1) return phrases[0] ?? "";
-  return `${phrases.slice(0, -1).join("; ")}; and ${phrases[phrases.length - 1]}`;
-}
-
 /**
  * Tracked clicks this month, once they pass 80% of the plan's cap (#387).
  *
@@ -177,15 +193,18 @@ function joinPhrases(over: OverLimits, plan: OrgPlan): string {
  * somebody reading "limit reached" worries about.
  */
 export function ClickCapBanner() {
+  const { org } = useCurrentOrg();
   const notice = useClickCapNotice();
   if (!notice) return null;
+  // Over the plan or locked, the banner above the page already says it.
+  if (org && (org.locked || (isOverLimit(org.over) && notice.reached))) return null;
   return (
-    <Notice>
-      <p className="max-w-prose text-sm tnum">
-        <WithSupportLink text={notice.text} />
-      </p>
-      {notice.offerUpgrade && <BillingLink />}
-    </Notice>
+    <Notice
+      title={notice.reached ? "Click limit reached" : "Near the click limit"}
+      facts={[{ label: "Clicks counted", value: notice.figure, over: notice.reached }]}
+      action={notice.offerUpgrade ? <BillingLink /> : undefined}
+      note={<WithSupportLink text={notice.text} />}
+    />
   );
 }
 
@@ -209,13 +228,71 @@ function WithSupportLink({ text }: { text: string }) {
 function useClickCapNotice() {
   const { org } = useCurrentOrg();
   const usage = useClickUsage(org?.id ?? "");
-  return clickCapNotice(org, usage.data, Date.now());
+  const notice = clickCapNotice(org, usage.data, Date.now());
+  if (!notice || !usage.data) return null;
+  const n = (v: number) => v.toLocaleString("en-US");
+  return {
+    ...notice,
+    reached: usage.data.clicks >= usage.data.limit,
+    figure: `${n(usage.data.clicks)} of ${n(usage.data.limit)}`,
+  };
 }
 
-function Notice({ children }: { children: ReactNode }) {
+interface Fact {
+  label: string;
+  value: string;
+  /** Past the cap: set in the danger colour. */
+  over?: boolean;
+}
+
+/**
+ * The one notice (rdyrct-design, "Over the plan is one notice"): a state, a
+ * line of facts, one action, and a plain sentence under it. Butter for "more
+ * than you pay for", danger only for an org that is read-only.
+ */
+function Notice({
+  title,
+  facts,
+  action,
+  note,
+  tone = "warn",
+}: {
+  title: string;
+  facts: Fact[];
+  action?: ReactNode;
+  note: ReactNode;
+  tone?: "warn" | "bad";
+}) {
   return (
-    <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-surface-2 px-4 py-3">
-      {children}
+    <div className="mb-6 flex flex-col gap-2">
+      <div
+        className={cn(
+          "flex flex-wrap items-center gap-x-5 gap-y-2 rounded-xl py-2 pr-2 pl-4",
+          tone === "bad"
+            ? "bg-[color-mix(in_oklab,var(--danger)_6%,var(--surface))] shadow-[0_0_0_1px_color-mix(in_oklab,var(--danger)_35%,transparent)]"
+            : "bg-[color-mix(in_oklab,var(--butter)_8%,var(--surface))] shadow-[0_0_0_1px_color-mix(in_oklab,var(--butter)_40%,transparent)]",
+        )}
+      >
+        <span
+          className={cn(
+            "inline-flex items-center gap-1.5 text-sm font-semibold whitespace-nowrap",
+            tone === "bad" ? "text-danger" : "text-butter",
+          )}
+        >
+          <span aria-hidden className="size-1.5 rounded-full bg-current" />
+          {title}
+        </span>
+        <dl className="flex min-w-0 flex-1 flex-wrap gap-x-5 gap-y-1 text-sm">
+          {facts.map((f) => (
+            <div key={f.label} className="flex gap-1.5">
+              <dt className="text-muted">{f.label}</dt>
+              <dd className={cn("tnum font-semibold", f.over && "text-danger")}>{f.value}</dd>
+            </div>
+          ))}
+        </dl>
+        {action && <div className="ml-auto">{action}</div>}
+      </div>
+      <p className="max-w-prose px-1 text-xs text-pretty text-muted">{note}</p>
     </div>
   );
 }
