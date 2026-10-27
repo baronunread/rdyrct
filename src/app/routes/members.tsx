@@ -1,11 +1,8 @@
-import { useState, useMemo, useCallback } from "react";
-import { type InvitableRole, INVITABLE_ROLES } from "@/shared/types";
-import { oneOf } from "@/shared/lookup";
-import { useForm } from "react-hook-form";
-import { valibotResolver } from "@hookform/resolvers/valibot";
+import { useState, useMemo } from "react";
+import { type InvitableRole } from "@/shared/types";
 import { useCurrentOrg } from "../lib/current-org";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { UserPlus, Trash2, Info } from "@/app/ui/icons";
+import { Check, Ellipsis, Trash2, UserPlus } from "@/app/ui/icons";
 import { useCurrentUser, useMembers, useInvites } from "../lib/hooks";
 import { api } from "../lib/api";
 import {
@@ -19,16 +16,14 @@ import {
 } from "@/shared/types";
 import { Button, IconButton } from "../ui/button";
 import { CopyButton } from "../ui/copy-button";
-import { Field, Input } from "../ui/field";
-import { MenuSelect } from "../ui/menu";
-import { Tooltip } from "../ui/tooltip";
-import { RemoveMemberDialog, InviteMemberDialog } from "../components/member-dialogs";
-import { Table, Th, Td, Badge, Card, PageHeader } from "../ui/misc";
+import { Menu, MenuItem, MenuNote, MenuSeparator } from "../ui/menu";
+import { RemoveMemberDialog } from "../components/member-dialogs";
+import { InvitePeopleDialog, ROLE_OPTIONS } from "../components/invite-people-dialog";
+import { Table, Th, Td, Card, PageHeader } from "../ui/misc";
 import { HrefLink } from "../lib/router-search";
 import { buttonClass } from "../ui/button-class";
 import { TableSkeleton } from "../ui/skeleton";
 import { MembersSkeleton } from "../components/skeletons";
-import { BusyContent } from "../ui/spinner";
 import { useToast } from "../ui/toast";
 import { NoOrgState } from "../components/no-org";
 import { copyToClipboard } from "../lib/clipboard";
@@ -36,23 +31,14 @@ import { SortTh } from "../ui/sort-th";
 import { sortRows } from "../lib/sort";
 import { withErrorToast } from "../lib/mutation-toast";
 import { shortDate } from "../lib/dates";
-import { inviteEmailSchema } from "../lib/schemas";
 import posthog from "../lib/posthog";
 
-const roleColor = {
-  owner: "accent",
-  admin: "mint",
-  member: "muted",
-  viewer: "muted",
-} satisfies Record<OrgRole, "accent" | "mint" | "muted">;
-
-/** What each role can do, said once, where the role is chosen. Without it
- * "viewer" and "member" look like the same word twice. */
-const ROLE_OPTIONS = [
-  { value: "viewer", label: "viewer" },
-  { value: "member", label: "member" },
-  { value: "admin", label: "admin" },
-];
+const ROLE_LABEL = {
+  owner: "Owner",
+  admin: "Admin",
+  member: "Member",
+  viewer: "Viewer",
+} satisfies Record<OrgRole, string>;
 
 const inviteUrl = (token: string) => `${window.location.origin}/invite/${token}`;
 
@@ -62,7 +48,6 @@ function useMemberManagement(orgId: string, canManage: boolean) {
   const members = useMembers(orgId);
   const invites = useInvites(orgId, canManage);
   const [inviteOpen, setInviteOpen] = useState(false);
-  const [inviteRole, setInviteRole] = useState<InvitableRole>("member");
   const [removing, setRemoving] = useState<{ userId: string; name: string } | null>(null);
   const [sort, setSort] = useState<Sort>({ key: "createdAt", dir: 1 });
 
@@ -83,13 +68,13 @@ function useMemberManagement(orgId: string, canManage: boolean) {
   });
 
   const createInvite = useMutation({
-    mutationFn: () =>
+    mutationFn: (role: InvitableRole) =>
       api<{ invites: InviteDTO[] }>(`/orgs/${orgId}/invites`, {
         method: "POST",
-        body: { role: inviteRole },
+        body: { role },
       }),
-    onSuccess: ({ invites }) => {
-      posthog.capture("member_invited", { invite_type: "link", role: inviteRole });
+    onSuccess: ({ invites }, role) => {
+      posthog.capture("member_invited", { invite_type: "link", role });
       invalidateInvites();
       const invite = invites[0];
       if (invite) {
@@ -141,8 +126,6 @@ function useMemberManagement(orgId: string, canManage: boolean) {
     invites,
     inviteOpen,
     setInviteOpen,
-    inviteRole,
-    setInviteRole,
     removing,
     setRemoving,
     sort,
@@ -158,55 +141,68 @@ function useMemberManagement(orgId: string, canManage: boolean) {
   };
 }
 
-function MemberRoleCell({
-  member,
-  canManage,
-  onSetRole,
-}: {
-  member: { name: string; role: OrgRole; demoted: boolean };
-  canManage: boolean;
-  onSetRole: (role: string) => void;
-}) {
-  if (member.role === "owner") {
-    return (
-      <MenuSelect
-        label="Owner"
-        value="owner"
-        disabled
-        onChange={() => {}}
-        options={[{ value: "owner", label: "owner" }]}
-      />
-    );
-  }
-  if (canManage) {
-    return (
-      <MenuSelect
-        label={`Role for ${member.name}`}
-        value={member.role}
-        onChange={onSetRole}
-        options={ROLE_OPTIONS}
-      />
-    );
-  }
-  return <Badge color={roleColor[member.role]}>{member.role}</Badge>;
+/** The person in two lines (rdyrct-design, "Tables earn two lines"): the
+ * name in bold over the address in mono. */
+function PersonCell({ title, detail }: { title: string; detail: string }) {
+  return (
+    <div className="flex min-w-0 flex-col gap-0.5">
+      <span className="truncate text-sm font-semibold" title={title}>
+        {title}
+      </span>
+      <span className="truncate font-mono text-xs text-muted" title={detail}>
+        {detail}
+      </span>
+    </div>
+  );
 }
 
-function MemberRemoveCell({
+const menuTrigger = (
+  <div className="flex justify-end">
+    <span className="grid size-8 place-items-center rounded-md text-muted active:scale-[0.96] [@media(hover:hover)]:hover:bg-surface-2 [@media(hover:hover)]:hover:text-text">
+      <Ellipsis size={16} />
+    </span>
+  </div>
+);
+
+/** Role change and removal for one member. The owner's row has none: the
+ * owner is not chosen here, and nobody removes them. */
+function MemberMenu({
   member,
   isSelf,
+  onSetRole,
   onRemove,
 }: {
-  member: { name: string; role: OrgRole };
+  member: MemberDTO;
   isSelf: boolean;
+  onSetRole: (role: string) => void;
   onRemove: () => void;
 }) {
-  if (member.role === "owner" || isSelf) return null;
+  if (member.role === "owner") return null;
   return (
-    <div className="flex justify-end">
-      <IconButton label={`Remove ${member.name}`} danger onClick={onRemove}>
-        <Trash2 size={15} />
-      </IconButton>
-    </div>
+    <Menu align="end" label={`Actions for ${member.name}`} trigger={menuTrigger}>
+      <MenuNote>Role</MenuNote>
+      {ROLE_OPTIONS.map((o) => (
+        <MenuItem
+          key={o.value}
+          onClick={() => {
+            if (o.value !== member.role) onSetRole(o.value);
+          }}
+        >
+          <span className="w-4">
+            {o.value === member.role && <Check size={13} className="text-accent" />}
+          </span>
+          {o.label}
+        </MenuItem>
+      ))}
+      {!isSelf && (
+        <>
+          <MenuSeparator />
+          <MenuItem className="text-danger" onClick={onRemove}>
+            <Trash2 size={14} /> Remove {member.name}
+          </MenuItem>
+        </>
+      )}
+    </Menu>
   );
 }
 
@@ -225,15 +221,16 @@ function MemberRow({
 }) {
   return (
     <tr>
-      <Td className="truncate">{member.name}</Td>
-      <Td className="truncate text-muted">{member.email}</Td>
       <Td>
-        <MemberRoleCell member={member} canManage={canManage} onSetRole={onSetRole} />
+        <PersonCell title={member.name} detail={member.email} />
       </Td>
-      <Td className="text-xs text-muted">{shortDate(member.createdAt)}</Td>
+      <Td className="text-sm">{ROLE_LABEL[member.role]}</Td>
+      <Td className="tnum hidden text-sm whitespace-nowrap text-muted sm:table-cell">
+        {shortDate(member.createdAt)}
+      </Td>
       {canManage && (
-        <Td>
-          <MemberRemoveCell member={member} isSelf={isSelf} onRemove={onRemove} />
+        <Td className="py-1.5">
+          <MemberMenu member={member} isSelf={isSelf} onSetRole={onSetRole} onRemove={onRemove} />
         </Td>
       )}
     </tr>
@@ -264,17 +261,20 @@ function MemberTable({
     <Table fixed>
       <thead>
         <tr>
-          <SortTh label="Name" sortKey="name" sort={sort} onSort={setSort} className="w-36" />
-          <SortTh label="Email" sortKey="email" sort={sort} onSort={setSort} className="w-48" />
-          <SortTh label="Role" sortKey="role" sort={sort} onSort={setSort} className="w-32" />
+          <SortTh label="Person" sortKey="name" sort={sort} onSort={setSort} />
+          <SortTh label="Role" sortKey="role" sort={sort} onSort={setSort} className="w-28" />
           <SortTh
             label="Joined"
             sortKey="createdAt"
             sort={sort}
             onSort={setSort}
-            className="w-24"
+            className="hidden sm:table-cell sm:w-32"
           />
-          {canManage && <Th className="w-16 text-right">Actions</Th>}
+          {canManage && (
+            <Th className="w-14">
+              <span className="sr-only">Actions</span>
+            </Th>
+          )}
         </tr>
       </thead>
       <tbody>
@@ -293,44 +293,83 @@ function MemberTable({
   );
 }
 
-function PendingInvitesCard({
+function InviteRow({
+  invite,
+  copyInvite,
+  onRevoke,
+}: {
+  invite: InviteDTO;
+  copyInvite: (text: string) => Promise<void>;
+  onRevoke: () => void;
+}) {
+  return (
+    <tr>
+      <Td>
+        {invite.email ? (
+          <div className="flex min-w-0 flex-col gap-0.5">
+            <span className="truncate font-mono text-sm" title={invite.email}>
+              {invite.email}
+            </span>
+            <span className="text-xs text-muted">Invited, not joined</span>
+          </div>
+        ) : (
+          <div className="flex min-w-0 flex-col gap-0.5">
+            <span className="text-sm">Invite link</span>
+            <span className="text-xs text-muted">Single use, not opened yet</span>
+          </div>
+        )}
+      </Td>
+      <Td className="text-sm text-muted">{ROLE_LABEL[invite.role]}</Td>
+      <Td className="tnum hidden text-sm whitespace-nowrap text-muted sm:table-cell">
+        Expires {shortDate(invite.expiresAt)}
+      </Td>
+      <Td className="py-1.5">
+        <div className="flex justify-end gap-1">
+          <CopyButton text={inviteUrl(invite.token)} label="Copy invite link" onCopy={copyInvite} />
+          <IconButton label="Revoke invite" danger onClick={onRevoke}>
+            <Trash2 size={14} />
+          </IconButton>
+        </div>
+      </Td>
+    </tr>
+  );
+}
+
+function PendingInvitesTable({
   invites,
-  inviteUrl,
   copyInvite,
   revokeInvite,
 }: {
   invites: InviteDTO[];
-  inviteUrl: (token: string) => string;
   copyInvite: (text: string) => Promise<void>;
   revokeInvite: { mutate: (token: string) => void };
 }) {
   return (
-    <Card className="mt-4">
-      <p className="mb-3 text-xs font-medium text-muted">Pending invites</p>
-      <ul className="flex flex-col gap-2">
-        {invites.map((inv) => (
-          <li key={inv.token} className="flex items-center justify-between gap-3 text-sm">
-            <span className="truncate text-muted">{inv.email ?? "link invite"}</span>
-            <span className="flex items-center gap-2">
-              <Badge color={inv.role === "admin" ? "mint" : "muted"}>{inv.role}</Badge>
-              <span className="text-xs text-muted">expires {shortDate(inv.expiresAt)}</span>
-              <CopyButton
-                text={inviteUrl(inv.token)}
-                label="Copy invite link"
-                onCopy={copyInvite}
-              />
-              <IconButton
-                label="Revoke invite"
-                danger
-                onClick={() => revokeInvite.mutate(inv.token)}
-              >
-                <Trash2 size={14} />
-              </IconButton>
-            </span>
-          </li>
-        ))}
-      </ul>
-    </Card>
+    <section className="mt-8 flex flex-col gap-2">
+      <h2 className="text-sm font-medium text-muted">Pending invites</h2>
+      <Table fixed>
+        <thead>
+          <tr>
+            <Th>Invite</Th>
+            <Th className="w-28">Role</Th>
+            <Th className="hidden sm:table-cell sm:w-32">Expires</Th>
+            <Th className="w-24">
+              <span className="sr-only">Actions</span>
+            </Th>
+          </tr>
+        </thead>
+        <tbody>
+          {invites.map((inv) => (
+            <InviteRow
+              key={inv.token}
+              invite={inv}
+              copyInvite={copyInvite}
+              onRevoke={() => revokeInvite.mutate(inv.token)}
+            />
+          ))}
+        </tbody>
+      </Table>
+    </section>
   );
 }
 
@@ -372,72 +411,46 @@ function seatSummary(org: UserOrg, management: MemberManagement): SeatSummary {
   return { limit, taken, left: Math.max(0, limit - taken) };
 }
 
+/** The seat count under the title. A self-hosted instance has no limit to
+ * count against, so it counts people instead. */
+function seatLine(org: UserOrg, canManage: boolean, seats: SeatSummary, members: number): string {
+  if (org.plan === "unlimited" || !canManage) {
+    return members === 1 ? "1 person" : `${members.toLocaleString("en-US")} people`;
+  }
+  const line = `${seats.taken} of ${seats.limit} seats on your plan`;
+  return seats.taken > seats.limit ? `${line} (over the limit)` : line;
+}
+
 function MembersHeader({
   org,
   canManage,
   seats,
+  memberCount,
   onInvite,
 }: {
   org: UserOrg;
   canManage: boolean;
   seats: SeatSummary;
+  memberCount: number;
   onInvite: () => void;
 }) {
   const action = canManage ? (
-    <div className="flex items-center gap-3">
-      <span className="tnum text-xs text-muted">
-        {seats.taken} / {seats.limit} members
-        {seats.taken > seats.limit && " (over the limit)"}
-      </span>
-      <Button
-        variant="primary"
-        onClick={onInvite}
-        disabled={seats.left === 0}
-        title={seats.left === 0 ? fullSeatsHint(org, seats.limit) : undefined}
-      >
-        <UserPlus size={15} /> Invite link
-      </Button>
-    </div>
+    <Button
+      variant="primary"
+      onClick={onInvite}
+      disabled={seats.left === 0}
+      title={seats.left === 0 ? fullSeatsHint(org, seats.limit) : undefined}
+    >
+      <UserPlus size={15} /> Invite people
+    </Button>
   ) : undefined;
   return (
-    <PageHeader title="Members" sub="People with access to this organization" action={action} />
-  );
-}
-
-function MemberInviteSection({
-  org,
-  seats,
-  management,
-}: {
-  org: UserOrg;
-  seats: SeatSummary;
-  management: MemberManagement;
-}) {
-  if (seats.left === 0) {
-    return <SeatsFullNotice org={org} memberLimit={seats.limit} over={seats.taken > seats.limit} />;
-  }
-  return (
-    <InviteByEmailCard
-      org={org}
-      memberLimit={seats.limit}
-      sendEmailInvite={management.sendEmailInvite}
+    <PageHeader
+      title="Members"
+      sub={<span className="tnum">{seatLine(org, canManage, seats, memberCount)}</span>}
+      action={action}
     />
   );
-}
-
-function ManagedInviteSection({
-  org,
-  canManage,
-  seats,
-  management,
-}: {
-  org: UserOrg;
-  canManage: boolean;
-  seats: SeatSummary;
-  management: MemberManagement;
-}) {
-  if (!canManage) return null;
-  return <MemberInviteSection org={org} seats={seats} management={management} />;
 }
 
 function PendingInvitesSection({
@@ -450,16 +463,23 @@ function PendingInvitesSection({
   const invites = management.invites.data;
   if (!canManage || !hasPendingInvites(invites)) return null;
   return (
-    <PendingInvitesCard
+    <PendingInvitesTable
       invites={invites ?? []}
-      inviteUrl={management.inviteUrl}
       copyInvite={management.copyInvite}
       revokeInvite={management.revokeInvite}
     />
   );
 }
 
-function MemberOverlays({ management }: { management: MemberManagement }) {
+function MemberOverlays({
+  org,
+  seats,
+  management,
+}: {
+  org: UserOrg;
+  seats: SeatSummary;
+  management: MemberManagement;
+}) {
   return (
     <>
       {management.removing && (
@@ -469,13 +489,13 @@ function MemberOverlays({ management }: { management: MemberManagement }) {
           remove={management.removeMember}
         />
       )}
-      <InviteMemberDialog
+      <InvitePeopleDialog
         open={management.inviteOpen}
         onOpenChange={management.setInviteOpen}
-        role={management.inviteRole}
-        onRoleChange={management.setInviteRole}
-        onCreate={() => management.createInvite.mutate()}
-        isCreating={management.createInvite.isPending}
+        org={org}
+        seats={seats}
+        sendEmailInvite={management.sendEmailInvite}
+        createInvite={management.createInvite}
       />
     </>
   );
@@ -500,10 +520,13 @@ function MembersView({
         org={org}
         canManage={canManage}
         seats={seats}
+        memberCount={rowCount(management.members.data)}
         onInvite={() => management.setInviteOpen(true)}
       />
 
-      <ManagedInviteSection org={org} canManage={canManage} seats={seats} management={management} />
+      {canManage && seats.left === 0 && (
+        <SeatsFullNotice org={org} memberLimit={seats.limit} over={seats.taken > seats.limit} />
+      )}
 
       <MemberTable
         isLoading={management.members.isLoading}
@@ -518,7 +541,7 @@ function MembersView({
 
       <PendingInvitesSection canManage={canManage} management={management} />
 
-      <MemberOverlays management={management} />
+      {canManage && <MemberOverlays org={org} seats={seats} management={management} />}
     </div>
   );
 }
@@ -562,9 +585,9 @@ export function MembersPage() {
   );
 }
 
-/** What the invite form is replaced by once every seat is taken. Says which
- * of the two situations it is, because "full" and "over" need different
- * things done about them. */
+/** What stands in for the invite button once every seat is taken. Says
+ * which of the two situations it is, because "full" and "over" need
+ * different things done about them. */
 function SeatsFullNotice({
   org,
   memberLimit,
@@ -593,97 +616,4 @@ function SeatsFullNotice({
 /** The tooltip on a disabled invite control. */
 function fullSeatsHint(org: UserOrg, memberLimit: number): string {
   return `The ${org.plan} plan allows ${memberLimit} members, counting open invites`;
-}
-
-function InviteByEmailCard({
-  org,
-  memberLimit,
-  sendEmailInvite,
-}: {
-  org: NonNullable<ReturnType<typeof useCurrentOrg>["org"]>;
-  memberLimit: number;
-  sendEmailInvite: {
-    mutate: (
-      params: { email: string; role: InvitableRole },
-      opts?: { onSuccess?: () => void },
-    ) => void;
-    isPending: boolean;
-  };
-}) {
-  const toast = useToast();
-  const { register, handleSubmit, watch, setValue, reset } = useForm<{
-    email: string;
-    role: InvitableRole;
-  }>({
-    resolver: valibotResolver(inviteEmailSchema),
-    defaultValues: { email: "", role: "member" },
-  });
-  const selectedRole = watch("role");
-
-  const submit = useCallback(
-    ({ email, role }: { email: string; role: InvitableRole }) => {
-      sendEmailInvite.mutate(
-        { email, role },
-        {
-          onSuccess: () => {
-            reset({ email: "", role });
-            toast("Invite sent");
-          },
-        },
-      );
-    },
-    [sendEmailInvite, reset, toast],
-  );
-
-  return (
-    <Card className="mb-4">
-      <div className="mb-3 flex items-center gap-1.5">
-        <p className="text-xs font-medium text-muted">Invite by email</p>
-        {/* No limit to explain on a self-hosted instance. */}
-        {org.plan !== "unlimited" && (
-          <Tooltip
-            content={
-              <>
-                You can invite up to {memberLimit} members on the {org.plan} plan. Pending invites
-                count toward the limit.
-              </>
-            }
-          >
-            <button
-              type="button"
-              aria-label="Member limit info"
-              className="relative cursor-help text-muted after:absolute after:-inset-1.5 hover:text-text"
-            >
-              <Info size={13} />
-            </button>
-          </Tooltip>
-        )}
-      </div>
-      <form
-        onSubmit={handleSubmit(submit, (errors) =>
-          toast(errors.email?.message ?? "Enter a valid email address", "error"),
-        )}
-        className="flex items-end gap-2"
-      >
-        <div className="min-w-0 flex-1">
-          <Field label="Email">
-            <Input type="email" {...register("email")} placeholder="teammate@company.com" />
-          </Field>
-        </div>
-        <div className="w-36">
-          <Field label="Role">
-            <MenuSelect
-              label="Role"
-              value={selectedRole}
-              onChange={(role) => setValue("role", oneOf(INVITABLE_ROLES, role, "member"))}
-              options={ROLE_OPTIONS}
-            />
-          </Field>
-        </div>
-        <Button type="submit" variant="primary" disabled={sendEmailInvite.isPending}>
-          <BusyContent busy={sendEmailInvite.isPending}>Send invite</BusyContent>
-        </Button>
-      </form>
-    </Card>
-  );
 }
