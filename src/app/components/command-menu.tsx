@@ -26,6 +26,7 @@ import {
 } from "@/app/ui/command";
 import { appNavItems } from "./nav-items";
 import { LinkPreviewDialog } from "./link-preview-dialog";
+import { useNewLink } from "./new-link-host";
 import { SameDestinationDialog } from "./same-destination-dialog";
 import { useLinkMutations, useLinks, useLogout, useShellUser } from "../lib/hooks";
 import { useCurrentOrg } from "../lib/current-org";
@@ -159,14 +160,13 @@ function useActions(close: () => void, enterLinks: () => void): Action[] {
   const { org, orgs, setOrg } = useCurrentOrg();
   const logout = useLogout();
   const toast = useToast();
+  const { openNewLink } = useNewLink();
 
   const act = (fn: () => void) => () => {
     close();
     fn();
   };
   const goto = (to: string) => act(() => navigate({ to }));
-  // A runtime href (carries its own query string), same idea as goto.
-  const gotoHref = (href: string) => act(() => navigate({ href }));
   // A locked org takes no writes from anyone until it is active again (#160).
   const locked = !!org?.locked;
   const flip =
@@ -209,8 +209,8 @@ function useActions(close: () => void, enterLinks: () => void): Action[] {
       icon: Plus,
       group: "Actions",
       disabled: locked,
-      // Land on the links page with its editor already open.
-      run: gotoHref("/links?new=1"),
+      // The same dialog the header button and the C key open.
+      run: act(openNewLink),
     },
     {
       value: "add domain",

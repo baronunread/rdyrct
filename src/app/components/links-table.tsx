@@ -1,17 +1,8 @@
 import { useState } from "react";
-import {
-  ChartColumn,
-  ChevronRight,
-  Ellipsis,
-  ExternalLink,
-  Link,
-  Pencil,
-  QrCode,
-  Trash2,
-} from "@/app/ui/icons";
+import { ChartColumn, ChevronRight, Ellipsis, Link, Pencil, QrCode, Trash2 } from "@/app/ui/icons";
 import { AnimatePresence, LazyMotion, domAnimation } from "motion/react";
 import { type LinkDTO, type Sort } from "@/shared/types";
-import { Badge, Slug, Table, Th, Td } from "../ui/misc";
+import { Badge, Table, Th, Td } from "../ui/misc";
 import { Menu, MenuItem, MenuSeparator } from "../ui/menu";
 import { SortTh } from "../ui/sort-th";
 import { shortDate } from "../lib/dates";
@@ -40,7 +31,9 @@ interface RowActions {
   onCreateAlias: (link: LinkDTO) => void;
 }
 
-/** The short link itself: expander, domain badge, slug, copy button. */
+/** The link in two lines (rdyrct-design, "Tables earn two lines"): its
+ * title in bold over the short address in mono, the domain quiet and the
+ * slug in ink. An untitled link puts the address on the first line alone. */
 function LinkCell({
   link,
   isExpanded,
@@ -54,15 +47,22 @@ function LinkCell({
 }) {
   const toast = useToast();
   const hidden = link.addressCount - 1;
+  const host = new URL(link.url).host;
+  const address = (
+    <span className="min-w-0 max-w-full truncate font-mono text-xs">
+      <span className="text-muted">{host}/</span>
+      {link.slug}
+    </span>
+  );
   return (
-    <div className="flex min-w-0 items-center gap-2.5 overflow-hidden">
+    <div className="flex min-w-0 items-center gap-2 overflow-hidden">
       {onToggle ? (
         <button
           type="button"
           onClick={onToggle}
           aria-label={`${isExpanded ? "Hide" : "Show"} ${hidden} alias${hidden === 1 ? "" : "es"}`}
           aria-expanded={isExpanded}
-          className="flex shrink-0 cursor-pointer items-center justify-center p-1 text-muted transition-transform duration-150 active:scale-[0.96] hover:text-text"
+          className="flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-md text-muted active:scale-[0.96] [@media(hover:hover)]:hover:bg-surface-2 [@media(hover:hover)]:hover:text-text"
         >
           <ChevronRight
             size={14}
@@ -70,29 +70,24 @@ function LinkCell({
           />
         </button>
       ) : (
-        <span className="w-5.5 shrink-0" />
+        <span className="w-6 shrink-0" />
       )}
       <button
         type="button"
         onClick={() => navigate(linkDetailPath(link))}
-        className="group flex min-w-0 max-w-full cursor-pointer flex-col items-start gap-0.5 text-start"
+        className="flex min-w-0 max-w-full cursor-pointer flex-col items-start gap-0.5 text-start"
       >
-        {/* The domain is half the address, so it reads as the address: mono,
-            quiet, directly above the slug it belongs to. It used to sit in a
-            Badge, which is for state (active, pending, blocked) rather than
-            for an identifier. */}
-        <span className="min-w-0 max-w-full truncate font-mono text-2xs text-muted">
-          {new URL(link.url).host}
-        </span>
-        <Slug slug={link.slug} className="font-bold text-accent group-hover:underline" />
+        {link.title ? (
+          <>
+            <span className="max-w-full truncate text-sm font-semibold [@media(hover:hover)]:group-hover:underline">
+              {link.title}
+            </span>
+            {address}
+          </>
+        ) : (
+          <span className="[@media(hover:hover)]:group-hover:underline">{address}</span>
+        )}
       </button>
-      <span className="shrink-0">
-        <CopyButton
-          text={link.url}
-          label={`Copy ${link.url}`}
-          onCopy={(text) => copyToClipboard(text, toast)}
-        />
-      </span>
       {link.suspendedAt && (
         <span
           className="shrink-0"
@@ -101,7 +96,40 @@ function LinkCell({
           <Badge color="pink">paused</Badge>
         </span>
       )}
+      <span className="shrink-0 opacity-100 transition-opacity [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 [@media(hover:hover)]:focus-within:opacity-100">
+        <CopyButton
+          text={link.url}
+          label={`Copy ${link.url}`}
+          onCopy={(text) => copyToClipboard(text, toast)}
+        />
+      </span>
     </div>
+  );
+}
+
+/** Where the link goes: the host over the rest, so a column of them scans by
+ * site first. */
+function DestinationCell({ destination }: { destination: string }) {
+  let host = destination;
+  let rest = "";
+  try {
+    const url = new URL(destination);
+    host = url.host;
+    rest = `${url.pathname === "/" ? "" : url.pathname}${url.search}`;
+  } catch {
+    // Stored destinations are absolute URLs; show anything else as it is.
+  }
+  return (
+    <a
+      href={destination}
+      target="_blank"
+      rel="noreferrer"
+      title={destination}
+      className="flex min-w-0 flex-col gap-0.5 [@media(hover:hover)]:hover:text-accent"
+    >
+      <span className="truncate text-sm">{host}</span>
+      {rest && <span className="truncate font-mono text-xs text-muted">{rest}</span>}
+    </a>
   );
 }
 
@@ -113,8 +141,8 @@ function RowMenu({ link, actions }: { link: LinkDTO; actions: RowActions }) {
       label={`Actions for ${link.slug}`}
       trigger={
         <div className="flex justify-end">
-          <span className="rounded p-1.5 text-muted transition-transform duration-150 active:scale-[0.96] hover:bg-surface-2 hover:text-text">
-            <Ellipsis size={15} />
+          <span className="grid size-8 place-items-center rounded-md text-muted active:scale-[0.96] [@media(hover:hover)]:hover:bg-surface-2 [@media(hover:hover)]:hover:text-text">
+            <Ellipsis size={16} />
           </span>
         </div>
       }
@@ -159,7 +187,7 @@ function LinkRow({
   return (
     <>
       <tr className="group">
-        <Td>
+        <Td className="py-2.5">
           <LinkCell
             link={link}
             isExpanded={isExpanded}
@@ -167,35 +195,16 @@ function LinkRow({
             navigate={actions.navigate}
           />
         </Td>
-        {/* An untitled link leaves the cell empty: a dash read as a title,
-            and a word would be mistaken for one. */}
-        <Td
-          className="hidden truncate text-xs text-muted lg:table-cell"
-          title={link.title || undefined}
-        >
-          {link.title}
+        <Td className="hidden py-2.5 lg:table-cell">
+          <DestinationCell destination={link.destination} />
         </Td>
-        <Td className="hidden max-w-64 xl:table-cell">
-          <a
-            href={link.destination}
-            target="_blank"
-            rel="noreferrer"
-            className="flex items-center gap-1 text-muted hover:text-accent"
-          >
-            {/* A destination is a URL somebody pastes and checks character by
-                character, so it keeps the mono face the title beside it does
-                not. */}
-            <span className="truncate font-mono text-xs" title={link.destination}>
-              {link.destination}
-            </span>
-            <ExternalLink size={12} className="shrink-0" />
-          </a>
+        <Td className="tnum py-2.5 text-end font-semibold">
+          {link.clicks.toLocaleString("en-US")}
         </Td>
-        <Td className="tnum text-end">{link.clicks}</Td>
-        <Td className="hidden text-xs whitespace-nowrap text-muted sm:table-cell">
+        <Td className="hidden py-2.5 text-xs whitespace-nowrap text-muted sm:table-cell">
           {shortDate(link.createdAt)}
         </Td>
-        <Td>
+        <Td className="py-2.5">
           <RowMenu link={link} actions={actions} />
         </Td>
       </tr>
@@ -239,27 +248,16 @@ export function LinksTable({
     <LazyMotion features={domAnimation}>
       {/* Load-bearing widths: the table is `fixed`, so these decide the layout
           rather than describing it, and columns drop in as the screen grows.
-            <sm   50%      + 9rem   (short link, clicks, actions)
-            sm    40%      + 16rem  (+ created)
-            lg    30 + 16% + 16rem  (+ title)
-            xl    26 + 16 + 22% + 16rem  (+ destination)
-          Percentages share the row with 16rem of fixed columns, so they cannot
-          add up to 100, which is also why no width token fits them. */}
+            <sm   link + clicks + actions
+            sm    + created
+            lg    + destination
+          The link column takes what is left. */}
       <Table fixed>
         <thead>
           <tr>
-            <SortTh
-              label="Short link"
-              sortKey="slug"
-              sort={sort}
-              onSort={onSort}
-              // fallow-ignore-next-line css-token-drift
-              className="w-1/2 sm:w-2/5 lg:w-[30%] xl:w-[26%]"
-            />
+            <SortTh label="Link" sortKey="slug" sort={sort} onSort={onSort} />
             {/* fallow-ignore-next-line css-token-drift */}
-            <Th className="hidden lg:table-cell lg:w-[16%]">Title</Th>
-            {/* fallow-ignore-next-line css-token-drift */}
-            <Th className="hidden xl:table-cell xl:w-[22%]">Destination</Th>
+            <Th className="hidden lg:table-cell lg:w-[34%]">Destination</Th>
             <SortTh
               label="Clicks"
               sortKey="clicks"
@@ -274,7 +272,9 @@ export function LinksTable({
               onSort={onSort}
               className="hidden sm:table-cell sm:w-28"
             />
-            <Th className="w-16 text-end whitespace-nowrap">Actions</Th>
+            <Th className="w-12">
+              <span className="sr-only">Actions</span>
+            </Th>
           </tr>
         </thead>
         <tbody>

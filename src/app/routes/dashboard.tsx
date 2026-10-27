@@ -15,7 +15,10 @@ import {
 import { useOrgLimits } from "../lib/org-limits";
 import { ApiError } from "../lib/api";
 import { type DomainDTO, type LinkDTO, type LinkInput, type RecentClick } from "@/shared/types";
-import { StatCard, TopLinksCard } from "../components/charts";
+import { AreaChart, BarList, StatsChart } from "../components/charts";
+import { useNewLink, NewLinkButton } from "../components/new-link-host";
+import { PanelTabs } from "../ui/tabs";
+import { formatNumber } from "../lib/numbers";
 import { DashboardSkeleton } from "../components/skeletons";
 import { NoOrgState } from "../components/no-org";
 import { ClickCapBanner } from "../components/over-limit";
@@ -30,9 +33,6 @@ import { destinationSchema } from "../lib/schemas";
 import { relativeDate } from "../lib/dates";
 import { SameDestinationDialog } from "../components/same-destination-dialog";
 import { LinkPreviewDialog } from "../components/link-preview-dialog";
-
-/** Heatmap rows come back Monday-first (see the stats query). */
-const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
 const linkPath = (l: { slug: string; domain?: string | null }) =>
   l.domain ? `/links/${l.slug}?domain=${encodeURIComponent(l.domain)}` : `/links/${l.slug}`;
@@ -69,15 +69,6 @@ function useDashboardData(orgId: string) {
   };
 }
 
-/** The busiest heatmap cell, or null when there's no activity to report. */
-function peakActivityCell(
-  heatmap: { dayOfWeek: number; hour: number; clicks: number }[],
-): { dayOfWeek: number; hour: number; clicks: number } | null {
-  if (!heatmap.length) return null;
-  const peakCell = heatmap.reduce((max, cell) => (cell.clicks > max.clicks ? cell : max));
-  return peakCell.clicks > 0 ? peakCell : null;
-}
-
 /** Shared shape of the same-destination dialog's two "go ahead" actions:
  * differ only in which extra field they send. */
 function submitSameDestination(
@@ -98,15 +89,12 @@ const FIRST_RUN_HEADER = {
   title: "Shorten your first link",
   sub: "Paste any long URL. Your stats appear here once it starts getting clicks.",
 };
-const DASHBOARD_HEADER = {
-  title: "Dashboard",
-  sub: "See your organization's link activity at a glance",
-};
+const DASHBOARD_HEADER = { title: "Dashboard" };
 
 /**
- * Everything below the create field: the numbers, and the cards that read
- * them. Split out because it only renders once there is something to count,
- * so the page itself is the question plus this.
+ * The dashboard once there is something to count: this week's clicks over
+ * the chart, then two panels (rdyrct-design, "Panels hold lists behind
+ * tabs"). The full report is Analytics.
  */
 function DashboardBody({
   stats: s,
@@ -115,26 +103,91 @@ function DashboardBody({
   stats: NonNullable<DashboardData["stats"]>;
   data: DashboardData;
 }) {
-  const peak = peakActivityCell(s.heatmap);
+  const attention = [
+    ...s.decayingLinks.map((l) => ({ ...l, suffix: `${l.drop}% fewer clicks` })),
+    ...s.deadLinks.map((l) => ({ ...l, suffix: "No clicks in 30 days" })),
+  ];
   return (
-    <>
-      <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <StatCard label="Links" value={s.totalLinks} />
-        <StatCard label="Clicks · 7d" value={s.clicks7d} delta={s.clicks7dDelta} />
-        <StatCard label="Members" value={data.memberCount} />
-      </div>
+    <div className="flex flex-col gap-6">
+      <StatsChart
+        figures={[
+          { label: "Clicks · 7d", value: formatNumber(s.clicks7d), delta: s.clicks7dDelta },
+          { label: "Links", value: formatNumber(s.totalLinks) },
+          { label: "Members", value: formatNumber(data.memberCount) },
+        ]}
+      >
+        {s.bucket === "day" && <AreaChart data={s.series.slice(-7)} tickFormat={shortDay} />}
+      </StatsChart>
 
-      <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <RecentClicksCard clicks={data.clicks} />
-        <ActivityCard links={data.recentLinks} creatorName={data.creatorName} />
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <PanelTabs
+          end={
+            <HrefLink href="/analytics" className="hover:text-text">
+              Analytics
+            </HrefLink>
+          }
+          tabs={[
+            {
+              value: "top",
+              label: "Top links",
+              panel: (
+                <BarList
+                  head={["Link", "Clicks"]}
+                  empty="Your busiest links appear here once they start collecting clicks."
+                  items={s.topLinks.slice(0, 6).map((l) => ({ key: l.slug, clicks: l.clicks }))}
+                  formatKey={(slug) => topLinkLabel(s.topLinks, slug)}
+                />
+              ),
+            },
+            {
+              value: "attention",
+              label: (
+                <>
+                  Needs attention
+                  {attention.length > 0 && (
+                    <span className="tnum ml-1.5 font-normal text-muted">{attention.length}</span>
+                  )}
+                </>
+              ),
+              panel: <AttentionList rows={attention.slice(0, 6)} />,
+            },
+          ]}
+        />
+        <PanelTabs
+          tabs={[
+            {
+              value: "clicks",
+              label: "Recent clicks",
+              panel: <RecentClicks clicks={data.clicks} />,
+            },
+            {
+              value: "team",
+              label: "Team activity",
+              panel: <TeamActivity links={data.recentLinks} creatorName={data.creatorName} />,
+            },
+          ]}
+        />
       </div>
+    </div>
+  );
+}
 
-      <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <TopLinksCard topLinks={s.topLinks} limit={5} />
-        <NeedsAttentionCard decaying={s.decayingLinks.slice(0, 3)} dead={s.deadLinks.slice(0, 3)} />
-        <PeakCard peak={peak} rangeDays={s.rangeDays} />
-      </div>
-    </>
+/** "Oct 5" from "2026-10-05". */
+function shortDay(day: string): string {
+  return new Date(`${day}T00:00:00Z`).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    timeZone: "UTC",
+  });
+}
+
+/** A top link's row label: its title, else its slug. */
+function topLinkLabel(links: { slug: string; title: string }[], slug: string) {
+  const link = links.find((l) => l.slug === slug);
+  return (
+    <HrefLink href={`/links/${slug}`} className="hover:underline">
+      {link?.title || `/${slug}`}
+    </HrefLink>
   );
 }
 
@@ -164,6 +217,7 @@ export function Dashboard() {
 function DashboardScreen({ stats: s }: { stats: NonNullable<DashboardData["stats"]> }) {
   const { orgId, limits, activeDomains, defaultDomainId, orgQr } = useOrgLimits();
   const data = useDashboardData(orgId);
+  const { openNewLink, canCreate } = useNewLink();
   const toast = useToast();
   const [created, setCreated] = useState<LinkDTO | null>(null);
   const [sameDestination, setSameDestination] = useState<{
@@ -196,22 +250,33 @@ function DashboardScreen({ stats: s }: { stats: NonNullable<DashboardData["stats
 
   return (
     <div>
-      <PageHeader {...(firstRun ? FIRST_RUN_HEADER : DASHBOARD_HEADER)} />
+      {firstRun ? (
+        <PageHeader {...FIRST_RUN_HEADER} />
+      ) : (
+        <PageHeader
+          {...DASHBOARD_HEADER}
+          action={canCreate && <NewLinkButton onClick={openNewLink} />}
+        />
+      )}
 
       <ClickCapBanner />
 
-      <QuickCreateCard
-        create={data.create}
-        activeDomains={activeDomains}
-        defaultDomainId={defaultDomainId}
-        atLimit={s.totalLinks >= limits.links}
-        onCreated={setCreated}
-        onSameDestinationMatch={(input, matchedLinks) =>
-          setSameDestination({ input, matchedLinks })
-        }
-      />
-
-      {!firstRun && <DashboardBody stats={s} data={data} />}
+      {/* The field only asks for the first link. After that, New link opens
+          the same dialog everywhere (header, C, ⌘K). */}
+      {firstRun ? (
+        <QuickCreateCard
+          create={data.create}
+          activeDomains={activeDomains}
+          defaultDomainId={defaultDomainId}
+          atLimit={s.totalLinks >= limits.links}
+          onCreated={setCreated}
+          onSameDestinationMatch={(input, matchedLinks) =>
+            setSameDestination({ input, matchedLinks })
+          }
+        />
+      ) : (
+        <DashboardBody stats={s} data={data} />
+      )}
 
       <LinkPreviewDialog
         title="Link created"
@@ -379,136 +444,83 @@ function QuickCreateCard({
   );
 }
 
-function RecentClicksCard({ clicks }: { clicks: RecentClick[] }) {
+function RecentClicks({ clicks }: { clicks: RecentClick[] }) {
+  if (!clicks.length)
+    return (
+      <p className="py-2 text-sm text-pretty text-muted">Each click shows here as it happens.</p>
+    );
   return (
-    <Card>
-      <p className="mb-3 text-xs font-medium text-muted">Recent clicks</p>
-      {!clicks.length ? (
-        <p className="py-2 text-sm text-muted">No clicks yet</p>
-      ) : (
-        <ul className="flex flex-col gap-2">
-          {clicks.map((click) => (
-            <li key={click.id} className="flex items-center justify-between gap-3 text-xs">
-              <span className="min-w-0 truncate">
-                <HrefLink href={linkPath(click)} className="text-accent hover:underline">
-                  /{click.slug}
-                </HrefLink>
-                <span className="text-muted"> · {click.referrer || "direct"}</span>
-              </span>
-              <span className="tnum shrink-0 text-muted">
-                {[click.country, click.device, relativeDate(click.ts)].filter(Boolean).join(" · ")}
-              </span>
-            </li>
-          ))}
-        </ul>
-      )}
-    </Card>
+    <ul className="flex flex-col">
+      {clicks.map((click) => (
+        <li
+          key={click.id}
+          className="grid h-9 grid-cols-[minmax(0,7rem)_minmax(0,1fr)_auto] items-center gap-3 text-sm"
+        >
+          <HrefLink href={linkPath(click)} className="truncate font-mono text-xs hover:underline">
+            /{click.slug}
+          </HrefLink>
+          <span className="truncate text-muted">{click.referrer || "Direct"}</span>
+          <span className="tnum text-right text-xs text-muted">
+            {[click.country, relativeDate(click.ts)].filter(Boolean).join(" · ")}
+          </span>
+        </li>
+      ))}
+    </ul>
   );
 }
 
-function ActivityCard({
+function TeamActivity({
   links,
   creatorName,
 }: {
   links: LinkDTO[];
   creatorName: (id: string | null) => string;
 }) {
+  if (!links.length)
+    return (
+      <p className="py-2 text-sm text-pretty text-muted">
+        New links show here, with who made them.
+      </p>
+    );
   return (
-    <Card>
-      <p className="mb-3 text-xs font-medium text-muted">Member activity</p>
-      {!links.length ? (
-        <p className="py-2 text-sm text-muted">No activity yet</p>
-      ) : (
-        <ul className="flex flex-col gap-2">
-          {links.map((l) => (
-            <li key={l.id} className="flex items-center justify-between gap-3 text-xs">
-              <span className="min-w-0 truncate">
-                <span className="font-bold">{creatorName(l.createdBy)}</span>
-                {" created "}
-                <HrefLink href={linkPath(l)} className="text-accent hover:underline">
-                  /{l.slug}
-                </HrefLink>
-              </span>
-              <span className="shrink-0 text-muted">{relativeDate(l.createdAt)}</span>
-            </li>
-          ))}
-        </ul>
-      )}
-    </Card>
+    <ul className="flex flex-col">
+      {links.map((l) => (
+        <li key={l.id} className="flex h-9 items-center justify-between gap-3 text-sm">
+          <span className="min-w-0 truncate">
+            <span className="font-medium">{creatorName(l.createdBy)}</span>
+            <span className="text-muted"> created </span>
+            <HrefLink href={linkPath(l)} className="font-mono text-xs hover:underline">
+              /{l.slug}
+            </HrefLink>
+          </span>
+          <span className="shrink-0 text-xs text-muted">{relativeDate(l.createdAt)}</span>
+        </li>
+      ))}
+    </ul>
   );
 }
 
-function NeedsAttentionCard({
-  decaying,
-  dead,
-}: {
-  decaying: { id: string; slug: string; title: string; drop: number }[];
-  dead: { id: string; slug: string; title: string }[];
-}) {
-  const groups = [
-    { label: "Decaying", rows: decaying.map((l) => ({ ...l, suffix: `${l.drop}% drop` })) },
-    { label: "Dead", rows: dead.map((l) => ({ ...l, suffix: "0 clicks in 30d" })) },
-  ].filter((g) => g.rows.length > 0);
-
-  return (
-    <Card>
-      <p className="mb-3 text-xs font-medium text-muted">Needs attention</p>
-      {!groups.length ? (
-        <p className="py-2 text-sm text-muted">No decaying or dead links</p>
-      ) : (
-        <div className="flex flex-col gap-3">
-          {groups.map((g) => (
-            <AttentionList key={g.label} label={g.label} rows={g.rows} />
-          ))}
-        </div>
-      )}
-    </Card>
-  );
-}
-
-/** One labeled group inside the Needs attention card. */
+/** Links whose clicks fell by half this week, then links nobody clicked in
+ * 30 days. */
 function AttentionList({
-  label,
   rows,
 }: {
-  label: string;
   rows: { id: string; slug: string; title: string; suffix: string }[];
 }) {
+  if (!rows.length)
+    return (
+      <p className="py-2 text-sm text-pretty text-muted">
+        No link lost half its clicks or went quiet.
+      </p>
+    );
   return (
-    <div>
-      <p className="mb-1.5 text-2xs text-muted">{label}</p>
-      <ul className="flex flex-col gap-2">
-        {rows.map((l) => (
-          <li key={l.id} className="flex items-center justify-between gap-3 text-xs">
-            <SlugLink to={`/links/${l.slug}`} slug={l.slug} title={l.title} />
-            <span className="tnum shrink-0 text-muted">{l.suffix}</span>
-          </li>
-        ))}
-      </ul>
-    </div>
-  );
-}
-
-function PeakCard({
-  peak,
-  rangeDays,
-}: {
-  peak: { dayOfWeek: number; hour: number } | null;
-  rangeDays: number;
-}) {
-  return (
-    <Card>
-      <p className="mb-3 text-xs font-medium text-muted">Peak activity</p>
-      {!peak ? (
-        <p className="py-2 text-sm text-muted">No clicks yet</p>
-      ) : (
-        <>
-          <p className="tnum text-sm font-bold">
-            {WEEKDAYS[peak.dayOfWeek]} · {peak.hour}:00–{peak.hour + 1}:00
-          </p>
-          <p className="mt-1 text-xs text-muted">Busiest hour over the last {rangeDays} days</p>
-        </>
-      )}
-    </Card>
+    <ul className="flex flex-col">
+      {rows.map((l) => (
+        <li key={l.id} className="flex h-9 items-center justify-between gap-3 text-sm">
+          <SlugLink to={`/links/${l.slug}`} slug={l.slug} title={l.title} />
+          <span className="tnum shrink-0 text-xs text-muted">{l.suffix}</span>
+        </li>
+      ))}
+    </ul>
   );
 }

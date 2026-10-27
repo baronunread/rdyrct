@@ -22,6 +22,7 @@ import { appNavItems } from "../components/nav-items";
 import { OverLimitBanner } from "../components/over-limit";
 import { UserAvatar } from "../components/user-avatar";
 import { CommandMenu } from "../components/command-menu";
+import { NewLinkHost } from "../components/new-link-host";
 import { OrgMenuItems } from "../components/org-menu-items";
 import { WebMcpLinkTools } from "../components/webmcp-link-tools";
 import { WebMcpAnalyticsTool } from "../components/webmcp-analytics-tool";
@@ -115,8 +116,17 @@ function OrgSwitcherMenu({
   return (
     <Menu
       trigger={
-        <div className="flex w-full items-center justify-between gap-2 rounded-md border border-border bg-surface px-2.5 py-2 text-sm select-none hover:border-accent">
-          <span className="truncate">{org ? org.name : "No organization"}</span>
+        <div className="flex h-10 w-full items-center gap-2.5 rounded-lg px-2 text-sm select-none [@media(hover:hover)]:hover:bg-surface-2">
+          {/* The org's initial, so a glance tells two orgs apart. */}
+          <span
+            aria-hidden
+            className="grid size-6 shrink-0 place-items-center rounded-md bg-accent text-xs font-bold text-bg"
+          >
+            {(org?.name ?? "?").trim().charAt(0).toUpperCase()}
+          </span>
+          <span className="min-w-0 flex-1 truncate font-semibold">
+            {org ? org.name : "No organization"}
+          </span>
           <ChevronsUpDown size={14} className="shrink-0 text-muted" />
         </div>
       }
@@ -448,51 +458,53 @@ export function AppShell() {
   );
 
   return (
-    <div className="flex min-h-dvh">
-      <CommandMenu />
-      <WebMcpLinkTools />
-      <WebMcpAnalyticsTool />
-      {/* desktop sidebar: fixed so it never moves, not even on overscroll */}
-      <aside className="fixed inset-y-0 left-0 z-10 hidden w-60 md:block">{sidebar}</aside>
+    <NewLinkHost>
+      <div className="flex min-h-dvh">
+        <CommandMenu />
+        <WebMcpLinkTools />
+        <WebMcpAnalyticsTool />
+        {/* desktop sidebar: fixed so it never moves, not even on overscroll */}
+        <aside className="fixed inset-y-0 left-0 z-10 hidden w-60 md:block">{sidebar}</aside>
 
-      {/* mobile top bar + drawer */}
-      <div className="fixed inset-x-0 top-0 z-30 flex items-center gap-2 bg-bg/90 px-4 py-2.5 backdrop-blur md:hidden">
-        <button
-          type="button"
-          onClick={() => setMobileOpen((v) => !v)}
-          aria-label="Menu"
-          className="cursor-pointer rounded-md p-1.5 text-muted hover:text-text"
-        >
-          <MorphIcon icon={mobileOpen ? x : menu2} size={18} spring="snappy" />
-        </button>
-        <Logo className="text-sm" />
-      </div>
-      <MobileDrawer open={mobileOpen} onClose={() => setMobileOpen(false)}>
-        {sidebar}
-      </MobileDrawer>
-
-      {/* One raised sheet for the page; the sidebar and the phone bar sit on
-          the paper behind it (rdyrct-design, "The app's surfaces"). */}
-      <main className="mx-1.5 mt-[52px] mb-1.5 flex min-w-0 flex-1 flex-col rounded-[22px] bg-surface px-4 py-6 smooth-shadow-ring-sm md:my-2 md:mr-2 md:ml-[248px] md:rounded-[14px] md:px-10 md:py-8">
-        <div className="mx-auto w-full max-w-5xl flex-1">
-          {/* Above the route, not inside each one: the state belongs to the
-              org, so it says the same thing on every page (#163). */}
-          <OverLimitBanner />
-          {/* pages are lazy chunks: keep the shell in place while one loads,
-              behind the shape that chunk is about to render */}
-          <Suspense fallback={<RouteSkeleton />}>
-            <Outlet />
-          </Suspense>
+        {/* mobile top bar + drawer */}
+        <div className="fixed inset-x-0 top-0 z-30 flex items-center gap-2 bg-bg/90 px-4 py-2.5 backdrop-blur md:hidden">
+          <button
+            type="button"
+            onClick={() => setMobileOpen((v) => !v)}
+            aria-label="Menu"
+            className="cursor-pointer rounded-md p-1.5 text-muted hover:text-text"
+          >
+            <MorphIcon icon={mobileOpen ? x : menu2} size={18} spring="snappy" />
+          </button>
+          <Logo className="text-sm" />
         </div>
-      </main>
+        <MobileDrawer open={mobileOpen} onClose={() => setMobileOpen(false)}>
+          {sidebar}
+        </MobileDrawer>
 
-      <NewOrgDialog
-        open={newOrgOpen}
-        onOpenChange={setNewOrgOpen}
-        name={newOrgName}
-        onNameChange={setNewOrgName}
-        onCreate={createOrg}
-      />
-    </div>
+        {/* One raised sheet for the page; the sidebar and the phone bar sit on
+          the paper behind it (rdyrct-design, "The app's surfaces"). */}
+        <main className="mx-1.5 mt-[52px] mb-1.5 flex min-w-0 flex-1 flex-col rounded-[22px] bg-surface px-4 py-6 smooth-shadow-ring-sm md:my-2 md:mr-2 md:ml-[248px] md:rounded-[14px] md:px-10 md:py-8">
+          <div className="mx-auto w-full max-w-5xl flex-1">
+            {/* Above the route, not inside each one: the state belongs to the
+              org, so it says the same thing on every page (#163). */}
+            <OverLimitBanner />
+            {/* pages are lazy chunks: keep the shell in place while one loads,
+              behind the shape that chunk is about to render */}
+            <Suspense fallback={<RouteSkeleton />}>
+              <Outlet />
+            </Suspense>
+          </div>
+        </main>
+
+        <NewOrgDialog
+          open={newOrgOpen}
+          onOpenChange={setNewOrgOpen}
+          name={newOrgName}
+          onNameChange={setNewOrgName}
+          onCreate={createOrg}
+        />
+      </div>
+    </NewLinkHost>
   );
 }

@@ -243,6 +243,40 @@ export function StatCard({
   );
 }
 
+/** One figure in a StatsChart strip. */
+export interface ChartFigure {
+  label: string;
+  value: ReactNode;
+  delta?: DeltaValue | null;
+}
+
+/**
+ * The figures and the chart in one card (rdyrct-design, "Stats and the chart
+ * share a card"): a strip of figures above the chart, the first shaded
+ * because it is the one the chart plots, each with its change beside it.
+ */
+export function StatsChart({ figures, children }: { figures: ChartFigure[]; children: ReactNode }) {
+  return (
+    <div className="rounded-xl bg-surface smooth-shadow-ring-xs">
+      <dl className="flex flex-wrap gap-1 p-1.5">
+        {figures.map((f, i) => (
+          <div
+            key={f.label}
+            className={`flex min-w-[40%] flex-1 flex-col gap-0.5 rounded-lg px-2.5 py-2 sm:min-w-0 ${i === 0 ? "bg-bg" : ""}`}
+          >
+            <dt className="truncate text-xs text-muted">{f.label}</dt>
+            <dd className="tnum flex min-w-0 items-baseline gap-2 text-xl leading-tight font-semibold tracking-tight">
+              <span className="truncate">{f.value}</span>
+              {f.delta && f.delta.pct !== null && <DeltaBadge pct={f.delta.pct} />}
+            </dd>
+          </div>
+        ))}
+      </dl>
+      <div className="px-4 pt-1 pb-3">{children}</div>
+    </div>
+  );
+}
+
 function DeltaBadge({ pct }: { pct: number }) {
   const up = pct > 0;
   const flat = pct === 0;

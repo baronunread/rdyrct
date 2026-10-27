@@ -1,23 +1,17 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { lookup } from "@/shared/lookup";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { Download, Plus } from "@/app/ui/icons";
+import { Download, Ellipsis, Plus, Upload } from "@/app/ui/icons";
 import { useLinks, useLinkMutations, useLinkQuotaUsage } from "../lib/hooks";
 import { useOrgLimits } from "../lib/org-limits";
-import { ApiError, fetchDownload } from "../lib/api";
+import { fetchDownload } from "../lib/api";
 import { downloadBlob } from "../lib/csv";
-import {
-  type DomainDTO,
-  type LinkDTO,
-  type LinkInput,
-  type OrgPlan,
-  type Sort,
-} from "@/shared/types";
+import { type DomainDTO, type LinkDTO, type LinkInput, type Sort } from "@/shared/types";
 import { Button } from "../ui/button";
 import { Spinner } from "../ui/spinner";
 import { buttonClass } from "../ui/button-class";
 import { Input } from "../ui/field";
-import { MenuSelect } from "../ui/menu";
+import { Menu, MenuItem, MenuSelect } from "../ui/menu";
 import { EmptyState, PageHeader } from "../ui/misc";
 import { TableSkeleton } from "../ui/skeleton";
 import { LinksSkeleton } from "../components/skeletons";
@@ -26,12 +20,11 @@ import { NoOrgState } from "../components/no-org";
 import { LinkEditor } from "../components/link-editor";
 import { LinksTable } from "../components/links-table";
 import { ConfirmDialog } from "../ui/confirm-dialog";
-import { SameDestinationDialog } from "../components/same-destination-dialog";
 import { CreateAliasDialog } from "../components/create-alias-dialog";
 import { LinkPreviewDialog } from "../components/link-preview-dialog";
+import { linkFeatures, NewLinkButton, useNewLink } from "../components/new-link-host";
 import { withErrorToast } from "../lib/mutation-toast";
 import { useDebounced } from "../lib/use-debounced";
-import { useSearchParams } from "../lib/router-search";
 import posthog from "../lib/posthog";
 
 const PAGE_SIZE = 25;
@@ -112,8 +105,7 @@ function LinksBrowser({
   domains,
   navigate,
   dialogs,
-  atLimit,
-  limitHint,
+  onCreate,
   canWrite,
 }: {
   list: ReturnType<typeof useLinkPage>;
@@ -121,8 +113,7 @@ function LinksBrowser({
   domains: DomainDTO[];
   navigate: (to: string) => void;
   dialogs: ReturnType<typeof useLinkDialogs>;
-  atLimit: boolean;
-  limitHint?: string;
+  onCreate?: () => void;
   canWrite: boolean;
 }) {
   return (
@@ -142,9 +133,7 @@ function LinksBrowser({
         hasLinks={
           list.rows.length > 0 || !!list.search || list.domainFilter !== "all" || list.page > 0
         }
-        atLimit={atLimit}
-        limitHint={limitHint}
-        onCreate={canWrite ? dialogs.openCreate : undefined}
+        onCreate={onCreate}
       >
         <LinksTable
           orgId={orgId}
@@ -167,78 +156,41 @@ function LinksBrowser({
   );
 }
 
-/** What a saved link used, for PostHog. Four questions, each of them "did they
- * fill in any of these fields", which is why they read as one thing here and
- * not as branches in the success handler. */
-function linkFeatures(data: LinkInput) {
-  const any = (...fields: (string | null | undefined)[]) => fields.some(Boolean);
-  return {
-    has_custom_domain: data.domainId !== null,
-    has_custom_slug: Boolean(data.slug?.trim()),
-    has_qr_customization: any(data.qrStyle, data.qrColor, data.qrCorner, data.qrLogo),
-    has_utm_parameters: any(
-      data.utmSource,
-      data.utmMedium,
-      data.utmCampaign,
-      data.utmTerm,
-      data.utmContent,
-    ),
-  };
-}
-
-/** Builds the LinkEditor's onSave handler: PATCH when editing, POST when
- * creating, sharing one success/error path (and bumping the editor's shake
- * counter on any rejected save, so its Save button flags the failure). */
+/** The editor's onSave on this page: creating lives in the New link dialog
+ * (NewLinkHost), so here it only ever saves an edit. A rejected save bumps
+ * the editor's shake counter so its Save button flags the failure. */
 function buildOnSave({
   editing,
-  create,
   update,
   toast,
   closeEditor,
   onSaveError,
-  onSameDestinationMatch,
 }: {
   editing: LinkDTO | null;
-  create: ReturnType<typeof useLinkMutations>["create"];
   update: ReturnType<typeof useLinkMutations>["update"];
   toast: ReturnType<typeof useToast>;
   closeEditor: () => void;
   onSaveError: () => void;
-  onSameDestinationMatch: (input: LinkInput, matchedLinks: LinkDTO[]) => void;
 }) {
   return (data: LinkInput) => {
-    const done = {
-      onSuccess: () => {
-        posthog.capture(editing ? "link_updated" : "link_created", linkFeatures(data));
-        closeEditor();
-        toast(editing ? "Link updated" : "Link created");
+    if (!editing) return;
+    update.mutate(
+      { id: editing.id, ...data },
+      {
+        onSuccess: () => {
+          posthog.capture("link_updated", linkFeatures(data));
+          closeEditor();
+          toast("Link updated");
+        },
+        onError: (e: Error) => {
+          toast(e.message, "error");
+          onSaveError();
+        },
       },
-      onError: (e: Error) => {
-        if (e instanceof ApiError && e.code === "same_destination_match") {
-          // SAFETY: guarded by the same_destination_match code above, and the
-          // route that sets that code attaches matchedLinks alongside it.
-          const { matchedLinks } = e.data as { matchedLinks: LinkDTO[] };
-          onSameDestinationMatch(data, matchedLinks);
-          return;
-        }
-        toast(e.message, "error");
-        onSaveError();
-      },
-    };
-    if (editing) update.mutate({ id: editing.id, ...data }, done);
-    else create.mutate(data, done);
+    );
   };
 }
 
-/**
- * Which dialog is open, and what it is open about (#45).
- *
- * Six pieces of state that only ever describe one thing: the editor, the QR
- * preview, the alias dialog, the delete confirmation, the duplicate-destination
- * prompt, and the shake that fires when a save fails. They lived inline and
- * made LinksPage the most complex function in the app; here they are one
- * named thing the page reads off.
- */
 /**
  * What the links counter says when it is worth saying something (#163).
  *
@@ -252,23 +204,27 @@ function linkLimitHint(count: number, limit: number): string | undefined {
   return undefined;
 }
 
-/** "12 / 30 links", or "12 links" on a self-hosted instance, which has no
- * cap to count against (its limit is a placeholder of a billion). */
-function linkCountLabel(count: number, limit: number, plan: OrgPlan | undefined): string {
-  return plan === "unlimited" ? `${count} links` : `${count} / ${limit} links`;
+/** "199 of 3,000 on your plan", or "199 links" on a self-hosted instance,
+ * which has no cap to count against (its limit is a placeholder of a billion). */
+function linkCountLabel(count: number, limit: number, unlimited: boolean): string {
+  const n = (v: number) => v.toLocaleString("en-US");
+  if (unlimited) return `${n(count)} ${count === 1 ? "link" : "links"}`;
+  return `${n(count)} of ${n(limit)} on your plan${count > limit ? " (over the limit)" : ""}`;
 }
 
-function useLinkDialogs(atLimit: boolean) {
+/**
+ * Which dialog is open, and what it is open about (#45): the editor, the QR
+ * preview, the alias dialog, the delete confirmation, and the shake that
+ * fires when a save fails. One named thing the page reads off.
+ */
+
+function useLinkDialogs() {
   const [editorOpen, setEditorOpen] = useState(false);
   const [editing, setEditing] = useState<LinkDTO | null>(null);
   const [qrLink, setQrLink] = useState<LinkDTO | null>(null);
   const [aliasLink, setAliasLink] = useState<LinkDTO | null>(null);
   const [deleting, setDeleting] = useState<LinkDTO | null>(null);
   const [shakeKey, setShakeKey] = useState(0);
-  const [sameDestination, setSameDestination] = useState<{
-    input: LinkInput;
-    matchedLinks: LinkDTO[];
-  } | null>(null);
 
   return {
     editorOpen,
@@ -283,13 +239,6 @@ function useLinkDialogs(atLimit: boolean) {
     setDeleting,
     shakeKey,
     setShakeKey,
-    sameDestination,
-    setSameDestination,
-    openCreate: () => {
-      if (atLimit) return;
-      setEditing(null);
-      setEditorOpen(true);
-    },
     openEdit: (link: LinkDTO) => {
       setEditing(link);
       setEditorOpen(true);
@@ -310,7 +259,8 @@ export function LinksPage() {
     currentUser,
   } = useOrgLimits();
   const quotaUsage = useLinkQuotaUsage(orgId);
-  const { create, update, remove } = useLinkMutations(orgId);
+  const { update, remove } = useLinkMutations(orgId);
+  const { openNewLink } = useNewLink();
   const toast = useToast();
   const routerNavigate = useNavigate();
   const navigate = (to: string) => void routerNavigate({ href: to });
@@ -318,52 +268,10 @@ export function LinksPage() {
   // Links used against the plan cap, not the number of rows in the table: a
   // link plus its kept-forever aliases each count. See useLinkQuotaUsage.
   const linkCount = quotaUsage.data?.count ?? 0;
-  const atLimit = linkCount >= limits.links;
-  const overLimit = linkCount > limits.links;
   const limitHint = linkLimitHint(linkCount, limits.links);
 
-  const dialogs = useLinkDialogs(atLimit);
-
+  const dialogs = useLinkDialogs();
   const list = useLinkPage(orgId);
-
-  // The command palette's "Create link" sends people here with ?new=1: open
-  // the editor once, then drop the flag so a reload doesn't reopen it.
-  const [urlParams, setUrlParams] = useSearchParams();
-  useEffect(() => {
-    if (!urlParams.has("new")) return;
-    dialogs.openCreate();
-    const next = new URLSearchParams(urlParams);
-    next.delete("new");
-    setUrlParams(next, { replace: true });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  /**
-   * Answer the duplicate-destination prompt (#45).
-   *
-   * Both answers are the same create with one flag swapped, so they share a
-   * call. The event name and the toast follow the flag, because merging an
-   * address into an existing link and making a second link are different
-   * things to have done.
-   */
-  const resolveDuplicate = (choice: { mergeIntoLinkId: string } | { forceSeparateLink: true }) => {
-    if (!dialogs.sameDestination) return;
-    const merging = "mergeIntoLinkId" in choice;
-    create.mutate(
-      { ...dialogs.sameDestination.input, ...choice },
-      {
-        onSuccess: () => {
-          posthog.capture(merging ? "link_alias_created" : "link_created", {
-            created_from_duplicate_destination: true,
-          });
-          dialogs.setSameDestination(null);
-          dialogs.setEditorOpen(false);
-          toast(merging ? "Address added to the existing link" : "Link created");
-        },
-        onError: (e) => toast(e.message, "error"),
-      },
-    );
-  };
 
   // The cached shell may know the organization before /user confirms the
   // current role and plan. Do not briefly offer a stale create control.
@@ -372,45 +280,22 @@ export function LinksPage() {
 
   const onSave = buildOnSave({
     editing: dialogs.editing,
-    create,
     update,
     toast,
     closeEditor: () => dialogs.setEditorOpen(false),
     onSaveError: () => dialogs.setShakeKey((k) => k + 1),
-    onSameDestinationMatch: (input, matchedLinks) =>
-      dialogs.setSameDestination({ input, matchedLinks }),
   });
 
   return (
     <div>
       <PageHeader
         title="Links"
-        sub="Short links, UTM tagging and QR codes"
-        action={
-          <div className="flex flex-wrap items-center gap-3">
-            {/* Its own line on a phone, so the three buttons fit on the next. */}
-            <span className="tnum basis-full text-xs text-muted sm:basis-auto" title={limitHint}>
-              {linkCountLabel(linkCount, limits.links, org?.plan)}
-              {overLimit && " (over the limit)"}
-            </span>
-            <ExportLinksButton orgId={orgId} />
-            {canWrite && (
-              <Link to="/import" className={buttonClass({ variant: "outline" })}>
-                Import
-              </Link>
-            )}
-            {canWrite && (
-              <Button
-                variant="primary"
-                onClick={dialogs.openCreate}
-                disabled={atLimit}
-                title={limitHint}
-              >
-                <Plus size={15} /> New link
-              </Button>
-            )}
-          </div>
+        sub={
+          <span className="tnum" title={limitHint}>
+            {linkCountLabel(linkCount, limits.links, org.plan === "unlimited")}
+          </span>
         }
+        action={<LinksActions orgId={orgId} canWrite={canWrite} onNewLink={openNewLink} />}
       />
 
       <LinksBrowser
@@ -419,8 +304,7 @@ export function LinksPage() {
         domains={domains.data ?? []}
         navigate={navigate}
         dialogs={dialogs}
-        atLimit={atLimit}
-        limitHint={limitHint}
+        onCreate={canWrite ? openNewLink : undefined}
         canWrite={canWrite}
       />
 
@@ -431,13 +315,66 @@ export function LinksPage() {
         activeDomains={activeDomains}
         defaultDomainId={defaultDomainId}
         orgQr={orgQr}
-        create={create}
         update={update}
         remove={remove}
         onSave={onSave}
-        onResolveDuplicate={resolveDuplicate}
         toast={toast}
       />
+    </div>
+  );
+}
+
+/**
+ * Import, Export and New link. One primary button; Import and Export are
+ * quiet beside it on a wide screen and share a menu on a phone, where the
+ * header has room for New link alone. Export stays for a viewer and in a
+ * locked org: it is how people take their links with them.
+ */
+function LinksActions({
+  orgId,
+  canWrite,
+  onNewLink,
+}: {
+  orgId: string;
+  canWrite: boolean;
+  onNewLink: () => void;
+}) {
+  const navigate = useNavigate();
+  const { busy, exportLinks } = useExportLinks(orgId);
+  return (
+    <div className="flex items-center gap-2">
+      <div className="hidden items-center gap-1 sm:flex">
+        {canWrite && (
+          <Link to="/import" className={buttonClass({ variant: "ghost" })}>
+            <Upload size={15} aria-hidden /> Import
+          </Link>
+        )}
+        <Button variant="ghost" onClick={exportLinks} disabled={busy}>
+          {busy ? <Spinner className="size-4" /> : <Download size={15} aria-hidden />}
+          Export
+        </Button>
+      </div>
+      <div className="sm:hidden">
+        <Menu
+          label="More actions"
+          align="end"
+          trigger={
+            <span className={buttonClass({ variant: "outline", className: "w-9 px-0" })}>
+              <Ellipsis size={16} aria-hidden />
+            </span>
+          }
+        >
+          {canWrite && (
+            <MenuItem onClick={() => void navigate({ to: "/import" })}>
+              <Upload size={15} aria-hidden /> Import links
+            </MenuItem>
+          )}
+          <MenuItem onClick={exportLinks} disabled={busy}>
+            <Download size={15} aria-hidden /> Export as CSV
+          </MenuItem>
+        </Menu>
+      </div>
+      {canWrite && <NewLinkButton onClick={onNewLink} />}
     </div>
   );
 }
@@ -448,15 +385,11 @@ export function LinksPage() {
 function LinksListArea({
   isLoading,
   hasLinks,
-  atLimit,
-  limitHint,
   onCreate,
   children,
 }: {
   isLoading: boolean;
   hasLinks: boolean;
-  atLimit: boolean;
-  limitHint: string | undefined;
   /** Undefined for a viewer, who has no way to make the empty state stop
    * being empty. The screen then explains rather than offering (#157). */
   onCreate?: () => void;
@@ -474,7 +407,7 @@ function LinksListArea({
         }
         action={
           onCreate ? (
-            <Button variant="primary" onClick={onCreate} disabled={atLimit} title={limitHint}>
+            <Button variant="primary" onClick={onCreate}>
               <Plus size={15} /> New link
             </Button>
           ) : undefined
@@ -570,7 +503,7 @@ function LinksToolbar({
 /**
  * Every dialog the links page can open (#45).
  *
- * They are five separate concerns that happen to share a parent, and holding
+ * They are four separate concerns that happen to share a parent, and holding
  * them in the page meant every one of their conditions counted against the
  * page's own complexity. The page now says "and the dialogs", once.
  */
@@ -581,11 +514,9 @@ function LinkDialogStack({
   activeDomains,
   defaultDomainId,
   orgQr,
-  create,
   update,
   remove,
   onSave,
-  onResolveDuplicate,
   toast,
 }: {
   dialogs: ReturnType<typeof useLinkDialogs>;
@@ -594,11 +525,9 @@ function LinkDialogStack({
   activeDomains: ReturnType<typeof useOrgLimits>["activeDomains"];
   defaultDomainId: string | null;
   orgQr: ReturnType<typeof useOrgLimits>["orgQr"];
-  create: ReturnType<typeof useLinkMutations>["create"];
   update: ReturnType<typeof useLinkMutations>["update"];
   remove: ReturnType<typeof useLinkMutations>["remove"];
   onSave: (data: LinkInput) => void;
-  onResolveDuplicate: (choice: { mergeIntoLinkId: string } | { forceSeparateLink: true }) => void;
   toast: ReturnType<typeof useToast>;
 }) {
   return (
@@ -607,7 +536,7 @@ function LinkDialogStack({
         open={dialogs.editorOpen}
         onOpenChange={dialogs.setEditorOpen}
         editingLink={dialogs.editing}
-        busy={create.isPending || update.isPending}
+        busy={update.isPending}
         onSave={onSave}
         activeDomains={activeDomains}
         defaultDomainId={defaultDomainId}
@@ -636,21 +565,13 @@ function LinkDialogStack({
         remove={remove}
         toast={toast}
       />
-
-      <SameDestinationDialog
-        matchedLinks={dialogs.sameDestination?.matchedLinks ?? null}
-        pending={create.isPending}
-        onClose={() => dialogs.setSameDestination(null)}
-        onAddToExisting={(matchedLink) => onResolveDuplicate({ mergeIntoLinkId: matchedLink.id })}
-        onCreateSeparate={() => onResolveDuplicate({ forceSeparateLink: true })}
-      />
     </>
   );
 }
 
 /** Every link in the org as a CSV the import reads back (#75). Any member
  * can export, a locked org included: it is how people take their data out. */
-function ExportLinksButton({ orgId }: { orgId: string }) {
+function useExportLinks(orgId: string) {
   const toast = useToast();
   const [busy, setBusy] = useState(false);
   const exportLinks = async () => {
@@ -664,10 +585,5 @@ function ExportLinksButton({ orgId }: { orgId: string }) {
       setBusy(false);
     }
   };
-  return (
-    <Button variant="outline" onClick={exportLinks} disabled={busy}>
-      {busy ? <Spinner className="size-4" /> : <Download className="size-4" aria-hidden />}
-      Export CSV
-    </Button>
-  );
+  return { busy, exportLinks };
 }
