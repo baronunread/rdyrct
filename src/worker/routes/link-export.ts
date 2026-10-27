@@ -20,8 +20,10 @@ import { csvRow } from "@/shared/csv";
 // Mounted at /api/orgs/:orgId/link-export
 export const linkExportRoutes = new Hono<AppEnv>();
 
-/** Links per D1 query. */
-export const EXPORT_BATCH = 100;
+/** Links per D1 query. Large, because the stream reads every batch in one
+ * Worker invocation and Workers Free allows 50 D1 queries there: at 500 a
+ * self-hosted org reaches that limit only past about 24,000 links. */
+export const EXPORT_BATCH = 500;
 
 export const EXPORT_HEADER = [
   "Short link",
@@ -101,7 +103,8 @@ linkExportRoutes.get("/", requireOrgRole("viewer"), async (c) => {
   const orgId = c.req.param("orgId")!;
   const db = c.var.db;
   const env = c.env;
-  c.get("log")?.set({ orgId, linkExport: true });
+  const log = c.get("log");
+  log.set({ org: { id: orgId }, linkExport: true });
   const [org] = await db
     .select({ name: schema.orgs.name })
     .from(schema.orgs)
