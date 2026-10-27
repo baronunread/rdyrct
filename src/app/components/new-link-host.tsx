@@ -105,7 +105,7 @@ export function NewLinkHost({ children }: { children: ReactNode }) {
   const toast = useToast();
   const [open, setOpen] = useState(false);
   const [shakeKey, setShakeKey] = useState(0);
-  const [created, setCreated] = useState<LinkDTO | null>(null);
+  const [created, setCreated] = useState<{ link: LinkDTO; merged: boolean } | null>(null);
   const [match, setMatch] = useState<{ input: LinkInput; matchedLinks: LinkDTO[] } | null>(null);
 
   const canCreate = !!org && canWrite;
@@ -125,7 +125,7 @@ export function NewLinkHost({ children }: { children: ReactNode }) {
     posthog.capture(event, linkFeatures(input));
     setMatch(null);
     setOpen(false);
-    setCreated(link);
+    setCreated({ link, merged: event === "link_alias_created" });
   };
 
   const onSave = (input: LinkInput) =>
@@ -182,8 +182,8 @@ export function NewLinkHost({ children }: { children: ReactNode }) {
             onCreateSeparate={() => resolve({ forceSeparateLink: true })}
           />
           <LinkPreviewDialog
-            title="Link created"
-            link={created}
+            title={created?.merged ? "Address added" : "Link created"}
+            link={created?.link ?? null}
             onClose={() => setCreated(null)}
             orgQr={orgQr}
           />

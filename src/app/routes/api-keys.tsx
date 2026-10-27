@@ -12,76 +12,24 @@ import {
 } from "../lib/hooks";
 import type { ApiKeyDTO } from "@/shared/types";
 import { Button, IconButton } from "../ui/button";
-import { Input } from "../ui/field";
 import { Table, Th, Td, EmptyState, PageHeader } from "../ui/misc";
-import { BusyContent } from "../ui/spinner";
 import { TableSkeleton } from "../ui/skeleton";
 import { useToast } from "../ui/toast";
 import { ConfirmDialog } from "../ui/confirm-dialog";
-import { CopyButton } from "../ui/copy-button";
-import { copyToClipboard } from "../lib/clipboard";
-import { relativeDate } from "../lib/dates";
-import { Trash2 } from "../ui/icons";
+import { relativeDate, shortDate } from "../lib/dates";
+import { Plus, Trash2 } from "../ui/icons";
 import { cn } from "../ui/cn";
-import { McpSetupCopyButton } from "../components/mcp-setup-prompt";
 import { McpConnectWizard } from "../components/mcp-connect-wizard";
+import { CreateApiKeyDialog } from "../components/create-api-key-dialog";
 import { NoOrgState } from "../components/no-org";
 import { ApiKeysSkeleton } from "../components/skeletons";
-
-/** The key value shown once, right after minting, with a copy button. */
-function NewKeyBanner({ apiKey, onDismiss }: { apiKey: ApiKeyDTO; onDismiss: () => void }) {
-  const toast = useToast();
-  return (
-    <div className="flex flex-col gap-2 rounded-lg border border-accent/40 bg-surface-2 p-4">
-      <p className="text-sm">
-        <strong>{apiKey.name}</strong> is ready. Copy the key now: it won't be shown again.
-      </p>
-      <div className="flex items-center gap-2">
-        <code className="min-w-0 flex-1 truncate rounded-md bg-surface px-3 py-2 font-mono text-xs">
-          {apiKey.key}
-        </code>
-        <CopyButton
-          text={apiKey.key ?? ""}
-          label="Copy key"
-          onCopy={(text) => copyToClipboard(text, toast)}
-        />
-      </div>
-      <div className="flex flex-wrap items-center gap-2">
-        <McpSetupCopyButton apiKey={apiKey.key} />
-        <Button variant="ghost" size="sm" onClick={onDismiss}>
-          Done
-        </Button>
-      </div>
-    </div>
-  );
-}
-
-function ApiKeyRow({ apiKey, onRevoke }: { apiKey: ApiKeyDTO; onRevoke: () => void }) {
-  return (
-    <tr>
-      <Td className="truncate">{apiKey.name}</Td>
-      <Td className="font-mono text-xs text-muted">{apiKey.keyPrefix}…</Td>
-      <Td className="text-xs text-muted">{relativeDate(apiKey.createdAt)}</Td>
-      <Td className="text-xs text-muted">
-        {apiKey.lastUsedAt ? relativeDate(apiKey.lastUsedAt) : "Never used"}
-      </Td>
-      <Td>
-        <div className="flex justify-end">
-          <IconButton label={`Revoke ${apiKey.name}`} danger onClick={onRevoke}>
-            <Trash2 size={15} />
-          </IconButton>
-        </div>
-      </Td>
-    </tr>
-  );
-}
 
 function ConnectedAppRow({ app, onRevoke }: { app: ConnectedApp; onRevoke: () => void }) {
   return (
     <tr>
-      <Td className="truncate">{app.clientName}</Td>
-      <Td className="text-xs text-muted">{relativeDate(app.createdAt)}</Td>
-      <Td>
+      <Td className="truncate text-sm font-semibold">{app.clientName}</Td>
+      <Td className="tnum text-sm whitespace-nowrap text-muted">{relativeDate(app.createdAt)}</Td>
+      <Td className="py-1.5">
         <div className="flex justify-end">
           <IconButton label={`Revoke ${app.clientName}`} danger onClick={onRevoke}>
             <Trash2 size={15} />
@@ -108,12 +56,14 @@ function ConnectedAppsTable({
   onRevoke: (app: ConnectedApp) => void;
 }) {
   return (
-    <Table>
+    <Table fixed>
       <thead>
         <tr>
           <Th>App</Th>
-          <Th>Connected</Th>
-          <Th />
+          <Th className="w-32 sm:w-40">Connected</Th>
+          <Th className="w-14">
+            <span className="sr-only">Actions</span>
+          </Th>
         </tr>
       </thead>
       <tbody>
@@ -216,45 +166,33 @@ function ConnectedAppsSection() {
   );
 }
 
-/** The create-key form, name field plus button, and the just-minted banner
- * above it. Its own component so ApiKeysSection reads as sections wired
- * together, not one function holding the whole flow. */
-function CreateKeyForm({
-  name,
-  onNameChange,
-  onCreate,
-  creating,
-  justCreated,
-  onDismissBanner,
-}: {
-  name: string;
-  onNameChange: (name: string) => void;
-  onCreate: () => void;
-  creating: boolean;
-  justCreated: ApiKeyDTO | null;
-  onDismissBanner: () => void;
-}) {
+/** The key in two lines (rdyrct-design, "Tables earn two lines"): the name
+ * in bold over its prefix in mono. */
+function ApiKeyRow({ apiKey, onRevoke }: { apiKey: ApiKeyDTO; onRevoke: () => void }) {
   return (
-    <>
-      {justCreated && <NewKeyBanner apiKey={justCreated} onDismiss={onDismissBanner} />}
-      <div className="flex gap-2">
-        <Input
-          value={name}
-          onChange={(e) => onNameChange(e.target.value)}
-          placeholder="Key name, e.g. Claude"
-          className="min-w-0 flex-1"
-          onKeyDown={(e) => e.key === "Enter" && !creating && onCreate()}
-        />
-        <Button
-          variant="primary"
-          onClick={onCreate}
-          disabled={!name.trim() || creating}
-          className="shrink-0 whitespace-nowrap"
-        >
-          <BusyContent busy={creating}>Create key</BusyContent>
-        </Button>
-      </div>
-    </>
+    <tr>
+      <Td>
+        <div className="flex min-w-0 flex-col gap-0.5">
+          <span className="truncate text-sm font-semibold" title={apiKey.name}>
+            {apiKey.name}
+          </span>
+          <span className="truncate font-mono text-xs text-muted">{apiKey.keyPrefix}…</span>
+        </div>
+      </Td>
+      <Td className="tnum hidden text-sm whitespace-nowrap text-muted sm:table-cell">
+        {shortDate(apiKey.createdAt)}
+      </Td>
+      <Td className="tnum text-sm whitespace-nowrap text-muted">
+        {apiKey.lastUsedAt ? relativeDate(apiKey.lastUsedAt) : "Never used"}
+      </Td>
+      <Td className="py-1.5">
+        <div className="flex justify-end">
+          <IconButton label={`Revoke ${apiKey.name}`} danger onClick={onRevoke}>
+            <Trash2 size={15} />
+          </IconButton>
+        </div>
+      </Td>
+    </tr>
   );
 }
 
@@ -276,41 +214,41 @@ function ApiKeysTable({
       />
     );
   return (
-    <Table>
-      <thead>
-        <tr>
-          <Th>Name</Th>
-          <Th>Prefix</Th>
-          <Th>Created</Th>
-          <Th>Last used</Th>
-          <Th />
-        </tr>
-      </thead>
-      <tbody>
-        {keys.map((k) => (
-          <ApiKeyRow key={k.id} apiKey={k} onRevoke={() => onRevoke(k)} />
-        ))}
-      </tbody>
-    </Table>
+    <>
+      <Table fixed>
+        <thead>
+          <tr>
+            <Th>Key</Th>
+            <Th className="hidden sm:table-cell sm:w-32">Created</Th>
+            <Th className="w-32">Last used</Th>
+            <Th className="w-14">
+              <span className="sr-only">Actions</span>
+            </Th>
+          </tr>
+        </thead>
+        <tbody>
+          {keys.map((k) => (
+            <ApiKeyRow key={k.id} apiKey={k} onRevoke={() => onRevoke(k)} />
+          ))}
+        </tbody>
+      </Table>
+      <p className="text-xs text-muted">You see the full key once, when you create it.</p>
+    </>
   );
 }
 
-/** State and mutations for the API keys section: create, revoke, and the
- * two pending-target bits of UI state that go with them. */
+/** State and mutations for the API keys tab: the create dialog, the key
+ * shown once after it, and the revoke confirmation. */
 function useApiKeysSection(orgId: string) {
   const toast = useToast();
   const mutations = useApiKeyMutations(orgId);
-  const [name, setName] = useState("");
+  const [createOpen, setCreateOpen] = useState(false);
   const [justCreated, setJustCreated] = useState<ApiKeyDTO | null>(null);
   const [revokeTarget, setRevokeTarget] = useState<ApiKeyDTO | null>(null);
 
-  const create = async () => {
-    const trimmed = name.trim();
-    if (!trimmed) return;
+  const create = async (name: string) => {
     try {
-      const created = await mutations.create.mutateAsync(trimmed);
-      setJustCreated(created);
-      setName("");
+      setJustCreated(await mutations.create.mutateAsync(name));
     } catch (e) {
       toast(errorMessage(e), "error");
     }
@@ -329,10 +267,15 @@ function useApiKeysSection(orgId: string) {
   };
 
   return {
-    name,
-    setName,
+    createOpen,
+    // The shown-once key is cleared on the next open, not on close, so the
+    // dialog does not swap back to the form while it animates out.
+    openCreate: () => {
+      setJustCreated(null);
+      setCreateOpen(true);
+    },
+    setCreateOpen,
     justCreated,
-    setJustCreated,
     revokeTarget,
     setRevokeTarget,
     create,
@@ -342,33 +285,21 @@ function useApiKeysSection(orgId: string) {
   };
 }
 
-function ApiKeysSection() {
-  const { org } = useCurrentOrg();
-  const isOwner = org?.role === "owner";
-  const orgId = org?.id ?? "";
-  const keys = useApiKeys(orgId, isOwner);
-  const section = useApiKeysSection(orgId);
+type ApiKeysState = ReturnType<typeof useApiKeysSection>;
 
-  if (!isOwner) {
-    return (
-      <p className="text-sm text-muted">
-        Only this organization's owner can create or revoke API keys.
-      </p>
-    );
-  }
-
+function ApiKeysSection({ orgId, section }: { orgId: string; section: ApiKeysState }) {
+  const keys = useApiKeys(orgId, true);
   return (
-    <div className="flex flex-col gap-4">
-      <CreateKeyForm
-        name={section.name}
-        onNameChange={section.setName}
-        onCreate={section.create}
-        creating={section.creating}
-        justCreated={section.justCreated}
-        onDismissBanner={() => section.setJustCreated(null)}
-      />
-
+    <div className="flex flex-col gap-3">
       <ApiKeysTable keys={keys.data} loading={keys.isLoading} onRevoke={section.setRevokeTarget} />
+
+      <CreateApiKeyDialog
+        open={section.createOpen}
+        onOpenChange={section.setCreateOpen}
+        justCreated={section.justCreated}
+        onCreate={(name) => void section.create(name)}
+        creating={section.creating}
+      />
 
       <ConfirmDialog
         title="Revoke API key"
@@ -413,19 +344,26 @@ function useApiTab(): [ApiTab, (tab: ApiTab) => void] {
   return [tab, setTab];
 }
 
+/** Underline tabs, as in the panels (rdyrct-design, "Panels hold lists
+ * behind tabs"). Plain buttons rather than PanelTabs: the tab lives in the
+ * URL, so a reload lands back on it. */
 function ApiTabBar({ active, onChange }: { active: ApiTab; onChange: (tab: ApiTab) => void }) {
   return (
-    <nav aria-label="API sections" className="mb-6 flex gap-1 border-b border-border">
+    <nav
+      aria-label="API sections"
+      className="mb-5 flex gap-4 overflow-x-auto shadow-[inset_0_-1px_0_var(--border)]"
+    >
       {TABS.map((tab) => (
         <button
           key={tab.id}
           type="button"
+          aria-current={active === tab.id ? "page" : undefined}
           onClick={() => onChange(tab.id)}
           className={cn(
-            "border-b-2 px-3 py-2 text-sm transition-colors",
+            "cursor-pointer pb-2.5 text-sm whitespace-nowrap outline-none focus-visible:text-text focus-visible:underline",
             active === tab.id
-              ? "border-accent text-text"
-              : "border-transparent text-muted hover:text-text",
+              ? "font-semibold text-text shadow-[inset_0_-1.5px_0_var(--text)]"
+              : "text-muted [@media(hover:hover)]:hover:text-text",
           )}
         >
           {tab.label}
@@ -435,29 +373,61 @@ function ApiTabBar({ active, onChange }: { active: ApiTab; onChange: (tab: ApiTa
   );
 }
 
+function OwnerOnlyNotice() {
+  return (
+    <p className="text-sm text-muted">
+      Only this organization's owner can create or revoke API keys.
+    </p>
+  );
+}
+
+/** Header, tabs and the open tab. "New key" is the screen's one primary
+ * button, and only on the keys tab, for the owner. */
+function ApiView({ orgId, isOwner }: { orgId: string; isOwner: boolean }) {
+  const [tab, setTab] = useApiTab();
+  const section = useApiKeysSection(orgId);
+  const showNewKey = tab === "keys" && isOwner;
+
+  return (
+    <div>
+      <PageHeader
+        title="API"
+        sub="Call the API or connect an AI assistant."
+        action={
+          showNewKey ? (
+            <Button variant="primary" onClick={section.openCreate}>
+              <Plus size={15} /> New key
+            </Button>
+          ) : undefined
+        }
+      />
+      <ApiTabBar active={tab} onChange={setTab} />
+      {tab === "mcp" ? (
+        <ConnectedAppsSection />
+      ) : isOwner ? (
+        <ApiKeysSection orgId={orgId} section={section} />
+      ) : (
+        <OwnerOnlyNotice />
+      )}
+    </div>
+  );
+}
+
 /** API (#131/#134/#139 follow-up): its own nav tab, not a card buried in
  * Settings. The MCP tab (OAuth connections) is per-user and open to every
  * member; the API keys tab stays owner-only, since minting a standing
  * credential is the same trust level as changing who has one (see
- * api-keys.ts). Both tabs render eagerly alongside the header and tab bar —
+ * api-keys.ts). Both tabs render eagerly alongside the header and tab bar:
  * only their own content area shows a skeleton while its query loads,
  * matching every other page here, so switching or reloading on either tab
  * never blanks the chrome around it. */
 export function ApiKeysPage() {
   const { org } = useCurrentOrg();
   const currentUser = useCurrentUser();
-  const [tab, setTab] = useApiTab();
 
   // The cached shell may know the organization before /user confirms the
   // current role and plan. Do not briefly offer a stale create control.
   if (currentUser.isLoading) return <ApiKeysSkeleton />;
   if (!org) return <NoOrgState />;
-
-  return (
-    <div>
-      <PageHeader title="API" sub="Connect an AI assistant, or call the API" />
-      <ApiTabBar active={tab} onChange={setTab} />
-      {tab === "mcp" ? <ConnectedAppsSection /> : <ApiKeysSection />}
-    </div>
-  );
+  return <ApiView orgId={org.id} isOwner={org.role === "owner"} />;
 }

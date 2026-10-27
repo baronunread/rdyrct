@@ -2,7 +2,7 @@
 import { expect, test } from "@playwright/test";
 import { signUpAndVerify } from "./resend";
 import { makePlatformAdmin, queryRows } from "./db";
-import { createQuickLink } from "./orgs";
+import { createQuickLink, expectRedirect } from "./orgs";
 
 /**
  * Admin link moderation through the screen an admin actually uses (#67).
@@ -68,9 +68,17 @@ test("an admin can find a link by destination and suspend it", async ({ page }) 
   // The real promise (#101): KV reaches every location within a minute, not
   // at once.
   await expect(dialog.getByText(/stops within a minute everywhere/)).toBeVisible();
-  // A suspension with no reason is not answerable later, so it is refused.
-  await expect(dialog.getByRole("button", { name: "Suspend link" })).toBeDisabled();
-  await dialog.getByLabel("Reason").fill("phishing report, ticket 412");
+  // A suspension with no reason is not answerable later, so it is refused:
+  // the button stays pressable and the empty field is marked instead.
+  const reason = dialog.getByRole("textbox", { name: "Reason" });
+  await dialog.getByRole("button", { name: "Suspend link" }).click();
+  await expect(reason).toHaveAttribute("aria-invalid", "true");
+  await expect(reason).toBeFocused();
+  await expect(dialog.getByText("Required", { exact: true })).toBeVisible();
+  await expect(dialog).toBeVisible();
+  await expectRedirect(page, slug, destination);
+  await reason.fill("phishing report, ticket 412");
+  await expect(reason).not.toHaveAttribute("aria-invalid", "true");
   await dialog.getByRole("button", { name: "Suspend link" }).click();
 
   await expect(row.getByText("suspended")).toBeVisible({ timeout: 10_000 });

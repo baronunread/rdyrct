@@ -126,10 +126,12 @@ test("the palette's contextual create and invite actions", async ({ page }) => {
   await page.getByRole("option", { name: `Invite ${invitee}` }).click();
   await expect(page.getByText(`Invite sent to ${invitee}`)).toBeVisible();
 
-  // "Create link" lands on the links page with the editor already open.
+  // "Create link" opens the New link dialog where you are, without leaving
+  // the page.
+  const here = page.url();
   await page.keyboard.press("ControlOrMeta+KeyK");
   await page.getByPlaceholder(ALL).fill("create link");
   await page.getByRole("option", { name: "Create link" }).click();
-  await expect(page).toHaveURL(/\/links$/);
   await expect(page.getByRole("dialog", { name: "New link" })).toBeVisible();
+  expect(page.url()).toBe(here);
 });

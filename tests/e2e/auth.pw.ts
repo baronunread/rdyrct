@@ -2,6 +2,7 @@ import { expect, type Page, test } from "@playwright/test";
 import { signUpThroughForm, subjectsSentTo, verifySignup, submitSignup } from "./resend";
 import { rawSql } from "./db";
 import { signOut } from "./pages";
+import { currentOrgName } from "./orgs";
 
 async function blockAuthRequests(page: Page) {
   const counter = { count: 0 };
@@ -93,7 +94,7 @@ test.describe("authentication forms", () => {
     await expect(page).toHaveURL(/\/dashboard$/);
     // Signed in and already able to work: the account was given an
     // organization on its first session, so the switcher names one.
-    await expect(page.getByTitle("Switch organization")).not.toHaveText("No organization");
+    await expect(currentOrgName(page)).not.toHaveText("No organization");
   });
 
   // Regression for the case a mode-gated capture missed: someone signs up,

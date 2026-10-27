@@ -17,10 +17,11 @@ test("a new owner can create an organization and a scheme-less quick link", asyn
 
   await setPlan(page, email);
   const hostname = await addCustomDomain(page, `links-${Date.now()}.example.com`);
-  await expect(page.getByText(hostname, { exact: true })).toBeVisible();
+  // The row names the host first; its DNS records repeat it below.
+  await expect(page.getByText(hostname, { exact: true }).first()).toBeVisible();
 
   await page.goto("/links");
-  await page.getByRole("button", { name: "New link" }).click();
+  await page.getByRole("button", { name: "New link" }).first().click();
   const editor = page.getByRole("dialog", { name: "New link" });
   await editor.getByPlaceholder("https://example.com/launch").fill("example.com/editor");
   await editor.getByPlaceholder("Spring launch").fill("Editor link");
@@ -28,8 +29,10 @@ test("a new owner can create an organization and a scheme-less quick link", asyn
   await expect(page.getByText("Editor link")).toBeVisible();
 
   await page.goto("/members");
-  await page.getByPlaceholder("teammate@company.com").fill(`invitee-${Date.now()}@gmail.com`);
-  await page.getByRole("button", { name: "Send invite" }).click();
+  await page.getByRole("button", { name: "Invite people" }).click();
+  const invite = page.getByRole("dialog", { name: "Invite people" });
+  await invite.getByPlaceholder("teammate@company.com").fill(`invitee-${Date.now()}@gmail.com`);
+  await invite.getByRole("button", { name: "Send invite" }).click();
   await expect(page.getByText("Invite sent")).toBeVisible();
 
   await page.goto("/settings");

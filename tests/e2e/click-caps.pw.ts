@@ -59,10 +59,14 @@ test("an org at its click cap still redirects, and /billing shows the cap reache
   expect(clicks).toBe(5000);
 
   await page.goto("/billing");
-  await expect(page.getByText("Clicks counted this month 5,000 / 5,000")).toBeVisible();
+  // The usage row: its label, a bar, and "5,000 of 5,000".
+  const clickRow = page.getByText("Clicks counted this month").locator("..");
+  await expect(clickRow.getByText("5,000 of 5,000", { exact: true })).toBeVisible();
   await expect(page.getByText("Limit reached.")).toBeVisible();
 
   await page.goto("/dashboard");
+  // One line of facts, and the sentence as the note under it.
+  await expect(page.getByText("Click limit reached", { exact: true })).toBeVisible();
   await expect(
     page.getByText(
       /This organization has reached the 5,000 clicks its plan counts in .*Your links still work\./,

@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { signUpThroughForm } from "./resend";
+import { currentOrgName } from "./orgs";
 
 /**
  * What a brand-new account walks into.
@@ -21,7 +22,7 @@ test("a new account arrives with an organization and one question", async ({ pag
   // it, rather than saying there is none.
   const switcher = page.getByTitle("Switch organization");
   await expect(switcher).toBeVisible();
-  await expect(switcher).not.toHaveText("No organization");
+  await expect(currentOrgName(page)).not.toHaveText("No organization");
 
   // One question, and none of the empty furniture: three zeroed stat cards
   // and a flat chart teach a new account that the product is empty.
@@ -87,7 +88,7 @@ test("deleting the last organization asks for a new one, not for a first link", 
   // And it works: naming one puts them back in the app.
   await page.getByLabel("Name").fill("Second Time");
   await page.getByRole("button", { name: "Create organization" }).click();
-  await expect(page.getByTitle("Switch organization")).toHaveText("Second Time", {
+  await expect(currentOrgName(page)).toHaveText("Second Time", {
     timeout: 15_000,
   });
 });

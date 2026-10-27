@@ -15,7 +15,7 @@ test("a member can export the org's links as a CSV (#75)", async ({ page }) => {
   await createQuickLink(page, "example.com/export-me");
   await page.keyboard.press("Escape");
 
-  const { filename, text } = await exportCsvFrom(page, "/links");
+  const { filename, text } = await exportCsvFrom(page, "/links", "Export");
 
   expect(filename).toMatch(/^rdyrct-links-.+-\d{4}-\d{2}-\d{2}\.csv$/);
 

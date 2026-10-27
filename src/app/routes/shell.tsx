@@ -118,12 +118,14 @@ function OrgSwitcherMenu({
       trigger={
         <div className="flex h-10 w-full items-center gap-2.5 rounded-lg px-2 text-sm select-none [@media(hover:hover)]:hover:bg-surface-2">
           {/* The org's initial, so a glance tells two orgs apart. */}
-          <span
-            aria-hidden
-            className="grid size-6 shrink-0 place-items-center rounded-md bg-accent text-xs font-bold text-bg"
-          >
-            {(org?.name ?? "?").trim().charAt(0).toUpperCase()}
-          </span>
+          {org && (
+            <span
+              aria-hidden
+              className="grid size-6 shrink-0 place-items-center rounded-md bg-accent text-xs font-bold text-bg"
+            >
+              {org.name.trim().charAt(0).toUpperCase()}
+            </span>
+          )}
           <span className="min-w-0 flex-1 truncate font-semibold">
             {org ? org.name : "No organization"}
           </span>

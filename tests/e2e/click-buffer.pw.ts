@@ -67,17 +67,24 @@ test("a redirect's click shows on /analytics and /links through the rollups (#26
   await rawSql(page, "delete from clicks where link_id = ?", [id]);
 
   await page.goto("/analytics");
-  const total = page.getByText("Total clicks", { exact: true }).locator("..");
-  await expect(total.locator("p.tnum")).toHaveText("1");
+  // The stats card's first figure: its label, then the number.
+  const total = page.locator("dl > div").filter({
+    has: page.getByRole("term").getByText("Total clicks", { exact: true }),
+  });
+  await expect(total.getByRole("definition").locator("span").first()).toHaveText("1");
   await expect(page.getByText("Today (UTC)")).toHaveCount(0);
 
   // The 24-hour view: its chart covers the last 24 hours, its breakdowns
   // today's UTC day, and each breakdown says so.
   await page.getByRole("button", { name: "24h", exact: true }).click();
-  await expect(page.getByText("Last 24 hours")).toBeVisible();
+  await expect(page.getByText("All links · last 24 hours")).toBeVisible();
   for (const name of ["Countries", "Referrers", "Devices"]) {
-    const label = page.getByText(name, { exact: true }).locator("..");
-    await expect(label).toHaveText(`${name}Today (UTC)`);
+    // Each breakdown card names its period at the end of its tab row.
+    const tabRow = page
+      .getByRole("tablist")
+      .filter({ has: page.getByRole("tab", { name, exact: true }) })
+      .locator("..");
+    await expect(tabRow).toContainText("Today (UTC)");
   }
 
   await page.goto("/links");

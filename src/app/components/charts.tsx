@@ -12,10 +12,8 @@ import { motion } from "@tanstack/charts/motion";
 import { RendererChart } from "@tanstack/react-charts/tooltip";
 import { followSpring, pointerTooltip } from "./chart-tooltip";
 import { clicksByHour, HOURS } from "../lib/click-buckets";
-import type { SeriesPoint, DeltaValue, HeatmapRow, TopEntry } from "@/shared/types";
+import type { SeriesPoint, DeltaValue, HeatmapRow } from "@/shared/types";
 import { formatNumber } from "../lib/numbers";
-import { Card, SlugLink } from "../ui/misc";
-import { CountryMap } from "./country-map";
 
 // Monotone rather than a cubic that overshoots: it never draws a peak or a
 // trough the data doesn't have, so the smoothing stays a reading aid.
@@ -194,55 +192,6 @@ export function BarList({
   );
 }
 
-/** A card of top links by clicks, rendered as a BarList (which carries its
- * own empty line for an empty list). */
-export function TopLinksCard({
-  topLinks,
-  limit,
-}: {
-  topLinks: { id: string; slug: string; title: string; clicks: number }[];
-  limit?: number;
-}) {
-  const rows = limit ? topLinks.slice(0, limit) : topLinks;
-  return (
-    <Card>
-      <p className="mb-3 text-xs font-medium text-muted">Top links</p>
-      <BarList
-        items={rows.map((l) => ({
-          key: `/${l.slug}${l.title ? ` · ${l.title}` : ""}`,
-          clicks: l.clicks,
-        }))}
-      />
-    </Card>
-  );
-}
-
-export function StatCard({
-  label,
-  value,
-  delta,
-  prefix,
-  suffix,
-}: {
-  label: string;
-  value: number;
-  delta?: DeltaValue | null;
-  prefix?: string;
-  suffix?: string;
-}) {
-  return (
-    <div className="rounded-lg bg-surface p-4 smooth-shadow-ring-xs">
-      <p className="truncate text-xs font-medium text-muted">{label}</p>
-      <p className="tnum mt-1 text-2xl font-bold">
-        {prefix}
-        {formatNumber(value)}
-        {suffix}
-      </p>
-      {delta && delta.pct !== null && <DeltaBadge pct={delta.pct} />}
-    </div>
-  );
-}
-
 /** One figure in a StatsChart strip. */
 export interface ChartFigure {
   label: string;
@@ -352,118 +301,5 @@ export function ClicksByHour({ data, height = 260 }: { data: HeatmapRow[]; heigh
         );
       }}
     />
-  );
-}
-
-/**
- * Compact link card used in the analytics dead/decaying link lists.
- */
-export function LinkListCard({
-  title,
-  links,
-}: {
-  title: string;
-  links: { id: string; slug: string; title: string; suffix?: string; domain?: string | null }[];
-}) {
-  return (
-    <div className="rounded-lg bg-surface p-4 smooth-shadow-ring-xs">
-      <p className="mb-2 text-xs font-medium text-muted">{title}</p>
-      {links.length === 0 ? (
-        <p className="py-2 text-sm text-muted">
-          Your busiest links appear here once they start collecting clicks.
-        </p>
-      ) : (
-        <ul className="flex flex-col gap-2">
-          {links.map((l) => (
-            <li key={l.id} className="flex items-center justify-between gap-3 text-xs">
-              <SlugLink
-                to={
-                  l.domain
-                    ? `/links/${l.slug}?domain=${encodeURIComponent(l.domain)}`
-                    : `/links/${l.slug}`
-                }
-                slug={l.slug}
-                title={l.title}
-              />
-              {l.suffix && <span className="tnum shrink-0 text-muted">{l.suffix}</span>}
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
-  );
-}
-
-const COUNTRY_NAMES = new Intl.DisplayNames("en", { type: "region" });
-const fmtCountry = (key: string) => {
-  try {
-    return COUNTRY_NAMES.of(key) ?? key;
-  } catch {
-    return key;
-  }
-};
-
-/**
- * A card's label. `period` names the stretch of time the card counts, set
- * only where it differs from the range the page heading names: the 24-hour
- * view's breakdowns count today's UTC day, since they are kept per day.
- */
-export function CardLabel({ children, period }: { children: ReactNode; period?: string }) {
-  return (
-    <p className="mb-3 flex items-baseline justify-between gap-3 text-xs font-medium text-muted">
-      <span>{children}</span>
-      {period && <span className="shrink-0">{period}</span>}
-    </p>
-  );
-}
-
-export function ClickBreakdown({
-  countries,
-  referrers,
-  devices,
-  period,
-}: {
-  countries: TopEntry[];
-  referrers: TopEntry[];
-  devices: TopEntry[];
-  /** See CardLabel. */
-  period?: string;
-}) {
-  return (
-    <div className="flex flex-col gap-4">
-      <Card>
-        <CardLabel period={period}>Countries</CardLabel>
-        {/* The map holds a 960:500 frame whatever width it gets, while the
-            list grows a row per country, so side by side the map's column
-            runs out of map long before the list runs out of rows. It only
-            splits once the column is wide enough for that gap to be small,
-            and the map sits centred in whatever is left. */}
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-          <div className="self-center lg:col-span-2">
-            <CountryMap countries={countries} />
-          </div>
-          <BarList
-            items={countries.map((c) => ({ ...c, key: fmtCountry(c.key) }))}
-            empty="The country each click came from appears here. Never the address it came from."
-          />
-        </div>
-      </Card>
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <Card>
-          <CardLabel period={period}>Referrers</CardLabel>
-          <BarList
-            items={referrers}
-            empty="Where people were when they followed a link appears here."
-          />
-        </Card>
-        <Card>
-          <CardLabel period={period}>Devices</CardLabel>
-          <BarList
-            items={devices}
-            empty="Phone, desktop or tablet, counted here once clicks arrive."
-          />
-        </Card>
-      </div>
-    </div>
   );
 }
