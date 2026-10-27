@@ -1,10 +1,11 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { lookup } from "@/shared/lookup";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { Plus } from "@/app/ui/icons";
+import { Download, Plus } from "@/app/ui/icons";
 import { useLinks, useLinkMutations, useLinkQuotaUsage } from "../lib/hooks";
 import { useOrgLimits } from "../lib/org-limits";
-import { ApiError } from "../lib/api";
+import { ApiError, fetchDownload } from "../lib/api";
+import { downloadBlob } from "../lib/csv";
 import {
   type DomainDTO,
   type LinkDTO,
@@ -13,6 +14,7 @@ import {
   type Sort,
 } from "@/shared/types";
 import { Button } from "../ui/button";
+import { Spinner } from "../ui/spinner";
 import { buttonClass } from "../ui/button-class";
 import { Input } from "../ui/field";
 import { MenuSelect } from "../ui/menu";
@@ -385,11 +387,13 @@ export function LinksPage() {
         title="Links"
         sub="Short links, UTM tagging and QR codes"
         action={
-          <div className="flex items-center gap-3">
-            <span className="tnum text-xs text-muted" title={limitHint}>
+          <div className="flex flex-wrap items-center gap-3">
+            {/* Its own line on a phone, so the three buttons fit on the next. */}
+            <span className="tnum basis-full text-xs text-muted sm:basis-auto" title={limitHint}>
               {linkCountLabel(linkCount, limits.links, org?.plan)}
               {overLimit && " (over the limit)"}
             </span>
+            <ExportLinksButton orgId={orgId} />
             {canWrite && (
               <Link to="/import" className={buttonClass({ variant: "outline" })}>
                 Import
@@ -641,5 +645,29 @@ function LinkDialogStack({
         onCreateSeparate={() => onResolveDuplicate({ forceSeparateLink: true })}
       />
     </>
+  );
+}
+
+/** Every link in the org as a CSV the import reads back (#75). Any member
+ * can export, a locked org included: it is how people take their data out. */
+function ExportLinksButton({ orgId }: { orgId: string }) {
+  const toast = useToast();
+  const [busy, setBusy] = useState(false);
+  const exportLinks = async () => {
+    setBusy(true);
+    try {
+      const { blob, filename } = await fetchDownload(`/orgs/${orgId}/link-export`);
+      downloadBlob(filename, blob);
+    } catch (e) {
+      toast(e instanceof Error ? e.message : "Could not export your links", "error");
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <Button variant="outline" onClick={exportLinks} disabled={busy}>
+      {busy ? <Spinner className="size-4" /> : <Download className="size-4" aria-hidden />}
+      Export CSV
+    </Button>
   );
 }

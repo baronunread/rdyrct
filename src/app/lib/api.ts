@@ -76,6 +76,16 @@ export async function uploadQrLogo(orgId: string, file: File): Promise<string> {
   return url;
 }
 
+/** Fetch a file the Worker builds (a CSV export), with the name its
+ * Content-Disposition gives it. */
+export async function fetchDownload(path: string): Promise<{ blob: Blob; filename: string }> {
+  const res = await fetch(`/api${path}`);
+  await throwIfNotOk(res);
+  const disposition = res.headers.get("content-disposition") ?? "";
+  const filename = /filename="([^"]+)"/.exec(disposition)?.[1] ?? "download";
+  return { blob: await res.blob(), filename };
+}
+
 const uploadedAvatarSchema = v.object({ image: v.string() });
 
 /** Upload a profile picture (raw body, not JSON); returns the new serving URL. */
