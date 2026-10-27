@@ -27,6 +27,15 @@ bun run db:seed:local       # seed local D1/KV with fake data (run dev server fi
 bun run deploy              # build, apply D1 migrations, deploy; VITE_RDYRCT_SITE=1 (in .env) for rdyrct.com, otherwise a self-hosted copy
 ```
 
+**Account states, one link each.** With the dev server running and the seed
+loaded, `/__dev/scenarios` lists them: Pro, Hobby and Free owners, a
+brand-new account, a member, a viewer, an org over its plan, one past its
+grace period, a read-only org, one at the click cap, and a platform admin.
+`/__dev/scenarios/<name>?to=/links` signs in as the seeded account in that
+state and opens the page. Use it to check a UI change in every state before
+calling it done. It exists only in dev builds (`src/worker/dev-scenarios.ts`)
+and only signs in as `@seed.test` accounts.
+
 **Rolling back a release.** `bun run deploy` migrates before it deploys.
 Wrangler has no down migrations, so a rollback is two steps:
 `bunx wrangler rollback` for the code, and, if a migration has to be undone

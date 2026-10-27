@@ -52,3 +52,25 @@ test("a trailing slash still moves to the slash-free page", async ({ request }) 
   expect(res.status()).toBe(301);
   expect(new URL(res.headers()["location"], res.url()).pathname).toBe("/pricing");
 });
+
+/**
+ * The dev-only account scenarios (src/worker/dev-scenarios.ts) are not in a
+ * built Worker at all: index.ts mounts them under import.meta.env.DEV, a
+ * build-time constant. If that fence ever slipped, this address would sign
+ * strangers in as seeded accounts on a real deployment.
+ */
+test("the dev scenario switcher does not exist in a built Worker", async ({ request }) => {
+  // Not only unrouted: the code itself must be gone. A static import once
+  // kept the whole module (seed password included) in the bundle while the
+  // route still answered 404.
+  const { readdirSync, readFileSync } = await import("node:fs");
+  const dir = "dist/rdyrct";
+  for (const file of readdirSync(dir).filter((f) => f.endsWith(".js")))
+    expect(readFileSync(`${dir}/${file}`, "utf8"), file).not.toContain("seed-password-123");
+
+  for (const path of ["/__dev/scenarios", "/__dev/scenarios/pro-owner"]) {
+    const res = await request.get(path, { maxRedirects: 0 });
+    expect(res.status(), path).toBe(404);
+    expect(res.headers()["set-cookie"] ?? "", path).not.toContain("session");
+  }
+});

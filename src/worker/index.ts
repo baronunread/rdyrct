@@ -360,6 +360,15 @@ if (RDYRCT_SITE) app.route("/api/shorten", shortenRoutes);
 // Abuse reports from anyone, gated the same way (Turnstile plus a rate limit).
 app.route("/api/reports", reportRoutes);
 
+// Dev-only account scenarios (dev-scenarios.ts). import.meta.env.DEV is a
+// build-time constant and the import is dynamic, so a production build drops
+// the branch and the module with it (a static import would keep the module:
+// its route registrations count as side effects).
+if (import.meta.env.DEV)
+  app.all("/__dev/*", async (c) =>
+    (await import("./dev-scenarios")).devScenarioRoutes.fetch(c.req.raw, c.env, c.executionCtx),
+  );
+
 // Polar webhook: public, signature-verified, no session middleware.
 app.post("/api/webhooks/polar", (c) => {
   const log = c.get("log");

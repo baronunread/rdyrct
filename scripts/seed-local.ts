@@ -872,6 +872,8 @@ async function seed() {
 
   await seedClickUsage();
 
+  await seedScenarioAccounts(passwordHash, now, day);
+
   /* summary */
   console.log("\nSeeded:");
   console.log(`  users:  ${users.length} (password for all: ${PASSWORD})`);
@@ -883,6 +885,46 @@ async function seed() {
     console.log(
       `  ${org.name.padEnd(16)} ${org.plan.padEnd(6)} ${owners[orgs.indexOf(org)].email}`,
     );
+}
+
+/**
+ * Two accounts the random seed never produces, for the dev scenarios
+ * (src/worker/dev-scenarios.ts): one that has just signed up and owns an empty
+ * org, and a platform admin. Fixed addresses, so a scenario can name them.
+ */
+async function seedScenarioAccounts(passwordHash: string, now: number, day: number) {
+  const accounts = [
+    {
+      key: "fresh",
+      name: "Sam Rivera",
+      email: "fresh.account@seed.test",
+      admin: 0,
+      org: "My links",
+    },
+    {
+      key: "admin",
+      name: "Ada Platform",
+      email: "platform.admin@seed.test",
+      admin: 1,
+      org: "Platform Ops",
+    },
+  ];
+  const statements: string[] = [];
+  for (const a of accounts) {
+    const userId = `seed-scn-${a.key}`;
+    const orgId = `seed-scn-org-${a.key}`;
+    const at = a.key === "fresh" ? now - 60_000 : now - 200 * day;
+    statements.push(
+      `INSERT INTO user (id, name, email, email_verified, plan, is_admin, created_at, updated_at)
+       VALUES (${q(userId)}, ${q(a.name)}, ${q(a.email)}, 1, 'free', ${a.admin}, ${at}, ${at})`,
+      `INSERT INTO account (id, account_id, provider_id, user_id, password, created_at, updated_at)
+       VALUES (${q(`seed-acc-scn-${a.key}`)}, ${q(userId)}, 'credential', ${q(userId)}, ${q(passwordHash)}, ${at}, ${at})`,
+      `INSERT INTO orgs (id, name, created_at) VALUES (${q(orgId)}, ${q(a.org)}, ${at})`,
+      `INSERT INTO org_members (org_id, user_id, role, created_at) VALUES (${q(orgId)}, ${q(userId)}, 'owner', ${at})`,
+    );
+  }
+  await sqlBatch(statements);
+  console.log(`  scenario accounts: ${accounts.map((a) => a.email).join(", ")}`);
 }
 
 /**

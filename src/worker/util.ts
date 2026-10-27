@@ -20,6 +20,7 @@ export const SLUG_RE = /^[a-zA-Z0-9_-]{1,64}$/;
 // Paths the SPA owns at the top level; slugs may not shadow them. There is no
 // /app prefix; every app page is a root keyword, so all of them are reserved.
 export const RESERVED_SLUGS = new Set([
+  "__dev",
   "api",
   "app",
   "assets",
