@@ -10,11 +10,10 @@
  * own. A report naming a slug does not know which table it came from, and
  * two places to search is one place too many at 2am.
  */
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Ban,
-  Ellipsis,
   ExternalLink,
   ShieldQuestionMark,
   Trash2,
@@ -26,7 +25,7 @@ import { useAdminAnonLinks, useAdminLinks, useAdminReports } from "../../lib/hoo
 import { api } from "../../lib/api";
 import { linkDisplayTitle } from "../../lib/link-display";
 import type { AdminAnonLinkRow, AdminLinkRow, AdminReportRow, Sort } from "@/shared/types";
-import { Badge, PageHeader, Table, Td, Th } from "../../ui/misc";
+import { PageHeader, Table, Td, Th } from "../../ui/misc";
 import { Button } from "../../ui/button";
 import { Field, Input, Select } from "../../ui/field";
 import { Dialog } from "../../ui/dialog";
@@ -43,11 +42,11 @@ import { useDebounced } from "../../lib/use-debounced";
 import { SortTh } from "../../ui/sort-th";
 import { sortRows } from "../../lib/sort";
 import { useSearchParams, HrefLink } from "../../lib/router-search";
-import { Segmented } from "../../ui/segmented";
 import { BlockedHosts } from "./blocked-hosts";
 import { linkStateDetail, linkStateRank } from "./link-state";
 import { LinkStateBadge } from "./link-state-badge";
-import { Spinner } from "../../ui/spinner";
+import { FilterRow, RowMenuTrigger } from "./admin-kit";
+import { BusyContent, Spinner } from "../../ui/spinner";
 
 /** The two columns both tables open with. Destination has no width of its
  * own: every other column is sized, so it takes what is left, which is the
@@ -115,17 +114,7 @@ function RowMenu({
   children: React.ReactNode;
 }) {
   return (
-    <Menu
-      align="end"
-      label={`Actions for ${slug}`}
-      trigger={
-        <div className="flex justify-end">
-          <span className="rounded p-1.5 text-muted transition-transform duration-150 active:scale-[0.96] hover:bg-surface-2 hover:text-text">
-            <Ellipsis size={15} />
-          </span>
-        </div>
-      }
-    >
+    <Menu align="end" label={`Actions for ${slug}`} trigger={<RowMenuTrigger />}>
       <MenuNote>
         {/* One fact a line: the tooltip joins them with " · ", which wraps
             badly in a menu this narrow. */}
@@ -190,9 +179,23 @@ function DeleteLinkDialog({
 }
 
 function SuspendDialog({ link, onClose }: { link: AdminLinkRow | null; onClose: () => void }) {
+  return (
+    <Dialog open={!!link} onOpenChange={(open) => !open && onClose()} title="Suspend this link?">
+      {/* Keyed so the next suspension starts from an empty, unmarked form. */}
+      {link && <SuspendForm key={link.id} link={link} onClose={onClose} />}
+    </Dialog>
+  );
+}
+
+/** The reason is required, and the button still works without one: pressing
+ * it marks the field and moves focus there instead of greying out with no
+ * word as to why (rdyrct-design, "Submit stays enabled"). */
+function SuspendForm({ link, onClose }: { link: AdminLinkRow; onClose: () => void }) {
   const toast = useToast();
   const qc = useQueryClient();
   const [reason, setReason] = useState("");
+  const [missing, setMissing] = useState(false);
+  const reasonRef = useRef<HTMLInputElement>(null);
 
   const suspend = useMutation({
     mutationFn: (input: { id: string; reason: string }) =>
@@ -204,47 +207,57 @@ function SuspendDialog({ link, onClose }: { link: AdminLinkRow | null; onClose: 
       await qc.invalidateQueries({ queryKey: ["admin", "links"] });
       await qc.invalidateQueries({ queryKey: ["admin", "audit"] });
       toast("Link suspended. It stops redirecting everywhere within a minute.");
-      setReason("");
       onClose();
     },
     onError: withErrorToast(toast),
   });
 
   return (
-    <Dialog open={!!link} onOpenChange={(open) => !open && onClose()} title="Suspend this link">
-      {link && (
-        <div className="flex flex-col gap-4">
-          <div className="rounded-lg bg-surface-2 p-3 text-xs">
-            <p className="font-mono font-bold">{linkDisplayTitle(link.url)}</p>
-            <p className="mt-1 break-all text-muted">{link.destination}</p>
-          </div>
-          <p className="text-xs text-muted">
-            The redirect stops within a minute everywhere, and stays stopped after the owner edits
-            the link. Nothing is deleted: the link and its clicks survive, and you can restore it.
-          </p>
-          <Field label="Reason">
-            <Input
-              value={reason}
-              onChange={(event) => setReason(event.target.value)}
-              placeholder="Phishing report, ticket 412"
-              autoFocus
-            />
-          </Field>
-          <div className="flex justify-end gap-2">
-            <Button variant="ghost" onClick={onClose}>
-              Cancel
-            </Button>
-            <Button
-              variant="danger"
-              disabled={!reason.trim() || suspend.isPending}
-              onClick={() => suspend.mutate({ id: link.id, reason: reason.trim() })}
-            >
-              Suspend link
-            </Button>
-          </div>
-        </div>
-      )}
-    </Dialog>
+    <form
+      className="flex flex-col gap-4"
+      noValidate
+      onSubmit={(event) => {
+        event.preventDefault();
+        const trimmed = reason.trim();
+        if (!trimmed) {
+          setMissing(true);
+          reasonRef.current?.focus();
+          return;
+        }
+        suspend.mutate({ id: link.id, reason: trimmed });
+      }}
+    >
+      <div className="flex flex-col gap-0.5 rounded-lg bg-surface-2 px-3 py-2.5">
+        <span className="font-mono text-sm font-semibold break-all">
+          {linkDisplayTitle(link.url)}
+        </span>
+        <span className="font-mono text-xs break-all text-muted">{link.destination}</span>
+      </div>
+      <p className="text-sm text-pretty text-muted">
+        The redirect stops within a minute everywhere, and stays stopped after the owner edits the
+        link. Nothing is deleted: the link and its clicks survive, and you can restore it.
+      </p>
+      <Field label="Reason" hint="Goes in the audit log." error={missing ? "Required" : undefined}>
+        <Input
+          ref={reasonRef}
+          value={reason}
+          onChange={(event) => {
+            setReason(event.target.value);
+            if (event.target.value.trim()) setMissing(false);
+          }}
+          placeholder="Phishing report, ticket 412"
+          autoFocus
+        />
+      </Field>
+      <div className="flex justify-end gap-2">
+        <Button variant="ghost" onClick={onClose}>
+          Cancel
+        </Button>
+        <Button type="submit" variant="danger" disabled={suspend.isPending}>
+          <BusyContent busy={suspend.isPending}>Suspend link</BusyContent>
+        </Button>
+      </div>
+    </form>
   );
 }
 
@@ -280,6 +293,20 @@ function ReportsCell({ count }: { count: number }) {
   return <Td className="pl-2 text-right tnum">{count}</Td>;
 }
 
+/** The short address in two lines: the slug in ink over its host, quiet,
+ * so a narrow column still shows the part a report quotes. Its state and why
+ * live in the State column's tooltip and the menu. */
+function ShortAddress({ url }: { url: string }) {
+  const text = linkDisplayTitle(url);
+  const cut = text.indexOf("/");
+  return (
+    <span className="flex min-w-0 flex-col gap-0.5 leading-tight" title={text}>
+      <span className="truncate font-mono text-sm/tight font-semibold">{text.slice(cut)}</span>
+      <span className="truncate font-mono text-xs/tight text-muted">{text.slice(0, cut)}</span>
+    </span>
+  );
+}
+
 function LinkRow({ link, ...actions }: { link: AdminLinkRow } & RowActions) {
   return (
     <tr className={link.suspendedAt ? "opacity-60" : undefined}>
@@ -292,10 +319,8 @@ function LinkRow({ link, ...actions }: { link: AdminLinkRow } & RowActions) {
           className="size-4 cursor-pointer accent-accent"
         />
       </Td>
-      {/* The slug only. Its state and why live in the State column's
-          tooltip and the row menu, so every row stays one line. */}
-      <Td className="truncate font-mono text-xs font-bold" title={linkDisplayTitle(link.url)}>
-        {linkDisplayTitle(link.url)}
+      <Td className="py-2">
+        <ShortAddress url={link.url} />
       </Td>
       <Td className="truncate font-mono text-xs text-muted" title={link.destination}>
         {link.destination}
@@ -305,7 +330,7 @@ function LinkRow({ link, ...actions }: { link: AdminLinkRow } & RowActions) {
             after "who owns this". */}
         <HrefLink
           href={`/admin/links?org=${encodeURIComponent(link.orgId)}`}
-          className="block truncate hover:text-accent hover:underline"
+          className="block truncate [@media(hover:hover)]:hover:text-accent [@media(hover:hover)]:hover:underline"
           title={link.orgName}
         >
           {link.orgName}
@@ -315,8 +340,8 @@ function LinkRow({ link, ...actions }: { link: AdminLinkRow } & RowActions) {
         <LinkStateBadge link={link} />
       </Td>
       <ReportsCell count={link.reportCount} />
-      <Td className="pl-2 text-right tnum">{link.clicks}</Td>
-      <Td className="whitespace-nowrap text-muted">{shortDate(link.createdAt)}</Td>
+      <Td className="pl-2 text-right tnum">{link.clicks.toLocaleString("en-US")}</Td>
+      <Td className="tnum text-xs whitespace-nowrap text-muted">{shortDate(link.createdAt)}</Td>
       <Td className="px-2">
         <LinkActions link={link} {...actions} />
       </Td>
@@ -446,7 +471,9 @@ function LinksTable({
             onSort={onSort}
             className={COL.date}
           />
-          <Th className={COL.actions} />
+          <Th className={COL.actions}>
+            <span className="sr-only">Actions</span>
+          </Th>
         </tr>
       </thead>
       <tbody>
@@ -519,13 +546,17 @@ function AnonymousLinksTable({
             onSort={onSort}
             className={COL.date}
           />
-          <Th className={COL.actions} />
+          <Th className={COL.actions}>
+            <span className="sr-only">Actions</span>
+          </Th>
         </tr>
       </thead>
       <tbody>
         {rows.map((link) => (
           <tr key={link.id}>
-            <Td className="truncate font-mono text-xs font-bold">/{link.slug}</Td>
+            <Td className="truncate font-mono text-sm font-semibold" title={`/${link.slug}`}>
+              /{link.slug}
+            </Td>
             <Td className="truncate font-mono text-xs text-muted" title={link.destination}>
               {link.destination}
             </Td>
@@ -538,8 +569,12 @@ function AnonymousLinksTable({
             <Td className="pl-2 text-right text-muted" title="Anonymous links record no clicks">
               none
             </Td>
-            <Td className="whitespace-nowrap text-muted">{shortDate(link.createdAt)}</Td>
-            <Td className="whitespace-nowrap text-muted">{shortDate(link.expiresAt)}</Td>
+            <Td className="tnum text-xs whitespace-nowrap text-muted">
+              {shortDate(link.createdAt)}
+            </Td>
+            <Td className="tnum text-xs whitespace-nowrap text-muted">
+              {shortDate(link.expiresAt)}
+            </Td>
             <Td className="px-2">
               <RowMenu slug={link.slug} destination={link.destination} note={linkStateDetail(link)}>
                 <MenuSeparator />
@@ -595,14 +630,12 @@ function AnonymousLinks() {
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="flex flex-wrap items-center gap-2">
-        <SearchInput
-          value={query}
-          onChange={search}
-          placeholder="Slug or destination"
-          label="Search anonymous links"
-        />
-      </div>
+      <SearchInput
+        value={query}
+        onChange={search}
+        placeholder="Search slug or destination"
+        label="Search anonymous links"
+      />
       <AnonymousLinksTable
         rows={rows}
         isPending={isPending}
@@ -635,7 +668,7 @@ function ReportOrg({ report: r }: { report: AdminReportRow }) {
   return (
     <HrefLink
       href={`/admin/links?org=${encodeURIComponent(r.orgId)}`}
-      className="block truncate hover:text-accent hover:underline"
+      className="block truncate [@media(hover:hover)]:hover:text-accent [@media(hover:hover)]:hover:underline"
       title={r.orgName ?? undefined}
     >
       {r.orgName}
@@ -654,20 +687,21 @@ function ReportRow({
 }) {
   return (
     <tr>
-      <Td className="truncate font-mono text-xs font-bold">/{r.slug}</Td>
+      <Td className="truncate font-mono text-sm font-semibold" title={`/${r.slug}`}>
+        /{r.slug}
+      </Td>
       <Td className="truncate">
         <ReportOrg report={r} />
       </Td>
-      <Td>
-        <Badge color={r.reason === "other" ? "muted" : "pink"}>{r.reason}</Badge>
-      </Td>
+      {/* The category a reporter picked: an attribute, so plain text. */}
+      <Td className="first-letter:uppercase">{r.reason}</Td>
       <Td className="truncate text-muted" title={r.note}>
         {r.note || "none"}
       </Td>
       <Td className="truncate text-muted" title={r.contact}>
         {r.contact || "none"}
       </Td>
-      <Td className="whitespace-nowrap text-muted">{shortDate(r.createdAt)}</Td>
+      <Td className="tnum text-xs whitespace-nowrap text-muted">{shortDate(r.createdAt)}</Td>
       <Td className="px-2 text-right">
         <Button size="sm" variant="ghost" disabled={pending} onClick={() => onDismiss(r.id)}>
           Dismiss
@@ -709,7 +743,9 @@ function Reports() {
           <Th>Note</Th>
           <Th className="w-[16%]">Contact</Th>
           <Th className={COL.date}>When</Th>
-          <Th className="w-24 px-2" />
+          <Th className="w-24 px-2">
+            <span className="sr-only">Actions</span>
+          </Th>
         </tr>
       </thead>
       <tbody>
@@ -904,7 +940,7 @@ function OwnedLinksToolbar({
       <SearchInput
         value={query}
         onChange={onSearch}
-        placeholder="Slug or destination"
+        placeholder="Search slug or destination"
         label="Search links"
       />
       <Select
@@ -1096,7 +1132,7 @@ export function AdminLinksPage() {
         sub="Every link across every organization. Search by slug or destination."
       />
       <div className="flex flex-col gap-4">
-        <Segmented items={VIEWS} value={view} onChange={setView} label="Link lists" />
+        <FilterRow items={VIEWS} value={view} onChange={setView} label="Link lists" />
         {panels[view]}
       </div>
 

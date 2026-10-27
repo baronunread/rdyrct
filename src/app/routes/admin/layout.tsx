@@ -10,16 +10,16 @@
  */
 import { Suspense } from "react";
 import { Link, Outlet } from "@tanstack/react-router";
-import { Activity, Building2, Link2, ScrollText, UserCog } from "@/app/ui/icons";
 import { RouteSkeleton } from "../../components/skeletons";
 import { useConfig } from "../../lib/hooks";
 
+// The mock's order: who is on the instance before what they made.
 const TABS = [
-  { to: "/admin", end: true, icon: Activity, label: "Usage" },
-  { to: "/admin/links", end: false, icon: Link2, label: "Links" },
-  { to: "/admin/orgs", end: false, icon: Building2, label: "Organizations" },
-  { to: "/admin/users", end: false, icon: UserCog, label: "Users" },
-  { to: "/admin/audit", end: false, icon: ScrollText, label: "Audit log" },
+  { to: "/admin", end: true, label: "Usage" },
+  { to: "/admin/users", end: false, label: "Users" },
+  { to: "/admin/orgs", end: false, label: "Organizations" },
+  { to: "/admin/links", end: false, label: "Links" },
+  { to: "/admin/audit", end: false, label: "Audit log" },
 ] as const;
 
 export function AdminLayout() {
@@ -36,20 +36,24 @@ export function AdminLayout() {
           turn verification on.
         </p>
       )}
+      {/* Underline tabs, drawn as inset shadows so the hairline adds nothing
+          to the box (rdyrct-design, "Depth from layered shadows"). */}
       <nav
         aria-label="Platform sections"
-        className="-mx-1 flex gap-1 overflow-x-auto border-b border-border px-1 pb-px"
+        className="flex gap-5 overflow-x-auto shadow-[inset_0_-1px_0_var(--border)]"
       >
-        {TABS.map(({ to, end, icon: Icon, label }) => (
+        {TABS.map(({ to, end, label }) => (
           <Link
             key={to}
             to={to}
             activeOptions={{ exact: end }}
-            className="flex items-center gap-1.5 border-b-2 px-3 py-2 text-sm whitespace-nowrap transition-colors"
-            activeProps={{ className: "border-accent text-text" }}
-            inactiveProps={{ className: "border-transparent text-muted hover:text-text" }}
+            className="pb-2.5 text-sm whitespace-nowrap transition-colors"
+            activeProps={{
+              className: "font-semibold text-text shadow-[inset_0_-2px_0_var(--text)]",
+            }}
+            inactiveProps={{ className: "text-muted [@media(hover:hover)]:hover:text-text" }}
           >
-            <Icon size={15} /> {label}
+            {label}
           </Link>
         ))}
       </nav>

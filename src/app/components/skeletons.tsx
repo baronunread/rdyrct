@@ -1,4 +1,4 @@
-import type { ReactElement } from "react";
+import type { ReactElement, ReactNode } from "react";
 import { lookup } from "@/shared/lookup";
 import { useLocation } from "@tanstack/react-router";
 import { ChevronsUpDown, Menu as MenuIcon } from "@/app/ui/icons";
@@ -27,27 +27,148 @@ import { Logo } from "../ui/logo";
  * Stands in for PageHeader, which every route opens with, so its height has
  * to match exactly or the page below it moves on every route.
  *
- * Measured against the real thing on a populated account: the block is 52px
- * tall, an h1 at text-lg (28px line box) over a `mt-1` sub at text-sm (20px),
- * with `mb-6` under it. The bars are shorter than the text they replace, so
- * each sits in a box of the line's height rather than setting it.
+ * An h1 at text-xl (28px line box), then, only where the page has one, a
+ * `mt-1` sub at text-sm (20px), with `mb-6` under it. Settings, Organization,
+ * Domains and the dashboard have no sub, so it is off unless asked for. The
+ * bars are shorter than the text they replace, so each sits in a box of the
+ * line's height rather than setting it.
  *
- * `action` mirrors the controls a page hangs on the right: 36px for a button
- * (Links, Members), 32px for the range picker and export pair (Analytics).
- * Leaving it out was why a header looked half-finished until the page landed.
+ * `action` is whatever the page hangs on the right, drawn at the size of the
+ * real controls (`ButtonSkeleton` for a 36px button).
  */
-export function HeaderSkeleton({ action }: { action?: { w: string; h?: string } } = {}) {
+export function HeaderSkeleton({
+  sub = false,
+  action,
+}: { sub?: boolean; action?: ReactNode } = {}) {
   return (
     <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
       <div>
         <span className="flex h-7 items-center">
           <Skeleton className="h-5 w-40" />
         </span>
-        <span className="mt-1 flex h-5 items-center">
-          <Skeleton className="h-3 w-64 max-w-full" />
-        </span>
+        {sub && (
+          <span className="mt-1 flex h-5 items-center">
+            <Skeleton className="h-3 w-64 max-w-full" />
+          </span>
+        )}
       </div>
-      {action && <Skeleton className={cn("rounded-lg", action.h ?? "h-9", action.w)} />}
+      {action}
+    </div>
+  );
+}
+
+/** A `md` Button (h-9, rounded-lg) at the width its label takes. */
+function ButtonSkeleton({ className }: { className: string }) {
+  return <Skeleton className={cn("h-9 shrink-0 rounded-lg", className)} />;
+}
+
+/** NewLinkButton: icon, "New link" and its `C` key, which hides on a phone. */
+function NewLinkButtonSkeleton() {
+  return <ButtonSkeleton className="w-[7.5rem] sm:w-[9.25rem]" />;
+}
+
+/**
+ * StatsChart: the strip of figures over the chart in one card. Each figure is
+ * a text-xs label over a text-xl leading-tight value (25px) in `px-2.5 py-2`,
+ * the first one shaded; the chart sits in `px-4 pt-1 pb-3` at its own height.
+ */
+function StatsChartSkeleton({ figures, chartHeight }: { figures: number; chartHeight: number }) {
+  return (
+    <div className="rounded-xl bg-surface smooth-shadow-ring-xs">
+      <div className="flex flex-wrap gap-1 p-1.5">
+        {Array.from({ length: figures }, (_, i) => (
+          <div
+            key={i}
+            className={cn(
+              "flex min-w-[40%] flex-1 flex-col gap-0.5 rounded-lg px-2.5 py-2 sm:min-w-0",
+              i === 0 && "bg-bg",
+            )}
+          >
+            <span className="flex h-4 items-center">
+              <Skeleton className="h-2.5 w-16" />
+            </span>
+            <span className="flex h-[25px] items-center">
+              <Skeleton className="h-4 w-14" />
+            </span>
+          </div>
+        ))}
+      </div>
+      <div className="px-4 pt-1 pb-3">
+        <Skeleton className="w-full" style={{ height: chartHeight }} />
+      </div>
+    </div>
+  );
+}
+
+/**
+ * PanelTabs: underline tabs (`pb-2.5` under a 20px label) over a hairline,
+ * `mb-3`, then the panel, all in `px-4 pt-3 pb-3.5`. `tabs` are the label
+ * widths; `end` draws the quiet link some panels put on the right.
+ */
+function PanelSkeleton({
+  tabs,
+  end,
+  children,
+}: {
+  tabs: string[];
+  end?: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <div className="rounded-xl bg-surface px-4 pt-3 pb-3.5 smooth-shadow-ring-xs">
+      <div className="mb-3 flex items-center gap-4 shadow-[inset_0_-1px_0_var(--border)]">
+        {tabs.map((w) => (
+          <span key={w} className="flex h-5 box-content items-center pb-2.5">
+            <Skeleton className={cn("h-3", w)} />
+          </span>
+        ))}
+        {end && (
+          <span className="ml-auto flex h-4 box-content items-center pb-2.5">
+            <Skeleton className="h-2.5 w-14" />
+          </span>
+        )}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+const barWidths = [92, 71, 58, 44, 33, 24, 17];
+
+/** BarList with column headings: a 20px heading row, then 30px bars
+ * `gap-y-0.5` apart, the count and share in their own columns. */
+function BarListSkeleton({ rows }: { rows: number }) {
+  return (
+    <div className="grid grid-cols-[minmax(0,1fr)_auto_2.5rem] items-center gap-x-3 gap-y-0.5">
+      <span className="flex h-4 box-content items-center pb-1">
+        <Skeleton className="h-2.5 w-10" />
+      </span>
+      <span className="flex h-4 box-content items-center justify-end pb-1">
+        <Skeleton className="h-2.5 w-10" />
+      </span>
+      <span />
+      {barWidths.slice(0, rows).map((w) => (
+        <div key={w} className="contents">
+          <Skeleton className="h-[30px]" style={{ width: `${w}%` }} />
+          <Skeleton className="ml-auto h-3 w-8" />
+          <Skeleton className="ml-auto h-2.5 w-6" />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** The plain lists in a panel (recent clicks, team activity): h-9 rows, a
+ * name on the left and a quiet figure on the right. */
+function LineListSkeleton({ rows }: { rows: number }) {
+  return (
+    <div className="flex flex-col">
+      {barWidths.slice(0, rows).map((w) => (
+        <div key={w} className="flex h-9 items-center justify-between gap-3">
+          <Skeleton className="h-3" style={{ width: `${Math.max(30, w * 0.8)}%` }} />
+          <Skeleton className="h-2.5 w-14 shrink-0" />
+        </div>
+      ))}
     </div>
   );
 }
@@ -112,87 +233,73 @@ function BarListCardSkeleton({ rows = 4 }: { rows?: number }) {
 }
 
 /**
- * /dashboard, measured against a populated account: header (52), the
- * create card (a field beside the button), the three stat cards (109), the
- * clicks-and-activity pair (245) and the three list cards (231).
+ * /dashboard once there is a link: "Dashboard" with New link on the right,
+ * then, `gap-6` apart, the three-figure strip over the week's chart (180)
+ * and the two panels side by side: top links as a bar list, recent clicks
+ * as h-9 rows.
  *
- * An account on its very first run has only the first two, so it watches the
- * rest disappear once. Every visit after that, and every visit by everyone
- * else, lands on the shape already drawn, which is the trade worth making.
+ * An account on its very first run gets a header and one field instead, so
+ * it watches this shape go once. Every visit after that lands on it.
  */
 export function DashboardSkeleton() {
   return (
     <SkeletonStatus>
-      <HeaderSkeleton />
-      <Card>
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-          <Skeleton className="h-9 min-w-0 flex-1" />
-          <Skeleton className="h-9 sm:w-24" />
+      <HeaderSkeleton action={<NewLinkButtonSkeleton />} />
+      <div className="flex flex-col gap-6">
+        <StatsChartSkeleton figures={3} chartHeight={180} />
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+          <PanelSkeleton tabs={["w-16", "w-28"]} end>
+            <BarListSkeleton rows={6} />
+          </PanelSkeleton>
+          <PanelSkeleton tabs={["w-24", "w-24"]}>
+            <LineListSkeleton rows={6} />
+          </PanelSkeleton>
         </div>
-      </Card>
-      <div className="mt-4">
-        <StatCardsSkeleton count={3} />
-      </div>
-      <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <BarListCardSkeleton rows={5} />
-        <BarListCardSkeleton rows={5} />
-      </div>
-      <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <BarListCardSkeleton rows={5} />
-        <BarListCardSkeleton rows={5} />
-        <BarListCardSkeleton rows={5} />
       </div>
     </SkeletonStatus>
   );
 }
 
 /**
- * /analytics, block for block: the range picker and export pair in the
- * header, three stat cards (109), the clicks chart (241), the UTM trio
- * (231), top links (339), the country and referrer breakdown (765), dead
- * and decaying links (169), and the heatmap (343).
+ * /analytics: the title over "All links · last N days", the range control
+ * (a 32px segmented track) and Export CSV (a `sm` button) on the right; then
+ * the four-figure strip over the chart (180), the 2x2 grid of panels (links,
+ * sources, places, devices) and the by-hour panel (260) under it.
  *
- * All of it renders for any organization with clicks, so drawing half the
- * page (which is what four bar lists in a two-column grid amounted to) left
- * the second half arriving as a jump.
+ * The by-hour panel is left out of the 24-hour view and before the first
+ * click; it is last, so leaving it drawn moves nothing above it.
  */
 export function AnalyticsSkeleton() {
   return (
     <SkeletonStatus>
-      <HeaderSkeleton action={{ w: "w-72", h: "h-8" }} />
-      <StatCardsSkeleton count={3} />
-      <div className="mt-4">
-        <ChartCardSkeleton />
-      </div>
-      <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        <BarListCardSkeleton rows={5} />
-        <BarListCardSkeleton rows={5} />
-        <BarListCardSkeleton rows={5} />
-      </div>
-      <div className="mt-4">
-        <BarListCardSkeleton rows={7} />
-      </div>
-      {/* countries (a map card, 411) over referrers and devices (339) */}
-      <div className="mt-4 flex flex-col gap-4">
-        <Card>
-          <Skeleton className="h-2.5 w-24" />
-          <Skeleton className="mt-4 h-[407px] w-full" />
-        </Card>
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-          <BarListCardSkeleton rows={7} />
-          <BarListCardSkeleton rows={7} />
+      <HeaderSkeleton
+        sub
+        action={
+          <div className="flex flex-wrap items-center gap-2">
+            <Skeleton className="h-8 w-44 rounded-[9px]" />
+            <Skeleton className="h-8 w-28 rounded-lg" />
+          </div>
+        }
+      />
+      <div className="flex flex-col gap-6">
+        <StatsChartSkeleton figures={4} chartHeight={180} />
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+          <PanelSkeleton tabs={["w-16", "w-16", "w-8"]}>
+            <BarListSkeleton rows={6} />
+          </PanelSkeleton>
+          <PanelSkeleton tabs={["w-16"]}>
+            <BarListSkeleton rows={6} />
+          </PanelSkeleton>
+          <PanelSkeleton tabs={["w-16", "w-6"]}>
+            <BarListSkeleton rows={6} />
+          </PanelSkeleton>
+          <PanelSkeleton tabs={["w-12"]}>
+            <BarListSkeleton rows={3} />
+          </PanelSkeleton>
         </div>
-      </div>
-      <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <BarListCardSkeleton rows={3} />
-        <BarListCardSkeleton rows={3} />
-      </div>
-      {/* the heatmap, 343 */}
-      <div className="mt-4">
-        <Card>
-          <Skeleton className="h-2.5 w-32" />
-          <Skeleton className="mt-4 h-[290px] w-full" />
-        </Card>
+        <PanelSkeleton tabs={["w-14", "w-20"]}>
+          <Skeleton className="h-[260px] w-full" />
+        </PanelSkeleton>
       </div>
     </SkeletonStatus>
   );
@@ -239,7 +346,7 @@ export function AdminPlatformSkeleton() {
 export function AdminUsageSkeleton() {
   return (
     <SkeletonStatus testId="admin-usage-skeleton">
-      <HeaderSkeleton />
+      <HeaderSkeleton sub />
       <StatCardsSkeleton count={6} gridClass="grid-cols-2 sm:grid-cols-3 lg:grid-cols-6" />
       <div className="mt-4 grid gap-4 lg:grid-cols-2">
         <ChartCardSkeleton />
@@ -255,7 +362,7 @@ export function AdminUsageSkeleton() {
 function AdminTableSkeleton() {
   return (
     <div data-testid="admin-table-skeleton">
-      <HeaderSkeleton />
+      <HeaderSkeleton sub />
       <Skeleton className="mb-4 h-9 w-full max-w-xs" />
       <TableSkeleton rows={6} />
     </div>
@@ -271,26 +378,103 @@ export function AdminAuditRowsSkeleton() {
 function PageSkeleton() {
   return (
     <div>
-      <HeaderSkeleton />
+      <HeaderSkeleton sub />
       <TableSkeleton rows={5} />
     </div>
   );
 }
 
-/** Domains card body: a couple of hostname rows with status pills. */
+/**
+ * SettingsGroup: an optional small heading (a text-sm line, with its hint
+ * beside it) `gap-2` above one card whose rows are split by inset hairlines.
+ * `title` and `hint` are bar widths.
+ */
+function GroupSkeleton({
+  title,
+  hint,
+  danger,
+  children,
+}: {
+  title?: string;
+  hint?: string;
+  danger?: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <section className="flex flex-col gap-2">
+      {title && (
+        <div className="flex h-5 items-center gap-3">
+          <Skeleton className={cn("h-3", title)} />
+          {hint && <Skeleton className={cn("h-2.5", hint)} />}
+        </div>
+      )}
+      <div
+        className={cn(
+          "rounded-xl bg-surface [&>*+*]:shadow-[inset_0_1px_0_var(--border)]",
+          danger
+            ? "shadow-[0_0_0_1px_color-mix(in_oklab,var(--danger)_35%,transparent)]"
+            : "smooth-shadow-ring-xs",
+        )}
+      >
+        {children}
+      </div>
+    </section>
+  );
+}
+
+/** SettingsRow: label (and its one-line hint) on the left, the control on the
+ * right, `min-h-14`; on a phone the control drops under the label. */
+function RowSkeleton({
+  label,
+  hint,
+  children,
+}: {
+  label: string;
+  hint?: string;
+  children: ReactNode;
+}) {
+  return (
+    <div className="flex min-h-14 flex-wrap items-center justify-between gap-x-6 gap-y-2 px-4 py-2.5">
+      <div className="min-w-0 sm:w-64">
+        <span className="flex h-5 items-center">
+          <Skeleton className={cn("h-3", label)} />
+        </span>
+        {hint && (
+          <span className="mt-0.5 flex h-4 items-center">
+            <Skeleton className={cn("h-2.5 max-w-full", hint)} />
+          </span>
+        )}
+      </div>
+      <div className="flex min-w-0 flex-wrap items-center justify-end gap-2.5 max-sm:w-full max-sm:justify-start">
+        {children}
+      </div>
+    </div>
+  );
+}
+
+/** The settings column Settings, Organization, Billing and Domains share. */
+function SettingsColumn({ children }: { children: ReactNode }) {
+  return <div className="flex max-w-[760px] flex-col gap-8">{children}</div>;
+}
+
+/** The domain list while it loads: the same rows domains.tsx draws for its
+ * own loading state (min-h-16, hostname over its detail line, status pill). */
 const domainRows = [40, 55];
 
 export function DomainsSkeleton() {
   return (
-    <SkeletonStatus className="flex flex-col gap-4">
-      {domainRows.map((w) => (
-        <div key={w} className="rounded-lg border border-border p-3">
-          <div className="flex items-center justify-between gap-2">
-            <Skeleton className="h-3.5" style={{ width: `${w}%` }} />
-            <Skeleton className="h-5 w-20 shrink-0 rounded-full" />
+    <SkeletonStatus>
+      <GroupSkeleton>
+        {domainRows.map((w) => (
+          <div key={w} className="flex min-h-16 items-center justify-between gap-3 px-4 py-3">
+            <div className="flex min-w-0 flex-1 flex-col gap-2">
+              <Skeleton className="h-3.5" style={{ width: `${w}%` }} />
+              <Skeleton className="h-3 w-1/3" />
+            </div>
+            <Skeleton className="h-5 w-16 shrink-0 rounded-full" />
           </div>
-        </div>
-      ))}
+        ))}
+      </GroupSkeleton>
     </SkeletonStatus>
   );
 }
@@ -419,228 +603,263 @@ export function AppShellSkeleton() {
   );
 }
 
+/** One line of a two-line table cell: bold text-sm (20px) over mono text-xs
+ * (16px), `gap-0.5`, which is what makes the rows 59px. */
+function TwoLineCellSkeleton({ first, second }: { first: string; second: string }) {
+  return (
+    <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+      <span className="flex h-5 items-center">
+        <Skeleton className={cn("h-3.5", first)} />
+      </span>
+      <span className="flex h-4 items-center">
+        <Skeleton className={cn("h-2.5", second)} />
+      </span>
+    </div>
+  );
+}
+
+/** Table's frame and a header row (Th: `py-2.5` around a text-xs line, then
+ * its 1px rule). `children` are the body rows. */
+function TableFrameSkeleton({ head, children }: { head: ReactNode; children: ReactNode }) {
+  return (
+    <div className="overflow-hidden rounded-xl bg-surface smooth-shadow-ring-xs">
+      <div className="flex border-b border-border">{head}</div>
+      {children}
+    </div>
+  );
+}
+
+/** A Th's text-xs label as a bar, in the cell's own padding and width. */
+function HeadCellSkeleton({ className, bar }: { className?: string; bar?: string }) {
+  return (
+    <div className={cn("flex h-4 box-content items-center px-4 py-2.5", className)}>
+      {bar && <Skeleton className={cn("h-2.5", bar)} />}
+    </div>
+  );
+}
+
+const linkRowWidths = [
+  ["w-2/5", "w-3/5"],
+  ["w-1/2", "w-2/5"],
+  ["w-1/3", "w-1/2"],
+  ["w-3/5", "w-1/3"],
+];
+
 /**
- * /links, measured: header with the count-and-button pair on the right (52),
- * the search and domain-filter toolbar (36, `mb-4`), the table, and the
- * pager under it (24, `mt-4`). The toolbar was missing, so the table used to
- * arrive 36px lower than the skeleton had promised.
+ * /links: "Links" over the count, Import and Export (quiet, `sm` and up;
+ * a 36px menu button on a phone) beside New link; the search field
+ * (`mb-4`); then the table in two-line rows. The domain filter and the pager
+ * only appear for some organizations, so they stay out.
  */
 export function LinksSkeleton() {
   return (
-    <div data-testid="links-page-skeleton">
-      <HeaderSkeleton action={{ w: "w-60" }} />
-      <div className="mb-4 flex flex-wrap items-center gap-2">
-        <Skeleton className="h-9 w-full max-w-xs" />
-        <Skeleton className="h-9 w-32" />
-      </div>
-      <TableSkeleton rows={12} />
-      <div className="mt-4 flex justify-center">
-        <Skeleton className="h-6 w-48" />
-      </div>
-    </div>
-  );
-}
-
-/**
- * /members: header with the invite button (52), the invite-by-email card,
- * then the table. The card is the part that was missing.
- *
- * The card is a `text-xs` title with `mb-3`, then one row (`flex items-end`)
- * holding the Email field and the w-36 Role field. Both fields carry a real
- * `Field` label, so the placeholders sit in 22px line boxes and the row does
- * not stack on mobile, or the table jumps when the form arrives.
- */
-export function MembersSkeleton() {
-  return (
-    <div data-testid="members-page-skeleton">
-      <HeaderSkeleton action={{ w: "w-36" }} />
-      <Card className="mb-4">
-        <span className="mb-3 flex h-4 items-center">
-          <Skeleton className="h-2.5 w-28" />
-        </span>
-        <div className="flex items-end gap-2">
-          <div className="min-w-0 flex-1">
-            <span className="mb-1.5 flex h-4 items-center">
-              <Skeleton className="h-2.5 w-12" />
-            </span>
-            <Skeleton className="h-9 w-full" />
-          </div>
-          <div className="w-36">
-            <span className="mb-1.5 flex h-4 items-center">
-              <Skeleton className="h-2.5 w-10" />
-            </span>
-            <Skeleton className="h-9 w-full" />
-          </div>
-        </div>
-      </Card>
-      <TableSkeleton rows={12} />
-    </div>
-  );
-}
-
-/**
- * /domains: header, then the two columns the page splits into on a wide
- * screen. The card is `w-full max-w-2xl` (not flex-1, or its right edge
- * jumps in when the page lands), holding the "Custom domains" label, the
- * connected-domain rows, and the add-a-domain form. Beside it the
- * how-it-works aside: a label and the three steps `HowItWorksSteps` renders,
- * each a bold digit and two lines of `text-xs`.
- */
-export function DomainsPageSkeleton() {
-  return (
-    <div data-testid="domains-page-skeleton">
-      <HeaderSkeleton />
-      <div className="flex flex-col gap-6 lg:flex-row lg:items-start">
-        <Card className="w-full max-w-2xl">
-          <div className="flex flex-col gap-4">
-            <span className="flex h-4 items-center">
-              <Skeleton className="h-2.5 w-28" />
-            </span>
-            <DomainsSkeleton />
-            {/* AddDomainForm: the label, the input beside a w-24 button, then
-                the helper line that wraps to three */}
-            <div>
-              <span className="mb-1.5 flex h-4 items-center">
-                <Skeleton className="h-2.5 w-24" />
-              </span>
-              <div className="flex items-center gap-2">
-                <Skeleton className="h-9 min-w-0 flex-1" />
-                <Skeleton className="h-8 w-24 shrink-0" />
-              </div>
-              <div className="mt-1 flex flex-col gap-1">
-                <Skeleton className="h-3 w-full" />
-                <Skeleton className="h-3 w-full" />
-                <Skeleton className="h-3 w-2/3" />
-              </div>
+    <SkeletonStatus testId="links-page-skeleton">
+      <HeaderSkeleton
+        sub
+        action={
+          <div className="flex items-center gap-2">
+            <div className="hidden items-center gap-1 sm:flex">
+              <ButtonSkeleton className="w-[6.25rem]" />
+              <ButtonSkeleton className="w-[6.25rem]" />
             </div>
+            <ButtonSkeleton className="w-9 sm:hidden" />
+            <NewLinkButtonSkeleton />
           </div>
-        </Card>
-        <aside className="w-full shrink-0 lg:w-72">
-          <span className="flex h-4 items-center">
-            <Skeleton className="h-2.5 w-24" />
-          </span>
-          <div className="mt-3 flex flex-col gap-3">
-            {[0, 1, 2].map((i) => (
-              <div key={i} className="flex gap-2.5">
-                <Skeleton className="mt-0.5 h-3 w-1.5 shrink-0" />
-                <div className="flex min-w-0 flex-1 flex-col gap-1">
-                  <Skeleton className="h-3 w-full" />
-                  <Skeleton className="h-3 w-4/5" />
-                </div>
+        }
+      />
+      <div className="mb-4 flex flex-wrap items-center gap-3">
+        <Skeleton className="h-9 w-full max-w-64 rounded-lg" />
+      </div>
+      <TableFrameSkeleton
+        head={
+          <>
+            <HeadCellSkeleton className="min-w-0 flex-1" bar="w-10" />
+            <HeadCellSkeleton className="hidden w-[34%] lg:flex" bar="w-20" />
+            <HeadCellSkeleton className="w-20 shrink-0 justify-end" bar="w-12" />
+            <HeadCellSkeleton className="hidden w-28 shrink-0 sm:flex" bar="w-14" />
+            <HeadCellSkeleton className="w-12 shrink-0" />
+          </>
+        }
+      >
+        {Array.from({ length: 12 }, (_, i) => {
+          const [first, second] = linkRowWidths[i % linkRowWidths.length];
+          return (
+            <div key={i} className="flex items-center border-b border-border/50">
+              <div className="flex min-w-0 flex-1 items-center gap-2 px-4 py-2.5">
+                <span className="w-6 shrink-0" />
+                <TwoLineCellSkeleton first={first} second={second} />
               </div>
-            ))}
-          </div>
-        </aside>
-      </div>
-    </div>
-  );
-}
-
-/** /billing: header, the plan card, and the usage card beneath it. */
-export function BillingSkeleton() {
-  return (
-    <SkeletonStatus testId="billing-page-skeleton">
-      <HeaderSkeleton />
-      {/* both cards are max-w-2xl on the real page: full-width placeholders
-          were a third too wide, and the swap moved every edge */}
-      <div className="flex flex-col gap-4">
-        {/* Plan card: the label-and-badge row, one line of blurb, and the
-            upgrade buttons, `gap-4` apart like the real card. The plan
-            comparison below them only renders on the free plan, so it stays
-            out. */}
-        <Card className="max-w-2xl">
-          <div className="flex flex-col gap-4">
-            <div className="flex items-center justify-between">
-              <span className="flex h-4 items-center">
-                <Skeleton className="h-2.5 w-10" />
-              </span>
-              <Skeleton className="h-5 w-14 shrink-0 rounded-full" />
+              <div className="hidden w-[34%] px-4 py-2.5 lg:flex">
+                <TwoLineCellSkeleton first="w-1/2" second="w-3/4" />
+              </div>
+              <div className="flex w-20 shrink-0 justify-end px-4">
+                <Skeleton className="h-3 w-8" />
+              </div>
+              <div className="hidden w-28 shrink-0 px-4 sm:flex">
+                <Skeleton className="h-2.5 w-14" />
+              </div>
+              <div className="w-12 shrink-0" />
             </div>
-            <span className="flex h-5 items-center">
-              <Skeleton className="h-3 w-full max-w-sm" />
-            </span>
-            <div className="grid grid-cols-2 gap-3">
-              <Skeleton className="h-9" />
-              <Skeleton className="h-9" />
-            </div>
-          </div>
-        </Card>
-        {/* Usage card: a `mb-2` title over four `text-sm` lines (Links,
-            Members, Domains, Orgs you own) in a `gap-1` column */}
-        <Card className="max-w-2xl">
-          <div className="flex flex-col gap-1">
-            <span className="mb-2 flex h-4 items-center">
-              <Skeleton className="h-2.5 w-28" />
-            </span>
-            {[32, 36, 28, 30].map((w) => (
-              <span key={w} className="flex h-5 items-center">
-                <Skeleton className="h-3.5" style={{ width: `${w * 0.25}rem` }} />
-              </span>
-            ))}
-          </div>
-        </Card>
-      </div>
+          );
+        })}
+      </TableFrameSkeleton>
     </SkeletonStatus>
   );
 }
 
-/** One danger-zone card: the label, a two-line blurb, and a button. */
-function DangerCardSkeleton() {
+/**
+ * /members: "Members" over the seat count with Invite people on the right,
+ * then the people table in two-line rows (name over email). The seats-full
+ * notice and the pending invites only exist for some organizations.
+ */
+export function MembersSkeleton() {
   return (
-    <Card className="max-w-2xl">
-      <Skeleton className="h-2.5 w-24" />
-      <div className="mt-4">
-        <Skeleton className="h-3 w-full max-w-md" />
-        <Skeleton className="mt-2 h-3 w-3/5" />
-        <Skeleton className="mt-4 h-9 w-40" />
-      </div>
-    </Card>
+    <SkeletonStatus testId="members-page-skeleton">
+      <HeaderSkeleton sub action={<ButtonSkeleton className="w-40" />} />
+      <TableFrameSkeleton
+        head={
+          <>
+            <HeadCellSkeleton className="min-w-0 flex-1" bar="w-12" />
+            <HeadCellSkeleton className="w-28 shrink-0" bar="w-10" />
+            <HeadCellSkeleton className="hidden w-32 shrink-0 sm:flex" bar="w-12" />
+            <HeadCellSkeleton className="w-14 shrink-0" />
+          </>
+        }
+      >
+        {linkRowWidths.map(([first, second]) => (
+          <div key={first} className="flex items-center border-b border-border/50">
+            <div className="flex min-w-0 flex-1 px-4 py-2.5">
+              <TwoLineCellSkeleton first={first} second={second} />
+            </div>
+            <div className="w-28 shrink-0 px-4">
+              <Skeleton className="h-3 w-14" />
+            </div>
+            <div className="hidden w-32 shrink-0 px-4 sm:flex">
+              <Skeleton className="h-3 w-16" />
+            </div>
+            <div className="w-14 shrink-0" />
+          </div>
+        ))}
+      </TableFrameSkeleton>
+    </SkeletonStatus>
   );
 }
 
-/** /settings: the account card (name and email beside the picture, save, then
- * the dark-mode row) and the delete-account danger card. */
+/**
+ * /domains, for somebody who can add one: "Domains" with Add domain on the
+ * right, then the domain rows in the settings column.
+ */
+export function DomainsPageSkeleton() {
+  return (
+    <div data-testid="domains-page-skeleton">
+      <HeaderSkeleton action={<ButtonSkeleton className="w-[8.5rem]" />} />
+      <SettingsColumn>
+        <DomainsSkeleton />
+      </SettingsColumn>
+    </div>
+  );
+}
+
+const planFeatureWidths = ["w-24", "w-28", "w-32", "w-28", "w-36", "w-44", "w-32"];
+
+/** PlanCard: name, price, the feature list (as long as Pro's, since the grid
+ * makes every card as tall as the longest) and the button at the foot. */
+function PlanCardSkeleton() {
+  return (
+    <div className="flex flex-col gap-3 rounded-xl bg-surface p-4 smooth-shadow-ring-xs">
+      <span className="flex h-6 items-center">
+        <Skeleton className="h-3.5 w-14" />
+      </span>
+      <span className="flex h-7 items-center">
+        <Skeleton className="h-5 w-24" />
+      </span>
+      <div className="flex flex-col gap-1.5">
+        {planFeatureWidths.map((w, i) => (
+          <span key={i} className="flex h-5 items-center">
+            <Skeleton className={cn("h-3 max-w-full", w)} />
+          </span>
+        ))}
+      </div>
+      <div className="mt-auto pt-1">
+        <Skeleton className="h-9 w-full rounded-lg" />
+      </div>
+    </div>
+  );
+}
+
+/**
+ * /billing on the free plan, which is most people who open it: the title
+ * over its one line, the Usage group (the 44px rows billing.tsx draws while
+ * the figures load, then Organizations you own), then Plans with the billing
+ * cycle switch and the three plan cards. A paid plan opens on its own plan
+ * row instead, a shape nobody can know before the plan arrives.
+ */
+export function BillingSkeleton() {
+  return (
+    <SkeletonStatus testId="billing-page-skeleton">
+      <HeaderSkeleton sub />
+      <SettingsColumn>
+        <GroupSkeleton title="w-12" hint="w-24">
+          {[24, 28, 20, 40, 44].map((w) => (
+            <div key={w} className="flex h-11 items-center px-4">
+              <Skeleton className="h-3.5" style={{ width: `${w * 0.25}rem` }} />
+            </div>
+          ))}
+        </GroupSkeleton>
+        <section className="flex flex-col gap-3">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex h-5 items-center gap-3">
+              <Skeleton className="h-3 w-12" />
+              <Skeleton className="h-2.5 w-48" />
+            </div>
+            <Skeleton className="h-8 w-52 rounded-[9px]" />
+          </div>
+          <div className="grid gap-3 sm:grid-cols-3">
+            <PlanCardSkeleton />
+            <PlanCardSkeleton />
+            <PlanCardSkeleton />
+          </div>
+        </section>
+      </SettingsColumn>
+    </SkeletonStatus>
+  );
+}
+
+/**
+ * /settings: the Account group (picture, name, email, dark mode), Save on
+ * the right under it (`gap-3`), and the delete-account group outlined in
+ * the danger colour, `gap-8` apart in the settings column.
+ */
 export function SettingsSkeleton() {
   return (
     <SkeletonStatus testId="settings-page-skeleton">
       <HeaderSkeleton />
-      <div className="flex flex-col gap-4">
-        <Card className="max-w-2xl">
-          <div className="flex flex-col gap-6">
-            <div className="flex flex-col gap-4">
-              <div className="flex flex-col-reverse gap-5 sm:flex-row sm:items-start sm:gap-6">
-                <div className="flex min-w-0 flex-1 flex-col gap-4">
-                  {[0, 1].map((i) => (
-                    <div key={i}>
-                      {/* label line box: text-xs (16px) + mb-1.5, so the swap
-                          to a real Field doesn't nudge the card */}
-                      <span className="mb-1.5 flex h-4 items-center">
-                        <Skeleton className="h-2.5 w-24" />
-                      </span>
-                      <Skeleton className="h-9 w-full" />
-                    </div>
-                  ))}
-                </div>
-                <Skeleton className="h-32 w-32 shrink-0 rounded-full" />
-              </div>
-              <Skeleton className="h-9 w-24" />
-            </div>
-            <div className="flex items-center justify-between gap-4 border-t border-border pt-5">
-              <div>
-                {/* text-sm (20px) over text-xs (16px), matched line for line */}
-                <span className="flex h-5 items-center">
-                  <Skeleton className="h-3 w-20" />
-                </span>
-                <span className="flex h-4 items-center">
-                  <Skeleton className="h-2.5 w-56 max-w-full" />
-                </span>
-              </div>
-              <Skeleton className="h-5 w-9 shrink-0 rounded-full" />
-            </div>
+      <SettingsColumn>
+        <div className="flex flex-col gap-3">
+          <GroupSkeleton title="w-16">
+            <RowSkeleton label="w-14" hint="w-40">
+              <Skeleton className="size-10 rounded-full" />
+            </RowSkeleton>
+            <RowSkeleton label="w-10">
+              <Skeleton className="h-9 w-60 rounded-lg max-sm:w-full" />
+            </RowSkeleton>
+            <RowSkeleton label="w-12">
+              <Skeleton className="h-2.5 w-48" />
+            </RowSkeleton>
+            <RowSkeleton label="w-20" hint="w-44">
+              <Skeleton className="h-5 w-9 rounded-full" />
+            </RowSkeleton>
+          </GroupSkeleton>
+          <div className="flex justify-end">
+            <ButtonSkeleton className="w-16" />
           </div>
-        </Card>
-        <DangerCardSkeleton />
-      </div>
+        </div>
+        <GroupSkeleton danger>
+          <RowSkeleton label="w-28" hint="w-56">
+            <ButtonSkeleton className="w-36" />
+          </RowSkeleton>
+        </GroupSkeleton>
+      </SettingsColumn>
     </SkeletonStatus>
   );
 }
@@ -673,7 +892,7 @@ function ApiTabBarSkeleton() {
 export function ApiKeysSkeleton() {
   return (
     <SkeletonStatus testId="api-keys-page-skeleton">
-      <HeaderSkeleton />
+      <HeaderSkeleton sub />
       <ApiTabBarSkeleton />
       <div className="flex flex-col gap-4">
         <div className="flex gap-2">
@@ -693,51 +912,50 @@ export function ApiKeysSkeleton() {
 function McpTabSkeleton() {
   return (
     <SkeletonStatus testId="mcp-tab-skeleton">
-      <HeaderSkeleton />
+      <HeaderSkeleton sub />
       <ApiTabBarSkeleton />
       <TableSkeleton rows={3} />
     </SkeletonStatus>
   );
 }
 
-/** /organization: the name/id card, the QR defaults card, and the
- * delete-organization danger card. */
+/**
+ * /organization, as its owner sees it: the name row (field and Save) and the
+ * ID row, the QR code defaults group, and the delete group outlined in the
+ * danger colour. The QR group's body is one line here (the free plan's
+ * upgrade prompt); a paid plan's editor is taller, and it is the second
+ * last thing on the page.
+ */
 export function OrganizationSkeleton() {
   return (
     <SkeletonStatus testId="organization-page-skeleton">
       <HeaderSkeleton />
-      <div className="flex flex-col gap-4">
-        <Card className="max-w-2xl">
-          {/* name and id are real Fields (label in a 22px line box + h-9
-              input), gap-4 apart, then the Save button */}
-          <div className="flex flex-col gap-4">
-            {[0, 1].map((i) => (
-              <div key={i}>
-                <span className="mb-1.5 flex h-4 items-center">
-                  <Skeleton className="h-2.5 w-32" />
-                </span>
-                <Skeleton className="h-9 w-full" />
-              </div>
-            ))}
-            <Skeleton className="h-9 w-24" />
-          </div>
-        </Card>
-        {/* QR defaults: only the two-line intro is certain. Below it the card
-            shows an upgrade prompt, the editor grid, or nothing, by plan and
-            by whether defaults are already set, so the skeleton stops here
-            rather than guess a shape that collapses for most accounts. */}
-        <Card className="max-w-2xl">
-          <div>
-            <span className="flex h-4 items-center">
-              <Skeleton className="h-2.5 w-28" />
-            </span>
-            <span className="mt-1 flex h-4 items-center">
-              <Skeleton className="h-2.5 w-64 max-w-full" />
+      <SettingsColumn>
+        <GroupSkeleton>
+          <RowSkeleton label="w-10">
+            <div className="flex w-full items-center gap-2 sm:w-auto">
+              <Skeleton className="h-9 min-w-0 flex-1 rounded-lg sm:w-60 sm:flex-none" />
+              <ButtonSkeleton className="w-16" />
+            </div>
+          </RowSkeleton>
+          <RowSkeleton label="w-32" hint="w-20">
+            <Skeleton className="h-2.5 w-56" />
+            <Skeleton className="size-7 rounded-md" />
+          </RowSkeleton>
+        </GroupSkeleton>
+        <GroupSkeleton title="w-32" hint="w-72">
+          <div className="p-4">
+            <span className="flex h-5 items-center">
+              <Skeleton className="h-3 w-full max-w-md" />
             </span>
           </div>
-        </Card>
-        <DangerCardSkeleton />
-      </div>
+        </GroupSkeleton>
+        <GroupSkeleton danger>
+          <RowSkeleton label="w-36" hint="w-64">
+            <ButtonSkeleton className="w-48" />
+          </RowSkeleton>
+        </GroupSkeleton>
+      </SettingsColumn>
     </SkeletonStatus>
   );
 }
@@ -746,7 +964,7 @@ export function OrganizationSkeleton() {
 export function LinkDetailSkeleton() {
   return (
     <SkeletonStatus>
-      <HeaderSkeleton action={{ w: "w-40" }} />
+      <HeaderSkeleton sub action={<Skeleton className="h-8 w-28 shrink-0 rounded-lg" />} />
       <ChartCardSkeleton />
       <div className="mt-4">
         <TableSkeleton rows={3} />
