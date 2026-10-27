@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { signUpAndVerify } from "./resend";
+import { signUpThroughForm } from "./resend";
 import { queryRows } from "./db";
 
 /**
@@ -83,7 +83,7 @@ test("signing up keeps the link that was made before the account (#65)", async (
   const shortUrl = await shorten(page, destination);
   const slug = shortUrl.split("/").pop()!;
 
-  await signUpAndVerify(page, `anon-${Date.now()}@gmail.com`, password);
+  await signUpThroughForm(page, `anon-${Date.now()}@gmail.com`, password);
 
   // The new account's first dashboard is not empty: the link they made
   // before signing up is already in it, on the same slug.
@@ -150,7 +150,7 @@ test("links survive a reload, so leaving the page does not lose them", async ({ 
   // And it is still claimable: the token came back with it, not just the URL.
   // Claiming happens as the app loads rather than inside a form submit, so
   // this polls for the row instead of assuming it landed before the query.
-  await signUpAndVerify(page, `reload-${Date.now()}@gmail.com`, password);
+  await signUpThroughForm(page, `reload-${Date.now()}@gmail.com`, password);
   await expect
     .poll(
       async () => {

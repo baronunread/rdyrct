@@ -3,6 +3,8 @@ import type { AppEnv } from "./env";
 import { getAuth } from "./better-auth";
 import { lookup } from "../shared/lookup";
 import { PLAN_LIMITS } from "../shared/types";
+import * as v from "valibot";
+import { parseBody } from "./schemas";
 
 /**
  * Dev-only scenarios: every account state one link away, against the real
@@ -175,6 +177,7 @@ export async function handleDev(c: Context<AppEnv>): Promise<Response> {
   if (c.req.method === "GET" && path === "/__dev/scenarios") return c.html(indexPage());
   const name = /^\/__dev\/scenarios\/([a-z-]+)$/.exec(path)?.[1];
   if (c.req.method === "GET" && name) return signInAs(c, name);
+  if (c.req.method === "POST" && path === "/__dev/test-account") return createTestAccount(c);
   return c.text("Not found", 404);
 }
 
@@ -224,4 +227,54 @@ localStorage.setItem("rdyrct:consent:v2:at", String(Date.now()));
 localStorage.removeItem("rdyrct:user:v1");
 location.replace(${inScript(target)});
 </script>Signing in as ${esc(row.email)}…`;
+}
+
+const testAccountSchema = v.object({
+  email: v.pipe(v.string(), v.email()),
+  password: v.pipe(v.string(), v.minLength(8)),
+});
+
+/**
+ * A verified, signed-in account in one request, for browser tests that need
+ * an account but are not about signing up (tests/e2e/resend.ts,
+ * `signUpAndVerify`). The real form costs 6 to 7 seconds per test (Turnstile,
+ * an account write, a mail send, a code read back out of the emulator) and
+ * most specs paid it just to have somebody to be.
+ *
+ * It goes through BetterAuth's own adapter, so the databaseHooks a real
+ * sign-up runs still run (the superadmin pin, the welcome mail), and signs in
+ * the normal way, so the session hook creates the org exactly as it does for
+ * a person. It only ever creates a new address: an existing one is refused,
+ * so it cannot be used to sign in as anybody. Nor as the platform admin: the
+ * SUPERADMIN_EMAIL address is refused even before it exists, or anyone who
+ * can reach a dev server on the network could claim it after a database reset.
+ */
+async function createTestAccount(c: Context<AppEnv>): Promise<Response> {
+  const { email, password } = parseBody(testAccountSchema, await c.req.json());
+  if (email.toLowerCase() === c.env.SUPERADMIN_EMAIL.toLowerCase())
+    return c.text("The platform admin address cannot be made here.", 403);
+  const auth = getAuth(c.env);
+  const ctx = await auth.$context;
+  if (await ctx.internalAdapter.findUserByEmail(email))
+    return c.text(`${email} already exists.`, 409);
+
+  const user = await ctx.internalAdapter.createUser(
+    {
+      email,
+      name: email.split("@")[0],
+      emailVerified: true,
+    },
+    { method: "email-password" },
+  );
+  await ctx.internalAdapter.linkAccount({
+    userId: user.id,
+    providerId: "credential",
+    accountId: user.id,
+    password: await ctx.password.hash(password),
+  });
+
+  const signIn = await auth.api.signInEmail({ body: { email, password }, asResponse: true });
+  const res = c.json({ id: user.id }, signIn.ok ? 201 : 502);
+  for (const cookie of signIn.headers.getSetCookie()) res.headers.append("set-cookie", cookie);
+  return res;
 }

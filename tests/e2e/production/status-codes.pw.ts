@@ -79,4 +79,12 @@ test("the dev scenario switcher does not exist in a built Worker", async ({ requ
     expect(res.status(), path).toBe(404);
     expect(res.headers()["set-cookie"] ?? "", path).not.toContain("session");
   }
+  // The test-account route makes a signed-in account from nothing; it must
+  // not answer in a built Worker either.
+  const made = await request.post("/__dev/test-account", {
+    data: { email: `prod-${Date.now()}@gmail.com`, password: "test-password-123" },
+    maxRedirects: 0,
+  });
+  expect([404, 405]).toContain(made.status());
+  expect(made.headers()["set-cookie"] ?? "").not.toContain("session");
 });
