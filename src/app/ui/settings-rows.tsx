@@ -9,17 +9,25 @@ import { cn } from "./cn";
  */
 export function SettingsGroup({
   title,
+  hint,
   danger,
   children,
 }: {
   title?: string;
+  /** One line beside the heading, for the whole group. */
+  hint?: string;
   /** Outlined in the danger colour: for "Delete organization" and the like. */
   danger?: boolean;
   children: ReactNode;
 }) {
   return (
     <section className="flex flex-col gap-2">
-      {title && <h2 className="text-sm font-medium text-muted">{title}</h2>}
+      {title && (
+        <div className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5">
+          <h2 className="text-sm font-medium text-muted">{title}</h2>
+          {hint && <p className="text-xs text-muted">{hint}</p>}
+        </div>
+      )}
       <div
         className={cn(
           "rounded-xl bg-surface [&>*+*]:shadow-[inset_0_1px_0_var(--border)]",
