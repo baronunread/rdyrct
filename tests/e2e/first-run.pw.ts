@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { signUpAndVerify } from "./resend";
+import { signUpThroughForm } from "./resend";
 
 /**
  * What a brand-new account walks into.
@@ -15,7 +15,7 @@ import { signUpAndVerify } from "./resend";
 const password = "test-password-123";
 
 test("a new account arrives with an organization and one question", async ({ page }) => {
-  await signUpAndVerify(page, `firstrun-${Date.now()}@gmail.com`, password);
+  await signUpThroughForm(page, `firstrun-${Date.now()}@gmail.com`, password);
 
   // The organization is real before anything is created: the switcher names
   // it, rather than saying there is none.
@@ -42,7 +42,7 @@ test("a new account arrives with an organization and one question", async ({ pag
 });
 
 test("typing or pasting anywhere on the dashboard goes into the link field", async ({ page }) => {
-  await signUpAndVerify(page, `typeahead-${Date.now()}@gmail.com`, password);
+  await signUpThroughForm(page, `typeahead-${Date.now()}@gmail.com`, password);
 
   const field = page.getByPlaceholder("https://example.com/launch").first();
   await expect(field).toBeVisible();
@@ -67,7 +67,7 @@ test("typing or pasting anywhere on the dashboard goes into the link field", asy
 test("deleting the last organization asks for a new one, not for a first link", async ({
   page,
 }) => {
-  await signUpAndVerify(page, `lastorg-${Date.now()}@gmail.com`, password);
+  await signUpThroughForm(page, `lastorg-${Date.now()}@gmail.com`, password);
 
   await page.goto("/organization");
   const name = await page.getByLabel("Organization name").inputValue();

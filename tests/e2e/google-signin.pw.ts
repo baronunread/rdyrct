@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { signOut } from "./pages";
-import { signUpAndVerify } from "./resend";
+import { signUpThroughForm } from "./resend";
 
 // Drives the Google button against the local emulate google service (started
 // by the resend webServer, see playwright.config.ts). When Google isn't
@@ -80,7 +80,7 @@ test.describe("Google sign-in", () => {
     await requireGoogle(page);
 
     // A password account under the address the emulator signs in as.
-    await signUpAndVerify(page, "testuser@gmail.com", "test-password-123");
+    await signUpThroughForm(page, "testuser@gmail.com", "test-password-123");
     const menu = page.getByRole("button", { name: "Account menu" });
     await expect(menu).toContainText("testuser");
 
