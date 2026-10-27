@@ -15,17 +15,23 @@ export function Segmented<Id extends string>({
   label?: string;
 }) {
   return (
-    <div role="group" aria-label={label} className="flex w-fit gap-1 rounded-lg bg-surface-2 p-1">
+    // Radii nest: a 9px track, 2px of padding, 7px segments.
+    <div
+      role="group"
+      aria-label={label}
+      className="flex w-fit gap-0.5 rounded-[9px] bg-surface-2 p-0.5"
+    >
       {items.map(({ id, label }) => (
         <button
           key={id}
           type="button"
           onClick={() => onChange(id)}
+          aria-pressed={value === id}
           className={cn(
-            "cursor-pointer rounded-md px-3 py-1.5 text-xs transition-colors",
+            "h-7 cursor-pointer rounded-[7px] px-2.5 text-xs transition-colors",
             value === id
-              ? "bg-surface font-bold text-text shadow-sm"
-              : "text-muted hover:text-text",
+              ? "bg-surface font-semibold text-text smooth-shadow-ring-xs"
+              : "text-muted [@media(hover:hover)]:hover:text-text",
           )}
         >
           {label}
