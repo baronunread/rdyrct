@@ -117,6 +117,27 @@ async function userFromOAuthToken(
   }
 }
 
+type AuthSession = NonNullable<
+  Awaited<ReturnType<ReturnType<typeof getAuth>["api"]["getSession"]>>
+>;
+
+function sessionUserOf(user: AuthSession["user"]): SessionUser {
+  return {
+    id: user.id,
+    email: user.email,
+    name: user.name,
+    isAdmin: user.isAdmin ?? false,
+    emailVerified: user.emailVerified,
+    plan: planNow(orgPlanOf(user.plan)),
+    polarSubscriptionCancelAtPeriodEnd: user.polarSubscriptionCancelAtPeriodEnd ?? false,
+    // better-auth types its extra user fields loosely; the column is an
+    // integer, and periodEndOf keeps "no subscription" as null.
+    polarSubscriptionCurrentPeriodEnd: periodEndOf(user.polarSubscriptionCurrentPeriodEnd),
+    polarSubscriptionInterval: intervalOf(user.polarSubscriptionInterval),
+    image: user.image ?? null,
+  } satisfies SessionUser;
+}
+
 /**
  * Attaches db + user to context, from the BetterAuth session cookie or, for
  * a caller with no browser session (a remote MCP client, #139), either a
@@ -148,23 +169,7 @@ export function withSession(opts: { oauthTokenPath?: string } = {}) {
       headers: c.req.raw.headers,
     });
     if (session) {
-      c.set("user", {
-        id: session.user.id,
-        email: session.user.email,
-        name: session.user.name,
-        isAdmin: session.user.isAdmin ?? false,
-        emailVerified: session.user.emailVerified,
-        plan: planNow(orgPlanOf(session.user.plan)),
-        polarSubscriptionCancelAtPeriodEnd:
-          session.user.polarSubscriptionCancelAtPeriodEnd ?? false,
-        // better-auth types its extra user fields loosely; the column is an
-        // integer, and periodEndOf keeps "no subscription" as null.
-        polarSubscriptionCurrentPeriodEnd: periodEndOf(
-          session.user.polarSubscriptionCurrentPeriodEnd,
-        ),
-        polarSubscriptionInterval: intervalOf(session.user.polarSubscriptionInterval),
-        image: session.user.image ?? null,
-      } satisfies SessionUser);
+      c.set("user", sessionUserOf(session.user));
     } else {
       const authorization = c.req.header("authorization");
       const viaKey = await userFromApiKey(db, authorization);
