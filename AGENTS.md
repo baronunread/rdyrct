@@ -300,7 +300,10 @@ Shell writes to repo files are sandboxed; edit through the editor tools, not
 
 ## Conventions
 
-- **Errors go to toasts** (`useToast`), never inline red field text.
+- **A form error marks its field**: danger outline, a short reason in the
+  field's label row, `aria-invalid` and focus on the first bad field, and no
+  text below the field (nothing shifts). **Toasts** (`useToast`) are for
+  outcomes and for failures no field owns. Details in `rdyrct-design`.
 - UI kit in `src/app/ui/`: Button (`primary|outline|ghost`, has `size`),
   Field/Input/Select, Dialog, Badge, Card/PageHeader/Table, Menu,
   Tooltip, toast, Skeleton (`ui/skeleton.tsx`; page-level skeletons that

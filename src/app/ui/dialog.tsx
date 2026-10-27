@@ -42,7 +42,7 @@ export function Dialog({
               <BaseDialog.Portal keepMounted>
                 <BaseDialog.Backdrop
                   className={cn(
-                    "fixed inset-0 bg-black/55 backdrop-blur-[2px]",
+                    "fixed inset-0 bg-black/40 backdrop-blur-[2px]",
                     nested ? "z-[60]" : "z-40",
                   )}
                   render={
@@ -56,7 +56,7 @@ export function Dialog({
                 />
                 <BaseDialog.Popup
                   className={cn(
-                    "fixed top-1/2 left-1/2 max-h-[85dvh] w-[calc(100vw-2rem)] -translate-x-1/2 -translate-y-1/2 overflow-y-auto overscroll-none rounded-xl bg-surface p-6 text-text smooth-shadow-ring-2xl",
+                    "fixed top-1/2 left-1/2 max-h-[85dvh] w-[calc(100vw-2rem)] -translate-x-1/2 -translate-y-1/2 overflow-y-auto overscroll-none rounded-2xl bg-surface p-6 text-text smooth-shadow-ring-2xl",
                     nested ? "z-[70]" : "z-50",
                     wide ? "max-w-2xl" : "max-w-md",
                   )}
@@ -73,7 +73,7 @@ export function Dialog({
                   }
                 >
                   <div className="mb-4 flex items-center justify-between gap-3">
-                    <BaseDialog.Title className="text-base font-bold">{title}</BaseDialog.Title>
+                    <BaseDialog.Title className="text-base font-semibold">{title}</BaseDialog.Title>
                     <BaseDialog.Close
                       className="-m-1 cursor-pointer rounded-md p-1.5 text-muted transition-colors hover:bg-surface-2 hover:text-text"
                       aria-label="Close"

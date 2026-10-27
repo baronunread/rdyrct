@@ -141,13 +141,17 @@ export function AreaChart({
 }
 
 /**
- * Ranked horizontal bars with direct labels: identity is in the row label,
- * so a single hue does the work.
+ * Ranked bars with the label inside: each row is a tinted bar sized to its
+ * value, the label sits on it, and the count and its share line up in their
+ * own columns (rdyrct-design, "The app's surfaces"). One scale per list, so a
+ * bar's length still encodes its value; identity is in the label, so one hue
+ * does the work.
  */
 export function BarList({
   items,
   formatKey = (k) => k,
   empty = "Nothing recorded in this period yet.",
+  head,
 }: {
   items: { key: string; clicks: number }[];
   formatKey?: (key: string) => string | ReactNode;
@@ -155,26 +159,38 @@ export function BarList({
    *  somebody nothing; naming the thing that fills the list explains the
    *  feature and points at the next step in the same sentence. */
   empty?: string;
+  /** Column headings, e.g. ["Country", "Clicks"]. */
+  head?: [string, string];
 }) {
   const max = Math.max(1, ...items.map((i) => i.clicks));
-  if (!items.length) return <p className="py-4 text-sm text-muted">{empty}</p>;
+  const total = items.reduce((sum, i) => sum + i.clicks, 0) || 1;
+  if (!items.length) return <p className="py-4 text-sm text-pretty text-muted">{empty}</p>;
   return (
-    <ul className="flex flex-col gap-2.5">
+    <div className="grid grid-cols-[minmax(0,1fr)_auto_2.5rem] items-center gap-x-3 gap-y-0.5 text-sm">
+      {head && (
+        <>
+          <span className="pb-1 text-xs text-muted">{head[0]}</span>
+          <span className="pb-1 text-right text-xs text-muted">{head[1]}</span>
+          <span />
+        </>
+      )}
       {items.map((item) => (
-        <li key={item.key}>
-          <div className="mb-1 flex items-baseline justify-between gap-3 text-xs">
-            <span className="min-w-0 truncate">{formatKey(item.key)}</span>
-            <span className="tnum shrink-0 text-muted">{item.clicks}</span>
-          </div>
-          <div className="h-1.5 rounded-full bg-surface-2">
-            <div
-              className="h-full rounded-full bg-chart"
+        <div key={item.key} className="group contents">
+          <div className="relative flex h-[30px] min-w-0 items-center px-2">
+            <span
+              aria-hidden
+              className="pointer-events-none absolute inset-y-0 left-0 rounded-md bg-chart/10 transition-colors [@media(hover:hover)]:group-hover:bg-chart/20"
               style={{ width: `${Math.max(2, (item.clicks / max) * 100)}%` }}
             />
+            <span className="relative min-w-0 truncate">{formatKey(item.key)}</span>
           </div>
-        </li>
+          <span className="tnum text-right">{formatNumber(item.clicks)}</span>
+          <span className="tnum text-right text-xs text-muted">
+            {Math.round((item.clicks / total) * 100)}%
+          </span>
+        </div>
       ))}
-    </ul>
+    </div>
   );
 }
 

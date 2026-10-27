@@ -85,11 +85,32 @@ The kit is `src/app/ui/`. Use what is there before adding anything.
 
 Rules that come up every time:
 
-- **Errors go to toasts.** Never inline red field text.
+- **A form error marks the field and says why in its label row.** On submit, every bad field gets the danger outline, a short reason sits on the right of that field's label line ("Needs https://", "Already taken", "Required"), the field carries `aria-invalid="true"` and `aria-describedby` pointing at the reason, and focus moves to the first bad field. Nothing below the field, so nothing shifts. A reason too long for the label row goes in the description for screen readers and a tooltip. Not a toast: a form error is about a field, and a toast can be missed or time out.
+- **Toasts are for outcomes, not for form errors.** "Link created", "Copied", a request that failed for a reason no field owns. Routine ones use `role="status"`; only an urgent failure uses `role="alert"`.
+- **Submit stays enabled.** Validate on submit, then mark the fields. A greyed-out button that never says why is a dead end.
 - **Loading**: a page-level skeleton that mirrors the route's layout (`components/skeletons.tsx`), never a spinner. `Spinner` is for an in-flight button, and a button never says `…`.
 - **A `<button>` never nests in an `<a>`.** Give the anchor `buttonClass()` instead; there is one control or there are two tab stops fighting.
 - **Badges encode state**, not metadata. `Active`, `Pending DNS`, `banned`, `suspended`, `blocked` earn a pill because losing it loses the scan. A plan or a role is an attribute of a row: set it as plain text. The test is whether removing the pill costs meaning.
 - **Icons** come from `lucide-react`. Never decorative, never in a coloured tile, never mixed styles. Prefer a text label unless the icon makes an action materially faster to recognise.
+
+## The app's surfaces
+
+The app is built from depth and nesting, not lines. These are the decisions behind every screen; the mockups they came from live in the app audit (`rdyrct-app-audit/mocks/evolved.html`).
+
+- **One raised sheet.** The sidebar and the phone's top bar sit on the paper (`--bg`). The page sits on one raised `--surface` sheet with a 14px radius and the standard shadow. Nothing else in the page is raised as high.
+- **Depth from layered shadows, not borders.** A card, an input, a menu or a selected tab is lifted by a ring-plus-blur shadow (`smooth-shadow-ring-*`). Dividers inside a surface are hairlines drawn as inset shadows, never a border that adds to the box.
+- **Radii nest.** Outer radius equals inner radius plus the padding between them: a 12px panel with 4px padding holds 8px items; a menu is 12 / 4 / 8; a segmented control is 9 / 2 / 7. A nested corner that does not follow this looks wrong before anyone can say why.
+- **Settings are rows, not cards with footers.** The label (and at most one short line) on the left, the control on the right, in one card per group under a small muted group heading. No grey footer strip, no description paragraphs. Settings, Organization, Billing and Domains sit in a ~760px column so the label and its control stay close.
+- **Panels hold lists behind tabs.** Analytics and the dashboard group related lists in one card with underline tabs ("Top links · Decaying · Dead"), the way Plausible and Umami do, rather than a separate card per list.
+- **Bar lists put the label inside the bar.** A 30px row, the tinted bar sized to the value behind the label, the count and its share in aligned columns to the right, column headings above. One shared scale per list.
+- **Stats and the chart share a card.** A compact strip of figures above the chart, the selected one shaded because it is what the chart plots, each figure with its change beside it.
+- **Charts are smooth and honest.** A monotone cubic curve (it never overshoots a point, so it never dips below zero between two empty days), a faint fill to a zero baseline, direct labels, dates as "Oct 5". A hover guide and a small tooltip instead of a legend.
+- **Tables earn two lines.** The name in bold over its identifier in mono, the number right-aligned and tabular, row actions in a fixed column that appears on hover. A filter row with counts above a long table.
+- **Creating is a dialog.** "New link" is a header button with the `C` shortcut, not a form parked on the page. The form is one column with UTM tags inline; the QR preview, the short link and the full destination sit in a side column with "Customize QR", which opens the QR editor in the same dialog. QR defaults on Organization use the same editor rows.
+- **⌘K finds and does.** Recent links, pages and actions in one list, the match in the accent, the keys shown in the footer.
+- **One primary button per screen.** A second action is secondary or quiet.
+- **Over the plan is one notice.** A single line of facts ("Links 184 of 30 · Members 23 of 3 · Domain stops Nov 6") with one action, above the page title. Never stacked banners.
+- **On a phone** the same markup stacks: columns become one, dialogs and ⌘K open as bottom sheets with a handle, the drawer floats over a dimmed page, and every target is at least 40px.
 
 ## Layout
 
@@ -146,6 +167,17 @@ Default to stillness. Motion explains a state change, preserves continuity, or c
 
 The base experience is complete without motion, and `prefers-reduced-motion` is honoured everywhere (`MotionConfig reducedMotion="user"` is already in place on the landing page).
 
+The interface rules, from interfaces.dev's cheat sheet:
+
+- **Frequent menus open instantly.** The org switcher, the account menu and row menus appear at once and animate only on close: a short fade with a 4px blur, from the trigger (`transform-origin` at the trigger's corner).
+- **Exits are subtler than entrances.** Shorter travel, plus opacity and a small blur.
+- **Name the properties.** `transition: scale 200ms ease-out, opacity 150ms`, never `transition: all`.
+- **Buttons give on press:** `scale: 0.97` over 200ms.
+- **Icon swaps crossfade:** the new icon from scale 0.25, opacity 0 and 4px blur to rest, the old one the reverse.
+- **CSS transitions for interactions** (they can reverse mid-way); keyframes only for one-time sequences. Transitions are off while the theme switches (already done in `lib/theme.ts`).
+- **Hover only where there is hover:** wrap hover styles in `@media (hover: hover)`.
+- **Frequent interactions are instant or very fast;** nothing animates on page load unless it is the point.
+
 **The landing's feature cards loop** (`FeatureCard` in `components/landing-pillars.tsx`): each plays the product doing what its title says, a step every 700ms, with CSS transitions between steps (reversible, opacity, scale, a little blur). They start in their finished state, which is what the prerendered page and reduced motion show, play only while half on screen, and are `aria-hidden` because the title and line say the same thing. A new card is a list of steps whose last one is finished.
 
 **The other exception is the landing hero's globe** (`components/hero-globe.tsx`): clicks hopping between cities, drawn the way the mark is drawn (a small dot leaves, an arc, the accent dot lands on a flat shadow). It is allowed to move because it says what the product does, and it keeps these terms. Do not add a second ambient animation on the strength of it.
@@ -167,10 +199,25 @@ Orwell's six rules, in `AGENTS.md`, apply to every word that ships. On top of th
 - A control says what happens: "Publish", then a toast that says "Published".
 - Errors say what went wrong and how to fix it. No apologies, no vagueness.
 - Concrete numbers are trust signals. Prefer "30 links, 3 members" to "generous limits".
+- Buttons start with a verb, and a confirm button names the action: "Delete link" beside "Cancel", never "OK".
+- One label for moving forward through a flow.
+- A toggle is named for its on state: "Product news", not "Disable emails".
+- Link text names the destination.
+- Curly quotes and a real ellipsis (…). The em dash stays banned.
+- Address the reader as "you".
 
 ## Accessibility
 
 Not optional and not a later pass. Landmarks, one descriptive `h1` per page, ordered headings, native controls, semantic tables, accessible names, visible focus, text alternatives. WCAG AA. Colour never carries meaning alone. Source order is reading order.
+
+- Style `:focus-visible`, and never remove an outline without a replacement.
+- Hit areas at least 24px everywhere, 40px on desktop controls and 44px on touch, never overlapping.
+- `tabindex` is only ever `0` or `-1`. Icon-only buttons have an `aria-label`; nothing focusable is `aria-hidden`.
+- Every input has a visible label and the right `type` and `inputmode`. Never block paste.
+- Decorative layers take `pointer-events: none`.
+- Truncated text shows in full on hover or when expanded. Identifiers and URLs wrap with `overflow-wrap: anywhere`; labels and badges do not wrap.
+- Images and avatars carry a 1px outline at 8% (black in light, white in dark), inset by 1px, so a light image does not melt into the surface.
+- Icon strokes match the weight of the text beside them; an icon-and-text button has slightly less padding on the icon side.
 
 ## Anti-patterns
 
