@@ -7,7 +7,7 @@ import { useCurrentOrg } from "../lib/current-org";
 import { api, shortUrl } from "../lib/api";
 import { PLAN_LIMITS } from "@/shared/types";
 import { Button } from "../ui/button";
-import { Card } from "../ui/misc";
+import { SettingsGroup } from "../ui/settings-rows";
 import { BusyContent } from "../ui/spinner";
 import { useToast } from "../ui/toast";
 import { QrColorAndLogoFields, QrPreviewSidebar, QrPatternFields } from "./qr-fields";
@@ -173,14 +173,11 @@ export function QrDefaultsCard() {
   const canEdit = isAdmin && hasQrCustom;
 
   return (
-    <Card className="max-w-2xl">
-      <div className="flex flex-col gap-4">
-        <div>
-          <p className="text-xs font-medium text-muted">QR code defaults</p>
-          <p className="mt-1 text-xs text-muted">
-            Applied to every link's QR code unless the link overrides them.
-          </p>
-        </div>
+    <SettingsGroup
+      title="QR code defaults"
+      hint="Every new QR code starts like this. Any link can change it."
+    >
+      <div className="flex flex-col gap-4 p-4">
         {!hasQrCustom && <UpgradeQrPrompt locked={hasQrDefaults} />}
         {(hasQrCustom || hasQrDefaults) && (
           <QrDefaultsFields
@@ -192,6 +189,6 @@ export function QrDefaultsCard() {
           />
         )}
       </div>
-    </Card>
+    </SettingsGroup>
   );
 }

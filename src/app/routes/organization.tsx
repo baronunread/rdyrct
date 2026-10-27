@@ -8,8 +8,9 @@ import { useCurrentOrg } from "../lib/current-org";
 import { api } from "../lib/api";
 import type { OrgRole, UserOrg } from "@/shared/types";
 import { Button } from "../ui/button";
-import { Field, Input } from "../ui/field";
-import { Card, PageHeader } from "../ui/misc";
+import { Input } from "../ui/field";
+import { PageHeader } from "../ui/misc";
+import { SettingsGroup, SettingsRow } from "../ui/settings-rows";
 import { BusyContent } from "../ui/spinner";
 import { useToast } from "../ui/toast";
 import { CopyButton } from "../ui/copy-button";
@@ -107,7 +108,7 @@ function useDeleteOrgFlow(orgId: string, clearNameField: () => void) {
   return { open, setOpen, close, confirmName, setConfirmName, pending, deleteOrg };
 }
 
-function OrgNameCard({
+function OrgRows({
   orgId,
   isOwner,
   register,
@@ -122,49 +123,54 @@ function OrgNameCard({
   currentName: string | undefined;
   isSubmitting: boolean;
 }) {
+  const toast = useToast();
   return (
-    <Card className="max-w-2xl">
-      <div className="flex flex-col gap-4">
-        <Field label="Organization name">
-          <Input {...register("name")} disabled={!isOwner} />
-        </Field>
-        <Field label="Organization id">
-          <Input value={orgId} disabled readOnly />
-        </Field>
-        {isOwner ? (
-          <div>
-            <Button
-              variant="primary"
-              onClick={rename}
-              disabled={!currentName?.trim() || isSubmitting}
-            >
+    <SettingsGroup>
+      <SettingsRow label="Name" hint={isOwner ? undefined : "Only the owner can rename it."}>
+        <form
+          className="flex w-full items-center gap-2 sm:w-auto"
+          onSubmit={(e) => {
+            e.preventDefault();
+            rename();
+          }}
+        >
+          <Input
+            {...register("name")}
+            aria-label="Organization name"
+            disabled={!isOwner}
+            className="min-w-0 flex-1 sm:w-60 sm:flex-none"
+          />
+          {isOwner && (
+            <Button type="submit" disabled={!currentName?.trim() || isSubmitting}>
               <BusyContent busy={isSubmitting}>Save</BusyContent>
             </Button>
-          </div>
-        ) : (
-          <p className="text-xs text-muted">Only the owner can change these settings.</p>
-        )}
-      </div>
-    </Card>
+          )}
+        </form>
+      </SettingsRow>
+      <SettingsRow label="Organization ID" hint="For the API.">
+        <span className="font-mono text-xs">{orgId}</span>
+        <CopyButton
+          text={orgId}
+          label="Copy organization ID"
+          onCopy={(text) => copyToClipboard(text, toast)}
+        />
+      </SettingsRow>
+    </SettingsGroup>
   );
 }
 
-function DeleteOrgCard({ orgName, onDelete }: { orgName: string; onDelete: () => void }) {
+function DeleteOrgGroup({ onDelete }: { onDelete: () => void }) {
   return (
-    <Card className="max-w-2xl">
-      <div className="flex flex-col gap-3">
-        <p className="text-xs font-medium text-danger">Danger zone</p>
-        <p className="text-sm text-muted">
-          Permanently delete <span className="text-text">{orgName}</span> with every link, custom
-          domain, and all click history. Short links stop working immediately.
-        </p>
-        <div>
-          <Button variant="danger" onClick={onDelete}>
-            Delete organization
-          </Button>
-        </div>
-      </div>
-    </Card>
+    <SettingsGroup danger>
+      <SettingsRow
+        label="Delete organization"
+        hint="Its links, domains and click history go with it, at once."
+      >
+        <Button variant="danger" onClick={onDelete}>
+          Delete organization
+        </Button>
+      </SettingsRow>
+    </SettingsGroup>
   );
 }
 
@@ -231,9 +237,9 @@ export function OrganizationPage() {
 
   return (
     <div>
-      <PageHeader title="Organization" sub="Settings for the current organization" />
-      <div className="flex flex-col gap-4">
-        <OrgNameCard
+      <PageHeader title="Organization" />
+      <div className="flex max-w-[760px] flex-col gap-8">
+        <OrgRows
           orgId={orgId}
           isOwner={isOwner}
           register={register}
@@ -242,9 +248,7 @@ export function OrganizationPage() {
           isSubmitting={isSubmitting}
         />
         <QrDefaultsCard key={org.id} />
-        {isOwner && (
-          <DeleteOrgCard orgName={org.name} onDelete={() => deleteOrgFlow.setOpen(true)} />
-        )}
+        {isOwner && <DeleteOrgGroup onDelete={() => deleteOrgFlow.setOpen(true)} />}
       </div>
 
       <DeleteOrgDialog org={org} flow={deleteOrgFlow} />
