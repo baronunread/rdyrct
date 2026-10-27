@@ -3,7 +3,7 @@ import { errorMessage } from "@/app/lib/error-message";
 import { Link, Outlet, useNavigate } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, LazyMotion, MotionConfig, domAnimation, m } from "motion/react";
-import { Layers, ChevronsUpDown, Plus, LogOut, Settings } from "@/app/ui/icons";
+import { Layers, ChevronsUpDown, Plus, LogOut, Search, Settings } from "@/app/ui/icons";
 import { MorphIcon } from "morphicons/react";
 import { menu2, moon, sun, x } from "@/app/ui/icon-nodes";
 import { useCurrentUser, useLogout, useShellUser } from "../lib/hooks";
@@ -80,11 +80,24 @@ export function RequireAdmin({ children }: { children: ReactNode }) {
   return children;
 }
 
+// The current page is lifted onto the surface, like the sheet beside it, with
+// its icon in the accent: one raised thing in the sidebar, not a tinted well.
 const navLinkProps = {
-  className: "flex items-center gap-2.5 rounded-md px-2.5 py-2 text-sm transition-colors",
-  activeProps: { className: "bg-surface-2 text-accent" },
-  inactiveProps: { className: "text-muted hover:bg-surface-2/60 hover:text-text" },
+  className:
+    "flex h-9 items-center gap-2.5 rounded-lg px-2.5 text-sm transition-[background-color,color] [&_svg]:shrink-0",
+  activeProps: {
+    className: "bg-surface font-medium text-text smooth-shadow-ring-xs [&_svg]:text-accent",
+  },
+  inactiveProps: {
+    className:
+      "text-muted [@media(hover:hover)]:hover:bg-surface/50 [@media(hover:hover)]:hover:text-text",
+  },
 };
+
+/** Opens the command menu the way its own shortcut does. */
+function openCommandMenu() {
+  document.dispatchEvent(new KeyboardEvent("keydown", { key: "k", metaKey: true, ctrlKey: true }));
+}
 
 function OrgSwitcherMenu({
   org,
@@ -196,17 +209,26 @@ function AppSidebar({
 
       {/* user footer — py-2.5 makes this block exactly as tall as the main
           Footer, so both border-t lines form one continuous bottom rule */}
-      <div className="mt-auto border-t border-border px-3 py-2.5">
+      <div className="mt-auto px-3 py-3">
         <Menu
           label="Account menu"
           trigger={
-            <div className="flex items-center gap-2 rounded-md px-1.5 py-1 hover:bg-surface-2">
-              <UserAvatar user={user} size={32} />
-              <p className="min-w-0 flex-1 truncate text-sm">{user.name}</p>
+            <div className="flex items-center gap-2.5 rounded-lg px-1.5 py-1.5 [@media(hover:hover)]:hover:bg-surface/50">
+              <UserAvatar user={user} size={30} />
+              <span className="min-w-0 flex-1 leading-tight">
+                <span className="block truncate text-sm font-medium">{user.name}</span>
+                <span className="block truncate text-xs text-muted">{user.email}</span>
+              </span>
               <ChevronsUpDown size={14} className="shrink-0 text-muted" />
             </div>
           }
         >
+          <MenuItem onClick={openCommandMenu}>
+            <Search size={15} /> Search and commands
+            <kbd className="ml-auto rounded-md px-1.5 font-mono text-2xs text-muted smooth-shadow-ring-xs">
+              ⌘K
+            </kbd>
+          </MenuItem>
           <MenuItem onClick={() => void navigate({ to: "/settings" })}>
             <Settings size={15} /> Settings
           </MenuItem>
@@ -241,14 +263,20 @@ function MobileDrawer({
             <div className="fixed inset-0 z-20 md:hidden">
               {/* click-outside backdrop as a real button: keyboard-focusable and
                 labeled, while drawer clicks (sibling, not child) never reach it */}
-              <button
+              {/* A dimmed page behind the drawer says it is on top and that a
+                  tap outside closes it. A real button, so it is reachable. */}
+              <m.button
                 type="button"
                 aria-label="Close menu"
-                className="absolute inset-0 cursor-default"
+                className="absolute inset-0 cursor-default bg-black/35"
                 onClick={onClose}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.2 }}
               />
               <m.div
-                className="absolute top-[49px] bottom-0 left-0 w-64 border-r border-border bg-bg"
+                className="absolute top-[52px] bottom-1.5 left-1.5 w-72 rounded-[20px] bg-bg smooth-shadow-ring-xl"
                 initial={{ opacity: 0, x: -24 }}
                 animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, x: -12, transition: { duration: 0.15 } }}
@@ -425,12 +453,10 @@ export function AppShell() {
       <WebMcpLinkTools />
       <WebMcpAnalyticsTool />
       {/* desktop sidebar: fixed so it never moves, not even on overscroll */}
-      <aside className="fixed inset-y-0 left-0 z-10 hidden w-60 border-r border-border bg-surface/40 md:block">
-        {sidebar}
-      </aside>
+      <aside className="fixed inset-y-0 left-0 z-10 hidden w-60 md:block">{sidebar}</aside>
 
       {/* mobile top bar + drawer */}
-      <div className="fixed inset-x-0 top-0 z-30 flex items-center gap-2 border-b border-border bg-bg/90 px-4 py-2.5 backdrop-blur md:hidden">
+      <div className="fixed inset-x-0 top-0 z-30 flex items-center gap-2 bg-bg/90 px-4 py-2.5 backdrop-blur md:hidden">
         <button
           type="button"
           onClick={() => setMobileOpen((v) => !v)}
@@ -445,7 +471,9 @@ export function AppShell() {
         {sidebar}
       </MobileDrawer>
 
-      <main className="flex min-w-0 flex-1 flex-col px-5 py-8 pt-16 md:ml-60 md:px-8 md:pt-8">
+      {/* One raised sheet for the page; the sidebar and the phone bar sit on
+          the paper behind it (rdyrct-design, "The app's surfaces"). */}
+      <main className="mx-1.5 mt-[52px] mb-1.5 flex min-w-0 flex-1 flex-col rounded-[22px] bg-surface px-4 py-6 smooth-shadow-ring-sm md:my-2 md:mr-2 md:ml-[248px] md:rounded-[14px] md:px-10 md:py-8">
         <div className="mx-auto w-full max-w-5xl flex-1">
           {/* Above the route, not inside each one: the state belongs to the
               org, so it says the same thing on every page (#163). */}
