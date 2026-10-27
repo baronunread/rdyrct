@@ -158,10 +158,16 @@ li{margin:0 0 18px}span{color:#544f61}a{color:#745ab8}.p{font-size:13px;margin-r
 
 export const devScenarioRoutes = new Hono<AppEnv>().basePath("/__dev");
 
-devScenarioRoutes.get("/scenarios", (c) => c.html(indexPage()));
+devScenarioRoutes.get("/scenarios", (c) => {
+  const log = c.get("log");
+  log?.set({ route: "/__dev/scenarios" });
+  return c.html(indexPage());
+});
 
 devScenarioRoutes.get("/scenarios/:name", async (c) => {
   const name = c.req.param("name");
+  const log = c.get("log");
+  log?.set({ route: "/__dev/scenarios/:name", scenario: { name } });
   const scenario: Scenario | undefined = lookup(SCENARIOS, name);
   if (!scenario) return c.text(`No scenario "${name}". See /__dev/scenarios`, 404);
 
