@@ -1,4 +1,5 @@
 import { expect } from "vitest";
+import type { BillingProvider } from "../../src/worker/billing-provider";
 import { env } from "cloudflare:workers";
 import {
   applyD1Migrations,
@@ -120,8 +121,25 @@ function stubWorkflow<T>(): Workflow<T> {
 // came back a 500. Tests wrote around it (expiry.worker.ts asserted "not a
 // 302" because it could not assert the status it meant), which is how a
 // stubbed 500 got mistaken for the fallback working.
+/**
+ * Polar, refusing every call (#412). The worker tests read .dev.vars.local.example,
+ * which carries a placeholder token and the sandbox server, so without this a
+ * route that ends a subscription (a ban, an account deletion) built the real
+ * SDK and sent the request to Polar's sandbox, which turned the fake token
+ * away. The test passed on that refusal, needed the network to do it, and
+ * timed out on CI when the connection dropped. A test that wants Polar to
+ * answer passes its own BILLING (billing.worker.ts).
+ */
+const noPolar = () => Promise.reject(new Error("No Polar in worker tests: pass a BILLING stub"));
+export const unreachableBilling: BillingProvider = {
+  checkouts: { create: noPolar, get: noPolar },
+  customerSessions: { create: noPolar },
+  subscriptions: { revoke: noPolar, list: noPolar },
+};
+
 export const testEnv: Env = {
   ...env,
+  BILLING: unreachableBilling,
   ASSETS: stubAssets,
   ORG_DELETE: stubWorkflow(),
   DOMAIN_ACTIVATE: stubWorkflow(),
