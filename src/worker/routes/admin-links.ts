@@ -266,7 +266,8 @@ async function setSuspended(
 
   if (!suspend) await clearOrgAfterRestore(db, link.orgId);
 
-  const addresses = await republishLink(c.env, db, linkId);
+  // Written to KV in this request, not left to the queue (#101).
+  const addresses = await republishLink(c.env, db, linkId, { recheck: true });
   await recordAdminAction(c.env, {
     actorUserId: c.var.user!.id,
     action: suspend ? "link.suspend" : "link.unsuspend",

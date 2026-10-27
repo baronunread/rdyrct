@@ -203,7 +203,7 @@ function SuspendDialog({ link, onClose }: { link: AdminLinkRow | null; onClose: 
     onSuccess: async () => {
       await qc.invalidateQueries({ queryKey: ["admin", "links"] });
       await qc.invalidateQueries({ queryKey: ["admin", "audit"] });
-      toast("Link suspended. It stops redirecting immediately.");
+      toast("Link suspended. It stops redirecting everywhere within a minute.");
       setReason("");
       onClose();
     },
@@ -219,8 +219,8 @@ function SuspendDialog({ link, onClose }: { link: AdminLinkRow | null; onClose: 
             <p className="mt-1 break-all text-muted">{link.destination}</p>
           </div>
           <p className="text-xs text-muted">
-            The redirect stops at once and stays stopped, including after the owner edits the link.
-            Nothing is deleted: the link and its clicks survive, and you can restore it.
+            The redirect stops within a minute everywhere, and stays stopped after the owner edits
+            the link. Nothing is deleted: the link and its clicks survive, and you can restore it.
           </p>
           <Field label="Reason">
             <Input
@@ -618,7 +618,7 @@ function AnonymousLinks() {
         onClose={() => setDeleting(null)}
         onConfirm={remove.mutate}
       >
-        stops redirecting at once. It would have expired on its own within 24 hours.
+        stops redirecting within a minute. It would have expired on its own within 24 hours.
       </DeleteLinkDialog>
     </div>
   );
@@ -844,7 +844,7 @@ function RestoreLinkDialog({
     >
       <p className="text-sm text-muted">
         <span className="font-mono font-bold text-text">/{link?.slug}</span> starts redirecting
-        again immediately.
+        again within a minute.
       </p>
     </ConfirmDialog>
   );
