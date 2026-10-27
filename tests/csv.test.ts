@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { statsFilename, statsToCsv, toCsv } from "../src/app/lib/csv";
+import { statsFilename, statsToCsv } from "../src/app/lib/csv";
+import { toCsv } from "../src/shared/csv";
 
 describe("toCsv", () => {
   test("leaves an ordinary field bare", () => {
