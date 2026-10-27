@@ -9,9 +9,10 @@ import { AvatarInput } from "../components/avatar-input";
 import { uploadUserAvatar, deleteUserAvatar } from "../lib/api";
 import { authClient } from "../lib/auth-client";
 import { Button } from "../ui/button";
-import { Field, Input } from "../ui/field";
+import { Input } from "../ui/field";
 import { Switch } from "../ui/switch";
-import { Card, PageHeader } from "../ui/misc";
+import { PageHeader } from "../ui/misc";
+import { SettingsGroup, SettingsRow } from "../ui/settings-rows";
 import { BusyContent } from "../ui/spinner";
 import { useToast } from "../ui/toast";
 import { ConfirmDialog } from "../ui/confirm-dialog";
@@ -137,54 +138,52 @@ function useAccountForm(user: User | undefined) {
   };
 }
 
-function AccountCard({ user }: { user: User | undefined }) {
+function AccountGroup({ user }: { user: User | undefined }) {
   const [theme, toggleTheme] = useTheme();
   const { register, currentName, pic, save, isSubmitting, dirty } = useAccountForm(user);
 
   return (
-    <Card className="max-w-2xl">
-      <div className="flex flex-col gap-6">
-        <div className="flex flex-col gap-4">
-          <div className="flex flex-col-reverse gap-5 sm:flex-row sm:items-start sm:gap-6">
-            <div className="flex min-w-0 flex-1 flex-col gap-4">
-              <Field label="Your name">
-                <Input {...register("name")} />
-              </Field>
-              <Field label="Email">
-                <Input value={user?.email ?? ""} disabled readOnly className="font-mono text-xs" />
-              </Field>
-            </div>
-            {user && (
-              <AvatarInput
-                // Blobatar tracks the name being typed; the image wins over it.
-                user={{ ...user, name: currentName.trim() || user.name }}
-                pendingUrl={pic.url}
-                pendingRemove={pic.remove}
-                onPick={pic.pick}
-                onRemove={pic.clear}
-              />
-            )}
-          </div>
-          <div>
-            <Button variant="primary" onClick={save} disabled={!dirty || isSubmitting}>
-              <BusyContent busy={isSubmitting}>Save</BusyContent>
-            </Button>
-          </div>
-        </div>
-
-        <div className="flex items-center justify-between gap-4 border-t border-border pt-5">
-          <div>
-            <p className="text-sm">Dark mode</p>
-            <p className="text-xs text-muted">Also on the account menu, bottom left.</p>
-          </div>
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        void save();
+      }}
+      className="flex flex-col gap-3"
+    >
+      <SettingsGroup title="Account">
+        <SettingsRow label="Picture" hint="Shown to your teammates.">
+          {user && (
+            <AvatarInput
+              size={40}
+              // Blobatar tracks the name being typed; the image wins over it.
+              user={{ ...user, name: currentName.trim() || user.name }}
+              pendingUrl={pic.url}
+              pendingRemove={pic.remove}
+              onPick={pic.pick}
+              onRemove={pic.clear}
+            />
+          )}
+        </SettingsRow>
+        <SettingsRow label="Name">
+          <Input {...register("name")} aria-label="Your name" className="w-60 max-sm:w-full" />
+        </SettingsRow>
+        <SettingsRow label="Email">
+          <span className="font-mono text-xs">{user?.email}</span>
+        </SettingsRow>
+        <SettingsRow label="Dark mode" hint="Also on the account menu.">
           <Switch
             label="Dark mode"
             checked={theme === "dark"}
             onCheckedChange={(on) => on !== (theme === "dark") && toggleTheme()}
           />
-        </div>
+        </SettingsRow>
+      </SettingsGroup>
+      <div className="flex justify-end">
+        <Button variant="primary" type="submit" disabled={!dirty || isSubmitting}>
+          <BusyContent busy={isSubmitting}>Save</BusyContent>
+        </Button>
       </div>
-    </Card>
+    </form>
   );
 }
 
@@ -214,22 +213,30 @@ function useDeleteAccountFlow() {
   return { open, setOpen, pending, deleteAccount };
 }
 
-function DeleteAccountCard({ disabled, onDelete }: { disabled: boolean; onDelete: () => void }) {
+function DeleteAccountGroup({
+  disabled,
+  ownedCount,
+  onDelete,
+}: {
+  disabled: boolean;
+  ownedCount: number;
+  onDelete: () => void;
+}) {
   return (
-    <Card className="max-w-2xl">
-      <div className="flex flex-col gap-3">
-        <p className="text-xs font-medium text-danger">Danger zone</p>
-        <p className="text-sm text-muted">
-          Permanently delete your account, and every organization you own with it. Organizations you
-          only belong to are left alone.
-        </p>
-        <div>
-          <Button variant="danger" onClick={onDelete} disabled={disabled}>
-            Delete account
-          </Button>
-        </div>
-      </div>
-    </Card>
+    <SettingsGroup danger>
+      <SettingsRow
+        label="Delete account"
+        hint={
+          ownedCount > 0
+            ? `Also deletes the ${ownedCount === 1 ? "organization" : `${ownedCount} organizations`} you own.`
+            : "Organizations you only belong to are left alone."
+        }
+      >
+        <Button variant="danger" onClick={onDelete} disabled={disabled}>
+          Delete account
+        </Button>
+      </SettingsRow>
+    </SettingsGroup>
   );
 }
 
@@ -251,7 +258,7 @@ function DeleteAccountWarning({ orgs }: { orgs: UserOrg[] }) {
         This permanently deletes your account and the{" "}
         {orgs.length === 1 ? "organization" : `${orgs.length} organizations`} you own:
       </p>
-      <ul className="flex flex-col gap-1 rounded-xl border border-border bg-surface-2 px-4 py-3">
+      <ul className="flex flex-col gap-1 rounded-xl bg-surface-2 px-4 py-3">
         {orgs.map((org) => (
           <li key={org.id} className="text-sm font-semibold text-text">
             {org.name}
@@ -279,11 +286,12 @@ export function SettingsPage() {
 
   return (
     <div>
-      <PageHeader title="Settings" sub="Your account" />
-      <div className="flex flex-col gap-4">
-        <AccountCard user={currentUser.data?.user} />
-        <DeleteAccountCard
+      <PageHeader title="Settings" />
+      <div className="flex max-w-[760px] flex-col gap-8">
+        <AccountGroup user={currentUser.data?.user} />
+        <DeleteAccountGroup
           disabled={accountDeleteDisabled}
+          ownedCount={ownedOrgs.length}
           onDelete={() => deleteAccountFlow.setOpen(true)}
         />
       </div>
