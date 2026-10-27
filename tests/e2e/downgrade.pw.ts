@@ -177,13 +177,21 @@ test("losing seats demotes the newest members to viewer, and says so", async ({
     await page.goto("/members");
     await page.getByRole("button", { name: "Invite link" }).click();
     await page.getByRole("button", { name: "Create invite link" }).click();
-    const [invite] = await queryRows<{ token: string }>(
-      page,
-      `select token from invites
-       where created_by = (select id from user where email = ?)
-       order by created_at desc limit 1`,
-      [email],
-    );
+    // The click only starts the request: poll until the row exists rather than
+    // reading straight after it (this read raced the write on a CI shard).
+    // The previous seat's invite was spent and deleted, so any row is this one.
+    const latestInvite = async () =>
+      (
+        await queryRows<{ token: string }>(
+          page,
+          `select token from invites
+           where created_by = (select id from user where email = ?)
+           order by created_at desc limit 1`,
+          [email],
+        )
+      )[0]?.token;
+    await expect.poll(latestInvite).toBeTruthy();
+    const invite = { token: (await latestInvite())! };
     const guest = await guestAccount(browser, prefix);
     await guest.page.goto(`/invite/${invite.token}`);
     await guest.page.getByRole("button", { name: "Accept invite" }).click();

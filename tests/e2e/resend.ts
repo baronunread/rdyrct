@@ -91,7 +91,26 @@ export async function verifySignup(page: Page, email: string) {
   await expect(page).toHaveURL(/\/dashboard$/, { timeout: 30_000 });
 }
 
+/**
+ * A verified, signed-in account on the dashboard, in one request instead of
+ * the form (src/worker/dev-scenarios.ts, POST /__dev/test-account). For every
+ * spec that needs somebody to be but is not about signing up: the form costs
+ * 6 to 7 seconds a test and most specs paid it only to get here.
+ *
+ * Specs that are about sign-up itself use `signUpThroughForm`.
+ */
 export async function signUpAndVerify(page: Page, email: string, password: string) {
+  const res = await page.request.post("/__dev/test-account", { data: { email, password } });
+  expect(res.status(), await res.text()).toBe(201);
+  await page.goto("/dashboard");
+  await expect(page.getByPlaceholder("https://example.com/launch").first()).toBeVisible({
+    timeout: 30_000,
+  });
+}
+
+/** The whole sign-up as a person goes through it: form, Turnstile, the
+ * emailed code. For the specs that are about that flow. */
+export async function signUpThroughForm(page: Page, email: string, password: string) {
   await submitSignup(page, email, password);
 
   // Not the default 5s: a sign-up here is a Turnstile challenge, an

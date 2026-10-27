@@ -1,5 +1,5 @@
 import { expect, type Page, test } from "@playwright/test";
-import { signUpAndVerify, subjectsSentTo, verifySignup, submitSignup } from "./resend";
+import { signUpThroughForm, subjectsSentTo, verifySignup, submitSignup } from "./resend";
 import { rawSql } from "./db";
 import { signOut } from "./pages";
 
@@ -20,7 +20,7 @@ async function submitLogin(page: Page, email: string, password: string) {
 
 test("a new account gets one welcome email once its address is verified", async ({ page }) => {
   const email = `welcome-${Date.now()}@gmail.com`;
-  await signUpAndVerify(page, email, "test-password-123");
+  await signUpThroughForm(page, email, "test-password-123");
 
   await expect
     .poll(async () => (await subjectsSentTo(page, email)).filter((s) => s === "Welcome to rdyrct"))
@@ -83,7 +83,7 @@ test.describe("authentication forms", () => {
     const email = `login-${Date.now()}@gmail.com`;
     const password = "test-password-123";
 
-    await signUpAndVerify(page, email, password);
+    await signUpThroughForm(page, email, password);
 
     await signOut(page);
     await expect(page).toHaveURL(/\/login$/);
