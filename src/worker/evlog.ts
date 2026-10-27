@@ -23,7 +23,8 @@ const drains = [createSentryDrain()];
 // after the body drains — which corrupts the SPA HTML the browser receives
 // (React never mounts). Scoping emit to /api/** keeps the SPA and the root
 // redirect untouched while still covering every handler entry point.
-const INCLUDED = ["/api/**", "/api/*"];
+// /__dev only exists in a dev build (src/worker/dev-scenarios.ts).
+const INCLUDED = ["/api/**", "/api/*", "/__dev/**"];
 
 /** Register once, before your routes: `app.use(evlogMiddleware)`. */
 export const evlogMiddleware = evlog({

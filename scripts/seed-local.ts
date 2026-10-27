@@ -14,6 +14,7 @@
 
 import { ALIAS_TTL_MS } from "../src/worker/util";
 import { PLAN_LIMITS, type JsonValue, type OverLimits } from "../src/shared/types";
+import { defaultOrgName } from "../src/shared/org-name";
 
 // SEED_URL points it at a second dev server (a worktree on its own port), so
 // seeding that one leaves the main checkout's database alone.
@@ -899,14 +900,15 @@ async function seedScenarioAccounts(passwordHash: string, now: number, day: numb
       name: "Sam Rivera",
       email: "fresh.account@seed.test",
       admin: 0,
-      org: "My links",
+      // What sign-up names a first org for someone on a personal address.
+      org: defaultOrgName("sam.rivera@gmail.com", "Sam Rivera"),
     },
     {
       key: "admin",
       name: "Ada Platform",
       email: "platform.admin@seed.test",
       admin: 1,
-      org: "Platform Ops",
+      org: defaultOrgName("ada.platform@gmail.com", "Ada Platform"),
     },
   ];
   const statements: string[] = [];

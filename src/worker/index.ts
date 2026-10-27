@@ -365,9 +365,7 @@ app.route("/api/reports", reportRoutes);
 // the branch and the module with it (a static import would keep the module:
 // its route registrations count as side effects).
 if (import.meta.env.DEV)
-  app.all("/__dev/*", async (c) =>
-    (await import("./dev-scenarios")).devScenarioRoutes.fetch(c.req.raw, c.env, c.executionCtx),
-  );
+  app.all("/__dev/*", async (c) => (await import("./dev-scenarios")).handleDev(c));
 
 // Polar webhook: public, signature-verified, no session middleware.
 app.post("/api/webhooks/polar", (c) => {

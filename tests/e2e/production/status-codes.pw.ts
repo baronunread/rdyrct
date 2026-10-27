@@ -65,7 +65,13 @@ test("the dev scenario switcher does not exist in a built Worker", async ({ requ
   // route still answered 404.
   const { readdirSync, readFileSync } = await import("node:fs");
   const dir = "dist/rdyrct";
-  for (const file of readdirSync(dir).filter((f) => f.endsWith(".js")))
+  // Recursive: the Worker build also writes chunks under assets/, which is
+  // where a dynamically imported module lands if the fence ever slips.
+  const files = readdirSync(dir, { recursive: true, encoding: "utf8" }).filter((f) =>
+    f.endsWith(".js"),
+  );
+  expect(files.length).toBeGreaterThan(0);
+  for (const file of files)
     expect(readFileSync(`${dir}/${file}`, "utf8"), file).not.toContain("seed-password-123");
 
   for (const path of ["/__dev/scenarios", "/__dev/scenarios/pro-owner"]) {

@@ -1,4 +1,4 @@
-import { Hono } from "hono";
+import type { Context } from "hono";
 import type { AppEnv } from "./env";
 import { getAuth } from "./better-auth";
 import { lookup } from "../shared/lookup";
@@ -156,18 +156,23 @@ li{margin:0 0 18px}span{color:#544f61}a{color:#745ab8}.p{font-size:13px;margin-r
 <h1>Dev scenarios</h1><p>Signs in as a seeded account in that state. Needs <code>bun run db:seed:local</code>. Dev builds only.</p><ul>${rows}</ul>`;
 }
 
-export const devScenarioRoutes = new Hono<AppEnv>().basePath("/__dev");
-
-devScenarioRoutes.get("/scenarios", (c) => {
+/**
+ * Answers every /__dev request. index.ts calls it with its own context, so the
+ * request carries the app's wide event (evlog's include list names /__dev,
+ * which only exists in a dev build).
+ */
+export async function handleDev(c: Context<AppEnv>): Promise<Response> {
   const log = c.get("log");
-  log?.set({ route: "/__dev/scenarios" });
-  return c.html(indexPage());
-});
+  const path = new URL(c.req.url).pathname;
+  log?.set({ route: path });
+  if (c.req.method === "GET" && path === "/__dev/scenarios") return c.html(indexPage());
+  const name = /^\/__dev\/scenarios\/([a-z-]+)$/.exec(path)?.[1];
+  if (c.req.method === "GET" && name) return signInAs(c, name);
+  return c.text("Not found", 404);
+}
 
-devScenarioRoutes.get("/scenarios/:name", async (c) => {
-  const name = c.req.param("name");
-  const log = c.get("log");
-  log?.set({ route: "/__dev/scenarios/:name", scenario: { name } });
+async function signInAs(c: Context<AppEnv>, name: string): Promise<Response> {
+  c.get("log")?.set({ scenario: { name } });
   const scenario: Scenario | undefined = lookup(SCENARIOS, name);
   if (!scenario) return c.text(`No scenario "${name}". See /__dev/scenarios`, 404);
 
@@ -188,22 +193,28 @@ devScenarioRoutes.get("/scenarios/:name", async (c) => {
   });
   for (const cookie of signIn.headers.getSetCookie()) res.headers.append("set-cookie", cookie);
   return res;
-});
-
-/** Where the hop lands: the page asked for, or the scenario's own start. */
-function landing(to: string | undefined, scenario: Scenario): string {
-  return to?.startsWith("/") && !to.startsWith("//") ? to : scenario.start;
 }
+
+/** Where the hop lands: an app path asked for, or the scenario's own start.
+ * Only plain paths: no backslash, no second slash at the start, nothing that
+ * could leave the site or end the script it is written into. */
+function landing(to: string | undefined, scenario: Scenario): string {
+  return to && /^\/[a-z0-9/_?=&.-]*$/i.test(to) && !to.startsWith("//") ? to : scenario.start;
+}
+
+/** A value written into an inline script. JSON.stringify leaves "<" alone,
+ * so "</script>" in a value would end the script early. */
+const inScript = (value: string) => JSON.stringify(value).replace(/</g, "\\u003c");
 
 /** The current org and the cookie banner live in localStorage, so the hop
  * goes through a page that sets both before it opens the app. The cached
  * /user is cleared so the shell paints the new account, not the last one. */
 function hopPage(scenario: Scenario, row: { email: string; orgId: string }, target: string) {
   return `<!doctype html><meta charset="utf-8"><title>${esc(scenario.title)}</title><script>
-localStorage.setItem("rdyrct:currentOrg", ${JSON.stringify(row.orgId)});
+localStorage.setItem("rdyrct:currentOrg", ${inScript(row.orgId)});
 localStorage.setItem("rdyrct:consent:v2", "rejected");
 localStorage.setItem("rdyrct:consent:v2:at", String(Date.now()));
 localStorage.removeItem("rdyrct:user:v1");
-location.replace(${JSON.stringify(target)});
+location.replace(${inScript(target)});
 </script>Signing in as ${esc(row.email)}…`;
 }
