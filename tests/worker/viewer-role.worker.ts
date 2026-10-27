@@ -54,6 +54,7 @@ const READS = [
   "/stats",
   "/clicks",
   "/links/stats/sale",
+  "/link-export",
 ];
 
 /** Every write. A viewer must reach none of them. */

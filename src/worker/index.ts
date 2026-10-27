@@ -21,6 +21,7 @@ import {
 } from "./routes/orgs";
 import { linkRoutes } from "./routes/links";
 import { linkImportRoutes } from "./routes/link-import";
+import { linkExportRoutes } from "./routes/link-export";
 import { apiKeyRoutes } from "./routes/api-keys";
 import { oauthConnectionRoutes } from "./routes/oauth-connections";
 import { mcpRoutes } from "./routes/mcp";
@@ -391,6 +392,7 @@ api.route("/", userRoutes);
 api.route("/orgs", orgRoutes);
 api.route("/orgs/:orgId/links", linkRoutes);
 api.route("/orgs/:orgId/link-import", linkImportRoutes);
+api.route("/orgs/:orgId/link-export", linkExportRoutes);
 api.route("/orgs/:orgId/qr-logo", qrLogoRoutes);
 api.route("/user/avatar", avatarRoutes);
 api.route("/billing", billingRoutes);
