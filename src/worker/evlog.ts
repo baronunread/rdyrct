@@ -1,6 +1,10 @@
+import { tracing } from "cloudflare:workers";
 import { initLogger } from "evlog";
 import { evlog } from "evlog/hono";
 import { createSentryDrain } from "evlog/sentry";
+import { createMiddleware } from "hono/factory";
+import { routePath } from "hono/route";
+import type { AppEnv } from "./env";
 
 initLogger({
   env: { service: "rdyrct" },
@@ -35,4 +39,25 @@ export const evlogMiddleware = evlog({
   keep: (ctx) => {
     if (ctx.status && ctx.status >= 400) ctx.shouldKeep = true;
   },
+});
+
+/**
+ * Ties each wide event to Cloudflare's trace of the same request, and names
+ * both by the matched route (`/api/orgs/:orgId/links`) rather than the URL,
+ * so one endpoint groups as one in Sentry and in Workers Observability.
+ * Without the ids the Sentry drain invents a random trace id per event.
+ * Register right after `evlogMiddleware`.
+ */
+export const evlogRequestContext = createMiddleware<AppEnv>(async (c, next) => {
+  // Optional calls although the types say otherwise: the runtime ships these
+  // piecemeal (spanContext and updateName arrived 2026-10-26, and the test
+  // pool's workerd has `tracing` without getActiveSpan), and an older runtime
+  // has to lose the trace link, not every request.
+  const span = tracing.getActiveSpan?.();
+  const ids = span?.spanContext?.();
+  if (ids) c.get("log")?.set({ traceId: ids.traceId, spanId: ids.spanId });
+  await next();
+  const route = routePath(c);
+  c.get("log")?.set({ route });
+  span?.updateName?.(`${c.req.method} ${route}`);
 });
