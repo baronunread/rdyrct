@@ -20,6 +20,12 @@ test("an import runs on the server and is still there after a reload (#383)", as
   const host = await addActiveCustomDomain(page, `import-${Date.now()}.example.com`);
 
   await page.goto("/import");
+  // The consent banner sits over the bottom-right corner, where each step
+  // keeps its Continue button. Answer it, as anybody would.
+  await page
+    .getByRole("region", { name: "Cookie consent" })
+    .getByRole("button", { name: "Reject" })
+    .click();
   await page.getByRole("button", { name: "Dub" }).click();
   await page.locator('input[type="file"]').setInputFiles({
     name: "dub-links.csv",
