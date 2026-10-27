@@ -1,6 +1,28 @@
 import { expect, test } from "@playwright/test";
 import { rawSql } from "./db";
 import { hashPassword } from "../../src/worker/password";
+import type { Page } from "@playwright/test";
+
+/** Both tests touch the one "fresh" account, so they run in order, and each
+ * starts by removing it: the e2e database is shared and never reset, so a
+ * retry or a second run would otherwise find the first run's row. */
+test.describe.configure({ mode: "serial" });
+
+const userId = "seed-scn-fresh";
+const orgId = "seed-scn-org-fresh";
+
+async function removeFreshAccount(page: Page) {
+  // By address, not by id: an earlier run that died half way can leave a row
+  // under another id, and the address is what is unique.
+  const who = "(SELECT id FROM user WHERE email = 'fresh.account@seed.test')";
+  await rawSql(page, `DELETE FROM org_members WHERE user_id IN ${who} OR org_id = ?`, [orgId]);
+  await rawSql(page, "DELETE FROM orgs WHERE id = ?", [orgId]);
+  await rawSql(page, `DELETE FROM account WHERE user_id IN ${who} OR id = ?`, [
+    "seed-acc-scn-fresh",
+  ]);
+  await rawSql(page, `DELETE FROM session WHERE user_id IN ${who}`);
+  await rawSql(page, "DELETE FROM user WHERE email = 'fresh.account@seed.test'");
+}
 
 /**
  * The dev scenario switcher (src/worker/dev-scenarios.ts) answers on the dev
@@ -10,8 +32,10 @@ import { hashPassword } from "../../src/worker/password";
  * `bun run db:seed:local`).
  */
 test("the dev scenario list renders and an unseeded scenario signs nobody in", async ({
+  page,
   request,
 }) => {
+  await removeFreshAccount(page);
   const list = await request.get("/__dev/scenarios");
   expect(list.status()).toBe(200);
   const html = await list.text();
@@ -32,16 +56,10 @@ test("the dev scenario list renders and an unseeded scenario signs nobody in", a
  * link says, with its org selected.
  */
 test("a scenario link signs in as its seeded account and lands on the page", async ({ page }) => {
-  const userId = "seed-scn-fresh";
-  const orgId = "seed-scn-org-fresh";
   const now = Date.now();
   // A leftover from a seeded dev database or an earlier run would make the
   // inserts below collide; this test owns these ids.
-  await rawSql(page, "DELETE FROM org_members WHERE user_id = ?", [userId]);
-  await rawSql(page, "DELETE FROM orgs WHERE id = ?", [orgId]);
-  await rawSql(page, "DELETE FROM account WHERE user_id = ?", [userId]);
-  await rawSql(page, "DELETE FROM session WHERE user_id = ?", [userId]);
-  await rawSql(page, "DELETE FROM user WHERE id = ?", [userId]);
+  await removeFreshAccount(page);
   await rawSql(
     page,
     "INSERT INTO user (id, name, email, email_verified, plan, created_at, updated_at) VALUES (?, 'Sam Rivera', 'fresh.account@seed.test', 1, 'free', ?, ?)",

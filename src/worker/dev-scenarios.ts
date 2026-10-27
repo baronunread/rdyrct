@@ -2,6 +2,7 @@ import type { Context } from "hono";
 import type { AppEnv } from "./env";
 import { getAuth } from "./better-auth";
 import { lookup } from "../shared/lookup";
+import { PLAN_LIMITS } from "../shared/types";
 
 /**
  * Dev-only scenarios: every account state one link away, against the real
@@ -73,8 +74,11 @@ const SCENARIOS = {
     title: "Member, not owner",
     about: "Belongs to a paid org as a member.",
     start: "/links",
+    // The org's plan is its owner's, so the owner is what makes it paid.
     sql: `SELECT u.email, m.org_id AS orgId FROM org_members m JOIN user u ON u.id = m.user_id
-      WHERE m.role = 'member' AND u.email LIKE '%@seed.test'
+      JOIN org_members om ON om.org_id = m.org_id AND om.role = 'owner'
+      JOIN user owner ON owner.id = om.user_id
+      WHERE m.role = 'member' AND u.email LIKE '%@seed.test' AND owner.plan IN ('hobby', 'pro')
         AND m.org_id NOT IN (SELECT org_id FROM org_entitlements) LIMIT 1`,
   },
   viewer: {
@@ -116,7 +120,10 @@ const SCENARIOS = {
       JOIN org_members m ON m.org_id = o.id AND m.role = 'owner'
       JOIN user u ON u.id = m.user_id
       WHERE u.plan = 'free' AND u.email LIKE '%@seed.test' AND ${notDowngraded}
-      ORDER BY c.month DESC, c.clicks DESC LIMIT 1`,
+        -- This month only (UTC, as the counter is kept), and really at the cap:
+        -- last month's capped org has a fresh allowance today.
+        AND c.month = strftime('%Y-%m', 'now') AND c.clicks >= ${PLAN_LIMITS.free.trackedClicks}
+      ORDER BY c.clicks DESC LIMIT 1`,
   },
   admin: {
     title: "Platform admin",
