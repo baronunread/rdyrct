@@ -5,8 +5,14 @@ import { useSearchParams } from "../lib/router-search";
 import { ArrowLeft, ExternalLink, QrCode } from "@/app/ui/icons";
 import { useLinkStats, useLinks, useLinkMutations, useMembers } from "../lib/hooks";
 import { useOrgLimits } from "../lib/org-limits";
-import { AreaChart, BarList, StatsChart } from "../components/charts";
-import { CountryMap } from "../components/country-map";
+import {
+  AreaChart,
+  BarList,
+  PlacesPanel,
+  StatsChart,
+  countryName,
+  dayTick,
+} from "../components/charts";
 import { NoOrgState } from "../components/no-org";
 import { LinkEditor } from "../components/link-editor";
 import { LinkPreviewDialog } from "../components/link-preview-dialog";
@@ -25,22 +31,6 @@ import posthog from "../lib/posthog";
 import type { LinkDTO, LinkInput, LinkStats } from "@/shared/types";
 
 /** "Oct 5" from "2026-10-05". */
-const dayTick = (day: string) =>
-  new Date(`${day.slice(0, 10)}T00:00:00Z`).toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    timeZone: "UTC",
-  });
-
-const COUNTRY_NAMES = new Intl.DisplayNames("en", { type: "region" });
-function countryName(code: string): string {
-  try {
-    return COUNTRY_NAMES.of(code) ?? code;
-  } catch {
-    return code;
-  }
-}
-
 /**
  * The link as the links list knows it, for the editor and the QR dialog.
  * The stats answer carries no QR look, UTM tags or pause state, and there is
@@ -141,22 +131,7 @@ function LinkDetailHeader({
 function LinkPanels({ s }: { s: LinkStats }) {
   return (
     <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-      <PanelTabs
-        tabs={[
-          {
-            value: "countries",
-            label: "Countries",
-            panel: (
-              <BarList
-                head={["Country", "Clicks"]}
-                items={s.countries.map((c) => ({ ...c, key: countryName(c.key) }))}
-                empty="The country each click came from appears here. Never the address it came from."
-              />
-            ),
-          },
-          { value: "map", label: "Map", panel: <CountryMap countries={s.countries} /> },
-        ]}
-      />
+      <PlacesPanel countries={s.countries} />
       <PanelTabs
         tabs={[
           {

@@ -3,8 +3,16 @@ import { useStats, useCurrentUser, useClickUsage } from "../lib/hooks";
 import { useCurrentOrg } from "../lib/current-org";
 import { clicksByWeekday } from "../lib/click-buckets";
 import { PLAN_LIMITS, type HeatmapRow, type OrgStats, type UserOrg } from "@/shared/types";
-import { AreaChart, BarList, ClicksByHour, StatsChart } from "../components/charts";
-import { CountryMap } from "../components/country-map";
+import {
+  AreaChart,
+  BarList,
+  ClicksByHour,
+  PlacesPanel,
+  StatsChart,
+  countryName,
+  dayTick,
+  hourTick,
+} from "../components/charts";
 import { PanelTabs } from "../ui/tabs";
 import { Segmented } from "../ui/segmented";
 import { formatNumber } from "../lib/numbers";
@@ -67,24 +75,6 @@ function RangePicker({
       )}
     </div>
   );
-}
-
-/** "Oct 5" from "2026-10-05", and "14:00" from an hourly bucket. */
-const dayTick = (day: string) =>
-  new Date(`${day.slice(0, 10)}T00:00:00Z`).toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    timeZone: "UTC",
-  });
-const hourTick = (day: string) => day.slice(11, 16);
-
-const COUNTRY_NAMES = new Intl.DisplayNames("en", { type: "region" });
-function countryName(code: string): string {
-  try {
-    return COUNTRY_NAMES.of(code) ?? code;
-  } catch {
-    return code;
-  }
 }
 
 /** Where clicks came from: referrers, then whichever UTM lists have rows. A
@@ -192,28 +182,6 @@ function LinksPanel({ s }: { s: OrgStats }) {
   );
 }
 
-function PlacesPanel({ s, period }: { s: OrgStats; period?: string }) {
-  return (
-    <PanelTabs
-      end={period}
-      tabs={[
-        {
-          value: "countries",
-          label: "Countries",
-          panel: (
-            <BarList
-              head={["Country", "Clicks"]}
-              items={s.countries.map((c) => ({ ...c, key: countryName(c.key) }))}
-              empty="The country each click came from appears here. Never the address it came from."
-            />
-          ),
-        },
-        { value: "map", label: "Map", panel: <CountryMap countries={s.countries} /> },
-      ]}
-    />
-  );
-}
-
 /** Only for daily buckets: an hourly range is too short for a by-hour and
  * by-weekday breakdown to mean anything. */
 function TimingPanel({ heatmap }: { heatmap: HeatmapRow[] }) {
@@ -312,7 +280,7 @@ function AnalyticsReport({
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
           <LinksPanel s={s} />
           <SourcesPanel s={s} period={period} />
-          <PlacesPanel s={s} period={period} />
+          <PlacesPanel countries={s.countries} period={period} />
           <PanelTabs
             end={period}
             tabs={[
