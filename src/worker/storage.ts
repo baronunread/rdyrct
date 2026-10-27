@@ -92,15 +92,18 @@ export function deleteQrLogoMsg(url: string): StorageMessage | null {
 
 /**
  * Send messages to the storage queue. Skips nulls so callers can inline
- * conditions.
+ * conditions. `inlineLimit` is how many `kv_sync`s may be applied in the
+ * request before the whole batch goes to the queue instead.
  */
 export async function enqueueStorage(
   env: Env,
   messages: Array<StorageMessage | null>,
+  inlineLimit = INLINE_KV_SYNC_LIMIT,
 ): Promise<void> {
   const pending = await applyKvSyncs(
     env,
     messages.flatMap((m) => (m ? [m] : [])),
+    inlineLimit,
   );
   const batch = pending.map((body) => ({ body }));
   if (!batch.length) return;
@@ -157,10 +160,14 @@ const INLINE_KV_SYNC_LIMIT = 10;
  * their KV writes out of order and leave the older value until the next
  * edit. Rare enough to accept; a per-link Durable Object would close it.
  */
-async function applyKvSyncs(env: Env, messages: StorageMessage[]): Promise<StorageMessage[]> {
+async function applyKvSyncs(
+  env: Env,
+  messages: StorageMessage[],
+  inlineLimit: number,
+): Promise<StorageMessage[]> {
   const db = drizzle(env.DB, { schema });
   const kv = messages.filter((m) => m.op === "kv_sync");
-  if (kv.length > INLINE_KV_SYNC_LIMIT) return messages;
+  if (kv.length > inlineLimit) return messages;
   const rest = messages.filter((m) => m.op !== "kv_sync");
   const results = await Promise.allSettled(kv.map((m) => kvSync(env, db, m.key)));
   return [...rest, ...kv.filter((_, i) => results[i]?.status === "rejected")];
@@ -884,20 +891,54 @@ export async function publishOrgSyncs(
  * Re-sync every address one link answers to, after its suspension or warning
  * changed. A link with three aliases that only republished its primary would
  * keep its old state on the other two. Returns how many addresses it synced.
+ *
+ * Every address is written in the request, past INLINE_KV_SYNC_LIMIT (#101):
+ * a suspension must not wait on a queue that may be stuck, and one link has
+ * few addresses (a primary, five aliases, a rename's 48-hour aliases). The
+ * queue still takes any write that fails.
+ *
+ * `recheck` sends the same keys to the queue again, delayed. An owner's edit
+ * that read D1 just before the suspension committed can land its KV write
+ * just after ours (see applyKvSyncs) and put the link back live; the
+ * delayed sync reads D1 again and puts the hold back. It carries keys, not
+ * values, so it can never write a stale one itself.
  */
-export async function republishLink(env: Env, db: DB, linkId: string): Promise<number> {
+export async function republishLink(
+  env: Env,
+  db: DB,
+  linkId: string,
+  { recheck = false } = {},
+): Promise<number> {
   const addresses = await db
     .select({ slug: schema.linkAddresses.slug, hostname: schema.domains.hostname })
     .from(schema.linkAddresses)
     .leftJoin(schema.domains, eq(schema.linkAddresses.domainId, schema.domains.id))
     .where(and(eq(schema.linkAddresses.linkId, linkId), isNull(schema.linkAddresses.retiredAt)));
-  if (addresses.length > 0)
-    await enqueueStorage(
-      env,
-      addresses.map((a) => syncLinkMsg(a.slug, a.hostname)),
-    );
+  if (addresses.length === 0) return 0;
+  const messages = addresses.map((a) => syncLinkMsg(a.slug, a.hostname));
+  await enqueueStorage(env, messages, Infinity);
+  if (recheck)
+    try {
+      await env.STORAGE_QUEUE.sendBatch(
+        messages.map((body) => ({ body })),
+        { delaySeconds: RECHECK_DELAY_SECONDS },
+      );
+    } catch (error) {
+      // The write that matters already happened in the request.
+      captureAlert([
+        {
+          event: "storage_recheck_send_failed",
+          count: messages.length,
+          error: error instanceof Error ? error.message.slice(0, 200) : "",
+        },
+      ]);
+    }
   return addresses.length;
 }
+
+/** How long after a suspension or restore the queue rewrites its keys. Past
+ * KV's one-write-per-second limit for a key, and past any racing edit. */
+const RECHECK_DELAY_SECONDS = 60;
 
 // Cloudflare Queues caps sendBatch at 100 messages: this sweep enqueues one
 // sync message per expired row in a single sendBatch call below, so the page

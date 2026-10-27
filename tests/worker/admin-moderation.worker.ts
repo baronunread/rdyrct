@@ -4,7 +4,7 @@ import { reset } from "cloudflare:test";
 import { drizzle } from "drizzle-orm/d1";
 import * as schema from "../../src/worker/db/schema";
 import type { JsonValue } from "../../src/shared/types";
-import { applyStorageMessage, syncLinkMsg } from "../../src/worker/storage";
+import { applyStorageMessage, syncLinkMsg, type StorageMessage } from "../../src/worker/storage";
 import {
   adminCookie,
   applyTestMigrations,
@@ -12,6 +12,7 @@ import {
   fetchWorker,
   freeOwnerCookie,
   jsonBody,
+  stubQueue,
   testEnv,
 } from "./support";
 
@@ -227,6 +228,72 @@ describe("suspension survives what would undo it", () => {
     await setSuspended(link.id, await adminCookie(), true, "malware");
 
     for (const row of aliases.results) expect(await heldKey(row.slug)).toBe(true);
+  });
+});
+
+describe("suspension does not wait on the queue (#101)", () => {
+  /** A link answering on twelve slugs: past the ten keys a request writes
+   * itself before handing a batch to the queue. */
+  async function linkWithTwelveSlugs(owner: string) {
+    const link = await createLiveLink(owner);
+    for (let i = 0; i < 11; i++)
+      await env.DB.prepare(
+        "insert into link_addresses (id, link_id, org_id, slug, kind, created_at) values (?, ?, 'org-1', ?, 'permanent_alias', 0)",
+      )
+        .bind(`addr-extra-${i}`, link.id, `extra${i}`)
+        .run();
+    const slugs = await slugsOf(link.id);
+    expect(slugs.length).toBe(12);
+    await syncKv(...slugs);
+    for (const slug of slugs) expect(await liveKey(slug)).toBe(true);
+    return { link, slugs };
+  }
+
+  /** Suspend or restore through a queue that delivers nothing, and return
+   * what it was handed. KV is never synced by hand here. */
+  async function patchWithDeadQueue(cookie: string, linkId: string, body: JsonValue) {
+    const sent: StorageMessage[] = [];
+    const res = await fetchWorker(
+      new Request(`http://localhost/api/admin/links/${linkId}`, {
+        method: "PATCH",
+        headers: { cookie, "content-type": "application/json" },
+        body: JSON.stringify(body),
+      }),
+      { ...authEnv(), STORAGE_QUEUE: stubQueue<StorageMessage>((m) => sent.push(m)) },
+    );
+    expect(res.status).toBe(200);
+    return sent;
+  }
+
+  it("holds every slug in the request, and restores them the same way", async () => {
+    const { link, slugs } = await linkWithTwelveSlugs(await freeOwnerCookie());
+    const cookie = await adminCookie();
+
+    await patchWithDeadQueue(cookie, link.id, { suspended: true, reason: "phishing" });
+    for (const slug of slugs) expect(await heldKey(slug)).toBe(true);
+
+    await patchWithDeadQueue(cookie, link.id, { suspended: false });
+    for (const slug of slugs) expect(await liveKey(slug)).toBe(true);
+  });
+
+  it("puts the hold back when a racing edit writes a stale live value", async () => {
+    const { link, slugs } = await linkWithTwelveSlugs(await freeOwnerCookie());
+    const cookie = await adminCookie();
+    const live = await kvFor(slugs[0]!);
+
+    const sent = await patchWithDeadQueue(cookie, link.id, { suspended: true, reason: "phishing" });
+    // An owner's edit that read D1 before the suspension committed, landing
+    // its KV write after ours.
+    await env.LINKS.put(`slug:${slugs[0]}`, live!);
+    expect(await liveKey(slugs[0]!)).toBe(true);
+
+    // The delayed recheck the route queued reads D1 again.
+    expect(sent.map((m) => m.op === "kv_sync" && m.key).sort()).toEqual(
+      slugs.map((s) => `slug:${s}`).sort(),
+    );
+    const db = drizzle(env.DB, { schema });
+    for (const message of sent) await applyStorageMessage(testEnv, db, message);
+    expect(await heldKey(slugs[0]!)).toBe(true);
   });
 });
 

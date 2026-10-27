@@ -65,6 +65,9 @@ test("an admin can find a link by destination and suspend it", async ({ page }) 
   await page.getByRole("menuitem", { name: "Suspend link" }).click();
   const dialog = page.getByRole("dialog", { name: "Suspend this link" });
   await expect(dialog).toBeVisible();
+  // The real promise (#101): KV reaches every location within a minute, not
+  // at once.
+  await expect(dialog.getByText(/stops within a minute everywhere/)).toBeVisible();
   // A suspension with no reason is not answerable later, so it is refused.
   await expect(dialog.getByRole("button", { name: "Suspend link" })).toBeDisabled();
   await dialog.getByLabel("Reason").fill("phishing report, ticket 412");
@@ -72,12 +75,9 @@ test("an admin can find a link by destination and suspend it", async ({ page }) 
 
   await expect(row.getByText("suspended")).toBeVisible({ timeout: 10_000 });
 
-  // The redirect is gone, and the row and its clicks are not.
-  await expect
-    .poll(async () => (await page.request.get(`/${slug}`, { maxRedirects: 0 })).status(), {
-      timeout: 15_000,
-    })
-    .not.toBe(302);
+  // The redirect is gone, and the row and its clicks are not. Not polled:
+  // the suspend writes KV in its own request, not through the queue (#101).
+  expect((await page.request.get(`/${slug}`, { maxRedirects: 0 })).status()).not.toBe(302);
 
   const rows = await queryRows<{ n: number }>(
     page,
@@ -85,6 +85,15 @@ test("an admin can find a link by destination and suspend it", async ({ page }) 
     [slug],
   );
   expect(Number(rows[0].n)).toBe(1);
+
+  // Restoring writes KV the same way.
+  await row.getByRole("button", { name: `Actions for ${slug}` }).click();
+  await page.getByRole("menuitem", { name: "Restore link" }).click();
+  const restore = page.getByRole("dialog", { name: "Restore this link?" });
+  await expect(restore.getByText(/again within a minute/)).toBeVisible();
+  await restore.getByRole("button", { name: "Restore link" }).click();
+  await expect(row.getByText("suspended")).toBeHidden({ timeout: 10_000 });
+  expect((await page.request.get(`/${slug}`, { maxRedirects: 0 })).status()).toBe(302);
 
   // And it is answerable. The log is its own section, since it records bans
   // and org deletions too, not only link actions.

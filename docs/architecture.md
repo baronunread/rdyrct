@@ -149,6 +149,33 @@ Two distinct consistency promises:
   domain changes, and suspensions therefore do not have a global instant-effect
   guarantee. See [How Workers KV works](https://developers.cloudflare.com/kv/concepts/how-kv-works/).
 
+### The revocation promise (#101)
+
+**A suspended link stops redirecting everywhere within a minute.** That is
+what `/admin` tells a moderator, and what we tell anyone who asks how fast a
+phishing link comes down.
+
+- The suspend (and restore) request writes the link's KV keys itself, every
+  address, before it answers. It does not wait on the storage queue, so a
+  stuck queue cannot keep a suspended link live. Bans and whole-org suspensions
+  write the same way up to ten keys, and send bigger orgs to the queue, which
+  keeps the request inside its subrequest budget.
+- The location that served the admin sees it at once. Every other location
+  sees it once its cached copy expires: up to 60 seconds, the default
+  `cacheTtl` the redirect path reads with (Cloudflare,
+  [Write key-value pairs](https://developers.cloudflare.com/kv/api/write-key-value-pairs/)).
+- A minute later the queue rewrites the same keys from D1. That repairs a KV
+  write that lost a race with an owner's edit. The message names the key,
+  not the value, so it can only ever write the current state.
+- If the request's own KV write fails, the queue retries it, and the daily
+  outbox drain after that. Only then can it take longer than a minute, and
+  Sentry alerts on it (`storage_send_failed`, `storage_outbox_drain_failed`).
+
+There is no faster switch yet. Blocking a host from the blocklist page in
+`/admin` refuses new links to it, not existing ones. If seconds ever matter,
+the manual fallback is a Cloudflare WAF custom rule on the slug's path, which
+needs no deploy. That procedure is not yet written or tested; #101 tracks it.
+
 ## Main runtime flows
 
 ### Redirect and analytics
