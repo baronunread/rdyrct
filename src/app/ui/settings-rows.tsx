@@ -1,0 +1,59 @@
+import type { ReactNode } from "react";
+import { cn } from "./cn";
+
+/**
+ * Settings as rows, not cards with footers (rdyrct-design, "The app's
+ * surfaces"): what it is on the left, the control on the right, one card per
+ * group under a small muted heading. On a phone the control drops under its
+ * label.
+ */
+export function SettingsGroup({
+  title,
+  danger,
+  children,
+}: {
+  title?: string;
+  /** Outlined in the danger colour: for "Delete organization" and the like. */
+  danger?: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <section className="flex flex-col gap-2">
+      {title && <h2 className="text-sm font-medium text-muted">{title}</h2>}
+      <div
+        className={cn(
+          "rounded-xl bg-surface [&>*+*]:shadow-[inset_0_1px_0_var(--border)]",
+          danger
+            ? "shadow-[0_0_0_1px_color-mix(in_oklab,var(--danger)_35%,transparent)]"
+            : "smooth-shadow-ring-xs",
+        )}
+      >
+        {children}
+      </div>
+    </section>
+  );
+}
+
+export function SettingsRow({
+  label,
+  hint,
+  children,
+}: {
+  label: string;
+  /** At most one short line. A paragraph here means the setting needs a
+   *  better name, not more words. */
+  hint?: ReactNode;
+  children: ReactNode;
+}) {
+  return (
+    <div className="flex min-h-14 flex-wrap items-center justify-between gap-x-6 gap-y-2 px-4 py-2.5">
+      <div className="min-w-0 sm:w-64">
+        <p className="text-sm font-medium">{label}</p>
+        {hint && <p className="mt-0.5 text-xs text-pretty text-muted">{hint}</p>}
+      </div>
+      <div className="flex min-w-0 flex-wrap items-center justify-end gap-2.5 max-sm:w-full max-sm:justify-start">
+        {children}
+      </div>
+    </div>
+  );
+}

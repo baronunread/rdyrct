@@ -24,6 +24,7 @@ export {
   IconCreditCard as CreditCard,
   IconDots as Ellipsis,
   IconDownload as Download,
+  IconUpload as Upload,
   IconEye as Eye,
   IconExternalLink as ExternalLink,
   IconFileText as ScrollText,

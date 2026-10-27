@@ -170,7 +170,7 @@ export function PageHeader({
   action,
 }: {
   title: string;
-  sub?: string;
+  sub?: ReactNode;
   action?: ReactNode;
 }) {
   return (
