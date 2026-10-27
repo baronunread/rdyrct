@@ -734,9 +734,15 @@ function useAuthFlow(mode: "login" | "signup") {
   const [resent, setResent] = useState(false);
 
   // RequireAuth bounces a signed-out visitor to /login?next=<path>, so the
-  // query string is the only source for where to send them back.
-  const rawNext = readPending()?.next ?? params.get("next") ?? "/dashboard";
-  const next = rawNext.startsWith("/") && !rawNext.startsWith("//") ? rawNext : "/dashboard";
+  // query string is the only source for where to send them back. Read once:
+  // the moment sign-in navigates to `next` the query string is gone, and this
+  // page renders once more before it unmounts. Read live, `next` fell back to
+  // /dashboard on that render and useRedirectWhenSignedIn replaced the page
+  // the visitor had just been sent to (an invite was never accepted).
+  const [next] = useState(() => {
+    const raw = readPending()?.next ?? params.get("next") ?? "/dashboard";
+    return raw.startsWith("/") && !raw.startsWith("//") ? raw : "/dashboard";
+  });
 
   const { forgotBusy, submitForgot, resetChallenge } = useForgotPassword(
     setView,
