@@ -17,7 +17,8 @@ import { TableSkeleton } from "../ui/skeleton";
 import { useToast } from "../ui/toast";
 import { ConfirmDialog } from "../ui/confirm-dialog";
 import { relativeDate, shortDate } from "../lib/dates";
-import { Plus, Trash2 } from "../ui/icons";
+import { ExternalLink, Plus, Trash2 } from "../ui/icons";
+import { RDYRCT_SITE } from "@/shared/site";
 import { cn } from "../ui/cn";
 import { McpConnectWizard } from "../components/mcp-connect-wizard";
 import { CreateApiKeyDialog } from "../components/create-api-key-dialog";
@@ -166,27 +167,44 @@ function ConnectedAppsSection() {
   );
 }
 
-/** The key in two lines (rdyrct-design, "Tables earn two lines"): the name
- * in bold over its prefix in mono. */
-function ApiKeyRow({ apiKey, onRevoke }: { apiKey: ApiKeyDTO; onRevoke: () => void }) {
+/**
+ * A key as the API may send it: who made it, once the worker says so. Keys
+ * belong to the account that made them (session.ts), so until the API sends
+ * a name there is nobody to name but the reader.
+ */
+type ApiKeyRowData = ApiKeyDTO & { createdByName?: string | null };
+
+/** "Oct 2, 2026 by Franco", or just the date until the API names the maker. */
+function createdLabel(key: ApiKeyRowData): string {
+  const date = shortDate(key.createdAt);
+  const first = key.createdByName?.trim().split(/\s+/)[0];
+  return first ? `${date} by ${first}` : date;
+}
+
+/** One key: its name, its prefix in mono, when and by whom it was made, and
+ * when it last called. The trash shows on hover where there is hover. */
+function ApiKeyRow({ apiKey, onRevoke }: { apiKey: ApiKeyRowData; onRevoke: () => void }) {
   return (
-    <tr>
-      <Td>
-        <div className="flex min-w-0 flex-col gap-0.5">
-          <span className="truncate text-sm font-semibold" title={apiKey.name}>
-            {apiKey.name}
-          </span>
-          <span className="truncate font-mono text-xs text-muted">{apiKey.keyPrefix}…</span>
-        </div>
+    <tr className="group/row">
+      <Td className="truncate text-sm font-semibold" title={apiKey.name}>
+        {apiKey.name}
       </Td>
-      <Td className="tnum hidden text-sm whitespace-nowrap text-muted sm:table-cell">
-        {shortDate(apiKey.createdAt)}
+      <Td className="hidden truncate font-mono text-xs text-muted sm:table-cell">
+        {apiKey.keyPrefix}…
       </Td>
-      <Td className="tnum text-sm whitespace-nowrap text-muted">
-        {apiKey.lastUsedAt ? relativeDate(apiKey.lastUsedAt) : "Never used"}
+      <Td className="tnum hidden text-sm whitespace-nowrap text-muted md:table-cell">
+        {createdLabel(apiKey)}
+      </Td>
+      <Td
+        className={cn(
+          "tnum text-sm whitespace-nowrap",
+          apiKey.lastUsedAt ? "text-muted" : "text-placeholder",
+        )}
+      >
+        {apiKey.lastUsedAt ? relativeDate(apiKey.lastUsedAt) : "Never"}
       </Td>
       <Td className="py-1.5">
-        <div className="flex justify-end">
+        <div className="flex justify-end transition-opacity duration-150 [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover/row:opacity-100 [@media(hover:hover)]:focus-within:opacity-100">
           <IconButton label={`Revoke ${apiKey.name}`} danger onClick={onRevoke}>
             <Trash2 size={15} />
           </IconButton>
@@ -218,8 +236,9 @@ function ApiKeysTable({
       <Table fixed>
         <thead>
           <tr>
-            <Th>Key</Th>
-            <Th className="hidden sm:table-cell sm:w-32">Created</Th>
+            <Th>Name</Th>
+            <Th className="hidden sm:table-cell sm:w-56">Key</Th>
+            <Th className="hidden md:table-cell md:w-52">Created</Th>
             <Th className="w-32">Last used</Th>
             <Th className="w-14">
               <span className="sr-only">Actions</span>
@@ -232,7 +251,10 @@ function ApiKeysTable({
           ))}
         </tbody>
       </Table>
-      <p className="text-xs text-muted">You see the full key once, when you create it.</p>
+      <p className="text-xs text-pretty text-muted">
+        A key acts as you, in every organization you own or belong to. You see the full key once,
+        when you create it.
+      </p>
     </>
   );
 }
@@ -328,6 +350,10 @@ const TABS: { id: ApiTab; label: string }[] = [
   { id: "mcp", label: "MCP" },
 ];
 
+/** The API reference. rdyrct.com serves it at /docs; a self-hosted copy has
+ * no marketing pages, so it points at rdyrct.com's. */
+const DOCS_URL = RDYRCT_SITE ? "/docs" : "https://rdyrct.com/docs";
+
 /** The tab param, read and written through the URL rather than local state,
  * so a shell reload lands back on whichever tab was open instead of always
  * resetting to "keys". "keys" has no ?tab= of its own (the default), so a
@@ -369,6 +395,16 @@ function ApiTabBar({ active, onChange }: { active: ApiTab; onChange: (tab: ApiTa
           {tab.label}
         </button>
       ))}
+      <a
+        href={DOCS_URL}
+        target="_blank"
+        rel="noreferrer"
+        className="inline-flex cursor-pointer items-center gap-1 pb-2.5 text-sm whitespace-nowrap text-muted outline-none focus-visible:text-text focus-visible:underline [@media(hover:hover)]:hover:text-text"
+      >
+        Docs
+        <ExternalLink size={13} aria-hidden />
+        <span className="sr-only">(opens in a new tab)</span>
+      </a>
     </nav>
   );
 }
@@ -381,7 +417,7 @@ function OwnerOnlyNotice() {
   );
 }
 
-/** Header, tabs and the open tab. "New key" is the screen's one primary
+/** Header, tabs and the open tab. "Create key" is the screen's one primary
  * button, and only on the keys tab, for the owner. */
 function ApiView({ orgId, isOwner }: { orgId: string; isOwner: boolean }) {
   const [tab, setTab] = useApiTab();
@@ -396,7 +432,7 @@ function ApiView({ orgId, isOwner }: { orgId: string; isOwner: boolean }) {
         action={
           showNewKey ? (
             <Button variant="primary" onClick={section.openCreate}>
-              <Plus size={15} /> New key
+              <Plus size={15} aria-hidden /> Create key
             </Button>
           ) : undefined
         }

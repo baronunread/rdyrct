@@ -27,7 +27,7 @@ test("a new account arrives with an organization and one question", async ({ pag
   // One question, and none of the empty furniture: three zeroed stat cards
   // and a flat chart teach a new account that the product is empty.
   await expect(page.getByRole("heading", { name: "Shorten your first link" })).toBeVisible();
-  await expect(page.getByText("Clicks · 7d")).toHaveCount(0);
+  await expect(page.getByRole("term").getByText("Clicks", { exact: true })).toHaveCount(0);
 
   await page.getByPlaceholder("https://example.com/launch").first().fill("example.com/first-run");
   await page.getByRole("button", { name: "Create link" }).click();
@@ -39,7 +39,10 @@ test("a new account arrives with an organization and one question", async ({ pag
 
   // And with a link in it, the dashboard becomes a dashboard.
   await expect(page.getByRole("heading", { name: "Dashboard" })).toBeVisible();
-  await expect(page.getByText("Clicks · 7d")).toBeVisible();
+  await expect(page.getByRole("term").getByText("Clicks", { exact: true })).toBeVisible();
+  await expect(
+    page.getByRole("group", { name: "Range" }).getByRole("button", { name: "7d", exact: true }),
+  ).toHaveAttribute("aria-pressed", "true");
 });
 
 test("typing or pasting anywhere on the dashboard goes into the link field", async ({ page }) => {

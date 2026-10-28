@@ -117,7 +117,7 @@ export async function signUpThroughForm(page: Page, email: string, password: str
   // account write and a mail send, and with the suite running in parallel
   // that round trip regularly outlasts five seconds. Every caller of this
   // helper was failing here for that reason and no other.
-  const codeScreen = page.getByRole("heading", { name: "Enter your code" });
+  const codeScreen = page.getByRole("heading", { name: "Check your email" });
   await expect(codeScreen).toBeVisible({ timeout: 30_000 });
   await page.reload();
   await expect(codeScreen).toBeVisible({ timeout: 30_000 });

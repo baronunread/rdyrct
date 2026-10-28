@@ -21,7 +21,7 @@ async function signUp(page: Page, email: string) {
 
 test("sign-up lands signed in, with no code step", async ({ page }) => {
   await signUp(page, `selfhost-signup-${Date.now()}@example.com`);
-  await expect(page.getByRole("heading", { name: "Enter your code" })).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "Check your email" })).toHaveCount(0);
 });
 
 test("forgot password says this instance cannot send the reset", async ({ page }) => {
@@ -48,9 +48,9 @@ test("without Polar there is nothing to buy and nothing capped", async ({ page }
   await expect(nav.getByRole("link", { name: "Settings" })).toBeVisible();
   await expect(nav.getByRole("link", { name: "Billing" })).toHaveCount(0);
   await page.keyboard.press("ControlOrMeta+KeyK");
-  const palette = page.getByPlaceholder("Search pages and actions…");
+  const palette = page.getByPlaceholder("Search links, pages and actions");
   await palette.fill("billing");
-  await expect(page.getByRole("option", { name: /billing/i })).toHaveCount(0);
+  await expect(page.getByRole("option", { name: "Billing", exact: true })).toHaveCount(0);
   await page.keyboard.press("Escape");
 
   // A free account owns one org and the sign-up made it. Here a second one
@@ -65,11 +65,10 @@ test("without Polar there is nothing to buy and nothing capped", async ({ page }
 
   // Nor does Members explain a seat limit there is not.
   await page.goto("/members");
-  await page.getByRole("button", { name: "Invite people" }).click();
+  await page.getByRole("button", { name: "Invite", exact: true }).click();
   const invite = page.getByRole("dialog", { name: "Invite people" });
   await expect(invite.getByRole("button", { name: "Send invite" })).toBeVisible();
-  await expect(invite.getByText(/seats free/)).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "Member limit info" })).toHaveCount(0);
+  await expect(invite.getByText(/free seats?/)).toHaveCount(0);
 
   // /billing is not a page here.
   const res = await page.goto("/billing");

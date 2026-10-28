@@ -5,30 +5,44 @@ import {
   useState,
   type ChangeEvent,
   type ClipboardEvent,
+  type CSSProperties,
   type ReactNode,
   type RefObject,
 } from "react";
 import { useForm, type SubmitErrorHandler } from "react-hook-form";
 import { valibotResolver } from "@hookform/resolvers/valibot";
 import { Link as RouterLink } from "@tanstack/react-router";
-import { ArrowLeft, Lock, Plus, QrCode } from "@/app/ui/icons";
+import { IconChevronLeft, IconWorld } from "@tabler/icons-react";
+import { Lock, Plus, QrCode } from "@/app/ui/icons";
 import { shortUrl } from "../lib/api";
 import { useLinkHost } from "../lib/hooks";
-import type { DomainDTO, LinkInput } from "@/shared/types";
+import {
+  QR_CORNER_STYLES,
+  QR_DEFAULT_BG,
+  QR_DEFAULT_COLOR,
+  QR_DEFAULT_CORNER,
+  QR_DEFAULT_LOGO_SIZE,
+  QR_DOT_STYLES,
+  type DomainDTO,
+  type LinkInput,
+} from "@/shared/types";
+import { oneOf } from "@/shared/lookup";
 import { Button } from "../ui/button";
 import { buttonClass } from "../ui/button-class";
 import { cn } from "../ui/cn";
-import { Dialog } from "../ui/dialog";
-import { Field, Input } from "../ui/field";
+import { Dialog, DialogClose, DialogTitle } from "../ui/dialog";
+import { Field, FieldReason, Input, InvalidMark } from "../ui/field";
 import { MenuSelect } from "../ui/menu";
 import { BusyContent } from "../ui/spinner";
 import { useToast } from "../ui/toast";
 import { QRPreview } from "./qr";
-import { LinkQrEditor, withoutQrOverrides } from "./link-qr-editor";
+import { SiteLetter } from "./link-marks";
+import { QrContrastNote, QrEditorRows, type QrLookValue, type QrPatch } from "./qr-pickers";
 import { linkInputSchema } from "../lib/schemas";
 import { resolveQrLook, type OrgQr } from "../lib/org-qr";
 import { resolveDefaultDomainId } from "../lib/default-domain";
 import { useShake } from "../lib/use-shake";
+import { isWebAddress, linkFieldError, type LinkFieldError } from "../lib/link-field-errors";
 
 const defaultForm: LinkInput = {
   destination: "",
@@ -161,6 +175,9 @@ function mergePastedText(input: HTMLInputElement, pasted: string): string {
 function openedUrl(form: LinkInput): { base: string; tags: string } | null {
   const raw = form.destination.trim();
   if (!raw) return null;
+  // Shown as typed until it is an address: a browser would happily turn
+  // "copperkettle winter menu" into a percent-encoded host.
+  if (!isWebAddress(raw)) return { base: raw, tags: "" };
   let url: URL;
   try {
     url = new URL(/^[a-z][a-z0-9+.-]*:/i.test(raw) ? raw : `https://${raw}`);
@@ -293,16 +310,21 @@ function ShortLinkField({
   editing,
   activeDomains,
   domainsAllowed,
+  slugRef,
+  error,
 }: {
   form: LinkInput;
   setForm: SetForm;
   editing: boolean;
   activeDomains: DomainDTO[];
   domainsAllowed: boolean;
+  slugRef: RefObject<HTMLInputElement | null>;
+  error?: LinkFieldError;
 }) {
   const linkHost = useLinkHost();
   const slugLocked = !form.domainId;
   const hasDomains = activeDomains.length > 0;
+  const reasonId = "link-editor-slug-reason";
   const hints: ReactNode[] = [];
   if (slugLocked) {
     hints.push(
@@ -333,42 +355,64 @@ function ShortLinkField({
 
   return (
     <div className="min-w-0">
-      <span className="mb-1.5 block text-xs text-muted">Short link</span>
-      <div className="flex min-w-0 items-stretch">
+      <span className="mb-1.5 flex min-h-4 items-center gap-1.5 text-xs text-muted">
+        Short link
+        {error && <FieldReason id={reasonId} reason={error.reason} detail={error.detail} />}
+      </span>
+      {/* One ring around the three parts, the way one field reads as one. */}
+      <div
+        className={cn(
+          "flex h-10 min-w-0 items-stretch rounded-lg smooth-shadow-ring-xs",
+          error && "shadow-[0_0_0_1.5px_var(--danger)]",
+        )}
+      >
         {hasDomains ? (
-          <MenuSelect
-            label="Domain"
-            value={form.domainId ?? ""}
-            onChange={(v) => setForm({ ...form, domainId: v || null, slug: "" })}
-            disabled={editing}
-            className="w-auto max-w-[60%] min-w-0 rounded-r-none font-mono text-[13px]"
-            options={[
-              { value: "", label: linkHost },
-              ...activeDomains.map((d) => ({ value: d.id, label: d.hostname })),
-            ]}
-          />
+          // A fixed share of the row: the trigger fills whatever box it is
+          // given, so the box sets the width.
+          <span className="flex w-[42%] max-w-[210px] min-w-0 shrink-0">
+            <MenuSelect
+              label="Domain"
+              value={form.domainId ?? ""}
+              onChange={(v) => setForm({ ...form, domainId: v || null, slug: "" })}
+              disabled={editing}
+              className="h-10 min-w-0 rounded-l-lg rounded-r-none border-0 bg-surface font-mono text-[13px] [@media(hover:hover)]:hover:bg-surface-2"
+              options={[
+                { value: "", label: linkHost },
+                ...activeDomains.map((d) => ({ value: d.id, label: d.hostname })),
+              ]}
+            />
+          </span>
         ) : (
-          <span className="flex h-9 max-w-[60%] min-w-0 items-center truncate rounded-l-lg bg-surface-2 px-3 font-mono text-[13px] text-muted">
+          <span className="flex max-w-[60%] min-w-0 shrink-0 items-center truncate rounded-l-lg bg-surface-2 px-3 font-mono text-[13px] text-muted">
             {linkHost}
           </span>
         )}
         <span
           aria-hidden
-          className="grid w-5 shrink-0 place-items-center bg-surface-2 text-sm text-muted"
+          className="grid w-[22px] shrink-0 place-items-center bg-surface font-mono text-sm text-placeholder shadow-[inset_1px_0_0_color-mix(in_oklab,var(--text)_8%,transparent),inset_-1px_0_0_color-mix(in_oklab,var(--text)_8%,transparent)]"
         >
           /
         </span>
-        <Input
-          aria-label="Slug"
-          value={form.slug ?? ""}
-          onChange={(e) => setForm({ ...form, slug: e.target.value })}
-          placeholder={slugLocked ? "random" : "launch-2026"}
-          disabled={slugLocked}
-          autoComplete="off"
-          autoCapitalize="none"
-          spellCheck={false}
-          className="min-w-0 flex-1 rounded-l-none font-mono text-[13px]"
-        />
+        <span className="relative flex min-w-0 flex-1">
+          <Input
+            ref={slugRef}
+            aria-label="Slug"
+            aria-invalid={error ? true : undefined}
+            aria-describedby={error ? reasonId : undefined}
+            value={form.slug ?? ""}
+            onChange={(e) => setForm({ ...form, slug: e.target.value })}
+            placeholder={slugLocked ? "random" : "launch-2026"}
+            disabled={slugLocked}
+            autoComplete="off"
+            autoCapitalize="none"
+            spellCheck={false}
+            className={cn(
+              "h-10 min-w-0 flex-1 rounded-l-none font-mono text-[13px] shadow-none aria-invalid:shadow-none",
+              error && "pr-8",
+            )}
+          />
+          {error && <InvalidMark />}
+        </span>
       </div>
       {hints.map((hint, i) => (
         <span key={i} className="mt-1.5 block text-xs text-muted">
@@ -379,6 +423,18 @@ function ShortLinkField({
   );
 }
 
+/** The host a destination points at, for its letter tile, or "" while it is
+ * not an address yet. */
+function destinationHost(raw: string): string {
+  const value = raw.trim();
+  if (!value || /\s/.test(value)) return "";
+  try {
+    return new URL(/^[a-z][a-z0-9+.-]*:/i.test(value) ? value : `https://${value}`).hostname;
+  } catch {
+    return "";
+  }
+}
+
 function LinkFormFields({
   form,
   setForm,
@@ -386,7 +442,9 @@ function LinkFormFields({
   activeDomains,
   domainsAllowed,
   destinationRef,
+  slugRef,
   destinationError,
+  slugError,
   showMoreUtm,
   onShowMoreUtm,
 }: {
@@ -396,11 +454,14 @@ function LinkFormFields({
   activeDomains: DomainDTO[];
   domainsAllowed: boolean;
   destinationRef: RefObject<HTMLInputElement | null>;
-  destinationError?: string;
+  slugRef: RefObject<HTMLInputElement | null>;
+  destinationError?: LinkFieldError;
+  slugError?: LinkFieldError;
   showMoreUtm: boolean;
   onShowMoreUtm: () => void;
 }) {
   const toast = useToast();
+  const host = destinationHost(form.destination);
 
   const onDestinationChange = (e: ChangeEvent<HTMLInputElement>) => {
     const destination = e.target.value;
@@ -424,24 +485,41 @@ function LinkFormFields({
   };
 
   return (
-    <div className="flex min-w-0 flex-col gap-5">
-      <Field label="Destination" error={destinationError}>
-        <Input
-          ref={destinationRef}
-          value={form.destination}
-          onChange={onDestinationChange}
-          onPaste={onDestinationPaste}
-          // A URL keyboard on a text field: the form's own check marks the
-          // field, where type="url" would have the browser refuse first in
-          // a bubble of its own.
-          inputMode="url"
-          autoComplete="off"
-          autoCapitalize="none"
-          spellCheck={false}
-          placeholder="https://example.com/launch"
-          autoFocus={!editing}
-          className="h-10 font-mono text-[13px]"
-        />
+    <div className="flex min-w-0 flex-col gap-[18px]">
+      <Field
+        label="Destination"
+        error={destinationError?.reason}
+        errorDetail={destinationError?.detail}
+      >
+        <span className="relative block">
+          {/* The site's letter stands in for its favicon: the CSP allows no
+              remote images. A globe until there is a site to name. */}
+          <span className="pointer-events-none absolute top-1/2 left-2.5 z-10 -translate-y-1/2">
+            {host ? (
+              <SiteLetter host={host} className="size-[22px] rounded-md text-[11px]" />
+            ) : (
+              <span className="grid size-[22px] place-items-center text-placeholder">
+                <IconWorld size={15} aria-hidden />
+              </span>
+            )}
+          </span>
+          <Input
+            ref={destinationRef}
+            value={form.destination}
+            onChange={onDestinationChange}
+            onPaste={onDestinationPaste}
+            // A URL keyboard on a text field: the form's own check marks the
+            // field, where type="url" would have the browser refuse first in
+            // a bubble of its own.
+            inputMode="url"
+            autoComplete="off"
+            autoCapitalize="none"
+            spellCheck={false}
+            placeholder="https://example.com/launch"
+            autoFocus={!editing}
+            className="h-11 rounded-[10px] pl-10 font-mono text-[13.5px]"
+          />
+        </span>
       </Field>
 
       <ShortLinkField
@@ -450,13 +528,16 @@ function LinkFormFields({
         editing={editing}
         activeDomains={activeDomains}
         domainsAllowed={domainsAllowed}
+        slugRef={slugRef}
+        error={slugError}
       />
 
-      <Field label="Title">
+      <Field label="Title" optional>
         <Input
           value={form.title ?? ""}
           onChange={(e) => setForm({ ...form, title: e.target.value })}
           placeholder="Spring launch"
+          className="h-10"
         />
       </Field>
 
@@ -465,6 +546,23 @@ function LinkFormFields({
   );
 }
 
+/** What the code is drawn with: the link's own look over the org's, every
+ * value concrete. */
+function lookOf(form: LinkInput, orgQr: OrgQr): QrLookValue {
+  const look = resolveQrLook(form, orgQr);
+  const ink = look.color || QR_DEFAULT_COLOR;
+  return {
+    dot: oneOf(QR_DOT_STYLES, look.dotStyle, "rounded"),
+    corner: oneOf(QR_CORNER_STYLES, look.corner, QR_DEFAULT_CORNER),
+    dotColor: ink,
+    cornerColor: look.eyeColor || ink,
+    bg: look.bg || QR_DEFAULT_BG,
+    logo: look.logo ?? "",
+    logoSize: look.logoSize ?? QR_DEFAULT_LOGO_SIZE,
+  };
+}
+
+/** The code on a white card, the way it prints. */
 function LinkQrPreview({
   form,
   orgQr,
@@ -478,21 +576,23 @@ function LinkQrPreview({
 }) {
   const look = resolveQrLook(form, orgQr);
   return (
-    <QRPreview
-      url={previewUrl}
-      logo={look.logo}
-      dotStyle={look.dotStyle}
-      color={look.color}
-      corner={look.corner}
-      eyeColor={look.eyeColor}
-      bg={look.bg}
-      logoSize={look.logoSize}
-      size={size}
-    />
+    <div className="rounded-2xl bg-white p-3 smooth-shadow-ring-sm [&_[role=img]]:rounded-none [&_[role=img]]:border-0">
+      <QRPreview
+        url={previewUrl}
+        logo={look.logo}
+        dotStyle={look.dotStyle}
+        color={look.color}
+        corner={look.corner}
+        eyeColor={look.eyeColor}
+        bg={look.bg}
+        logoSize={look.logoSize}
+        size={size}
+      />
+    </div>
   );
 }
 
-/** The side column: the code, the short link, and where it opens. */
+/** The side column's text: the short link, and where it opens. */
 function LinkSummary({
   form,
   host,
@@ -513,7 +613,7 @@ function LinkSummary({
       </div>
       <div className="flex min-w-0 flex-col gap-0.5">
         <dt className="text-xs text-muted">Opens</dt>
-        <dd className="font-mono text-xs leading-relaxed text-muted [overflow-wrap:anywhere]">
+        <dd className="font-mono text-[11.5px] leading-relaxed text-muted [overflow-wrap:anywhere]">
           {opened ? (
             <>
               {opened.base}
@@ -528,12 +628,55 @@ function LinkSummary({
   );
 }
 
+/** The link's own QR fields, to put back on Cancel. */
+function qrOverridesOf(form: LinkInput): Pick<LinkInput, (typeof QR_OVERRIDE_FIELDS)[number]> {
+  return {
+    qrStyle: form.qrStyle,
+    qrColor: form.qrColor,
+    qrCorner: form.qrCorner,
+    qrEyeColor: form.qrEyeColor,
+    qrBg: form.qrBg,
+    qrLogo: form.qrLogo,
+    qrLogoSize: form.qrLogoSize,
+  };
+}
+
+/** The link with every QR override cleared: back to the org's look. */
+function withoutQrOverrides(form: LinkInput): LinkInput {
+  return {
+    ...form,
+    qrStyle: "",
+    qrColor: "",
+    qrCorner: "",
+    qrEyeColor: "",
+    qrBg: "",
+    qrLogo: "",
+    qrLogoSize: null,
+  };
+}
+
+/** The buttons along the bottom: on a desktop the foot of the side column,
+ * on a phone pinned to the sheet's bottom edge. */
+function Footer({ children, className }: { children: ReactNode; className?: string }) {
+  return <div className={cn("flex items-center justify-end gap-1.5", className)}>{children}</div>;
+}
+
+// A phone sheet scrolls as one; this keeps its buttons on its bottom edge.
+const PHONE_FOOTER =
+  "sticky bottom-0 z-10 bg-surface px-5 pt-3 pb-[max(1.25rem,env(safe-area-inset-bottom))] shadow-[0_-1px_0_color-mix(in_oklab,var(--text)_8%,transparent)] sm:hidden";
+
+// The side column: the paper colour, split from the form by a hairline.
+const ASIDE =
+  "flex min-w-0 flex-col gap-4 bg-bg px-5 pt-4 pb-6 max-sm:shadow-[inset_0_1px_0_color-mix(in_oklab,var(--text)_8%,transparent)] sm:shadow-[inset_1px_0_0_color-mix(in_oklab,var(--text)_8%,transparent)]";
+
 export function LinkEditor({
   open,
   onOpenChange,
   editingLink,
   busy,
   onSave,
+  onDelete,
+  saveError,
   activeDomains,
   defaultDomainId,
   domainsAllowed,
@@ -546,6 +689,15 @@ export function LinkEditor({
   editingLink: LinkInput | null;
   busy: boolean;
   onSave: (data: LinkInput) => void;
+  /** Shows Delete at the left of the footer, when editing. The caller opens
+   * its own confirmation. */
+  onDelete?: () => void;
+  /**
+   * The last save's failure. One the server pins on a field (a destination
+   * it refuses, a slug that is taken) marks that field instead of a toast:
+   * check `linkFieldError(e)` before toasting it yourself.
+   */
+  saveError?: Error | null;
   activeDomains: DomainDTO[];
   /** The org's default domain for new links (#69), or null for the shared
    * one. Ignored when editing: that link already has an address. */
@@ -558,17 +710,26 @@ export function LinkEditor({
   shakeKey: number;
 }) {
   const editing = editingLink != null;
-  // Sends what it loaded. Clearing the QR fields on a plan without qrCustom
-  // was how a title edit silently destroyed a link's logo and colours (#162);
-  // the server now only refuses a save that *changes* them.
-  const save = (data: LinkInput) => onSave(data);
   const shake = useShake();
   const destinationRef = useRef<HTMLInputElement>(null);
+  const slugRef = useRef<HTMLInputElement>(null);
   const customizeRef = useRef<HTMLButtonElement>(null);
   const backRef = useRef<HTMLButtonElement>(null);
+  const formRef = useRef<HTMLFormElement>(null);
+  // The form's height as the QR view opened: the QR view is shorter, and a
+  // centred dialog that shrank would jump up the screen under the pointer.
+  const [formHeight, setFormHeight] = useState<number | undefined>();
   // The QR editor replaces the form in the same dialog, with a way back.
   const [view, setView] = useState<"form" | "qr">("form");
   const [showMoreUtm, setShowMoreUtm] = useState(false);
+  // A refusal pinned on a field: by the server, or by the same address test
+  // run here first. Cleared as soon as that field changes.
+  const [fieldError, setFieldError] = useState<LinkFieldError | null>(null);
+  // The QR look as it was when the QR view opened, for its Cancel.
+  const [qrBefore, setQrBefore] = useState<ReturnType<typeof qrOverridesOf> | null>(null);
+  // The logo's file name, known only for one picked in this session: the
+  // API stores the uploaded file under an id. TODO(lead): store the name.
+  const [logoName, setLogoName] = useState<string | undefined>();
 
   const {
     handleSubmit,
@@ -595,6 +756,8 @@ export function LinkEditor({
       reset(editingLink ?? { ...defaultForm, domainId: newDomainId });
       setView("form");
       setShowMoreUtm(false);
+      setFieldError(null);
+      setLogoName(undefined);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, editingLink, reset]);
@@ -621,6 +784,19 @@ export function LinkEditor({
     setView(next);
   };
 
+  /** Marks one field, says why in its label row, and puts focus on it. */
+  const markField = (error: LinkFieldError) => {
+    setFieldError(error);
+    shake.start();
+    setView("form");
+    // After the view has rendered, so the field exists to take focus.
+    requestAnimationFrame(() => {
+      const el = (error.field === "slug" ? slugRef : destinationRef).current;
+      el?.scrollIntoView({ block: "center", behavior: "smooth" });
+      el?.focus();
+    });
+  };
+
   // shakeKey bumps on every save failure (client validation or server
   // error): the button shakes either way, without the parent needing to
   // know shake is button-level, not whole-dialog.
@@ -632,6 +808,14 @@ export function LinkEditor({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [shakeKey]);
+
+  // A refusal the server pinned on a field lands on that field.
+  useEffect(() => {
+    if (!saveError) return;
+    const pinned = linkFieldError(saveError);
+    if (pinned) markField(pinned);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [saveError]);
 
   const form = watch();
   // Every call site passes the full next LinkInput (spreading the current
@@ -648,31 +832,54 @@ export function LinkEditor({
     // SAFETY: `next` is typed LinkInput, a fully-defined object type, so
     // Object.keys(next) can only return its own declared keys.
     (Object.keys(next) as (keyof LinkInput)[]).forEach((key) => {
-      if (next[key] !== form[key])
-        setValue(key, next[key], { shouldDirty: true, shouldValidate: isSubmitted });
+      if (next[key] === form[key]) return;
+      setValue(key, next[key], { shouldDirty: true, shouldValidate: isSubmitted });
+      if (fieldError?.field === key) setFieldError(null);
+      // A new domain is a new namespace: a slug taken on the old one says
+      // nothing about this one.
+      if (key === "domainId" && fieldError?.field === "slug") setFieldError(null);
     });
+  };
+
+  // Sends what it loaded. Clearing the QR fields on a plan without qrCustom
+  // was how a title edit silently destroyed a link's logo and colours (#162);
+  // the server now only refuses a save that *changes* them.
+  const save = (data: LinkInput) => {
+    if (!isWebAddress(data.destination.trim())) {
+      markField({
+        field: "destination",
+        reason: "Not a web address",
+        detail: "Enter a full address, like https://example.com/menu",
+      });
+      return;
+    }
+    onSave(data);
   };
 
   // A form error marks its field (rdyrct-design): the reason in the label
   // row, focus on the field, and the button shakes. No toast.
   const onInvalid: SubmitErrorHandler<LinkInput> = (errors) => {
-    shake.start();
-    // destination is the only field this schema can reject, so it's always
-    // the culprit.
-    if (errors.destination) {
-      setView("form");
-      // After the view has rendered, so the field exists to take focus.
-      requestAnimationFrame(() => {
-        destinationRef.current?.scrollIntoView({ block: "center", behavior: "smooth" });
-        destinationRef.current?.focus();
-      });
-    }
+    // destination is the only field this schema can reject.
+    if (!errors.destination) return shake.start();
+    markField({
+      field: "destination",
+      reason: form.destination.trim() ? "Not a web address" : "Required",
+      detail: form.destination.trim()
+        ? "Enter a full address, like https://example.com/menu"
+        : "Enter the address this link opens",
+    });
   };
-  const destinationError = errors.destination
-    ? form.destination.trim()
-      ? (errors.destination.message ?? "Enter a valid URL")
-      : "Required"
-    : undefined;
+  const destinationError =
+    fieldError?.field === "destination"
+      ? fieldError
+      : errors.destination
+        ? {
+            field: "destination" as const,
+            reason: form.destination.trim() ? "Not a web address" : "Required",
+            detail: errors.destination.message ?? "Enter a valid URL",
+          }
+        : undefined;
+  const slugError = fieldError?.field === "slug" ? fieldError : undefined;
 
   const selectedDomain = activeDomains.find((d) => d.id === form.domainId)?.hostname ?? null;
   const linkHost = useLinkHost();
@@ -682,10 +889,41 @@ export function LinkEditor({
     [form.slug, selectedDomain, linkHost],
   );
   const opened = openedUrl(form);
+  const look = lookOf(form, orgQr);
 
-  const actions = (
-    <div className="flex justify-end gap-2">
-      <Button variant="ghost" onClick={() => onOpenChange(false)}>
+  const openQr = () => {
+    setQrBefore(qrOverridesOf(form));
+    setFormHeight(formRef.current?.offsetHeight);
+    showView("qr");
+  };
+  const cancelQr = () => {
+    if (qrBefore) setForm({ ...form, ...qrBefore });
+    showView("form");
+  };
+  const applyQr = (patch: QrPatch, fileName?: string) => {
+    if (fileName) setLogoName(fileName);
+    if (patch.qrLogo === "") setLogoName(undefined);
+    setForm({ ...form, ...patch });
+  };
+
+  const formActions = (
+    <>
+      {editing && onDelete && (
+        <Button
+          variant="ghost"
+          onClick={onDelete}
+          // Its padding tucked under the column's edge, so three buttons
+          // fit the 240px the side column leaves them.
+          className="-ml-2 mr-auto px-2 text-danger [@media(hover:hover)]:hover:bg-danger/10 [@media(hover:hover)]:hover:text-danger"
+        >
+          Delete
+        </Button>
+      )}
+      <Button
+        variant="ghost"
+        onClick={() => onOpenChange(false)}
+        className={cn(editing && onDelete && "px-2.5")}
+      >
         Cancel
       </Button>
       <Button
@@ -697,35 +935,70 @@ export function LinkEditor({
       >
         <BusyContent busy={busy}>{editing ? "Save changes" : "Create link"}</BusyContent>
       </Button>
-    </div>
+    </>
   );
+  const qrActions = (
+    <>
+      <button
+        type="button"
+        onClick={() => setForm(withoutQrOverrides(form))}
+        disabled={!hasQrOverrides(form)}
+        className="mr-auto cursor-pointer text-xs text-muted underline decoration-from-font underline-offset-2 disabled:cursor-default disabled:no-underline disabled:opacity-50 enabled:[@media(hover:hover)]:hover:text-text"
+      >
+        Reset
+      </button>
+      <Button variant="ghost" onClick={cancelQr}>
+        Cancel
+      </Button>
+      <Button variant="primary" onClick={() => showView("form")}>
+        Done
+      </Button>
+    </>
+  );
+  const title = editing ? "Edit link" : "New link";
+  const heldHeight: CSSProperties & { "--form-h"?: string } =
+    view === "qr" && formHeight ? { "--form-h": `${formHeight}px` } : {};
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange} title={editing ? "Edit link" : "New link"} wide>
+    <Dialog open={open} onOpenChange={onOpenChange} title={title} size="xl" bare>
       <form
+        ref={formRef}
         onSubmit={handleSubmit(save, onInvalid)}
         noValidate
-        className="grid gap-6 sm:grid-cols-[minmax(0,1fr)_15rem]"
+        // Desktop only: a phone sheet grows from the bottom edge, so a shorter
+        // view does not move what is under the thumb.
+        style={heldHeight}
+        className="grid min-h-full sm:min-h-[var(--form-h,0px)] sm:grid-cols-[minmax(0,1fr)_280px]"
       >
         {view === "form" ? (
           <>
-            <LinkFormFields
-              form={form}
-              setForm={setForm}
-              editing={editing}
-              activeDomains={activeDomains}
-              domainsAllowed={domainsAllowed}
-              destinationRef={destinationRef}
-              destinationError={destinationError}
-              showMoreUtm={showMoreUtm}
-              onShowMoreUtm={() => setShowMoreUtm(true)}
-            />
-            <aside className="flex min-w-0 flex-col gap-5 rounded-xl bg-bg p-4">
+            <div className="flex min-w-0 flex-col gap-[18px] px-5 pt-3 pb-6 sm:px-6 sm:pt-5">
+              <div className="flex min-h-8 items-center gap-2">
+                <DialogTitle className="flex-1">{title}</DialogTitle>
+                <DialogClose className="-mr-1.5 sm:hidden" />
+              </div>
+              <LinkFormFields
+                form={form}
+                setForm={setForm}
+                editing={editing}
+                activeDomains={activeDomains}
+                domainsAllowed={domainsAllowed}
+                destinationRef={destinationRef}
+                slugRef={slugRef}
+                destinationError={destinationError}
+                slugError={slugError}
+                showMoreUtm={showMoreUtm}
+                onShowMoreUtm={() => setShowMoreUtm(true)}
+              />
+            </div>
+            <aside className={ASIDE}>
+              <div className="flex justify-end max-sm:hidden">
+                <DialogClose className="-mr-1.5" />
+              </div>
               <div className="flex flex-col items-center gap-3">
-                <p className="self-start text-xs text-muted">QR code</p>
-                <LinkQrPreview form={form} orgQr={orgQr} previewUrl={previewUrl} size={152} />
+                <LinkQrPreview form={form} orgQr={orgQr} previewUrl={previewUrl} size={156} />
                 {qrCustomEnabled ? (
-                  <Button ref={customizeRef} size="sm" onClick={() => showView("qr")}>
+                  <Button ref={customizeRef} size="sm" onClick={openQr}>
                     <QrCode size={14} aria-hidden /> Customize QR
                   </Button>
                 ) : (
@@ -733,49 +1006,54 @@ export function LinkEditor({
                 )}
               </div>
               <LinkSummary form={form} host={selectedDomain ?? linkHost} opened={opened} />
-              <div className="mt-auto pt-1 max-sm:hidden">{actions}</div>
+              <Footer className="mt-auto pt-1 max-sm:hidden">{formActions}</Footer>
             </aside>
-            {/* On a phone the column above sits under every field, so the
-                buttons ride the sheet's bottom edge instead of a scroll away. */}
-            <div className="sticky -bottom-5 z-10 -mx-5 -mt-3 bg-surface px-5 pt-3 pb-5 shadow-[0_-1px_0_var(--border)] sm:hidden">
-              {actions}
-            </div>
+            <Footer className={PHONE_FOOTER}>{formActions}</Footer>
           </>
         ) : (
           <>
-            <div className="flex min-w-0 flex-col gap-2">
-              <div className="flex items-center gap-1">
+            <div className="flex min-w-0 flex-col gap-1.5 px-5 pt-3 pb-4 sm:px-6 sm:pt-5">
+              {/* The dialog keeps its name (New link) for assistive tech;
+                  what shows is where you are inside it. */}
+              <DialogTitle className="sr-only">{title}</DialogTitle>
+              <div className="mb-1 flex min-h-8 items-center gap-1.5">
                 <button
                   ref={backRef}
                   type="button"
                   onClick={() => showView("form")}
                   aria-label="Back to the link"
-                  className="-ml-2 grid size-9 cursor-pointer place-items-center rounded-md text-muted transition-colors [@media(hover:hover)]:hover:bg-surface-2 [@media(hover:hover)]:hover:text-text"
+                  className="-ml-2 grid size-8 cursor-pointer place-items-center rounded-md text-muted transition-colors focus-visible:outline-2 focus-visible:outline-accent [@media(hover:hover)]:hover:bg-surface-2 [@media(hover:hover)]:hover:text-text"
                 >
-                  <ArrowLeft size={16} />
+                  <IconChevronLeft size={16} aria-hidden />
                 </button>
-                <h3 className="text-sm font-semibold">QR code</h3>
+                <h2 className="flex-1 text-base font-semibold">QR code</h2>
+                <DialogClose className="-mr-1.5 sm:hidden" />
               </div>
-              <LinkQrEditor form={form} setForm={setForm} orgQr={orgQr} />
+              <QrEditorRows
+                look={look}
+                onChange={applyQr}
+                inherited={{ dot: !form.qrStyle, corner: !form.qrCorner }}
+                logoName={
+                  logoName ?? (form.qrLogo ? "This link's logo" : "Your organization's logo")
+                }
+                logoLockedOn={
+                  !form.qrLogo && orgQr.logo
+                    ? "Every QR code carries your organization's logo. Turn it off on Organization."
+                    : undefined
+                }
+              />
             </div>
-            {/* On a phone the preview leads, so a change shows where it is
-                made rather than a long scroll below. */}
-            <aside className="order-first flex min-w-0 flex-col items-center gap-4 rounded-xl bg-bg p-4 sm:sticky sm:top-0 sm:order-none sm:self-start">
-              <LinkQrPreview form={form} orgQr={orgQr} previewUrl={previewUrl} size={168} />
-              <div className="flex w-full items-center justify-between gap-2">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setForm(withoutQrOverrides(form))}
-                  disabled={!hasQrOverrides(form)}
-                >
-                  Reset
-                </Button>
-                <Button variant="primary" onClick={() => showView("form")}>
-                  Done
-                </Button>
+            <aside className={ASIDE}>
+              <div className="flex justify-end max-sm:hidden">
+                <DialogClose className="-mr-1.5" />
               </div>
+              <div className="flex flex-col items-center gap-3">
+                <LinkQrPreview form={form} orgQr={orgQr} previewUrl={previewUrl} size={168} />
+                <QrContrastNote look={look} />
+              </div>
+              <Footer className="mt-auto pt-1 max-sm:hidden">{qrActions}</Footer>
             </aside>
+            <Footer className={PHONE_FOOTER}>{qrActions}</Footer>
           </>
         )}
       </form>

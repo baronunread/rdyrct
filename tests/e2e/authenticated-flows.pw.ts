@@ -29,11 +29,20 @@ test("a new owner can create an organization and a scheme-less quick link", asyn
   await expect(page.getByText("Editor link")).toBeVisible();
 
   await page.goto("/members");
-  await page.getByRole("button", { name: "Invite people" }).click();
+  await page.getByRole("button", { name: "Invite", exact: true }).click();
   const invite = page.getByRole("dialog", { name: "Invite people" });
-  await invite.getByPlaceholder("teammate@company.com").fill(`invitee-${Date.now()}@gmail.com`);
-  await invite.getByRole("button", { name: "Send invite" }).click();
-  await expect(page.getByText("Invite sent")).toBeVisible();
+  // Several addresses at once: each one turns into a chip as it is ended.
+  const invitees = [`invitee-a-${Date.now()}@gmail.com`, `invitee-b-${Date.now()}@gmail.com`];
+  await invite.getByLabel("Emails").fill(`${invitees[0]}, `);
+  await invite.getByLabel("Emails").pressSequentially(invitees[1]);
+  await expect(invite.getByRole("button", { name: `Remove ${invitees[0]}` })).toBeVisible();
+  await invite.getByRole("button", { name: "Send 2 invites" }).click();
+  await expect(page.getByText("2 invites sent")).toBeVisible();
+  // Both wait in the same table as the people they will become.
+  for (const address of invitees)
+    await expect(page.locator("tbody tr").filter({ hasText: address })).toContainText(
+      "Invite sent",
+    );
 
   await page.goto("/settings");
 
@@ -52,7 +61,10 @@ test("a new owner can create an organization and a scheme-less quick link", asyn
   );
   const rootEl = page.locator("html");
   const themeBefore = await rootEl.getAttribute("data-theme");
-  await page.getByRole("switch", { name: "Dark mode" }).click();
+  await page
+    .getByRole("group", { name: "Theme" })
+    .getByRole("button", { name: themeBefore === "dark" ? "Light" : "Dark" })
+    .click();
   await expect(rootEl).not.toHaveAttribute("data-theme", themeBefore ?? "");
 
   // Organization settings live on their own page now.

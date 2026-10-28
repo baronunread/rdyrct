@@ -1,36 +1,57 @@
+import { linkFieldError } from "../lib/link-field-errors";
 import { useMemo, useState } from "react";
-import { Link, useParams } from "@tanstack/react-router";
+import { useNavigate, useParams } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
-import { useSearchParams } from "../lib/router-search";
-import { ArrowLeft, ExternalLink, QrCode } from "@/app/ui/icons";
-import { useLinkStats, useLinks, useLinkMutations, useMembers } from "../lib/hooks";
-import { useOrgLimits } from "../lib/org-limits";
 import {
-  AreaChart,
-  BarList,
-  PlacesPanel,
-  StatsChart,
-  countryName,
-  dayTick,
-} from "../components/charts";
+  IconDots,
+  IconExternalLink,
+  IconLinkPlus,
+  IconQrcode,
+  IconTrash,
+} from "@tabler/icons-react";
+import { useSearchParams } from "../lib/router-search";
+import { useLinks, useLinkMutations, useMembers } from "../lib/hooks";
+import { useOrgLimits } from "../lib/org-limits";
+import { AreaChart, BarList, PlacesPanel, StatsChart, dayTick } from "../components/charts";
 import { NoOrgState } from "../components/no-org";
 import { LinkEditor } from "../components/link-editor";
 import { LinkPreviewDialog } from "../components/link-preview-dialog";
 import { linkFeatures } from "../components/new-link-host";
 import { LinkDetailSide } from "../components/link-detail-side";
 import { LinkDetailSkeleton } from "../components/skeletons";
+import { RangeControl } from "../components/range-control";
+import { SourceTile } from "../components/source-tile";
+import { QRPreview } from "../components/qr";
+import { CreateAliasDialog } from "../components/create-alias-dialog";
+import { DeleteLinkDialog } from "../components/delete-link-dialog";
 import { Badge } from "../ui/misc";
 import { Button } from "../ui/button";
 import { CopyButton } from "../ui/copy-button";
+import { Menu, MenuItem, MenuSeparator } from "../ui/menu";
 import { PanelTabs } from "../ui/tabs";
+import { cn } from "../ui/cn";
 import { useToast } from "../ui/toast";
 import { copyToClipboard } from "../lib/clipboard";
 import { formatNumber } from "../lib/numbers";
 import { linkDisplayTitle } from "../lib/link-display";
+import { resolveQrLook, type OrgQr } from "../lib/org-qr";
+import {
+  PRESET_30D,
+  PRESET_365D,
+  PRESET_7D,
+  cappedCount,
+  deviceLabel,
+  sourceLabel,
+  useLinkInsightStats,
+  windowOf,
+  type LinkInsightStats,
+  type RangePreset,
+} from "../lib/insights-data";
 import posthog from "../lib/posthog";
-import type { LinkDTO, LinkInput, LinkStats } from "@/shared/types";
+import type { LinkDTO, LinkInput } from "@/shared/types";
 
-/** "Oct 5" from "2026-10-05". */
+const LINK_RANGES = [PRESET_7D, PRESET_30D, PRESET_365D] as const;
+
 /**
  * The link as the links list knows it, for the editor and the QR dialog.
  * The stats answer carries no QR look, UTM tags or pause state, and there is
@@ -38,40 +59,128 @@ import type { LinkDTO, LinkInput, LinkStats } from "@/shared/types";
  * by id. Null until it loads, or if the search somehow misses it: then the
  * page simply offers no Edit or QR code.
  */
-function useLinkRow(orgId: string, s: LinkStats | undefined): LinkDTO | null {
+function useLinkRow(orgId: string, s: LinkInsightStats | undefined): LinkDTO | null {
   // An empty org id holds the query until the stats name the slug.
   const links = useLinks(s ? orgId : "", { q: s?.slug ?? "", limit: 100 });
   if (!s) return null;
   return links.data?.items.find((l) => l.id === s.id) ?? null;
 }
 
+/** "go.example.com/" muted, then the slug: the part people read is the
+ * part that differs between links. */
+function ShortAddress({ url }: { url: string }) {
+  const address = linkDisplayTitle(url);
+  const cut = address.lastIndexOf("/") + 1;
+  return (
+    <span className="truncate font-mono text-sm" title={address}>
+      <span className="text-muted">{address.slice(0, cut)}</span>
+      {address.slice(cut)}
+    </span>
+  );
+}
+
+/** The link's own QR code, small, as the page's picture of it. Opens the
+ * full-size code with its downloads. */
+function QrThumb({
+  url,
+  link,
+  orgQr,
+  onOpen,
+}: {
+  url: string;
+  link: LinkDTO | null;
+  orgQr: OrgQr;
+  onOpen: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      disabled={!link}
+      aria-label="Show QR code"
+      className="shrink-0 cursor-pointer rounded-xl transition-[scale] duration-200 ease-out active:scale-[0.97] disabled:cursor-default [&_[role=img]]:rounded-xl [&_[role=img]]:border-0 [&_[role=img]]:smooth-shadow-ring-xs"
+    >
+      <QRPreview url={url} size={56} {...resolveQrLook(link ?? {}, orgQr)} />
+    </button>
+  );
+}
+
+function LinkMenu({
+  s,
+  link,
+  canWrite,
+  onAlias,
+  onDelete,
+}: {
+  s: LinkInsightStats;
+  link: LinkDTO | null;
+  canWrite: boolean;
+  onAlias: () => void;
+  onDelete: () => void;
+}) {
+  const open = (href: string) => window.open(href, "_blank", "noopener,noreferrer");
+  return (
+    <Menu
+      align="end"
+      label="More actions"
+      trigger={
+        <span className="grid size-9 place-items-center rounded-lg text-muted transition-[scale,background-color,color] duration-200 ease-out active:scale-[0.96] [@media(hover:hover)]:hover:bg-surface-2 [@media(hover:hover)]:hover:text-text">
+          <IconDots size={16} aria-hidden />
+        </span>
+      }
+    >
+      <MenuItem onClick={() => open(s.url)}>
+        <IconExternalLink size={14} aria-hidden /> Open short link
+      </MenuItem>
+      <MenuItem onClick={() => open(s.destination)}>
+        <IconExternalLink size={14} aria-hidden /> Open destination
+      </MenuItem>
+      {canWrite && link && (
+        <>
+          <MenuItem onClick={onAlias}>
+            <IconLinkPlus size={14} aria-hidden /> Add another short link
+          </MenuItem>
+          <MenuSeparator />
+          <MenuItem className="text-danger" onClick={onDelete}>
+            <IconTrash size={14} aria-hidden /> Delete link
+          </MenuItem>
+        </>
+      )}
+    </Menu>
+  );
+}
+
 function LinkDetailHeader({
   s,
   link,
   canWrite,
+  orgQr,
+  range,
+  maxDays,
+  onRangeChange,
   onEdit,
   onQr,
+  onAlias,
+  onDelete,
 }: {
-  s: LinkStats;
+  s: LinkInsightStats;
   link: LinkDTO | null;
   canWrite: boolean;
+  orgQr: OrgQr;
+  range: RangePreset;
+  maxDays: number;
+  onRangeChange: (range: RangePreset) => void;
   onEdit: () => void;
   onQr: () => void;
+  onAlias: () => void;
+  onDelete: () => void;
 }) {
   const toast = useToast();
   const address = linkDisplayTitle(s.url);
   return (
-    <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
-      <div className="flex min-w-0 items-start gap-2">
-        {/* One control, the link itself: a button inside it gave Tab two stops. */}
-        <Link
-          to="/links"
-          aria-label="Back to links"
-          title="Back to links"
-          className="-ml-2 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-muted transition-colors [@media(hover:hover)]:hover:bg-surface-2 [@media(hover:hover)]:hover:text-text"
-        >
-          <ArrowLeft size={16} />
-        </Link>
+    <div className="mb-6 flex flex-wrap items-center justify-between gap-x-3 gap-y-4">
+      <div className="flex min-w-0 flex-1 items-center gap-3.5">
+        <QrThumb url={s.url} link={link} orgQr={orgQr} onOpen={onQr} />
         <div className="min-w-0">
           <div className="flex min-w-0 items-center gap-2">
             <h1
@@ -90,49 +199,53 @@ function LinkDetailHeader({
             )}
           </div>
           <div className="mt-0.5 flex min-w-0 items-center gap-1">
-            <span className="truncate font-mono text-sm text-muted" title={address}>
-              {address}
-            </span>
+            <ShortAddress url={s.url} />
             <CopyButton
               text={s.url}
               label={`Copy ${s.url}`}
-              onCopy={(text) => copyToClipboard(text, toast)}
+              onCopy={(text) =>
+                copyToClipboard(text, toast, { success: `Copied ${linkDisplayTitle(text)}` })
+              }
             />
-            <a
-              href={s.url}
-              target="_blank"
-              rel="noreferrer"
-              className="inline-flex shrink-0 items-center justify-center rounded-md p-1.5 text-muted transition-colors [@media(hover:hover)]:hover:bg-surface-2 [@media(hover:hover)]:hover:text-text"
-              aria-label="Open link in new tab"
-              title={s.url}
-            >
-              <ExternalLink size={14} />
-            </a>
           </div>
         </div>
       </div>
-      {link && (
-        <div className="flex shrink-0 items-center gap-2">
-          {canWrite && (
+      <div className="flex shrink-0 items-center gap-2 max-sm:w-full max-sm:flex-wrap">
+        <RangeControl
+          presets={LINK_RANGES}
+          maxDays={maxDays}
+          days={range.days}
+          bucket="day"
+          onChange={onRangeChange}
+        />
+        <div className="flex items-center gap-2 max-sm:ml-auto">
+          {link && canWrite && (
             <Button variant="outline" size="sm" onClick={onEdit}>
               Edit
             </Button>
           )}
-          <Button variant="outline" size="sm" onClick={onQr}>
-            <QrCode className="size-4" aria-hidden />
-            QR code
-          </Button>
+          {link && (
+            <Button variant="outline" size="sm" onClick={onQr}>
+              <IconQrcode className="size-4" aria-hidden />
+              QR code
+            </Button>
+          )}
+          <div className="w-9">
+            <LinkMenu s={s} link={link} canWrite={canWrite} onAlias={onAlias} onDelete={onDelete} />
+          </div>
         </div>
-      )}
+      </div>
     </div>
   );
 }
 
-function LinkPanels({ s }: { s: LinkStats }) {
+function LinkPanels({ s, period }: { s: LinkInsightStats; period?: string }) {
+  const campaigns = s.campaigns;
   return (
     <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-      <PlacesPanel countries={s.countries} />
+      <PlacesPanel countries={s.countries} period={period} limit={7} />
       <PanelTabs
+        end={period}
         tabs={[
           {
             value: "referrers",
@@ -141,10 +254,30 @@ function LinkPanels({ s }: { s: LinkStats }) {
               <BarList
                 head={["Source", "Clicks"]}
                 items={s.referrers}
+                formatKey={sourceLabel}
+                lead={(key) => <SourceTile source={key} />}
+                limit={7}
                 empty="Where people were when they followed this link appears here."
               />
             ),
           },
+          // Only once the API sends this link's campaigns: until then there
+          // is nothing true to put in the tab.
+          ...(campaigns
+            ? [
+                {
+                  value: "campaigns",
+                  label: "Campaigns",
+                  panel: (
+                    <BarList
+                      head={["Campaign", "Clicks"]}
+                      items={campaigns.map((c) => ({ key: c.campaign, clicks: c.clicks }))}
+                      empty="Clicks from links tagged with utm_campaign appear here."
+                    />
+                  ),
+                },
+              ]
+            : []),
           {
             value: "devices",
             label: "Devices",
@@ -152,6 +285,7 @@ function LinkPanels({ s }: { s: LinkStats }) {
               <BarList
                 head={["Device", "Clicks"]}
                 items={s.devices}
+                formatKey={deviceLabel}
                 empty="Phone, desktop or tablet, counted here once clicks arrive."
               />
             ),
@@ -166,13 +300,19 @@ function LinkPanels({ s }: { s: LinkStats }) {
 function useLinkDetailDialogs(orgId: string, link: LinkDTO | null) {
   const [editorOpen, setEditorOpen] = useState(false);
   const [qrOpen, setQrOpen] = useState(false);
+  const [aliasOpen, setAliasOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
   const [shakeKey, setShakeKey] = useState(0);
+  // A save the server refused for the destination or the slug: the editor
+  // marks that field with it instead of a toast.
+  const [saveError, setSaveError] = useState<Error | null>(null);
   const { update } = useLinkMutations(orgId);
   const qc = useQueryClient();
   const toast = useToast();
 
   const onSave = (data: LinkInput) => {
     if (!link) return;
+    setSaveError(null);
     update.mutate(
       { id: link.id, ...data },
       {
@@ -185,23 +325,74 @@ function useLinkDetailDialogs(orgId: string, link: LinkDTO | null) {
           toast("Link updated");
         },
         onError: (e: Error) => {
-          toast(e.message, "error");
+          setSaveError(e);
+          if (!linkFieldError(e)) toast(e.message, "error");
           setShakeKey((k) => k + 1);
         },
       },
     );
   };
 
-  return { editorOpen, setEditorOpen, qrOpen, setQrOpen, shakeKey, onSave, busy: update.isPending };
+  return {
+    saveError,
+    editorOpen,
+    setEditorOpen,
+    qrOpen,
+    setQrOpen,
+    aliasOpen,
+    setAliasOpen,
+    deleteOpen,
+    setDeleteOpen,
+    shakeKey,
+    onSave,
+    busy: update.isPending,
+  };
+}
+
+/** The range a link's page opens on: 30 days, or the plan's whole window
+ * when that is shorter. */
+const defaultRange = (maxDays: number) => (maxDays >= 30 ? PRESET_30D : PRESET_7D);
+
+/**
+ * The figures and chart for the chosen range. Until the API reads `days`,
+ * a link's stats cover the plan's whole window: the chart and the click
+ * count are trimmed to the range here, the change beside the count is left
+ * out (it compares the whole window), and the breakdowns say which period
+ * they really cover.
+ */
+function rangeView(s: LinkInsightStats, days: number) {
+  const exact = s.rangeDays === days;
+  const { series, total } = exact
+    ? { series: s.series, total: s.totalClicks }
+    : windowOf(s.series, days);
+  return {
+    series,
+    figures: [
+      { label: "Clicks", value: formatNumber(total), delta: exact ? s.totalClicksDelta : null },
+      {
+        label: "Countries",
+        value: cappedCount(
+          s.countryCount,
+          s.countries.filter((c) => c.key !== "unknown").length,
+          10,
+        ),
+      },
+      { label: "Top source", value: s.referrers[0] ? sourceLabel(s.referrers[0].key) : "None yet" },
+    ],
+    period: exact ? undefined : `Last ${s.rangeDays} days`,
+  };
 }
 
 export function LinkDetailPage() {
   const { slug } = useParams({ strict: false });
   const [searchParams] = useSearchParams();
   const domain = searchParams.get("domain");
+  const navigate = useNavigate();
   const { org, orgId, currentUser, canWrite, limits, activeDomains, defaultDomainId, orgQr } =
     useOrgLimits();
-  const stats = useLinkStats(orgId, slug ?? null, domain);
+  const [picked, setPicked] = useState<RangePreset | null>(null);
+  const range = picked ?? defaultRange(limits.analyticsDays);
+  const stats = useLinkInsightStats(orgId, slug ?? null, domain, range.days);
   const link = useLinkRow(orgId, stats.data);
   const members = useMembers(orgId);
   const memberNames = useMemo(
@@ -221,6 +412,7 @@ export function LinkDetailPage() {
     members.data === undefined
       ? null
       : (s.createdBy && memberNames.get(s.createdBy)) || "A former member";
+  const view = rangeView(s, range.days);
 
   return (
     <div>
@@ -228,30 +420,30 @@ export function LinkDetailPage() {
         s={s}
         link={link}
         canWrite={canWrite}
+        orgQr={orgQr}
+        range={range}
+        maxDays={limits.analyticsDays}
+        onRangeChange={setPicked}
         onEdit={() => dialogs.setEditorOpen(true)}
         onQr={() => dialogs.setQrOpen(true)}
+        onAlias={() => dialogs.setAliasOpen(true)}
+        onDelete={() => dialogs.setDeleteOpen(true)}
       />
 
       <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-[minmax(0,1fr)_16rem]">
-        <div className="flex min-w-0 flex-col gap-6">
-          <StatsChart
-            figures={[
-              {
-                label: `Total clicks · ${s.rangeDays}d`,
-                value: formatNumber(s.totalClicks),
-                delta: s.totalClicksDelta,
-              },
-              { label: "Clicks · 7d", value: formatNumber(s.clicks7d), delta: s.clicks7dDelta },
-              {
-                label: "Top country",
-                value: s.countries[0] ? countryName(s.countries[0].key) : "None yet",
-              },
-              { label: "Top source", value: s.referrers[0]?.key ?? "None yet" },
-            ]}
-          >
-            <AreaChart data={s.series} tickFormat={dayTick} />
+        <div
+          aria-busy={stats.isPlaceholderData}
+          className={cn(
+            "flex min-w-0 flex-col gap-6 transition-opacity duration-200 ease-out",
+            stats.isPlaceholderData && "opacity-60",
+          )}
+        >
+          <StatsChart figures={view.figures}>
+            <div key={view.series.length} className="chart-in">
+              <AreaChart data={view.series} tickFormat={dayTick} />
+            </div>
           </StatsChart>
-          <LinkPanels s={s} />
+          <LinkPanels s={s} period={view.period} />
         </div>
         <LinkDetailSide orgId={orgId} stats={s} createdBy={createdBy} />
       </div>
@@ -270,12 +462,24 @@ export function LinkDetailPage() {
             qrCustomEnabled={limits.qrCustom}
             orgQr={orgQr}
             shakeKey={dialogs.shakeKey}
+            saveError={dialogs.saveError}
           />
           <LinkPreviewDialog
             title={`QR · /${link.slug}`}
             link={dialogs.qrOpen ? link : null}
             onClose={() => dialogs.setQrOpen(false)}
             orgQr={orgQr}
+          />
+          <CreateAliasDialog
+            orgId={orgId}
+            link={dialogs.aliasOpen ? link : null}
+            onClose={() => dialogs.setAliasOpen(false)}
+          />
+          <DeleteLinkDialog
+            orgId={orgId}
+            links={dialogs.deleteOpen ? [link] : null}
+            onClose={() => dialogs.setDeleteOpen(false)}
+            onDeleted={() => void navigate({ to: "/links" })}
           />
         </>
       )}

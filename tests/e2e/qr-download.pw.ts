@@ -67,7 +67,7 @@ test("styling a QR is paid, generating one is not", async ({ page }) => {
   const editor = await newLinkDialog(page, email);
 
   // The code itself renders for a free plan: no lock, no empty placeholder.
-  await expect(editor.getByText("QR code", { exact: true })).toBeVisible();
+  await expect(editor.getByRole("img", { name: /^QR code for / })).toBeVisible();
   await expect(editor.getByText(/Add your logo, colors, and dot shapes/)).toBeVisible();
   await expect(editor.getByRole("group", { name: "QR customization" })).toBeHidden();
   await expect(editor.getByRole("button", { name: "Customize QR" })).toHaveCount(0);

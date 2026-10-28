@@ -1,11 +1,12 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { useForm, Controller } from "react-hook-form";
 import { valibotResolver } from "@hookform/resolvers/valibot";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useSearchParams, HrefLink } from "../lib/router-search";
 import { useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { ArrowRight, Check } from "@/app/ui/icons";
-import { AuthCard, PasswordMeter } from "../components/auth-form";
+import { PasswordMeter } from "../components/auth-form";
+import { AUTH_LINK, AuthHeading, AuthPanel, InviteBanner } from "../components/auth-panel";
 import { authClient } from "../lib/auth-client";
 import { friendlyAuthError } from "../lib/auth-errors";
 import posthog from "../lib/posthog";
@@ -79,34 +80,39 @@ function ForgotView({
   );
 
   return (
-    <AuthCard>
-      <div className="flex flex-col gap-4 rounded-xl bg-surface p-6 smooth-shadow-ring-sm">
-        <h1 className="font-bold">Reset your password</h1>
-        {sent ? (
-          <p className="text-sm text-muted">
-            If that account exists, we sent a reset link to{" "}
-            <span className="text-text">{getValues("email")}</span>.
-          </p>
-        ) : (
-          <form onSubmit={onFormSubmit} className="flex flex-col gap-4">
-            <Field label="Email">
-              <Input type="email" {...register("email")} required autoComplete="email" />
-            </Field>
-            <TurnstileSlot challenge={challenge} />
-            <Button type="submit" variant="primary" disabled={button.disabled}>
-              <BusyContent busy={button.spinning}>
-                {button.waiting ? CHALLENGE_LABEL : "Send reset link"}
-              </BusyContent>
-            </Button>
-          </form>
-        )}
-        <p className="text-center text-xs text-muted">
-          <Link to="/login" onClick={onBack}>
-            Back to sign in
-          </Link>
+    <AuthPanel>
+      <AuthHeading>Reset your password</AuthHeading>
+      {sent ? (
+        <p className="text-center text-sm text-pretty text-muted">
+          If that account exists, we sent a reset link to{" "}
+          <span className="font-mono text-text">{getValues("email")}</span>.
         </p>
-      </div>
-    </AuthCard>
+      ) : (
+        <form onSubmit={onFormSubmit} className="flex flex-col gap-4">
+          <Field label="Email">
+            <Input
+              type="email"
+              {...register("email")}
+              required
+              autoComplete="email"
+              placeholder="you@company.com"
+              className="h-10"
+            />
+          </Field>
+          <TurnstileSlot challenge={challenge} />
+          <Button type="submit" variant="primary" disabled={button.disabled} className="h-10">
+            <BusyContent busy={button.spinning}>
+              {button.waiting ? CHALLENGE_LABEL : "Send reset link"}
+            </BusyContent>
+          </Button>
+        </form>
+      )}
+      <p className="text-center text-xs text-muted">
+        <Link to="/login" onClick={onBack} className={AUTH_LINK}>
+          Back to sign in
+        </Link>
+      </p>
+    </AuthPanel>
   );
 }
 
@@ -146,17 +152,15 @@ function VerifyOtpView({
   const verified = verifyPhase !== "idle";
 
   return (
-    <AuthCard className={verifyPhase === "leaving" ? "auth-card-leaving" : undefined}>
-      <form
-        onSubmit={onFormSubmit}
-        className="flex flex-col gap-4 rounded-xl bg-surface p-6 smooth-shadow-ring-sm"
-      >
-        <h1 className="font-bold">Enter your code</h1>
-        <p className="text-sm text-muted">
-          We emailed a 6-digit code to <span className="text-text">{email}</span>. It expires in 10
-          minutes.
+    <AuthPanel className={verifyPhase === "leaving" ? "auth-card-leaving" : undefined}>
+      <form onSubmit={onFormSubmit} className="contents">
+        <AuthHeading>Check your email</AuthHeading>
+        <p className="text-center text-sm text-pretty text-muted">
+          We sent a 6-digit code to{" "}
+          <span className="font-mono [overflow-wrap:anywhere] text-text">{email}</span>. It expires
+          in 10 minutes.
         </p>
-        <Field label="Verification code">
+        <div role="group" aria-label="Verification code">
           <Controller
             control={control}
             name="otp"
@@ -173,12 +177,13 @@ function VerifyOtpView({
               />
             )}
           />
-        </Field>
+        </div>
         <Button
           type="submit"
           variant="primary"
           disabled={busy}
           className={cn(
+            "h-10",
             shake.className,
             // `disabled` keeps the button inert through the fade, but its
             // own opacity-50 was washing the checkmark's green out.
@@ -190,20 +195,21 @@ function VerifyOtpView({
             Verify and continue
           </BusyContent>
         </Button>
-        <div className="flex items-center justify-between text-xs text-muted">
+        <p className="text-center text-xs text-muted">
           {resent ? (
-            <span>New code sent.</span>
+            <span role="status">New code sent</span>
           ) : (
-            <button type="button" className="hover:text-accent" onClick={onResend}>
-              Resend code
+            <button type="button" className={AUTH_LINK} onClick={onResend}>
+              Send a new code
             </button>
           )}
-          <Link to="/login" onClick={onBack}>
-            Back to sign in
+          <span aria-hidden> · </span>
+          <Link to="/login" onClick={onBack} className={AUTH_LINK}>
+            Use another email
           </Link>
-        </div>
+        </p>
       </form>
-    </AuthCard>
+    </AuthPanel>
   );
 }
 
@@ -241,7 +247,7 @@ function SignupSubtitle({ next }: { next: string }) {
       ? "Create your account, then check out. No card needed to create the account."
       : null;
   if (!body) return null;
-  return <p className="-mt-2 text-xs text-muted">{body}</p>;
+  return <p className="-mt-2 text-center text-xs text-pretty text-muted">{body}</p>;
 }
 
 /** Step 3a (#64), once per mount of the signup form. */
@@ -252,23 +258,42 @@ function SignupViewed() {
   return null;
 }
 
-function PasswordHint({
+/**
+ * The password, with "Forgot it?" on the right of its label line on sign-in
+ * (where somebody looks the moment they are stuck) and the strength meter
+ * under it on sign-up. Its own label row rather than Field's, because a
+ * button inside a <label> would hand its clicks to the input.
+ */
+function PasswordField({
   mode,
   password,
   onForgot,
+  input,
 }: {
   mode: "login" | "signup";
   password: string;
   onForgot: () => void;
+  input: (id: string) => ReactNode;
 }) {
-  if (mode === "login") {
-    return (
-      <button type="button" className="text-muted hover:text-accent" onClick={onForgot}>
-        Forgot password?
-      </button>
-    );
-  }
-  return <PasswordMeter password={password} />;
+  const id = useId();
+  return (
+    <div>
+      <div className="mb-1.5 flex items-center justify-between gap-3 text-xs text-muted">
+        <label htmlFor={id}>Password</label>
+        {mode === "login" && (
+          <button type="button" className={AUTH_LINK} onClick={onForgot}>
+            Forgot it?
+          </button>
+        )}
+      </div>
+      {input(id)}
+      {mode === "signup" && (
+        <span className="mt-1.5 block text-xs text-muted">
+          <PasswordMeter password={password} />
+        </span>
+      )}
+    </div>
+  );
 }
 
 /**
@@ -294,7 +319,7 @@ function GoogleButton({
         type="button"
         onClick={onClick}
         {...off}
-        className="flex cursor-pointer items-center justify-center gap-2 rounded-lg border border-border bg-surface py-2.5 text-sm font-medium transition-colors hover:bg-surface-2 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-surface"
+        className="flex h-10 cursor-pointer items-center justify-center gap-2 rounded-lg bg-surface text-sm font-semibold smooth-shadow-ring-xs transition-[background-color,scale] duration-200 ease-out active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50 [@media(hover:hover)]:hover:bg-surface-2 [@media(hover:hover)]:disabled:hover:bg-surface"
       >
         <GoogleG />
         Continue with Google
@@ -307,7 +332,7 @@ function GoogleButton({
       onClick={onClick}
       {...off}
       aria-label={`Continue as ${email}`}
-      className="flex cursor-pointer items-center gap-3 rounded-lg border border-border bg-surface px-3 py-2.5 text-sm transition-colors hover:bg-surface-2 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-surface"
+      className="flex h-10 cursor-pointer items-center gap-3 rounded-lg bg-surface px-3 text-sm smooth-shadow-ring-xs transition-[background-color,scale] duration-200 ease-out active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50 [@media(hover:hover)]:hover:bg-surface-2 [@media(hover:hover)]:disabled:hover:bg-surface"
     >
       <GoogleG />
       <span className="min-w-0 flex-1 truncate text-left font-medium">{email}</span>
@@ -429,15 +454,11 @@ function AuthFormView({
   );
 
   return (
-    <AuthCard>
-      <form
-        onSubmit={onFormSubmit}
-        onInput={onInput}
-        noValidate
-        className="flex flex-col gap-4 rounded-xl bg-surface p-6 smooth-shadow-ring-sm"
-      >
-        <h1 className="font-bold">{copy.title}</h1>
+    <AuthPanel>
+      <form onSubmit={onFormSubmit} onInput={onInput} noValidate className="contents">
+        <AuthHeading>{copy.title}</AuthHeading>
         {mode === "signup" && <SignupSubtitle next={next} />}
+        <InviteBanner next={next} />
         {mode === "signup" && <SignupViewed />}
         {/* Keep the Google row in place while configuration loads. Enable it
             only when this server has Google credentials. */}
@@ -452,31 +473,36 @@ function AuthFormView({
           <span className="h-px flex-1 bg-border" />
         </div>
         <Field label="Email">
-          <Input type="email" {...register("email")} required autoComplete="email" />
-        </Field>
-        <Field
-          label="Password"
-          hint={
-            <PasswordHint
-              mode={mode}
-              password={password}
-              onForgot={() => onForgot(getValues("email"))}
-            />
-          }
-        >
           <Input
-            type="password"
-            {...register("password")}
+            type="email"
+            {...register("email")}
             required
-            autoComplete={copy.passwordAutoComplete}
+            autoComplete="email"
+            placeholder="you@company.com"
+            className="h-10"
           />
         </Field>
+        <PasswordField
+          mode={mode}
+          password={password}
+          onForgot={() => onForgot(getValues("email"))}
+          input={(id) => (
+            <Input
+              id={id}
+              type="password"
+              {...register("password")}
+              required
+              autoComplete={copy.passwordAutoComplete}
+              className="h-10"
+            />
+          )}
+        />
         {mode === "signup" && <TurnstileSlot challenge={challenge} />}
         <Button
           type="submit"
           variant="primary"
           disabled={button.disabled}
-          className={shake.className}
+          className={cn("h-10", shake.className)}
           onAnimationEnd={shake.end}
         >
           <BusyContent busy={button.spinning}>
@@ -485,12 +511,15 @@ function AuthFormView({
         </Button>
         <p className="text-center text-xs text-muted">
           {copy.footerPrompt}{" "}
-          <HrefLink href={`${copy.footerTo}?next=${encodeURIComponent(next)}`}>
+          <HrefLink
+            href={`${copy.footerTo}?next=${encodeURIComponent(next)}`}
+            className={AUTH_LINK}
+          >
             {copy.footerLabel}
           </HrefLink>
         </p>
       </form>
-    </AuthCard>
+    </AuthPanel>
   );
 }
 

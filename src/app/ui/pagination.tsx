@@ -1,42 +1,56 @@
+import { Button } from "./button";
+import { cn } from "./cn";
+
 /**
- * Next and back over a cursor-paged list.
+ * Where you are in a cursor-paged list ("26 to 50 of 199") and the way to
+ * the pages either side.
  *
- * No total, because a cursor-paged endpoint does not count the table to hand
- * one over: that count is the expensive query the paging was moved away
- * from, and it is stale the moment it is read. The page number is what the
- * reader is actually keeping track of.
+ * The total is optional, because a cursor-paged endpoint does not count the
+ * table to hand one over: that count is the expensive query the paging was
+ * moved away from. A caller that has a cheap count (the filter chips' facets)
+ * passes it; without one the line says the range alone.
  */
 export function CursorPager({
   page,
+  pageSize,
+  rows,
+  total,
   hasNext,
   onBack,
   onNext,
+  className,
 }: {
   page: number;
+  pageSize: number;
+  /** Rows on this page. */
+  rows: number;
+  total?: number;
   hasNext: boolean;
   onBack: () => void;
   onNext: () => void;
+  className?: string;
 }) {
-  if (page === 0 && !hasNext) return null;
+  if (rows === 0) return null;
+  const n = (v: number) => v.toLocaleString("en-US");
+  const from = page * pageSize + 1;
+  const to = page * pageSize + rows;
+  const single = page === 0 && !hasNext;
   return (
-    <div className="mt-4 flex items-center justify-center gap-2">
-      <button
-        type="button"
-        onClick={onBack}
-        disabled={page === 0}
-        className="cursor-pointer rounded-md px-2.5 py-1 text-xs text-muted transition-[color,scale] duration-200 ease-out enabled:active:scale-[0.96] [@media(hover:hover)]:hover:text-text disabled:opacity-40"
-      >
-        Previous
-      </button>
-      <span className="text-xs text-muted tnum">Page {page + 1}</span>
-      <button
-        type="button"
-        onClick={onNext}
-        disabled={!hasNext}
-        className="cursor-pointer rounded-md px-2.5 py-1 text-xs text-muted transition-[color,scale] duration-200 ease-out enabled:active:scale-[0.96] [@media(hover:hover)]:hover:text-text disabled:opacity-40"
-      >
-        Next
-      </button>
+    <div className={cn("flex min-h-12 items-center justify-between gap-3 px-4 py-2", className)}>
+      <span className="tnum text-xs text-muted">
+        {n(from)} to {n(to)}
+        {total !== undefined && total >= to ? ` of ${n(total)}` : ""}
+      </span>
+      {!single && (
+        <span className="flex gap-1.5">
+          <Button size="sm" onClick={onBack} disabled={page === 0}>
+            Previous
+          </Button>
+          <Button size="sm" onClick={onNext} disabled={!hasNext}>
+            Next
+          </Button>
+        </span>
+      )}
     </div>
   );
 }

@@ -3,7 +3,13 @@ import { errorMessage } from "@/app/lib/error-message";
 import { useForm } from "react-hook-form";
 import { valibotResolver } from "@hookform/resolvers/valibot";
 import { useQueryClient } from "@tanstack/react-query";
-import { useCurrentUser } from "../lib/hooks";
+import { useCurrentUser, useDomainMutations, useLinkHost, useLinkQuotaUsage } from "../lib/hooks";
+import { canAdminOrg, useOrgLimits } from "../lib/org-limits";
+import { HrefLink } from "../lib/router-search";
+import { Check, ChevronsUpDown } from "@/app/ui/icons";
+import { Menu, MenuItem } from "../ui/menu";
+import { buttonClass } from "../ui/button-class";
+import { withErrorToast } from "../lib/mutation-toast";
 import { useCurrentOrg } from "../lib/current-org";
 import { api } from "../lib/api";
 import type { OrgRole, UserOrg } from "@/shared/types";
@@ -108,9 +114,80 @@ function useDeleteOrgFlow(orgId: string, clearNameField: () => void) {
   return { open, setOpen, close, confirmName, setConfirmName, pending, deleteOrg };
 }
 
+/**
+ * Which domain new links start on (#69), chosen where the organization's
+ * other settings live. Only domains that are serving are offered, the same
+ * list the link editor reads, so the choice can never point at one that
+ * resolves nowhere. Admins choose; everyone else reads it.
+ */
+function DefaultDomainRow({ orgId, canChange }: { orgId: string; canChange: boolean }) {
+  const toast = useToast();
+  const linkHost = useLinkHost();
+  const { activeDomains, defaultDomainId, limits, canListDomains } = useOrgLimits();
+  const { setDefault } = useDomainMutations(orgId);
+  const options = [
+    { id: "", host: linkHost, note: "shared" },
+    ...activeDomains.map((d) => ({ id: d.id, host: d.hostname, note: "" })),
+  ];
+  const current = options.find((o) => o.id === (defaultDomainId ?? "")) ?? options[0];
+  const choose = (id: string) => {
+    if (id === (defaultDomainId ?? "")) return;
+    const next = options.find((o) => o.id === id);
+    setDefault.mutate(id || null, {
+      onSuccess: () => {
+        posthog.capture("domain_default_set", { cleared: !id });
+        toast(`New links will use ${next?.host ?? linkHost}`);
+      },
+      onError: withErrorToast(toast),
+    });
+  };
+  const face = (
+    <>
+      <span className="truncate font-mono text-[13px]">{current.host}</span>
+      <ChevronsUpDown size={14} className="shrink-0 text-muted" aria-hidden />
+    </>
+  );
+  return (
+    <SettingsRow label="Default domain" hint="Where new links start. Each link can change it.">
+      {canChange && activeDomains.length > 0 ? (
+        <div className="w-full sm:w-80">
+          <Menu
+            label="Default domain"
+            trigger={
+              <span className="flex h-9 w-full items-center justify-between gap-2 rounded-lg bg-surface px-3 smooth-shadow-ring-xs transition-[box-shadow] duration-150 [@media(hover:hover)]:hover:shadow-[0_0_0_1px_var(--accent)]">
+                {face}
+              </span>
+            }
+          >
+            {options.map((o) => (
+              <MenuItem key={o.id || "shared"} onClick={() => choose(o.id)}>
+                <span className="w-4">
+                  {o.id === current.id && <Check size={13} className="text-accent" />}
+                </span>
+                <span className="truncate font-mono text-[13px]">{o.host}</span>
+                {o.note && <span className="ml-auto pl-3 text-xs text-muted">{o.note}</span>}
+              </MenuItem>
+            ))}
+          </Menu>
+        </div>
+      ) : (
+        <>
+          <span className="font-mono text-[13px]">{current.host}</span>
+          {canChange && canListDomains && limits.domains > 0 && (
+            <HrefLink href="/domains" className={buttonClass({ variant: "ghost", size: "sm" })}>
+              Add a domain
+            </HrefLink>
+          )}
+        </>
+      )}
+    </SettingsRow>
+  );
+}
+
 function OrgRows({
   orgId,
   isOwner,
+  canAdmin,
   register,
   rename,
   currentName,
@@ -118,6 +195,7 @@ function OrgRows({
 }: {
   orgId: string;
   isOwner: boolean;
+  canAdmin: boolean;
   register: ReturnType<typeof useOrgRenameForm>["register"];
   rename: () => void;
   currentName: string | undefined;
@@ -147,8 +225,9 @@ function OrgRows({
           )}
         </form>
       </SettingsRow>
+      <DefaultDomainRow orgId={orgId} canChange={canAdmin} />
       <SettingsRow label="Organization ID" hint="For the API.">
-        <span className="font-mono text-xs">{orgId}</span>
+        <span className="font-mono text-[13px]">{orgId}</span>
         <CopyButton
           text={orgId}
           label="Copy organization ID"
@@ -159,15 +238,23 @@ function OrgRows({
   );
 }
 
-function DeleteOrgGroup({ onDelete }: { onDelete: () => void }) {
+/** "Its 199 links and 2 domains stop working at once." Counted when the
+ * counts are in, and said without them until then. */
+function deleteHint(links: number | undefined, domains: number): string {
+  if (links === undefined) return "Its links and domains stop working at once.";
+  const linkPart = links === 1 ? "1 link" : `${links.toLocaleString("en-US")} links`;
+  if (domains === 0) return `Its ${linkPart} stop working at once.`;
+  return `Its ${linkPart} and ${domains === 1 ? "1 domain" : `${domains} domains`} stop working at once.`;
+}
+
+function DeleteOrgGroup({ orgId, onDelete }: { orgId: string; onDelete: () => void }) {
+  const links = useLinkQuotaUsage(orgId).data?.count;
+  const domains = useOrgLimits().domains.data?.length ?? 0;
   return (
     <SettingsGroup danger>
-      <SettingsRow
-        label="Delete organization"
-        hint="Its links, domains and click history go with it, at once."
-      >
-        <Button variant="danger" onClick={onDelete}>
-          Delete organization
+      <SettingsRow label="Delete organization" hint={deleteHint(links, domains)}>
+        <Button variant="danger" onClick={onDelete} aria-label="Delete organization">
+          Delete
         </Button>
       </SettingsRow>
     </SettingsGroup>
@@ -236,19 +323,20 @@ export function OrganizationPage() {
   if (!org) return <NoOrgState />;
 
   return (
-    <div>
+    <div className="mx-auto w-full max-w-[760px]">
       <PageHeader title="Organization" />
       <div className="flex max-w-[760px] flex-col gap-8">
         <OrgRows
           orgId={orgId}
           isOwner={isOwner}
+          canAdmin={canAdminOrg(currentUser.data?.user.isAdmin, org.role, org.locked)}
           register={register}
           rename={rename}
           currentName={currentName}
           isSubmitting={isSubmitting}
         />
         <QrDefaultsCard key={org.id} />
-        {isOwner && <DeleteOrgGroup onDelete={() => deleteOrgFlow.setOpen(true)} />}
+        {isOwner && <DeleteOrgGroup orgId={orgId} onDelete={() => deleteOrgFlow.setOpen(true)} />}
       </div>
 
       <DeleteOrgDialog org={org} flow={deleteOrgFlow} />

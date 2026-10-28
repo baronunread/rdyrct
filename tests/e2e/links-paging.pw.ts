@@ -40,16 +40,16 @@ test("walks pages with a cursor, and searches past the first one", async ({ page
   await page.reload();
 
   // A page, not the table: twenty-five rows and a way forward.
-  await expect(page.getByText("Page 1")).toBeVisible();
+  await expect(page.getByText(/^1 to 25( of 30)?$/)).toBeVisible();
   await page.getByRole("button", { name: "Next" }).click();
-  await expect(page.getByText("Page 2")).toBeVisible();
+  await expect(page.getByText(/^26 to 30( of 30)?$/)).toBeVisible();
   await expect(page.getByRole("button", { name: "Next" })).toBeDisabled();
 
   await page.getByRole("button", { name: "Previous" }).click();
-  await expect(page.getByText("Page 1")).toBeVisible();
+  await expect(page.getByText(/^1 to 25( of 30)?$/)).toBeVisible();
 
   // The oldest link is on the last page, so a search that finds it proves
   // the search ran against the table rather than the rows on screen.
-  await page.getByPlaceholder("Search links…").fill("paged-0");
+  await page.getByPlaceholder("Search links").fill("paged-0");
   await expect(page.getByText("Paged 0", { exact: true })).toBeVisible();
 });

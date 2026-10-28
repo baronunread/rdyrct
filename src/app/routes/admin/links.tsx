@@ -21,13 +21,14 @@ import {
   Undo2,
   X,
 } from "@/app/ui/icons";
-import { useAdminAnonLinks, useAdminLinks, useAdminReports } from "../../lib/hooks";
+import { useAdminAnonLinks, useAdminBlockedHosts, useAdminReports } from "../../lib/hooks";
+import { ADMIN_LINKS_CAP, useAdminLinksData, type AdminLinkFilter } from "../../lib/admin-data";
 import { api } from "../../lib/api";
 import { linkDisplayTitle } from "../../lib/link-display";
 import type { AdminAnonLinkRow, AdminLinkRow, AdminReportRow, Sort } from "@/shared/types";
-import { PageHeader, Table, Td, Th } from "../../ui/misc";
+import { Table, Td, Th } from "../../ui/misc";
 import { Button } from "../../ui/button";
-import { Field, Input, Select } from "../../ui/field";
+import { Field, Input } from "../../ui/field";
 import { Dialog } from "../../ui/dialog";
 import { ConfirmDialog } from "../../ui/confirm-dialog";
 import { Menu, MenuItem, MenuNote, MenuSeparator } from "../../ui/menu";
@@ -43,9 +44,9 @@ import { SortTh } from "../../ui/sort-th";
 import { sortRows } from "../../lib/sort";
 import { useSearchParams, HrefLink } from "../../lib/router-search";
 import { BlockedHosts } from "./blocked-hosts";
-import { linkStateDetail, linkStateRank } from "./link-state";
+import { flaggedByGoogle, linkStateDetail, linkStateRank } from "./link-state";
 import { LinkStateBadge } from "./link-state-badge";
-import { FilterRow, RowMenuTrigger } from "./admin-kit";
+import { FilterPill, PHONE, RowMenuTrigger, SectionHeading, fullNumber } from "./admin-kit";
 import { BusyContent, Spinner } from "../../ui/spinner";
 
 /** The two columns both tables open with. Destination has no width of its
@@ -54,7 +55,7 @@ import { BusyContent, Spinner } from "../../ui/spinner";
 function SlugAndDestinationHeaders({ sort, onSort }: { sort: Sort; onSort: (s: Sort) => void }) {
   return (
     <>
-      <SortTh label="Link" sortKey="slug" sort={sort} onSort={onSort} className="w-[16%]" />
+      <SortTh label="Link" sortKey="slug" sort={sort} onSort={onSort} className={COL.link} />
       <SortTh label="Destination" sortKey="destination" sort={sort} onSort={onSort} />
     </>
   );
@@ -64,10 +65,10 @@ function SlugAndDestinationHeaders({ sort, onSort }: { sort: Sort; onSort: (s: S
  * badge or a date never takes room the destination needs. */
 const COL = {
   check: "w-11 pr-0",
+  link: "w-[24%]",
   org: "w-[17%]",
-  // pr-2/pl-2: the longest badge ("suspended") and the "Reports" header fit
-  // without another 16px of padding each.
-  state: "w-28 pr-2",
+  // Fits the longest word, "Flagged by Google", with its dot.
+  state: "w-40",
   reports: "w-[5.25rem] pl-2 text-right",
   clicks: "w-[4.5rem] pl-2 text-right",
   date: "w-28",
@@ -178,9 +179,19 @@ function DeleteLinkDialog({
   );
 }
 
+/** The title names the link, "Suspend rdyrct.com/cbycdcr?", so nobody has to
+ * read a second line to know which one they are about to stop. The last link
+ * is kept while the dialog fades out, so the title does not change under it. */
 function SuspendDialog({ link, onClose }: { link: AdminLinkRow | null; onClose: () => void }) {
+  const last = useRef<AdminLinkRow | null>(null);
+  if (link) last.current = link;
+  const named = link ?? last.current;
   return (
-    <Dialog open={!!link} onOpenChange={(open) => !open && onClose()} title="Suspend this link?">
+    <Dialog
+      open={!!link}
+      onOpenChange={(open) => !open && onClose()}
+      title={named ? `Suspend ${linkDisplayTitle(named.url)}?` : "Suspend this link?"}
+    >
       {/* Keyed so the next suspension starts from an empty, unmarked form. */}
       {link && <SuspendForm key={link.id} link={link} onClose={onClose} />}
     </Dialog>
@@ -227,12 +238,6 @@ function SuspendForm({ link, onClose }: { link: AdminLinkRow; onClose: () => voi
         suspend.mutate({ id: link.id, reason: trimmed });
       }}
     >
-      <div className="flex flex-col gap-0.5 rounded-lg bg-surface-2 px-3 py-2.5">
-        <span className="font-mono text-sm font-semibold break-all">
-          {linkDisplayTitle(link.url)}
-        </span>
-        <span className="font-mono text-xs break-all text-muted">{link.destination}</span>
-      </div>
       <p className="text-sm text-pretty text-muted">
         The redirect stops within a minute everywhere, and stays stopped after the owner edits the
         link. Nothing is deleted: the link and its clicks survive, and you can restore it.
@@ -253,7 +258,13 @@ function SuspendForm({ link, onClose }: { link: AdminLinkRow; onClose: () => voi
         <Button variant="ghost" onClick={onClose}>
           Cancel
         </Button>
-        <Button type="submit" variant="danger" disabled={suspend.isPending}>
+        {/* Solid: this stops a live link for everyone who has it. */}
+        <Button
+          type="submit"
+          variant="danger"
+          disabled={suspend.isPending}
+          className="bg-danger font-semibold text-bg shadow-none [@media(hover:hover)]:hover:bg-danger [@media(hover:hover)]:hover:brightness-110"
+        >
           <BusyContent busy={suspend.isPending}>Suspend link</BusyContent>
         </Button>
       </div>
@@ -286,46 +297,64 @@ function WarnMenuItem({
 function ReportsCell({ count }: { count: number }) {
   if (count === 0)
     return (
-      <Td className="pl-2 text-right text-muted">
+      <Td className={`pl-2 text-right text-muted ${PHONE.hide}`}>
         <span aria-label="No reports">–</span>
       </Td>
     );
-  return <Td className="pl-2 text-right tnum">{count}</Td>;
+  return (
+    <Td className={`pl-2 text-right tnum ${PHONE.meta}`} data-label="Reports">
+      {fullNumber(count)}
+    </Td>
+  );
 }
 
-/** The short address in two lines: the slug in ink over its host, quiet,
- * so a narrow column still shows the part a report quotes. Its state and why
- * live in the State column's tooltip and the menu. */
+/** The short address on one line: the host quiet, the slug in ink, so the
+ * eye finds the part a report quotes. Truncated, with all of it on hover. */
 function ShortAddress({ url }: { url: string }) {
   const text = linkDisplayTitle(url);
   const cut = text.indexOf("/");
   return (
-    <span className="flex min-w-0 flex-col gap-0.5 leading-tight" title={text}>
-      <span className="truncate font-mono text-sm/tight font-semibold">{text.slice(cut)}</span>
-      <span className="truncate font-mono text-xs/tight text-muted">{text.slice(0, cut)}</span>
+    // The host gives way first: a long custom domain is cut, the slug never.
+    <span className="flex min-w-0 font-mono text-sm" title={text}>
+      <span className="truncate text-muted">{text.slice(0, cut)}</span>
+      <span className="shrink-0">
+        <span className="text-muted">/</span>
+        <span className="font-semibold">{text.slice(cut + 1)}</span>
+      </span>
     </span>
   );
 }
 
-function LinkRow({ link, ...actions }: { link: AdminLinkRow } & RowActions) {
+function LinkRow({
+  link,
+  selectable,
+  ...actions
+}: { link: AdminLinkRow; selectable: boolean } & RowActions) {
   return (
-    <tr className={link.suspendedAt ? "opacity-60" : undefined}>
-      <Td className="pr-0">
-        <input
-          type="checkbox"
-          aria-label={`Select ${link.slug}`}
-          checked={actions.selected}
-          onChange={() => actions.onSelect(link)}
-          className="size-4 cursor-pointer accent-accent"
-        />
-      </Td>
-      <Td className="py-2">
+    <tr className={PHONE.row}>
+      {selectable && (
+        <Td className="pr-0 max-sm:order-0 max-sm:border-0 max-sm:p-0">
+          <input
+            type="checkbox"
+            aria-label={`Select ${link.slug}`}
+            checked={actions.selected}
+            onChange={() => actions.onSelect(link)}
+            className="size-4 cursor-pointer accent-accent"
+          />
+        </Td>
+      )}
+      <Td className={`${PHONE.main} ${selectable ? "max-sm:w-[calc(100%-5.5rem)]" : ""}`}>
         <ShortAddress url={link.url} />
       </Td>
-      <Td className="truncate font-mono text-xs text-muted" title={link.destination}>
-        {link.destination}
+      <Td
+        className="truncate font-mono text-xs text-muted max-sm:order-2 max-sm:w-full max-sm:border-0 max-sm:p-0"
+        title={link.destination}
+      >
+        {/* https is the default, so it is the one scheme left unsaid; an
+            http:// destination keeps its scheme, which is worth seeing. */}
+        {link.destination.replace(/^https:\/\//, "")}
       </Td>
-      <Td className="truncate">
+      <Td className={`truncate ${PHONE.meta} max-sm:max-w-full max-sm:before:content-none`}>
         {/* Straight to that organization's links, which is the next question
             after "who owns this". */}
         <HrefLink
@@ -336,13 +365,14 @@ function LinkRow({ link, ...actions }: { link: AdminLinkRow } & RowActions) {
           {link.orgName}
         </HrefLink>
       </Td>
-      <Td className="pr-2">
+      <ReportsCell count={link.reportCount} />
+      <Td className={`pl-2 text-right tnum ${PHONE.meta}`} data-label="Clicks">
+        {fullNumber(link.clicks)}
+      </Td>
+      <Td className="max-sm:order-3 max-sm:w-full max-sm:border-0 max-sm:p-0">
         <LinkStateBadge link={link} />
       </Td>
-      <ReportsCell count={link.reportCount} />
-      <Td className="pl-2 text-right tnum">{link.clicks.toLocaleString("en-US")}</Td>
-      <Td className="tnum text-xs whitespace-nowrap text-muted">{shortDate(link.createdAt)}</Td>
-      <Td className="px-2">
+      <Td className={`px-2 ${PHONE.menu}`}>
         <LinkActions link={link} {...actions} />
       </Td>
     </tr>
@@ -399,10 +429,13 @@ function LinksTable({
   rescoringId,
   onWarn,
   warningId,
+  selectable,
   selectedIds,
   onSelect,
   onSelectAll,
 }: {
+  /** Ticks for bulk restore, only where there is something to restore. */
+  selectable: boolean;
   selectedIds: Set<string>;
   onSelect: (l: AdminLinkRow) => void;
   onSelectAll: (checked: boolean) => void;
@@ -422,25 +455,27 @@ function LinksTable({
   // and the page-level skeleton would draw a second one of each.
   if (isPending) return <TableSkeleton rows={6} testId="admin-links-rows-skeleton" />;
   if (rows.length === 0)
-    return <p className="py-6 text-center text-sm text-muted">No links match that search.</p>;
+    return <p className="py-6 text-center text-sm text-muted">No links match that.</p>;
 
   return (
     // Fixed layout. In an auto-layout table a long destination sets the
     // column width and pushes everything past the card, and `max-w` on the
     // cell is ignored. The minimum fits the admin column on a laptop, so the
     // actions menu is on screen there; narrower than that, the card scrolls.
-    <Table fixed minWidth="min-w-[58rem]">
-      <thead>
+    <Table fixed minWidth={`sm:min-w-[48rem] ${PHONE.table}`}>
+      <thead className={PHONE.head}>
         <tr>
-          <Th className={COL.check}>
-            <input
-              type="checkbox"
-              aria-label="Select all links on this page"
-              checked={rows.length > 0 && rows.every((l) => selectedIds.has(l.id))}
-              onChange={(e) => onSelectAll(e.target.checked)}
-              className="size-4 cursor-pointer accent-accent"
-            />
-          </Th>
+          {selectable && (
+            <Th className={COL.check}>
+              <input
+                type="checkbox"
+                aria-label="Select all links on this page"
+                checked={rows.length > 0 && rows.every((l) => selectedIds.has(l.id))}
+                onChange={(e) => onSelectAll(e.target.checked)}
+                className="size-4 cursor-pointer accent-accent"
+              />
+            </Th>
+          )}
           <SlugAndDestinationHeaders sort={sort} onSort={onSort} />
           <SortTh
             label="Organization"
@@ -449,7 +484,6 @@ function LinksTable({
             onSort={onSort}
             className={COL.org}
           />
-          <SortTh label="State" sortKey="state" sort={sort} onSort={onSort} className={COL.state} />
           <SortTh
             label="Reports"
             sortKey="reportCount"
@@ -464,23 +498,18 @@ function LinksTable({
             onSort={onSort}
             className={COL.clicks}
           />
-          <SortTh
-            label="Created"
-            sortKey="createdAt"
-            sort={sort}
-            onSort={onSort}
-            className={COL.date}
-          />
+          <SortTh label="State" sortKey="state" sort={sort} onSort={onSort} className={COL.state} />
           <Th className={COL.actions}>
             <span className="sr-only">Actions</span>
           </Th>
         </tr>
       </thead>
-      <tbody>
+      <tbody className={PHONE.body}>
         {rows.map((link) => (
           <LinkRow
             key={link.id}
             link={link}
+            selectable={selectable}
             onSuspend={onSuspend}
             onRestore={onRestore}
             onDelete={onDelete}
@@ -523,8 +552,8 @@ function AnonymousLinksTable({
   if (rows.length === 0)
     return <p className="py-6 text-center text-sm text-muted">Nothing here.</p>;
   return (
-    <Table fixed minWidth="min-w-[58rem]">
-      <thead>
+    <Table fixed minWidth={`sm:min-w-[52rem] ${PHONE.table}`}>
+      <thead className={PHONE.head}>
         <tr>
           <SlugAndDestinationHeaders sort={sort} onSort={onSort} />
           {/* Always "none" here, so it gets a short column, not the owned
@@ -551,31 +580,46 @@ function AnonymousLinksTable({
           </Th>
         </tr>
       </thead>
-      <tbody>
+      <tbody className={PHONE.body}>
         {rows.map((link) => (
-          <tr key={link.id}>
-            <Td className="truncate font-mono text-sm font-semibold" title={`/${link.slug}`}>
+          <tr key={link.id} className={PHONE.row}>
+            <Td
+              className={`truncate font-mono text-sm font-semibold ${PHONE.main}`}
+              title={`/${link.slug}`}
+            >
               /{link.slug}
             </Td>
-            <Td className="truncate font-mono text-xs text-muted" title={link.destination}>
+            <Td
+              className="truncate font-mono text-xs text-muted max-sm:order-2 max-sm:w-full max-sm:border-0 max-sm:p-0"
+              title={link.destination}
+            >
               {link.destination}
             </Td>
             {/* Nobody owns it, and no click is recorded against it: both
                     are the product boundary, not missing data. */}
-            <Td className="text-muted">none</Td>
-            <Td className="pr-2">
+            <Td className={`text-muted ${PHONE.hide}`}>none</Td>
+            <Td className="pr-2 max-sm:order-3 max-sm:border-0 max-sm:p-0">
               <LinkStateBadge link={link} />
             </Td>
-            <Td className="pl-2 text-right text-muted" title="Anonymous links record no clicks">
+            <Td
+              className={`pl-2 text-right text-muted ${PHONE.hide}`}
+              title="Anonymous links record no clicks"
+            >
               none
             </Td>
-            <Td className="tnum text-xs whitespace-nowrap text-muted">
+            <Td
+              className={`tnum text-xs whitespace-nowrap text-muted ${PHONE.meta}`}
+              data-label="Made"
+            >
               {shortDate(link.createdAt)}
             </Td>
-            <Td className="tnum text-xs whitespace-nowrap text-muted">
+            <Td
+              className={`tnum text-xs whitespace-nowrap text-muted ${PHONE.meta}`}
+              data-label="Expires"
+            >
               {shortDate(link.expiresAt)}
             </Td>
-            <Td className="px-2">
+            <Td className={`px-2 ${PHONE.menu}`}>
               <RowMenu slug={link.slug} destination={link.destination} note={linkStateDetail(link)}>
                 <MenuSeparator />
                 <MenuItem className="text-danger" onClick={() => onDelete(link)}>
@@ -686,23 +730,35 @@ function ReportRow({
   onDismiss: (id: string) => void;
 }) {
   return (
-    <tr>
-      <Td className="truncate font-mono text-sm font-semibold" title={`/${r.slug}`}>
+    <tr className={PHONE.row}>
+      <Td
+        className={`truncate font-mono text-sm font-semibold ${PHONE.main} max-sm:w-[calc(100%-6rem)]`}
+        title={`/${r.slug}`}
+      >
         /{r.slug}
       </Td>
-      <Td className="truncate">
+      <Td className={`truncate ${PHONE.meta} max-sm:before:content-none`}>
         <ReportOrg report={r} />
       </Td>
       {/* The category a reporter picked: an attribute, so plain text. */}
-      <Td className="first-letter:uppercase">{r.reason}</Td>
-      <Td className="truncate text-muted" title={r.note}>
+      <Td className={`first-letter:uppercase ${PHONE.meta} max-sm:before:content-none`}>
+        {r.reason}
+      </Td>
+      <Td
+        className="truncate text-muted max-sm:order-3 max-sm:w-full max-sm:border-0 max-sm:p-0 max-sm:whitespace-normal"
+        title={r.note}
+      >
         {r.note || "none"}
       </Td>
-      <Td className="truncate text-muted" title={r.contact}>
+      <Td className={`truncate text-muted ${PHONE.meta}`} data-label="From" title={r.contact}>
         {r.contact || "none"}
       </Td>
-      <Td className="tnum text-xs whitespace-nowrap text-muted">{shortDate(r.createdAt)}</Td>
-      <Td className="px-2 text-right">
+      <Td
+        className={`tnum text-xs whitespace-nowrap text-muted ${PHONE.meta} max-sm:before:content-none`}
+      >
+        {shortDate(r.createdAt)}
+      </Td>
+      <Td className={`px-2 text-right ${PHONE.menu} max-sm:w-auto`}>
         <Button size="sm" variant="ghost" disabled={pending} onClick={() => onDismiss(r.id)}>
           Dismiss
         </Button>
@@ -731,8 +787,8 @@ function Reports() {
   if (rows.length === 0)
     return <p className="py-6 text-center text-sm text-muted">No open reports.</p>;
   return (
-    <Table fixed minWidth="min-w-[56rem]">
-      <thead>
+    <Table fixed minWidth={`sm:min-w-[56rem] ${PHONE.table}`}>
+      <thead className={PHONE.head}>
         <tr>
           {/* Note has no width: it is the free text, so it takes what the
               sized columns leave. The last column fits the Dismiss button,
@@ -748,7 +804,7 @@ function Reports() {
           </Th>
         </tr>
       </thead>
-      <tbody>
+      <tbody className={PHONE.body}>
         {rows.map((r) => (
           <ReportRow key={r.id} report={r} pending={dismiss.isPending} onDismiss={dismiss.mutate} />
         ))}
@@ -756,14 +812,6 @@ function Reports() {
     </Table>
   );
 }
-
-const VIEWS = [
-  { id: "links", label: "Owned links" },
-  { id: "reports", label: "Reports" },
-  { id: "blocked", label: "Blocked hosts" },
-  { id: "anonymous", label: "Anonymous" },
-] as const;
-type View = (typeof VIEWS)[number]["id"];
 
 /**
  * Restore, delete and re-check, with the toasts they answer with.
@@ -906,61 +954,6 @@ function ClearOrgFilterButton({ orgName, onClear }: { orgName?: string; onClear:
   );
 }
 
-/** The search box, plus the "you are looking at one organization" escape
- * hatch that a click on an owner's name puts you behind. */
-const STATUSES = [
-  { id: "all", label: "All" },
-  { id: "active", label: "Active" },
-  { id: "suspended", label: "Suspended" },
-  { id: "warned", label: "Warning" },
-] as const;
-type Status = (typeof STATUSES)[number]["id"];
-
-function OwnedLinksToolbar({
-  query,
-  onSearch,
-  status,
-  onStatus,
-  orgFilter,
-  orgName,
-  onClearOrg,
-  children,
-}: {
-  children?: React.ReactNode;
-  query: string;
-  onSearch: (value: string) => void;
-  status: Status;
-  onStatus: (value: Status) => void;
-  orgFilter: string;
-  orgName?: string;
-  onClearOrg: () => void;
-}) {
-  return (
-    <div className="flex flex-wrap items-center gap-2">
-      <SearchInput
-        value={query}
-        onChange={onSearch}
-        placeholder="Search slug or destination"
-        label="Search links"
-      />
-      <Select
-        aria-label="Filter by status"
-        wrapperClass="w-36"
-        value={status}
-        onChange={(e) => onStatus(STATUSES.find((s) => s.id === e.target.value)?.id ?? "all")}
-      >
-        {STATUSES.map(({ id, label }) => (
-          <option key={id} value={id}>
-            {label}
-          </option>
-        ))}
-      </Select>
-      {orgFilter && <ClearOrgFilterButton orgName={orgName} onClear={onClearOrg} />}
-      {children}
-    </div>
-  );
-}
-
 /** The column sort. State sorts worst first (linkStateRank), and unscored
  * ranks below clean: nobody has looked at it, which is not the same as clean. */
 function sortOwnedLinks(data: AdminLinkRow[] | undefined, sort: Sort) {
@@ -1023,58 +1016,166 @@ function RestoreSelectedBar({
   );
 }
 
-/** The cross-org list with its own controls. Split out so the page itself is
- * just the switch and the two things it switches between. */
-function OwnedLinks({ onSuspend }: { onSuspend: (l: AdminLinkRow) => void }) {
-  const [params, setParams] = useSearchParams();
-  const orgFilter = params.get("org") ?? "";
-  const { query, search: onSearch, page, setPage } = useTableSearch();
-  // The term reaches the server, so it waits for a pause in typing. Without
-  // this, "testing" was eight requests.
-  const search = useDebounced(query);
+/** The filters over the link list, then the other lists an abuse report can
+ * send somebody to. One row: the filters narrow one table, the lists replace
+ * it, and a hairline between them says which is which. */
+const FILTERS = [
+  { id: "all", label: "All", test: () => true },
+  { id: "reported", label: "Reported", test: (l) => l.reportCount > 0 },
+  { id: "flagged", label: "Flagged by Google", test: flaggedByGoogle },
+  { id: "suspended", label: "Suspended", test: (l) => l.suspendedAt != null },
+  { id: "warned", label: "Warning", test: (l) => l.warnedAt != null },
+] as const satisfies readonly {
+  id: AdminLinkFilter;
+  label: string;
+  test: (l: AdminLinkRow) => boolean;
+}[];
+
+const LISTS = [
+  { id: "reports", label: "Open reports" },
+  { id: "blocked", label: "Blocked hosts" },
+  { id: "anonymous", label: "Anonymous" },
+] as const;
+type List = (typeof LISTS)[number]["id"];
+type View = AdminLinkFilter | List;
+
+const isFilter = (view: View): view is AdminLinkFilter => FILTERS.some((f) => f.id === view);
+const filterTest = (id: AdminLinkFilter) => FILTERS.find((f) => f.id === id)?.test ?? (() => true);
+
+/** How many rows each filter holds, read from the unfiltered list. The list
+ * stops at 200 rows, so past that only "All" says anything, and it says
+ * "200+" rather than a number it does not know. */
+interface FilterCounts {
+  counts: Partial<Record<AdminLinkFilter, number>>;
+  capped: boolean;
+}
+
+function filterCounts(base: AdminLinkRow[] | undefined): FilterCounts {
+  if (!base) return { counts: {}, capped: false };
+  if (base.length >= ADMIN_LINKS_CAP) return { counts: { all: ADMIN_LINKS_CAP }, capped: true };
+  const counts: Partial<Record<AdminLinkFilter, number>> = {};
+  for (const f of FILTERS) counts[f.id] = base.filter(f.test).length;
+  return { counts, capped: false };
+}
+
+function ViewRow({
+  view,
+  onView,
+  counts,
+  capped,
+  lists,
+}: {
+  view: View;
+  onView: (view: View) => void;
+  counts: Partial<Record<AdminLinkFilter, number>>;
+  capped: boolean;
+  lists: Partial<Record<List, number>>;
+}) {
+  return (
+    <div
+      role="group"
+      aria-label="Link lists"
+      className="-mx-1 flex max-w-full min-w-0 items-center gap-0.5 overflow-x-auto px-1 sm:shrink-0"
+    >
+      {FILTERS.map((f) =>
+        // Warning has no place in the mock's row; it shows once a link has one.
+        f.id === "warned" && !counts.warned && view !== "warned" ? null : (
+          <FilterPill
+            key={f.id}
+            on={view === f.id}
+            label={f.label}
+            count={counts[f.id]}
+            capped={capped && f.id === "all"}
+            onClick={() => onView(f.id)}
+          />
+        ),
+      )}
+      <span aria-hidden className="mx-2 h-4 w-px shrink-0 bg-border" />
+      {LISTS.map((l) => (
+        <FilterPill
+          key={l.id}
+          on={view === l.id}
+          label={l.label}
+          count={lists[l.id]}
+          onClick={() => onView(l.id)}
+        />
+      ))}
+    </div>
+  );
+}
+
+/** The org chip and the search box, on the right of the filters. */
+function LinkSearch({
+  query,
+  onSearch,
+  orgFilter,
+  orgName,
+  onClearOrg,
+}: {
+  query: string;
+  onSearch: (value: string) => void;
+  orgFilter: string;
+  orgName?: string;
+  onClearOrg: () => void;
+}) {
+  return (
+    <div className="flex w-full items-center gap-2 sm:ml-auto sm:w-auto">
+      {orgFilter && <ClearOrgFilterButton orgName={orgName} onClear={onClearOrg} />}
+      <SearchInput
+        value={query}
+        onChange={onSearch}
+        placeholder="Search slug or destination"
+        label="Search links"
+        className="min-w-0 flex-1 sm:w-60 sm:flex-none"
+      />
+    </div>
+  );
+}
+
+/** The cross-org list under one filter. */
+function OwnedLinks({
+  filter,
+  rowsData,
+  isPending,
+  onSuspend,
+}: {
+  filter: AdminLinkFilter;
+  rowsData: AdminLinkRow[] | undefined;
+  isPending: boolean;
+  onSuspend: (l: AdminLinkRow) => void;
+}) {
+  const [page, setPage] = useState(0);
   const [sort, setSort] = useState<Sort>({ key: "createdAt", dir: -1 });
   const [restoring, setRestoring] = useState<AdminLinkRow | null>(null);
   const [deleting, setDeleting] = useState<AdminLinkRow | null>(null);
-  const [status, setStatus] = useState<Status>("all");
   const selection = useSelection();
-  const { data, isPending } = useAdminLinks({ q: search, status, org: orgFilter });
   const { restore, restoreMany, remove, rescore, warn } = useOwnedLinkActions(
     () => setRestoring(null),
     () => setDeleting(null),
   );
 
-  const all = sortOwnedLinks(data, sort);
+  // The Worker filters suspended and warned links itself; reported and
+  // flagged are filtered here too until it reads those parameters.
+  const all = sortOwnedLinks(rowsData?.filter(filterTest(filter)), sort);
   const { rows, totalPages, safePage } = paginate(all, page);
-  // Only suspended links can be restored; selecting an active one is harmless
-  // but must not be counted or sent.
+  // Only suspended links can be restored, so only that list has ticks.
+  const selectable = filter === "suspended";
   const restorable = all.filter((l) => selection.has(l.id) && l.suspendedAt).map((l) => l.id);
 
   return (
     <div className="flex flex-col gap-3">
-      <OwnedLinksToolbar
-        query={query}
-        onSearch={onSearch}
-        status={status}
-        onStatus={(next) => {
-          setStatus(next);
-          setPage(0);
-        }}
-        orgFilter={orgFilter}
-        orgName={all[0]?.orgName}
-        onClearOrg={() => {
-          params.delete("org");
-          setParams(params, { replace: true });
-        }}
-      >
-        <RestoreSelectedBar
-          count={restorable.length}
-          pending={restoreMany.isPending}
-          onClear={selection.clear}
-          onRestore={() => restoreMany.mutate(restorable, { onSuccess: selection.clear })}
-        />
-      </OwnedLinksToolbar>
-
+      {selectable && restorable.length > 0 && (
+        <div className="flex items-center justify-end">
+          <RestoreSelectedBar
+            count={restorable.length}
+            pending={restoreMany.isPending}
+            onClear={selection.clear}
+            onRestore={() => restoreMany.mutate(restorable, { onSuccess: selection.clear })}
+          />
+        </div>
+      )}
       <LinksTable
+        selectable={selectable}
         selectedIds={selection.ids}
         onSelect={(l) => selection.toggle(l.id, !selection.has(l.id))}
         onSelectAll={(on) => rows.forEach((l) => selection.toggle(l.id, on))}
@@ -1113,27 +1214,68 @@ function OwnedLinks({ onSuspend }: { onSuspend: (l: AdminLinkRow) => void }) {
 }
 
 export function AdminLinksPage() {
-  const [view, setView] = useState<View>("links");
+  const [view, setView] = useState<View>("all");
   const [suspending, setSuspending] = useState<AdminLinkRow | null>(null);
-  const panels = {
-    links: <OwnedLinks onSuspend={setSuspending} />,
-    reports: <Reports />,
-    blocked: <BlockedHosts />,
-    anonymous: <AnonymousLinks />,
-  } satisfies Record<View, React.ReactNode>;
+  const [params, setParams] = useSearchParams();
+  const orgFilter = params.get("org") ?? "";
+  const [query, setQuery] = useState("");
+  // The term reaches the server, so it waits for a pause in typing. Without
+  // this, "testing" was eight requests.
+  const search = useDebounced(query);
+  const filter = isFilter(view) ? view : "all";
+  // The unfiltered list, for the counts; when "All" is picked it is also the
+  // list on screen, so it is one request, not two.
+  const base = useAdminLinksData({ q: search, filter: "all", org: orgFilter });
+  const filtered = useAdminLinksData({ q: search, filter, org: orgFilter });
+  const shown = filter === "all" ? base : filtered;
+  const reports = useAdminReports();
+  const anon = useAdminAnonLinks();
+  const blocked = useAdminBlockedHosts();
+
+  const lists = {
+    reports: reports.data?.length,
+    blocked: blocked.data?.length,
+    anonymous: anon.data?.length,
+  };
+  const panel = isFilter(view) ? (
+    <OwnedLinks
+      // A new filter starts on its first page with nothing ticked.
+      key={view}
+      filter={view}
+      rowsData={shown.data}
+      isPending={shown.isPending}
+      onSuspend={setSuspending}
+    />
+  ) : view === "reports" ? (
+    <Reports />
+  ) : view === "blocked" ? (
+    <BlockedHosts />
+  ) : (
+    <AnonymousLinks />
+  );
 
   return (
-    // The header keeps its own bottom margin, the one every page has; the gap
-    // below only spaces the tabs from the panel. Inside one gap container the
-    // two added up, and the tabs sat 40px under the subtitle instead of 24.
     <div>
-      <PageHeader
-        title="Links"
-        sub="Every link across every organization. Search by slug or destination."
-      />
+      <SectionHeading>Links</SectionHeading>
       <div className="flex flex-col gap-4">
-        <FilterRow items={VIEWS} value={view} onChange={setView} label="Link lists" />
-        {panels[view]}
+        {/* Wraps rather than squeezes: on a narrow laptop the search drops
+            under the pills instead of covering the last of them. */}
+        <div className="flex flex-col-reverse gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+          <ViewRow view={view} onView={setView} {...filterCounts(base.data)} lists={lists} />
+          {isFilter(view) && (
+            <LinkSearch
+              query={query}
+              onSearch={setQuery}
+              orgFilter={orgFilter}
+              orgName={base.data?.[0]?.orgName}
+              onClearOrg={() => {
+                params.delete("org");
+                setParams(params, { replace: true });
+              }}
+            />
+          )}
+        </div>
+        {panel}
       </div>
 
       <SuspendDialog link={suspending} onClose={() => setSuspending(null)} />

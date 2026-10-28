@@ -4,26 +4,33 @@ import { makePlatformAdmin, seedSubscriber } from "./db";
 
 const password = "test-password-123";
 
+const digits = (text: string | null) => Number((text ?? "").replace(/[^0-9]/g, ""));
+
 /**
- * The number on one /admin stat card.
+ * The "Paid" figure on /admin: people who pay, comps excluded. Its value is
+ * the first figure in the button; the share beside it is not.
  *
  * Read as a delta rather than asserted outright: the local database keeps
  * whatever earlier runs left in it, so "there are 3 subscribers" would depend
  * on test order. "Comping someone adds no subscriber" does not.
  */
-async function stat(page: Page, label: string): Promise<number> {
-  const card = page.getByText(label, { exact: true }).locator("..");
-  const text = (await card.textContent()) ?? "";
-  return Number(text.replace(label, "").replace(/[^0-9.-]/g, "")) || 0;
+async function paidUsers(page: Page): Promise<number> {
+  const figure = page
+    .getByRole("group", { name: "Figure to chart" })
+    .getByRole("button", { name: /^Paid/ });
+  return digits(await figure.locator(".tnum").first().textContent());
 }
 
-/** The comped count, which sits in the plan-mix card's footnote rather than
- * on a card of its own: a comp is not a fourth plan, it is how some of the
- * paid rows were paid for. */
-async function compedCount(page: Page): Promise<number> {
-  const line = await page.getByText(/\d+ comped/).textContent();
-  return Number(/(\d+) comped/.exec(line ?? "")?.[1] ?? NaN);
+/** The plan-mix footnote: "5 comped. 7% pay. 24 subscriptions." A comp is
+ * not a fourth plan, it is how some of the paid rows were paid for, so it is
+ * counted there rather than on a figure of its own. */
+async function footnote(page: Page, noun: RegExp): Promise<number> {
+  const line = (await page.getByText(/ comped\./).textContent()) ?? "";
+  const match = new RegExp(`([\\d,]+) ${noun.source}`).exec(line);
+  return match ? digits(match[1]) : NaN;
 }
+const compedCount = (page: Page) => footnote(page, /comped/);
+const subscriberCount = (page: Page) => footnote(page, /subscriptions?/);
 
 /**
  * A comp and a subscription grant the same access and are not the same fact
@@ -49,10 +56,10 @@ test("an admin can comp a user, and the comp never counts as a subscriber", asyn
   await expect(adminRow).not.toContainText("comped");
 
   await page.goto("/admin");
-  await expect(page.getByText("Subscribers", { exact: true })).toBeVisible();
+  await expect(page.getByText(/ subscriptions?\./)).toBeVisible();
   const before = {
-    paidUsers: await stat(page, "Paid users"),
-    subscribers: await stat(page, "Subscribers"),
+    paidUsers: await paidUsers(page),
+    subscribers: await subscriberCount(page),
     comped: await compedCount(page),
   };
   expect(before.subscribers).toBeGreaterThanOrEqual(1);
@@ -92,10 +99,10 @@ test("an admin can comp a user, and the comp never counts as a subscriber", asyn
   // subscription (setPlan) whenever they need a paid feature, and each of
   // those adds to both totals at a moment this test cannot predict.
   await page.goto("/admin");
-  await expect(page.getByText("Subscribers", { exact: true })).toBeVisible();
+  await expect(page.getByText(/ subscriptions?\./)).toBeVisible();
   expect(await compedCount(page)).toBe(before.comped + 1);
-  expect(await stat(page, "Paid users")).toBe(before.paidUsers);
-  expect(await stat(page, "Subscribers")).toBe(before.subscribers);
+  expect(await paidUsers(page)).toBe(before.paidUsers);
+  expect(await subscriberCount(page)).toBe(before.subscribers);
 
   // Revoking it takes the access away again, and leaves the subscriber alone.
   await page.goto("/admin/users");

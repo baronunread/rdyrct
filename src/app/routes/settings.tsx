@@ -10,7 +10,8 @@ import { uploadUserAvatar, deleteUserAvatar } from "../lib/api";
 import { authClient } from "../lib/auth-client";
 import { Button } from "../ui/button";
 import { Input } from "../ui/field";
-import { Switch } from "../ui/switch";
+import { Segmented } from "../ui/segmented";
+import { SigningInGroup } from "../components/signing-in-group";
 import { PageHeader } from "../ui/misc";
 import { SettingsGroup, SettingsRow } from "../ui/settings-rows";
 import { BusyContent } from "../ui/spinner";
@@ -138,23 +139,30 @@ function useAccountForm(user: User | undefined) {
   };
 }
 
+const THEMES = [
+  { id: "light", label: "Light" },
+  { id: "dark", label: "Dark" },
+] as const;
+
+/** Name and picture save together, from the Save beside the name: the
+ * picture is part of how you are named to your teammates. */
 function AccountGroup({ user }: { user: User | undefined }) {
   const [theme, toggleTheme] = useTheme();
   const { register, currentName, pic, save, isSubmitting, dirty } = useAccountForm(user);
 
   return (
-    <form
-      onSubmit={(e) => {
-        e.preventDefault();
-        void save();
-      }}
-      className="flex flex-col gap-3"
-    >
-      <SettingsGroup title="Account">
-        <SettingsRow label="Picture" hint="Shown to your teammates.">
+    <SettingsGroup title="Account">
+      <SettingsRow label="Name">
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            void save();
+          }}
+          className="flex w-full items-center gap-2 sm:w-auto"
+        >
           {user && (
             <AvatarInput
-              size={40}
+              size={32}
               // Blobatar tracks the name being typed; the image wins over it.
               user={{ ...user, name: currentName.trim() || user.name }}
               pendingUrl={pic.url}
@@ -163,27 +171,29 @@ function AccountGroup({ user }: { user: User | undefined }) {
               onRemove={pic.clear}
             />
           )}
-        </SettingsRow>
-        <SettingsRow label="Name">
-          <Input {...register("name")} aria-label="Your name" className="w-60 max-sm:w-full" />
-        </SettingsRow>
-        <SettingsRow label="Email">
-          <span className="font-mono text-xs">{user?.email}</span>
-        </SettingsRow>
-        <SettingsRow label="Dark mode" hint="Also on the account menu.">
-          <Switch
-            label="Dark mode"
-            checked={theme === "dark"}
-            onCheckedChange={(on) => on !== (theme === "dark") && toggleTheme()}
+          <Input
+            {...register("name")}
+            aria-label="Your name"
+            autoComplete="name"
+            className="min-w-0 flex-1 sm:w-56 sm:flex-none"
           />
-        </SettingsRow>
-      </SettingsGroup>
-      <div className="flex justify-end">
-        <Button variant="primary" type="submit" disabled={!dirty || isSubmitting}>
-          <BusyContent busy={isSubmitting}>Save</BusyContent>
-        </Button>
-      </div>
-    </form>
+          <Button type="submit" disabled={!dirty || isSubmitting}>
+            <BusyContent busy={isSubmitting}>Save</BusyContent>
+          </Button>
+        </form>
+      </SettingsRow>
+      <SettingsRow label="Email">
+        <span className="font-mono text-[13px] [overflow-wrap:anywhere]">{user?.email}</span>
+      </SettingsRow>
+      <SettingsRow label="Theme">
+        <Segmented
+          label="Theme"
+          items={THEMES}
+          value={theme === "dark" ? "dark" : "light"}
+          onChange={(next) => next !== theme && toggleTheme()}
+        />
+      </SettingsRow>
+    </SettingsGroup>
   );
 }
 
@@ -213,27 +223,30 @@ function useDeleteAccountFlow() {
   return { open, setOpen, pending, deleteAccount };
 }
 
+/** "Also deletes Copper Kettle Kitchen, which you own." Named while
+ * there are few enough to name. */
+function deleteAccountHint(owned: UserOrg[]): string {
+  if (owned.length === 0) return "Organizations you only belong to are left alone.";
+  if (owned.length === 1) return `Also deletes ${owned[0].name}, which you own.`;
+  if (owned.length === 2)
+    return `Also deletes ${owned[0].name} and ${owned[1].name}, which you own.`;
+  return `Also deletes the ${owned.length} organizations you own.`;
+}
+
 function DeleteAccountGroup({
   disabled,
-  ownedCount,
+  owned,
   onDelete,
 }: {
   disabled: boolean;
-  ownedCount: number;
+  owned: UserOrg[];
   onDelete: () => void;
 }) {
   return (
     <SettingsGroup danger>
-      <SettingsRow
-        label="Delete account"
-        hint={
-          ownedCount > 0
-            ? `Also deletes the ${ownedCount === 1 ? "organization" : `${ownedCount} organizations`} you own.`
-            : "Organizations you only belong to are left alone."
-        }
-      >
-        <Button variant="danger" onClick={onDelete} disabled={disabled}>
-          Delete account
+      <SettingsRow label="Delete account" hint={deleteAccountHint(owned)}>
+        <Button variant="danger" onClick={onDelete} disabled={disabled} aria-label="Delete account">
+          Delete
         </Button>
       </SettingsRow>
     </SettingsGroup>
@@ -285,13 +298,14 @@ export function SettingsPage() {
   if (currentUser.isLoading) return <SettingsSkeleton />;
 
   return (
-    <div>
+    <div className="mx-auto w-full max-w-[760px]">
       <PageHeader title="Settings" />
       <div className="flex max-w-[760px] flex-col gap-8">
         <AccountGroup user={currentUser.data?.user} />
+        <SigningInGroup />
         <DeleteAccountGroup
           disabled={accountDeleteDisabled}
-          ownedCount={ownedOrgs.length}
+          owned={ownedOrgs}
           onDelete={() => deleteAccountFlow.setOpen(true)}
         />
       </div>

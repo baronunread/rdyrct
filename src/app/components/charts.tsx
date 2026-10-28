@@ -1,4 +1,7 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
+import { IconArrowDown, IconArrowUp } from "@tabler/icons-react";
+import { HrefLink } from "../lib/router-search";
+import { Flag } from "./source-tile";
 import type { ReactNode } from "react";
 import { areaY, barY, defineChart, lineY } from "@tanstack/charts";
 import { d3Curve } from "@tanstack/charts/d3/shape";
@@ -29,6 +32,24 @@ const hourBarMotion = motion<{ hour: number; clicks: number }, number, number>(c
 
 const defaultTickFormat = (day: string) => day.slice(5);
 
+/** Every value up to eight; past that, five evenly spaced, ends included. */
+function evenTicks<T>(values: T[]): T[] {
+  if (values.length <= 8) return values;
+  const last = values.length - 1;
+  return [0, 1, 2, 3, 4].flatMap((i) => {
+    const v = values[Math.round((i * last) / 4)];
+    return v === undefined ? [] : [v];
+  });
+}
+
+/** The top of the y scale: the max rounded up to a nice even number, so the
+ * half-way hairline lands on a whole click count too. */
+function yTop(max: number): number {
+  const nice = scaleLinear().domain([0, max]).nice(4).domain()[1];
+  const top = Math.max(2, Math.ceil(nice));
+  return top % 2 === 0 ? top : top + 1;
+}
+
 /**
  * Single-series area chart (clicks over time). One hue (--chart), recessive
  * grid, crosshair + tooltip on hover. No legend: the card title names the
@@ -47,7 +68,7 @@ export function AreaChart({
   // data or formatter actually change, so hover-driven re-renders don't
   // read as a changed chart to the runtime.
   const definition = useMemo(() => {
-    const max = Math.max(1, ...data.map((d) => d.clicks));
+    const top = yTop(Math.max(1, ...data.map((d) => d.clicks)));
     return defineChart({
       marks: [
         areaY(data, {
@@ -97,13 +118,25 @@ export function AreaChart({
           // quietly went back to printing whole ISO strings ("2026-07-17"
           // instead of "07-17", and every timestamp in full on the hourly
           // range).
-          // Stubs off: a point scale offers every day as a candidate, so
-          // 90 days would draw 90 stubs. Labels thin themselves.
-          axis: { ticks: { format: tickFormat, size: 0 } },
+          // Stubs off. A week labels every day; anything longer labels five
+          // evenly spaced days, first and last included, rather than letting
+          // the renderer thin a crowd of labels into an uneven row.
+          axis: {
+            line: false,
+            ticks: { format: tickFormat, size: 0, values: evenTicks(data.map((d) => d.day)) },
+          },
         },
+        // Three hairlines (zero, half, top) labelled on the right, where the
+        // line ends and the eye already is. No axis line: the zero hairline
+        // is the baseline.
         y: {
-          scale: scaleLinear().domain([0, max]).nice(),
+          scale: scaleLinear().domain([0, top]),
+          side: "right",
           grid: true,
+          axis: {
+            line: false,
+            ticks: { values: [0, top / 2, top], size: 0, format: (v: number) => formatNumber(v) },
+          },
         },
       },
       theme: { foreground: "var(--text)", muted: "var(--muted)", grid: "var(--border)" },
@@ -149,47 +182,94 @@ export function AreaChart({
 export function BarList({
   items,
   formatKey = (k) => k,
+  lead,
   empty = "Nothing recorded in this period yet.",
   head,
+  limit,
 }: {
   items: { key: string; clicks: number }[];
   formatKey?: (key: string) => string | ReactNode;
+  /** A flag or a site's letter tile ahead of each label. */
+  lead?: (key: string) => ReactNode;
   /** What will appear here, said in the caller's own words. "No data" tells
    *  somebody nothing; naming the thing that fills the list explains the
    *  feature and points at the next step in the same sentence. */
   empty?: string;
   /** Column headings, e.g. ["Country", "Clicks"]. */
   head?: [string, string];
+  /** Rows shown before "Show all N". Unset shows every row. */
+  limit?: number;
 }) {
+  const [expanded, setExpanded] = useState(false);
   const max = Math.max(1, ...items.map((i) => i.clicks));
   const total = items.reduce((sum, i) => sum + i.clicks, 0) || 1;
   if (!items.length) return <p className="py-4 text-sm text-pretty text-muted">{empty}</p>;
+  const cut = limit !== undefined && items.length > limit;
+  const shown = cut && !expanded ? items.slice(0, limit) : items;
   return (
-    <div className="grid grid-cols-[minmax(0,1fr)_auto_2.5rem] items-center gap-x-3 gap-y-0.5 text-sm">
-      {head && (
-        <>
-          <span className="pb-1 text-xs text-muted">{head[0]}</span>
-          <span className="pb-1 text-right text-xs text-muted">{head[1]}</span>
-          <span />
-        </>
-      )}
-      {items.map((item) => (
-        <div key={item.key} className="group contents">
-          <div className="relative flex h-[30px] min-w-0 items-center px-2">
-            <span
-              aria-hidden
-              className="pointer-events-none absolute inset-y-0 left-0 rounded-md bg-chart/10 transition-colors [@media(hover:hover)]:group-hover:bg-chart/20"
-              style={{ width: `${Math.max(2, (item.clicks / max) * 100)}%` }}
-            />
-            <span className="relative min-w-0 truncate">{formatKey(item.key)}</span>
+    <div className="flex flex-col">
+      <div className="grid grid-cols-[minmax(0,1fr)_auto_2.5rem] items-center gap-x-3 gap-y-0.5 text-sm">
+        {head && (
+          <>
+            <span className="pb-1 text-xs text-muted">{head[0]}</span>
+            <span className="pb-1 text-right text-xs text-muted">{head[1]}</span>
+            <span />
+          </>
+        )}
+        {shown.map((item) => (
+          <div key={item.key} className="group contents">
+            <div className="relative flex h-[30px] min-w-0 items-center gap-2 px-2">
+              <span
+                aria-hidden
+                className="pointer-events-none absolute inset-y-0 left-0 rounded-md bg-chart/10 transition-colors duration-150 ease-out [@media(hover:hover)]:group-hover:bg-chart/20"
+                style={{ width: `${Math.max(2, (item.clicks / max) * 100)}%` }}
+              />
+              {lead && <span className="relative flex shrink-0">{lead(item.key)}</span>}
+              <span className="relative min-w-0 truncate">{formatKey(item.key)}</span>
+            </div>
+            <span className="tnum text-right">{formatNumber(item.clicks)}</span>
+            <span className="tnum text-right text-xs text-muted">
+              {Math.round((item.clicks / total) * 100)}%
+            </span>
           </div>
-          <span className="tnum text-right">{formatNumber(item.clicks)}</span>
-          <span className="tnum text-right text-xs text-muted">
-            {Math.round((item.clicks / total) * 100)}%
-          </span>
-        </div>
-      ))}
+        ))}
+      </div>
+      {cut && (
+        <button
+          type="button"
+          aria-expanded={expanded}
+          onClick={() => setExpanded((v) => !v)}
+          className="mx-auto mt-2 -mb-1 flex h-7 cursor-pointer items-center rounded-md px-2 text-xs text-muted transition-colors duration-150 ease-out [@media(hover:hover)]:hover:text-text"
+        >
+          {expanded ? "Show fewer" : `Show all ${items.length}`}
+        </button>
+      )}
     </div>
+  );
+}
+
+/** A link in a bar list: its slug, which is what people search for and
+ * type, then its title in the muted voice (rdyrct-design, mono only on the
+ * identifier). */
+export function LinkBarLabel({
+  slug,
+  title,
+  domain,
+}: {
+  slug: string;
+  title?: string;
+  domain?: string | null;
+}) {
+  const href = domain ? `/links/${slug}?domain=${encodeURIComponent(domain)}` : `/links/${slug}`;
+  return (
+    <HrefLink
+      href={href}
+      title={title ? `/${slug} · ${title}` : `/${slug}`}
+      className="[@media(hover:hover)]:hover:underline"
+    >
+      <span className="font-mono text-[13px]">/{slug}</span>
+      {title && <span className="text-muted"> {title}</span>}
+    </HrefLink>
   );
 }
 
@@ -227,14 +307,18 @@ export function StatsChart({ figures, children }: { figures: ChartFigure[]; chil
   );
 }
 
+/** The change beside a figure: an arrow and the size of the move. The arrow
+ * carries the direction, so the colour never has to on its own. */
 function DeltaBadge({ pct }: { pct: number }) {
   const up = pct > 0;
   const flat = pct === 0;
   const color = flat ? "text-muted" : up ? "text-accent-2" : "text-danger";
+  const Arrow = up ? IconArrowUp : IconArrowDown;
   return (
-    <span className={`tnum mt-1 inline-flex items-center gap-0.5 text-xs ${color}`}>
-      {up ? "+" : ""}
-      {pct}%
+    <span className={`tnum inline-flex items-center gap-0.5 text-xs font-medium ${color}`}>
+      {!flat && <Arrow aria-hidden size={12} stroke={2.25} />}
+      <span className="sr-only">{flat ? "No change" : up ? "Up" : "Down"}</span>
+      {Math.abs(pct)}%
     </span>
   );
 }
@@ -254,7 +338,7 @@ export function ClicksByHour({ data, height = 260 }: { data: HeatmapRow[]; heigh
   const hours = useMemo(() => clicksByHour(data), [data]);
 
   const definition = useMemo(() => {
-    const max = Math.max(1, ...hours.map((h) => h.clicks));
+    const top = yTop(Math.max(1, ...hours.map((h) => h.clicks)));
     return defineChart({
       marks: [
         barY(hours, {
@@ -273,9 +357,19 @@ export function ClicksByHour({ data, height = 260 }: { data: HeatmapRow[]; heigh
         x: {
           scale: scaleBand<number>().domain(HOURS),
           grid: false,
-          axis: { tickLabels: { thin: true } },
+          axis: { line: false, ticks: { size: 0 }, tickLabels: { thin: true } },
         },
-        y: { scale: scaleLinear().domain([0, max]).nice(), grid: true },
+        // Same y axis as the clicks chart: three hairlines, labelled on the
+        // right, no axis line.
+        y: {
+          scale: scaleLinear().domain([0, top]),
+          side: "right",
+          grid: true,
+          axis: {
+            line: false,
+            ticks: { values: [0, top / 2, top], size: 0, format: (v: number) => formatNumber(v) },
+          },
+        },
       },
       theme: { foreground: "var(--text)", muted: "var(--muted)", grid: "var(--border)" },
       focusRing: false,
@@ -327,8 +421,20 @@ export function countryName(code: string): string {
   }
 }
 
+/** "Italy" from "IT"; a click the edge could not place says so. */
+const placeName = (code: string) => (code === "unknown" ? "Unknown" : countryName(code));
+
 /** Countries as bars, with the map one tab away. */
-export function PlacesPanel({ countries, period }: { countries: TopEntry[]; period?: string }) {
+export function PlacesPanel({
+  countries,
+  period,
+  limit,
+}: {
+  countries: TopEntry[];
+  period?: string;
+  /** Rows before "Show all N". */
+  limit?: number;
+}) {
   return (
     <PanelTabs
       end={period}
@@ -339,7 +445,10 @@ export function PlacesPanel({ countries, period }: { countries: TopEntry[]; peri
           panel: (
             <BarList
               head={["Country", "Clicks"]}
-              items={countries.map((c) => ({ ...c, key: countryName(c.key) }))}
+              items={countries}
+              formatKey={placeName}
+              lead={(code) => <Flag code={code} />}
+              limit={limit}
               empty="The country each click came from appears here. Never the address it came from."
             />
           ),

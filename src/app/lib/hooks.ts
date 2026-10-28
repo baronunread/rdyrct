@@ -17,15 +17,10 @@ import type {
   InviteDTO,
   DomainDTO,
   OrgStats,
-  LinkStats,
   RecentClick,
-  AdminUsage,
-  AdminOrgRow,
   AdminReportRow,
   AdminBlockedHostRow,
   AdminOrgDetail,
-  AdminUserRow,
-  AdminLinkRow,
   AdminAnonLinkRow,
   AdminActionRow,
   QuotaUsage,
@@ -261,17 +256,6 @@ export const useStats = (orgId: string, days?: number, bucket?: "day" | "hour") 
     // orgs: another org's numbers are not a placeholder for this one's.
     placeholderData: (previous, previousQuery) =>
       previousQuery?.queryKey[1] === orgId ? previous : undefined,
-  });
-
-export const useLinkStats = (orgId: string, slug: string | null, domain?: string | null) =>
-  useQuery<LinkStats>({
-    queryKey: ["linkStats", orgId, slug, domain],
-    queryFn: () => {
-      let path = `/orgs/${orgId}/links/stats/${encodeURIComponent(slug!)}`;
-      if (domain) path += `?domain=${encodeURIComponent(domain)}`;
-      return api<LinkStats>(path);
-    },
-    enabled: !!orgId && !!slug,
   });
 
 // A link's primary address plus every alias (temporary, permanent, expired).
@@ -510,55 +494,11 @@ export function useConfirmCheckout() {
   });
 }
 
-export const useAdminUsage = () =>
-  useQuery<AdminUsage>({
-    queryKey: ["admin", "usage"],
-    queryFn: () => api("/admin/usage"),
-  });
-
-export const useAdminOrgs = () =>
-  useQuery<AdminOrgRow[]>({
-    queryKey: ["admin", "orgs"],
-    queryFn: () => api("/admin/orgs"),
-  });
-
 export const useAdminOrgDetail = (orgId: string | null) =>
   useQuery<AdminOrgDetail>({
     queryKey: ["admin", "org", orgId],
     queryFn: () => api(`/admin/orgs/${orgId}`),
     enabled: !!orgId,
-  });
-
-/** The cross-org link list (#67).
- *
- * The search goes to the server, because the table can hold far more links
- * than a browser should filter. Ordering does not: the response is capped, so
- * sorting it is a client concern and the column headers can drive it the way
- * every other table here works. */
-const STATUS_PARAM = {
-  all: "",
-  active: "&suspended=0",
-  suspended: "&suspended=1",
-  warned: "&warned=1",
-};
-
-export const useAdminLinks = (params: {
-  q: string;
-  status: keyof typeof STATUS_PARAM;
-  org?: string;
-}) =>
-  useQuery<AdminLinkRow[]>({
-    queryKey: ["admin", "links", params],
-    queryFn: () =>
-      api(
-        `/admin/links?q=${encodeURIComponent(params.q)}${STATUS_PARAM[params.status]}` +
-          (params.org ? `&org=${encodeURIComponent(params.org)}` : ""),
-      ),
-    // The search term is part of the key, so without this every pause in
-    // typing replaced the table with a skeleton and put it back. That flashes,
-    // and it also tears out whatever the admin had open: a row's actions menu
-    // is unmounted mid-click when the new page of results lands.
-    placeholderData: keepPreviousData,
   });
 
 export const useAdminAnonLinks = () =>
@@ -583,12 +523,6 @@ export const useAdminAudit = () =>
   useQuery<AdminActionRow[]>({
     queryKey: ["admin", "audit"],
     queryFn: () => api("/admin/audit"),
-  });
-
-export const useAdminUsers = () =>
-  useQuery<AdminUserRow[]>({
-    queryKey: ["admin", "users"],
-    queryFn: () => api("/admin/users"),
   });
 
 /** One DNS record a domain needs, as GET /domains/:id/records lists it. */

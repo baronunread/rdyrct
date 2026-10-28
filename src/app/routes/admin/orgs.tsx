@@ -3,14 +3,25 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { ArrowRight, Ban, Check, Eye, Trash2, Undo2 } from "@/app/ui/icons";
 import { HrefLink } from "../../lib/router-search";
 import { buttonClass } from "../../ui/button-class";
-import { useAdminOrgDetail, useAdminOrgs } from "../../lib/hooks";
+import { useAdminOrgDetail } from "../../lib/hooks";
+import { useAdminOrgsData, useAdminUsageRange, type AdminOrgData } from "../../lib/admin-data";
 import { api } from "../../lib/api";
 import type { AdminOrgRow, Sort } from "@/shared/types";
 import { AreaChart } from "../../components/charts";
 import { Dialog } from "../../ui/dialog";
 import { Menu, MenuItem, MenuSeparator } from "../../ui/menu";
-import { PageHeader, Table, Td, Th } from "../../ui/misc";
-import { FilterBar, FilterRow, RowMenuTrigger, StateLabel } from "./admin-kit";
+import { Table, Td, Th } from "../../ui/misc";
+import {
+  FilterBar,
+  FilterRow,
+  LetterTile,
+  PHONE,
+  RowMenuTrigger,
+  SectionHeading,
+  StateLabel,
+  fullNumber,
+  type StateTone,
+} from "./admin-kit";
 import { OrgDetailSkeleton } from "../../components/skeletons";
 import { TableSkeleton } from "../../ui/skeleton";
 import { useToast } from "../../ui/toast";
@@ -23,36 +34,74 @@ import { SortTh } from "../../ui/sort-th";
 import { sortRows } from "../../lib/sort";
 import { withErrorToast } from "../../lib/mutation-toast";
 import { shortDate } from "../../lib/dates";
-import { formatNumber } from "../../lib/numbers";
 import { Pager } from "../../ui/pagination";
 
 /** What an empty table says. It names the filter that matched nothing: with
  * only a status picked there is no search term to quote. */
 function emptyMessage(status: OrgStatus, term: string): string {
   if (term) return `No organizations match “${term}”.`;
-  if (status === "review") return "No organizations need review.";
-  if (status === "suspended") return "No organizations are suspended.";
-  return "No organizations yet.";
+  const none = {
+    all: "No organizations yet.",
+    over: "No organization is over its plan.",
+    locked: "No organizations are locked.",
+    disabled: "No organizations are disabled.",
+    suspended: "No organizations are suspended.",
+    review: "No organizations need review.",
+  } satisfies Record<OrgStatus, string>;
+  return none[status];
 }
 
-const hasStatus = (o: AdminOrgRow, status: OrgStatus) =>
-  status === "all" || (status === "suspended" ? o.linksSuspendedAt : o.reviewFlaggedAt) != null;
+/** An org row with what the page worked out about it. */
+type OrgView = AdminOrgData & { over: boolean };
+
+const STATUS_TEST = {
+  all: () => true,
+  over: (o) => o.over,
+  locked: (o) => o.lockedAt != null,
+  disabled: (o) => o.disabledAt != null,
+  suspended: (o) => o.linksSuspendedAt != null,
+  review: (o) => o.reviewFlaggedAt != null,
+} satisfies Record<string, (o: OrgView) => boolean>;
+
+const hasStatus = (o: OrgView, status: OrgStatus) => STATUS_TEST[status](o);
 
 const matchesSearch = (o: AdminOrgRow, needle: string) =>
   !needle || [o.name, o.ownerName, o.ownerEmail].some((v) => v?.toLowerCase().includes(needle));
 
+/** The mock's three first, then the two the abuse work still needs. */
 const STATUSES = [
   { id: "all", label: "All" },
+  { id: "over", label: "Over plan" },
+  { id: "locked", label: "Locked" },
+  { id: "disabled", label: "Disabled" },
   { id: "suspended", label: "Suspended" },
   { id: "review", label: "Needs review" },
 ] as const;
 type OrgStatus = (typeof STATUSES)[number]["id"];
 
-/** Whether an org's links are stopped, and how to say it: a ban outranks a
- * suspension, since it is the decision. */
-function stoppedLabel(org: AdminOrgRow, suspendedLabel: string): string | null {
-  if (org.disabledAt) return "disabled";
-  return org.linksSuspendedAt ? suspendedLabel : null;
+const DAY_MS = 86_400_000;
+
+/** "Over plan · 10 days left" while the grace period runs, plain "Over plan"
+ * when the API has not said when it ends. */
+function overLabel(org: OrgView): string {
+  if (org.graceEndsAt == null) return "Over plan";
+  const left = Math.ceil((org.graceEndsAt - Date.now()) / DAY_MS);
+  if (left <= 0) return "Over plan · grace ended";
+  return `Over plan · ${left} ${left === 1 ? "day" : "days"} left`;
+}
+
+/** Every state an admin acts on, worst first. A ban outranks a suspension,
+ * since it is the decision; `suspendedLabel` differs because the table is
+ * cramped and the dialog has room. */
+function orgStates(org: OrgView, suspendedLabel: string): { tone: StateTone; text: string }[] {
+  const states: { tone: StateTone; text: string }[] = [];
+  if (org.disabledAt) states.push({ tone: "bad", text: "disabled" });
+  else if (org.linksSuspendedAt) states.push({ tone: "bad", text: suspendedLabel });
+  if (org.domainStoppedAt) states.push({ tone: "warn", text: "Domain stopped" });
+  if (org.lockedAt) states.push({ tone: "warn", text: "Locked" });
+  else if (org.over) states.push({ tone: "warn", text: overLabel(org) });
+  if (org.reviewFlaggedAt) states.push({ tone: "warn", text: "needs review" });
+  return states;
 }
 
 /** What an admin can still do to an org: nothing to a banned owner's but
@@ -69,16 +118,17 @@ function ownerOf(org: AdminOrgRow) {
     : null;
 }
 
-/** The states an admin acts on, as a dot and a word each, or "active" when
- * there is none. `suspendedLabel` differs: the table is cramped, the dialog
- * has room. */
-function OrgStates({ org, suspendedLabel }: { org: AdminOrgRow; suspendedLabel: string }) {
-  const stopped = stoppedLabel(org, suspendedLabel);
-  if (!stopped && !org.reviewFlaggedAt) return <StateLabel tone="ok">active</StateLabel>;
+/** The states as a dot and a word each, or "Active" when there is none. */
+function OrgStates({ org, suspendedLabel }: { org: OrgView; suspendedLabel: string }) {
+  const states = orgStates(org, suspendedLabel);
+  if (states.length === 0) return <StateLabel tone="ok">Active</StateLabel>;
   return (
     <span className="flex flex-wrap gap-x-3 gap-y-1">
-      {stopped && <StateLabel tone="bad">{stopped}</StateLabel>}
-      {org.reviewFlaggedAt && <StateLabel tone="warn">needs review</StateLabel>}
+      {states.map((st) => (
+        <StateLabel key={st.text} tone={st.tone}>
+          {st.text}
+        </StateLabel>
+      ))}
     </span>
   );
 }
@@ -130,22 +180,25 @@ function OrgMenu({
 function OrgCell({ org, onView }: { org: AdminOrgRow; onView: () => void }) {
   const owner = org.ownerName ? `${org.ownerName} · ${org.ownerEmail ?? ""}` : "No owner";
   return (
-    <span className="flex min-w-0 flex-col gap-0.5 leading-tight">
-      <button
-        type="button"
-        onClick={onView}
-        title={org.name}
-        className="max-w-full cursor-pointer truncate text-start text-sm font-semibold [@media(hover:hover)]:hover:underline"
-      >
-        {org.name}
-      </button>
-      {org.ownerEmail ? (
-        <span className="truncate font-mono text-xs text-muted" title={owner}>
-          {org.ownerEmail}
-        </span>
-      ) : (
-        <span className="text-xs text-muted">No owner</span>
-      )}
+    <span className="flex min-w-0 items-center gap-3">
+      <LetterTile name={org.name} />
+      <span className="flex min-w-0 flex-col gap-0.5 leading-tight">
+        <button
+          type="button"
+          onClick={onView}
+          title={org.name}
+          className="max-w-full cursor-pointer truncate text-start text-sm font-semibold [@media(hover:hover)]:hover:underline"
+        >
+          {org.name}
+        </button>
+        {org.ownerEmail ? (
+          <span className="truncate font-mono text-xs text-muted" title={owner}>
+            {org.ownerEmail}
+          </span>
+        ) : (
+          <span className="text-xs text-muted">No owner</span>
+        )}
+      </span>
     </span>
   );
 }
@@ -157,27 +210,37 @@ function OrgRow({
   onBanOwner,
   onAct,
 }: {
-  org: AdminOrgRow;
+  org: OrgView;
   onView: () => void;
   onDelete: () => void;
   onBanOwner: () => void;
   onAct: (path: string, body?: { reason: string }) => void;
 }) {
   return (
-    <tr>
-      <Td>
+    <tr className={PHONE.row}>
+      <Td className={PHONE.main}>
         <OrgCell org={org} onView={onView} />
       </Td>
-      <Td className={org.plan === "free" ? "text-muted capitalize" : "capitalize"}>{org.plan}</Td>
-      <Td className="tnum text-right">{formatNumber(org.links)}</Td>
-      <Td className="tnum text-right">{formatNumber(org.members)}</Td>
-      <Td className="tnum text-right">{formatNumber(org.clicks)}</Td>
-      <Td>
+      <Td
+        className={`${org.plan === "free" ? "text-muted" : ""} capitalize ${PHONE.meta}`}
+        data-label="Plan"
+      >
+        {org.plan}
+      </Td>
+      <Td className={`tnum text-right ${PHONE.meta}`} data-label="Links">
+        {fullNumber(org.links)}
+      </Td>
+      <Td className={`tnum text-right ${PHONE.meta}`} data-label="Members">
+        {fullNumber(org.members)}
+      </Td>
+      <Td className={`tnum text-right ${PHONE.meta}`} data-label="Clicks">
+        {fullNumber(org.clicks30d ?? org.clicks)}
+      </Td>
+      <Td className="max-sm:order-3 max-sm:w-full max-sm:border-0 max-sm:p-0">
         <OrgStates org={org} suspendedLabel="suspended" />
         <HoldReason why={org.linksSuspendedAt ? org.suspendReason : null} />
       </Td>
-      <Td className="tnum text-xs whitespace-nowrap text-muted">{shortDate(org.createdAt)}</Td>
-      <Td className="px-2">
+      <Td className={`px-2 ${PHONE.menu}`}>
         <OrgMenu
           org={org}
           onView={onView}
@@ -198,9 +261,9 @@ function OrgRows({
   onBanOwner,
   onAct,
 }: {
-  rows: AdminOrgRow[];
+  rows: OrgView[];
   emptyText: string;
-  onView: (org: AdminOrgRow) => void;
+  onView: (org: OrgView) => void;
   onDelete: (org: AdminOrgRow) => void;
   onBanOwner: (org: AdminOrgRow) => void;
   onAct: (org: AdminOrgRow, path: string, body?: { reason: string }) => void;
@@ -208,7 +271,7 @@ function OrgRows({
   if (rows.length === 0)
     return (
       <tr>
-        <Td colSpan={8} className="py-8 text-center text-muted">
+        <Td colSpan={7} className="block py-8 text-center text-muted sm:table-cell">
           {emptyText}
         </Td>
       </tr>
@@ -280,9 +343,9 @@ function OrgLinksRecap({
       <div className="flex-1">
         <p className="text-xs text-muted">Links</p>
         <p className="mt-0.5 text-sm">
-          <span className="font-semibold tnum">{formatNumber(links.length)}</span>{" "}
+          <span className="font-semibold tnum">{fullNumber(links.length)}</span>{" "}
           {links.length === 1 ? "link" : "links"},{" "}
-          <span className="font-semibold tnum">{formatNumber(clicks)}</span> clicks between them
+          <span className="font-semibold tnum">{fullNumber(clicks)}</span> clicks between them
         </p>
       </div>
       <HrefLink
@@ -296,13 +359,14 @@ function OrgLinksRecap({
   );
 }
 
-function OrgDetailDialog({ org, onClose }: { org: AdminOrgRow | null; onClose: () => void }) {
+function OrgDetailDialog({ org, onClose }: { org: OrgView | null; onClose: () => void }) {
   const detail = useAdminOrgDetail(org?.id ?? null);
   return (
     <Dialog open={!!org} onOpenChange={(o) => !o && onClose()} title={org?.name ?? ""} wide>
       {org && (
         <div className="flex flex-col gap-4">
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+            <LetterTile name={org.name} />
             <span className="capitalize">{org.plan}</span>
             <OrgStates org={org} suspendedLabel="links suspended" />
             <span className="text-xs text-muted">Created {shortDate(org.createdAt)}</span>
@@ -332,11 +396,28 @@ function OrgDetailDialog({ org, onClose }: { org: AdminOrgRow | null; onClose: (
 }
 
 export function AdminOrgsPage() {
-  const orgs = useAdminOrgs();
+  const orgs = useAdminOrgsData();
+  // Who is over their plan, until each row says so itself: the usage page's
+  // cap list already names them (over 100% of any cap).
+  const usage = useAdminUsageRange(30);
+  const overIds = useMemo(
+    () =>
+      new Set(
+        (usage.data?.capPressure ?? [])
+          .filter((c) => Math.max(c.linksPct, c.membersPct, c.domainsPct) > 100)
+          .map((c) => c.orgId),
+      ),
+    [usage.data],
+  );
+  const views = useMemo<OrgView[]>(
+    () => (orgs.data ?? []).map((o) => ({ ...o, over: o.overPlan ?? overIds.has(o.id) })),
+    [orgs.data, overIds],
+  );
+  const clicksLabel = views.some((o) => o.clicks30d !== undefined) ? "Clicks · 30d" : "Clicks";
   const qc = useQueryClient();
   const toast = useToast();
   const [deleting, setDeleting] = useState<AdminOrgRow | null>(null);
-  const [viewing, setViewing] = useState<AdminOrgRow | null>(null);
+  const [viewing, setViewing] = useState<OrgView | null>(null);
   const [banning, setBanning] = useState<{ id: string; name: string } | null>(null);
   const [q, setQ] = useState("");
   const [status, setStatus] = useState<OrgStatus>("all");
@@ -367,31 +448,29 @@ export function AdminOrgsPage() {
 
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase();
-    const matches = (orgs.data ?? []).filter(
-      (o) => hasStatus(o, status) && matchesSearch(o, needle),
-    );
+    const matches = views.filter((o) => hasStatus(o, status) && matchesSearch(o, needle));
     return sortRows(matches, sort, {
       name: (o) => o.name.toLowerCase(),
       members: (o) => o.members,
       links: (o) => o.links,
-      clicks: (o) => o.clicks,
+      clicks: (o) => o.clicks30d ?? o.clicks,
       created: (o) => o.createdAt,
     });
-  }, [orgs.data, q, status, sort]);
+  }, [views, q, status, sort]);
 
   const { totalPages, safePage, rows } = paginate(filtered, page);
   const counts = useMemo(
     () =>
       STATUSES.map((s) => ({
         ...s,
-        count: (orgs.data ?? []).filter((o) => hasStatus(o, s.id)).length,
+        count: views.filter((o) => hasStatus(o, s.id)).length,
       })),
-    [orgs.data],
+    [views],
   );
 
   return (
     <div>
-      <PageHeader title="Organizations" sub="All organizations on this instance." />
+      <SectionHeading>Organizations</SectionHeading>
       <div className="mb-4">
         <FilterBar>
           <FilterRow
@@ -419,8 +498,8 @@ export function AdminOrgsPage() {
       {orgs.isLoading ? (
         <TableSkeleton rows={6} testId="admin-orgs-rows-skeleton" />
       ) : (
-        <Table fixed minWidth="min-w-[54rem]">
-          <thead>
+        <Table fixed minWidth={`sm:min-w-[50rem] ${PHONE.table}`}>
+          <thead className={PHONE.head}>
             <tr>
               <SortTh label="Organization" sortKey="name" sort={sort} onSort={setSort} />
               <Th className="w-20">Plan</Th>
@@ -439,26 +518,19 @@ export function AdminOrgsPage() {
                 className="w-24 text-right"
               />
               <SortTh
-                label="Clicks"
+                label={clicksLabel}
                 sortKey="clicks"
                 sort={sort}
                 onSort={setSort}
-                className="w-24 text-right"
+                className="w-28 text-right"
               />
-              <Th className="w-36">State</Th>
-              <SortTh
-                label="Created"
-                sortKey="created"
-                sort={sort}
-                onSort={setSort}
-                className="w-28"
-              />
+              <Th className="w-52">State</Th>
               <Th className="w-12 px-2">
                 <span className="sr-only">Actions</span>
               </Th>
             </tr>
           </thead>
-          <tbody>
+          <tbody className={PHONE.body}>
             <OrgRows
               rows={rows}
               emptyText={emptyMessage(status, q.trim())}

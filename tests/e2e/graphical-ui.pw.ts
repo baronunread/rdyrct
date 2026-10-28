@@ -24,7 +24,7 @@ test("link stats keep their layout while loading (#174)", async ({ page }) => {
   await page.goto("/links");
   const row = page.locator("tbody tr").first();
   await row.getByLabel(/Actions for/).click();
-  await page.getByRole("menuitem", { name: "View analytics" }).click();
+  await page.getByRole("menuitem", { name: "Analytics", exact: true }).click();
   await expect(page.locator(".animate-pulse").first()).toBeVisible();
 
   releaseStats();

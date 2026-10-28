@@ -40,10 +40,11 @@ import {
   reachedSentence,
   resetDay,
 } from "@/shared/click-usage";
-import { Check } from "@/app/ui/icons";
+import { Check, Download } from "@/app/ui/icons";
+import type { BillingDetails, Invoice, PaymentCard } from "../lib/billing-details";
 import { Button } from "../ui/button";
 import { cn } from "../ui/cn";
-import { Dialog } from "../ui/dialog";
+import { Dialog, DialogClose, DialogTitle } from "../ui/dialog";
 import { PageHeader } from "../ui/misc";
 import { Segmented } from "../ui/segmented";
 import { SettingsGroup, SettingsRow } from "../ui/settings-rows";
@@ -319,9 +320,15 @@ function ChangePlanDialog({
     );
   };
   return (
-    <Dialog open={open} onOpenChange={onOpenChange} title="Change plan" wide>
-      <div className="flex flex-col gap-4">
-        <IntervalSwitch interval={interval} onChange={setInterval} />
+    <Dialog open={open} onOpenChange={onOpenChange} title="Change plan" size="xl" bare>
+      <div className="flex flex-col gap-4 max-sm:px-5 max-sm:pb-[max(1.25rem,env(safe-area-inset-bottom))] sm:p-6">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <DialogTitle>Change plan</DialogTitle>
+          <div className="flex items-center gap-3">
+            <IntervalSwitch interval={interval} onChange={setInterval} />
+            <DialogClose className="-mr-1.5" />
+          </div>
+        </div>
         <div className="grid gap-3 sm:grid-cols-3">
           {PLAN_ORDER.map((plan) => (
             <PlanCard
@@ -334,7 +341,9 @@ function ChangePlanDialog({
           ))}
         </div>
         <p className="text-xs text-pretty text-muted">
-          Plan changes open in the subscription portal. Switching down deletes nothing.
+          Switching down deletes nothing. Past the new plan's limits you can't add more until you
+          make room, extra organizations go read-only, and extra domains stop after 30 days. Plan
+          changes open in the subscription portal.
         </p>
       </div>
     </Dialog>
@@ -436,21 +445,26 @@ function NoBillingAccountNote({ plan, comped }: { plan: OrgPlan; comped: boolean
   );
 }
 
-const PLAN_CHANGE_HINT = "Switch between monthly and yearly, update your card, or cancel.";
+const MONTH_DAY = new Intl.DateTimeFormat("en", { month: "short", day: "numeric" });
 
-const INTERVAL_LABEL = { month: "Monthly", year: "Yearly" } as const;
-
-/** The plan's name: "Pro · Yearly" for a subscriber, just the plan for comped. */
-function planTitle({ plan, comped, interval }: PlanActionSnapshot): string {
-  const cycle = comped || !interval ? "" : ` · ${INTERVAL_LABEL[interval]}`;
-  return PLAN_LABEL[plan] + cycle;
+/** "$9 a month, renews Nov 14" while a subscription runs on; just the price
+ * once a cancel is scheduled, since the note below says its own date. A comp
+ * pays and renews nothing. */
+function renewalLine(snapshot: PlanActionSnapshot): string | null {
+  if (!snapshot.hasBillingAccount || snapshot.comped) return null;
+  if (snapshot.plan !== "hobby" && snapshot.plan !== "pro") return null;
+  const price =
+    snapshot.interval === "year"
+      ? `${PLAN_PRICES_YEARLY[snapshot.plan]} a month, billed yearly`
+      : `${PLAN_PRICES[snapshot.plan]} a month`;
+  if (snapshot.cancelAtPeriodEnd || snapshot.periodEnd == null) return price;
+  return `${price}, renews ${MONTH_DAY.format(new Date(snapshot.periodEnd))}`;
 }
 
-/** "Renews Nov 14" while a subscription runs on. A scheduled cancel says its
- * own date in the note below, and a comp renews nothing. */
-function renewalLine(snapshot: PlanActionSnapshot): string | null {
-  if (!snapshot.hasBillingAccount || snapshot.comped || snapshot.cancelAtPeriodEnd) return null;
-  return snapshot.periodEnd == null ? null : `Renews ${shortDate(snapshot.periodEnd)}`;
+/** Cancelling happens in the portal; offered while there is something to
+ * cancel. A scheduled cancel is undone there too, from Manage. */
+function canCancel(snapshot: PlanActionSnapshot): boolean {
+  return canChangePlan(snapshot) && !snapshot.cancelAtPeriodEnd;
 }
 
 /** Whether "Change plan" can do anything: only a subscription the portal can
@@ -459,13 +473,18 @@ function canChangePlan(snapshot: PlanActionSnapshot): boolean {
   return snapshot.hasBillingAccount && !snapshot.comped;
 }
 
-/** A paid plan: what it is, when it renews, and the way to change it. */
+/** A paid plan: what it is, what it costs and when it renews, the way to
+ * change or cancel it, and what it is being used for, in one card. */
 function PaidPlan({
   snapshot,
+  usage,
   onChangePlan,
+  onPortal,
 }: {
   snapshot: PlanActionSnapshot;
+  usage: UsageSnapshot;
   onChangePlan: () => void;
+  onPortal: () => void;
 }) {
   const renewal = renewalLine(snapshot);
   return (
@@ -473,49 +492,138 @@ function PaidPlan({
       <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3 px-4 py-4">
         <div className="min-w-0">
           <p className="flex flex-wrap items-baseline gap-x-2">
-            <span className="text-base font-semibold">{planTitle(snapshot)}</span>
+            <span className="text-base font-semibold">{PLAN_LABEL[snapshot.plan]}</span>
             {renewal && <span className="text-sm text-muted tnum">{renewal}</span>}
           </p>
           <p className="mt-0.5 text-xs text-muted">Covers every organization you own.</p>
         </div>
         {canChangePlan(snapshot) && (
-          <Button variant="outline" onClick={onChangePlan}>
-            Change plan
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" onClick={onChangePlan}>
+              Change plan
+            </Button>
+            {canCancel(snapshot) && (
+              <Button
+                variant="ghost"
+                disabled={snapshot.showPortalOverlay}
+                onClick={onPortal}
+                title="Cancels in the subscription portal. Paid features stay until the period ends."
+              >
+                Cancel
+              </Button>
+            )}
+          </div>
         )}
       </div>
       <PlanStatusNotes snapshot={snapshot} inset />
       {!snapshot.hasBillingAccount && (
         <NoBillingAccountNote plan={snapshot.plan} comped={snapshot.comped} />
       )}
+      <UsageInPlan usage={usage} />
     </SettingsGroup>
   );
 }
 
-/** Card, invoices and cancelling all live in Polar's portal. */
-function PaymentGroup({
+/** The card and the invoices. Both live in Polar's portal, which every
+ * button here opens; the rows show the card and the list themselves once the
+ * API sends them (`BillingDetails`). */
+function PaymentGroups({
   snapshot,
   commands,
+  details,
 }: {
   snapshot: PlanActionSnapshot;
   commands: PlanActionCommands;
+  details: BillingDetails | undefined;
 }) {
   if (!snapshot.hasBillingAccount) return null;
-  return (
-    <SettingsGroup title="Payment">
-      <SettingsRow label="Subscription" hint={snapshot.comped ? undefined : PLAN_CHANGE_HINT}>
-        <Button
-          variant="outline"
-          disabled={snapshot.showPortalOverlay}
-          className={commands.shake.portal.className}
-          onAnimationEnd={commands.shake.portal.end}
-          onClick={commands.onPortal}
-        >
-          <BusyContent busy={snapshot.showPortalOverlay}>Manage subscription</BusyContent>
-        </Button>
-      </SettingsRow>
-    </SettingsGroup>
+  const portalButton = (label: string) => (
+    <Button
+      variant="outline"
+      size="sm"
+      disabled={snapshot.showPortalOverlay}
+      className={commands.shake.portal.className}
+      onAnimationEnd={commands.shake.portal.end}
+      onClick={commands.onPortal}
+    >
+      <BusyContent busy={snapshot.showPortalOverlay}>{label}</BusyContent>
+    </Button>
   );
+  const card = details?.card;
+  return (
+    <>
+      <SettingsGroup title="Payment">
+        <SettingsRow label="Card" hint={card ? undefined : "Kept by Polar, our payment provider."}>
+          {card && <CardFace card={card} />}
+          {portalButton("Update")}
+        </SettingsRow>
+      </SettingsGroup>
+      <SettingsGroup title="Invoices">
+        {details?.invoices && details.invoices.length > 0 ? (
+          details.invoices.map((invoice) => <InvoiceRow key={invoice.id} invoice={invoice} />)
+        ) : (
+          <SettingsRow
+            label="Every invoice and receipt"
+            hint="In the subscription portal, as PDFs."
+          >
+            {portalButton("View invoices")}
+          </SettingsRow>
+        )}
+      </SettingsGroup>
+    </>
+  );
+}
+
+/** "Visa · Ending 4242, expires 08/28". The brand as a word, not a logo:
+ * the CSP allows no remote image and a drawn logo would be a trademark. */
+function CardFace({ card }: { card: PaymentCard }) {
+  const brand = card.brand.charAt(0).toUpperCase() + card.brand.slice(1);
+  const mm = String(card.expMonth).padStart(2, "0");
+  const yy = String(card.expYear).slice(-2);
+  return (
+    <span className="flex items-center gap-2 text-sm tnum">
+      <span className="rounded-[5px] bg-surface-2 px-1.5 py-0.5 text-xs font-semibold">
+        {brand}
+      </span>
+      Ending {card.last4}, expires {mm}/{yy}
+    </span>
+  );
+}
+
+function InvoiceRow({ invoice }: { invoice: Invoice }) {
+  const paid = invoice.status === "paid";
+  return (
+    <div className="grid min-h-11 grid-cols-[1fr_auto_auto_2rem] items-center gap-x-4 px-4 py-2 text-sm sm:grid-cols-[1fr_5rem_5rem_4rem_2rem]">
+      <span className="tnum">{shortDate(invoice.date)}</span>
+      <span className="text-muted max-sm:hidden">{PLAN_LABEL[invoice.plan]}</span>
+      <span className="text-right tnum">{formatMoney(invoice.amountCents, invoice.currency)}</span>
+      <span className="inline-flex items-center gap-1.5 text-xs max-sm:hidden">
+        <span
+          aria-hidden
+          className={cn("size-1.5 rounded-full", paid ? "bg-accent-2" : "bg-butter")}
+        />
+        {paid ? "Paid" : "Open"}
+      </span>
+      {invoice.pdfUrl ? (
+        <a
+          href={invoice.pdfUrl}
+          target="_blank"
+          rel="noreferrer"
+          aria-label={`Download the invoice of ${shortDate(invoice.date)}`}
+          title="Download PDF"
+          className="grid size-8 place-items-center rounded-md text-muted transition-colors [@media(hover:hover)]:hover:bg-surface-2 [@media(hover:hover)]:hover:text-text"
+        >
+          <Download size={15} aria-hidden />
+        </a>
+      ) : (
+        <span />
+      )}
+    </div>
+  );
+}
+
+function formatMoney(cents: number, currency: string): string {
+  return new Intl.NumberFormat("en-US", { style: "currency", currency }).format(cents / 100);
 }
 
 /** One figure against its cap: "184 of 3,000" over a thin bar. Over the cap,
@@ -572,7 +680,7 @@ function ClickUsageRow({ usage }: { usage: ClickUsage }) {
   const now = Date.now();
   return (
     <UsageRow
-      label="Clicks counted this month"
+      label="Clicks counted"
       hint={`resets ${resetDay(now)}`}
       count={usage.clicks}
       limit={usage.limit}
@@ -612,6 +720,21 @@ function UsageRows({ snapshot, limits }: { snapshot: UsageSnapshot; limits: Plan
         <UsageRow label="Custom domains" count={snapshot.domainCount} limit={limits.domains} />
       )}
       {snapshot.clickUsage && <ClickUsageRow usage={snapshot.clickUsage} />}
+    </>
+  );
+}
+
+/** The plan's meters, as rows of the plan card. */
+function UsageInPlan({ usage }: { usage: UsageSnapshot }) {
+  if (!usage.org) return null;
+  return (
+    <>
+      <UsageRows snapshot={usage} limits={PLAN_LIMITS[usage.org.plan]} />
+      <UsageRow
+        label="Organizations"
+        count={usage.ownedOrgs}
+        limit={PLAN_LIMITS[usage.plan].orgs}
+      />
     </>
   );
 }
@@ -1156,7 +1279,7 @@ export function BillingPage() {
   const free = snapshot.plan === "free";
 
   return (
-    <div>
+    <div className="mx-auto w-full max-w-[760px]">
       <PageHeader
         title="Billing"
         sub={free ? "You’re on Free. Upgrade any time, cancel any time." : undefined}
@@ -1174,9 +1297,13 @@ export function BillingPage() {
           </>
         ) : (
           <>
-            <PaidPlan snapshot={snapshot} onChangePlan={() => setChangingPlan(true)} />
-            <UsageGroup snapshot={model.usage} />
-            <PaymentGroup snapshot={snapshot} commands={commands} />
+            <PaidPlan
+              snapshot={snapshot}
+              usage={model.usage}
+              onChangePlan={() => setChangingPlan(true)}
+              onPortal={commands.onPortal}
+            />
+            <PaymentGroups snapshot={snapshot} commands={commands} details={undefined} />
             {canChangePlan(snapshot) && (
               <ChangePlanDialog
                 open={changingPlan}

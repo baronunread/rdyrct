@@ -2,7 +2,7 @@ import { useState, type FormEvent, type ReactNode, useCallback } from "react";
 import { useForm, type UseFormRegister } from "react-hook-form";
 import { valibotResolver } from "@hookform/resolvers/valibot";
 import { AnimatePresence, LazyMotion, MotionConfig, domAnimation, m } from "motion/react";
-import { Ellipsis, Globe, Plus, Star } from "@/app/ui/icons";
+import { Ellipsis, Globe, Plus } from "@/app/ui/icons";
 import { useCurrentUser, useConfig, useDomains, useDomainMutations } from "../lib/hooks";
 import { useCurrentOrg } from "../lib/current-org";
 import {
@@ -12,7 +12,7 @@ import {
   type OrgRole,
   type UserOrg,
 } from "@/shared/types";
-import { Button, IconButton } from "../ui/button";
+import { Button } from "../ui/button";
 import { buttonClass } from "../ui/button-class";
 import { Field, Input } from "../ui/field";
 import { Dialog } from "../ui/dialog";
@@ -20,17 +20,17 @@ import { ConfirmDialog } from "../ui/confirm-dialog";
 import { Menu, MenuItem, MenuSeparator } from "../ui/menu";
 import { withErrorToast } from "../lib/mutation-toast";
 import { hostnameSchema } from "../lib/schemas";
-import { Badge, PageHeader } from "../ui/misc";
+import { PageHeader } from "../ui/misc";
 import { SettingsGroup } from "../ui/settings-rows";
 import { BusyContent } from "../ui/spinner";
 import { DomainsPageSkeleton, DomainsSkeleton, HeaderSkeleton } from "../components/skeletons";
 import { NoOrgState } from "../components/no-org";
 import { LockedPanel } from "../components/over-limit";
 import { domainsBlockedBy } from "../lib/org-limits";
+import { displayUrl, parentDomain } from "../lib/domain-display";
 import { graceLabel, graceRunning } from "../lib/grace";
 import { shortDate } from "../lib/dates";
 import { CopyButton } from "../ui/copy-button";
-import { Tooltip } from "../ui/tooltip";
 import { useToast } from "../ui/toast";
 import { cn } from "../ui/cn";
 import { copyToClipboard } from "../lib/clipboard";
@@ -38,19 +38,32 @@ import { DnsRecords } from "../components/dns-records";
 import { addDomainMessage, recheckMessage } from "../lib/domain-messages";
 import posthog from "../lib/posthog";
 
-const domainStatusColor = {
-  checking_dns: "butter",
-  issuing_tls: "accent",
-  active: "mint",
-  error: "pink",
-} satisfies Record<DomainDTO["status"], "accent" | "butter" | "mint" | "pink">;
+type Tone = "ok" | "warn" | "bad";
 
-const domainStatusLabel = {
-  checking_dns: "Checking DNS",
-  issuing_tls: "Issuing TLS",
-  active: "active",
-  error: "Failed",
-} satisfies Record<DomainDTO["status"], string>;
+const TONE_CLASS = {
+  ok: "text-accent-2",
+  warn: "text-butter",
+  bad: "text-danger",
+} satisfies Record<Tone, string>;
+
+const domainStatus = {
+  checking_dns: { tone: "warn", label: "Waiting for DNS" },
+  issuing_tls: { tone: "warn", label: "Issuing certificate" },
+  active: { tone: "ok", label: "Active" },
+  error: { tone: "bad", label: "Failed" },
+} satisfies Record<DomainDTO["status"], { tone: Tone; label: string }>;
+
+/** What a domain's status line says: its own status, or for a domain over
+ * the plan (#159), whether it still redirects. */
+function statusOf(d: DomainDTO, graceEndsAt: number | null): { tone: Tone; label: string } {
+  if (d.lockedAt === null) return domainStatus[d.status];
+  return graceRunning(graceEndsAt)
+    ? { tone: "warn", label: `Stops ${monthDay(graceEndsAt!)}` }
+    : { tone: "bad", label: "Stopped" };
+}
+
+const MONTH_DAY = new Intl.DateTimeFormat("en", { month: "short", day: "numeric" });
+const monthDay = (ts: number) => MONTH_DAY.format(new Date(ts));
 
 const transitional = (status: DomainDTO["status"]) =>
   status === "checking_dns" || status === "issuing_tls";
@@ -80,7 +93,7 @@ export function DomainsPage() {
 
   if (!canManageDomains(!!currentUser.data?.user.isAdmin, org.role))
     return (
-      <div>
+      <div className="mx-auto w-full max-w-[760px]">
         <PageHeader title="Domains" />
         <p className="text-sm text-muted">You don't have access to domains.</p>
       </div>
@@ -138,12 +151,14 @@ function AddDomainDialog({
             autoFocus
           />
         </Field>
-        <div className="flex items-start gap-3">
-          <Globe size={15} className="mt-0.5 shrink-0 text-muted" aria-hidden />
-          <div>
+        <div className="flex items-center gap-3 rounded-xl p-3 smooth-shadow-ring-xs">
+          <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-surface-2 text-muted">
+            <Globe size={15} aria-hidden />
+          </span>
+          <div className="min-w-0">
             <p className="text-sm font-semibold">Next, one DNS record</p>
-            <p className="text-xs text-muted">
-              We show you the CNAME to add and check for it every few seconds.
+            <p className="text-xs text-pretty text-muted">
+              We show you the CNAME to add and check it every few seconds.
             </p>
           </div>
         </div>
@@ -425,9 +440,10 @@ function DomainsSection({ orgId, plan }: { orgId: string; plan: OrgPlan }) {
   const canAdd = !upgradeOnly && blockedBy === null;
 
   return (
-    <div>
+    <div className="mx-auto w-full max-w-[760px]">
       <PageHeader
         title="Domains"
+        sub={domainsSubtitle(plan, model.domains.data?.length)}
         action={
           canAdd ? (
             <Button variant="primary" onClick={model.openAdd}>
@@ -443,7 +459,6 @@ function DomainsSection({ orgId, plan }: { orgId: string; plan: OrgPlan }) {
         ) : (
           <>
             <DomainsBody model={model} canAdd={canAdd} />
-            <DomainsBlocked blockedBy={blockedBy} />
           </>
         )}
       </div>
@@ -520,30 +535,17 @@ function DomainsBody({ model, canAdd }: { model: DomainsModel; canAdd: boolean }
 }
 
 /**
- * Why there is no "Add domain" button: the org is locked, or the plan has no
- * domains (#159, #160). Shown under the list, which stays, because a
- * read-only list with no reason beside it looks like a bug.
+ * "2 of 5 on your plan" under the title. A plan with no domains that still
+ * has some (#159) says why there is no Add button instead: the notice above
+ * the page and each row's status say the rest, so no card repeats it.
  */
-function DomainsBlocked({ blockedBy }: { blockedBy: ReturnType<typeof domainsBlockedBy> }) {
-  // The banner at the top of the page already says why and until when, and
-  // each row says whether it still redirects, so this only says why adding
-  // is gone.
-  if (blockedBy === "lock")
-    return (
-      <LockedPanel
-        title="This organization is locked"
-        reason="You cannot add a domain until it is active again. The domains it already has keep redirecting."
-      />
-    );
-  if (blockedBy === "plan")
-    return (
-      <LockedPanel
-        title="Your custom domains are locked"
-        reason="Custom domains need a paid plan. The DNS record, the certificate and every link on these domains are still here."
-        cta="Upgrade to keep them"
-      />
-    );
-  return null;
+function domainsSubtitle(plan: OrgPlan, count: number | undefined): string | undefined {
+  if (count === undefined) return undefined;
+  const cap = PLAN_LIMITS[plan].domains;
+  if (cap === 0) return count > 0 ? "Custom domains need a paid plan." : undefined;
+  // A self-hosted instance has no cap to count against.
+  if (plan === "unlimited") return count === 1 ? "1 domain" : `${count} domains`;
+  return `${count} of ${cap} on your plan`;
 }
 
 /** Slide-in/out variants for the status badge swap: skip the motion (and
@@ -558,74 +560,42 @@ function statusSlideVariants(tabVisible: boolean) {
   };
 }
 
-function DomainStatusBadge({ domain: d, locked }: { domain: DomainDTO; locked: boolean }) {
+/** The state as a coloured dot and a word, the way every list in the app
+ * says it. The word carries the meaning; the colour only helps the scan. */
+function DomainStatus({
+  domain: d,
+  graceEndsAt,
+}: {
+  domain: DomainDTO;
+  graceEndsAt: number | null;
+}) {
   const { initial, exit, duration } = statusSlideVariants(document.visibilityState === "visible");
-  if (locked) return <Badge color="butter">locked</Badge>;
+  const { tone, label } = statusOf(d, graceEndsAt);
   return (
     <AnimatePresence initial={false} mode="popLayout">
       <m.span
-        key={d.status}
+        key={label}
         initial={initial}
         animate={{ x: 0, opacity: 1 }}
         exit={exit}
         transition={{ duration }}
-        className="inline-flex"
+        className="inline-flex items-center gap-1.5 text-sm whitespace-nowrap tnum"
       >
-        <Badge color={domainStatusColor[d.status]}>{domainStatusLabel[d.status]}</Badge>
+        {/* The dot carries the colour; the word stays in ink, because the
+            state colours are under AA as small text on light grounds. */}
+        <span aria-hidden className={cn("size-1.5 rounded-full bg-current", TONE_CLASS[tone])} />
+        {label}
       </m.span>
     </AnimatePresence>
   );
 }
 
-/**
- * Makes this domain the one new links start on, or gives that up (#69).
- *
- * Only offered on a domain that is actually serving: preselecting one still
- * waiting on DNS would hand every new link an address that resolves nowhere,
- * and the server refuses it anyway.
- */
-function DefaultDomainButton({
-  domain: d,
-  isDefault,
-  pending,
-  onToggle,
-}: {
-  domain: DomainDTO;
-  isDefault: boolean;
-  pending: boolean;
-  onToggle: () => void;
-}) {
-  const label = isDefault
-    ? `Stop defaulting to ${d.hostname}`
-    : `Default new links to ${d.hostname}`;
-  return (
-    <Tooltip content={label}>
-      <IconButton label={label} title={undefined} disabled={pending} onClick={onToggle}>
-        <Star size={15} className={isDefault ? "fill-accent text-accent" : ""} />
-      </IconButton>
-    </Tooltip>
-  );
-}
-
 type RowAction = { label: string; onClick: () => void; danger?: boolean; disabled?: boolean };
 
-/** A row's actions: one is a button, more go behind "…". */
+/** A row's actions, always behind "…" so every row ends in the same place. */
 function RowActions({ hostname, items }: { hostname: string; items: RowAction[] }) {
-  if (items.length === 0) return null;
-  if (items.length === 1) {
-    const [only] = items;
-    return (
-      <Button
-        variant="ghost"
-        size="sm"
-        disabled={only.disabled}
-        onClick={only.onClick}
-        className={only.danger ? "text-danger [@media(hover:hover)]:hover:text-danger" : ""}
-      >
-        {only.label}
-      </Button>
-    );
-  }
+  // Keeps the column when there is nothing to offer, so the statuses align.
+  if (items.length === 0) return <div className="w-8" />;
   const safe = items.filter((item) => !item.danger);
   const danger = items.filter((item) => item.danger);
   return (
@@ -693,16 +663,30 @@ function DomainRow({
   const locked = d.lockedAt !== null;
   const serving = !locked && d.status === "active";
   // Re-checking is a read, so it stays in a locked org. Only writes go.
+  // The default is only offered on a domain that is actually serving (#69):
+  // preselecting one still waiting on DNS would hand every new link an
+  // address that resolves nowhere, and the server refuses it anyway.
   const items: RowAction[] = [
     ...(!locked && transitional(d.status)
       ? [{ label: "Re-check now", onClick: onRecheck, disabled: pending.refreshing }]
       : []),
-    ...(canWrite && serving ? [{ label: "Set root redirect", onClick: onEditRedirect }] : []),
+    ...(canWrite && serving
+      ? [
+          {
+            label: isDefault
+              ? `Stop defaulting to ${d.hostname}`
+              : `Default new links to ${d.hostname}`,
+            onClick: onToggleDefault,
+            disabled: pending.savingDefault,
+          },
+          { label: "Set root redirect", onClick: onEditRedirect },
+        ]
+      : []),
     ...(canWrite ? [{ label: "Delete domain", onClick: onDelete, danger: true }] : []),
   ];
 
   return (
-    <div className="flex items-start gap-3 px-4 py-3.5">
+    <div className="flex min-h-[60px] items-start gap-3 px-4 py-3">
       <div className="min-w-0 flex-1">
         <p className="flex flex-wrap items-baseline gap-x-2">
           <span className="font-mono text-sm font-bold [overflow-wrap:anywhere]">{d.hostname}</span>
@@ -715,18 +699,11 @@ function DomainRow({
           appHost={appHost}
           orgId={orgId}
           onCopy={onCopy}
+          onPickPage={canWrite && serving ? onEditRedirect : undefined}
         />
       </div>
-      <div className="flex shrink-0 items-center gap-1.5">
-        <DomainStatusBadge domain={d} locked={locked} />
-        {canWrite && serving && (
-          <DefaultDomainButton
-            domain={d}
-            isDefault={isDefault}
-            pending={pending.savingDefault}
-            onToggle={onToggleDefault}
-          />
-        )}
+      <div className="flex shrink-0 items-center gap-3 pt-0.5">
+        <DomainStatus domain={d} graceEndsAt={graceEndsAt} />
         <RowActions hostname={d.hostname} items={items} />
       </div>
     </div>
@@ -746,6 +723,7 @@ function DomainDetail({
   appHost,
   orgId,
   onCopy,
+  onPickPage,
 }: {
   domain: DomainDTO;
   locked: boolean;
@@ -753,13 +731,15 @@ function DomainDetail({
   appHost: string;
   orgId: string;
   onCopy: (text: string) => void;
+  /** Opens the root redirect, for a row that can still change it. */
+  onPickPage?: () => void;
 }) {
   if (locked)
     return (
       <DetailLine className="tnum">
         {graceRunning(graceEndsAt)
           ? `Still redirecting until ${shortDate(graceEndsAt!)} (${graceLabel(graceEndsAt!)}), then it stops.`
-          : "This domain has stopped redirecting. Upgrading brings it straight back, with no DNS to redo."}
+          : "Nothing is deleted. Upgrading brings it back with no DNS to redo."}
       </DetailLine>
     );
   if (d.status === "error")
@@ -773,11 +753,27 @@ function DomainDetail({
       <DetailLine>
         {d.rootRedirect ? (
           <>
-            With no slug, it goes to{" "}
-            <span className="font-mono [overflow-wrap:anywhere]">{d.rootRedirect}</span>
+            No slug goes to{" "}
+            <span className="font-mono [overflow-wrap:anywhere]" title={d.rootRedirect}>
+              {displayUrl(d.rootRedirect)}
+            </span>
           </>
         ) : (
-          "With no slug, it shows a not-found page"
+          <>
+            No slug shows a 404
+            {onPickPage && (
+              <>
+                {" · "}
+                <button
+                  type="button"
+                  onClick={onPickPage}
+                  className="cursor-pointer text-text underline decoration-border underline-offset-2 transition-colors [@media(hover:hover)]:hover:decoration-current"
+                >
+                  Pick a page
+                </button>
+              </>
+            )}
+          </>
         )}
       </DetailLine>
     );
@@ -799,7 +795,9 @@ function DomainDetail({
     );
   return (
     <>
-      <DetailLine>Add this record at your DNS provider. We check every few seconds.</DetailLine>
+      <DetailLine>
+        Add this record where you manage {parentDomain(d.hostname)}. We check every few seconds.
+      </DetailLine>
       <CnameRecord hostname={d.hostname} appHost={appHost} onCopy={onCopy} />
     </>
   );

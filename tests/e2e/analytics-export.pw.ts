@@ -16,6 +16,15 @@ test("an owner can export the analytics view as a CSV (#78)", async ({ page }) =
   // One link, so the org has something to report on.
   await createQuickLink(page, "example.com/export");
   await page.keyboard.press("Escape");
+  // A link nobody has followed gets the "No clicks yet" card, which has no
+  // export. One country row is enough for the report and its button.
+  await page.route("**/api/orgs/*/stats**", async (route) => {
+    const response = await route.fetch();
+    // SAFETY: this route is the stats endpoint, whose response always has a countries array.
+    const stats = (await response.json()) as { countries: { key: string; clicks: number }[] };
+    stats.countries = [{ key: "US", clicks: 1 }];
+    await route.fulfill({ response, json: stats });
+  });
 
   const { filename, text } = await exportCsvFrom(page, "/analytics");
 

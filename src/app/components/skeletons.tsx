@@ -2,7 +2,7 @@ import type { OrgPlan } from "@/shared/types";
 import type { ReactElement, ReactNode } from "react";
 import { lookup } from "@/shared/lookup";
 import { useLocation } from "@tanstack/react-router";
-import { ChevronsUpDown, Menu as MenuIcon } from "@/app/ui/icons";
+import { ChevronsUpDown, MenuIcon } from "@/app/ui/icons";
 import { appNavItems } from "./nav-items";
 import { cn } from "../ui/cn";
 import { Card } from "../ui/misc";
@@ -347,7 +347,7 @@ export function AdminPlatformSkeleton() {
 }
 
 /** /admin: header, 6 stat cards, two charts, two ranked lists. */
-export function AdminUsageSkeleton() {
+function AdminUsageSkeleton() {
   return (
     <SkeletonStatus testId="admin-usage-skeleton">
       <HeaderSkeleton sub />
