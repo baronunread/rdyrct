@@ -139,8 +139,14 @@ export async function linkFacets(db: DB, orgId: string, now = Date.now()): Promi
   return row ?? { all: 0, attention: 0, qr: 0, customDomain: 0 };
 }
 
-/** Days in a row's sparkline. */
+/** Days read per row: two weeks, so "needs attention" can compare this week
+ * with the one before. */
 const SPARK_DAYS = 14;
+
+/** Days a row's sparkline shows: one week, on every plan. The free plan's
+ * analytics window is 7 days, and the table must not show more than the
+ * plan's own charts do. */
+export const SPARK_SHOWN = 7;
 
 /** The first UTC day a sparkline covers. */
 export const sparkSince = (now = Date.now()) => computeWindows(SPARK_DAYS, now).since;

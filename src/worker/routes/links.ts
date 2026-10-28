@@ -46,6 +46,7 @@ import {
   linkPageQuery,
   readLinkPageParams,
   sparkLines,
+  SPARK_SHOWN,
   sparkSince,
   takePage,
   type Page,
@@ -645,7 +646,11 @@ linkRoutes.get("/", requireOrgRole("viewer"), async (c) => {
     items: page.items.map((link): LinkListItem => {
       const spark = sparkOf(link.id);
       const note = { warnedAt: warnedAt.get(link.id) ?? null, createdAt: link.createdAt };
-      return { ...link, spark, attention: attentionNote(note, spark, link.clicks, now) };
+      return {
+        ...link,
+        spark: spark.slice(-SPARK_SHOWN),
+        attention: attentionNote(note, spark, link.clicks, now),
+      };
     }),
   } satisfies Page<LinkListItem>);
 });

@@ -145,7 +145,7 @@ test("the chips above the links table count and filter", async ({ page }) => {
   );
   // Two fresh links: neither needs a look, and neither has a QR look of its own.
   await expect(chips.getByRole("button", { name: "Needs attention 0" })).toBeVisible();
-  await expect(page.getByRole("columnheader", { name: "Last 14 days" })).toBeVisible();
+  await expect(page.getByRole("columnheader", { name: "Last 7 days" })).toBeVisible();
   await expect(page.locator("tbody tr")).toHaveCount(2);
 
   await chips.getByRole("button", { name: "QR codes 0" }).click();

@@ -121,17 +121,17 @@ describe("GET /orgs/:orgId/links?filter=", () => {
 });
 
 describe("the links list's sparkline and attention note", () => {
-  it("sends 14 zero-filled days per link, oldest first", async () => {
+  it("sends 7 zero-filled days per link on every plan, oldest first", async () => {
     const cookie = await seedOrg();
     const { items } = await list(cookie, "");
     const drop = items.find((l) => l.id === "drop")!;
 
-    expect(drop.spark).toHaveLength(14);
-    expect(drop.spark[3]).toBe(20); // 10 days ago
-    expect(drop.spark[11]).toBe(3); // 2 days ago
-    expect(drop.spark.reduce((a, b) => a + b, 0)).toBe(23);
-    // Older than 14 days is not in the line.
-    expect(items.find((l) => l.id === "quiet")!.spark).toEqual(Array.from({ length: 14 }, () => 0));
+    // One week, the free plan's analytics window, whatever the plan.
+    expect(drop.spark).toHaveLength(7);
+    expect(drop.spark[4]).toBe(3); // 2 days ago
+    // 10 days ago is outside the week, so it is not in the line.
+    expect(drop.spark.reduce((a, b) => a + b, 0)).toBe(3);
+    expect(items.find((l) => l.id === "quiet")!.spark).toEqual(Array.from({ length: 7 }, () => 0));
   });
 
   it("words the same rule the attention chip counts", async () => {

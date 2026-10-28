@@ -413,7 +413,7 @@ export interface LinkFacets {
 /** One row of the links list: the link, plus the two things only the list
  * needs. */
 export interface LinkListItem extends LinkDTO {
-  /** Clicks per UTC day for the last 14 days, oldest first, today last. */
+  /** Clicks per UTC day for the last 7 days, oldest first, today last. */
   spark: number[];
   /** Why the link needs a look ("82% fewer clicks"), or null when it is fine. */
   attention: string | null;

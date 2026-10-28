@@ -415,7 +415,7 @@ export function LinksTable({
                 <sm   link + clicks + actions
                 sm    + checkbox + created
                 lg    + destination
-                xl    + last 14 days
+                xl    + last 7 days
               The link column takes what is left. */}
           <table className="w-full table-fixed text-sm [&_tbody_tr]:transition-colors [@media(hover:hover)]:[&_tbody_tr]:hover:bg-surface-2/40">
             {/* No header on a phone: two columns explain themselves, and the
@@ -441,7 +441,7 @@ export function LinksTable({
                 />
                 {/* fallow-ignore-next-line css-token-drift */}
                 <Th className="hidden lg:table-cell lg:w-[30%]">Destination</Th>
-                <Th className="hidden w-32 text-end xl:table-cell">Last 14 days</Th>
+                <Th className="hidden w-32 text-end xl:table-cell">Last 7 days</Th>
                 <SortTh
                   label="Clicks"
                   sortKey="clicks"
