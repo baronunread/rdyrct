@@ -17,6 +17,7 @@ import {
 } from "../components/charts";
 import { PanelTabs } from "../ui/tabs";
 import { Segmented } from "../ui/segmented";
+import { cn } from "../ui/cn";
 import { formatNumber } from "../lib/numbers";
 import { AnalyticsSkeleton } from "../components/skeletons";
 import { NoOrgState } from "../components/no-org";
@@ -235,11 +236,14 @@ function AnalyticsReport({
   maxDays,
   range,
   onRangeChange,
+  updating,
 }: {
   stats: OrgStats;
   maxDays: number;
   range: AnalyticsRange;
   onRangeChange: (range: AnalyticsRange) => void;
+  /** The figures below are the last range's, while the new one loads. */
+  updating: boolean;
 }) {
   const picker = rangePickerProps(s, maxDays, range, onRangeChange);
   const period = breakdownPeriod(s.bucket);
@@ -258,7 +262,13 @@ function AnalyticsReport({
         }
       />
       <ClickCapBanner />
-      <div className="flex flex-col gap-6">
+      <div
+        aria-busy={updating}
+        className={cn(
+          "flex flex-col gap-6 transition-opacity duration-200 ease-out",
+          updating && "opacity-60",
+        )}
+      >
         <StatsChart
           figures={[
             {
@@ -274,10 +284,12 @@ function AnalyticsReport({
             },
           ]}
         >
-          <AreaChart
-            data={hourly ? s.hourSeries : s.series}
-            tickFormat={hourly ? hourTick : dayTick}
-          />
+          <div key={`${s.rangeDays}-${s.bucket}`} className="chart-in">
+            <AreaChart
+              data={hourly ? s.hourSeries : s.series}
+              tickFormat={hourly ? hourTick : dayTick}
+            />
+          </div>
         </StatsChart>
 
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
@@ -342,6 +354,7 @@ function AnalyticsForOrg({ org }: { org: UserOrg }) {
       maxDays={PLAN_LIMITS[org.plan].analyticsDays}
       range={range}
       onRangeChange={setRange}
+      updating={stats.isPlaceholderData}
     />
   );
 }
