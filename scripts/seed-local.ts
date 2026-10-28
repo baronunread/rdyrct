@@ -431,14 +431,33 @@ async function buildRollups(): Promise<void> {
   if (backfill.length !== 3) throw new Error("migration 0042 no longer has its three backfills");
   await sqlBatch(backfill);
 
-  const [row] = await sql<Record<string, number>>(
-    `select (select count(*) from clicks where org_id like 'seed-%') as raw,
-            (select coalesce(sum(clicks), 0) from click_daily where org_id like 'seed-%') as daily,
-            (select coalesce(sum(clicks), 0) from click_hourly where org_id like 'seed-%') as hourly,
-            (select coalesce(sum(clicks), 0) from click_daily_dims
-              where org_id like 'seed-%' and dim = 'country') as dims`,
-  );
-  if (!row || new Set(Object.values(row).map(Number)).size !== 1) {
+  // Four counts, one request each and retried once: a single request
+  // scanning all four tables after the backfill was long enough for the
+  // local D1 to answer 500, which failed the whole seed at its last step.
+  const total = async (query: string): Promise<number> => {
+    for (let attempt = 0; ; attempt++) {
+      try {
+        const [r] = await sql<{ n: number }>(query);
+        return Number(r?.n ?? 0);
+      } catch (error) {
+        if (attempt === 1) throw error;
+        await Bun.sleep(2_000);
+      }
+    }
+  };
+  const row = {
+    raw: await total("select count(*) as n from clicks where org_id like 'seed-%'"),
+    daily: await total(
+      "select coalesce(sum(clicks), 0) as n from click_daily where org_id like 'seed-%'",
+    ),
+    hourly: await total(
+      "select coalesce(sum(clicks), 0) as n from click_hourly where org_id like 'seed-%'",
+    ),
+    dims: await total(
+      "select coalesce(sum(clicks), 0) as n from click_daily_dims where org_id like 'seed-%' and dim = 'country'",
+    ),
+  };
+  if (new Set(Object.values(row)).size !== 1) {
     throw new Error(
       `click rollups disagree with raw clicks: ${JSON.stringify(row)}. Restart bun run dev (it applies the migrations) and seed again.`,
     );
