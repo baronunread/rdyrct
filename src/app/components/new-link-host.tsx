@@ -12,6 +12,7 @@ import { LinkPreviewDialog } from "./link-preview-dialog";
 import { SameDestinationDialog } from "./same-destination-dialog";
 import type { LinkDTO, LinkInput } from "@/shared/types";
 import { isShortcut } from "../lib/shortcut";
+import { Kbd } from "../ui/kbd";
 
 /**
  * "New link" is one dialog, opened from anywhere (rdyrct-design, "Creating is
@@ -53,9 +54,9 @@ export function NewLinkButton({ onClick }: { onClick: () => void }) {
   return (
     <Button variant="primary" onClick={onClick}>
       <Plus size={15} aria-hidden /> New link
-      <kbd className="ml-0.5 hidden rounded-[5px] bg-bg/20 px-1.5 font-mono text-[11px] leading-[18px] sm:inline">
+      <Kbd tone="primary" className="ml-0.5 max-sm:hidden">
         C
-      </kbd>
+      </Kbd>
     </Button>
   );
 }
