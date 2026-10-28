@@ -1,0 +1,15 @@
+/** True when a key press belongs to whatever has focus, not to a shortcut. */
+function typingIn(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false;
+  return target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName);
+}
+
+/**
+ * Whether `e` is the bare `key` meant as an app shortcut: no modifier, not
+ * typed into a field, and not already taken by something else (the
+ * dashboard's first-run field catches every keystroke).
+ */
+export function isShortcut(e: KeyboardEvent, key: string): boolean {
+  const taken = [e.defaultPrevented, e.metaKey, e.ctrlKey, e.altKey].some(Boolean);
+  return !taken && e.key.toLowerCase() === key && !typingIn(e.target);
+}

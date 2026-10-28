@@ -3,7 +3,16 @@ import { errorMessage } from "@/app/lib/error-message";
 import { Link, Outlet, useNavigate } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, LazyMotion, MotionConfig, domAnimation, m } from "motion/react";
-import { Layers, ChevronsUpDown, Plus, LogOut, Search, Settings } from "@/app/ui/icons";
+import {
+  Layers,
+  ChevronsUpDown,
+  Plus,
+  LogOut,
+  PanelLeftClose,
+  PanelLeftOpen,
+  Search,
+  Settings,
+} from "@/app/ui/icons";
 import { MorphIcon } from "morphicons/react";
 import { menu2, moon, sun, x } from "@/app/ui/icon-nodes";
 import { useCurrentUser, useLogout, useShellUser } from "../lib/hooks";
@@ -30,7 +39,16 @@ import { NotFound } from "./not-found";
 import { PLAN_LIMITS, type User, type UserOrg } from "@/shared/types";
 import posthog from "../lib/posthog";
 import { FUNNEL } from "../lib/funnel";
-import { Logo } from "../ui/logo";
+import { Logo, LogoMark } from "../ui/logo";
+import { IconButton } from "../ui/button";
+import { Tooltip } from "../ui/tooltip";
+import { cn } from "../ui/cn";
+import {
+  shellLayout,
+  toggleSidebar,
+  useSidebarCollapsed,
+  useSidebarShortcut,
+} from "../lib/sidebar";
 
 const ORG_LIMIT_MESSAGE = "Upgrade to Pro to create more organizations";
 
@@ -100,13 +118,36 @@ function openCommandMenu() {
   document.dispatchEvent(new KeyboardEvent("keydown", { key: "k", metaKey: true, ctrlKey: true }));
 }
 
+/** The switcher's face: the org's initial, so a glance tells two orgs
+ * apart, then its name. Folded, only the initial shows. */
+function OrgTrigger({ org, collapsed }: { org: UserOrg | null; collapsed: boolean }) {
+  return (
+    <div className="flex h-10 w-full items-center gap-2.5 rounded-lg px-1.5 text-sm select-none [@media(hover:hover)]:hover:bg-surface-2">
+      {org && (
+        <span
+          aria-hidden
+          className="grid size-6 shrink-0 place-items-center rounded-md bg-accent text-xs font-bold text-bg"
+        >
+          {org.name.trim().charAt(0).toUpperCase()}
+        </span>
+      )}
+      <span className={cn("min-w-0 flex-1 truncate font-semibold", fade(collapsed))}>
+        {org ? org.name : "No organization"}
+      </span>
+      <ChevronsUpDown size={14} className={cn("shrink-0 text-muted", fade(collapsed))} />
+    </div>
+  );
+}
+
 function OrgSwitcherMenu({
   org,
   orgs,
   onSwitchOrg,
   canCreateOrg,
   onNewOrg,
+  collapsed,
 }: {
+  collapsed: boolean;
   org: UserOrg | null;
   orgs: UserOrg[];
   onSwitchOrg: (id: string) => void;
@@ -114,26 +155,7 @@ function OrgSwitcherMenu({
   onNewOrg: () => void;
 }) {
   return (
-    <Menu
-      trigger={
-        <div className="flex h-10 w-full items-center gap-2.5 rounded-lg px-2 text-sm select-none [@media(hover:hover)]:hover:bg-surface-2">
-          {/* The org's initial, so a glance tells two orgs apart. */}
-          {org && (
-            <span
-              aria-hidden
-              className="grid size-6 shrink-0 place-items-center rounded-md bg-accent text-xs font-bold text-bg"
-            >
-              {org.name.trim().charAt(0).toUpperCase()}
-            </span>
-          )}
-          <span className="min-w-0 flex-1 truncate font-semibold">
-            {org ? org.name : "No organization"}
-          </span>
-          <ChevronsUpDown size={14} className="shrink-0 text-muted" />
-        </div>
-      }
-      label="Switch organization"
-    >
+    <Menu trigger={<OrgTrigger org={org} collapsed={collapsed} />} label="Switch organization">
       <OrgMenuItems orgs={orgs} currentId={org?.id} onPick={onSwitchOrg} />
       <MenuSeparator />
       <MenuItem onClick={onNewOrg}>
@@ -149,16 +171,99 @@ function OrgSwitcherMenu({
  * sidebar items they sat directly under the organization's own nav, where
  * "Links" appeared twice meaning two different things.
  */
-function PlatformNav({ visible }: { visible: boolean }) {
+function PlatformNav({ visible, collapsed }: { visible: boolean; collapsed: boolean }) {
   if (!visible) return null;
   return (
     <div className="mt-2 px-3">
-      <p className="px-2.5 pb-1 text-xs font-medium text-muted">Admin</p>
+      <p className={cn("px-2.5 pb-1 text-xs font-medium text-muted", fade(collapsed))}>Admin</p>
       <nav className="flex flex-col gap-0.5">
-        <Link to="/admin" {...navLinkProps}>
-          <Layers size={15} /> Platform
-        </Link>
+        <NavItem to="/admin" icon={Layers} label="Platform" collapsed={collapsed} />
       </nav>
+    </div>
+  );
+}
+
+/** Hidden in the rail but still laid out, so nothing beside it moves while
+ * the sidebar folds: the rail only clips. */
+const fade = (collapsed: boolean) =>
+  cn("whitespace-nowrap transition-opacity duration-150", collapsed && "opacity-0");
+
+function NavItem({
+  to,
+  icon: Icon,
+  label,
+  collapsed,
+}: {
+  to: string;
+  icon: typeof Layers;
+  label: string;
+  collapsed: boolean;
+}) {
+  const link = (
+    <Link to={to} {...navLinkProps}>
+      <Icon size={15} /> <span className={fade(collapsed)}>{label}</span>
+    </Link>
+  );
+  // In the rail the icon is all that shows, so its name comes up beside it.
+  return collapsed ? (
+    <Tooltip side="right" content={label}>
+      {link}
+    </Tooltip>
+  ) : (
+    link
+  );
+}
+
+/**
+ * The top of the sidebar: the mark, then search and the fold button. Folded,
+ * only the mark is left, and pointing at it turns it into the unfold button
+ * (the icon swap from the interfaces.dev cheat sheet: scale, blur, fade).
+ */
+function SidebarTop({ collapsed }: { collapsed: boolean }) {
+  return (
+    <div className="hidden h-14 items-center gap-1 px-3 md:flex">
+      {collapsed ? (
+        <Tooltip
+          side="right"
+          content={
+            <span className="flex items-center gap-2">
+              Expand sidebar
+              <kbd className="rounded px-1 font-mono text-2xs text-muted smooth-shadow-ring-xs">
+                [
+              </kbd>
+            </span>
+          }
+        >
+          <button
+            type="button"
+            onClick={toggleSidebar}
+            aria-label="Expand sidebar"
+            className="group/mark relative grid size-9 shrink-0 cursor-pointer place-items-center rounded-lg [@media(hover:hover)]:hover:bg-surface-2"
+          >
+            <LogoMark className="h-[18px] transition-[opacity,scale,filter] duration-200 ease-out group-hover/mark:scale-25 group-hover/mark:opacity-0 group-hover/mark:blur-[4px] group-focus-visible/mark:scale-25 group-focus-visible/mark:opacity-0" />
+            <PanelLeftOpen
+              size={18}
+              className="absolute scale-25 text-muted opacity-0 blur-[4px] transition-[opacity,scale,filter] duration-200 ease-out group-hover/mark:scale-100 group-hover/mark:opacity-100 group-hover/mark:blur-none group-focus-visible/mark:scale-100 group-focus-visible/mark:opacity-100 group-focus-visible/mark:blur-none"
+            />
+          </button>
+        </Tooltip>
+      ) : (
+        <Link
+          to="/dashboard"
+          aria-label="rdyrct, dashboard"
+          className="grid size-9 shrink-0 place-items-center rounded-lg"
+        >
+          <LogoMark className="h-[18px]" />
+        </Link>
+      )}
+      <div inert={collapsed} className={cn("ml-auto flex items-center gap-0.5", fade(collapsed))}>
+        <IconButton label="Search and commands (⌘K)" onClick={openCommandMenu}>
+          <Search size={16} />
+        </IconButton>
+        <IconButton label="Collapse sidebar ([)" onClick={toggleSidebar}>
+          <PanelLeftClose size={16} />
+        </IconButton>
+      </div>
     </div>
   );
 }
@@ -174,7 +279,10 @@ function AppSidebar({
   onToggleTheme,
   onSignOut,
   signOutPending,
+  collapsed = false,
 }: {
+  /** Folded to the icon rail. Desktop only: the phone drawer is always open. */
+  collapsed?: boolean;
   org: UserOrg | null;
   orgs: UserOrg[];
   onSwitchOrg: (id: string) => void;
@@ -188,11 +296,9 @@ function AppSidebar({
 }) {
   const navigate = useNavigate();
   return (
-    <div className="flex h-full flex-col">
-      {/* brand — desktop only; on mobile the top bar already shows it */}
-      <div className="hidden px-3 pt-4 pb-2 md:block">
-        <Logo className="px-1.5 text-sm" />
-      </div>
+    <div className="flex h-full flex-col overflow-hidden">
+      {/* desktop only; on a phone the top bar already shows the mark */}
+      <SidebarTop collapsed={collapsed} />
 
       {/* org switcher */}
       <div className="px-3 py-2">
@@ -202,6 +308,7 @@ function AppSidebar({
           onSwitchOrg={onSwitchOrg}
           canCreateOrg={canCreateOrg}
           onNewOrg={onNewOrg}
+          collapsed={collapsed}
         />
       </div>
 
@@ -210,14 +317,12 @@ function AppSidebar({
       <nav className="flex flex-col gap-0.5 px-3 py-2">
         {appNavItems
           .filter(({ to }) => to !== "/billing" || user.plan !== "unlimited")
-          .map(({ to, icon: Icon, label }) => (
-            <Link key={to} to={to} {...navLinkProps}>
-              <Icon size={15} /> {label}
-            </Link>
+          .map(({ to, icon, label }) => (
+            <NavItem key={to} to={to} icon={icon} label={label} collapsed={collapsed} />
           ))}
       </nav>
 
-      <PlatformNav visible={user.isAdmin} />
+      <PlatformNav visible={user.isAdmin} collapsed={collapsed} />
 
       {/* user footer — py-2.5 makes this block exactly as tall as the main
           Footer, so both border-t lines form one continuous bottom rule */}
@@ -225,13 +330,13 @@ function AppSidebar({
         <Menu
           label="Account menu"
           trigger={
-            <div className="flex items-center gap-2.5 rounded-lg px-1.5 py-1.5 [@media(hover:hover)]:hover:bg-surface/50">
+            <div className="flex items-center gap-2.5 rounded-lg px-[3px] py-1.5 [@media(hover:hover)]:hover:bg-surface/50">
               <UserAvatar user={user} size={30} />
-              <span className="min-w-0 flex-1 leading-tight">
+              <span className={cn("min-w-0 flex-1 leading-tight", fade(collapsed))}>
                 <span className="block truncate text-sm font-medium">{user.name}</span>
                 <span className="block truncate text-xs text-muted">{user.email}</span>
               </span>
-              <ChevronsUpDown size={14} className="shrink-0 text-muted" />
+              <ChevronsUpDown size={14} className={cn("shrink-0 text-muted", fade(collapsed))} />
             </div>
           }
         >
@@ -391,6 +496,9 @@ export function AppShell() {
   const [newOrgOpen, setNewOrgOpen] = useState(false);
   const [newOrgName, setNewOrgName] = useState("");
   const [mobileOpen, setMobileOpen] = useState(false);
+  const collapsed = useSidebarCollapsed();
+  const layout = shellLayout(collapsed);
+  useSidebarShortcut();
 
   const { org, orgs, setOrg } = useShellOrgs();
   useClaimAnonLinks(org?.id);
@@ -444,20 +552,18 @@ export function AppShell() {
       onError: (error) => toast(error.message, "error"),
     });
 
-  const sidebar = (
-    <AppSidebar
-      org={org}
-      orgs={orgs}
-      onSwitchOrg={switchOrg}
-      canCreateOrg={canCreateOrg}
-      onNewOrg={onNewOrg}
-      user={user}
-      theme={theme}
-      onToggleTheme={toggleTheme}
-      onSignOut={onSignOut}
-      signOutPending={logout.isPending}
-    />
-  );
+  const sidebarProps = {
+    org,
+    orgs,
+    onSwitchOrg: switchOrg,
+    canCreateOrg,
+    onNewOrg,
+    user,
+    theme,
+    onToggleTheme: toggleTheme,
+    onSignOut,
+    signOutPending: logout.isPending,
+  };
 
   return (
     <NewLinkHost>
@@ -466,7 +572,9 @@ export function AppShell() {
         <WebMcpLinkTools />
         <WebMcpAnalyticsTool />
         {/* desktop sidebar: fixed so it never moves, not even on overscroll */}
-        <aside className="fixed inset-y-0 left-0 z-10 hidden w-60 md:block">{sidebar}</aside>
+        <aside className={layout.aside}>
+          <AppSidebar {...sidebarProps} collapsed={collapsed} />
+        </aside>
 
         {/* mobile top bar + drawer */}
         <div className="fixed inset-x-0 top-0 z-30 flex items-center gap-2 bg-bg/90 px-4 py-2.5 backdrop-blur md:hidden">
@@ -481,12 +589,12 @@ export function AppShell() {
           <Logo className="text-sm" />
         </div>
         <MobileDrawer open={mobileOpen} onClose={() => setMobileOpen(false)}>
-          {sidebar}
+          <AppSidebar {...sidebarProps} />
         </MobileDrawer>
 
         {/* One raised sheet for the page; the sidebar and the phone bar sit on
           the paper behind it (rdyrct-design, "The app's surfaces"). */}
-        <main className="mx-1.5 mt-[52px] mb-1.5 flex min-w-0 flex-1 flex-col rounded-[22px] bg-surface px-4 py-6 smooth-shadow-ring-sm md:my-2 md:mr-2 md:ml-[248px] md:rounded-[14px] md:px-10 md:py-8">
+        <main className={layout.main}>
           <div className="mx-auto w-full max-w-5xl flex-1">
             {/* Above the route, not inside each one: the state belongs to the
               org, so it says the same thing on every page (#163). */}

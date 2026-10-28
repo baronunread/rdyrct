@@ -34,6 +34,8 @@ export {
   IconLink as Link,
   IconLink as Link2,
   IconLayoutDashboard as LayoutDashboard,
+  IconLayoutSidebarLeftCollapse as PanelLeftClose,
+  IconLayoutSidebarLeftExpand as PanelLeftOpen,
   IconLock as Lock,
   IconLogout as LogOut,
   IconMenu2 as Menu,

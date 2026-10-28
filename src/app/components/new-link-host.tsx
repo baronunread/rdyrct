@@ -11,6 +11,7 @@ import { LinkEditor } from "./link-editor";
 import { LinkPreviewDialog } from "./link-preview-dialog";
 import { SameDestinationDialog } from "./same-destination-dialog";
 import type { LinkDTO, LinkInput } from "@/shared/types";
+import { isShortcut } from "../lib/shortcut";
 
 /**
  * "New link" is one dialog, opened from anywhere (rdyrct-design, "Creating is
@@ -59,12 +60,6 @@ export function NewLinkButton({ onClick }: { onClick: () => void }) {
   );
 }
 
-/** True when a key press belongs to whatever has focus, not to a shortcut. */
-function typingIn(target: EventTarget | null): boolean {
-  if (!(target instanceof HTMLElement)) return false;
-  return target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName);
-}
-
 /** `C` opens the dialog, unless the key is for a field, carries a modifier,
  * another dialog is already on screen, or something took the key first (the
  * first-run field on the dashboard, which catches every keystroke). */
@@ -72,9 +67,7 @@ function useNewLinkShortcut(open: () => void, enabled: boolean) {
   useEffect(() => {
     if (!enabled) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.defaultPrevented || e.key.toLowerCase() !== "c" || e.metaKey || e.ctrlKey || e.altKey)
-        return;
-      if (typingIn(e.target) || document.querySelector('[role="dialog"]')) return;
+      if (!isShortcut(e, "c") || document.querySelector('[role="dialog"]')) return;
       e.preventDefault();
       open();
     };
