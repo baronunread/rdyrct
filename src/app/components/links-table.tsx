@@ -11,6 +11,7 @@ import { useToast } from "../ui/toast";
 import { copyToClipboard } from "../lib/clipboard";
 import { cn } from "../ui/cn";
 import { AliasThread } from "./alias-thread";
+import { ShortAddress } from "./short-address";
 import { CursorPager } from "../ui/pagination";
 
 function linkDetailPath(link: LinkDTO): string {
@@ -47,13 +48,7 @@ function LinkCell({
 }) {
   const toast = useToast();
   const hidden = link.addressCount - 1;
-  const host = new URL(link.url).host;
-  const address = (
-    <span className="min-w-0 max-w-full truncate font-mono text-xs">
-      <span className="text-muted">{host}/</span>
-      {link.slug}
-    </span>
-  );
+  const address = <ShortAddress url={link.url} slug={link.slug} />;
   return (
     <div className="flex min-w-0 items-center gap-2 overflow-hidden">
       {onToggle ? (

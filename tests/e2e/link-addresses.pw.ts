@@ -128,14 +128,14 @@ test("renaming a custom-domain link leaves a temporary alias, which can be kept 
   // Expand the alias thread and check the temporary alias it left behind.
   await page.getByRole("button", { name: /Show \d+ alias/ }).click();
   const aliasRow = page.getByRole("row", { name: /old-slug/ });
-  await expect(aliasRow.getByText(/Expires in/)).toBeVisible();
+  await expect(aliasRow.getByText(/expires in/i)).toBeVisible();
 
   // Keep the temporary alias forever, from its own row actions menu.
   await aliasRow.getByRole("button", { name: "Actions for old-slug" }).click();
   await page.getByRole("menuitem", { name: "Keep forever" }).click();
   await expect(page.getByText("Address kept forever")).toBeVisible();
   await expect(aliasRow.getByText("Permanent alias")).toBeVisible();
-  await expect(aliasRow.getByText(/Expires in/)).not.toBeVisible();
+  await expect(aliasRow.getByText(/expires in/i)).not.toBeVisible();
 });
 
 test("creating a link to an already-shortened destination offers to reuse it (#38)", async ({

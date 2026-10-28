@@ -43,12 +43,6 @@ export function AreaChart({
   height?: number;
   tickFormat?: (day: string) => string;
 }) {
-  // Every series ends at the day (or hour) still under way. Drawn like the
-  // rest, its half-counted total reads as a fall, so the line goes dashed
-  // into it and the fill stops at the last whole one, the way Plausible and
-  // Stripe draw an unfinished period.
-  const whole = data.length > 1 ? data.slice(0, -1) : data;
-  const unfinished = data.length > 1 ? data.slice(-2) : [];
   // Definition identity is the update boundary: recreate it only when the
   // data or formatter actually change, so hover-driven re-renders don't
   // read as a changed chart to the runtime.
@@ -56,7 +50,7 @@ export function AreaChart({
     const max = Math.max(1, ...data.map((d) => d.clicks));
     return defineChart({
       marks: [
-        areaY(whole, {
+        areaY(data, {
           x: "day",
           y: "clicks",
           key: "day",
@@ -64,28 +58,13 @@ export function AreaChart({
           fillOpacity: 0.14,
           curve: smoothCurve,
         }),
-        lineY(whole, {
+        lineY(data, {
           x: "day",
           y: "clicks",
           key: "day",
           stroke: "var(--chart)",
           strokeWidth: 2,
           curve: smoothCurve,
-        }),
-        areaY(unfinished, {
-          x: "day",
-          y: "clicks",
-          key: "day",
-          fill: "var(--chart)",
-          fillOpacity: 0.06,
-        }),
-        lineY(unfinished, {
-          x: "day",
-          y: "clicks",
-          key: "day",
-          stroke: "var(--chart)",
-          strokeWidth: 2,
-          strokeDasharray: "3 4",
         }),
         // Vertical guide plus a marker on the focused point, drawn by the
         // renderer inside the plot. The marker's surface-coloured ring is
@@ -139,8 +118,6 @@ export function AreaChart({
   }, [data, tickFormat]);
 
   if (!data.length) return null;
-  const tooltipDay = (day: string) =>
-    day === unfinished[1]?.day ? `${tickFormat(day)} · so far` : tickFormat(day);
 
   return (
     <RendererChart
@@ -153,7 +130,7 @@ export function AreaChart({
         if (!datum) return null;
         return (
           <>
-            <span className="text-muted">{tooltipDay(datum.day)}</span>{" "}
+            <span className="text-muted">{tickFormat(datum.day)}</span>{" "}
             <span className="tnum font-bold">{datum.clicks}</span>
           </>
         );
