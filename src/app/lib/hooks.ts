@@ -256,6 +256,11 @@ export const useStats = (orgId: string, days?: number, bucket?: "day" | "hour") 
       return api<OrgStats>(`/orgs/${orgId}/stats${qs}`);
     },
     enabled: !!orgId,
+    // A new range keeps the last one on screen until it arrives, so the
+    // charts morph instead of the page dropping to a skeleton. Never across
+    // orgs: another org's numbers are not a placeholder for this one's.
+    placeholderData: (previous, previousQuery) =>
+      previousQuery?.queryKey[1] === orgId ? previous : undefined,
   });
 
 export const useLinkStats = (orgId: string, slug: string | null, domain?: string | null) =>

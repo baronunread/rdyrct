@@ -290,6 +290,21 @@
   }
 }
 
+/* A chart whose range changed: the old one has nothing to morph into (hours
+   and days share no points), so the new one fades in over it. */
+@keyframes chart-in {
+  from {
+    opacity: 0;
+    filter: blur(4px);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .chart-in {
+    animation: chart-in 200ms ease-out;
+  }
+}
+
 @keyframes shake {
   0%,
   100% {

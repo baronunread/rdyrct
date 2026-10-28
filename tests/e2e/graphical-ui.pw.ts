@@ -33,6 +33,11 @@ test("link stats keep their layout while loading (#174)", async ({ page }) => {
 
 test("the country map is not a keyboard focus target (#175)", async ({ page }) => {
   await signUpAndVerify(page, `map-focus-${Date.now()}@gmail.com`, password);
+  // An org with no links gets one empty state on Analytics, not the panels.
+  await page.getByPlaceholder("https://example.com/launch").first().fill("https://example.com/map");
+  await page.getByRole("button", { name: "Create link" }).click();
+  await expect(page.getByRole("dialog", { name: "Link created" })).toBeVisible();
+  await page.keyboard.press("Escape");
 
   await page.route("**/api/orgs/*/stats**", async (route) => {
     const response = await route.fetch();
