@@ -24,7 +24,6 @@ agent needs while working.
 bun install
 bun run dev                 # first run creates .dev.vars and migrates; starts app + mail inbox + Google emulator behind portless; prints the URLs
 bun scripts/dev-hosts.ts    # print this checkout's dev URLs (`... app` for one; read mail: curl "$(bun scripts/dev-hosts.ts mail)/emails" -H 'authorization: Bearer test_token_admin')
-bun run db:migrate:local    # apply migrations to local D1
 bun run db:reset:local      # wipe local D1 + KV, re-apply migrations (start from scratch; restart dev after)
 bun add <pkg>               # dependencies
 bunx agent-browser          # real-browser checks: screenshots, clicking through pages. Use it for any visual verification; do not hand-roll headless Chrome
@@ -34,13 +33,31 @@ bun run deploy              # build, apply D1 migrations, deploy; VITE_RDYRCT_SI
 ```
 
 **Account states, one link each.** With the dev server running and the seed
-loaded, `/__dev/scenarios` lists them: Pro, Hobby and Free owners, a
-brand-new account, a member, a viewer, an org over its plan, one past its
-grace period, a read-only org, one at the click cap, and a platform admin.
-`/__dev/scenarios/<name>?to=/links` signs in as the seeded account in that
-state and opens the page. Use it to check a UI change in every state before
-calling it done. It exists only in dev builds (`src/worker/dev-scenarios.ts`)
-and only signs in as `@seed.test` accounts.
+loaded, `<app URL>/__dev/scenarios` lists them. The names:
+
+| Name          | Signs in as                         |
+| ------------- | ----------------------------------- |
+| `pro-owner`   | a Pro owner                         |
+| `hobby-owner` | a Hobby owner                       |
+| `free-owner`  | a Free owner                        |
+| `fresh`       | a brand-new account, no links       |
+| `member`      | a member of someone else's org      |
+| `viewer`      | a read-only viewer                  |
+| `over-plan`   | an org over its plan, in its grace  |
+| `grace-ended` | an org past its 30-day grace period |
+| `locked-org`  | a read-only (locked) org            |
+| `click-cap`   | an org at its click cap             |
+| `admin`       | the platform admin                  |
+
+`<app URL>/__dev/scenarios/<name>?to=/links` signs in as that account and
+opens the page. Use it to check a UI change in every state before calling it
+done. Browser tests that need a signed-in account but are not about sign-up
+use `signUpAndVerify` (`tests/e2e/resend.ts`), which calls
+`POST /__dev/test-account` and skips the form (6 to 7 seconds a test); a
+spec about sign-up itself uses `signUpThroughForm`. All of `/__dev` exists
+only in dev builds (`src/worker/dev-scenarios.ts`); scenarios only sign in
+as `@seed.test` accounts, and the test account route only creates new
+addresses, never the `SUPERADMIN_EMAIL` one.
 
 **Rolling back a release.** `bun run deploy` migrates before it deploys.
 Wrangler has no down migrations, so a rollback is two steps:
@@ -110,7 +127,7 @@ without wrangler CLI calls).
 bun run check                          # app + shared, worker, worker tests (three bun check runs)
 bun run test                           # unit tests (bun test, tests/)
 bun run test:worker                    # worker tests (vitest-pool-workers, tests/worker/)
-bun run e2e:smoke                      # browser tests (playwright, tests/e2e/); needs .dev.vars, and a .env like CI's (cp .env.build.example .env if you have none)
+bun run e2e:smoke                      # browser tests (playwright, tests/e2e/); bring their own env, whatever your .dev.vars and .env say
 bun run e2e:self-host                  # browser tests against a self-hosted build (own dist/, so not alongside e2e:smoke)
 bun run verify                         # static checks + unit + worker tests, no e2e: the local gate
 bun run verify:e2e                     # verify + the full e2e:smoke suite: what CI runs

@@ -1,4 +1,5 @@
-# Copy to .dev.vars (gitignored) for local dev.
+# `bun run dev` copies this to .dev.vars (gitignored) on its first run, with
+# an auth secret of its own. The worker tests read this file, not .dev.vars.
 
 BETTER_AUTH_SECRET=dev-only-secret-change-in-prod
 SUPERADMIN_EMAIL=you@example.com
@@ -14,6 +15,9 @@ MAIL_FROM=rdyrct <no-reply@localhost>
 WELCOME_FROM=Andrea at rdyrct <andrea@localhost>
 
 # Polar (sandbox): https://sandbox.polar.sh
+# Any value here switches billing on, placeholder included: plan limits and
+# the billing page work, and the scenarios rely on that. Checkout itself
+# fails until this is a real sandbox token and the product ids below match.
 POLAR_ACCESS_TOKEN=polar_oat_replace_me
 # POLAR_WEBHOOK_SECRET: leave it out locally. `bun run dev` uses the secret
 # `polar listen` signs forwarded webhooks with (`bun run polar:listen`).
@@ -59,8 +63,9 @@ WEB_RISK_API_KEY=
 # behind portless and points the Worker at it, so the values below work
 # as-is (the client id/secret are arbitrary, the emulator accepts any).
 # It's seeded from google.emulate.yaml with two accounts: testuser@gmail.com
-# (a regular account) and admin@gmail.com. Set SUPERADMIN_EMAIL above to the
-# latter to test the platform admin locally through the emulator.
+# (a regular account) and admin@gmail.com. For the platform admin, the
+# `admin` scenario at /__dev/scenarios is quicker; setting SUPERADMIN_EMAIL
+# above to admin@gmail.com makes the emulator's account the admin instead.
 # In production, leave GOOGLE_EMULATOR_URL unset and set the real Google
 # OAuth client id/secret; the worker then uses Google's discovery URL.
 GOOGLE_CLIENT_ID=test-client

@@ -6,6 +6,8 @@ test("a branch becomes one DNS label", () => {
   expect(label("feat/Links_Bulk")).toBe("feat-links-bulk");
   expect(label("--x--")).toBe("x");
   expect(label("a".repeat(80))).toHaveLength(40);
+  // The cut lands on a hyphen: a label may not end with one.
+  expect(label(`feature/${"a".repeat(31)}-x`)).toBe(`feature-${"a".repeat(31)}`);
 });
 
 test("the Worker's addresses all follow the app's host", () => {

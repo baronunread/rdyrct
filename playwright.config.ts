@@ -1,6 +1,20 @@
 import { defineConfig, devices } from "@playwright/test";
 import { appUrl, playwrightPort, previewPort, previewUrl } from "./tests/e2e/environment";
 
+/**
+ * The build-time values every browser run uses, whatever the developer's own
+ * `.env` says (Vite prefers the process environment). The project token is
+ * .env.build.example's placeholder, so the analytics path runs and nothing
+ * reaches a real project; the dev token keeps localhost out of both.
+ */
+const BUILD_ENV = {
+  PLAYWRIGHT_TEST: "1",
+  VITE_RDYRCT_SITE: "1",
+  VITE_PUBLIC_POSTHOG_PROJECT_TOKEN: "your_posthog_project_token",
+  VITE_PUBLIC_POSTHOG_HOST: "https://eu.i.posthog.com",
+  VITE_PUBLIC_POSTHOG_DEV_PROJECT_TOKEN: "phc_e2e",
+};
+
 export default defineConfig({
   testDir: "./tests/e2e",
   testMatch: "**/*.pw.ts",
@@ -67,23 +81,18 @@ export default defineConfig({
       url: appUrl,
       reuseExistingServer: false,
       gracefulShutdown: { signal: "SIGTERM", timeout: 500 },
-      env: {
-        PLAYWRIGHT_TEST: "1",
-        VITE_RDYRCT_SITE: "1",
-        CLOUDFLARE_ENV: "playwright",
-        // Browser checks must never write into either real PostHog project.
-        VITE_PUBLIC_POSTHOG_DEV_PROJECT_TOKEN: "phc_e2e",
-      },
+      env: { ...BUILD_ENV, CLOUDFLARE_ENV: "playwright" },
     },
     {
       // Built output, not the dev server: `vite dev` relaxes script-src for
       // Vite's inline React Refresh preamble, so only this one serves the
       // policy that actually ships. The build is part of the command so the
       // suite can never assert against a stale dist/.
-      // APP_HOST is pinned to the preview's own host (a later line in a
-      // .dev.vars wins): the CSP only allows Turnstile on APP_HOST, and the
-      // copied .dev.vars names the dev server's host instead.
-      command: `bun run build && printf '\\nAPP_HOST=localhost:${previewPort}\\nAPP_URL=${previewUrl}\\n' >> dist/rdyrct/.dev.vars && bunx vite preview --port ${previewPort} --strictPort`,
+      // The build copies whatever .dev.vars it finds into dist/rdyrct/, and
+      // that copy is the one `vite preview` reads, so it is replaced with
+      // the test values. APP_HOST is then pinned to the preview's own host
+      // (a later line wins): the CSP only allows Turnstile on APP_HOST.
+      command: `bun run build && cp .dev.vars.playwright dist/rdyrct/.dev.vars && printf '\\nAPP_HOST=localhost:${previewPort}\\nAPP_URL=${previewUrl}\\n' >> dist/rdyrct/.dev.vars && bunx vite preview --port ${previewPort} --strictPort`,
       url: previewUrl,
       reuseExistingServer: false,
       timeout: 180_000,
@@ -91,11 +100,7 @@ export default defineConfig({
       // No CLOUDFLARE_ENV here: the built wrangler.json carries no
       // `playwright` environment, so setting it only produces a warning.
       // These tests are about response headers and need no backend state.
-      env: {
-        PLAYWRIGHT_TEST: "1",
-        VITE_RDYRCT_SITE: "1",
-        VITE_PUBLIC_POSTHOG_DEV_PROJECT_TOKEN: "phc_e2e",
-      },
+      env: BUILD_ENV,
     },
   ],
 });

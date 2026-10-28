@@ -21,8 +21,8 @@ export function label(branch: string): string {
   return branch
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 40);
+    .slice(0, 40)
+    .replace(/^-+|-+$/g, "");
 }
 
 /** `rdyrct` in the main checkout, `rdyrct-<branch>` in a linked worktree. */

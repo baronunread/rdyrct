@@ -49,24 +49,44 @@ if (pinned.length) {
   process.exit(1);
 }
 
-await $`bunx wrangler d1 migrations apply rdyrct --local`.quiet();
+// The binding name, not the database's: `bun run setup` renames the
+// database for a fork, and the binding stays `DB`.
+await $`bunx wrangler d1 migrations apply DB --local`.quiet();
 
 /**
  * The secret Polar's CLI signs the webhooks it forwards with (`bun run
  * polar:listen`), when `.dev.vars` sets none of its own. Nothing when the
- * CLI is missing or signed out: the webhook route then refuses every event,
- * which is right for a checkout that cannot receive any.
+ * CLI is missing, signed out or slow to answer (it gets three seconds): the
+ * webhook route then refuses every event, which is right for a checkout
+ * that cannot receive any.
  */
 async function polarForwardSecret(devVars: string): Promise<string | undefined> {
   if (/^POLAR_WEBHOOK_SECRET=\S/m.test(devVars)) return undefined;
   try {
-    const out = await $`polar listen --print-secret`.nothrow().quiet();
-    return out.exitCode === 0 ? out.text().trim() || undefined : undefined;
+    const polar = Bun.spawn(["polar", "listen", "--print-secret"], {
+      stdio: ["ignore", "pipe", "ignore"],
+      timeout: 3000,
+    });
+    const [text, code] = await Promise.all([new Response(polar.stdout).text(), polar.exited]);
+    return code === 0 ? text.trim() || undefined : undefined;
   } catch {
+    // No `polar` on the PATH: spawn throws rather than exiting non-zero.
     return undefined;
   }
 }
 const polarSecret = await polarForwardSecret(readFileSync(DEV_VARS, "utf8"));
+
+// The proxy first, on its own, in the foreground. On a fresh machine it asks
+// for a password (port 443 needs sudo) and creates the CA the probe below
+// reads; three `portless <name>` runs would otherwise race to start it, two
+// of them with no terminal to ask on. When it already runs this is a no-op.
+const proxy = Bun.spawnSync(["portless", "proxy", "start"], {
+  stdio: ["inherit", "inherit", "inherit"],
+});
+if (!proxy.success) {
+  console.error("portless could not start its proxy (see above). Fix that, then run this again.");
+  process.exit(1);
+}
 
 const hosts = await devHosts();
 
@@ -77,6 +97,9 @@ const appEnv: NodeJS.ProcessEnv = {
 };
 if (polarSecret) appEnv.POLAR_WEBHOOK_SECRET = polarSecret;
 
+/** The pinned devDependency, not whatever `bunx` would fetch today. */
+const EMULATE = `${process.cwd()}/node_modules/.bin/emulate`;
+
 /** One service behind portless. `$PORT` and `$PORTLESS_URL` come from
  * portless, so the shell expands them, not this script. */
 const emulator = (name: string, args: string) =>
@@ -85,47 +108,70 @@ const emulator = (name: string, args: string) =>
     name,
     "sh",
     "-c",
-    `exec bunx emulate start ${args} --port "$PORT" --base-url "$PORTLESS_URL"`,
+    `exec "${EMULATE}" start ${args} --port "$PORT" --base-url "$PORTLESS_URL"`,
   ] as const;
 
-const children: Subprocess[] = [
-  Bun.spawn(["portless", hosts.name, "vite", "dev"], {
-    env: appEnv,
-    stdio: ["inherit", "inherit", "inherit"],
-  }),
-  Bun.spawn([...emulator(`${hosts.name}-mail`, "--service resend")], {
-    stdio: ["ignore", "ignore", "inherit"],
-  }),
-  Bun.spawn([...emulator(`${hosts.name}-google`, "--service google --seed google.emulate.yaml")], {
-    stdio: ["ignore", "ignore", "inherit"],
-  }),
-];
-
+const children: Subprocess[] = [];
 const stop = (code: number) => {
   for (const child of children) child.kill();
   process.exit(code);
 };
 process.on("SIGINT", () => stop(0));
 process.on("SIGTERM", () => stop(0));
-// One of them dying leaves a half-working app: take the rest down with it.
-for (const child of children) void child.exited.then((code) => stop(code ?? 1));
+// Whatever ends this process (an exception included) ends the servers too.
+process.on("exit", () => {
+  for (const child of children) child.kill();
+});
+
+try {
+  children.push(
+    Bun.spawn(["portless", hosts.name, "vite", "dev"], {
+      env: appEnv,
+      stdio: ["inherit", "inherit", "inherit"],
+    }),
+    Bun.spawn([...emulator(`${hosts.name}-mail`, "--service resend")], {
+      stdio: ["ignore", "ignore", "inherit"],
+    }),
+    Bun.spawn(
+      [...emulator(`${hosts.name}-google`, "--service google --seed google.emulate.yaml")],
+      { stdio: ["ignore", "ignore", "inherit"] },
+    ),
+  );
+  // One of them dying leaves a half-working app: take the rest down with it.
+  for (const child of children) void child.exited.then((code) => stop(code ?? 1));
+
+  // After vite's own start-up lines, so this is the last thing on screen.
+  while (!(await ready(hosts.app))) await Bun.sleep(500);
+} catch (error) {
+  console.error(error);
+  stop(1);
+}
+
+/**
+ * Whether the app answers yet. portless's own CA signs its certificates, and
+ * Bun trusts its bundled roots rather than the system's, so the probe names
+ * the CA. It is read on every try: on a first run it may not exist yet.
+ */
+async function ready(app: string): Promise<boolean> {
+  let ca: string | undefined;
+  if (app.startsWith("https:")) {
+    try {
+      ca = readFileSync(`${homedir()}/.portless/ca.pem`, "utf8");
+    } catch {
+      return false;
+    }
+  }
+  return fetch(`${app}/api/config`, ca ? { tls: { ca } } : {}).then(
+    (res) => res.ok,
+    () => false,
+  );
+}
 
 /** This machine's LAN address, for the line about other devices. */
 function lanAddress(): string | undefined {
   const nets = Object.values(networkInterfaces()).flatMap((n) => n ?? []);
   return nets.find((net) => net.family === "IPv4" && !net.internal)?.address;
 }
-
-// After vite's own start-up lines, so this is the last thing on screen.
-// portless's own CA signs these, and Bun trusts its bundled roots rather
-// than the system's, so the probe names the CA.
-const ca = readFileSync(`${homedir()}/.portless/ca.pem`, "utf8");
-const ready = () =>
-  fetch(`${hosts.app}/api/config`, { tls: { ca } }).then(
-    (res) => res.ok,
-    () => false,
-  );
-while (!(await ready())) await Bun.sleep(500);
 
 const lan = new URL(hosts.app).hostname.endsWith(".local");
 console.log(`

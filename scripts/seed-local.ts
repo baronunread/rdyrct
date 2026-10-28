@@ -17,9 +17,8 @@ import { PLAN_LIMITS, type JsonValue, type OverLimits } from "../src/shared/type
 import { defaultOrgName } from "../src/shared/org-name";
 import { devHosts } from "./dev-hosts";
 
-// SEED_URL points it at a second dev server (a worktree on its own port), so
-// seeding that one leaves the main checkout's database alone.
-const API = `${process.env.SEED_URL ?? (await devHosts()).app}/cdn-cgi/explorer/api`;
+// Each checkout has its own address, so a worktree seeds its own database.
+const API = `${(await devHosts()).app}/cdn-cgi/explorer/api`;
 const PASSWORD = "seed-password-123";
 
 const CONFIG = {
@@ -440,7 +439,7 @@ async function buildRollups(): Promise<void> {
   );
   if (!row || new Set(Object.values(row).map(Number)).size !== 1) {
     throw new Error(
-      `click rollups disagree with raw clicks: ${JSON.stringify(row)}. Run bun run db:migrate:local and seed again.`,
+      `click rollups disagree with raw clicks: ${JSON.stringify(row)}. Restart bun run dev (it applies the migrations) and seed again.`,
     );
   }
   console.log(`  rollups built, matching ${row.raw} raw clicks`);
