@@ -40,7 +40,7 @@ test("builds a tagged link, tidies its case, and copies it", async ({ page, cont
   await expect(output).toHaveText(tagged);
 
   await page.getByRole("button", { name: "Copy link" }).click();
-  await expect(page.getByText("Copied to clipboard")).toBeVisible();
+  await expect(page.getByText(/^Copied example\.com\/spring/)).toBeVisible();
   expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(tagged);
 });
 

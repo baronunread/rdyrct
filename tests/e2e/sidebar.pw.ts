@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { createQuickLink } from "./orgs";
 import { signUpAndVerify } from "./resend";
 
 const password = "test-password-123";
@@ -6,6 +7,10 @@ const password = "test-password-123";
 test("the sidebar folds to an icon rail, stays folded, and unfolds", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
   await signUpAndVerify(page, `sidebar-${Date.now()}@gmail.com`, password);
+  // One link, so Links has its search field (an empty org has none) for
+  // the "not while typing" check below.
+  await createQuickLink(page, "example.com/sidebar");
+  await page.keyboard.press("Escape");
 
   const sidebar = page.locator("aside").first();
   const width = async () => (await sidebar.boundingBox())?.width ?? 0;

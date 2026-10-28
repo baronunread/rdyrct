@@ -1,7 +1,8 @@
 import { useState, type FormEvent } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { useSearchParams } from "../lib/router-search";
-import { AuthCard, PasswordMeter } from "../components/auth-form";
+import { PasswordMeter } from "../components/auth-form";
+import { AuthHeading, AuthPanel } from "../components/auth-panel";
 import { useShake } from "../lib/use-shake";
 import { submitResetPassword } from "../lib/reset-password";
 import { Button } from "../ui/button";
@@ -31,13 +32,9 @@ export function ResetPasswordPage() {
   };
 
   return (
-    <AuthCard>
-      <form
-        onSubmit={submit}
-        noValidate
-        className="flex flex-col gap-4 rounded-xl bg-surface p-6 smooth-shadow-ring-sm"
-      >
-        <h1 className="font-bold">Set a new password</h1>
+    <AuthPanel>
+      <form onSubmit={submit} noValidate className="flex flex-col gap-4">
+        <AuthHeading>Set a new password</AuthHeading>
         {!token && (
           <p className="text-sm text-danger">
             This reset link is missing its token. Request a new one from the sign-in page.
@@ -71,6 +68,6 @@ export function ResetPasswordPage() {
           <BusyContent busy={busy}>Reset password</BusyContent>
         </Button>
       </form>
-    </AuthCard>
+    </AuthPanel>
   );
 }
