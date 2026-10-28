@@ -84,7 +84,7 @@ export function NoOrgState() {
         <div>
           <h1 className="font-bold">Create an organization</h1>
           <p className="mt-1 text-sm text-muted">
-            Links, domains and teammates live in an organization. Name it whatever you like.
+            Links, domains and teammates belong to an organization. Name it whatever you like.
           </p>
         </div>
         <Field label="Name">

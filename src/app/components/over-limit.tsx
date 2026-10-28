@@ -183,7 +183,7 @@ function LockedOrgNotice({ org }: { org: UserOrg }) {
       ]}
       note={
         org.role === "owner"
-          ? "Nothing was deleted. Upgrade to unlock every organization, or use this one instead of the one that is active now."
+          ? "Nothing was deleted. Upgrade to use every organization, or make this one active in place of the current one."
           : "Nothing was deleted. Its owner can upgrade, or make this the organization they keep active."
       }
       action={

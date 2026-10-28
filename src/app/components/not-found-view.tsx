@@ -19,7 +19,7 @@ export function NotFoundView({ back }: { back?: ReactNode }) {
         404
       </p>
       <h1 className="mt-5 text-2xl font-bold tracking-tight text-balance sm:text-3xl">
-        Nothing lives at this link.
+        No link at this address.
       </h1>
       <p className="mx-auto mt-3 max-w-sm text-pretty text-muted">
         Check it for a typo. If it is right, whoever made it has taken it down.

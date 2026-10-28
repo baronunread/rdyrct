@@ -119,7 +119,7 @@ function AliasRow({
         >
           {isTemp && (
             <MenuItem onClick={onKeepForever} disabled={pending}>
-              <Clock size={14} /> Keep forever
+              <Clock size={14} /> Make permanent
             </MenuItem>
           )}
           <MenuItem onClick={onPromote} disabled={pending}>
@@ -179,7 +179,7 @@ export function AliasThread({ orgId, link }: { orgId: string; link: LinkDTO }) {
           pending={pending}
           onKeepForever={() =>
             keepForever.mutate(address.id, {
-              onSuccess: () => toast("Address kept forever"),
+              onSuccess: () => toast("Address made permanent"),
               onError: withErrorToast(toast),
             })
           }

@@ -87,7 +87,7 @@ async function createLinkExpectingConflict(page: Page, destination: string) {
   return conflict;
 }
 
-test("renaming a custom-domain link leaves a temporary alias, which can be kept forever (#38)", async ({
+test("renaming a custom-domain link leaves a temporary alias, which can be made permanent (#38)", async ({
   page,
 }) => {
   // The custom-domain activation wait below can alone take up to 30s, the
@@ -130,10 +130,10 @@ test("renaming a custom-domain link leaves a temporary alias, which can be kept 
   const aliasRow = page.getByRole("row", { name: /old-slug/ });
   await expect(aliasRow.getByText(/expires in/i)).toBeVisible();
 
-  // Keep the temporary alias forever, from its own row actions menu.
+  // Make the temporary alias permanent, from its own row actions menu.
   await aliasRow.getByRole("button", { name: "Actions for old-slug" }).click();
-  await page.getByRole("menuitem", { name: "Keep forever" }).click();
-  await expect(page.getByText("Address kept forever")).toBeVisible();
+  await page.getByRole("menuitem", { name: "Make permanent" }).click();
+  await expect(page.getByText("Address made permanent")).toBeVisible();
   await expect(aliasRow.getByText("Permanent alias")).toBeVisible();
   await expect(aliasRow.getByText(/expires in/i)).not.toBeVisible();
 });

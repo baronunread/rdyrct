@@ -1233,8 +1233,8 @@ function SwitchStep({
   return (
     <Section title="Last step: point your domains at rdyrct">
       <p className="max-w-prose text-sm text-pretty text-muted">
-        Your links are on rdyrct and wait for their domain. Until you change the DNS, people still
-        reach them through {serviceName}.
+        Your links are on rdyrct. Until you change the DNS, people still reach them through{" "}
+        {serviceName}.
       </p>
       <ul className={LIST_CARD}>
         {hosts.map((host) => {

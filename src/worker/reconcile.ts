@@ -467,7 +467,7 @@ async function notifyOrgsLocked(
       paragraphs: [
         `Your plan covers ${limit === 1 ? "one organization" : `${limit} organizations`}, and you own more, so ${names} ${locked.length === 1 ? "is" : "are"} now read-only.`,
         "Nothing was deleted, and every link in them keeps redirecting.",
-        "Upgrade to unlock all of them, or open one and choose to keep it active instead.",
+        "Upgrade to use all of them, or open one and choose to keep it active instead.",
       ],
       cta: { label: "See your plan", url: `${env.APP_URL}/billing` },
       footerLine: NOTICE_FOOTER,

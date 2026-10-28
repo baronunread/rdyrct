@@ -18,7 +18,7 @@ test("the landing runs wide, and its closing band and footer share its edges", a
   const main = await page.locator("main").boundingBox();
   const cta = page
     .locator("section")
-    .filter({ has: page.getByRole("heading", { name: "Your next link, one hop away." }) });
+    .filter({ has: page.getByRole("heading", { name: "Make your first short link." }) });
   await cta.scrollIntoViewIfNeeded();
   const band = await cta.boundingBox();
   const footer = await page.locator("footer").boundingBox();

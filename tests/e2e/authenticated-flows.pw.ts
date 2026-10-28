@@ -135,10 +135,10 @@ test("a signed-in visitor makes a real link from the hero, not an anonymous one"
   await destination.fill("https://example.com/hero-quick-create");
   await page.getByRole("button", { name: "Shorten it" }).click();
   // The same panel the anonymous card opens: the link to copy, its QR, and
-  // a footer that says this one is kept.
+  // a footer that says which organization it was saved to.
   await expect(page.getByRole("link", { name: "Your short link" })).toBeVisible();
   await expect(page.getByRole("button", { name: /^Copy https?:\/\// })).toBeVisible();
-  await expect(page.getByText(/kept for good/)).toBeVisible();
+  await expect(page.getByText(/^Saved to /)).toBeVisible();
   await expect(destination).toHaveValue("");
 
   await destination.fill("https://example.com/hero-quick-create");

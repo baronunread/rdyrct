@@ -244,7 +244,7 @@ export function RoadmapPage() {
     <MarketingPage
       path="/roadmap"
       title="What we are building"
-      intro="rdyrct is built in the open, so this is the work itself rather than a promise about it. Every planned item is an issue you can read, argue with, or send a patch to. No dates: one person maintains this, and a date would be a guess dressed up as a commitment."
+      intro="rdyrct is built in the open. Every planned item is an issue you can read, argue with, or send a patch to. No dates: one person maintains this, so any date would be a guess."
     >
       {/* The hero closes its own frame; this one starts on the same line. */}
       <div className="-mt-px mb-16 border-x border-border/70">

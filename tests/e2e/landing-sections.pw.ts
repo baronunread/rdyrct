@@ -8,7 +8,7 @@ const section = (page: Page, name: string) =>
 
 test("each detail is a card that says what it is, and its loop shows it", async ({ page }) => {
   await page.goto("/");
-  const links = section(page, "Links that look like you.");
+  const links = section(page, "Branded short links.");
   await links.scrollIntoViewIfNeeded();
 
   for (const title of ["Your own domain", "Words you choose", "Campaign tags"]) {
@@ -71,7 +71,7 @@ test("the colours card plays through without drawing its code again", async ({ p
 test("the landing sections name no competitor", async ({ page }) => {
   await page.goto("/");
   for (const name of [
-    "Links that look like you.",
+    "Branded short links.",
     "Print once. Change it later.",
     "See which post paid off.",
   ]) {
@@ -83,7 +83,7 @@ test("the landing sections name no competitor", async ({ page }) => {
 // A card plays its loop while it is on screen, from the finished state the
 // page arrives in; under reduced motion it stays finished.
 const linkScene = async (page: Page) => {
-  const scene = section(page, "Links that look like you.").locator("[data-scene]").nth(1);
+  const scene = section(page, "Branded short links.").locator("[data-scene]").nth(1);
   await scene.scrollIntoViewIfNeeded();
   return scene;
 };
@@ -113,7 +113,7 @@ test("under reduced motion the cards hold their finished state", async ({ page }
   await page.goto("/");
   const seen = await steps(page);
   expect([...seen]).toEqual(["6"]);
-  await expect(
-    section(page, "Links that look like you.").locator("[data-scene]").nth(1),
-  ).toContainText("Available on go.acme.com");
+  await expect(section(page, "Branded short links.").locator("[data-scene]").nth(1)).toContainText(
+    "Available on go.acme.com",
+  );
 });

@@ -861,7 +861,7 @@ function CelebrationOverlay({
             <span aria-hidden="true" className="text-5xl">
               🎉
             </span>
-            <p className="text-xl font-bold text-accent">Welcome to {PLAN_LABEL[plan]}!</p>
+            <p className="text-xl font-bold text-accent">You’re on {PLAN_LABEL[plan]}.</p>
             {onFirstLink ? (
               <Button variant="primary" onClick={onFirstLink}>
                 Shorten your first link

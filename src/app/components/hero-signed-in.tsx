@@ -43,7 +43,7 @@ function NoOrgYet() {
     <div className={cn(HERO_CARD, "flex flex-col gap-3 p-5")}>
       <p className="text-sm">You are signed in, but you have no organization yet.</p>
       <p className="text-xs text-muted">
-        Links live in an organization. Making one takes a name and nothing else.
+        Links belong to an organization. To make one, you only need a name.
       </p>
       <Link
         to="/dashboard"
@@ -165,7 +165,7 @@ function Made({ link, existing, orgName }: { link: LinkDTO; existing: boolean; o
         }
       />
       <HeroFooter ruled action={<DashboardLink>Open in dashboard</DashboardLink>}>
-        Saved to {orgName}, kept for good.
+        Saved to {orgName}.
       </HeroFooter>
     </>
   );

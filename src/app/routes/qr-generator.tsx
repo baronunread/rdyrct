@@ -149,8 +149,8 @@ function TrackingSection() {
     <section className="flex w-full max-w-3xl flex-col gap-3 rounded-2xl border border-dashed border-border p-6 sm:p-8">
       <h2 className="text-lg font-bold">Want to know if anyone scans it?</h2>
       <p className="text-sm text-muted">
-        A static code has its destination baked into the dots, so nothing reports back. Point it at
-        a short link instead and rdyrct counts every scan by country, device, and time, without
+        A static code stores its destination in the dots, so nothing reports back. Point it at a
+        short link instead and rdyrct counts every scan by country, device, and time, without
         storing an IP address. Start free and upgrade anytime.{" "}
         <a href="/blog/qr-code-tracking" className="text-accent underline underline-offset-4">
           How QR code tracking works
@@ -187,7 +187,7 @@ function TrackingSection() {
 function OpenSourceNote() {
   return (
     <div className="mx-auto flex w-full max-w-3xl flex-col gap-3 border-t border-border pt-8 text-sm text-muted">
-      <h2 className="text-sm font-bold text-text">Free, and built on free things</h2>
+      <h2 className="text-sm font-bold text-text">Free, and built on open source</h2>
       <p>
         The codes here are drawn by{" "}
         <a
@@ -216,13 +216,13 @@ function OpenSourceNote() {
         >
           browser-image-compression
         </a>
-        , and the page itself is React and Tailwind. All of it open source, all of it doing the work
-        on your machine.
+        , and the page itself is React and Tailwind. All of it is open source and runs on your
+        machine.
       </p>
       <p>
-        We think tools like this should be free as in beer and open as in source. A QR code is a
-        square of dots: nobody should pay a subscription to draw one, and nobody should have to hand
-        over an email address for a PNG.
+        We think tools like this should be free and open source. A QR code is a square of dots:
+        nobody should pay a subscription to draw one, and nobody should have to hand over an email
+        address for a PNG.
       </p>
       <p>
         rdyrct, the team-based link and QR analytics behind this page, is how the work gets paid
@@ -257,7 +257,7 @@ const qrFaqs = [
   },
   {
     q: "What is a dynamic QR code, and do I need one?",
-    a: "A dynamic QR code points at a short link you control, so you can change the destination after it is printed and count the scans. A static code has the destination baked into the dots: it works forever, but it cannot be redirected or measured. To get one, point the code at a short link you own.",
+    a: "A dynamic QR code points at a short link you control, so you can change the destination after it is printed and count the scans. A static code stores the destination in the dots: it works forever, but it cannot be redirected or measured. To get one, point the code at a short link you own.",
   },
   {
     q: "Do QR codes expire?",

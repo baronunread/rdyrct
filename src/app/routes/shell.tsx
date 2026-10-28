@@ -690,10 +690,8 @@ function useClaimAnonLinks(orgId: string | undefined) {
       // The claim just added links, and billing's first-link hand-off asks
       // whether the count is still zero.
       await qc.invalidateQueries({ queryKey: ["linkQuotaUsage", orgId] });
-      // The one moment in the app worth sounding pleased about: they made
-      // something before they had an account, and it survived. A sentence
-      // that reads like a receipt wastes it.
-      toast("Welcome. Your link is already here.");
+      // They made a link before they had an account: say it carried over.
+      toast("Your link is saved to your account.");
     })();
   }, [orgId, qc, toast]);
 }

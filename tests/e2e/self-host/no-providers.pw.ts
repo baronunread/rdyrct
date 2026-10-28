@@ -8,7 +8,7 @@ import { submitSignup } from "../resend";
 
 const password = "self-host-password-123";
 // Signed in, so the in-app 404: the sidebar stays.
-const NOT_FOUND = "Nothing lives at this page";
+const NOT_FOUND = "This page does not exist";
 
 /** Signs up and lands on the dashboard: with no email provider there is no
  *  code to wait for, so the account is signed in straight away. */

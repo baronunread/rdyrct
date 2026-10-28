@@ -101,9 +101,7 @@ function ConnectGuide({ onStartWaiting }: { onStartWaiting: () => void }) {
       </div>
 
       <div className="flex items-center gap-2 border-t border-border pt-4">
-        <p className="flex-1 text-xs text-muted">
-          Or tell your agent to help you set it up for you.
-        </p>
+        <p className="flex-1 text-xs text-muted">Or ask your agent to set it up for you.</p>
         <McpAgentPromptButton />
       </div>
 

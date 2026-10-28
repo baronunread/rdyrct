@@ -12,7 +12,7 @@ test("a mistyped app address stays inside the app", async ({ page }) => {
 
   await page.goto("/dashbord");
   await expect(
-    page.getByRole("heading", { level: 1, name: "Nothing lives at this page" }),
+    page.getByRole("heading", { level: 1, name: "This page does not exist" }),
   ).toBeVisible();
   await expect(page.getByText("Your links and data are fine.", { exact: false })).toBeVisible();
   // The shell is still there.
@@ -34,7 +34,7 @@ test("an admin page is an in-app 404 for everybody else", async ({ page }) => {
   await signUpAndVerify(page, `app-404-admin-${Date.now()}@gmail.com`, password);
   await page.goto("/admin");
   await expect(
-    page.getByRole("heading", { level: 1, name: "Nothing lives at this page" }),
+    page.getByRole("heading", { level: 1, name: "This page does not exist" }),
   ).toBeVisible();
   // One shell, not one drawn inside another.
   await expect(page.getByRole("button", { name: "Account menu" })).toHaveCount(1);

@@ -242,7 +242,7 @@ const AUTH_MODE_COPY = {
  */
 function SignupSubtitle({ next }: { next: string }) {
   const body = storedAnonLinks().length
-    ? "Your link is waiting. Sign up and it becomes permanent, with the clicks it earns."
+    ? "Sign up to keep your link and its clicks."
     : next.startsWith("/billing")
       ? "Create your account, then check out. No card needed to create the account."
       : null;

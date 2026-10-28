@@ -429,7 +429,7 @@ export function PlacesPanel({
               formatKey={placeName}
               lead={(code) => <Flag code={code} />}
               limit={limit}
-              empty="The country each click came from appears here. Never the address it came from."
+              empty="The country each click came from appears here. No IP address is stored."
             />
           ),
         },

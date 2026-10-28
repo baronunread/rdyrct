@@ -15,7 +15,7 @@ export function AppNotFound() {
   return (
     <div className="mx-auto mt-16 flex max-w-[440px] flex-col items-center gap-3 text-center md:mt-[120px]">
       <span className="font-mono text-[0.8125rem] text-muted">404</span>
-      <h1 className="text-[22px] font-semibold text-balance">Nothing lives at this page</h1>
+      <h1 className="text-[22px] font-semibold text-balance">This page does not exist</h1>
       <p className="text-pretty text-muted">
         The address may be mistyped, or the page moved. Your links and data are fine.
       </p>

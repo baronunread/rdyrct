@@ -1278,7 +1278,7 @@ linkRoutes.patch("/:linkId/addresses/:addressId", requireOrgRole("member"), asyn
 async function keepAddressForever(c: Context<AppEnv>) {
   const { db, orgId, address } = await findLinkAndAddress(c);
   if (address.kind !== "temp_alias")
-    throw new HTTPException(400, { message: "Only a temporary alias can be kept forever" });
+    throw new HTTPException(400, { message: "Only a temporary alias can be made permanent" });
 
   const { limits } = await orgPlan(db, orgId);
 

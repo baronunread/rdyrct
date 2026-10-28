@@ -49,7 +49,7 @@ export function GrantCompDialog({
         }}
       >
         <p className="text-sm text-pretty text-muted">
-          Gives {user.name} paid access without a subscription. It unlocks every org they own, it
+          Gives {user.name} paid access without a subscription. It covers every org they own, it
           counts in plan totals, and it never counts as revenue. A subscription they buy later sits
           underneath and comes back if the comp is revoked.
         </p>

@@ -119,7 +119,7 @@ export function QrColorAndLogoFields({
       <div>
         <span className="mb-1.5 flex items-center gap-1.5 text-xs font-medium text-muted">
           Logo
-          <Tooltip content="Embedded in the center of every QR code by default. Use a small, square image with some breathing room so the code stays easy to scan. A link can upload its own logo to override this.">
+          <Tooltip content="Embedded in the center of every QR code by default. Use a small, square image with some empty space around it so the code stays easy to scan. A link can upload its own logo to override this.">
             <button
               type="button"
               aria-label="About QR logos"

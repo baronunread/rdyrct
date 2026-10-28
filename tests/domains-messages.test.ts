@@ -3,7 +3,7 @@ import { addDomainMessage, recheckMessage } from "../src/app/lib/domain-messages
 
 describe("addDomainMessage", () => {
   test("active", () => {
-    expect(addDomainMessage("active")).toBe("Domain added successfully");
+    expect(addDomainMessage("active")).toBe("Domain added");
   });
   test("issuing_tls", () => {
     expect(addDomainMessage("issuing_tls")).toBe(
@@ -34,13 +34,13 @@ describe("recheckMessage", () => {
     expect(recheckMessage("error", "error")).toBeNull();
   });
 
-  test("newly active: celebrates", () => {
-    expect(recheckMessage("issuing_tls", "active")).toBe("Domain is live!");
+  test("newly active: says so", () => {
+    expect(recheckMessage("issuing_tls", "active")).toBe("Domain is active");
   });
 
   test("DNS just resolved: moves to issuing_tls", () => {
     expect(recheckMessage("checking_dns", "issuing_tls")).toBe(
-      "DNS resolved! Issuing TLS certificate…",
+      "DNS resolved. Issuing TLS certificate…",
     );
   });
 

@@ -26,7 +26,7 @@ const SPA_SHELL = `<!doctype html><html><head><title>rdyrct - branded short link
 
 /** What `bun run build` writes to 404-short.html (scripts/prerender-404.tsx),
  * cut down to the parts the Worker reads: the marker and the link. */
-const SHORT_404 = `<!doctype html><html><head><title>Not found</title></head><body data-page="404-short"><div id="root"><h1>Nothing lives at this link.</h1><p><a href="/">Go home</a></p></div></body></html>`;
+const SHORT_404 = `<!doctype html><html><head><title>Not found</title></head><body data-page="404-short"><div id="root"><h1>No link at this address.</h1><p><a href="/">Go home</a></p></div></body></html>`;
 
 // The worker reaches this binding through serveSpa's `c.env.ASSETS.fetch`
 // in src/worker/index.ts, and for the short-host 404. `connect` is here because
