@@ -316,7 +316,9 @@ function Notice({
     <div className="mb-6 flex flex-col gap-2">
       <div
         className={cn(
-          "flex flex-wrap items-center gap-x-5 gap-y-2 rounded-xl py-2 pr-2 pl-4",
+          // On a phone the title, the facts and the action stack, so the facts
+          // get the full width instead of a narrow column beside the title.
+          "flex flex-wrap items-center gap-x-5 gap-y-2 rounded-xl py-2 pr-2 pl-4 max-sm:flex-col max-sm:items-stretch max-sm:py-3 max-sm:pr-3",
           tone === "bad"
             ? "bg-[color-mix(in_oklab,var(--danger)_6%,var(--surface))] shadow-[0_0_0_1px_color-mix(in_oklab,var(--danger)_35%,transparent)]"
             : "bg-[color-mix(in_oklab,var(--butter)_8%,var(--surface))] shadow-[0_0_0_1px_color-mix(in_oklab,var(--butter)_40%,transparent)]",
@@ -333,13 +335,16 @@ function Notice({
         </span>
         <dl className="flex min-w-0 flex-1 flex-wrap gap-x-5 gap-y-1 text-sm">
           {facts.map((f) => (
-            <div key={f.label} className="flex gap-1.5">
-              <dt className="text-muted">{f.label}</dt>
+            <div key={f.label} className="flex max-w-full min-w-0 gap-1.5">
+              <dt className="shrink-0 text-muted">{f.label}</dt>
+              {/* A long hostname shortens with an ellipsis rather than running
+                  off a phone's edge; the full name is on hover. */}
               <dd
+                title={f.mono ? f.value : undefined}
                 className={cn(
-                  "tnum font-semibold",
+                  "tnum min-w-0 font-semibold",
                   f.over && "text-danger",
-                  f.mono && "font-mono text-[0.8125rem] font-normal",
+                  f.mono && "truncate font-mono text-[0.8125rem] font-normal",
                 )}
               >
                 {f.value}
@@ -347,7 +352,7 @@ function Notice({
             </div>
           ))}
         </dl>
-        {action && <div className="ml-auto">{action}</div>}
+        {action && <div className="ml-auto max-sm:ml-0">{action}</div>}
       </div>
       {note && <p className="max-w-prose px-1 text-xs text-pretty text-muted">{note}</p>}
     </div>
