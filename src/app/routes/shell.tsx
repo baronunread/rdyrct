@@ -10,7 +10,6 @@ import {
   LogOut,
   PanelLeftClose,
   PanelLeftOpen,
-  Search,
   Settings,
 } from "@/app/ui/icons";
 import { MorphIcon } from "morphicons/react";
@@ -41,6 +40,7 @@ import posthog from "../lib/posthog";
 import { FUNNEL } from "../lib/funnel";
 import { Logo, LogoMark } from "../ui/logo";
 import { Tooltip, TooltipGroup } from "../ui/tooltip";
+import { MOD_KEY, Shortcut } from "../ui/kbd";
 import { cn } from "../ui/cn";
 import {
   shellLayout,
@@ -214,9 +214,7 @@ function NavItem({
 }
 
 /** "[" as a key, for the fold tooltips. */
-const foldKey = (
-  <kbd className="rounded px-1 font-mono text-2xs text-muted smooth-shadow-ring-xs">[</kbd>
-);
+const foldKey = <Shortcut keys={["["]} tone="tooltip" />;
 
 /**
  * The top of the sidebar, as ChatGPT has it. Open: the mark goes to the
@@ -335,7 +333,7 @@ function AppSidebar({
 
         {/* You, as the mock has it: avatar, name over email, and the ⌘K key,
           which opens search (its one home now the top row only folds). */}
-        <div className="mt-auto flex items-center gap-1 px-3 py-3">
+        <div className="mt-auto flex items-center gap-0.5 px-3 py-3">
           <div className="min-w-0 flex-1">
             <Menu
               label="Account menu"
@@ -349,12 +347,6 @@ function AppSidebar({
                 </div>
               }
             >
-              <MenuItem onClick={openCommandMenu}>
-                <Search size={15} /> Search and commands
-                <kbd className="ml-auto rounded-md px-1.5 font-mono text-2xs text-muted smooth-shadow-ring-xs">
-                  ⌘K
-                </kbd>
-              </MenuItem>
               <MenuItem onClick={() => void navigate({ to: "/settings" })}>
                 <Settings size={15} /> Settings
               </MenuItem>
@@ -375,11 +367,11 @@ function AppSidebar({
             aria-label="Search and commands"
             title="Search and commands"
             className={cn(
-              "shrink-0 cursor-pointer rounded-md bg-surface px-1.5 py-0.5 font-mono text-2xs text-muted smooth-shadow-ring-xs transition-[color,scale] duration-200 ease-out active:scale-[0.96] [@media(hover:hover)]:hover:text-text",
+              "shrink-0 cursor-pointer rounded-md p-0.5 transition-[scale,opacity] duration-200 ease-out active:scale-[0.96] [@media(hover:hover)]:hover:[&_kbd]:text-text",
               fade(collapsed),
             )}
           >
-            ⌘K
+            <Shortcut keys={[MOD_KEY, "K"]} className="gap-0.5" />
           </button>
         </div>
       </div>
