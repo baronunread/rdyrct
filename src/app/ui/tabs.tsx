@@ -40,11 +40,27 @@ export function PanelTabs({
         </BaseTabs.List>
         {end && <div className="ml-auto shrink-0 pb-2.5 text-xs text-muted">{end}</div>}
       </div>
-      {tabs.map((tab) => (
-        <BaseTabs.Panel key={tab.value} value={tab.value}>
-          {tab.panel}
-        </BaseTabs.Panel>
-      ))}
+      {/* Every panel stays mounted in the same grid cell and only the active
+          one is visible, so the card is as tall as its tallest list and
+          switching tabs never moves the card, or the one beside it in a row. */}
+      <div className="grid">
+        {tabs.map((tab) => (
+          <BaseTabs.Panel
+            key={tab.value}
+            value={tab.value}
+            keepMounted
+            // Base UI hides an inactive panel with the `hidden` attribute,
+            // which Tailwind's base layer turns into display: none
+            // !important, out of reach of any utility. Dropped here: the
+            // panel keeps its place but goes invisible (data-hidden), and
+            // Base UI's `inert` keeps it out of focus and the a11y tree.
+            render={(props) => <div {...props} hidden={undefined} />}
+            className="col-start-1 row-start-1 min-w-0 data-[hidden]:invisible"
+          >
+            {tab.panel}
+          </BaseTabs.Panel>
+        ))}
+      </div>
     </BaseTabs.Root>
   );
 }
