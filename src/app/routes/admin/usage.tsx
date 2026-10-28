@@ -2,7 +2,7 @@ import { useState, type ReactNode } from "react";
 import { ArrowUp } from "@/app/ui/icons";
 import { AreaChart, BarList } from "../../components/charts";
 import { PanelTabs } from "../../ui/tabs";
-import { Skeleton, SkeletonStatus } from "../../ui/skeleton";
+import { AdminUsageSkeleton } from "../../components/skeletons";
 import { cn } from "../../ui/cn";
 import { linkLabel } from "./util";
 import type { SeriesPoint } from "@/shared/types";
@@ -587,47 +587,11 @@ function Anomalies({ s }: { s: AdminUsageData }) {
   );
 }
 
-/** Mirrors the page below: the figure strip over the chart, two cards side
- * by side, one list. The title and the tabs are the layout's, already real. */
-function UsageSkeleton() {
-  return (
-    <SkeletonStatus testId="admin-usage-skeleton" className="flex flex-col gap-6">
-      <div className="rounded-xl bg-surface smooth-shadow-ring-xs">
-        <div className="grid grid-cols-2 gap-1 p-1.5 sm:grid-cols-3 lg:grid-cols-5">
-          {Array.from({ length: 5 }, (_, i) => (
-            <div key={i} className="flex flex-col gap-2 px-2.5 py-2">
-              <Skeleton className="h-2.5 w-14" />
-              <Skeleton className="h-5 w-20" />
-            </div>
-          ))}
-        </div>
-        <div className="px-4 pt-1 pb-3">
-          <Skeleton className="mb-2 h-2.5 w-28" />
-          <Skeleton className="w-full" style={{ height: CHART_HEIGHT }} />
-        </div>
-      </div>
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        {[0, 1].map((i) => (
-          <div
-            key={i}
-            className="flex flex-col gap-3 rounded-xl bg-surface p-4 smooth-shadow-ring-xs"
-          >
-            <Skeleton className="h-3 w-24" />
-            <Skeleton className="h-[30px] w-full" />
-            <Skeleton className="h-[30px] w-3/4" />
-            <Skeleton className="h-[30px] w-1/2" />
-          </div>
-        ))}
-      </div>
-    </SkeletonStatus>
-  );
-}
-
 export function AdminUsagePage() {
   const [range] = useUsageRange();
   const days = rangeDays(range);
   const usage = useAdminUsageRange(days);
-  if (usage.isLoading) return <UsageSkeleton />;
+  if (usage.isLoading) return <AdminUsageSkeleton />;
   if (!usage.data) return <p className="text-sm text-danger">Could not load usage.</p>;
   const s = usage.data;
 
