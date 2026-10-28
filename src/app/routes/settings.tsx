@@ -290,9 +290,13 @@ function DeleteAccountWarning({ orgs }: { orgs: UserOrg[] }) {
 
 /** Everything Settings' first frame reads beyond the user (see
  * lib/route-preload.ts): the "Signing in" group's two lists. */
-export function preload(qc: QueryClient) {
+/** Settings reads only the account, never an org, so all of it preloads
+ * through preloadAccount, which also runs for somebody with no org left. */
+export function preloadAccount(qc: QueryClient) {
   return settle([qc.ensureQueryData(linkedAccountsQuery), qc.ensureQueryData(otherSessionsQuery)]);
 }
+
+export const preload = () => Promise.resolve();
 
 export function SettingsPage() {
   const currentUser = useCurrentUser();

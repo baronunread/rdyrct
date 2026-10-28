@@ -72,6 +72,7 @@ const dashboard = () => import("./routes/dashboard");
 const analytics = () => import("./routes/analytics");
 const links = () => import("./routes/links");
 const linkImport = () => import("./routes/link-import");
+const linkImportPreload = () => import("./routes/link-import-preload");
 const linkDetail = () => import("./routes/link-detail");
 const members = () => import("./routes/members");
 const billing = () => import("./routes/billing");
@@ -210,9 +211,8 @@ const linkDetailRoute = createRoute({
 const linkImportRoute = createRoute({
   ...appPage,
   path: "/import",
-  // No preload: the import page draws its own states from its queries, and
-  // it is reached from Links rather than the sidebar.
   component: lazyRouteComponent(linkImport, "LinkImportPage"),
+  loader: pageLoader(linkImportPreload),
 });
 const membersRoute = createRoute({
   ...appPage,

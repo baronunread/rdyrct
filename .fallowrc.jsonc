@@ -24,7 +24,9 @@
   // Every app page exports a `preload` of the same name on purpose: the
   // route loaders in main.tsx call whichever one the page's module has
   // (lib/route-preload.ts).
-  "ignoreExports": [{ "file": "src/app/routes/**/*.tsx", "exports": ["preload"] }],
+  "ignoreExports": [
+    { "file": "src/app/routes/**/*.{ts,tsx}", "exports": ["preload", "preloadAccount"] },
+  ],
   // "run" is called by the Cloudflare Workflows runtime, not application code.
   "usedClassMembers": [{ "extends": "WorkflowEntrypoint", "members": ["run"] }],
   "audit": {

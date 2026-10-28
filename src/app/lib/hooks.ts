@@ -592,7 +592,7 @@ export const useDomainRecords = (orgId: string, domainId: string, enabled = true
  */
 export const useLinkImport = (orgId: string) => useQuery(linkImportQuery(orgId));
 
-const linkImportQuery = (orgId: string) =>
+export const linkImportQuery = (orgId: string) =>
   queryOptions<{ import: LinkImportDTO | null }>({
     queryKey: ["link-import", orgId],
     queryFn: () => api(`/orgs/${orgId}/link-import/current`),

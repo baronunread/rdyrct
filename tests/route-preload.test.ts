@@ -45,6 +45,22 @@ describe("loadPage", () => {
     expect(called).toBe(0);
   });
 
+  test("still preloads the account's own data for somebody with no org", async () => {
+    let account = 0;
+    let orgPage = 0;
+    const page = async () => ({
+      preload: async () => {
+        orgPage++;
+      },
+      preloadAccount: async () => {
+        account++;
+      },
+    });
+    await loadPage(clientWith(userWith([])), page, target);
+    await loadPage(clientWith(null), page, target);
+    expect({ account, orgPage }).toEqual({ account: 1, orgPage: 0 });
+  });
+
   test("never fails the navigation", async () => {
     const preload = async () => {
       throw new Error("network down");
