@@ -60,7 +60,7 @@ test("without Polar there is nothing to buy and nothing capped", async ({ page }
   // The links page counts links without a ceiling, and no banner says this
   // account is over a plan.
   await page.goto("/links");
-  await expect(page.getByText(/^0 links$/)).toBeVisible();
+  await expect(page.getByText(/^0 short links$/)).toBeVisible();
   await expect(page.getByText(/over (your|the) plan|over the limit|upgrade/i)).toHaveCount(0);
 
   // Nor does Members explain a seat limit there is not.
