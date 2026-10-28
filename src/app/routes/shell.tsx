@@ -331,8 +331,8 @@ function AppSidebar({
 
         <PlatformNav visible={user.isAdmin} collapsed={collapsed} />
 
-        {/* You, as the mock has it: avatar, name over email, and the ⌘K key,
-          which opens search (its one home now the top row only folds). */}
+        {/* You: avatar, name, and the ⌘K key, which opens search (its one
+          home now the top row only folds). The email heads the menu. */}
         <div className="mt-auto flex items-center gap-0.5 px-3 py-3">
           <div className="min-w-0 flex-1">
             <Menu
@@ -340,13 +340,18 @@ function AppSidebar({
               trigger={
                 <div className="flex min-w-9 items-center gap-2.5 rounded-lg px-1 py-1.5 [@media(hover:hover)]:hover:bg-surface/50">
                   <UserAvatar user={user} size={28} />
-                  <span className={cn("min-w-0 flex-1 leading-tight", fade(collapsed))}>
-                    <span className="block truncate text-sm font-semibold">{user.name}</span>
-                    <span className="block truncate text-xs text-muted">{user.email}</span>
+                  <span
+                    className={cn("min-w-0 flex-1 truncate text-sm font-semibold", fade(collapsed))}
+                  >
+                    {user.name}
                   </span>
                 </div>
               }
             >
+              {/* Which account this is, for anybody with two. */}
+              <p className="max-w-56 truncate px-2.5 pt-1.5 pb-1 text-xs text-muted">
+                {user.email}
+              </p>
               <MenuItem onClick={() => void navigate({ to: "/settings" })}>
                 <Settings size={15} /> Settings
               </MenuItem>
