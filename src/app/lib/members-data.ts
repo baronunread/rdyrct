@@ -1,17 +1,14 @@
 import type { InviteDTO, MemberDTO, OrgRole } from "@/shared/types";
 
 /**
- * What the members page reads beyond today's `MemberDTO`. The API does not
- * send these yet; the page shows them the moment it does (see the overnight
- * report for the exact shape the worker needs to add).
- *
- * - `image`: the member's same-origin avatar URL, as on `User.image`.
- * - `lastActiveAt`: epoch ms of the member's most recent session activity
- *   (the newest `session.updated_at`), or null when there is none.
+ * What the members page reads beyond today's `MemberDTO`: `image`, the
+ * member's picture. The API does not send it yet, because a picture is
+ * served only to its own account (`/api/user/avatar` answers with the
+ * signed-in user's), so another member's needs a route of its own first.
+ * Until then every member shows the generated face.
  */
 export type MemberRowData = MemberDTO & {
   image?: string | null;
-  lastActiveAt?: number | null;
 };
 
 /** An invite, plus who sent it once the API says so. */
@@ -26,12 +23,6 @@ export const ROLE_LABEL = {
   viewer: "Viewer",
 } satisfies Record<OrgRole, string>;
 
-/** Whether the API has started sending last-active times. Until it does
- * the column stays off: a column of blanks says nothing. */
-export function hasLastActive(members: readonly MemberRowData[]): boolean {
-  return members.some((m) => m.lastActiveAt !== undefined);
-}
-
 const DAY_MS = 86_400_000;
 const ONLINE_MS = 5 * 60_000;
 
@@ -44,7 +35,7 @@ function startOfDay(ts: number): number {
 }
 
 /** "Online now", "Today", "Yesterday", "3 days ago", then "Oct 2". */
-export function lastActiveLabel(ts: number | null | undefined, now = Date.now()): string {
+export function lastActiveLabel(ts: number | null, now = Date.now()): string {
   if (ts == null) return "Never";
   if (now - ts < ONLINE_MS) return "Online now";
   const days = Math.round((startOfDay(now) - startOfDay(ts)) / DAY_MS);

@@ -223,29 +223,60 @@ export function heatmapRows(db: DB, orgId: string, sinceMs: number) {
     .groupBy(dayOfWeek, hourOfDay);
 }
 
-/** The org's most-clicked links of all time. */
-export function topLinkRows(db: DB, orgId: string) {
+/** How the stats lists name a link: enough to build its address. */
+const linkRef = {
+  id: schema.links.id,
+  slug: schema.links.slug,
+  title: schema.links.title,
+  domain: schema.domains.hostname,
+};
+
+/** The org's most-clicked links in the range. */
+export function topLinkRows(db: DB, orgId: string, since: string) {
   return db
-    .select({
-      id: schema.links.id,
-      slug: schema.links.slug,
-      title: schema.links.title,
-      clicks: total,
-    })
-    .from(schema.links)
-    .innerJoin(daily, eq(daily.linkId, schema.links.id))
-    .where(eq(schema.links.orgId, orgId))
+    .select({ ...linkRef, clicks: total })
+    .from(daily)
+    .innerJoin(schema.links, eq(daily.linkId, schema.links.id))
+    .leftJoin(schema.domains, eq(schema.links.domainId, schema.domains.id))
+    .where(and(eq(daily.orgId, orgId), gte(daily.day, since)))
     .groupBy(schema.links.id)
     .orderBy(desc(total))
     .limit(8);
+}
+
+/** Whether the org has a click on record at all: one key lookup. */
+export async function everClicked(db: DB, orgId: string): Promise<boolean> {
+  const [row] = await db
+    .select({ one: sql<number>`1` })
+    .from(daily)
+    .where(eq(daily.orgId, orgId))
+    .limit(1);
+  return !!row;
+}
+
+/** Each link's clicks per day since `since`, for the links list's
+ * sparklines: one read for a whole page of links. The ids travel as one
+ * JSON parameter, because D1 binds at most 100 and a page can hold 100. */
+export function sparkRows(db: DB, orgId: string, linkIds: string[], since: string) {
+  return db
+    .select({ linkId: daily.linkId, day: daily.day, clicks: daily.clicks })
+    .from(daily)
+    .where(
+      and(
+        eq(daily.orgId, orgId),
+        gte(daily.day, since),
+        sql`${daily.linkId} in (select value from json_each(${JSON.stringify(linkIds)}))`,
+      ),
+    );
 }
 
 /** Links that had clicks once and none in the last 30 days. A link that never
  * got a single click is not dead, just new or unshared. */
 export function deadLinkRows(db: DB, orgId: string, since30: string) {
   return db
-    .select({ id: schema.links.id, slug: schema.links.slug, title: schema.links.title })
+    .select(linkRef)
     .from(schema.links)
+    .leftJoin(schema.domains, eq(schema.links.domainId, schema.domains.id))
     .where(
       and(
         eq(schema.links.orgId, orgId),
@@ -262,10 +293,11 @@ export function decayingLinkRows(env: Env, orgId: string, w: StatsWindows) {
     `with cur as (select link_id, sum(clicks) as n from click_daily where org_id = ? and day >= ? group by link_id),
           prev as (select link_id, sum(clicks) as n from click_daily where org_id = ? and day >= ? and day < ? group by link_id),
           decay as (select cur.link_id, round((prev.n - cur.n) * 100.0 / prev.n) as drop_pct from cur join prev on cur.link_id = prev.link_id where prev.n > 0 and cur.n < prev.n * 0.5)
-     select l.id, l.slug, l.title, d.drop_pct from decay d join links l on l.id = d.link_id order by d.drop_pct desc limit 5`,
+     select l.id, l.slug, l.title, dm.hostname as domain, d.drop_pct from decay d join links l on l.id = d.link_id
+     left join domains dm on dm.id = l.domain_id order by d.drop_pct desc limit 5`,
   )
     .bind(orgId, w.since7, orgId, w.prev7Since, w.since7)
-    .all<{ id: string; slug: string; title: string; drop_pct: number }>()
+    .all<{ id: string; slug: string; title: string; domain: string | null; drop_pct: number }>()
     .then((r) => r.results);
 }
 

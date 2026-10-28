@@ -21,6 +21,7 @@ import {
   type LinkInput,
   type OrgPlan,
   type RecentClick,
+  type StatsLinkRef,
 } from "@/shared/types";
 import {
   AreaChart,
@@ -30,6 +31,7 @@ import {
   countryName,
   dayTick,
   hourTick,
+  linkPagePath,
 } from "../components/charts";
 import { useNewLink, NewLinkButton } from "../components/new-link-host";
 import { RangeControl } from "../components/range-control";
@@ -62,9 +64,6 @@ import {
 } from "../lib/insights-data";
 import { SameDestinationDialog } from "../components/same-destination-dialog";
 import { LinkPreviewDialog } from "../components/link-preview-dialog";
-
-const linkPath = (l: { slug: string; domain?: string | null }) =>
-  l.domain ? `/links/${l.slug}?domain=${encodeURIComponent(l.domain)}` : `/links/${l.slug}`;
 
 /** The dashboard's ranges: a glance, not a report. Analytics adds 365d. */
 const DASHBOARD_RANGES = [PRESET_24H, PRESET_7D, PRESET_30D] as const;
@@ -191,7 +190,11 @@ function DashboardBody({
                   items={topLinks.map((l) => ({ key: l.id, clicks: l.clicks }))}
                   formatKey={(id) => {
                     const link = topLinks.find((l) => l.id === id);
-                    return link ? <LinkBarLabel slug={link.slug} title={link.title} /> : id;
+                    return link ? (
+                      <LinkBarLabel slug={link.slug} title={link.title} domain={link.domain} />
+                    ) : (
+                      id
+                    );
                   }}
                 />
               ),
@@ -665,7 +668,7 @@ function RecentClicks({ clicks }: { clicks: RecentClick[] }) {
             className="grid h-8 grid-cols-[minmax(0,7.5rem)_minmax(0,1fr)_auto_1.75rem] items-center gap-2.5 text-sm [&+&]:shadow-[inset_0_1px_0_var(--border)]"
           >
             <HrefLink
-              href={linkPath(click)}
+              href={linkPagePath(click)}
               className="truncate font-mono text-[13px] [@media(hover:hover)]:hover:underline"
             >
               /{click.slug}
@@ -713,7 +716,7 @@ function TeamActivity({
             <span className="font-medium">{creatorName(l.createdBy)}</span>
             <span className="text-muted"> created </span>
             <HrefLink
-              href={linkPath(l)}
+              href={linkPagePath(l)}
               className="font-mono text-[13px] [@media(hover:hover)]:hover:underline"
             >
               /{l.slug}
@@ -730,11 +733,7 @@ function TeamActivity({
 
 /** Links whose clicks fell by half this week, then links nobody clicked in
  * 30 days. */
-function AttentionList({
-  rows,
-}: {
-  rows: { id: string; slug: string; title: string; suffix: string }[];
-}) {
+function AttentionList({ rows }: { rows: (StatsLinkRef & { suffix: string })[] }) {
   if (!rows.length)
     return (
       <p className="py-2 text-sm text-pretty text-muted">
@@ -748,7 +747,7 @@ function AttentionList({
           key={l.id}
           className="flex h-8 items-center justify-between gap-3 text-sm [&+&]:shadow-[inset_0_1px_0_var(--border)]"
         >
-          <SlugLink to={`/links/${l.slug}`} slug={l.slug} title={l.title} />
+          <SlugLink to={linkPagePath(l)} slug={l.slug} title={l.title} />
           <span className="tnum shrink-0 text-xs text-muted">{l.suffix}</span>
         </li>
       ))}

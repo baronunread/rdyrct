@@ -315,22 +315,22 @@ export function captureEmails({
   const sent: CapturedEmail[] = [];
   let started = false;
   const original = globalThis.fetch;
+  const resend = async (init?: RequestInit) => {
+    started = true;
+    // SAFETY: the only caller of this branch is sendEmail(), which posts a
+    // JSON body of exactly these four fields to Resend.
+    const email = JSON.parse(String(init?.body ?? "{}")) as CapturedEmail;
+    if (refuse?.includes(email.to)) return new Response("down", { status: 500 });
+    sent.push(email);
+    if (hold) await hold;
+    return Response.json({ id: "sent" });
+  };
+  const dns = () =>
+    Response.json({ Status: 0, Answer: mx === "deliverable" ? [{ data: "10 mx.example." }] : [] });
   globalThis.fetch = async (input, init) => {
     const url = String(input instanceof Request ? input.url : input);
-    if (url.includes("/emails")) {
-      started = true;
-      // SAFETY: the only caller of this branch is sendEmail(), which posts a
-      // JSON body of exactly these four fields to Resend.
-      const email = JSON.parse(String(init?.body ?? "{}")) as CapturedEmail;
-      if (refuse?.includes(email.to)) return new Response("down", { status: 500 });
-      sent.push(email);
-      if (hold) await hold;
-      return Response.json({ id: "sent" });
-    }
-    if (mx && url.includes("cloudflare-dns.com")) {
-      const Answer = mx === "deliverable" ? [{ data: "10 mx.example." }] : [];
-      return Response.json({ Status: 0, Answer });
-    }
+    if (url.includes("/emails")) return resend(init);
+    if (mx && url.includes("cloudflare-dns.com")) return dns();
     return original(input, init);
   };
   return { sent, started: () => started, restore: () => (globalThis.fetch = original) };

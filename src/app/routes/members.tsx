@@ -40,7 +40,6 @@ import { shortDate } from "../lib/dates";
 import {
   ROLE_LABEL,
   expiresLabel,
-  hasLastActive,
   lastActiveLabel,
   type InviteRowData,
   type MemberRowData,
@@ -126,7 +125,7 @@ function useMemberManagement(orgId: string, canManage: boolean) {
       sortRows<MemberRowData>(members.data ?? [], sort, {
         name: (m) => m.name.toLowerCase(),
         role: (m) => m.role,
-        lastActiveAt: (m) => m.lastActiveAt ?? null,
+        lastActiveAt: (m) => m.lastActiveAt,
         createdAt: (m) => m.createdAt,
       }),
     [members.data, sort],
@@ -251,7 +250,7 @@ function RoleSelect({
 const rowActions =
   "flex justify-end gap-0.5 transition-opacity duration-150 [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover/row:opacity-100 [@media(hover:hover)]:focus-within:opacity-100";
 
-type Columns = { lastActive: boolean; actions: boolean };
+type Columns = { actions: boolean };
 
 function MemberRow({
   member,
@@ -295,11 +294,9 @@ function MemberRow({
           <span className="pl-2.5 text-sm text-muted">{ROLE_LABEL[member.role]}</span>
         )}
       </Td>
-      {columns.lastActive && (
-        <Td className="tnum hidden text-sm whitespace-nowrap text-muted sm:table-cell">
-          <LastActive ts={member.lastActiveAt} />
-        </Td>
-      )}
+      <Td className="tnum hidden text-sm whitespace-nowrap text-muted sm:table-cell">
+        <LastActive ts={member.lastActiveAt} />
+      </Td>
       <Td className="tnum hidden text-sm whitespace-nowrap text-muted sm:table-cell">
         {shortDate(member.createdAt)}
       </Td>
@@ -318,7 +315,7 @@ function MemberRow({
   );
 }
 
-function LastActive({ ts }: { ts: number | null | undefined }) {
+function LastActive({ ts }: { ts: number | null }) {
   const label = lastActiveLabel(ts);
   if (label === "Online now")
     return (
@@ -378,9 +375,7 @@ function InviteRow({
           </Menu>
         </div>
       </Td>
-      {columns.lastActive && (
-        <Td className="hidden text-sm whitespace-nowrap sm:table-cell">Not yet</Td>
-      )}
+      <Td className="hidden text-sm whitespace-nowrap sm:table-cell">Not yet</Td>
       <Td className="hidden whitespace-nowrap sm:table-cell">
         <div className="flex flex-col gap-0.5">
           <span className="inline-flex items-center gap-1.5 text-sm text-text">
@@ -418,7 +413,7 @@ function MemberTable({
   const { sorted, sort, setSort } = management;
   const invites: InviteRowData[] = canManage ? (management.invites.data ?? []) : [];
   if (management.members.isLoading) return <TableSkeleton rows={4} />;
-  const columns: Columns = { lastActive: hasLastActive(sorted), actions: canManage };
+  const columns: Columns = { actions: canManage };
   return (
     <Table fixed>
       <thead>
@@ -431,15 +426,13 @@ function MemberTable({
             onSort={setSort}
             className="w-32 sm:w-36"
           />
-          {columns.lastActive && (
-            <SortTh
-              label="Last active"
-              sortKey="lastActiveAt"
-              sort={sort}
-              onSort={setSort}
-              className="hidden sm:table-cell sm:w-36"
-            />
-          )}
+          <SortTh
+            label="Last active"
+            sortKey="lastActiveAt"
+            sort={sort}
+            onSort={setSort}
+            className="hidden sm:table-cell sm:w-36"
+          />
           <SortTh
             label="Joined"
             sortKey="createdAt"

@@ -43,7 +43,6 @@ import {
   deviceLabel,
   sourceLabel,
   useLinkInsightStats,
-  windowOf,
   type LinkInsightStats,
   type RangePreset,
 } from "../lib/insights-data";
@@ -239,13 +238,12 @@ function LinkDetailHeader({
   );
 }
 
-function LinkPanels({ s, period }: { s: LinkInsightStats; period?: string }) {
+function LinkPanels({ s }: { s: LinkInsightStats }) {
   const campaigns = s.campaigns;
   return (
     <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-      <PlacesPanel countries={s.countries} period={period} limit={7} />
+      <PlacesPanel countries={s.countries} limit={7} />
       <PanelTabs
-        end={period}
         tabs={[
           {
             value: "referrers",
@@ -353,34 +351,16 @@ function useLinkDetailDialogs(orgId: string, link: LinkDTO | null) {
  * when that is shorter. */
 const defaultRange = (maxDays: number) => (maxDays >= 30 ? PRESET_30D : PRESET_7D);
 
-/**
- * The figures and chart for the chosen range. Until the API reads `days`,
- * a link's stats cover the plan's whole window: the chart and the click
- * count are trimmed to the range here, the change beside the count is left
- * out (it compares the whole window), and the breakdowns say which period
- * they really cover.
- */
-function rangeView(s: LinkInsightStats, days: number) {
-  const exact = s.rangeDays === days;
-  const { series, total } = exact
-    ? { series: s.series, total: s.totalClicks }
-    : windowOf(s.series, days);
-  return {
-    series,
-    figures: [
-      { label: "Clicks", value: formatNumber(total), delta: exact ? s.totalClicksDelta : null },
-      {
-        label: "Countries",
-        value: cappedCount(
-          s.countryCount,
-          s.countries.filter((c) => c.key !== "unknown").length,
-          10,
-        ),
-      },
-      { label: "Top source", value: s.referrers[0] ? sourceLabel(s.referrers[0].key) : "None yet" },
-    ],
-    period: exact ? undefined : `Last ${s.rangeDays} days`,
-  };
+/** The figures over the chart, for the range the API answered. */
+function linkFigures(s: LinkInsightStats) {
+  return [
+    { label: "Clicks", value: formatNumber(s.totalClicks), delta: s.totalClicksDelta },
+    {
+      label: "Countries",
+      value: cappedCount(s.countryCount, s.countries.filter((c) => c.key !== "unknown").length, 10),
+    },
+    { label: "Top source", value: s.referrers[0] ? sourceLabel(s.referrers[0].key) : "None yet" },
+  ];
 }
 
 export function LinkDetailPage() {
@@ -412,7 +392,6 @@ export function LinkDetailPage() {
     members.data === undefined
       ? null
       : (s.createdBy && memberNames.get(s.createdBy)) || "A former member";
-  const view = rangeView(s, range.days);
 
   return (
     <div>
@@ -438,12 +417,12 @@ export function LinkDetailPage() {
             stats.isPlaceholderData && "opacity-60",
           )}
         >
-          <StatsChart figures={view.figures}>
-            <div key={view.series.length} className="chart-in">
-              <AreaChart data={view.series} tickFormat={dayTick} />
+          <StatsChart figures={linkFigures(s)}>
+            <div key={s.rangeDays} className="chart-in">
+              <AreaChart data={s.series} tickFormat={dayTick} />
             </div>
           </StatsChart>
-          <LinkPanels s={s} period={view.period} />
+          <LinkPanels s={s} />
         </div>
         <LinkDetailSide orgId={orgId} stats={s} createdBy={createdBy} />
       </div>

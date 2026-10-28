@@ -251,6 +251,11 @@ export function BarList({
 /** A link in a bar list: its slug, which is what people search for and
  * type, then its title in the muted voice (rdyrct-design, mono only on the
  * identifier). */
+/** A link's own page. The domain picks the link when two share a slug, one
+ * on the shared domain and one on a custom one. */
+export const linkPagePath = (l: { slug: string; domain?: string | null }) =>
+  l.domain ? `/links/${l.slug}?domain=${encodeURIComponent(l.domain)}` : `/links/${l.slug}`;
+
 export function LinkBarLabel({
   slug,
   title,
@@ -260,10 +265,9 @@ export function LinkBarLabel({
   title?: string;
   domain?: string | null;
 }) {
-  const href = domain ? `/links/${slug}?domain=${encodeURIComponent(domain)}` : `/links/${slug}`;
   return (
     <HrefLink
-      href={href}
+      href={linkPagePath({ slug, domain })}
       title={title ? `/${slug} · ${title}` : `/${slug}`}
       className="[@media(hover:hover)]:hover:underline"
     >

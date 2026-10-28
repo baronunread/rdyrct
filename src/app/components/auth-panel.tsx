@@ -106,14 +106,12 @@ const ROLE_SAYS = {
  */
 export function InviteJoinCard({
   preview,
-  inviter,
   actions,
 }: {
   preview: InvitePreview;
-  /** Who sent it, when the API says (it does not yet). */
-  inviter?: string;
   actions: ReactNode;
 }) {
+  const inviter = preview.invitedBy;
   return (
     <AuthPanel className="text-center">
       <span className="self-center">
@@ -121,8 +119,14 @@ export function InviteJoinCard({
       </span>
       <AuthHeading>Join {preview.orgName}</AuthHeading>
       <p className="text-sm text-pretty text-muted">
-        {inviter ? `${inviter} invited you` : "You are invited"} as{" "}
-        {ROLE_WITH_ARTICLE[preview.role].split(" ")[0]}{" "}
+        {inviter ? (
+          <>
+            <b className="font-semibold text-text">{inviter}</b> invited you
+          </>
+        ) : (
+          "You are invited"
+        )}{" "}
+        as {ROLE_WITH_ARTICLE[preview.role].split(" ")[0]}{" "}
         <b className="font-semibold text-text">{preview.role}</b>. {ROLE_SAYS[preview.role]}
       </p>
       {actions}

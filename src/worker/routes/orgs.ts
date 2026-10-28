@@ -42,6 +42,7 @@ import {
   deadLinkRows,
   decayingLinkRows,
   dimensionRows,
+  everClicked,
   headlineTotals,
   heatmapRows,
   hourSeriesRows,
@@ -486,6 +487,14 @@ orgRoutes.delete(
 
 /* ---------------- members ---------------- */
 
+/** A member's newest session activity, epoch ms, or null with no session
+ * left. Literal org_members.user_id: an interpolated column renders
+ * unqualified and SQLite binds it to the subquery's own table. */
+export const memberLastActiveAt = sql<number | null>`(
+  select max(session.updated_at) from session
+  where session.user_id = org_members.user_id
+)`;
+
 orgRoutes.get("/:orgId/members", requireOrgRole("viewer"), async (c) => {
   const rows = await c.var.db
     .select({
@@ -495,6 +504,7 @@ orgRoutes.get("/:orgId/members", requireOrgRole("viewer"), async (c) => {
       role: schema.orgMembers.role,
       createdAt: schema.orgMembers.createdAt,
       previousRole: schema.orgMembers.previousRole,
+      lastActiveAt: memberLastActiveAt,
     })
     .from(schema.orgMembers)
     .innerJoin(schema.user, eq(schema.orgMembers.userId, schema.user.id))
@@ -580,117 +590,73 @@ async function occupiedSeats(db: AppEnv["Variables"]["db"], orgId: string): Prom
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-orgRoutes.post("/:orgId/invites", requireOrgRole("admin"), async (c) => {
-  let rawBody: JsonValue;
-  try {
-    rawBody = await c.req.json();
-  } catch {
-    throw new HTTPException(400, { message: "Invalid request body" });
-  }
-  const body = parseBody(inviteBodySchema, rawBody);
-  const role = body.role;
-  const orgIdParam = c.req.param("orgId");
-  const { plan, limits } = await orgPlan(c.var.db, orgIdParam);
+/** The addresses asked for, trimmed, lowercased, valid and once each. */
+function inviteEmails(raw: string[]): string[] {
+  const valid = raw.map((e) => e.trim().toLowerCase()).filter((e) => EMAIL_RE.test(e));
+  return [...new Set(valid)];
+}
 
-  const emails = [
-    ...new Set(
-      body.emails.flatMap((e) => {
-        const email = e.trim().toLowerCase();
-        return EMAIL_RE.test(email) ? [email] : [];
-      }),
-    ),
-  ];
-  // An address that already has an open invite keeps it: asking again sends
-  // the same link (with this role and a fresh week) rather than a second
-  // row, so retrying after a failed send never duplicates an invite.
-  const ts = Date.now();
-  const open = emails.length
-    ? await c.var.db
-        .select({ token: schema.invites.token, email: schema.invites.email })
-        .from(schema.invites)
-        .where(
-          and(
-            eq(schema.invites.orgId, orgIdParam),
-            inArray(schema.invites.email, emails),
-            gte(schema.invites.expiresAt, ts),
-          ),
-        )
-    : [];
-  const openToken = new Map(open.map((o) => [o.email, o.token]));
-  const fresh = emails.filter((e) => !openToken.has(e));
-  const need = emails.length === 0 ? 1 : fresh.length;
-  if (need > 0 && (await occupiedSeats(c.var.db, orgIdParam)) + need > limits.members)
-    throw new HTTPException(402, {
-      message:
-        plan === "free"
-          ? `The free plan allows ${limits.members} members (including you), upgrade to a paid plan to invite more`
-          : `This plan allows at most ${limits.members} members`,
-    });
-
-  if (emails.length === 0) {
-    const invite = {
-      token: uid(24),
-      orgId: orgIdParam,
-      role,
-      email: null,
-      createdBy: c.var.user!.id,
-      createdAt: ts,
-      expiresAt: ts + INVITE_TTL_MS,
-    } as const;
-    await c.var.db.insert(schema.invites).values(invite);
-    return c.json(
-      {
-        invites: [
-          {
-            token: invite.token,
-            role,
-            email: invite.email,
-            createdAt: invite.createdAt,
-            expiresAt: invite.expiresAt,
-          } satisfies InviteDTO,
-        ],
-        failed: [],
-      } satisfies InvitesCreated,
-      201,
+/**
+ * The open invites some of these addresses already have, by address. Asking
+ * again for one sends that same invite (with the new role and a fresh week)
+ * instead of a second row, so a retry after a failed send never duplicates
+ * an invite or takes another seat.
+ */
+async function openInviteTokens(
+  db: DB,
+  orgId: string,
+  emails: string[],
+  now: number,
+): Promise<Map<string | null, string>> {
+  if (!emails.length) return new Map();
+  const open = await db
+    .select({ token: schema.invites.token, email: schema.invites.email })
+    .from(schema.invites)
+    .where(
+      and(
+        eq(schema.invites.orgId, orgId),
+        inArray(schema.invites.email, emails),
+        gte(schema.invites.expiresAt, now),
+      ),
     );
-  }
+  return new Map(open.map((o) => [o.email, o.token]));
+}
 
-  const orgRows = await c.var.db
-    .select({ name: schema.orgs.name })
-    .from(schema.orgs)
-    .where(eq(schema.orgs.id, orgIdParam));
-  const orgName = orgRows[0]?.name ?? "rdyrct";
+async function assertSeatsFor(db: DB, orgId: string, need: number): Promise<void> {
+  if (need === 0) return;
+  const { plan, limits } = await orgPlan(db, orgId);
+  if ((await occupiedSeats(db, orgId)) + need <= limits.members) return;
+  throw new HTTPException(402, {
+    message:
+      plan === "free"
+        ? `The free plan allows ${limits.members} members (including you), upgrade to a paid plan to invite more`
+        : `This plan allows at most ${limits.members} members`,
+  });
+}
 
-  const created = emails.map((email) => ({
-    token: openToken.get(email) ?? uid(24),
-    orgId: orgIdParam,
-    role,
-    email,
-    createdBy: c.var.user!.id,
-    createdAt: ts,
-    expiresAt: ts + INVITE_TTL_MS,
-  }));
+type NewInvite = typeof schema.invites.$inferInsert & { token: string; expiresAt: number };
 
-  const inserts = created.filter((invite) => !openToken.has(invite.email));
-  if (inserts.length) await c.var.db.insert(schema.invites).values(inserts);
-  if (openToken.size)
-    await c.var.db
-      .update(schema.invites)
-      .set({ role, expiresAt: ts + INVITE_TTL_MS })
-      .where(
-        and(
-          eq(schema.invites.orgId, orgIdParam),
-          inArray(schema.invites.token, [...openToken.values()]),
-        ),
-      );
+const inviteDTO = (invite: NewInvite): InviteDTO => ({
+  token: invite.token,
+  role: invite.role,
+  email: invite.email ?? null,
+  createdAt: invite.createdAt,
+  expiresAt: invite.expiresAt,
+});
 
-  // Every address gets its try: one bounce must not hide which others went
-  // out. The rows stay either way, so the dialog can offer the failed ones
-  // again and the retry lands on the same invite.
+/**
+ * Mails each invite on its own: one bounce must not hide which others went
+ * out. Returns the addresses that failed, and the first error for the log.
+ */
+async function mailInvites(
+  env: Env,
+  orgName: string,
+  invites: (NewInvite & { email: string })[],
+): Promise<{ failed: string[]; error?: Error }> {
   const sends = await Promise.allSettled(
-    created.map((invite) =>
+    invites.map((invite) =>
       sendEmail(
-        c.env,
+        env,
         invite.email,
         `You're invited to ${orgName} on rdyrct`,
         renderEmail(
@@ -698,46 +664,89 @@ orgRoutes.post("/:orgId/invites", requireOrgRole("admin"), async (c) => {
             preheader: `Join ${orgName} on rdyrct. The invite lasts 7 days.`,
             heading: `You're invited to join ${orgName}`,
             paragraphs: ["rdyrct shortens links and makes QR codes for them."],
-            cta: {
-              label: "Accept the invite",
-              url: `${c.env.APP_URL}/invite/${invite.token}`,
-            },
+            cta: { label: "Accept the invite", url: `${env.APP_URL}/invite/${invite.token}` },
             note: "The invite expires in 7 days.",
           },
-          c.env.APP_URL,
+          env.APP_URL,
           invite.email,
         ),
       ),
     ),
   );
-  const failed = created.flatMap((invite, i) =>
+  const failed = invites.flatMap((invite, i) =>
     sends[i]!.status === "rejected" ? [invite.email] : [],
   );
-  const firstFailure = sends.find((s) => s.status === "rejected");
-  if (firstFailure?.status === "rejected") {
+  const rejected = sends.find((r) => r.status === "rejected");
+  if (rejected?.status !== "rejected") return { failed };
+  const reason = rejected.reason;
+  return { failed, error: reason instanceof Error ? reason : new Error(String(reason)) };
+}
+
+orgRoutes.post("/:orgId/invites", requireOrgRole("admin"), async (c) => {
+  let rawBody: JsonValue;
+  try {
+    rawBody = await c.req.json();
+  } catch {
+    throw new HTTPException(400, { message: "Invalid request body" });
+  }
+  const { role, emails: asked } = parseBody(inviteBodySchema, rawBody);
+  const orgId = c.req.param("orgId");
+  const db = c.var.db;
+  const emails = inviteEmails(asked);
+  const now = Date.now();
+  const openToken = await openInviteTokens(db, orgId, emails, now);
+  // No address means one copy-only link, which takes a seat like any invite.
+  await assertSeatsFor(
+    db,
+    orgId,
+    emails.length ? emails.filter((e) => !openToken.has(e)).length : 1,
+  );
+
+  const base = {
+    orgId,
+    role,
+    createdBy: c.var.user!.id,
+    createdAt: now,
+    expiresAt: now + INVITE_TTL_MS,
+  };
+  if (emails.length === 0) {
+    const invite = { ...base, token: uid(24), email: null };
+    await db.insert(schema.invites).values(invite);
+    return c.json({ invites: [inviteDTO(invite)], failed: [] } satisfies InvitesCreated, 201);
+  }
+
+  const created = emails.map((email) => ({
+    ...base,
+    email,
+    token: openToken.get(email) ?? uid(24),
+  }));
+  const inserts = created.filter((invite) => !openToken.has(invite.email));
+  if (inserts.length) await db.insert(schema.invites).values(inserts);
+  if (openToken.size)
+    await db
+      .update(schema.invites)
+      .set({ role, expiresAt: base.expiresAt })
+      .where(
+        and(
+          eq(schema.invites.orgId, orgId),
+          inArray(schema.invites.token, [...openToken.values()]),
+        ),
+      );
+
+  const [org] = await db
+    .select({ name: schema.orgs.name })
+    .from(schema.orgs)
+    .where(eq(schema.orgs.id, orgId));
+  // The rows stay whatever the mail does, so the dialog can offer the failed
+  // addresses again and the retry lands on the same invites.
+  const { failed, error } = await mailInvites(c.env, org?.name ?? "rdyrct", created);
+  if (error) {
     const log = c.get("log");
     // Counts only: the addresses are personal data.
     log?.set({ invites: { failed: failed.length, sent: created.length - failed.length } });
-    const err = firstFailure.reason;
-    log?.error(err instanceof Error ? err : new Error(String(err)));
+    log?.error(error);
   }
-
-  return c.json(
-    {
-      failed,
-      invites: created.map(
-        (invite) =>
-          ({
-            token: invite.token,
-            role,
-            email: invite.email,
-            createdAt: invite.createdAt,
-            expiresAt: invite.expiresAt,
-          }) satisfies InviteDTO,
-      ),
-    } satisfies InvitesCreated,
-    201,
-  );
+  return c.json({ invites: created.map(inviteDTO), failed } satisfies InvitesCreated, 201);
 });
 
 orgRoutes.delete("/:orgId/invites/:token", requireOrgRole("admin"), async (c) => {
@@ -836,6 +845,25 @@ function cleanDim(rows: { key: string; clicks: number }[]) {
   return rows.map((r) => ({ key: r.key || "direct", clicks: r.clicks }));
 }
 
+type DimRows = { key: string; clicks: number }[];
+
+/** The three breakdowns as both stats routes send them: a country the edge
+ * could not place is "unknown", a referrer is its host, no referrer is
+ * "direct". */
+function breakdowns(countries: DimRows, referrers: DimRows, devices: DimRows) {
+  return {
+    countries: cleanDim(countries).map((r) => ({
+      ...r,
+      key: r.key === "direct" ? "unknown" : r.key,
+    })),
+    referrers: cleanDim(referrers).map((r) => ({
+      ...r,
+      key: r.key ? referrerHost(r.key) || r.key : "direct",
+    })),
+    devices: cleanDim(devices),
+  };
+}
+
 function clampDays(requested: number | null, planDays: number): number {
   if (!requested || requested < 1) return planDays;
   return Math.min(requested, planDays);
@@ -902,6 +930,7 @@ orgRoutes.get("/:orgId/stats", requireOrgRole("viewer"), async (c) => {
     seriesData,
     hourSeriesData,
     topLinks,
+    clickedEver,
     countries,
     referrers,
     devices,
@@ -921,7 +950,10 @@ orgRoutes.get("/:orgId/stats", requireOrgRole("viewer"), async (c) => {
     lastDayByHour(db, orgId, w.since24h),
     seriesRows(db, scope, w.since),
     hourSeriesRows(db, orgId, w.since24h),
-    topLinkRows(db, orgId),
+    // The same days as the breakdowns beside it (today's UTC day in the
+    // 24-hour view), so a range's top links and its countries agree.
+    topLinkRows(db, orgId, w.since),
+    everClicked(db, orgId),
     dimensionRows(db, scope, w.since, "country", 10),
     dimensionRows(db, scope, w.since, "referrer", 8),
     dimensionRows(db, scope, w.since, "device"),
@@ -951,20 +983,14 @@ orgRoutes.get("/:orgId/stats", requireOrgRole("viewer"), async (c) => {
     totalClicksDelta: computeDelta(totalClicks, totalClicksPrev),
     clicks7dDelta: computeDelta(clicks7d, clicks7dPrev),
     topLinks,
-    countries: cleanDim(countries).map((r) => ({
-      ...r,
-      key: r.key === "direct" ? "unknown" : r.key,
-    })),
-    referrers: cleanDim(referrers).map((r) => ({
-      ...r,
-      key: r.key ? referrerHost(r.key) || r.key : "direct",
-    })),
-    devices: cleanDim(devices),
-    deadLinks: deadLinks.map((l) => ({ id: l.id, slug: l.slug, title: l.title })),
+    everClicked: clickedEver,
+    ...breakdowns(countries, referrers, devices),
+    deadLinks,
     decayingLinks: decayingRaw.map((l) => ({
       id: l.id,
       slug: l.slug,
       title: l.title,
+      domain: l.domain,
       drop: l.drop_pct,
     })),
     heatmap,
@@ -1029,7 +1055,9 @@ orgRoutes.get("/:orgId/links/stats/:slug", requireOrgRole("viewer"), async (c) =
   const slug = c.req.param("slug");
   const domain = c.req.query("domain");
   const { limits } = await orgPlan(db, orgId);
-  const days = limits.analyticsDays;
+  // Clamped to the plan the same way the org's stats are.
+  const queryDays = c.req.query("days");
+  const days = clampDays(queryDays ? parseInt(queryDays, 10) : null, limits.analyticsDays);
 
   // Matched through link_addresses (any active address, not just the link's
   // current primary), so a bookmarked or QR'd URL for an address that has
@@ -1091,15 +1119,7 @@ orgRoutes.get("/:orgId/links/stats/:slug", requireOrgRole("viewer"), async (c) =
     series: fillSeries(seriesData, days),
     totalClicksDelta: computeDelta(totalClicks, totalClicksPrev),
     clicks7dDelta: computeDelta(clicks7d, clicks7dPrev),
-    countries: cleanDim(countries).map((r) => ({
-      ...r,
-      key: r.key === "direct" ? "unknown" : r.key,
-    })),
-    referrers: cleanDim(referrers).map((r) => ({
-      ...r,
-      key: r.key ? referrerHost(r.key) || r.key : "direct",
-    })),
-    devices: cleanDim(devices),
+    ...breakdowns(countries, referrers, devices),
     slug: link.slug,
     domain: link.domain,
     url: linkUrl(c.env, link.domain, link.slug),
@@ -1125,9 +1145,12 @@ inviteRoutes.get("/:token", async (c) => {
       role: schema.invites.role,
       expiresAt: schema.invites.expiresAt,
       orgName: schema.orgs.name,
+      invitedBy: schema.user.name,
     })
     .from(schema.invites)
     .innerJoin(schema.orgs, eq(schema.invites.orgId, schema.orgs.id))
+    // Left: an invite outlives its author (created_by is set null).
+    .leftJoin(schema.user, eq(schema.invites.createdBy, schema.user.id))
     .where(eq(schema.invites.token, c.req.param("token")));
   const invite = rows[0];
   if (!invite || invite.expiresAt < Date.now())
@@ -1141,6 +1164,8 @@ inviteRoutes.get("/:token", async (c) => {
   return c.json({
     orgName: invite.orgName,
     role: invite.role,
+    // An account with no name set reads as nobody in particular.
+    invitedBy: invite.invitedBy?.trim() || null,
   } satisfies InvitePreview);
 });
 

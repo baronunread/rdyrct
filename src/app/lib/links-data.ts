@@ -1,43 +1,21 @@
 /**
  * The links page's data beyond the shared hooks: the filter counts, the
- * extra per-row fields the redesigned table reads, creator names and past
- * imports.
+ * list rows, creator names and past imports.
  *
- * Several of these ask for things the API may not send yet. Each one is
- * optional on the type and every reader treats "absent" as "do not show",
- * so the page works today and the column, chip or list appears the moment
- * the Worker starts answering. The shapes are written out in
- * rdyrct-app-audit/overnight/links.md.
+ * Past imports and `qrCustom` ask for things the API does not send yet. Each
+ * is optional, and its reader treats "absent" as "do not show", so the list
+ * or flag appears the moment the Worker starts answering. The shapes are
+ * written out in rdyrct-app-audit/overnight/links.md.
  */
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
-import type { LinkDTO } from "@/shared/types";
+import type { LinkDTO, LinkFacets, LinkFilter, LinkListItem } from "@/shared/types";
 import { api } from "./api";
 import { useMembers } from "./hooks";
 
-/** Which slice of the links the chips above the table pick. */
-export type LinkFilter = "all" | "attention" | "qr" | "custom";
-
-/** What one row may carry on top of LinkDTO. All optional: an API that has
- * not grown them yet sends none, and the table leaves their places out. */
-export interface LinkRowExtras {
-  /** Clicks per day for the last 14 days, oldest first, 14 entries. */
-  spark?: number[];
-  /** Why the link needs a look ("82% fewer clicks"), or null when it is fine. */
-  attention?: string | null;
-  /** True when the link's QR code differs from the org's defaults, or has
-   * been downloaded: what the "QR codes" chip counts. */
-  qrCustom?: boolean;
-}
-
-export type LinkRow = LinkDTO & LinkRowExtras;
-
-/** The counts beside each chip (GET /orgs/:orgId/links/facets). */
-export interface LinkFacets {
-  all: number;
-  attention: number;
-  qr: number;
-  customDomain: number;
-}
+/** One row of the table: the list route's item, plus a flag the API may
+ * grow: true when the link's QR code differs from the org's defaults, or has
+ * been downloaded. */
+export type LinkRow = LinkListItem & { qrCustom?: boolean };
 
 export interface LinkPageQuery {
   q: string;
@@ -75,16 +53,13 @@ export const useLinkRows = (orgId: string, query: LinkPageQuery) =>
     placeholderData: keepPreviousData,
   });
 
-/**
- * The chip counts. A 404 means the Worker has no facets route yet: the page
- * then shows no chips at all rather than chips that would not filter.
- */
+/** The chip counts. Until they arrive (or if they fail) the page shows no
+ * chips, rather than chips with no numbers. */
 export const useLinkFacets = (orgId: string) =>
   useQuery<LinkFacets>({
     queryKey: ["links", orgId, "facets"],
     queryFn: () => api(`/orgs/${orgId}/links/facets`),
     enabled: !!orgId,
-    retry: false,
     staleTime: 30_000,
   });
 
@@ -151,19 +126,12 @@ export function hasQrOverride(link: LinkDTO): boolean {
 }
 
 /**
- * What the trend says about a link, from its 14 days: no clicks at all, or a
- * second week well under the first. The server's own `attention` wins when it
- * sends one; this is only for a series without it.
+ * The line under a link's sparkline. A link that never had a click says so
+ * in danger, whatever its age; anything else the server flagged (a drop, a
+ * quiet week, a warning page) reads as a caution.
  */
 export function trendNote(link: LinkRow): { tone: "warn" | "bad"; text: string } | null {
-  if (link.attention) return { tone: "warn", text: link.attention };
   if (link.clicks === 0) return { tone: "bad", text: "No clicks yet" };
-  const spark = link.spark;
-  if (!spark || spark.length < 14) return null;
-  const before = spark.slice(0, 7).reduce((a, b) => a + b, 0);
-  const after = spark.slice(7).reduce((a, b) => a + b, 0);
-  // A drop worth saying needs a first week with enough clicks that half of
-  // them going is not noise.
-  if (before < 10 || after >= before / 2) return null;
-  return { tone: "warn", text: `${Math.round((1 - after / before) * 100)}% fewer clicks` };
+  if (link.attention) return { tone: "warn", text: link.attention };
+  return null;
 }

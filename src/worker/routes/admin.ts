@@ -18,7 +18,7 @@ import {
   type OrgPlan,
   orgPlanOf,
 } from "@/shared/types";
-import { fillSeries, computeDelta, deleteOrg } from "./orgs";
+import { fillSeries, computeDelta, deleteOrg, memberLastActiveAt } from "./orgs";
 import { orgPlan } from "../plan";
 import { effectivePlanSql, subscriptionGrantsAccess } from "../entitlement";
 import { reconcileUser } from "../reconcile";
@@ -658,6 +658,7 @@ adminRoutes.get("/orgs/:orgId", async (c) => {
         // A downgrade demoted this member to viewer (#161), rather than
         // anybody choosing it. Worth seeing from admin too.
         demoted: sql<boolean>`${schema.orgMembers.previousRole} is not null`,
+        lastActiveAt: memberLastActiveAt,
       })
       .from(schema.orgMembers)
       .innerJoin(schema.user, eq(schema.orgMembers.userId, schema.user.id))

@@ -15,7 +15,14 @@ import { useLinkMutations, useLinkQuotaUsage } from "../lib/hooks";
 import { useOrgLimits } from "../lib/org-limits";
 import { fetchDownload } from "../lib/api";
 import { downloadBlob } from "../lib/csv";
-import { type DomainDTO, type LinkDTO, type LinkInput, type Sort } from "@/shared/types";
+import {
+  type DomainDTO,
+  type LinkDTO,
+  type LinkFacets,
+  type LinkFilter,
+  type LinkInput,
+  type Sort,
+} from "@/shared/types";
 import { Button } from "../ui/button";
 import { Spinner } from "../ui/spinner";
 import { buttonClass } from "../ui/button-class";
@@ -37,13 +44,7 @@ import { LinkPreviewDialog } from "../components/link-preview-dialog";
 import { linkFeatures, NewLinkButton, useNewLink } from "../components/new-link-host";
 import { useDebounced } from "../lib/use-debounced";
 import { downloadQrCodes } from "../lib/bulk-qr";
-import {
-  useCreatorNames,
-  useLinkFacets,
-  useLinkRows,
-  type LinkFacets,
-  type LinkFilter,
-} from "../lib/links-data";
+import { useCreatorNames, useLinkFacets, useLinkRows } from "../lib/links-data";
 import posthog from "../lib/posthog";
 
 const PAGE_SIZE = 25;
@@ -542,7 +543,6 @@ function LinksBrowser({
         <LinksTable
           orgId={orgId}
           rows={list.rows}
-          columns={{ spark: list.rows.some((row) => row.spark) }}
           navigate={navigate}
           onQrClick={dialogs.setQrLink}
           canWrite={canWrite}

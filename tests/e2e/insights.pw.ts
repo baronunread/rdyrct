@@ -114,3 +114,37 @@ test("a link's page has its QR code, a range and a menu in the header", async ({
   await expect(page.getByRole("menuitem", { name: "Open short link" })).toBeVisible();
   await expect(page.getByRole("menuitem", { name: "Delete link" })).toBeVisible();
 });
+
+test("a top link on a custom domain links to its page with the domain", async ({ page }) => {
+  await signUpAndVerify(page, `insights-top-${Date.now()}@gmail.com`, password);
+  await createQuickLink(page, "example.com/insights-top");
+  await page.keyboard.press("Escape");
+  // A custom domain and its clicks take DNS and real redirects to make; the
+  // page only reads the stats answer, so the answer carries them.
+  await page.route("**/api/orgs/*/stats**", async (route) => {
+    const response = await route.fetch();
+    // SAFETY: this route is the stats endpoint, whose response always has
+    // everClicked and a topLinks array.
+    const stats = (await response.json()) as {
+      everClicked: boolean;
+      topLinks: {
+        id: string;
+        slug: string;
+        title: string;
+        domain: string | null;
+        clicks: number;
+      }[];
+    };
+    stats.everClicked = true;
+    stats.topLinks = [
+      { id: "top-1", slug: "spring", title: "", domain: "go.example.test", clicks: 12 },
+    ];
+    await route.fulfill({ response, json: stats });
+  });
+
+  await page.goto("/analytics");
+  await expect(page.getByRole("link", { name: "/spring" })).toHaveAttribute(
+    "href",
+    "/links/spring?domain=go.example.test",
+  );
+});

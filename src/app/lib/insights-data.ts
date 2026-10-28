@@ -53,11 +53,9 @@ export const useInsightStats = (orgId: string, days?: number, bucket?: "day" | "
   });
 
 /**
- * One link's stats for a range. The `days` parameter is new: until the API
- * reads it, the answer covers the plan's whole window and `rangeDays` says
- * so, and the page trims what it can (see `windowOf`). Keyed under
- * ["linkStats", orgId] so every mutation that refreshes a link's stats
- * refreshes this too.
+ * One link's stats for a range, clamped by the API to the plan's window
+ * (`rangeDays` says which it answered). Keyed under ["linkStats", orgId] so
+ * every mutation that refreshes a link's stats refreshes this too.
  */
 export const useLinkInsightStats = (
   orgId: string,
@@ -169,27 +167,4 @@ export function shortAgo(ts: number, now = Date.now()): string {
   const days = Math.floor(hours / 24);
   if (days < 30) return `${days}d`;
   return new Date(ts).toLocaleDateString("en-US", { month: "short", day: "numeric" });
-}
-
-/**
- * The part of a daily series a range asks for, when the API answered with a
- * longer window than asked (a link's stats ignore `days` until the API reads
- * it). Returns the trimmed series and its total; the breakdowns cannot be
- * trimmed, so the caller labels them with the window they really cover.
- */
-export function windowOf<T extends { clicks: number }>(series: T[], days: number) {
-  const trimmed = series.length > days ? series.slice(-days) : series;
-  return { series: trimmed, total: trimmed.reduce((sum, p) => sum + p.clicks, 0) };
-}
-
-/** Whether an org has ever had a click: every list the stats carry is empty.
- * Top links are all-time, so they settle it on their own once they exist. */
-export function neverClicked(s: OrgStats): boolean {
-  return (
-    s.topLinks.length === 0 &&
-    s.countries.length === 0 &&
-    s.referrers.length === 0 &&
-    s.devices.length === 0 &&
-    s.series.every((p) => p.clicks === 0)
-  );
 }
