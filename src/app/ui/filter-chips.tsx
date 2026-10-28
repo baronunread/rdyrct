@@ -1,4 +1,6 @@
+import { useRef } from "react";
 import { cn } from "./cn";
+import { useScrollFade } from "./scroll-fade";
 
 /**
  * A row of filters with their counts ("All 199 · Needs attention 3"), the
@@ -21,8 +23,11 @@ export function FilterChips<Id extends string>({
   label: string;
   className?: string;
 }) {
+  const row = useRef<HTMLDivElement>(null);
+  useScrollFade(row);
   return (
     <div
+      ref={row}
       role="group"
       aria-label={label}
       className={cn(

@@ -12,6 +12,7 @@
  */
 import { settle } from "../../lib/route-preload";
 import { useRef, useState } from "react";
+import { useScrollFade } from "../../ui/scroll-fade";
 import { useHeld } from "@/app/lib/use-held";
 import { useMutation, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import {
@@ -1035,10 +1036,11 @@ function RestoreSelectedBar({
 const FILTERS = [
   { id: "all", label: "All" },
   { id: "reported", label: "Reported" },
-  { id: "flagged", label: "Flagged by Google" },
+  // Short so the row fits beside the search; the hover says whose flag.
+  { id: "flagged", label: "Flagged", title: "Flagged by Google Web Risk" },
   { id: "suspended", label: "Suspended" },
   { id: "warned", label: "Warning" },
-] as const satisfies readonly { id: AdminLinkFilter; label: string }[];
+] as const satisfies readonly { id: AdminLinkFilter; label: string; title?: string }[];
 
 const LISTS = [
   { id: "reports", label: "Open reports" },
@@ -1063,11 +1065,7 @@ function ViewRow({
   lists: Partial<Record<List, number>>;
 }) {
   return (
-    <div
-      role="group"
-      aria-label="Link lists"
-      className="-mx-1 flex max-w-full min-w-0 items-center gap-0.5 overflow-x-auto px-1 sm:shrink-0"
-    >
+    <div role="group" aria-label="Link lists" className="flex w-max items-center gap-0.5 px-1">
       {FILTERS.map((f) =>
         // Warning has no place in the mock's row; it shows once a link has one.
         f.id === "warned" && !counts.warned && view !== "warned" ? null : (
@@ -1075,12 +1073,13 @@ function ViewRow({
             key={f.id}
             on={view === f.id}
             label={f.label}
+            title={"title" in f ? f.title : undefined}
             count={counts[f.id]}
             onClick={() => onView(f.id)}
           />
         ),
       )}
-      <span aria-hidden className="mx-2 h-4 w-px shrink-0 bg-border" />
+      <span aria-hidden className="mx-1.5 h-4 w-px shrink-0 bg-border" />
       {LISTS.map((l) => (
         <FilterPill
           key={l.id}
@@ -1109,14 +1108,14 @@ function LinkSearch({
   onClearOrg: () => void;
 }) {
   return (
-    <div className="flex w-full items-center gap-2 sm:ml-auto sm:w-auto">
+    <div className="flex w-full items-center gap-2 sm:w-auto sm:shrink-0">
       {orgFilter && <ClearOrgFilterButton orgName={orgName} onClear={onClearOrg} />}
       <SearchInput
         value={query}
         onChange={onSearch}
-        placeholder="Search slug or destination"
+        placeholder="Search links"
         label="Search links"
-        className="min-w-0 flex-1 sm:w-60 sm:flex-none"
+        className="min-w-0 flex-1 sm:w-48 sm:flex-none"
       />
     </div>
   );
@@ -1220,6 +1219,8 @@ export function AdminLinksPage() {
   const [params, setParams] = useSearchParams();
   const orgFilter = params.get("org") ?? "";
   const [query, setQuery] = useState("");
+  const pills = useRef<HTMLDivElement>(null);
+  useScrollFade(pills);
   // The term reaches the server, so it waits for a pause in typing. Without
   // this, "testing" was eight requests.
   const search = useDebounced(query);
@@ -1257,10 +1258,16 @@ export function AdminLinksPage() {
     <div>
       <SectionHeading>Links</SectionHeading>
       <div className="flex flex-col gap-4">
-        {/* Wraps rather than squeezes: on a narrow laptop the search drops
-            under the pills instead of covering the last of them. */}
-        <div className="flex flex-col-reverse gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
-          <ViewRow view={view} onView={setView} counts={counts.data ?? {}} lists={lists} />
+        {/* One row: the pills scroll sideways when the row runs short, and
+            the search keeps its place on the right instead of wrapping onto
+            a line of its own. On a phone the search sits above the pills. */}
+        <div className="flex flex-col-reverse gap-3 sm:flex-row sm:items-center sm:gap-4">
+          <div
+            ref={pills}
+            className="-mx-1 min-w-0 overflow-x-auto [scrollbar-width:none] sm:flex-1"
+          >
+            <ViewRow view={view} onView={setView} counts={counts.data ?? {}} lists={lists} />
+          </div>
           {isFilter(view) && (
             <LinkSearch
               query={query}

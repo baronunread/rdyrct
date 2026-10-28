@@ -56,15 +56,19 @@ export function FilterPill({
   label,
   count,
   onClick,
+  title,
 }: {
   on: boolean;
   label: string;
   count?: number;
   onClick: () => void;
+  /** The longer name, on hover, when the label is a short one. */
+  title?: string;
 }) {
   return (
     <button
       type="button"
+      title={title}
       aria-pressed={on}
       onClick={onClick}
       className={cn(

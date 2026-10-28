@@ -67,7 +67,7 @@ export function AdminLayout() {
         <nav
           ref={bar}
           aria-label="Platform sections"
-          className="relative -mx-1 flex gap-5 overflow-x-auto px-1 shadow-[inset_0_-1px_0_var(--border)]"
+          className="relative flex gap-5 overflow-x-auto shadow-[inset_0_-1px_0_var(--border)]"
         >
           {TABS.map(({ to, end, label }) => (
             <Link

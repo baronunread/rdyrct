@@ -431,6 +431,25 @@ html {
   scrollbar-color: color-mix(in oklab, var(--muted) 45%, transparent) transparent;
 }
 
+/* A sideways-scrolling row with more behind an edge fades that edge
+   (ui/scroll-fade.ts), so a row cut off by a narrow window shows there is
+   more. */
+[data-fade="right"] {
+  mask-image: linear-gradient(to right, #000 calc(100% - 2.5rem), transparent);
+}
+[data-fade="left"] {
+  mask-image: linear-gradient(to left, #000 calc(100% - 2.5rem), transparent);
+}
+[data-fade="both"] {
+  mask-image: linear-gradient(
+    to right,
+    transparent,
+    #000 2.5rem,
+    #000 calc(100% - 2.5rem),
+    transparent
+  );
+}
+
 /* The sheet keeps room for its scrollbar whether or not it has one, on both
    sides so the page stays centred: where a scrollbar takes width (Windows,
    Linux), a page growing past the window (the dashboard as its data lands)
