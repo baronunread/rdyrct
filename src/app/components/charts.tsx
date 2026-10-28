@@ -9,6 +9,7 @@ import { curveMonotoneX } from "d3-shape";
 import { crosshair } from "@tanstack/charts/crosshair";
 import { focusNearestX } from "@tanstack/charts/focus";
 import { motion } from "@tanstack/charts/motion";
+import { chartMotion } from "../lib/chart-motion";
 import { RendererChart } from "@tanstack/react-charts/tooltip";
 import { followSpring, pointerTooltip } from "./chart-tooltip";
 import { clicksByHour, HOURS } from "../lib/click-buckets";
@@ -23,8 +24,8 @@ const smoothCurve = d3Curve(curveMonotoneX);
 
 // One motion renderer per chart type: it holds no per-instance state, so a
 // module-level instance avoids reallocating it on every render.
-const areaChartMotion = motion<SeriesPoint, string, number>();
-const hourBarMotion = motion<{ hour: number; clicks: number }, number, number>();
+const areaChartMotion = motion<SeriesPoint, string, number>(chartMotion);
+const hourBarMotion = motion<{ hour: number; clicks: number }, number, number>(chartMotion);
 
 const defaultTickFormat = (day: string) => day.slice(5);
 
