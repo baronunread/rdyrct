@@ -603,9 +603,11 @@ export function AppShellSkeleton() {
       </div>
 
       <main className={layout.main}>
-        <div className="mx-auto w-full max-w-5xl flex-1">
-          {/* whichever page was asked for, not always the dashboard */}
-          <RouteSkeleton />
+        <div data-app-sheet className={layout.scroller}>
+          <div className="mx-auto w-full max-w-5xl flex-1">
+            {/* whichever page was asked for, not always the dashboard */}
+            <RouteSkeleton />
+          </div>
         </div>
       </main>
     </div>

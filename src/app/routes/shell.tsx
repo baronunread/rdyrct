@@ -616,15 +616,17 @@ export function AppShell() {
         {/* One raised sheet for the page; the sidebar and the phone bar sit on
           the paper behind it (rdyrct-design, "The app's surfaces"). */}
         <main className={layout.main}>
-          <div className="mx-auto w-full max-w-5xl flex-1">
-            {/* Above the route, not inside each one: the state belongs to the
+          <div data-app-sheet className={layout.scroller}>
+            <div className="mx-auto w-full max-w-5xl flex-1">
+              {/* Above the route, not inside each one: the state belongs to the
               org, so it says the same thing on every page (#163). */}
-            <OverLimitBanner />
-            {/* pages are lazy chunks: keep the shell in place while one loads,
+              <OverLimitBanner />
+              {/* pages are lazy chunks: keep the shell in place while one loads,
               behind the shape that chunk is about to render */}
-            <Suspense fallback={<RouteSkeleton />}>
-              <Outlet />
-            </Suspense>
+              <Suspense fallback={<RouteSkeleton />}>
+                <Outlet />
+              </Suspense>
+            </div>
           </div>
         </main>
 
