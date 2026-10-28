@@ -34,6 +34,7 @@ import { useClickUsage } from "../lib/hooks";
 import { clickCapNotice } from "@/shared/click-usage";
 import { SUPPORT_EMAIL } from "@/shared/support";
 import { graceLabel, graceRunning } from "../lib/grace";
+import { shortDate } from "../lib/dates";
 import {
   OVER_LIMIT_KEYS,
   PLAN_LIMITS,
@@ -180,7 +181,7 @@ function LockedOrgNotice({ org }: { org: UserOrg }) {
 function overLimitAdvice(org: UserOrg): string {
   if (org.over.domains !== undefined)
     return graceRunning(org.graceEndsAt)
-      ? `Your custom domains keep redirecting until ${new Date(org.graceEndsAt!).toLocaleDateString()} (${graceLabel(org.graceEndsAt!)}), then they stop.`
+      ? `Your custom domains keep redirecting until ${shortDate(org.graceEndsAt!)} (${graceLabel(org.graceEndsAt!)}), then they stop.`
       : "Your custom domains have stopped redirecting. Upgrading brings them straight back.";
   return "Everything you have keeps working. You can delete what you no longer need, or upgrade to keep it all.";
 }
@@ -298,41 +299,45 @@ function Notice({
 }
 
 /**
- * What a locked thing shows instead of its controls: what it is, why it is
- * locked, when it stops working if there is a deadline, and one way back.
- *
- * `until` is the end of the grace period, for the things that keep working
- * through it (custom domains). Anything frozen at once leaves it out rather
- * than showing a countdown to nothing.
+ * The one way to say "this needs a paid plan" or "this is locked": a row
+ * with what it is, why, and one way back. Every paid feature a plan lacks
+ * shows this, not its own upsell. A deadline belongs to the org banner
+ * above, not here a second time. `bare` drops the card, for a panel
+ * that sits as a row inside a `SettingsGroup`. `primary` is for a screen
+ * where upgrading is the only thing to do.
  */
 export function LockedPanel({
   title,
   reason,
-  until,
   cta = "See plans",
+  primary,
+  bare,
 }: {
   title: string;
   reason: string;
-  until?: number | null;
   cta?: string;
+  primary?: boolean;
+  bare?: boolean;
 }) {
+  const Heading = bare ? "h3" : "h2";
   return (
-    <div className="flex flex-col gap-3 rounded-xl border border-border bg-surface-2 px-4 py-4">
-      <div className="flex items-center gap-2">
-        <Lock size={15} className="text-muted" aria-hidden />
-        <h2 className="font-semibold">{title}</h2>
-      </div>
-      <p className="max-w-prose text-sm text-muted">{reason}</p>
-      {until != null && (
-        <p className="tnum max-w-prose text-sm text-muted">
-          {graceRunning(until)
-            ? `It keeps working until ${new Date(until).toLocaleDateString()} (${graceLabel(until)}), then it stops.`
-            : "It has stopped working."}{" "}
-          Nothing is deleted, and upgrading brings it back with no setup to redo.
-        </p>
+    <div
+      className={cn(
+        "flex flex-wrap items-center gap-x-6 gap-y-3 px-4 py-3.5",
+        !bare && "rounded-xl bg-surface smooth-shadow-ring-xs",
       )}
-      <div>
-        <BillingLink label={cta} />
+    >
+      <div className="flex min-w-0 flex-1 basis-72 gap-3">
+        <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-surface-2 text-muted">
+          <Lock size={15} aria-hidden />
+        </span>
+        <div className="min-w-0">
+          <Heading className="text-sm font-semibold">{title}</Heading>
+          <p className="mt-0.5 max-w-prose text-sm text-pretty text-muted">{reason}</p>
+        </div>
+      </div>
+      <div className="max-sm:ps-11">
+        <BillingLink label={cta} primary={primary} />
       </div>
     </div>
   );

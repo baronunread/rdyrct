@@ -1148,7 +1148,9 @@ export function BillingPage() {
 
   // The shell cache is deliberately not an authority for plan or billing
   // state. Rendering its free defaults here made the paid page flash first.
-  if (model.loading) return <BillingSkeleton />;
+  // The fresh /user answer may land before the rest: it only picks the
+  // skeleton's shape, never what the page says.
+  if (model.loading) return <BillingSkeleton plan={current?.user.plan} />;
 
   const { snapshot, commands } = model.planActions;
   const free = snapshot.plan === "free";

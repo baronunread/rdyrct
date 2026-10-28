@@ -62,7 +62,7 @@ export function Pager({
         Previous
       </button>
       <span className="text-xs text-muted tnum">
-        {page + 1} / {totalPages}
+        Page {page + 1} of {totalPages}
       </span>
       <button
         type="button"

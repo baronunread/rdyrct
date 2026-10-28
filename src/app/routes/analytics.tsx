@@ -1,5 +1,7 @@
 import { useState } from "react";
-import { useStats, useCurrentUser, useClickUsage } from "../lib/hooks";
+import { useStats, useCurrentUser, useClickUsage, useLinkQuotaUsage } from "../lib/hooks";
+import { canWriteOrg } from "../lib/org-limits";
+import { NewLinkButton, useNewLink } from "../components/new-link-host";
 import { useCurrentOrg } from "../lib/current-org";
 import { clicksByWeekday } from "../lib/click-buckets";
 import { PLAN_LIMITS, type HeatmapRow, type OrgStats, type UserOrg } from "@/shared/types";
@@ -20,7 +22,7 @@ import { AnalyticsSkeleton } from "../components/skeletons";
 import { NoOrgState } from "../components/no-org";
 import { ClickCapBanner } from "../components/over-limit";
 import { ExportCsvButton } from "../components/export-csv-button";
-import { PageHeader, SlugLink } from "../ui/misc";
+import { EmptyState, PageHeader, SlugLink } from "../ui/misc";
 import { Tooltip } from "../ui/tooltip";
 import { HrefLink } from "../lib/router-search";
 
@@ -210,6 +212,24 @@ function breakdownPeriod(bucket: "day" | "hour"): string | undefined {
   return bucket === "hour" ? "Today (UTC)" : undefined;
 }
 
+/** The range picker's props: the plan's ranges, the ones it hides, and a
+ * choice that goes back to the default when it picks the default. */
+function rangePickerProps(
+  s: OrgStats,
+  maxDays: number,
+  range: AnalyticsRange,
+  onRangeChange: (range: AnalyticsRange) => void,
+) {
+  return {
+    presets: RANGE_PRESETS.filter((p) => p.days <= maxDays),
+    hiddenRanges: RANGE_PRESETS.filter((p) => p.days > maxDays).map((p) => p.label),
+    activeDays: range.days ?? s.rangeDays,
+    activeBucket: range.bucket ?? s.bucket,
+    onChoose: (days: number, bucket?: "day" | "hour") =>
+      onRangeChange(days === s.rangeDays && (bucket ?? "day") === s.bucket ? {} : { days, bucket }),
+  };
+}
+
 function AnalyticsReport({
   stats: s,
   maxDays,
@@ -221,18 +241,7 @@ function AnalyticsReport({
   range: AnalyticsRange;
   onRangeChange: (range: AnalyticsRange) => void;
 }) {
-  const presets = RANGE_PRESETS.filter((p) => p.days <= maxDays);
-  const hiddenRanges = RANGE_PRESETS.filter((p) => p.days > maxDays).map((p) => p.label);
-  const activeDays = range.days ?? s.rangeDays;
-  const activeBucket = range.bucket ?? s.bucket;
-  const chooseRange = (days: number, bucket?: "day" | "hour") => {
-    if (days === s.rangeDays && (bucket ?? "day") === s.bucket) {
-      onRangeChange({});
-    } else {
-      onRangeChange({ days, bucket });
-    }
-  };
-
+  const picker = rangePickerProps(s, maxDays, range, onRangeChange);
   const period = breakdownPeriod(s.bucket);
 
   const hourly = s.bucket === "hour";
@@ -243,14 +252,8 @@ function AnalyticsReport({
         sub={`All links · ${hourly ? "last 24 hours" : `last ${s.rangeDays} days`}`}
         action={
           <div className="flex flex-wrap items-center gap-2">
-            <RangePicker
-              presets={presets}
-              hiddenRanges={hiddenRanges}
-              activeDays={activeDays}
-              activeBucket={activeBucket}
-              onChoose={chooseRange}
-            />
-            <ExportCsvButton stats={s} scope="analytics" days={activeDays} />
+            <RangePicker {...picker} />
+            <ExportCsvButton stats={s} scope="analytics" days={picker.activeDays} />
           </div>
         }
       />
@@ -305,13 +308,33 @@ function AnalyticsReport({
   );
 }
 
+/** An org with no links has nothing to chart: one sentence and the way to
+ * start, rather than ten panels each saying "nothing yet" in its own words. */
+function NoLinksYet({ org }: { org: UserOrg }) {
+  const { openNewLink } = useNewLink();
+  return (
+    <div>
+      <PageHeader title="Analytics" />
+      <EmptyState
+        title="No clicks yet"
+        hint="Shorten a link and share it. Each click shows up here: where it came from, on which device, and when."
+        action={
+          canWriteOrg(org.role, org.locked) ? <NewLinkButton onClick={openNewLink} /> : undefined
+        }
+      />
+    </div>
+  );
+}
+
 function AnalyticsForOrg({ org }: { org: UserOrg }) {
   const [range, setRange] = useState<AnalyticsRange>({});
   const stats = useStats(org.id, range.days, range.bucket);
+  const quota = useLinkQuotaUsage(org.id);
   // Fetched with the stats so the cap banner is there when the page draws.
   useClickUsage(org.id);
 
-  if (stats.isLoading) return <AnalyticsSkeleton />;
+  if (stats.isLoading || quota.isLoading) return <AnalyticsSkeleton />;
+  if (quota.data?.count === 0) return <NoLinksYet org={org} />;
   if (!stats.data) return <p className="text-sm text-danger">Could not load stats.</p>;
   return (
     <AnalyticsReport

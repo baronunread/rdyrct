@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { errorMessage } from "@/app/lib/error-message";
-import { Link } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCurrentUser, useLinkHost } from "../lib/hooks";
 import { useCurrentOrg } from "../lib/current-org";
@@ -8,6 +7,7 @@ import { api, shortUrl } from "../lib/api";
 import { PLAN_LIMITS } from "@/shared/types";
 import { Button } from "../ui/button";
 import { SettingsGroup } from "../ui/settings-rows";
+import { LockedPanel } from "./over-limit";
 import { BusyContent } from "../ui/spinner";
 import { useToast } from "../ui/toast";
 import { QrColorAndLogoFields, QrPreviewSidebar, QrPatternFields } from "./qr-fields";
@@ -85,16 +85,18 @@ function useQrDefaultsForm(
  * code" describes the state it is already in.
  */
 function UpgradeQrPrompt({ locked }: { locked: boolean }) {
-  return (
-    <p className="max-w-prose text-sm text-muted">
-      {locked
-        ? "These defaults still apply to every QR code this organization makes. Changing them needs a paid plan. "
-        : "Changing how QR codes look needs a paid plan. "}
-      <Link to="/billing" className="text-accent hover:underline">
-        Upgrade
-      </Link>{" "}
-      {locked ? "to edit them again." : "to put your logo and style on every QR code."}
-    </p>
+  return locked ? (
+    <LockedPanel
+      bare
+      title="Editing these needs a paid plan"
+      reason="They still apply to every QR code this organization makes."
+    />
+  ) : (
+    <LockedPanel
+      bare
+      title="QR code styles are a paid feature"
+      reason="Put your logo, colors and pattern on every QR code."
+    />
   );
 }
 
@@ -177,9 +179,9 @@ export function QrDefaultsCard() {
       title="QR code defaults"
       hint="Every new QR code starts like this. Any link can change it."
     >
-      <div className="flex flex-col gap-4 p-4">
-        {!hasQrCustom && <UpgradeQrPrompt locked={hasQrDefaults} />}
-        {(hasQrCustom || hasQrDefaults) && (
+      {!hasQrCustom && <UpgradeQrPrompt locked={hasQrDefaults} />}
+      {(hasQrCustom || hasQrDefaults) && (
+        <div className="flex flex-col gap-4 p-4">
           <QrDefaultsFields
             values={values}
             setField={setField}
@@ -187,8 +189,8 @@ export function QrDefaultsCard() {
             savingQr={savingQr}
             save={save}
           />
-        )}
-      </div>
+        </div>
+      )}
     </SettingsGroup>
   );
 }

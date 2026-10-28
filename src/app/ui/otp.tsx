@@ -103,6 +103,7 @@ export function OtpInput({
         <OTPField.Input
           key={i}
           autoFocus={autoFocus && i === 0}
+          aria-label={`Digit ${i + 1} of ${length}`}
           className="h-11 w-full min-w-0 rounded-md border border-border bg-bg text-center text-lg text-text tabular-nums transition-colors focus-visible:border-accent focus-visible:outline-none disabled:opacity-50 data-[filled]:border-accent/60"
         />
       ))}

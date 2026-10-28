@@ -402,7 +402,7 @@ function LinksListArea({
         title="No links yet"
         hint={
           onCreate
-            ? "Shorten your first address and it appears here, with its clicks, referrers and QR code."
+            ? "Shorten your first link and it appears here, with its clicks, referrers and QR code."
             : "Links this organization creates appear here, with their clicks, referrers and QR codes."
         }
         action={

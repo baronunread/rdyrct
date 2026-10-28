@@ -187,7 +187,7 @@ function VerifyOtpView({
           onAnimationEnd={shake.end}
         >
           <BusyContent busy={busy} icon={verified ? <Check className="h-4 w-4" /> : undefined}>
-            Verify & continue
+            Verify and continue
           </BusyContent>
         </Button>
         <div className="flex items-center justify-between text-xs text-muted">
