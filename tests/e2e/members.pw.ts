@@ -64,6 +64,8 @@ test("change a role in place, revoke an invite from its row, remove a member", a
   await expect(page.getByRole("button", { name: `Change role for ${name}` })).toContainText(
     "Viewer",
   );
+  // The role menu fades out; until it has gone, its "Viewer" is a second match.
+  await expect(page.getByRole("menu")).toHaveCount(0);
 
   // A second invite, made from the chevron, then revoked from its row.
   await page.getByRole("button", { name: "More ways to invite" }).click();
