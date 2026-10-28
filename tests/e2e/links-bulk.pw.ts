@@ -2,6 +2,7 @@ import { expect, test, type Page } from "@playwright/test";
 import { signUpAndVerify } from "./resend";
 import { appUrl } from "./environment";
 import { queryRows } from "./db";
+import { createQuickLink } from "./orgs";
 
 const password = "test-password-123";
 
@@ -127,4 +128,29 @@ test("a read-only organization keeps Import and New link on screen, greyed, and 
     .hover();
   await expect(page.getByText("This organization is read-only")).toBeVisible();
   await expect(page.getByRole("button", { name: "Export" })).toBeEnabled();
+});
+
+test("the chips above the links table count and filter", async ({ page }) => {
+  await signUpAndVerify(page, `links-chips-${Date.now()}@gmail.com`, password);
+  await createQuickLink(page, "example.com/chips-one");
+  await page.keyboard.press("Escape");
+  await createQuickLink(page, "example.com/chips-two");
+  await page.keyboard.press("Escape");
+
+  await page.goto("/links");
+  const chips = page.getByRole("group", { name: "Show" });
+  await expect(chips.getByRole("button", { name: "All 2" })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+  // Two fresh links: neither needs a look, and neither has a QR look of its own.
+  await expect(chips.getByRole("button", { name: "Needs attention 0" })).toBeVisible();
+  await expect(page.getByRole("columnheader", { name: "Last 14 days" })).toBeVisible();
+  await expect(page.locator("tbody tr")).toHaveCount(2);
+
+  await chips.getByRole("button", { name: "QR codes 0" }).click();
+  await expect(page.getByText("Try another word, or clear the filters.")).toBeVisible();
+
+  await chips.getByRole("button", { name: "All 2" }).click();
+  await expect(page.locator("tbody tr")).toHaveCount(2);
 });

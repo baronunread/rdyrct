@@ -5,7 +5,7 @@ import { canWriteOrg } from "../lib/org-limits";
 import { NewLinkButton, useNewLink } from "../components/new-link-host";
 import { useCurrentOrg } from "../lib/current-org";
 import { clicksByWeekday } from "../lib/click-buckets";
-import { PLAN_LIMITS, type HeatmapRow, type UserOrg } from "@/shared/types";
+import { PLAN_LIMITS, type HeatmapRow, type StatsLinkRef, type UserOrg } from "@/shared/types";
 import {
   AreaChart,
   BarList,
@@ -15,6 +15,7 @@ import {
   StatsChart,
   dayTick,
   hourTick,
+  linkPagePath,
   type ChartFigure,
 } from "../components/charts";
 import { RangeControl } from "../components/range-control";
@@ -39,7 +40,6 @@ import {
   cappedCount,
   clicksPerLink,
   deviceLabel,
-  neverClicked,
   sourceLabel,
   useInsightStats,
   type InsightStats,
@@ -102,10 +102,7 @@ function SourcesPanel({ s, period }: { s: InsightStats; period?: string }) {
 }
 
 function LinksPanel({ s }: { s: InsightStats }) {
-  const linkList = (
-    rows: { id: string; slug: string; title: string; suffix: string }[],
-    empty: string,
-  ) =>
+  const linkList = (rows: (StatsLinkRef & { suffix: string })[], empty: string) =>
     rows.length ? (
       <ul className="flex flex-col">
         {rows.map((l) => (
@@ -113,7 +110,7 @@ function LinksPanel({ s }: { s: InsightStats }) {
             key={l.id}
             className="flex h-8 items-center justify-between gap-3 text-sm [&+&]:shadow-[inset_0_1px_0_var(--border)]"
           >
-            <SlugLink to={`/links/${l.slug}`} slug={l.slug} title={l.title} />
+            <SlugLink to={linkPagePath(l)} slug={l.slug} title={l.title} />
             <span className="tnum shrink-0 text-xs text-muted">{l.suffix}</span>
           </li>
         ))}
@@ -135,7 +132,11 @@ function LinksPanel({ s }: { s: InsightStats }) {
               limit={CARD_ROWS}
               formatKey={(id) => {
                 const link = s.topLinks.find((l) => l.id === id);
-                return link ? <LinkBarLabel slug={link.slug} title={link.title} /> : id;
+                return link ? (
+                  <LinkBarLabel slug={link.slug} title={link.title} domain={link.domain} />
+                ) : (
+                  id
+                );
               }}
             />
           ),
@@ -405,7 +406,7 @@ function AnalyticsForOrg({ org }: { org: UserOrg }) {
 
   if (stats.isLoading) return <AnalyticsSkeleton />;
   if (!stats.data) return <p className="text-sm text-danger">Could not load stats.</p>;
-  if (neverClicked(stats.data))
+  if (!stats.data.everClicked)
     return (
       <NoClicksYet
         org={org}

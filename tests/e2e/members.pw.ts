@@ -29,6 +29,9 @@ test("change a role in place, revoke an invite from its row, remove a member", a
   expect(name).toBeTruthy();
 
   await page.goto("/members");
+  // Both just signed in, so both read as here now.
+  await expect(page.getByRole("columnheader", { name: "Last active" })).toBeVisible();
+  await expect(page.locator("tbody tr").getByText("Online now")).toHaveCount(2);
   // The owner's own role is not a control.
   await expect(page.getByRole("button", { name: /^Change role for / })).toHaveCount(1);
 

@@ -31,15 +31,12 @@ function timeLeft(expiresAt: number): string {
 
 function AliasRow({
   address,
-  spark,
   onKeepForever,
   onRemove,
   onPromote,
   pending,
 }: {
   address: AddressDTO;
-  /** Whether the table draws its "Last 14 days" column. */
-  spark: boolean;
   onKeepForever: () => void;
   onRemove: () => void;
   onPromote: () => void;
@@ -98,7 +95,7 @@ function AliasRow({
         </div>
       </Td>
       <Td className="hidden py-2 text-xs text-muted lg:table-cell">Same destination</Td>
-      {spark && <Td className="hidden xl:table-cell" />}
+      <Td className="hidden xl:table-cell" />
       <Td className="py-2 text-end">
         <span className="tnum block font-semibold">
           {address.recentClicks.toLocaleString("en-US")}
@@ -140,15 +137,7 @@ function AliasRow({
 
 /** Expanded-row "thread" of a link's non-primary addresses, rendered as
  * regular table rows so they share the main table's columns and height. See #38. */
-export function AliasThread({
-  orgId,
-  link,
-  spark,
-}: {
-  orgId: string;
-  link: LinkDTO;
-  spark: boolean;
-}) {
+export function AliasThread({ orgId, link }: { orgId: string; link: LinkDTO }) {
   const addresses = useAddresses(orgId, link.id);
   const { keepForever, remove, promote } = useAddressMutations(orgId, link.id);
   const toast = useToast();
@@ -158,7 +147,7 @@ export function AliasThread({
     return (
       // One cell per column the table draws at this width: Link, Clicks and
       // the menu always, the checkbox and Created from sm, Destination from
-      // lg and Last 14 days from xl when the table has it. A span
+      // lg and Last 14 days from xl. A span
       // asking for a column the table does not have makes the browser add
       // one, and the header jumps while the aliases load.
       <tr>
@@ -170,7 +159,7 @@ export function AliasThread({
         <Td className="hidden bg-surface-2/40 sm:table-cell" />
         <Td className="hidden bg-surface-2/40 sm:table-cell" />
         <Td className="hidden bg-surface-2/40 lg:table-cell" />
-        {spark && <Td className="hidden bg-surface-2/40 xl:table-cell" />}
+        <Td className="hidden bg-surface-2/40 xl:table-cell" />
       </tr>
     );
 
@@ -187,7 +176,6 @@ export function AliasThread({
         <AliasRow
           key={address.id}
           address={address}
-          spark={spark}
           pending={pending}
           onKeepForever={() =>
             keepForever.mutate(address.id, {

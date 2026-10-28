@@ -12,10 +12,17 @@ import { signUpAndVerify } from "./resend";
  * may never have signed up.
  */
 test("accepting an invite deletes it, token and all", async ({ page, browser }) => {
-  const { token } = await ownerWithInviteLink(page, "owner");
+  const { owner, token } = await ownerWithInviteLink(page, "owner");
+  const [{ name: ownerName }] = await queryRows<{ name: string }>(
+    page,
+    "select name from user where email = ?",
+    [owner],
+  );
 
   const guest = await guestAccount(browser, "guest");
   await guest.page.goto(`/invite/${token}`);
+  // The join card says who sent it.
+  await expect(guest.page.getByText(`${ownerName} invited you as`)).toBeVisible();
   await guest.page.getByRole("button", { name: "Accept invite" }).click();
   await expect(guest.page).toHaveURL(/\/dashboard$/);
 

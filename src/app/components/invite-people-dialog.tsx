@@ -40,12 +40,18 @@ function sendLabel(count: number): string {
  * the label row. */
 function emailsError(emails: string[], seatsLeft: number, limited: boolean): string | undefined {
   if (emails.length === 0) return "Add an email";
+  return badEmailsError(emails) ?? (limited ? seatsError(emails.length, seatsLeft) : undefined);
+}
+
+function badEmailsError(emails: string[]): string | undefined {
   const bad = emails.filter((e) => !isEmail(e));
-  if (bad.length === 1) return `Not an email: ${bad[0]}`;
-  if (bad.length > 1) return `${bad.length} are not emails`;
-  if (limited && emails.length > seatsLeft)
-    return seatsLeft === 1 ? "Only 1 seat free" : `Only ${seatsLeft} seats free`;
-  return undefined;
+  if (bad.length === 0) return undefined;
+  return bad.length === 1 ? `Not an email: ${bad[0]}` : `${bad.length} are not emails`;
+}
+
+function seatsError(count: number, seatsLeft: number): string | undefined {
+  if (count <= seatsLeft) return undefined;
+  return seatsLeft === 1 ? "Only 1 seat free" : `Only ${seatsLeft} seats free`;
 }
 
 /** "2 of 18 free seats on your plan." while addresses are in the box. */

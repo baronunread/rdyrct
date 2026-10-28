@@ -43,12 +43,6 @@ interface RowActions {
   onCreateAlias: (link: LinkDTO) => void;
 }
 
-/** Which optional columns this page draws. The sparkline only appears once
- * the API sends a series: a column of blanks would say nothing. */
-export interface TableColumns {
-  spark: boolean;
-}
-
 /**
  * A 16px box, ticked in the accent. Native underneath (so Space, labels and
  * screen readers work as they always do), drawn over by the tick, inside a
@@ -198,7 +192,7 @@ function TrendCell({ link }: { link: LinkRow }) {
   const note = trendNote(link);
   return (
     <div className="flex flex-col items-end gap-0.5">
-      {link.spark && <Sparkline series={link.spark} />}
+      <Sparkline series={link.spark} />
       {note && (
         <span
           className={cn(
@@ -276,7 +270,6 @@ function RowActionsCell({ link, actions }: { link: LinkDTO; actions: RowActions 
 function LinkRowView({
   orgId,
   link,
-  columns,
   selected,
   onSelect,
   isExpanded,
@@ -286,7 +279,6 @@ function LinkRowView({
 }: {
   orgId: string;
   link: LinkRow;
-  columns: TableColumns;
   selected: boolean;
   onSelect: () => void;
   isExpanded: boolean;
@@ -312,11 +304,9 @@ function LinkRowView({
         <Td className="hidden py-3 lg:table-cell">
           <DestinationCell destination={link.destination} />
         </Td>
-        {columns.spark && (
-          <Td className="hidden py-2 xl:table-cell">
-            <TrendCell link={link} />
-          </Td>
-        )}
+        <Td className="hidden py-2 xl:table-cell">
+          <TrendCell link={link} />
+        </Td>
         <Td className="tnum py-3 text-end text-[15px] font-semibold max-sm:w-16">
           {link.clicks.toLocaleString("en-US")}
         </Td>
@@ -331,9 +321,7 @@ function LinkRowView({
         </Td>
       </tr>
       <AnimatePresence>
-        {isExpanded && (
-          <AliasThread key="alias-thread" orgId={orgId} link={link} spark={columns.spark} />
-        )}
+        {isExpanded && <AliasThread key="alias-thread" orgId={orgId} link={link} />}
       </AnimatePresence>
     </>
   );
@@ -342,7 +330,6 @@ function LinkRowView({
 export function LinksTable({
   orgId,
   rows,
-  columns,
   sort,
   onSort,
   selection,
@@ -353,7 +340,6 @@ export function LinksTable({
 }: RowActions & {
   orgId: string;
   rows: LinkRow[];
-  columns: TableColumns;
   sort: Sort;
   onSort: (s: Sort) => void;
   /** Ids of the ticked rows on this page. */
@@ -398,7 +384,7 @@ export function LinksTable({
                 <sm   link + clicks + actions
                 sm    + checkbox + created
                 lg    + destination
-                xl    + last 14 days (when the API sends it)
+                xl    + last 14 days
               The link column takes what is left. */}
           <table className="w-full table-fixed text-sm [&_tbody_tr]:transition-colors [@media(hover:hover)]:[&_tbody_tr]:hover:bg-surface-2/40">
             {/* No header on a phone: two columns explain themselves, and the
@@ -424,9 +410,7 @@ export function LinksTable({
                 />
                 {/* fallow-ignore-next-line css-token-drift */}
                 <Th className="hidden lg:table-cell lg:w-[30%]">Destination</Th>
-                {columns.spark && (
-                  <Th className="hidden w-32 text-end xl:table-cell">Last 14 days</Th>
-                )}
+                <Th className="hidden w-32 text-end xl:table-cell">Last 14 days</Th>
                 <SortTh
                   label="Clicks"
                   sortKey="clicks"
@@ -454,7 +438,6 @@ export function LinksTable({
                     key={link.id}
                     orgId={orgId}
                     link={link}
-                    columns={columns}
                     selected={selection.has(link.id)}
                     onSelect={() => toggleOne(link.id)}
                     isExpanded={hasAliases && expanded.has(link.id)}

@@ -282,6 +282,9 @@ export interface MemberDTO {
    * their old role back.
    */
   demoted: boolean;
+  /** Epoch ms of the member's newest session activity, or null when they
+   * have no session left (never signed in, or signed out everywhere). */
+  lastActiveAt: number | null;
 }
 
 export interface InviteDTO {
@@ -388,6 +391,30 @@ export interface LinkDTO extends QrOverrides {
   suspendedAt: number | null;
 }
 
+/** The chips above the links table, as `filter=` on the list route. */
+export const LINK_FILTERS = ["all", "attention", "qr", "custom"] as const;
+export type LinkFilter = (typeof LINK_FILTERS)[number];
+
+/** How many of an org's links each chip holds (GET /orgs/:orgId/links/facets).
+ * Counted over the whole org: search and the domain picker do not narrow them. */
+export interface LinkFacets {
+  all: number;
+  /** Paused, warned, quiet for a week, or down by half: see links-page.ts. */
+  attention: number;
+  /** Links whose QR code has an override of its own. */
+  qr: number;
+  customDomain: number;
+}
+
+/** One row of the links list: the link, plus the two things only the list
+ * needs. */
+export interface LinkListItem extends LinkDTO {
+  /** Clicks per UTC day for the last 14 days, oldest first, today last. */
+  spark: number[];
+  /** Why the link needs a look ("82% fewer clicks"), or null when it is fine. */
+  attention: string | null;
+}
+
 /** One address (primary or alias) a link answers to. See #38. */
 export interface AddressDTO {
   id: string;
@@ -444,6 +471,15 @@ export interface DeltaValue {
   pct: number | null;
 }
 
+/** A link as the stats lists name it. `domain` is the custom hostname, or
+ * null on the shared domain: with the slug it is the link's address. */
+export interface StatsLinkRef {
+  id: string;
+  slug: string;
+  title: string;
+  domain: string | null;
+}
+
 export interface OrgStats {
   totalClicks: number;
   totalLinks: number;
@@ -456,14 +492,18 @@ export interface OrgStats {
   hourSeries: SeriesPoint[];
   totalClicksDelta: DeltaValue | null;
   clicks7dDelta: DeltaValue | null;
-  topLinks: { id: string; slug: string; title: string; clicks: number }[];
+  /** The most-clicked links in the range. */
+  topLinks: (StatsLinkRef & { clicks: number })[];
+  /** Whether any link in the org has a click on record, in any range. The
+   * empty Analytics page rests on this, not on the range's own lists. */
+  everClicked: boolean;
   countries: TopEntry[];
   referrers: TopEntry[];
   devices: TopEntry[];
   /** Links with zero clicks in the last 30 days. */
-  deadLinks: { id: string; slug: string; title: string }[];
+  deadLinks: StatsLinkRef[];
   /** Links whose last-7d clicks dropped more than 50% vs the prior 7d. */
-  decayingLinks: { id: string; slug: string; title: string; drop: number }[];
+  decayingLinks: (StatsLinkRef & { drop: number })[];
   /** Day-of-week × hour-of-day heatmap over the window. */
   heatmap: HeatmapRow[];
   /** Clicks grouped by utm_campaign (non-empty only). */
@@ -725,6 +765,8 @@ export interface AdminUserRow {
 export interface InvitePreview {
   orgName: string;
   role: OrgRole;
+  /** The name of whoever made the invite, or null when that account is gone. */
+  invitedBy: string | null;
 }
 
 export type Sort = { key: string; dir: 1 | -1 };
