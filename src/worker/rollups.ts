@@ -184,6 +184,36 @@ export function dimensionRows(
   return limit ? query.limit(limit) : query;
 }
 
+/** Distinct countries in the range. The edge sends no country, or "XX",
+ * when it cannot place a visitor: neither is a country. */
+export async function countryCount(db: DB, scope: Scope, since: string): Promise<number> {
+  const [row] = await db
+    .select({ n: sql<number>`count(distinct ${dims.value})` })
+    .from(dims)
+    .where(
+      and(
+        scoped(dims, scope),
+        eq(dims.dim, "country"),
+        gte(dims.day, since),
+        sql`${dims.value} not in ('', 'XX')`,
+      ),
+    );
+  return row?.n ?? 0;
+}
+
+/** Distinct links with a click in the range, and in the equal range before
+ * it, in one read. */
+export async function linksClickedCounts(db: DB, orgId: string, w: StatsWindows) {
+  const [row] = await db
+    .select({
+      current: sql<number>`count(distinct case when ${daily.day} >= ${w.since} then ${daily.linkId} end)`,
+      previous: sql<number>`count(distinct case when ${daily.day} < ${w.since} then ${daily.linkId} end)`,
+    })
+    .from(daily)
+    .where(and(eq(daily.orgId, orgId), gte(daily.day, w.prevSince)));
+  return row ?? { current: 0, previous: 0 };
+}
+
 /** The last 24 hours, one row per UTC hour with clicks, labelled the way
  * the stats route's hour series expects. */
 export function hourSeriesRows(db: DB, orgId: string, since24h: number) {
@@ -231,6 +261,11 @@ const linkRef = {
   domain: schema.domains.hostname,
 };
 
+/** Rows a stats list (top links, referrers, UTM values) sends at most. The
+ * cards show seven and "Show all" opens the rest, so the rest has to be
+ * here. Countries have no cap: there are only so many. */
+export const STATS_LIST_LIMIT = 50;
+
 /** The org's most-clicked links in the range. */
 export function topLinkRows(db: DB, orgId: string, since: string) {
   return db
@@ -241,7 +276,7 @@ export function topLinkRows(db: DB, orgId: string, since: string) {
     .where(and(eq(daily.orgId, orgId), gte(daily.day, since)))
     .groupBy(schema.links.id)
     .orderBy(desc(total))
-    .limit(8);
+    .limit(STATS_LIST_LIMIT);
 }
 
 /** Whether the org has a click on record at all: one key lookup. */
@@ -303,17 +338,20 @@ export function decayingLinkRows(env: Env, orgId: string, w: StatsWindows) {
 
 type UtmField = "utmCampaign" | "utmSource" | "utmMedium";
 
-/** Clicks in range per value of one UTM field on the org's links. */
-export function utmRows(db: DB, orgId: string, since: string, field: UtmField) {
+/** Clicks in range per value of one UTM field: across the org's links, or
+ * for one link (whose tags are its own, so at most one row). */
+export function utmRows(db: DB, scope: Scope, since: string, field: UtmField) {
   const value = schema.links[field];
+  const owner =
+    "orgId" in scope ? eq(schema.links.orgId, scope.orgId) : eq(schema.links.id, scope.linkId);
   return db
     .select({ value, clicks: total })
     .from(schema.links)
     .innerJoin(daily, eq(daily.linkId, schema.links.id))
-    .where(and(eq(schema.links.orgId, orgId), gte(daily.day, since), sql`length(${value}) > 0`))
+    .where(and(owner, gte(daily.day, since), sql`length(${value}) > 0`))
     .groupBy(value)
     .orderBy(desc(total))
-    .limit(8);
+    .limit(STATS_LIST_LIMIT);
 }
 
 /** A link's clicks over every day kept, for the links list. Literal

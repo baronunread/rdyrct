@@ -2,13 +2,14 @@
  * The links page's data beyond the shared hooks: the filter counts, the
  * list rows, creator names and past imports.
  *
- * Past imports and `qrCustom` ask for things the API does not send yet. Each
- * is optional, and its reader treats "absent" as "do not show", so the list
- * or flag appears the moment the Worker starts answering. The shapes are
- * written out in rdyrct-app-audit/overnight/links.md.
+ * `qrCustom` asks for a flag the API does not send yet. It is optional, and
+ * its reader treats "absent" as "do not show", so it appears the moment the
+ * Worker starts answering. The shape is written out in
+ * rdyrct-app-audit/overnight/links.md.
  */
 import { keepPreviousData, queryOptions, useQuery } from "@tanstack/react-query";
 import type { LinkDTO, LinkFacets, LinkFilter, LinkListItem } from "@/shared/types";
+import type { LinkImportHistory } from "@/shared/link-import";
 import { api } from "./api";
 import { useMembers } from "./hooks";
 
@@ -76,25 +77,12 @@ export function useCreatorNames(orgId: string): Map<string, string> {
   return new Map((members.data ?? []).map((m) => [m.userId, m.name || m.email]));
 }
 
-/** One finished import (GET /orgs/:orgId/link-import/history). */
-interface PastImport {
-  id: string;
-  service: string;
-  imported: number;
-  exists: number;
-  failed: number;
-  /** Epoch ms the import finished. */
-  finishedAt: number;
-}
-
-/** Imports this org has finished, newest first. A 404 (no history route yet)
- * hides the "Past imports" list. */
-export const useImportHistory = (orgId: string, enabled: boolean) =>
-  useQuery<{ imports: PastImport[] }>({
+/** Imports this org has finished, newest first. */
+export const useImportHistory = (orgId: string) =>
+  useQuery<LinkImportHistory>({
     queryKey: ["link-import", orgId, "history"],
     queryFn: () => api(`/orgs/${orgId}/link-import/history`),
-    enabled: enabled && !!orgId,
-    retry: false,
+    enabled: !!orgId,
   });
 
 const DAY_MONTH = new Intl.DateTimeFormat("en", { month: "short", day: "numeric" });

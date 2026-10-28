@@ -26,6 +26,7 @@ import {
   type LinkDTO,
   type LinkInput,
   type OrgPlan,
+  type OrgStats,
   type RecentClick,
   type StatsLinkRef,
 } from "@/shared/types";
@@ -66,7 +67,6 @@ import {
   sourceLabel,
   insightStatsQuery,
   useInsightStats,
-  type InsightStats,
   type RangePreset,
 } from "../lib/insights-data";
 import { SameDestinationDialog } from "../components/same-destination-dialog";
@@ -137,20 +137,12 @@ function submitSameDestination(
 
 type DashboardData = ReturnType<typeof useDashboardData>;
 
-/** The four figures over the chart. "Links clicked" needs a count the API
- * does not send yet; until it does, the strip says how many links there
- * are, which is true, rather than a number it cannot know. */
-function dashboardFigures(s: InsightStats) {
+/** The four figures over the chart. */
+function dashboardFigures(s: OrgStats) {
   const top = s.countries[0];
   return [
     { label: "Clicks", value: formatNumber(s.totalClicks), delta: s.totalClicksDelta },
-    s.linksClicked !== undefined
-      ? {
-          label: "Links clicked",
-          value: formatNumber(s.linksClicked),
-          delta: s.linksClickedDelta ?? null,
-        }
-      : { label: "Links", value: formatNumber(s.totalLinks) },
+    { label: "Links clicked", value: formatNumber(s.linksClicked), delta: s.linksClickedDelta },
     {
       label: "Top country",
       value: top && top.key !== "unknown" ? countryName(top.key) : "None yet",

@@ -7,7 +7,13 @@ import { canWriteOrg } from "../lib/org-limits";
 import { NewLinkButton, useNewLink } from "../components/new-link-host";
 import { useCurrentOrg } from "../lib/current-org";
 import { clicksByWeekday } from "../lib/click-buckets";
-import { PLAN_LIMITS, type HeatmapRow, type StatsLinkRef, type UserOrg } from "@/shared/types";
+import {
+  PLAN_LIMITS,
+  type HeatmapRow,
+  type OrgStats,
+  type StatsLinkRef,
+  type UserOrg,
+} from "@/shared/types";
 import {
   AreaChart,
   BarList,
@@ -39,13 +45,11 @@ import {
   PRESET_30D,
   PRESET_365D,
   PRESET_7D,
-  cappedCount,
   clicksPerLink,
   deviceLabel,
   sourceLabel,
   insightStatsQuery,
   useInsightStats,
-  type InsightStats,
   type RangePreset,
 } from "../lib/insights-data";
 
@@ -70,7 +74,7 @@ const CARD_ROWS = 7;
 
 /** Where clicks came from: referrers, then whichever UTM lists have rows. A
  * UTM tab with nothing in it is noise to an org that does not tag links. */
-function SourcesPanel({ s, period }: { s: InsightStats; period?: string }) {
+function SourcesPanel({ s, period }: { s: OrgStats; period?: string }) {
   const utm = [
     {
       value: "campaigns",
@@ -118,7 +122,7 @@ function SourcesPanel({ s, period }: { s: InsightStats; period?: string }) {
   );
 }
 
-function LinksPanel({ s }: { s: InsightStats }) {
+function LinksPanel({ s }: { s: OrgStats }) {
   const linkList = (rows: (StatsLinkRef & { suffix: string })[], empty: string) =>
     rows.length ? (
       <ul className="flex flex-col">
@@ -205,31 +209,21 @@ function breakdownPeriod(bucket: "day" | "hour"): string | undefined {
   return bucket === "hour" ? "Today (UTC)" : undefined;
 }
 
-/** The figures over the chart. "Links clicked" and "Clicks per link" need a
- * count the API does not send yet: until it does, the strip shows how many
- * links there are, and leaves out the figure it cannot work out. */
-function analyticsFigures(s: InsightStats): ChartFigure[] {
+/** The figures over the chart. "Clicks per link" stays out of a range with
+ * no clicked link: there is nothing to divide by. */
+function analyticsFigures(s: OrgStats): ChartFigure[] {
   const perLink = clicksPerLink(s);
   return [
     { label: "Clicks", value: formatNumber(s.totalClicks), delta: s.totalClicksDelta },
-    s.linksClicked !== undefined
-      ? {
-          label: "Links clicked",
-          value: formatNumber(s.linksClicked),
-          delta: s.linksClickedDelta ?? null,
-        }
-      : { label: "Links", value: formatNumber(s.totalLinks) },
-    {
-      label: "Countries",
-      value: cappedCount(s.countryCount, s.countries.filter((c) => c.key !== "unknown").length, 10),
-    },
+    { label: "Links clicked", value: formatNumber(s.linksClicked), delta: s.linksClickedDelta },
+    { label: "Countries", value: formatNumber(s.countryCount) },
     ...(perLink
       ? [{ label: "Clicks per link", value: formatNumber(perLink.value), delta: perLink.delta }]
       : []),
   ];
 }
 
-function rangeSub(s: InsightStats) {
+function rangeSub(s: OrgStats) {
   return `All links · ${s.bucket === "hour" ? "last 24 hours" : `last ${s.rangeDays} days`}`;
 }
 
@@ -240,7 +234,7 @@ function AnalyticsReport({
   onRangeChange,
   updating,
 }: {
-  stats: InsightStats;
+  stats: OrgStats;
   maxDays: number;
   range: RangePreset | null;
   onRangeChange: (range: RangePreset) => void;
@@ -370,7 +364,7 @@ function NoClicksYet({
   onRangeChange,
 }: {
   org: UserOrg;
-  stats: InsightStats;
+  stats: OrgStats;
   hasLinks: boolean;
   range: RangePreset | null;
   onRangeChange: (range: RangePreset) => void;

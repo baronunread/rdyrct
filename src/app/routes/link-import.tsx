@@ -166,7 +166,7 @@ function ImportPage({ orgId, role }: { orgId: string; role: OrgRole }) {
         ) : (
           !current.isPending && <ImportForm orgId={orgId} role={role} />
         )}
-        <PastImports orgId={orgId} />
+        <PastImports orgId={orgId} shown={live?.id} />
       </div>
     </>
   );
@@ -714,11 +714,11 @@ function DropZone({
 
 /* ---------------- past imports ---------------- */
 
-/** Imports this org finished. Hidden until the API keeps a history (see
- * useImportHistory), and when it has none. */
-function PastImports({ orgId }: { orgId: string }) {
-  const history = useImportHistory(orgId, true);
-  const imports = history.data?.imports ?? [];
+/** Imports this org finished, less the one the page shows above (`shown`).
+ * Hidden when there are none. */
+function PastImports({ orgId, shown }: { orgId: string; shown?: string }) {
+  const history = useImportHistory(orgId);
+  const imports = (history.data?.imports ?? []).filter((item) => item.id !== shown);
   if (!imports.length) return null;
   return (
     <Section title="Past imports">
@@ -1135,7 +1135,9 @@ function JobView({
   const [busy, setBusy] = useState<"retry" | "new" | null>(null);
 
   useEffect(() => {
-    if (job.status === "done") void qc.invalidateQueries({ queryKey: ["links", orgId] });
+    if (job.status !== "done") return;
+    void qc.invalidateQueries({ queryKey: ["links", orgId] });
+    void qc.invalidateQueries({ queryKey: ["link-import", orgId, "history"] });
   }, [job.status, orgId, qc]);
 
   const act = (kind: "retry" | "new") => {

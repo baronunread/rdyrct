@@ -81,9 +81,13 @@ function validateSlug(slug: string | undefined): void {
   if (!SLUG_RE.test(slug))
     throw new HTTPException(400, {
       message: "Slug may only contain letters, numbers, - and _ (max 64)",
+      cause: { code: "bad_slug" },
     });
   if (RESERVED_SLUGS.has(slug.toLowerCase()))
-    throw new HTTPException(400, { message: "That slug is reserved" });
+    throw new HTTPException(400, {
+      message: "That slug is reserved",
+      cause: { code: "reserved_slug" },
+    });
 }
 
 function validateInput(body: LinkInput, orgId: string, partial = false) {
@@ -92,6 +96,7 @@ function validateInput(body: LinkInput, orgId: string, partial = false) {
     if (!isValidHttpUrl(body.destination))
       throw new HTTPException(400, {
         message: "Destination must be a valid http(s) URL",
+        cause: { code: "bad_destination" },
       });
     assertNotShortener(body.destination);
   }
@@ -547,6 +552,7 @@ async function resolveNewSlug(db: DB, requested: string, domainId: string | null
     throw new HTTPException(400, {
       message:
         "Links on the shared domain get random slugs: connect a custom domain (paid plans) to choose your own",
+      cause: { code: "slug_locked" },
     });
   if (requested) {
     if (await slugTaken(db, requested, domainId)) throw slugConflict(requested, domainId === null);
@@ -574,6 +580,7 @@ async function resolveRenamedSlug(
     throw new HTTPException(400, {
       message:
         "Links on the shared domain keep their random slug: move the link to a custom domain to choose one",
+      cause: { code: "slug_locked" },
     });
   const moved = newSlug !== existing.slug || domainId !== existing.domainId;
   if (moved && (await ownsSlugAsAlias(db, existing.id, newSlug, domainId)))

@@ -62,10 +62,20 @@ test("an import runs on the server and is still there after a reload (#383)", as
   await expect(page.getByText(`${host}/spring`)).toBeVisible();
   await expect(page.getByText(`${host}/summer`)).toBeVisible();
 
-  // Putting it away offers a new import.
+  // The finished import is the one on show, so it is not also a past one.
   await page.goto("/import");
+  const pastImports = page.locator("section").filter({
+    has: page.getByRole("heading", { name: "Past imports" }),
+  });
+  await expect(page.getByRole("heading", { name: "Your links are in" })).toBeVisible();
+  await expect(pastImports).toHaveCount(0);
+
+  // Putting it away offers a new import, and keeps this one in the history.
   await page.getByRole("button", { name: "Import another file" }).click();
   await expect(page.getByRole("heading", { name: "From" })).toBeVisible();
   await page.reload();
   await expect(page.getByRole("heading", { name: "From" })).toBeVisible();
+  await expect(pastImports.getByRole("listitem")).toHaveCount(1);
+  await expect(pastImports.getByRole("listitem")).toContainText("Dub");
+  await expect(pastImports.getByRole("listitem")).toContainText("2 links");
 });

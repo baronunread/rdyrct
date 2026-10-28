@@ -120,7 +120,9 @@ function GoogleRow({
       label="Google"
       hint={onlyWayIn ? "Your only way in, so it stays until you set a password." : undefined}
     >
-      <span className="text-sm text-muted">Connected</span>
+      <span data-testid="google-account" className="min-w-0 truncate text-sm text-muted">
+        {account.email || "Connected"}
+      </span>
       {!onlyWayIn && (
         <Button
           variant="ghost"

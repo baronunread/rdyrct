@@ -113,6 +113,8 @@ export const account = sqliteTable(
     }),
     scope: text("scope"),
     password: text("password"),
+    /** A Google account's address, from its id token (migration 0049). */
+    email: text("email"),
     createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
     updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),
   },

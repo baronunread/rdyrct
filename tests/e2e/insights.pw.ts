@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { signUpAndVerify } from "./resend";
 import { createQuickLink } from "./orgs";
+import { queryRows, rawSql } from "./db";
 
 /**
  * The dashboard, Analytics and a link's page after the redesign: a range
@@ -147,4 +148,60 @@ test("a top link on a custom domain links to its page with the domain", async ({
     "href",
     "/links/spring?domain=go.example.test",
   );
+});
+
+test("Analytics counts clicked links and countries, Show all opens every country, and a link's page lists its campaign", async ({
+  page,
+}) => {
+  const email = `insights-full-${Date.now()}@gmail.com`;
+  await signUpAndVerify(page, email, password);
+  await createQuickLink(page, "example.com/insights-full");
+  await page.keyboard.press("Escape");
+
+  const [link] = await queryRows<{ id: string; org_id: string; slug: string }>(
+    page,
+    `select l.id, l.org_id, l.slug from links l
+     join org_members m on m.org_id = l.org_id join user u on u.id = m.user_id
+     where u.email = ?`,
+    [email],
+  );
+  expect(link).toBeTruthy();
+  // Clicks take a redirect each and a flush; the stats read only the
+  // rollups, so the rollups carry them: nine countries, nine clicks from
+  // Italy down to one from Switzerland, so the order is fixed.
+  const countries = ["IT", "FR", "DE", "ES", "PT", "NL", "BE", "AT", "CH"];
+  const dims = countries.map((code, i) => [link.org_id, code, link.id, countries.length - i]);
+  await rawSql(
+    page,
+    `insert into click_daily (org_id, day, link_id, clicks) values (?, date('now'), ?, 45)`,
+    [link.org_id, link.id],
+  );
+  await rawSql(
+    page,
+    `insert into click_daily_dims (org_id, dim, day, value, link_id, clicks) values ${dims
+      .map(() => `(?, 'country', date('now'), ?, ?, ?)`)
+      .join(", ")}`,
+    dims.flat(),
+  );
+  await rawSql(page, "update links set utm_campaign = 'spring-menu' where id = ?", [link.id]);
+
+  await page.goto("/analytics");
+  const figure = (label: string) =>
+    page
+      .locator("dl > div")
+      .filter({ has: page.getByRole("term").getByText(label, { exact: true }) });
+  await expect(figure("Links clicked").getByRole("definition")).toHaveText("1");
+  await expect(figure("Countries").getByRole("definition")).toHaveText("9");
+  await expect(figure("Clicks per link").getByRole("definition")).toHaveText("45");
+
+  // The card shows seven; Show all names the full count and opens the rest.
+  await expect(page.getByText("Switzerland", { exact: true })).toHaveCount(0);
+  await page.getByRole("button", { name: "Show all 9" }).click();
+  await expect(page.getByText("Switzerland", { exact: true })).toBeVisible();
+  await expect(page.getByText("Austria", { exact: true })).toBeVisible();
+
+  await page.goto(`/links/${link.slug}`);
+  await expect(figure("Countries").getByRole("definition")).toHaveText("9");
+  await page.getByRole("tab", { name: "Campaigns" }).click();
+  await expect(page.getByText("spring-menu", { exact: true })).toBeVisible();
 });

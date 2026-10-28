@@ -1,15 +1,4 @@
-import type { InviteDTO, MemberDTO, OrgRole } from "@/shared/types";
-
-/**
- * What the members page reads beyond today's `MemberDTO`: `image`, the
- * member's picture. The API does not send it yet, because a picture is
- * served only to its own account (`/api/user/avatar` answers with the
- * signed-in user's), so another member's needs a route of its own first.
- * Until then every member shows the generated face.
- */
-export type MemberRowData = MemberDTO & {
-  image?: string | null;
-};
+import type { InviteDTO, OrgRole } from "@/shared/types";
 
 /** An invite, plus who sent it once the API says so. */
 export type InviteRowData = InviteDTO & {

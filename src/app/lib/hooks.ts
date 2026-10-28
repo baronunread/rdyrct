@@ -22,7 +22,6 @@ import type {
   MemberDTO,
   InviteDTO,
   DomainDTO,
-  OrgStats,
   RecentClick,
   AdminReportRow,
   AdminBlockedHostRow,
@@ -258,24 +257,6 @@ export function useLinkMutations(orgId: string) {
   });
   return { create, update, remove };
 }
-
-export const useStats = (orgId: string, days?: number, bucket?: "day" | "hour") =>
-  useQuery<OrgStats>({
-    queryKey: ["stats", orgId, days, bucket],
-    queryFn: () => {
-      const params = new URLSearchParams();
-      if (days) params.set("days", String(days));
-      if (bucket) params.set("bucket", bucket);
-      const qs = params.size ? `?${params.toString()}` : "";
-      return api<OrgStats>(`/orgs/${orgId}/stats${qs}`);
-    },
-    enabled: !!orgId,
-    // A new range keeps the last one on screen until it arrives, so the
-    // charts morph instead of the page dropping to a skeleton. Never across
-    // orgs: another org's numbers are not a placeholder for this one's.
-    placeholderData: (previous, previousQuery) =>
-      previousQuery?.queryKey[1] === orgId ? previous : undefined,
-  });
 
 // A link's primary address plus every alias (temporary, permanent, expired).
 // See #38.

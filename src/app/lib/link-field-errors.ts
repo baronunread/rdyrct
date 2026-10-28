@@ -3,13 +3,12 @@
  * its label row.
  *
  * A form error marks its field (rdyrct-design): the server's refusal of a
- * destination or a slug belongs on that field, not in a toast. The API sends
- * a code for some of these and only a message for the rest, so this reads
- * both. TODO(lead): give every destination and slug refusal in
- * `src/worker/routes/links.ts`, `abuse.ts` and `abuse-hold.ts` a code (say
- * `bad_destination`, `blocked_destination`, `shortener_destination`,
- * `own_short_link`, `bad_slug`, `reserved_slug`) and match on those alone.
+ * destination or a slug belongs on that field, not in a toast. Every such
+ * refusal carries a code (`cause: { code }` in `routes/links.ts`,
+ * `abuse.ts` and `abuse-hold.ts`), and this reads the code alone: the
+ * message is for people and may change.
  */
+import { lookup } from "@/shared/lookup";
 import { ApiError } from "./api";
 
 export type LinkErrorField = "destination" | "slug";
@@ -22,47 +21,23 @@ export interface LinkFieldError {
   detail: string;
 }
 
-const RULES: { field: LinkErrorField; reason: string; test: (e: ApiError) => boolean }[] = [
-  { field: "slug", reason: "Already taken", test: (e) => e.code === "slug_taken" },
-  { field: "slug", reason: "Already an alias", test: (e) => e.code === "slug_is_own_alias" },
-  {
-    field: "slug",
-    reason: "Letters, numbers, - and _",
-    test: (e) => e.message.startsWith("Slug may only"),
-  },
-  { field: "slug", reason: "Reserved", test: (e) => /slug is reserved/i.test(e.message) },
-  {
-    field: "slug",
-    reason: "Random on this domain",
-    test: (e) => /keep their random slug/.test(e.message),
-  },
-  {
-    field: "destination",
-    reason: "Not a web address",
-    test: (e) => e.message.startsWith("Destination must be a valid"),
-  },
-  {
-    field: "destination",
-    reason: "Another shortener",
-    test: (e) => /another link shortener/i.test(e.message),
-  },
-  {
-    field: "destination",
-    reason: "Already a short link",
-    test: (e) => /another rdyrct short link/i.test(e.message),
-  },
-  {
-    field: "destination",
-    reason: "Not allowed",
-    test: (e) => /destination is not allowed/i.test(e.message),
-  },
-];
+const RULES = {
+  slug_taken: { field: "slug", reason: "Already taken" },
+  slug_is_own_alias: { field: "slug", reason: "Already an alias" },
+  bad_slug: { field: "slug", reason: "Letters, numbers, - and _" },
+  reserved_slug: { field: "slug", reason: "Reserved" },
+  slug_locked: { field: "slug", reason: "Random on this domain" },
+  bad_destination: { field: "destination", reason: "Not a web address" },
+  shortener_destination: { field: "destination", reason: "Another shortener" },
+  own_short_link: { field: "destination", reason: "Already a short link" },
+  blocked_destination: { field: "destination", reason: "Not allowed" },
+} satisfies Record<string, { field: LinkErrorField; reason: string }>;
 
 /** The field a save error belongs to, or null when no field owns it (a toast
  * says those). */
 export function linkFieldError(error: Error): LinkFieldError | null {
-  if (!(error instanceof ApiError)) return null;
-  const rule = RULES.find((r) => r.test(error));
+  if (!(error instanceof ApiError) || !error.code) return null;
+  const rule = lookup(RULES, error.code);
   return rule ? { field: rule.field, reason: rule.reason, detail: error.message } : null;
 }
 

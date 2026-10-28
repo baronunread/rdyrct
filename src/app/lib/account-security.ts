@@ -5,8 +5,9 @@ import { authClient } from "./auth-client";
  * The "Signing in" group on Settings, read straight from BetterAuth's own
  * endpoints: which ways in an account has (`/list-accounts`), which other
  * browsers hold a session (`/list-sessions`), and the three changes a person
- * makes to them. Nothing here goes through our API, so nothing new is needed
- * on the worker.
+ * makes to them. Nothing here goes through our API: the one field of ours,
+ * a Google account's `email`, is an additional field on BetterAuth's account
+ * (better-auth.ts), so `/list-accounts` returns it.
  */
 
 /** One way into the account: "credential" is the password, "google" Google. */
@@ -14,6 +15,9 @@ export interface LinkedAccount {
   /** BetterAuth's row id, which is what unlinking takes. */
   id: string;
   providerId: string;
+  /** The Google account's address. Null for a password, and for a Google
+   * account linked before the address was kept, until it signs in again. */
+  email?: string | null;
 }
 
 /** A signed-in browser, as BetterAuth lists it. The IP address it also

@@ -48,16 +48,14 @@ import {
   PRESET_30D,
   PRESET_365D,
   PRESET_7D,
-  cappedCount,
   deviceLabel,
   sourceLabel,
   linkInsightStatsQuery,
   useLinkInsightStats,
-  type LinkInsightStats,
   type RangePreset,
 } from "../lib/insights-data";
 import posthog from "../lib/posthog";
-import { PLAN_LIMITS, type LinkDTO, type LinkInput } from "@/shared/types";
+import { PLAN_LIMITS, type LinkDTO, type LinkInput, type LinkStats } from "@/shared/types";
 
 const LINK_RANGES = [PRESET_7D, PRESET_30D, PRESET_365D] as const;
 
@@ -92,7 +90,7 @@ export function preload(qc: QueryClient, orgId: string, page: PageContext) {
  * by id. Null until it loads, or if the search somehow misses it: then the
  * page simply offers no Edit or QR code.
  */
-function useLinkRow(orgId: string, s: LinkInsightStats | undefined): LinkDTO | null {
+function useLinkRow(orgId: string, s: LinkStats | undefined): LinkDTO | null {
   // An empty org id holds the query until the stats name the slug.
   const links = useLinks(s ? orgId : "", rowSearch(s?.slug ?? ""));
   if (!s) return null;
@@ -145,7 +143,7 @@ function LinkMenu({
   onAlias,
   onDelete,
 }: {
-  s: LinkInsightStats;
+  s: LinkStats;
   link: LinkDTO | null;
   canWrite: boolean;
   onAlias: () => void;
@@ -196,7 +194,7 @@ function LinkDetailHeader({
   onAlias,
   onDelete,
 }: {
-  s: LinkInsightStats;
+  s: LinkStats;
   link: LinkDTO | null;
   canWrite: boolean;
   orgQr: OrgQr;
@@ -277,8 +275,7 @@ function LinkDetailHeader({
   );
 }
 
-function LinkPanels({ s }: { s: LinkInsightStats }) {
-  const campaigns = s.campaigns;
+function LinkPanels({ s }: { s: LinkStats }) {
   return (
     <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
       <PlacesPanel countries={s.countries} limit={7} />
@@ -298,23 +295,17 @@ function LinkPanels({ s }: { s: LinkInsightStats }) {
               />
             ),
           },
-          // Only once the API sends this link's campaigns: until then there
-          // is nothing true to put in the tab.
-          ...(campaigns
-            ? [
-                {
-                  value: "campaigns",
-                  label: "Campaigns",
-                  panel: (
-                    <BarList
-                      head={["Campaign", "Clicks"]}
-                      items={campaigns.map((c) => ({ key: c.campaign, clicks: c.clicks }))}
-                      empty="Clicks from links tagged with utm_campaign appear here."
-                    />
-                  ),
-                },
-              ]
-            : []),
+          {
+            value: "campaigns",
+            label: "Campaigns",
+            panel: (
+              <BarList
+                head={["Campaign", "Clicks"]}
+                items={s.campaigns.map((c) => ({ key: c.campaign, clicks: c.clicks }))}
+                empty="Tag this link with utm_campaign and its clicks appear here."
+              />
+            ),
+          },
           {
             value: "devices",
             label: "Devices",
@@ -391,13 +382,10 @@ function useLinkDetailDialogs(orgId: string, link: LinkDTO | null) {
 const defaultRange = (maxDays: number) => (maxDays >= 30 ? PRESET_30D : PRESET_7D);
 
 /** The figures over the chart, for the range the API answered. */
-function linkFigures(s: LinkInsightStats) {
+function linkFigures(s: LinkStats) {
   return [
     { label: "Clicks", value: formatNumber(s.totalClicks), delta: s.totalClicksDelta },
-    {
-      label: "Countries",
-      value: cappedCount(s.countryCount, s.countries.filter((c) => c.key !== "unknown").length, 10),
-    },
+    { label: "Countries", value: formatNumber(s.countryCount) },
     { label: "Top source", value: s.referrers[0] ? sourceLabel(s.referrers[0].key) : "None yet" },
   ];
 }

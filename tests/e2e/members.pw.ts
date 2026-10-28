@@ -2,6 +2,10 @@ import { expect, test } from "@playwright/test";
 import { queryRows } from "./db";
 import { guestAccount, ownerWithInviteLink } from "./orgs";
 
+/** A real 1x1 PNG, small enough for the avatar route's limits. */
+const PNG_1x1 =
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
+
 /**
  * The members table (the redesign): the role is changed where it is shown,
  * removing someone is a trash in their row, and an open invite sits in the
@@ -28,7 +32,27 @@ test("change a role in place, revoke an invite from its row, remove a member", a
   const name = guestName[0]?.name;
   expect(name).toBeTruthy();
 
+  // The guest has a picture; the owner without one keeps the generated face.
+  const uploaded = await guest.page.request.post("/api/user/avatar", {
+    headers: { "content-type": "image/png" },
+    data: Buffer.from(PNG_1x1, "base64"),
+  });
+  expect(uploaded.ok()).toBe(true);
+
   await page.goto("/members");
+  const guestPicture = page
+    .locator("tbody tr")
+    .filter({ hasText: String(name) })
+    .locator("img");
+  await expect(guestPicture).toHaveAttribute("src", /^\/api\/orgs\/[^/]+\/members\/[^/]+\/avatar/);
+  // Served to the owner, who is not the picture's account.
+  await expect
+    .poll(() => guestPicture.evaluate((img: HTMLImageElement) => img.naturalWidth))
+    .toBeGreaterThan(0);
+  await expect(
+    page.locator("tbody tr").filter({ hasText: owner }).first().locator("img"),
+  ).toHaveAttribute("src", /^data:image\/svg\+xml/);
+
   // Both just signed in, so both read as here now.
   await expect(page.getByRole("columnheader", { name: "Last active" })).toBeVisible();
   await expect(page.locator("tbody tr").getByText("Online now")).toHaveCount(2);

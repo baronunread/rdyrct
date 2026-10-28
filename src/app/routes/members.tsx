@@ -12,6 +12,7 @@ import {
   PLAN_LIMITS,
   type InviteDTO,
   type InvitesCreated,
+  type MemberDTO,
   type CurrentUser,
   type OrgRole,
   type Sort,
@@ -38,13 +39,7 @@ import { SortTh } from "../ui/sort-th";
 import { sortRows } from "../lib/sort";
 import { withErrorToast } from "../lib/mutation-toast";
 import { shortDate } from "../lib/dates";
-import {
-  ROLE_LABEL,
-  expiresLabel,
-  lastActiveLabel,
-  type InviteRowData,
-  type MemberRowData,
-} from "../lib/members-data";
+import { ROLE_LABEL, expiresLabel, lastActiveLabel, type InviteRowData } from "../lib/members-data";
 import posthog from "../lib/posthog";
 
 const inviteUrl = (token: string) => `${window.location.origin}/invite/${token}`;
@@ -123,7 +118,7 @@ function useMemberManagement(orgId: string, canManage: boolean) {
 
   const sorted = useMemo(
     () =>
-      sortRows<MemberRowData>(members.data ?? [], sort, {
+      sortRows<MemberDTO>(members.data ?? [], sort, {
         name: (m) => m.name.toLowerCase(),
         role: (m) => m.role,
         lastActiveAt: (m) => m.lastActiveAt,
@@ -204,7 +199,7 @@ function RoleSelect({
   onSetRole,
   onRemove,
 }: {
-  member: MemberRowData;
+  member: MemberDTO;
   isSelf: boolean;
   onSetRole: (role: string) => void;
   onRemove: () => void;
@@ -261,7 +256,7 @@ function MemberRow({
   onSetRole,
   onRemove,
 }: {
-  member: MemberRowData;
+  member: MemberDTO;
   columns: Columns;
   canManage: boolean;
   isSelf: boolean;

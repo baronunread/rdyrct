@@ -285,6 +285,10 @@ export interface MemberDTO {
   /** Epoch ms of the member's newest session activity, or null when they
    * have no session left (never signed in, or signed out everywhere). */
   lastActiveAt: number | null;
+  /** The member's picture, served through this org
+   * (`/api/orgs/:orgId/members/:userId/avatar`), or null when they have none.
+   * The org's members route always sends it; the admin org view does not. */
+  image?: string | null;
 }
 
 export interface InviteDTO {
@@ -512,6 +516,13 @@ export interface OrgStats {
   sources: { source: string; clicks: number }[];
   /** Clicks grouped by utm_medium (non-empty only). */
   mediums: { medium: string; clicks: number }[];
+  /** Distinct links with at least one click in the range. */
+  linksClicked: number;
+  /** The same count for the equal range before it. */
+  linksClickedDelta: DeltaValue | null;
+  /** Distinct countries in the range, the ones the edge could not place
+   * left out. */
+  countryCount: number;
 }
 
 export interface HeatmapRow {
@@ -553,6 +564,12 @@ export interface LinkStats {
   createdAt: number;
   lastClick: number | null;
   createdBy: string | null;
+  /** Distinct countries in the range, the ones the edge could not place
+   * left out. */
+  countryCount: number;
+  /** This link's clicks in the range by utm_campaign: one row when the link
+   * carries a campaign tag and has clicks, none otherwise. */
+  campaigns: { campaign: string; clicks: number }[];
 }
 
 export interface AdminUsage {

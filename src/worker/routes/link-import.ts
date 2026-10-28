@@ -16,7 +16,7 @@
 import { Hono, type Context } from "hono";
 import { HTTPException } from "hono/http-exception";
 import * as v from "valibot";
-import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import * as schema from "../db/schema";
 import type { AppEnv, DB, Env } from "../env";
@@ -41,6 +41,7 @@ import {
   IMPORT_CHUNK_ROWS,
   type ImportVerdict,
   type LinkImportDTO,
+  type LinkImportHistory,
 } from "@/shared/link-import";
 import type { JsonValue } from "@/shared/types";
 
@@ -394,6 +395,36 @@ linkImportRoutes.get("/current", requireOrgRole("member"), async (c) => {
     .orderBy(desc(schema.linkImports.createdAt))
     .limit(1);
   return c.json({ import: job ? await importStatus(db, job) : null });
+});
+
+/** Imports a history lists at most. */
+const HISTORY_LIMIT = 20;
+
+/**
+ * The org's finished imports, newest first, put away or not: a dismissed
+ * import keeps its row and its rows' outcomes, so it stays here. One that
+ * never finished (dropped while uploading) has nothing to report.
+ */
+linkImportRoutes.get("/history", requireOrgRole("member"), async (c) => {
+  const imports = await c.var.db
+    .select({
+      id: schema.linkImports.id,
+      service: schema.linkImports.service,
+      imported: sql<number>`(select count(*) from link_import_rows r where r.import_id = link_imports.id and r.status = 'imported')`,
+      exists: sql<number>`(select count(*) from link_import_rows r where r.import_id = link_imports.id and r.status = 'exists')`,
+      failed: sql<number>`(select count(*) from link_import_rows r where r.import_id = link_imports.id and r.status = 'failed')`,
+      finishedAt: sql<number>`${schema.linkImports.finishedAt}`,
+    })
+    .from(schema.linkImports)
+    .where(
+      and(
+        eq(schema.linkImports.orgId, c.req.param("orgId")!),
+        isNotNull(schema.linkImports.finishedAt),
+      ),
+    )
+    .orderBy(desc(schema.linkImports.finishedAt))
+    .limit(HISTORY_LIMIT);
+  return c.json({ imports } satisfies LinkImportHistory);
 });
 
 /** Sends the failed rows through again: the plan may have room now, or the

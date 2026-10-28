@@ -18,7 +18,8 @@ import {
 } from "../plan";
 import { sendEmail } from "../email";
 import { renderEmail } from "../email-layout";
-import { deleteQrLogoMsg, enqueueStorage } from "../storage";
+import { deleteQrLogoMsg, enqueueStorage, memberAvatarUrl } from "../storage";
+import { serveAvatar } from "./avatars";
 import { uid, referrerHost, validateQrFields, changesQr, linkUrl } from "../util";
 import { jsonBodyLimit } from "../body-limit";
 import { parseBody, inviteBodySchema } from "../schemas";
@@ -39,6 +40,7 @@ import { clicksThisMonth } from "../click-caps";
 import { INVITABLE_ROLES } from "@/shared/types";
 import {
   computeWindows,
+  countryCount,
   deadLinkRows,
   decayingLinkRows,
   dimensionRows,
@@ -47,7 +49,9 @@ import {
   heatmapRows,
   hourSeriesRows,
   lastDayByHour,
+  linksClickedCounts,
   seriesRows,
+  STATS_LIST_LIMIT,
   topLinkRows,
   utmRows,
 } from "../rollups";
@@ -501,6 +505,7 @@ export const memberLastActiveAt = sql<number | null>`(
 )`;
 
 orgRoutes.get("/:orgId/members", requireOrgRole("viewer"), async (c) => {
+  const orgId = c.req.param("orgId");
   const rows = await c.var.db
     .select({
       userId: schema.orgMembers.userId,
@@ -510,16 +515,33 @@ orgRoutes.get("/:orgId/members", requireOrgRole("viewer"), async (c) => {
       createdAt: schema.orgMembers.createdAt,
       previousRole: schema.orgMembers.previousRole,
       lastActiveAt: memberLastActiveAt,
+      image: schema.user.image,
     })
     .from(schema.orgMembers)
     .innerJoin(schema.user, eq(schema.orgMembers.userId, schema.user.id))
-    .where(eq(schema.orgMembers.orgId, c.req.param("orgId")));
+    .where(memberWhere(orgId));
   return c.json(
-    rows.map(({ previousRole, ...row }) => ({
+    rows.map(({ previousRole, image, ...row }) => ({
       ...row,
       demoted: previousRole !== null,
+      image: memberAvatarUrl(orgId, row.userId, image),
     })) satisfies MemberDTO[],
   );
+});
+
+/** A member's picture, for the rest of the org: `/api/user/avatar` serves
+ * only the session's own. Anyone who can see the members list may see the
+ * pictures in it, and nobody else's: a user outside this org is a 404. */
+orgRoutes.get("/:orgId/members/:userId/avatar", requireOrgRole("viewer"), async (c) => {
+  const orgId = c.req.param("orgId");
+  const userId = c.req.param("userId");
+  c.get("log").set({ route: "member-avatar", orgId });
+  const [member] = await c.var.db
+    .select({ userId: schema.orgMembers.userId })
+    .from(schema.orgMembers)
+    .where(memberWhere(orgId, userId));
+  if (!member) throw new HTTPException(404, { message: "No avatar" });
+  return serveAvatar(c, userId);
 });
 
 orgRoutes.patch("/:orgId/members/:userId", requireOrgRole("admin"), async (c) => {
@@ -879,8 +901,10 @@ async function resolveMember(db: DB, orgId: string, targetId: string) {
   return { orgId, targetId };
 }
 
-function memberWhere(orgId: string, targetId: string) {
-  return and(eq(schema.orgMembers.orgId, orgId), eq(schema.orgMembers.userId, targetId));
+/** An org's members, or one of them. */
+function memberWhere(orgId: string, targetId?: string) {
+  const inOrg = eq(schema.orgMembers.orgId, orgId);
+  return targetId === undefined ? inOrg : and(inOrg, eq(schema.orgMembers.userId, targetId));
 }
 
 async function assertMember(
@@ -946,6 +970,8 @@ orgRoutes.get("/:orgId/stats", requireOrgRole("viewer"), async (c) => {
     campaignRows,
     sourceRows,
     mediumRows,
+    linksClicked,
+    countriesTotal,
   ] = await Promise.all([
     // Bounded to the selected range (matching the previous period's
     // equal-length window), not an all-time count: comparing an ever-growing
@@ -959,8 +985,8 @@ orgRoutes.get("/:orgId/stats", requireOrgRole("viewer"), async (c) => {
     // 24-hour view), so a range's top links and its countries agree.
     topLinkRows(db, orgId, w.since),
     everClicked(db, orgId),
-    dimensionRows(db, scope, w.since, "country", 10),
-    dimensionRows(db, scope, w.since, "referrer", 8),
+    dimensionRows(db, scope, w.since, "country"),
+    dimensionRows(db, scope, w.since, "referrer", STATS_LIST_LIMIT),
     dimensionRows(db, scope, w.since, "device"),
     db
       .select({ n: sql<number>`count(*)` })
@@ -969,9 +995,11 @@ orgRoutes.get("/:orgId/stats", requireOrgRole("viewer"), async (c) => {
     deadLinkRows(db, orgId, w.since30),
     decayingLinkRows(c.env, orgId, w),
     heatmapRows(db, orgId, w.sinceMs),
-    utmRows(db, orgId, w.since, "utmCampaign"),
-    utmRows(db, orgId, w.since, "utmSource"),
-    utmRows(db, orgId, w.since, "utmMedium"),
+    utmRows(db, scope, w.since, "utmCampaign"),
+    utmRows(db, scope, w.since, "utmSource"),
+    utmRows(db, scope, w.since, "utmMedium"),
+    linksClickedCounts(db, orgId, w),
+    countryCount(db, scope, w.since),
   ]);
   const { clicks7d, clicks7dPrev } = headline;
   // The 24-hour view counts the 24 hours its chart draws, not today's UTC day.
@@ -1002,6 +1030,9 @@ orgRoutes.get("/:orgId/stats", requireOrgRole("viewer"), async (c) => {
     campaigns: campaignRows.map((r) => ({ campaign: r.value, clicks: r.clicks })),
     sources: sourceRows.map((r) => ({ source: r.value, clicks: r.clicks })),
     mediums: mediumRows.map((r) => ({ medium: r.value, clicks: r.clicks })),
+    linksClicked: linksClicked.current,
+    linksClickedDelta: computeDelta(linksClicked.current, linksClicked.previous),
+    countryCount: countriesTotal,
   } satisfies OrgStats);
 });
 
@@ -1097,13 +1128,22 @@ orgRoutes.get("/:orgId/links/stats/:slug", requireOrgRole("viewer"), async (c) =
   const w = computeWindows(days);
   const scope = { linkId };
 
-  const [headline, seriesData, countries, referrers, devices, lastClickRow] = await Promise.all([
+  const [
+    headline,
+    seriesData,
+    countries,
+    referrers,
+    devices,
+    lastClickRow,
+    countriesTotal,
+    campaignRows,
+  ] = await Promise.all([
     // Bounded to the selected range, same reasoning as the org stats route's
     // headline figures above (see issue #24).
     headlineTotals(db, scope, w),
     seriesRows(db, scope, w.since),
-    dimensionRows(db, scope, w.since, "country", 10),
-    dimensionRows(db, scope, w.since, "referrer", 8),
+    dimensionRows(db, scope, w.since, "country"),
+    dimensionRows(db, scope, w.since, "referrer", STATS_LIST_LIMIT),
     dimensionRows(db, scope, w.since, "device"),
     // The one raw read left: a single row off the (link_id, ts) index, for a
     // timestamp the rollups only know to the hour.
@@ -1113,6 +1153,8 @@ orgRoutes.get("/:orgId/links/stats/:slug", requireOrgRole("viewer"), async (c) =
       .where(eq(schema.clicks.linkId, linkId))
       .orderBy(desc(schema.clicks.ts))
       .limit(1),
+    countryCount(db, scope, w.since),
+    utmRows(db, scope, w.since, "utmCampaign"),
   ]);
   const { totalClicks, totalClicksPrev, clicks7d, clicks7dPrev } = headline;
 
@@ -1133,6 +1175,8 @@ orgRoutes.get("/:orgId/links/stats/:slug", requireOrgRole("viewer"), async (c) =
     createdAt: link.createdAt,
     lastClick: lastClickRow[0]?.ts ?? null,
     createdBy: link.createdBy,
+    countryCount: countriesTotal,
+    campaigns: campaignRows.map((r) => ({ campaign: r.value, clicks: r.clicks })),
   } satisfies LinkStats);
 });
 

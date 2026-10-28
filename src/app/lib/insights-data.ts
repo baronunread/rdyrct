@@ -1,51 +1,20 @@
 import { queryOptions, useQuery } from "@tanstack/react-query";
 import { api } from "./api";
-import { formatNumber } from "./numbers";
 import type { DeltaValue, LinkStats, OrgStats } from "@/shared/types";
 
-/**
- * What the dashboard, Analytics and a link's page read beyond what the stats
- * API sends today. Every field is optional: the screens use one the moment the
- * API sends it, and fall back to what they can work out from the rest until
- * then. The shapes the API should send are in the overnight insights report.
- */
-export interface OrgStatsExtras {
-  /** Distinct links with at least one click in the range. */
-  linksClicked?: number;
-  /** The same count for the period before, for the change beside it. */
-  linksClickedDelta?: DeltaValue | null;
-  /** Distinct countries in the range. `countries` stops at ten rows. */
-  countryCount?: number;
-}
-
-export type InsightStats = OrgStats & OrgStatsExtras;
-
-export interface LinkStatsExtras {
-  /** Distinct countries in the range. `countries` stops at ten rows. */
-  countryCount?: number;
-  /** This link's clicks by utm_campaign, for the Campaigns tab. */
-  campaigns?: { campaign: string; clicks: number }[];
-}
-
-export type LinkInsightStats = LinkStats & LinkStatsExtras;
-
-/**
- * The org's stats for a range. Same cache entry as `useStats` in hooks.ts
- * (same key, same request), typed with the fields the redesign reads once
- * the API sends them.
- */
+/** The org's stats for a range, with the crossfade between ranges. */
 export const useInsightStats = (orgId: string, days?: number, bucket?: "day" | "hour") =>
   useQuery(insightStatsQuery(orgId, days, bucket));
 
 export const insightStatsQuery = (orgId: string, days?: number, bucket?: "day" | "hour") =>
-  queryOptions<InsightStats>({
+  queryOptions<OrgStats>({
     queryKey: ["stats", orgId, days, bucket],
     queryFn: () => {
       const params = new URLSearchParams();
       if (days) params.set("days", String(days));
       if (bucket) params.set("bucket", bucket);
       const qs = params.size ? `?${params.toString()}` : "";
-      return api<InsightStats>(`/orgs/${orgId}/stats${qs}`);
+      return api<OrgStats>(`/orgs/${orgId}/stats${qs}`);
     },
     enabled: !!orgId,
     // A new range keeps the last one on screen until it arrives, so the
@@ -73,7 +42,7 @@ export const linkInsightStatsQuery = (
   domain: string | null,
   days?: number,
 ) =>
-  queryOptions<LinkInsightStats>({
+  queryOptions<LinkStats>({
     queryKey: ["linkStats", orgId, slug, domain, days],
     queryFn: () => {
       const params = new URLSearchParams();
@@ -81,7 +50,7 @@ export const linkInsightStatsQuery = (
       if (days) params.set("days", String(days));
       const qs = params.size ? `?${params.toString()}` : "";
       // SAFETY: `enabled` below holds the query until the slug is known.
-      return api<LinkInsightStats>(`/orgs/${orgId}/links/stats/${encodeURIComponent(slug!)}${qs}`);
+      return api<LinkStats>(`/orgs/${orgId}/links/stats/${encodeURIComponent(slug!)}${qs}`);
     },
     enabled: !!orgId && !!slug,
     // Same link, new range: keep the last answer up while the next loads.
@@ -116,18 +85,8 @@ function deltaOf(current: number, previous: number): DeltaValue {
   };
 }
 
-/**
- * A count the API caps at `cap` rows. The exact number when the API sends
- * it; otherwise the rows themselves, which are exact below the cap and a
- * floor at it ("10+").
- */
-export function cappedCount(exact: number | undefined, rows: number, cap: number): string {
-  if (exact !== undefined) return formatNumber(exact);
-  return rows >= cap ? `${cap}+` : String(rows);
-}
-
-/** Clicks per clicked link, and its change when the API sends both periods. */
-export function clicksPerLink(s: InsightStats): { value: number; delta: DeltaValue | null } | null {
+/** Clicks per clicked link, and its change against the period before. */
+export function clicksPerLink(s: OrgStats): { value: number; delta: DeltaValue | null } | null {
   if (!s.linksClicked) return null;
   const value = Math.round(s.totalClicks / s.linksClicked);
   const prevLinks = s.linksClickedDelta?.previous ?? 0;

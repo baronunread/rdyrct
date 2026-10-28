@@ -23,7 +23,8 @@ import { cn } from "../ui/cn";
 import { OrgMenuItems } from "./org-menu-items";
 import { HERO_CARD, HeroBar, HeroFooter, MadeLinkPanel } from "./hero-link-bar";
 import { useCurrentOrg } from "../lib/current-org";
-import { useCurrentUser, useLinkMutations, useStats } from "../lib/hooks";
+import { useCurrentUser, useLinkMutations } from "../lib/hooks";
+import { useInsightStats } from "../lib/insights-data";
 import { useOrgLimits } from "../lib/org-limits";
 import { ApiError } from "../lib/api";
 import { withErrorToast } from "../lib/mutation-toast";
@@ -128,7 +129,7 @@ const clicksThisWeek = (n: number) =>
 
 /** "Welcome back, Mara · 577 clicks this week": the line before a link. */
 function WeekLine({ name, orgId }: { name: string; orgId: string }) {
-  const { data } = useStats(orgId);
+  const { data } = useInsightStats(orgId);
   // The name arrives with the /user query, and the card can render before it
   // does: the signed-in hint comes from storage. Without the guard that first
   // paint reads "Welcome back, ."
@@ -229,7 +230,7 @@ function QuickBar({
   again: boolean;
 }) {
   const { limits } = useOrgLimits();
-  const { data: stats } = useStats(orgId);
+  const { data: stats } = useInsightStats(orgId);
   const atLimit = atLinkLimit(stats?.totalLinks, limits.links);
   const { ref, ...field } = form.register("destination");
   return (
