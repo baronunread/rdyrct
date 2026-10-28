@@ -185,7 +185,7 @@ function useActions(close: () => void, enterLinks: () => void): Action[] {
   if (shell?.user.isAdmin) {
     nav.push({
       value: "go admin platform",
-      label: "Admin",
+      label: "Platform",
       icon: Layers,
       group: "Go to",
       run: goto("/admin"),

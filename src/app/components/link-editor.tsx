@@ -733,8 +733,13 @@ export function LinkEditor({
                 )}
               </div>
               <LinkSummary form={form} host={selectedDomain ?? linkHost} opened={opened} />
-              <div className="mt-auto pt-1">{actions}</div>
+              <div className="mt-auto pt-1 max-sm:hidden">{actions}</div>
             </aside>
+            {/* On a phone the column above sits under every field, so the
+                buttons ride the sheet's bottom edge instead of a scroll away. */}
+            <div className="sticky -bottom-5 z-10 -mx-5 -mt-3 bg-surface px-5 pt-3 pb-5 shadow-[0_-1px_0_var(--border)] sm:hidden">
+              {actions}
+            </div>
           </>
         ) : (
           <>

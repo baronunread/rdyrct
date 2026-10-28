@@ -208,7 +208,7 @@ test.describe("authentication forms", () => {
     await expect(page.getByRole("heading", { name: "Enter your code" })).toBeVisible();
 
     const authRequests = await blockAuthRequests(page);
-    await page.getByRole("button", { name: "Verify & continue" }).click();
+    await page.getByRole("button", { name: "Verify and continue" }).click();
 
     await expect(page.getByRole("heading", { name: "Enter your code" })).toBeVisible();
     await expect(page.getByText("Enter a 6-digit code")).toBeVisible();

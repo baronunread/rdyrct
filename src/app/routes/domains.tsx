@@ -1,7 +1,6 @@
 import { useState, type FormEvent, type ReactNode, useCallback } from "react";
 import { useForm, type UseFormRegister } from "react-hook-form";
 import { valibotResolver } from "@hookform/resolvers/valibot";
-import { Link } from "@tanstack/react-router";
 import { AnimatePresence, LazyMotion, MotionConfig, domAnimation, m } from "motion/react";
 import { Ellipsis, Globe, Plus, Star } from "@/app/ui/icons";
 import { useCurrentUser, useConfig, useDomains, useDomainMutations } from "../lib/hooks";
@@ -22,13 +21,14 @@ import { Menu, MenuItem, MenuSeparator } from "../ui/menu";
 import { withErrorToast } from "../lib/mutation-toast";
 import { hostnameSchema } from "../lib/schemas";
 import { Badge, PageHeader } from "../ui/misc";
-import { SettingsGroup, SettingsRow } from "../ui/settings-rows";
+import { SettingsGroup } from "../ui/settings-rows";
 import { BusyContent } from "../ui/spinner";
 import { DomainsPageSkeleton, DomainsSkeleton, HeaderSkeleton } from "../components/skeletons";
 import { NoOrgState } from "../components/no-org";
 import { LockedPanel } from "../components/over-limit";
 import { domainsBlockedBy } from "../lib/org-limits";
 import { graceLabel, graceRunning } from "../lib/grace";
+import { shortDate } from "../lib/dates";
 import { CopyButton } from "../ui/copy-button";
 import { Tooltip } from "../ui/tooltip";
 import { useToast } from "../ui/toast";
@@ -91,16 +91,12 @@ export function DomainsPage() {
 
 function UpgradeDomainsGroup() {
   return (
-    <SettingsGroup>
-      <SettingsRow
-        label="Custom domains"
-        hint="Serve short links from your own domain. A paid feature."
-      >
-        <Link to="/billing" className={buttonClass({ variant: "primary" })}>
-          Upgrade to add a domain
-        </Link>
-      </SettingsRow>
-    </SettingsGroup>
+    <LockedPanel
+      title="Custom domains are a paid feature"
+      reason="Serve your short links from your own domain, with slugs you choose."
+      cta="Upgrade to add a domain"
+      primary
+    />
   );
 }
 
@@ -447,7 +443,7 @@ function DomainsSection({ orgId, plan }: { orgId: string; plan: OrgPlan }) {
         ) : (
           <>
             <DomainsBody model={model} canAdd={canAdd} />
-            <DomainsBlocked blockedBy={blockedBy} graceEndsAt={model.org?.graceEndsAt ?? null} />
+            <DomainsBlocked blockedBy={blockedBy} />
           </>
         )}
       </div>
@@ -528,15 +524,10 @@ function DomainsBody({ model, canAdd }: { model: DomainsModel; canAdd: boolean }
  * domains (#159, #160). Shown under the list, which stays, because a
  * read-only list with no reason beside it looks like a bug.
  */
-function DomainsBlocked({
-  blockedBy,
-  graceEndsAt,
-}: {
-  blockedBy: ReturnType<typeof domainsBlockedBy>;
-  graceEndsAt: number | null;
-}) {
-  // The banner at the top of the page already tells a locked org why it is
-  // locked, so this only says why adding is gone.
+function DomainsBlocked({ blockedBy }: { blockedBy: ReturnType<typeof domainsBlockedBy> }) {
+  // The banner at the top of the page already says why and until when, and
+  // each row says whether it still redirects, so this only says why adding
+  // is gone.
   if (blockedBy === "lock")
     return (
       <LockedPanel
@@ -548,8 +539,7 @@ function DomainsBlocked({
     return (
       <LockedPanel
         title="Your custom domains are locked"
-        reason="Custom domains need a paid plan. Nothing was deleted: the DNS record, the certificate and every link on these domains are still here."
-        until={graceEndsAt}
+        reason="Custom domains need a paid plan. The DNS record, the certificate and every link on these domains are still here."
         cta="Upgrade to keep them"
       />
     );
@@ -767,7 +757,7 @@ function DomainDetail({
     return (
       <DetailLine className="tnum">
         {graceRunning(graceEndsAt)
-          ? `Still redirecting until ${new Date(graceEndsAt!).toLocaleDateString()} (${graceLabel(graceEndsAt!)}), then it stops.`
+          ? `Still redirecting until ${shortDate(graceEndsAt!)} (${graceLabel(graceEndsAt!)}), then it stops.`
           : "This domain has stopped redirecting. Upgrading brings it straight back, with no DNS to redo."}
       </DetailLine>
     );

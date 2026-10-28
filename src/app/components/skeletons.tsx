@@ -1,3 +1,4 @@
+import type { OrgPlan } from "@/shared/types";
 import type { ReactElement, ReactNode } from "react";
 import { lookup } from "@/shared/lookup";
 import { useLocation } from "@tanstack/react-router";
@@ -796,7 +797,39 @@ function PlanCardSkeleton() {
  * cycle switch and the three plan cards. A paid plan opens on its own plan
  * row instead, a shape nobody can know before the plan arrives.
  */
-export function BillingSkeleton() {
+export function BillingSkeleton({ plan }: { plan?: OrgPlan } = {}) {
+  // Paid: the plan row, usage and payment. Free (or not yet known): usage
+  // above the three plan cards.
+  if (plan && plan !== "free")
+    return (
+      <SkeletonStatus testId="billing-page-skeleton">
+        <HeaderSkeleton />
+        <SettingsColumn>
+          <GroupSkeleton>
+            <div className="flex min-h-[4.5rem] items-center justify-between gap-6 px-4 py-4">
+              <div className="flex flex-col gap-2">
+                <Skeleton className="h-4 w-40" />
+                <Skeleton className="h-3 w-52" />
+              </div>
+              <Skeleton className="h-8 w-28 rounded-lg" />
+            </div>
+          </GroupSkeleton>
+          <GroupSkeleton title="w-12" hint="w-24">
+            {[24, 28, 20, 40].map((w) => (
+              <div key={w} className="flex h-11 items-center px-4">
+                <Skeleton className="h-3.5" style={{ width: `${w * 0.25}rem` }} />
+              </div>
+            ))}
+          </GroupSkeleton>
+          <GroupSkeleton title="w-16">
+            <div className="flex min-h-14 items-center justify-between px-4">
+              <Skeleton className="h-3.5 w-24" />
+              <Skeleton className="h-8 w-36 rounded-lg" />
+            </div>
+          </GroupSkeleton>
+        </SettingsColumn>
+      </SkeletonStatus>
+    );
   return (
     <SkeletonStatus testId="billing-page-skeleton">
       <HeaderSkeleton sub />

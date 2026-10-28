@@ -131,6 +131,9 @@
     "src/app/routes/analytics.tsx": {
       "crap_high": {
         "count": 1
+      },
+      "crap_moderate": {
+        "count": 1
       }
     },
     "src/app/routes/api-keys.tsx": {
@@ -178,10 +181,10 @@
         "count": 1
       },
       "crap_high": {
-        "count": 4
+        "count": 3
       },
       "crap_moderate": {
-        "count": 3
+        "count": 4
       }
     },
     "src/app/routes/link-detail.tsx": {
@@ -304,12 +307,12 @@
     "src/app/lib/clipboard.ts:high impact",
     "src/app/lib/posthog.ts:hidden coupling",
     "src/worker/routes/orgs.ts:hidden coupling",
-    "src/app/lib/use-shake.ts:high impact",
     "src/app/components/qr-defaults-card.tsx:hidden coupling",
+    "src/app/lib/use-shake.ts:high impact",
     "src/app/routes/admin/audit.tsx:hidden coupling",
     "src/app/lib/mcp-url.ts:high impact",
-    "src/worker/routes/links.ts:hidden coupling",
     "src/app/routes/dashboard.tsx:hidden coupling",
+    "src/worker/routes/links.ts:hidden coupling",
     "src/app/routes/admin/users.tsx:hidden coupling",
     "src/app/components/link-editor.tsx:complexity",
     "src/app/routes/domains.tsx:hidden coupling",
