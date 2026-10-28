@@ -580,10 +580,12 @@ body {
   display: none;
 }
 
+/* 0.75rem from the top: centred on a one-line toast (44px tall, a 20px
+   button), and level with the first line of a toast with a second one. */
 .rdyrct-toast-close {
   position: absolute;
-  top: 0.55rem;
-  right: 0.55rem;
+  top: 0.75rem;
+  right: 0.75rem;
   display: grid;
   width: 1.25rem;
   height: 1.25rem;
