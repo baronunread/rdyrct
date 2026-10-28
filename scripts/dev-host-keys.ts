@@ -10,3 +10,9 @@ export const DEV_HOST_KEYS = [
   "RESEND_BASE_URL",
   "GOOGLE_EMULATOR_URL",
 ] as const;
+
+/** Vars `bun run dev` fills in only when `.dev.vars` leaves them out (its own
+ * values win anyway): the secret `polar listen` signs forwarded webhooks
+ * with, so a sandbox event reaches the Worker and verifies with nothing
+ * copied by hand. */
+export const DEV_DEFAULT_KEYS = ["POLAR_WEBHOOK_SECRET"] as const;

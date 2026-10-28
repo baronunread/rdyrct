@@ -85,6 +85,9 @@ names on a network. The launcher hands the Worker its addresses (`APP_URL`,
 would win, and the launcher refuses to start if it does. It also creates
 `.dev.vars` from the example on a first run and applies the local D1
 migrations. Never hard-code a dev URL in a script; ask `scripts/dev-hosts.ts`.
+Sandbox billing webhooks: run `bun run polar:listen` beside it. When
+`.dev.vars` sets no `POLAR_WEBHOOK_SECRET`, `bun run dev` hands the Worker
+the one `polar listen` signs with, so forwarded events verify as they are.
 
 **Local Cloudflare state**: while `bun run dev` runs, the Explorer API at
 `<app URL>/cdn-cgi/explorer/api` exposes the local KV, R2, D1,

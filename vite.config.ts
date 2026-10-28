@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { DEV_HOST_KEYS } from "./scripts/dev-host-keys";
+import { DEV_DEFAULT_KEYS, DEV_HOST_KEYS } from "./scripts/dev-host-keys";
 import { defineConfig, type Plugin, type UserConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
@@ -118,7 +118,14 @@ export default defineConfig(async (): Promise<UserConfig> => ({
       // `bun run dev` (scripts/dev.ts) works out this checkout's addresses
       // and hands them over here; .dev.vars must not set them (it would win).
       config: process.env.RDYRCT_DEV_HOSTS
-        ? { vars: Object.fromEntries(DEV_HOST_KEYS.map((key) => [key, process.env[key] ?? ""])) }
+        ? {
+            vars: Object.fromEntries([
+              ...DEV_HOST_KEYS.map((key) => [key, process.env[key] ?? ""]),
+              ...DEV_DEFAULT_KEYS.flatMap((key) =>
+                process.env[key] ? [[key, process.env[key]]] : [],
+              ),
+            ]),
+          }
         : undefined,
     }),
   ],

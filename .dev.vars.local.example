@@ -15,7 +15,8 @@ WELCOME_FROM=Andrea at rdyrct <andrea@localhost>
 
 # Polar (sandbox): https://sandbox.polar.sh
 POLAR_ACCESS_TOKEN=polar_oat_replace_me
-POLAR_WEBHOOK_SECRET=polar_whs_replace_me
+# POLAR_WEBHOOK_SECRET: leave it out locally. `bun run dev` uses the secret
+# `polar listen` signs forwarded webhooks with (`bun run polar:listen`).
 POLAR_PRO_PRODUCT_ID=replace_me
 POLAR_HOBBY_PRODUCT_ID=replace_me
 # Yearly products, priced 10% below twelve months

@@ -51,8 +51,31 @@ if (pinned.length) {
 
 await $`bunx wrangler d1 migrations apply rdyrct --local`.quiet();
 
+/**
+ * The secret Polar's CLI signs the webhooks it forwards with (`bun run
+ * polar:listen`), when `.dev.vars` sets none of its own. Nothing when the
+ * CLI is missing or signed out: the webhook route then refuses every event,
+ * which is right for a checkout that cannot receive any.
+ */
+async function polarForwardSecret(devVars: string): Promise<string | undefined> {
+  if (/^POLAR_WEBHOOK_SECRET=\S/m.test(devVars)) return undefined;
+  try {
+    const out = await $`polar listen --print-secret`.nothrow().quiet();
+    return out.exitCode === 0 ? out.text().trim() || undefined : undefined;
+  } catch {
+    return undefined;
+  }
+}
+const polarSecret = await polarForwardSecret(readFileSync(DEV_VARS, "utf8"));
+
 const hosts = await devHosts();
-const vars = devHostVars(hosts);
+
+const appEnv: NodeJS.ProcessEnv = {
+  ...process.env,
+  ...devHostVars(hosts),
+  RDYRCT_DEV_HOSTS: "1",
+};
+if (polarSecret) appEnv.POLAR_WEBHOOK_SECRET = polarSecret;
 
 /** One service behind portless. `$PORT` and `$PORTLESS_URL` come from
  * portless, so the shell expands them, not this script. */
@@ -67,7 +90,7 @@ const emulator = (name: string, args: string) =>
 
 const children: Subprocess[] = [
   Bun.spawn(["portless", hosts.name, "vite", "dev"], {
-    env: { ...process.env, ...vars, RDYRCT_DEV_HOSTS: "1" },
+    env: appEnv,
     stdio: ["inherit", "inherit", "inherit"],
   }),
   Bun.spawn([...emulator(`${hosts.name}-mail`, "--service resend")], {
