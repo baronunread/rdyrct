@@ -286,7 +286,13 @@ const routeTree = rootRoute.addChildren([
 export const PRERENDER_ROUTES = [...PRERENDERED_PUBLIC_PATHS] as const;
 
 const router = globalThis.window
-  ? createRouter({ routeTree, defaultPreload: false })
+  ? createRouter({
+      routeTree,
+      defaultPreload: false,
+      // On a desktop the app scrolls inside its sheet, not the window
+      // (shellLayout), so a new page has to start that at the top too.
+      scrollToTopSelectors: ["window", "[data-app-sheet]"],
+    })
   : createRouter({
       routeTree,
       defaultPreload: false,

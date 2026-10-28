@@ -403,6 +403,23 @@ html {
   scrollbar-gutter: stable;
 }
 
+/* The app on a desktop scrolls inside its sheet (lib/sidebar.ts,
+   shellLayout), so the page itself neither scrolls nor keeps a gutter for a
+   scrollbar it will never show. */
+@media (min-width: 48rem) {
+  html:has([data-app-sheet]) {
+    overflow: hidden;
+    scrollbar-gutter: auto;
+  }
+}
+
+/* Where a scrollbar takes room (Windows, Linux), a thin one in the muted
+   ink, with no arrows: the default grey block reads as a second frame. */
+[data-app-sheet] {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in oklab, var(--muted) 45%, transparent) transparent;
+}
+
 /* Marketing-to-marketing navigation (the viewTransition Links in
    landing-header.tsx and friends) cross-fades through a view transition, not
    a CSS transition: a view transition fades two snapshots on the
