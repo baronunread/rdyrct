@@ -69,7 +69,9 @@ test("the dashboard's range control switches the period and locks what the plan 
   // Free shows seven days: 30d stays in the row, locked, and opens the plans.
   const locked = range.getByRole("button", { name: "30d" });
   await expect(locked).toHaveAttribute("aria-disabled", "true");
-  await locked.click();
+  // aria-disabled so it reads as unavailable, yet pressing it is the way to
+  // the plans; Playwright refuses to click anything aria-disabled unforced.
+  await locked.click({ force: true });
   await expect(page).toHaveURL(/\/billing/);
 });
 

@@ -53,7 +53,7 @@ export async function addCustomDomain(page: Page, hostname = `e2e-${Date.now()}.
  * take most of the default budget. */
 export async function addActiveCustomDomain(page: Page, hostname?: string) {
   const added = await addCustomDomain(page, hostname);
-  await expect(page.getByText("active", { exact: true })).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByText("Active", { exact: true })).toBeVisible({ timeout: 30_000 });
   return added;
 }
 

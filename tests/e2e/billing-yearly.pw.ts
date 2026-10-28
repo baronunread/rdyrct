@@ -34,8 +34,7 @@ test("the yearly toggle drives the checkout interval and the button price", asyn
 });
 
 /** Somebody on a paid plan has to be able to tell which cycle they are on,
- * and where to change it: the badge says it, the note under the button says
- * where. */
+ * and where to change it: the plan line says it, Change plan is where. */
 test("a subscriber sees their billing cycle and where to change it", async ({ page }) => {
   const email = `billing-cycle-${Date.now()}@gmail.com`;
   await signUpAndVerify(page, email, password);
@@ -43,6 +42,6 @@ test("a subscriber sees their billing cycle and where to change it", async ({ pa
 
   await page.goto("/billing");
 
-  await expect(page.getByText("Pro · Yearly")).toBeVisible();
-  await expect(page.getByText("Switch between monthly and yearly")).toBeVisible();
+  await expect(page.getByText("$8.10 a month, billed yearly")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Change plan" })).toBeVisible();
 });

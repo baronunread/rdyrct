@@ -26,7 +26,7 @@ async function pickColour(page: Page, label: string, hex: string) {
 test("a refused destination marks the field, not a toast", async ({ page }) => {
   await signUpAndVerify(page, `editor-err-${Date.now()}@gmail.com`, password);
   const editor = await openNewLinkDialog(page);
-  const destination = editor.getByRole("textbox", { name: "Destination", exact: true });
+  const destination = editor.getByRole("textbox", { name: /^Destination/ });
 
   await destination.fill("copperkettle winter menu");
   await editor.getByRole("button", { name: "Create link" }).click();
@@ -69,7 +69,7 @@ test("the QR editor checks contrast, and Cancel puts the look back", async ({ pa
   await expect(editor.getByText("Low contrast, may not scan")).toBeVisible();
 
   await editor.getByRole("button", { name: "Cancel" }).click();
-  await expect(editor.getByRole("textbox", { name: "Destination", exact: true })).toBeVisible();
+  await expect(editor.getByRole("textbox", { name: /^Destination/ })).toBeVisible();
   await editor.getByRole("button", { name: "Customize QR" }).click();
   await expect(editor.getByLabel("Dots colour")).toHaveValue("#17151f");
   await expect(dots.getByRole("button", { name: "Rounded", exact: true })).toHaveAttribute(

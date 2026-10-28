@@ -413,6 +413,17 @@ html {
   }
 }
 
+/* While the cookie banner is up it sits over the sheet's bottom right
+   corner, where a page's last button usually is (Delete account, Save).
+   The sheet gets that much more room to scroll, so nothing ends up out of
+   reach underneath it. */
+@media (min-width: 48rem) {
+  html:has([data-consent-banner]) [data-app-sheet] {
+    padding-bottom: 11rem;
+    scroll-padding-bottom: 11rem;
+  }
+}
+
 /* Where a scrollbar takes room (Windows, Linux), a thin one in the muted
    ink, with no arrows: the default grey block reads as a second frame. */
 [data-app-sheet] {
@@ -517,7 +528,7 @@ body {
 .toast-stack {
   left: 50%;
   display: grid;
-  width: min(22rem, calc(100vw - 2rem));
+  width: min(26.25rem, calc(100vw - 1.5rem));
   min-height: 2.75rem;
   transform: translateX(-50%);
   pointer-events: none;

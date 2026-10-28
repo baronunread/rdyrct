@@ -59,9 +59,12 @@ test("an org at its click cap still redirects, and /billing shows the cap reache
   expect(clicks).toBe(5000);
 
   await page.goto("/billing");
-  // The usage row: its label, a bar, and "5,000 of 5,000".
-  const clickRow = page.getByText("Clicks counted this month").locator("..");
-  await expect(clickRow.getByText("5,000 of 5,000", { exact: true })).toBeVisible();
+  // The usage row: its label (with the reset date), a bar, and "5,000 of 5,000".
+  const clickRow = page
+    .getByText(/^Clicks counted/)
+    .first()
+    .locator("..");
+  await expect(clickRow).toContainText(/5,000\s*of 5,000/);
   await expect(page.getByText("Limit reached.")).toBeVisible();
 
   await page.goto("/dashboard");

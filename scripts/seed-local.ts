@@ -527,7 +527,10 @@ async function seed() {
       sub ? q(u.plan) : "NULL"
     }, ${sub ? "'active'" : "NULL"}, ${sub ? q(`sub_seed_${u.id.slice(5)}`) : "NULL"}, ${
       sub ? q(`cus_seed_${u.id.slice(5)}`) : "NULL"
-    }, ${leaving ? 1 : 0}, ${comp ? q(comp) : "NULL"}, ${comp ? "'Seeded comp'" : "NULL"}, ${
+    }, ${leaving ? 1 : 0}, ${
+      // The period end Polar's webhook writes, so /billing can say "renews Nov 14".
+      sub ? now + randInt(3, 28) * day : "NULL"
+    }, ${comp ? q(comp) : "NULL"}, ${comp ? "'Seeded comp'" : "NULL"}, ${
       comp ? u.createdAt : "NULL"
     }, ${u.createdAt}, ${u.createdAt})`;
   });
@@ -538,7 +541,7 @@ async function seed() {
   await sqlBatch([
     `INSERT INTO user (id, name, email, email_verified, plan, subscription_plan,
        subscription_status, polar_subscription_id, polar_customer_id,
-       polar_subscription_cancel_at_period_end,
+       polar_subscription_cancel_at_period_end, polar_subscription_current_period_end,
        comp_plan, comp_reason, comp_granted_at, created_at, updated_at)
      VALUES ${userRows.join(",")}`,
     `INSERT INTO account (id, account_id, provider_id, user_id, password, created_at, updated_at) VALUES ${accountRows.join(",")}`,
@@ -872,6 +875,7 @@ async function seed() {
   await seedDowngrades(orgs, now, day);
 
   await seedClickUsage();
+  await seedLinkQrLooks();
 
   await seedScenarioAccounts(passwordHash, now, day);
 
@@ -1028,7 +1032,75 @@ async function seedDowngrades(orgs: SeedOrg[], now: number, day: number): Promis
   );
 
   await sqlBatch(statements);
-  console.log(`  downgraded: ${candidates.length} orgs, 1 locked org`);
+  const moved = await moveLinksToOrg(candidates[0].id, extraOrgId, 24);
+  console.log(`  downgraded: ${candidates.length} orgs, 1 locked org with ${moved} links`);
+}
+
+/**
+ * Hands up to `limit` of one org's shared-domain links, with their clicks
+ * and rollups, to another org. The locked org exists only after the links
+ * are seeded, and a read-only org with nothing in it shows the empty state,
+ * not the read-only table it is there to show. Custom-domain links stay put:
+ * their domain belongs to the first org.
+ */
+async function moveLinksToOrg(from: string, to: string, limit: number): Promise<number> {
+  const rows = await sql<{ id: string }>(
+    `SELECT id FROM links WHERE org_id = ${q(from)} AND domain_id IS NULL ORDER BY created_at DESC LIMIT ${limit}`,
+  );
+  if (!rows.length) return 0;
+  const ids = rows.map((r) => q(r.id)).join(",");
+  await sqlBatch(
+    ["links", "link_addresses", "clicks", "click_daily", "click_hourly", "click_daily_dims"].map(
+      (table) =>
+        `UPDATE ${table} SET org_id = ${q(to)} WHERE ${table === "links" ? "id" : "link_id"} IN (${ids})`,
+    ),
+  );
+  // The redirect's KV value names the org too.
+  const addresses = await sql<{
+    id: string;
+    link_id: string;
+    slug: string;
+    expires_at: string | null;
+    destination: string;
+  }>(
+    `SELECT a.id, a.link_id, a.slug, a.expires_at, l.destination FROM link_addresses a JOIN links l ON l.id = a.link_id
+      WHERE a.link_id IN (${ids}) AND a.retired_at IS NULL`,
+  );
+  await Promise.all(
+    addresses.map((a) =>
+      kvPut(`slug:${a.slug}`, {
+        linkId: a.link_id,
+        addressId: a.id,
+        orgId: to,
+        url: a.destination,
+        expiresAt: a.expires_at === null ? null : Number(a.expires_at),
+      }),
+    ),
+  );
+  return rows.length;
+}
+
+/**
+ * A few links with their own QR look, so the Links table's QR thumbnails
+ * and the link page's QR card have something other than the default to draw.
+ */
+async function seedLinkQrLooks(): Promise<void> {
+  const looks = [
+    "qr_style = 'dots', qr_corner = 'dot', qr_color = '#1f6f5c'",
+    "qr_style = 'classy', qr_corner = 'square', qr_color = '#7c3a1d', qr_bg = '#fff7ec'",
+    "qr_color = '#2f1f5e', qr_eye_color = '#7c5cff'",
+  ];
+  const rows = await sql<{ id: string }>(
+    `SELECT l.id FROM links l JOIN orgs o ON o.id = l.org_id
+      WHERE l.org_id LIKE 'seed-%' AND o.locked_at IS NULL
+      ORDER BY (SELECT count(*) FROM clicks c WHERE c.link_id = l.id) DESC LIMIT 60`,
+  );
+  // Every fourth of the busiest links, so most orgs with any traffic get one.
+  const statements = rows
+    .filter((_, i) => i % 4 === 0)
+    .map((r, i) => `UPDATE links SET ${looks[i % looks.length]} WHERE id = ${q(r.id)}`);
+  await sqlBatch(statements);
+  console.log(`  QR looks: ${statements.length} links`);
 }
 
 /**

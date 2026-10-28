@@ -16,7 +16,7 @@ const manager = Toast.createToastManager<ToastData>();
 
 type ToastKind = "info" | "error";
 
-interface ToastOptions {
+export interface ToastOptions {
   /** A muted second line under the message. */
   detail?: string;
   /** An identifier (a short link, a domain) shown in mono after the message. */
@@ -59,11 +59,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     <Toast.Provider toastManager={manager} limit={4} timeout={3250}>
       {children}
       <Toast.Portal>
-        <Toast.Viewport
-          className="toast-stack pointer-events-none fixed bottom-4 z-toast"
-          // The mock's 420px; styles.css still says 22rem for the stack.
-          style={{ width: "min(26.25rem, calc(100vw - 1.5rem))" }}
-        >
+        <Toast.Viewport className="toast-stack pointer-events-none fixed bottom-4 z-toast">
           <ToastList />
         </Toast.Viewport>
       </Toast.Portal>

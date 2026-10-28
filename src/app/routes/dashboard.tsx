@@ -555,10 +555,12 @@ function QuickCreateCard({
       e.preventDefault();
       fill(text);
     };
-    document.addEventListener("keydown", onKeyDown);
+    // Capture phase, so this claims the key before the shell's G chords
+    // (go-shortcuts.ts) see it: they skip a key somebody already took.
+    document.addEventListener("keydown", onKeyDown, true);
     document.addEventListener("paste", onPaste);
     return () => {
-      document.removeEventListener("keydown", onKeyDown);
+      document.removeEventListener("keydown", onKeyDown, true);
       document.removeEventListener("paste", onPaste);
     };
   }, [getValues, setFocus, setValue, clearErrors]);

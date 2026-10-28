@@ -70,7 +70,12 @@ test("a new owner can create an organization and a scheme-less quick link", asyn
   // Organization settings live on their own page now.
   await page.goto("/organization");
   await page.getByLabel("Organization name").fill("Playwright Org Renamed");
-  await page.getByRole("button", { name: "Save", exact: true }).click();
+  // The QR defaults card has a Save of its own further down.
+  await page
+    .locator("form")
+    .filter({ has: page.getByLabel("Organization name") })
+    .getByRole("button", { name: "Save", exact: true })
+    .click();
   await expect(page.getByText("Organization renamed")).toBeVisible();
 
   // The theme item in the account menu toggles without closing the menu.
