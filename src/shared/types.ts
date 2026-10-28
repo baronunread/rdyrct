@@ -293,6 +293,14 @@ export interface InviteDTO {
   expiresAt: number;
 }
 
+/** What POST /orgs/:id/invites answers. `failed` lists the addresses whose
+ * email did not go out; their invites exist, and asking again resends the
+ * same ones. */
+export interface InvitesCreated {
+  invites: InviteDTO[];
+  failed: string[];
+}
+
 export interface DomainDTO {
   id: string;
   hostname: string;

@@ -321,8 +321,9 @@ function WebRisk({ s }: { s: AdminUsageData }) {
               <Meter label="Lookups today" value={s.webRisk.today} max={s.webRisk.perDay} />
               <Meter label="Lookups this month" value={s.webRisk.month} max={100_000} />
               <p className="mt-3 text-xs text-pretty text-muted">
-                Checks stop for the day at {fullNumber(s.webRisk.perDay)}. A free organization gets
-                50 a day of its own.
+                {fullNumber(s.webRisk.perDay)} lookups a day in all. Each free organization gets 50
+                of those; paid ones have no cap of their own. A link made past the limit is not
+                checked then; the daily rescan gets to it, free links first.
               </p>
             </div>
           ),

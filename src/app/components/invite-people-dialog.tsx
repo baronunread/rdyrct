@@ -1,5 +1,10 @@
 import { useRef, useState, type FormEvent } from "react";
-import { INVITABLE_ROLES, type InvitableRole, type UserOrg } from "@/shared/types";
+import {
+  INVITABLE_ROLES,
+  type InvitableRole,
+  type InvitesCreated,
+  type UserOrg,
+} from "@/shared/types";
 import { oneOf } from "@/shared/lookup";
 import { Link } from "@/app/ui/icons";
 import { Button } from "../ui/button";
@@ -66,7 +71,7 @@ export function InvitePeopleDialog({
   org: UserOrg;
   seats: { limit: number; left: number };
   sendEmailInvites: {
-    mutate: (params: EmailInvites, opts?: { onSuccess?: () => void }) => void;
+    mutate: (params: EmailInvites, opts?: { onSuccess?: (data: InvitesCreated) => void }) => void;
     isPending: boolean;
   };
   createInvite: { mutate: (role: InvitableRole) => void; isPending: boolean };
@@ -104,9 +109,19 @@ export function InvitePeopleDialog({
     sendEmailInvites.mutate(
       { emails: all, role },
       {
-        onSuccess: () => {
-          toast(all.length > 1 ? `${all.length} invites sent` : "Invite sent");
-          close(false);
+        onSuccess: ({ failed }) => {
+          const sent = all.length - failed.length;
+          if (sent > 0) toast(sent > 1 ? `${sent} invites sent` : "Invite sent");
+          if (failed.length === 0) return close(false);
+          // Their invites exist; sending again reuses them. Keep only these
+          // addresses in the field, marked, so Send retries just them.
+          setEmails(failed);
+          setError(
+            failed.length > 1
+              ? "Couldn't email these. Try again"
+              : "Couldn't email this. Try again",
+          );
+          input.current?.focus();
         },
       },
     );
