@@ -96,6 +96,27 @@ describe("appPageTransitionTypes", () => {
     ).toEqual(["app-page"]);
   });
 
+  test("morphs Links into a link's page and back, and nowhere else", () => {
+    const types = (from: string, to: string) =>
+      appPageTransitionTypes(
+        { fromLocation: at(from), toLocation: at(to), pathChanged: true },
+        inApp,
+      );
+    expect(types("/links", "/links/abc")).toEqual(["app-page", "link-morph"]);
+    expect(types("/links/abc", "/links")).toEqual(["app-page", "link-morph"]);
+    expect(types("/dashboard", "/links/abc")).toEqual(["app-page"]);
+    expect(types("/links/abc", "/links/def")).toEqual(["app-page"]);
+  });
+
+  test("holds the Platform header still between its tabs", () => {
+    expect(
+      appPageTransitionTypes(
+        { fromLocation: at("/admin"), toLocation: at("/admin/users"), pathChanged: true },
+        inApp,
+      ),
+    ).toEqual(["app-page", "platform"]);
+  });
+
   test("not a search-only change, a first load, or a move out of the app", () => {
     expect(
       appPageTransitionTypes(

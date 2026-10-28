@@ -541,9 +541,80 @@ html:active-view-transition-type(app-page) {
   }
 }
 
+/* Links to one link's page and back (lib/link-morph.ts, page-transition.ts):
+   the link's QR code, title and address travel between its row and the page
+   header. The page around them waits: the old one leaves quickly and the new
+   one arrives once the parts have mostly landed, so nothing crosses them in
+   flight. Words fade between their two sizes rather than stretching. */
+html:active-view-transition-type(link-morph) {
+  [data-morph="qr"] {
+    view-transition-name: link-qr;
+  }
+  [data-morph="title"] {
+    view-transition-name: link-title;
+  }
+  [data-morph="addr"] {
+    view-transition-name: link-addr;
+  }
+  &::view-transition-old(app-page) {
+    animation-duration: 100ms;
+  }
+  &::view-transition-new(app-page) {
+    animation-delay: 180ms;
+    animation-duration: 180ms;
+  }
+}
+
+::view-transition-group(link-qr),
+::view-transition-group(link-title),
+::view-transition-group(link-addr) {
+  animation-duration: 340ms;
+  animation-timing-function: cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+::view-transition-old(link-title),
+::view-transition-old(link-addr) {
+  animation: 120ms ease-out both app-page-out;
+}
+
+::view-transition-new(link-title),
+::view-transition-new(link-addr) {
+  animation: 240ms ease-out both link-part-in;
+}
+
+@keyframes link-part-in {
+  from {
+    opacity: 0;
+  }
+}
+
+/* One Platform tab to another: the title and the tab bar hold still (the
+   underline slides in the live new image) and only the tab's content
+   crossfades. The old image is hidden so the two underlines never show. */
+html:active-view-transition-type(platform) [data-platform-head] {
+  view-transition-name: platform-head;
+}
+
+::view-transition-group(platform-head),
+::view-transition-new(platform-head) {
+  animation: none;
+}
+
+::view-transition-old(platform-head) {
+  animation: none;
+  opacity: 0;
+}
+
 @media (prefers-reduced-motion: reduce) {
   ::view-transition-old(app-page),
-  ::view-transition-new(app-page) {
+  ::view-transition-new(app-page),
+  ::view-transition-group(link-qr),
+  ::view-transition-group(link-title),
+  ::view-transition-group(link-addr),
+  ::view-transition-old(link-title),
+  ::view-transition-new(link-title),
+  ::view-transition-old(link-addr),
+  ::view-transition-new(link-addr) {
     animation: none;
   }
 }

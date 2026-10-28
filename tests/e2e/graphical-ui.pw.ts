@@ -42,8 +42,13 @@ test("the country map is not a keyboard focus target (#175)", async ({ page }) =
   await page.route("**/api/orgs/*/stats**", async (route) => {
     const response = await route.fetch();
     // SAFETY: this route is the stats endpoint, whose response always has a countries array.
-    const stats = (await response.json()) as { countries: { key: string; clicks: number }[] };
+    const stats = (await response.json()) as {
+      countries: { key: string; clicks: number }[];
+      everClicked: boolean;
+    };
     stats.countries = [{ key: "US", clicks: 1 }];
+    // A click on record, or Analytics shows its "no clicks yet" screen.
+    stats.everClicked = true;
     await route.fulfill({ response, json: stats });
   });
 

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { TabUnderline } from "../ui/tab-underline";
 import { errorMessage } from "@/app/lib/error-message";
 import { useCurrentOrg } from "../lib/current-org";
 import { useSearchParams } from "../lib/router-search";
@@ -380,10 +381,12 @@ function useApiTab(): [ApiTab, (tab: ApiTab) => void] {
  * behind tabs"). Plain buttons rather than PanelTabs: the tab lives in the
  * URL, so a reload lands back on it. */
 function ApiTabBar({ active, onChange }: { active: ApiTab; onChange: (tab: ApiTab) => void }) {
+  const bar = useRef<HTMLElement>(null);
   return (
     <nav
+      ref={bar}
       aria-label="API sections"
-      className="mb-5 flex gap-4 overflow-x-auto shadow-[inset_0_-1px_0_var(--border)]"
+      className="relative mb-5 flex gap-4 overflow-x-auto shadow-[inset_0_-1px_0_var(--border)]"
     >
       {TABS.map((tab) => (
         <button
@@ -394,7 +397,7 @@ function ApiTabBar({ active, onChange }: { active: ApiTab; onChange: (tab: ApiTa
           className={cn(
             "cursor-pointer pb-2.5 text-sm whitespace-nowrap outline-none focus-visible:text-text focus-visible:underline",
             active === tab.id
-              ? "font-semibold text-text shadow-[inset_0_-1.5px_0_var(--text)]"
+              ? "font-semibold text-text"
               : "text-muted [@media(hover:hover)]:hover:text-text",
           )}
         >
@@ -411,6 +414,7 @@ function ApiTabBar({ active, onChange }: { active: ApiTab; onChange: (tab: ApiTa
         <ExternalLink size={13} aria-hidden />
         <span className="sr-only">(opens in a new tab)</span>
       </a>
+      <TabUnderline bar={bar} />
     </nav>
   );
 }

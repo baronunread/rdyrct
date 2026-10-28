@@ -1,3 +1,4 @@
+import { flushSync } from "react-dom";
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "@tanstack/react-router";
 import {
@@ -25,6 +26,7 @@ import { AliasThread } from "./alias-thread";
 import { ShortAddress } from "./short-address";
 import { QrThumb, SiteLetter, Sparkline } from "./link-marks";
 import { CursorPager } from "../ui/pagination";
+import { morphKey, morphPart, setMorphLink, useIsMorphLink } from "../lib/link-morph";
 
 function linkDetailPath(link: LinkDTO): string {
   return link.domain
@@ -108,6 +110,14 @@ function LinkCell({
 }) {
   const aliases = link.addressCount - 1;
   const custom = link.qrCustom ?? hasQrOverride(link);
+  const key = morphKey(link);
+  const morphing = useIsMorphLink(key);
+  // Marked before the click navigates, so the page being left has this
+  // row's parts named when the browser takes its picture (lib/link-morph.ts).
+  const open = () => {
+    flushSync(() => setMorphLink(key));
+    navigate(linkDetailPath(link));
+  };
   // A button, not a link, so the router's hover preload does not reach it:
   // ask for the link's page the same way (see lib/route-preload.ts).
   const router = useRouter();
@@ -125,6 +135,7 @@ function LinkCell({
         type="button"
         onClick={() => onQrClick(link)}
         aria-label={`QR code for ${link.slug}`}
+        {...morphPart("qr", morphing)}
         className="shrink-0 cursor-pointer rounded-md transition-[scale] duration-150 ease-out active:scale-[0.96] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
       >
         <QrThumb url={link.url} custom={custom} />
@@ -133,9 +144,10 @@ function LinkCell({
         <span className="flex min-w-0 items-center gap-2">
           <button
             type="button"
-            onClick={() => navigate(linkDetailPath(link))}
+            onClick={open}
             onPointerEnter={preload}
             onFocus={preload}
+            {...morphPart("title", morphing)}
             className="min-w-0 cursor-pointer truncate text-start text-sm font-semibold [@media(hover:hover)]:hover:underline"
           >
             {link.title || (
@@ -167,7 +179,11 @@ function LinkCell({
             </button>
           )}
         </span>
-        {link.title && <ShortAddress url={link.url} slug={link.slug} />}
+        {link.title && (
+          <span className="flex min-w-0 self-start" {...morphPart("addr", morphing)}>
+            <ShortAddress url={link.url} slug={link.slug} />
+          </span>
+        )}
       </div>
     </div>
   );
