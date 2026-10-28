@@ -215,54 +215,44 @@ function NavItem({
 }
 
 /**
- * The top of the sidebar: the mark, then search and the fold button. Folded,
- * only the mark is left, and pointing at it turns it into the unfold button
- * (the icon swap from the interfaces.dev cheat sheet: scale, blur, fade).
+ * The top of the sidebar: the mark, which folds and unfolds it, and search.
+ * Pointing at the mark turns it into the fold or unfold icon (the icon swap
+ * from the interfaces.dev cheat sheet: scale, blur, fade), so it says what a
+ * click will do before the click.
  */
 function SidebarTop({ collapsed }: { collapsed: boolean }) {
+  const label = collapsed ? "Expand sidebar" : "Collapse sidebar";
+  const Icon = collapsed ? PanelLeftOpen : PanelLeftClose;
   return (
     <div className="hidden h-14 items-center gap-1 px-3 md:flex">
-      {collapsed ? (
-        <Tooltip
-          grouped
-          side="right"
-          content={
-            <span className="flex items-center gap-2">
-              Expand sidebar
-              <kbd className="rounded px-1 font-mono text-2xs text-muted smooth-shadow-ring-xs">
-                [
-              </kbd>
-            </span>
-          }
+      <Tooltip
+        grouped
+        side="right"
+        content={
+          <span className="flex items-center gap-2">
+            {label}
+            <kbd className="rounded px-1 font-mono text-2xs text-muted smooth-shadow-ring-xs">
+              [
+            </kbd>
+          </span>
+        }
+      >
+        <button
+          type="button"
+          onClick={toggleSidebar}
+          aria-label={label}
+          className="group/mark relative grid size-9 shrink-0 cursor-pointer place-items-center rounded-lg [@media(hover:hover)]:hover:bg-surface-2"
         >
-          <button
-            type="button"
-            onClick={toggleSidebar}
-            aria-label="Expand sidebar"
-            className="group/mark relative grid size-9 shrink-0 cursor-pointer place-items-center rounded-lg [@media(hover:hover)]:hover:bg-surface-2"
-          >
-            <LogoMark className="h-[18px] transition-[opacity,scale,filter] duration-200 ease-out group-hover/mark:scale-25 group-hover/mark:opacity-0 group-hover/mark:blur-[4px] group-focus-visible/mark:scale-25 group-focus-visible/mark:opacity-0" />
-            <PanelLeftOpen
-              size={18}
-              className="absolute scale-25 text-muted opacity-0 blur-[4px] transition-[opacity,scale,filter] duration-200 ease-out group-hover/mark:scale-100 group-hover/mark:opacity-100 group-hover/mark:blur-none group-focus-visible/mark:scale-100 group-focus-visible/mark:opacity-100 group-focus-visible/mark:blur-none"
-            />
-          </button>
-        </Tooltip>
-      ) : (
-        <Link
-          to="/dashboard"
-          aria-label="rdyrct, dashboard"
-          className="grid size-9 shrink-0 place-items-center rounded-lg"
-        >
-          <LogoMark className="h-[18px]" />
-        </Link>
-      )}
-      <div inert={collapsed} className={cn("ml-auto flex items-center gap-0.5", fade(collapsed))}>
+          <LogoMark className="h-[18px] transition-[opacity,scale,filter] duration-200 ease-out group-hover/mark:scale-25 group-hover/mark:opacity-0 group-hover/mark:blur-[4px] group-focus-visible/mark:scale-25 group-focus-visible/mark:opacity-0" />
+          <Icon
+            size={18}
+            className="absolute scale-25 text-muted opacity-0 blur-[4px] transition-[opacity,scale,filter] duration-200 ease-out group-hover/mark:scale-100 group-hover/mark:opacity-100 group-hover/mark:blur-none group-focus-visible/mark:scale-100 group-focus-visible/mark:opacity-100 group-focus-visible/mark:blur-none"
+          />
+        </button>
+      </Tooltip>
+      <div inert={collapsed} className={cn("ml-auto", fade(collapsed))}>
         <IconButton label="Search and commands (⌘K)" onClick={openCommandMenu}>
           <Search size={16} />
-        </IconButton>
-        <IconButton label="Collapse sidebar ([)" onClick={toggleSidebar}>
-          <PanelLeftClose size={16} />
         </IconButton>
       </div>
     </div>
