@@ -304,7 +304,7 @@ function QrCustomizationUpsell({ locked }: { locked: boolean }) {
 
 /** The short link as a domain and a slug joined by a slash. Chosen slugs
  * only exist on custom domains, so on the shared one the slug is locked. */
-// react-doctor-disable-next-line react-doctor/no-high-complexity-react-function -- one field with its domain, slug and lock states; split tracked in the follow-up issue.
+// react-doctor-disable-next-line react-doctor/no-high-complexity-react-function -- one field with its domain, slug and lock states; split tracked in #422.
 function ShortLinkField({
   form,
   setForm,
@@ -671,7 +671,7 @@ const PHONE_FOOTER =
 const ASIDE =
   "flex min-w-0 flex-col gap-4 bg-bg px-5 pt-4 pb-6 max-sm:shadow-[inset_0_1px_0_color-mix(in_oklab,var(--text)_8%,transparent)] sm:shadow-[inset_1px_0_0_color-mix(in_oklab,var(--text)_8%,transparent)]";
 
-// react-doctor-disable-next-line react-doctor/no-high-complexity-react-function, react-doctor/no-giant-component -- the form, the QR view and the preview share one form state; split tracked in the follow-up issue.
+// react-doctor-disable-next-line react-doctor/no-high-complexity-react-function, react-doctor/no-giant-component -- the form, the QR view and the preview share one form state; split tracked in #422.
 export function LinkEditor({
   open,
   onOpenChange,

@@ -228,7 +228,7 @@ type CheckState =
 /** What the form says is wrong after Import, in the place it is wrong. */
 type FormError = { at: "file" | "domains" | "rows"; message: string } | null;
 
-// react-doctor-disable-next-line react-doctor/no-high-complexity-react-function -- one form across the file, domain and row steps; split tracked in the follow-up issue.
+// react-doctor-disable-next-line react-doctor/no-high-complexity-react-function -- one form across the file, domain and row steps; split tracked in #422.
 function ImportForm({ orgId, role }: { orgId: string; role: OrgRole }) {
   const { limits, activeDomains, defaultDomainId } = useOrgLimits();
   const quota = useLinkQuotaUsage(orgId);
