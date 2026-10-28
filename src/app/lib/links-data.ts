@@ -7,7 +7,7 @@
  * or flag appears the moment the Worker starts answering. The shapes are
  * written out in rdyrct-app-audit/overnight/links.md.
  */
-import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import { keepPreviousData, queryOptions, useQuery } from "@tanstack/react-query";
 import type { LinkDTO, LinkFacets, LinkFilter, LinkListItem } from "@/shared/types";
 import { api } from "./api";
 import { useMembers } from "./hooks";
@@ -46,7 +46,10 @@ function queryString(query: LinkPageQuery): string {
  * already do (create, edit, delete, import) refreshes this too.
  */
 export const useLinkRows = (orgId: string, query: LinkPageQuery) =>
-  useQuery<{ items: LinkRow[]; nextCursor: string | null }>({
+  useQuery(linkRowsQuery(orgId, query));
+
+export const linkRowsQuery = (orgId: string, query: LinkPageQuery) =>
+  queryOptions<{ items: LinkRow[]; nextCursor: string | null }>({
     queryKey: ["links", orgId, "rows", query],
     queryFn: () => api(`/orgs/${orgId}/links?${queryString(query)}`),
     enabled: !!orgId,
@@ -55,8 +58,10 @@ export const useLinkRows = (orgId: string, query: LinkPageQuery) =>
 
 /** The chip counts. Until they arrive (or if they fail) the page shows no
  * chips, rather than chips with no numbers. */
-export const useLinkFacets = (orgId: string) =>
-  useQuery<LinkFacets>({
+export const useLinkFacets = (orgId: string) => useQuery(linkFacetsQuery(orgId));
+
+export const linkFacetsQuery = (orgId: string) =>
+  queryOptions<LinkFacets>({
     queryKey: ["links", orgId, "facets"],
     queryFn: () => api(`/orgs/${orgId}/links/facets`),
     enabled: !!orgId,

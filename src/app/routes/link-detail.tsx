@@ -1,7 +1,7 @@
 import { linkFieldError } from "../lib/link-field-errors";
 import { useMemo, useState } from "react";
 import { useNavigate, useParams } from "@tanstack/react-router";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQueryClient, type QueryClient } from "@tanstack/react-query";
 import {
   IconDots,
   IconExternalLink,
@@ -10,8 +10,16 @@ import {
   IconTrash,
 } from "@tabler/icons-react";
 import { useSearchParams } from "../lib/router-search";
-import { useLinks, useLinkMutations, useMembers } from "../lib/hooks";
-import { useOrgLimits } from "../lib/org-limits";
+import {
+  addressesQuery,
+  linksQuery,
+  membersQuery,
+  useLinks,
+  useLinkMutations,
+  useMembers,
+} from "../lib/hooks";
+import { preloadOrgDomains, useOrgLimits } from "../lib/org-limits";
+import { settle, type PageContext } from "../lib/route-preload";
 import { AreaChart, BarList, PlacesPanel, StatsChart, dayTick } from "../components/charts";
 import { NoOrgState } from "../components/no-org";
 import { LinkEditor } from "../components/link-editor";
@@ -42,14 +50,39 @@ import {
   cappedCount,
   deviceLabel,
   sourceLabel,
+  linkInsightStatsQuery,
   useLinkInsightStats,
   type LinkInsightStats,
   type RangePreset,
 } from "../lib/insights-data";
 import posthog from "../lib/posthog";
-import type { LinkDTO, LinkInput } from "@/shared/types";
+import { PLAN_LIMITS, type LinkDTO, type LinkInput } from "@/shared/types";
 
 const LINK_RANGES = [PRESET_7D, PRESET_30D, PRESET_365D] as const;
+
+/** The list search that finds this link's row: there is no single-link read. */
+const rowSearch = (slug: string) => ({ q: slug, limit: 100 });
+
+/** Everything a link's first frame reads (see lib/route-preload.ts): its
+ * stats, then the row and other addresses the stats name. */
+export function preload(qc: QueryClient, orgId: string, page: PageContext) {
+  const slug = page.params.slug ?? null;
+  const domain = new URLSearchParams(page.searchStr).get("domain");
+  const days = defaultRange(PLAN_LIMITS[page.org.plan].analyticsDays).days;
+  const stats = qc
+    .ensureQueryData(linkInsightStatsQuery(orgId, slug, domain, days))
+    .then((s) =>
+      settle([
+        qc.ensureQueryData(linksQuery(orgId, rowSearch(s.slug))),
+        qc.ensureQueryData(addressesQuery(orgId, s.id)),
+      ]),
+    );
+  return settle([
+    stats,
+    qc.ensureQueryData(membersQuery(orgId)),
+    preloadOrgDomains(qc, page.org, page.user),
+  ]);
+}
 
 /**
  * The link as the links list knows it, for the editor and the QR dialog.
@@ -60,7 +93,7 @@ const LINK_RANGES = [PRESET_7D, PRESET_30D, PRESET_365D] as const;
  */
 function useLinkRow(orgId: string, s: LinkInsightStats | undefined): LinkDTO | null {
   // An empty org id holds the query until the stats name the slug.
-  const links = useLinks(s ? orgId : "", { q: s?.slug ?? "", limit: 100 });
+  const links = useLinks(s ? orgId : "", rowSearch(s?.slug ?? ""));
   if (!s) return null;
   return links.data?.items.find((l) => l.id === s.id) ?? null;
 }

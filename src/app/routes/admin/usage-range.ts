@@ -16,8 +16,7 @@ const DAYS = { "7d": 7, "30d": 30, "90d": 90 } as const satisfies Record<RangeId
 /** The range id in the URL, 30d when there is none or it is not one of ours. */
 export function useUsageRange(): [RangeId, (next: RangeId) => void] {
   const [params, setParams] = useSearchParams();
-  const raw = params.get("range");
-  const range = IDS.find((id) => id === raw) ?? "30d";
+  const range = rangeFrom(params);
   const set = (next: RangeId) => {
     if (next === "30d") params.delete("range");
     else params.set("range", next);
@@ -27,3 +26,12 @@ export function useUsageRange(): [RangeId, (next: RangeId) => void] {
 }
 
 export const rangeDays = (id: RangeId): UsageRange => DAYS[id];
+
+function rangeFrom(params: URLSearchParams): RangeId {
+  const raw = params.get("range");
+  return IDS.find((id) => id === raw) ?? "30d";
+}
+
+/** The days a query string asks for, for a preload that has no hook. */
+export const usageDaysFrom = (searchStr: string): UsageRange =>
+  rangeDays(rangeFrom(new URLSearchParams(searchStr)));

@@ -1,9 +1,11 @@
 import { useState, useEffect, useRef } from "react";
+import { settle } from "../lib/route-preload";
 import { errorMessage } from "@/app/lib/error-message";
 import { useForm } from "react-hook-form";
 import { valibotResolver } from "@hookform/resolvers/valibot";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { useCurrentUser } from "../lib/hooks";
+import { linkedAccountsQuery, otherSessionsQuery } from "../lib/account-security";
 import type { User, UserOrg } from "@/shared/types";
 import { AvatarInput } from "../components/avatar-input";
 import { uploadUserAvatar, deleteUserAvatar } from "../lib/api";
@@ -284,6 +286,12 @@ function DeleteAccountWarning({ orgs }: { orgs: UserOrg[] }) {
       </p>
     </div>
   );
+}
+
+/** Everything Settings' first frame reads beyond the user (see
+ * lib/route-preload.ts): the "Signing in" group's two lists. */
+export function preload(qc: QueryClient) {
+  return settle([qc.ensureQueryData(linkedAccountsQuery), qc.ensureQueryData(otherSessionsQuery)]);
 }
 
 export function SettingsPage() {

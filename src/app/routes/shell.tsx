@@ -537,7 +537,7 @@ function MobileDrawer({
       <MotionConfig reducedMotion="user">
         <AnimatePresence>
           {open && (
-            <div className="fixed inset-0 z-40 md:hidden">
+            <div data-app-drawer className="fixed inset-0 z-40 md:hidden">
               {/* A dimmed page behind the drawer says it is on top and that a
                   tap outside closes it. A real button, so it is reachable. */}
               <m.button
@@ -807,7 +807,10 @@ export function AppShell({ children }: { children?: ReactNode }) {
         </aside>
 
         {/* mobile top bar + drawer */}
-        <div className="fixed inset-x-0 top-0 z-30 flex h-[52px] items-center gap-1.5 bg-bg/90 px-3 backdrop-blur md:hidden">
+        <div
+          data-app-bar
+          className="fixed inset-x-0 top-0 z-30 flex h-[52px] items-center gap-1.5 bg-bg/90 px-3 backdrop-blur md:hidden"
+        >
           <button
             type="button"
             onClick={() => setMobileOpen((v) => !v)}
@@ -842,8 +845,9 @@ export function AppShell({ children }: { children?: ReactNode }) {
               {/* Above the route, not inside each one: the state belongs to the
               org, so it says the same thing on every page (#163). */}
               <OverLimitBanner />
-              {/* pages are lazy chunks: keep the shell in place while one loads,
-              behind the shape that chunk is about to render */}
+              {/* The router loads a page before it swaps to it and draws a
+              slow one's skeleton itself (main.tsx), so this is only met by
+              the shell's own first render. */}
               <Suspense fallback={<RouteSkeleton />}>
                 <InShell.Provider value>{children ?? <Outlet />}</InShell.Provider>
               </Suspense>

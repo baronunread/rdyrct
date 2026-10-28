@@ -10,8 +10,9 @@
  * own. A report naming a slug does not know which table it came from, and
  * two places to search is one place too many at 2am.
  */
+import { settle } from "../../lib/route-preload";
 import { useRef, useState } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import {
   Ban,
   ExternalLink,
@@ -21,8 +22,20 @@ import {
   Undo2,
   X,
 } from "@/app/ui/icons";
-import { useAdminAnonLinks, useAdminBlockedHosts, useAdminReports } from "../../lib/hooks";
-import { ADMIN_LINKS_CAP, useAdminLinksData, type AdminLinkFilter } from "../../lib/admin-data";
+import {
+  adminAnonLinksQuery,
+  adminBlockedHostsQuery,
+  adminReportsQuery,
+  useAdminAnonLinks,
+  useAdminBlockedHosts,
+  useAdminReports,
+} from "../../lib/hooks";
+import {
+  ADMIN_LINKS_CAP,
+  adminLinksQuery,
+  useAdminLinksData,
+  type AdminLinkFilter,
+} from "../../lib/admin-data";
 import { api } from "../../lib/api";
 import { linkDisplayTitle } from "../../lib/link-display";
 import type { AdminAnonLinkRow, AdminLinkRow, AdminReportRow, Sort } from "@/shared/types";
@@ -1212,6 +1225,22 @@ function OwnedLinks({
     </div>
   );
 }
+
+/** The links page's first frame (see lib/route-preload.ts): every link,
+ * or one org's from ?org=, and the counts on the other tabs. */
+export const preload = (qc: QueryClient, searchStr: string) =>
+  settle([
+    qc.ensureQueryData(
+      adminLinksQuery({
+        q: "",
+        filter: "all",
+        org: new URLSearchParams(searchStr).get("org") ?? "",
+      }),
+    ),
+    qc.ensureQueryData(adminReportsQuery),
+    qc.ensureQueryData(adminAnonLinksQuery),
+    qc.ensureQueryData(adminBlockedHostsQuery),
+  ]);
 
 export function AdminLinksPage() {
   const [view, setView] = useState<View>("all");

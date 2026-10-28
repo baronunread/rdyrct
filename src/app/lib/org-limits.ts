@@ -1,9 +1,10 @@
 import { useMemo } from "react";
-import { useCurrentUser, useDomains } from "./hooks";
+import type { QueryClient } from "@tanstack/react-query";
+import { domainsQuery, useCurrentUser, useDomains } from "./hooks";
 import { useCurrentOrg } from "./current-org";
 import { orgQrFrom } from "./org-qr";
 import { resolveDefaultDomainId } from "./default-domain";
-import { PLAN_LIMITS, type OrgRole } from "@/shared/types";
+import { PLAN_LIMITS, type CurrentUser, type OrgRole, type UserOrg } from "@/shared/types";
 
 /** Platform admins can always see an org's domains; otherwise only its
  * owner or admins can (members can't manage custom domains). */
@@ -59,6 +60,14 @@ export function canWriteOrg(role: OrgRole | undefined, locked = false): boolean 
 export function domainsBlockedBy(planDomains: number, locked: boolean): "lock" | "plan" | null {
   if (locked) return "lock";
   return planDomains > 0 ? null : "plan";
+}
+
+/** What `useOrgLimits` fetches, for a page's preload: the org's domains when
+ * this account may list them. */
+export function preloadOrgDomains(qc: QueryClient, org: UserOrg, user: CurrentUser) {
+  return canListOrgDomains(user.user.isAdmin, org.role)
+    ? qc.ensureQueryData(domainsQuery(org.id))
+    : undefined;
 }
 
 export function useOrgLimits() {

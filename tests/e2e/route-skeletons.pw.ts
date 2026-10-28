@@ -87,9 +87,10 @@ test("Links keeps its full route shape until the current user arrives", async ()
   );
 });
 
-test("sidebar navigation keeps the Links table usable after its data arrives", async () => {
+test("a slow page keeps the old one up, then shows its skeleton, then the page whole", async () => {
   const page = sharedPage;
   await warmShell(page, sharedEmail);
+  // Hold the links page's rows: the router waits for them before it swaps.
   let release = () => {};
   const held = new Promise<void>((resolve) => {
     release = resolve;
@@ -102,12 +103,22 @@ test("sidebar navigation keeps the Links table usable after its data arrives", a
     },
   );
 
+  // A new account's dashboard asks for its first link, so read what it says
+  // rather than assume a title.
+  const oldHeading = await page.locator("[data-app-sheet] h1").first().textContent();
   await page.getByRole("link", { name: "Links" }).click();
-  await expect(page).toHaveURL(/\/links$/);
-  await expect(page.getByRole("textbox", { name: "Search links" })).toBeVisible();
-  await expect(page.getByTestId("links-table-skeleton")).toBeVisible();
-  await expect(page.getByRole("button", { name: "New link" }).first()).toBeVisible();
+  // Within the pending delay the dashboard is still the page on screen, with
+  // no skeleton over it.
+  await expect(page.locator("[data-app-sheet] h1").first()).toHaveText(oldHeading ?? "");
+  await expect(page.getByTestId("links-page-skeleton")).toHaveCount(0);
+  // Past it (defaultPendingMs), the skeleton of the page being opened.
+  await expect(page.getByTestId("links-page-skeleton")).toBeVisible();
   release();
+  await expect(page).toHaveURL(/\/links$/);
+  await expect(
+    page.locator("[data-app-sheet]").getByRole("heading", { name: "Links", level: 1 }),
+  ).toBeVisible();
+  await expect(page.getByTestId("links-page-skeleton")).toHaveCount(0);
   await expect(page.getByTestId("links-table-skeleton")).toHaveCount(0);
   await expect(page.getByRole("button", { name: "New link" }).first()).toBeVisible();
 });

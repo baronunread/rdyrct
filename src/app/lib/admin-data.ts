@@ -8,7 +8,7 @@
  * The query keys are the ones `hooks.ts` uses, so every invalidation that
  * already targets `["admin", …]` reaches these too.
  */
-import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import { keepPreviousData, queryOptions, useQuery } from "@tanstack/react-query";
 import { api } from "./api";
 import type {
   AdminLinkRow,
@@ -55,26 +55,31 @@ export type AdminOrgData = AdminOrgRow & {
 };
 
 export function useAdminUsageRange(days: UsageRange) {
-  return useQuery<AdminUsageData>({
+  return useQuery(adminUsageQuery(days));
+}
+
+export const adminUsageQuery = (days: UsageRange) =>
+  queryOptions<AdminUsageData>({
     // The 30-day answer is the one `useAdminUsage` caches, so the key is the
     // same; other ranges get their own.
     queryKey: days === 30 ? ["admin", "usage"] : ["admin", "usage", days],
     queryFn: () => api(days === 30 ? "/admin/usage" : `/admin/usage?days=${days}`),
     placeholderData: keepPreviousData,
   });
-}
 
-export const useAdminUsersData = () =>
-  useQuery<AdminUserData[]>({
-    queryKey: ["admin", "users"],
-    queryFn: () => api("/admin/users"),
-  });
+export const useAdminUsersData = () => useQuery(adminUsersQuery);
 
-export const useAdminOrgsData = () =>
-  useQuery<AdminOrgData[]>({
-    queryKey: ["admin", "orgs"],
-    queryFn: () => api("/admin/orgs"),
-  });
+export const adminUsersQuery = queryOptions<AdminUserData[]>({
+  queryKey: ["admin", "users"],
+  queryFn: () => api("/admin/users"),
+});
+
+export const useAdminOrgsData = () => useQuery(adminOrgsQuery);
+
+export const adminOrgsQuery = queryOptions<AdminOrgData[]>({
+  queryKey: ["admin", "orgs"],
+  queryFn: () => api("/admin/orgs"),
+});
 
 /** The link list's filters. `suspended` and `warned` are filtered by the
  * Worker today; `reported` and `flagged` are sent too, and filtered here as
@@ -94,8 +99,16 @@ const FILTER_PARAM = {
 /** Rows the list endpoint returns at most (MAX_ROWS in admin-links.ts). */
 export const ADMIN_LINKS_CAP = 200;
 
-export const useAdminLinksData = (params: { q: string; filter: AdminLinkFilter; org?: string }) =>
-  useQuery<AdminLinkRow[]>({
+export const useAdminLinksData = (params: AdminLinksParams) => useQuery(adminLinksQuery(params));
+
+export interface AdminLinksParams {
+  q: string;
+  filter: AdminLinkFilter;
+  org?: string;
+}
+
+export const adminLinksQuery = (params: AdminLinksParams) =>
+  queryOptions<AdminLinkRow[]>({
     queryKey: ["admin", "links", params],
     queryFn: () =>
       api(

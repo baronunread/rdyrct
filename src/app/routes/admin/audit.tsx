@@ -6,11 +6,18 @@
  * deletions are recorded here too. A row says who, what and to whom; the rest
  * of the entry (the reason, the counts, the ids) opens from the row.
  */
+import { settle } from "../../lib/route-preload";
 import { useMemo, useRef, useState } from "react";
 import * as v from "valibot";
 import { ArrowRight } from "@/app/ui/icons";
-import { useAdminAudit } from "../../lib/hooks";
-import { useAdminOrgsData, useAdminUsersData } from "../../lib/admin-data";
+import type { QueryClient } from "@tanstack/react-query";
+import { adminAuditQuery, useAdminAudit } from "../../lib/hooks";
+import {
+  adminOrgsQuery,
+  adminUsersQuery,
+  useAdminOrgsData,
+  useAdminUsersData,
+} from "../../lib/admin-data";
 import { Table, Td, Th } from "../../ui/misc";
 import { Dialog } from "../../ui/dialog";
 import { SortTh } from "../../ui/sort-th";
@@ -312,6 +319,15 @@ function matchesTerm(entry: Entry, term: string): boolean {
     .toLowerCase();
   return haystack.includes(term);
 }
+
+/** The audit log's first frame (see lib/route-preload.ts): the entries, and
+ * the users and orgs that name their ids. */
+export const preload = (qc: QueryClient) =>
+  settle([
+    qc.ensureQueryData(adminAuditQuery),
+    qc.ensureQueryData(adminUsersQuery),
+    qc.ensureQueryData(adminOrgsQuery),
+  ]);
 
 export function AdminAuditPage() {
   const { data, isPending } = useAdminAudit();
