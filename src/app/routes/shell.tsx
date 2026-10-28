@@ -103,7 +103,7 @@ export function RequireAdmin({ children }: { children: ReactNode }) {
 // its icon in the accent: one raised thing in the sidebar, not a tinted well.
 const navLinkProps = {
   className:
-    "flex h-9 items-center gap-2.5 rounded-lg px-2.5 text-sm transition-[background-color,color] [&_svg]:shrink-0",
+    "flex h-9 min-w-9 items-center gap-2.5 rounded-lg px-2.5 text-sm transition-[background-color,color] [&_svg]:shrink-0",
   activeProps: {
     className: "bg-surface font-medium text-text smooth-shadow-ring-xs [&_svg]:text-accent",
   },
@@ -122,7 +122,7 @@ function openCommandMenu() {
  * apart, then its name. Folded, only the initial shows. */
 function OrgTrigger({ org, collapsed }: { org: UserOrg | null; collapsed: boolean }) {
   return (
-    <div className="flex h-10 w-full items-center gap-2.5 rounded-lg px-1.5 text-sm select-none [@media(hover:hover)]:hover:bg-surface-2">
+    <div className="flex h-10 w-full min-w-9 items-center gap-2.5 rounded-lg px-1.5 text-sm select-none [@media(hover:hover)]:hover:bg-surface-2">
       {org && (
         <span
           aria-hidden
@@ -332,7 +332,7 @@ function AppSidebar({
           <Menu
             label="Account menu"
             trigger={
-              <div className="flex items-center gap-2.5 rounded-lg px-[3px] py-1.5 [@media(hover:hover)]:hover:bg-surface/50">
+              <div className="flex min-w-9 items-center gap-2.5 rounded-lg px-[3px] py-1.5 [@media(hover:hover)]:hover:bg-surface/50">
                 <UserAvatar user={user} size={30} />
                 <span className={cn("min-w-0 flex-1 leading-tight", fade(collapsed))}>
                   <span className="block truncate text-sm font-medium">{user.name}</span>

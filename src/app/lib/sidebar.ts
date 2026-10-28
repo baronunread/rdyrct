@@ -41,16 +41,21 @@ export function useSidebarShortcut() {
 }
 
 /** The desktop sidebar and the sheet beside it, open or folded. Shared with
- * the shell's skeleton so the first paint already has the right width. */
+ * the shell's skeleton so the first paint already has the right width.
+ *
+ * Folded, what reads as the rail is the strip of paper up to the sheet: the
+ * aside plus the 8px gap. Every icon's centre sits 30px in (12px padding,
+ * then half a 36px item), so the aside is 52px and the strip 60. Its items
+ * keep their 36px (`min-w-9`) and run into the right-hand padding. */
 export function shellLayout(collapsed: boolean) {
   return {
     aside: cn(
       "fixed inset-y-0 left-0 z-10 hidden transition-[width] duration-200 ease-out md:block",
-      collapsed ? "w-[60px]" : "w-60",
+      collapsed ? "w-[52px]" : "w-60",
     ),
     main: cn(
       "mx-1.5 mt-[52px] mb-1.5 flex min-w-0 flex-1 flex-col rounded-[22px] bg-surface px-4 py-6 smooth-shadow-ring-sm transition-[margin] duration-200 ease-out md:my-2 md:mr-2 md:rounded-[14px] md:px-10 md:py-8",
-      collapsed ? "md:ml-[68px]" : "md:ml-[248px]",
+      collapsed ? "md:ml-[60px]" : "md:ml-[248px]",
     ),
   };
 }

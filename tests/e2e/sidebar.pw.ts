@@ -12,18 +12,18 @@ test("the sidebar folds to an icon rail, stays folded, and unfolds", async ({ pa
   await expect.poll(width).toBe(240);
 
   await page.getByRole("button", { name: "Collapse sidebar ([)" }).click();
-  await expect.poll(width).toBe(60);
+  await expect.poll(width).toBe(52);
   // The nav still works from the rail.
   await sidebar.getByRole("link", { name: "Links" }).click();
   await expect(page).toHaveURL(/\/links$/);
 
   // Folded is remembered across a reload, skeleton included.
   await page.reload();
-  await expect.poll(width).toBe(60);
+  await expect.poll(width).toBe(52);
 
   // `[` unfolds it, but not while typing in a field.
   await page.getByPlaceholder("Search links…").fill("[");
-  await expect.poll(width).toBe(60);
+  await expect.poll(width).toBe(52);
   await page.getByPlaceholder("Search links…").blur();
   await page.keyboard.press("[");
   await expect.poll(width).toBe(240);

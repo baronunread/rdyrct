@@ -548,7 +548,7 @@ function SidebarSkeleton({ collapsed }: { collapsed: boolean }) {
 
       {/* org switcher: the initial and name are data */}
       <div className="px-3 py-2">
-        <div className="flex h-10 w-full items-center gap-2.5 px-1.5">
+        <div className="flex h-10 w-full min-w-9 items-center gap-2.5 px-1.5">
           <Skeleton className="size-6 shrink-0 rounded-md" />
           <span className={cn("flex h-5 min-w-0 flex-1 items-center", hide)}>
             <Skeleton className="h-3.5 w-28" />
@@ -562,7 +562,7 @@ function SidebarSkeleton({ collapsed }: { collapsed: boolean }) {
         {appNavItems.map(({ icon: Icon, label }) => (
           <span
             key={label}
-            className="flex h-9 items-center gap-2.5 rounded-lg px-2.5 text-sm whitespace-nowrap text-muted [&_svg]:shrink-0"
+            className="flex h-9 min-w-9 items-center gap-2.5 rounded-lg px-2.5 text-sm whitespace-nowrap text-muted [&_svg]:shrink-0"
           >
             <Icon size={15} /> <span className={cn(hide)}>{label}</span>
           </span>
@@ -571,7 +571,7 @@ function SidebarSkeleton({ collapsed }: { collapsed: boolean }) {
 
       {/* account: the avatar and name are data */}
       <div className="mt-auto px-3 py-3">
-        <div className="flex items-center gap-2.5 px-[3px] py-1.5">
+        <div className="flex min-w-9 items-center gap-2.5 px-[3px] py-1.5">
           <Skeleton className="size-[30px] shrink-0 rounded-full" />
           <span className={cn("flex h-5 min-w-0 flex-1 items-center", hide)}>
             <Skeleton className="h-3 w-2/3" />
