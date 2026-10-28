@@ -404,6 +404,7 @@ async function wipe(): Promise<number> {
     "DELETE FROM org_entitlements WHERE org_id LIKE 'seed-%'",
     "DELETE FROM org_members WHERE org_id LIKE 'seed-%'",
     "DELETE FROM orgs WHERE id LIKE 'seed-%'",
+    "DELETE FROM admin_actions WHERE id LIKE 'seed-plan-%'",
     "DELETE FROM session WHERE user_id LIKE 'seed-%'",
     "DELETE FROM account WHERE user_id LIKE 'seed-%'",
     "DELETE FROM user WHERE id LIKE 'seed-%'",
@@ -879,6 +880,7 @@ async function seed() {
   await seedLastSeen(now, day);
 
   await seedScenarioAccounts(passwordHash, now, day);
+  await seedPlanHistory(now, day);
 
   /* summary */
   console.log("\nSeeded:");
@@ -1102,6 +1104,31 @@ async function seedLinkQrLooks(): Promise<void> {
     .map((r, i) => `UPDATE links SET ${looks[i % looks.length]} WHERE id = ${q(r.id)}`);
   await sqlBatch(statements);
   console.log(`  QR looks: ${statements.length} links`);
+}
+
+/**
+ * Polar's plan changes on the Audit page (migration 0050). Every account's
+ * audited plan is set level with its plan, so the first reconcile after
+ * seeding logs nothing it did not see happen, and a few accounts get the
+ * upgrade (and one the cancellation) that would have put them where they
+ * are.
+ */
+async function seedPlanHistory(now: number, day: number): Promise<void> {
+  const entry = (from: string, to: string, ago: string) =>
+    `INSERT INTO admin_actions (id, actor_user_id, action, target_type, target_id, detail, created_at)
+     SELECT 'seed-plan-' || id, 'polar', 'plan.change', 'user', id,
+            json_object('from', ${q(from)}, 'to', ${q(to)}, 'email', email),
+            ${now} - ${ago}
+     FROM user`;
+  await sqlBatch([
+    `UPDATE user SET audited_plan = plan`,
+    `${entry("free", "pro", `(abs(random()) % ${20 * day})`)}
+     WHERE id LIKE 'seed-%' AND plan = 'pro' AND comp_plan IS NULL LIMIT 3`,
+    `${entry("free", "hobby", `(abs(random()) % ${20 * day})`)}
+     WHERE id LIKE 'seed-%' AND plan = 'hobby' AND comp_plan IS NULL LIMIT 3`,
+    `${entry("pro", "free", `(abs(random()) % ${10 * day})`)}
+     WHERE id LIKE 'seed-%' AND plan = 'free' LIMIT 1`,
+  ]);
 }
 
 /**

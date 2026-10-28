@@ -66,7 +66,7 @@ export function linkState(link: StateInput): LinkState {
 }
 
 /** On a blocklist because Google Web Risk said so, rather than DNS. */
-export const flaggedByGoogle = (link: StateInput) =>
+const flaggedByGoogle = (link: StateInput) =>
   riskState(link.riskScore) === "blocked" &&
   link.riskReasons.some((reason) => reason.startsWith("web_risk_"));
 

@@ -19,7 +19,8 @@ import {
   type PlanLimits,
   type JsonValue,
 } from "@/shared/types";
-import { logFailure } from "./log-failure";
+import { activeLog, logFailure } from "./log-failure";
+import { recordAdminAction } from "./audit";
 
 /**
  * What a plan change means for the orgs a user owns (#158).
@@ -359,9 +360,14 @@ export async function reconcileUser(
   if (!billingEnabled()) return;
   try {
     const rows = await db
-      .select({ plan: schema.user.plan })
+      .select({
+        plan: schema.user.plan,
+        auditedPlan: schema.user.auditedPlan,
+        email: schema.user.email,
+      })
       .from(schema.user)
       .where(eq(schema.user.id, userId));
+    if (rows[0]) await recordPlanChange(env, db, userId, rows[0]);
     const plan = orgPlanOf(rows[0]?.plan);
     const limits = PLAN_LIMITS[plan];
 
@@ -384,6 +390,52 @@ export async function reconcileUser(
   } catch (error) {
     captureAlert([{ event: "reconcile_failed", userId }]);
     logFailure("reconcile_failed", error, { userId });
+  }
+}
+
+/** Who the Audit page names for a plan change nobody at rdyrct made. */
+const POLAR_ACTOR = "polar";
+
+/**
+ * Logs a plan change the audit log has not seen yet (migration 0050).
+ *
+ * A comp moves `audited_plan` with `plan` in the same statement, because its
+ * own entry records the change, so whatever is left to log here came from
+ * Polar: a webhook, the checkout-confirm fallback, or an admin's manual pass
+ * catching up after one of those failed to reconcile. The update is guarded
+ * on the value read, so two passes racing over one change log it once.
+ * Best-effort, like every audit write: a failure here must not stop the
+ * pass from locking what is over the new plan.
+ */
+async function recordPlanChange(
+  env: Env,
+  db: DB,
+  userId: string,
+  user: { plan: StoredPlan; auditedPlan: StoredPlan; email: string },
+): Promise<void> {
+  if (user.plan === user.auditedPlan) return;
+  try {
+    const moved = await db
+      .update(schema.user)
+      .set({ auditedPlan: user.plan })
+      .where(and(eq(schema.user.id, userId), eq(schema.user.auditedPlan, user.auditedPlan)));
+    if (moved.meta.changes === 0) return;
+    await recordAdminAction(env, {
+      actorUserId: POLAR_ACTOR,
+      action: "plan.change",
+      targetType: "user",
+      targetId: userId,
+      detail: { from: user.auditedPlan, to: user.plan, email: user.email },
+    });
+    activeLog.getStore()?.audit({
+      action: "plan.change",
+      actor: { type: "system", id: POLAR_ACTOR },
+      target: { type: "user", id: userId },
+      outcome: "success",
+      changes: { before: { plan: user.auditedPlan }, after: { plan: user.plan } },
+    });
+  } catch (error) {
+    logFailure("plan_change_audit_failed", error, { userId });
   }
 }
 

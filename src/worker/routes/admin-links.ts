@@ -41,6 +41,7 @@ import { linkUrl } from "../util";
 import {
   ADMIN_LINK_SORTS,
   type AdminAnonLinkRow,
+  type AdminLinkCounts,
   type AdminLinkRow,
   type AdminLinkSort,
   type AdminReportRow,
@@ -102,6 +103,22 @@ const reportCount = sql<number>`(
   where link_reports.link_id = links.id and link_reports.status = 'open'
 )`;
 
+/** Open reports, as a test rather than a count. */
+const reported = sql<boolean>`exists (
+  select 1 from link_reports
+  where link_reports.link_id = links.id and link_reports.status = 'open'
+)`;
+
+/**
+ * On a blocklist because Google Web Risk said so: the score that blocks and
+ * a `web_risk_*` reason (risk.ts). `like` over the stored JSON rather than
+ * json_each, which throws on a malformed row where parseReasons shrugs. (`_`
+ * matches any one character in `like`, which only ever widens this to a
+ * reason nobody writes.)
+ * Literal `links.` columns: this runs inside an aggregate below too.
+ */
+const flagged = sql<boolean>`(links.risk_score >= 100 and links.risk_reasons like '%"web_risk_%')`;
+
 // Read from the rollups (#26), like the org's own links list.
 const clickCount = linkClicksTotal;
 
@@ -142,17 +159,30 @@ async function routeLink(c: Context<AppEnv>) {
  * instance, or a big account, that is usually none of them, and answering an
  * abuse report with an empty table is worse than answering it slowly.
  */
-function adminLinkFilters(c: Context<AppEnv>) {
+function adminLinkScope(c: Context<AppEnv>) {
   const q = (c.req.query("q") ?? "").trim();
   const org = (c.req.query("org") ?? "").trim();
   return [
     q ? or(like(schema.links.slug, `%${q}%`), like(schema.links.destination, `%${q}%`)) : undefined,
-    c.req.query("suspended") === "1" ? isNotNull(schema.links.suspendedAt) : undefined,
-    c.req.query("suspended") === "0" ? isNull(schema.links.suspendedAt) : undefined,
-    c.req.query("warned") === "1" ? isNotNull(schema.links.warnedAt) : undefined,
     org ? eq(schema.links.orgId, org) : undefined,
   ].filter(Boolean);
 }
+
+/** The scope above, narrowed by the filter pills. */
+function adminLinkFilters(c: Context<AppEnv>) {
+  return [
+    ...adminLinkScope(c),
+    c.req.query("suspended") === "1" ? isNotNull(schema.links.suspendedAt) : undefined,
+    c.req.query("suspended") === "0" ? isNull(schema.links.suspendedAt) : undefined,
+    c.req.query("warned") === "1" ? isNotNull(schema.links.warnedAt) : undefined,
+    c.req.query("reported") === "1" ? reported : undefined,
+    c.req.query("flagged") === "1" ? flagged : undefined,
+  ].filter(Boolean);
+}
+
+/** A count of the rows matching `test`, as one column of a single pass. */
+const countWhere = (test: SQL) =>
+  sql<number>`coalesce(sum(case when ${test} then 1 else 0 end), 0)`;
 
 /** Nulls last on risk: unscored is not "safe", and letting it sort above a
  * score of 100 would put the worst links below links nobody has looked at. */
@@ -162,6 +192,27 @@ function adminLinkOrder(sort: AdminLinkSort) {
     return sql`${schema.links.riskScore} is null, ${schema.links.riskScore} desc`;
   return desc(schema.links.createdAt);
 }
+
+/**
+ * How many links each filter pill holds, under the list's search and org.
+ * The list stops at MAX_ROWS, so its length cannot say this past 200.
+ */
+adminLinkRoutes.get("/counts", async (c) => {
+  const scope = adminLinkScope(c);
+  const [row] = await c.var.db
+    .select({
+      all: sql<number>`count(*)`,
+      reported: countWhere(reported),
+      flagged: countWhere(flagged),
+      suspended: countWhere(isNotNull(schema.links.suspendedAt)),
+      warned: countWhere(isNotNull(schema.links.warnedAt)),
+    })
+    .from(schema.links)
+    .where(scope.length ? and(...scope) : undefined);
+  return c.json(
+    (row ?? { all: 0, reported: 0, flagged: 0, suspended: 0, warned: 0 }) satisfies AdminLinkCounts,
+  );
+});
 
 adminLinkRoutes.get("/", async (c) => {
   const log = c.get("log");

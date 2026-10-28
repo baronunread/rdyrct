@@ -1,16 +1,15 @@
 /**
- * The platform-admin queries, with the fields the redesigned screens read
- * before the API sends all of them.
+ * The platform-admin queries the redesigned screens read.
  *
- * Each type below is the shared DTO plus optional fields. The screens use a
- * field when it is there and fall back to what they can derive when it is
- * not, so the Worker can add them one at a time without a client release.
+ * `AdminUsageData` is the shared DTO plus the two fields the Worker does not
+ * send yet: the screens use each when it is there and say so when it is not.
  * The query keys are the ones `hooks.ts` uses, so every invalidation that
  * already targets `["admin", …]` reaches these too.
  */
 import { keepPreviousData, queryOptions, useQuery } from "@tanstack/react-query";
 import { api } from "./api";
 import type {
+  AdminLinkCounts,
   AdminLinkRow,
   AdminOrgRow,
   AdminUsage,
@@ -22,36 +21,12 @@ import type {
 export type UsageRange = 7 | 30 | 90;
 
 export type AdminUsageData = AdminUsage & {
-  /** The range the series cover, when the Worker honours `?days=`. */
-  days?: number;
-  /** New links per day, same window as `series`. */
-  linkSeries?: SeriesPoint[];
-  /** People paying, per day, same window as `series`. */
+  /** People paying, per day, same window as `series`. Nothing records a
+   * plan's history before the `plan.change` audit entries, so the Worker
+   * cannot draw this yet. */
   paidSeries?: SeriesPoint[];
-  /** Sign-ups in the range, by the plan each holds today. */
-  signupsByPlan?: { free: number; hobby: number; pro: number };
   /** Every org over or near its plan; `capPressure` may be cut short. */
   capPressureTotal?: number;
-};
-
-export type AdminUserData = AdminUserRow & {
-  /** Links this person made, across every org. */
-  links?: number;
-  /** Uploaded picture URL, or null for the generated one. */
-  image?: string | null;
-};
-
-export type AdminOrgData = AdminOrgRow & {
-  /** Clicks in the last 30 days, rather than all time. */
-  clicks30d?: number;
-  /** Over its plan right now (org_entitlements has an over-cap entry). */
-  overPlan?: boolean;
-  /** When the grace period ends, if it is over its plan. */
-  graceEndsAt?: number | null;
-  /** Read-only after a downgrade (`orgs.locked_at`). */
-  lockedAt?: number | null;
-  /** One of its custom domains stopped serving (`domains.locked_at` past grace). */
-  domainStoppedAt?: number | null;
 };
 
 export function useAdminUsageRange(days: UsageRange) {
@@ -69,35 +44,29 @@ export const adminUsageQuery = (days: UsageRange) =>
 
 export const useAdminUsersData = () => useQuery(adminUsersQuery);
 
-export const adminUsersQuery = queryOptions<AdminUserData[]>({
+export const adminUsersQuery = queryOptions<AdminUserRow[]>({
   queryKey: ["admin", "users"],
   queryFn: () => api("/admin/users"),
 });
 
 export const useAdminOrgsData = () => useQuery(adminOrgsQuery);
 
-export const adminOrgsQuery = queryOptions<AdminOrgData[]>({
+export const adminOrgsQuery = queryOptions<AdminOrgRow[]>({
   queryKey: ["admin", "orgs"],
   queryFn: () => api("/admin/orgs"),
 });
 
-/** The link list's filters. `suspended` and `warned` are filtered by the
- * Worker today; `reported` and `flagged` are sent too, and filtered here as
- * well until the Worker reads them. */
+/** The link list's filters, each one a parameter the Worker reads. */
 export type AdminLinkFilter = "all" | "reported" | "flagged" | "suspended" | "warned";
 
 const FILTER_PARAM = {
   all: "",
   reported: "&reported=1",
-  // Worst first, so the 200-row cap holds the flagged ones even before the
-  // Worker learns the filter.
+  // Worst first, so the 200-row cap holds the worst of them.
   flagged: "&flagged=1&sort=risk",
   suspended: "&suspended=1",
   warned: "&warned=1",
 } satisfies Record<AdminLinkFilter, string>;
-
-/** Rows the list endpoint returns at most (MAX_ROWS in admin-links.ts). */
-export const ADMIN_LINKS_CAP = 200;
 
 export const useAdminLinksData = (params: AdminLinksParams) => useQuery(adminLinksQuery(params));
 
@@ -117,5 +86,20 @@ export const adminLinksQuery = (params: AdminLinksParams) =>
       ),
     // Without it every pause in typing swapped the table for a skeleton,
     // and unmounted a row menu mid-click.
+    placeholderData: keepPreviousData,
+  });
+
+/** How many links each filter holds, under the same search and org. */
+export const useAdminLinkCounts = (params: Omit<AdminLinksParams, "filter">) =>
+  useQuery(adminLinkCountsQuery(params));
+
+export const adminLinkCountsQuery = (params: Omit<AdminLinksParams, "filter">) =>
+  queryOptions<AdminLinkCounts>({
+    queryKey: ["admin", "links", "counts", params],
+    queryFn: () =>
+      api(
+        `/admin/links/counts?q=${encodeURIComponent(params.q)}` +
+          (params.org ? `&org=${encodeURIComponent(params.org)}` : ""),
+      ),
     placeholderData: keepPreviousData,
   });

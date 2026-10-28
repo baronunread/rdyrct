@@ -6,9 +6,11 @@ import { createQuickLink } from "./orgs";
 
 /**
  * The platform screens' frame and the controls the redesign added: one fixed
- * title over the tabs, the usage range in the URL, the figure the chart
- * plots, a list that shows its worst five without dropping the rest, the
- * link filters, and every tab on a phone.
+ * title over the tabs, the usage range in the URL and on the server, the
+ * figure the chart plots, a list that shows its worst five without dropping
+ * the rest, the link filters and their counts, the plan states on the orgs
+ * list, pictures on the users list, Polar's plan changes in the audit log,
+ * and every tab on a phone.
  */
 
 const password = "test-password-123";
@@ -113,12 +115,124 @@ test("a reported link says so, and the Reported filter finds it", async ({ page 
   await expect(row.getByText("Reported", { exact: true })).toBeVisible({ timeout: 10_000 });
 
   const lists = page.getByRole("group", { name: "Link lists" });
+  // Counted by the server, so the pills say a number past the list's cap.
+  await expect(lists.getByRole("button", { name: "All", exact: true })).toContainText("1");
+  await expect(lists.getByRole("button", { name: "Reported", exact: true })).toContainText("1");
+  await expect(lists.getByRole("button", { name: "Suspended", exact: true })).toContainText("0");
   await lists.getByRole("button", { name: "Suspended", exact: true }).click();
   await expect(row).toHaveCount(0);
   await lists.getByRole("button", { name: "Reported", exact: true }).click();
   await expect(row).toBeVisible();
   // The host and slug share one line.
   expect((await row.boundingBox())!.height).toBeLessThan(56);
+});
+
+test("the range reaches the server: links per day and sign-ups by plan", async ({ page }) => {
+  await admin(page, "admin-range");
+  await page.goto("/admin");
+  const answer = page.waitForResponse((r) => r.url().includes("/api/admin/usage?days=90"));
+  await page.getByRole("group", { name: "Range" }).getByRole("button", { name: "90d" }).click();
+  expect((await (await answer).json()).days).toBe(90);
+
+  const figures = page.getByRole("group", { name: "Figure to chart" });
+  await figures.getByRole("button", { name: /^Links/ }).click();
+  await expect(page.getByText("New links per day", { exact: true })).toBeVisible();
+  await expect(page.getByText(/No daily history/)).toHaveCount(0);
+  await figures.getByRole("button", { name: /^Clicks/ }).click();
+  await expect(page.getByText("Clicks per day", { exact: true })).toBeVisible();
+
+  // Sign-ups split by plan, rather than the figures it showed without them.
+  await page.getByRole("tab", { name: "Sign-ups" }).click();
+  const signups = page.getByRole("tabpanel", { name: "Sign-ups" });
+  await expect(signups).toContainText("Hobby");
+  await expect(signups).not.toContainText("Signed in this week");
+  await expect(page.getByText("Bot clicks · 90d")).toBeVisible();
+});
+
+test("an org past its grace period reads locked, with its domain stopped", async ({ page }) => {
+  const email = await admin(page, "admin-locked");
+  const [org] = await queryRows<{ id: string; name: string }>(
+    page,
+    `select orgs.id, orgs.name from orgs join org_members on org_members.org_id = orgs.id
+     join user on user.id = org_members.user_id where user.email = ?`,
+    [email],
+  );
+  const now = Date.now();
+  const day = 86_400_000;
+  await rawSql(page, "update orgs set locked_at = ? where id = ?", [now - 40 * day, org.id]);
+  await rawSql(
+    page,
+    `insert into org_entitlements (org_id, plan, over_json, grace_ends_at, reconciled_at)
+     values (?, 'free', '{"domains":1}', ?, ?)`,
+    [org.id, now - 10 * day, now],
+  );
+  await rawSql(
+    page,
+    `insert into domains (id, org_id, hostname, status, locked_at, created_at)
+     values (?, ?, ?, 'active', ?, 0)`,
+    [`dom-${org.id}`, org.id, `stopped-${now}.example`, now - 40 * day],
+  );
+
+  await page.goto("/admin/orgs");
+  await expect(page.getByRole("columnheader", { name: "Clicks · 30d" })).toBeVisible();
+  const row = page.getByRole("row").filter({ hasText: org.name });
+  await expect(row.getByText("Locked", { exact: true })).toBeVisible({ timeout: 10_000 });
+  await expect(row.getByText("Domain stopped", { exact: true })).toBeVisible();
+
+  await page
+    .getByRole("group", { name: "Filter organizations" })
+    .getByRole("button", { name: "Locked", exact: true })
+    .click();
+  await expect(row).toBeVisible();
+});
+
+test("the users list shows an uploaded picture, through the admin route", async ({ page }) => {
+  const email = await admin(page, "admin-avatar");
+  const png = await page.evaluate(() => {
+    const c = document.createElement("canvas");
+    c.width = c.height = 64;
+    const x = c.getContext("2d")!;
+    x.fillStyle = "#35875e";
+    x.fillRect(0, 0, 64, 64);
+    return c.toDataURL("image/png").split(",")[1];
+  });
+  const upload = await page.request.post("/api/user/avatar", {
+    data: Buffer.from(png, "base64"),
+    headers: { "content-type": "image/png" },
+  });
+  expect(upload.ok()).toBe(true);
+
+  await page.goto("/admin/users");
+  const picture = page.getByRole("row").filter({ hasText: email }).locator("img");
+  await expect(picture).toHaveAttribute("src", /^\/api\/admin\/users\/[^/]+\/avatar\?v=/, {
+    timeout: 10_000,
+  });
+  await expect
+    .poll(() => picture.evaluate((img: HTMLImageElement) => img.naturalWidth))
+    .toBeGreaterThan(0);
+  await expect(page.getByRole("columnheader", { name: "Links" })).toBeVisible();
+});
+
+test("a plan change from Polar reads as Polar's, under Plan changes", async ({ page }) => {
+  const email = await admin(page, "admin-polar");
+  const [user] = await queryRows<{ id: string }>(page, "select id from user where email = ?", [
+    email,
+  ]);
+  await rawSql(
+    page,
+    `insert into admin_actions (id, actor_user_id, action, target_type, target_id, detail, created_at)
+     values (?, 'polar', 'plan.change', 'user', ?, ?, ?)`,
+    [`plan-${user.id}`, user.id, JSON.stringify({ from: "pro", to: "free", email }), Date.now()],
+  );
+
+  await page.goto("/admin/audit");
+  await page
+    .getByRole("group", { name: "Filter the audit log" })
+    .getByRole("button", { name: "Plan changes", exact: true })
+    .click();
+  const row = page.getByRole("row").filter({ hasText: email });
+  await expect(row).toContainText("Polar", { timeout: 10_000 });
+  await expect(row).toContainText("Pro to Free");
 });
 
 test("every platform tab fits a phone", async ({ page }) => {

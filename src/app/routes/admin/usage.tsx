@@ -35,13 +35,6 @@ function perDay(running: SeriesPoint[]): SeriesPoint[] {
 
 const total = (series: SeriesPoint[]) => series.reduce((sum, p) => sum + p.clicks, 0);
 
-/** Sign-ups per day over the range: the daily series when it reaches that
- * far, otherwise the 90-day running total read day by day. */
-function signupSeries(s: AdminUsageData, days: number): SeriesPoint[] {
-  if (s.signups.length >= days) return s.signups.slice(-days);
-  return perDay(s.cumulativeUsers).slice(-days);
-}
-
 type KpiId = "users" | "paid" | "orgs" | "links" | "clicks";
 
 interface Kpi {
@@ -70,10 +63,10 @@ function Added({ n, days }: { n: number; days: number }) {
 }
 
 function kpis(s: AdminUsageData, days: number): Kpi[] {
-  const signups = signupSeries(s, days);
+  const signups = s.signups.slice(-days);
   const orgs = perDay(s.cumulativeOrgs).slice(-days);
   const clicks = s.series.slice(-days);
-  const links = s.linkSeries?.slice(-days) ?? null;
+  const links = s.linkSeries.slice(-days);
   const paidShare = s.users > 0 ? Math.round((s.payingUsers / s.users) * 100) : 0;
   return [
     {
@@ -104,7 +97,7 @@ function kpis(s: AdminUsageData, days: number): Kpi[] {
       id: "links",
       label: "Links",
       value: s.links,
-      note: links ? <Added n={total(links)} days={links.length} /> : undefined,
+      note: <Added n={total(links)} days={links.length} />,
       series: links,
       per: "New links per day",
     },
@@ -188,8 +181,7 @@ function KpiChart({ s, days }: { s: AdminUsageData; days: number }) {
  * separate questions (#82): the plan mix counts comps, "pay" does not, and
  * subscriptions are Polar's own count. No money here: Polar knows what it
  * charged, net of discounts, tax and refunds. */
-function PlanMix({ s, days }: { s: AdminUsageData; days: number }) {
-  const signups = signupSeries(s, days);
+function PlanMix({ s }: { s: AdminUsageData }) {
   return (
     <PanelTabs
       tabs={[
@@ -225,7 +217,7 @@ function PlanMix({ s, days }: { s: AdminUsageData; days: number }) {
         {
           value: "signups",
           label: "Sign-ups",
-          panel: s.signupsByPlan ? (
+          panel: (
             <BarList
               head={["Plan", "Sign-ups"]}
               items={[
@@ -234,62 +226,10 @@ function PlanMix({ s, days }: { s: AdminUsageData; days: number }) {
                 { key: "Pro", clicks: s.signupsByPlan.pro },
               ]}
             />
-          ) : (
-            <SignupFigures s={s} signups={signups} days={days} />
           ),
         },
       ]}
     />
-  );
-}
-
-/** Sign-ups as figures, until the API says which plan each one took. */
-function SignupFigures({
-  s,
-  signups,
-  days,
-}: {
-  s: AdminUsageData;
-  signups: SeriesPoint[];
-  days: number;
-}) {
-  const rows: [string, ReactNode][] = [
-    [`Last ${days} days`, fullNumber(total(signups))],
-    [
-      "Last 7 days",
-      <>
-        {fullNumber(s.signups7d)}
-        {s.signups7dDelta?.pct != null && (
-          <span
-            className={cn(
-              "ml-2 text-xs",
-              s.signups7dDelta.pct > 0
-                ? "text-accent-2"
-                : s.signups7dDelta.pct < 0
-                  ? "text-danger"
-                  : "text-muted",
-            )}
-          >
-            {s.signups7dDelta.pct > 0 ? "+" : ""}
-            {s.signups7dDelta.pct}% on the week before
-          </span>
-        )}
-      </>,
-    ],
-    ["Signed in this week", fullNumber(s.wau)],
-  ];
-  return (
-    <div>
-      {rows.map(([label, value]) => (
-        <div
-          key={label}
-          className="flex h-9 items-center justify-between gap-3 text-sm [&+&]:shadow-[inset_0_1px_0_var(--border)]"
-        >
-          <span>{label}</span>
-          <span className="tnum text-right">{value}</span>
-        </div>
-      ))}
-    </div>
   );
 }
 
@@ -372,7 +312,7 @@ function Health({ s }: { s: AdminUsageData }) {
   return (
     <PanelTabs
       tabs={[
-        { value: "bots", label: "Bot clicks · 30d", panel: <Chart data={s.botSeries} /> },
+        { value: "bots", label: `Bot clicks · ${s.days}d`, panel: <Chart data={s.botSeries} /> },
         { value: "table", label: "Clicks table", panel: <TableSize s={s} /> },
       ]}
     />
@@ -382,7 +322,7 @@ function Health({ s }: { s: AdminUsageData }) {
 function TopLists({ s }: { s: AdminUsageData }) {
   return (
     <PanelTabs
-      end="30 days"
+      end={`${s.days} days`}
       tabs={[
         {
           value: "orgs",
@@ -607,7 +547,7 @@ export function AdminUsagePage() {
       <SectionHeading>Usage</SectionHeading>
       <KpiChart s={s} days={days} />
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <PlanMix s={s} days={days} />
+        <PlanMix s={s} />
         <WebRisk s={s} />
       </div>
       {s.capPressure.length > 0 && <CapPressure s={s} />}

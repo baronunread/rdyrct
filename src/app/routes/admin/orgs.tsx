@@ -5,13 +5,7 @@ import { ArrowRight, Ban, Check, Eye, Trash2, Undo2 } from "@/app/ui/icons";
 import { HrefLink } from "../../lib/router-search";
 import { buttonClass } from "../../ui/button-class";
 import { useAdminOrgDetail } from "../../lib/hooks";
-import {
-  adminOrgsQuery,
-  adminUsageQuery,
-  useAdminOrgsData,
-  useAdminUsageRange,
-  type AdminOrgData,
-} from "../../lib/admin-data";
+import { adminOrgsQuery, useAdminOrgsData } from "../../lib/admin-data";
 import { api } from "../../lib/api";
 import type { AdminOrgRow, Sort } from "@/shared/types";
 import { AreaChart } from "../../components/charts";
@@ -58,19 +52,16 @@ function emptyMessage(status: OrgStatus, term: string): string {
   return none[status];
 }
 
-/** An org row with what the page worked out about it. */
-type OrgView = AdminOrgData & { over: boolean };
-
 const STATUS_TEST = {
   all: () => true,
-  over: (o) => o.over,
+  over: (o) => o.overPlan,
   locked: (o) => o.lockedAt != null,
   disabled: (o) => o.disabledAt != null,
   suspended: (o) => o.linksSuspendedAt != null,
   review: (o) => o.reviewFlaggedAt != null,
-} satisfies Record<string, (o: OrgView) => boolean>;
+} satisfies Record<string, (o: AdminOrgRow) => boolean>;
 
-const hasStatus = (o: OrgView, status: OrgStatus) => STATUS_TEST[status](o);
+const hasStatus = (o: AdminOrgRow, status: OrgStatus) => STATUS_TEST[status](o);
 
 const matchesSearch = (o: AdminOrgRow, needle: string) =>
   !needle || [o.name, o.ownerName, o.ownerEmail].some((v) => v?.toLowerCase().includes(needle));
@@ -90,7 +81,7 @@ const DAY_MS = 86_400_000;
 
 /** "Over plan · 10 days left" while the grace period runs, plain "Over plan"
  * when the API has not said when it ends. */
-function overLabel(org: OrgView): string {
+function overLabel(org: AdminOrgRow): string {
   if (org.graceEndsAt == null) return "Over plan";
   const left = Math.ceil((org.graceEndsAt - Date.now()) / DAY_MS);
   if (left <= 0) return "Over plan · grace ended";
@@ -100,13 +91,13 @@ function overLabel(org: OrgView): string {
 /** Every state an admin acts on, worst first. A ban outranks a suspension,
  * since it is the decision; `suspendedLabel` differs because the table is
  * cramped and the dialog has room. */
-function orgStates(org: OrgView, suspendedLabel: string): { tone: StateTone; text: string }[] {
+function orgStates(org: AdminOrgRow, suspendedLabel: string): { tone: StateTone; text: string }[] {
   const states: { tone: StateTone; text: string }[] = [];
   if (org.disabledAt) states.push({ tone: "bad", text: "disabled" });
   else if (org.linksSuspendedAt) states.push({ tone: "bad", text: suspendedLabel });
   if (org.domainStoppedAt) states.push({ tone: "warn", text: "Domain stopped" });
   if (org.lockedAt) states.push({ tone: "warn", text: "Locked" });
-  else if (org.over) states.push({ tone: "warn", text: overLabel(org) });
+  else if (org.overPlan) states.push({ tone: "warn", text: overLabel(org) });
   if (org.reviewFlaggedAt) states.push({ tone: "warn", text: "needs review" });
   return states;
 }
@@ -126,7 +117,7 @@ function ownerOf(org: AdminOrgRow) {
 }
 
 /** The states as a dot and a word each, or "Active" when there is none. */
-function OrgStates({ org, suspendedLabel }: { org: OrgView; suspendedLabel: string }) {
+function OrgStates({ org, suspendedLabel }: { org: AdminOrgRow; suspendedLabel: string }) {
   const states = orgStates(org, suspendedLabel);
   if (states.length === 0) return <StateLabel tone="ok">Active</StateLabel>;
   return (
@@ -217,7 +208,7 @@ function OrgRow({
   onBanOwner,
   onAct,
 }: {
-  org: OrgView;
+  org: AdminOrgRow;
   onView: () => void;
   onDelete: () => void;
   onBanOwner: () => void;
@@ -241,7 +232,7 @@ function OrgRow({
         {fullNumber(org.members)}
       </Td>
       <Td className={`tnum text-right ${PHONE.meta}`} data-label="Clicks">
-        {fullNumber(org.clicks30d ?? org.clicks)}
+        {fullNumber(org.clicks30d)}
       </Td>
       <Td className="max-sm:order-3 max-sm:w-full max-sm:border-0 max-sm:p-0">
         <OrgStates org={org} suspendedLabel="suspended" />
@@ -268,9 +259,9 @@ function OrgRows({
   onBanOwner,
   onAct,
 }: {
-  rows: OrgView[];
+  rows: AdminOrgRow[];
   emptyText: string;
-  onView: (org: OrgView) => void;
+  onView: (org: AdminOrgRow) => void;
   onDelete: (org: AdminOrgRow) => void;
   onBanOwner: (org: AdminOrgRow) => void;
   onAct: (org: AdminOrgRow, path: string, body?: { reason: string }) => void;
@@ -366,7 +357,7 @@ function OrgLinksRecap({
   );
 }
 
-function OrgDetailDialog({ org, onClose }: { org: OrgView | null; onClose: () => void }) {
+function OrgDetailDialog({ org, onClose }: { org: AdminOrgRow | null; onClose: () => void }) {
   const detail = useAdminOrgDetail(org?.id ?? null);
   return (
     <Dialog open={!!org} onOpenChange={(o) => !o && onClose()} title={org?.name ?? ""} wide>
@@ -402,34 +393,16 @@ function OrgDetailDialog({ org, onClose }: { org: OrgView | null; onClose: () =>
   );
 }
 
-/** The orgs page's first frame (see lib/route-preload.ts): the list, and
- * the usage answer that says who is over their plan. */
-export const preload = (qc: QueryClient) =>
-  settle([qc.ensureQueryData(adminOrgsQuery), qc.ensureQueryData(adminUsageQuery(30))]);
+/** The orgs page's first frame (see lib/route-preload.ts): the list. */
+export const preload = (qc: QueryClient) => settle([qc.ensureQueryData(adminOrgsQuery)]);
 
 export function AdminOrgsPage() {
   const orgs = useAdminOrgsData();
-  // Who is over their plan, until each row says so itself: the usage page's
-  // cap list already names them (over 100% of any cap).
-  const usage = useAdminUsageRange(30);
-  const overIds = useMemo(
-    () =>
-      new Set(
-        (usage.data?.capPressure ?? [])
-          .filter((c) => Math.max(c.linksPct, c.membersPct, c.domainsPct) > 100)
-          .map((c) => c.orgId),
-      ),
-    [usage.data],
-  );
-  const views = useMemo<OrgView[]>(
-    () => (orgs.data ?? []).map((o) => ({ ...o, over: o.overPlan ?? overIds.has(o.id) })),
-    [orgs.data, overIds],
-  );
-  const clicksLabel = views.some((o) => o.clicks30d !== undefined) ? "Clicks · 30d" : "Clicks";
+  const views = useMemo(() => orgs.data ?? [], [orgs.data]);
   const qc = useQueryClient();
   const toast = useToast();
   const [deleting, setDeleting] = useState<AdminOrgRow | null>(null);
-  const [viewing, setViewing] = useState<OrgView | null>(null);
+  const [viewing, setViewing] = useState<AdminOrgRow | null>(null);
   const [banning, setBanning] = useState<{ id: string; name: string } | null>(null);
   const [q, setQ] = useState("");
   const [status, setStatus] = useState<OrgStatus>("all");
@@ -465,7 +438,7 @@ export function AdminOrgsPage() {
       name: (o) => o.name.toLowerCase(),
       members: (o) => o.members,
       links: (o) => o.links,
-      clicks: (o) => o.clicks30d ?? o.clicks,
+      clicks: (o) => o.clicks30d,
       created: (o) => o.createdAt,
     });
   }, [views, q, status, sort]);
@@ -530,7 +503,7 @@ export function AdminOrgsPage() {
                 className="w-24 text-right"
               />
               <SortTh
-                label={clicksLabel}
+                label="Clicks · 30d"
                 sortKey="clicks"
                 sort={sort}
                 onSort={setSort}

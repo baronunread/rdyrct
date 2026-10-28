@@ -5,7 +5,7 @@ import { Ban, Check, Trash2 } from "@/app/ui/icons";
 import { MorphIcon } from "morphicons/react";
 import { shieldMinus, shieldPlus } from "@/app/ui/icon-nodes";
 import { useCurrentUser } from "../../lib/hooks";
-import { adminUsersQuery, useAdminUsersData, type AdminUserData } from "../../lib/admin-data";
+import { adminUsersQuery, useAdminUsersData } from "../../lib/admin-data";
 import { UserAvatar } from "../../components/user-avatar";
 import { api } from "../../lib/api";
 import type { AdminUserRow, Sort } from "@/shared/types";
@@ -226,13 +226,11 @@ function PersonMarks({ user }: { user: AdminUserRow }) {
 function UserRow({
   user,
   isSelf,
-  showLinks,
   onGrantComp,
   onRevokeComp,
   onConfirm,
 }: {
-  user: AdminUserData;
-  showLinks: boolean;
+  user: AdminUserRow;
   isSelf: boolean;
   onGrantComp: () => void;
   onRevokeComp: () => void;
@@ -246,7 +244,7 @@ function UserRow({
       <Td className={PHONE.main}>
         <span className="flex min-w-0 items-center gap-3">
           <UserAvatar
-            user={{ id: user.id, image: user.image ?? null, name: user.name, email: user.email }}
+            user={{ id: user.id, image: user.image, name: user.name, email: user.email }}
             size={32}
           />
           <span className="min-w-0">
@@ -275,11 +273,9 @@ function UserRow({
       <Td className={`tnum text-right ${PHONE.meta}`} data-label="Orgs">
         {fullNumber(user.orgCount)}
       </Td>
-      {showLinks && (
-        <Td className={`tnum text-right ${PHONE.meta}`} data-label="Links">
-          {user.links === undefined ? "" : fullNumber(user.links)}
-        </Td>
-      )}
+      <Td className={`tnum text-right ${PHONE.meta}`} data-label="Links">
+        {fullNumber(user.links)}
+      </Td>
       <Td className={`whitespace-nowrap ${PHONE.meta}`} data-label="Seen">
         {user.banned ? (
           <StateLabel tone="bad">banned</StateLabel>
@@ -313,7 +309,7 @@ function UsersTable({
   onConfirm,
   emptyText,
 }: {
-  rows: AdminUserData[];
+  rows: AdminUserRow[];
   meId: string | undefined;
   sort: Sort;
   setSort: (s: Sort) => void;
@@ -322,9 +318,6 @@ function UsersTable({
   onConfirm: (kind: UserAction, user: AdminUserRow) => void;
   emptyText: string;
 }) {
-  // The column waits for the API to count each person's links; a column of
-  // blanks would say "none" when it means "not known".
-  const showLinks = rows.some((u) => u.links !== undefined);
   return (
     <Table fixed minWidth={`sm:min-w-[52rem] ${PHONE.table}`}>
       <thead className={PHONE.head}>
@@ -338,15 +331,13 @@ function UsersTable({
             onSort={setSort}
             className="w-20 text-right"
           />
-          {showLinks && (
-            <SortTh
-              label="Links"
-              sortKey="links"
-              sort={sort}
-              onSort={setSort}
-              className="w-20 text-right"
-            />
-          )}
+          <SortTh
+            label="Links"
+            sortKey="links"
+            sort={sort}
+            onSort={setSort}
+            className="w-20 text-right"
+          />
           <SortTh
             label="Last active"
             sortKey="lastSeen"
@@ -365,7 +356,6 @@ function UsersTable({
           <UserRow
             key={u.id}
             user={u}
-            showLinks={showLinks}
             isSelf={u.id === meId}
             onGrantComp={() => onGrantComp(u)}
             onRevokeComp={() => onRevokeComp(u)}
@@ -570,7 +560,7 @@ export function AdminUsersPage() {
     return sortRows(matches, sort, {
       name: (u) => u.name.toLowerCase(),
       orgs: (u) => u.orgCount,
-      links: (u) => u.links ?? 0,
+      links: (u) => u.links,
       joined: (u) => u.createdAt,
       lastSeen: (u) => u.lastSeen,
     });

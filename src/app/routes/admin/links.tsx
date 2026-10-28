@@ -31,8 +31,9 @@ import {
   useAdminReports,
 } from "../../lib/hooks";
 import {
-  ADMIN_LINKS_CAP,
+  adminLinkCountsQuery,
   adminLinksQuery,
+  useAdminLinkCounts,
   useAdminLinksData,
   type AdminLinkFilter,
 } from "../../lib/admin-data";
@@ -57,7 +58,7 @@ import { SortTh } from "../../ui/sort-th";
 import { sortRows } from "../../lib/sort";
 import { useSearchParams, HrefLink } from "../../lib/router-search";
 import { BlockedHosts } from "./blocked-hosts";
-import { flaggedByGoogle, linkStateDetail, linkStateRank } from "./link-state";
+import { linkStateDetail, linkStateRank } from "./link-state";
 import { LinkStateBadge } from "./link-state-badge";
 import { FilterPill, PHONE, RowMenuTrigger, SectionHeading, fullNumber } from "./admin-kit";
 import { BusyContent, Spinner } from "../../ui/spinner";
@@ -1033,16 +1034,12 @@ function RestoreSelectedBar({
  * send somebody to. One row: the filters narrow one table, the lists replace
  * it, and a hairline between them says which is which. */
 const FILTERS = [
-  { id: "all", label: "All", test: () => true },
-  { id: "reported", label: "Reported", test: (l) => l.reportCount > 0 },
-  { id: "flagged", label: "Flagged by Google", test: flaggedByGoogle },
-  { id: "suspended", label: "Suspended", test: (l) => l.suspendedAt != null },
-  { id: "warned", label: "Warning", test: (l) => l.warnedAt != null },
-] as const satisfies readonly {
-  id: AdminLinkFilter;
-  label: string;
-  test: (l: AdminLinkRow) => boolean;
-}[];
+  { id: "all", label: "All" },
+  { id: "reported", label: "Reported" },
+  { id: "flagged", label: "Flagged by Google" },
+  { id: "suspended", label: "Suspended" },
+  { id: "warned", label: "Warning" },
+] as const satisfies readonly { id: AdminLinkFilter; label: string }[];
 
 const LISTS = [
   { id: "reports", label: "Open reports" },
@@ -1053,35 +1050,17 @@ type List = (typeof LISTS)[number]["id"];
 type View = AdminLinkFilter | List;
 
 const isFilter = (view: View): view is AdminLinkFilter => FILTERS.some((f) => f.id === view);
-const filterTest = (id: AdminLinkFilter) => FILTERS.find((f) => f.id === id)?.test ?? (() => true);
-
-/** How many rows each filter holds, read from the unfiltered list. The list
- * stops at 200 rows, so past that only "All" says anything, and it says
- * "200+" rather than a number it does not know. */
-interface FilterCounts {
-  counts: Partial<Record<AdminLinkFilter, number>>;
-  capped: boolean;
-}
-
-function filterCounts(base: AdminLinkRow[] | undefined): FilterCounts {
-  if (!base) return { counts: {}, capped: false };
-  if (base.length >= ADMIN_LINKS_CAP) return { counts: { all: ADMIN_LINKS_CAP }, capped: true };
-  const counts: Partial<Record<AdminLinkFilter, number>> = {};
-  for (const f of FILTERS) counts[f.id] = base.filter(f.test).length;
-  return { counts, capped: false };
-}
 
 function ViewRow({
   view,
   onView,
   counts,
-  capped,
   lists,
 }: {
   view: View;
   onView: (view: View) => void;
+  /** From /admin/links/counts; undefined until it answers. */
   counts: Partial<Record<AdminLinkFilter, number>>;
-  capped: boolean;
   lists: Partial<Record<List, number>>;
 }) {
   return (
@@ -1098,7 +1077,6 @@ function ViewRow({
             on={view === f.id}
             label={f.label}
             count={counts[f.id]}
-            capped={capped && f.id === "all"}
             onClick={() => onView(f.id)}
           />
         ),
@@ -1167,9 +1145,7 @@ function OwnedLinks({
     () => setDeleting(null),
   );
 
-  // The Worker filters suspended and warned links itself; reported and
-  // flagged are filtered here too until it reads those parameters.
-  const all = sortOwnedLinks(rowsData?.filter(filterTest(filter)), sort);
+  const all = sortOwnedLinks(rowsData, sort);
   const { rows, totalPages, safePage } = paginate(all, page);
   // Only suspended links can be restored, so only that list has ticks.
   const selectable = filter === "suspended";
@@ -1228,19 +1204,16 @@ function OwnedLinks({
 
 /** The links page's first frame (see lib/route-preload.ts): every link,
  * or one org's from ?org=, and the counts on the other tabs. */
-export const preload = (qc: QueryClient, searchStr: string) =>
-  settle([
-    qc.ensureQueryData(
-      adminLinksQuery({
-        q: "",
-        filter: "all",
-        org: new URLSearchParams(searchStr).get("org") ?? "",
-      }),
-    ),
+export const preload = (qc: QueryClient, searchStr: string) => {
+  const org = new URLSearchParams(searchStr).get("org") ?? "";
+  return settle([
+    qc.ensureQueryData(adminLinksQuery({ q: "", filter: "all", org })),
+    qc.ensureQueryData(adminLinkCountsQuery({ q: "", org })),
     qc.ensureQueryData(adminReportsQuery),
     qc.ensureQueryData(adminAnonLinksQuery),
     qc.ensureQueryData(adminBlockedHostsQuery),
   ]);
+};
 
 export function AdminLinksPage() {
   const [view, setView] = useState<View>("all");
@@ -1252,11 +1225,9 @@ export function AdminLinksPage() {
   // this, "testing" was eight requests.
   const search = useDebounced(query);
   const filter = isFilter(view) ? view : "all";
-  // The unfiltered list, for the counts; when "All" is picked it is also the
-  // list on screen, so it is one request, not two.
-  const base = useAdminLinksData({ q: search, filter: "all", org: orgFilter });
-  const filtered = useAdminLinksData({ q: search, filter, org: orgFilter });
-  const shown = filter === "all" ? base : filtered;
+  const shown = useAdminLinksData({ q: search, filter, org: orgFilter });
+  // Every pill's count, past the list's 200-row cap.
+  const counts = useAdminLinkCounts({ q: search, org: orgFilter });
   const reports = useAdminReports();
   const anon = useAdminAnonLinks();
   const blocked = useAdminBlockedHosts();
@@ -1290,13 +1261,13 @@ export function AdminLinksPage() {
         {/* Wraps rather than squeezes: on a narrow laptop the search drops
             under the pills instead of covering the last of them. */}
         <div className="flex flex-col-reverse gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
-          <ViewRow view={view} onView={setView} {...filterCounts(base.data)} lists={lists} />
+          <ViewRow view={view} onView={setView} counts={counts.data ?? {}} lists={lists} />
           {isFilter(view) && (
             <LinkSearch
               query={query}
               onSearch={setQuery}
               orgFilter={orgFilter}
-              orgName={base.data?.[0]?.orgName}
+              orgName={shown.data?.[0]?.orgName}
               onClearOrg={() => {
                 params.delete("org");
                 setParams(params, { replace: true });

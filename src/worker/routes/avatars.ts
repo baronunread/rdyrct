@@ -143,13 +143,13 @@ avatarRoutes.get("/", async (c) => {
 
 /**
  * A user's picture from R2. The caller has already decided the session may
- * see it: its own (above), or a member of an org it belongs to
- * (`/api/orgs/:orgId/members/:userId/avatar` in orgs.ts).
+ * see it: its own (above), a member of an org it belongs to
+ * (`/api/orgs/:orgId/members/:userId/avatar` in orgs.ts), or the platform
+ * admin (`/api/admin/users/:userId/avatar`). One function, so all cache alike.
  */
 export async function serveAvatar(c: Context<AppEnv>, userId: string): Promise<Response> {
   const log = c.get("log");
   log.set({ userId });
-
   // Served on every page load (sidebar, org switcher, footer). R2 throttles
   // simultaneous reads of one object (error 10058) and has transient blips
   // (10001); neither is worth a 500 or a Sentry issue, so degrade to a 503

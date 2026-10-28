@@ -28,16 +28,17 @@ import { jsonBodyLimit } from "../body-limit";
 import { adminLinkRoutes } from "./admin-links";
 import { recordAdminAction } from "../audit";
 import { WEB_RISK_LOOKUPS_PER_DAY, webRiskDay } from "../risk";
-
-// An org's effective plan is its owner's plan (billing is per-user). A single
-// correlated subquery pulls it for list views. Note: `user` is a SQL keyword,
-// so it must stay quoted here.
-const ownerPlan = sql<OrgPlan>`coalesce((
-  select "user".plan from org_members
-  join "user" on "user".id = org_members.user_id
-  where org_members.org_id = orgs.id and org_members.role = 'owner'
-  limit 1
-), 'free')`;
+import {
+  adminAvatarUrl,
+  linksByCreator,
+  orgPlanState,
+  orgPlanStateColumns,
+  ownerPlan,
+  usageForRange,
+  usageRange,
+} from "../admin-usage";
+import { computeWindows } from "../rollups";
+import { serveAvatar } from "./avatars";
 
 const ownerName = sql<string | null>`(
   select "user".name from org_members
@@ -335,9 +336,9 @@ adminRoutes.get("/usage", async (c) => {
   const log = c.get("log");
   log.set({ route: "usage" });
   const db = c.var.db;
-  const days = 30;
+  const days = usageRange(c.req.query("days"));
+  log.set({ usageDays: days });
   const cumDays = 90;
-  const since = Date.now() - days * 24 * 60 * 60 * 1000;
   const since7 = Date.now() - 7 * 24 * 60 * 60 * 1000;
   const since14d = Date.now() - 14 * 24 * 60 * 60 * 1000;
   const since24h = Date.now() - 24 * 60 * 60 * 1000;
@@ -348,15 +349,11 @@ adminRoutes.get("/usage", async (c) => {
     clicks,
     clicks7d,
     paidPlanUsers,
-    seriesRows,
-    signupRows,
-    topOrgRows,
-    topLinkRows,
+    range,
     planCountRows,
     signups7dRows,
     signups7dPrevRows,
     wauRows,
-    botSeriesRows,
     userCreationRows,
     orgCreationRows,
     anomaly24hRows,
@@ -376,52 +373,8 @@ adminRoutes.get("/usage", async (c) => {
       .select({ n: sql<number>`count(*)` })
       .from(schema.user)
       .where(ne(schema.user.plan, "free")),
-    // click series (30d)
-    db
-      .select({ day, clicks: sql<number>`count(*)` })
-      .from(schema.clicks)
-      .where(gte(schema.clicks.ts, since))
-      .groupBy(day),
-    // signup series (30d)
-    db
-      .select({
-        day: userDay,
-        clicks: sql<number>`count(*)`,
-      })
-      .from(schema.user)
-      .where(gte(schema.user.createdAt, new Date(since)))
-      .groupBy(userDay),
-    // top orgs (30d) with plan
-    db
-      .select({
-        id: schema.orgs.id,
-        name: schema.orgs.name,
-        clicks: sql<number>`count(*)`,
-        plan: ownerPlan,
-      })
-      .from(schema.clicks)
-      .innerJoin(schema.orgs, eq(schema.clicks.orgId, schema.orgs.id))
-      .where(gte(schema.clicks.ts, since))
-      .groupBy(schema.clicks.orgId)
-      .orderBy(desc(sql`count(*)`))
-      .limit(5),
-    // top links (30d)
-    db
-      .select({
-        id: schema.links.id,
-        slug: schema.links.slug,
-        domain: schema.domains.hostname,
-        orgName: schema.orgs.name,
-        clicks: sql<number>`count(*)`,
-      })
-      .from(schema.clicks)
-      .innerJoin(schema.links, eq(schema.clicks.linkId, schema.links.id))
-      .leftJoin(schema.domains, eq(schema.links.domainId, schema.domains.id))
-      .innerJoin(schema.orgs, eq(schema.links.orgId, schema.orgs.id))
-      .where(gte(schema.clicks.ts, since))
-      .groupBy(schema.clicks.linkId)
-      .orderBy(desc(sql`count(*)`))
-      .limit(5),
+    // everything that follows the picked range
+    usageForRange(db, days),
     // plan distribution
     db
       .select({ plan: schema.user.plan, n: sql<number>`count(*)` })
@@ -447,12 +400,6 @@ adminRoutes.get("/usage", async (c) => {
       .select({ n: sql<number>`count(distinct user_id)` })
       .from(schema.session)
       .where(gte(schema.session.updatedAt, new Date(since7))),
-    // bot clicks per day (30d)
-    db
-      .select({ day, clicks: sql<number>`count(*)` })
-      .from(schema.clicks)
-      .where(and(gte(schema.clicks.ts, since), eq(schema.clicks.device, "bot")))
-      .groupBy(day),
     // user creation all-time (for cumulative)
     db
       .select({
@@ -529,8 +476,6 @@ adminRoutes.get("/usage", async (c) => {
 
   // ── Health row ──
 
-  const botSeries = fillSeries(botSeriesRows, days);
-
   const anomalyCandidates = findAnomalies(anomaly24hRows, anomaly14dRows);
   const anomalyNames = await resolveAnomalyNames(db, anomalyCandidates);
   const anomalies = anomalyCandidates.map((a) => ({
@@ -558,8 +503,7 @@ adminRoutes.get("/usage", async (c) => {
 
   // Table size and growth projection
   const tableSize = clicks[0]?.n ?? 0;
-  const tableGrowth = fillSeries(seriesRows, days);
-  const tableProjectedDays = projectTableGrowth(seriesRows, tableSize);
+  const tableProjectedDays = projectTableGrowth(range.series, tableSize);
 
   return c.json({
     users: totalUsers,
@@ -568,13 +512,7 @@ adminRoutes.get("/usage", async (c) => {
     clicks: tableSize,
     clicks7d: clicks7d[0]?.n ?? 0,
     payingUsers,
-    series: fillSeries(seriesRows, days),
-    signups: fillSeries(signupRows, days),
-    topOrgs: topOrgRows.map((o) => ({
-      ...o,
-      plan: orgPlanOf(o.plan),
-    })),
-    topLinks: topLinkRows,
+    ...range,
     planCounts,
     payingSubscribers,
     compedUsers,
@@ -584,11 +522,10 @@ adminRoutes.get("/usage", async (c) => {
     wau,
     cumulativeUsers,
     cumulativeOrgs,
-    botSeries,
     anomalies,
     capPressure,
     tableSize,
-    tableGrowth,
+    tableGrowth: range.series,
     tableProjectedDays,
     webRisk: await webRiskUsage(db),
   } satisfies AdminUsage);
@@ -626,12 +563,18 @@ adminRoutes.get("/orgs", async (c) => {
         order by suspend_reason like 'Held with its organization%', suspended_at
         limit 1
       )`,
-      clicks: sql<number>`(
-        select count(*) from clicks where clicks.org_id = orgs.id
-      )`,
+      // From the rollups (#26), like every other click figure.
+      ...orgPlanStateColumns(computeWindows(30).since30),
     })
-    .from(schema.orgs);
-  return c.json(rows satisfies AdminOrgRow[]);
+    .from(schema.orgs)
+    .leftJoin(schema.orgEntitlements, eq(schema.orgEntitlements.orgId, schema.orgs.id));
+  const now = Date.now();
+  return c.json(
+    rows.map(({ overJson, entitlementGraceEndsAt, firstDomainLock, ...row }) => ({
+      ...row,
+      ...orgPlanState({ overJson, entitlementGraceEndsAt, firstDomainLock }, now),
+    })) satisfies AdminOrgRow[],
+  );
 });
 
 adminRoutes.get("/orgs/:orgId", async (c) => {
@@ -722,43 +665,50 @@ adminRoutes.delete("/orgs/:orgId", async (c) => {
 adminRoutes.get("/users", async (c) => {
   const log = c.get("log");
   log.set({ route: "users" });
-  const rows = await c.var.db
-    .select({
-      id: schema.user.id,
-      name: schema.user.name,
-      email: schema.user.email,
-      isAdmin: schema.user.isAdmin,
-      banned: schema.user.banned,
-      emailVerified: schema.user.emailVerified,
-      plan: schema.user.plan,
-      subscriptionPlan: schema.user.subscriptionPlan,
-      subscriptionStatus: schema.user.subscriptionStatus,
-      cancelAtPeriodEnd: schema.user.polarSubscriptionCancelAtPeriodEnd,
-      currentPeriodEnd: schema.user.polarSubscriptionCurrentPeriodEnd,
-      compPlan: schema.user.compPlan,
-      compReason: schema.user.compReason,
-      compGrantedAt: schema.user.compGrantedAt,
-      // Who granted the comp, by email: an admin reading this list wants a
-      // person, not an id. Null once that admin's account is gone.
-      compGrantedBy: sql<string | null>`(
+  const db = c.var.db;
+  const [rows, links] = await Promise.all([
+    db
+      .select({
+        id: schema.user.id,
+        name: schema.user.name,
+        email: schema.user.email,
+        isAdmin: schema.user.isAdmin,
+        image: schema.user.image,
+        banned: schema.user.banned,
+        emailVerified: schema.user.emailVerified,
+        plan: schema.user.plan,
+        subscriptionPlan: schema.user.subscriptionPlan,
+        subscriptionStatus: schema.user.subscriptionStatus,
+        cancelAtPeriodEnd: schema.user.polarSubscriptionCancelAtPeriodEnd,
+        currentPeriodEnd: schema.user.polarSubscriptionCurrentPeriodEnd,
+        compPlan: schema.user.compPlan,
+        compReason: schema.user.compReason,
+        compGrantedAt: schema.user.compGrantedAt,
+        // Who granted the comp, by email: an admin reading this list wants a
+        // person, not an id. Null once that admin's account is gone.
+        compGrantedBy: sql<string | null>`(
         select grantor.email from "user" as grantor
         where grantor.id = "user".comp_granted_by
       )`,
-      createdAt: schema.user.createdAt,
-      orgCount: sql<number>`(
+        createdAt: schema.user.createdAt,
+        orgCount: sql<number>`(
         select count(*) from org_members where org_members.user_id = "user".id
       )`,
-      // literal "user".id: interpolated columns render unqualified inside
-      // correlated subqueries and bind to the wrong table
-      lastSeen: sql<number | null>`(
+        // literal "user".id: interpolated columns render unqualified inside
+        // correlated subqueries and bind to the wrong table
+        lastSeen: sql<number | null>`(
         select max(session.updated_at) from session
         where session.user_id = "user".id
       )`,
-    })
-    .from(schema.user);
+      })
+      .from(schema.user),
+    linksByCreator(db),
+  ]);
   return c.json(
     rows.map((r) => ({
       ...r,
+      image: adminAvatarUrl(r.id, r.image),
+      links: links.get(r.id) ?? 0,
       disposable: isDisposableEmail(r.email),
       createdAt: r.createdAt.getTime(),
       compGrantedAt: r.compGrantedAt?.getTime() ?? null,
@@ -815,6 +765,12 @@ const userPatchSchema = v.object({
   reason: optionalText,
   blockHosts: v.optional(v.fallback(v.array(v.string()), []), []),
 });
+
+/** Somebody's uploaded picture, for the Users list. /api/user/avatar
+ * answers only the signed-in account, so this serves the same object by id;
+ * it sits behind requireAdmin like everything here, so anybody else gets the
+ * 404 every admin route gives. */
+adminRoutes.get("/users/:userId/avatar", (c) => serveAvatar(c, c.req.param("userId")));
 
 /** Destination hosts in the orgs a user owns, for the ban dialog to offer. */
 adminRoutes.get("/users/:userId/hosts", async (c) =>
@@ -901,6 +857,9 @@ async function writeComp(
       compGrantedBy: comp?.grantedBy ?? null,
       compGrantedAt: comp ? new Date() : null,
       plan: effectivePlanSql({ compPlan: comp?.plan ?? null }),
+      // The comp's own entry records this change, so the audit log is level
+      // with it and reconcileUser finds no Polar change to log.
+      auditedPlan: effectivePlanSql({ compPlan: comp?.plan ?? null }),
     })
     .where(eq(schema.user.id, targetId));
   if (result.meta.changes === 0) throw new HTTPException(404, { message: "User not found" });

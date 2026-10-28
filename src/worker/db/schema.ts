@@ -37,6 +37,11 @@ export const user = sqliteTable("user", {
   plan: text("plan", { enum: ["free", "hobby", "pro"] })
     .notNull()
     .default("free"),
+  // The plan the admin audit log last recorded (migration 0050). Differing
+  // from `plan` means a change nobody has logged yet: reconcileUser logs it.
+  auditedPlan: text("audited_plan", { enum: ["free", "hobby", "pro"] })
+    .notNull()
+    .default("free"),
   // What Polar says: written by the webhook, never by an admin. Null means no
   // subscription. `subscriptionStatus` is Polar's own status string, kept raw
   // so a status we have no rule for is still visible (see entitlement.ts).

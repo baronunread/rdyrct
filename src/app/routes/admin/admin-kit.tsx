@@ -55,14 +55,11 @@ export function FilterPill({
   on,
   label,
   count,
-  capped,
   onClick,
 }: {
   on: boolean;
   label: string;
   count?: number;
-  /** The list stopped at `count`, so it reads "200+". */
-  capped?: boolean;
   onClick: () => void;
 }) {
   return (
@@ -84,7 +81,6 @@ export function FilterPill({
           className={cn("tnum font-medium", on ? "text-muted" : "text-placeholder")}
         >
           {fullNumber(count)}
-          {capped && "+"}
         </span>
       )}
     </button>

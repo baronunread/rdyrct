@@ -33,8 +33,7 @@ import { lookup } from "@/shared/lookup";
 
 /** The kinds of action somebody looks for after an incident. Each matches
  * the action names the Worker records (src/worker/audit.ts). A plan change
- * an admin makes is a comp; `plan.` is there for the day the Worker logs
- * Polar's changes too. */
+ * an admin makes is a comp; one Polar makes is `plan.change`. */
 const KINDS = [
   { id: "all", label: "All", test: () => true },
   { id: "bans", label: "Bans", test: (a) => a === "user.ban" || a === "user.unban" },
@@ -126,8 +125,12 @@ type Names = ReturnType<typeof useNames>;
 
 function who(entry: AdminActionRow, names: Names): string {
   if (entry.actorUserId === "system") return "System";
+  // A webhook from Polar, the billing provider, rather than a person.
+  if (entry.actorUserId === "polar") return "Polar";
   return names.user.get(entry.actorUserId)?.name || entry.actorEmail || "Deleted account";
 }
+
+const capitalized = (word: string) => `${word.charAt(0).toUpperCase()}${word.slice(1)}`;
 
 /** What the action was done to, in words: the link, the address, the org. */
 function target(entry: AdminActionRow, fields: Detail, names: Names): string {
@@ -148,7 +151,11 @@ function target(entry: AdminActionRow, fields: Detail, names: Names): string {
     }
   })();
   const plan = text(fields.plan);
-  return plan ? `${base} · ${plan.charAt(0).toUpperCase()}${plan.slice(1)}` : base;
+  if (plan) return `${base} · ${capitalized(plan)}`;
+  // plan.change: "Pro to Free".
+  const from = text(fields.from);
+  const to = text(fields.to);
+  return from && to ? `${base} · ${capitalized(from)} to ${capitalized(to)}` : base;
 }
 
 /** What happened, in words, for the entry's title. */
@@ -172,6 +179,7 @@ const ACTION_WORDS = {
   "user.delete": "User deleted",
   "user.comp_grant": "Comp granted",
   "user.comp_revoke": "Comp revoked",
+  "plan.change": "Plan changed",
   "anon_link.delete": "Anonymous link deleted",
 } as const;
 

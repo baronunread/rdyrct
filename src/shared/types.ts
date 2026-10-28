@@ -580,9 +580,17 @@ export interface AdminUsage {
   clicks7d: number;
   /** People holding a paid plan who actually pay: comped users are excluded. */
   payingUsers: number;
+  /** The range, in days, that `series` and everything said to share its
+   * window cover: 7, 30 or 90, from `?days=`. */
+  days: number;
   series: SeriesPoint[];
   /** New accounts per day, same window as `series`. */
   signups: SeriesPoint[];
+  /** New links per day, same window as `series`. Links deleted since are
+   * not counted: nothing records them once they are gone. */
+  linkSeries: SeriesPoint[];
+  /** Sign-ups in the range, by the plan each account holds today. */
+  signupsByPlan: { free: number; hobby: number; pro: number };
   /** Most-clicked orgs/links over the same window as `series`. */
   topOrgs: { id: string; name: string; clicks: number; plan: OrgPlan }[];
   topLinks: {
@@ -646,6 +654,19 @@ export interface AdminOrgRow {
   members: number;
   links: number;
   clicks: number;
+  /** Clicks in the last 30 days (today and the 29 before it). */
+  clicks30d: number;
+  /** Over its plan right now: its `org_entitlements` row names a resource
+   * over cap. */
+  overPlan: boolean;
+  /** When the grace period for being over its plan ends (ms epoch), or null
+   * when it is not over. */
+  graceEndsAt: number | null;
+  /** Read-only after a downgrade (`orgs.locked_at`), or null. */
+  lockedAt: number | null;
+  /** When one of its custom domains stopped serving, being locked past the
+   * grace period, or null. */
+  domainStoppedAt: number | null;
   ownerId: string | null;
   ownerName: string | null;
   ownerEmail: string | null;
@@ -775,8 +796,22 @@ export interface AdminUserRow {
   compGrantedBy: string | null;
   createdAt: number;
   orgCount: number;
+  /** Links this person made, across every org. */
+  links: number;
+  /** Their uploaded picture, served to admins, or null for the generated one. */
+  image: string | null;
   /** Last session activity (ms epoch), null if never signed in. */
   lastSeen: number | null;
+}
+
+/** How many links each filter of the admin list holds, under the same
+ * search and org as the list. */
+export interface AdminLinkCounts {
+  all: number;
+  reported: number;
+  flagged: number;
+  suspended: number;
+  warned: number;
 }
 
 export interface InvitePreview {
