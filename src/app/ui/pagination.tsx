@@ -24,7 +24,7 @@ export function CursorPager({
         type="button"
         onClick={onBack}
         disabled={page === 0}
-        className="cursor-pointer rounded-md px-2.5 py-1 text-xs text-muted transition-[color,scale] duration-150 enabled:active:scale-[0.96] hover:text-text disabled:opacity-40"
+        className="cursor-pointer rounded-md px-2.5 py-1 text-xs text-muted transition-[color,scale] duration-200 ease-out enabled:active:scale-[0.96] [@media(hover:hover)]:hover:text-text disabled:opacity-40"
       >
         Previous
       </button>
@@ -33,7 +33,7 @@ export function CursorPager({
         type="button"
         onClick={onNext}
         disabled={!hasNext}
-        className="cursor-pointer rounded-md px-2.5 py-1 text-xs text-muted transition-[color,scale] duration-150 enabled:active:scale-[0.96] hover:text-text disabled:opacity-40"
+        className="cursor-pointer rounded-md px-2.5 py-1 text-xs text-muted transition-[color,scale] duration-200 ease-out enabled:active:scale-[0.96] [@media(hover:hover)]:hover:text-text disabled:opacity-40"
       >
         Next
       </button>
@@ -57,7 +57,7 @@ export function Pager({
         type="button"
         onClick={() => onPageChange((p) => Math.max(0, p - 1))}
         disabled={page === 0}
-        className="cursor-pointer rounded-md px-2.5 py-1 text-xs text-muted transition-[color,scale] duration-150 enabled:active:scale-[0.96] hover:text-text disabled:opacity-40"
+        className="cursor-pointer rounded-md px-2.5 py-1 text-xs text-muted transition-[color,scale] duration-200 ease-out enabled:active:scale-[0.96] [@media(hover:hover)]:hover:text-text disabled:opacity-40"
       >
         Previous
       </button>
@@ -68,7 +68,7 @@ export function Pager({
         type="button"
         onClick={() => onPageChange((p) => Math.min(totalPages - 1, p + 1))}
         disabled={page >= totalPages - 1}
-        className="cursor-pointer rounded-md px-2.5 py-1 text-xs text-muted transition-[color,scale] duration-150 enabled:active:scale-[0.96] hover:text-text disabled:opacity-40"
+        className="cursor-pointer rounded-md px-2.5 py-1 text-xs text-muted transition-[color,scale] duration-200 ease-out enabled:active:scale-[0.96] [@media(hover:hover)]:hover:text-text disabled:opacity-40"
       >
         Next
       </button>

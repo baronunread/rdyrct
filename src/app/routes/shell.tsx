@@ -291,7 +291,7 @@ function MobileDrawer({
                 className="absolute top-[52px] bottom-1.5 left-1.5 w-72 rounded-[20px] bg-bg smooth-shadow-ring-xl"
                 initial={{ opacity: 0, x: -24 }}
                 animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: -12, transition: { duration: 0.15 } }}
+                exit={{ opacity: 0, x: -12, filter: "blur(4px)", transition: { duration: 0.15 } }}
                 transition={{ duration: 0.2 }}
               >
                 {children}

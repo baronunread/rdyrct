@@ -68,7 +68,7 @@ function LinkDetailHeader({
           to="/links"
           aria-label="Back to links"
           title="Back to links"
-          className="-ml-2 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-muted transition-colors hover:bg-surface-2 hover:text-text"
+          className="-ml-2 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-muted transition-colors [@media(hover:hover)]:hover:bg-surface-2 [@media(hover:hover)]:hover:text-text"
         >
           <ArrowLeft size={16} />
         </Link>
@@ -102,7 +102,7 @@ function LinkDetailHeader({
               href={s.url}
               target="_blank"
               rel="noreferrer"
-              className="inline-flex shrink-0 items-center justify-center rounded-md p-1.5 text-muted transition-colors hover:bg-surface-2 hover:text-text"
+              className="inline-flex shrink-0 items-center justify-center rounded-md p-1.5 text-muted transition-colors [@media(hover:hover)]:hover:bg-surface-2 [@media(hover:hover)]:hover:text-text"
               aria-label="Open link in new tab"
               title={s.url}
             >
