@@ -5,9 +5,8 @@
   "license": "MIT",
   "type": "module",
   "scripts": {
-    "dev": "trap 'kill 0' INT TERM; portless rdyrct vite dev & bun run mail & bunx emulate start --service google --portless --port 4001 --seed google.emulate.yaml & wait",
-    "mail": "portless mail.rdyrct bunx emulate --service resend",
-    "polar:listen": "NODE_EXTRA_CA_CERTS=\"$HOME/.portless/ca.pem\" polar listen https://rdyrct.localhost/api/webhooks/polar",
+    "dev": "bun scripts/dev.ts",
+    "polar:listen": "NODE_EXTRA_CA_CERTS=\"$HOME/.portless/ca.pem\" sh -c 'polar listen \"$(bun scripts/dev-hosts.ts app)/api/webhooks/polar\"'",
     "build": "vite build && bun scripts/prerender-public.tsx && bun scripts/prerender-404.tsx",
     "preview": "vite preview",
     "check": "bun check && bun check -p tsconfig.worker.json && bun check -p tests/worker/tsconfig.json",

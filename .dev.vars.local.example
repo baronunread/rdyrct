@@ -2,13 +2,13 @@
 
 BETTER_AUTH_SECRET=dev-only-secret-change-in-prod
 SUPERADMIN_EMAIL=you@example.com
-APP_URL=https://rdyrct.localhost
-APP_HOST=rdyrct.localhost
-SHARED_LINK_HOST=rdyrct.localhost
+# APP_URL, APP_HOST, SHARED_LINK_HOST, RESEND_BASE_URL and GOOGLE_EMULATOR_URL
+# are not set here: `bun run dev` works them out for each checkout
+# (scripts/dev-hosts.ts) and refuses to start if this file sets them.
 
-# Email: point at the emulate.dev Resend emulator (bun run mail)
+# Email: `bun run dev` starts the emulate.dev Resend emulator and points the
+# Worker at it.
 RESEND_API_KEY=re_local_emulated
-RESEND_BASE_URL=https://mail.rdyrct.localhost
 MAIL_FROM=rdyrct <no-reply@localhost>
 # The founder's welcome email. Leave unset to send none.
 WELCOME_FROM=Andrea at rdyrct <andrea@localhost>
@@ -55,13 +55,12 @@ WEB_RISK_API_KEY=
 
 # Google sign-in. Leave all three blank to hide the "Continue with Google"
 # button. For local dev, `bun run dev` starts the emulate google service
-# behind portless at https://google.emulate.localhost, so the values below
-# work as-is (the client id/secret are arbitrary, the emulator accepts any).
+# behind portless and points the Worker at it, so the values below work
+# as-is (the client id/secret are arbitrary, the emulator accepts any).
 # It's seeded from google.emulate.yaml with two accounts: testuser@gmail.com
 # (a regular account) and admin@gmail.com. Set SUPERADMIN_EMAIL above to the
 # latter to test the platform admin locally through the emulator.
-# In production, leave GOOGLE_EMULATOR_URL blank and set the real Google
+# In production, leave GOOGLE_EMULATOR_URL unset and set the real Google
 # OAuth client id/secret; the worker then uses Google's discovery URL.
 GOOGLE_CLIENT_ID=test-client
 GOOGLE_CLIENT_SECRET=test-secret
-GOOGLE_EMULATOR_URL=https://google.emulate.localhost

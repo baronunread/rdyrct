@@ -64,21 +64,24 @@ Application layer:
 
 ```sh
 bun install
-cp .dev.vars.local.example .dev.vars     # then edit; at minimum set SUPERADMIN_EMAIL
-
-bunx emulate --service resend      # local Resend inbox on :4000
-
-bun run db:migrate:local
-bun run dev                        # https://rdyrct.localhost
+bun run dev                        # https://rdyrct.localhost, plus a local inbox and Google sign-in
 ```
 
-- Sign up with the address you set as `SUPERADMIN_EMAIL` to unlock the admin console; any other address is a normal user.
+`bun run dev` creates `.dev.vars` from `.dev.vars.local.example` on the first
+run, applies the local D1 migrations, and prints its URLs. Set
+`SUPERADMIN_EMAIL` in `.dev.vars` to your address to get the admin console.
+In a git worktree the names carry the branch (`https://rdyrct-<branch>.localhost`),
+so several checkouts run side by side. To open the dev server from another
+computer or a phone on the same network, switch portless to LAN mode once
+(`sudo portless service install --lan`); the URLs then end in `.local`.
+
+- Sign up with the address you set as `SUPERADMIN_EMAIL` to unlock the admin console; any other address is a normal user. `bun run db:seed:local` fills the database with fake orgs, and `/__dev/scenarios` signs in as one in each plan state.
 - The dev server runs the self-hosted app. Add `VITE_RDYRCT_SITE=1` to `.env` to work on rdyrct.com's own landing and marketing pages.
 - New accounts see a create-org prompt on org-scoped pages until they create their first organization.
 - Email verification codes are sent through [emulate.dev](https://emulate.dev)'s Resend emulator instead of a real inbox. Read it with:
 
   ```sh
-  curl localhost:4000/emails -H 'authorization: Bearer test_token_admin'
+  curl "$(bun scripts/dev-hosts.ts mail)/emails" -H 'authorization: Bearer test_token_admin'
   ```
 
   and copy the 6-digit code out of the latest message.

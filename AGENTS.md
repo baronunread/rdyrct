@@ -17,8 +17,8 @@ Always use **bun**, never npm/npx.
 
 ```sh
 bun install
-bun run dev                 # vite dev (Worker + SPA) via portless: https://rdyrct.localhost, plus the Google OAuth emulator at https://google.emulate.localhost
-bun run mail                # local Resend inbox via portless: https://mail.rdyrct.localhost (read: curl https://mail.rdyrct.localhost/emails -H 'authorization: Bearer test_token_admin')
+bun run dev                 # app + Resend inbox + Google sign-in emulator, each behind portless; prints the URLs (see "Dev addresses" below)
+bun scripts/dev-hosts.ts    # print this checkout's dev URLs (`... app` for one; read mail: curl "$(bun scripts/dev-hosts.ts mail)/emails" -H 'authorization: Bearer test_token_admin')
 bun run db:migrate:local    # apply migrations to local D1
 bun run db:reset:local      # wipe local D1 + KV, re-apply migrations (start from scratch; restart dev after)
 bun add <pkg>               # dependencies
@@ -71,8 +71,23 @@ run uses `.dev.vars.self-host`, not your `.dev.vars`: no email, no Polar,
 no Google, so it also covers sign-up without a code, no billing and the
 `/admin` warning.
 
+**Dev addresses.** `bun run dev` (`scripts/dev.ts`) names everything after
+the checkout: `rdyrct`, `rdyrct-mail` and `rdyrct-google` in the main
+checkout, `rdyrct-<branch>`, `rdyrct-<branch>-mail` and so on in a git
+worktree, so any number of checkouts run at once. portless picks the TLD:
+`https://rdyrct.localhost` normally, `https://rdyrct.local` once its proxy
+runs in LAN mode (`sudo portless service install --lan`), which is how a
+second computer or a phone on the same network opens the dev server. Every
+name is one DNS label because Windows finds only single-label `.local`
+names on a network. The launcher hands the Worker its addresses (`APP_URL`,
+`APP_HOST`, `SHARED_LINK_HOST`, `RESEND_BASE_URL`, `GOOGLE_EMULATOR_URL`;
+`scripts/dev-host-keys.ts`), so `.dev.vars` must not set them: its values
+would win, and the launcher refuses to start if it does. It also creates
+`.dev.vars` from the example on a first run and applies the local D1
+migrations. Never hard-code a dev URL in a script; ask `scripts/dev-hosts.ts`.
+
 **Local Cloudflare state**: while `bun run dev` runs, the Explorer API at
-`https://rdyrct.localhost/cdn-cgi/explorer/api` exposes the local KV, R2, D1,
+`<app URL>/cdn-cgi/explorer/api` exposes the local KV, R2, D1,
 Durable Objects, and Workflows. Fetch that URL for the OpenAPI schema, then use
 it to list, query, and manage local resources (e.g. inspect D1 rows or KV keys
 without wrangler CLI calls).

@@ -48,7 +48,7 @@ Browser preview is the fast loop; a real inbox is the truth.
 3. Narrow-window check: drag the browser to ~380px. The card is `max-width:
    520px` and must stay inside the viewport without horizontal scroll.
 4. For a real-inbox check, send it to yourself through the dev flow (`bun run
-   dev` + `bun run mail`, read at `https://mail.rdyrct.localhost`), or paste
+   dev`, read at `bun scripts/dev-hosts.ts mail`), or paste
    the HTML into Resend's Broadcast editor, which renders a preview before you
    send.
 
