@@ -1118,9 +1118,6 @@ function PricingTeaser() {
   );
 }
 
-// main.tsx names this export as a string, for lazyRouteComponent, which
-// static analysis can't follow.
-// fallow-ignore-next-line unused-export
 export function LandingPage() {
   const { authed, ready, name, ctaTo, ctaLabel } = useAudience();
 

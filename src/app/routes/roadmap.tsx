@@ -234,9 +234,6 @@ function Column({ name, meaning, icon: Icon, items }: Stage) {
   );
 }
 
-// main.tsx names this export as a string, for lazyRouteComponent, which
-// static analysis can't follow.
-// fallow-ignore-next-line unused-export
 export function RoadmapPage() {
   const { ctaTo, ctaLabel } = useAudience();
 
