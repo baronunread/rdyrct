@@ -37,7 +37,7 @@ import {
   DomainsSkeleton,
 } from "../components/skeletons";
 import { NoOrgState } from "../components/no-org";
-import { LockedPanel } from "../components/over-limit";
+import { PaidBadge, UpgradeDialog } from "../components/upgrade-dialog";
 import { domainsBlockedBy } from "../lib/org-limits";
 import { displayUrl, parentDomain } from "../lib/domain-display";
 import { graceLabel, graceRunning } from "../lib/grace";
@@ -98,13 +98,14 @@ export function DomainsPage() {
   const currentUser = useCurrentUser();
 
   // The full skeleton only for somebody who is going to get the full page.
-  // A member sees one line saying they have no access, and a free plan sees
-  // an upgrade row, so drawing a domain list for either promises controls
-  // that the page then takes away. Role and plan are both already in hand:
-  // the only thing still loading is whether this is a platform admin, and
-  // that is a handful of people.
+  // A member sees one line saying they have no access, so drawing a domain
+  // list for them promises controls that the page then takes away. A free
+  // plan gets the same page as a paid one (its Add domain offers the plan),
+  // so it gets the same skeleton. The role is already in hand: the only
+  // thing still loading is whether this is a platform admin, and that is a
+  // handful of people.
   if (currentUser.isLoading)
-    return org && canManageDomains(false, org.role) && PLAN_LIMITS[org.plan].domains > 0 ? (
+    return org && canManageDomains(false, org.role) ? (
       <DomainsPageSkeleton />
     ) : (
       <DomainsHeaderSkeleton />
@@ -122,15 +123,15 @@ export function DomainsPage() {
   return <DomainsSection orgId={orgId} plan={org.plan} />;
 }
 
-function UpgradeDomainsGroup() {
-  return (
-    <LockedPanel
-      title="Custom domains are a paid feature"
-      reason="Serve your short links from your own domain, with slugs you choose."
-      cta="Upgrade to add a domain"
-      primary
-    />
-  );
+/** What the upgrade dialog says a paid plan gives a domain, with the counts
+ * from the plans themselves. */
+function domainBenefits(): string[] {
+  const hobby = PLAN_LIMITS.hobby.domains;
+  return [
+    "Short links on your own domain",
+    "Slugs you choose",
+    `${hobby} ${hobby === 1 ? "domain" : "domains"} on Hobby, ${PLAN_LIMITS.pro.domains} on Pro`,
+  ];
 }
 
 type HostnameForm = { hostname: string };
@@ -453,34 +454,57 @@ function useDomainsModel(orgId: string, plan: OrgPlan) {
 
 type DomainsModel = ReturnType<typeof useDomainsModel>;
 
+/**
+ * What Add domain does here: open the form, offer the plan, or nothing.
+ *
+ * A plan without domains and an org with none gets the page a paid plan
+ * gets, and Add domain offers the plan instead of the form. An org that kept
+ * domains past a downgrade (#159), or a read-only one (#160), gets no
+ * button: its rows and the notice above the page say what happened.
+ */
+function addDomainMode(model: DomainsModel): "add" | "upgrade" | null {
+  const blockedBy = domainsBlockedBy(model.limits.domains, !model.canWrite);
+  if (blockedBy === null) return "add";
+  return blockedBy === "plan" && model.domains.data?.length === 0 ? "upgrade" : null;
+}
+
+/** The page's one primary button, badged "Paid" when it offers the plan,
+ * with the dialog that offer opens. */
+function AddDomainAction({ model }: { model: DomainsModel }) {
+  const mode = addDomainMode(model);
+  const [upgradeOpen, setUpgradeOpen] = useState(false);
+  if (mode === null) return null;
+  const upgrade = mode === "upgrade";
+  return (
+    <>
+      <Button variant="primary" onClick={upgrade ? () => setUpgradeOpen(true) : model.openAdd}>
+        <Plus size={15} aria-hidden />
+        Add domain
+        {upgrade && <PaidBadge onPrimary />}
+      </Button>
+      <UpgradeDialog
+        open={upgradeOpen}
+        onClose={() => setUpgradeOpen(false)}
+        title="Custom domains come with a paid plan"
+        benefits={domainBenefits()}
+        unlockedBy="hobby"
+      />
+    </>
+  );
+}
+
 function DomainsSection({ orgId, plan }: { orgId: string; plan: OrgPlan }) {
   const model = useDomainsModel(orgId, plan);
-  const upgradeOnly = model.limits.domains === 0 && !model.hasDomains;
-  const blockedBy = domainsBlockedBy(model.limits.domains, !model.canWrite);
-  const canAdd = !upgradeOnly && blockedBy === null;
 
   return (
     <div className="mx-auto w-full max-w-[760px]">
       <PageHeader
         title="Domains"
         sub={domainsSubtitle(plan, model.domains.data?.length)}
-        action={
-          canAdd ? (
-            <Button variant="primary" onClick={model.openAdd}>
-              <Plus size={15} aria-hidden />
-              Add domain
-            </Button>
-          ) : undefined
-        }
+        action={<AddDomainAction model={model} />}
       />
       <div className="flex max-w-[760px] flex-col gap-8">
-        {upgradeOnly ? (
-          <UpgradeDomainsGroup />
-        ) : (
-          <>
-            <DomainsBody model={model} canAdd={canAdd} />
-          </>
-        )}
+        <DomainsBody model={model} />
       </div>
 
       <AddDomainDialog
@@ -510,22 +534,76 @@ function DomainsSection({ orgId, plan }: { orgId: string; plan: OrgPlan }) {
   );
 }
 
-/** The list, or the line that stands in for it before the first domain. */
-function DomainsBody({ model, canAdd }: { model: DomainsModel; canAdd: boolean }) {
+/** What a serving domain looks like, for the example under the empty state. */
+const EXAMPLE_DOMAIN: DomainDTO = {
+  id: "example",
+  hostname: "go.yourbrand.com",
+  status: "active",
+  statusReason: "",
+  rootRedirect: "https://yourbrand.com",
+  validation: "http",
+  createdAt: 0,
+  lockedAt: null,
+};
+
+/**
+ * Before the first domain: what will appear, then one faded row drawn by the
+ * real row component, so the page shows what a domain looks like here. The
+ * same on every plan; only the header button differs. The example is hidden
+ * from assistive tech and takes no input: it is a picture, not a domain.
+ */
+function DomainsEmpty({ appHost }: { appHost: string }) {
+  return (
+    <SettingsGroup>
+      <div className="px-4 py-5">
+        <p className="text-sm font-medium">No domains yet</p>
+        <p className="mt-0.5 text-xs text-pretty text-muted">
+          Add one and your short links read like{" "}
+          <span className="font-mono">go.yourbrand.com/launch</span> instead of the shared domain.
+        </p>
+      </div>
+      <div aria-hidden inert data-testid="domain-example" className="select-none">
+        <p className="px-4 pt-2.5 text-xs text-muted">Example</p>
+        <div className="opacity-50">
+          <LazyMotion features={domAnimation}>
+            <DomainRow
+              domain={EXAMPLE_DOMAIN}
+              appHost={appHost}
+              orgId=""
+              isDefault={false}
+              graceEndsAt={null}
+              canWrite={false}
+              pending={NOTHING_PENDING}
+              onToggleDefault={noop}
+              onRecheck={noop}
+              onEditRedirect={noop}
+              onDelete={noop}
+              onCopy={noop}
+            />
+          </LazyMotion>
+        </div>
+      </div>
+    </SettingsGroup>
+  );
+}
+
+const noop = () => {};
+
+const NOTHING_PENDING: DomainsModel["pending"] = {
+  adding: false,
+  refreshing: false,
+  savingRedirect: false,
+  savingDefault: false,
+  removing: false,
+};
+
+/** The list, or what stands in for it before the first domain. */
+function DomainsBody({ model }: { model: DomainsModel }) {
   const { domains, org, appHost, actions, pending } = model;
   if (domains.isLoading) return <DomainsSkeleton />;
-  if (!model.hasDomains)
-    return canAdd ? (
-      <SettingsGroup>
-        <div className="px-4 py-5">
-          <p className="text-sm font-medium">No domains yet</p>
-          <p className="mt-0.5 text-xs text-pretty text-muted">
-            Add one and your short links read like{" "}
-            <span className="font-mono">go.yourbrand.com/launch</span> instead of the shared domain.
-          </p>
-        </div>
-      </SettingsGroup>
-    ) : null;
+  // A read-only org (#160) gets it too, with no button: the notice above
+  // the page says why.
+  if (!model.hasDomains) return <DomainsEmpty appHost={appHost} />;
 
   return (
     <SettingsGroup>

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { errorMessage } from "@/app/lib/error-message";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCurrentUser, useLinkHost } from "../lib/hooks";
@@ -16,7 +16,9 @@ import {
 import { oneOf } from "@/shared/lookup";
 import { Button } from "../ui/button";
 import { SettingsGroup } from "../ui/settings-rows";
-import { LockedPanel } from "./over-limit";
+import { PaidBadge, UpgradeDialog } from "./upgrade-dialog";
+import { HrefLink } from "../lib/router-search";
+import { cn } from "../ui/cn";
 import { BusyContent } from "../ui/spinner";
 import { useToast } from "../ui/toast";
 import { QRPreview } from "./qr";
@@ -126,54 +128,85 @@ function useQrDefaultsForm(orgId: string, org: Org) {
 }
 
 /**
- * What sits here on a plan without `qrCustom`.
- *
- * Two sentences, because they are two situations (#162). An org with no
- * defaults is being offered a feature. An org that already set some, and
- * downgraded, is keeping them: they still apply to every QR the org
- * generates, so telling that org to "upgrade to put your logo on every QR
- * code" describes the state it is already in.
+ * What a plan without `qrCustom` is in: offered the feature, or keeping
+ * defaults it set before a downgrade (#162). Two situations, so two
+ * sentences: telling an org that kept its logo to "upgrade to put your logo
+ * on every QR code" describes the state it is already in.
  */
-function UpgradeQrPrompt({ locked }: { locked: boolean }) {
-  return locked ? (
-    <LockedPanel
-      bare
-      title="Editing these needs a paid plan"
-      reason="They still apply to every QR code this organization makes."
-    />
-  ) : (
-    <LockedPanel
-      bare
-      title="QR code styles are a paid feature"
-      reason="Put your logo, colors and pattern on every QR code."
-    />
+type Upsell = "offer" | "kept";
+
+const UPSELL_LINE = {
+  offer: "Your logo, colours and pattern on every new QR code.",
+  kept: "These still apply to every QR code. Changing them needs a paid plan.",
+} satisfies Record<Upsell, string>;
+
+const QR_UPGRADE_BENEFITS = [
+  "Your logo in every QR code",
+  "Your colours and pattern",
+  "Set once for the organization",
+];
+
+/**
+ * The strip under the inert editor: one sentence, and the way to a plan for
+ * the person who pays for it. Billing is the owner's, so anyone else is told
+ * who can upgrade instead of being handed a button that upgrades their own
+ * account and changes nothing here.
+ */
+function UpsellFooter({
+  upsell,
+  isOwner,
+  onUpgrade,
+}: {
+  upsell: Upsell;
+  isOwner: boolean;
+  onUpgrade: () => void;
+}) {
+  return (
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-2.5 px-4 py-3">
+      <p className="min-w-0 flex-1 basis-64 text-sm text-pretty text-muted">
+        {UPSELL_LINE[upsell]}
+        {!isOwner && " Only the owner can upgrade."}
+      </p>
+      {isOwner && (
+        <Button variant="primary" size="sm" onClick={onUpgrade}>
+          Upgrade
+        </Button>
+      )}
+    </div>
   );
 }
 
 /**
  * The organization's QR defaults: the same rows as a link's QR editor, with
- * the preview, its contrast check, Reset and Save in a side column (on a
- * phone, above the rows). Read-only on a plan that kept its defaults but may
- * no longer change them (#162), and for anyone who is not an admin.
+ * the preview and whatever `children` add under it in a side column (on a
+ * phone, above the rows). With `upsell`, on a plan without `qrCustom`, the
+ * rows are quiet and inert: the editor the plan would give, or the defaults
+ * the org kept (#162), whose preview stays at full strength because it is
+ * what every QR code still looks like.
  */
 function QrDefaultsEditor({
   form,
   canEdit,
-  isAdmin,
+  upsell,
+  children,
 }: {
   form: ReturnType<typeof useQrDefaultsForm>;
   canEdit: boolean;
-  isAdmin: boolean;
+  upsell?: Upsell;
+  children?: ReactNode;
 }) {
-  const linkHost = useLinkHost();
   const [logoName, setLogoName] = useState<string | undefined>();
-  const look = lookOf(form.values);
   return (
-    <div className="grid overflow-hidden rounded-xl sm:grid-cols-[minmax(0,1fr)_220px]">
-      <div className="min-w-0 px-4 py-1 max-sm:order-last">
+    <div
+      className={cn(
+        "grid overflow-hidden sm:grid-cols-[minmax(0,1fr)_220px]",
+        upsell ? "rounded-t-xl" : "rounded-xl",
+      )}
+    >
+      <div inert={!!upsell} className={cn("min-w-0 px-4 py-1 max-sm:order-last", upsell && QUIET)}>
         <QrEditorRows
-          look={look}
-          disabled={!canEdit}
+          look={lookOf(form.values)}
+          disabled={!canEdit && !upsell}
           logoName={logoName ?? "Your logo"}
           onChange={(patch, fileName) => {
             if (fileName) setLogoName(fileName);
@@ -183,35 +216,120 @@ function QrDefaultsEditor({
         />
       </div>
       <aside className="flex flex-col items-center gap-3 bg-bg p-4 max-sm:shadow-[inset_0_-1px_0_color-mix(in_oklab,var(--text)_8%,transparent)] sm:shadow-[inset_1px_0_0_color-mix(in_oklab,var(--text)_8%,transparent)]">
-        <div className="rounded-[14px] bg-white p-2.5 smooth-shadow-ring-sm [&_[role=img]]:rounded-none [&_[role=img]]:border-0">
-          <QRPreview
-            url={shortUrl("preview", undefined, linkHost)}
-            {...qrPreviewProps(form.values)}
-            size={150}
-          />
-        </div>
-        <QrContrastNote look={look} short />
-        {canEdit ? (
-          <div className="mt-auto flex w-full items-center justify-between gap-2 pt-1">
-            <button
-              type="button"
-              onClick={form.reset}
-              disabled={!hasAnyQrValue(form.values)}
-              className="cursor-pointer text-xs text-muted underline decoration-from-font underline-offset-2 disabled:cursor-default disabled:no-underline disabled:opacity-50 enabled:[@media(hover:hover)]:hover:text-text"
-            >
-              Reset
-            </button>
-            <Button size="sm" onClick={form.save} disabled={!form.dirty || form.savingQr}>
-              <BusyContent busy={form.savingQr}>Save</BusyContent>
-            </Button>
-          </div>
-        ) : isAdmin ? null : (
-          <p className="mt-auto text-center text-xs text-pretty text-muted">
-            Only the owner and admins can change these.
-          </p>
-        )}
+        <QrDefaultsPreview values={form.values} quiet={upsell === "offer"} />
+        {children}
       </aside>
     </div>
+  );
+}
+
+/** Quieter, for controls a plan shows but does not give. */
+const QUIET = "opacity-55 saturate-[.6] select-none";
+
+function QrDefaultsPreview({ values, quiet }: { values: QrValues; quiet: boolean }) {
+  const linkHost = useLinkHost();
+  return (
+    <div
+      inert={quiet}
+      className={cn(
+        "rounded-[14px] bg-white p-2.5 smooth-shadow-ring-sm [&_[role=img]]:rounded-none [&_[role=img]]:border-0",
+        quiet && QUIET,
+      )}
+    >
+      <QRPreview
+        url={shortUrl("preview", undefined, linkHost)}
+        {...qrPreviewProps(values)}
+        size={150}
+      />
+    </div>
+  );
+}
+
+/** Under the preview on a plan with `qrCustom`: the contrast check, then
+ * Reset and Save for an admin, or who can change these for anyone else. */
+function QrDefaultsActions({
+  form,
+  canEdit,
+  isAdmin,
+}: {
+  form: ReturnType<typeof useQrDefaultsForm>;
+  canEdit: boolean;
+  isAdmin: boolean;
+}) {
+  return (
+    <>
+      <QrContrastNote look={lookOf(form.values)} short />
+      {canEdit ? (
+        <div className="mt-auto flex w-full items-center justify-between gap-2 pt-1">
+          <button
+            type="button"
+            onClick={form.reset}
+            disabled={!hasAnyQrValue(form.values)}
+            className="cursor-pointer text-xs text-muted underline decoration-from-font underline-offset-2 disabled:cursor-default disabled:no-underline disabled:opacity-50 enabled:[@media(hover:hover)]:hover:text-text"
+          >
+            Reset
+          </button>
+          <Button size="sm" onClick={form.save} disabled={!form.dirty || form.savingQr}>
+            <BusyContent busy={form.savingQr}>Save</BusyContent>
+          </Button>
+        </div>
+      ) : isAdmin ? null : (
+        <p className="mt-auto text-center text-xs text-pretty text-muted">
+          Only the owner and admins can change these.
+        </p>
+      )}
+    </>
+  );
+}
+
+const QR_HINT = "Every new QR code starts like this. Any link can change it.";
+
+/**
+ * The group on a plan without `qrCustom`: the badge by the title, the inert
+ * editor, the strip under it, and the dialog its Upgrade opens. The plans
+ * link and the button are the owner's, who pays for the org.
+ */
+function LockedQrDefaults({
+  form,
+  upsell,
+  isOwner,
+}: {
+  form: ReturnType<typeof useQrDefaultsForm>;
+  upsell: Upsell;
+  isOwner: boolean;
+}) {
+  const [upgradeOpen, setUpgradeOpen] = useState(false);
+  return (
+    <>
+      <SettingsGroup
+        title="QR code defaults"
+        // An org being offered the feature has no defaults to describe.
+        hint={upsell === "kept" ? QR_HINT : undefined}
+        badge={<PaidBadge />}
+        action={isOwner ? <SeePlansLink /> : undefined}
+      >
+        <QrDefaultsEditor form={form} canEdit={false} upsell={upsell} />
+        <UpsellFooter upsell={upsell} isOwner={isOwner} onUpgrade={() => setUpgradeOpen(true)} />
+      </SettingsGroup>
+      <UpgradeDialog
+        open={upgradeOpen}
+        onClose={() => setUpgradeOpen(false)}
+        title="QR code styles come with a paid plan"
+        benefits={QR_UPGRADE_BENEFITS}
+        unlockedBy="hobby"
+      />
+    </>
+  );
+}
+
+function SeePlansLink() {
+  return (
+    <HrefLink
+      href="/billing"
+      className="text-xs font-medium text-accent [@media(hover:hover)]:hover:underline"
+    >
+      See plans
+    </HrefLink>
   );
 }
 
@@ -219,27 +337,32 @@ export function QrDefaultsCard() {
   const { org } = useCurrentOrg();
   const orgId = org?.id ?? "";
   const currentUser = useCurrentUser();
-  const isAdmin = canAdminOrg(currentUser.data?.user.isAdmin, org?.role, org?.locked);
+  const isPlatformAdmin = currentUser.data?.user.isAdmin;
+  const isAdmin = canAdminOrg(isPlatformAdmin, org?.role, org?.locked);
   const hasQrCustom = org ? PLAN_LIMITS[org.plan].qrCustom : false;
 
   // SAFETY: Organization renders this card only once the current org has
   // loaded, so `org` is set here.
   const form = useQrDefaultsForm(orgId, org!);
-  // Defaults the org already set, which keep applying on a plan that no
-  // longer allows new ones: shown, read-only, rather than replaced by an
-  // upsell for the feature they are visibly using (#162).
-  const hasQrDefaults = hasAnyQrValue(form.values);
-  const canEdit = isAdmin && hasQrCustom;
 
+  if (!hasQrCustom)
+    return (
+      <LockedQrDefaults
+        form={form}
+        // Defaults the org already set keep applying on a plan that no
+        // longer allows new ones: shown as kept, rather than offered as a
+        // feature they are visibly using (#162).
+        upsell={hasAnyQrValue(form.values) ? "kept" : "offer"}
+        isOwner={!!isPlatformAdmin || org?.role === "owner"}
+      />
+    );
+
+  const canEdit = isAdmin;
   return (
-    <SettingsGroup
-      title="QR code defaults"
-      hint="Every new QR code starts like this. Any link can change it."
-    >
-      {!hasQrCustom && <UpgradeQrPrompt locked={hasQrDefaults} />}
-      {(hasQrCustom || hasQrDefaults) && (
-        <QrDefaultsEditor form={form} canEdit={canEdit} isAdmin={isAdmin} />
-      )}
+    <SettingsGroup title="QR code defaults" hint={QR_HINT}>
+      <QrDefaultsEditor form={form} canEdit={canEdit}>
+        <QrDefaultsActions form={form} canEdit={canEdit} isAdmin={isAdmin} />
+      </QrDefaultsEditor>
     </SettingsGroup>
   );
 }
