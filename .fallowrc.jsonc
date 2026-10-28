@@ -7,7 +7,9 @@
   // ignorePatterns above keep out of the analysis.
   // preloadFonts in vite.config.ts resolves these package names dynamically;
   // the stylesheet also imports them through /node_modules URLs.
+  // portless is run as a command (scripts/dev.ts), never imported.
   "ignoreDependencies": [
+    "portless",
     "tailwindcss",
     "@oxlint/plugins",
     "@fontsource-variable/figtree",

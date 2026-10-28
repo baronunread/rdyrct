@@ -1,5 +1,7 @@
 import { cloudflareTest, readD1Migrations } from "@cloudflare/vitest-pool-workers";
+import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import { parseEnv } from "node:util";
 import path from "node:path";
 import { defineConfig } from "vitest/config";
 
@@ -9,6 +11,9 @@ export default defineConfig({
       wrangler: { configPath: "./wrangler.jsonc" },
       miniflare: {
         bindings: {
+          // The example's values, not the developer's .dev.vars: every
+          // checkout and CI run the worker tests against the same secrets.
+          ...parseEnv(readFileSync(".dev.vars.local.example", "utf8")),
           APP_HOST: "localhost",
           APP_URL: "http://localhost",
           // wrangler.jsonc's top-level DSN is prod's: unset so tests never report to it.

@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { posthogTokenForHost } from "../src/app/lib/posthog-project";
 
 test("local dev and previews use only the development project", () => {
-  for (const host of ["localhost", "rdyrct.localhost", "127.0.0.1", "[::1]"]) {
+  for (const host of ["localhost", "rdyrct.localhost", "rdyrct.local", "127.0.0.1", "[::1]"]) {
     expect(posthogTokenForHost(host, "production", "development")).toBe("development");
     expect(posthogTokenForHost(host, "production", undefined)).toBeUndefined();
   }

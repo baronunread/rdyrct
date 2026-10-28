@@ -74,13 +74,8 @@ jobs:
           key: node_modules-${{ runner.os }}-${{ hashFiles('bun.lock') }}
       - name: Install dependencies
         run: bun install --frozen-lockfile
-      # Worker tests read secrets (BETTER_AUTH_SECRET, TURNSTILE_SECRET_KEY, ...) out of
-      # the ambient miniflare env, which wrangler builds from .dev.vars. Without
-      # it those bindings are empty, so auth/rate-limit code 500s instead of
-      # behaving: same reason the old single-job workflow copied this before
-      # running verify.
-      - name: Configure worker test environment
-        run: cp .dev.vars.local.example .dev.vars
+      # No .dev.vars step: vitest.config.ts binds .dev.vars.local.example's
+      # values itself, so CI and every checkout run the same secrets.
       - name: bun run ${{ matrix.suite }}
         run: bun run ${{ matrix.suite }}
 
@@ -136,19 +131,9 @@ jobs:
           key: node_modules-${{ runner.os }}-${{ hashFiles('bun.lock') }}
       - name: Install dependencies
         run: bun install --frozen-lockfile
-      # Both of them. .env carries the VITE_PUBLIC_POSTHOG_* pair that
-      # src/app/lib/posthog.ts reads, and CI used to run without it: the
-      # analytics path was never exercised here, and in dev mode a missing
-      # token makes the loader throw on every capture. A developer with a
-      # .env therefore ran a different suite from CI, which is how a green
-      # local run reached a red pipeline.
-      #
-      # The token is the placeholder from .env.build.example, so nothing lands in
-      # a real project, and the funnel test blocks the requests anyway.
-      - name: Configure browser test environment
-        run: |
-          cp .dev.vars.local.example .dev.vars
-          cp .env.build.example .env
+      # No .dev.vars or .env step: playwright.config.ts sets the worker's
+      # values (.dev.vars.playwright) and the build's (BUILD_ENV, with the
+      # placeholder PostHog token) itself, so a local run and CI match.
       # On a PR, leanest runs only the specs this diff could affect and hands
       # them to playwright unchanged. It fails open: a judge error or a
       # low-confidence answer runs the full suite, and so does any change to

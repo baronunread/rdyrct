@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import { devHostVars } from "./scripts/dev-host-keys";
 import { defineConfig, type Plugin, type UserConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
@@ -114,6 +115,9 @@ export default defineConfig(async (): Promise<UserConfig> => ({
       // persisted D1, KV, or R2 state.
       persistState: process.env.PLAYWRIGHT_TEST ? false : true,
       inspectorPort: process.env.PLAYWRIGHT_TEST ? false : undefined,
+      // `bun run dev` (scripts/dev.ts) works out this checkout's addresses
+      // and hands them over here; .dev.vars must not set them (it would win).
+      config: devHostVars(process.env),
     }),
   ],
   define: SITE_DEFINE,

@@ -10,7 +10,7 @@
 
     cp scripts/og-image.html public/og-image.html
     agent-browser set viewport 1200 630
-    agent-browser open https://rdyrct.localhost/og-image.html
+    agent-browser open "$(bun scripts/dev-hosts.ts app)/og-image.html"
     agent-browser screenshot og.png     # writes to the CWD, not a subpath
     mv og.png public/og.png && rm public/og-image.html
 

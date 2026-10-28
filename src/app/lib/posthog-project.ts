@@ -8,6 +8,8 @@ export function posthogTokenForHost(
   const local =
     hostname === "localhost" ||
     hostname.endsWith(".localhost") ||
+    // portless's LAN mode (scripts/dev-hosts.ts)
+    hostname.endsWith(".local") ||
     hostname === "127.0.0.1" ||
     hostname === "[::1]";
   return local || developmentBuild ? developmentToken : productionToken;

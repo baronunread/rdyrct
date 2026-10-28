@@ -15,26 +15,49 @@ path is **KV**; custom domains use **Cloudflare for SaaS**. Product host:
 
 Always use **bun**, never npm/npx.
 
+**Setting up and running the app is in the README's "Local development"**
+(what you need, first run, day to day, LAN mode, integrations, and what to
+do when something is off). Read it once; the rules below are the parts an
+agent needs while working.
+
 ```sh
 bun install
-bun run dev                 # vite dev (Worker + SPA) via portless: https://rdyrct.localhost, plus the Google OAuth emulator at https://google.emulate.localhost
-bun run mail                # local Resend inbox via portless: https://mail.rdyrct.localhost (read: curl https://mail.rdyrct.localhost/emails -H 'authorization: Bearer test_token_admin')
-bun run db:migrate:local    # apply migrations to local D1
+bun run dev                 # first run creates .dev.vars and migrates; starts app + mail inbox + Google emulator behind portless; prints the URLs
+bun scripts/dev-hosts.ts    # print this checkout's dev URLs (`... app` for one; read mail: curl "$(bun scripts/dev-hosts.ts mail)/emails" -H 'authorization: Bearer test_token_admin')
 bun run db:reset:local      # wipe local D1 + KV, re-apply migrations (start from scratch; restart dev after)
 bun add <pkg>               # dependencies
 bunx agent-browser          # real-browser checks: screenshots, clicking through pages. Use it for any visual verification; do not hand-roll headless Chrome
-bun run db:seed:local       # seed local D1/KV with fake data (run dev server first)
+bun run db:seed:local       # seed local D1/KV with fake data (run dev server first; finds this checkout's server itself)
+bun run polar:listen        # forward Polar sandbox webhooks to this checkout (needs the Polar CLI)
 bun run deploy              # build, apply D1 migrations, deploy; VITE_RDYRCT_SITE=1 (in .env) for rdyrct.com, otherwise a self-hosted copy
 ```
 
 **Account states, one link each.** With the dev server running and the seed
-loaded, `/__dev/scenarios` lists them: Pro, Hobby and Free owners, a
-brand-new account, a member, a viewer, an org over its plan, one past its
-grace period, a read-only org, one at the click cap, and a platform admin.
-`/__dev/scenarios/<name>?to=/links` signs in as the seeded account in that
-state and opens the page. Use it to check a UI change in every state before
-calling it done. It exists only in dev builds (`src/worker/dev-scenarios.ts`)
-and only signs in as `@seed.test` accounts.
+loaded, `<app URL>/__dev/scenarios` lists them. The names:
+
+| Name          | Signs in as                         |
+| ------------- | ----------------------------------- |
+| `pro-owner`   | a Pro owner                         |
+| `hobby-owner` | a Hobby owner                       |
+| `free-owner`  | a Free owner                        |
+| `fresh`       | a brand-new account, no links       |
+| `member`      | a member of someone else's org      |
+| `viewer`      | a read-only viewer                  |
+| `over-plan`   | an org over its plan, in its grace  |
+| `grace-ended` | an org past its 30-day grace period |
+| `locked-org`  | a read-only (locked) org            |
+| `click-cap`   | an org at its click cap             |
+| `admin`       | the platform admin                  |
+
+`<app URL>/__dev/scenarios/<name>?to=/links` signs in as that account and
+opens the page. Use it to check a UI change in every state before calling it
+done. Browser tests that need a signed-in account but are not about sign-up
+use `signUpAndVerify` (`tests/e2e/resend.ts`), which calls
+`POST /__dev/test-account` and skips the form (6 to 7 seconds a test); a
+spec about sign-up itself uses `signUpThroughForm`. All of `/__dev` exists
+only in dev builds (`src/worker/dev-scenarios.ts`); scenarios only sign in
+as `@seed.test` accounts, and the test account route only creates new
+addresses, never the `SUPERADMIN_EMAIL` one.
 
 **Rolling back a release.** `bun run deploy` migrates before it deploys.
 Wrangler has no down migrations, so a rollback is two steps:
@@ -71,8 +94,29 @@ run uses `.dev.vars.self-host`, not your `.dev.vars`: no email, no Polar,
 no Google, so it also covers sign-up without a code, no billing and the
 `/admin` warning.
 
+**Dev addresses.** Rules for agents; the README explains the same for
+people. `bun run dev` (`scripts/dev.ts`) names everything after the checkout: `rdyrct`, `rdyrct-mail` and `rdyrct-google` in the main
+checkout, `rdyrct-<branch>`, `rdyrct-<branch>-mail` and so on in a git
+worktree, so any number of checkouts run at once. portless picks the TLD:
+`https://rdyrct.localhost` normally, `https://rdyrct.local` once its proxy
+runs in LAN mode (`sudo portless service install --lan`), which is how a
+second computer or a phone on the same network opens the dev server. Every
+name is one DNS label because Windows finds only single-label `.local`
+names on a network. The launcher hands the Worker its addresses (`APP_URL`,
+`APP_HOST`, `SHARED_LINK_HOST`, `RESEND_BASE_URL`, `GOOGLE_EMULATOR_URL`;
+`scripts/dev-host-keys.ts`), so `.dev.vars` must not set them: its values
+would win, and the launcher refuses to start if it does. It also creates
+`.dev.vars` from the example on a first run and applies the local D1
+migrations. Never hard-code a dev URL (`rdyrct.localhost`, a port) in a
+script, a doc or a test: ask `bun scripts/dev-hosts.ts` (`app`, `mail`,
+`google`). Open the URL it prints, never `localhost:<port>`: sign-in
+actions answer "Invalid origin" from any other address.
+Sandbox billing webhooks: run `bun run polar:listen` beside it. When
+`.dev.vars` sets no `POLAR_WEBHOOK_SECRET`, `bun run dev` hands the Worker
+the one `polar listen` signs with, so forwarded events verify as they are.
+
 **Local Cloudflare state**: while `bun run dev` runs, the Explorer API at
-`https://rdyrct.localhost/cdn-cgi/explorer/api` exposes the local KV, R2, D1,
+`<app URL>/cdn-cgi/explorer/api` exposes the local KV, R2, D1,
 Durable Objects, and Workflows. Fetch that URL for the OpenAPI schema, then use
 it to list, query, and manage local resources (e.g. inspect D1 rows or KV keys
 without wrangler CLI calls).
@@ -83,7 +127,7 @@ without wrangler CLI calls).
 bun run check                          # app + shared, worker, worker tests (three bun check runs)
 bun run test                           # unit tests (bun test, tests/)
 bun run test:worker                    # worker tests (vitest-pool-workers, tests/worker/)
-bun run e2e:smoke                      # browser tests (playwright, tests/e2e/); needs .dev.vars
+bun run e2e:smoke                      # browser tests (playwright, tests/e2e/); bring their own env, whatever your .dev.vars and .env say
 bun run e2e:self-host                  # browser tests against a self-hosted build (own dist/, so not alongside e2e:smoke)
 bun run verify                         # static checks + unit + worker tests, no e2e: the local gate
 bun run verify:e2e                     # verify + the full e2e:smoke suite: what CI runs

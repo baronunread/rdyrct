@@ -147,13 +147,14 @@ That decides the tool, too. A seeded user is already verified and shares one
 password, so `bunx agent-browser` can just sign in:
 
 ```sh
+APP=$(bun scripts/dev-hosts.ts app)   # this checkout's dev URL
 bunx agent-browser set viewport 1280 900
-bunx agent-browser open https://rdyrct.localhost/login
+bunx agent-browser open "$APP/login"
 bunx agent-browser eval "localStorage.setItem('rdyrct:consent:v2','granted')"
 bunx agent-browser fill 'input[type="email"]' someone@seed.test
 bunx agent-browser fill 'input[type="password"]' seed-password-123
 bunx agent-browser click 'button[type="submit"]'
-bunx agent-browser open https://rdyrct.localhost/members
+bunx agent-browser open "$APP/members"
 bunx agent-browser screenshot shots/members.png
 ```
 
