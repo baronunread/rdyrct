@@ -67,14 +67,20 @@ async function userAndPage<M>(
   }
 }
 
+/** What a page reads that belongs to the account rather than an org (Settings'
+ * sign-in methods and sessions): preloaded even for somebody with no org. */
+export type AccountPreload = (qc: QueryClient) => Promise<void>;
+
 export async function loadPage(
   qc: QueryClient,
-  importPage: () => Promise<{ preload: PagePreload }>,
+  importPage: () => Promise<{ preload: PagePreload; preloadAccount?: AccountPreload }>,
   target: PageTarget,
 ): Promise<void> {
   const loaded = await userAndPage(qc, importPage);
-  const org = loaded && pickOrg(loaded.user.orgs);
-  if (!loaded || !org) return;
+  if (!loaded) return;
+  await loaded.page.preloadAccount?.(qc).catch(() => {});
+  const org = pickOrg(loaded.user.orgs);
+  if (!org) return;
   await loaded.page.preload(qc, org.id, { ...target, org, user: loaded.user }).catch(() => {});
 }
 
