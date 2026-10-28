@@ -1,4 +1,5 @@
-import { useCallback, type ReactNode } from "react";
+import { useCallback, useEffect, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
+import type { BaseUIEvent } from "@base-ui/react/types";
 import { Toast } from "@base-ui/react/toast";
 import { Check, X } from "@/app/ui/icons";
 import { cn } from "./cn";
@@ -34,6 +35,7 @@ export interface ToastOptions {
 export function useToast() {
   return useCallback((message: string, kind: ToastKind = "info", options?: ToastOptions) => {
     let id = "";
+    movedSinceToast = false;
     id = manager.add({
       description: message,
       type: kind,
@@ -54,12 +56,41 @@ export function useToast() {
   }, []);
 }
 
+/**
+ * Whether the mouse has really moved since the last toast appeared. Base UI
+ * pauses toasts on the viewport's mouseenter and mousemove, and the browser
+ * sends those, with no movement, when a toast appears under a cursor that is
+ * resting there. That kept a toast on screen until the mouse moved off it.
+ * Until the mouse moves, the viewport ignores them; a real hover still
+ * pauses, so somebody reading a toast keeps it.
+ */
+let movedSinceToast = true;
+
+function useTrackPointerMoves() {
+  useEffect(() => {
+    const moved = (e: MouseEvent) => {
+      if (e.movementX || e.movementY) movedSinceToast = true;
+    };
+    window.addEventListener("mousemove", moved, { passive: true });
+    return () => window.removeEventListener("mousemove", moved);
+  }, []);
+}
+
+/** Base UI's hover pause, only for a mouse that moved there. */
+function skipHoverUntilMoved(event: BaseUIEvent<ReactMouseEvent<HTMLDivElement>>) {
+  if (!movedSinceToast) event.preventBaseUIHandler();
+}
 export function ToastProvider({ children }: { children: ReactNode }) {
+  useTrackPointerMoves();
   return (
     <Toast.Provider toastManager={manager} limit={4} timeout={3250}>
       {children}
       <Toast.Portal>
-        <Toast.Viewport className="toast-stack pointer-events-none fixed bottom-4 z-toast">
+        <Toast.Viewport
+          className="toast-stack pointer-events-none fixed bottom-4 z-toast"
+          onMouseEnter={skipHoverUntilMoved}
+          onMouseMove={skipHoverUntilMoved}
+        >
           <ToastList />
         </Toast.Viewport>
       </Toast.Portal>
