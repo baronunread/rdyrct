@@ -10,6 +10,7 @@ import { api } from "../lib/api";
 import {
   PLAN_LIMITS,
   type InviteDTO,
+  type InvitesCreated,
   type CurrentUser,
   type OrgRole,
   type Sort,
@@ -99,7 +100,7 @@ function useMemberManagement(orgId: string, canManage: boolean) {
 
   const sendEmailInvites = useMutation({
     mutationFn: (params: EmailInvites) =>
-      api<{ invites: InviteDTO[] }>(`/orgs/${orgId}/invites`, {
+      api<InvitesCreated>(`/orgs/${orgId}/invites`, {
         method: "POST",
         body: { role: params.role, emails: params.emails },
       }),

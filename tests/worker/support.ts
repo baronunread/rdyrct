@@ -305,7 +305,13 @@ export interface CapturedEmail {
 export function captureEmails({
   mx,
   hold,
-}: { mx?: "deliverable" | "unroutable"; hold?: Promise<void> } = {}) {
+  refuse,
+}: {
+  mx?: "deliverable" | "unroutable";
+  hold?: Promise<void>;
+  /** Addresses Resend answers with a 500, as an outage or a bounce would. */
+  refuse?: string[];
+} = {}) {
   const sent: CapturedEmail[] = [];
   let started = false;
   const original = globalThis.fetch;
@@ -315,7 +321,9 @@ export function captureEmails({
       started = true;
       // SAFETY: the only caller of this branch is sendEmail(), which posts a
       // JSON body of exactly these four fields to Resend.
-      sent.push(JSON.parse(String(init?.body ?? "{}")) as CapturedEmail);
+      const email = JSON.parse(String(init?.body ?? "{}")) as CapturedEmail;
+      if (refuse?.includes(email.to)) return new Response("down", { status: 500 });
+      sent.push(email);
       if (hold) await hold;
       return Response.json({ id: "sent" });
     }

@@ -10,7 +10,7 @@ import { useToast } from "../ui/toast";
 import { api, ApiError } from "../lib/api";
 import { withErrorToast } from "../lib/mutation-toast";
 import { destinationSchema } from "../lib/schemas";
-import type { LinkDTO, LinkInput } from "@/shared/types";
+import type { InvitesCreated, LinkDTO, LinkInput } from "@/shared/types";
 
 /* The two things ⌘K can do from what you type, rather than from a row:
  * make a link from a pasted URL, and invite a typed email address. */
@@ -104,13 +104,17 @@ export function useInviteFlow(close: () => void): (email: string) => void {
   const qc = useQueryClient();
   const invite = useMutation({
     mutationFn: (email: string) =>
-      api(`/orgs/${org?.id ?? ""}/invites`, {
+      api<InvitesCreated>(`/orgs/${org?.id ?? ""}/invites`, {
         method: "POST",
         body: { role: "member", emails: [email] },
       }),
-    onSuccess: (_data, email) => {
+    onSuccess: ({ failed }, email) => {
       void qc.invalidateQueries({ queryKey: ["invites", org?.id] });
-      toast(`Invite sent to ${email}`);
+      if (failed.length)
+        toast(`Couldn't email ${email}`, "error", {
+          detail: "The invite is saved. Send it again from Members.",
+        });
+      else toast(`Invite sent to ${email}`);
     },
     onError: withErrorToast(toast),
   });

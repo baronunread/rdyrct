@@ -26,6 +26,7 @@ import type {
   UserOrg,
   MemberDTO,
   InviteDTO,
+  InvitesCreated,
   OrgStats,
   LinkStats,
   SeriesPoint,
@@ -599,16 +600,32 @@ orgRoutes.post("/:orgId/invites", requireOrgRole("admin"), async (c) => {
       }),
     ),
   ];
-  const need = Math.max(1, emails.length);
-  if ((await occupiedSeats(c.var.db, orgIdParam)) + need > limits.members)
+  // An address that already has an open invite keeps it: asking again sends
+  // the same link (with this role and a fresh week) rather than a second
+  // row, so retrying after a failed send never duplicates an invite.
+  const ts = Date.now();
+  const open = emails.length
+    ? await c.var.db
+        .select({ token: schema.invites.token, email: schema.invites.email })
+        .from(schema.invites)
+        .where(
+          and(
+            eq(schema.invites.orgId, orgIdParam),
+            inArray(schema.invites.email, emails),
+            gte(schema.invites.expiresAt, ts),
+          ),
+        )
+    : [];
+  const openToken = new Map(open.map((o) => [o.email, o.token]));
+  const fresh = emails.filter((e) => !openToken.has(e));
+  const need = emails.length === 0 ? 1 : fresh.length;
+  if (need > 0 && (await occupiedSeats(c.var.db, orgIdParam)) + need > limits.members)
     throw new HTTPException(402, {
       message:
         plan === "free"
           ? `The free plan allows ${limits.members} members (including you), upgrade to a paid plan to invite more`
           : `This plan allows at most ${limits.members} members`,
     });
-
-  const ts = Date.now();
 
   if (emails.length === 0) {
     const invite = {
@@ -632,7 +649,8 @@ orgRoutes.post("/:orgId/invites", requireOrgRole("admin"), async (c) => {
             expiresAt: invite.expiresAt,
           } satisfies InviteDTO,
         ],
-      },
+        failed: [],
+      } satisfies InvitesCreated,
       201,
     );
   }
@@ -644,7 +662,7 @@ orgRoutes.post("/:orgId/invites", requireOrgRole("admin"), async (c) => {
   const orgName = orgRows[0]?.name ?? "rdyrct";
 
   const created = emails.map((email) => ({
-    token: uid(24),
+    token: openToken.get(email) ?? uid(24),
     orgId: orgIdParam,
     role,
     email,
@@ -653,9 +671,23 @@ orgRoutes.post("/:orgId/invites", requireOrgRole("admin"), async (c) => {
     expiresAt: ts + INVITE_TTL_MS,
   }));
 
-  await c.var.db.insert(schema.invites).values(created);
+  const inserts = created.filter((invite) => !openToken.has(invite.email));
+  if (inserts.length) await c.var.db.insert(schema.invites).values(inserts);
+  if (openToken.size)
+    await c.var.db
+      .update(schema.invites)
+      .set({ role, expiresAt: ts + INVITE_TTL_MS })
+      .where(
+        and(
+          eq(schema.invites.orgId, orgIdParam),
+          inArray(schema.invites.token, [...openToken.values()]),
+        ),
+      );
 
-  await Promise.all(
+  // Every address gets its try: one bounce must not hide which others went
+  // out. The rows stay either way, so the dialog can offer the failed ones
+  // again and the retry lands on the same invite.
+  const sends = await Promise.allSettled(
     created.map((invite) =>
       sendEmail(
         c.env,
@@ -678,9 +710,21 @@ orgRoutes.post("/:orgId/invites", requireOrgRole("admin"), async (c) => {
       ),
     ),
   );
+  const failed = created.flatMap((invite, i) =>
+    sends[i]!.status === "rejected" ? [invite.email] : [],
+  );
+  const firstFailure = sends.find((s) => s.status === "rejected");
+  if (firstFailure?.status === "rejected") {
+    const log = c.get("log");
+    // Counts only: the addresses are personal data.
+    log?.set({ invites: { failed: failed.length, sent: created.length - failed.length } });
+    const err = firstFailure.reason;
+    log?.error(err instanceof Error ? err : new Error(String(err)));
+  }
 
   return c.json(
     {
+      failed,
       invites: created.map(
         (invite) =>
           ({
@@ -691,7 +735,7 @@ orgRoutes.post("/:orgId/invites", requireOrgRole("admin"), async (c) => {
             expiresAt: invite.expiresAt,
           }) satisfies InviteDTO,
       ),
-    },
+    } satisfies InvitesCreated,
     201,
   );
 });
