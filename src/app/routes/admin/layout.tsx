@@ -10,7 +10,8 @@
  * them: the title, the subtitle and the tabs stay put, and only the section
  * below changes.
  */
-import { Suspense } from "react";
+import { Suspense, useRef } from "react";
+import { TabUnderline } from "../../ui/tab-underline";
 import { Link, Outlet, useLocation } from "@tanstack/react-router";
 import { AdminSectionSkeleton } from "../../components/skeletons";
 import { useConfig } from "../../lib/hooks";
@@ -37,6 +38,7 @@ export function AdminLayout() {
   const config = useConfig().data;
   const pathname = useLocation({ select: (l) => l.pathname });
   const onUsage = pathname === "/admin" || pathname === "/admin/";
+  const bar = useRef<HTMLElement>(null);
   // No email and no Google: nobody proves they own the address they sign up
   // with. Fine on a private instance, wrong on a public one.
   const unverified = config && !config.emailEnabled && !config.googleEnabled;
@@ -49,7 +51,8 @@ export function AdminLayout() {
           turn verification on.
         </p>
       )}
-      <div className="flex flex-col gap-4">
+      {/* Held still while one tab changes to another (styles.css, platform). */}
+      <div data-platform-head className="flex flex-col gap-4">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
             <h1 className="text-xl font-semibold tracking-tight text-balance">Platform</h1>
@@ -62,8 +65,9 @@ export function AdminLayout() {
         {/* Underline tabs, drawn as inset shadows so the hairline adds nothing
             to the box (rdyrct-design, "Depth from layered shadows"). */}
         <nav
+          ref={bar}
           aria-label="Platform sections"
-          className="-mx-1 flex gap-5 overflow-x-auto px-1 shadow-[inset_0_-1px_0_var(--border)]"
+          className="relative -mx-1 flex gap-5 overflow-x-auto px-1 shadow-[inset_0_-1px_0_var(--border)]"
         >
           {TABS.map(({ to, end, label }) => (
             <Link
@@ -72,7 +76,7 @@ export function AdminLayout() {
               activeOptions={{ exact: end, includeSearch: false }}
               className="shrink-0 pb-2.5 text-sm whitespace-nowrap transition-colors"
               activeProps={{
-                className: "font-semibold text-text shadow-[inset_0_-2px_0_var(--text)]",
+                className: "font-semibold text-text",
                 "aria-current": "page",
               }}
               inactiveProps={{ className: "text-muted [@media(hover:hover)]:hover:text-text" }}
@@ -80,6 +84,7 @@ export function AdminLayout() {
               {label}
             </Link>
           ))}
+          <TabUnderline bar={bar} className="h-0.5" />
         </nav>
       </div>
       {/* Local to the section, not just the shell's outer one: without it, a

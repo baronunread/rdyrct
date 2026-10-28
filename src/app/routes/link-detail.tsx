@@ -1,5 +1,6 @@
 import { linkFieldError } from "../lib/link-field-errors";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { morphKey, morphPart, setMorphLink } from "../lib/link-morph";
 import { useNavigate, useParams } from "@tanstack/react-router";
 import { useQueryClient, type QueryClient } from "@tanstack/react-query";
 import {
@@ -212,12 +213,15 @@ function LinkDetailHeader({
   return (
     <div className="mb-6 flex flex-wrap items-center justify-between gap-x-3 gap-y-4">
       <div className="flex min-w-0 flex-1 items-center gap-3.5">
-        <QrThumb url={s.url} link={link} orgQr={orgQr} onOpen={onQr} />
+        <span className="shrink-0" {...morphPart("qr")}>
+          <QrThumb url={s.url} link={link} orgQr={orgQr} onOpen={onQr} />
+        </span>
         <div className="min-w-0">
           <div className="flex min-w-0 items-center gap-2">
             <h1
               className="truncate text-xl font-semibold tracking-tight"
               title={s.title || address}
+              {...morphPart("title")}
             >
               {s.title || address}
             </h1>
@@ -231,7 +235,9 @@ function LinkDetailHeader({
             )}
           </div>
           <div className="mt-0.5 flex min-w-0 items-center gap-1">
-            <ShortAddress url={s.url} />
+            <span className="flex min-w-0" {...morphPart("addr")}>
+              <ShortAddress url={s.url} />
+            </span>
             <CopyButton
               text={s.url}
               label={`Copy ${s.url}`}
@@ -400,6 +406,10 @@ export function LinkDetailPage() {
   const { slug } = useParams({ strict: false });
   const [searchParams] = useSearchParams();
   const domain = searchParams.get("domain");
+  // So the way back to Links morphs into this link's row (lib/link-morph.ts).
+  useEffect(() => {
+    if (slug) setMorphLink(morphKey({ slug, domain }));
+  }, [slug, domain]);
   const navigate = useNavigate();
   const { org, orgId, currentUser, canWrite, limits, activeDomains, defaultDomainId, orgQr } =
     useOrgLimits();
