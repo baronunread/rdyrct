@@ -11,7 +11,6 @@ test("the sidebar folds to an icon rail, stays folded, and unfolds", async ({ pa
   const width = async () => (await sidebar.boundingBox())?.width ?? 0;
   await expect.poll(width).toBe(240);
 
-  // The mark is the fold button.
   await page.getByRole("button", { name: "Collapse sidebar" }).click();
   await expect.poll(width).toBe(52);
   // The nav still works from the rail.

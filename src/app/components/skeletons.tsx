@@ -571,8 +571,8 @@ function SidebarSkeleton({ collapsed }: { collapsed: boolean }) {
 
       {/* account: the avatar and name are data */}
       <div className="mt-auto px-3 py-3">
-        <div className="flex min-w-9 items-center gap-2.5 px-[3px] py-1.5">
-          <Skeleton className="size-[30px] shrink-0 rounded-full" />
+        <div className="flex min-w-9 items-center gap-2.5 px-1 py-1.5">
+          <Skeleton className="size-7 shrink-0 rounded-full" />
           <span className={cn("flex h-5 min-w-0 flex-1 items-center", hide)}>
             <Skeleton className="h-3 w-2/3" />
           </span>
