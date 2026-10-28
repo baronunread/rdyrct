@@ -7,7 +7,8 @@ import { appNavItems } from "./nav-items";
 import { cn } from "../ui/cn";
 import { Card } from "../ui/misc";
 import { Skeleton, SkeletonStatus, TableSkeleton } from "../ui/skeleton";
-import { Logo } from "../ui/logo";
+import { Logo, LogoMark } from "../ui/logo";
+import { shellLayout, useSidebarCollapsed } from "../lib/sidebar";
 
 /**
  * Page-level loading skeletons, one per route, used both as the lazy chunk's
@@ -534,20 +535,25 @@ export function InviteSkeleton() {
  * so the loaded sidebar replaces this without anything moving. Classes
  * mirror AppShell's sidebar.
  */
-function SidebarSkeleton() {
+function SidebarSkeleton({ collapsed }: { collapsed: boolean }) {
+  const hide = collapsed && "opacity-0";
   return (
-    <div className="flex h-full flex-col">
-      <div className="hidden px-3 pt-4 pb-2 md:block">
-        <Logo className="px-1.5 text-sm" />
+    <div className="flex h-full flex-col overflow-hidden">
+      {/* the mark, then search and fold (shell.tsx, SidebarTop) */}
+      <div className="hidden h-14 items-center px-3 md:flex">
+        <span className="grid size-9 place-items-center">
+          <LogoMark className="h-[18px]" />
+        </span>
       </div>
 
-      {/* org switcher: the frame is chrome, the org name is data */}
+      {/* org switcher: the initial and name are data */}
       <div className="px-3 py-2">
-        <div className="flex w-full items-center justify-between gap-2 rounded-md border border-border bg-surface px-2.5 py-2">
-          <span className="flex h-5 items-center">
+        <div className="flex h-10 w-full items-center gap-2.5 px-1.5">
+          <Skeleton className="size-6 shrink-0 rounded-md" />
+          <span className={cn("flex h-5 min-w-0 flex-1 items-center", hide)}>
             <Skeleton className="h-3.5 w-28" />
           </span>
-          <ChevronsUpDown size={14} className="shrink-0 text-muted" />
+          <ChevronsUpDown size={14} className={cn("shrink-0 text-muted", hide)} />
         </div>
       </div>
 
@@ -556,22 +562,20 @@ function SidebarSkeleton() {
         {appNavItems.map(({ icon: Icon, label }) => (
           <span
             key={label}
-            className="flex items-center gap-2.5 rounded-md px-2.5 py-2 text-sm text-muted"
+            className="flex h-9 items-center gap-2.5 rounded-lg px-2.5 text-sm whitespace-nowrap text-muted [&_svg]:shrink-0"
           >
-            <Icon size={15} /> {label}
+            <Icon size={15} /> <span className={cn(hide)}>{label}</span>
           </span>
         ))}
       </nav>
 
-      {/* user footer: the avatar frame is chrome, the name is data. Settings,
-          theme and sign out live inside the account menu now. */}
-      <div className="mt-auto border-t border-border px-3 py-2.5">
-        <div className="flex items-center gap-2 px-1.5 py-1">
-          <Skeleton className="h-8 w-8 shrink-0 rounded-full" />
-          <span className="flex h-5 min-w-0 flex-1 items-center">
+      {/* account: the avatar and name are data */}
+      <div className="mt-auto px-3 py-3">
+        <div className="flex items-center gap-2.5 px-[3px] py-1.5">
+          <Skeleton className="size-[30px] shrink-0 rounded-full" />
+          <span className={cn("flex h-5 min-w-0 flex-1 items-center", hide)}>
             <Skeleton className="h-3 w-2/3" />
           </span>
-          <ChevronsUpDown size={14} className="shrink-0 text-muted" />
         </div>
       </div>
     </div>
@@ -579,24 +583,26 @@ function SidebarSkeleton() {
 }
 
 /** First paint of the authenticated app: real sidebar chrome + skeleton
- * content. Layout classes mirror AppShell so the swap doesn't shift. */
+ * content. Layout classes mirror AppShell so the swap doesn't shift,
+ * folded sidebar included. */
 export function AppShellSkeleton() {
+  const collapsed = useSidebarCollapsed();
+  const layout = shellLayout(collapsed);
   return (
     <div className="flex min-h-dvh" data-testid="app-shell-skeleton">
-      {/* desktop sidebar */}
-      <aside className="fixed inset-y-0 left-0 z-10 hidden w-60 border-r border-border bg-surface/40 md:block">
-        <SidebarSkeleton />
+      <aside className={layout.aside}>
+        <SidebarSkeleton collapsed={collapsed} />
       </aside>
 
       {/* mobile top bar */}
-      <div className="fixed inset-x-0 top-0 z-30 flex items-center gap-2 border-b border-border bg-bg/90 px-4 py-2.5 backdrop-blur md:hidden">
+      <div className="fixed inset-x-0 top-0 z-30 flex items-center gap-2 bg-bg/90 px-4 py-2.5 backdrop-blur md:hidden">
         <span className="p-1.5 text-muted">
           <MenuIcon size={18} />
         </span>
         <Logo className="text-sm" />
       </div>
 
-      <main className="flex min-w-0 flex-1 flex-col px-5 py-8 pt-16 md:ml-60 md:px-8 md:pt-8">
+      <main className={layout.main}>
         <div className="mx-auto w-full max-w-5xl flex-1">
           {/* whichever page was asked for, not always the dashboard */}
           <RouteSkeleton />
