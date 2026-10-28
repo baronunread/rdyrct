@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { settle } from "../lib/route-preload";
 import { NotFound } from "./not-found";
 import { errorMessage } from "@/app/lib/error-message";
 import confetti from "canvas-confetti";
@@ -10,9 +11,13 @@ import {
   m,
   useReducedMotion,
 } from "motion/react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import {
+  clickUsageQuery,
+  domainsQuery,
+  linkQuotaUsageQuery,
+  membersQuery,
   useCurrentUser,
   useLinkQuotaUsage,
   useClickUsage,
@@ -1260,6 +1265,17 @@ function useBillingPageModel() {
       onFirstLink: firstLinkAction(usage, dismissCelebration, navigate),
     },
   };
+}
+
+/** Everything the billing page's first frame reads (see
+ * lib/route-preload.ts): the usage it sets against the plan. */
+export function preload(qc: QueryClient, orgId: string) {
+  return settle([
+    qc.ensureQueryData(linkQuotaUsageQuery(orgId)),
+    qc.ensureQueryData(membersQuery(orgId)),
+    qc.ensureQueryData(domainsQuery(orgId)),
+    qc.ensureQueryData(clickUsageQuery(orgId)),
+  ]);
 }
 
 export function BillingPage() {

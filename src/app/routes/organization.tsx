@@ -2,9 +2,16 @@ import { useState, useEffect, useRef } from "react";
 import { errorMessage } from "@/app/lib/error-message";
 import { useForm } from "react-hook-form";
 import { valibotResolver } from "@hookform/resolvers/valibot";
-import { useQueryClient } from "@tanstack/react-query";
-import { useCurrentUser, useDomainMutations, useLinkHost, useLinkQuotaUsage } from "../lib/hooks";
-import { canAdminOrg, useOrgLimits } from "../lib/org-limits";
+import { useQueryClient, type QueryClient } from "@tanstack/react-query";
+import {
+  linkQuotaUsageQuery,
+  useCurrentUser,
+  useDomainMutations,
+  useLinkHost,
+  useLinkQuotaUsage,
+} from "../lib/hooks";
+import { canAdminOrg, preloadOrgDomains, useOrgLimits } from "../lib/org-limits";
+import { settle, type PageContext } from "../lib/route-preload";
 import { HrefLink } from "../lib/router-search";
 import { Check, ChevronsUpDown } from "@/app/ui/icons";
 import { Menu, MenuItem } from "../ui/menu";
@@ -307,6 +314,18 @@ function DeleteOrgDialog({
       </div>
     </ConfirmDialog>
   );
+}
+
+/** Everything the organization page's first frame reads (see
+ * lib/route-preload.ts): the default-domain choices, and for the owner the
+ * counts the delete row quotes. */
+export function preload(qc: QueryClient, orgId: string, { org, user }: PageContext) {
+  return settle([
+    preloadOrgDomains(qc, org, user),
+    isOrgOwner(user.user.isAdmin, org.role)
+      ? qc.ensureQueryData(linkQuotaUsageQuery(orgId))
+      : undefined,
+  ]);
 }
 
 export function OrganizationPage() {

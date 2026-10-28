@@ -1,4 +1,5 @@
 import { useState, type ReactNode } from "react";
+import { settle } from "../../lib/route-preload";
 import { ArrowUp } from "@/app/ui/icons";
 import { AreaChart, BarList } from "../../components/charts";
 import { PanelTabs } from "../../ui/tabs";
@@ -7,9 +8,10 @@ import { cn } from "../../ui/cn";
 import { linkLabel } from "./util";
 import type { SeriesPoint } from "@/shared/types";
 import { shortDate } from "../../lib/dates";
-import { useAdminUsageRange, type AdminUsageData } from "../../lib/admin-data";
+import type { QueryClient } from "@tanstack/react-query";
+import { adminUsageQuery, useAdminUsageRange, type AdminUsageData } from "../../lib/admin-data";
 import { SectionHeading, fullNumber } from "./admin-kit";
-import { rangeDays, useUsageRange } from "./usage-range";
+import { rangeDays, usageDaysFrom, useUsageRange } from "./usage-range";
 
 /** "Oct 5" from "2026-10-05", as on the analytics page. */
 const dayTick = (day: string) =>
@@ -587,6 +589,10 @@ function Anomalies({ s }: { s: AdminUsageData }) {
     />
   );
 }
+
+/** The usage page's first frame (see lib/route-preload.ts). */
+export const preload = (qc: QueryClient, searchStr: string) =>
+  settle([qc.ensureQueryData(adminUsageQuery(usageDaysFrom(searchStr)))]);
 
 export function AdminUsagePage() {
   const [range] = useUsageRange();

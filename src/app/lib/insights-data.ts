@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { queryOptions, useQuery } from "@tanstack/react-query";
 import { api } from "./api";
 import { formatNumber } from "./numbers";
 import type { DeltaValue, LinkStats, OrgStats } from "@/shared/types";
@@ -35,7 +35,10 @@ export type LinkInsightStats = LinkStats & LinkStatsExtras;
  * the API sends them.
  */
 export const useInsightStats = (orgId: string, days?: number, bucket?: "day" | "hour") =>
-  useQuery<InsightStats>({
+  useQuery(insightStatsQuery(orgId, days, bucket));
+
+export const insightStatsQuery = (orgId: string, days?: number, bucket?: "day" | "hour") =>
+  queryOptions<InsightStats>({
     queryKey: ["stats", orgId, days, bucket],
     queryFn: () => {
       const params = new URLSearchParams();
@@ -62,8 +65,15 @@ export const useLinkInsightStats = (
   slug: string | null,
   domain: string | null,
   days?: number,
+) => useQuery(linkInsightStatsQuery(orgId, slug, domain, days));
+
+export const linkInsightStatsQuery = (
+  orgId: string,
+  slug: string | null,
+  domain: string | null,
+  days?: number,
 ) =>
-  useQuery<LinkInsightStats>({
+  queryOptions<LinkInsightStats>({
     queryKey: ["linkStats", orgId, slug, domain, days],
     queryFn: () => {
       const params = new URLSearchParams();

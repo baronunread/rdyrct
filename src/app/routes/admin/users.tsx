@@ -1,10 +1,11 @@
 import { useMemo, useState, type ReactNode } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { settle } from "../../lib/route-preload";
+import { useMutation, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { Ban, Check, Trash2 } from "@/app/ui/icons";
 import { MorphIcon } from "morphicons/react";
 import { shieldMinus, shieldPlus } from "@/app/ui/icon-nodes";
 import { useCurrentUser } from "../../lib/hooks";
-import { useAdminUsersData, type AdminUserData } from "../../lib/admin-data";
+import { adminUsersQuery, useAdminUsersData, type AdminUserData } from "../../lib/admin-data";
 import { UserAvatar } from "../../components/user-avatar";
 import { api } from "../../lib/api";
 import type { AdminUserRow, Sort } from "@/shared/types";
@@ -534,6 +535,9 @@ function useAdminUserActions() {
     actionPending: patchUser.isPending || remove.isPending,
   };
 }
+
+/** The users page's first frame (see lib/route-preload.ts). */
+export const preload = (qc: QueryClient) => settle([qc.ensureQueryData(adminUsersQuery)]);
 
 export function AdminUsersPage() {
   const users = useAdminUsersData();

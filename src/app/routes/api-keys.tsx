@@ -2,7 +2,11 @@ import { useEffect, useRef, useState } from "react";
 import { errorMessage } from "@/app/lib/error-message";
 import { useCurrentOrg } from "../lib/current-org";
 import { useSearchParams } from "../lib/router-search";
+import type { QueryClient } from "@tanstack/react-query";
+import { settle, type PageContext } from "../lib/route-preload";
 import {
+  apiKeysQuery,
+  connectedAppsQuery,
   useApiKeys,
   useApiKeyMutations,
   useConnectedApps,
@@ -358,9 +362,11 @@ const DOCS_URL = RDYRCT_SITE ? "/docs" : "https://rdyrct.com/docs";
  * so a shell reload lands back on whichever tab was open instead of always
  * resetting to "keys". "keys" has no ?tab= of its own (the default), so a
  * plain /api-keys link never needs one. */
+const tabFrom = (params: URLSearchParams): ApiTab => (params.get("tab") === "mcp" ? "mcp" : "keys");
+
 function useApiTab(): [ApiTab, (tab: ApiTab) => void] {
   const [params, setParams] = useSearchParams();
-  const tab: ApiTab = params.get("tab") === "mcp" ? "mcp" : "keys";
+  const tab = tabFrom(params);
   const setTab = (next: ApiTab) => {
     const nextParams = new URLSearchParams(params);
     if (next === "keys") nextParams.delete("tab");
@@ -457,6 +463,16 @@ function ApiView({ orgId, isOwner }: { orgId: string; isOwner: boolean }) {
  * only their own content area shows a skeleton while its query loads,
  * matching every other page here, so switching or reloading on either tab
  * never blanks the chrome around it. */
+/** Everything the API page's first frame reads (see lib/route-preload.ts):
+ * the open tab's list. */
+export function preload(qc: QueryClient, orgId: string, { org, searchStr }: PageContext) {
+  if (tabFrom(new URLSearchParams(searchStr)) === "mcp")
+    return settle([qc.ensureQueryData(connectedAppsQuery())]);
+  return org.role === "owner"
+    ? settle([qc.ensureQueryData(apiKeysQuery(orgId))])
+    : Promise.resolve();
+}
+
 export function ApiKeysPage() {
   const { org } = useCurrentOrg();
   const currentUser = useCurrentUser();

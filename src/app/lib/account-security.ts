@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { queryOptions, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { authClient } from "./auth-client";
 
 /**
@@ -32,30 +32,30 @@ function unwrap<T>(result: { data: T | null; error: { message?: string } | null 
   return result.data;
 }
 
-export function useLinkedAccounts() {
-  return useQuery<LinkedAccount[]>({
-    queryKey: ["auth", "accounts"],
-    queryFn: async () => unwrap(await authClient.listAccounts()),
-  });
-}
+export const useLinkedAccounts = () => useQuery(linkedAccountsQuery);
+
+export const linkedAccountsQuery = queryOptions<LinkedAccount[]>({
+  queryKey: ["auth", "accounts"],
+  queryFn: async () => unwrap(await authClient.listAccounts()),
+});
 
 /** Every other browser signed in to this account, newest first. */
-export function useOtherSessions() {
-  return useQuery<SessionRow[]>({
-    queryKey: ["auth", "sessions"],
-    queryFn: async () => {
-      const [sessions, current] = await Promise.all([
-        authClient.listSessions(),
-        authClient.getSession(),
-      ]);
-      const mine = current.data?.session.token;
-      return unwrap(sessions)
-        .filter((s) => s.token !== mine)
-        .map((s) => ({ ...s, updatedAt: new Date(s.updatedAt) }))
-        .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
-    },
-  });
-}
+export const useOtherSessions = () => useQuery(otherSessionsQuery);
+
+export const otherSessionsQuery = queryOptions<SessionRow[]>({
+  queryKey: ["auth", "sessions"],
+  queryFn: async () => {
+    const [sessions, current] = await Promise.all([
+      authClient.listSessions(),
+      authClient.getSession(),
+    ]);
+    const mine = current.data?.session.token;
+    return unwrap(sessions)
+      .filter((s) => s.token !== mine)
+      .map((s) => ({ ...s, updatedAt: new Date(s.updatedAt) }))
+      .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
+  },
+});
 
 export function useSignOutOtherSessions() {
   const qc = useQueryClient();

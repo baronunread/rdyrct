@@ -4,6 +4,7 @@ import { IconChartLine, IconLink, IconPlus, IconQrcode, IconUsers } from "@table
 import { dashboardView } from "./dashboard-view";
 import { valibotResolver } from "@hookform/resolvers/valibot";
 import { HrefLink } from "../lib/router-search";
+import type { QueryClient } from "@tanstack/react-query";
 import {
   useLinks,
   useMembers,
@@ -11,8 +12,13 @@ import {
   useRecentClicks,
   useLinkHost,
   useClickUsage,
+  linksQuery,
+  membersQuery,
+  recentClicksQuery,
+  clickUsageQuery,
 } from "../lib/hooks";
-import { useOrgLimits } from "../lib/org-limits";
+import { preloadOrgDomains, useOrgLimits } from "../lib/org-limits";
+import { settle, type PageContext } from "../lib/route-preload";
 import { ApiError } from "../lib/api";
 import {
   PLAN_LIMITS,
@@ -58,6 +64,7 @@ import {
   PRESET_7D,
   shortAgo,
   sourceLabel,
+  insightStatsQuery,
   useInsightStats,
   type InsightStats,
   type RangePreset,
@@ -67,6 +74,21 @@ import { LinkPreviewDialog } from "../components/link-preview-dialog";
 
 /** The dashboard's ranges: a glance, not a report. Analytics adds 365d. */
 const DASHBOARD_RANGES = [PRESET_24H, PRESET_7D, PRESET_30D] as const;
+const DEFAULT_RANGE = PRESET_7D;
+/** The newest links on the team activity tab. */
+const RECENT_LINKS = { limit: 5 };
+
+/** Everything the dashboard's first frame reads (see lib/route-preload.ts). */
+export function preload(qc: QueryClient, orgId: string, { org, user }: PageContext) {
+  return settle([
+    qc.ensureQueryData(insightStatsQuery(orgId, DEFAULT_RANGE.days, DEFAULT_RANGE.bucket)),
+    qc.ensureQueryData(linksQuery(orgId, RECENT_LINKS)),
+    qc.ensureQueryData(membersQuery(orgId)),
+    qc.ensureQueryData(recentClicksQuery(orgId)),
+    qc.ensureQueryData(clickUsageQuery(orgId)),
+    preloadOrgDomains(qc, org, user),
+  ]);
+}
 
 /** Link rows carry only the creator's user id; names come from the roster. */
 function creatorNameFrom(memberNames: Map<string, string>, id: string | null): string {
@@ -78,7 +100,7 @@ function useDashboardData(orgId: string, range: RangePreset) {
   const stats = useInsightStats(orgId, range.days, range.bucket);
   // Five, from the server, rather than every link the org owns sorted in the
   // browser: this card only ever showed the newest handful.
-  const links = useLinks(orgId, { limit: 5 });
+  const links = useLinks(orgId, RECENT_LINKS);
   const members = useMembers(orgId);
   const clicks = useRecentClicks(orgId);
   const { create } = useLinkMutations(orgId);
@@ -236,7 +258,7 @@ function DashboardBody({
  * arrived. Separated from the page itself so the page is about the page. */
 export function Dashboard() {
   const { org, orgId, currentUser } = useOrgLimits();
-  const [range, setRange] = useState<RangePreset>(PRESET_7D);
+  const [range, setRange] = useState<RangePreset>(DEFAULT_RANGE);
   const data = useDashboardData(orgId, range);
   // Asked for alongside the stats rather than when the banner mounts, so it
   // has its (much cheaper) answer by the time the page draws and the banner

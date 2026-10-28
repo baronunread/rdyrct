@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useRouter } from "@tanstack/react-router";
 import {
   IconChartBar,
   IconCheck,
@@ -107,6 +108,17 @@ function LinkCell({
 }) {
   const aliases = link.addressCount - 1;
   const custom = link.qrCustom ?? hasQrOverride(link);
+  // A button, not a link, so the router's hover preload does not reach it:
+  // ask for the link's page the same way (see lib/route-preload.ts).
+  const router = useRouter();
+  const preload = () =>
+    void router
+      .preloadRoute({
+        to: "/links/$slug",
+        params: { slug: link.slug },
+        search: link.domain ? { domain: link.domain } : {},
+      })
+      .catch(() => {});
   return (
     <div className="flex min-w-0 items-center gap-3">
       <button
@@ -122,6 +134,8 @@ function LinkCell({
           <button
             type="button"
             onClick={() => navigate(linkDetailPath(link))}
+            onPointerEnter={preload}
+            onFocus={preload}
             className="min-w-0 cursor-pointer truncate text-start text-sm font-semibold [@media(hover:hover)]:hover:underline"
           >
             {link.title || (

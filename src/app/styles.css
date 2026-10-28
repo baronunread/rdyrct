@@ -475,6 +475,79 @@ html {
   view-transition-name: marketing-header;
 }
 
+/* App page to app page (APP_PAGE_TRANSITION in main.tsx): only what is in
+   the sheet crossfades. The window itself swaps with no animation, so the
+   sidebar and the sheet's frame never move. Named only for the length of an
+   `app-page` transition, so nothing else captures them.
+
+   The sheet's scroller is the part that fades, not the page inside it: on a
+   desktop it is a scroll box, so its snapshot is the visible part only, and
+   a page scrolled down does not spill over the paper around the sheet. On a
+   phone the bar and the drawer, which sit over the page, are named too, so
+   they stay above the fading page instead of under it. */
+html:active-view-transition-type(app-page) {
+  [data-app-sheet] {
+    view-transition-name: app-page;
+  }
+  [data-app-bar] {
+    view-transition-name: app-bar;
+  }
+  [data-app-drawer] {
+    view-transition-name: app-drawer;
+  }
+  &::view-transition-old(root),
+  &::view-transition-new(root) {
+    animation: none;
+  }
+}
+
+::view-transition-group(app-page),
+::view-transition-group(app-bar),
+::view-transition-old(app-bar),
+::view-transition-new(app-bar),
+::view-transition-group(app-drawer),
+::view-transition-new(app-drawer) {
+  animation: none;
+}
+
+/* The drawer closes with its own animation, which plays on in the live new
+   image; the frozen old one would show an open drawer under it. */
+::view-transition-old(app-drawer) {
+  animation: none;
+  opacity: 0;
+}
+
+/* Same length and curve both ways, so whatever the two pages share (the
+   banner over them, a header in the same place) holds steady as one fades
+   into the other. The new page rises 4px into place. */
+::view-transition-old(app-page) {
+  animation: 160ms ease-out both app-page-out;
+}
+
+::view-transition-new(app-page) {
+  animation: 160ms ease-out both app-page-in;
+}
+
+@keyframes app-page-out {
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes app-page-in {
+  from {
+    opacity: 0;
+    translate: 0 4px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-old(app-page),
+  ::view-transition-new(app-page) {
+    animation: none;
+  }
+}
+
 body {
   min-height: 100dvh;
 }

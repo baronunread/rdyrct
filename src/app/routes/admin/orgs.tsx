@@ -1,10 +1,17 @@
 import { useMemo, useState } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { settle } from "../../lib/route-preload";
+import { useMutation, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { ArrowRight, Ban, Check, Eye, Trash2, Undo2 } from "@/app/ui/icons";
 import { HrefLink } from "../../lib/router-search";
 import { buttonClass } from "../../ui/button-class";
 import { useAdminOrgDetail } from "../../lib/hooks";
-import { useAdminOrgsData, useAdminUsageRange, type AdminOrgData } from "../../lib/admin-data";
+import {
+  adminOrgsQuery,
+  adminUsageQuery,
+  useAdminOrgsData,
+  useAdminUsageRange,
+  type AdminOrgData,
+} from "../../lib/admin-data";
 import { api } from "../../lib/api";
 import type { AdminOrgRow, Sort } from "@/shared/types";
 import { AreaChart } from "../../components/charts";
@@ -394,6 +401,11 @@ function OrgDetailDialog({ org, onClose }: { org: OrgView | null; onClose: () =>
     </Dialog>
   );
 }
+
+/** The orgs page's first frame (see lib/route-preload.ts): the list, and
+ * the usage answer that says who is over their plan. */
+export const preload = (qc: QueryClient) =>
+  settle([qc.ensureQueryData(adminOrgsQuery), qc.ensureQueryData(adminUsageQuery(30))]);
 
 export function AdminOrgsPage() {
   const orgs = useAdminOrgsData();

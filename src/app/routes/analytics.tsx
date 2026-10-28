@@ -1,6 +1,8 @@
 import { useState } from "react";
+import { settle } from "../lib/route-preload";
 import { IconChartLine } from "@tabler/icons-react";
-import { useCurrentUser, useClickUsage, useLinks } from "../lib/hooks";
+import type { QueryClient } from "@tanstack/react-query";
+import { clickUsageQuery, linksQuery, useCurrentUser, useClickUsage, useLinks } from "../lib/hooks";
 import { canWriteOrg } from "../lib/org-limits";
 import { NewLinkButton, useNewLink } from "../components/new-link-host";
 import { useCurrentOrg } from "../lib/current-org";
@@ -41,12 +43,27 @@ import {
   clicksPerLink,
   deviceLabel,
   sourceLabel,
+  insightStatsQuery,
   useInsightStats,
   type InsightStats,
   type RangePreset,
 } from "../lib/insights-data";
 
 const RANGE_PRESETS = [PRESET_24H, PRESET_7D, PRESET_30D, PRESET_365D] as const;
+
+/** The newest link, for "Copy your newest link". */
+const NEWEST_LINK = { limit: 1 };
+
+/** Everything Analytics' first frame reads (see lib/route-preload.ts). No
+ * range: the API answers with the plan's default, as the page asks it to. */
+export function preload(qc: QueryClient, orgId: string) {
+  const stats = qc.ensureQueryData(insightStatsQuery(orgId)).then(async (s) => {
+    // The empty state offers the newest link, when there is one.
+    if (!s.everClicked && s.totalLinks > 0)
+      await qc.ensureQueryData(linksQuery(orgId, NEWEST_LINK));
+  });
+  return settle([stats, qc.ensureQueryData(clickUsageQuery(orgId))]);
+}
 
 /** Rows a breakdown card shows before "Show all N". */
 const CARD_ROWS = 7;
@@ -323,7 +340,7 @@ function GhostChart() {
  * on the clipboard, ready to share. */
 function CopyNewestLink({ orgId }: { orgId: string }) {
   const toast = useToast();
-  const newest = useLinks(orgId, { limit: 1 }).data?.items[0];
+  const newest = useLinks(orgId, NEWEST_LINK).data?.items[0];
   if (!newest) return null;
   return (
     <Button

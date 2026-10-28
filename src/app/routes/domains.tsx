@@ -3,7 +3,15 @@ import { useForm, type UseFormRegister } from "react-hook-form";
 import { valibotResolver } from "@hookform/resolvers/valibot";
 import { AnimatePresence, LazyMotion, MotionConfig, domAnimation, m } from "motion/react";
 import { Ellipsis, Globe, Plus } from "@/app/ui/icons";
-import { useCurrentUser, useConfig, useDomains, useDomainMutations } from "../lib/hooks";
+import type { QueryClient } from "@tanstack/react-query";
+import {
+  domainsQuery,
+  useCurrentUser,
+  useConfig,
+  useDomains,
+  useDomainMutations,
+} from "../lib/hooks";
+import { settle, type PageContext } from "../lib/route-preload";
 import { useCurrentOrg } from "../lib/current-org";
 import {
   PLAN_LIMITS,
@@ -74,6 +82,14 @@ const transitional = (status: DomainDTO["status"]) =>
 
 function canManageDomains(isPlatformAdmin: boolean, role: OrgRole): boolean {
   return isPlatformAdmin || role === "owner" || role === "admin";
+}
+
+/** Everything the domains page's first frame reads (see
+ * lib/route-preload.ts), for whoever gets the list. Config is already in. */
+export function preload(qc: QueryClient, orgId: string, { org, user }: PageContext) {
+  return canManageDomains(user.user.isAdmin, org.role)
+    ? settle([qc.ensureQueryData(domainsQuery(orgId))])
+    : Promise.resolve();
 }
 
 export function DomainsPage() {

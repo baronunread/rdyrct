@@ -7,6 +7,7 @@ import {
   redirect,
   RouterProvider,
   lazyRouteComponent,
+  type ParsedLocation,
 } from "@tanstack/react-router";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 // Figtree carries everything anybody reads; JetBrains Mono is kept for
@@ -23,7 +24,19 @@ import "./styles.css";
 import { ToastProvider } from "./ui/toast";
 import { ErrorBoundary } from "./components/error-boundary";
 import { NewVersionBanner } from "./components/new-version-banner";
-import { AppShellSkeleton, AdminPlatformSkeleton } from "./components/skeletons";
+import {
+  AppShellSkeleton,
+  AdminPlatformSkeleton,
+  AdminSectionSkeleton,
+  RouteSkeleton,
+} from "./components/skeletons";
+import { appPageTransitionTypes } from "./lib/page-transition";
+import {
+  loadAdminPage,
+  loadPage,
+  type AdminPagePreload,
+  type PagePreload,
+} from "./lib/route-preload";
 import { marketingRoutes } from "./marketing-routes";
 import { rootRoute } from "./root-route";
 import { resumeAnalyticsIfConsented } from "./lib/posthog";
@@ -50,52 +63,29 @@ const RequireAuth = lazy(() => import("./routes/shell").then((m) => ({ default: 
 const RequireAdmin = lazy(() =>
   import("./routes/shell").then((m) => ({ default: m.RequireAdmin })),
 );
-const Dashboard = lazy(() => import("./routes/dashboard").then((m) => ({ default: m.Dashboard })));
-const Analytics = lazy(() => import("./routes/analytics").then((m) => ({ default: m.Analytics })));
-const LinksPage = lazy(() => import("./routes/links").then((m) => ({ default: m.LinksPage })));
-const LinkImportPage = lazy(() =>
-  import("./routes/link-import").then((m) => ({ default: m.LinkImportPage })),
-);
-const LinkDetailPage = lazy(() =>
-  import("./routes/link-detail").then((m) => ({ default: m.LinkDetailPage })),
-);
-const MembersPage = lazy(() =>
-  import("./routes/members").then((m) => ({ default: m.MembersPage })),
-);
-const BillingPage = lazy(() =>
-  import("./routes/billing").then((m) => ({ default: m.BillingPage })),
-);
-const DomainsPage = lazy(() =>
-  import("./routes/domains").then((m) => ({ default: m.DomainsPage })),
-);
-const SettingsPage = lazy(() =>
-  import("./routes/settings").then((m) => ({ default: m.SettingsPage })),
-);
-const ApiKeysPage = lazy(() =>
-  import("./routes/api-keys").then((m) => ({ default: m.ApiKeysPage })),
-);
-const OrganizationPage = lazy(() =>
-  import("./routes/organization").then((m) => ({ default: m.OrganizationPage })),
-);
-const AdminUsagePage = lazy(() =>
-  import("./routes/admin/usage").then((m) => ({
-    default: m.AdminUsagePage,
-  })),
-);
+
+// The app's pages are router-managed (lazyRouteComponent) rather than
+// React.lazy: the router fetches a page's chunk and its data (the loaders
+// below) before it swaps pages, so the page you are on stays until the next
+// one can draw whole. See lib/route-preload.ts.
+const dashboard = () => import("./routes/dashboard");
+const analytics = () => import("./routes/analytics");
+const links = () => import("./routes/links");
+const linkImport = () => import("./routes/link-import");
+const linkDetail = () => import("./routes/link-detail");
+const members = () => import("./routes/members");
+const billing = () => import("./routes/billing");
+const domains = () => import("./routes/domains");
+const settings = () => import("./routes/settings");
+const apiKeys = () => import("./routes/api-keys");
+const organization = () => import("./routes/organization");
+const adminUsage = () => import("./routes/admin/usage");
+const adminLinks = () => import("./routes/admin/links");
+const adminOrgs = () => import("./routes/admin/orgs");
+const adminUsers = () => import("./routes/admin/users");
+const adminAudit = () => import("./routes/admin/audit");
 const AdminLayout = lazy(() =>
   import("./routes/admin/layout").then((m) => ({ default: m.AdminLayout })),
-);
-const AdminAuditPage = lazy(() =>
-  import("./routes/admin/audit").then((m) => ({ default: m.AdminAuditPage })),
-);
-const AdminLinksPage = lazy(() =>
-  import("./routes/admin/links").then((m) => ({ default: m.AdminLinksPage })),
-);
-const AdminOrgsPage = lazy(() =>
-  import("./routes/admin/orgs").then((m) => ({ default: m.AdminOrgsPage })),
-);
-const AdminUsersPage = lazy(() =>
-  import("./routes/admin/users").then((m) => ({ default: m.AdminUsersPage })),
 );
 
 // A self-hosted copy has no landing page: its front door is the app, which
@@ -157,60 +147,108 @@ const appShellRoute = createRoute({
   ),
 });
 
-const dashboardRoute = createRoute({
+/** Where a page is going, as a loader hears it. */
+interface LoaderArgs {
+  params: Record<string, string>;
+  location: { searchStr: string };
+}
+
+/**
+ * A page's loader: its chunk and the data its first frame reads.
+ *
+ * Only awaited once the app is on screen. A cold load returns at once and
+ * lets the fetches run alongside the first render, so the shell and the
+ * page's own skeleton paint as soon as the chunk is in, as they always did,
+ * instead of a blank screen waiting on the network.
+ */
+const pageLoader =
+  (importPage: () => Promise<{ preload: PagePreload }>) =>
+  ({ params, location }: LoaderArgs): Promise<void> | undefined => {
+    const work = loadPage(queryClient, importPage, { params, searchStr: location.searchStr });
+    return router.state.resolvedLocation ? work : undefined;
+  };
+
+const adminLoader =
+  (importPage: () => Promise<{ preload: AdminPagePreload }>) =>
+  ({ params, location }: LoaderArgs): Promise<void> | undefined => {
+    const work = loadAdminPage(queryClient, importPage, { params, searchStr: location.searchStr });
+    return router.state.resolvedLocation ? work : undefined;
+  };
+
+// A slow page (pendingMs) shows the skeleton of the page it is opening, in
+// the sheet, and keeps it long enough to read as a step (pendingMinMs)
+// rather than a flash. A fast one never shows it.
+const appPage = {
   getParentRoute: () => appShellRoute,
+  pendingComponent: RouteSkeleton,
+};
+
+const dashboardRoute = createRoute({
+  ...appPage,
   path: "/dashboard",
-  component: Dashboard,
+  component: lazyRouteComponent(dashboard, "Dashboard"),
+  loader: pageLoader(dashboard),
 });
 const analyticsRoute = createRoute({
-  getParentRoute: () => appShellRoute,
+  ...appPage,
   path: "/analytics",
-  component: Analytics,
+  component: lazyRouteComponent(analytics, "Analytics"),
+  loader: pageLoader(analytics),
 });
 const linksRoute = createRoute({
-  getParentRoute: () => appShellRoute,
+  ...appPage,
   path: "/links",
-  component: LinksPage,
+  component: lazyRouteComponent(links, "LinksPage"),
+  loader: pageLoader(links),
 });
 const linkDetailRoute = createRoute({
-  getParentRoute: () => appShellRoute,
+  ...appPage,
   path: "/links/$slug",
-  component: LinkDetailPage,
+  component: lazyRouteComponent(linkDetail, "LinkDetailPage"),
+  loader: pageLoader(linkDetail),
 });
 const linkImportRoute = createRoute({
-  getParentRoute: () => appShellRoute,
+  ...appPage,
   path: "/import",
-  component: LinkImportPage,
+  // No preload: the import page draws its own states from its queries, and
+  // it is reached from Links rather than the sidebar.
+  component: lazyRouteComponent(linkImport, "LinkImportPage"),
 });
 const membersRoute = createRoute({
-  getParentRoute: () => appShellRoute,
+  ...appPage,
   path: "/members",
-  component: MembersPage,
+  component: lazyRouteComponent(members, "MembersPage"),
+  loader: pageLoader(members),
 });
 const billingRoute = createRoute({
-  getParentRoute: () => appShellRoute,
+  ...appPage,
   path: "/billing",
-  component: BillingPage,
+  component: lazyRouteComponent(billing, "BillingPage"),
+  loader: pageLoader(billing),
 });
 const domainsRoute = createRoute({
-  getParentRoute: () => appShellRoute,
+  ...appPage,
   path: "/domains",
-  component: DomainsPage,
+  component: lazyRouteComponent(domains, "DomainsPage"),
+  loader: pageLoader(domains),
 });
 const settingsRoute = createRoute({
-  getParentRoute: () => appShellRoute,
+  ...appPage,
   path: "/settings",
-  component: SettingsPage,
+  component: lazyRouteComponent(settings, "SettingsPage"),
+  loader: pageLoader(settings),
 });
 const apiKeysRoute = createRoute({
-  getParentRoute: () => appShellRoute,
+  ...appPage,
   path: "/api-keys",
-  component: ApiKeysPage,
+  component: lazyRouteComponent(apiKeys, "ApiKeysPage"),
+  loader: pageLoader(apiKeys),
 });
 const organizationRoute = createRoute({
-  getParentRoute: () => appShellRoute,
+  ...appPage,
   path: "/organization",
-  component: OrganizationPage,
+  component: lazyRouteComponent(organization, "OrganizationPage"),
+  loader: pageLoader(organization),
 });
 
 // One guard for the whole section, and one place for its sub-navigation.
@@ -227,30 +265,41 @@ const adminRoute = createRoute({
     </Suspense>
   ),
 });
-const adminUsageRoute = createRoute({
+// Inside the Platform frame, so a slow tab holds the frame and draws only
+// the section's own skeleton under it.
+const adminPage = {
   getParentRoute: () => adminRoute,
+  pendingComponent: AdminSectionSkeleton,
+};
+const adminUsageRoute = createRoute({
+  ...adminPage,
   path: "/",
-  component: AdminUsagePage,
+  component: lazyRouteComponent(adminUsage, "AdminUsagePage"),
+  loader: adminLoader(adminUsage),
 });
 const adminLinksRoute = createRoute({
-  getParentRoute: () => adminRoute,
+  ...adminPage,
   path: "links",
-  component: AdminLinksPage,
+  component: lazyRouteComponent(adminLinks, "AdminLinksPage"),
+  loader: adminLoader(adminLinks),
 });
 const adminOrgsRoute = createRoute({
-  getParentRoute: () => adminRoute,
+  ...adminPage,
   path: "orgs",
-  component: AdminOrgsPage,
+  component: lazyRouteComponent(adminOrgs, "AdminOrgsPage"),
+  loader: adminLoader(adminOrgs),
 });
 const adminUsersRoute = createRoute({
-  getParentRoute: () => adminRoute,
+  ...adminPage,
   path: "users",
-  component: AdminUsersPage,
+  component: lazyRouteComponent(adminUsers, "AdminUsersPage"),
+  loader: adminLoader(adminUsers),
 });
 const adminAuditRoute = createRoute({
-  getParentRoute: () => adminRoute,
+  ...adminPage,
   path: "audit",
-  component: AdminAuditPage,
+  component: lazyRouteComponent(adminAudit, "AdminAuditPage"),
+  loader: adminLoader(adminAudit),
 });
 
 const routeTree = rootRoute.addChildren([
@@ -285,10 +334,48 @@ const routeTree = rootRoute.addChildren([
 
 export const PRERENDER_ROUTES = [...PRERENDERED_PUBLIC_PATHS] as const;
 
+// Before the router: the page loaders fill this cache.
+//
+// 30 seconds fresh, so going back to a page you just left draws it from the
+// cache without asking again. A mutation still refetches what it changes
+// (invalidateQueries ignores staleTime).
+const queryClient = new QueryClient({
+  defaultOptions: { queries: { retry: 1, refetchOnWindowFocus: false, staleTime: 30_000 } },
+});
+
+/**
+ * Moving between app pages crossfades the page inside the sheet and nothing
+ * else (the `app-page` rules in styles.css). Only when the path changes: a
+ * range, a tab or a filter is the same page and swaps in place. Browsers
+ * that cannot scope a view transition by type get none, rather than a
+ * whole-window fade on every filter change.
+ */
+const APP_PAGE_TRANSITION = globalThis.CSS?.supports?.("selector(:active-view-transition-type(a))")
+  ? { types: (change: ViewTransitionChange) => appPageTransitionTypes(change, inApp) }
+  : false;
+
+interface ViewTransitionChange {
+  fromLocation?: ParsedLocation;
+  toLocation: ParsedLocation;
+  pathChanged: boolean;
+}
+
+function inApp(location: ParsedLocation): boolean {
+  return router.matchRoutes(location).some((match) => match.routeId === appShellRoute.id);
+}
+
 const router = globalThis.window
   ? createRouter({
       routeTree,
-      defaultPreload: false,
+      // Hovering or focusing a link fetches the page behind it, chunk and
+      // data, so the click usually finds it ready.
+      defaultPreload: "intent",
+      defaultPreloadDelay: 50,
+      // TanStack Query decides what is fresh; the router just asks it.
+      defaultPreloadStaleTime: 0,
+      defaultPendingMs: 400,
+      defaultPendingMinMs: 350,
+      defaultViewTransition: APP_PAGE_TRANSITION,
       // On a desktop the app scrolls inside its sheet, not the window
       // (shellLayout), so a new page has to start that at the top too.
       scrollToTopSelectors: ["window", "[data-app-sheet]"],
@@ -304,10 +391,6 @@ declare module "@tanstack/react-router" {
     router: typeof router;
   }
 }
-
-const queryClient = new QueryClient({
-  defaultOptions: { queries: { retry: 1, refetchOnWindowFocus: false } },
-});
 
 export function App() {
   return (

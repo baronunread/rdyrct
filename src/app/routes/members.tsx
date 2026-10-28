@@ -2,10 +2,11 @@ import { useState, useMemo, type ReactNode } from "react";
 import { INVITABLE_ROLES, type InvitableRole } from "@/shared/types";
 import { oneOf } from "@/shared/lookup";
 import { useCurrentOrg } from "../lib/current-org";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { IconUsers } from "@tabler/icons-react";
 import { Check, ChevronsUpDown, Copy, Link, Plus, Trash2 } from "@/app/ui/icons";
-import { useCurrentUser, useMembers, useInvites } from "../lib/hooks";
+import { invitesQuery, membersQuery, useCurrentUser, useMembers, useInvites } from "../lib/hooks";
+import { settle, type PageContext } from "../lib/route-preload";
 import { api } from "../lib/api";
 import {
   PLAN_LIMITS,
@@ -654,6 +655,15 @@ function memberCanManage(
   if (!org) return false;
   const myRole = resolveMyRole(currentUser?.user.isAdmin, org.role);
   return canManageOrg(myRole) && !org.locked;
+}
+
+/** Everything the members page's first frame reads (see
+ * lib/route-preload.ts): the roster, and open invites for whoever manages it. */
+export function preload(qc: QueryClient, orgId: string, { org, user }: PageContext) {
+  return settle([
+    qc.ensureQueryData(membersQuery(orgId)),
+    memberCanManage(org, user) ? qc.ensureQueryData(invitesQuery(orgId)) : undefined,
+  ]);
 }
 
 export function MembersPage() {

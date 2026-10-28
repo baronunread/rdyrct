@@ -11,8 +11,15 @@ import {
   IconUpload,
 } from "@tabler/icons-react";
 import { Kbd } from "../ui/kbd";
-import { useLinkMutations, useLinkQuotaUsage } from "../lib/hooks";
-import { useOrgLimits } from "../lib/org-limits";
+import type { QueryClient } from "@tanstack/react-query";
+import {
+  linkQuotaUsageQuery,
+  membersQuery,
+  useLinkMutations,
+  useLinkQuotaUsage,
+} from "../lib/hooks";
+import { preloadOrgDomains, useOrgLimits } from "../lib/org-limits";
+import { settle, type PageContext } from "../lib/route-preload";
 import { fetchDownload } from "../lib/api";
 import { downloadBlob } from "../lib/csv";
 import {
@@ -44,7 +51,14 @@ import { LinkPreviewDialog } from "../components/link-preview-dialog";
 import { linkFeatures, NewLinkButton, useNewLink } from "../components/new-link-host";
 import { useDebounced } from "../lib/use-debounced";
 import { downloadQrCodes } from "../lib/bulk-qr";
-import { useCreatorNames, useLinkFacets, useLinkRows } from "../lib/links-data";
+import {
+  linkFacetsQuery,
+  linkRowsQuery,
+  useCreatorNames,
+  useLinkFacets,
+  useLinkRows,
+  type LinkPageQuery,
+} from "../lib/links-data";
 import posthog from "../lib/posthog";
 
 const PAGE_SIZE = 25;
@@ -66,13 +80,48 @@ const FACET_OF = {
 
 const READ_ONLY = "This organization is read-only";
 
+/** Newest first, the order the table opens in. */
+const DEFAULT_SORT: Sort = { key: "createdAt", dir: -1 };
+
+/** The page of rows the table's controls ask for. */
+function rowsQuery(
+  q: string,
+  domain: string,
+  filter: LinkFilter,
+  sort: Sort,
+  cursor: string | null,
+): LinkPageQuery {
+  return {
+    q,
+    domain,
+    filter,
+    sort: lookup(API_SORT, sort.key) ?? "created",
+    dir: sort.dir === 1 ? "asc" : "desc",
+    limit: PAGE_SIZE,
+    cursor,
+  };
+}
+
+/** Everything the Links page's first frame reads (see lib/route-preload.ts):
+ * the first page of rows as the table opens, the chip counts, the quota, the
+ * creator names and the domains the toolbar filters by. */
+export function preload(qc: QueryClient, orgId: string, { org, user }: PageContext) {
+  return settle([
+    qc.ensureQueryData(linkRowsQuery(orgId, rowsQuery("", "all", "all", DEFAULT_SORT, null))),
+    qc.ensureQueryData(linkFacetsQuery(orgId)),
+    qc.ensureQueryData(linkQuotaUsageQuery(orgId)),
+    qc.ensureQueryData(membersQuery(orgId)),
+    preloadOrgDomains(qc, org, user),
+  ]);
+}
+
 /** The table's controls, the cursor stack that lets Previous be a step back
  * rather than a re-walk from the top, and the ticked rows. */
 function useLinkPage(orgId: string) {
   const [search, setSearch] = useState("");
   const [domainFilter, setDomainFilter] = useState<string>("all");
   const [filter, setFilter] = useState<LinkFilter>("all");
-  const [sort, setSort] = useState<Sort>({ key: "createdAt", dir: -1 });
+  const [sort, setSort] = useState<Sort>(DEFAULT_SORT);
   // Index 0 is the first page, whose cursor is nothing. Next pushes the
   // cursor the server handed back; Previous pops.
   const [cursors, setCursors] = useState<(string | null)[]>([null]);
@@ -84,15 +133,7 @@ function useLinkPage(orgId: string) {
   const q = useDebounced(search);
   const page = cursors.length - 1;
 
-  const links = useLinkRows(orgId, {
-    q,
-    domain: domainFilter,
-    filter,
-    sort: lookup(API_SORT, sort.key) ?? "created",
-    dir: sort.dir === 1 ? "asc" : "desc",
-    limit: PAGE_SIZE,
-    cursor: cursors[page],
-  });
+  const links = useLinkRows(orgId, rowsQuery(q, domainFilter, filter, sort, cursors[page]));
 
   // Any change to what is being asked for starts the walk again: a cursor
   // belongs to one ordering and one filter, and carrying it across means

@@ -21,6 +21,10 @@
     "/node_modules/@fontsource/jetbrains-mono/latin-400.css",
     "/node_modules/@fontsource/jetbrains-mono/latin-700.css",
   ],
+  // Every app page exports a `preload` of the same name on purpose: the
+  // route loaders in main.tsx call whichever one the page's module has
+  // (lib/route-preload.ts).
+  "ignoreExports": [{ "file": "src/app/routes/**/*.tsx", "exports": ["preload"] }],
   // "run" is called by the Cloudflare Workflows runtime, not application code.
   "usedClassMembers": [{ "extends": "WorkflowEntrypoint", "members": ["run"] }],
   "audit": {
