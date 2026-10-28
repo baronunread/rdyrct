@@ -10,6 +10,7 @@ import { defineChart } from "@tanstack/charts";
 // oxlint-disable-next-line anti-slop/no-shape-in-symbol-names
 import { geoShape as geoMark } from "@tanstack/charts/geo";
 import { motion } from "@tanstack/charts/motion";
+import { chartMotion } from "../lib/chart-motion";
 import { RendererChart } from "@tanstack/react-charts/tooltip";
 import { pointerTooltip } from "./chart-tooltip";
 
@@ -26,7 +27,7 @@ const countries = feature(world, world.objects.countries).features;
 
 type CountryFeature = (typeof countries)[number];
 
-const mapMotion = motion<CountryFeature, number, number>();
+const mapMotion = motion<CountryFeature, number, number>(chartMotion);
 
 /** Topojson feature ids are ISO 3166-1 numeric codes; click data keys are
  * alpha-2. Built once from the static topology, not per render. */
