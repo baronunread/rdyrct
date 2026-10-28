@@ -876,6 +876,7 @@ async function seed() {
 
   await seedClickUsage();
   await seedLinkQrLooks();
+  await seedLastSeen(now, day);
 
   await seedScenarioAccounts(passwordHash, now, day);
 
@@ -1101,6 +1102,19 @@ async function seedLinkQrLooks(): Promise<void> {
     .map((r, i) => `UPDATE links SET ${looks[i % looks.length]} WHERE id = ${q(r.id)}`);
   await sqlBatch(statements);
   console.log(`  QR looks: ${statements.length} links`);
+}
+
+/**
+ * When each seeded account was last here (migration 0048): most within the
+ * last month, a few never, so Members' "Last active" shows its range. Seeded
+ * accounts have no sessions, so without this every one of them read "Never".
+ */
+async function seedLastSeen(now: number, day: number): Promise<void> {
+  await sqlBatch([
+    `UPDATE user SET last_seen_at = CASE WHEN abs(random()) % 8 = 0 THEN NULL
+       ELSE ${now} - abs(random()) % ${30 * day} END
+     WHERE id LIKE 'seed-%'`,
+  ]);
 }
 
 /**

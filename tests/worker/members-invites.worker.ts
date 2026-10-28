@@ -15,11 +15,18 @@ beforeEach(async () => {
 });
 
 describe("GET /orgs/:orgId/members: lastActiveAt", () => {
-  it("is the member's newest session, or null with none", async () => {
+  it("is the newer of the member's last session and last seen, or null with neither", async () => {
     const cookie = await freeOwnerCookie();
     await env.DB.batch([
       env.DB.prepare(
         "insert into user (id, name, email, email_verified, created_at, updated_at) values ('quiet-1', 'Quiet', 'quiet@example.com', 1, 0, 0)",
+      ),
+      // Signed out everywhere: no session left, only the last-seen mark.
+      env.DB.prepare(
+        "insert into user (id, name, email, email_verified, created_at, updated_at, last_seen_at) values ('gone-1', 'Gone', 'gone@example.com', 1, 0, 0, 5000)",
+      ),
+      env.DB.prepare(
+        "insert into org_members (org_id, user_id, role, created_at) values ('org-1', 'gone-1', 'member', 0)",
       ),
       env.DB.prepare(
         "insert into org_members (org_id, user_id, role, created_at) values ('org-1', 'quiet-1', 'viewer', 0)",
@@ -41,7 +48,34 @@ describe("GET /orgs/:orgId/members: lastActiveAt", () => {
     const byId = Object.fromEntries(members.map((m) => [m.userId, m.lastActiveAt]));
 
     expect(newest).toBeGreaterThan(2000);
-    expect(byId).toEqual({ "free-1": newest, "quiet-1": null });
+    // The owner's request may already have marked them seen, which is newer.
+    expect(byId["free-1"]).toBeGreaterThanOrEqual(newest!);
+    expect(byId["gone-1"]).toBe(5000);
+    expect(byId["quiet-1"]).toBeNull();
+  });
+
+  it("a signed-in request marks the account seen, at most once an hour", async () => {
+    const cookie = await freeOwnerCookie();
+    const seen = () =>
+      env.DB.prepare("select last_seen_at as t from user where id = 'free-1'").first<number>("t");
+    const get = () =>
+      fetchWorker(new Request("http://localhost/api/orgs/org-1/members", { headers: { cookie } }));
+
+    await env.DB.prepare("update user set last_seen_at = null where id = 'free-1'").run();
+    await get();
+    await expect.poll(seen).toBeGreaterThan(0);
+
+    // Inside the hour: left alone.
+    const recent = Date.now() - 10 * 60 * 1000;
+    await env.DB.prepare("update user set last_seen_at = ? where id = 'free-1'").bind(recent).run();
+    await get();
+    expect(await seen()).toBe(recent);
+
+    // Past the hour: moved on.
+    const stale = Date.now() - 2 * 60 * 60 * 1000;
+    await env.DB.prepare("update user set last_seen_at = ? where id = 'free-1'").bind(stale).run();
+    await get();
+    await expect.poll(seen).toBeGreaterThan(stale);
   });
 });
 

@@ -24,6 +24,8 @@ export const user = sqliteTable("user", {
   isAdmin: integer("is_admin", { mode: "boolean" }).notNull().default(false),
   // Suspended by a platform admin: sessions are wiped and sign-in is refused.
   banned: integer("banned", { mode: "boolean" }).notNull().default(false),
+  // Last signed-in request, to the hour (migration 0048).
+  lastSeenAt: integer("last_seen_at"),
   // Billing lives on the user, not the org: one Free/Hobby/Pro subscription
   // per person. An org's effective limits are its owner's plan (see plan.ts).
   //

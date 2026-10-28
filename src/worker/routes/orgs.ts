@@ -487,12 +487,17 @@ orgRoutes.delete(
 
 /* ---------------- members ---------------- */
 
-/** A member's newest session activity, epoch ms, or null with no session
- * left. Literal org_members.user_id: an interpolated column renders
- * unqualified and SQLite binds it to the subquery's own table. */
+/** When a member was last here, epoch ms: the newer of their newest session
+ * and `user.last_seen_at` (kept to the hour, and still there after they sign
+ * out everywhere). Null for somebody never seen. Literal
+ * org_members.user_id: an interpolated column renders unqualified and
+ * SQLite binds it to the subquery's own table. */
 export const memberLastActiveAt = sql<number | null>`(
-  select max(session.updated_at) from session
-  where session.user_id = org_members.user_id
+  select max(t) from (
+    select session.updated_at as t from session where session.user_id = org_members.user_id
+    union all
+    select user.last_seen_at from user where user.id = org_members.user_id
+  )
 )`;
 
 orgRoutes.get("/:orgId/members", requireOrgRole("viewer"), async (c) => {

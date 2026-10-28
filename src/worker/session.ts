@@ -2,7 +2,7 @@ import { createMiddleware } from "hono/factory";
 import { configureBilling, planNow } from "./plan";
 import { orgPlanOf } from "../shared/types";
 import { drizzle } from "drizzle-orm/d1";
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, isNull, lt, or } from "drizzle-orm";
 import { jwtVerify, createLocalJWKSet, type JSONWebKeySet } from "jose";
 import * as schema from "./db/schema";
 import type { AppEnv, DB, Env, SessionUser } from "./env";
@@ -158,6 +158,23 @@ function sessionUserOf(user: AuthSession["user"]): SessionUser {
  * authenticated dispatch() — and restricting it there would break every
  * OAuth-authenticated tool call.
  */
+const SEEN_EVERY_MS = 60 * 60 * 1000;
+
+/** Records that the account was here, at most once an hour: the condition
+ * makes every other request a read that changes nothing. */
+function markSeen(db: DB, userId: string) {
+  const now = Date.now();
+  return db
+    .update(schema.user)
+    .set({ lastSeenAt: now })
+    .where(
+      and(
+        eq(schema.user.id, userId),
+        or(isNull(schema.user.lastSeenAt), lt(schema.user.lastSeenAt, now - SEEN_EVERY_MS)),
+      ),
+    );
+}
+
 export function withSession(opts: { oauthTokenPath?: string } = {}) {
   return createMiddleware<AppEnv>(async (c, next) => {
     configureBilling(c.env);
@@ -188,6 +205,7 @@ export function withSession(opts: { oauthTokenPath?: string } = {}) {
     }
     // Who made the request, on every API event: ids only, never the email.
     const user = c.var.user;
+    if (user) c.executionCtx.waitUntil(markSeen(db, user.id));
     if (user) c.get("log")?.set({ user: { id: user.id, plan: user.plan, admin: user.isAdmin } });
     await next();
   });

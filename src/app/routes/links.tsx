@@ -192,9 +192,11 @@ function linkLimitHint(count: number, limit: number): string | undefined {
   return undefined;
 }
 
-/** "199 of 3,000 on your plan" ("199 of 3,000" on a phone), or "199 links"
- * on a self-hosted instance, which has no cap to count against (its limit
- * is a placeholder of a billion). */
+/** "199 short links of 3,000 on your plan", or "199 short links" on a
+ * self-hosted instance, which has no cap to count against (its limit is a
+ * placeholder of a billion). "Short links", not "links": the plan counts
+ * every address, a link's extra ones included, so this runs ahead of the
+ * All chip's count of links and has to say why. */
 function LinkCountLabel({
   count,
   limit,
@@ -205,10 +207,11 @@ function LinkCountLabel({
   unlimited: boolean;
 }) {
   const n = (v: number) => v.toLocaleString("en-US");
-  if (unlimited) return <>{`${n(count)} ${count === 1 ? "link" : "links"}`}</>;
+  const what = count === 1 ? "short link" : "short links";
+  if (unlimited) return <>{`${n(count)} ${what}`}</>;
   return (
     <>
-      {n(count)} of {n(limit)}
+      {n(count)} {what} of {n(limit)}
       <span className="max-sm:hidden"> on your plan</span>
       {count > limit ? " (over the limit)" : ""}
     </>
