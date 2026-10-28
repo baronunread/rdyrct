@@ -30,6 +30,7 @@ export async function downloadQrCodes(links: LinkDTO[], orgQr: OrgQr): Promise<v
   const files: { name: string; data: Uint8Array }[] = [];
   for (const link of links) {
     const look = resolveLook(resolveQrLook(link, orgQr));
+    // react-doctor-disable-next-line react-doctor/async-await-in-loop -- one canvas at a time on purpose, see above.
     files.push({ name: fileName(link), data: bytesOf(await qrDataUrl(link.url, look, "png")) });
   }
   if (files.length === 1) {

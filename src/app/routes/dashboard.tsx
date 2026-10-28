@@ -30,16 +30,10 @@ import {
   type RecentClick,
   type StatsLinkRef,
 } from "@/shared/types";
-import {
-  AreaChart,
-  BarList,
-  LinkBarLabel,
-  StatsChart,
-  countryName,
-  dayTick,
-  hourTick,
-  linkPagePath,
-} from "../components/charts";
+import { AreaChart, BarList, LinkBarLabel, StatsChart } from "../components/charts";
+import { countryName } from "../lib/places";
+import { linkPagePath } from "../lib/link-display";
+import { dayTick, hourTick } from "../lib/dates";
 import { useNewLink, NewLinkButton } from "../components/new-link-host";
 import { RangeControl } from "../components/range-control";
 import { Flag } from "../components/source-tile";

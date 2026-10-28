@@ -29,3 +29,14 @@ export function relativeDate(ts: number | string | Date): string {
   }
   return RELATIVE.format(Math.round(diff / 1000), "second");
 }
+
+/** "Oct 5" from "2026-10-05" (or the date part of an hourly bucket). */
+export const dayTick = (day: string) =>
+  new Date(`${day.slice(0, 10)}T00:00:00Z`).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    timeZone: "UTC",
+  });
+
+/** "14:00" from an hourly bucket. */
+export const hourTick = (day: string) => day.slice(11, 16);

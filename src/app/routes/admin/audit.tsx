@@ -7,7 +7,8 @@
  * of the entry (the reason, the counts, the ids) opens from the row.
  */
 import { settle } from "../../lib/route-preload";
-import { useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
+import { useHeld } from "@/app/lib/use-held";
 import * as v from "valibot";
 import { ArrowRight } from "@/app/ui/icons";
 import type { QueryClient } from "@tanstack/react-query";
@@ -194,9 +195,7 @@ const fieldLabel = (key: string) => {
 
 function EntryDialog({ entry: current, onClose }: { entry: Entry | null; onClose: () => void }) {
   // The last entry stays while the dialog fades out, so it does not empty.
-  const last = useRef<Entry | null>(null);
-  if (current) last.current = current;
-  const entry = current ?? last.current;
+  const entry = useHeld(current);
   const facts: [string, string, boolean][] = entry
     ? [
         ["When", WHEN_FULL.format(entry.createdAt), false],
@@ -264,6 +263,7 @@ function AuditTable({
         {rows.map((entry) => (
           // The whole row opens the entry for a pointer; the arrow button is
           // the same thing for a keyboard and a screen reader.
+          // react-doctor-disable-next-line react-doctor/click-events-have-key-events -- the row's arrow button is the keyboard path.
           <tr
             key={entry.id}
             onClick={() => onOpen(entry)}

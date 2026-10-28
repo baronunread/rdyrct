@@ -1,6 +1,7 @@
 import {
   Suspense,
   useEffect,
+  useEffectEvent,
   useRef,
   useState,
   type ComponentType,
@@ -42,7 +43,8 @@ import { CommandMenu } from "../components/command-menu";
 import { openCommandMenu } from "../lib/shortcut";
 import { NewLinkHost } from "../components/new-link-host";
 import { OrgMenuItems } from "../components/org-menu-items";
-import { AppNotFound, InShell } from "../components/app-not-found";
+import { AppNotFound } from "../components/app-not-found";
+import { InShell } from "../lib/in-shell";
 import { WebMcpLinkTools } from "../components/webmcp-link-tools";
 import { WebMcpAnalyticsTool } from "../components/webmcp-analytics-tool";
 import { PLAN_LIMITS, type OrgPlan, type User, type UserOrg } from "@/shared/types";
@@ -51,7 +53,8 @@ import { FUNNEL } from "../lib/funnel";
 import { Logo, LogoMark } from "../ui/logo";
 import { LayersIcon } from "../ui/nav-icons";
 import { Tooltip, TooltipGroup } from "../ui/tooltip";
-import { MOD_KEY, Shortcut } from "../ui/kbd";
+import { Shortcut } from "../ui/kbd";
+import { MOD_KEY } from "../lib/shortcut";
 import { cn } from "../ui/cn";
 import {
   shellLayout,
@@ -523,15 +526,15 @@ function MobileDrawer({
   onClose: () => void;
   children: ReactNode;
 }) {
+  // A menu open inside the drawer takes its own Escape first.
+  const onKey = useEffectEvent((e: KeyboardEvent) => {
+    if (e.key === "Escape" && !e.defaultPrevented) onClose();
+  });
   useEffect(() => {
     if (!open) return;
-    const onKey = (e: KeyboardEvent) => {
-      // A menu open inside the drawer takes its own Escape first.
-      if (e.key === "Escape" && !e.defaultPrevented) onClose();
-    };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [open, onClose]);
+  }, [open]);
   return (
     <LazyMotion features={domAnimation}>
       <MotionConfig reducedMotion="user">

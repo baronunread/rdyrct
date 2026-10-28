@@ -20,3 +20,7 @@ export function isShortcut(e: KeyboardEvent, key: string): boolean {
 export function openCommandMenu() {
   document.dispatchEvent(new KeyboardEvent("keydown", { key: "k", metaKey: true, ctrlKey: true }));
 }
+
+/** ⌘ on a Mac (and iPad with a keyboard), Ctrl everywhere else, where the
+ * command menu listens for Ctrl+K and ⌘ means nothing. */
+export const MOD_KEY = /Mac|iPhone|iPad/.test(navigator.userAgent) ? "⌘" : "Ctrl";

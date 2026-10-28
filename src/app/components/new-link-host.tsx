@@ -1,4 +1,12 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
 import posthog from "../lib/posthog";
 import { ApiError } from "../lib/api";
 import { useLinkMutations, useLinkQuotaUsage } from "../lib/hooks";
@@ -12,6 +20,7 @@ import { LinkPreviewDialog } from "./link-preview-dialog";
 import { SameDestinationDialog } from "./same-destination-dialog";
 import type { LinkDTO, LinkInput } from "@/shared/types";
 import { isShortcut } from "../lib/shortcut";
+import { linkFeatures } from "../lib/links-data";
 import { Kbd } from "../ui/kbd";
 import { linkFieldError } from "../lib/link-field-errors";
 
@@ -26,24 +35,6 @@ const NewLinkContext = createContext<{ openNewLink: () => void; canCreate: boole
   openNewLink: () => {},
   canCreate: false,
 });
-
-/** What a saved link used, for PostHog: four "did they fill in any of
- * these" questions. */
-export function linkFeatures(data: LinkInput) {
-  const any = (...fields: (string | null | undefined)[]) => fields.some(Boolean);
-  return {
-    has_custom_domain: data.domainId !== null,
-    has_custom_slug: Boolean(data.slug?.trim()),
-    has_qr_customization: any(data.qrStyle, data.qrColor, data.qrCorner, data.qrLogo),
-    has_utm_parameters: any(
-      data.utmSource,
-      data.utmMedium,
-      data.utmCampaign,
-      data.utmTerm,
-      data.utmContent,
-    ),
-  };
-}
 
 export function useNewLink() {
   return useContext(NewLinkContext);
@@ -109,7 +100,7 @@ export function NewLinkHost({ children }: { children: ReactNode }) {
 
   const canCreate = !!org && canWrite;
   const atLimit = (quota.data?.count ?? 0) >= limits.links;
-  const openNewLink = () => {
+  const openNewLink = useCallback(() => {
     if (!canCreate) return;
     if (atLimit) {
       toast("Link limit reached: delete a link or upgrade for more", "error");
@@ -117,7 +108,7 @@ export function NewLinkHost({ children }: { children: ReactNode }) {
     }
     setSaveError(null);
     setOpen(true);
-  };
+  }, [canCreate, atLimit, toast]);
   useNewLinkShortcut(openNewLink, canCreate);
   useOpenFromUrl(openNewLink, canCreate);
 
@@ -159,8 +150,9 @@ export function NewLinkHost({ children }: { children: ReactNode }) {
     );
   };
 
+  const value = useMemo(() => ({ openNewLink, canCreate }), [openNewLink, canCreate]);
   return (
-    <NewLinkContext.Provider value={{ openNewLink, canCreate }}>
+    <NewLinkContext.Provider value={value}>
       {children}
       {canCreate && (
         <>

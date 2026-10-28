@@ -228,6 +228,7 @@ type CheckState =
 /** What the form says is wrong after Import, in the place it is wrong. */
 type FormError = { at: "file" | "domains" | "rows"; message: string } | null;
 
+// react-doctor-disable-next-line react-doctor/no-high-complexity-react-function -- one form across the file, domain and row steps; split tracked in the follow-up issue.
 function ImportForm({ orgId, role }: { orgId: string; role: OrgRole }) {
   const { limits, activeDomains, defaultDomainId } = useOrgLimits();
   const quota = useLinkQuotaUsage(orgId);
@@ -256,11 +257,11 @@ function ImportForm({ orgId, role }: { orgId: string; role: OrgRole }) {
 
   // The rows as they will be sent: moved onto the chosen domain, or on
   // their own less any domain the person left out.
+  const skippedSet = useMemo(() => new Set(skipped), [skipped]);
   const rows = useMemo(() => {
     if (!keep) return read.rows.map((row) => ({ ...row, host: target }));
-    const left = new Set(skipped);
-    return read.rows.filter((row) => !left.has(row.host));
-  }, [read.rows, keep, target, skipped]);
+    return read.rows.filter((row) => !skippedSet.has(row.host));
+  }, [read.rows, keep, target, skippedSet]);
 
   const canManage = role === "owner" || role === "admin";
   const domains = useDomains(orgId, canManage);
@@ -269,7 +270,7 @@ function ImportForm({ orgId, role }: { orgId: string; role: OrgRole }) {
   // list the org's domains, so for them the check says which hosts it lacks.
   const waiting =
     keep && canManage
-      ? fileHosts.filter((h) => !skipped.includes(h) && byHost.get(h)?.status !== "active")
+      ? fileHosts.filter((h) => !skippedSet.has(h) && byHost.get(h)?.status !== "active")
       : [];
   const domainsKey = (domains.data ?? []).map((d) => `${d.hostname}:${d.status}`).join();
 
@@ -441,7 +442,7 @@ function ImportForm({ orgId, role }: { orgId: string; role: OrgRole }) {
           <ul className={LIST_CARD}>
             {fileHosts.map((host) => (
               <li key={host}>
-                {SERVICE_HOSTS.has(host) && !skipped.includes(host) ? (
+                {SERVICE_HOSTS.has(host) && !skippedSet.has(host) ? (
                   <ServiceHostRow
                     host={host}
                     links={read.rows.filter((r) => r.host === host).length}
@@ -455,7 +456,7 @@ function ImportForm({ orgId, role }: { orgId: string; role: OrgRole }) {
                     links={read.rows.filter((r) => r.host === host).length}
                     domain={byHost.get(host)}
                     canManage={canManage}
-                    skipped={skipped.includes(host)}
+                    skipped={skippedSet.has(host)}
                     onSkip={(skip) =>
                       setSkipped(skip ? [...skipped, host] : skipped.filter((h) => h !== host))
                     }

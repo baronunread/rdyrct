@@ -21,11 +21,10 @@ import {
   LinkBarLabel,
   PlacesPanel,
   StatsChart,
-  dayTick,
-  hourTick,
-  linkPagePath,
   type ChartFigure,
 } from "../components/charts";
+import { linkPagePath } from "../lib/link-display";
+import { dayTick, hourTick } from "../lib/dates";
 import { RangeControl } from "../components/range-control";
 import { SourceTile } from "../components/source-tile";
 import { PanelTabs } from "../ui/tabs";

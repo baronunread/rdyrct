@@ -8,7 +8,7 @@
  * rdyrct-app-audit/overnight/links.md.
  */
 import { keepPreviousData, queryOptions, useQuery } from "@tanstack/react-query";
-import type { LinkDTO, LinkFacets, LinkFilter, LinkListItem } from "@/shared/types";
+import type { LinkDTO, LinkFacets, LinkFilter, LinkInput, LinkListItem } from "@/shared/types";
 import type { LinkImportHistory } from "@/shared/link-import";
 import { api } from "./api";
 import { useMembers } from "./hooks";
@@ -127,4 +127,22 @@ export function trendNote(link: LinkRow): { tone: "warn" | "bad"; text: string }
   if (link.clicks === 0) return { tone: "bad", text: "No clicks yet" };
   if (link.attention) return { tone: "warn", text: link.attention };
   return null;
+}
+
+/** What a saved link used, for PostHog: four "did they fill in any of
+ * these" questions. */
+export function linkFeatures(data: LinkInput) {
+  const any = (...fields: (string | null | undefined)[]) => fields.some(Boolean);
+  return {
+    has_custom_domain: data.domainId !== null,
+    has_custom_slug: Boolean(data.slug?.trim()),
+    has_qr_customization: any(data.qrStyle, data.qrColor, data.qrCorner, data.qrLogo),
+    has_utm_parameters: any(
+      data.utmSource,
+      data.utmMedium,
+      data.utmCampaign,
+      data.utmTerm,
+      data.utmContent,
+    ),
+  };
 }

@@ -33,10 +33,6 @@ export function Kbd({
   );
 }
 
-/** ⌘ on a Mac (and iPad with a keyboard), Ctrl everywhere else, where the
- * command menu listens for Ctrl+K and ⌘ means nothing. */
-export const MOD_KEY = /Mac|iPhone|iPad/.test(navigator.userAgent) ? "⌘" : "Ctrl";
-
 /** A chord as separate keys: `<Shortcut keys={[MOD_KEY, "K"]} />`. Hidden
  * from screen readers; the control it sits in carries the name. */
 export function Shortcut({

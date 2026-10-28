@@ -75,7 +75,7 @@ export const EmailChips = forwardRef<
       </span>
       {/* Clicking anywhere in the box puts the caret in the input, as a real
           field would. */}
-      {/* oxlint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions -- the input inside is the keyboard target; this only forwards pointer clicks to it. */}
+      {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions, react-doctor/no-static-element-interactions -- the input inside is the keyboard target; this only forwards pointer clicks to it. */}
       <div
         onClick={(e) => {
           if (e.target === e.currentTarget)
@@ -106,7 +106,7 @@ export const EmailChips = forwardRef<
           autoComplete="off"
           autoCapitalize="none"
           spellCheck={false}
-          // oxlint-disable-next-line jsx-a11y/no-autofocus -- the dialog opens to type addresses; this is the first and main field.
+          // eslint-disable-next-line jsx-a11y/no-autofocus, react-doctor/no-autofocus -- the dialog opens to type addresses; this is the first and main field.
           autoFocus
           value={draft}
           onChange={(e) => {

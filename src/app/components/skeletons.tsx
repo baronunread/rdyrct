@@ -93,7 +93,7 @@ function SegmentedSkeleton({ labels }: { labels: number[] }) {
     <div className="flex w-fit shrink-0 animate-pulse gap-0.5 rounded-[9px] bg-surface-2 p-0.5">
       {/* Index keys: two labels can share a width. The list never reorders. */}
       {labels.map((w, i) => (
-        // oxlint-disable-next-line react/no-array-index-key
+        // react-doctor-disable-next-line react-doctor/no-array-index-as-key -- as above.
         <span
           key={i}
           className="box-content h-7 px-2.5 max-sm:h-9 max-sm:px-3"
@@ -184,7 +184,7 @@ function TabsSkeleton({
     <div className={cn("flex items-center gap-4 shadow-[inset_0_-1px_0_var(--border)]", className)}>
       {/* Index keys: two tabs can share a width. The list never reorders. */}
       {tabs.map((w, i) => (
-        // oxlint-disable-next-line react/no-array-index-key
+        // react-doctor-disable-next-line react-doctor/no-array-index-as-key -- as above.
         <span key={i} className="flex h-5 box-content items-center pb-2.5">
           <Skeleton className={cn("h-3", w)} />
         </span>

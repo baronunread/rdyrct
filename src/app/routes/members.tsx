@@ -21,11 +21,8 @@ import {
 import { IconButton } from "../ui/button";
 import { Menu, MenuItem, MenuNote, MenuSeparator } from "../ui/menu";
 import { RemoveMemberDialog } from "../components/member-dialogs";
-import {
-  InvitePeopleDialog,
-  ROLE_OPTIONS,
-  type EmailInvites,
-} from "../components/invite-people-dialog";
+import { InvitePeopleDialog, type EmailInvites } from "../components/invite-people-dialog";
+import { ROLE_OPTIONS } from "../lib/members-data";
 import { SplitButton } from "../components/split-button";
 import { UserAvatar } from "../components/user-avatar";
 import { Table, Th, Td, PageHeader } from "../ui/misc";

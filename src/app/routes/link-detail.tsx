@@ -21,11 +21,12 @@ import {
 } from "../lib/hooks";
 import { preloadOrgDomains, useOrgLimits } from "../lib/org-limits";
 import { settle, type PageContext } from "../lib/route-preload";
-import { AreaChart, BarList, PlacesPanel, StatsChart, dayTick } from "../components/charts";
+import { AreaChart, BarList, PlacesPanel, StatsChart } from "../components/charts";
+import { dayTick } from "../lib/dates";
 import { NoOrgState } from "../components/no-org";
 import { LinkEditor } from "../components/link-editor";
 import { LinkPreviewDialog } from "../components/link-preview-dialog";
-import { linkFeatures } from "../components/new-link-host";
+import { linkFeatures } from "../lib/links-data";
 import { LinkDetailSide } from "../components/link-detail-side";
 import { LinkDetailSkeleton } from "../components/skeletons";
 import { RangeControl } from "../components/range-control";

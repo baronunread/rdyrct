@@ -1,14 +1,9 @@
-import { createContext } from "react";
 import { Link } from "@tanstack/react-router";
 import { Search } from "@/app/ui/icons";
 import { buttonClass } from "../ui/button-class";
-import { MOD_KEY, Shortcut } from "../ui/kbd";
+import { Shortcut } from "../ui/kbd";
+import { MOD_KEY } from "../lib/shortcut";
 import { openCommandMenu } from "../lib/shortcut";
-
-/** True inside the app shell's sheet, so a 404 rendered there (a page the
- * plan has no use for, an admin page for a non-admin) does not draw a
- * second shell around itself. */
-export const InShell = createContext(false);
 
 /**
  * A page the app does not have, inside the app: the sidebar stays, so the

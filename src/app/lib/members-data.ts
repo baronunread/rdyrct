@@ -53,3 +53,9 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 export function isEmail(text: string): boolean {
   return EMAIL_RE.test(text);
 }
+
+export const ROLE_OPTIONS = [
+  { value: "viewer", label: "Viewer" },
+  { value: "member", label: "Member" },
+  { value: "admin", label: "Admin" },
+];

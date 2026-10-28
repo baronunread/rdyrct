@@ -12,6 +12,7 @@
  */
 import { settle } from "../../lib/route-preload";
 import { useRef, useState } from "react";
+import { useHeld } from "@/app/lib/use-held";
 import { useMutation, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import {
   Ban,
@@ -197,9 +198,7 @@ function DeleteLinkDialog({
  * read a second line to know which one they are about to stop. The last link
  * is kept while the dialog fades out, so the title does not change under it. */
 function SuspendDialog({ link, onClose }: { link: AdminLinkRow | null; onClose: () => void }) {
-  const last = useRef<AdminLinkRow | null>(null);
-  if (link) last.current = link;
-  const named = link ?? last.current;
+  const named = useHeld(link);
   return (
     <Dialog
       open={!!link}

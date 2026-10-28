@@ -48,7 +48,8 @@ import { BulkBar } from "../components/bulk-bar";
 import { DeleteLinkDialog } from "../components/delete-link-dialog";
 import { CreateAliasDialog } from "../components/create-alias-dialog";
 import { LinkPreviewDialog } from "../components/link-preview-dialog";
-import { linkFeatures, NewLinkButton, useNewLink } from "../components/new-link-host";
+import { NewLinkButton, useNewLink } from "../components/new-link-host";
+import { linkFeatures } from "../lib/links-data";
 import { useDebounced } from "../lib/use-debounced";
 import { downloadQrCodes } from "../lib/bulk-qr";
 import {

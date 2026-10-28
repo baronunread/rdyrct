@@ -240,7 +240,7 @@ export function PaletteFooter() {
 /** Each word of `query` in the accent wherever it appears in `text`. */
 export function Highlight({ text, query }: { text: string; query: string }) {
   const words = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
-  if (words.length === 0) return text;
+  if (words.length === 0) return <>{text}</>;
   const lower = text.toLowerCase();
   const marked = Array.from({ length: text.length }, () => false);
   for (const word of words) {

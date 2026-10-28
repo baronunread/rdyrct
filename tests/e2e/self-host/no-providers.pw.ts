@@ -7,7 +7,8 @@ import { submitSignup } from "../resend";
 // worker tests (no-email-signup, no-polar) only see the API side of it.
 
 const password = "self-host-password-123";
-const NOT_FOUND = "Nothing lives at this link.";
+// Signed in, so the in-app 404: the sidebar stays.
+const NOT_FOUND = "Nothing lives at this page";
 
 /** Signs up and lands on the dashboard: with no email provider there is no
  *  code to wait for, so the account is signed in straight away. */
@@ -27,7 +28,7 @@ test("sign-up lands signed in, with no code step", async ({ page }) => {
 test("forgot password says this instance cannot send the reset", async ({ page }) => {
   await page.goto("/login");
   await page.getByLabel("Email").fill(`selfhost-forgot-${Date.now()}@example.com`);
-  await page.getByRole("button", { name: "Forgot password?" }).click();
+  await page.getByRole("button", { name: "Forgot it?" }).click();
   await page.getByRole("button", { name: "Send reset link" }).click();
   await expect(
     page.getByText("This instance has no email provider, so passwords cannot be reset by email."),

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useHeld } from "../lib/use-held";
 import type { LinkDTO } from "@/shared/types";
 import { Dialog } from "../ui/dialog";
 import { Button } from "../ui/button";
@@ -54,11 +55,7 @@ export function DeleteLinkDialog({
 }) {
   const open = !!links && links.length > 0;
   // Kept through the close animation, so the title does not blank out.
-  const [retained, setRetained] = useState<LinkDTO[]>([]);
-  useEffect(() => {
-    if (links && links.length > 0) setRetained(links);
-  }, [links]);
-  const shown = links && links.length > 0 ? links : retained;
+  const shown = useHeld(open ? links : null) ?? [];
 
   return (
     <Dialog
@@ -121,6 +118,7 @@ function DeleteForm({
       // One at a time: each delete answers with the quota it leaves, and
       // the cache keeps the freshest of them.
       for (const link of links) {
+        // react-doctor-disable-next-line react-doctor/async-await-in-loop -- one at a time on purpose, see above.
         await remove.mutateAsync(link.id);
         done.push(link.id);
         posthog.capture("link_deleted", { had_custom_domain: link.domainId !== null });

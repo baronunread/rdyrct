@@ -304,6 +304,7 @@ function QrCustomizationUpsell({ locked }: { locked: boolean }) {
 
 /** The short link as a domain and a slug joined by a slash. Chosen slugs
  * only exist on custom domains, so on the shared one the slug is locked. */
+// react-doctor-disable-next-line react-doctor/no-high-complexity-react-function -- one field with its domain, slug and lock states; split tracked in the follow-up issue.
 function ShortLinkField({
   form,
   setForm,
@@ -415,6 +416,7 @@ function ShortLinkField({
         </span>
       </div>
       {hints.map((hint, i) => (
+        // react-doctor-disable-next-line react-doctor/no-array-index-as-key -- a fixed list built each render, never reordered.
         <span key={i} className="mt-1.5 block text-xs text-muted">
           {hint}
         </span>
@@ -669,6 +671,7 @@ const PHONE_FOOTER =
 const ASIDE =
   "flex min-w-0 flex-col gap-4 bg-bg px-5 pt-4 pb-6 max-sm:shadow-[inset_0_1px_0_color-mix(in_oklab,var(--text)_8%,transparent)] sm:shadow-[inset_1px_0_0_color-mix(in_oklab,var(--text)_8%,transparent)]";
 
+// react-doctor-disable-next-line react-doctor/no-high-complexity-react-function, react-doctor/no-giant-component -- the form, the QR view and the preview share one form state; split tracked in the follow-up issue.
 export function LinkEditor({
   open,
   onOpenChange,
@@ -726,7 +729,7 @@ export function LinkEditor({
   // run here first. Cleared as soon as that field changes.
   const [fieldError, setFieldError] = useState<LinkFieldError | null>(null);
   // The QR look as it was when the QR view opened, for its Cancel.
-  const [qrBefore, setQrBefore] = useState<ReturnType<typeof qrOverridesOf> | null>(null);
+  const qrBefore = useRef<ReturnType<typeof qrOverridesOf> | null>(null);
   // The logo's file name, known only for one picked in this session: the
   // API stores the uploaded file under an id. TODO(lead): store the name.
   const [logoName, setLogoName] = useState<string | undefined>();
@@ -754,9 +757,13 @@ export function LinkEditor({
   useEffect(() => {
     if (open) {
       reset(editingLink ?? { ...defaultForm, domainId: newDomainId });
+      // react-doctor-disable-next-line react-doctor/no-adjust-state-on-prop-change -- the dialog stays mounted to animate, so opening it is the reset.
       setView("form");
+      // react-doctor-disable-next-line react-doctor/no-adjust-state-on-prop-change -- the dialog stays mounted to animate, so opening it is the reset.
       setShowMoreUtm(false);
+      // react-doctor-disable-next-line react-doctor/no-adjust-state-on-prop-change -- the dialog stays mounted to animate, so opening it is the reset.
       setFieldError(null);
+      // react-doctor-disable-next-line react-doctor/no-adjust-state-on-prop-change -- the dialog stays mounted to animate, so opening it is the reset.
       setLogoName(undefined);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -892,12 +899,12 @@ export function LinkEditor({
   const look = lookOf(form, orgQr);
 
   const openQr = () => {
-    setQrBefore(qrOverridesOf(form));
+    qrBefore.current = qrOverridesOf(form);
     setFormHeight(formRef.current?.offsetHeight);
     showView("qr");
   };
   const cancelQr = () => {
-    if (qrBefore) setForm({ ...form, ...qrBefore });
+    if (qrBefore.current) setForm({ ...form, ...qrBefore.current });
     showView("form");
   };
   const applyQr = (patch: QrPatch, fileName?: string) => {

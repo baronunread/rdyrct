@@ -13,13 +13,7 @@ import { MenuSelect } from "../ui/menu";
 import { BusyContent } from "../ui/spinner";
 import { useToast } from "../ui/toast";
 import { EmailChips } from "./email-chips";
-import { isEmail, splitEmails } from "../lib/members-data";
-
-export const ROLE_OPTIONS = [
-  { value: "viewer", label: "Viewer" },
-  { value: "member", label: "Member" },
-  { value: "admin", label: "Admin" },
-];
+import { ROLE_OPTIONS, isEmail, splitEmails } from "../lib/members-data";
 
 /** What each role can do, said once, where the role is chosen. Without it
  * "viewer" and "member" look like the same word twice. */

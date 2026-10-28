@@ -1,3 +1,4 @@
+// react-doctor-disable-next-line react-doctor/no-flush-sync -- see open() in LinkRow: the mark must be in the DOM before the transition takes its picture.
 import { flushSync } from "react-dom";
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "@tanstack/react-router";

@@ -2,7 +2,8 @@ import { lazy, Suspense, useContext } from "react";
 import { Link } from "@tanstack/react-router";
 import { HOME_LINK } from "../components/not-found-home";
 import { NotFoundView } from "../components/not-found-view";
-import { AppNotFound, InShell } from "../components/app-not-found";
+import { AppNotFound } from "../components/app-not-found";
+import { InShell } from "../lib/in-shell";
 import { AppShellSkeleton } from "../components/skeletons";
 import { useShellUser } from "../lib/hooks";
 

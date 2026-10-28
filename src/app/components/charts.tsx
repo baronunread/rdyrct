@@ -19,6 +19,8 @@ import { clicksByHour, HOURS } from "../lib/click-buckets";
 import type { SeriesPoint, DeltaValue, HeatmapRow, TopEntry } from "@/shared/types";
 import { CountryMap } from "./country-map";
 import { PanelTabs } from "../ui/tabs";
+import { countryName } from "../lib/places";
+import { linkPagePath } from "../lib/link-display";
 import { formatNumber } from "../lib/numbers";
 
 // Monotone rather than a cubic that overshoots: it never draws a peak or a
@@ -251,10 +253,6 @@ export function BarList({
 /** A link in a bar list: its slug, which is what people search for and
  * type, then its title in the muted voice (rdyrct-design, mono only on the
  * identifier). */
-/** A link's own page. The domain picks the link when two share a slug, one
- * on the shared domain and one on a custom one. */
-export const linkPagePath = (l: { slug: string; domain?: string | null }) =>
-  l.domain ? `/links/${l.slug}?domain=${encodeURIComponent(l.domain)}` : `/links/${l.slug}`;
 
 export function LinkBarLabel({
   slug,
@@ -401,28 +399,6 @@ export function ClicksByHour({ data, height = 260 }: { data: HeatmapRow[]; heigh
       }}
     />
   );
-}
-
-/** "Oct 5" from "2026-10-05" (or the date part of an hourly bucket). */
-export const dayTick = (day: string) =>
-  new Date(`${day.slice(0, 10)}T00:00:00Z`).toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    timeZone: "UTC",
-  });
-
-/** "14:00" from an hourly bucket. */
-export const hourTick = (day: string) => day.slice(11, 16);
-
-const COUNTRY_NAMES = new Intl.DisplayNames("en", { type: "region" });
-
-/** "Italy" from "IT", or the code itself when the runtime has no name. */
-export function countryName(code: string): string {
-  try {
-    return COUNTRY_NAMES.of(code) ?? code;
-  } catch {
-    return code;
-  }
 }
 
 /** "Italy" from "IT"; a click the edge could not place says so. */
