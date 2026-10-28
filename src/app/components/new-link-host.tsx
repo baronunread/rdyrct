@@ -79,17 +79,19 @@ function useNewLinkShortcut(open: () => void, enabled: boolean) {
 
 /** ⌘K's "Create link" sends people to `?new=1`: open once, then drop the
  * flag so a reload does not reopen it. */
-function useOpenFromUrl(open: () => void) {
+function useOpenFromUrl(open: () => void, ready: boolean) {
   const [params, setParams] = useSearchParams();
   const wanted = params.has("new");
   useEffect(() => {
-    if (!wanted) return;
+    // On a fresh load the org arrives after the first render, and open()
+    // does nothing until it has. Wait for it rather than spend the flag.
+    if (!wanted || !ready) return;
     open();
     const next = new URLSearchParams(params);
     next.delete("new");
     setParams(next, { replace: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [wanted]);
+  }, [wanted, ready]);
 }
 
 export function NewLinkHost({ children }: { children: ReactNode }) {
@@ -113,7 +115,7 @@ export function NewLinkHost({ children }: { children: ReactNode }) {
     setOpen(true);
   };
   useNewLinkShortcut(openNewLink, canCreate);
-  useOpenFromUrl(openNewLink);
+  useOpenFromUrl(openNewLink, canCreate);
 
   const finish = (link: LinkDTO, event: string, input: LinkInput) => {
     posthog.capture(event, linkFeatures(input));

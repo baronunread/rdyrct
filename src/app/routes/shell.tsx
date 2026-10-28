@@ -1,10 +1,9 @@
-import { Suspense, useEffect, useRef, useState, type ReactNode } from "react";
+import { Suspense, useEffect, useRef, useState, type ComponentType, type ReactNode } from "react";
 import { errorMessage } from "@/app/lib/error-message";
 import { Link, Outlet, useNavigate } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, LazyMotion, MotionConfig, domAnimation, m } from "motion/react";
 import {
-  Layers,
   ChevronsUpDown,
   Plus,
   LogOut,
@@ -39,6 +38,7 @@ import { PLAN_LIMITS, type User, type UserOrg } from "@/shared/types";
 import posthog from "../lib/posthog";
 import { FUNNEL } from "../lib/funnel";
 import { Logo, LogoMark } from "../ui/logo";
+import { LayersIcon } from "../ui/nav-icons";
 import { Tooltip, TooltipGroup } from "../ui/tooltip";
 import { MOD_KEY, Shortcut } from "../ui/kbd";
 import { cn } from "../ui/cn";
@@ -176,7 +176,7 @@ function PlatformNav({ visible, collapsed }: { visible: boolean; collapsed: bool
     <div className="mt-2 px-3">
       <p className={cn("px-2.5 pb-1 text-xs font-medium text-muted", fade(collapsed))}>Admin</p>
       <nav className="flex flex-col gap-0.5">
-        <NavItem to="/admin" icon={Layers} label="Platform" collapsed={collapsed} />
+        <NavItem to="/admin" icon={LayersIcon} label="Platform" collapsed={collapsed} />
       </nav>
     </div>
   );
@@ -194,13 +194,13 @@ function NavItem({
   collapsed,
 }: {
   to: string;
-  icon: typeof Layers;
+  icon: ComponentType<{ size?: number; className?: string }>;
   label: string;
   collapsed: boolean;
 }) {
   const link = (
     <Link to={to} {...navLinkProps}>
-      <Icon size={15} /> <span className={fade(collapsed)}>{label}</span>
+      <Icon size={16} /> <span className={fade(collapsed)}>{label}</span>
     </Link>
   );
   // In the rail the icon is all that shows, so its name comes up beside it.
