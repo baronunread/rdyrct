@@ -60,21 +60,18 @@ await $`bunx wrangler d1 migrations apply DB --local`.quiet();
  * webhook route then refuses every event, which is right for a checkout
  * that cannot receive any.
  */
-async function polarForwardSecret(devVars: string): Promise<string | undefined> {
-  if (/^POLAR_WEBHOOK_SECRET=\S/m.test(devVars)) return undefined;
-  try {
-    const polar = Bun.spawn(["polar", "listen", "--print-secret"], {
-      stdio: ["ignore", "pipe", "ignore"],
-      timeout: 3000,
-    });
-    const [text, code] = await Promise.all([new Response(polar.stdout).text(), polar.exited]);
-    return code === 0 ? text.trim() || undefined : undefined;
-  } catch {
-    // No `polar` on the PATH: spawn throws rather than exiting non-zero.
-    return undefined;
-  }
+async function polarForwardSecret(): Promise<string | undefined> {
+  if (!Bun.which("polar")) return undefined;
+  const polar = Bun.spawn(["polar", "listen", "--print-secret"], {
+    stdio: ["ignore", "pipe", "ignore"],
+    timeout: 3000,
+  });
+  const [text, code] = await Promise.all([new Response(polar.stdout).text(), polar.exited]);
+  return code === 0 ? text.trim() || undefined : undefined;
 }
-const polarSecret = await polarForwardSecret(readFileSync(DEV_VARS, "utf8"));
+const polarSecret = /^POLAR_WEBHOOK_SECRET=\S/m.test(readFileSync(DEV_VARS, "utf8"))
+  ? undefined
+  : await polarForwardSecret();
 
 // The proxy first, on its own, in the foreground. On a fresh machine it asks
 // for a password (port 443 needs sudo) and creates the CA the probe below

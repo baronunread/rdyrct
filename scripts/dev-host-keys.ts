@@ -15,4 +15,13 @@ export const DEV_HOST_KEYS = [
  * values win anyway): the secret `polar listen` signs forwarded webhooks
  * with, so a sandbox event reaches the Worker and verifies with nothing
  * copied by hand. */
-export const DEV_DEFAULT_KEYS = ["POLAR_WEBHOOK_SECRET"] as const;
+const DEV_DEFAULT_KEYS = ["POLAR_WEBHOOK_SECRET"] as const;
+
+/** The Worker vars vite.config.ts sets under `bun run dev`, from the
+ * environment scripts/dev.ts started it with. Nothing outside it. */
+export function devHostVars(env: NodeJS.ProcessEnv): { vars: Record<string, string> } | undefined {
+  if (!env.RDYRCT_DEV_HOSTS) return undefined;
+  const hosts = DEV_HOST_KEYS.map((key) => [key, env[key] ?? ""]);
+  const defaults = DEV_DEFAULT_KEYS.flatMap((key) => (env[key] ? [[key, env[key]]] : []));
+  return { vars: Object.fromEntries([...hosts, ...defaults]) };
+}
