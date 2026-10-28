@@ -41,9 +41,10 @@ const POSTHOG = POSTHOG_CONFIGURED ? "https://*.posthog.com" : "";
 const SENTRY =
   "https://*.ingest.sentry.io https://*.ingest.de.sentry.io https://*.ingest.us.sentry.io";
 const STATS = RDYRCT_SITE ? "https://stats.brnr.dev" : "";
-/** Fazier's launch badge in the landing footer, the one remote image:
- *  their verifier wants their own badge, not a copy. rdyrct.com only. */
+/** Fazier's and PeerPush's badges in the landing footer, the only remote
+ *  images: each directory wants its own badge, not a copy. rdyrct.com only. */
 const FAZIER = RDYRCT_SITE ? "https://fazier.com" : "";
+const PEERPUSH = RDYRCT_SITE ? "https://peerpush.com" : "";
 
 /** Turnstile's script and challenge iframe (#304). */
 const TURNSTILE = "https://challenges.cloudflare.com";
@@ -92,7 +93,7 @@ function buildCsp(turnstile: string): string {
     "default-src 'self'",
     scriptSrc,
     "style-src 'self' 'unsafe-inline'",
-    directive("img-src 'self' data:", POSTHOG, FAZIER),
+    directive("img-src 'self' data:", POSTHOG, FAZIER, PEERPUSH),
     "font-src 'self'",
     directive("connect-src 'self'", POSTHOG, SENTRY, STATS),
     // Only Turnstile's challenge iframe. With no frame-src at all the
