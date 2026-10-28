@@ -3,12 +3,23 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Ban, Check, Trash2 } from "@/app/ui/icons";
 import { MorphIcon } from "morphicons/react";
 import { shieldMinus, shieldPlus } from "@/app/ui/icon-nodes";
-import { useAdminUsers, useCurrentUser } from "../../lib/hooks";
+import { useCurrentUser } from "../../lib/hooks";
+import { useAdminUsersData, type AdminUserData } from "../../lib/admin-data";
+import { UserAvatar } from "../../components/user-avatar";
 import { api } from "../../lib/api";
 import type { AdminUserRow, Sort } from "@/shared/types";
 import { Menu, MenuItem, MenuSeparator } from "../../ui/menu";
-import { Badge, PageHeader, Table, Td, Th } from "../../ui/misc";
-import { FilterBar, FilterRow, RowMenuTrigger, StateLabel, TwoLine } from "./admin-kit";
+import { Badge, Table, Td, Th } from "../../ui/misc";
+import {
+  FilterBar,
+  FilterRow,
+  PHONE,
+  RowMenuTrigger,
+  SectionHeading,
+  StateLabel,
+  TwoLine,
+  fullNumber,
+} from "./admin-kit";
 import { Tooltip } from "../../ui/tooltip";
 import { useToast } from "../../ui/toast";
 import { ConfirmDialog } from "../../ui/confirm-dialog";
@@ -214,22 +225,29 @@ function PersonMarks({ user }: { user: AdminUserRow }) {
 function UserRow({
   user,
   isSelf,
+  showLinks,
   onGrantComp,
   onRevokeComp,
   onConfirm,
 }: {
-  user: AdminUserRow;
+  user: AdminUserData;
+  showLinks: boolean;
   isSelf: boolean;
   onGrantComp: () => void;
   onRevokeComp: () => void;
   onConfirm: (kind: UserAction) => void;
 }) {
   return (
-    <tr>
+    <tr className={PHONE.row}>
       {/* Two lines (rdyrct-design, "Tables earn two lines"): the name over
-          the address. Both truncate, with the whole value on hover. */}
-      <Td>
-        <span className="flex min-w-0 items-center gap-2">
+          the address, beside the picture. Both truncate, with the whole
+          value on hover. */}
+      <Td className={PHONE.main}>
+        <span className="flex min-w-0 items-center gap-3">
+          <UserAvatar
+            user={{ id: user.id, image: user.image ?? null, name: user.name, email: user.email }}
+            size={32}
+          />
           <span className="min-w-0">
             <TwoLine
               title={user.name}
@@ -245,7 +263,7 @@ function UserRow({
       </Td>
       {/* The plan is an attribute, so it is text; what it adds (a comp, a
           failing payment, an end date) is a state, so it is a pill. */}
-      <Td>
+      <Td className={PHONE.meta} data-label="Plan">
         <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
           <span className={user.plan === "free" ? "text-muted capitalize" : "capitalize"}>
             {user.plan}
@@ -253,8 +271,15 @@ function UserRow({
           <PlanNote user={user} />
         </span>
       </Td>
-      <Td className="tnum text-right">{user.orgCount}</Td>
-      <Td className="whitespace-nowrap">
+      <Td className={`tnum text-right ${PHONE.meta}`} data-label="Orgs">
+        {fullNumber(user.orgCount)}
+      </Td>
+      {showLinks && (
+        <Td className={`tnum text-right ${PHONE.meta}`} data-label="Links">
+          {user.links === undefined ? "" : fullNumber(user.links)}
+        </Td>
+      )}
+      <Td className={`whitespace-nowrap ${PHONE.meta}`} data-label="Seen">
         {user.banned ? (
           <StateLabel tone="bad">banned</StateLabel>
         ) : (
@@ -263,8 +288,10 @@ function UserRow({
           </span>
         )}
       </Td>
-      <Td className="tnum text-xs whitespace-nowrap text-muted">{shortDate(user.createdAt)}</Td>
-      <Td className="px-2">
+      <Td className={`tnum text-sm whitespace-nowrap text-muted ${PHONE.meta}`} data-label="Joined">
+        {shortDate(user.createdAt)}
+      </Td>
+      <Td className={`px-2 ${PHONE.menu}`}>
         <Menu align="end" label={`Actions for ${user.name}`} trigger={<RowMenuTrigger />}>
           <AdminToggleMenuItem user={user} isSelf={isSelf} onConfirm={onConfirm} />
           <CompMenuItems user={user} onGrant={onGrantComp} onRevoke={onRevokeComp} />
@@ -285,7 +312,7 @@ function UsersTable({
   onConfirm,
   emptyText,
 }: {
-  rows: AdminUserRow[];
+  rows: AdminUserData[];
   meId: string | undefined;
   sort: Sort;
   setSort: (s: Sort) => void;
@@ -294,9 +321,12 @@ function UsersTable({
   onConfirm: (kind: UserAction, user: AdminUserRow) => void;
   emptyText: string;
 }) {
+  // The column waits for the API to count each person's links; a column of
+  // blanks would say "none" when it means "not known".
+  const showLinks = rows.some((u) => u.links !== undefined);
   return (
-    <Table fixed minWidth="min-w-[52rem]">
-      <thead>
+    <Table fixed minWidth={`sm:min-w-[52rem] ${PHONE.table}`}>
+      <thead className={PHONE.head}>
         <tr>
           <SortTh label="Person" sortKey="name" sort={sort} onSort={setSort} />
           <Th className="w-[18%]">Plan</Th>
@@ -307,6 +337,15 @@ function UsersTable({
             onSort={setSort}
             className="w-20 text-right"
           />
+          {showLinks && (
+            <SortTh
+              label="Links"
+              sortKey="links"
+              sort={sort}
+              onSort={setSort}
+              className="w-20 text-right"
+            />
+          )}
           <SortTh
             label="Last active"
             sortKey="lastSeen"
@@ -320,11 +359,12 @@ function UsersTable({
           </Th>
         </tr>
       </thead>
-      <tbody>
+      <tbody className={PHONE.body}>
         {rows.map((u) => (
           <UserRow
             key={u.id}
             user={u}
+            showLinks={showLinks}
             isSelf={u.id === meId}
             onGrantComp={() => onGrantComp(u)}
             onRevokeComp={() => onRevokeComp(u)}
@@ -333,7 +373,7 @@ function UsersTable({
         ))}
         {rows.length === 0 && (
           <tr>
-            <Td colSpan={6} className="py-8 text-center text-muted">
+            <Td colSpan={7} className="block py-8 text-center text-muted sm:table-cell">
               {emptyText}
             </Td>
           </tr>
@@ -496,7 +536,7 @@ function useAdminUserActions() {
 }
 
 export function AdminUsersPage() {
-  const users = useAdminUsers();
+  const users = useAdminUsersData();
   const currentUser = useCurrentUser();
   const {
     confirm,
@@ -526,6 +566,7 @@ export function AdminUsersPage() {
     return sortRows(matches, sort, {
       name: (u) => u.name.toLowerCase(),
       orgs: (u) => u.orgCount,
+      links: (u) => u.links ?? 0,
       joined: (u) => u.createdAt,
       lastSeen: (u) => u.lastSeen,
     });
@@ -544,7 +585,7 @@ export function AdminUsersPage() {
 
   return (
     <div>
-      <PageHeader title="Users" sub="All accounts on this instance." />
+      <SectionHeading>Users</SectionHeading>
       <div className="mb-4">
         <FilterBar>
           <FilterRow

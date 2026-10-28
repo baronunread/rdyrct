@@ -34,7 +34,7 @@ const FORMS: GuardedForm[] = [
     name: "password reset",
     open: async (page) => {
       await page.goto("/login");
-      await page.getByRole("button", { name: "Forgot password?" }).click();
+      await page.getByRole("button", { name: "Forgot it?" }).click();
     },
     container: (page) =>
       page.locator("form").filter({ has: page.getByRole("button", { name: "Send reset link" }) }),

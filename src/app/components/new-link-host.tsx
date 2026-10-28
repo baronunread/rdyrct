@@ -13,6 +13,7 @@ import { SameDestinationDialog } from "./same-destination-dialog";
 import type { LinkDTO, LinkInput } from "@/shared/types";
 import { isShortcut } from "../lib/shortcut";
 import { Kbd } from "../ui/kbd";
+import { linkFieldError } from "../lib/link-field-errors";
 
 /**
  * "New link" is one dialog, opened from anywhere (rdyrct-design, "Creating is
@@ -101,6 +102,8 @@ export function NewLinkHost({ children }: { children: ReactNode }) {
   const toast = useToast();
   const [open, setOpen] = useState(false);
   const [shakeKey, setShakeKey] = useState(0);
+  // The last failed save, for the editor to pin on its field.
+  const [saveError, setSaveError] = useState<Error | null>(null);
   const [created, setCreated] = useState<{ link: LinkDTO; merged: boolean } | null>(null);
   const [match, setMatch] = useState<{ input: LinkInput; matchedLinks: LinkDTO[] } | null>(null);
 
@@ -112,6 +115,7 @@ export function NewLinkHost({ children }: { children: ReactNode }) {
       toast("Link limit reached: delete a link or upgrade for more", "error");
       return;
     }
+    setSaveError(null);
     setOpen(true);
   };
   useNewLinkShortcut(openNewLink, canCreate);
@@ -134,7 +138,10 @@ export function NewLinkHost({ children }: { children: ReactNode }) {
           setMatch({ input, matchedLinks });
           return;
         }
-        toast(e.message, "error");
+        // A refusal about the destination or the slug marks that field
+        // (rdyrct-design, form errors); only the rest is a toast.
+        setSaveError(e);
+        if (!linkFieldError(e)) toast(e.message, "error");
         setShakeKey((k) => k + 1);
       },
     });
@@ -169,6 +176,7 @@ export function NewLinkHost({ children }: { children: ReactNode }) {
             qrCustomEnabled={limits.qrCustom}
             orgQr={orgQr}
             shakeKey={shakeKey}
+            saveError={saveError}
           />
           <SameDestinationDialog
             matchedLinks={match?.matchedLinks ?? null}

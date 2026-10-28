@@ -1,12 +1,11 @@
 /**
- * The QR appearance controls, shared by the organization's defaults card and
- * the free generator at /qr-code-generator.
+ * The QR appearance controls of the free generator at /qr-code-generator:
+ * dot and corner style, the three colors, logo size and the logo itself,
+ * kept in the browser.
  *
- * One implementation because they are the same controls: dot and corner
- * style, the three colors, logo size and the logo itself. What differs is
- * only what sits around them (a save button and a plan gate on one side,
- * a download and a link-shortening offer on the other) and where the logo
- * ends up: an org uploads it, the free page keeps it in the browser.
+ * The signed-in app (a link's QR editor and the organization's defaults)
+ * uses the rows in `qr-pickers.tsx` instead. TODO(lead): move the
+ * generator onto those rows too, and this file can go.
  */
 import { Info } from "@/app/ui/icons";
 import { QR_CORNER_STYLES, QR_DEFAULT_BG, QR_DEFAULT_COLOR, QR_DOT_STYLES } from "@/shared/types";
@@ -14,8 +13,7 @@ import { cn } from "../ui/cn";
 import { Field } from "../ui/field";
 import { MenuSelect } from "../ui/menu";
 import { Tooltip } from "../ui/tooltip";
-import { QRPreview } from "./qr";
-import { qrPreviewProps, type QrValues } from "../lib/qr-look";
+import type { QrValues } from "../lib/qr-look";
 import { QrLogoInput } from "./qr-logo-input";
 import { QrColorField } from "./qr-color-field";
 
@@ -139,19 +137,6 @@ export function QrColorAndLogoFields({
           onClear={isAdmin ? () => setField("qrLogo", "") : undefined}
         />
       </div>
-    </div>
-  );
-}
-
-/** Mirrors LinkEditor's QrPreviewSidebar (link-editor.tsx): beside the shape
- * fields on sm+ (via the caller's grid), moved after them (`order-last
- * sm:order-none`) on mobile, where it's more useful after the controls it's
- * previewing than pushed above them. */
-export function QrPreviewSidebar({ values, url }: { values: QrValues; url: string }) {
-  return (
-    <div className="flex flex-col gap-2 sm:w-40">
-      <p className="text-xs font-medium text-muted">Preview</p>
-      <QRPreview url={url} {...qrPreviewProps(values)} size={160} />
     </div>
   );
 }

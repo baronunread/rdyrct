@@ -27,7 +27,7 @@ export async function createAdditionalOrg(page: Page, name: string) {
   await page.getByRole("menuitem", { name: "New organization" }).click();
   const dialog = page.getByRole("dialog", { name: "New organization" });
   await dialog.getByLabel("Name").fill(name);
-  await dialog.getByRole("button", { name: "Create" }).click();
+  await dialog.getByRole("button", { name: "Create organization" }).click();
   await expect(currentOrgName(page)).toHaveText(name);
 }
 
@@ -106,12 +106,13 @@ export async function ownerWithInviteLink(
   await seed?.(page);
 
   await page.goto("/members");
-  await page.getByRole("button", { name: "Invite people" }).click();
+  await page.getByRole("button", { name: "Invite", exact: true }).click();
   await page
     .getByRole("dialog", { name: "Invite people" })
-    .getByRole("button", { name: "Create invite link" })
+    .getByRole("button", { name: "Copy invite link" })
     .click();
-  await expect(page.getByText("Pending invites")).toBeVisible();
+  // The open invite joins the members table as a row of its own.
+  await expect(page.locator("tbody tr").filter({ hasText: "Invite link" })).toHaveCount(1);
 
   const [invite] = await queryRows<{ token: string }>(
     page,

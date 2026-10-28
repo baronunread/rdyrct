@@ -99,7 +99,7 @@ test("a link row is one line: its state, its report count, and why behind the ba
   const row = page.getByRole("row").filter({ hasText: link.slug });
   // One badge, the worst state, and the reason is not printed in the row.
   const badge = row.getByRole("button", { name: /^Suspended: asks for card numbers · Risk: / });
-  await expect(badge).toHaveText("suspended", { timeout: 10_000 });
+  await expect(badge).toHaveText("Suspended", { timeout: 10_000 });
   await expect(row.getByText("asks for card numbers")).toHaveCount(0);
   // Reports is a count of its own, like Clicks.
   const reportsColumn = await page
@@ -123,14 +123,10 @@ test("a link row is one line: its state, its report count, and why behind the ba
   await expect(page.getByRole("menu").getByText("Suspended: asks for card numbers")).toBeVisible();
   await page.keyboard.press("Escape");
 
-  // The filter row lines up: search, status and the org chip were three
-  // heights, with the chip sitting lower than the select beside it.
+  // The filter row lines up: the search and the org chip were two
+  // heights, with the chip sitting lower than the box beside it.
   const clear = page.getByRole("button", { name: /^Clear filter: / });
-  const controls = [
-    page.getByRole("textbox", { name: "Search links" }),
-    page.getByLabel("Filter by status"),
-    clear,
-  ];
+  const controls = [page.getByRole("textbox", { name: "Search links" }), clear];
   const boxes = await Promise.all(controls.map((c) => c.boundingBox()));
   for (const box of boxes) {
     expect(box!.height).toBe(boxes[0]!.height);

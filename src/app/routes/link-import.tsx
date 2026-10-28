@@ -1,17 +1,19 @@
 /**
- * Import from another service (#383): one step at a time, from "where are
- * your links now" to "switch the DNS", so somebody moving from Short.io,
- * Bitly, Rebrandly or Dub ends with every short URL they ever printed
- * answering from rdyrct.
+ * Import from another service (#383), on one page: pick where the links are
+ * now, drop the file, say which domain they land on, import. Somebody moving
+ * from Short.io, Bitly, Rebrandly or Dub ends with every short URL they ever
+ * printed answering from rdyrct.
  *
  * The file is read here, and the rows go to the Worker in chunks: first to
- * be checked (nothing written), then to be stored for a workflow that writes
- * them on the server. Once they are all sent, closing the page changes
- * nothing; coming back shows how far it got. A domain the file uses and the org lacks is set up inside the
- * flow, with TXT validation, so it is ready before its CNAME moves.
+ * be checked (nothing written, as soon as the file and its domains are
+ * ready), then to be stored for a workflow that writes them on the server.
+ * Once they are all sent, closing the page changes nothing; coming back
+ * shows how far it got. A domain the file uses and the org lacks is set up
+ * on the page, with TXT validation, so it is ready before its CNAME moves.
  */
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode, type Ref } from "react";
 import { Link } from "@tanstack/react-router";
+import { IconUpload } from "@tabler/icons-react";
 import {
   CHECK_CHUNK_ROWS,
   IMPORT_SERVICES,
@@ -29,19 +31,21 @@ import {
   type ReadResult,
   type UnreadableRow,
 } from "@/shared/link-import";
-import { resolveUtm, stripUtmParams, UTM_KEYS } from "@/shared/utm";
 import type { DomainDTO, OrgRole } from "@/shared/types";
 import { api, ApiError } from "../lib/api";
-import { useConfig, useDomains, useLinkImport } from "../lib/hooks";
-import { useCurrentOrg } from "../lib/current-org";
+import { useConfig, useDomains, useLinkImport, useLinkQuotaUsage } from "../lib/hooks";
+import { useOrgLimits } from "../lib/org-limits";
+import { useImportHistory, tableDate } from "../lib/links-data";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "../ui/button";
 import { buttonClass } from "../ui/button-class";
 import { Select } from "../ui/field";
+import { MenuSelect } from "../ui/menu";
 import { Badge, PageHeader, Table, Td, Th } from "../ui/misc";
 import { BusyContent } from "../ui/spinner";
+import { Segmented } from "../ui/segmented";
 import { useToast } from "../ui/toast";
-import { Check, ChevronRight, Upload } from "../ui/icons";
+import { Check } from "../ui/icons";
 import { cn } from "../ui/cn";
 import { LockedPanel } from "../components/over-limit";
 import { NoOrgState } from "../components/no-org";
@@ -49,34 +53,72 @@ import { DnsRecords } from "../components/dns-records";
 import { CopyButton } from "../ui/copy-button";
 import { copyToClipboard } from "../lib/clipboard";
 
-type Step = "service" | "file" | "domains" | "check" | "import" | "switch";
+const TITLE = "Import links";
+const SUB = "Bring links from another shortener. Each one keeps its slug.";
 
-const STEPS: { id: Step; label: string }[] = [
-  { id: "service", label: "Where from" },
-  { id: "file", label: "Your file" },
-  { id: "domains", label: "Domains" },
-  { id: "check", label: "Check" },
-  { id: "import", label: "Import" },
-  { id: "switch", label: "Switch DNS" },
-];
+/** The picker's order and names: the mock's, with "CSV" for any other
+ * service's export (IMPORT_SERVICES calls it "Another service"). */
+const SERVICE_TABS = [
+  { id: "bitly", label: "Bitly" },
+  { id: "shortio", label: "Short.io" },
+  { id: "rebrandly", label: "Rebrandly" },
+  { id: "dub", label: "Dub" },
+  { id: "csv", label: "CSV" },
+] as const satisfies readonly { id: ImportServiceId; label: string }[];
+
+/** The most rows one import takes (the Worker's MAX_IMPORT_ROWS). */
+const MAX_ROWS = 20_000;
+
+/** Short domains that belong to the service itself. A link on one of them
+ * cannot keep its domain (nobody but the service can point it here), so it
+ * has to land on one of the org's own. */
+const SERVICE_HOSTS = new Set([
+  "bit.ly",
+  "bitly.com",
+  "j.mp",
+  "short.io",
+  "short.gy",
+  "rebrand.ly",
+  "rb.gy",
+  "dub.sh",
+  "dub.co",
+  "dub.link",
+]);
+
+/** "Keep each link's own domain" in the Into domain select. */
+const KEEP = "keep";
 
 export function LinkImportPage() {
-  const { org } = useCurrentOrg();
+  const { org } = useOrgLimits();
   if (!org) return <NoOrgState />;
   if (org.plan === "free")
     return (
       <>
-        <PageHeader title="Import from another service" />
+        <PageHeader title={TITLE} sub={SUB} />
         <LockedPanel
           title="Importing links is a paid feature"
           reason="Bring your links from Short.io, Bitly, Rebrandly or Dub with their short URLs unchanged. Each one keeps its own slug on your domain, which needs a paid plan."
         />
       </>
     );
-  return <ImportFlow orgId={org.id} role={org.role} />;
+  if (org.role === "viewer" || org.locked)
+    return (
+      <>
+        <PageHeader title={TITLE} sub={SUB} />
+        <LockedPanel
+          title={org.locked ? "This organization is read-only" : "Viewers can't import links"}
+          reason={
+            org.locked
+              ? "Importing adds links, and a read-only organization takes no new ones. You can still export the links it has from Links."
+              : "Ask an owner or admin of this organization to import, or to make you a member."
+          }
+        />
+      </>
+    );
+  return <ImportPage orgId={org.id} role={org.role} />;
 }
 
-/** Everything the steps hand to each other. */
+/** Everything the page knows about the chosen file. */
 interface FileState {
   name: string;
   table: string[][];
@@ -85,37 +127,47 @@ interface FileState {
 }
 
 /** An import the server already has (running, or finished and not put away)
- * comes first: it is what somebody returning to this page wants to see. */
-function ImportFlow({ orgId, role }: { orgId: string; role: OrgRole }) {
+ * takes the form's place: it is what somebody returning here wants to see. */
+function ImportPage({ orgId, role }: { orgId: string; role: OrgRole }) {
   const current = useLinkImport(orgId);
   const [switching, setSwitching] = useState(false);
   // One still uploading was cut off before its rows were all sent, and its
   // file is gone with that page: the next import replaces it.
   const job = current.data?.import;
   const live = job && job.status !== "uploading" ? job : null;
+  // A domain verified over HTTP is one whose CNAME already reaches us: links
+  // imported onto it answer at once, and there is no DNS left to switch.
+  const domains = useDomains(orgId, role === "owner" || role === "admin");
+  const servedHere = new Set(
+    (domains.data ?? [])
+      .filter((d) => d.status === "active" && d.validation !== "txt")
+      .map((d) => d.hostname),
+  );
+  const dnsDone = !!live && live.hosts.length > 0 && live.hosts.every((h) => servedHere.has(h));
 
   return (
     <>
-      <PageHeader
-        title="Import from another service"
-        sub="Your short URLs stay the same. Each link keeps its domain, its slug and where it goes."
-      />
-      {live ? (
-        <div className="flex max-w-[760px] flex-col gap-6">
-          <Stepper current={switching ? "switch" : "import"} />
-          {switching ? (
+      <PageHeader title={TITLE} sub={SUB} />
+      <div className="flex flex-col gap-6">
+        {live ? (
+          switching ? (
             <SwitchStep
               orgId={orgId}
               hosts={live.hosts}
               serviceName={serviceNameOf(live.service)}
             />
           ) : (
-            <JobView orgId={orgId} job={live} onNext={() => setSwitching(true)} />
-          )}
-        </div>
-      ) : (
-        !current.isPending && <Wizard orgId={orgId} role={role} />
-      )}
+            <JobView
+              orgId={orgId}
+              job={live}
+              onNext={dnsDone ? undefined : () => setSwitching(true)}
+            />
+          )
+        ) : (
+          !current.isPending && <ImportForm orgId={orgId} role={role} />
+        )}
+        <PastImports orgId={orgId} />
+      </div>
     </>
   );
 }
@@ -123,282 +175,588 @@ function ImportFlow({ orgId, role }: { orgId: string; role: OrgRole }) {
 const serviceNameOf = (id: string | null) =>
   IMPORT_SERVICES.find((s) => s.id === id)?.name ?? "your old service";
 
-/** From "where are your links" to sending the rows. Once they are sent the
- * server has the import, and ImportFlow shows that instead. */
-function Wizard({ orgId, role }: { orgId: string; role: OrgRole }) {
-  const [step, setStep] = useState<Step>("service");
-  const [service, setService] = useState<ImportServiceId | null>(null);
-  const [file, setFile] = useState<FileState | null>(null);
-  const [skipped, setSkipped] = useState<string[]>([]);
-  const [checked, setChecked] = useState<ImportVerdict[]>([]);
-  const [room, setRoom] = useState<number | null>(null);
-
-  const read = useMemo(() => readFile(file), [file]);
-  const rows = useMemo(() => {
-    const left = new Set(skipped);
-    return read.rows.filter((row) => !left.has(row.host));
-  }, [read.rows, skipped]);
-  // Memoised: the upload starts again whenever this list changes.
-  const ready = useMemo(() => {
-    const lines = new Set(checked.filter((v) => v.status === "ready").map((v) => v.line));
-    return rows.filter((row) => lines.has(row.line));
-  }, [rows, checked]);
-  const onChecked = useCallback((verdicts: ImportVerdict[], left: number | null) => {
-    setChecked(verdicts);
-    setRoom(left);
-  }, []);
-
-  return (
-    <div className="flex max-w-[760px] flex-col gap-6">
-      <Stepper current={step} />
-      <div>
-        {step === "service" && (
-          <ServiceStep
-            value={service}
-            onPick={(id) => {
-              setService(id);
-              setStep("file");
-            }}
-          />
-        )}
-        {step === "file" && service && (
-          <FileStep
-            service={service}
-            file={file}
-            read={read}
-            onFile={setFile}
-            onBack={() => setStep("service")}
-            onNext={() => setStep("domains")}
-          />
-        )}
-        {step === "domains" && (
-          <DomainsStep
-            orgId={orgId}
-            role={role}
-            hosts={hostsOf(read.rows)}
-            rows={read.rows}
-            serviceName={serviceNameOf(service)}
-            skipped={skipped}
-            onSkip={setSkipped}
-            onBack={() => setStep("file")}
-            onNext={() => setStep("check")}
-          />
-        )}
-        {step === "check" && (
-          <CheckStep
-            orgId={orgId}
-            rows={rows}
-            unreadable={read.unreadable}
-            onChecked={onChecked}
-            checked={checked}
-            room={room}
-            onBack={() => setStep("domains")}
-            onNext={() => setStep("import")}
-          />
-        )}
-        {step === "import" && service && (
-          <UploadStep orgId={orgId} service={service} rows={ready} />
-        )}
-      </div>
-    </div>
-  );
-}
-
 function readFile(file: FileState | null): ReadResult {
   if (!file?.map) return { rows: [], unreadable: [] };
   const body = file.hasHeader ? file.table.slice(1) : file.table;
   return readRows(body, file.map, file.hasHeader ? 2 : 1);
 }
 
-/* ---------------- the steps ---------------- */
-
-/** A real sequence, so its markers are numbers (see rdyrct-design). */
-function Stepper({ current }: { current: Step }) {
-  const at = STEPS.findIndex((step) => step.id === current);
-  return (
-    <>
-      <p className="tnum text-sm sm:hidden">
-        <span className="text-muted">
-          Step {at + 1} of {STEPS.length}:
-        </span>{" "}
-        <span className="font-semibold">{STEPS[at].label}</span>
-      </p>
-      <ol className="hidden flex-wrap items-center gap-x-2 gap-y-2 text-sm sm:flex">
-        {STEPS.map((step, index) => (
-          <li key={step.id} className="flex items-center gap-2">
-            <span
-              aria-current={index === at ? "step" : undefined}
-              className={cn(
-                "flex items-center gap-2",
-                index === at ? "font-semibold text-text" : "text-muted",
-              )}
-            >
-              <span
-                className={cn(
-                  "tnum flex size-6 items-center justify-center rounded-full text-xs",
-                  index < at && "bg-accent-2/15 text-accent-2",
-                  index === at && "bg-surface font-semibold text-text smooth-shadow-ring-xs",
-                  index > at && "bg-surface-2 text-muted",
-                )}
-              >
-                {index < at ? <Check size={13} aria-label="Done" /> : index + 1}
-              </span>
-              {step.label}
-            </span>
-            {index < STEPS.length - 1 && (
-              <ChevronRight size={14} className="text-muted/50" aria-hidden />
-            )}
-          </li>
-        ))}
-      </ol>
-    </>
-  );
-}
+/* ---------------- layout ---------------- */
 
 /** One raised card holding a list, its rows split by inset hairlines
  * (rdyrct-design: shadows, not borders). */
 const LIST_CARD =
   "flex flex-col overflow-hidden rounded-xl bg-surface smooth-shadow-ring-xs [&>*+*]:shadow-[inset_0_1px_0_var(--border)]";
 
-function Section({ title, children }: { title: string; children: ReactNode }) {
+/** A titled card with no footer strip: the page's two sections. */
+function Section({
+  title,
+  children,
+  className,
+}: {
+  title: string;
+  children: ReactNode;
+  className?: string;
+}) {
   return (
-    <section className="flex flex-col gap-4">
+    <section
+      className={cn(
+        "flex flex-col gap-4 rounded-xl bg-surface p-4 smooth-shadow-ring-xs sm:p-5",
+        className,
+      )}
+    >
       <h2 className="text-base font-semibold text-balance">{title}</h2>
       {children}
     </section>
   );
 }
 
-function Nav({ onBack, next }: { onBack?: () => void; next: ReactNode }) {
-  return (
-    <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
-      {onBack ? (
-        <Button variant="ghost" onClick={onBack}>
-          Back
-        </Button>
-      ) : (
-        <span />
-      )}
-      {next}
-    </div>
-  );
+function Nav({ next }: { next: ReactNode }) {
+  return <div className="flex flex-wrap items-center justify-end gap-3 pt-1">{next}</div>;
 }
 
-function ServiceStep({
-  value,
-  onPick,
-}: {
-  value: ImportServiceId | null;
-  onPick: (id: ImportServiceId) => void;
-}) {
+/* ---------------- the form ---------------- */
+
+/** Where the rows stand: still to be checked, being checked, or checked with
+ * a verdict per row and the room the plan has left. */
+type CheckState =
+  | { kind: "idle" }
+  | { kind: "checking"; done: number; total: number }
+  | { kind: "checked"; verdicts: ImportVerdict[]; room: number | null }
+  | { kind: "failed"; message: string };
+
+/** What the form says is wrong after Import, in the place it is wrong. */
+type FormError = { at: "file" | "domains" | "rows"; message: string } | null;
+
+function ImportForm({ orgId, role }: { orgId: string; role: OrgRole }) {
+  const { limits, activeDomains, defaultDomainId } = useOrgLimits();
+  const quota = useLinkQuotaUsage(orgId);
+  const toast = useToast();
+  const qc = useQueryClient();
+  const [service, setService] = useState<ImportServiceId>("bitly");
+  const [file, setFile] = useState<FileState | null>(null);
+  const [into, setInto] = useState<string | null>(null);
+  const [skipped, setSkipped] = useState<string[]>([]);
+  const [check, setCheck] = useState<CheckState>({ kind: "idle" });
+  const [error, setError] = useState<FormError>(null);
+  const [sending, setSending] = useState<{ done: number; total: number } | null>(null);
+  const dropRef = useRef<HTMLLabelElement>(null);
+
+  const read = useMemo(() => readFile(file), [file]);
+  const fileHosts = useMemo(() => hostsOf(read.rows), [read.rows]);
+
+  // The select's starting point: a file on the service's own short domain
+  // has to land somewhere of ours; one on the person's own domains keeps
+  // them. Their own pick wins once they make one.
+  const defaultHost =
+    activeDomains.find((d) => d.id === defaultDomainId)?.hostname ?? activeDomains[0]?.hostname;
+  const target =
+    into ?? (fileHosts.some((h) => SERVICE_HOSTS.has(h)) && defaultHost ? defaultHost : KEEP);
+  const keep = target === KEEP;
+
+  // The rows as they will be sent: moved onto the chosen domain, or on
+  // their own less any domain the person left out.
+  const rows = useMemo(() => {
+    if (!keep) return read.rows.map((row) => ({ ...row, host: target }));
+    const left = new Set(skipped);
+    return read.rows.filter((row) => !left.has(row.host));
+  }, [read.rows, keep, target, skipped]);
+
+  const canManage = role === "owner" || role === "admin";
+  const domains = useDomains(orgId, canManage);
+  const byHost = new Map((domains.data ?? []).map((d) => [d.hostname, d]));
+  // Hosts the file keeps that the org does not have ready. Members cannot
+  // list the org's domains, so for them the check says which hosts it lacks.
+  const waiting =
+    keep && canManage
+      ? fileHosts.filter((h) => !skipped.includes(h) && byHost.get(h)?.status !== "active")
+      : [];
+  const domainsKey = (domains.data ?? []).map((d) => `${d.hostname}:${d.status}`).join();
+
+  // Check as soon as there is something checkable: nothing is written, and
+  // the answer is what the Import button and the hint need to say.
+  useEffect(() => {
+    if (!rows.length || waiting.length) {
+      setCheck({ kind: "idle" });
+      return;
+    }
+    let current = true;
+    setCheck({ kind: "checking", done: 0, total: rows.length });
+    void sendChunks(`/orgs/${orgId}/link-import/check`, rows, (done) => {
+      if (current) setCheck({ kind: "checking", done, total: rows.length });
+    })
+      .then((result) => {
+        if (current) setCheck({ kind: "checked", verdicts: result.verdicts, room: result.room });
+      })
+      .catch((e: Error) => {
+        if (current)
+          setCheck({
+            kind: "failed",
+            message: e instanceof ApiError ? e.message : "Could not check the file",
+          });
+      });
+    return () => {
+      current = false;
+    };
+    // `waiting` is derived from domainsKey; listing the key keeps a new
+    // array each render from re-running the check.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [orgId, rows, waiting.length, domainsKey]);
+
+  const verdicts = check.kind === "checked" ? check.verdicts : [];
+  const readyLines = new Set(verdicts.filter((v) => v.status === "ready").map((v) => v.line));
+  const ready = rows.filter((row) => readyLines.has(row.line));
+  const exists = verdicts.filter((v) => v.status === "exists").length;
+  const room =
+    check.kind === "checked" && check.room !== null
+      ? check.room
+      : Math.max(0, limits.links - (quota.data?.count ?? 0));
+  const fits = Math.min(room, ready.length);
+  const problems = problemsOf(rows, verdicts, read.unreadable);
+
+  const choose = async (picked: File | undefined) => {
+    if (!picked) return;
+    const table = parseCsv(await picked.text());
+    setError(null);
+    setSkipped([]);
+    if (!table.length) {
+      setFile(null);
+      setError({ at: "file", message: "That file has no rows" });
+      return;
+    }
+    if (table.length - 1 > MAX_ROWS) {
+      setFile(null);
+      setError({ at: "file", message: `Over ${MAX_ROWS.toLocaleString("en-US")} links` });
+      return;
+    }
+    setFile({ name: picked.name, table, map: detectColumns(table[0]), hasHeader: true });
+  };
+
+  const submit = async () => {
+    if (!file || !read.rows.length) {
+      setError({ at: "file", message: file ? "No links in this file" : "Choose a file first" });
+      dropRef.current?.focus();
+      return;
+    }
+    if (waiting.length) {
+      setError({ at: "domains", message: "Add these domains first, or leave them out" });
+      return;
+    }
+    if (check.kind !== "checked" || !fits) {
+      setError({
+        at: "rows",
+        message:
+          check.kind === "checking"
+            ? "Still checking the file"
+            : check.kind === "failed"
+              ? check.message
+              : "None of these links can import",
+      });
+      return;
+    }
+    setError(null);
+    const send = ready.slice(0, fits);
+    setSending({ done: 0, total: send.length });
+    try {
+      await upload(orgId, service, send, (done) => setSending({ done, total: send.length }));
+      await qc.invalidateQueries({ queryKey: ["link-import", orgId] });
+    } catch (e) {
+      toast(e instanceof ApiError ? e.message : "Something went wrong", "error");
+      setSending(null);
+    }
+  };
+
+  const serviceName = SERVICE_TABS.find((s) => s.id === service)?.label ?? "CSV";
+  const info = IMPORT_SERVICES.find((s) => s.id === service);
+  const n = (v: number) => v.toLocaleString("en-US");
+
+  if (sending)
+    return (
+      <Section title="Sending your links">
+        <Progress done={sending.done} total={sending.total} label="Sent" />
+        <p className="max-w-prose text-sm text-pretty text-muted">
+          Keep this page open until they are all sent. The import then carries on without it.
+        </p>
+      </Section>
+    );
+
   return (
-    <Section title="Where are your links now?">
-      <div className={LIST_CARD}>
-        {IMPORT_SERVICES.map((service) => (
-          <button
-            key={service.id}
-            type="button"
-            onClick={() => onPick(service.id)}
-            className={cn(
-              "flex min-h-12 w-full cursor-pointer items-center justify-between gap-3 px-4 py-2.5 text-left text-sm transition-colors focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent [@media(hover:hover)]:hover:bg-surface-2/60",
-              value === service.id && "bg-surface-2/60",
-            )}
-          >
-            <span className="font-medium">{service.name}</span>
-            {value === service.id ? (
-              <Check size={16} className="text-accent-2" aria-hidden />
-            ) : (
-              <ChevronRight size={16} className="text-muted" aria-hidden />
-            )}
-          </button>
-        ))}
+    <Section title="From">
+      <div className="-mx-1 overflow-x-auto px-1">
+        <Segmented
+          label="Where your links are now"
+          items={SERVICE_TABS}
+          value={service}
+          onChange={(id) => setService(id)}
+        />
+      </div>
+
+      <DropZone
+        ref={dropRef}
+        serviceName={service === "csv" ? "CSV" : `${serviceName}`}
+        file={file}
+        found={read.rows.length}
+        error={error?.at === "file" ? error.message : undefined}
+        onFile={(f) => void choose(f)}
+      />
+      {info && (
+        <details className="group -mt-1 text-sm">
+          <summary className="w-fit cursor-pointer text-xs text-muted [@media(hover:hover)]:hover:text-text">
+            How to export from {info.name}
+          </summary>
+          <ol className="mt-2 flex max-w-prose list-decimal flex-col gap-1 pl-5 text-pretty text-muted">
+            {info.steps.map((line) => (
+              <li key={line}>{line}</li>
+            ))}
+          </ol>
+        </details>
+      )}
+      {file && !file.map && <ColumnPicker file={file} onChange={setFile} />}
+
+      {activeDomains.length > 0 && (
+        <div className="flex flex-col gap-1.5">
+          <span id="into-domain" className="text-xs text-muted">
+            Into domain
+          </span>
+          <div className="w-full sm:w-72">
+            <MenuSelect
+              label="Into domain"
+              value={target}
+              onChange={(value) => setInto(value)}
+              options={[
+                { value: KEEP, label: "Keep each link's domain" },
+                ...activeDomains.map((d) => ({ value: d.hostname, label: d.hostname })),
+              ]}
+            />
+          </div>
+        </div>
+      )}
+
+      {keep && fileHosts.length > 0 && (waiting.length > 0 || skipped.length > 0) && (
+        <div className="flex flex-col gap-2">
+          <p className="flex items-baseline justify-between gap-3 text-xs text-muted">
+            The domains in this file
+            {error?.at === "domains" && <span className="text-danger">{error.message}</span>}
+          </p>
+          <ul className={LIST_CARD}>
+            {fileHosts.map((host) => (
+              <li key={host}>
+                {SERVICE_HOSTS.has(host) && !skipped.includes(host) ? (
+                  <ServiceHostRow
+                    host={host}
+                    links={read.rows.filter((r) => r.host === host).length}
+                    hasDomains={activeDomains.length > 0}
+                    onSkip={() => setSkipped([...skipped, host])}
+                  />
+                ) : (
+                  <DomainRow
+                    orgId={orgId}
+                    host={host}
+                    links={read.rows.filter((r) => r.host === host).length}
+                    domain={byHost.get(host)}
+                    canManage={canManage}
+                    skipped={skipped.includes(host)}
+                    onSkip={(skip) =>
+                      setSkipped(skip ? [...skipped, host] : skipped.filter((h) => h !== host))
+                    }
+                  />
+                )}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {check.kind === "checked" && (problems.length > 0 || exists > 0) && (
+        <CheckSummary
+          fits={fits}
+          exists={exists}
+          left={problems.length + (ready.length - fits)}
+          problems={problems}
+        />
+      )}
+
+      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
+        <ImportHint
+          check={check}
+          room={room}
+          ready={ready.length}
+          fits={fits}
+          error={error?.at === "rows" ? error.message : undefined}
+          unlimited={limits.links >= 1_000_000}
+        />
+        <Button
+          variant="primary"
+          size="sm"
+          className="max-sm:h-11 max-sm:w-full"
+          onClick={() => void submit()}
+        >
+          {check.kind === "checked" && fits > 0
+            ? `Import ${n(fits)} ${fits === 1 ? "link" : "links"}`
+            : "Import"}
+        </Button>
       </div>
     </Section>
   );
 }
 
-function FileStep({
-  service,
-  file,
-  read,
-  onFile,
-  onBack,
-  onNext,
+/**
+ * A host that belongs to the old service (bit.ly, dub.sh): nobody else can
+ * point it here, so its links need one of the org's own domains, picked in
+ * Into domain, or a domain added first.
+ */
+function ServiceHostRow({
+  host,
+  links,
+  hasDomains,
+  onSkip,
 }: {
-  service: ImportServiceId;
-  file: FileState | null;
-  read: ReadResult;
-  onFile: (file: FileState) => void;
-  onBack: () => void;
-  onNext: () => void;
+  host: string;
+  links: number;
+  hasDomains: boolean;
+  onSkip: () => void;
 }) {
-  const toast = useToast();
-  const input = useRef<HTMLInputElement>(null);
-  const info = IMPORT_SERVICES.find((s) => s.id === service)!;
-
-  const choose = async (picked: File | undefined) => {
-    if (!picked) return;
-    const table = parseCsv(await picked.text());
-    if (!table.length) return toast("That file has no rows.", "error");
-    onFile({ name: picked.name, table, map: detectColumns(table[0]), hasHeader: true });
-  };
-
   return (
-    <Section title={`Export your links from ${info.name}`}>
-      <ol className="flex max-w-prose list-decimal flex-col gap-1.5 pl-5 text-sm text-pretty">
-        {info.steps.map((line) => (
-          <li key={line}>{line}</li>
-        ))}
-      </ol>
-      <label
-        className="flex cursor-pointer flex-col items-center gap-2 rounded-xl bg-surface px-4 py-8 text-center outline-[1.5px] -outline-offset-[1.5px] outline-border outline-dashed transition-colors focus-within:outline-2 focus-within:outline-accent focus-within:outline-solid [@media(hover:hover)]:hover:bg-surface-2/40"
-        onDragOver={(event) => event.preventDefault()}
-        onDrop={(event) => {
-          event.preventDefault();
-          void choose(event.dataTransfer.files[0]);
-        }}
-      >
-        <input
-          ref={input}
-          type="file"
-          accept=".csv,.tsv,.txt,text/csv"
-          className="sr-only"
-          onChange={(event) => void choose(event.target.files?.[0])}
-        />
-        {file ? (
-          <>
-            <Check size={20} className="text-accent-2" aria-hidden />
-            <span className="font-mono text-sm break-all">{file.name}</span>
-            <span className="tnum text-xs text-muted">
-              {read.rows.length.toLocaleString()} links found. Choose another file to replace it.
-            </span>
-          </>
+    <div className="flex flex-col gap-2 px-4 py-3">
+      <div className="flex min-h-9 flex-wrap items-center justify-between gap-3">
+        <div className="flex min-w-0 flex-col gap-0.5">
+          <span className="font-mono text-sm break-all">{host}</span>
+          <span className="tnum text-xs text-muted">
+            {links.toLocaleString("en-US")} {links === 1 ? "link" : "links"}
+          </span>
+        </div>
+        <Button variant="ghost" size="sm" onClick={onSkip}>
+          Leave these out
+        </Button>
+      </div>
+      <p className="max-w-prose text-sm text-pretty text-muted">
+        {hasDomains ? (
+          <>Links on {host} can't keep its domain. Pick one of yours under Into domain.</>
         ) : (
           <>
-            <Upload size={20} className="text-muted" aria-hidden />
-            <span className="text-sm font-semibold">Choose the CSV file</span>
-            <span className="text-xs text-muted">or drop it here</span>
+            Links on {host} can't keep its domain, and they need one of yours.{" "}
+            <Link to="/domains" className="text-accent [@media(hover:hover)]:hover:underline">
+              Add a domain
+            </Link>{" "}
+            first.
           </>
         )}
-      </label>
-      {file && !file.map && <ColumnPicker file={file} onChange={onFile} />}
-      {file?.map && file.table.length > 0 && read.rows.length === 0 && (
-        <p className="text-sm text-muted">
-          No row in this file has both a short URL and a destination. Check that it is the links
-          export.
-        </p>
-      )}
-      <Nav
-        onBack={onBack}
-        next={
-          <Button variant="primary" disabled={!read.rows.length} onClick={onNext}>
-            Continue
-          </Button>
-        }
+      </p>
+    </div>
+  );
+}
+
+/** The line beside Import: the plan's room before a file, the check's
+ * progress while it runs, and what will happen once it is done. */
+function ImportHint({
+  check,
+  room,
+  ready,
+  fits,
+  error,
+  unlimited,
+}: {
+  check: CheckState;
+  room: number;
+  ready: number;
+  fits: number;
+  error?: string;
+  unlimited: boolean;
+}) {
+  const n = (v: number) => v.toLocaleString("en-US");
+  if (error) return <span className="text-sm text-danger">{error}</span>;
+  if (check.kind === "checking")
+    return (
+      <span className="tnum text-sm text-muted">
+        Checking {n(check.done)} of {n(check.total)}. Nothing is written yet.
+      </span>
+    );
+  if (check.kind === "failed") return <span className="text-sm text-danger">{check.message}</span>;
+  if (check.kind === "checked" && fits < ready)
+    return (
+      <span className="text-sm text-pretty">
+        Your plan has room for {n(fits)} more links, so the last {n(ready - fits)} will be left out.{" "}
+        <Link to="/billing" className="text-accent [@media(hover:hover)]:hover:underline">
+          See plans
+        </Link>
+      </span>
+    );
+  if (check.kind === "checked")
+    return (
+      <span className="text-sm text-muted">
+        Clicks start from zero here. Your old service keeps the history.
+      </span>
+    );
+  if (unlimited) return <span />;
+  return (
+    <span className="tnum text-sm text-muted">
+      Your plan has room for {n(room)} more {room === 1 ? "link" : "links"}.
+    </span>
+  );
+}
+
+/** Rows that will not import, behind a count: the person mostly wants the
+ * number, and the reasons when it is not zero. */
+function CheckSummary({
+  fits,
+  exists,
+  left,
+  problems,
+}: {
+  fits: number;
+  exists: number;
+  left: number;
+  problems: { line: number; address: string; reason: string }[];
+}) {
+  return (
+    <div className="flex flex-col gap-3">
+      <Totals
+        items={[
+          { label: "Will import", value: fits },
+          { label: "Already on rdyrct", value: exists },
+          { label: "Won't import", value: left },
+        ]}
       />
+      {problems.length > 0 && (
+        <details className="text-sm">
+          <summary className="w-fit cursor-pointer text-xs text-muted [@media(hover:hover)]:hover:text-text">
+            Why{" "}
+            {problems.length === 1
+              ? "one link"
+              : `${problems.length.toLocaleString("en-US")} links`}{" "}
+            won't import
+          </summary>
+          <div className="mt-3">
+            <Problems rows={problems} />
+          </div>
+        </details>
+      )}
+    </div>
+  );
+}
+
+/** The dashed box: drop the export on it, or click to choose. */
+function DropZone({
+  ref,
+  serviceName,
+  file,
+  found,
+  error,
+  onFile,
+}: {
+  ref: Ref<HTMLLabelElement>;
+  serviceName: string;
+  file: FileState | null;
+  found: number;
+  error?: string;
+  onFile: (file: File | undefined) => void;
+}) {
+  const [over, setOver] = useState(false);
+  return (
+    <label
+      ref={ref}
+      tabIndex={-1}
+      className={cn(
+        "flex cursor-pointer flex-col items-center gap-2 rounded-xl px-4 py-7 text-center outline-[1.5px] -outline-offset-[1.5px] outline-dashed transition-[background-color,outline-color] duration-150 focus-within:outline-2 focus-within:outline-accent focus-within:outline-solid [@media(hover:hover)]:hover:bg-surface-2/40",
+        error ? "outline-danger" : "outline-border",
+        over && "bg-surface-2/60 outline-accent",
+      )}
+      onDragOver={(event) => {
+        event.preventDefault();
+        setOver(true);
+      }}
+      onDragLeave={() => setOver(false)}
+      onDrop={(event) => {
+        event.preventDefault();
+        setOver(false);
+        onFile(event.dataTransfer.files[0]);
+      }}
+    >
+      <input
+        type="file"
+        accept=".csv,.tsv,.txt,text/csv"
+        className="sr-only"
+        aria-invalid={error ? true : undefined}
+        aria-describedby={error ? "drop-error" : undefined}
+        onChange={(event) => onFile(event.target.files?.[0])}
+      />
+      {file ? (
+        <>
+          <Check size={20} className="text-accent-2" aria-hidden />
+          <span className="font-mono text-sm break-all">{file.name}</span>
+          <span className="tnum text-xs text-muted">
+            {found.toLocaleString("en-US")} {found === 1 ? "link" : "links"} found. Choose another
+            file to replace it.
+          </span>
+        </>
+      ) : (
+        <>
+          <IconUpload size={20} stroke={1.75} className="text-placeholder" aria-hidden />
+          <span className="text-sm font-semibold">
+            {serviceName === "CSV"
+              ? "Drop your CSV file here"
+              : `Drop your ${serviceName} export here`}
+          </span>
+          <span className="text-xs text-muted">
+            or <span className="text-text underline underline-offset-2">choose a file</span>. CSV,
+            up to {MAX_ROWS.toLocaleString("en-US")} links.
+          </span>
+        </>
+      )}
+      {error && (
+        <span id="drop-error" className="text-xs text-danger">
+          {error}
+        </span>
+      )}
+    </label>
+  );
+}
+
+/* ---------------- past imports ---------------- */
+
+/** Imports this org finished. Hidden until the API keeps a history (see
+ * useImportHistory), and when it has none. */
+function PastImports({ orgId }: { orgId: string }) {
+  const history = useImportHistory(orgId, true);
+  const imports = history.data?.imports ?? [];
+  if (!imports.length) return null;
+  return (
+    <Section title="Past imports">
+      <ul className="-mt-1 flex flex-col [&>*+*]:shadow-[inset_0_1px_0_var(--border)]">
+        {imports.map((item) => {
+          const total = item.imported + item.exists;
+          const skips = item.failed;
+          return (
+            <li
+              key={item.id}
+              className="grid min-h-10 grid-cols-[minmax(0,5.5rem)_1fr_auto] items-center gap-x-3 py-2 text-sm sm:grid-cols-[6rem_1fr_auto_auto]"
+            >
+              <span className="truncate font-semibold">{serviceTabName(item.service)}</span>
+              <span className="tnum truncate text-muted">
+                {total.toLocaleString("en-US")} {total === 1 ? "link" : "links"}
+                {skips ? `, ${skips.toLocaleString("en-US")} skipped` : ""}
+              </span>
+              <span className="tnum text-muted max-sm:hidden">{tableDate(item.finishedAt)}</span>
+              <span
+                className={cn(
+                  "inline-flex items-center gap-1.5 whitespace-nowrap",
+                  skips ? "text-butter" : "text-accent-2",
+                )}
+              >
+                <span aria-hidden className="size-1.5 rounded-full bg-current" />
+                {skips ? "Done with skips" : "Done"}
+              </span>
+            </li>
+          );
+        })}
+      </ul>
     </Section>
   );
 }
+
+const serviceTabName = (id: string) => SERVICE_TABS.find((s) => s.id === id)?.label ?? "CSV";
+
+/* ---------------- kept from the step-by-step page ---------------- */
 
 /** For a header we do not know: the person says which column is which. */
 function ColumnPicker({
@@ -472,77 +830,6 @@ function ColumnPicker({
         </Button>
       </div>
     </div>
-  );
-}
-
-function DomainsStep({
-  orgId,
-  role,
-  hosts,
-  rows,
-  serviceName,
-  skipped,
-  onSkip,
-  onBack,
-  onNext,
-}: {
-  orgId: string;
-  role: OrgRole;
-  hosts: string[];
-  rows: ImportRow[];
-  serviceName: string;
-  skipped: string[];
-  onSkip: (hosts: string[]) => void;
-  onBack: () => void;
-  onNext: () => void;
-}) {
-  const canManage = role === "owner" || role === "admin";
-  const domains = useDomains(orgId, canManage);
-  const byHost = new Map((domains.data ?? []).map((domain) => [domain.hostname, domain]));
-  const left = new Set(skipped);
-  // Members cannot list the org's domains, so they are not held here: the
-  // check in the next step says which hosts the org lacks.
-  const waiting = canManage ? hosts.filter((host) => !byHost.has(host) && !left.has(host)) : [];
-  const perHost = new Map<string, number>();
-  for (const row of rows) perHost.set(row.host, (perHost.get(row.host) ?? 0) + 1);
-  const count = (host: string) => perHost.get(host) ?? 0;
-
-  return (
-    <Section title="The domains your links live on">
-      <p className="max-w-prose text-sm text-pretty text-muted">
-        Each link keeps its domain, so the domain has to be on rdyrct first. Your links keep working
-        on {serviceName} until the very last step, when you switch the DNS.
-      </p>
-      <ul className={LIST_CARD}>
-        {hosts.map((host) => (
-          <li key={host}>
-            <DomainRow
-              orgId={orgId}
-              host={host}
-              links={count(host)}
-              domain={byHost.get(host)}
-              canManage={canManage}
-              skipped={left.has(host)}
-              onSkip={(skip) =>
-                onSkip(skip ? [...skipped, host] : skipped.filter((h) => h !== host))
-              }
-            />
-          </li>
-        ))}
-      </ul>
-      <Nav
-        onBack={onBack}
-        next={
-          <Button
-            variant="primary"
-            disabled={waiting.length > 0 || skipped.length === hosts.length}
-            onClick={onNext}
-          >
-            Continue
-          </Button>
-        }
-      />
-    </Section>
   );
 }
 
@@ -814,201 +1101,6 @@ function problemsOf(rows: ImportRow[], verdicts: ImportVerdict[], unreadable: Un
   ].sort((a, b) => a.line - b.line);
 }
 
-function CheckStep({
-  orgId,
-  rows,
-  unreadable,
-  checked,
-  room,
-  onChecked,
-  onBack,
-  onNext,
-}: {
-  orgId: string;
-  rows: ImportRow[];
-  unreadable: UnreadableRow[];
-  checked: ImportVerdict[];
-  room: number | null;
-  onChecked: (verdicts: ImportVerdict[], room: number | null) => void;
-  onBack: () => void;
-  onNext: () => void;
-}) {
-  const toast = useToast();
-  const [done, setDone] = useState(0);
-  const fresh = checked.length !== rows.length;
-
-  useEffect(() => {
-    if (!fresh) return;
-    let current = true;
-    void sendChunks(`/orgs/${orgId}/link-import/check`, rows, (n) => current && setDone(n))
-      .then((result) => current && onChecked(result.verdicts, result.room))
-      .catch((error: Error) =>
-        toast(error instanceof ApiError ? error.message : "Something went wrong", "error"),
-      );
-    return () => {
-      current = false;
-    };
-  }, [orgId, rows, fresh, onChecked, toast]);
-
-  if (fresh)
-    return (
-      <Section title="Checking your links">
-        <Progress done={done} total={rows.length} label="Checked" />
-        <p className="text-sm text-muted">Nothing is written yet.</p>
-      </Section>
-    );
-
-  const ready = rows.filter((row) =>
-    checked.some((verdict) => verdict.line === row.line && verdict.status === "ready"),
-  );
-  const exists = checked.filter((verdict) => verdict.status === "exists").length;
-  const problems = problemsOf(rows, checked, unreadable);
-  const fits = room === null ? ready.length : Math.min(room, ready.length);
-
-  return (
-    <Section title="Here's what will happen">
-      <Totals
-        items={[
-          { label: "Will import", value: fits },
-          { label: "Already on rdyrct", value: exists },
-          { label: "Won't import", value: problems.length + (ready.length - fits) },
-        ]}
-      />
-      {fits < ready.length && (
-        <p className="max-w-prose text-sm text-pretty">
-          Your plan has room for {fits.toLocaleString()} more links, so the last{" "}
-          {(ready.length - fits).toLocaleString()} in the file will be left out.{" "}
-          <Link to="/billing" className="text-accent hover:underline">
-            See plans
-          </Link>
-        </p>
-      )}
-      <p className="max-w-prose text-sm text-pretty text-muted">
-        Clicks start counting from zero here. Your old service keeps the history.
-      </p>
-      {ready.length > 0 && <Sample rows={ready.slice(0, 5)} total={ready.length} />}
-      <Problems rows={problems} />
-      <Nav
-        onBack={onBack}
-        next={
-          <Button variant="primary" disabled={!fits} onClick={onNext}>
-            Import {fits.toLocaleString()} {fits === 1 ? "link" : "links"}
-          </Button>
-        }
-      />
-    </Section>
-  );
-}
-
-/** A few ready rows as they will be stored: the short URL, where it goes,
- * and the UTM tags split out, the way the link editor will show them. */
-function Sample({ rows, total }: { rows: ImportRow[]; total: number }) {
-  return (
-    <div className="flex flex-col gap-2">
-      <h3 className="text-sm font-medium text-muted">
-        {total > rows.length ? `The first ${rows.length}` : "The links"}
-      </h3>
-      <ul className={cn(LIST_CARD, "sm:hidden")}>
-        {rows.map((row) => (
-          <li key={row.line} className="flex flex-col gap-1 px-4 py-2.5 text-sm">
-            <span className="font-mono text-xs break-all">{shortOf(row)}</span>
-            <span className="break-all">{stripUtmParams(row.destination)}</span>
-            <span className="text-xs text-muted">{utmTags(row).join(", ") || "No UTM tags"}</span>
-          </li>
-        ))}
-      </ul>
-      <Table className="max-sm:hidden" minWidth="min-w-[40rem]">
-        <thead>
-          <tr>
-            <Th>Link</Th>
-            <Th>UTM tags</Th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row) => {
-            const tags = utmTags(row);
-            return (
-              <tr key={row.line} className="align-top">
-                {/* Two lines: the short URL over where it goes. */}
-                <Td className="max-w-0 w-2/3">
-                  <div className="flex min-w-0 flex-col gap-0.5">
-                    <span className="font-mono text-xs font-semibold">{shortOf(row)}</span>
-                    <span className="truncate text-muted" title={row.destination}>
-                      {stripUtmParams(row.destination)}
-                    </span>
-                  </div>
-                </Td>
-                <Td className="text-muted">{tags.join(", ") || "None"}</Td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </Table>
-    </div>
-  );
-}
-
-/** A row's UTM tags as the editor will show them: "source: instagram". */
-function utmTags(row: ImportRow): string[] {
-  const utm = resolveUtm(row.destination, {});
-  return UTM_KEYS.filter(([, field]) => utm[field]).map(
-    ([param, field]) => `${param.slice(4)}: ${utm[field]}`,
-  );
-}
-
-/** Sends the rows to the server and starts the import. Only this part needs
- * the page: once it is started, JobView takes over from what the server
- * reports. */
-function UploadStep({
-  orgId,
-  service,
-  rows,
-}: {
-  orgId: string;
-  service: ImportServiceId;
-  rows: ImportRow[];
-}) {
-  const toast = useToast();
-  const qc = useQueryClient();
-  const [done, setDone] = useState(0);
-  const [failed, setFailed] = useState(false);
-  const [attempt, setAttempt] = useState(0);
-  // Each attempt creates an import, so it must run once, not once per effect
-  // run (StrictMode runs effects twice).
-  const sent = useRef(-1);
-
-  useEffect(() => {
-    if (sent.current === attempt) return;
-    sent.current = attempt;
-    setFailed(false);
-    setDone(0);
-    void upload(orgId, service, rows, setDone)
-      .then(() => qc.invalidateQueries({ queryKey: ["link-import", orgId] }))
-      .catch((error: Error) => {
-        setFailed(true);
-        toast(error instanceof ApiError ? error.message : "Something went wrong", "error");
-      });
-  }, [orgId, service, rows, attempt, qc, toast]);
-
-  return (
-    <Section title="Sending your links">
-      <Progress done={done} total={rows.length} label="Sent" />
-      <p className="max-w-prose text-sm text-pretty text-muted">
-        Keep this page open until they are all sent. The import then carries on without it.
-      </p>
-      {failed && (
-        <Nav
-          next={
-            <Button variant="primary" onClick={() => setAttempt((n) => n + 1)}>
-              Try again
-            </Button>
-          }
-        />
-      )}
-    </Section>
-  );
-}
-
 /** Creates the import, sends its rows and starts it. A second try starts a
  * new import, which replaces the one cut off. */
 async function upload(
@@ -1035,7 +1127,8 @@ function JobView({
 }: {
   orgId: string;
   job: LinkImportDTO;
-  onNext: () => void;
+  /** To the DNS step; undefined when every domain already points here. */
+  onNext?: () => void;
 }) {
   const toast = useToast();
   const qc = useQueryClient();
@@ -1078,7 +1171,9 @@ function JobView({
         ]}
       />
       <p className="max-w-prose text-sm text-pretty text-muted">
-        They answer as soon as their domain points at rdyrct, which is the next step.
+        {onNext
+          ? "They answer as soon as their domain points at rdyrct, which is the next step."
+          : "Their domain already points at rdyrct, so they answer now."}
       </p>
       <Problems
         rows={job.failures.map((row) => ({
@@ -1101,9 +1196,15 @@ function JobView({
                 </BusyContent>
               </Button>
             )}
-            <Button variant="primary" disabled={!!busy} onClick={onNext}>
-              Next: switch the DNS
-            </Button>
+            {onNext ? (
+              <Button variant="primary" disabled={!!busy} onClick={onNext}>
+                Next: switch the DNS
+              </Button>
+            ) : (
+              <Link to="/links" className={buttonClass({ variant: "primary" })}>
+                Go to your links
+              </Link>
+            )}
           </div>
         }
       />

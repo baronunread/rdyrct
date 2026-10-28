@@ -10,7 +10,7 @@ import { ShortAddress } from "./short-address";
 import { Menu, MenuItem, MenuSeparator } from "../ui/menu";
 import { CopyButton } from "../ui/copy-button";
 import { copyToClipboard } from "../lib/clipboard";
-import { shortDate } from "../lib/dates";
+import { tableDate } from "../lib/links-data";
 import { Skeleton, SkeletonStatus } from "../ui/skeleton";
 import { Tooltip } from "../ui/tooltip";
 import { ConfirmDialog } from "../ui/confirm-dialog";
@@ -31,12 +31,15 @@ function timeLeft(expiresAt: number): string {
 
 function AliasRow({
   address,
+  spark,
   onKeepForever,
   onRemove,
   onPromote,
   pending,
 }: {
   address: AddressDTO;
+  /** Whether the table draws its "Last 14 days" column. */
+  spark: boolean;
   onKeepForever: () => void;
   onRemove: () => void;
   onPromote: () => void;
@@ -46,9 +49,10 @@ function AliasRow({
   const isTemp = address.kind === "temp_alias";
 
   return (
-    // The link's own five columns, so an alias lines up under its link:
-    // address over what kind of alias it is, the shared destination, its
-    // clicks (a week's, said so), when it was made, and its menu.
+    // The link's own columns, so an alias lines up under its link: the
+    // checkbox column left empty (aliases go with their link), address over
+    // what kind of alias it is, the shared destination, its clicks (a
+    // week's, said so), when it was made, and its menu.
     <m.tr
       className="bg-surface-2/40"
       initial={{ opacity: 0, y: -4 }}
@@ -56,10 +60,11 @@ function AliasRow({
       exit={{ opacity: 0, y: -2, transition: { duration: 0.15 } }}
       transition={{ duration: 0.2, ease: "easeOut" }}
     >
-      <Td className="py-2">
-        <div className="flex min-w-0 items-center gap-2">
-          {/* Under the link's chevron: a rule that ties the row to it. */}
-          <span aria-hidden className="flex w-6 shrink-0 justify-center self-stretch">
+      <Td className="hidden pr-0 sm:table-cell" />
+      <Td className="py-2 max-sm:pl-3">
+        <div className="flex min-w-0 items-center gap-3">
+          {/* Under the link's QR thumbnail: a rule that ties the row to it. */}
+          <span aria-hidden className="flex w-8 shrink-0 justify-center self-stretch sm:w-7">
             <span className="w-px bg-border" />
           </span>
           <div className="flex min-w-0 flex-col gap-0.5">
@@ -93,6 +98,7 @@ function AliasRow({
         </div>
       </Td>
       <Td className="hidden py-2 text-xs text-muted lg:table-cell">Same destination</Td>
+      {spark && <Td className="hidden xl:table-cell" />}
       <Td className="py-2 text-end">
         <span className="tnum block font-semibold">
           {address.recentClicks.toLocaleString("en-US")}
@@ -100,9 +106,9 @@ function AliasRow({
         <span className="block text-xs text-muted">7 days</span>
       </Td>
       <Td className="hidden py-2 text-xs whitespace-nowrap text-muted sm:table-cell">
-        {shortDate(address.createdAt)}
+        {tableDate(address.createdAt)}
       </Td>
-      <Td className="py-2">
+      <Td className="py-2 pr-2 pl-0">
         <Menu
           align="end"
           label={`Actions for ${address.slug}`}
@@ -134,7 +140,15 @@ function AliasRow({
 
 /** Expanded-row "thread" of a link's non-primary addresses, rendered as
  * regular table rows so they share the main table's columns and height. See #38. */
-export function AliasThread({ orgId, link }: { orgId: string; link: LinkDTO }) {
+export function AliasThread({
+  orgId,
+  link,
+  spark,
+}: {
+  orgId: string;
+  link: LinkDTO;
+  spark: boolean;
+}) {
   const addresses = useAddresses(orgId, link.id);
   const { keepForever, remove, promote } = useAddressMutations(orgId, link.id);
   const toast = useToast();
@@ -143,7 +157,8 @@ export function AliasThread({ orgId, link }: { orgId: string; link: LinkDTO }) {
   if (addresses.isLoading)
     return (
       // One cell per column the table draws at this width: Link, Clicks and
-      // the menu always, Created from sm and Destination from lg. A span
+      // the menu always, the checkbox and Created from sm, Destination from
+      // lg and Last 14 days from xl when the table has it. A span
       // asking for a column the table does not have makes the browser add
       // one, and the header jumps while the aliases load.
       <tr>
@@ -153,7 +168,9 @@ export function AliasThread({ orgId, link }: { orgId: string; link: LinkDTO }) {
           </SkeletonStatus>
         </Td>
         <Td className="hidden bg-surface-2/40 sm:table-cell" />
+        <Td className="hidden bg-surface-2/40 sm:table-cell" />
         <Td className="hidden bg-surface-2/40 lg:table-cell" />
+        {spark && <Td className="hidden bg-surface-2/40 xl:table-cell" />}
       </tr>
     );
 
@@ -170,6 +187,7 @@ export function AliasThread({ orgId, link }: { orgId: string; link: LinkDTO }) {
         <AliasRow
           key={address.id}
           address={address}
+          spark={spark}
           pending={pending}
           onKeepForever={() =>
             keepForever.mutate(address.id, {

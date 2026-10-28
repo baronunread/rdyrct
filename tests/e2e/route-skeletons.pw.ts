@@ -119,7 +119,7 @@ test("Members keeps invite controls out until the current user arrives", async (
     page,
     "/members",
     "members-page-skeleton",
-    page.getByRole("button", { name: "Invite people" }),
+    page.getByRole("button", { name: "Invite", exact: true }),
   );
 });
 
@@ -182,7 +182,9 @@ test("Admin routes show their own skeletons while their data is delayed", async 
   );
 
   for (const route of [
-    { path: "/admin", api: "/api/admin/usage", heading: "Platform usage" },
+    // One visible title, "Platform", over the tabs; each section names
+    // itself in a heading for screen readers.
+    { path: "/admin", api: "/api/admin/usage", heading: "Usage" },
     { path: "/admin/links", api: "/api/admin/links", heading: "Links" },
     { path: "/admin/orgs", api: "/api/admin/orgs", heading: "Organizations" },
     { path: "/admin/users", api: "/api/admin/users", heading: "Users" },
@@ -211,7 +213,6 @@ test("Admin routes show their own skeletons while their data is delayed", async 
     await expect(page.getByRole("heading", { name: route.heading })).toBeVisible();
     await expect(page.getByRole("status")).toHaveCount(0);
     // Calls to Google Web Risk, against the site-wide daily cap.
-    if (route.path === "/admin")
-      await expect(page.getByText("Google lookups · today")).toBeVisible();
+    if (route.path === "/admin") await expect(page.getByText("Lookups today")).toBeVisible();
   }
 });

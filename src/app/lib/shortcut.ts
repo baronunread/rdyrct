@@ -13,3 +13,10 @@ export function isShortcut(e: KeyboardEvent, key: string): boolean {
   const taken = [e.defaultPrevented, e.metaKey, e.ctrlKey, e.altKey].some(Boolean);
   return !taken && e.key.toLowerCase() === key && !typingIn(e.target);
 }
+
+/** Opens ⌘K the way its own shortcut does: from a button, a menu item, the
+ * 404 page. Here rather than beside the palette so a caller does not pull
+ * the palette's code in with it. */
+export function openCommandMenu() {
+  document.dispatchEvent(new KeyboardEvent("keydown", { key: "k", metaKey: true, ctrlKey: true }));
+}

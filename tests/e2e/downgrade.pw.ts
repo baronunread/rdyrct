@@ -76,11 +76,11 @@ test("losing Pro locks the extra org, says why, and lets the owner pick which on
 
   // The locked org is still in the switcher, marked, rather than gone.
   await page.getByTitle("Switch organization").click();
-  await expect(page.getByRole("menuitem", { name: /Second org/ })).toContainText("locked");
+  await expect(page.getByRole("menuitem", { name: /Second org/ })).toContainText("Read-only");
   await page.keyboard.press("Escape");
 
   // And the choice is a real one: keeping this org active frees the other.
-  await page.getByRole("button", { name: "Use this one" }).click();
+  await page.getByRole("button", { name: "Use this one instead" }).click();
   await expect(page.getByText(/is active again/)).toBeVisible();
   await expect(readOnly).toBeHidden();
   await expect(page.getByRole("button", { name: "New link" }).first()).toBeVisible();
@@ -135,9 +135,11 @@ test("losing a paid plan locks the custom domain, keeps it redirecting, and says
   // The domain is still listed. Hiding it behind an upgrade pitch is how an
   // owner concludes we deleted it.
   await expect(page.getByText(hostname)).toBeVisible({ timeout: 15_000 });
-  await expect(page.getByText("locked", { exact: true })).toBeVisible();
+  // Its status says the day it stops, and the line under it until when it
+  // still redirects. No second card repeats the notice above the page.
+  await expect(page.getByText(/^Stops [A-Z][a-z]{2} \d+$/)).toBeVisible();
   await expect(page.getByText(/Still redirecting until/)).toBeVisible();
-  await expect(page.getByRole("heading", { name: /custom domains are locked/i })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /custom domains are locked/i })).toHaveCount(0);
 
   // The row, the KV entry and the Cloudflare hostname all stay.
   const [domain] = await queryRows<{ locked_at: number | null; cf_hostname_id: string | null }>(
@@ -160,15 +162,15 @@ test("losing a paid plan locks the custom domain, keeps it redirecting, and says
   expect(await verdict()).toBeGreaterThan(Date.now());
 
   // And the banner names what is over, with a route out: one line of facts
-  // (one custom domain against none on Free, and when they stop), and the
-  // note under it.
+  // (the day the domain stops, never "Custom domains 1 of 0"), and the note
+  // under it.
   await expect(page.getByText("Over the Free plan", { exact: true })).toBeVisible();
   const fact = (label: string) =>
     page.locator("dl > div").filter({ has: page.getByText(label, { exact: true }) });
-  await expect(fact("Custom domains").getByRole("definition")).toHaveText("1 of 0");
-  await expect(fact("Domains").getByRole("definition")).toHaveText(/^stop /);
-  await expect(page.getByText(/Your custom domains keep redirecting until/)).toBeVisible();
-  await expect(page.getByRole("link", { name: "Upgrade to keep them" })).toBeVisible();
+  await expect(fact("Custom domains")).toHaveCount(0);
+  await expect(fact("Domain").getByRole("definition")).toHaveText(/^stops /);
+  await expect(page.getByRole("link", { name: "See plans" }).first()).toBeVisible();
+  await expect(page.getByText(/every link still works/)).toBeVisible();
 });
 
 test("losing seats demotes the newest members to viewer, and says so", async ({
@@ -184,11 +186,9 @@ test("losing seats demotes the newest members to viewer, and says so", async ({
   const guests = [];
   for (const prefix of ["seat-a", "seat-b", "seat-c"]) {
     await page.goto("/members");
-    await page.getByRole("button", { name: "Invite people" }).click();
-    await page
-      .getByRole("dialog", { name: "Invite people" })
-      .getByRole("button", { name: "Create invite link" })
-      .click();
+    // The chevron beside Invite makes a link for a role without the dialog.
+    await page.getByRole("button", { name: "More ways to invite" }).click();
+    await page.getByRole("menuitem", { name: "Member", exact: true }).click();
     // The click only starts the request: poll until the row exists rather than
     // reading straight after it (this read raced the write on a CI shard).
     // The previous seat's invite was spent and deleted, so any row is this one.

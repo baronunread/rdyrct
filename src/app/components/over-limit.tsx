@@ -30,11 +30,10 @@ import { useToast } from "../ui/toast";
 import { buttonClass } from "../ui/button-class";
 import { cn } from "../ui/cn";
 import { useCurrentOrg } from "../lib/current-org";
-import { useClickUsage } from "../lib/hooks";
+import { useClickUsage, useDomains } from "../lib/hooks";
 import { clickCapNotice } from "@/shared/click-usage";
 import { SUPPORT_EMAIL } from "@/shared/support";
-import { graceLabel, graceRunning } from "../lib/grace";
-import { shortDate } from "../lib/dates";
+import { graceRunning } from "../lib/grace";
 import {
   OVER_LIMIT_KEYS,
   PLAN_LIMITS,
@@ -68,6 +67,7 @@ export function OverLimitBanner() {
   if (!org) return null;
   if (org.locked) return <LockedOrgNotice org={org} />;
   if (!isOverLimit(org.over)) return null;
+  if (domainsStopped(org)) return <DomainStoppedNotice org={org} />;
   const facts = overFacts(org);
   // The month's clicks join the same line rather than a second banner.
   if (clicks?.reached) facts.push({ label: "Clicks counted", value: clicks.figure, over: true });
@@ -75,8 +75,40 @@ export function OverLimitBanner() {
     <Notice
       title={`Over the ${PLAN_NAMES[org.plan]} plan`}
       facts={facts}
-      action={<BillingLink />}
-      note={`Nothing was deleted. ${overLimitAdvice(org)}`}
+      action={<BillingLink primary />}
+      note={overLimitAdvice(org)}
+    />
+  );
+}
+
+/** The grace period ran out and the custom domains stopped answering. That
+ * is no longer "more than you pay for": links are broken, so it says so in
+ * the danger colour and leads with the fix. */
+function domainsStopped(org: UserOrg): boolean {
+  return org.over.domains !== undefined && !!org.graceEndsAt && !graceRunning(org.graceEndsAt);
+}
+
+function DomainStoppedNotice({ org }: { org: UserOrg }) {
+  const domains = useDomains(org.id);
+  const stopped = (domains.data ?? []).filter((d) => d.lockedAt !== null);
+  const one = stopped.length === 1;
+  const facts: Fact[] = [];
+  if (stopped.length > 0)
+    facts.push({
+      label: one ? "Domain" : "Domains",
+      value: one ? stopped[0].hostname : String(stopped.length),
+      mono: one,
+    });
+  if (org.graceEndsAt) facts.push({ label: "Since", value: monthDay(org.graceEndsAt) });
+  facts.push({ label: "Its links", value: "answer “not found”", over: true });
+  // Links or members over the cap too: same line, never a second banner.
+  for (const fact of overFacts(org)) if (fact.over) facts.push(fact);
+  return (
+    <Notice
+      tone="bad"
+      title={one || stopped.length === 0 ? "A domain stopped working" : "Domains stopped working"}
+      facts={facts}
+      action={<BillingLink label="Upgrade to bring it back" primary />}
     />
   );
 }
@@ -92,18 +124,22 @@ const PLAN_NAMES = {
  * deadline when there is one. */
 function overFacts(org: UserOrg): Fact[] {
   const limits = PLAN_LIMITS[org.plan];
+  // Domains are left out of the counts: "Custom domains 1 of 0" reads as
+  // a glitch. What matters about them is the day they stop.
   const facts: Fact[] = OVER_LIMIT_KEYS.flatMap((key) => {
     const count = org.over[key];
-    if (count === undefined) return [];
+    if (count === undefined || key === "domains") return [];
     return [{ label: FACT_LABELS[key], value: `${count} of ${limits[key]}`, over: true }];
   });
-  if (org.over.domains !== undefined && org.graceEndsAt)
+  const domains = org.over.domains;
+  if (domains !== undefined && org.graceEndsAt) {
+    const one = domains - limits.domains <= 1;
+    const day = monthDay(org.graceEndsAt);
     facts.push({
-      label: "Domains",
-      value: graceRunning(org.graceEndsAt)
-        ? `stop ${new Date(org.graceEndsAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}`
-        : "stopped",
+      label: one ? "Domain" : "Domains",
+      value: graceRunning(org.graceEndsAt) ? `${one ? "stops" : "stop"} ${day}` : "stopped",
     });
+  }
   return facts;
 }
 
@@ -161,7 +197,7 @@ function LockedOrgNotice({ org }: { org: UserOrg }) {
               disabled={keepActive.isPending}
               onClick={() => keepActive.mutate()}
             >
-              <BusyContent busy={keepActive.isPending}>Use this one</BusyContent>
+              <BusyContent busy={keepActive.isPending}>Use this one instead</BusyContent>
             </Button>
           )}
           <BillingLink label="Upgrade to Pro" primary />
@@ -179,11 +215,21 @@ function LockedOrgNotice({ org }: { org: UserOrg }) {
  * deadline, and only while it is still ahead.
  */
 function overLimitAdvice(org: UserOrg): string {
-  if (org.over.domains !== undefined)
-    return graceRunning(org.graceEndsAt)
-      ? `Your custom domains keep redirecting until ${shortDate(org.graceEndsAt!)} (${graceLabel(org.graceEndsAt!)}), then they stop.`
-      : "Your custom domains have stopped redirecting. Upgrading brings them straight back.";
-  return "Everything you have keeps working. You can delete what you no longer need, or upgrade to keep it all.";
+  const blocked = [
+    org.over.links !== undefined && "links",
+    org.over.members !== undefined && "members",
+  ].filter(Boolean);
+  // The domain's deadline is already a fact on the line above; saying it
+  // again here only made the note three lines long.
+  const parts = ["Nothing was deleted and every link still works."];
+  if (blocked.length > 0)
+    parts.push(`You can't add ${blocked.join(" or ")} until you upgrade or make room.`);
+  return parts.join(" ");
+}
+
+/** "Nov 6": a deadline this close needs no year. */
+function monthDay(at: number): string {
+  return new Date(at).toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
 /**
@@ -244,6 +290,8 @@ interface Fact {
   value: string;
   /** Past the cap: set in the danger colour. */
   over?: boolean;
+  /** An identifier (a hostname): set in mono. */
+  mono?: boolean;
 }
 
 /**
@@ -261,7 +309,7 @@ function Notice({
   title: string;
   facts: Fact[];
   action?: ReactNode;
-  note: ReactNode;
+  note?: ReactNode;
   tone?: "warn" | "bad";
 }) {
   return (
@@ -287,13 +335,21 @@ function Notice({
           {facts.map((f) => (
             <div key={f.label} className="flex gap-1.5">
               <dt className="text-muted">{f.label}</dt>
-              <dd className={cn("tnum font-semibold", f.over && "text-danger")}>{f.value}</dd>
+              <dd
+                className={cn(
+                  "tnum font-semibold",
+                  f.over && "text-danger",
+                  f.mono && "font-mono text-[0.8125rem] font-normal",
+                )}
+              >
+                {f.value}
+              </dd>
             </div>
           ))}
         </dl>
         {action && <div className="ml-auto">{action}</div>}
       </div>
-      <p className="max-w-prose px-1 text-xs text-pretty text-muted">{note}</p>
+      {note && <p className="max-w-prose px-1 text-xs text-pretty text-muted">{note}</p>}
     </div>
   );
 }

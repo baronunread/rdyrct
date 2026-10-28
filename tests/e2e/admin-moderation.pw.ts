@@ -76,7 +76,8 @@ test("an admin can find a link by destination and suspend it", async ({ page }) 
   // rather than as a button of its own on every row.
   await row.getByRole("button", { name: `Actions for ${slug}` }).click();
   await page.getByRole("menuitem", { name: "Suspend link" }).click();
-  const dialog = page.getByRole("dialog", { name: "Suspend this link" });
+  // The title names the link, so nobody suspends the wrong one.
+  const dialog = page.getByRole("dialog", { name: new RegExp(`^Suspend .*/${slug}\\?$`) });
   await expect(dialog).toBeVisible();
   // The real promise (#101): KV reaches every location within a minute, not
   // at once.
@@ -128,7 +129,13 @@ test("an admin can find a link by destination and suspend it", async ({ page }) 
     .getByRole("link", { name: "Audit log" })
     .click();
   await expect(page.getByText("link.suspend").first()).toBeVisible();
-  await expect(page.getByText(/ticket 412/).first()).toBeVisible();
+  // The row says who, what and to whom; the reason opens from the row.
+  await page
+    .getByRole("button", { name: `Open entry: link.suspend, /${slug}` })
+    .first()
+    .click();
+  const entry = page.getByRole("dialog", { name: "Link suspended" });
+  await expect(entry.getByText(/ticket 412/)).toBeVisible();
 });
 
 test("the Links tab is invisible and unreachable for a normal user", async ({ page }) => {
@@ -210,7 +217,10 @@ test("an admin sees a suspended org and restores its links in bulk", async ({ pa
   await expect(page.getByText("suspended").first()).toBeVisible({ timeout: 10_000 });
 
   await page.goto(`/admin/links?org=${link.org_id}`);
-  await page.getByLabel("Filter by status").selectOption("Suspended");
+  await page
+    .getByRole("group", { name: "Link lists" })
+    .getByRole("button", { name: "Suspended", exact: true })
+    .click();
   await page.getByRole("checkbox", { name: "Select all links on this page" }).check();
   await page.getByRole("button", { name: "Restore selected" }).click();
   await expect(page.getByText(/1 link restored/)).toBeVisible({ timeout: 10_000 });
@@ -254,7 +264,7 @@ test("a visitor reports a link and an admin sees and dismisses the report", asyn
   // Scoped to the view switch: the owned table has a Reports column too.
   await page
     .getByRole("group", { name: "Link lists" })
-    .getByRole("button", { name: "Reports", exact: true })
+    .getByRole("button", { name: "Open reports", exact: true })
     .click();
   const row = page.getByRole("row").filter({ hasText: slug });
   await expect(row).toBeVisible({ timeout: 10_000 });

@@ -69,7 +69,7 @@ test("a redirect's click shows on /analytics and /links through the rollups (#26
   await page.goto("/analytics");
   // The stats card's first figure: its label, then the number.
   const total = page.locator("dl > div").filter({
-    has: page.getByRole("term").getByText("Total clicks", { exact: true }),
+    has: page.getByRole("term").getByText("Clicks", { exact: true }),
   });
   await expect(total.getByRole("definition").locator("span").first()).toHaveText("1");
   await expect(page.getByText("Today (UTC)")).toHaveCount(0);

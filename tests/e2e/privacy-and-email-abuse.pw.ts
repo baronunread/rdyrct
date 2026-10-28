@@ -130,6 +130,6 @@ test("a throttled verification email still lands on the code screen (#50)", asyn
     timeout: 20_000,
   });
   // The code screen, which is where the resend button is, not back at the form.
-  await expect(page.getByRole("heading", { name: "Enter your code" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Resend code" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Check your email" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Send a new code" })).toBeVisible();
 });

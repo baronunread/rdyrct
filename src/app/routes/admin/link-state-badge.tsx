@@ -1,6 +1,12 @@
 import { Tooltip } from "../../ui/tooltip";
 import { StateLabel, type StateTone } from "./admin-kit";
-import { linkState, linkStateDetail, type LinkState, type StateInput } from "./link-state";
+import {
+  linkState,
+  linkStateDetail,
+  linkStateWord,
+  type LinkState,
+  type StateInput,
+} from "./link-state";
 
 /** Danger for what stops or condemns a link, butter for caution, mint for a
  * checked link, muted for one nobody has looked at. The word always rides
@@ -8,6 +14,7 @@ import { linkState, linkStateDetail, type LinkState, type StateInput } from "./l
 const TONE = {
   blocked: "bad",
   suspended: "bad",
+  reported: "warn",
   warning: "warn",
   risky: "warn",
   clean: "ok",
@@ -27,7 +34,7 @@ export function LinkStateBadge({ link }: { link: StateInput }) {
         aria-label={detail}
         className="cursor-default rounded-md focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
       >
-        <StateLabel tone={TONE[state]}>{state}</StateLabel>
+        <StateLabel tone={TONE[state]}>{linkStateWord(link)}</StateLabel>
       </button>
     </Tooltip>
   );
