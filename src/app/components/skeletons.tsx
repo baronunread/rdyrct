@@ -1189,12 +1189,20 @@ function McpTabSkeleton() {
   );
 }
 
+/** The QR editor's rows: label width and row height (Colours holds two
+ * lines of controls). */
+const qrEditorRows = [
+  { label: "w-10", h: "h-16" },
+  { label: "w-14", h: "h-16" },
+  { label: "w-16", h: "h-28" },
+  { label: "w-12", h: "h-16" },
+];
+
 /**
  * /organization, as its owner sees it: the name row (field and Save), the
- * default domain and the ID, the QR code defaults group, and the delete
- * group outlined in the danger colour. The QR group's body is one line here
- * (the free plan's prompt); a paid plan's editor is taller, and it is the
- * second last thing on the page.
+ * default domain and the ID, the QR code defaults editor, and the delete
+ * group outlined in the danger colour. Every plan shows the editor; a free
+ * one adds a one-line strip under it, the second last thing on the page.
  */
 export function OrganizationSkeleton() {
   return (
@@ -1217,21 +1225,20 @@ export function OrganizationSkeleton() {
         </RowSkeleton>
       </GroupSkeleton>
       <GroupSkeleton title="w-28" hint="w-80">
-        {/* LockedPanel, bare: the lock, two lines, and its link to Billing */}
-        <div className="flex flex-wrap items-center gap-x-6 gap-y-3 px-4 py-3.5">
-          <div className="flex min-w-0 flex-1 basis-72 gap-3">
-            <Skeleton className="size-8 shrink-0 rounded-lg" />
-            <div className="min-w-0 flex-1">
-              <span className="flex h-10 items-center sm:h-5">
-                <Skeleton className="h-3 w-56 max-w-full" />
-              </span>
-              <span className="mt-0.5 flex h-10 items-center sm:h-5">
-                <Skeleton className="h-3 w-80 max-w-full" />
-              </span>
-            </div>
+        {/* The QR editor every plan shows (inert on a free one): Dots,
+            Corners, Colours and Logo rows, the preview beside them (on a
+            phone, above). */}
+        <div className="grid overflow-hidden rounded-xl sm:grid-cols-[minmax(0,1fr)_220px]">
+          <div className="flex min-w-0 flex-col px-4 py-1 max-sm:order-last">
+            {qrEditorRows.map(({ label, h }) => (
+              <div key={label} className={cn("flex items-center justify-between gap-4", h)}>
+                <Skeleton className={cn("h-3", label)} />
+                <Skeleton className="h-9 w-40 rounded-lg" />
+              </div>
+            ))}
           </div>
-          <div className="max-sm:ps-11">
-            <SmallButtonSkeleton className="w-28" />
+          <div className="flex justify-center bg-bg p-4">
+            <Skeleton className="size-[170px] rounded-[14px]" />
           </div>
         </div>
       </GroupSkeleton>
