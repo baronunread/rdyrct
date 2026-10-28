@@ -100,7 +100,12 @@ export function Dialog({
                         // The way out travels less and ends sooner than the way
                         // in: the dialog's job is done, so it should not hold
                         // the page up.
-                        exit={{ opacity: 0, scale: 0.98, transition: { duration: 0.15 } }}
+                        exit={{
+                          opacity: 0,
+                          scale: 0.98,
+                          filter: "blur(4px)",
+                          transition: { duration: 0.15 },
+                        }}
                         transition={{ duration: 0.2 }}
                       />
                     )

@@ -95,7 +95,7 @@ function AliasRow({
           label={`Actions for ${address.slug}`}
           trigger={
             <div className="flex justify-end">
-              <span className="rounded p-1.5 text-muted transition-transform duration-150 active:scale-[0.96] hover:bg-surface-2 hover:text-text">
+              <span className="rounded p-1.5 text-muted transition-[scale,background-color,color] duration-200 ease-out active:scale-[0.96] [@media(hover:hover)]:hover:bg-surface-2 [@media(hover:hover)]:hover:text-text">
                 <Ellipsis size={15} />
               </span>
             </div>

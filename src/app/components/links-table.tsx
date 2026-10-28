@@ -62,7 +62,7 @@ function LinkCell({
           onClick={onToggle}
           aria-label={`${isExpanded ? "Hide" : "Show"} ${hidden} alias${hidden === 1 ? "" : "es"}`}
           aria-expanded={isExpanded}
-          className="flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-md text-muted active:scale-[0.96] [@media(hover:hover)]:hover:bg-surface-2 [@media(hover:hover)]:hover:text-text"
+          className="flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-md text-muted transition-[scale,background-color,color] duration-200 ease-out active:scale-[0.96] [@media(hover:hover)]:hover:bg-surface-2 [@media(hover:hover)]:hover:text-text"
         >
           <ChevronRight
             size={14}
@@ -141,7 +141,7 @@ function RowMenu({ link, actions }: { link: LinkDTO; actions: RowActions }) {
       label={`Actions for ${link.slug}`}
       trigger={
         <div className="flex justify-end">
-          <span className="grid size-8 place-items-center rounded-md text-muted active:scale-[0.96] [@media(hover:hover)]:hover:bg-surface-2 [@media(hover:hover)]:hover:text-text">
+          <span className="grid size-8 place-items-center rounded-md text-muted transition-[scale,background-color,color] duration-200 ease-out active:scale-[0.96] [@media(hover:hover)]:hover:bg-surface-2 [@media(hover:hover)]:hover:text-text">
             <Ellipsis size={16} />
           </span>
         </div>

@@ -552,7 +552,8 @@ function DomainsBlocked({ blockedBy }: { blockedBy: ReturnType<typeof domainsBlo
 function statusSlideVariants(tabVisible: boolean) {
   return {
     initial: tabVisible ? { x: 16, opacity: 0 } : { x: 0, opacity: 1 },
-    exit: tabVisible ? { x: -16, opacity: 0 } : { x: 0, opacity: 1 },
+    // The way out travels half as far and blurs, so the new status leads.
+    exit: tabVisible ? { x: -8, opacity: 0, filter: "blur(4px)" } : { x: 0, opacity: 1 },
     duration: tabVisible ? 0.2 : 0,
   };
 }

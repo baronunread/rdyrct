@@ -158,7 +158,7 @@ function PersonCell({ title, detail }: { title: string; detail: string }) {
 
 const menuTrigger = (
   <div className="flex justify-end">
-    <span className="grid size-8 place-items-center rounded-md text-muted active:scale-[0.96] [@media(hover:hover)]:hover:bg-surface-2 [@media(hover:hover)]:hover:text-text">
+    <span className="grid size-8 place-items-center rounded-md text-muted transition-[scale,background-color,color] duration-200 ease-out active:scale-[0.96] [@media(hover:hover)]:hover:bg-surface-2 [@media(hover:hover)]:hover:text-text">
       <Ellipsis size={16} />
     </span>
   </div>
