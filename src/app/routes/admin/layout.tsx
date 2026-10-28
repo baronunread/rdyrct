@@ -12,7 +12,7 @@
  */
 import { Suspense } from "react";
 import { Link, Outlet, useLocation } from "@tanstack/react-router";
-import { RouteSkeleton } from "../../components/skeletons";
+import { AdminSectionSkeleton } from "../../components/skeletons";
 import { useConfig } from "../../lib/hooks";
 import { Segmented } from "../../ui/segmented";
 import { useUsageRange, RANGE_ITEMS } from "./usage-range";
@@ -86,7 +86,7 @@ export function AdminLayout() {
           tab whose chunk hasn't downloaded yet suspends past this nav too,
           so switching tabs used to blank the nav bar itself, not just the
           content below it. */}
-      <Suspense fallback={<RouteSkeleton />}>
+      <Suspense fallback={<AdminSectionSkeleton />}>
         <Outlet />
       </Suspense>
     </div>

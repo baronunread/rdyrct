@@ -23,7 +23,11 @@ import { hostnameSchema } from "../lib/schemas";
 import { PageHeader } from "../ui/misc";
 import { SettingsGroup } from "../ui/settings-rows";
 import { BusyContent } from "../ui/spinner";
-import { DomainsPageSkeleton, DomainsSkeleton, HeaderSkeleton } from "../components/skeletons";
+import {
+  DomainsHeaderSkeleton,
+  DomainsPageSkeleton,
+  DomainsSkeleton,
+} from "../components/skeletons";
 import { NoOrgState } from "../components/no-org";
 import { LockedPanel } from "../components/over-limit";
 import { domainsBlockedBy } from "../lib/org-limits";
@@ -87,7 +91,7 @@ export function DomainsPage() {
     return org && canManageDomains(false, org.role) && PLAN_LIMITS[org.plan].domains > 0 ? (
       <DomainsPageSkeleton />
     ) : (
-      <HeaderSkeleton />
+      <DomainsHeaderSkeleton />
     );
   if (!org) return <NoOrgState />;
 
