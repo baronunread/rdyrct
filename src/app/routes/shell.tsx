@@ -40,7 +40,6 @@ import { PLAN_LIMITS, type User, type UserOrg } from "@/shared/types";
 import posthog from "../lib/posthog";
 import { FUNNEL } from "../lib/funnel";
 import { Logo, LogoMark } from "../ui/logo";
-import { IconButton } from "../ui/button";
 import { Tooltip, TooltipGroup } from "../ui/tooltip";
 import { cn } from "../ui/cn";
 import {
@@ -214,46 +213,64 @@ function NavItem({
   );
 }
 
+/** "[" as a key, for the fold tooltips. */
+const foldKey = (
+  <kbd className="rounded px-1 font-mono text-2xs text-muted smooth-shadow-ring-xs">[</kbd>
+);
+
 /**
- * The top of the sidebar: the mark, which folds and unfolds it, and search.
- * Pointing at the mark turns it into the fold or unfold icon (the icon swap
- * from the interfaces.dev cheat sheet: scale, blur, fade), so it says what a
- * click will do before the click.
+ * The top of the sidebar, as ChatGPT has it. Open: the mark goes to the
+ * dashboard, the convention people bring with them, and the fold button sits
+ * on the right. Folded: the mark is all that is left, and pointing at it
+ * turns it into the unfold button (the icon swap from the interfaces.dev
+ * cheat sheet: scale, blur, fade).
  */
 function SidebarTop({ collapsed }: { collapsed: boolean }) {
-  const label = collapsed ? "Expand sidebar" : "Collapse sidebar";
-  const Icon = collapsed ? PanelLeftOpen : PanelLeftClose;
   return (
     <div className="hidden h-14 items-center gap-1 px-3 md:flex">
-      <Tooltip
-        grouped
-        side="right"
-        content={
-          <span className="flex items-center gap-2">
-            {label}
-            <kbd className="rounded px-1 font-mono text-2xs text-muted smooth-shadow-ring-xs">
-              [
-            </kbd>
-          </span>
-        }
-      >
-        <button
-          type="button"
-          onClick={toggleSidebar}
-          aria-label={label}
-          className="group/mark relative grid size-9 shrink-0 cursor-pointer place-items-center rounded-lg [@media(hover:hover)]:hover:bg-surface-2"
+      {collapsed ? (
+        <Tooltip
+          grouped
+          side="right"
+          content={<span className="flex items-center gap-2">Expand sidebar {foldKey}</span>}
         >
-          <LogoMark className="h-[18px] transition-[opacity,scale,filter] duration-200 ease-out group-hover/mark:scale-25 group-hover/mark:opacity-0 group-hover/mark:blur-[4px] group-focus-visible/mark:scale-25 group-focus-visible/mark:opacity-0" />
-          <Icon
-            size={18}
-            className="absolute scale-25 text-muted opacity-0 blur-[4px] transition-[opacity,scale,filter] duration-200 ease-out group-hover/mark:scale-100 group-hover/mark:opacity-100 group-hover/mark:blur-none group-focus-visible/mark:scale-100 group-focus-visible/mark:opacity-100 group-focus-visible/mark:blur-none"
-          />
-        </button>
-      </Tooltip>
+          <button
+            type="button"
+            onClick={toggleSidebar}
+            aria-label="Expand sidebar"
+            className="group/mark relative grid size-9 shrink-0 cursor-pointer place-items-center rounded-lg [@media(hover:hover)]:hover:bg-surface-2"
+          >
+            <LogoMark className="h-[18px] transition-[opacity,scale,filter] duration-200 ease-out group-hover/mark:scale-25 group-hover/mark:opacity-0 group-hover/mark:blur-[4px] group-focus-visible/mark:scale-25 group-focus-visible/mark:opacity-0" />
+            <PanelLeftOpen
+              size={18}
+              className="absolute scale-25 text-muted opacity-0 blur-[4px] transition-[opacity,scale,filter] duration-200 ease-out group-hover/mark:scale-100 group-hover/mark:opacity-100 group-hover/mark:blur-none group-focus-visible/mark:scale-100 group-focus-visible/mark:opacity-100 group-focus-visible/mark:blur-none"
+            />
+          </button>
+        </Tooltip>
+      ) : (
+        <Link
+          to="/dashboard"
+          aria-label="rdyrct, dashboard"
+          className="grid size-9 shrink-0 place-items-center rounded-lg"
+        >
+          <LogoMark className="h-[18px]" />
+        </Link>
+      )}
       <div inert={collapsed} className={cn("ml-auto", fade(collapsed))}>
-        <IconButton label="Search and commands (⌘K)" onClick={openCommandMenu}>
-          <Search size={16} />
-        </IconButton>
+        <Tooltip
+          grouped
+          side="right"
+          content={<span className="flex items-center gap-2">Collapse sidebar {foldKey}</span>}
+        >
+          <button
+            type="button"
+            onClick={toggleSidebar}
+            aria-label="Collapse sidebar"
+            className="grid size-8 cursor-pointer place-items-center rounded-md text-muted transition-[background-color,color,scale] duration-200 ease-out active:scale-[0.96] [@media(hover:hover)]:hover:bg-surface-2 [@media(hover:hover)]:hover:text-text"
+          >
+            <PanelLeftClose size={16} />
+          </button>
+        </Tooltip>
       </div>
     </div>
   );
@@ -316,40 +333,54 @@ function AppSidebar({
 
         <PlatformNav visible={user.isAdmin} collapsed={collapsed} />
 
-        {/* user footer — py-2.5 makes this block exactly as tall as the main
-          Footer, so both border-t lines form one continuous bottom rule */}
-        <div className="mt-auto px-3 py-3">
-          <Menu
-            label="Account menu"
-            trigger={
-              <div className="flex min-w-9 items-center gap-2.5 rounded-lg px-[3px] py-1.5 [@media(hover:hover)]:hover:bg-surface/50">
-                <UserAvatar user={user} size={30} />
-                <span className={cn("min-w-0 flex-1 leading-tight", fade(collapsed))}>
-                  <span className="block truncate text-sm font-medium">{user.name}</span>
-                  <span className="block truncate text-xs text-muted">{user.email}</span>
-                </span>
-                <ChevronsUpDown size={14} className={cn("shrink-0 text-muted", fade(collapsed))} />
-              </div>
-            }
+        {/* You, as the mock has it: avatar, name over email, and the ⌘K key,
+          which opens search (its one home now the top row only folds). */}
+        <div className="mt-auto flex items-center gap-1 px-3 py-3">
+          <div className="min-w-0 flex-1">
+            <Menu
+              label="Account menu"
+              trigger={
+                <div className="flex min-w-9 items-center gap-2.5 rounded-lg px-1 py-1.5 [@media(hover:hover)]:hover:bg-surface/50">
+                  <UserAvatar user={user} size={28} />
+                  <span className={cn("min-w-0 flex-1 leading-tight", fade(collapsed))}>
+                    <span className="block truncate text-sm font-semibold">{user.name}</span>
+                    <span className="block truncate text-xs text-muted">{user.email}</span>
+                  </span>
+                </div>
+              }
+            >
+              <MenuItem onClick={openCommandMenu}>
+                <Search size={15} /> Search and commands
+                <kbd className="ml-auto rounded-md px-1.5 font-mono text-2xs text-muted smooth-shadow-ring-xs">
+                  ⌘K
+                </kbd>
+              </MenuItem>
+              <MenuItem onClick={() => void navigate({ to: "/settings" })}>
+                <Settings size={15} /> Settings
+              </MenuItem>
+              <MenuItem closeOnClick={false} onClick={onToggleTheme}>
+                <MorphIcon icon={theme === "dark" ? sun : moon} size={15} spring="snappy" />
+                {theme === "dark" ? "Light theme" : "Dark theme"}
+              </MenuItem>
+              <MenuSeparator />
+              <MenuItem className="text-danger" disabled={signOutPending} onClick={onSignOut}>
+                <LogOut size={15} /> Sign out
+              </MenuItem>
+            </Menu>
+          </div>
+          <button
+            type="button"
+            inert={collapsed}
+            onClick={openCommandMenu}
+            aria-label="Search and commands"
+            title="Search and commands"
+            className={cn(
+              "shrink-0 cursor-pointer rounded-md bg-surface px-1.5 py-0.5 font-mono text-2xs text-muted smooth-shadow-ring-xs transition-[color,scale] duration-200 ease-out active:scale-[0.96] [@media(hover:hover)]:hover:text-text",
+              fade(collapsed),
+            )}
           >
-            <MenuItem onClick={openCommandMenu}>
-              <Search size={15} /> Search and commands
-              <kbd className="ml-auto rounded-md px-1.5 font-mono text-2xs text-muted smooth-shadow-ring-xs">
-                ⌘K
-              </kbd>
-            </MenuItem>
-            <MenuItem onClick={() => void navigate({ to: "/settings" })}>
-              <Settings size={15} /> Settings
-            </MenuItem>
-            <MenuItem closeOnClick={false} onClick={onToggleTheme}>
-              <MorphIcon icon={theme === "dark" ? sun : moon} size={15} spring="snappy" />
-              {theme === "dark" ? "Light theme" : "Dark theme"}
-            </MenuItem>
-            <MenuSeparator />
-            <MenuItem className="text-danger" disabled={signOutPending} onClick={onSignOut}>
-              <LogOut size={15} /> Sign out
-            </MenuItem>
-          </Menu>
+            ⌘K
+          </button>
         </div>
       </div>
     </TooltipGroup>
