@@ -41,7 +41,7 @@ import posthog from "../lib/posthog";
 import { FUNNEL } from "../lib/funnel";
 import { Logo, LogoMark } from "../ui/logo";
 import { IconButton } from "../ui/button";
-import { Tooltip } from "../ui/tooltip";
+import { Tooltip, TooltipGroup } from "../ui/tooltip";
 import { cn } from "../ui/cn";
 import {
   shellLayout,
@@ -206,7 +206,7 @@ function NavItem({
   );
   // In the rail the icon is all that shows, so its name comes up beside it.
   return collapsed ? (
-    <Tooltip side="right" content={label}>
+    <Tooltip grouped side="right" content={label}>
       {link}
     </Tooltip>
   ) : (
@@ -224,6 +224,7 @@ function SidebarTop({ collapsed }: { collapsed: boolean }) {
     <div className="hidden h-14 items-center gap-1 px-3 md:flex">
       {collapsed ? (
         <Tooltip
+          grouped
           side="right"
           content={
             <span className="flex items-center gap-2">
@@ -296,70 +297,72 @@ function AppSidebar({
 }) {
   const navigate = useNavigate();
   return (
-    <div className="flex h-full flex-col overflow-hidden">
-      {/* desktop only; on a phone the top bar already shows the mark */}
-      <SidebarTop collapsed={collapsed} />
+    <TooltipGroup>
+      <div className="flex h-full flex-col overflow-hidden">
+        {/* desktop only; on a phone the top bar already shows the mark */}
+        <SidebarTop collapsed={collapsed} />
 
-      {/* org switcher */}
-      <div className="px-3 py-2">
-        <OrgSwitcherMenu
-          org={org}
-          orgs={orgs}
-          onSwitchOrg={onSwitchOrg}
-          canCreateOrg={canCreateOrg}
-          onNewOrg={onNewOrg}
-          collapsed={collapsed}
-        />
-      </div>
+        {/* org switcher */}
+        <div className="px-3 py-2">
+          <OrgSwitcherMenu
+            org={org}
+            orgs={orgs}
+            onSwitchOrg={onSwitchOrg}
+            canCreateOrg={canCreateOrg}
+            onNewOrg={onNewOrg}
+            collapsed={collapsed}
+          />
+        </div>
 
-      {/* nav — always visible: org-scoped pages render their own empty state
+        {/* nav — always visible: org-scoped pages render their own empty state
           when no org exists yet, and billing is per-user */}
-      <nav className="flex flex-col gap-0.5 px-3 py-2">
-        {appNavItems
-          .filter(({ to }) => to !== "/billing" || user.plan !== "unlimited")
-          .map(({ to, icon, label }) => (
-            <NavItem key={to} to={to} icon={icon} label={label} collapsed={collapsed} />
-          ))}
-      </nav>
+        <nav className="flex flex-col gap-0.5 px-3 py-2">
+          {appNavItems
+            .filter(({ to }) => to !== "/billing" || user.plan !== "unlimited")
+            .map(({ to, icon, label }) => (
+              <NavItem key={to} to={to} icon={icon} label={label} collapsed={collapsed} />
+            ))}
+        </nav>
 
-      <PlatformNav visible={user.isAdmin} collapsed={collapsed} />
+        <PlatformNav visible={user.isAdmin} collapsed={collapsed} />
 
-      {/* user footer — py-2.5 makes this block exactly as tall as the main
+        {/* user footer — py-2.5 makes this block exactly as tall as the main
           Footer, so both border-t lines form one continuous bottom rule */}
-      <div className="mt-auto px-3 py-3">
-        <Menu
-          label="Account menu"
-          trigger={
-            <div className="flex items-center gap-2.5 rounded-lg px-[3px] py-1.5 [@media(hover:hover)]:hover:bg-surface/50">
-              <UserAvatar user={user} size={30} />
-              <span className={cn("min-w-0 flex-1 leading-tight", fade(collapsed))}>
-                <span className="block truncate text-sm font-medium">{user.name}</span>
-                <span className="block truncate text-xs text-muted">{user.email}</span>
-              </span>
-              <ChevronsUpDown size={14} className={cn("shrink-0 text-muted", fade(collapsed))} />
-            </div>
-          }
-        >
-          <MenuItem onClick={openCommandMenu}>
-            <Search size={15} /> Search and commands
-            <kbd className="ml-auto rounded-md px-1.5 font-mono text-2xs text-muted smooth-shadow-ring-xs">
-              ⌘K
-            </kbd>
-          </MenuItem>
-          <MenuItem onClick={() => void navigate({ to: "/settings" })}>
-            <Settings size={15} /> Settings
-          </MenuItem>
-          <MenuItem closeOnClick={false} onClick={onToggleTheme}>
-            <MorphIcon icon={theme === "dark" ? sun : moon} size={15} spring="snappy" />
-            {theme === "dark" ? "Light theme" : "Dark theme"}
-          </MenuItem>
-          <MenuSeparator />
-          <MenuItem className="text-danger" disabled={signOutPending} onClick={onSignOut}>
-            <LogOut size={15} /> Sign out
-          </MenuItem>
-        </Menu>
+        <div className="mt-auto px-3 py-3">
+          <Menu
+            label="Account menu"
+            trigger={
+              <div className="flex items-center gap-2.5 rounded-lg px-[3px] py-1.5 [@media(hover:hover)]:hover:bg-surface/50">
+                <UserAvatar user={user} size={30} />
+                <span className={cn("min-w-0 flex-1 leading-tight", fade(collapsed))}>
+                  <span className="block truncate text-sm font-medium">{user.name}</span>
+                  <span className="block truncate text-xs text-muted">{user.email}</span>
+                </span>
+                <ChevronsUpDown size={14} className={cn("shrink-0 text-muted", fade(collapsed))} />
+              </div>
+            }
+          >
+            <MenuItem onClick={openCommandMenu}>
+              <Search size={15} /> Search and commands
+              <kbd className="ml-auto rounded-md px-1.5 font-mono text-2xs text-muted smooth-shadow-ring-xs">
+                ⌘K
+              </kbd>
+            </MenuItem>
+            <MenuItem onClick={() => void navigate({ to: "/settings" })}>
+              <Settings size={15} /> Settings
+            </MenuItem>
+            <MenuItem closeOnClick={false} onClick={onToggleTheme}>
+              <MorphIcon icon={theme === "dark" ? sun : moon} size={15} spring="snappy" />
+              {theme === "dark" ? "Light theme" : "Dark theme"}
+            </MenuItem>
+            <MenuSeparator />
+            <MenuItem className="text-danger" disabled={signOutPending} onClick={onSignOut}>
+              <LogOut size={15} /> Sign out
+            </MenuItem>
+          </Menu>
+        </div>
       </div>
-    </div>
+    </TooltipGroup>
   );
 }
 
