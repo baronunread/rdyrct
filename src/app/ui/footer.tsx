@@ -101,7 +101,7 @@ function Wordmark() {
 const FEATURED_ON = [{ name: "Twelve Tools", href: "https://twelve.tools" }];
 
 /**
- * Fazier's launch badge, the one badge image on the site: their verifier
+ * Fazier's launch badge, one of the two badge images on the site: their verifier
  * reads the homepage HTML for this exact link and image, so it is theirs and
  * not a copy (img-src allows fazier.com for rdyrct.com's build alone,
  * security-headers.ts). Both themes are in the HTML and the page's theme
@@ -134,6 +134,32 @@ function FazierBadge() {
         alt="Fazier badge"
         loading="lazy"
         className={cn(img, "hidden [:root[data-theme=dark]_&]:block")}
+      />
+    </a>
+  );
+}
+
+/**
+ * PeerPush's trending badge, from their own embed code: like Fazier's, their
+ * page and image, not a copy (img-src allows peerpush.com for rdyrct.com's
+ * build alone). One image for both themes; it is 230x65, drawn at the row's
+ * 38px.
+ */
+function PeerPushBadge() {
+  return (
+    <a
+      href="https://peerpush.com/p/rdyrct"
+      target="_blank"
+      rel="noopener"
+      className="inline-flex shrink-0 rounded-md opacity-90 transition-opacity hover:opacity-100"
+    >
+      <img
+        src="https://peerpush.com/p/rdyrct/badge.png"
+        width={230}
+        height={65}
+        alt="rdyrct on PeerPush"
+        loading="lazy"
+        className="h-[2.375rem] w-auto"
       />
     </a>
   );
@@ -276,7 +302,7 @@ export function Footer({ featured = false }: { featured?: boolean }) {
                 <span aria-hidden="true" className="max-sm:hidden">
                   ·
                 </span>
-                <span className="flex items-center gap-3">
+                <span className="flex flex-wrap items-center gap-x-3 gap-y-2">
                   <span>
                     Featured on{" "}
                     {FEATURED_ON.map((d) => (
@@ -292,6 +318,7 @@ export function Footer({ featured = false }: { featured?: boolean }) {
                     ))}
                   </span>
                   <FazierBadge />
+                  <PeerPushBadge />
                 </span>
               </>
             )}
